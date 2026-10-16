@@ -1,0 +1,19 @@
+# App icons for every platform, generated from assets/icon/icon.png (drawn by tool/make_icon.py).
+# Regenerate: python3 tool/make_icon.py && dart run flutter_launcher_icons
+flutter_launcher_icons:
+  image_path: "assets/icon/icon.png"
+  ios: true
+  remove_alpha_ios: true
+  android: true
+  min_sdk_android: 21
+  adaptive_icon_background: "#062A2C"
+  adaptive_icon_foreground: "assets/icon/foreground.png"
+  macos:
+    generate: true
+    image_path: "assets/icon/icon.png"
+  windows:
+    generate: true
+    image_path: "assets/icon/icon.png"
+    icon_size: 256
+  web:
+    generate: false

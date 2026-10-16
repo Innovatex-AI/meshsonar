@@ -14,6 +14,14 @@ Future<void> drain(WidgetTester tester) async {
 DriveSession sess(String id, DateTime start, {String? label}) =>
     DriveSession(id: id, startedAt: start, endedAt: start.add(const Duration(hours: 1)), label: label, channel: '#wardriving');
 
+/// Delete lives in each drive card's menu.
+Future<void> tapDelete(WidgetTester tester, String id) async {
+  await tester.tap(find.byKey(ValueKey('menu-$id')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(ValueKey('delete-$id')));
+  await tester.pumpAndSettle();
+}
+
 final settingsScroll =
     find.descendant(of: find.byKey(const Key('settings-list')), matching: find.byType(Scrollable)).first;
 
@@ -66,15 +74,13 @@ void main() {
     expect(h.shared.single.path, endsWith('drive-old.json'));
 
     // Delete: cancel keeps it, confirm removes it
-    await tester.tap(find.byKey(const ValueKey('delete-old')));
-    await tester.pumpAndSettle();
+    await tapDelete(tester, 'old');
     expect(find.text('Delete this drive?'), findsOneWidget);
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(h.store.sessionsById.containsKey('old'), isTrue);
 
-    await tester.tap(find.byKey(const ValueKey('delete-old')));
-    await tester.pumpAndSettle();
+    await tapDelete(tester, 'old');
     await tester.tap(find.byKey(const Key('confirm-delete')));
     await tester.pumpAndSettle();
     expect(h.store.sessionsById.containsKey('old'), isFalse);
@@ -89,8 +95,7 @@ void main() {
     await h.pumpApp(tester);
     await tester.tap(find.text('Drives'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('delete-s')));
-    await tester.pumpAndSettle();
+    await tapDelete(tester, 's');
     expect(find.textContaining('2 of 2 pings have NOT been uploaded'), findsOneWidget);
   });
 

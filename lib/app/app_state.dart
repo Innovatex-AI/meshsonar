@@ -98,6 +98,9 @@ class AppState extends ChangeNotifier {
   LocationSource get _locationSource =>
       _radioKind == RadioKind.simulator ? services.simulatedLocation : services.location;
 
+  /// The location source a drive uses with the current radio (read-only; the Drive screen's map follows it).
+  LocationSource get activeLocation => _locationSource;
+
   Future<bool> connect(RadioDevice device, RadioKind kind) async {
     if (driving) {
       _say('Stop the drive before switching radios.');

@@ -82,6 +82,10 @@ class AppServices {
   final Future<void> Function(File file) shareFile;
 
   final AppInfo appInfo;
+
+  /// Small JSON file for UI-only preferences (first-run intro seen, drive names). Null = keep them in memory only.
+  final File? uiPrefsFile;
+
   final DateTime Function() clock;
   final String Function() newId;
 
@@ -102,5 +106,6 @@ class AppServices {
     required this.newId,
     required this.clock,
     this.appInfo = const AppInfo(name: 'MeshSonar', version: '0.1.0'),
+    this.uiPrefsFile,
   });
 }

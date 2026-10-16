@@ -1,0 +1,124 @@
+// Small UI-only preferences kept outside Settings (so lib/core/api.dart stays unchanged):
+// whether the first-run intro has been seen, and drive names the user typed on this phone.
+//
+// Drive names here are display names only. The DriveStore contract has no "rename" call, so a renamed drive keeps its
+// original label in exports and uploads.
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
+
+import '../../app/app_state.dart';
+
+class UiPrefs extends ChangeNotifier {
+  bool _onboardingSeen;
+  final Map<String, String> _labels;
+  bool _loaded;
+
+  UiPrefs({bool seen = false, Map<String, String>? labels})
+      : _onboardingSeen = seen,
+        _labels = {...?labels},
+        _loaded = true;
+
+  UiPrefs._unloaded()
+      : _onboardingSeen = false,
+        _labels = {},
+        _loaded = false;
+
+  bool get loaded => _loaded;
+  bool get onboardingSeen => _onboardingSeen;
+
+  /// Name typed on this phone for a drive, if any.
+  String? labelFor(String sessionId) => _labels[sessionId];
+
+  Future<void> load() async {}
+
+  Future<void> markOnboardingSeen() async {
+    if (_onboardingSeen) return;
+    _onboardingSeen = true;
+    notifyListeners();
+    await persist();
+  }
+
+  /// Empty or null clears the name.
+  Future<void> setLabel(String sessionId, String? label) async {
+    final v = label?.trim() ?? '';
+    if (v.isEmpty) {
+      _labels.remove(sessionId);
+    } else {
+      _labels[sessionId] = v;
+    }
+    notifyListeners();
+    await persist();
+  }
+
+  Future<void> forget(String sessionId) async {
+    if (_labels.remove(sessionId) != null) {
+      notifyListeners();
+      await persist();
+    }
+  }
+
+  /// Saves. The in-memory version only keeps values.
+  Future<void> persist() async {}
+
+  Map<String, dynamic> toJson() => {'onboarding_seen': _onboardingSeen, 'labels': _labels};
+}
+
+/// JSON file next to settings.json. A damaged or missing file means "first run" with no names.
+class FileUiPrefs extends UiPrefs {
+  final File file;
+  Future<void>? _loading;
+  FileUiPrefs(this.file) : super._unloaded();
+
+  @override
+  Future<void> load() => _loading ??= _read();
+
+  Future<void> _read() async {
+    try {
+      if (await file.exists()) {
+        final j = jsonDecode(await file.readAsString());
+        if (j is Map) {
+          _onboardingSeen = j['onboarding_seen'] == true;
+          final l = j['labels'];
+          if (l is Map) l.forEach((k, v) => _labels['$k'] = '$v');
+        }
+      }
+    } catch (_) {}
+    _loaded = true;
+    notifyListeners();
+  }
+
+  @override
+  Future<void> persist() async {
+    try {
+      await file.parent.create(recursive: true);
+      final tmp = File('${file.path}.tmp');
+      await tmp.writeAsString(jsonEncode(toJson()), flush: true);
+      await tmp.rename(file.path);
+    } catch (_) {
+      // Only costs the intro showing again or a drive name; never block the app on it.
+    }
+  }
+}
+
+final Expando<UiPrefs> _prefs = Expando('uiPrefs');
+
+/// The UiPrefs for this app. With no prefs file (tests, or no file system) the intro counts as already seen.
+UiPrefs uiPrefsFor(AppState state) {
+  var p = _prefs[state];
+  if (p == null) {
+    final f = state.services.uiPrefsFile;
+    p = f == null ? UiPrefs(seen: true) : FileUiPrefs(f);
+    _prefs[state] = p;
+    p.load();
+  }
+  return p;
+}
+
+/// Use [prefs] for this app (tests: e.g. `UiPrefs()` to see the first-run intro).
+void attachUiPrefs(AppState state, UiPrefs prefs) => _prefs[state] = prefs;
+
+/// Display name for a drive: the name typed on this phone, else the label it was recorded with.
+String? driveLabel(AppState state, String sessionId, String? recorded) =>
+    uiPrefsFor(state).labelFor(sessionId) ?? recorded;

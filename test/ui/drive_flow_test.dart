@@ -74,12 +74,17 @@ void main() {
 
     // Stored immediately, before stop.
     expect(h.store.pingsBySession[session.id]!.map((p) => p.id), ['p1', 'p2']);
+    // The list is collapsed to the latest ping; open it to see them all.
+    expect(find.byKey(const Key('latest-ping')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('recent-toggle')));
+    await settle(tester);
+    expect(find.byKey(const Key('recent-pings')), findsOneWidget);
     expect(find.text('Heard nothing'), findsOneWidget);
     expect(find.text('2 repeaters heard · SNR 4.3 dB'), findsOneWidget);
     expect(find.textContaining('Westerville Water Tower'), findsOneWidget); // name from cache
     expect(find.textContaining('ff09'), findsOneWidget); // unknown -> hex prefix
     expect(tester.widget<Text>(find.byKey(const Key('stat-pings'))).data, '2');
-    expect(tester.widget<Text>(find.byKey(const Key('stat-heard'))).data, '1');
+    expect(tester.widget<Text>(find.byKey(const Key('stat-heard'))).data, '1 heard');
     expect(tester.widget<Text>(find.byKey(const Key('stat-pct'))).data, '50%');
 
     // Ping now: emitted on the stream AND returned; counted once.

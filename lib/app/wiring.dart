@@ -72,6 +72,7 @@ Future<AppServices> buildRealServices() async {
     },
     shareFile: shareDriveFile,
     appInfo: app,
+    uiPrefsFile: File('${root.path}${Platform.pathSeparator}ui_prefs.json'),
     clock: DateTime.now,
     newId: () => uuid.v4(),
   );

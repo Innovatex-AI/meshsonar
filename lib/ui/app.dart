@@ -1,10 +1,14 @@
-// Root widget, theme, AppScope (how screens reach AppState) and the bottom-tab shell.
+// Root widget, theme wiring (see theme.dart), AppScope (how screens reach AppState) and the bottom-tab shell.
 import 'package:flutter/material.dart';
 
 import '../app/app_state.dart';
 import 'drive_screen.dart';
+import 'onboarding/first_run_gate.dart';
 import 'sessions_screen.dart';
 import 'settings_screen.dart';
+import 'theme.dart';
+
+export 'theme.dart' show meshSonarTheme, meshSonarThemeMode, MeshSonarColors, Gap, Corners, numberStyle;
 
 /// Gives every screen the AppState and rebuilds dependents when it changes.
 class AppScope extends InheritedNotifier<AppState> {
@@ -16,23 +20,6 @@ class AppScope extends InheritedNotifier<AppState> {
   /// Read without subscribing (for callbacks).
   static AppState read(BuildContext context) =>
       (context.getElementForInheritedWidgetOfExactType<AppScope>()!.widget as AppScope).notifier!;
-}
-
-ThemeData meshSonarTheme(Brightness b) {
-  final scheme = ColorScheme.fromSeed(seedColor: const Color(0xFF00897B), brightness: b);
-  return ThemeData(
-    useMaterial3: true,
-    colorScheme: scheme,
-    visualDensity: VisualDensity.standard,
-    filledButtonTheme: FilledButtonThemeData(
-      style: FilledButton.styleFrom(minimumSize: const Size(64, 56), textStyle: const TextStyle(fontSize: 18)),
-    ),
-    outlinedButtonTheme: OutlinedButtonThemeData(
-      style: OutlinedButton.styleFrom(minimumSize: const Size(64, 52), textStyle: const TextStyle(fontSize: 16)),
-    ),
-    listTileTheme: const ListTileThemeData(minVerticalPadding: 10),
-    snackBarTheme: const SnackBarThemeData(behavior: SnackBarBehavior.floating),
-  );
 }
 
 class MeshSonarApp extends StatelessWidget {
@@ -48,21 +35,23 @@ class MeshSonarApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         theme: meshSonarTheme(Brightness.light),
         darkTheme: meshSonarTheme(Brightness.dark),
-        themeMode: ThemeMode.system,
-        home: const HomeShell(),
+        themeMode: meshSonarThemeMode(),
+        home: FirstRunGate(builder: (tab) => HomeShell(key: ValueKey('shell-$tab'), initialTab: tab)),
       ),
     );
   }
 }
 
 class HomeShell extends StatefulWidget {
-  const HomeShell({super.key});
+  /// 0 Drive, 1 Drives, 2 Settings.
+  final int initialTab;
+  const HomeShell({super.key, this.initialTab = 0});
   @override
   State<HomeShell> createState() => _HomeShellState();
 }
 
 class _HomeShellState extends State<HomeShell> {
-  int _tab = 0;
+  late int _tab = widget.initialTab;
   AppState? _state;
   final _messengerKey = GlobalKey<ScaffoldMessengerState>();
 

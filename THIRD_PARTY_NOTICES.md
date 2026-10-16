@@ -51,3 +51,14 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
 COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+## Map and fonts (lib/ui/)
+
+### Barlow typeface
+Copyright 2017 The Barlow Project Authors (https://github.com/jpt/barlow). Licensed under the SIL Open Font License 1.1;
+the full licence is bundled at assets/fonts/Barlow-OFL.txt. Used as the app typeface (Barlow, Barlow Semi Condensed).
+
+### OpenStreetMap map tiles
+Map data © OpenStreetMap contributors, available under the Open Database License (https://www.openstreetmap.org/copyright).
+Tiles are loaded from tile.openstreetmap.org under the OSM tile usage policy; the app shows the required attribution on
+every map. Map rendering uses the flutter_map package (BSD-3-Clause).
