@@ -1,0 +1,346 @@
+# MeshSonar features and behaviour rules
+
+Every screen and every user-visible rule in v0.2.0, with the numbers the code uses. Widget keys are given where
+tests rely on them (`Key('…')`), because a port's UI tests can reuse the same names.
+
+```mermaid
+flowchart LR
+  FIRST[First-run intro] --> SHELL
+  subgraph SHELL[Home shell — bottom tabs]
+    DRIVE[Drive] --- DRIVES[Drives] --- SETTINGS[Settings]
+  end
+  DRIVE --> CONNECT[Connect a radio]
+  DRIVE --> FULL[Full-screen map]
+  DRIVE --> LOG[Ping log]
+  DRIVE --> REPORT[Drive report]
+  LOG --> PING[Ping detail sheet]
+  LOG --> REP[Repeater detail sheet]
+  PING --> REP
+  DRIVES --> DETAIL[Drive detail]
+  DRIVES --> REPORT
+  DETAIL --> LOG
+  DETAIL --> REPORT
+  SETTINGS --> ABOUT[About]
+  SETTINGS --> FIRST
+```
+
+## First-run intro (onboarding)
+
+Files: `ui/onboarding/*`. The intro has three pages and is shown once. `ui_prefs.json` `onboarding_seen` is set when
+it's finished or skipped.
+
+| Page | Content | Buttons |
+|---|---|---|
+| 1 "Map your mesh by driving it" | What MeshSonar does; heard-nothing pings count | Next |
+| 2 "Connect your radio" | BLE pairing; Simulator | **Connect radio** → Drive tab + Connect screen; **Try the Simulator** → connects the simulator |
+| 3 "Get a driver key" | Drives are saved locally; key needed to upload | **Request a driver key** → Settings tab; **Get started** → Drive tab |
+
+**Skip** is always available. Settings → "Show the welcome tour" reopens the intro. When there's no prefs file (tests),
+the intro counts as already seen.
+
+## Drive screen (tab 1)
+
+File: `ui/drive_screen.dart` + `ui/drive/*`. It's built for one hand in a moving car. In landscape (width > height
+and ≥ 640 px) the map sits on the left and the controls on the right.
+
+- **App bar:** MeshSonar title. The **connection chip** (`connection-chip`) shows "Not connected", "Connecting…", the
+  radio name, or "Simulator" with a *SIMULATED GPS & RADIO* tag. Tap it to open Connect.
+- **Live coverage map** (see [Map](#coverage-map)), with these overlays:
+  - **Heard box** (top left, see below), shown once a ping exists and while driving or something has been heard.
+  - **Full-screen** (`map-fullscreen`) and **Layers** (`drive-map-layers`) buttons (top right).
+  - **Map hint** (`map-hint`) while there are no pings: what to do next.
+  - **Ping result flash** (`ping-flash`) for ~4 s after each ping: "Heard by <name or N> · +x.x dB" or "No repeaters
+    heard", coloured by result.
+  - **View drive report** card (`drive-report-card`) after Stop, until dismissed or a new drive starts.
+- **Status row** (`status-line`): the engine's message ("Joining #wardriving", "Pinging", "Listening for repeaters",
+  "Heard 2 repeaters", "Heard nothing", "Move 40 m more to ping", "No GPS fix: waiting to ping", "Radio disconnected",
+  …), with a spinner, error icon or live dot.
+- **Next-ping indicator:** a countdown ring "Next ping N" (time), "Move N m" (distance), "Keep moving", or "Waiting
+  for GPS".
+- **Stats strip:** Pings · *N heard* with heard % · Last SNR dB ("none" if the last ping heard nothing) · Synced. These
+  are the current drive's numbers, or the last drive's after Stop.
+- **Unsaved banner** while pings are waiting to be written to the device.
+- **Antenna toggle** (`antenna-toggle`): Internal / External. It's editable before a drive and **locked while
+  driving**, showing what this drive records.
+- **Log** button (`open-log`): "Log · N". Opens the live ping log.
+- **Start drive / Stop drive** (`start-stop`). It reads "Connect radio" when nothing is connected. Next to it is **Ping
+  now** (`ping-now`), enabled only while driving and not already pinging.
+- **Keep awake:** the screen wake lock is on while driving (`wakelock_plus`).
+- **Haptics:** a light tap when a ping is heard, a medium tap when it heard nothing.
+
+### Auto-ping cadence
+
+(`DefaultWardriveEngine`, settings *Auto-ping* and *Minimum distance*)
+
+- An auto-ping goes out when **both** of these are true:
+  1. **Time:** at least `intervalSec` (10–120 s; default 30) since the last ping, auto or manual. The gap is never
+     shorter than one listen window (7 s).
+  2. **Distance:** the current filtered GPS fix is at least `minDistanceM` (15–500 m; default 100) from where the last
+     ping was sent (haversine, R = 6,371 km).
+- The **first ping goes out as soon as the drive starts** (no previous ping, so time and distance are both met).
+- The check runs on **every GPS fix** and on a **1 s tick**.
+- **Ping now** is allowed any time while driving. It queues behind a ping already on the air, and it **resets both
+  the timer and the distance anchor**.
+- No GPS fix: the status says "No GPS fix: waiting to ping", and it pings once a fix arrives (if the other rules
+  allow).
+- After a failed auto ping, the engine waits 5 s before trying again.
+- Pings never overlap: each one owns the radio for its listen window.
+- Changing interval or distance in Settings **during a drive applies immediately** (`engine.updateConfig`). The
+  channel can't change mid-drive.
+- Values are clamped by the engine as well as by Settings. The engine also supports `intervalSec = 0` (manual only),
+  but Settings can no longer produce it.
+
+### GPS filter
+
+(`lib/core/position_filter.dart`, applies to real GPS only; the simulator's fixes are clean)
+
+| Rule | Value |
+|---|---|
+| Drop a fix with reported accuracy worse than | **50 m** — unless no fix ≤ 50 m has arrived for **10 s**, then poor fixes are used |
+| Accuracy assumed when none is reported | 10 m |
+| Smoothing | Accuracy-weighted 1-D Kalman on position. Process noise = (speed × dt)², speed ≥ 1 m/s, from reported speed or raw fix-to-fix speed. |
+| "Stopped" speed | < **1.0 m/s** |
+| "Moving" speed | ≥ **2.0 m/s** on 2 fixes in a row |
+| "Clearly driving" speed | ≥ **5.0 m/s** on one fix |
+| Hold radius around the parked anchor | max(2 × accuracy, **15 m**) |
+| Leave the hold without speed | **3** fixes in a row beyond the radius, each further than the last, the last at least max(2 × radius, **50 m**) out (4 × radius when the phone reports speed < 1 m/s) |
+| Enter the hold | First fix with no speed or speed < 1 m/s; reported speed < 1 m/s on 2 fixes in a row; or, with no speed, the last 3 fixes within the radius of their centre |
+| While holding | The output is the anchor position with speed 0. Accuracy is always the raw value. |
+| On leaving | The smoother restarts at the fix that proved movement (no pull-back lag) |
+| `current()` | Returns the last filtered fix if it arrived within **3 s**, else asks the platform. An older cached fix never rewinds the filter. |
+
+The filter keeps a parked phone from "driving around" and triggering distance pings. The map, the engine and the
+ping positions all share one filter instance.
+
+## Heard box
+
+(`ui/drive/heard_box.dart`, `core/heard.dart`, setting *Heard list hold*)
+
+- One row per repeater heard on this drive, keyed by the hex id as heard (`path[0]`).
+- **Hold:** a repeater stays **live** while it was heard within the last `heardHoldPings` tx pings (1–10 on the
+  slider, default 3). With hold 3, a repeater heard on ping *n* is still live on pings *n+1* and *n+2*, and goes
+  **stale** on *n+3*. Every tx ping counts, including ones that heard nothing.
+- Phases: **fresh** (heard on the latest ping: full colour, `×times heard`), **holding** (missed the latest ping:
+  dimmed, "missed N", pips for the pings left), **stale** (greyed, folded into "+N earlier"; tap to expand up to 8).
+- Rows are sorted live first, most recently heard first, then by last SNR.
+- Each row shows the name (CMAT first, then map.meshcore.io; ambiguous prefix → "ABC (2 possible)"; unknown → hex), the
+  live distance from the current position when the repeater's position is known, and the last SNR.
+- Up to `maxRows` live rows fit (it depends on map height, max 5; 7 in full-screen portrait), then "+N more in range".
+- Tap the header to collapse it to one line. Tap a row to select the repeater on the map; the map frames the repeater
+  together with your position.
+- The tracker resets at each Start. It is never cleared during a drive.
+- The hold value is copied into the tracker at Start. A Settings change mid-drive updates the pips but not the
+  live/stale rule until the next drive (see ROADMAP).
+
+## Coverage map
+
+(`ui/map/coverage_map.dart`; used on the Drive screen, in full-screen, in drive detail; the report has its own cell map)
+
+Layers, bottom to top: a chart grid (visible with no tiles), **OpenStreetMap tiles** (colour-graded to the theme; after
+two tile errors a "Map offline. Pings still record." pill appears), **range rings** at 1 km and 2 km, **links** to
+every live heard repeater with a known position (solid for fresh, dashed for holding, each with a distance label),
+**repeater markers** (amber diamonds that pop and glow when fresh, stay lit while holding and grey out when stale; the
+CMAT list plus heard repeaters found in the public directory, plus the simulator's repeaters in Simulator mode),
+**ping dots**, and the current **position**.
+
+- Ping colours: **red** = heard nothing. Heard pings are coloured by best SNR on a **−10 → +10 dB** scale (blue → teal
+  → green), or plain green in "Heard / not" mode. Unknown SNR shows mid teal. The newest dot pulses once.
+- **Follow mode** keeps the position centred. Dragging turns it off and shows **Recenter** (`map-recenter`).
+- Tap a repeater to see its name, a short key, "Heard N pings ago", SNR and distance.
+- **Layers sheet** (`layers-sheet`): Pings (colour by SNR / heard-not), Repeaters, Links to heard repeaters, Range
+  rings. All are on by default. The choices are shared between the Drive and full-screen maps but not saved.
+- Attribution "© OpenStreetMap contributors" is always shown with tiles. Tiles are off under `flutter test`.
+- If there's no position or pings, the map centres on Columbus, Ohio (39.9612, −82.9988).
+
+## Full-screen map
+
+(`ui/map/fullscreen_map.dart`, `fullscreen-map`) The whole screen is map. It shows the heard box (top left), exit
+(`fullscreen-close`) and layers buttons (top right), the ping flash, and a bottom panel with the status row plus
+compact **Stop / Ping now** buttons (bottom-right half in landscape). **Two-finger rotate** is enabled, and a compass
+returns to north-up. It respects safe areas. It shares the `DriveMapModel` with the Drive screen, so the selection,
+layers and GPS stream are shared.
+
+## Connect a radio
+
+(`ui/connect_screen.dart`) Scanning starts automatically when nothing is connected. It lists MeshCore companions
+advertising the service UUID, sorted by RSSI, with signal bars and dBm labels (≥ −60 strong, ≥ −80 good, else weak).
+The page also has a **Scan again** button, a **Simulator (no radio)** entry, and the tip "Only one app can talk to the
+radio at a time".
+
+- Errors are mapped to plain text: permission (with where to fix it on iPhone/Android), Bluetooth off/unavailable,
+  or a generic failure.
+- If a scan stream never closes, the screen stops showing "Scanning" after 15 s.
+- A connected radio shows a card with its firmware and **Disconnect**. You can't disconnect or switch radios while
+  driving.
+- Connect timeouts: transport 25 s, `start()` 20 s → "The radio didn't answer…".
+
+## Simulator
+
+(`lib/radio/simulator.dart`) With no hardware, the simulator plays the radio *and* the GPS:
+
+- **GPS:** a ~16 km loop through Westerville, Ohio at 13 m/s (≈ 47 km/h). Accuracy is 4–6 m, with one fix per second.
+  The position is a pure function of the clock.
+- **Radio:** it speaks the real companion protocol. It has 8 channel slots (slot 0 = Public), firmware v9
+  "v1.18.0-sim", 910.525 MHz / 62.5 kHz / SF7 / CR5 / 22 dBm, and a noise floor of −112 ± 2 dBm.
+- **Mesh:** 7 made-up repeaters. Echo odds and SNR come from a log-distance path-loss model with shadowing and a
+  logistic decode curve. Repeaters that heard a first-hop repeater produce 2-hop echoes. Reported SNR saturates at
+  about +11.5 dB like real LoRa. 30% of pings also produce background Public traffic that must not count as an echo.
+- **Labelled everywhere:** the connection chip and the map show *SIMULATED GPS & RADIO*. The simulator's repeaters are
+  drawn on the map and named in the heard box.
+
+## Ping log
+
+(`ui/ping_log_screen.dart`, `ping-log`) Opened from **Log** (the current drive, live; after Stop it shows the drive
+that just ended) or from drive detail (a saved drive; live if it's the one being driven).
+
+- Summary: Pings · Heard % (tx) · Repeaters.
+- **Pings** tab: newest first, filters **All / Heard / Heard nothing**. Each row shows the time, the result, up to 4
+  repeater chips (name + hex id, `?` for an ambiguous id) and an SNR pill. Tap a row for the ping detail.
+- **Repeaters** tab: repeaters aggregated over the drive, most heard first, with best SNR, times heard, last distance
+  and hops. Stale ones are greyed (live log only). Tap a row for the repeater detail.
+
+### Ping detail sheet
+
+(`ping-detail`) Shows the result, time, SNR, position, GPS accuracy, speed (km/h and mph) and noise floor. **Every
+echo** is listed with name, id, SNR, "direct" or "N hops", RSSI, delay, distance + compass bearing, source badge
+(CMAT / map) and the "via A → B" path. For an ambiguous short id, the nearest 3 candidates are listed. The neighbour
+exchange is shown when present. **Copy as text** (`ping-copy`) leaves unmeasured values out.
+
+### Repeater detail sheet
+
+(`repeater-detail`) Shows the name, id as heard, full key (or "N known repeaters share this id" / "Not in any repeater
+list"), position, distance and bearing from the newest ping, times heard, last and best SNR, last heard time and hops,
+and "Name from CMAT / map.meshcore.io". An **SNR sparkline** (`snr-sparkline`) plots each hearing, with gaps for
+unmeasured values and a dashed 0 dB line.
+
+## Drives list (tab 2)
+
+(`ui/sessions_screen.dart`)
+
+- **Overview card:** "N drives · N pings" and "N pings waiting to upload", with **Sync all** (`sync-all`).
+- **Drive card:** name (local name, else recorded label, else date/time), date and channel, a "Recording" chip for the
+  drive in progress, duration, distance, pings, Heard %, the **heard strip** (one bar per tx ping, bucketed so each bar
+  is ≥ ~3 px; red = nothing heard, otherwise SNR colour and height ∝ heard fraction), a **sync badge**, Sync now,
+  Export & share, and a menu (Sync now, Drive report, Export & share, Rename, Delete).
+- **Sync badge:** *Nothing to sync* (0 pings), *All synced*, *N not synced*, *N not synced · Sync failed* (after a
+  failed sync), *Syncing…*.
+- **Swipe left to delete** (not for the drive in progress). The confirm dialog warns how many pings are not uploaded.
+- **Rename** sets a name on this phone only (it isn't exported or uploaded).
+- Pull to refresh, or use the refresh button.
+
+## Drive detail
+
+(`ui/drive_detail_screen.dart`, `drive-detail`) Shows the whole route on a map (framed to the pings, zoom ≤ 15.5, no
+rings or links), a header (name, date, channel, radio name, antenna, sync badge), **Sync N / Synced**, **Export**,
+**Ping log**, then an 8-tile stats grid, the heard strip, "Repeaters heard" (most pings first, with a bar), and the
+pings (newest first, 60 at a time, "Show all N pings"). The app bar has **Report**, **Rename** and **Delete**
+(disabled while recording).
+
+Stats definitions (`DriveStats.of`):
+
+| Tile | Definition |
+|---|---|
+| Pings | All readable pings |
+| Heard | tx pings not "heard nothing" ÷ tx pings, rounded % |
+| Distance | Sum of great-circle distances between consecutive pings in time order. This is ping-to-ping, not the GPS track. |
+| Duration | `ended_at` (or the last ping's time) − `started_at` |
+| Best SNR / Median SNR | Over each ping's best SNR (echoes and neighbour) |
+| Repeaters | Distinct repeater ids heard |
+| Multi-hop | Echoes with hops > 1 |
+
+## Drive report
+
+(`ui/report/*`, `drive-report`) Opened from the Drive screen card after Stop, from drive detail ("Report") and from the
+drive card menu. It's computed once per open. **Share report** (`report-share`, `report-share-button`) shares a
+plain-text summary (`.txt` plus the text itself).
+
+Sections: **hero** (distance in km and mi, date, duration, antenna; grids mapped, % pings heard, repeaters),
+**highlights**, a **grid map** of cells coloured by heard % (red = 0%, then blue → teal → green), with new cells
+outlined and heard repeaters with known positions marked. Then **the drive** numbers, **signal over the drive** (SNR
+chart and heard strip), **how echoes came back** (hops), the **repeater leaderboard** (`NEW`, `not on CMAT` tags) and
+**best / dead spot**.
+
+Metric definitions (`DriveReport.compute`):
+
+| Metric | Definition |
+|---|---|
+| Grid cell | Same as CMAT: `(floor(lat / 0.002), floor(lon / 0.0025))`, ≈ 220 m × 210 m in central Ohio. **tx pings only.** |
+| Grids mapped / with coverage | Distinct cells with ≥ 1 tx ping / with ≥ 1 heard tx ping |
+| New grids | Cells no earlier drive on this phone pinged in. "Earlier" means drives that started before this one. |
+| Heard % | Heard tx pings ÷ tx pings |
+| Distance | Ping-to-ping haversine sum (as above) |
+| Avg speed | Distance ÷ (last ping time − first ping time) |
+| Top speed | Highest GPS-reported `speed_mps`. With none reported, the fastest ping-to-ping segment at least 5 s long, ignoring jumps > 70 m/s. |
+| Best SNR | Highest per-ping best SNR |
+| Cell best SNR | Highest per-ping best SNR in the cell. This uses **all** echoes; CMAT's map uses direct echoes only. |
+| Repeater times heard | Pings on which it was heard (echo or neighbour), once per ping |
+| Repeater farthest | Greatest distance from a ping position at which it was heard (known positions only) |
+| New repeater | Id not heard on any earlier drive. Prefixes of different lengths match each other. |
+| Not on CMAT | Not resolved from CMAT's repeater list. Only flagged when that list is loaded. |
+| Hops | Echo counts: direct (1), 2, 3+ (and unknown) |
+| Best spot | Heard cell with the highest best SNR, then highest heard % |
+| Dead spot | Cell with unanswered pings and the lowest heard %, then the most unanswered |
+| Highlights | First drive ("every grid is new"), or N new grids; new repeaters (if there are earlier drives); farthest repeater; repeaters not on CMAT |
+
+## Settings (tab 3)
+
+(`ui/settings_screen.dart`) Changes are saved immediately, and sliders save when the drag ends.
+
+| Section | Item | Behaviour |
+|---|---|---|
+| Driver & server | **Driver key** | Without a key: a request form (name required, callsign and email optional) → `driver-request`. With a key: a status badge (No key / Pending approval / Approved / Rejected / Revoked / Not recognised by this server), the public display name, the masked key `••••abcd`, **Refresh** (`driver-status`) and **Remove key**. Approval also downloads repeater names. |
+| | **Server URL** | Must be http(s) with a host. Any Drive Format v1 server works, and keys are per server. |
+| Wardriving | **Channel** | Default `#wardriving`; `#` is added if missing |
+| | **Auto-ping** | Slider, every 5 s from **10 to 120 s** (default 30) |
+| | **Minimum distance** | Slider stops 15, 25, 50, 75, 100, 125, 150, 200, 250, 300, 400, **500 m** (default 100) |
+| | **Heard list hold** | 1–10 pings (default 3) |
+| Antenna | **Antenna type** | Internal / External (same setting as the Drive-screen toggle) |
+| | Gain (dBi), height (m) | Optional numbers; leave empty for unknown |
+| Upload | **Upload at end of drive** | `autoSync`, default on |
+| | **Upload during the drive** | Default on; needs the end-of-drive toggle |
+| | **Upload interval** | 1–30 min (default 5) |
+| | Last upload | "Uploading…", "Last upload HH:MM:SS · OK", "Last upload failed: …", or "No uploads yet" |
+| | **Repeater names** | Count saved for offline use. Tap (needs a key) to refresh CMAT names and force a public-directory refresh. |
+| About | **About MeshSonar** | Version, MIT text, short notices, Flutter licence page |
+| | **Show the welcome tour** | Reopens the intro |
+
+## Uploads
+
+- **During the drive:** a timer every `syncEveryMin` minutes runs while *driving* **and** both toggles are on
+  **and** the key is approved. Settings changes start, stop or restart it right away. A tick is skipped while the
+  previous upload is still running or a start/stop is in progress. Uploads wait for pending local writes. Failures
+  are quiet (shown in Settings → Last upload) and retried on the next tick. A 403 or "not approved" triggers a quiet
+  key-status refresh.
+- **At Stop:** after the drive is closed and any in-flight upload finishes, the drive is synced if *Upload at end of
+  drive* is on and the key is approved. The user then sees "Uploaded N new pings…", or "Drive saved. Nothing new to
+  upload." If the key isn't approved yet: "Drive saved. It will upload once your driver key is approved." Otherwise:
+  "Drive saved on this phone."
+- **Manual:** Sync on a drive card or in drive detail, and Sync all. Without an approved key these explain what to do.
+- Rules for what's sent are in [DATA_MODEL.md §5](DATA_MODEL.md#5-sync-rules).
+
+## Repeater directory (names and positions)
+
+- **CMAT list** (`drive-repeaters`, needs an approved key): fetched at launch when approved, after approval, and on
+  "Repeater names" tap. It's cached in `repeaters.json`. An empty answer never wipes existing names.
+- **Public node map** (`https://map.meshcore.io/api/v1/nodes`, ~66k nodes, ~17 MB gzipped): the body is streamed and
+  split object by object. The app keeps **repeaters (type 2) with a position within 150 km** of the centre, nearest
+  first, max 3,000. It skips adverts older than 180 days (never-heard dates are kept) and (0,0) positions, and caps
+  names at 64 chars. The cache goes to `node_directory.json`.
+  - Refreshed when the cache is older than **7 days** (the app setting; the class default is 24 h), when the drive
+    area moves more than **75 km** (half the radius), or when forced.
+  - It's triggered at launch (if stale) and on the **first ping of each drive** (around that position).
+  - A failure backs off for **30 min**. There's a 20 s idle timeout, a 120 s total cap, and the download stops above
+    120 MiB. It never throws: offline only means fewer names.
+- **Lookup order:** CMAT first, then the public map. A prefix that matches several different keys is "ambiguous" and
+  is never guessed. Two entries with the same full key count as one.
+
+## Export & share
+
+The drive card and drive detail write one Drive Format v1 JSON file (see [DATA_MODEL.md §3](DATA_MODEL.md#3-export-file--drive-format-v1))
+to the temp folder and open the platform share sheet (`share_plus`). The drive report shares a `.txt` file and its
+text.
+
+## Messages
+
+All errors are turned into one short plain-language line (`lib/app/messages.dart`). Data-safety wording ("your data is
+safe on this phone") is used for network and server errors. 401, 403, 413 and 429 each get their own text.

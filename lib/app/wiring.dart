@@ -21,7 +21,7 @@ import '../radio/simulator.dart';
 import '../radio/wardrive_engine.dart';
 import 'services.dart';
 
-const String appVersion = '0.1.0';
+const String appVersion = '0.2.0'; // keep in step with pubspec.yaml
 
 String _platformName() {
   if (kIsWeb) return 'web';

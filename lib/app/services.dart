@@ -106,7 +106,7 @@ class AppServices {
     required this.shareFile,
     required this.newId,
     required this.clock,
-    this.appInfo = const AppInfo(name: 'MeshSonar', version: '0.1.0'),
+    this.appInfo = const AppInfo(name: 'MeshSonar', version: '0.2.0'),
     this.uiPrefsFile,
     this.directory,
   });

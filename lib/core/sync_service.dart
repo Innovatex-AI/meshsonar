@@ -33,7 +33,7 @@ class DefaultSyncService implements SyncService {
     required this.store,
     required this.client,
     required this.settings,
-    this.app = const AppInfo(name: 'MeshSonar', version: '0.1.0'),
+    this.app = const AppInfo(name: 'MeshSonar', version: '0.2.0'),
     this.chunkSize = maxPingsPerUpload,
   }) : assert(chunkSize > 0 && chunkSize <= maxPingsPerUpload);
 
