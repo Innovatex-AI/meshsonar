@@ -333,9 +333,12 @@ class SimulatedTransport implements ByteTransport {
 
   Uint8List _hash(SimulatedRepeater r) => Uint8List.sublistView(r.publicKey, 0, pathHashSize);
 
+  /// Reports a heard packet. RSSI follows the true link, but reported SNR saturates like a real LoRa radio's
+  /// (about +10…+14 dB at most, however strong the signal), so strong links read realistically, not +26 dB.
   void _hearPacket(MeshPacket pkt, double snr, Duration delay) {
     final rssi = (_nf + snr).clamp(-140.0, -20.0).round();
-    _emit(encodeLogRxData(snr.clamp(-31.0, 31.0), rssi, pkt.toBytes()), delay);
+    final reported = math.min(snr, 11.5 + _gauss() * 0.75);
+    _emit(encodeLogRxData(reported.clamp(-31.0, 31.0), rssi, pkt.toBytes()), delay);
   }
 
   void _simulateFlood(Uint8List secret, int ts, String text) {

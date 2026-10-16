@@ -77,7 +77,8 @@ void main() {
     await screen(t, 'drives');
 
     await pumpFor(t, const Duration(milliseconds: 800));
-    await t.tap(find.textContaining('pings').first);
+    // the drive card (not the "N drives · N pings" summary card above it)
+    await t.tap(find.text('#wardriving').first);
     expect(await waitFor(t, find.text('Median SNR')), isTrue, reason: 'drive detail stats');
     await screen(t, 'detail');
 

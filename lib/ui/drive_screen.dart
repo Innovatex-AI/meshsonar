@@ -508,7 +508,11 @@ class _ActionButtons extends StatelessWidget {
                 icon: s.pinging
                     ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2.5))
                     : const Icon(Icons.wifi_tethering, size: 28),
-                label: const Text('Ping now', style: TextStyle(fontSize: 18)),
+                // one line at every phone width: scale down rather than wrap
+                label: const FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text('Ping now', maxLines: 1, softWrap: false, style: TextStyle(fontSize: 18)),
+                ),
               ),
             ),
           ),
