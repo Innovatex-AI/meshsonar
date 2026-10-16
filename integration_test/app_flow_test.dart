@@ -41,7 +41,7 @@ Future<void> screen(WidgetTester t, String name) async {
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('first run → simulator drive → drives list → drive detail', (t) async {
+  testWidgets('first run → simulator drive → full-screen map → log → drives list → drive detail', (t) async {
     await app.main();
 
     if (await waitFor(t, find.text('Skip'), timeout: const Duration(seconds: 10))) {
@@ -66,11 +66,27 @@ void main() {
       await t.tap(find.text('Ping now'));
       await pumpFor(t, const Duration(seconds: 9));
     }
-    expect(find.textContaining(RegExp(r'repeaters? heard|Heard nothing')), findsWidgets, reason: 'pings recorded');
+    expect(find.byKey(const Key('heard-box')), findsOneWidget, reason: 'pings recorded: the heard box is up');
     await screen(t, 'drive-active');
+
+    // Full-screen map with the heard box and the controls; then back.
+    await tapWhenReady(t, find.byKey(const Key('map-fullscreen')), 'full-screen map button');
+    expect(await waitFor(t, find.byKey(const Key('fullscreen-map'))), isTrue, reason: 'full-screen map');
+    await screen(t, 'fullscreen-map');
+    await tapWhenReady(t, find.byKey(const Key('fullscreen-close')), 'exit full screen');
+    expect(await waitFor(t, find.byKey(const Key('drive-map'))), isTrue, reason: 'back on the Drive screen');
+
+    // The live ping log of this drive.
+    await tapWhenReady(t, find.byKey(const Key('open-log')), 'LOG button');
+    expect(await waitFor(t, find.textContaining(RegExp(r'Heard|heard'))), isTrue, reason: 'ping log');
+    await screen(t, 'log');
+    await t.pageBack();
+    await pumpFor(t, const Duration(seconds: 1));
 
     await t.tap(find.text('Stop drive'));
     expect(await waitFor(t, find.text('Start drive'), timeout: const Duration(seconds: 30)), isTrue, reason: 'stopped');
+    expect(await waitFor(t, find.byKey(const Key('view-report'))), isTrue, reason: 'drive report card');
+    await screen(t, 'drive-stopped');
 
     await tapWhenReady(t, find.text('Drives'), 'Drives tab');
     expect(await waitFor(t, find.textContaining('pings')), isTrue, reason: 'drives list shows the drive');

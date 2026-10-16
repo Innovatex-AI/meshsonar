@@ -4,8 +4,8 @@
 //  - ping text  buildPayload(): "@[MapperBot] <lat 5dp>, <lon 5dp>" plus " [<power>]" when the power is known
 //    (MeshMapper's power choices are "0.3w", "0.6w", "1.0w", "2.0w"); kept identical so community tools recognise it;
 //  - sendPing(): read the noise floor (CMD_GET_STATS radio), take a GPS fix, send on the channel, then listen to the
-//    RX log for the listen window (RX_LOG_LISTEN_WINDOW_MS); auto mode restarts the interval after each ping and skips
-//    a ping that is too close to the last one (validateMinimumDistance, haversine);
+//    RX log for the listen window (RX_LOG_LISTEN_WINDOW_MS); auto mode waits the interval after each ping and won't
+//    ping too close to the last one (validateMinimumDistance, haversine);
 //  - handleTxLogging(): an echo is a GRP_TXT on our channel whose decrypted text is our ping and whose path is not
 //    empty; repeater id = first path hop; one entry per repeater, best SNR kept.
 // See packet.dart for where we deliberately differ (transport-flood, multi-byte path hashes, MAC/timestamp check).
@@ -15,6 +15,7 @@ import 'dart:typed_data';
 
 import 'package:uuid/uuid.dart';
 
+import '../core/api.dart' show Settings;
 import '../core/model.dart';
 import 'companion_link.dart';
 import 'crypto.dart';
@@ -76,8 +77,18 @@ class DefaultWardriveEngine implements WardriveEngine {
   int? _channelIndex;
   Uint8List? _secret;
   StreamSubscription<RxPacket>? _rxSub;
+
+  // Auto-ping cadence: a ping goes out once BOTH the interval since the last ping has passed AND we've moved
+  // minDistanceM from where it was sent. Checked on every GPS fix and on a [tick] timer.
+  final Duration tick;
   Timer? _autoTimer;
+  StreamSubscription<GeoFix>? _fixSub;
   DateTime? _nextPingAt;
+  DateTime? _lastPingTime; // when the last ping (auto or manual) was sent
+  DateTime? _retryAfter; // after a failed auto ping, don't retry before this
+  bool _evaluating = false;
+  PingWait? _waitingFor;
+  double? _metresToGo;
   bool _running = false;
   bool _stopping = false;
   bool _busy = false;
@@ -93,6 +104,7 @@ class DefaultWardriveEngine implements WardriveEngine {
     required this.location,
     DateTime Function()? clock,
     String Function()? newId,
+    this.tick = const Duration(seconds: 1),
   })  : _clock = clock ?? DateTime.now,
         _newId = newId ?? const Uuid().v4;
 
@@ -104,8 +116,32 @@ class DefaultWardriveEngine implements WardriveEngine {
   EngineStatus get current => _current;
 
   void _setStatus(EngineState s, [String? message]) {
-    _current = EngineStatus(s, message: message, lastFix: _lastFix, nextPingAt: _running ? _nextPingAt : null);
+    final auto = _running && _config.intervalSec > 0;
+    _current = EngineStatus(
+      s,
+      message: message,
+      lastFix: _lastFix,
+      nextPingAt: auto ? _nextPingAt : null,
+      waitingFor: auto ? _waitingFor : null,
+      metresToGo: auto ? _metresToGo : null,
+    );
     if (!_status.isClosed) _status.add(_current);
+  }
+
+  /// Keeps config values inside the ranges the app allows (Settings.minIntervalSec…): never hammer the mesh.
+  /// intervalSec ≤ 0 stays 0 (manual pings only).
+  static WardriveConfig clampConfig(WardriveConfig c) => WardriveConfig(
+        channel: c.channel,
+        intervalSec: c.intervalSec <= 0 ? 0 : c.intervalSec.clamp(Settings.minIntervalSec, Settings.maxIntervalSec),
+        minDistanceM: c.minDistanceM.clamp(Settings.minDistance, Settings.maxDistance),
+        listenWindow: c.listenWindow,
+        txPowerW: c.txPowerW,
+      );
+
+  /// Shortest time between two auto pings: the interval, and never less than one listen window.
+  Duration get _minGap {
+    final i = Duration(seconds: _config.intervalSec);
+    return i < _config.listenWindow ? _config.listenWindow : i;
   }
 
   /// Keeps the state, updates the message.
@@ -114,8 +150,14 @@ class DefaultWardriveEngine implements WardriveEngine {
   @override
   Future<void> start(WardriveConfig config) async {
     if (_running || _current.state == EngineState.starting) throw StateError('already driving');
-    _config = config;
+    _config = clampConfig(config);
+    config = _config;
     _lastPingAt = null;
+    _lastPingTime = null;
+    _retryAfter = null;
+    _waitingFor = null;
+    _metresToGo = null;
+    _nextPingAt = null;
     _stopping = false;
     _setStatus(EngineState.starting, 'Joining ${config.channel}');
     try {
@@ -139,56 +181,129 @@ class DefaultWardriveEngine implements WardriveEngine {
     }
     _running = true;
     _setStatus(EngineState.driving, config.intervalSec > 0 ? 'Driving' : 'Ready (manual pings)');
-    if (config.intervalSec > 0) _scheduleAuto(Duration.zero);
+    _startAuto();
+  }
+
+  @override
+  void updateConfig(WardriveConfig config) {
+    if (!_running || _stopping) return;
+    final c = clampConfig(config);
+    _config = WardriveConfig(
+      channel: _config.channel, // can't switch channel mid-drive
+      intervalSec: c.intervalSec,
+      minDistanceM: c.minDistanceM,
+      listenWindow: c.listenWindow,
+      txPowerW: c.txPowerW,
+    );
+    _startAuto();
+    if (_config.intervalSec <= 0 && !_busy) _setStatus(EngineState.driving, 'Ready (manual pings)');
   }
 
   void _onRadioLost() {
     if (!_running) return;
     _running = false;
-    _autoTimer?.cancel();
-    _autoTimer = null;
-    _nextPingAt = null;
+    _stopAuto();
     _setStatus(EngineState.error, 'Radio disconnected');
   }
 
   // ------------------------------------------------------------------ auto pinging
 
-  void _scheduleAuto(Duration d) {
-    _autoTimer?.cancel();
-    if (!_running || _stopping || _config.intervalSec <= 0) return;
-    if (d.isNegative) d = Duration.zero;
-    _nextPingAt = _clock().add(d);
-    _autoTimer = Timer(d, _autoTick);
-    if (!_busy) _setStatus(EngineState.driving, _current.message);
+  /// (Re)starts or stops the cadence checks for the current config.
+  void _startAuto() {
+    if (!_running || _stopping || _config.intervalSec <= 0) {
+      _stopAuto();
+      return;
+    }
+    _autoTimer ??= Timer.periodic(tick, (_) => _evaluate());
+    if (_fixSub == null) {
+      try {
+        _fixSub = location.fixes.listen((f) {
+          _lastFix = f;
+          _evaluate();
+        }, onError: (Object _) {});
+      } catch (_) {
+        _fixSub = null; // no stream: the tick still checks current()
+      }
+    }
+    scheduleMicrotask(_evaluate);
   }
 
-  Future<void> _autoTick() async {
-    if (!_running || _stopping || _busy) return; // a running ping reschedules when it finishes
-    final interval = Duration(seconds: _config.intervalSec);
-    final run = _serial(() async {
-      if (!_running || _stopping) return;
+  void _stopAuto() {
+    _autoTimer?.cancel();
+    _autoTimer = null;
+    final sub = _fixSub;
+    _fixSub = null;
+    if (sub != null) unawaited(sub.cancel());
+    _nextPingAt = null;
+    _waitingFor = null;
+    _metresToGo = null;
+  }
+
+  double? _metresLeft(GeoFix? fix) {
+    final last = _lastPingAt;
+    if (last == null) return 0;
+    if (fix == null) return null;
+    final moved = haversineM(last.lat, last.lon, fix.lat, fix.lon);
+    return math.max(0, _config.minDistanceM - moved).toDouble();
+  }
+
+  /// Publishes what we're waiting for, only when something the UI shows has changed.
+  void _wait(PingWait? w, double? togo, {String? message}) {
+    final rounded = togo?.roundToDouble();
+    final msg = message ?? _current.message;
+    if (_current.state == EngineState.driving &&
+        _waitingFor == w &&
+        _metresToGo == rounded &&
+        _current.nextPingAt == _nextPingAt &&
+        _current.message == msg) {
+      return;
+    }
+    _waitingFor = w;
+    _metresToGo = rounded;
+    if (!_busy) _setStatus(EngineState.driving, msg);
+  }
+
+  /// One cadence check: pings now if both the interval and the distance are met.
+  Future<void> _evaluate() async {
+    if (!_running || _stopping || _busy || _evaluating || _config.intervalSec <= 0) return;
+    final now = _clock();
+    final lastTime = _lastPingTime;
+    final due = lastTime == null ? now : lastTime.add(_minGap);
+    _nextPingAt = due;
+    if (now.isBefore(due)) {
+      _wait(PingWait.time, _metresLeft(_lastFix));
+      return;
+    }
+    final retry = _retryAfter;
+    if (retry != null && now.isBefore(retry)) return;
+    _evaluating = true;
+    try {
       final fix = await _fix();
-      if (!_running) return;
+      if (!_running || _stopping || _busy || _config.intervalSec <= 0) return;
       if (fix == null) {
-        _note('No GPS fix: ping skipped');
-        _scheduleAuto(interval);
+        _wait(PingWait.gps, null, message: 'No GPS fix: waiting to ping');
         return;
       }
-      final last = _lastPingAt;
-      if (last != null) {
-        final moved = haversineM(last.lat, last.lon, fix.lat, fix.lon);
-        if (moved < _config.minDistanceM) {
-          _note('Moved ${moved.round()} m since last ping (need ${_config.minDistanceM} m): skipped');
-          _scheduleAuto(interval);
-          return;
-        }
+      final togo = _metresLeft(fix)!;
+      if (togo > 0) {
+        _wait(PingWait.distance, togo, message: 'Move ${math.max(1, togo.round())} m more to ping');
+        return;
       }
-      await _ping(fix);
-    });
-    try {
-      await run;
+      _waitingFor = null;
+      _metresToGo = null;
+      await _serial(() async {
+        if (!_running || _stopping || _config.intervalSec <= 0) return null;
+        // A manual ping may have gone out while we waited for the GPS: it resets the timer and the anchor.
+        final t = _lastPingTime;
+        if (t != null && _clock().isBefore(t.add(_minGap))) return null;
+        if ((_metresLeft(fix) ?? 1) > 0) return null;
+        return _ping(fix);
+      });
     } catch (_) {
-      // status already reported by _ping
+      // status already reported by _ping; don't hammer a failing radio
+      _retryAfter = _clock().add(const Duration(seconds: 5));
+    } finally {
+      _evaluating = false;
     }
   }
 
@@ -257,6 +372,8 @@ class DefaultWardriveEngine implements WardriveEngine {
       sentAt = _clock();
       await link.sendChannelText(idx, text);
       _lastPingAt = (lat: fix.lat, lon: fix.lon);
+      _lastPingTime = sentAt;
+      _retryAfter = null;
       final l = link;
       final sentTs = l is MeshCoreCompanionLink ? l.lastSentTimestamp : null;
 
@@ -294,6 +411,11 @@ class DefaultWardriveEngine implements WardriveEngine {
       );
       if (!_pings.isClosed) _pings.add(ping);
       if (_running && !_stopping) {
+        if (_config.intervalSec > 0) {
+          _nextPingAt = sentAt.add(_minGap);
+          _waitingFor = PingWait.time;
+          _metresToGo = _config.minDistanceM.toDouble();
+        }
         _setStatus(
             EngineState.driving,
             echoes.isEmpty
@@ -313,11 +435,7 @@ class DefaultWardriveEngine implements WardriveEngine {
       _collector = null;
       await ctlSub?.cancel();
       _busy = false;
-      if (_running && !_stopping && _config.intervalSec > 0) {
-        final interval = Duration(seconds: _config.intervalSec);
-        final base = sentAt ?? _clock();
-        _scheduleAuto(base.add(interval).difference(_clock()));
-      }
+      if (_running && !_stopping && _config.intervalSec > 0) scheduleMicrotask(_evaluate);
     }
   }
 
@@ -407,17 +525,14 @@ class DefaultWardriveEngine implements WardriveEngine {
     final wasRunning = _running;
     _stopping = true;
     if (wasRunning) _setStatus(EngineState.stopping, 'Stopping');
-    _autoTimer?.cancel();
-    _autoTimer = null;
-    _nextPingAt = null;
+    _stopAuto();
     // Let a ping that is already on the air finish its listen window so its data isn't lost.
     final inflight = _inFlight;
     if (inflight != null) {
       await inflight;
     }
     _running = false;
-    _autoTimer?.cancel();
-    _autoTimer = null;
+    _stopAuto();
     await _rxSub?.cancel();
     _rxSub = null;
     _collector = null;

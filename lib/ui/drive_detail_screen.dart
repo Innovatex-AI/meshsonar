@@ -8,6 +8,8 @@ import 'app.dart';
 import 'drive_detail_map.dart';
 import 'drive_stats.dart';
 import 'onboarding/ui_prefs.dart';
+import 'report/drive_report_screen.dart';
+import 'ping_log_screen.dart';
 import 'sessions_screen.dart';
 import 'widgets.dart';
 
@@ -66,6 +68,12 @@ class _DriveDetailScreenState extends State<DriveDetailScreen> {
           appBar: AppBar(
             title: Text(label ?? 'Drive', maxLines: 1, overflow: TextOverflow.ellipsis),
             actions: [
+              TextButton.icon(
+                key: const Key('detail-report'),
+                onPressed: summary.pingCount == 0 ? null : () => openDriveReport(context, ses.id),
+                icon: const Icon(Icons.insights),
+                label: const Text('Report'),
+              ),
               IconButton(
                 key: const Key('detail-rename'),
                 tooltip: 'Rename',
@@ -207,7 +215,10 @@ class _Actions extends StatelessWidget {
         Expanded(
           child: FilledButton.icon(
             key: const Key('detail-sync'),
-            style: FilledButton.styleFrom(minimumSize: const Size(0, 52), textStyle: const TextStyle(fontSize: 16)),
+            style: FilledButton.styleFrom(
+                minimumSize: const Size(0, 52),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                textStyle: const TextStyle(fontSize: 16)),
             onPressed: (syncing || summary.unsyncedCount == 0) ? null : () => s.syncSession(id),
             icon: syncing
                 ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
@@ -215,14 +226,30 @@ class _Actions extends StatelessWidget {
             label: Text(summary.unsyncedCount == 0 ? 'Synced' : 'Sync ${summary.unsyncedCount}'),
           ),
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
         Expanded(
           child: OutlinedButton.icon(
             key: const Key('detail-export'),
-            style: OutlinedButton.styleFrom(minimumSize: const Size(0, 52), textStyle: const TextStyle(fontSize: 16)),
+            style: OutlinedButton.styleFrom(
+                minimumSize: const Size(0, 52),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                textStyle: const TextStyle(fontSize: 16)),
             onPressed: () => s.exportAndShare(id),
             icon: const Icon(Icons.ios_share),
-            label: const Text('Export & share'),
+            label: const Text('Export'),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: OutlinedButton.icon(
+            key: const Key('detail-ping-log'),
+            style: OutlinedButton.styleFrom(
+                minimumSize: const Size(0, 52),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                textStyle: const TextStyle(fontSize: 16)),
+            onPressed: () => openPingLog(context, sessionId: id),
+            icon: const Icon(Icons.list_alt),
+            label: const Text('Ping log'),
           ),
         ),
       ]),

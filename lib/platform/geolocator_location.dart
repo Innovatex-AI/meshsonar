@@ -1,4 +1,5 @@
-// GPS for the real app, via the geolocator package. High accuracy, every metre counts on a wardrive.
+// GPS for the real app, via the geolocator package. High accuracy, every metre counts on a wardrive. The app wraps
+// this in FilteredLocationSource (lib/core/position_filter.dart) so parked jitter and poor fixes never reach a ping.
 // Unknown values stay null (the plugin reports 0 or negative for "not available").
 import 'dart:async';
 

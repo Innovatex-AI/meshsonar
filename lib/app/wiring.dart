@@ -8,7 +8,9 @@ import 'package:uuid/uuid.dart';
 
 import '../core/cmat_client.dart';
 import '../core/drive_store.dart';
+import '../core/position_filter.dart';
 import '../core/model.dart';
+import '../core/repeater_directory.dart';
 import '../core/settings_store.dart';
 import '../core/sync_service.dart';
 import '../platform/geolocator_location.dart';
@@ -60,7 +62,8 @@ Future<AppServices> buildRealServices() async {
     bluetoothScanner: BleRadioScanner(),
     simulatorScanner: SimulatedRadioScanner(location: simLocation),
     linkFactory: (transport) => MeshCoreCompanionLink(transport),
-    location: GeolocatorLocationSource(),
+    // Real GPS, cleaned: parked jitter is held still, poor fixes dropped (lib/core/position_filter.dart).
+    location: FilteredLocationSource(GeolocatorLocationSource()),
     simulatedLocation: simLocation,
     engineFactory: (link, location) => DefaultWardriveEngine(link: link, location: location),
     repeaterCache: FileRepeaterCache(File('${root.path}${Platform.pathSeparator}repeaters.json')),
@@ -73,6 +76,9 @@ Future<AppServices> buildRealServices() async {
     shareFile: shareDriveFile,
     appInfo: app,
     uiPrefsFile: File('${root.path}${Platform.pathSeparator}ui_prefs.json'),
+    // The public map is ~17 MB; repeaters rarely move, so refresh weekly (or when the drive area moves >75 km).
+    directory: RepeaterDirectory(
+        cacheFile: File('${root.path}${Platform.pathSeparator}node_directory.json'), ttl: const Duration(days: 7)),
     clock: DateTime.now,
     newId: () => uuid.v4(),
   );

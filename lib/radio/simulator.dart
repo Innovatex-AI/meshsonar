@@ -60,6 +60,17 @@ class SimulatedLocationSource implements LocationSource {
   /// Set false to simulate losing the GPS fix.
   bool hasFix = true;
 
+  /// GPS noise: when > 0, every fix wanders around the true position by a bounded random walk (±[jitterM] metres
+  /// per axis, a few metres per fix) and reports accuracy between [jitterAccuracyM].min and .max — what a real
+  /// phone does while parked. 0 (the default) = clean fixes.
+  final double jitterM;
+  final ({double min, double max}) jitterAccuracyM;
+
+  /// False reports speed as unknown (null), like an iPhone that isn't sure it's moving.
+  final bool reportSpeed;
+
+  double _jx = 0, _jy = 0; // current noise offset, metres east/north
+
   late final List<double> _cum;
 
   SimulatedLocationSource({
@@ -68,6 +79,9 @@ class SimulatedLocationSource implements LocationSource {
     DateTime Function()? clock,
     DateTime? epoch,
     int? seed,
+    this.jitterM = 0,
+    this.jitterAccuracyM = (min: 5.0, max: 20.0),
+    this.reportSpeed = true,
   })  : _clock = clock ?? DateTime.now,
         _epoch = epoch ?? DateTime.utc(2026, 1, 1),
         _rng = math.Random(seed) {
@@ -93,14 +107,38 @@ class SimulatedLocationSource implements LocationSource {
     return (lat: a.lat + (b.lat - a.lat) * f, lon: a.lon + (b.lon - a.lon) * f);
   }
 
+  /// A parked phone with a noisy GPS: stands still at the start of the loop (Uptown) and wanders ±[jitterM] m.
+  factory SimulatedLocationSource.parked({
+    double jitterM = 20,
+    bool reportSpeed = true,
+    DateTime Function()? clock,
+    int? seed,
+  }) =>
+      SimulatedLocationSource(speedMps: 0, jitterM: jitterM, reportSpeed: reportSpeed, clock: clock, seed: seed);
+
   GeoFix _fixAt(DateTime t) {
     final p = positionAt(t);
+    if (jitterM <= 0) {
+      return GeoFix(
+        lat: p.lat,
+        lon: p.lon,
+        at: t.toUtc(),
+        accuracyM: 4.0 + _rng.nextDouble() * 2.0,
+        speedMps: reportSpeed ? speedMps * timeScale : null,
+      );
+    }
+    double step(double v) => (v + (_rng.nextDouble() * 2 - 1) * 4).clamp(-jitterM, jitterM);
+    _jx = step(_jx);
+    _jy = step(_jy);
+    const mPerDegLat = 111320.0;
+    final mPerDegLon = mPerDegLat * math.cos(p.lat * math.pi / 180);
+    final acc = jitterAccuracyM.min + _rng.nextDouble() * (jitterAccuracyM.max - jitterAccuracyM.min);
     return GeoFix(
-      lat: p.lat,
-      lon: p.lon,
+      lat: p.lat + _jy / mPerDegLat,
+      lon: p.lon + _jx / mPerDegLon,
       at: t.toUtc(),
-      accuracyM: 4.0 + _rng.nextDouble() * 2.0,
-      speedMps: speedMps * timeScale,
+      accuracyM: acc,
+      speedMps: reportSpeed ? speedMps * timeScale : null,
     );
   }
 

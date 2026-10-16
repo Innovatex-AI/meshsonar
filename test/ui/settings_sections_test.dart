@@ -16,16 +16,23 @@ void main() {
       ('driver', 'key-request'),
       ('driver', 'server-url'),
       ('wardriving', 'interval'),
+      ('wardriving', 'min-distance'),
+      ('wardriving', 'heard-hold'),
+      ('antenna', 'antenna-type'),
       ('antenna', 'antenna-gain'),
       ('sync', 'auto-sync'),
+      ('sync', 'sync-during-drive'),
+      ('sync', 'sync-every'),
+      ('sync', 'last-upload'),
       ('about-section', 'about'),
     ]) {
       await tester.scrollUntilVisible(find.byKey(Key(field)), 120, scrollable: scroll);
       expect(find.descendant(of: find.byKey(Key('section-$section')), matching: find.byKey(Key(field))), findsOneWidget,
           reason: '$field should be in $section');
     }
-    for (final title in ['DRIVER & SERVER', 'WARDRIVING', 'ANTENNA', 'SYNC', 'ABOUT']) {
-      await tester.scrollUntilVisible(find.text(title), -120, scrollable: scroll);
+    await tester.scrollUntilVisible(find.text('DRIVER & SERVER'), -120, scrollable: scroll);
+    for (final title in ['DRIVER & SERVER', 'WARDRIVING', 'ANTENNA', 'UPLOAD', 'ABOUT']) {
+      await tester.scrollUntilVisible(find.text(title), 120, scrollable: scroll);
       expect(find.text(title), findsOneWidget);
     }
   });

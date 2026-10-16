@@ -193,14 +193,24 @@ void main() {
 
     await edit('channel', 'cmh-drive');
     expect(h.settings.saved.channel, '#cmh-drive');
-    await edit('interval', '45');
+    Future<void> slide(String key, double index) async {
+      await tester.scrollUntilVisible(find.byKey(Key(key)), 100, scrollable: settingsScroll);
+      final sl = tester.widget<Slider>(find.byKey(Key(key)));
+      sl.onChanged!(index);
+      sl.onChangeEnd!(index);
+      await tester.pumpAndSettle();
+    }
+
+    await slide('interval-slider', 7); // 10, 15, … → 45
     expect(h.settings.saved.intervalSec, 45);
-    await edit('min-distance', '250');
+    await slide('min-distance-slider', 8); // … 200, 250
     expect(h.settings.saved.minDistanceM, 250);
-    await edit('antenna-type', 'mag-mount');
+    await tester.scrollUntilVisible(find.byKey(const Key('settings-antenna-external')), 100, scrollable: settingsScroll);
+    await tester.tap(find.byKey(const Key('settings-antenna-external')));
+    await tester.pumpAndSettle();
     await edit('antenna-gain', '5.8');
     await edit('antenna-height', '1.6');
-    expect(h.settings.saved.antenna.type, 'mag-mount');
+    expect(h.settings.saved.antenna.type, 'external');
     expect(h.settings.saved.antenna.gainDbi, 5.8);
     expect(h.settings.saved.antenna.heightM, 1.6);
 

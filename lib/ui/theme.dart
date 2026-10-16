@@ -403,7 +403,7 @@ ThemeData meshSonarTheme(Brightness b) {
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
       // Float above the thumb zone so a message never covers Start/Stop or Ping now on the Drive screen.
-      insetPadding: const EdgeInsets.fromLTRB(Gap.l, Gap.s, Gap.l, 104),
+      insetPadding: const EdgeInsets.fromLTRB(Gap.l, Gap.s, Gap.l, 160), // clear of the Antenna/Log row and the big buttons
       backgroundColor: p.text,
       contentTextStyle: TextStyle(fontFamily: _body, color: p.bg, fontSize: 16, fontWeight: FontWeight.w500),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Corners.chip)),

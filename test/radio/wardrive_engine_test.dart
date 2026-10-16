@@ -102,7 +102,8 @@ void main() {
     }
   }, timeout: const Timeout(Duration(seconds: 60)));
 
-  test('auto: first ping immediate, then every interval only after moving minDistance', () async {
+  test('auto (real clock): first ping immediate; 1 s interval is clamped to 10 s; manual pings still allowed', () async {
+    // Full cadence rules (time AND distance, clamping, updateConfig) are in wardrive_cadence_test.dart on a fake clock.
     final moving = Rig(speedMps: 13, gpsScale: 20); // 260 m/s
     await moving.open();
     await moving.engine
@@ -110,22 +111,15 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 100));
     expect(moving.radio.sentFrames.where((f) => f[0] == 3).length, 1, reason: 'first ping immediately');
     await Future<void>.delayed(const Duration(milliseconds: 2400));
-    await moving.engine.stop();
-    expect(moving.pings.length, 3);
+    expect(moving.pings.length, 1, reason: 'never more often than 10 s, however fast we drive');
+    expect(moving.engine.current.waitingFor, PingWait.time);
+    expect(moving.engine.current.nextPingAt, isNotNull);
     expect(String.fromCharCodes(moving.radio.sentFrames.lastWhere((f) => f[0] == 3).sublist(7)), matches(r'^@\[MapperBot\] -?\d+\.\d{5}, -?\d+\.\d{5}$'));
-
-    final parked = Rig(speedMps: 0);
-    await parked.open();
-    await parked.engine
-        .start(const WardriveConfig(intervalSec: 1, minDistanceM: 100, listenWindow: window));
-    await Future<void>.delayed(const Duration(milliseconds: 2400));
-    expect(parked.pings.length, 1, reason: 'not moved 100 m: auto pings skipped');
-    expect(parked.statuses.any((s) => (s.message ?? '').contains('skipped')), isTrue);
-    expect(parked.engine.current.nextPingAt, isNotNull);
-    // A manual ping is still allowed while parked.
-    await parked.engine.pingNow();
-    expect(parked.pings.length, 2);
-    await parked.engine.stop();
+    // A manual ping is allowed any time.
+    await moving.engine.pingNow();
+    expect(moving.pings.length, 2);
+    await moving.engine.stop();
+    expect(moving.engine.current.nextPingAt, isNull);
   }, timeout: const Timeout(Duration(seconds: 30)));
 
   test('no GPS fix: no ping, status says so', () async {

@@ -86,8 +86,8 @@ abstract class LocationSource {
 
 class WardriveConfig {
   final String channel;
-  final int intervalSec; // 0 = manual only
-  final int minDistanceM;
+  final int intervalSec; // 0 = manual only; otherwise clamped by the engine to 10–120 s
+  final int minDistanceM; // clamped by the engine to 15–500 m
   final Duration listenWindow; // how long to collect echoes after each ping
   final double? txPowerW; // shown in the ping text when known
   const WardriveConfig({
@@ -101,12 +101,33 @@ class WardriveConfig {
 
 enum EngineState { idle, starting, driving, pinging, stopping, error }
 
+/// What the next auto-ping is waiting for (both the interval AND the distance must be met).
+enum PingWait {
+  /// The interval since the last ping hasn't passed yet (see [EngineStatus.nextPingAt]).
+  time,
+
+  /// The interval has passed but we haven't moved far enough (see [EngineStatus.metresToGo]).
+  distance,
+
+  /// No GPS fix right now.
+  gps,
+}
+
 class EngineStatus {
   final EngineState state;
   final String? message;
   final GeoFix? lastFix;
+
+  /// Earliest time the next auto-ping may go out (last ping + interval). Null when not auto-pinging.
+  /// May be in the past while the engine is waiting for distance.
   final DateTime? nextPingAt;
-  const EngineStatus(this.state, {this.message, this.lastFix, this.nextPingAt});
+
+  /// What the next auto-ping is waiting for; null when not auto-pinging or a ping is due/going out now.
+  final PingWait? waitingFor;
+
+  /// Metres still to move before the distance rule is met (0 when met); null when unknown or not auto-pinging.
+  final double? metresToGo;
+  const EngineStatus(this.state, {this.message, this.lastFix, this.nextPingAt, this.waitingFor, this.metresToGo});
 }
 
 /// Runs a drive: pings on the channel on a timer/distance schedule, collects echoes for each ping,
@@ -116,6 +137,10 @@ abstract class WardriveEngine {
   Stream<EngineStatus> get status;
   EngineStatus get current;
   Future<void> start(WardriveConfig config);
+
+  /// Changes the auto-ping interval/distance (and listen window / power label) of a running drive. The channel
+  /// can't change mid-drive and is ignored. Takes effect immediately; does nothing when not driving.
+  void updateConfig(WardriveConfig config);
 
   /// Pings immediately (also allowed while auto-pinging). Completes with the finished ping.
   Future<DrivePing> pingNow();

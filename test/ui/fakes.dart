@@ -264,6 +264,14 @@ class FakeEngine implements WardriveEngine {
     setStatus(const EngineStatus(EngineState.driving, message: 'Driving. Listening on #wardriving.'));
   }
 
+  /// Every config pushed mid-drive (settings changed while driving).
+  final List<WardriveConfig> updates = [];
+  @override
+  void updateConfig(WardriveConfig config) {
+    updates.add(config);
+    this.config = config;
+  }
+
   void emit(DrivePing p) => _pings.add(p);
 
   @override

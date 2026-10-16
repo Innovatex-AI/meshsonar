@@ -74,15 +74,18 @@ void main() {
 
     // Stored immediately, before stop.
     expect(h.store.pingsBySession[session.id]!.map((p) => p.id), ['p1', 'p2']);
-    // The list is collapsed to the latest ping; open it to see them all.
-    expect(find.byKey(const Key('latest-ping')), findsOneWidget);
-    await tester.tap(find.byKey(const Key('recent-toggle')));
-    await settle(tester);
-    expect(find.byKey(const Key('recent-pings')), findsOneWidget);
-    expect(find.text('Heard nothing'), findsOneWidget);
-    expect(find.text('2 repeaters heard · SNR 4.3 dB'), findsOneWidget);
-    expect(find.textContaining('Westerville Water Tower'), findsOneWidget); // name from cache
-    expect(find.textContaining('ff09'), findsOneWidget); // unknown -> hex prefix
+    // The heard box on the map lists who answered: the cached name, or the hex id when unknown.
+    expect(find.byKey(const Key('heard-box')), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const ValueKey('heard-row-a1b2')), matching: find.text('Westerville Water Tower')),
+        findsOneWidget);
+    expect(find.descendant(of: find.byKey(const ValueKey('heard-row-ff09')), matching: find.text('FF09')), findsOneWidget);
+    // The LOG button opens the live ping log of this drive.
+    await tester.tap(find.byKey(const Key('open-log')));
+    await tester.pumpAndSettle();
+    expect(find.text('Heard nothing'), findsWidgets);
+    expect(find.textContaining('Westerville Water Tower'), findsWidgets); // name from cache
+    await tester.pageBack();
+    await tester.pumpAndSettle();
     expect(tester.widget<Text>(find.byKey(const Key('stat-pings'))).data, '2');
     expect(tester.widget<Text>(find.byKey(const Key('stat-heard'))).data, '1 heard');
     expect(tester.widget<Text>(find.byKey(const Key('stat-pct'))).data, '50%');
@@ -113,8 +116,9 @@ void main() {
     await tester.pump();
     h.engines.single.emit(silentPing('quiet'));
     await settle(tester);
-    expect(find.text('Heard nothing'), findsOneWidget);
-    expect(find.byIcon(Icons.signal_cellular_off), findsOneWidget);
+    expect(find.text('No repeaters heard'), findsOneWidget); // the result flash on the map
+    expect(find.text('Listening… nothing heard yet'), findsOneWidget); // the heard box
+    expect(tester.widget<Text>(find.byKey(const Key('stat-snr'))).data, 'none');
     expect(h.store.pingsBySession.values.single.single.echoes, isEmpty);
     expect(tester.widget<Text>(find.byKey(const Key('stat-pct'))).data, '0%');
     await h.state.stopDrive();

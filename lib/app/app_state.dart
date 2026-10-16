@@ -12,6 +12,7 @@ import 'package:flutter/foundation.dart';
 import '../core/api.dart';
 import '../core/heard.dart';
 import '../core/model.dart';
+import '../core/repeater_directory.dart';
 import '../radio/radio_api.dart';
 import 'messages.dart';
 import 'services.dart';
@@ -205,6 +206,7 @@ class AppState extends ChangeNotifier {
 
   void _rebuildLookup() {
     _lookup = RepeaterLookup([(RepeaterSource.cmat, _repeaters), (RepeaterSource.publicMap, _extraRepeaters)]);
+    _nameCache.clear(); // names from either list may have changed
     heard.relookup(_lookup);
   }
 
@@ -234,6 +236,88 @@ class AppState extends ChangeNotifier {
   /// Stats for the drive screen when not driving: the last finished drive stays visible.
   DriveSession? _lastSession;
   DriveSession? get lastSession => _lastSession;
+
+  // ---------- uploads during / at the end of a drive (Agent 4) ----------
+  /// When the last upload (during a drive, at Stop, or a manual sync) finished without error.
+  DateTime? _lastUploadAt;
+  DateTime? get lastUploadAt => _lastUploadAt;
+
+  /// Plain-language reason the last upload failed; null after a successful one.
+  String? _lastUploadError;
+  String? get lastUploadError => _lastUploadError;
+
+  bool _uploading = false;
+
+  /// An upload is running (the periodic in-drive upload, the one at Stop, or a manual sync).
+  bool get uploading => _uploading || _syncing.isNotEmpty;
+
+  /// The drive that just stopped (for the "View drive report" card); cleared when a new drive starts or it's deleted.
+  String? _lastFinishedSessionId;
+  String? get lastFinishedSessionId => _lastFinishedSessionId;
+
+  /// Period of the in-drive upload timer for a [Settings.syncEveryMin] value. Tests shorten it.
+  @visibleForTesting
+  Duration Function(int minutes) syncPeriodFor = (m) => Duration(minutes: m);
+
+  Timer? _driveSyncTimer;
+  Duration? _driveSyncPeriod;
+  Future<void>? _driveSyncInFlight;
+
+  /// Whether the in-drive upload timer should be running with the current settings.
+  bool get _wantDriveSync => driving && _settings.autoSync && _settings.syncDuringDrive && keyApproved;
+
+  /// Starts, restarts (new period) or stops the in-drive upload timer to match the settings.
+  void _scheduleDriveSync() {
+    if (!_wantDriveSync) {
+      _cancelDriveSync();
+      return;
+    }
+    final period = syncPeriodFor(_settings.syncEveryMin);
+    if (_driveSyncTimer != null && _driveSyncPeriod == period) return;
+    _driveSyncTimer?.cancel();
+    _driveSyncPeriod = period;
+    _driveSyncTimer = Timer.periodic(period, (_) => _driveSyncTick());
+  }
+
+  void _cancelDriveSync() {
+    _driveSyncTimer?.cancel();
+    _driveSyncTimer = null;
+    _driveSyncPeriod = null;
+  }
+
+  /// One in-drive upload of the current drive's saved pings. Never overlaps another; failures are quiet (status
+  /// line only) and retried on the next tick.
+  void _driveSyncTick() {
+    if (_driveSyncInFlight != null || _busy || !_wantDriveSync) return;
+    final sid = _session?.id;
+    if (sid == null) return;
+    _driveSyncInFlight = _uploadQuietly(sid).whenComplete(() => _driveSyncInFlight = null);
+  }
+
+  Future<void> _uploadQuietly(String sessionId) async {
+    _uploading = true;
+    notifyListeners();
+    try {
+      await _writeChain; // only pings already saved on the phone are sent
+      final r = await _syncService.syncSession(sessionId);
+      if (r.error != null) {
+        _lastUploadError = friendlySyncError(r.error!);
+        final l = r.error!.toLowerCase();
+        if (l.contains('403') || l.contains('not approved') || l.contains('not recognised')) {
+          unawaited(refreshKeyStatus(quiet: true));
+        }
+      } else {
+        _lastUploadAt = services.clock();
+        _lastUploadError = null;
+      }
+    } catch (e) {
+      _lastUploadError = friendlyError(e, action: 'Upload');
+      if (e is CmatException && e.status == 403) unawaited(refreshKeyStatus(quiet: true));
+    } finally {
+      _uploading = false;
+      await refreshSessions(); // updates syncedCount live
+    }
+  }
 
   Future<void> startDrive({String? label}) async {
     if (driving || _busy) return;
@@ -270,6 +354,7 @@ class AppState extends ChangeNotifier {
       await services.store.startSession(session);
       _session = session;
       _lastSession = null;
+      _lastFinishedSessionId = null;
       _recent.clear();
       _drivePings.clear();
       heard
@@ -295,10 +380,12 @@ class AppState extends ChangeNotifier {
         minDistanceM: s.minDistanceM,
         txPowerW: txW,
       ));
+      _scheduleDriveSync();
       unawaited(refreshSessions());
     } catch (e) {
       // The session row may exist with no pings; close it so it doesn't look "still driving".
       final sid = _session?.id;
+      _cancelDriveSync();
       await _teardownEngine();
       if (sid != null) {
         try {
@@ -325,6 +412,8 @@ class AppState extends ChangeNotifier {
     if (_recent.length > recentLimit) _recent.removeLast();
     _drivePings.add(ping);
     heard.addPing(ping);
+    // First GPS fix of the drive: make sure the public node directory covers this area (no-op when fresh).
+    if (_drivePings.length == 1) unawaited(refreshDirectory(lat: ping.lat, lon: ping.lon));
     notifyListeners();
     _enqueueWrite(sid, ping);
   }
@@ -389,6 +478,7 @@ class AppState extends ChangeNotifier {
     final session = _session;
     if (session == null || _busy) return;
     _busy = true;
+    _cancelDriveSync();
     notifyListeners();
     try {
       try {
@@ -409,12 +499,16 @@ class AppState extends ChangeNotifier {
         _say('${_unsaved.length} ping(s) couldn\'t be saved to this device. Export the drive before closing the app.');
       }
       _lastSession = session.copyWith(endedAt: services.clock().toUtc());
+      _lastFinishedSessionId = session.id;
       _session = null;
       _status = const EngineStatus(EngineState.idle);
     } finally {
       _busy = false;
       notifyListeners();
     }
+    // An in-drive upload may still be running; let it finish so the final one sends what's left plus ended_at.
+    final inFlight = _driveSyncInFlight;
+    if (inFlight != null) await inFlight;
     await refreshSessions();
     if (_settings.autoSync && keyApproved) {
       await syncSession(session.id, quietIfNothing: true);
@@ -444,7 +538,7 @@ class AppState extends ChangeNotifier {
         return 'Starting…';
       case EngineState.driving:
         final next = st.nextPingAt;
-        if (next == null) return _settings.intervalSec == 0 ? 'Driving (manual pings).' : 'Driving.';
+        if (next == null) return 'Driving.';
         final secs = next.difference(services.clock()).inSeconds;
         return secs > 0 ? 'Driving. Next ping in ${secs}s.' : 'Driving. Ping due.';
       case EngineState.pinging:
@@ -557,6 +651,8 @@ class AppState extends ChangeNotifier {
       return;
     }
     _lastSyncFailed = false;
+    _lastUploadAt = services.clock();
+    _lastUploadError = null;
     final parts = <String>['Uploaded ${r.stored} new ping${r.stored == 1 ? '' : 's'}'];
     if (r.duplicate > 0) parts.add('${r.duplicate} already on the server');
     if (r.rejected > 0) parts.add('${r.rejected} rejected');
@@ -571,6 +667,7 @@ class AppState extends ChangeNotifier {
   void _syncFailed(String msg, Object? e) {
     _lastSyncFailed = true;
     _lastSyncMessage = msg;
+    _lastUploadError = msg;
     _say(msg);
     if (e is CmatException && e.status == 403) unawaited(refreshKeyStatus(quiet: true));
   }
@@ -593,6 +690,7 @@ class AppState extends ChangeNotifier {
     }
     try {
       await services.store.deleteSession(sessionId);
+      if (_lastFinishedSessionId == sessionId) _lastFinishedSessionId = null;
       if (_lastSession?.id == sessionId) {
         _lastSession = null;
         _pingCount = 0;
@@ -620,6 +718,7 @@ class AppState extends ChangeNotifier {
     try {
       _setRepeaters(await services.repeaterCache.load());
     } catch (_) {}
+    unawaited(_loadDirectory());
     _loaded = true;
     notifyListeners();
     await refreshSessions();
@@ -628,12 +727,27 @@ class AppState extends ChangeNotifier {
 
   Future<void> updateSettings(Settings s) async {
     _settings = s;
+    _scheduleDriveSync(); // in-drive upload follows the toggles, the period and the key status
+    _applyPingCadence(s);
     notifyListeners();
     try {
       await services.settingsStore.save(s);
     } catch (e) {
       _say('Couldn\'t save settings. ${friendlyError(e, action: 'Saving')}');
     }
+  }
+
+  /// Auto-ping interval/distance changed mid-drive: the running engine picks them up at once.
+  void _applyPingCadence(Settings s) {
+    final engine = _engine;
+    if (engine == null || !driving) return;
+    final txDbm = _selfInfo?.radio.txDbm;
+    engine.updateConfig(WardriveConfig(
+      channel: s.channel,
+      intervalSec: s.intervalSec,
+      minDistanceM: s.minDistanceM,
+      txPowerW: txDbm == null ? null : _dbmToWatts(txDbm),
+    ));
   }
 
   bool _keyBusy = false;
@@ -715,6 +829,7 @@ class AppState extends ChangeNotifier {
   String repeaterLabel(String prefix) => repeaterName(prefix) ?? prefix.toLowerCase();
 
   Future<void> refreshRepeaters({bool quiet = false}) async {
+    if (!quiet) unawaited(refreshDirectory(force: true)); // a manual refresh also refetches the public node map
     final key = _settings.driverKey;
     if (key == null || key.isEmpty) {
       if (!quiet) _say('Request a driver key first.');
@@ -735,8 +850,47 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  // ---------- public node directory (map.meshcore.io; Agent 2) ----------
+  DirectorySnapshot? _directory;
+
+  /// The cached public node directory (repeaters near the last drive area), or null.
+  DirectorySnapshot? get directory => _directory;
+
+  void _applyDirectory(DirectorySnapshot? s) {
+    if (s == null || identical(s, _directory)) return;
+    _directory = s;
+    setExtraRepeaters(s.repeaters);
+  }
+
+  Future<void> _loadDirectory() async {
+    final d = services.directory;
+    if (d == null) return;
+    try {
+      final s = await d.load();
+      _applyDirectory(s);
+      if (s != null && d.isStale(s)) await refreshDirectory(); // once a day, around the last area used
+    } catch (_) {}
+  }
+
+  /// Refreshes the public node directory around [lat]/[lon] (default: the last drive position, else the cached
+  /// centre). Respects the directory's 24 h cache unless [force]. Never throws; offline just keeps the cache.
+  Future<void> refreshDirectory({double? lat, double? lon, bool force = false}) async {
+    final d = services.directory;
+    if (d == null) return;
+    if (lat == null || lon == null) {
+      final last = _drivePings.isNotEmpty ? _drivePings.last : null;
+      lat = last?.lat ?? _directory?.centerLat;
+      lon = last?.lon ?? _directory?.centerLon;
+    }
+    if (lat == null || lon == null) return;
+    try {
+      _applyDirectory(await d.refresh(lat: lat, lon: lon, force: force));
+    } catch (_) {}
+  }
+
   @override
   void dispose() {
+    _cancelDriveSync();
     _pingSub?.cancel();
     _statusSub?.cancel();
     super.dispose();

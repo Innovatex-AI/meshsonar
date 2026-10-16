@@ -10,6 +10,7 @@ import 'app.dart';
 import 'drive_detail_screen.dart';
 import 'drive_stats.dart';
 import 'onboarding/ui_prefs.dart';
+import 'report/drive_report_screen.dart';
 import 'widgets.dart';
 
 /// Loads and caches per-drive stats (they need the drive's pings). Reloaded when a drive's ping count changes.
@@ -464,6 +465,12 @@ class _CardMenu extends StatelessWidget {
           child: const ListTile(leading: Icon(Icons.cloud_upload_outlined), title: Text('Sync now')),
         ),
         PopupMenuItem(
+          key: ValueKey('menu-report-$id'),
+          value: 'report',
+          enabled: summary.pingCount > 0,
+          child: const ListTile(leading: Icon(Icons.insights), title: Text('Drive report')),
+        ),
+        PopupMenuItem(
           key: ValueKey('menu-export-$id'),
           value: 'export',
           child: const ListTile(leading: Icon(Icons.ios_share), title: Text('Export & share')),
@@ -491,6 +498,8 @@ Future<bool> runDriveAction(BuildContext context, String action, SessionSummary 
   switch (action) {
     case 'sync':
       await s.syncSession(id);
+    case 'report':
+      openDriveReport(context, id);
     case 'export':
       await s.exportAndShare(id);
     case 'rename':

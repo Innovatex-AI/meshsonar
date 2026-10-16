@@ -6,6 +6,7 @@ import 'dart:io';
 
 import '../core/api.dart';
 import '../core/model.dart';
+import '../core/repeater_directory.dart';
 import '../radio/radio_api.dart';
 
 /// Local cache of CMAT's repeater list, so names show with no signal.
@@ -107,5 +108,9 @@ class AppServices {
     required this.clock,
     this.appInfo = const AppInfo(name: 'MeshSonar', version: '0.1.0'),
     this.uiPrefsFile,
+    this.directory,
   });
+
+  /// Public node directory (map.meshcore.io) for names/positions CMAT doesn't know. Null = not used (tests).
+  final RepeaterDirectory? directory;
 }
