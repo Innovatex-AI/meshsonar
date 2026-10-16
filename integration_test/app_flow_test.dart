@@ -24,6 +24,13 @@ Future<bool> waitFor(WidgetTester t, Finder f, {Duration timeout = const Duratio
   return false;
 }
 
+/// Waits for [f], lets page transitions finish, then taps it.
+Future<void> tapWhenReady(WidgetTester t, Finder f, String what, {Duration timeout = const Duration(seconds: 20)}) async {
+  expect(await waitFor(t, f, timeout: timeout), isTrue, reason: what);
+  await pumpFor(t, const Duration(milliseconds: 1200));
+  await t.tap(f.last);
+}
+
 Future<void> screen(WidgetTester t, String name) async {
   await pumpFor(t, const Duration(milliseconds: 800));
   // ignore: avoid_print
@@ -44,15 +51,13 @@ void main() {
 
     expect(await waitFor(t, find.text('Connect radio')), isTrue, reason: 'Drive screen with Connect radio');
     await screen(t, 'drive-empty');
-    await t.tap(find.text('Connect radio').last);
+    await tapWhenReady(t, find.text('Connect radio'), 'Connect radio button');
 
     expect(await waitFor(t, find.text('Simulator (no radio)')), isTrue, reason: 'Connect screen');
     await screen(t, 'connect');
-    await t.tap(find.text('Simulator (no radio)'));
+    await tapWhenReady(t, find.text('Simulator (no radio)'), 'Simulator option');
 
-    expect(await waitFor(t, find.text('Start drive'), timeout: const Duration(seconds: 30)), isTrue,
-        reason: 'connected to the simulator radio');
-    await t.tap(find.text('Start drive'));
+    await tapWhenReady(t, find.text('Start drive'), 'connected to the simulator radio', timeout: const Duration(seconds: 30));
     expect(await waitFor(t, find.text('Stop drive')), isTrue, reason: 'drive started');
 
     // let auto-pings run (first is immediate) and add two manual pings
@@ -67,10 +72,11 @@ void main() {
     await t.tap(find.text('Stop drive'));
     expect(await waitFor(t, find.text('Start drive'), timeout: const Duration(seconds: 30)), isTrue, reason: 'stopped');
 
-    await t.tap(find.text('Drives').last);
+    await tapWhenReady(t, find.text('Drives'), 'Drives tab');
     expect(await waitFor(t, find.textContaining('pings')), isTrue, reason: 'drives list shows the drive');
     await screen(t, 'drives');
 
+    await pumpFor(t, const Duration(milliseconds: 800));
     await t.tap(find.textContaining('pings').first);
     expect(await waitFor(t, find.text('Median SNR')), isTrue, reason: 'drive detail stats');
     await screen(t, 'detail');
