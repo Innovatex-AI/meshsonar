@@ -1,0 +1,247 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/app/app_state.dart';
+import 'package:meshsonar/core/api.dart';
+import 'package:meshsonar/core/model.dart';
+
+import 'fakes.dart';
+
+Future<void> settle(WidgetTester tester) async {
+  for (var i = 0; i < 5; i++) {
+    await tester.pump(const Duration(milliseconds: 50));
+  }
+}
+
+/// Lets snackbars time out so no timers are left pending.
+Future<void> drain(WidgetTester tester) async {
+  await tester.pump(const Duration(seconds: 10));
+  await tester.pump(const Duration(seconds: 1));
+}
+
+Future<void> connectViaUi(WidgetTester tester, {String device = 'MeshCore-Truck'}) async {
+  await tester.tap(find.byKey(const Key('connection-chip')));
+  await tester.pumpAndSettle();
+  expect(find.text(device), findsOneWidget);
+  await tester.tap(find.text(device));
+  await settle(tester);
+  await tester.pumpAndSettle();
+}
+
+void main() {
+  testWidgets('empty drive screen explains what to do', (tester) async {
+    useTallScreen(tester);
+    final h = Harness();
+    await h.pumpApp(tester);
+    expect(find.text('Not connected'), findsOneWidget);
+    expect(find.text('No pings yet'), findsOneWidget);
+    expect(find.text('Connect radio'), findsOneWidget);
+    await drain(tester);
+  });
+
+  testWidgets('start drive -> pings appear and are stored -> stop -> sync called', (tester) async {
+    useTallScreen(tester);
+    final h = Harness()..approveKey();
+    h.cache.items = const [RepeaterRef(key: 'a1b2c3d4', name: 'Westerville Water Tower', lat: 40.1, lon: -82.9)];
+    await h.pumpApp(tester);
+
+    await connectViaUi(tester);
+    expect(find.text('Truck Radio'), findsOneWidget); // connection chip shows the radio's name
+    expect(h.bt.connects, 1);
+
+    await tester.tap(find.byKey(const Key('start-stop')));
+    await settle(tester);
+    expect(h.state.driving, isTrue);
+    expect(find.text('Stop drive'), findsOneWidget);
+    expect(find.text('Driving. Listening on #wardriving.'), findsOneWidget);
+
+    // Session carries radio info, antenna and companion from SelfInfo/settings.
+    final session = h.store.sessionsById.values.single;
+    expect(session.radio.freqMhz, 910.525);
+    expect(session.companion.publicKey, 'abcdef0123');
+    expect(session.companion.firmware, 'v1.9.0');
+    expect(session.channel, '#wardriving');
+    expect(h.engines.single.config!.channel, '#wardriving');
+    expect(h.engineLocation, same(h.location)); // real GPS with a Bluetooth radio
+
+    final e = h.engines.single;
+    e.emit(heardPing('p1', const [
+      Echo(repeater: 'a1b2', snrDb: 4.25, hops: 1),
+      Echo(repeater: 'ff09', snrDb: -3.0, hops: 1),
+    ]));
+    await settle(tester);
+    e.emit(silentPing('p2'));
+    await settle(tester);
+
+    // Stored immediately, before stop.
+    expect(h.store.pingsBySession[session.id]!.map((p) => p.id), ['p1', 'p2']);
+    expect(find.text('Heard nothing'), findsOneWidget);
+    expect(find.text('2 repeaters heard · SNR 4.3 dB'), findsOneWidget);
+    expect(find.textContaining('Westerville Water Tower'), findsOneWidget); // name from cache
+    expect(find.textContaining('ff09'), findsOneWidget); // unknown -> hex prefix
+    expect(tester.widget<Text>(find.byKey(const Key('stat-pings'))).data, '2');
+    expect(tester.widget<Text>(find.byKey(const Key('stat-heard'))).data, '1');
+    expect(tester.widget<Text>(find.byKey(const Key('stat-pct'))).data, '50%');
+
+    // Ping now: emitted on the stream AND returned; counted once.
+    await tester.tap(find.byKey(const Key('ping-now')));
+    await settle(tester);
+    expect(h.store.pingsBySession[session.id]!.length, 3);
+    expect(tester.widget<Text>(find.byKey(const Key('stat-pings'))).data, '3');
+
+    await tester.tap(find.byKey(const Key('start-stop')));
+    await settle(tester);
+    expect(e.stopped, isTrue);
+    expect(h.store.calls.last, isNot('start'));
+    expect(h.store.sessionsById[session.id]!.endedAt, isNotNull);
+    expect(h.sync.syncedSessions, [session.id]);
+    expect(tester.widget<Text>(find.byKey(const Key('stat-synced'))).data, '3');
+    expect(find.text('Start drive'), findsOneWidget);
+    await drain(tester);
+  });
+
+  testWidgets('a ping that heard nothing is shown as such and kept', (tester) async {
+    useTallScreen(tester);
+    final h = Harness();
+    await h.pumpApp(tester);
+    await h.state.connect(h.bt.devices.first, RadioKind.bluetooth);
+    await h.state.startDrive();
+    await tester.pump();
+    h.engines.single.emit(silentPing('quiet'));
+    await settle(tester);
+    expect(find.text('Heard nothing'), findsOneWidget);
+    expect(find.byIcon(Icons.signal_cellular_off), findsOneWidget);
+    expect(h.store.pingsBySession.values.single.single.echoes, isEmpty);
+    expect(tester.widget<Text>(find.byKey(const Key('stat-pct'))).data, '0%');
+    await h.state.stopDrive();
+    await drain(tester);
+  });
+
+  testWidgets('sync failure keeps pings and shows a plain message', (tester) async {
+    useTallScreen(tester);
+    final h = Harness()..approveKey();
+    h.sync.failWith = 'network error: Failed host lookup: cmh-meshcore.lovable.app';
+    await h.pumpApp(tester);
+    await h.state.connect(h.bt.devices.first, RadioKind.bluetooth);
+    await h.state.startDrive();
+    h.engines.single.emit(heardPing('p1', const [Echo(repeater: 'a1', snrDb: 2)]));
+    h.engines.single.emit(silentPing('p2'));
+    await settle(tester);
+
+    await tester.tap(find.byKey(const Key('start-stop')));
+    await settle(tester);
+    expect(h.sync.syncedSessions.length, 1);
+    final sid = h.store.sessionsById.keys.single;
+    expect(h.store.pingsBySession[sid]!.length, 2); // nothing lost
+    expect(h.store.synced[sid], isEmpty);
+    expect(find.textContaining('Pings are kept on this phone'), findsOneWidget);
+    expect(find.textContaining('Failed host lookup'), findsNothing); // no raw errors
+    expect(tester.widget<Text>(find.byKey(const Key('stat-synced'))).data, '0');
+
+    // Drives tab shows the unsynced count and the error banner.
+    await tester.tap(find.text('Drives'));
+    await tester.pumpAndSettle();
+    expect(find.text('2 not synced'), findsOneWidget);
+    expect(find.byKey(const Key('sync-error')), findsOneWidget);
+    await drain(tester);
+  });
+
+  testWidgets('sync throwing 403 is explained and pings are kept', (tester) async {
+    useTallScreen(tester);
+    final h = Harness()..approveKey();
+    h.sync.throwError = const CmatException('not approved', status: 403);
+    await h.pumpApp(tester);
+    await h.state.connect(h.bt.devices.first, RadioKind.bluetooth);
+    await h.state.startDrive();
+    h.engines.single.emit(silentPing('p1'));
+    await settle(tester);
+    await h.state.stopDrive();
+    await settle(tester);
+    expect(h.store.pingsBySession.values.single.length, 1);
+    expect(h.state.lastSyncMessage, contains('isn\'t approved'));
+    await drain(tester);
+  });
+
+  testWidgets('no auto-sync when the key is still pending; drive still saved', (tester) async {
+    useTallScreen(tester);
+    final h = Harness();
+    h.settings.saved = const Settings(driverKey: 'k-pending-0001', keyStatus: DriverKeyStatus.pending);
+    await h.pumpApp(tester);
+    await h.state.connect(h.bt.devices.first, RadioKind.bluetooth);
+    await h.state.startDrive();
+    h.engines.single.emit(silentPing('p1'));
+    await settle(tester);
+    await tester.tap(find.byKey(const Key('start-stop')));
+    await settle(tester);
+    expect(h.sync.syncedSessions, isEmpty);
+    expect(h.store.pingsBySession.values.single.length, 1);
+    expect(find.textContaining('once your driver key is approved'), findsOneWidget);
+    await drain(tester);
+  });
+
+  testWidgets('a failed local write is retried and the ping is not lost', (tester) async {
+    useTallScreen(tester);
+    final h = Harness();
+    await h.pumpApp(tester);
+    await h.state.connect(h.bt.devices.first, RadioKind.bluetooth);
+    await h.state.startDrive();
+    h.store.failAppend = true;
+    h.engines.single.emit(silentPing('p1'));
+    await settle(tester);
+    expect(h.state.unsavedCount, 1);
+    expect(find.textContaining('not yet saved'), findsOneWidget);
+    h.store.failAppend = false;
+    h.engines.single.emit(silentPing('p2'));
+    await settle(tester);
+    expect(h.state.unsavedCount, 0);
+    expect(h.store.pingsBySession.values.single.map((p) => p.id), ['p1', 'p2']);
+    await h.state.stopDrive();
+    await drain(tester);
+  });
+
+  testWidgets('simulator uses simulated location; permission denied blocks start with a message', (tester) async {
+    useTallScreen(tester);
+    final h = Harness();
+    await h.pumpApp(tester);
+    await tester.tap(find.byKey(const Key('connection-chip')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('simulator')));
+    await tester.pumpAndSettle();
+    expect(find.text('Simulator'), findsOneWidget);
+
+    h.simLocation.permission = false;
+    await tester.tap(find.byKey(const Key('start-stop')));
+    await settle(tester);
+    expect(h.state.driving, isFalse);
+    expect(find.textContaining('needs location access'), findsOneWidget);
+    expect(h.store.sessionsById, isEmpty);
+
+    h.simLocation.permission = true;
+    await tester.tap(find.byKey(const Key('start-stop')));
+    await settle(tester);
+    expect(h.state.driving, isTrue);
+    expect(h.engineLocation, same(h.simLocation));
+    await h.state.stopDrive();
+    await drain(tester);
+  });
+
+  testWidgets('connect failure and scan failure show plain messages', (tester) async {
+    useTallScreen(tester);
+    final h = Harness();
+    h.bt.connectError = Exception('GATT 133');
+    await h.pumpApp(tester);
+    await tester.tap(find.byKey(const Key('connection-chip')));
+    await tester.pumpAndSettle();
+    expect(find.text('MeshCore-Truck'), findsOneWidget);
+    expect(find.text('-62 dBm (good)'), findsOneWidget);
+    await tester.tap(find.text('MeshCore-Truck'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Couldn\'t connect to MeshCore-Truck'), findsOneWidget);
+    expect(h.state.connected, isFalse);
+
+    h.bt.scanError = Exception('Bluetooth permission denied');
+    await tester.tap(find.byKey(const Key('scan')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('needs Bluetooth permission'), findsOneWidget);
+    await drain(tester);
+  });
+}

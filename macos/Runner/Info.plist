@@ -28,5 +28,11 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>MeshSonar connects to your MeshCore companion radio over Bluetooth.</string>
+	<key>NSLocationUsageDescription</key>
+	<string>MeshSonar records where each ping was sent so your drive can be mapped.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>MeshSonar records where each ping was sent so your drive can be mapped.</string>
 </dict>
 </plist>

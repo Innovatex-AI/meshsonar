@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Meshsonar</string>
+	<string>MeshSonar</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -65,6 +65,19 @@
 		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>MeshSonar connects to your MeshCore companion radio over Bluetooth to send wardriving pings and hear repeater echoes.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>MeshSonar connects to your MeshCore companion radio over Bluetooth.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>MeshSonar records where each ping was sent so your drive can be mapped.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>MeshSonar keeps recording ping locations during a drive while the screen is off or another app (like navigation) is in front.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+		<string>bluetooth-central</string>
 	</array>
 </dict>
 </plist>

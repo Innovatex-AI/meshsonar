@@ -1,0 +1,197 @@
+// End-to-end: DefaultWardriveEngine → MeshCoreCompanionLink → SimulatedTransport (real companion frames, real
+// over-the-air packets). Time is sped up: the simulator's delays are divided by timeScale, listen windows are short.
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/core/model.dart';
+import 'package:meshsonar/radio/companion_link.dart';
+import 'package:meshsonar/radio/radio_api.dart';
+import 'package:meshsonar/radio/simulator.dart';
+import 'package:meshsonar/radio/wardrive_engine.dart';
+
+const window = Duration(milliseconds: 200);
+
+class Rig {
+  final SimulatedLocationSource gps;
+  final SimulatedTransport radio;
+  final MeshCoreCompanionLink link;
+  final DefaultWardriveEngine engine;
+  final pings = <DrivePing>[];
+  final statuses = <EngineStatus>[];
+  Rig._(this.gps, this.radio, this.link, this.engine) {
+    engine.pings.listen(pings.add);
+    engine.status.listen(statuses.add);
+  }
+
+  factory Rig({double speedMps = 13, double gpsScale = 1, int seed = 7, DateTime Function()? worldClock}) {
+    final gps = SimulatedLocationSource(speedMps: speedMps, timeScale: gpsScale, seed: seed, clock: worldClock);
+    final radio = SimulatedTransport(location: gps, seed: seed, timeScale: 40, clock: worldClock);
+    final link = MeshCoreCompanionLink(radio, timeout: const Duration(seconds: 2));
+    var n = 0;
+    final engine = DefaultWardriveEngine(link: link, location: gps, newId: () => 'id-${n++}');
+    return Rig._(gps, radio, link, engine);
+  }
+
+  Future<void> open() async {
+    await link.start();
+  }
+}
+
+WardriveConfig manual() => const WardriveConfig(intervalSec: 0, minDistanceM: 100, listenWindow: window, txPowerW: 1.0);
+
+void main() {
+  test('ping text matches MeshMapper buildPayload', () {
+    expect(formatPingText(40.126234, -82.929312), '@[MapperBot] 40.12623, -82.92931');
+    expect(formatPingText(40.126234, -82.929312, txPowerW: 1.0), '@[MapperBot] 40.12623, -82.92931 [1.0w]');
+    expect(formatPingText(40.1, -82.9, txPowerW: 0.3), '@[MapperBot] 40.10000, -82.90000 [0.3w]');
+  });
+
+  test('start joins the channel; pingNow emits one finished ping with real echoes', () async {
+    final rig = Rig(speedMps: 0); // parked in Uptown, next to "WSTV Uptown"
+    await rig.open();
+    await rig.engine.start(manual());
+    expect(rig.engine.current.state, EngineState.driving);
+
+    final p = await rig.engine.pingNow();
+    expect(rig.pings, [p]);
+    expect(p.id, 'id-0');
+    expect(p.kind, PingKind.tx);
+    expect(p.lat, closeTo(40.1262, 1e-6));
+    expect(p.gpsAccuracyM, inInclusiveRange(4, 6));
+    expect(p.noiseFloorDbm, inInclusiveRange(-114, -110));
+    expect(p.echoes, isNotEmpty);
+    final keys = defaultSimulatedRepeaters().map((r) => r.keyHex.substring(0, 2)).toSet();
+    for (final e in p.echoes) {
+      expect(keys, contains(e.repeater));
+      expect(e.hops, inInclusiveRange(1, 2));
+      expect(e.path!.first, e.repeater);
+      expect(e.path!.length, e.hops);
+      expect(e.snrDb, isNotNull);
+      expect(e.rssiDbm, isNotNull);
+      expect(e.delayMs, inInclusiveRange(0, window.inMilliseconds + 100));
+    }
+    expect(p.echoes.map((e) => e.repeater).toSet().length, p.echoes.length, reason: 'one echo per repeater');
+    // The ping text on air is MeshMapper's format.
+    final sent = rig.radio.sentFrames.lastWhere((f) => f[0] == 3);
+    expect(String.fromCharCodes(sent.sublist(7)), startsWith('@[MapperBot] 40.1262'));
+    expect(String.fromCharCodes(sent.sublist(7)), endsWith(' [1.0w]'));
+    await rig.engine.stop();
+    expect(rig.engine.current.state, EngineState.idle);
+  });
+
+  test('driving the loop: some pings hear repeaters, some hear nothing; every ping is emitted', () async {
+    // Deterministic: the car's position comes from a stepped clock (one ping every 40 s of driving at 13 m/s,
+    // i.e. every ~520 m, 30 pings ≈ one lap); the radio's randomness is seeded.
+    var world = DateTime.utc(2026, 1, 1);
+    final rig = Rig(speedMps: 13, worldClock: () => world);
+    await rig.open();
+    await rig.engine.start(manual());
+    for (var i = 0; i < 30; i++) {
+      world = world.add(const Duration(seconds: 40));
+      await rig.engine.pingNow();
+    }
+    await rig.engine.stop();
+    expect(rig.pings.length, 30);
+    expect(rig.pings.map((p) => p.id).toSet().length, 30);
+    final heard = rig.pings.where((p) => p.echoes.isNotEmpty).length;
+    expect(heard, greaterThan(0));
+    expect(rig.pings.where((p) => p.heardNothing), isNotEmpty);
+    expect(rig.pings.expand((p) => p.echoes).any((e) => e.hops == 2), isTrue, reason: 'occasional 2-hop echoes');
+    // Background traffic on Public is never counted.
+    for (final p in rig.pings) {
+      expect(p.toJson()['echoes'], isA<List>());
+    }
+  }, timeout: const Timeout(Duration(seconds: 60)));
+
+  test('auto: first ping immediate, then every interval only after moving minDistance', () async {
+    final moving = Rig(speedMps: 13, gpsScale: 20); // 260 m/s
+    await moving.open();
+    await moving.engine
+        .start(const WardriveConfig(intervalSec: 1, minDistanceM: 100, listenWindow: window, txPowerW: null));
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(moving.radio.sentFrames.where((f) => f[0] == 3).length, 1, reason: 'first ping immediately');
+    await Future<void>.delayed(const Duration(milliseconds: 2400));
+    await moving.engine.stop();
+    expect(moving.pings.length, 3);
+    expect(String.fromCharCodes(moving.radio.sentFrames.lastWhere((f) => f[0] == 3).sublist(7)), matches(r'^@\[MapperBot\] -?\d+\.\d{5}, -?\d+\.\d{5}$'));
+
+    final parked = Rig(speedMps: 0);
+    await parked.open();
+    await parked.engine
+        .start(const WardriveConfig(intervalSec: 1, minDistanceM: 100, listenWindow: window));
+    await Future<void>.delayed(const Duration(milliseconds: 2400));
+    expect(parked.pings.length, 1, reason: 'not moved 100 m: auto pings skipped');
+    expect(parked.statuses.any((s) => (s.message ?? '').contains('skipped')), isTrue);
+    expect(parked.engine.current.nextPingAt, isNotNull);
+    // A manual ping is still allowed while parked.
+    await parked.engine.pingNow();
+    expect(parked.pings.length, 2);
+    await parked.engine.stop();
+  }, timeout: const Timeout(Duration(seconds: 30)));
+
+  test('no GPS fix: no ping, status says so', () async {
+    final rig = Rig(speedMps: 0);
+    await rig.open();
+    await rig.engine.start(manual());
+    rig.gps.hasFix = false;
+    await expectLater(rig.engine.pingNow(), throwsA(isA<StateError>()));
+    expect(rig.pings, isEmpty);
+    expect(rig.radio.sentFrames.where((f) => f[0] == 3), isEmpty);
+    expect(rig.engine.current.message, contains('GPS'));
+    await rig.engine.stop();
+  });
+
+  test('stop waits for the ping on the air, then nothing more is sent', () async {
+    final rig = Rig(speedMps: 13, gpsScale: 20);
+    await rig.open();
+    await rig.engine.start(const WardriveConfig(intervalSec: 1, minDistanceM: 10, listenWindow: window));
+    await Future<void>.delayed(const Duration(milliseconds: 50)); // first ping is listening now
+    await rig.engine.stop();
+    expect(rig.pings.length, 1, reason: 'the in-flight ping is finished, not dropped');
+    final sends = rig.radio.sentFrames.where((f) => f[0] == 3).length;
+    await Future<void>.delayed(const Duration(milliseconds: 1500));
+    expect(rig.radio.sentFrames.where((f) => f[0] == 3).length, sends);
+    expect(rig.engine.current.state, EngineState.idle);
+    expect(() => rig.engine.pingNow(), throwsA(isA<StateError>()));
+    // Can drive again.
+    await rig.engine.start(manual());
+    await rig.engine.pingNow();
+    await rig.engine.stop();
+    expect(rig.pings.length, 2);
+  });
+
+  test('radio disconnect mid-drive: error state, no crash, stop still works', () async {
+    final rig = Rig(speedMps: 13, gpsScale: 20);
+    await rig.open();
+    await rig.engine.start(const WardriveConfig(intervalSec: 1, minDistanceM: 10, listenWindow: window));
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    rig.radio.simulateDisconnect();
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+    expect(rig.engine.current.state, EngineState.error);
+    expect(rig.engine.current.message, contains('disconnected'));
+    await expectLater(rig.engine.pingNow(), throwsA(isA<StateError>()));
+    await rig.engine.stop();
+    expect(rig.engine.current.state, EngineState.idle);
+  });
+
+  test('start on a dead radio reports error and throws', () async {
+    final rig = Rig(speedMps: 0);
+    await rig.open();
+    rig.radio.simulateDisconnect();
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    await expectLater(rig.engine.start(manual()), throwsA(anything));
+    expect(rig.engine.current.state, EngineState.error);
+  });
+
+  test('optional neighbor discovery records a two-way exchange', () async {
+    final rig = Rig(speedMps: 0);
+    await rig.open();
+    rig.engine.discoverNeighbors = true;
+    await rig.engine.start(manual());
+    final p = await rig.engine.pingNow();
+    expect(p.neighbor, isNotNull);
+    expect(p.neighbor!.repeater.length, 64);
+    expect(p.neighbor!.remoteSnrDb, isNotNull);
+    expect(p.neighbor!.localSnrDb, isNotNull);
+    await rig.engine.stop();
+  });
+}

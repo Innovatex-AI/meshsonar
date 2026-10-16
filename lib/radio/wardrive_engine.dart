@@ -1,0 +1,427 @@
+// DefaultWardriveEngine: pings a channel on a time/distance schedule and records which repeaters repeated each ping.
+//
+// Behaviour is modelled on the MeshMapper web client (MIT, © 2025 MrAlders0n), content/wardrive.js:
+//  - ping text  buildPayload(): "@[MapperBot] <lat 5dp>, <lon 5dp>" plus " [<power>]" when the power is known
+//    (MeshMapper's power choices are "0.3w", "0.6w", "1.0w", "2.0w"); kept identical so community tools recognise it;
+//  - sendPing(): read the noise floor (CMD_GET_STATS radio), take a GPS fix, send on the channel, then listen to the
+//    RX log for the listen window (RX_LOG_LISTEN_WINDOW_MS); auto mode restarts the interval after each ping and skips
+//    a ping that is too close to the last one (validateMinimumDistance, haversine);
+//  - handleTxLogging(): an echo is a GRP_TXT on our channel whose decrypted text is our ping and whose path is not
+//    empty; repeater id = first path hop; one entry per repeater, best SNR kept.
+// See packet.dart for where we deliberately differ (transport-flood, multi-byte path hashes, MAC/timestamp check).
+import 'dart:async';
+import 'dart:math' as math;
+import 'dart:typed_data';
+
+import 'package:uuid/uuid.dart';
+
+import '../core/model.dart';
+import 'companion_link.dart';
+import 'crypto.dart';
+import 'packet.dart';
+import 'protocol.dart';
+import 'radio_api.dart';
+
+/// The prefix MeshMapper and its community tools look for (wardrive.js PING_PREFIX).
+const String mapperPingPrefix = '@[MapperBot]';
+
+/// Ping text exactly as MeshMapper formats it (wardrive.js buildPayload), with an optional power suffix.
+String formatPingText(double lat, double lon, {double? txPowerW}) {
+  final coords = '${lat.toStringAsFixed(5)}, ${lon.toStringAsFixed(5)}';
+  final suffix = txPowerW == null ? '' : ' [${formatPowerW(txPowerW)}]';
+  return '$mapperPingPrefix $coords$suffix';
+}
+
+/// "1.0w", "0.3w", "2.0w" — MeshMapper's style. Small powers keep two decimals so they don't round to "0.0w".
+String formatPowerW(double w) => '${w < 0.1 ? w.toStringAsFixed(2) : w.toStringAsFixed(1)}w';
+
+/// Great-circle distance in metres (MeshMapper calculateHaversineDistance, R = 6371 km).
+double haversineM(double lat1, double lon1, double lat2, double lon2) {
+  const r = 6371000.0;
+  double rad(double d) => d * math.pi / 180;
+  final dLat = rad(lat2 - lat1), dLon = rad(lon2 - lon1);
+  final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+      math.cos(rad(lat1)) * math.cos(rad(lat2)) * math.sin(dLon / 2) * math.sin(dLon / 2);
+  return 2 * r * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+}
+
+class _Heard {
+  final RxPacket rx;
+  final DateTime arrived;
+  _Heard(this.rx, this.arrived);
+}
+
+class _Ctl {
+  final ControlPacket pkt;
+  _Ctl(this.pkt);
+}
+
+class DefaultWardriveEngine implements WardriveEngine {
+  final CompanionLink link;
+  final LocationSource location;
+  final DateTime Function() _clock;
+  final String Function() _newId;
+
+  /// Also send a zero-hop NODE_DISCOVER_REQ after each ping and record the strongest repeater that answers as the
+  /// ping's `neighbor` (a genuine two-way exchange: the repeater reports the SNR it heard us at; firmware v8+).
+  /// Off by default: it adds airtime on every ping and repeaters rate-limit discovery to 4 per 2 minutes
+  /// (examples/simple_repeater/MyMesh.cpp discover_limiter). Only used with a [MeshCoreCompanionLink].
+  bool discoverNeighbors = false;
+
+  final _pings = StreamController<DrivePing>.broadcast();
+  final _status = StreamController<EngineStatus>.broadcast();
+  EngineStatus _current = const EngineStatus(EngineState.idle);
+
+  WardriveConfig _config = const WardriveConfig();
+  int? _channelIndex;
+  Uint8List? _secret;
+  StreamSubscription<RxPacket>? _rxSub;
+  Timer? _autoTimer;
+  DateTime? _nextPingAt;
+  bool _running = false;
+  bool _stopping = false;
+  bool _busy = false;
+  Future<void> _pingChain = Future.value();
+  Future<void>? _inFlight;
+  void Function(RxPacket rx)? _collector;
+  ({double lat, double lon})? _lastPingAt;
+  GeoFix? _lastFix;
+  final _rng = math.Random();
+
+  DefaultWardriveEngine({
+    required this.link,
+    required this.location,
+    DateTime Function()? clock,
+    String Function()? newId,
+  })  : _clock = clock ?? DateTime.now,
+        _newId = newId ?? const Uuid().v4;
+
+  @override
+  Stream<DrivePing> get pings => _pings.stream;
+  @override
+  Stream<EngineStatus> get status => _status.stream;
+  @override
+  EngineStatus get current => _current;
+
+  void _setStatus(EngineState s, [String? message]) {
+    _current = EngineStatus(s, message: message, lastFix: _lastFix, nextPingAt: _running ? _nextPingAt : null);
+    if (!_status.isClosed) _status.add(_current);
+  }
+
+  /// Keeps the state, updates the message.
+  void _note(String message) => _setStatus(_current.state, message);
+
+  @override
+  Future<void> start(WardriveConfig config) async {
+    if (_running || _current.state == EngineState.starting) throw StateError('already driving');
+    _config = config;
+    _lastPingAt = null;
+    _stopping = false;
+    _setStatus(EngineState.starting, 'Joining ${config.channel}');
+    try {
+      if (!link.isConnected) throw StateError('Radio not connected');
+      final idx = await link.ensureChannel(config.channel);
+      Uint8List? secret;
+      final l = link;
+      if (l is MeshCoreCompanionLink) secret = l.channelSecret(idx);
+      secret ??= wellKnownChannelSecret(config.channel);
+      if (secret == null) {
+        // Without the key we can't tell our echoes apart, and every ping would look like "heard nothing".
+        throw StateError('Cannot recognise echoes on ${config.channel}: channel key unknown');
+      }
+      _channelIndex = idx;
+      _secret = secret;
+      await _rxSub?.cancel();
+      _rxSub = link.rxPackets.listen((rx) => _collector?.call(rx), onDone: _onRadioLost);
+    } catch (e) {
+      _setStatus(EngineState.error, _describe(e));
+      rethrow;
+    }
+    _running = true;
+    _setStatus(EngineState.driving, config.intervalSec > 0 ? 'Driving' : 'Ready (manual pings)');
+    if (config.intervalSec > 0) _scheduleAuto(Duration.zero);
+  }
+
+  void _onRadioLost() {
+    if (!_running) return;
+    _running = false;
+    _autoTimer?.cancel();
+    _autoTimer = null;
+    _nextPingAt = null;
+    _setStatus(EngineState.error, 'Radio disconnected');
+  }
+
+  // ------------------------------------------------------------------ auto pinging
+
+  void _scheduleAuto(Duration d) {
+    _autoTimer?.cancel();
+    if (!_running || _stopping || _config.intervalSec <= 0) return;
+    if (d.isNegative) d = Duration.zero;
+    _nextPingAt = _clock().add(d);
+    _autoTimer = Timer(d, _autoTick);
+    if (!_busy) _setStatus(EngineState.driving, _current.message);
+  }
+
+  Future<void> _autoTick() async {
+    if (!_running || _stopping || _busy) return; // a running ping reschedules when it finishes
+    final interval = Duration(seconds: _config.intervalSec);
+    final run = _serial(() async {
+      if (!_running || _stopping) return;
+      final fix = await _fix();
+      if (!_running) return;
+      if (fix == null) {
+        _note('No GPS fix: ping skipped');
+        _scheduleAuto(interval);
+        return;
+      }
+      final last = _lastPingAt;
+      if (last != null) {
+        final moved = haversineM(last.lat, last.lon, fix.lat, fix.lon);
+        if (moved < _config.minDistanceM) {
+          _note('Moved ${moved.round()} m since last ping (need ${_config.minDistanceM} m): skipped');
+          _scheduleAuto(interval);
+          return;
+        }
+      }
+      await _ping(fix);
+    });
+    try {
+      await run;
+    } catch (_) {
+      // status already reported by _ping
+    }
+  }
+
+  // ------------------------------------------------------------------ manual
+
+  @override
+  Future<DrivePing> pingNow() async {
+    if (!_running || _stopping) throw StateError('Not driving: start() first');
+    return _serial(() async {
+      if (!_running || _stopping) throw StateError('Not driving');
+      final fix = await _fix();
+      if (fix == null) {
+        _note('No GPS fix: can\'t ping');
+        throw StateError('No GPS fix');
+      }
+      final p = await _ping(fix);
+      if (p == null) throw StateError('Ping did not complete');
+      return p;
+    });
+  }
+
+  /// Runs pings one at a time (the radio is half-duplex and echoes are matched per ping).
+  Future<T> _serial<T>(Future<T> Function() body) {
+    final result = _pingChain.then((_) => body());
+    final done = result.then((_) {}, onError: (_) {});
+    _pingChain = done;
+    _inFlight = done;
+    return result;
+  }
+
+  Future<GeoFix?> _fix() async {
+    try {
+      final f = await location.current();
+      if (f != null) _lastFix = f;
+      return f;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // ------------------------------------------------------------------ one ping
+
+  /// Sends one ping at [fix], listens, emits it. Returns null if the ping couldn't be sent or was cut short with
+  /// nothing heard (a truncated listen is not evidence of "heard nothing").
+  Future<DrivePing?> _ping(GeoFix fix) async {
+    _busy = true;
+    final idx = _channelIndex!;
+    final secret = _secret!;
+    final text = formatPingText(fix.lat, fix.lon, txPowerW: _config.txPowerW);
+    final heard = <_Heard>[];
+    final ctl = <_Ctl>[];
+    StreamSubscription<ControlPacket>? ctlSub;
+    DateTime? sentAt;
+    var cutShort = false;
+    try {
+      _setStatus(EngineState.pinging, 'Pinging');
+      double? noise;
+      try {
+        noise = await link.noiseFloor();
+      } catch (_) {
+        noise = null;
+      }
+      if (!_running) return null;
+
+      _collector = (rx) => heard.add(_Heard(rx, _clock()));
+      sentAt = _clock();
+      await link.sendChannelText(idx, text);
+      _lastPingAt = (lat: fix.lat, lon: fix.lon);
+      final l = link;
+      final sentTs = l is MeshCoreCompanionLink ? l.lastSentTimestamp : null;
+
+      int? tag;
+      if (discoverNeighbors && l is MeshCoreCompanionLink && (l.firmwareVerCode ?? 0) >= 8) {
+        tag = _rng.nextInt(0x7fffffff) + 1;
+        ctlSub = l.controlPackets.listen((c) => ctl.add(_Ctl(c)));
+        try {
+          await l.sendDiscoverRequest(tag);
+        } catch (_) {
+          tag = null;
+        }
+      }
+
+      _note('Listening for repeaters');
+      cutShort = !await _listen(_config.listenWindow);
+      _collector = null;
+
+      final echoes = _buildEchoes(heard, secret, text, sentTs, sentAt);
+      final neighbor = tag == null ? null : _bestNeighbor(ctl, tag);
+      if (cutShort && echoes.isEmpty && neighbor == null) {
+        return null;
+      }
+      final ping = DrivePing(
+        id: _newId(),
+        ts: sentAt.toUtc(),
+        lat: fix.lat,
+        lon: fix.lon,
+        gpsAccuracyM: _inRange(fix.accuracyM, 0, 10000),
+        speedMps: _inRange(fix.speedMps, 0, 150),
+        kind: PingKind.tx,
+        noiseFloorDbm: _inRange(noise, -160, 0),
+        echoes: echoes,
+        neighbor: neighbor,
+      );
+      if (!_pings.isClosed) _pings.add(ping);
+      if (_running && !_stopping) {
+        _setStatus(
+            EngineState.driving,
+            echoes.isEmpty
+                ? 'Heard nothing'
+                : 'Heard ${echoes.length} repeater${echoes.length == 1 ? '' : 's'}');
+      }
+      return ping;
+    } catch (e) {
+      _collector = null;
+      if (!link.isConnected) {
+        _onRadioLost();
+      } else if (_running && !_stopping) {
+        _setStatus(EngineState.driving, 'Ping failed: ${_describe(e)}');
+      }
+      rethrow;
+    } finally {
+      _collector = null;
+      await ctlSub?.cancel();
+      _busy = false;
+      if (_running && !_stopping && _config.intervalSec > 0) {
+        final interval = Duration(seconds: _config.intervalSec);
+        final base = sentAt ?? _clock();
+        _scheduleAuto(base.add(interval).difference(_clock()));
+      }
+    }
+  }
+
+  /// Waits for [window]. Returns false if the radio went away first.
+  Future<bool> _listen(Duration window) {
+    final c = Completer<bool>();
+    final t = Timer(window, () {
+      if (!c.isCompleted) c.complete(true);
+    });
+    void check() {
+      if (!c.isCompleted && (!link.isConnected || !_running)) {
+        t.cancel();
+        c.complete(false);
+      }
+    }
+
+    // Poll for disconnects without depending on a connection-state stream (CompanionLink has none).
+    final poll = Timer.periodic(const Duration(milliseconds: 250), (_) => check());
+    return c.future.whenComplete(poll.cancel);
+  }
+
+  List<Echo> _buildEchoes(List<_Heard> heard, Uint8List secret, String text, int? sentTs, DateTime sentAt) {
+    final best = <String, ({Echo echo, int hops, double snr})>{};
+    final order = <String>[];
+    for (final h in heard) {
+      final pkt = MeshPacket.tryParse(h.rx.raw);
+      if (pkt == null) continue;
+      final m = matchEcho(pkt, secret, text, timestamp: sentTs);
+      if (m == null) continue;
+      final delay = h.arrived.difference(sentAt).inMilliseconds;
+      final echo = Echo(
+        repeater: m.repeater,
+        snrDb: _inRange(h.rx.snrDb, -40, 40),
+        rssiDbm: _inRange(h.rx.rssiDbm, -160, 0),
+        hops: m.hops,
+        path: m.path,
+        delayMs: delay < 0 ? 0 : delay,
+      );
+      final snr = echo.snrDb ?? double.negativeInfinity;
+      final prev = best[m.repeater];
+      if (prev == null) {
+        order.add(m.repeater);
+        best[m.repeater] = (echo: echo, hops: m.hops, snr: snr);
+      } else if (m.hops < prev.hops || (m.hops == prev.hops && snr > prev.snr)) {
+        // Prefer the copy that reached us most directly: only a 1-hop echo's SNR/RSSI describe the link to this
+        // repeater. Among equal hop counts keep the best SNR (MeshMapper's rule).
+        best[m.repeater] = (echo: echo, hops: m.hops, snr: snr);
+      }
+    }
+    return [for (final r in order) best[r]!.echo];
+  }
+
+  Neighbor? _bestNeighbor(List<_Ctl> ctl, int tag) {
+    Neighbor? best;
+    for (final c in ctl) {
+      if (c.pkt.pathLen != 0) continue;
+      final d = DiscoverResponse.tryParse(c.pkt.payload);
+      if (d == null || d.tag != tag || d.nodeType != 2 /* ADV_TYPE_REPEATER */) continue;
+      final n = Neighbor(
+        repeater: toHex(d.publicKey),
+        localSnrDb: _inRange(c.pkt.snrDb, -40, 40),
+        localRssiDbm: _inRange(c.pkt.rssiDbm.toDouble(), -160, 0),
+        remoteSnrDb: _inRange(d.remoteSnrDb, -40, 40),
+      );
+      if (best == null || (n.localSnrDb ?? -99) > (best.localSnrDb ?? -99)) best = n;
+    }
+    return best;
+  }
+
+  static double? _inRange(double? v, double lo, double hi) => (v == null || v.isNaN || v < lo || v > hi) ? null : v;
+
+  static String _describe(Object e) {
+    if (e is StateError) return e.message;
+    if (e is CompanionException) return e.message;
+    if (e is TimeoutException) return 'Radio did not answer';
+    return e.toString();
+  }
+
+  // ------------------------------------------------------------------ stop
+
+  @override
+  Future<void> stop() async {
+    if (!_running && _current.state != EngineState.error && _current.state != EngineState.starting) {
+      if (_current.state != EngineState.idle) _setStatus(EngineState.idle);
+      return;
+    }
+    final wasRunning = _running;
+    _stopping = true;
+    if (wasRunning) _setStatus(EngineState.stopping, 'Stopping');
+    _autoTimer?.cancel();
+    _autoTimer = null;
+    _nextPingAt = null;
+    // Let a ping that is already on the air finish its listen window so its data isn't lost.
+    final inflight = _inFlight;
+    if (inflight != null) {
+      await inflight;
+    }
+    _running = false;
+    _autoTimer?.cancel();
+    _autoTimer = null;
+    await _rxSub?.cancel();
+    _rxSub = null;
+    _collector = null;
+    _stopping = false;
+    _setStatus(EngineState.idle, 'Stopped');
+  }
+}
