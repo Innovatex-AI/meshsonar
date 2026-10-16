@@ -36,7 +36,7 @@ void main() {
       channel: '#test',
       intervalSec: 15,
       minDistanceM: 50,
-      antenna: Antenna(type: 'mag-mount', gainDbi: 3, heightM: 1.5),
+      antenna: Antenna(type: 'external', gainDbi: 3, heightM: 1.5),
       autoSync: false,
     );
     await store.save(s);
@@ -47,7 +47,18 @@ void main() {
   test('rapid saves are serialized; last one wins', () async {
     final f = File(p.join(tmp.path, 'settings.json'));
     final store = FileSettingsStore(f);
-    await Future.wait([for (var i = 1; i <= 20; i++) store.save(Settings(intervalSec: i))]);
-    expect((await store.load()).intervalSec, 20);
+    await Future.wait([for (var i = 1; i <= 20; i++) store.save(Settings(intervalSec: 10 + i))]);
+    expect((await store.load()).intervalSec, 30);
+  });
+
+  test('old/odd values are brought into range; antenna defaults to internal', () {
+    final s = Settings.fromJson({'interval_sec': 0, 'min_distance_m': 5000, 'sync_every_min': 0, 'antenna': {'type': 'mag-mount', 'gain_dbi': 3}});
+    expect(s.intervalSec, Settings.minIntervalSec);
+    expect(s.minDistanceM, Settings.maxDistance);
+    expect(s.syncEveryMin, Settings.minSyncEveryMin);
+    expect(s.antenna.type, 'internal');
+    expect(s.antenna.gainDbi, 3);
+    expect(const Settings().antenna.type, 'internal');
+    expect(const Settings().syncDuringDrive, isTrue);
   });
 }

@@ -105,7 +105,22 @@ class Settings {
   /// Skip an auto-ping if we haven't moved this far since the last one.
   final int minDistanceM;
   final Antenna antenna;
+
+  /// Upload the drive when it ends (if the key is approved).
   final bool autoSync;
+
+  /// Also upload during a drive, every [syncEveryMin] minutes (needs [autoSync]).
+  final bool syncDuringDrive;
+  final int syncEveryMin;
+
+  /// Keep a repeater "live" in the heard panel/map for this many pings after it was last heard, then grey it out.
+  final int heardHoldPings;
+
+  /// Allowed ranges (UI sliders and clamping).
+  static const int minIntervalSec = 10, maxIntervalSec = 120;
+  static const int minDistance = 15, maxDistance = 500;
+  static const int minSyncEveryMin = 1, maxSyncEveryMin = 30;
+
   const Settings({
     this.serverUrl = 'https://cmh-meshcore.lovable.app',
     this.driverKey,
@@ -114,8 +129,11 @@ class Settings {
     this.channel = '#wardriving',
     this.intervalSec = 30,
     this.minDistanceM = 100,
-    this.antenna = const Antenna(),
+    this.antenna = const Antenna(type: 'internal'),
     this.autoSync = true,
+    this.syncDuringDrive = true,
+    this.syncEveryMin = 5,
+    this.heardHoldPings = 3,
   });
 
   Settings copyWith({
@@ -128,6 +146,9 @@ class Settings {
     int? minDistanceM,
     Antenna? antenna,
     bool? autoSync,
+    bool? syncDuringDrive,
+    int? syncEveryMin,
+    int? heardHoldPings,
     bool clearKey = false,
   }) =>
       Settings(
@@ -140,6 +161,9 @@ class Settings {
         minDistanceM: minDistanceM ?? this.minDistanceM,
         antenna: antenna ?? this.antenna,
         autoSync: autoSync ?? this.autoSync,
+        syncDuringDrive: syncDuringDrive ?? this.syncDuringDrive,
+        syncEveryMin: syncEveryMin ?? this.syncEveryMin,
+        heardHoldPings: heardHoldPings ?? this.heardHoldPings,
       );
 
   Map<String, dynamic> toJson() => {
@@ -152,6 +176,9 @@ class Settings {
         'min_distance_m': minDistanceM,
         'antenna': antenna.toJson(),
         'auto_sync': autoSync,
+        'sync_during_drive': syncDuringDrive,
+        'sync_every_min': syncEveryMin,
+        'heard_hold_pings': heardHoldPings,
       };
   factory Settings.fromJson(Map<String, dynamic> j) => Settings(
         serverUrl: j['server_url'] as String? ?? 'https://cmh-meshcore.lovable.app',
@@ -159,11 +186,22 @@ class Settings {
         keyStatus: DriverKeyStatus.values.firstWhere((s) => s.name == j['key_status'], orElse: () => DriverKeyStatus.none),
         display: j['display'] as String?,
         channel: j['channel'] as String? ?? '#wardriving',
-        intervalSec: j['interval_sec'] as int? ?? 30,
-        minDistanceM: j['min_distance_m'] as int? ?? 100,
-        antenna: Antenna.fromJson((j['antenna'] as Map?)?.cast<String, dynamic>() ?? const {}),
+        // 0 used to mean "manual only"; auto-ping is now always 10–120 s (Ping now still works any time)
+        intervalSec: ((j['interval_sec'] as int?) ?? 30).clamp(minIntervalSec, maxIntervalSec),
+        minDistanceM: ((j['min_distance_m'] as int?) ?? 100).clamp(minDistance, maxDistance),
+        antenna: _antennaFrom(j['antenna']),
         autoSync: j['auto_sync'] as bool? ?? true,
+        syncDuringDrive: j['sync_during_drive'] as bool? ?? true,
+        syncEveryMin: ((j['sync_every_min'] as int?) ?? 5).clamp(minSyncEveryMin, maxSyncEveryMin),
+        heardHoldPings: ((j['heard_hold_pings'] as int?) ?? 3).clamp(1, 20),
       );
+
+  /// Antenna type is "internal" or "external"; anything older/unknown becomes internal (the default).
+  static Antenna _antennaFrom(Object? raw) {
+    final a = Antenna.fromJson((raw as Map?)?.cast<String, dynamic>() ?? const {});
+    final t = a.type == 'external' ? 'external' : 'internal';
+    return Antenna(type: t, gainDbi: a.gainDbi, heightM: a.heightM);
+  }
 }
 
 abstract class SettingsStore {

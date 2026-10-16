@@ -10,6 +10,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 
 import '../core/api.dart';
+import '../core/heard.dart';
 import '../core/model.dart';
 import '../radio/radio_api.dart';
 import 'messages.dart';
@@ -182,6 +183,37 @@ class AppState extends ChangeNotifier {
 
   final List<DrivePing> _recent = [];
   List<DrivePing> get recentPings => List.unmodifiable(_recent);
+
+  /// Every ping of the current drive, oldest first (the map and the ping log use the whole drive).
+  final List<DrivePing> _drivePings = [];
+  List<DrivePing> get drivePings => List.unmodifiable(_drivePings);
+
+  /// Who's in range: repeaters heard this drive; "live" until not heard for settings.heardHoldPings pings.
+  final HeardTracker heard = HeardTracker();
+
+  /// Prefix → repeater (name, key, position) from CMAT's list plus any extra directories.
+  RepeaterLookup _lookup = RepeaterLookup.empty;
+  RepeaterLookup get lookup => _lookup;
+  List<RepeaterRef> _extraRepeaters = const [];
+
+  /// Adds repeaters from another source (e.g. a public node map) used after CMAT's list.
+  void setExtraRepeaters(List<RepeaterRef> list) {
+    _extraRepeaters = list;
+    _rebuildLookup();
+    notifyListeners();
+  }
+
+  void _rebuildLookup() {
+    _lookup = RepeaterLookup([(RepeaterSource.cmat, _repeaters), (RepeaterSource.publicMap, _extraRepeaters)]);
+    heard.relookup(_lookup);
+  }
+
+  /// Antenna type for the next drive ("internal" or "external"); saved to settings.
+  Future<void> setAntennaType(String type) async {
+    final t = type == 'external' ? 'external' : 'internal';
+    final a = _settings.antenna;
+    await updateSettings(_settings.copyWith(antenna: Antenna(type: t, gainDbi: a.gainDbi, heightM: a.heightM)));
+  }
   static const int recentLimit = 50;
 
   int _pingCount = 0;
@@ -239,6 +271,10 @@ class AppState extends ChangeNotifier {
       _session = session;
       _lastSession = null;
       _recent.clear();
+      _drivePings.clear();
+      heard
+        ..holdPings = s.heardHoldPings
+        ..reset();
       _seenPingIds.clear();
       _pingCount = 0;
       _heardCount = 0;
@@ -287,6 +323,8 @@ class AppState extends ChangeNotifier {
     if (!ping.heardNothing && ping.kind == PingKind.tx) _heardCount++;
     _recent.insert(0, ping);
     if (_recent.length > recentLimit) _recent.removeLast();
+    _drivePings.add(ping);
+    heard.addPing(ping);
     notifyListeners();
     _enqueueWrite(sid, ping);
   }
@@ -659,22 +697,17 @@ class AppState extends ChangeNotifier {
   void _setRepeaters(List<RepeaterRef> list) {
     _repeaters = list;
     _nameCache.clear();
+    _rebuildLookup();
   }
 
   final Map<String, String?> _nameCache = {};
 
-  /// Name of the repeater whose key starts with [prefix], if exactly one cached repeater matches.
+  /// Name of the repeater whose key starts with [prefix], if exactly one known repeater matches.
   String? repeaterName(String prefix) {
     final p = prefix.toLowerCase();
     return _nameCache.putIfAbsent(p, () {
-      RepeaterRef? hit;
-      for (final r in _repeaters) {
-        if (r.key.startsWith(p)) {
-          if (hit != null) return null; // ambiguous prefix
-          hit = r;
-        }
-      }
-      return (hit == null || hit.name.isEmpty) ? null : hit.name;
+      final m = _lookup.resolve(p);
+      return (m.ref == null || m.ref!.name.isEmpty) ? null : m.ref!.name;
     });
   }
 
