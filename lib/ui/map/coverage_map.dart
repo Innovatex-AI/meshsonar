@@ -191,7 +191,7 @@ class _CoverageMapState extends State<CoverageMap> {
     return CameraFit.coordinates(
       coordinates: [for (final p in widget.pings) LatLng(p.lat, p.lon)],
       padding: const EdgeInsets.all(40) + widget.overlayPadding,
-      maxZoom: 17,
+      maxZoom: 15.5, // a short drive should still show its streets, not upscaled blurry tiles
     );
   }
 
