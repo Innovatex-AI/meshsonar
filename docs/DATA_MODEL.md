@@ -37,16 +37,17 @@ or fails the upload.
 |---|---|---|---|---|---|---|
 | id | `String id` | `id` | UUID v4 | required UUID | never | `services.newId()` at Start |
 | startedAt | `DateTime` | `started_at` | ISO 8601 UTC | 2015 … now+1 day | never | phone clock at Start |
-| endedAt | `DateTime?` | `ended_at` | ISO 8601 UTC | ≥ started_at | while driving, or a drive interrupted by a crash | `endSession` at Stop |
-| label | `String?` | `label` | text | ≤ 80 chars | always today (see note) | `startDrive(label:)` |
+| endedAt | `DateTime?` | `ended_at` | ISO 8601 UTC | ≥ started_at | while driving (a crashed drive is closed at the next launch) | `endSession` at Stop, or `closeOrphanedSessions` at launch |
+| label | `String?` | `label` | text | ≤ 80 chars | until the drive is named | `renameSession` (Rename), or `startDrive(label:)` |
 | channel | `String?` | `channel` | e.g. `#wardriving` | ≤ 40 chars | — | settings |
 | radio | `Radio` | `radio` | object | see below | fields individually | `SelfInfo` |
 | antenna | `Antenna` | `antenna` | object | see below | fields individually | settings |
 | companion | `Companion` | `companion` | object | see below | fields individually | `SelfInfo` |
 
-Note: `label` is recorded only if `startDrive(label: …)` is called with one, and the UI never passes one. **Rename**
-stores a display name in `ui_prefs.json` only. The `DriveStore` contract has no rename, so renamed drives keep
-`label: null` in exports and uploads. See [ROADMAP.md](ROADMAP.md).
+Note: **Rename** calls `DriveStore.renameSession`, which rewrites `session.json` with the new `label` (blank → null)
+and writes `resend.txt`, so the next sync sends the session again (an upload with `pings: []` if nothing else is
+pending); CMAT upserts the session, so the new name replaces the old one. Exports carry the label. Names typed under
+0.2.x lived only in `ui_prefs.json`; they are moved into their drives once at launch (`migrateLegacyLabels`).
 
 ### Radio (`session.radio`)
 
@@ -115,8 +116,9 @@ One echo per repeater per ping. The copy with the fewest hops wins, then the bes
 
 ### AppInfo (`app`)
 
-`{name: "MeshSonar", version, platform}`. `version` comes from the `appVersion` constant in `lib/app/wiring.dart`. It
-is **not** read from `pubspec.yaml` (it still says `"0.1.0"`; see [DEVELOPMENT.md §Versions](DEVELOPMENT.md#6-bumping-the-version)).
+`{name: "MeshSonar", version, platform}`. `version` is `pubspec.yaml`'s `X.Y.Z`, read at run time with
+`package_info_plus` (`lib/platform/app_version.dart`); null if the platform can't report it. See
+[DEVELOPMENT.md §6](DEVELOPMENT.md#6-bumping-the-version).
 `platform` is `defaultTargetPlatform.name` (`android`, `iOS`, `macOS`, `linux`, `windows`) or `web`.
 
 ### RepeaterRef
@@ -153,14 +155,16 @@ Root: `getApplicationSupportDirectory()/meshsonar/` (falls back to the Documents
 ├── settings.json              Settings (atomic: settings.json.tmp → rename)
 ├── repeaters.json             [RepeaterRef] from CMAT drive-repeaters (atomic)
 ├── node_directory.json        DirectorySnapshot from map.meshcore.io (atomic)
-├── ui_prefs.json              {"onboarding_seen": bool, "labels": {"<session id>": "name"}} (atomic)
+├── ui_prefs.json              {"onboarding_seen": bool, "labels": {}} (atomic; labels only from 0.2.x, migrated away)
 └── sessions/
     └── <session id>/          id must match ^[A-Za-z0-9_-]{1,100}$ (path-like ids refused)
-        ├── session.json       DriveSession JSON; rewritten atomically at start and end
+        ├── session.json       DriveSession JSON; rewritten atomically at start, rename and end
         ├── pings.jsonl        one DrivePing JSON per line; appended + flushed per ping
         ├── synced.txt         append-only ping ids the server confirmed (stored or duplicate)
         ├── rejected.txt       append-only ping ids the server rejected (kept locally, never re-sent)
-        └── end_sent.txt       the ended_at the server has been told about (ISO 8601)
+        ├── end_sent.txt       the ended_at the server has been told about (ISO 8601)
+        └── resend.txt         present after a rename until an upload carries the new session; holds a token so a
+                               rename made during an upload stays marked
 <temp dir>/meshsonar_export/   export files and report .txt files written before sharing
 ```
 
@@ -169,8 +173,10 @@ Root: `getApplicationSupportDirectory()/meshsonar/` (falls back to the Documents
 ### Derived per-drive numbers (`SessionSummary`)
 
 `pingCount` = readable unique pings. `heardCount` = tx pings with an echo or a neighbour. `syncedCount` = pings
-whose id is in `synced.txt`. `unsyncedCount = pingCount − syncedCount`. Rejected pings count as unsynced here,
-although sync never re-sends them. The list is sorted newest `started_at` first.
+whose id is in `synced.txt`. `rejectedCount` = pings in `rejected.txt` (and not in `synced.txt`).
+`unsyncedCount = pingCount − syncedCount − rejectedCount` (never below 0): rejected pings are never re-sent, so they
+aren't "waiting". `sessionResendPending` = `resend.txt` exists. `hasSomethingToSync = unsyncedCount > 0 ||
+sessionResendPending` drives the Sync buttons. The list is sorted newest `started_at` first.
 
 ### Crash recovery rules
 
@@ -180,9 +186,10 @@ although sync never re-sends them. The list is sorted newest `started_at` first.
 | Garbage line in the middle of `pings.jsonl` | Skipped; the rest is kept. |
 | The same ping id appears twice | The first copy is kept. |
 | Crash between writing `session.json.tmp` and the rename | `session.json.tmp` is read as a fallback. |
-| `settings.json` missing or corrupt | Defaults are used. A one-line notice appears if the read threw. |
+| `settings.json` missing or corrupt | Defaults are used. A one-line notice appears if the read threw. Numbers are read num-tolerantly (`30.0` loads as 30), and a field with the wrong type falls back to its own default without resetting the others. |
 | `repeaters.json`, `node_directory.json` or `ui_prefs.json` damaged | Treated as empty or first run; this only costs names or the intro. |
-| App killed mid-drive | Pings already appended are safe. The session keeps `ended_at: null`, and nothing closes it on the next launch (see ROADMAP). Its duration falls back to the last ping's time. |
+| App killed mid-drive | Pings already appended are safe. At the next launch `closeOrphanedSessions` (`lib/core/drive_store.dart`, called from `AppState.init`) sets `ended_at` to the latest ping time, or `started_at` with no pings. With auto-upload on and an approved key the drive is then synced quietly, so the server learns its end. |
+| `engine.start` fails | A drive with no pings is deleted (no empty drive left behind); one with pings is closed and kept. |
 | A write throws during a drive | The ping stays in memory and is retried before the next ping and at Stop. See [ARCHITECTURE.md §5](ARCHITECTURE.md#5-error-handling-and-the-save-first-rule). |
 
 ## 3. Export file = Drive Format v1
@@ -234,8 +241,11 @@ Implemented in `DefaultSyncService` (`lib/core/sync_service.dart`):
    the rest of the chunk is re-sent (already-stored pings come back as duplicates) until every rejected ping is
    identified. This takes at most one round per ping. If the server rejects pings without naming any, nothing is
    marked and the error says it will retry.
-6. **End time.** If the session has `ended_at`, a chunk upload carries it and `end_sent.txt` is written. If nothing
-   was pending and the server hasn't confirmed this exact `ended_at`, one upload with `pings: []` is sent.
+6. **End time and session changes.** If the session has `ended_at`, a chunk upload carries it and `end_sent.txt` is
+   written. If nothing was pending and the server hasn't confirmed this exact `ended_at`, **or** the drive was renamed
+   (`resend.txt`), one upload with `pings: []` is sent. Any successful upload clears the rename mark (only if no newer
+   rename happened meanwhile). An open drive renamed with nothing pending gets one session-only upload with
+   `ended_at: null`.
 7. **Errors.** 403 → "key not approved", 401 → "driver key not recognised by the server". Both are fatal for
    `syncAll`, which stops at the first session. Any other error stops that session and keeps everything.
 8. **One at a time.** Calls are serialised, so overlapping syncs never send the same pings twice.
@@ -244,7 +254,7 @@ Implemented in `DefaultSyncService` (`lib/core/sync_service.dart`):
     [FEATURES.md §Uploads](FEATURES.md#uploads).
 
 On a store that doesn't implement `SyncLedger` (test fakes), rejected ids and end markers are tracked in memory for
-the life of the sync service.
+the life of the sync service, and renames are not re-sent on their own.
 
 ## 6. What CMAT does with it (for orientation)
 

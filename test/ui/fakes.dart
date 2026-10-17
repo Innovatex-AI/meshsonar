@@ -16,12 +16,20 @@ class FakeDriveStore implements DriveStore {
   final Map<String, DriveSession> sessionsById = {};
   final Map<String, List<DrivePing>> pingsBySession = {};
   final Map<String, Set<String>> synced = {};
+  final Map<String, Set<String>> rejected = {};
+
+  /// Sessions renamed since their last sync (cleared by [FakeSyncService]).
+  final Set<String> resend = {};
   final List<String> calls = [];
+
+  /// Makes [startSession] fail (e.g. a full disk).
+  bool failStart = false;
   bool failAppend = false;
   int exportCount = 0;
 
   @override
   Future<void> startSession(DriveSession session) async {
+    if (failStart) throw const FileSystemException('disk full');
     calls.add('start');
     sessionsById[session.id] = session;
     pingsBySession[session.id] = [];
@@ -42,6 +50,25 @@ class FakeDriveStore implements DriveStore {
   }
 
   @override
+  Future<void> renameSession(String sessionId, String? label) async {
+    calls.add('rename');
+    final s = sessionsById[sessionId];
+    if (s == null) throw StateError('no such session: $sessionId');
+    final v = label?.trim();
+    sessionsById[sessionId] = DriveSession(
+      id: s.id,
+      startedAt: s.startedAt,
+      endedAt: s.endedAt,
+      label: (v == null || v.isEmpty) ? null : v,
+      channel: s.channel,
+      radio: s.radio,
+      antenna: s.antenna,
+      companion: s.companion,
+    );
+    resend.add(sessionId);
+  }
+
+  @override
   Future<DriveSession?> session(String sessionId) async => sessionsById[sessionId];
 
   @override
@@ -54,6 +81,8 @@ class FakeDriveStore implements DriveStore {
           pingCount: pingsBySession[s.id]!.length,
           heardCount: pingsBySession[s.id]!.where((p) => !p.heardNothing).length,
           syncedCount: synced[s.id]!.length,
+          rejectedCount: (rejected[s.id] ?? const {}).length,
+          sessionResendPending: resend.contains(s.id),
         ),
     ];
   }
@@ -63,7 +92,9 @@ class FakeDriveStore implements DriveStore {
 
   @override
   Future<List<DrivePing>> unsyncedPings(String sessionId) async =>
-      pingsBySession[sessionId]!.where((p) => !synced[sessionId]!.contains(p.id)).toList();
+      pingsBySession[sessionId]!
+          .where((p) => !synced[sessionId]!.contains(p.id) && !(rejected[sessionId]?.contains(p.id) ?? false))
+          .toList();
 
   @override
   Future<void> markSynced(String sessionId, Iterable<String> pingIds) async => synced[sessionId]!.addAll(pingIds);
@@ -74,6 +105,8 @@ class FakeDriveStore implements DriveStore {
     sessionsById.remove(sessionId);
     pingsBySession.remove(sessionId);
     synced.remove(sessionId);
+    rejected.remove(sessionId);
+    resend.remove(sessionId);
   }
 
   @override
@@ -83,10 +116,11 @@ class FakeDriveStore implements DriveStore {
   }
 
   /// Adds a finished session directly (for list tests).
-  void seed(DriveSession s, List<DrivePing> pings, {int syncedFirst = 0}) {
+  void seed(DriveSession s, List<DrivePing> pings, {int syncedFirst = 0, int rejectedLast = 0}) {
     sessionsById[s.id] = s;
     pingsBySession[s.id] = List.of(pings);
     synced[s.id] = pings.take(syncedFirst).map((p) => p.id).toSet();
+    rejected[s.id] = pings.skip(pings.length - rejectedLast).map((p) => p.id).toSet();
   }
 }
 
@@ -143,6 +177,7 @@ class FakeSyncService implements SyncService {
     if (failWith != null) return SyncReport(sessions: 1, error: failWith);
     final un = await store.unsyncedPings(sessionId);
     await store.markSynced(sessionId, un.map((p) => p.id));
+    store.resend.remove(sessionId);
     return SyncReport(sessions: 1, stored: un.length);
   }
 
@@ -246,6 +281,10 @@ class FakeEngine implements WardriveEngine {
   final List<DrivePing> Function(int n)? script;
   FakeEngine({this.script});
 
+  /// Makes [start] fail (e.g. the channel can't be joined), after emitting [pingsBeforeStartError].
+  Object? startError;
+  List<DrivePing> pingsBeforeStartError = const [];
+
   @override
   Stream<DrivePing> get pings => _pings.stream;
   @override
@@ -261,6 +300,13 @@ class FakeEngine implements WardriveEngine {
   @override
   Future<void> start(WardriveConfig config) async {
     this.config = config;
+    if (startError != null) {
+      for (final p in pingsBeforeStartError) {
+        _pings.add(p);
+      }
+      await Future<void>.delayed(Duration.zero);
+      throw startError!;
+    }
     setStatus(const EngineStatus(EngineState.driving, message: 'Driving. Listening on #wardriving.'));
   }
 
@@ -317,6 +363,14 @@ class Harness {
   LocationSource? engineLocation;
   int _id = 0;
 
+  /// The next engine's start fails with this (and first emits [engineStartPings]).
+  Object? engineStartError;
+  List<DrivePing> engineStartPings = const [];
+
+  /// URLs the app asked the browser to open.
+  final List<Uri> openedUrls = [];
+  bool browserWorks = true;
+
   SelfInfo selfInfo = const SelfInfo(
     publicKey: 'ABCDEF0123',
     name: 'Truck Radio',
@@ -346,9 +400,15 @@ class Harness {
     simulatedLocation: simLocation,
     engineFactory: (link, loc) {
       engineLocation = loc;
-      final e = FakeEngine();
+      final e = FakeEngine()
+        ..startError = engineStartError
+        ..pingsBeforeStartError = engineStartPings;
       engines.add(e);
       return e;
+    },
+    openUrl: (u) async {
+      openedUrls.add(u);
+      return browserWorks;
     },
     repeaterCache: cache,
     exportDir: () async => Directory.systemTemp,

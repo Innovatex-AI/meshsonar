@@ -32,8 +32,8 @@ class Radio {
   factory Radio.fromJson(Map<String, dynamic> j) => Radio(
         freqMhz: (j['freq_mhz'] as num?)?.toDouble(),
         bwKhz: (j['bw_khz'] as num?)?.toDouble(),
-        sf: j['sf'] as int?,
-        cr: j['cr'] as int?,
+        sf: (j['sf'] as num?)?.toInt(),
+        cr: (j['cr'] as num?)?.toInt(),
         txDbm: (j['tx_dbm'] as num?)?.toDouble(),
       );
 }
@@ -133,9 +133,9 @@ class Echo {
         repeater: j['repeater'] as String,
         snrDb: (j['snr_db'] as num?)?.toDouble(),
         rssiDbm: (j['rssi_dbm'] as num?)?.toDouble(),
-        hops: j['hops'] as int?,
+        hops: (j['hops'] as num?)?.toInt(),
         path: (j['path'] as List?)?.cast<String>(),
-        delayMs: j['delay_ms'] as int?,
+        delayMs: (j['delay_ms'] as num?)?.toInt(),
       );
 }
 

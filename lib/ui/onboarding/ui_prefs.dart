@@ -1,8 +1,8 @@
 // Small UI-only preferences kept outside Settings (so lib/core/api.dart stays unchanged):
 // whether the first-run intro has been seen, and drive names the user typed on this phone.
 //
-// Drive names here are display names only. The DriveStore contract has no "rename" call, so a renamed drive keeps its
-// original label in exports and uploads.
+// Drive names: since 0.3.0 a rename is saved in the drive itself (DriveStore.renameSession), so exports and uploads
+// carry it. Names typed under 0.2.x lived only here; they are moved into the drives once, then forgotten here.
 import 'dart:convert';
 import 'dart:io';
 
@@ -30,6 +30,9 @@ class UiPrefs extends ChangeNotifier {
 
   /// Name typed on this phone for a drive, if any.
   String? labelFor(String sessionId) => _labels[sessionId];
+
+  /// All phone-only names (session id → name).
+  Map<String, String> get labels => Map.unmodifiable(_labels);
 
   Future<void> load() async {}
 
@@ -111,9 +114,26 @@ UiPrefs uiPrefsFor(AppState state) {
     final f = state.services.uiPrefsFile;
     p = f == null ? UiPrefs(seen: true) : FileUiPrefs(f);
     _prefs[state] = p;
-    p.load();
+    final prefs = p;
+    prefs.load().then((_) => migrateLegacyLabels(state, prefs));
   }
   return p;
+}
+
+/// Moves names typed under 0.2.x (kept only in this file) into the drives, so they're exported and uploaded too.
+/// A name whose drive is gone is dropped; one that can't be written now is kept and tried again next launch.
+Future<void> migrateLegacyLabels(AppState state, UiPrefs prefs) async {
+  final names = prefs.labels;
+  if (names.isEmpty) return;
+  for (final e in names.entries) {
+    try {
+      final ses = await state.services.store.session(e.key);
+      if (ses != null && ses.label != e.value) {
+        if (!await state.renameSession(e.key, e.value, quiet: true)) continue;
+      }
+      await prefs.forget(e.key);
+    } catch (_) {}
+  }
 }
 
 /// Use [prefs] for this app (tests: e.g. `UiPrefs()` to see the first-run intro).

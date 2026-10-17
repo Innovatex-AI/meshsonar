@@ -195,7 +195,8 @@ class _Header extends StatelessWidget {
           ]),
         ),
         const SizedBox(width: 8),
-        SyncBadge(summary: summary),
+        // Bounded, so the badge's text can ellipsize (e.g. "Synced · 2 rejected" on a narrow phone).
+        Flexible(child: Align(alignment: Alignment.topRight, child: SyncBadge(summary: summary))),
       ]),
     );
   }
@@ -219,11 +220,15 @@ class _Actions extends StatelessWidget {
                 minimumSize: const Size(0, 52),
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 textStyle: const TextStyle(fontSize: 16)),
-            onPressed: (syncing || summary.unsyncedCount == 0) ? null : () => s.syncSession(id),
+            onPressed: (syncing || !summary.hasSomethingToSync) ? null : () => s.syncSession(id),
             icon: syncing
                 ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                : Icon(summary.unsyncedCount == 0 ? Icons.cloud_done : Icons.cloud_upload),
-            label: Text(summary.unsyncedCount == 0 ? 'Synced' : 'Sync ${summary.unsyncedCount}'),
+                : Icon(summary.hasSomethingToSync ? Icons.cloud_upload : Icons.cloud_done),
+            label: Text(summary.unsyncedCount > 0
+                ? 'Sync ${summary.unsyncedCount}'
+                : summary.sessionResendPending
+                    ? 'Sync name'
+                    : 'Synced'),
           ),
         ),
         const SizedBox(width: 8),

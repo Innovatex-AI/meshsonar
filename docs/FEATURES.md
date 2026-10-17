@@ -1,6 +1,6 @@
 # MeshSonar features and behaviour rules
 
-Every screen and every user-visible rule in v0.2.0, with the numbers the code uses. Widget keys are given where
+Every screen and every user-visible rule in v0.3.0, with the numbers the code uses. Widget keys are given where
 tests rely on them (`Key('…')`), because a port's UI tests can reuse the same names.
 
 ```mermaid
@@ -65,6 +65,12 @@ and ≥ 640 px) the map sits on the left and the controls on the right.
 - **Log** button (`open-log`): "Log · N". Opens the live ping log.
 - **Start drive / Stop drive** (`start-stop`). It reads "Connect radio" when nothing is connected. Next to it is **Ping
   now** (`ping-now`), enabled only while driving and not already pinging.
+- **Failed start:** if the engine can't start (e.g. the channel can't be joined), "Couldn't start the drive. …" is
+  shown. A drive that recorded no pings is deleted, so no empty 0-ping drive is left in the list; one that already
+  has pings is closed and kept.
+- **Crash or app kill mid-drive:** at the next launch any drive still open (`ended_at` null) is closed at its last
+  ping's time (or its start time if it has no pings). With *Upload at end of drive* on and an approved key, those
+  drives are then uploaded quietly in the background, so the server learns their end.
 - **Keep awake:** the screen wake lock is on while driving (`wakelock_plus`).
 - **Haptics:** a light tap when a ping is heard, a medium tap when it heard nothing.
 
@@ -129,8 +135,8 @@ ping positions all share one filter instance.
 - Tap the header to collapse it to one line. Tap a row to select the repeater on the map; the map frames the repeater
   together with your position.
 - The tracker resets at each Start. It is never cleared during a drive.
-- The hold value is copied into the tracker at Start. A Settings change mid-drive updates the pips but not the
-  live/stale rule until the next drive (see ROADMAP).
+- Changing *Heard list hold* in Settings applies at once, even mid-drive: the live/stale rule and the pips both use the
+  new value straight away (a shorter hold can grey out repeaters immediately; a longer one can bring them back).
 
 ## Coverage map
 
@@ -217,15 +223,21 @@ unmeasured values and a dashed 0 dB line.
 
 (`ui/sessions_screen.dart`)
 
-- **Overview card:** "N drives · N pings" and "N pings waiting to upload", with **Sync all** (`sync-all`).
-- **Drive card:** name (local name, else recorded label, else date/time), date and channel, a "Recording" chip for the
+- **Overview card:** "N drives · N pings" and "N pings waiting to upload" (or "N drive names waiting to upload" after
+  a rename), with **Sync all** (`sync-all`). Rejected pings don't count as waiting.
+- **Drive card:** name (the drive's label, else date/time), date and channel, a "Recording" chip for the
   drive in progress, duration, distance, pings, Heard %, the **heard strip** (one bar per tx ping, bucketed so each bar
   is ≥ ~3 px; red = nothing heard, otherwise SNR colour and height ∝ heard fraction), a **sync badge**, Sync now,
   Export & share, and a menu (Sync now, Drive report, Export & share, Rename, Delete).
-- **Sync badge:** *Nothing to sync* (0 pings), *All synced*, *N not synced*, *N not synced · Sync failed* (after a
-  failed sync), *Syncing…*.
+- **Sync badge:** *Nothing to sync* (0 pings), *All synced*, *N not synced*, *Name not synced* (renamed, every ping
+  already up), *N not synced · Sync failed* (after a failed sync), *Syncing…*. Pings the server **rejected** are
+  counted apart and shown as *· N rejected* (e.g. *Synced · 2 rejected*). They stay on the phone and in exports, are
+  never re-sent, and don't enable Sync: **Sync now** is enabled only when there are pings waiting or a new name to send.
 - **Swipe left to delete** (not for the drive in progress). The confirm dialog warns how many pings are not uploaded.
-- **Rename** sets a name on this phone only (it isn't exported or uploaded).
+- **Rename** saves the name in the drive itself (`DriveStore.renameSession` rewrites `session.json`), so exports carry
+  it, and marks the drive so the next sync sends the session again with the new name, even if every ping is already
+  up. Empty clears the name (the card shows the date). Names typed under 0.2.x, which lived only in `ui_prefs.json`,
+  are moved into their drives once at launch.
 - Pull to refresh, or use the refresh button.
 
 ## Drive detail
@@ -289,7 +301,8 @@ Metric definitions (`DriveReport.compute`):
 | Section | Item | Behaviour |
 |---|---|---|
 | Driver & server | **Driver key** | Without a key: a request form (name required, callsign and email optional) → `driver-request`. With a key: a status badge (No key / Pending approval / Approved / Rejected / Revoked / Not recognised by this server), the public display name, the masked key `••••abcd`, **Refresh** (`driver-status`) and **Remove key**. Approval also downloads repeater names. |
-| | **Server URL** | Must be http(s) with a host. Any Drive Format v1 server works, and keys are per server. |
+| | **Server URL** | Must be http(s) with a host. Any Drive Format v1 server works, and keys are per server: with a key saved, changing the URL first asks "Change server and remove your key?" (explaining that a key only works on the server that issued it), then removes the key and its status. Unsent drives stay on the phone and upload to the new server once it gives you a key. |
+| | **Account link** | Under the driver key (with or without one): "Manage your drives and privacy at `<server>/me` — sign in with the same email you registered with", and **Get a key on the website**, which opens `<server>/me/devices` in the browser (url_launcher). If no browser opens, a message gives the address. |
 | Wardriving | **Channel** | Default `#wardriving`; `#` is added if missing |
 | | **Auto-ping** | Slider, every 5 s from **10 to 120 s** (default 30) |
 | | **Minimum distance** | Slider stops 15, 25, 50, 75, 100, 125, 150, 200, 250, 300, 400, **500 m** (default 100) |
@@ -301,7 +314,7 @@ Metric definitions (`DriveReport.compute`):
 | | **Upload interval** | 1–30 min (default 5) |
 | | Last upload | "Uploading…", "Last upload HH:MM:SS · OK", "Last upload failed: …", or "No uploads yet" |
 | | **Repeater names** | Count saved for offline use. Tap (needs a key) to refresh CMAT names and force a public-directory refresh. |
-| About | **About MeshSonar** | Version, MIT text, short notices, Flutter licence page |
+| About | **About MeshSonar** | Version (from the build via `package_info_plus`), MIT text, short notices, Flutter licence page |
 | | **Show the welcome tour** | Reopens the intro |
 
 ## Uploads
@@ -316,6 +329,8 @@ Metric definitions (`DriveReport.compute`):
   upload." If the key isn't approved yet: "Drive saved. It will upload once your driver key is approved." Otherwise:
   "Drive saved on this phone."
 - **Manual:** Sync on a drive card or in drive detail, and Sync all. Without an approved key these explain what to do.
+  Sync is enabled when pings are waiting or a renamed drive's new name hasn't been sent; rejected pings never enable it.
+- **At launch:** drives closed after a crash (see Drive screen) are uploaded quietly when the key is approved.
 - Rules for what's sent are in [DATA_MODEL.md §5](DATA_MODEL.md#5-sync-rules).
 
 ## Repeater directory (names and positions)

@@ -51,6 +51,8 @@ class MemoryRepeaterCache implements RepeaterCache {
   Future<void> save(List<RepeaterRef> repeaters) async => items = List.of(repeaters);
 }
 
+Future<bool> _noBrowser(Uri url) async => false;
+
 class AppServices {
   final DriveStore store;
   final SettingsStore settingsStore;
@@ -82,6 +84,10 @@ class AppServices {
   /// Opens the platform share sheet for a file.
   final Future<void> Function(File file) shareFile;
 
+  /// Opens a web page in the browser (url_launcher in the real app). Returns false if nothing could open it.
+  final Future<bool> Function(Uri url) openUrl;
+
+  /// Name, version (from the build via package_info_plus) and platform.
   final AppInfo appInfo;
 
   /// Small JSON file for UI-only preferences (first-run intro seen, drive names). Null = keep them in memory only.
@@ -106,7 +112,8 @@ class AppServices {
     required this.shareFile,
     required this.newId,
     required this.clock,
-    this.appInfo = const AppInfo(name: 'MeshSonar', version: '0.2.0'),
+    this.openUrl = _noBrowser,
+    this.appInfo = const AppInfo(name: 'MeshSonar'),
     this.uiPrefsFile,
     this.directory,
   });

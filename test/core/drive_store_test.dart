@@ -228,4 +228,83 @@ void main() {
     await store.appendPing(s.id, a);
     expect(await store.pings(s.id), hasLength(1));
   });
+
+
+  test('sessions(): rejected pings are counted apart and are not "unsynced"', () async {
+    final s = makeSession();
+    await store.startSession(s);
+    final pings = [for (var i = 0; i < 6; i++) makePing(i)];
+    for (final ping in pings) {
+      await store.appendPing(s.id, ping);
+    }
+    await store.markSynced(s.id, [pings[0].id, pings[1].id, pings[2].id]);
+    await store.markRejected(s.id, [pings[3].id, pings[4].id, 'not-a-ping']);
+    final x = (await store.sessions()).single;
+    expect(x.syncedCount, 3);
+    expect(x.rejectedCount, 2);
+    expect(x.unsyncedCount, 1);
+    expect(x.hasSomethingToSync, isTrue);
+    await store.markSynced(s.id, [pings[5].id]);
+    final y = (await store.sessions()).single;
+    expect(y.unsyncedCount, 0);
+    expect(y.rejectedCount, 2);
+    expect(y.hasSomethingToSync, isFalse, reason: 'rejected pings are never re-sent, so Sync has nothing to do');
+  });
+
+  test('renameSession rewrites session.json, keeps everything else, and marks the session for re-send', () async {
+    final s = makeSession(endedAt: DateTime.utc(2026, 10, 16, 12));
+    await store.startSession(s);
+    await store.appendPing(s.id, makePing(0));
+    expect(await store.sessionResendToken(s.id), isNull);
+    expect((await store.sessions()).single.sessionResendPending, isFalse);
+
+    await store.renameSession(s.id, '  Route 3 north ');
+    final back = (await store.session(s.id))!;
+    expect(back.label, 'Route 3 north');
+    final want = s.toJson()..['label'] = 'Route 3 north';
+    expect(back.toJson(), want);
+    expect(jsonDecode(await sessionFile(s.id, 'session.json').readAsString())['label'], 'Route 3 north');
+    final token = await store.sessionResendToken(s.id);
+    expect(token, isNotNull);
+    expect((await store.sessions()).single.sessionResendPending, isTrue);
+    expect((await store.sessions()).single.hasSomethingToSync, isTrue);
+
+    // A newer rename isn't cleared by an upload that started before it.
+    await store.renameSession(s.id, 'Route 3');
+    await store.clearSessionResend(s.id, token!);
+    expect(await store.sessionResendToken(s.id), isNotNull);
+    await store.clearSessionResend(s.id, (await store.sessionResendToken(s.id))!);
+    expect(await store.sessionResendToken(s.id), isNull);
+
+    // Blank clears the name; exports carry whatever the drive is called now.
+    await store.renameSession(s.id, '   ');
+    expect((await store.session(s.id))!.label, isNull);
+    await store.renameSession(s.id, 'Final name');
+    final out = await store.exportSession(s.id, const AppInfo(name: 'MeshSonar', version: '0.3.0'), Directory(p.join(tmp.path, 'out')));
+    expect(jsonDecode(await out.readAsString())['session']['label'], 'Final name');
+    expect(() => store.renameSession(newId(), 'x'), throwsStateError);
+  });
+
+  test('closeOrphanedSessions closes open drives at their last ping (or start) and leaves the rest', () async {
+    final start = DateTime.utc(2026, 10, 16, 9);
+    final withPings = makeSession(startedAt: start);
+    final empty = makeSession(startedAt: start.add(const Duration(hours: 1)));
+    final done = makeSession(startedAt: start.add(const Duration(hours: 2)), endedAt: start.add(const Duration(hours: 3)));
+    final live = makeSession(startedAt: start.add(const Duration(hours: 4)));
+    for (final s in [withPings, empty, done, live]) {
+      await store.startSession(s);
+    }
+    // Out of order on purpose: the latest ping time wins, not the last line.
+    await store.appendPing(withPings.id, makePing(0, ts: start.add(const Duration(minutes: 5))));
+    await store.appendPing(withPings.id, makePing(1, ts: start.add(const Duration(minutes: 42))));
+    await store.appendPing(withPings.id, makePing(2, ts: start.add(const Duration(minutes: 30))));
+
+    final closed = await closeOrphanedSessions(store, except: {live.id});
+    expect(closed.toSet(), {withPings.id, empty.id});
+    expect((await store.session(withPings.id))!.endedAt, start.add(const Duration(minutes: 42)));
+    expect((await store.session(empty.id))!.endedAt, empty.startedAt);
+    expect((await store.session(done.id))!.endedAt, done.endedAt);
+    expect((await store.session(live.id))!.endedAt, isNull);
+    expect(await closeOrphanedSessions(store, except: {live.id}), isEmpty);
+  });
 }

@@ -108,9 +108,18 @@ class HeardRepeater {
 
 /// Rolling "who's in range" state for the current drive.
 class HeardTracker {
-  int holdPings;
+  int _holdPings;
   RepeaterLookup lookup;
-  HeardTracker({this.holdPings = 3, RepeaterLookup? lookup}) : lookup = lookup ?? RepeaterLookup.empty;
+  HeardTracker({int holdPings = 3, RepeaterLookup? lookup})
+      : _holdPings = holdPings < 1 ? 1 : holdPings,
+        lookup = lookup ?? RepeaterLookup.empty;
+
+  /// Pings a repeater stays "live" after it was last heard. Changing it mid-drive re-applies the rule at once.
+  int get holdPings => _holdPings;
+  set holdPings(int v) {
+    _holdPings = v < 1 ? 1 : v;
+    _restate();
+  }
 
   final Map<String, HeardRepeater> _byId = {};
   int _pingIndex = -1;
@@ -137,8 +146,12 @@ class HeardTracker {
       if (e.snrDb != null && (h.bestSnrDb == null || e.snrDb! > h.bestSnrDb!)) h.bestSnrDb = e.snrDb;
       h.lastDistanceM = h.match.distanceFrom(ping.lat, ping.lon);
     }
+    _restate();
+  }
+
+  void _restate() {
     for (final h in _byId.values) {
-      h.state = (_pingIndex - h.lastPingIndex) < holdPings ? HeardState.live : HeardState.stale;
+      h.state = (_pingIndex - h.lastPingIndex) < _holdPings ? HeardState.live : HeardState.stale;
     }
   }
 

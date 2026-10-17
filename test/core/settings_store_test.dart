@@ -61,4 +61,51 @@ void main() {
     expect(const Settings().antenna.type, 'internal');
     expect(const Settings().syncDuringDrive, isTrue);
   });
+
+
+  test('numbers written as 30.0 load (num-tolerant), and one odd field never resets the rest', () async {
+    final f = File(p.join(tmp.path, 'settings.json'))
+      ..writeAsStringSync('{"server_url": "https://example.org", "driver_key": "ms_k", "key_status": "approved", '
+          '"interval_sec": 45.0, "min_distance_m": 150.0, "sync_every_min": 7.0, "heard_hold_pings": 4.0, '
+          '"antenna": {"type": "external", "gain_dbi": 3, "height_m": 2}, "auto_sync": false}');
+    final s = await FileSettingsStore(f).load();
+    expect(s.serverUrl, 'https://example.org');
+    expect(s.driverKey, 'ms_k');
+    expect(s.keyStatus, DriverKeyStatus.approved);
+    expect(s.intervalSec, 45);
+    expect(s.minDistanceM, 150);
+    expect(s.syncEveryMin, 7);
+    expect(s.heardHoldPings, 4);
+    expect(s.antenna.type, 'external');
+    expect(s.autoSync, isFalse);
+
+    // Wrong types fall back field by field instead of throwing away the whole file.
+    final odd = Settings.fromJson({
+      'server_url': 'https://example.org',
+      'driver_key': 'ms_k',
+      'interval_sec': '45',
+      'min_distance_m': double.nan,
+      'auto_sync': 'yes',
+      'channel': 7,
+      'antenna': 'mag-mount',
+      'heard_hold_pings': 2.6,
+    });
+    expect(odd.serverUrl, 'https://example.org');
+    expect(odd.driverKey, 'ms_k');
+    expect(odd.intervalSec, 30);
+    expect(odd.minDistanceM, 100);
+    expect(odd.autoSync, isTrue);
+    expect(odd.channel, '#wardriving');
+    expect(odd.antenna.type, 'internal');
+    expect(odd.heardHoldPings, 3);
+  });
+
+  test('model numbers written as floats load too (hops, delay, sf, cr)', () {
+    final e = Echo.fromJson({'repeater': 'ab', 'hops': 1.0, 'delay_ms': 840.0});
+    expect(e.hops, 1);
+    expect(e.delayMs, 840);
+    final r = Radio.fromJson({'sf': 7.0, 'cr': 5.0});
+    expect(r.sf, 7);
+    expect(r.cr, 5);
+  });
 }

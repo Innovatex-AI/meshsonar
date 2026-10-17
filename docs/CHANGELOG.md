@@ -3,6 +3,46 @@
 All notable changes to MeshSonar. Dates are local (US Eastern). This changelog was reconstructed from the commit
 history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md](ROADMAP.md).
 
+## [0.3.0] — 2026-10-16 — roadmap fixes
+
+`pubspec.yaml` is `0.3.0+3`. The upload contract with CMAT is unchanged (same endpoints, headers and Drive Format v1
+bodies); a rename only re-sends the existing session object.
+
+### Fixed
+- **Drives cut off by a crash or app kill** are closed at the next launch at their last ping's time (or start time
+  with no pings), then uploaded quietly when *Upload at end of drive* is on and the key is approved, so the server
+  learns their end. (`closeOrphanedSessions` in `lib/core/drive_store.dart`, run from `AppState.init`.)
+- **Failed start no longer leaves an empty drive:** when `engine.start` fails and nothing was recorded, the session
+  folder is deleted. A drive that already has pings is closed and kept.
+- **Rejected pings** are counted separately (`SessionSummary.rejectedCount`). They no longer show as "N not synced"
+  or enable Sync; badges show "· N rejected" instead (drive card and drive detail).
+- **Changing the server URL** now removes the driver key and its status (keys are per server). Settings asks first
+  and explains why; with no key saved there's no prompt.
+- **Settings file parsing** is num-tolerant (`30.0` loads as 30), and a field with the wrong type falls back to its
+  own default instead of resetting every setting. Ping/echo/radio integers (`hops`, `delay_ms`, `sf`, `cr`) are
+  read the same way.
+- **Heard list hold** changes apply to the running drive at once (live/stale rule and pips), not at the next Start.
+- **Rename is saved in the drive and uploaded:** `DriveStore.renameSession` rewrites `session.json` and marks the
+  drive for re-send (`resend.txt`), so the next sync sends the session with its new `label`, as an upload with no
+  pings if everything else is already up. Exports carry the name. Badges say "Name not synced" until then. Names
+  typed under 0.2.x (kept only in `ui_prefs.json`) are moved into their drives once.
+- **App version** comes from the build via `package_info_plus` instead of the hard-coded `appVersion` (which still
+  said 0.1.0). `pubspec.yaml` is now the only place it's set.
+
+### Added
+- Settings → Driver key: "Manage your drives and privacy at `<server>/me` — sign in with the same email you
+  registered with", and a **Get a key on the website** button that opens `<server>/me/devices` (new dependency:
+  `url_launcher`; `package_info_plus` is now a direct dependency).
+- iOS signing: `ios/Flutter/Debug.xcconfig` and `Release.xcconfig` end with `#include? "Signing.xcconfig"`. Put your
+  `DEVELOPMENT_TEAM` in the git-ignored `ios/Flutter/Signing.xcconfig` (template:
+  `Signing.xcconfig.example`) so a personal team id never touches `project.pbxproj`. See DEVELOPMENT.md §2.1.
+
+### Changed (contracts)
+- `lib/core/api.dart`: `DriveStore.renameSession`; `SessionSummary.rejectedCount`, `sessionResendPending`,
+  `hasSomethingToSync` (`unsyncedCount` now excludes rejected pings). `SyncLedger` gains `sessionResendToken` /
+  `clearSessionResend`. `HeardTracker.holdPings` is now a setter that re-applies the rule. `AppServices` gains
+  `openUrl`; its and `DefaultSyncService`'s default `AppInfo` no longer carry a version.
+
 ## [0.2.0] — 2026-10-16 — field-test fixes
 
 Commits `dbff5c4` (05:53, shared groundwork) and `d86ebd3` (07:32, field-test fixes). `pubspec.yaml` is now

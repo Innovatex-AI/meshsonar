@@ -324,6 +324,75 @@ void main() {
     await sv.syncSession(s.id);
     expect(server.uploads, hasLength(1));
   });
+
+  test('a renamed drive re-sends its session (new label) once, even with every ping already up', () async {
+    final s = await drive(3, endedAt: DateTime.now().toUtc());
+    await sync.syncSession(s.id);
+    expect(server.uploads, hasLength(1));
+    await store.renameSession(s.id, 'Route 3 north');
+    expect((await store.sessions()).single.hasSomethingToSync, isTrue);
+    final r = await sync.syncSession(s.id);
+    expect(r.error, isNull);
+    expect(server.uploads, hasLength(2));
+    expect(server.uploads.last['pings'], isEmpty);
+    expect(server.uploads.last['session']['label'], 'Route 3 north');
+    expect(server.uploads.last['session']['ended_at'], isNotNull);
+    expect(await store.sessionResendToken(s.id), isNull);
+    await sync.syncAll();
+    expect(server.uploads, hasLength(2), reason: 'sent once');
+  });
+
+  test('a rename with pings still to send rides on that upload (no extra request); open drives too', () async {
+    final s = await drive(3);
+    await store.renameSession(s.id, 'Morning loop');
+    await sync.syncSession(s.id);
+    expect(server.uploads, hasLength(1));
+    expect(server.uploads.single['session']['label'], 'Morning loop');
+    expect(await store.sessionResendToken(s.id), isNull);
+    // Renamed while still open with nothing new: one session-only upload, ended_at still null.
+    await store.renameSession(s.id, 'Evening loop');
+    await sync.syncSession(s.id);
+    expect(server.uploads, hasLength(2));
+    expect(server.uploads.last['session']['label'], 'Evening loop');
+    expect(server.uploads.last['session']['ended_at'], isNull);
+    expect(await store.endReported(s.id), isNull);
+  });
+
+  test('a failed upload keeps the rename marked for the next sync', () async {
+    final s = await drive(2, endedAt: DateTime.now().toUtc());
+    await sync.syncSession(s.id);
+    await store.renameSession(s.id, 'Renamed');
+    server.networkDown = true;
+    expect((await sync.syncSession(s.id)).error, isNotNull);
+    expect(await store.sessionResendToken(s.id), isNotNull);
+    server.networkDown = false;
+    await sync.syncSession(s.id);
+    expect(server.uploads.last['session']['label'], 'Renamed');
+    expect(await store.sessionResendToken(s.id), isNull);
+  });
+
+  test('a drive closed after a crash (orphan) reports its end on the next sync', () async {
+    final s = await drive(4, startedAt: DateTime.now().toUtc().subtract(const Duration(hours: 6)));
+    await sync.syncSession(s.id); // uploaded mid-drive, then the app was killed
+    expect(server.uploads.single['session']['ended_at'], isNull);
+    final closed = await closeOrphanedSessions(store);
+    expect(closed, [s.id]);
+    await sync.syncAll();
+    expect(server.uploads, hasLength(2));
+    final last = (await store.pings(s.id)).map((e) => e.ts).reduce((a, b) => a.isAfter(b) ? a : b);
+    expect(server.uploads.last['session']['ended_at'], last.toIso8601String());
+  });
+
+  test('sessions(): a drive with rejected pings shows nothing left to sync after its upload', () async {
+    final s = await drive(5, endedAt: DateTime.now().toUtc());
+    server.badIds.add((await store.pings(s.id))[2].id);
+    await sync.syncSession(s.id);
+    final x = (await store.sessions()).single;
+    expect(x.syncedCount, 4);
+    expect(x.rejectedCount, 1);
+    expect(x.unsyncedCount, 0);
+    expect(x.hasSomethingToSync, isFalse);
+  });
 }
 
 /// Minimal DriveStore without SyncLedger.
@@ -342,6 +411,8 @@ class _MemStore implements DriveStore {
   Future<void> appendPing(String sessionId, DrivePing ping) async => _p[sessionId]!.add(ping);
   @override
   Future<void> endSession(String sessionId, DateTime endedAt) async => _s[sessionId] = _s[sessionId]!.copyWith(endedAt: endedAt);
+  @override
+  Future<void> renameSession(String sessionId, String? label) async => _s[sessionId] = _s[sessionId]!.copyWith(label: label);
   @override
   Future<DriveSession?> session(String sessionId) async => _s[sessionId];
   @override

@@ -3,7 +3,7 @@
 MeshSonar is a Flutter app (Dart 3.13+, Flutter 3.44+; developed on Flutter 3.47.7) with one codebase for iPhone/iPad,
 Android, macOS and Linux. A Windows runner is configured too, but it has not been tested with a radio. This document describes how the code is split up, how a drive
 flows from the radio to the server, and what each file does. Everything here is checked against the source as of
-v0.2.0.
+v0.2.0; the file table and data flow notes were updated for v0.3.0.
 
 Related documents: [PROTOCOL.md](PROTOCOL.md) (radio bytes), [DATA_MODEL.md](DATA_MODEL.md) (records and files),
 [FEATURES.md](FEATURES.md) (screens and rules), [PORTING.md](PORTING.md), [CONTRACTS.md](CONTRACTS.md) (the original
@@ -179,8 +179,8 @@ There are no state-management packages. All of it is plain Flutter:
 - **`DriveMapModel`** (`lib/ui/drive/drive_map_model.dart`) is a second `ChangeNotifier`, owned by the Drive screen and
   shared with the full-screen map. It holds the ping list, a frozen heard snapshot (`HeardView`s), the selected
   repeater, the layer toggles and the live GPS position. It recomputes only when a ping finishes or the lookup changes.
-- **`UiPrefs`** (`lib/ui/onboarding/ui_prefs.dart`) is a `ChangeNotifier` for UI-only preferences (intro seen, local
-  drive names). It hangs off `AppState` through an `Expando`. `DriveStatsCache` in `sessions_screen.dart` works the
+- **`UiPrefs`** (`lib/ui/onboarding/ui_prefs.dart`) is a `ChangeNotifier` for UI-only preferences (intro seen, plus
+  drive names typed under 0.2.x until they're migrated into the drives). It hangs off `AppState` through an `Expando`. `DriveStatsCache` in `sessions_screen.dart` works the
   same way.
 - Widgets keep their own small state (`StatefulWidget`): the heard box collapse, the ping log filters, slider drag
   positions.
@@ -246,12 +246,12 @@ names.
 |---|---|---|
 | `main.dart` | app | Entry point: builds real services, runs `MeshSonarApp`, then `AppState.init()`; shows `StartupErrorApp` if storage can't open. |
 | `app/app_state.dart` | app | `AppState`: settings, radio connection, drive lifecycle, save-first queue, live counters, heard tracker, in-drive/end uploads, sync, export/delete, driver key, repeater names, public directory. |
-| `app/services.dart` | app | `AppServices` dependency container; `RepeaterCache` + `FileRepeaterCache` / `MemoryRepeaterCache`. |
-| `app/wiring.dart` | app | `buildRealServices()`: data root, concrete store/client/sync/settings, BLE + simulator scanners, filtered GPS, engine factory, export dir, share, directory (7-day TTL); `appVersion` constant. |
+| `app/services.dart` | app | `AppServices` dependency container (incl. `openUrl` for web pages and `appInfo`); `RepeaterCache` + `FileRepeaterCache` / `MemoryRepeaterCache`. |
+| `app/wiring.dart` | app | `buildRealServices()`: data root, concrete store/client/sync/settings, BLE + simulator scanners, filtered GPS, engine factory, export dir, share, browser, directory (7-day TTL); app version via `loadAppInfo` (package_info_plus). |
 | `app/messages.dart` | app | `friendlyError` / `friendlySyncError`: exceptions → short plain-language messages. |
 | `core/model.dart` | core (contract) | Drive Format v1 records: `AppInfo`, `Radio`, `Antenna`, `Companion`, `DriveSession`, `Echo`, `Neighbor`, `DrivePing`, `DriveBatch`, `RepeaterRef`. |
 | `core/api.dart` | core (contract) | `DriveStore`, `CmatClient`, `SyncService`, `SettingsStore` interfaces; `Settings`, `SessionSummary`, `DriverKeyStatus`, `UploadResult`, `SyncReport`, `CmatException`. |
-| `core/drive_store.dart` | core | `JsonlDriveStore` (one folder per drive, JSONL pings, sync ledgers) and the `SyncLedger` extension interface. |
+| `core/drive_store.dart` | core | `JsonlDriveStore` (one folder per drive, JSONL pings, sync ledgers, rename + re-send mark), the `SyncLedger` extension interface, and `closeOrphanedSessions` (closes crashed drives at launch). |
 | `core/cmat_client.dart` | core | `HttpCmatClient` for `driver-request`, `driver-status`, `drive-upload`, `drive-repeaters`; `DetailedUploadResult`, `PingRejection`. |
 | `core/sync_service.dart` | core | `DefaultSyncService`: chunked, serialised, retry-safe uploads; rejection discovery; end-time reporting. |
 | `core/settings_store.dart` | core | `FileSettingsStore`: atomic JSON settings; missing/corrupt → defaults. |
@@ -268,6 +268,8 @@ names.
 | `radio/ble_transport.dart` | platform | `BleRadioScanner` / `_BleTransport` over flutter_blue_plus (Nordic-UART-style service). |
 | `platform/geolocator_location.dart` | platform | `GeolocatorLocationSource`: per-OS location settings (Android foreground notification, iOS background updates), permission. |
 | `platform/share.dart` | platform | `shareDriveFile`: share sheet for exports (JSON) and reports (text). |
+| `platform/app_version.dart` | platform | `loadAppInfo`: name, version (from the build via package_info_plus) and platform. |
+| `platform/open_url.dart` | platform | `openExternalUrl`: opens the server's web pages in the browser (url_launcher). |
 | `ui/app.dart` | ui | `MeshSonarApp`, `AppScope`, `HomeShell` (Drive / Drives / Settings tabs, SnackBar notices), `StartupErrorApp`. |
 | `ui/theme.dart` | ui | Design system: `Gap`, `Corners`, palettes, `MeshSonarColors` (SNR scale, beacon, map tile matrix), `numberStyle`, theme mode. |
 | `ui/widgets.dart` | ui | Shared formatters (`formatTime`, `formatDateTime`, `formatSnr`, `bestSnr`, `repeatersHeard`) and small widgets (`StatTile`, `StatStrip`, `EmptyState`, `ErrorBanner`, `SectionLabel`, `SignalBars`, `ResultDot`, `PingTile`). |
@@ -295,7 +297,7 @@ names.
 | `ui/onboarding/first_run_gate.dart` | ui | Shows the intro once, then routes to Connect / Simulator / Settings. |
 | `ui/onboarding/onboarding_screen.dart` | ui | Three-page intro. |
 | `ui/onboarding/illustrations.dart` | ui | Code-drawn intro art; `Brand` colours. |
-| `ui/onboarding/ui_prefs.dart` | ui | `UiPrefs` / `FileUiPrefs` (intro seen, local drive names); `driveLabel`. |
+| `ui/onboarding/ui_prefs.dart` | ui | `UiPrefs` / `FileUiPrefs` (intro seen; 0.2.x drive names until migrated); `driveLabel`, `migrateLegacyLabels`. |
 
 Other files: `tool/make_icon.py` draws the icon (Pillow), and `flutter_launcher_icons.yaml` generates the
 platform icons from it. `assets/fonts/` holds Barlow (SIL OFL). `test/fixtures/cmat_server.ts` runs CMAT's real

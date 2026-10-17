@@ -10,6 +10,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 
 import '../core/api.dart';
+import '../core/drive_store.dart' show closeOrphanedSessions;
 import '../core/heard.dart';
 import '../core/model.dart';
 import '../core/repeater_directory.dart';
@@ -383,14 +384,25 @@ class AppState extends ChangeNotifier {
       _scheduleDriveSync();
       unawaited(refreshSessions());
     } catch (e) {
-      // The session row may exist with no pings; close it so it doesn't look "still driving".
+      // The session folder may exist. With no pings it's just an empty drive, so remove it; otherwise close it so it
+      // doesn't look "still driving".
       final sid = _session?.id;
       _cancelDriveSync();
       await _teardownEngine();
+      await _flushWrites();
       if (sid != null) {
         try {
-          await services.store.endSession(sid, services.clock().toUtc());
-        } catch (_) {}
+          final saved = await services.store.pings(sid);
+          if (saved.isEmpty && _unsaved.isEmpty && _drivePings.isEmpty) {
+            await services.store.deleteSession(sid);
+          } else {
+            await services.store.endSession(sid, services.clock().toUtc());
+          }
+        } catch (_) {
+          try {
+            await services.store.endSession(sid, services.clock().toUtc());
+          } catch (_) {}
+        }
       }
       _session = null;
       _say('Couldn\'t start the drive. ${friendlyError(e, action: 'Starting')}');
@@ -672,6 +684,37 @@ class AppState extends ChangeNotifier {
     if (e is CmatException && e.status == 403) unawaited(refreshKeyStatus(quiet: true));
   }
 
+  // ---------- rename ----------
+  /// Names a drive (blank clears it). The name is saved in the drive itself, so exports carry it, and the drive is
+  /// marked so the next sync sends the new name to the server.
+  Future<bool> renameSession(String sessionId, String? label, {bool quiet = false}) async {
+    final v = label?.trim();
+    final name = (v == null || v.isEmpty) ? null : v;
+    try {
+      await services.store.renameSession(sessionId, name);
+      final cur = _session;
+      if (cur != null && cur.id == sessionId) _session = _withLabel(cur, name);
+      final last = _lastSession;
+      if (last != null && last.id == sessionId) _lastSession = _withLabel(last, name);
+      await refreshSessions();
+      return true;
+    } catch (e) {
+      if (!quiet) _say(friendlyError(e, action: 'Renaming'));
+      return false;
+    }
+  }
+
+  static DriveSession _withLabel(DriveSession s, String? label) => DriveSession(
+        id: s.id,
+        startedAt: s.startedAt,
+        endedAt: s.endedAt,
+        label: label,
+        channel: s.channel,
+        radio: s.radio,
+        antenna: s.antenna,
+        companion: s.companion,
+      );
+
   // ---------- export / delete ----------
   Future<void> exportAndShare(String sessionId) async {
     try {
@@ -715,18 +758,42 @@ class AppState extends ChangeNotifier {
       _settings = const Settings();
       _notice = 'Settings couldn\'t be read, so defaults are in use.';
     }
+    heard.holdPings = _settings.heardHoldPings;
     try {
       _setRepeaters(await services.repeaterCache.load());
     } catch (_) {}
     unawaited(_loadDirectory());
     _loaded = true;
     notifyListeners();
+    // A drive cut off by a crash or an app kill is still open; close it at its last ping so its end gets synced.
+    var orphans = const <String>[];
+    try {
+      orphans = await closeOrphanedSessions(services.store, except: {if (_session != null) _session!.id});
+    } catch (_) {}
     await refreshSessions();
     if (keyApproved) unawaited(refreshRepeaters(quiet: true));
+    if (orphans.isNotEmpty && _settings.autoSync && keyApproved) unawaited(_syncClosedQuietly(orphans));
+  }
+
+  /// Background upload of drives closed at startup (their remaining pings and ended_at). Failures stay quiet; the
+  /// drives show as not synced and go up with the next sync.
+  Future<void> _syncClosedQuietly(List<String> ids) async {
+    for (final id in ids) {
+      try {
+        await _syncService.syncSession(id);
+      } catch (_) {}
+    }
+    await refreshSessions();
   }
 
   Future<void> updateSettings(Settings s) async {
+    // Keys belong to one server: a new server URL with the old key would only be refused, so the key goes with it.
+    if (s.serverUrl != _settings.serverUrl && s.driverKey != null && s.driverKey == _settings.driverKey) {
+      s = s.copyWith(clearKey: true);
+      _keyError = null;
+    }
     _settings = s;
+    heard.holdPings = s.heardHoldPings; // the heard list's live/stale rule follows the slider at once, even mid-drive
     _scheduleDriveSync(); // in-drive upload follows the toggles, the period and the key status
     _applyPingCadence(s);
     notifyListeners();
@@ -759,12 +826,17 @@ class AppState extends ChangeNotifier {
     _keyBusy = true;
     _keyError = null;
     notifyListeners();
+    final server = _settings.serverUrl;
     try {
       final r = await client.requestKey(
         name: name.trim(),
         callsign: _blankToNull(callsign),
         email: _blankToNull(email),
       );
+      if (_settings.serverUrl != server) {
+        _keyError = 'The server changed while the key was being requested. Request it again.';
+        return false;
+      }
       await updateSettings(_settings.copyWith(driverKey: r.key, keyStatus: r.status, display: r.display));
       if (r.status == DriverKeyStatus.approved) unawaited(refreshRepeaters(quiet: true));
       return true;
@@ -785,10 +857,11 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     try {
       final r = await client.status(key);
+      if (_settings.driverKey != key) return; // the key was removed or replaced (e.g. server changed) meanwhile
       await updateSettings(_settings.copyWith(keyStatus: r.status, display: r.display));
       if (r.status == DriverKeyStatus.approved) unawaited(refreshRepeaters(quiet: true));
     } catch (e) {
-      if (e is CmatException && e.status == 401) {
+      if (e is CmatException && e.status == 401 && _settings.driverKey == key) {
         await updateSettings(_settings.copyWith(keyStatus: DriverKeyStatus.unknown));
       }
       if (!quiet) _keyError = friendlyError(e, action: 'Checking the key');
@@ -796,6 +869,23 @@ class AppState extends ChangeNotifier {
       _keyBusy = false;
       notifyListeners();
     }
+  }
+
+  /// The server's own web page at [path] (e.g. `/me`, `/me/devices`), from the configured server URL.
+  String webPage(String path) => '${_settings.serverUrl.replaceAll(RegExp(r'/+$'), '')}$path';
+
+  /// Opens one of the server's web pages in the browser. If no browser can open it, says where to go instead.
+  Future<bool> openWebPage(String path) async {
+    final url = webPage(path);
+    final uri = Uri.tryParse(url);
+    var ok = false;
+    if (uri != null) {
+      try {
+        ok = await services.openUrl(uri);
+      } catch (_) {}
+    }
+    if (!ok) _say('Couldn\'t open a browser. Go to $url');
+    return ok;
   }
 
   Future<void> forgetKey() => updateSettings(_settings.copyWith(clearKey: true));

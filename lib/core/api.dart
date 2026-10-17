@@ -15,8 +15,31 @@ class SessionSummary {
 
   /// Pings the server has confirmed (stored or duplicate).
   final int syncedCount;
-  const SessionSummary({required this.session, required this.pingCount, required this.heardCount, required this.syncedCount});
-  int get unsyncedCount => pingCount - syncedCount;
+
+  /// Pings the server rejected. They stay on the phone and in exports but are never re-sent, so they are not
+  /// "waiting to upload".
+  final int rejectedCount;
+
+  /// The drive's details (e.g. its name) changed since the server last saw them; the next sync re-sends the session
+  /// even if every ping is already uploaded.
+  final bool sessionResendPending;
+  const SessionSummary({
+    required this.session,
+    required this.pingCount,
+    required this.heardCount,
+    required this.syncedCount,
+    this.rejectedCount = 0,
+    this.sessionResendPending = false,
+  });
+
+  /// Pings still waiting to upload (neither confirmed nor rejected).
+  int get unsyncedCount {
+    final n = pingCount - syncedCount - rejectedCount;
+    return n < 0 ? 0 : n;
+  }
+
+  /// Whether a sync of this drive would send anything.
+  bool get hasSomethingToSync => unsyncedCount > 0 || sessionResendPending;
 }
 
 /// Local, crash-safe storage on the device. Every ping is written the moment it's captured.
@@ -26,6 +49,10 @@ abstract class DriveStore {
   /// Appends one ping durably (flushed before the future completes).
   Future<void> appendPing(String sessionId, DrivePing ping);
   Future<void> endSession(String sessionId, DateTime endedAt);
+
+  /// Sets the drive's name (null or blank clears it), rewrites the stored session and marks it to be re-sent on the
+  /// next sync so the server gets the new name too.
+  Future<void> renameSession(String sessionId, String? label);
   Future<DriveSession?> session(String sessionId);
 
   /// Newest first.
@@ -99,7 +126,7 @@ class Settings {
   final String? display;
   final String channel;
 
-  /// Auto-ping every N seconds while driving (0 = manual only).
+  /// Auto-ping every N seconds while driving (10–120; Ping now works any time).
   final int intervalSec;
 
   /// Skip an auto-ping if we haven't moved this far since the last one.
@@ -181,24 +208,35 @@ class Settings {
         'heard_hold_pings': heardHoldPings,
       };
   factory Settings.fromJson(Map<String, dynamic> j) => Settings(
-        serverUrl: j['server_url'] as String? ?? 'https://cmh-meshcore.lovable.app',
-        driverKey: j['driver_key'] as String?,
+        serverUrl: _str(j['server_url']) ?? 'https://cmh-meshcore.lovable.app',
+        driverKey: _str(j['driver_key']),
         keyStatus: DriverKeyStatus.values.firstWhere((s) => s.name == j['key_status'], orElse: () => DriverKeyStatus.none),
-        display: j['display'] as String?,
-        channel: j['channel'] as String? ?? '#wardriving',
+        display: _str(j['display']),
+        channel: _str(j['channel']) ?? '#wardriving',
         // 0 used to mean "manual only"; auto-ping is now always 10–120 s (Ping now still works any time)
-        intervalSec: ((j['interval_sec'] as int?) ?? 30).clamp(minIntervalSec, maxIntervalSec),
-        minDistanceM: ((j['min_distance_m'] as int?) ?? 100).clamp(minDistance, maxDistance),
+        intervalSec: (_int(j['interval_sec']) ?? 30).clamp(minIntervalSec, maxIntervalSec),
+        minDistanceM: (_int(j['min_distance_m']) ?? 100).clamp(minDistance, maxDistance),
         antenna: _antennaFrom(j['antenna']),
-        autoSync: j['auto_sync'] as bool? ?? true,
-        syncDuringDrive: j['sync_during_drive'] as bool? ?? true,
-        syncEveryMin: ((j['sync_every_min'] as int?) ?? 5).clamp(minSyncEveryMin, maxSyncEveryMin),
-        heardHoldPings: ((j['heard_hold_pings'] as int?) ?? 3).clamp(1, 20),
+        autoSync: j['auto_sync'] is bool ? j['auto_sync'] as bool : true,
+        syncDuringDrive: j['sync_during_drive'] is bool ? j['sync_during_drive'] as bool : true,
+        syncEveryMin: (_int(j['sync_every_min']) ?? 5).clamp(minSyncEveryMin, maxSyncEveryMin),
+        heardHoldPings: (_int(j['heard_hold_pings']) ?? 3).clamp(1, 20),
       );
+
+  /// A string field; anything else is null so the default applies.
+  static String? _str(Object? v) => v is String ? v : null;
+
+  /// Any JSON number (30 or 30.0) as an int; anything else (missing, text, NaN) is null so the default applies.
+  static int? _int(Object? v) => (v is num && v.isFinite) ? v.round() : null;
 
   /// Antenna type is "internal" or "external"; anything older/unknown becomes internal (the default).
   static Antenna _antennaFrom(Object? raw) {
-    final a = Antenna.fromJson((raw as Map?)?.cast<String, dynamic>() ?? const {});
+    Antenna a;
+    try {
+      a = Antenna.fromJson(raw is Map ? raw.cast<String, dynamic>() : const {});
+    } catch (_) {
+      a = const Antenna(); // odd values in one field never cost the rest of the settings
+    }
     final t = a.type == 'external' ? 'external' : 'internal';
     return Antenna(type: t, gainDbi: a.gainDbi, heightM: a.heightM);
   }

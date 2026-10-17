@@ -5,8 +5,8 @@
 // - Pings the server rejects stay on the device (and in exports) but are recorded so they aren't re-sent forever.
 //   The server lists at most 20 rejections per answer; when it rejected more than it listed, the rest of the chunk is
 //   re-sent (already-stored pings come back as duplicates) until every rejected ping is identified.
-// - A drive with nothing left to send but an ended_at the server hasn't heard yet gets one upload with no pings, so
-//   the server learns the end time.
+// - A drive with nothing left to send but an ended_at the server hasn't heard yet, or whose details changed (a
+//   rename), gets one upload with no pings, so the server learns the end time and the new name.
 // - 403 = key not approved: nothing is changed locally. Network errors stop that session and keep everything.
 // Pure Dart: no Flutter imports.
 import 'dart:async';
@@ -33,7 +33,7 @@ class DefaultSyncService implements SyncService {
     required this.store,
     required this.client,
     required this.settings,
-    this.app = const AppInfo(name: 'MeshSonar', version: '0.2.0'),
+    this.app = const AppInfo(name: 'MeshSonar'), // the app passes its real version (package_info_plus)
     this.chunkSize = maxPingsPerUpload,
   }) : assert(chunkSize > 0 && chunkSize <= maxPingsPerUpload);
 
@@ -90,6 +90,8 @@ class DefaultSyncService implements SyncService {
       return r;
     }
     final ledger = _ledger;
+    // Read before the uploads, so a rename made while they run stays marked for the next sync.
+    final resendToken = await ledger.sessionResendToken(sessionId);
     final rejectedBefore = await ledger.rejectedIds(sessionId);
     final pending = (await store.unsyncedPings(sessionId)).where((p) => !rejectedBefore.contains(p.id)).toList();
 
@@ -98,17 +100,18 @@ class DefaultSyncService implements SyncService {
         final chunk = pending.sublist(i, i + chunkSize > pending.length ? pending.length : i + chunkSize);
         await _uploadChunk(key, session, chunk, r);
       }
-      if (session.endedAt != null) {
-        final told = await ledger.endReported(sessionId);
-        if (pending.isNotEmpty) {
-          // The last chunk carried ended_at.
-          await ledger.markEndReported(sessionId, session.endedAt!);
-        } else if (told == null || !told.isAtSameMomentAs(session.endedAt!)) {
-          await client.upload(key, DriveBatch(app: app, session: session, pings: const []));
-          r.uploaded = true;
-          await ledger.markEndReported(sessionId, session.endedAt!);
-        }
+      final told = session.endedAt == null ? null : await ledger.endReported(sessionId);
+      final endUntold = session.endedAt != null && (told == null || !told.isAtSameMomentAs(session.endedAt!));
+      if (pending.isEmpty && (endUntold || resendToken != null)) {
+        // Nothing else to carry the session: one upload with no pings tells the server the end time / new details.
+        await client.upload(key, DriveBatch(app: app, session: session, pings: const []));
+        r.uploaded = true;
       }
+      // Every upload above carried this session as read, including its ended_at.
+      if (session.endedAt != null && (pending.isNotEmpty || endUntold)) {
+        await ledger.markEndReported(sessionId, session.endedAt!);
+      }
+      if (resendToken != null) await ledger.clearSessionResend(sessionId, resendToken);
     } on CmatException catch (e) {
       r.error = switch (e.status) {
         403 => 'key not approved',
@@ -189,4 +192,8 @@ class _MemoryLedger implements SyncLedger {
   Future<DateTime?> endReported(String sessionId) async => _ended[sessionId];
   @override
   Future<void> markEndReported(String sessionId, DateTime endedAt) async => _ended[sessionId] = endedAt;
+  @override
+  Future<String?> sessionResendToken(String sessionId) async => null; // stores without a ledger can't mark renames
+  @override
+  Future<void> clearSessionResend(String sessionId, String token) async {}
 }

@@ -38,21 +38,28 @@ App Store distribution.
 ### 2.1 Signing: keep the team id out of the repo
 
 The Xcode projects in the repo have **no `DEVELOPMENT_TEAM`** and use automatic signing. Your 10-character team id is
-personal, so don't commit it.
+personal, so it goes in an **untracked** file instead of the project:
 
-1. Xcode → Settings → Accounts → add your Apple ID. A "Personal Team" appears.
-2. `open ios/Runner.xcworkspace` → target **Runner** → *Signing & Capabilities* → Team = your Personal Team.
-   - If Xcode says the bundle id `net.innovatexit.meshsonar` is unavailable (an id belongs to one team), change it
-     locally (e.g. `net.innovatexit.meshsonar.<yourname>`) and don't commit that either.
-3. Xcode has now written `DEVELOPMENT_TEAM = …` (and maybe the bundle id) into `ios/Runner.xcodeproj/project.pbxproj`.
-   **Before committing**, check `git diff ios/Runner.xcodeproj/project.pbxproj` and revert those lines. Or tell git to
-   ignore your local edit:
+1. Xcode → Settings → Accounts → add your Apple ID. A "Personal Team" appears. Note its team id (also shown on
+   developer.apple.com → Membership, or in Keychain Access on your "Apple Development" certificate as *OU*).
+2. Create your signing file from the template and put your id in it:
    ```sh
-   git update-index --skip-worktree ios/Runner.xcodeproj/project.pbxproj   # undo with --no-skip-worktree
+   cp ios/Flutter/Signing.xcconfig.example ios/Flutter/Signing.xcconfig
+   # edit it: DEVELOPMENT_TEAM = ABCDE12345
    ```
-   (A cleaner long-term fix is an untracked `ios/Flutter/Signing.xcconfig` holding `DEVELOPMENT_TEAM`, pulled in with
-   an optional `#include? "Signing.xcconfig"` from `Debug.xcconfig`/`Release.xcconfig`. It's not set up yet; see
-   ROADMAP.)
+   `ios/Flutter/Debug.xcconfig` and `Release.xcconfig` (Release also serves Profile) end with
+   `#include? "Signing.xcconfig"`. The `?` makes it optional, so builds without the file (CI, other contributors) still
+   work. `ios/.gitignore` ignores `Flutter/Signing.xcconfig`, so `git status` never shows it.
+3. **Don't pick the team in Xcode's *Signing & Capabilities* tab.** That writes `DEVELOPMENT_TEAM = …` into
+   `ios/Runner.xcodeproj/project.pbxproj`, and a value there overrides the xcconfig. If it happened, revert those lines
+   (`git diff ios/Runner.xcodeproj/project.pbxproj`) and the tab will show the team from `Signing.xcconfig`.
+   - If Xcode says the bundle id `net.innovatexit.meshsonar` is unavailable (an id belongs to one team), you still
+     have to change it locally in the project (e.g. `net.innovatexit.meshsonar.<yourname>`) and not commit that; the
+     bundle id is set per target in `project.pbxproj`, so the xcconfig can't override it. To keep that local edit out
+     of `git status`:
+     ```sh
+     git update-index --skip-worktree ios/Runner.xcodeproj/project.pbxproj   # undo with --no-skip-worktree
+     ```
 
 ### 2.2 Prepare the phone
 
@@ -187,16 +194,15 @@ sleep 10 && import -window root shots/01-start.png
 
 ## 6. Bumping the version
 
-Two places hold the version, and they must be kept in step:
+One place holds the version: `pubspec.yaml` `version: X.Y.Z+N`. `X.Y.Z` becomes `CFBundleShortVersionString` /
+Android `versionName`, and `N` becomes `CFBundleVersion` / `versionCode`. **Increase `N` on every build you
+distribute.**
 
-1. `pubspec.yaml` `version: X.Y.Z+N`. `X.Y.Z` becomes `CFBundleShortVersionString` / Android `versionName`, and `N`
-   becomes `CFBundleVersion` / `versionCode`. **Increase `N` on every build you distribute.**
-2. **`appVersion` in `lib/app/wiring.dart`.** This is what's shown in Settings/About and sent as `app.version` in every
-   upload and export. The defaults in `AppServices.appInfo` (`lib/app/services.dart`) and
-   `DefaultSyncService.app` (`lib/core/sync_service.dart`) also say `0.1.0`, but only tests use them.
-
-As of this release, `pubspec.yaml` is `0.2.0+2` while `appVersion` still reads `0.1.0`. That needs a code change (see
-ROADMAP).
+Since 0.3.0 the app reads it at run time with `package_info_plus` (`lib/platform/app_version.dart`, called from
+`buildRealServices()` in `lib/app/wiring.dart`). That value is shown in Settings/About and sent as `app.version` in
+every upload and export. If the platform can't report it, the version is sent as `null` (unknown), never guessed. The
+defaults in `AppServices.appInfo` and `DefaultSyncService.app` carry no version; only tests use them.
+`test/app/app_version_test.dart` fails if a Dart file under `lib/` hard-codes a version again.
 
 Then add a section to [CHANGELOG.md](CHANGELOG.md).
 

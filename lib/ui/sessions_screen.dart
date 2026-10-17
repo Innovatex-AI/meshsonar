@@ -49,9 +49,10 @@ enum SyncBadgeKind { empty, synced, waiting, failed, syncing }
 
 SyncBadgeKind syncBadgeKind(AppState s, SessionSummary x) {
   final id = x.session.id;
-  if (s.isSyncing(id) || (s.isSyncing('*') && x.unsyncedCount > 0)) return SyncBadgeKind.syncing;
-  if (x.pingCount == 0) return SyncBadgeKind.empty;
-  if (x.unsyncedCount == 0) return SyncBadgeKind.synced;
+  if (s.isSyncing(id) || (s.isSyncing('*') && x.hasSomethingToSync)) return SyncBadgeKind.syncing;
+  if (x.pingCount == 0 && !x.sessionResendPending) return SyncBadgeKind.empty;
+  // Rejected pings are never re-sent, so they don't count as waiting.
+  if (!x.hasSomethingToSync) return SyncBadgeKind.synced;
   if (s.lastSyncFailed) return SyncBadgeKind.failed;
   return SyncBadgeKind.waiting;
 }
@@ -69,11 +70,14 @@ class SyncBadge extends StatelessWidget {
     final amber = c.onSurface;
     final kind = syncBadgeKind(s, summary);
     final n = summary.unsyncedCount;
+    final rejected = summary.rejectedCount;
+    // Only the name (or other drive details) is waiting: say so rather than "0 not synced".
+    final waitingText = n > 0 ? '$n not synced' : 'Name not synced';
     final (IconData icon, String text, Color color) = switch (kind) {
       SyncBadgeKind.empty => (Icons.remove_circle_outline, 'Nothing to sync', c.outline),
-      SyncBadgeKind.synced => (Icons.cloud_done, 'All synced', green),
-      SyncBadgeKind.waiting => (Icons.cloud_upload_outlined, '$n not synced', amber.withValues(alpha: 0.8)),
-      SyncBadgeKind.failed => (Icons.cloud_off, '$n not synced', c.error),
+      SyncBadgeKind.synced => (Icons.cloud_done, rejected > 0 ? 'Synced' : 'All synced', green),
+      SyncBadgeKind.waiting => (Icons.cloud_upload_outlined, waitingText, amber.withValues(alpha: 0.8)),
+      SyncBadgeKind.failed => (Icons.cloud_off, waitingText, c.error),
       SyncBadgeKind.syncing => (Icons.sync, 'Syncing…', c.primary),
     };
     return Container(
@@ -93,6 +97,20 @@ class SyncBadge extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 13)),
         ),
+        if (rejected > 0 && kind != SyncBadgeKind.empty) ...[
+          const SizedBox(width: 4),
+          Flexible(
+            child: Tooltip(
+              message: 'The server refused these pings (for example, bad GPS). They stay on this phone and in exports '
+                  'but are not sent again.',
+              child: Text('· $rejected rejected',
+                  key: ValueKey('rejected-${summary.session.id}'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: c.error, fontWeight: FontWeight.w700, fontSize: 13)),
+            ),
+          ),
+        ],
         if (kind == SyncBadgeKind.failed) ...[
           const SizedBox(width: 4),
           Flexible(
@@ -184,6 +202,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
     final t = Theme.of(context);
     final list = s.sessions.where((x) => !_hidden.contains(x.session.id)).toList();
     final unsyncedTotal = list.fold<int>(0, (a, x) => a + x.unsyncedCount);
+    final namesPending = list.where((x) => x.unsyncedCount == 0 && x.sessionResendPending).length;
     final pingTotal = list.fold<int>(0, (a, x) => a + x.pingCount);
     return Scaffold(
       appBar: AppBar(
@@ -214,6 +233,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
                     drives: list.length,
                     pings: pingTotal,
                     unsynced: unsyncedTotal,
+                    namesPending: namesPending,
                     syncing: s.anySyncing,
                     onSyncAll: () => s.syncAll(),
                   ),
@@ -254,10 +274,18 @@ class _Overview extends StatelessWidget {
   final int drives;
   final int pings;
   final int unsynced;
+
+  /// Drives whose only change waiting to upload is their name.
+  final int namesPending;
   final bool syncing;
   final VoidCallback onSyncAll;
   const _Overview(
-      {required this.drives, required this.pings, required this.unsynced, required this.syncing, required this.onSyncAll});
+      {required this.drives,
+      required this.pings,
+      required this.unsynced,
+      this.namesPending = 0,
+      required this.syncing,
+      required this.onSyncAll});
 
   @override
   Widget build(BuildContext context) {
@@ -276,13 +304,17 @@ class _Overview extends StatelessWidget {
                   style: t.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700, color: c.onPrimaryContainer)),
               const SizedBox(height: 2),
               Text(
-                unsynced == 0 ? 'Everything is uploaded.' : '$unsynced ping${unsynced == 1 ? '' : 's'} waiting to upload',
+                unsynced > 0
+                    ? '$unsynced ping${unsynced == 1 ? '' : 's'} waiting to upload'
+                    : namesPending > 0
+                        ? '$namesPending drive name${namesPending == 1 ? '' : 's'} waiting to upload'
+                        : 'Everything is uploaded.',
                 key: const Key('overview-unsynced'),
                 style: t.textTheme.bodyMedium?.copyWith(color: c.onPrimaryContainer.withValues(alpha: 0.8)),
               ),
             ]),
           ),
-          if (unsynced > 0)
+          if (unsynced > 0 || namesPending > 0)
             FilledButton.icon(
               key: const Key('sync-all'),
               style: FilledButton.styleFrom(minimumSize: const Size(0, 48), textStyle: const TextStyle(fontSize: 16)),
@@ -313,7 +345,6 @@ class _SessionCard extends StatelessWidget {
     final active = s.currentSession?.id == id;
     final pct = summary.pingCount == 0 ? null : (100 * summary.heardCount / summary.pingCount).round();
     final syncing = s.isSyncing(id) || s.isSyncing('*');
-    final unsynced = summary.unsyncedCount;
     final label = driveLabel(s, id, ses.label);
     final cache = driveStatsCache(s);
 
@@ -391,7 +422,7 @@ class _SessionCard extends StatelessWidget {
                     IconButton(
                       key: ValueKey('sync-$id'),
                       tooltip: 'Sync now',
-                      onPressed: unsynced == 0 ? null : () => s.syncSession(id),
+                      onPressed: summary.hasSomethingToSync ? () => s.syncSession(id) : null,
                       icon: const Icon(Icons.cloud_upload_outlined),
                     ),
                   IconButton(
@@ -461,7 +492,7 @@ class _CardMenu extends StatelessWidget {
         PopupMenuItem(
           key: ValueKey('menu-sync-$id'),
           value: 'sync',
-          enabled: summary.unsyncedCount > 0,
+          enabled: summary.hasSomethingToSync,
           child: const ListTile(leading: Icon(Icons.cloud_upload_outlined), title: Text('Sync now')),
         ),
         PopupMenuItem(
@@ -516,7 +547,6 @@ Future<bool> runDriveAction(BuildContext context, String action, SessionSummary 
 
 Future<void> renameDrive(BuildContext context, SessionSummary x) async {
   final s = AppScope.read(context);
-  final prefs = uiPrefsFor(s);
   final current = driveLabel(s, x.session.id, x.session.label) ?? '';
   final c = TextEditingController(text: current);
   final v = await showDialog<String>(
@@ -533,7 +563,8 @@ Future<void> renameDrive(BuildContext context, SessionSummary x) async {
           onSubmitted: (v) => Navigator.pop(ctx, v),
         ),
         const SizedBox(height: 8),
-        Text('Shown on this phone. Leave empty to use the date.', style: Theme.of(ctx).textTheme.bodySmall),
+        Text('Saved with the drive and sent to the server on the next sync. Leave empty to use the date.',
+            style: Theme.of(ctx).textTheme.bodySmall),
       ]),
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
@@ -542,8 +573,15 @@ Future<void> renameDrive(BuildContext context, SessionSummary x) async {
     ),
   );
   if (v == null) return;
-  // Empty: fall back to the recorded label (if the drive had one) by clearing the local name.
-  await prefs.setLabel(x.session.id, v.trim().isEmpty ? null : v);
+  // Saved in the drive itself (exports carry it) and marked so the next sync uploads it. Empty clears the name.
+  await renameDriveTo(s, x.session.id, v);
+}
+
+/// Renames through the drive store and drops any older phone-only name, which would otherwise hide the new one.
+Future<bool> renameDriveTo(AppState s, String sessionId, String? name) async {
+  final ok = await s.renameSession(sessionId, name);
+  if (ok) await uiPrefsFor(s).forget(sessionId);
+  return ok;
 }
 
 Future<bool> confirmDeleteDrive(BuildContext context, SessionSummary x) async {

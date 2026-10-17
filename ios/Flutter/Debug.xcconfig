@@ -1,1 +1,3 @@
 #include "Generated.xcconfig"
+// Personal signing (DEVELOPMENT_TEAM) lives in the untracked Signing.xcconfig; see docs/DEVELOPMENT.md §2.1.
+#include? "Signing.xcconfig"

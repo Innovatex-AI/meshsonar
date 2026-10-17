@@ -6,6 +6,8 @@
 //     synced.txt     append-only ping ids the server has confirmed (stored or duplicate)
 //     rejected.txt   append-only ping ids the server rejected (kept locally, never re-sent)
 //     end_sent.txt   ended_at the server has been told about (so a finished drive is reported once)
+//     resend.txt     present when the session's details changed (a rename) since the server last saw them; holds a
+//                    token so a rename during an upload isn't cleared by that upload
 //
 // A crash mid-write can leave a truncated last line in pings.jsonl; readers skip it, and the next append trims it
 // first so a new ping is never glued onto the broken one.
@@ -30,6 +32,32 @@ abstract class SyncLedger {
   /// The ended_at the server last confirmed for this session, or null.
   Future<DateTime?> endReported(String sessionId);
   Future<void> markEndReported(String sessionId, DateTime endedAt);
+
+  /// Non-null when the session itself (e.g. its label) must be sent again; the value identifies that change.
+  Future<String?> sessionResendToken(String sessionId);
+
+  /// Clears the re-send mark, but only if it is still [token] (a newer change keeps it set).
+  Future<void> clearSessionResend(String sessionId, String token);
+}
+
+/// Closes drives left open by a crash or an app kill (ended_at null), using the last ping's time, or the start time
+/// for a drive with no pings. [except] are sessions still recording. Returns the ids closed. Never throws for one bad
+/// drive; it's skipped and tried again next launch.
+Future<List<String>> closeOrphanedSessions(DriveStore store, {Set<String> except = const {}}) async {
+  final closed = <String>[];
+  for (final x in await store.sessions()) {
+    final s = x.session;
+    if (s.endedAt != null || except.contains(s.id)) continue;
+    try {
+      var end = s.startedAt;
+      for (final p in await store.pings(s.id)) {
+        if (p.ts.isAfter(end)) end = p.ts;
+      }
+      await store.endSession(s.id, end.toUtc());
+      closed.add(s.id);
+    } catch (_) {}
+  }
+  return closed;
 }
 
 class JsonlDriveStore implements DriveStore, SyncLedger {
@@ -133,6 +161,49 @@ class JsonlDriveStore implements DriveStore, SyncLedger {
         final s = await _readSession(sessionId);
         if (s == null) throw StateError('no such session: $sessionId');
         await _writeAtomic(_file(sessionId, 'session.json'), jsonEncode(s.copyWith(endedAt: endedAt.toUtc()).toJson()));
+      });
+
+  int _resendSeq = 0;
+
+  @override
+  Future<void> renameSession(String sessionId, String? label) => _locked(sessionId, () async {
+        final s = await _readSession(sessionId);
+        if (s == null) throw StateError('no such session: $sessionId');
+        final v = label?.trim();
+        final renamed = DriveSession(
+          id: s.id,
+          startedAt: s.startedAt,
+          endedAt: s.endedAt,
+          label: (v == null || v.isEmpty) ? null : v,
+          channel: s.channel,
+          radio: s.radio,
+          antenna: s.antenna,
+          companion: s.companion,
+        );
+        await _writeAtomic(_file(sessionId, 'session.json'), jsonEncode(renamed.toJson()));
+        final token = '${DateTime.now().toUtc().microsecondsSinceEpoch}-${++_resendSeq}';
+        await _writeAtomic(_file(sessionId, 'resend.txt'), token);
+      });
+
+  @override
+  Future<String?> sessionResendToken(String sessionId) => _locked(sessionId, () => _readResend(sessionId));
+
+  Future<String?> _readResend(String sessionId) async {
+    final f = _file(sessionId, 'resend.txt');
+    try {
+      if (!await f.exists()) return null;
+      final t = (await f.readAsString()).trim();
+      return t.isEmpty ? 'resend' : t;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Future<void> clearSessionResend(String sessionId, String token) => _locked(sessionId, () async {
+        if (await _readResend(sessionId) != token) return;
+        final f = _file(sessionId, 'resend.txt');
+        if (await f.exists()) await f.delete();
       });
 
   @override
@@ -240,11 +311,14 @@ class JsonlDriveStore implements DriveStore, SyncLedger {
         if (s == null) return null;
         final pings = await _readPings(id);
         final synced = await _readIds(id, 'synced.txt');
+        final rejected = await _readIds(id, 'rejected.txt');
         return SessionSummary(
           session: s,
           pingCount: pings.length,
           heardCount: pings.where((p) => p.kind == PingKind.tx && (p.echoes.isNotEmpty || p.neighbor != null)).length,
           syncedCount: pings.where((p) => synced.contains(p.id)).length,
+          rejectedCount: pings.where((p) => rejected.contains(p.id) && !synced.contains(p.id)).length,
+          sessionResendPending: await _readResend(id) != null,
         );
       });
       if (summary != null) out.add(summary);

@@ -48,4 +48,21 @@ void main() {
     expect(compass(bearingDeg(40, -83, 40, -82)), 'E');
     expect(haversineM(40, -83, 40, -83), 0);
   });
+
+
+  test('changing holdPings mid-drive re-applies live/stale at once, both ways', () {
+    final t = HeardTracker(holdPings: 5);
+    t.addPing(p(0, [const Echo(repeater: 'df', snrDb: 3)]));
+    t.addPing(p(1, const []));
+    t.addPing(p(2, const [])); // 2 pings since heard: live with hold 5
+    expect(t.live.map((h) => h.id), ['df']);
+    t.holdPings = 2; // now stale without waiting for another ping
+    expect(t.live, isEmpty);
+    expect(t.repeaters.single.state, HeardState.stale);
+    t.holdPings = 3; // back to live
+    expect(t.live.map((h) => h.id), ['df']);
+    t.holdPings = 0; // floored at 1
+    expect(t.holdPings, 1);
+    expect(t.live, isEmpty);
+  });
 }

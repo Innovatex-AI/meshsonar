@@ -9,19 +9,18 @@ import 'package:uuid/uuid.dart';
 import '../core/cmat_client.dart';
 import '../core/drive_store.dart';
 import '../core/position_filter.dart';
-import '../core/model.dart';
 import '../core/repeater_directory.dart';
 import '../core/settings_store.dart';
 import '../core/sync_service.dart';
+import '../platform/app_version.dart';
 import '../platform/geolocator_location.dart';
+import '../platform/open_url.dart';
 import '../platform/share.dart';
 import '../radio/ble_transport.dart';
 import '../radio/companion_link.dart';
 import '../radio/simulator.dart';
 import '../radio/wardrive_engine.dart';
 import 'services.dart';
-
-const String appVersion = '0.2.0'; // keep in step with pubspec.yaml
 
 String _platformName() {
   if (kIsWeb) return 'web';
@@ -48,7 +47,8 @@ Future<AppServices> buildRealServices() async {
 
   final store = await JsonlDriveStore.open(root);
   final settingsStore = FileSettingsStore(File('${root.path}${Platform.pathSeparator}settings.json'));
-  final app = AppInfo(name: 'MeshSonar', version: appVersion, platform: _platformName());
+  // Version comes from the build (pubspec.yaml's `version:`), never a constant here.
+  final app = await loadAppInfo(platform: _platformName());
   const uuid = Uuid();
   // One simulated car: the simulated radio decides which repeaters hear it from the same position the engine records.
   final simLocation = SimulatedLocationSource();
@@ -74,6 +74,7 @@ Future<AppServices> buildRealServices() async {
       return out;
     },
     shareFile: shareDriveFile,
+    openUrl: openExternalUrl,
     appInfo: app,
     uiPrefsFile: File('${root.path}${Platform.pathSeparator}ui_prefs.json'),
     // The public map is ~17 MB; repeaters rarely move, so refresh weekly (or when the drive area moves >75 km).

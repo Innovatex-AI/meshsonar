@@ -1,0 +1,4 @@
+// Copy to Signing.xcconfig (same folder) and fill in your own Apple team id. Signing.xcconfig is git-ignored, so your
+// team id never reaches the repo or project.pbxproj. Find the id in Xcode → Settings → Accounts → your team, or on
+// developer.apple.com → Membership. See docs/DEVELOPMENT.md §2.1.
+DEVELOPMENT_TEAM = YOUR_TEAM_ID

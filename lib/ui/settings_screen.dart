@@ -53,7 +53,11 @@ class SettingsScreen extends StatelessWidget {
                           }
                           return null;
                         });
-                    if (v != null) await s.updateSettings(st.copyWith(serverUrl: v.trim().replaceAll(RegExp(r'/+$'), '')));
+                    if (v == null || !context.mounted) return;
+                    final url = v.trim().replaceAll(RegExp(r'/+$'), '');
+                    if (url == s.settings.serverUrl) return;
+                    if (s.hasKey && !await confirmServerChange(context, url)) return;
+                    await s.updateSettings(s.settings.copyWith(serverUrl: url));
                   },
                 ),
               ],
@@ -395,6 +399,57 @@ String keyStatusHelp(DriverKeyStatus s) => switch (s) {
       DriverKeyStatus.unknown => 'The server doesn\'t know this key (maybe a different server). Request a new key.',
     };
 
+/// Asks before switching servers when this phone has a driver key: keys only work on the server that issued them,
+/// so the key is removed. Returns true to go ahead.
+Future<bool> confirmServerChange(BuildContext context, String newUrl) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      key: const Key('server-change-dialog'),
+      title: const Text('Change server and remove your key?'),
+      content: Text('A driver key only works on the server that issued it, so your current key will be removed. '
+          'Request a new key from $newUrl afterwards.\n\n'
+          'Drives already uploaded stay on the old server. Drives not yet uploaded stay on this phone and will upload '
+          'to the new server once you have a key there.'),
+      actions: [
+        TextButton(key: const Key('server-change-cancel'), onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+        FilledButton(
+            key: const Key('server-change-confirm'),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Change server')),
+      ],
+    ),
+  );
+  return ok == true;
+}
+
+/// Where to manage drives and privacy on the website, and a button to get a key there.
+class _AccountLinks extends StatelessWidget {
+  const _AccountLinks();
+  @override
+  Widget build(BuildContext context) {
+    final s = AppScope.of(context);
+    final t = Theme.of(context);
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+      Text(
+        'Manage your drives and privacy at ${s.webPage('/me')} — sign in with the same email you registered with',
+        key: const Key('account-hint'),
+        style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
+      ),
+      Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
+          key: const Key('key-website'),
+          style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 0)),
+          onPressed: () => s.openWebPage('/me/devices'),
+          icon: const Icon(Icons.open_in_new, size: 18),
+          label: const Text('Get a key on the website'),
+        ),
+      ),
+    ]);
+  }
+}
+
 class _DriverKeySection extends StatefulWidget {
   const _DriverKeySection();
   @override
@@ -453,6 +508,8 @@ class _DriverKeySectionState extends State<_DriverKeySection> {
           const SizedBox(height: 6),
           Text(keyStatusHelp(st.keyStatus), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
           if (s.keyError != null) ...[const SizedBox(height: 8), ErrorBanner(s.keyError!)],
+          const SizedBox(height: 8),
+          const _AccountLinks(),
           Align(
             alignment: Alignment.centerRight,
             child: TextButton(
@@ -545,6 +602,8 @@ class _DriverKeySectionState extends State<_DriverKeySection> {
                       : const Icon(Icons.vpn_key),
                   label: const Text('Request key'),
                 ),
+                const SizedBox(height: 12),
+                const _AccountLinks(),
               ],
             ),
           ),

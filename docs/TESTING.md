@@ -1,7 +1,7 @@
 # Testing MeshSonar
 
-`flutter test` runs **254 tests: 253 pass and 1 skips** (the opt-in live smoke test). That's on Linux with bun and the
-CMAT checkout present, and it takes about 3 min 20 s. `flutter analyze` must report no issues. How to install tools and
+`flutter test` runs **282 tests: 281 pass and 1 skips** (the opt-in live smoke test). That's on Linux with bun and the
+CMAT checkout present, and it takes about 3–4 min on a desktop (about 14 min in a busy build container). `flutter analyze` must report no issues. How to install tools and
 run the opt-in suites is in [DEVELOPMENT.md §4](DEVELOPMENT.md#4-running-the-tests).
 
 ## Kinds of test
@@ -26,13 +26,13 @@ through `FLUTTER_TEST` in the environment.
 | File | Covers |
 |---|---|
 | `helpers.dart` | Builders for sessions and pings, plus a **Dart mirror of CMAT's `validate.ts` shape rules** used to check exports and uploads. |
-| `drive_store_test.dart` | Round trip of every field (nulls stay null); on-disk files; heard-nothing preserved; **crash-truncated last line** skipped then repaired; garbage line skipped; `session.json.tmp` fallback; `endSession`; `sessions()` order and counts; `unsyncedPings` excludes synced/rejected; end-reported marker; concurrent appends don't interleave; unknown session fails; path-like ids refused; delete; export = one valid v1 file; duplicate ids read once. |
-| `settings_store_test.dart` | Missing/corrupt → defaults; atomic save; rapid saves serialised; old/odd values clamped; antenna defaults to internal. |
+| `drive_store_test.dart` | Round trip of every field (nulls stay null); on-disk files; heard-nothing preserved; **crash-truncated last line** skipped then repaired; garbage line skipped; `session.json.tmp` fallback; `endSession`; `sessions()` order and counts; `unsyncedPings` excludes synced/rejected; **rejected counted apart in `sessions()`**; **`renameSession` + re-send token**; **`closeOrphanedSessions`**; end-reported marker; concurrent appends don't interleave; unknown session fails; path-like ids refused; delete; export = one valid v1 file; duplicate ids read once. |
+| `settings_store_test.dart` | Missing/corrupt → defaults; atomic save; rapid saves serialised; old/odd values clamped; antenna defaults to internal; **`30.0`-style numbers load and a wrong-typed field falls back alone**; model ints (`hops`, `delay_ms`, `sf`, `cr`) from floats. |
 | `cmat_client_test.dart` | Endpoint URLs with/without trailing slash or sub-path; key request (nulls omitted, 201); 429; status with `x-driver-key` and every status string; 401; upload body and rejection parsing; 403; non-JSON error page; unreadable 200; network errors and timeouts → `CmatException(status: null)`; repeaters list. |
-| `sync_service_test.dart` | No key / pending key → nothing sent; synced only after 200; **12,001 pings → 3 requests**; no double upload; overlapping calls; mid-sync network failure resumes; lost 200 → duplicates; 403 keeps data; 403 stops `syncAll`; network down; rejected pings kept and never re-sent; **> 20 rejections discovered by re-sending**; end time reported once (empty upload only when needed; zero-ping drive); open session with nothing to send makes no request; totals; unknown session; store without `SyncLedger`. |
+| `sync_service_test.dart` | No key / pending key → nothing sent; synced only after 200; **12,001 pings → 3 requests**; no double upload; overlapping calls; mid-sync network failure resumes; lost 200 → duplicates; 403 keeps data; 403 stops `syncAll`; network down; rejected pings kept and never re-sent; **> 20 rejections discovered by re-sending**; end time reported once (empty upload only when needed; zero-ping drive); open session with nothing to send makes no request; **renamed drive re-sends its session once (also open drives, rides on a pending upload, kept after a failed upload)**; **orphan closed at launch reports its end**; rejected pings leave nothing to sync; totals; unknown session; store without `SyncLedger`. |
 | `cmat_contract_test.dart` | Against CMAT's real handlers: request → approve → upload a real drive → re-sync = duplicates → end reported; 12,001 pings in 3 requests all stored; validator rejections recorded locally and not re-sent; unknown key 401, revoked key → status revoked + upload 403. |
 | `position_filter_test.dart` | Parked phone with ±20 m jitter for 10 min (speed 0 / unknown, several seeds) holds still; ±30 m drift with optimistic accuracy; pull-away followed within 2 fixes (with speed) or a few fixes (without); 90° turn not overshot; steady driving tracks truth; stoplight hold and move-off; poor fixes dropped then used after a drought; nonsense input; `FilteredLocationSource` shares one filter; no fix → null. |
-| `heard_test.dart` | `RepeaterLookup` unique / ambiguous / unknown / later source; `HeardTracker` live for `holdPings` then stale, distance, best SNR; bearing and compass. |
+| `heard_test.dart` | `RepeaterLookup` unique / ambiguous / unknown / later source; `HeardTracker` live for `holdPings` then stale, distance, best SNR; **hold changed mid-drive re-applies at once**; bearing and compass. |
 | `repeater_directory_test.dart` | Node filtering (type, radius, nearest first, lower-case); `JsonArraySplitter` across arbitrary chunk boundaries; refresh → cache file → `load()`; TTL, centre-moved and forced refetch; offline / HTTP error / bad JSON never throw and back off; no cache + offline; damaged cache; idle timeout; size limit; `maxRepeaters`. |
 
 ### `test/radio`
@@ -51,6 +51,8 @@ through `FLUTTER_TEST` in the environment.
 
 | File | Covers |
 |---|---|
+| `state_fixes_test.dart` | Orphaned drives closed at launch at the last ping (or start) and uploaded quietly only with an approved key; failed start deletes an empty drive but keeps one with pings; server URL change clears key/status; heard hold applied mid-drive; rename saved in the drive (also while driving); 0.2.x phone-only names migrated; `openWebPage` URL and no-browser message. |
+| `app_version_test.dart` | `loadAppInfo` reads the version from `package_info_plus` (null when unknown); pubspec is `0.3.0+3`; no Dart file hard-codes an app version. |
 | `drive_upload_test.dart` | In-drive uploads on schedule update `syncedCount`; stop at Stop with the final upload after `ended_at`; toggles and key gate; turning on mid-drive / a longer period restarts the timer; never overlaps; quiet failures retried next tick; real sync service carries `ended_at`; a drive fully uploaded mid-drive still reports its end at Stop. |
 
 ### `test/ui`
@@ -71,6 +73,7 @@ through `FLUTTER_TEST` in the environment.
 | `detail_screen_test.dart` | Drive detail map, stats, named repeaters with counts, ping list; sync and export; delete returns to the list. |
 | `report_math_test.dart` | Cell index matches CMAT (negatives too); grids are distinct tx cells, rx ignored; new grids; distance and speed (GPS speed preferred, jumps ignored); empty drive; leaderboard; unknown-to-CMAT only when the list is loaded; new repeaters across prefix lengths; best/worst spots; text summary; **2,500 pings vs 20 earlier drives is fast**. |
 | `report_screen_test.dart` | Report from drive detail (hero, new grids and repeaters, not-on-CMAT tags, charts, share); first drive (everything new, no NEW tags) from the drives menu; pushed directly. |
+| `fixes_ui_test.dart` | "· N rejected" badge and Sync disabled for rejected-only drives (card and detail); rename → "Name not synced" → Sync uploads it; server change with a key asks first and removes the key (no prompt without a key); account hint `<server>/me` and "Get a key on the website" → `<server>/me/devices`. |
 | `onboarding_test.dart` | Intro shown on first run and not again; skippable; "Try the Simulator" connects; "Request a key" lands on Settings; file prefs persist and a damaged file means first run. |
 | `simulator_smoke_test.dart` | AppState + real simulator + link + engine: connect, start, ping now, stop → ping stored. |
 
