@@ -9,6 +9,12 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 antenna is still `{type, gain_dbi, height_m}`, and the new build number is not in the `app` object). Spec:
 `docs/specs/m1-app-0.4.0.md`. Released to rings 1 and 2 only.
 
+### Upgrading from 0.3.x
+- **The app id is now `com.meshsonar.app`** (was `net.innovatexit.meshsonar`) on iOS, Android and macOS. 0.4.0
+  installs as a **new app** next to the old one and does not see its drives or settings. Before switching, open the old
+  app and upload (Sync all) or export every drive that is only on the phone; then set up the driver key in the new app
+  again (paste it from the website, or request one). The old app can be deleted once its drives are safe.
+
 ### Added
 - **Report a problem** (Settings → About, and "Report a problem with this drive" in a drive's ⋮ menu). You pick a
   category, describe the problem, choose whether to include the app log and whether to attach a drive (its id only,

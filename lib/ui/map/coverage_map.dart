@@ -183,7 +183,7 @@ class CoverageMap extends StatefulWidget {
   }();
 
   static const String tileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-  static const String userAgentPackageName = 'net.innovatexit.meshsonar';
+  static const String userAgentPackageName = 'com.meshsonar.app';
 
   @override
   State<CoverageMap> createState() => _CoverageMapState();

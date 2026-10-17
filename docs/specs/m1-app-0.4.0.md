@@ -17,7 +17,7 @@ Release: rings 1 and 2 only (Andy, then invited testers).
 - **Drive Format v1 is unchanged** (`meshsonar.drive.v1`; CMAT `docs/MESHSONAR_DRIVE_FORMAT.md`, `src/lib/drive/validate.ts`).
   No new upload fields: v1.1 is held for Andy. `test/core/cmat_contract_test.dart` must pass unchanged against CMAT `main`.
 - No new package dependencies.
-- Bundle ID stays `net.innovatexit.meshsonar` (see §7).
+- Bundle ID becomes `com.meshsonar.app` (see §7).
 
 ## 3. Report a problem
 
@@ -129,11 +129,9 @@ MeshSonar sends drives only to the configured server. No settings migration is n
 `pubspec.yaml` → `version: 0.4.0+5`. `test/app/app_version_test.dart`: the pubspec test expects `0.4.0+5` (name updated
 to match). `CHANGELOG.md` gets a 0.4.0 entry.
 
-## 7. Held decision: bundle ID
+## 7. Bundle ID
 
-Changing to `com.meshsonar.app` is **out of scope** for this slice and held for Andy: a new ID installs as a separate app,
-so the drives stored on his phone would not carry over. Plan §13.1 says the change happens "in M1 / 0.4.0 before the first
-TestFlight upload"; that needs Andy's decision before ring 2 goes out on TestFlight.
+Decision (Andy, Oct 17): bundle ID → com.meshsonar.app in 0.4.0; installs as a new app; drives only on the phone must be uploaded or exported first.
 
 ## 8. Acceptance criteria
 
@@ -178,7 +176,7 @@ Note: no Flutter SDK in the agent container; L runs `flutter test` on Andy's Mac
 
 ## 10. Out of scope
 
-Bundle ID change (§7, held); Drive Format v1.1 fields, including mount on the wire (held); the default server URL change to
+Drive Format v1.1 fields, including mount on the wire (held); the default server URL change to
 `cmh.meshsonar.com` (follows the M1 domain move); the Ping Standard and channel changes (M4); background report queue;
 screenshots in reports; device model; persisting the diagnostic log; showing report status in the app (testers see it on
 `/me/reports`).
@@ -186,7 +184,7 @@ screenshots in reports; device model; persisting the diagnostic log; showing rep
 ## 11. Found in code / plan conflicts
 
 - No MeshMapper sending code or setting exists (§5).
-- Plan §13.1 schedules the bundle ID change for 0.4.0; held here (§7).
+- Plan §13.1 schedules the bundle ID change for 0.4.0; decided by Andy Oct 17 and done in 0.4.0 (§7).
 - Plan M1 lists "v1.1 basics" for 0.4.0 (Q4.19) and the default server URL change for 0.4.0; both are excluded here (v1.1 held
   by Andy, domain move not yet done).
 - The app has no logging today; "sends app logs" (plan §6 ring 2) needs the new diagnostic log in §3.

@@ -35,7 +35,7 @@ Every platform dependency sits behind an interface or a function in `AppServices
 | Share | `AppServices.shareFile(File)` | `shareDriveFile` (share_plus) | Takes a `dart:io File`. A web port needs a bytes-based variant (download). |
 | Wake lock + haptics | `DeviceFeedback` (`ui/device_feedback.dart`) | `wakelock_plus`, `HapticFeedback` | Already no-op tolerant. |
 | Background operation | Platform config + `GeolocatorLocationSource._settings()` | Android foreground-service notification; iOS `allowBackgroundLocationUpdates` + `UIBackgroundModes` | See the per-target sections below. |
-| Map tiles | `CoverageMap.tileUrl` | `https://tile.openstreetmap.org/{z}/{x}/{y}.png` with UA package `net.innovatexit.meshsonar` | See ROADMAP: heavy use needs another provider. |
+| Map tiles | `CoverageMap.tileUrl` | `https://tile.openstreetmap.org/{z}/{x}/{y}.png` with UA package `com.meshsonar.app` | See ROADMAP: heavy use needs another provider. |
 | Clock and ids | `AppServices.clock`, `newId` | `DateTime.now`, UUID v4 | Tests inject fakes. |
 | Theme override | env `MESHSONAR_THEME=dark\|light` | desktop only | For screenshots. |
 
@@ -43,7 +43,7 @@ Every platform dependency sits behind an interface or a function in `AppServices
 
 ### Android
 
-The Android project exists (`android/`, package `net.innovatexit.meshsonar`, Kotlin DSL). The repo history records no
+The Android project exists (`android/`, package `com.meshsonar.app`, Kotlin DSL). The repo history records no
 device testing, so treat it as untested.
 
 - [x] **Manifest permissions** (`android/app/src/main/AndroidManifest.xml`): `BLUETOOTH_SCAN`
@@ -68,7 +68,7 @@ device testing, so treat it as untested.
 ### iOS / iPadOS
 
 This is the platform it's developed on (see [DEVELOPMENT.md](DEVELOPMENT.md)). Deployment target is 15.0 and the
-bundle id is `net.innovatexit.meshsonar`.
+bundle id is `com.meshsonar.app`.
 
 - [x] `Info.plist`: `NSBluetoothAlwaysUsageDescription`, `NSBluetoothPeripheralUsageDescription`,
   `NSLocationWhenInUseUsageDescription`, `NSLocationAlwaysAndWhenInUseUsageDescription`, and `UIBackgroundModes` =
@@ -97,7 +97,7 @@ bundle id is `net.innovatexit.meshsonar`.
 - [ ] **GPS:** `geolocator_linux` (beta) uses **GeoClue2**. GeoClue must be installed and the app allowed in its
   config. A USB GPS works through gpsd → GeoClue. Without GeoClue, `ensurePermission()` returns false and Start drive
   shows the location message. Simulator mode doesn't need it.
-- [ ] Data lives in `$XDG_DATA_HOME/net.innovatexit.meshsonar/meshsonar/` (see DATA_MODEL §2).
+- [ ] Data lives in `$XDG_DATA_HOME/com.meshsonar.app/meshsonar/` (see DATA_MODEL §2).
 - [ ] **Export & share doesn't work on Linux.** `share_plus` 13.3.1 throws `UnimplementedError('Sharing files not
   supported on Linux')`, which the app shows as a short error. The export file is still written to the temp folder
   first (`$TMPDIR/meshsonar_export/`). Add a "Save as…" path for desktop.

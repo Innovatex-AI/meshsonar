@@ -147,7 +147,7 @@ positions and distances only. It never changes recorded data.
 ## 2. On-device storage layout
 
 Root: `getApplicationSupportDirectory()/meshsonar/` (falls back to the Documents directory). On Linux that's
-`$XDG_DATA_HOME/net.innovatexit.meshsonar/meshsonar/`, usually `~/.local/share/…`. path_provider uses the legacy
+`$XDG_DATA_HOME/com.meshsonar.app/meshsonar/`, usually `~/.local/share/…`. path_provider uses the legacy
 `~/.local/share/meshsonar/` folder instead if that one already exists.
 
 ```
