@@ -24,14 +24,14 @@ inferred from what the app expects.
 | Item | MeshMapper behaviour | Source |
 |---|---|---|
 | Channel | Group text (GRP_TXT) on `#wardriving`. Key = first 16 bytes of SHA-256("#wardriving"), AES-128-ECB by the radio | `MMW/app_how_it_works.md:36–38` |
-| Body | `MM:` + wire tag (13 characters). With "Broadcast My Coordinates" on: `MM:<tag>:lat,lon` (5 decimals) | `MMA/services/ping_service.dart:991–1020`; `MMA/services/meshcore/wire_tag_codec.dart:9`, `:35` |
+| Body | `MM:` + wire tag: 10 base64url characters (13 including `MM:`). With "Broadcast My Coordinates" on: `MM:<tag>:lat,lon` (5 decimals) | `MMA/services/ping_service.dart:991–1020`; `MMA/services/meshcore/wire_tag_codec.dart:9`, `:35` |
 | Tag layout | 55 bits, MSB→LSB: region (15) \| date (15) \| session number (14) \| counter (11). Date = (year−2020)×512 + month×32 + day. Region = 3 letters base 26 | `wire_tag_codec.dart:14–15`, `:43–53`, `:138–144` |
 | Encryption | Keyed 4-round balanced Feistel on two 28-bit halves; round function = first 4 bytes of SHA-256(secret ‖ round ‖ half), masked to 28 bits. Output 7 bytes, base64url without padding | `wire_tag_codec.dart:58–92`, `:94–116`, `:146–147` |
 | Key | Per-session `wire_key` from the server's `/auth` reply. Null key falls back to an unkeyed tag | `MMA/services/api_service.dart:908`; `wire_tag_codec.dart:121–123` |
 | Session id | `IATA-YYYYMMDD-NNNN`; offline sessions are never tagged | `wire_tag_codec.dart:121–133` |
 | Counter cap | 2047 pings per session (11-bit counter); at the cap the app uploads and disconnects | `ping_service.dart:1003–1013`; `MMW/app_how_it_works.md:52` |
 | No session, no ping | A TX without a session is refused (every TX carries a tag) | `ping_service.dart:1021–1029` |
-| Why | Lets the server recognise the same packet at an observer without putting the driver's position on air | `MMW/app_how_it_works.md:330` |
+| Why | Keeps the driver's position off the air; the TX upload carries `wire_tag` and `ping_counter`, which select the server's validated path and join a pending (status 4) row. That the server matches the tag to what observers heard is **inferred** (server closed) | `MMW/app_how_it_works.md:330`; `MMA/models/api_queue_item.dart:510–513`; `MMA/services/api_queue_service.dart:1585–1591` |
 
 **For us:** we keep the idea (an opaque per-session tag the server can resolve, no position on air) and design our
 own encoding in the M1 spec. Two lessons from their code: the date had to go into the tag so a recycled daily
@@ -65,15 +65,15 @@ passes.
 | 3 | Own CARpeater on the **first** hop: single hop → dropped; else that hop is stripped, the next hop is credited, SNR/RSSI set to null | `:148–169` |
 | 4 | Multi-hop (2+ hops, not stripped): credited to the **last** hop, kept separately with the full hop list | `:171–185` |
 | 5 | Regional CARpeater list: drop if the credited hop **or** the first hop is listed | `:187–200` |
-| 6 | User's ignore filter | `:202–209` |
+| 6 | User's ignore filter (skipped when a CARpeater hop was stripped) | `:202–209` (`!carpeaterStripped` at `:203`) |
 | 7 | RSSI failsafe: drop if RSSI ≥ −30 dBm (skipped after a CARpeater strip, or if the user turned it off) | `:211–229` |
 | 8 | Channel hash equals `#wardriving`'s (payload ≥ 3 bytes) | `:231–246` |
-| 9 | Decrypted text equals, or contains, the body just sent | `:250–304` |
+| 9 | Decrypted text equals, or contains, the body just sent. If no channel key is available the content check is **skipped** with a warning and the echo is accepted | `:250–304`, `:305–310` |
 | 10 | Dedup per repeater: keep the best SNR, count repeats | `:321–361` |
 
 After the window: direct (1-hop) echoes become the TX item's `heard_repeats`, formatted `id(snr),id(snr)` with SNR to
 2 decimals, or `id(null)` after a CARpeater strip, or `None` (`ping_service.dart:1245–1270`). Multi-hop echoes are
-uploaded as separate RX items at the ping's location (`ping_service.dart:1286–1300`; `MMW/app_how_it_works.md:48`).
+uploaded as separate RX items at the ping's location (`ping_service.dart:1332–1352`; `MMW/app_how_it_works.md:48`).
 
 ## 4. Passive RX pipeline and batching
 
@@ -108,7 +108,7 @@ Runs only while an auto mode runs; with no auto mode only the echoes of a manual
 | Flush on time | 30 s after the first reading | `rx_logger.dart:20`, `:300–303` |
 | Speed term | **None.** Both limits are fixed constants | `rx_logger.dart:19–20` |
 | Session end | All batches flushed on stop or disconnect | `rx_logger.dart:73–77`, `:451–467` |
-| Upload-queue cap | At most **4 RX items per repeater** buffered before they move to the main queue; extras dropped | `api_queue_service.dart:275`, `:690–698`, `:1060–1068` |
+| Upload-queue cap | RX items are buffered per repeater. When any repeater reaches **4** buffered items the **whole RX buffer** is flushed to the main queue. The "drop extras" branch (`:694`) only applies if a fifth arrives before that flush has run | `api_queue_service.dart:275`, `:690–698`, `:1061–1068` |
 
 **For us:** best-SNR-only and first-location pinning lose information at speed (teardown §3.4). We keep all readings
 or n/min/median/max per batch (M4 spec).
@@ -124,7 +124,7 @@ or n/min/median/max per batch (M4 spec).
 | Own CARpeater on RX | Matched on the **last** hop (our car delivered it to us) | `rx_logger.dart:116–135`; `MMW/app_how_it_works.md:191–193` |
 | Own CARpeater, single hop | Dropped (only our own car heard it) | `tx_tracker.dart:157–160`; `rx_logger.dart:122–125` |
 | Regional CARpeaters | Admin-shared list; always a plain drop, nothing behind them is credited; DISC matches on the full key | `tx_tracker.dart:187–200`; `rx_logger.dart:140–143`; `disc_tracker.dart:186–191`; `MMW/app_how_it_works.md:285` |
-| Regional list expiry | 90 days without reports | teardown §3.5 (wiki admin docs; not re-checked in this pass) |
+| Regional list expiry | Admin setting "CARpeater Retention (Days)", default **90**: a tag not reported for that long is removed | `MMW/admins.md:99`, `:356–358` |
 
 ## 6. Discovery (DISC) and trace commands
 
@@ -240,10 +240,10 @@ Hybrid at a 15 s interval sends one DISC every 30 s, exactly the 4-per-120 s rep
 | Timer | 15 s (60 s on a constrained link, e.g. satellite) | `api_queue_service.dart:267–271` |
 | After a TX/DISC/TRACE/DEFER/SCOPES | Flush in 5 s (60 s constrained) | `api_queue_service.dart:272–273`; `MMW/app_how_it_works.md:267` |
 | Retries | 5 per item | `api_queue_service.dart:274`, `:1197`, `:1205` |
-| Backoff | `2^retryCount` seconds, clamped 1–60 s. With 5 retries the ladder stops at 16–32 s; the 60 s cap is never reached | `MMA/models/api_queue_item.dart:533–544` |
+| Backoff | `2^retryCount` seconds, clamped 1–60 s: waits of 2, 4, 8 and 16 s between 5 attempts in total (max 16 s; the 60 s cap is never reached). Items that run out of retries get another chance after the next successful upload | `MMA/models/api_queue_item.dart:533–544`; `api_queue_service.dart:1540`; `MMW/app_how_it_works.md:268` |
 | Unreachable / server says wait | Batch held, no retry spent | `api_queue_service.dart:1315–1330`; `MMW/app_how_it_works.md:269` |
-| Data errors (dropped) | `gps_inaccurate`, `gps_stale`, `invalid_request`, `zone_disabled`, `outofdate`; `outside_zone` dropped but session kept | `api_service.dart:2071–2093` |
-| Session errors (disconnect) | `session_expired` (refresh first), `session_invalid`, `session_revoked`, `bad_session`, `invalid_key`, `unauthorized`, `bad_key`, `zone_full`, `zone_disabled` | `api_service.dart:2033–2069` |
+| Data errors (dropped) | `gps_inaccurate`, `gps_stale`, `invalid_request`, `zone_disabled`, `outofdate`; `outside_zone` dropped but session kept. `zone_disabled` is in both lists; the session list is checked first, so it disconnects | `api_service.dart:2071–2093` |
+| Session errors (disconnect) | `session_expired` (refresh first), `session_invalid`, `session_revoked`, `bad_session`, `invalid_key`, `unauthorized`, `bad_key`, `zone_full`, `zone_disabled` | `api_service.dart:2033–2069` (`zone_disabled` at `:2040`, checked at `:2055`) |
 | Connect/disconnect | Queue cleared on connect; best-effort upload then clear on disconnect; kept across auto-reconnect | `MMW/app_how_it_works.md:272` |
 | Third-party forward (not used by us, M3 removed) | Phone POSTs `{"data": [...]}` with `X-API-Key`, 10 s timeout, error log throttled 1/min, no retry; adds `contact` (first 8 hex of companion key, opt-in, default on) and `iata` | `MMA/services/custom_api_service.dart:19`, `:26–27`, `:71–98`, `:114–121`; `user_preferences.dart:219`; `app_state_provider.dart:3482–3486` |
 
@@ -302,7 +302,8 @@ Two other enumerations exist and must not be confused with `status`:
 | Coverage API `status_mask` bits | BIDIR 1, TX 2, RX 4, DISC 8, DEAD 16, DROP 32 | `MMW/coverage-api.md:176–181` (bits at `:181`) |
 
 The Coverage API also splits BIDIR by whether a repeat was heard: "BIDIR with a heard repeat" ranks first, "BIDIR with
-no heard repeat" ranks fifth (`MMW/coverage-api.md:149–157`; `coverage_summary.dart:186–192`). Inferred: status 1 can
+no heard repeat" ranks fifth (`MMW/coverage-api.md:149–157`). The app does not make that split: both cases get
+tile category `st` 1 (`coverage_summary.dart:180–181`, `:188`, `:192`). Inferred: status 1 can
 be stored without a heard repeat (for example a DISC-confirmed or observer-only path), so "1" alone does not prove
 the driver heard a repeat.
 
@@ -313,6 +314,6 @@ the driver heard a repeat.
 | Plan / teardown said | Source says | Action |
 |---|---|---|
 | Stale GPS 60 s, "checked at `gps_service.dart:565–567`" for pings | The 60 s check exists but the ping path does not call it; auto pings take a fresh fix instead. 60 s applies to API/zone calls | Our 60 s ping gate stays (our choice); cite as "MeshMapper: fresh fix per ping, 60 s for API" |
-| Upload backoff "1 → 60 s" | Formula clamps at 60 s, but 5 retries stop at 16–32 s | Ours: backoff 1 → 60 s and never drop (phone keeps pings), unchanged |
+| Upload backoff "1 → 60 s" | Formula clamps at 60 s, but the waits are 2, 4, 8, 16 s (max 16 s, 5 attempts); exhausted items retry after the next successful upload | Ours: backoff 1 → 60 s and never drop (phone keeps pings), unchanged |
 | DISC replies from "repeaters and room servers" (`MMW/app_how_it_works.md:96`) | Room servers do not implement DISCOVER replies in MeshCore v1.18.0 | Treat DISC as repeater-only |
 | `tx_tracker.dart:63` says 7 s | Code default 5 s (`:69`) | Already noted in §14.1 |

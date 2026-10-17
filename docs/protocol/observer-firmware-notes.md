@@ -41,7 +41,7 @@ slot and marks the ones a board cannot run as `(inactive)` (Doc `:181`).
 | `wss://` | MQTT over WebSocket Secure | Doc `:171–173` |
 | `mqtts://` | MQTT over TLS | Doc `:171–173` |
 | `mqtt://`, `ws://` | Plain; no certificate check | Doc `:171–173`, `:483–488` |
-| URL forms | Full URL with scheme in `mqttN.server`; an explicit port in the URL wins; without one the scheme default applies; the path (e.g. `/mqtt`) is kept | `OBS/src/helpers/bridges/MQTTBridge.cpp:2076–2111`; Doc `:495–497` |
+| URL forms | Full URL with scheme in `mqttN.server`; an explicit port in the URL wins. With no port in the URL, a set `mqttN.port` is inserted before the path; with neither, the scheme default applies. The path (e.g. `/mqtt`) is kept | `OBS/src/helpers/bridges/MQTTBridge.cpp:2076–2111` (port insertion `:2102–2110`); Doc `:495–497` |
 | Host only | Scheme picked from the port: 8883 → mqtts, 443 → wss, else mqtt | `MQTTBridge.cpp:2112–2119` |
 | Custom-slot trust | Verified against the firmware's **embedded CA bundle** (no pinning). Built-in presets pin a root (e.g. ISRG Root X1, GTS Root R4) | `MQTTBridge.cpp:2125–2158`; `MQTTPresets.h:139–141` |
 | Field limits | `mqttN.server` 63 chars, `mqttN.audience` 63, `mqttN.topic` 95 | `OBS/src/helpers/MQTTPrefsStorage.h:85`, `:94–95` |
@@ -89,7 +89,7 @@ password: eyJhbGciOiJFZDI1NTE5IiwidHlwIjoiSldUIn0.eyJwdWJsaWNLZXkiOiJDQzVE…In0
 | 8 | `aud` equals `AUTH_EXPECTED_AUDIENCE` (required env var) | `server.ts:220–225`; `BRK/src/config.ts:19–30` |
 | 9 | Publishers may only publish under `meshcore/` | `server.ts:306–312` |
 | 10 | Topic has ≥ 4 parts: `meshcore/{IATA}/{PUBKEY}/…` | `server.ts:314–325` |
-| 11 | IATA: not `XXX`; exactly 3 uppercase letters and a real airport (`airport-utils`), or `test` | `server.ts:22–29`, `:327–368` |
+| 11 | IATA: not `XXX`; exactly 3 uppercase **letters** (`/^[A-Z]{3}$/`, `:328`) and a real airport (`airport-utils`), or `test`. The firmware accepts letters **and digits** (`OBS/src/helpers/MQTTObserverValidation.h:15–23`) | `server.ts:22–29`, `:327–368` |
 | 12 | Topic key is 64 hex **and equals the authenticated key** | `server.ts:371–396` |
 | 13 | Topic normalised to uppercase IATA and key | `server.ts:399–409` |
 | 14 | JSON payload must contain `origin_id` equal to the authenticated key | `server.ts:435–455` |
@@ -220,7 +220,7 @@ For owners who run a Raspberry Pi bridge instead of the observer firmware.
 | Topic | Observer firmware | meshcoretomqtt | Source (M2M) |
 |---|---|---|---|
 | Token lifetime | 24 h (minus stagger) | **1 h** (`token_ttl = 3600`), reused until < 5 min left | `bridge/state.py:77`; `bridge/mqtt_manager.py:304–310`; M2Mt `mctomqtt.py:136`, `:239` |
-| Token format | Same header and signature form | Same; payload order `publicKey`, `iat`, `exp`, then `aud`, `owner`, `email` (no `client`). `owner`/`email` only sent when TLS **and** verify are on; email lower-cased | `auth_token.py:20–73`; `bridge/mqtt_manager.py:312–335` |
+| Token format | Same header and signature form | Same; payload order `publicKey`, `iat`, `exp`, then `aud`, then `owner`/`email` (only when TLS **and** verify are on; email lower-cased), then `client` (the bridge's client version) | `auth_token.py:20–73`; `bridge/mqtt_manager.py:312–337` |
 | WebSocket path | From the URL (`/mqtt` for most presets) | **Always `/`** | `bridge/broker_client.py:91–92` |
 | Offline status | None | **Last will** = status `"offline"` (no stats), plus an explicit offline on shutdown | `bridge/mqtt_manager.py:375–379`; `bridge/broker_client.py:74`; `bridge/runner.py:261–266` |
 | Status retain | Per preset; custom = off | Always unretained (`retain=False`); LWT retain per broker config (default true) | `bridge/mqtt_publish.py:87–101`; `bridge/mqtt_manager.py:379` |
@@ -229,7 +229,7 @@ For owners who run a Raspberry Pi bridge instead of the observer firmware.
 | Packet extras | `score` scaled ×1000; `hash` on rx and tx | `duration` (rx); `score` as printed; `hash` only on rx | `bridge/message_parser.py:80–86` |
 | `path` | JSON array, direct only | A **string** (the bracketed serial text), direct only | `bridge/message_parser.py:89–90` |
 | Timestamp | Microseconds, `+00:00` | Python `isoformat()`, `+00:00` | `bridge/message_parser.py:37` |
-| Extra topics | `neighbors` | `debug`; remote serial `serial/commands` / `serial/responses` | `config.toml.example:40–44`, `:46–60` |
+| Extra topics | `neighbors` | `debug`; remote serial `serial/commands` / `serial/responses` | `config.toml.example:40–44`, `:46–60`; `bridge/remote_serial.py:53` |
 | Topic variables | `{iata}`, `{device}`, `{token}`, `{type}` | `{IATA}`, `{PUBLIC_KEY}` | `config.toml.example:41` |
 
 ## 7. CMAT broker requirements that follow
@@ -237,8 +237,8 @@ For owners who run a Raspberry Pi bridge instead of the observer firmware.
 Inferred from §3–§6; these become M2 spec items.
 
 1. Accept WebSocket upgrades on **both** `/mqtt` and `/` (firmware and meshcoretomqtt).
-2. Expected audience: one fixed string; both clients send the value the owner typed. **Proposed: `mqtt.meshsonar.com`
-   (approve)**, matching the host-name convention of every built-in preset (`MQTTPresets.h:138–141`).
+2. Expected audience: one fixed string; both clients send the value the owner typed. **`mqtt.meshsonar.com`
+   (approved by Andy, Oct 17)**, matching the host-name convention of every built-in preset (`MQTTPresets.h:138–141`).
 3. Require `exp` and cap lifetime at ≥ 24 h + skew (firmware tokens are 24 h); reject `iat` far in the future. The
    reference broker does neither (§3.1, row 6).
 4. Treat silence, not an "offline" message, as the observer-down signal (firmware sends none).
@@ -246,6 +246,8 @@ Inferred from §3–§6; these become M2 spec items.
 6. Parse numbers that arrive as strings; tolerate integer and one-decimal SNR.
 7. Decode the flood path from `raw`; use `hash` to join one packet across observers.
 8. Check `origin_id` and the topic key against the authenticated key, as the reference broker does (§3.1, rows 12, 14).
+9. Accept IATA codes of 3 letters **or digits**, as the firmware does, not the reference broker's letters-only rule
+   (§3.1, row 11). CMH passes both.
 
 ## 8. Owner setup: exact commands
 
@@ -290,5 +292,5 @@ Expected replies: `OK - slot 3 preset: custom`, `OK`, `OK - slot 3 JWT audience:
 (`CommonCLI_Observer.cpp:531`, `:573`, `:619`). `get mqtt.status` should then show slot 3 connected. Prerequisites
 already on any working observer: WiFi set, radio `910.525,62.5,7,5`, clock synced by NTP (Doc `:22–49`, `:909–914`).
 
-The audience string above is the proposed value from §7, item 2; it must equal the broker's configured audience
-before owners are sent these commands.
+The audience string above is the approved value from §7, item 2 (Andy, Oct 17); the broker must be configured
+with the same audience before owners are sent these commands.
