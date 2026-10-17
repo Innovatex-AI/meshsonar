@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/core/api.dart';
-import 'package:meshsonar/core/model.dart';
 
 import 'fakes.dart';
 

@@ -425,7 +425,9 @@ Future<bool> confirmServerChange(BuildContext context, String newUrl) async {
 
 /// Where to manage drives and privacy on the website, and a button to get a key there.
 class _AccountLinks extends StatelessWidget {
-  const _AccountLinks();
+  /// When set, an "I already have a key" button sits next to the website button.
+  final VoidCallback? onHaveKey;
+  const _AccountLinks({this.onHaveKey});
   @override
   Widget build(BuildContext context) {
     final s = AppScope.of(context);
@@ -436,16 +438,23 @@ class _AccountLinks extends StatelessWidget {
         key: const Key('account-hint'),
         style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
       ),
-      Align(
-        alignment: Alignment.centerLeft,
-        child: TextButton.icon(
+      Wrap(spacing: 16, crossAxisAlignment: WrapCrossAlignment.center, children: [
+        TextButton.icon(
           key: const Key('key-website'),
           style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 0)),
           onPressed: () => s.openWebPage('/me/devices'),
           icon: const Icon(Icons.open_in_new, size: 18),
           label: const Text('Get a key on the website'),
         ),
-      ),
+        if (onHaveKey != null)
+          TextButton.icon(
+            key: const Key('key-have'),
+            style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 0)),
+            onPressed: onHaveKey,
+            icon: const Icon(Icons.key, size: 18),
+            label: const Text('I already have a key'),
+          ),
+      ]),
     ]);
   }
 }
@@ -606,19 +615,8 @@ class _DriverKeySectionState extends State<_DriverKeySection> {
                   label: const Text('Request key'),
                 ),
                 const SizedBox(height: 12),
-                const _AccountLinks(),
-                if (!_showPaste)
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
-                      key: const Key('key-have'),
-                      style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 0)),
-                      onPressed: () => setState(() => _showPaste = true),
-                      icon: const Icon(Icons.key, size: 18),
-                      label: const Text('I already have a key'),
-                    ),
-                  )
-                else ...[
+                _AccountLinks(onHaveKey: _showPaste ? null : () => setState(() => _showPaste = true)),
+                if (_showPaste) ...[
                   const SizedBox(height: 8),
                   TextField(
                     key: const Key('key-paste'),
