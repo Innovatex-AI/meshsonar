@@ -164,6 +164,11 @@ class FakeCmatClient implements CmatClient {
 
   @override
   Future<List<RepeaterRef>> repeaters(String driverKey) async => repeaterList;
+
+  /// Members added to [CmatClient] later (0.4.0's `reportProblem`) don't break every UI test: a fake that needs one
+  /// overrides it (see `ReportingCmatClient` in fakes_m1.dart); calling one that isn't faked fails loudly.
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 class FakeSyncService implements SyncService {
@@ -200,12 +205,28 @@ class FakeSyncService implements SyncService {
   }
 }
 
+/// Settings JSON (0.4.0 `antenna_profiles`) giving [Harness.selfInfo]'s radio a saved antenna, so tests that connect
+/// and start a drive aren't stopped by the once-per-radio antenna setup (spec m1-app-0.4.0 §4).
+const testAntennaProfiles = {
+  'abcdef0123': {'mount': 'insideCar', 'gain_dbi': null, 'height_m': 1.2, 'updated_at': '2026-10-16T17:00:00.000Z'},
+};
+
 class FakeSettingsStore implements SettingsStore {
   Settings saved;
   int saveCount = 0;
-  FakeSettingsStore([this.saved = const Settings()]);
+
+  /// When the saved settings have no antenna profiles, [load] adds [testAntennaProfiles] (via JSON, so this compiles
+  /// before and after 0.4.0). Off for tests about the antenna setup itself.
+  final bool seedAntennaProfile;
+  FakeSettingsStore([this.saved = const Settings(), this.seedAntennaProfile = false]);
   @override
-  Future<Settings> load() async => saved;
+  Future<Settings> load() async {
+    if (!seedAntennaProfile) return saved;
+    final j = saved.toJson();
+    final existing = j['antenna_profiles'];
+    if (existing is Map && existing.isNotEmpty) return saved;
+    return Settings.fromJson({...j, 'antenna_profiles': testAntennaProfiles});
+  }
   @override
   Future<void> save(Settings settings) async {
     saveCount++;
@@ -352,9 +373,13 @@ DrivePing heardPing(String id, List<Echo> echoes, {DateTime? ts}) => DrivePing(
 DrivePing silentPing(String id) => heardPing(id, const []);
 
 class Harness {
+  /// The default radio already has an antenna profile (see [testAntennaProfiles]); false = a radio never set up.
+  final bool antennaProfile;
+  Harness({this.antennaProfile = true});
+
   final store = FakeDriveStore();
   late final FakeSyncService sync = FakeSyncService(store);
-  final settings = FakeSettingsStore();
+  late final settings = FakeSettingsStore(const Settings(), antennaProfile);
   final bt = FakeScanner(const [
     RadioDevice(id: 'aa:bb', name: 'MeshCore-Truck', rssi: -62),
     RadioDevice(id: 'cc:dd', name: 'MeshCore-Far', rssi: -91),
@@ -386,41 +411,55 @@ class Harness {
 
   FakeCmatClient get client => state.client as FakeCmatClient;
 
-  late final AppServices services = AppServices(
+  /// The client the app gets for a server URL (subclasses return richer fakes). Keeps repeaters/status across rebuilds.
+  FakeCmatClient newClient(Uri u) => FakeCmatClient(u);
+
+  FakeCmatClient makeClient(Uri u) {
+    final c = newClient(u);
+    if (clients.isNotEmpty) {
+      c.repeaterList = clients.last.repeaterList;
+      c.statusResult = clients.last.statusResult;
+    }
+    clients.add(c);
+    return c;
+  }
+
+  WardriveEngine makeEngine(CompanionLink link, LocationSource loc) {
+    engineLocation = loc;
+    final e = FakeEngine()
+      ..startError = engineStartError
+      ..pingsBeforeStartError = engineStartPings;
+    engines.add(e);
+    return e;
+  }
+
+  Future<bool> recordOpenUrl(Uri u) async {
+    openedUrls.add(u);
+    return browserWorks;
+  }
+
+  String nextId() => 'id-${++_id}';
+
+  late final AppServices services = buildServices();
+
+  /// The app's services built from these fakes (subclasses add more, e.g. M1Harness in fakes_m1.dart).
+  AppServices buildServices() => AppServices(
     store: store,
     settingsStore: settings,
-    cmatClientFactory: (u) {
-      final c = FakeCmatClient(u);
-      if (clients.isNotEmpty) {
-        c.repeaterList = clients.last.repeaterList;
-        c.statusResult = clients.last.statusResult;
-      }
-      clients.add(c);
-      return c;
-    },
+    cmatClientFactory: makeClient,
     syncServiceFactory: (_) => sync,
     bluetoothScanner: bt,
     simulatorScanner: sim,
     linkFactory: (_) => FakeLink(selfInfo),
     location: location,
     simulatedLocation: simLocation,
-    engineFactory: (link, loc) {
-      engineLocation = loc;
-      final e = FakeEngine()
-        ..startError = engineStartError
-        ..pingsBeforeStartError = engineStartPings;
-      engines.add(e);
-      return e;
-    },
-    openUrl: (u) async {
-      openedUrls.add(u);
-      return browserWorks;
-    },
+    engineFactory: makeEngine,
+    openUrl: recordOpenUrl,
     repeaterCache: cache,
     exportDir: () async => Directory.systemTemp,
     shareFile: (f) async => shared.add(f),
     clock: () => DateTime.utc(2026, 10, 16, 18, 0, 0),
-    newId: () => 'id-${++_id}',
+    newId: nextId,
   );
 
   late final AppState state = AppState(services);

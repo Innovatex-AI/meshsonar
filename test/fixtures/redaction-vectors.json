@@ -1,0 +1,404 @@
+{
+  "about": "CMAT problem reports: canonical redaction and rounding vectors (docs/specs/m1-problem-reports.md section 8). Owned by Q. MeshSonar copies this file unchanged; both sides must produce every output and count exactly. Rules apply in order R1..R6 then C1 to each string; counts are the number of replacements per count key (R4 and R5 both count as mqtt).",
+  "countKeys": [
+    "driverKey",
+    "jwt",
+    "bearer",
+    "secret",
+    "mqtt",
+    "coords"
+  ],
+  "rules": [
+    {
+      "id": "R1",
+      "name": "driver key",
+      "count": "driverKey",
+      "pattern": "\\bms_[A-Za-z0-9_-]{20,}",
+      "flags": "g",
+      "replace": "[redacted:driver-key]"
+    },
+    {
+      "id": "R2",
+      "name": "JWT",
+      "count": "jwt",
+      "pattern": "\\beyJ[A-Za-z0-9_-]{5,}\\.[A-Za-z0-9_-]{5,}\\.[A-Za-z0-9_-]*",
+      "flags": "g",
+      "replace": "[redacted:jwt]"
+    },
+    {
+      "id": "R3",
+      "name": "bearer",
+      "count": "bearer",
+      "pattern": "\\b(Bearer)\\s+[A-Za-z0-9._~+\\/-]+=*",
+      "flags": "gi",
+      "replace": "$1 [redacted]"
+    },
+    {
+      "id": "R4",
+      "name": "URL credentials",
+      "count": "mqtt",
+      "pattern": "\\b((?:mqtts?|wss?|https?|tcp|ssl):\\/\\/[^\\s:\\/@]+):[^\\s@\\/]+@",
+      "flags": "gi",
+      "replace": "$1:[redacted]@"
+    },
+    {
+      "id": "R5",
+      "name": "observer CLI password",
+      "count": "mqtt",
+      "pattern": "\\b(set\\s+mqtt\\d*\\.(?:password|pass|token))\\s+\\S+",
+      "flags": "gi",
+      "replace": "$1 [redacted]"
+    },
+    {
+      "id": "R6",
+      "name": "secret field",
+      "count": "secret",
+      "pattern": "\\b(x-driver-key|x-admin-key|x-user-jwt|x-access-token|authorization|apikey|api_key|access_token|refresh_token|password|passwd|pwd|secret|token)([\"']?\\s*[:=]\\s*[\"']?)(?!\\[redacted|Bearer\\b)([^\\s\"',;&}]+)",
+      "flags": "gi",
+      "replace": "$1$2[redacted]"
+    },
+    {
+      "id": "C1",
+      "name": "coordinate in text",
+      "count": "coords",
+      "pattern": "(-?)\\b(\\d{1,3}\\.\\d{4,})\\b",
+      "flags": "g",
+      "replace": "sign + value rounded to 3 decimals (sign x round(|v| x 1000) / 1000, half away from zero), printed with exactly 3 decimals; only when the value is <= 180"
+    },
+    {
+      "id": "C2",
+      "name": "coordinate field",
+      "count": "coords",
+      "pattern": null,
+      "flags": null,
+      "replace": "keys lat, lon, lng, latitude, longitude with a number value in device/radio: number rounded to 3 decimals"
+    }
+  ],
+  "vectors": [
+    {
+      "name": "R1 driver key in a log line",
+      "input": "sync: x-driver-key ms_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8S9t0_-x accepted",
+      "output": "sync: x-driver-key [redacted:driver-key] accepted",
+      "counts": {
+        "driverKey": 1,
+        "jwt": 0,
+        "bearer": 0,
+        "secret": 0,
+        "mqtt": 0,
+        "coords": 0
+      }
+    },
+    {
+      "name": "R1 key at start of text",
+      "input": "ms_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8S9t0_-x",
+      "output": "[redacted:driver-key]",
+      "counts": {
+        "driverKey": 1,
+        "jwt": 0,
+        "bearer": 0,
+        "secret": 0,
+        "mqtt": 0,
+        "coords": 0
+      }
+    },
+    {
+      "name": "R1 short ms_ token is not a key",
+      "input": "ms_shortvalue123 stays",
+      "output": "ms_shortvalue123 stays",
+      "counts": {
+        "driverKey": 0,
+        "jwt": 0,
+        "bearer": 0,
+        "secret": 0,
+        "mqtt": 0,
+        "coords": 0
+      }
+    },
+    {
+      "name": "R2 JWT",
+      "input": "session eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U expired",
+      "output": "session [redacted:jwt] expired",
+      "counts": {
+        "driverKey": 0,
+        "jwt": 1,
+        "bearer": 0,
+        "secret": 0,
+        "mqtt": 0,
+        "coords": 0
+      }
+    },
+    {
+      "name": "R2 JWT in x-user-jwt header (R6 must not touch R2 output)",
+      "input": "x-user-jwt: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U",
+      "output": "x-user-jwt: [redacted:jwt]",
+      "counts": {
+        "driverKey": 0,
+        "jwt": 1,
+        "bearer": 0,
+        "secret": 0,
+        "mqtt": 0,
+        "coords": 0
+      }
+    },
+    {
+      "name": "R3 bearer",
+      "input": "Authorization: Bearer abc.DEF-123_~+/xyz==",
+      "output": "Authorization: Bearer [redacted]",
+      "counts": {
+        "driverKey": 0,
+        "jwt": 0,
+        "bearer": 1,
+        "secret": 0,
+        "mqtt": 0,
+        "coords": 0
+      }
+    },
+    {
+      "name": "R3 bearer, lower case keeps its case",
+      "input": "header authorization=bearer s3cr3tT0ken",
+      "output": "header authorization=bearer [redacted]",
+      "counts": {
+        "driverKey": 0,
+        "jwt": 0,
+        "bearer": 1,
+        "secret": 0,
+        "mqtt": 0,
+        "coords": 0
+      }
+    },
+    {
+      "name": "R3 bearer holding a JWT: R2 wins",
+      "input": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U",
+      "output": "Bearer [redacted:jwt]",
+      "counts": {
+        "driverKey": 0,
+        "jwt": 1,
+        "bearer": 0,
+        "secret": 0,
+        "mqtt": 0,
+        "coords": 0
+      }
+    },
+    {
+      "name": "R4 MQTT URL credentials",
+      "input": "connect mqtts://observer:hunter2@mqtt.example.org:8883/topic",
+      "output": "connect mqtts://observer:[redacted]@mqtt.example.org:8883/topic",
+      "counts": {
+        "driverKey": 0,
+        "jwt": 0,
+        "bearer": 0,
+        "secret": 0,
+        "mqtt": 1,
+        "coords": 0
+      }
+    },
+    {
+      "name": "R4 wss and https credentials",
+      "input": "ws wss://u1:p%40ss@broker.local/mqtt and https://admin:pw@site.example.com/x",
+      "output": "ws wss://u1:[redacted]@broker.local/mqtt and https://admin:[redacted]@site.example.com/x",
+      "counts": {
+        "driverKey": 0,
+        "jwt": 0,
+        "bearer": 0,
+        "secret": 0,
+        "mqtt": 2,
+        "coords": 0
+      }
+    },
+    {
+      "name": "R4 URL without credentials is untouched",
+      "input": "fetch https://cmat.example.com/api/cmh/drive-upload ok",
+      "output": "fetch https://cmat.example.com/api/cmh/drive-upload ok",
+      "counts": {
+        "driverKey": 0,
+        "jwt": 0,
+        "bearer": 0,
+        "secret": 0,
+        "mqtt": 0,
+        "coords": 0
+      }
+    },
+    {
+      "name": "R5 observer CLI password",
+      "input": "> set mqtt.password hunter2\n> set mqtt2.token abcDEF\n> set mqtt1.pass x",
+      "output": "> set mqtt.password [redacted]\n> set mqtt2.token [redacted]\n> set mqtt1.pass [redacted]",
+      "counts": {
+        "driverKey": 0,
+        "jwt": 0,
+        "bearer": 0,
+        "secret": 0,
+        "mqtt": 3,
+        "coords": 0
+      }
+    },
+    {
+      "name": "R6 secret fields",
+      "input": "password=hunter2 api_key: \"k-123\" token='zz9' x-admin-key: adminKEY99",
+      "output": "password=[redacted] api_key: \"[redacted]\" token='[redacted]' x-admin-key: [redacted]",
+      "counts": {
+        "driverKey": 0,
+        "jwt": 0,
+        "bearer": 0,
+        "secret": 4,
+        "mqtt": 0,
+        "coords": 0
+      }
+    },
+    {
+      "name": "R6 JSON field",
+      "input": "{\"access_token\": \"abc.def\", \"refresh_token\":\"r-1\", \"secret\": \"s\"}",
+      "output": "{\"access_token\": \"[redacted]\", \"refresh_token\":\"[redacted]\", \"secret\": \"[redacted]\"}",
+      "counts": {
+        "driverKey": 0,
+        "jwt": 0,
+        "bearer": 0,
+        "secret": 3,
+        "mqtt": 0,
+        "coords": 0
+      }
+    },
+    {
+      "name": "R6 stops at separators",
+      "input": "pwd=abc&next=1;passwd=q,secret=w}",
+      "output": "pwd=[redacted]&next=1;passwd=[redacted],secret=[redacted]}",
+      "counts": {
+        "driverKey": 0,
+        "jwt": 0,
+        "bearer": 0,
+        "secret": 3,
+        "mqtt": 0,
+        "coords": 0
+      }
+    },
+    {
+      "name": "R6 does not re-redact R1 output",
+      "input": "x-driver-key: ms_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8S9t0_-x",
+      "output": "x-driver-key: [redacted:driver-key]",
+      "counts": {
+        "driverKey": 1,
+        "jwt": 0,
+        "bearer": 0,
+        "secret": 0,
+        "mqtt": 0,
+        "coords": 0
+      }
+    },
+    {
+      "name": "C1 coordinates rounded to 3 decimals",
+      "input": "fix lat=40.128091 lon=-82.977705 acc 4.5m",
+      "output": "fix lat=40.128 lon=-82.978 acc 4.5m",
+      "counts": {
+        "driverKey": 0,
+        "jwt": 0,
+        "bearer": 0,
+        "secret": 0,
+        "mqtt": 0,
+        "coords": 2
+      }
+    },
+    {
+      "name": "C1 half rounds away from zero",
+      "input": "at 0.0625 and -12.0625",
+      "output": "at 0.063 and -12.063",
+      "counts": {
+        "driverKey": 0,
+        "jwt": 0,
+        "bearer": 0,
+        "secret": 0,
+        "mqtt": 0,
+        "coords": 2
+      }
+    },
+    {
+      "name": "C1 values above 180 are not coordinates",
+      "input": "freq 910.5251 MHz, snr 12.75, t=11.384",
+      "output": "freq 910.5251 MHz, snr 12.75, t=11.384",
+      "counts": {
+        "driverKey": 0,
+        "jwt": 0,
+        "bearer": 0,
+        "secret": 0,
+        "mqtt": 0,
+        "coords": 0
+      }
+    },
+    {
+      "name": "C1 exactly 180",
+      "input": "lon 180.0000",
+      "output": "lon 180.000",
+      "counts": {
+        "driverKey": 0,
+        "jwt": 0,
+        "bearer": 0,
+        "secret": 0,
+        "mqtt": 0,
+        "coords": 1
+      }
+    },
+    {
+      "name": "C1 trailing zeros printed",
+      "input": "lat 40.0001",
+      "output": "lat 40.000",
+      "counts": {
+        "driverKey": 0,
+        "jwt": 0,
+        "bearer": 0,
+        "secret": 0,
+        "mqtt": 0,
+        "coords": 1
+      }
+    },
+    {
+      "name": "C1 inside a timestamp is untouched",
+      "input": "2026-10-17T14:02:11.3845Z",
+      "output": "2026-10-17T14:02:11.3845Z",
+      "counts": {
+        "driverKey": 0,
+        "jwt": 0,
+        "bearer": 0,
+        "secret": 0,
+        "mqtt": 0,
+        "coords": 0
+      }
+    },
+    {
+      "name": "mixed: one of each",
+      "input": "key ms_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8S9t0_-x jwt eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U Bearer tok123 mqtt://a:b@h set mqtt.password p password=q at 39.961178,-82.998795",
+      "output": "key [redacted:driver-key] jwt [redacted:jwt] Bearer [redacted] mqtt://a:[redacted]@h set mqtt.password [redacted] password=[redacted] at 39.961,-82.999",
+      "counts": {
+        "driverKey": 1,
+        "jwt": 1,
+        "bearer": 1,
+        "secret": 1,
+        "mqtt": 2,
+        "coords": 2
+      }
+    },
+    {
+      "name": "nothing to redact",
+      "input": "Upload failed after 3 retries (HTTP 503).\nRadio KE4BFI-v4 fw 1.9, 910.525 MHz / 62.5 kHz / SF7.",
+      "output": "Upload failed after 3 retries (HTTP 503).\nRadio KE4BFI-v4 fw 1.9, 910.525 MHz / 62.5 kHz / SF7.",
+      "counts": {
+        "driverKey": 0,
+        "jwt": 0,
+        "bearer": 0,
+        "secret": 0,
+        "mqtt": 0,
+        "coords": 0
+      }
+    },
+    {
+      "name": "already redacted text is unchanged",
+      "input": "x-driver-key: [redacted:driver-key] [redacted:jwt] Bearer [redacted] password=[redacted] lat 40.128",
+      "output": "x-driver-key: [redacted:driver-key] [redacted:jwt] Bearer [redacted] password=[redacted] lat 40.128",
+      "counts": {
+        "driverKey": 0,
+        "jwt": 0,
+        "bearer": 0,
+        "secret": 0,
+        "mqtt": 0,
+        "coords": 0
+      }
+    }
+  ]
+}

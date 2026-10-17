@@ -100,6 +100,27 @@ void main() {
     expect(odd.heardHoldPings, 3);
   });
 
+  // AC-13 (spec m1-app-0.4.0 §5): MeshSonar has no "also send to MeshMapper" setting. A stray key from anywhere
+  // (an old build, a hand-edited file) loads normally and is gone after the next save.
+  test('AC-13: unknown also_send_meshmapper key loads normally and is dropped on the next save', () async {
+    final f = File(p.join(tmp.path, 'settings.json'))
+      ..writeAsStringSync('{"server_url": "https://example.org", "driver_key": "ms_k", "key_status": "approved", '
+          '"channel": "#wardriving", "interval_sec": 45, "also_send_meshmapper": true, '
+          '"meshmapper_url": "https://meshmapper.example/api"}');
+    final store = FileSettingsStore(f);
+    final s = await store.load();
+    expect(s.serverUrl, 'https://example.org');
+    expect(s.driverKey, 'ms_k');
+    expect(s.keyStatus, DriverKeyStatus.approved);
+    expect(s.intervalSec, 45);
+    expect(s.toJson().keys, isNot(contains('also_send_meshmapper')));
+    await store.save(s);
+    final raw = f.readAsStringSync();
+    expect(raw, isNot(contains('also_send_meshmapper')));
+    expect(raw, isNot(contains('meshmapper')));
+    expect(raw, contains('https://example.org'));
+  });
+
   test('model numbers written as floats load too (hops, delay, sf, cr)', () {
     final e = Echo.fromJson({'repeater': 'ab', 'hops': 1.0, 'delay_ms': 840.0});
     expect(e.hops, 1);
