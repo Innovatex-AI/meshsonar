@@ -849,6 +849,39 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  /// Uses a driver key created on the website (or copied from another device). The key is checked with the
+  /// server first and saved only if the server knows it, so a typo never replaces a working setup.
+  Future<bool> useExistingKey(String raw) async {
+    final key = raw.trim();
+    if (key.isEmpty) {
+      _keyError = 'Paste the driver key from the website.';
+      notifyListeners();
+      return false;
+    }
+    _keyBusy = true;
+    _keyError = null;
+    notifyListeners();
+    final server = _settings.serverUrl;
+    try {
+      final r = await client.status(key);
+      if (_settings.serverUrl != server) {
+        _keyError = 'The server changed while the key was being checked. Paste it again.';
+        return false;
+      }
+      await updateSettings(_settings.copyWith(driverKey: key, keyStatus: r.status, display: r.display));
+      if (r.status == DriverKeyStatus.approved) unawaited(refreshRepeaters(quiet: true));
+      return true;
+    } catch (e) {
+      _keyError = (e is CmatException && e.status == 401)
+          ? 'This server doesn\'t recognise that key. Check you copied all of it, and that it came from ${webPage('/me/devices')}.'
+          : friendlyError(e, action: 'Checking the key');
+      return false;
+    } finally {
+      _keyBusy = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> refreshKeyStatus({bool quiet = false}) async {
     final key = _settings.driverKey;
     if (key == null || key.isEmpty) return;

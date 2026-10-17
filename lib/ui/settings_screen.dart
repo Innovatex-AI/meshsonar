@@ -460,6 +460,7 @@ class _DriverKeySectionState extends State<_DriverKeySection> {
   final _name = TextEditingController();
   final _callsign = TextEditingController();
   final _email = TextEditingController();
+  final _pasted = TextEditingController();
   final _form = GlobalKey<FormState>();
 
   @override
@@ -467,6 +468,7 @@ class _DriverKeySectionState extends State<_DriverKeySection> {
     _name.dispose();
     _callsign.dispose();
     _email.dispose();
+    _pasted.dispose();
     super.dispose();
   }
 
@@ -556,6 +558,32 @@ class _DriverKeySectionState extends State<_DriverKeySection> {
                   const Spacer(),
                   const KeyStatusBadge(status: DriverKeyStatus.none),
                 ]),
+                const SizedBox(height: 6),
+                Text('Have a key from the website?', style: t.textTheme.titleSmall),
+                const SizedBox(height: 6),
+                TextField(
+                  key: const Key('key-paste'),
+                  controller: _pasted,
+                  decoration: const InputDecoration(labelText: 'Paste your driver key'),
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: (_) => s.keyBusy ? null : s.useExistingKey(_pasted.text),
+                ),
+                const SizedBox(height: 8),
+                FilledButton.icon(
+                  key: const Key('key-use'),
+                  onPressed: s.keyBusy
+                      ? null
+                      : () {
+                          FocusScope.of(context).unfocus();
+                          s.useExistingKey(_pasted.text);
+                        },
+                  icon: const Icon(Icons.key),
+                  label: const Text('Use this key'),
+                ),
+                const SizedBox(height: 20),
+                Text('Or request a new key', style: t.textTheme.titleSmall),
                 const SizedBox(height: 6),
                 Text(
                   'To upload drives, ask the server for a driver key. Your callsign (or "Driver N") is shown publicly; '
