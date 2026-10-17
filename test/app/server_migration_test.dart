@@ -1,5 +1,7 @@
 // 0.5.0 server move in AppState (docs/specs/app-0.5.0.md §2): a saved Lovable URL is rewritten at startup with the
 // driver key kept; moves between the same server's addresses keep the key; any other change still removes it.
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/core/api.dart';
 
@@ -71,7 +73,16 @@ void main() {
   });
 
   for (final from in ['https://meshsonar.com', 'https://cmh.meshsonar.com', 'https://cmh-meshcore.lovable.app']) {
-    for (final to in ['https://other.example', 'https://dev.meshsonar.com']) {
+    for (final to in [
+      'https://other.example',
+      'https://dev.meshsonar.com',
+      'http://meshsonar.com', // https → http alias
+      'http://cmh.meshsonar.com',
+      'https://meshsonar.com:8443',
+      'https://user:pw@meshsonar.com',
+      'https://cmh.meshsonar.com/api',
+      'https://meshsonar.com.evil.example',
+    ]) {
       test('an unrelated change ($from → $to) still removes the key', () async {
         final h = Harness()..settings.saved = _withKey(from);
         await h.state.init();
@@ -90,5 +101,26 @@ void main() {
     await h.state.init();
     await h.state.updateSettings(h.state.settings.copyWith(serverUrl: 'https://meshsonar.com'));
     expect(h.state.settings.driverKey, isNull);
+  });
+
+  test('the rewrite is in the app log; a failed save is logged and the new address is still used', () async {
+    final h = Harness()..settings.saved = _withKey('https://cmh-meshcore.lovable.app');
+    h.settings.failSave = const FileSystemException('disk full');
+    await h.state.init();
+    expect(h.state.settings.serverUrl, 'https://meshsonar.com');
+    expect(h.state.settings.driverKey, _key);
+    expect(h.settings.saved.serverUrl, 'https://cmh-meshcore.lovable.app', reason: 'nothing written');
+    final log = h.state.diagnostics.lines.join('\n');
+    expect(log, contains('Server address moved from cmh-meshcore.lovable.app to https://meshsonar.com'));
+    expect(log, contains('Saving the moved server address failed'));
+    expect(log, contains('disk full'));
+  });
+
+  test('a successful rewrite is logged without a failure line', () async {
+    final h = Harness()..settings.saved = _withKey('https://cmh-meshcore.lovable.app');
+    await h.state.init();
+    final log = h.state.diagnostics.lines.join('\n');
+    expect(log, contains('Server address moved'));
+    expect(log, isNot(contains('Saving the moved server address failed')));
   });
 }

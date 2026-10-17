@@ -866,10 +866,16 @@ class AppState extends ChangeNotifier {
     // address is rewritten to https://meshsonar.com and the driver key is kept (see lib/core/server_url.dart).
     final migrated = migratedServerUrl(_settings.serverUrl);
     if (migrated != null) {
+      final from = Uri.tryParse(_settings.serverUrl.trim())?.host ?? 'the old address';
       _settings = _settings.copyWith(serverUrl: migrated);
+      diagnostics.add('Server address moved from $from to $migrated (same server, driver key kept)');
       try {
         await services.settingsStore.save(_settings);
-      } catch (_) {} // saved again with the next settings change; the rewrite repeats at the next launch until then
+      } catch (e) {
+        // In use for this run either way; the rewrite repeats at the next launch until a save succeeds.
+        _logError('Saving the moved server address failed', e);
+        debugPrint('MeshSonar: saving the moved server address failed: $e');
+      }
     }
     heard.holdPings = _settings.heardHoldPings;
     try {
