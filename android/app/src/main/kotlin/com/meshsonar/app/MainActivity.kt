@@ -1,4 +1,4 @@
-package net.innovatexit.meshsonar
+package com.meshsonar.app
 
 import io.flutter.embedding.android.FlutterActivity
 

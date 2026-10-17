@@ -3,6 +3,53 @@
 All notable changes to MeshSonar. Dates are local (US Eastern). This changelog was reconstructed from the commit
 history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md](ROADMAP.md).
 
+## [0.4.0] — 2026-10-17 — report a problem, antenna per radio
+
+`pubspec.yaml` is `0.4.0+5`. Drive Format v1 is unchanged: uploads and exports carry the same keys as 0.3.x (the
+antenna is still `{type, gain_dbi, height_m}`, and the new build number is not in the `app` object). Spec:
+`docs/specs/m1-app-0.4.0.md`. Released to rings 1 and 2 only.
+
+### Upgrading from 0.3.x
+- **The app id is now `com.meshsonar.app`** (was `net.innovatexit.meshsonar`) on iOS, Android and macOS. 0.4.0
+  installs as a **new app** next to the old one and does not see its drives or settings. Before switching, open the old
+  app and upload (Sync all) or export every drive that is only on the phone; then set up the driver key in the new app
+  again (paste it from the website, or request one). The old app can be deleted once its drives are safe.
+
+### Added
+- **Report a problem** (Settings → About, and "Report a problem with this drive" in a drive's ⋮ menu). You pick a
+  category, describe the problem, choose whether to include the app log and whether to attach a drive (its id only,
+  never its pings), then review the **exact text** that will be sent, its size ("0.2 MB of 5 MB") and what was
+  removed before the only Send button. Sent with your driver key (pending or approved) to
+  `<server>/api/cmh/problem-report`. Without a usable key, "Open driver key settings" opens the key over the form,
+  so nothing typed is lost.
+- **Redaction on the phone** (`lib/core/redact.dart`): CMAT's §8 rules (driver keys, JWTs, bearer tokens, URL and
+  observer passwords, secret fields; coordinates rounded to 3 decimals, about 110 m). The driver key and the full
+  server address are also removed word for word from the log. Same output and counts as the server (shared
+  vectors file).
+- **5 MB cap:** the oldest log lines are dropped until the report fits ("Log shortened to fit 5 MB.").
+- **One saved report:** a report that can't be sent stays on the phone (`report_draft.json`, with what you typed in
+  the form) until you send it ("Send saved report", which shows the same review again) or discard it. Nothing is ever
+  sent in the background. If the server can't accept a report as written (400), the review offers Edit report and
+  Discard.
+- **Diagnostic log** (`lib/core/diagnostics.dart`): the last 1,000 app events (messages, radio connect and
+  disconnect, drive start and stop, uploads, repeater name and node map refreshes, caught errors), in memory only.
+  Reports add a settings snapshot (server host only, key status, channel, cadence, upload settings, antenna).
+- **Antenna per radio** (Q4.14): the first time a radio connects, "How is this radio's antenna set up?" asks for the
+  mount (handheld, inside car, roof mag-mount, fixed mast), gain in dBi or "Don't know", and height in metres. Start
+  drive waits until it's set ("Set up this radio's antenna", also on the full-screen map), the simulator included.
+  Settings → Antenna lists each radio to edit or forget (not the radio in use while driving).
+  Upgrading from 0.3.x prefills gain and height from the old setting and offers the matching mounts first.
+
+### Changed
+- The drive screen's Internal/External toggle is now the radio's antenna chip ("Roof mag-mount · 5.8 dBi · 1.8 m");
+  tap it to change the antenna before a drive. While driving it is locked and shows what the drive records
+  ("External · 5.8 dBi · 1.8 m"). On the wire, handheld and inside car upload as
+  `internal`, roof mag-mount and fixed mast as `external`.
+- Large text: section headers, slider rows, the connection chip and the simulator tag no longer overflow at 2.0×
+  text on a 320 dp screen.
+- MeshSonar sends drive data **only to the server in Settings**. There is no MeshMapper or other forwarding (there
+  never was); a test records every request through a full drive, sync and report to prove it.
+
 ## [0.3.0] — 2026-10-16 — roadmap fixes
 
 `pubspec.yaml` is `0.3.0+3`. The upload contract with CMAT is unchanged (same endpoints, headers and Drive Format v1

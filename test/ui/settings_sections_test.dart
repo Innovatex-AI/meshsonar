@@ -18,8 +18,7 @@ void main() {
       ('wardriving', 'interval'),
       ('wardriving', 'min-distance'),
       ('wardriving', 'heard-hold'),
-      ('antenna', 'antenna-type'),
-      ('antenna', 'antenna-gain'),
+      ('antenna', 'antenna-profile-abcdef0123'), // 0.4.0: one row per radio replaces the global type and gain
       ('sync', 'auto-sync'),
       ('sync', 'sync-during-drive'),
       ('sync', 'sync-every'),

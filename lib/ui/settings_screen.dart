@@ -1,13 +1,19 @@
-// Settings, grouped: Driver & server, Wardriving, Antenna, Sync, About.
+// Settings, grouped: Driver & server, Wardriving, Antenna (per radio), Sync, About.
 import 'package:flutter/material.dart';
 
 import '../app/app_state.dart';
+import '../core/antenna_profile.dart';
 import '../core/api.dart';
-import '../core/model.dart';
 import 'about_screen.dart';
+import 'antenna_sheet.dart';
 import 'onboarding/onboarding_screen.dart';
 import 'app.dart';
+import 'report_problem_screen.dart';
 import 'widgets.dart';
+
+const String _driverHelp =
+    'Your driver key lets this phone upload drives to the coverage map. Without one, drives stay on this phone (you '
+    'can still export them).';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -28,8 +34,7 @@ class SettingsScreen extends StatelessWidget {
               id: 'driver',
               title: 'Driver & server',
               icon: Icons.badge_outlined,
-              help: 'Your driver key lets this phone upload drives to the coverage map. Without one, drives stay on '
-                  'this phone (you can still export them).',
+              help: _driverHelp,
               children: [
                 const _DriverKeySection(),
                 ListTile(
@@ -134,70 +139,17 @@ class SettingsScreen extends StatelessWidget {
               id: 'antenna',
               title: 'Antenna',
               icon: Icons.settings_input_antenna,
-              help: 'Saved with each drive so coverage can be compared like with like. Gain and height are optional.',
+              help: 'Each radio remembers how its antenna is set up. It is saved with every drive, so coverage can be '
+                  'compared like with like.',
               children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('Antenna type', style: t.textTheme.titleMedium),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      width: double.infinity,
-                      child: SegmentedButton<String>(
-                        key: const Key('antenna-type'),
-                        showSelectedIcon: false,
-                        style: SegmentedButton.styleFrom(
-                          minimumSize: const Size(0, 48),
-                          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                          selectedBackgroundColor: t.colorScheme.primaryContainer,
-                          selectedForegroundColor: t.colorScheme.onPrimaryContainer,
-                        ),
-                        segments: const [
-                          ButtonSegment(
-                              value: 'internal',
-                              icon: Icon(Icons.smartphone, key: Key('settings-antenna-internal')),
-                              label: Text('Internal')),
-                          ButtonSegment(
-                              value: 'external',
-                              icon: Icon(Icons.settings_input_antenna, key: Key('settings-antenna-external')),
-                              label: Text('External')),
-                        ],
-                        selected: {st.antenna.type == 'external' ? 'external' : 'internal'},
-                        onSelectionChanged: (v) => s.setAntennaType(v.first),
-                      ),
-                    ),
-                  ]),
-                ),
-                ListTile(
-                  key: const Key('antenna-gain'),
-                  leading: const Icon(Icons.signal_cellular_alt),
-                  title: const Text('Antenna gain'),
-                  subtitle: Text(st.antenna.gainDbi == null ? 'Not set' : '${_num(st.antenna.gainDbi!)} dBi'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () async {
-                    final v = await _editDouble(context, title: 'Antenna gain (dBi)', initial: st.antenna.gainDbi);
-                    if (v != null) {
-                      final a = s.settings.antenna;
-                      await s.updateSettings(s.settings.copyWith(
-                          antenna: Antenna(type: a.type ?? 'internal', gainDbi: v.value, heightM: a.heightM)));
-                    }
-                  },
-                ),
-                ListTile(
-                  key: const Key('antenna-height'),
-                  leading: const Icon(Icons.height),
-                  title: const Text('Antenna height above ground'),
-                  subtitle: Text(st.antenna.heightM == null ? 'Not set' : '${_num(st.antenna.heightM!)} m'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () async {
-                    final v = await _editDouble(context, title: 'Antenna height (metres)', initial: st.antenna.heightM);
-                    if (v != null) {
-                      final a = s.settings.antenna;
-                      await s.updateSettings(s.settings.copyWith(
-                          antenna: Antenna(type: a.type ?? 'internal', gainDbi: a.gainDbi, heightM: v.value)));
-                    }
-                  },
-                ),
+                if (st.antennaProfiles.isEmpty)
+                  const ListTile(
+                    key: Key('antenna-none'),
+                    leading: Icon(Icons.info_outline),
+                    title: Text('No radios set up yet'),
+                    subtitle: Text('Connect a radio and MeshSonar asks how its antenna is set up.'),
+                  ),
+                for (final e in st.antennaProfiles.entries) _AntennaProfileTile(radioKey: e.key, profile: e.value),
               ],
             ),
             _Section(
@@ -257,6 +209,13 @@ class SettingsScreen extends StatelessWidget {
               icon: Icons.info_outline,
               children: [
                 ListTile(
+                  key: const Key('report-problem'),
+                  leading: const Icon(Icons.bug_report_outlined),
+                  title: const Text('Report a problem'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => openReportProblem(context),
+                ),
+                ListTile(
                   key: const Key('about'),
                   leading: const Icon(Icons.info_outline),
                   title: const Text('About MeshSonar'),
@@ -310,8 +269,11 @@ class _Section extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
             child: Row(children: [
               if (icon != null) ...[Icon(icon, size: 18, color: c.primary), const SizedBox(width: 8)],
-              Text(title!.toUpperCase(),
-                  style: t.textTheme.labelLarge?.copyWith(color: c.primary, fontWeight: FontWeight.w800, letterSpacing: 0.8)),
+              Flexible(
+                child: Text(title!.toUpperCase(),
+                    style: t.textTheme.labelLarge
+                        ?.copyWith(color: c.primary, fontWeight: FontWeight.w800, letterSpacing: 0.8)),
+              ),
             ]),
           ),
         if (help != null)
@@ -330,6 +292,82 @@ class _Section extends StatelessWidget {
           ]),
         ),
       ]),
+    );
+  }
+}
+
+/// The driver key part of Settings on a screen of its own, opened over screens that need a key (Report a problem);
+/// Back returns there with nothing lost.
+class DriverKeyScreen extends StatelessWidget {
+  const DriverKeyScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Driver key')),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(0, 4, 0, 24),
+          children: const [
+            _Section(
+              id: 'driver',
+              title: 'Driver key',
+              icon: Icons.badge_outlined,
+              help: _driverHelp,
+              children: [_DriverKeySection()],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One saved radio in Settings → Antenna: tap to edit, or forget it (it is asked again on its next connect).
+class _AntennaProfileTile extends StatelessWidget {
+  final String radioKey;
+  final AntennaProfile profile;
+  const _AntennaProfileTile({required this.radioKey, required this.profile});
+
+  Future<void> _forget(BuildContext context, String name) async {
+    final s = AppScope.read(context);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Forget the antenna of $name?'),
+        content: const Text('Its drives keep what they recorded. The next time this radio connects, MeshSonar asks '
+            'about its antenna again.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(
+            key: const Key('antenna-forget-confirm'),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Forget'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) await s.forgetAntennaProfile(radioKey);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = AppScope.of(context);
+    final name = s.radioName(radioKey) ?? 'Radio ${radioKey.length > 8 ? radioKey.substring(0, 8) : radioKey}';
+    // The radio in use keeps its antenna until the drive ends (the drive has already recorded it).
+    final locked = s.driving && s.selfInfo?.publicKey.toLowerCase() == radioKey;
+    return ListTile(
+      key: ValueKey('antenna-profile-$radioKey'),
+      leading: Icon(locked ? Icons.lock_outline : Icons.settings_input_antenna),
+      title: Text(name),
+      subtitle: Text(locked ? '${profile.summary}\nLocked while driving' : profile.summary),
+      trailing: IconButton(
+        key: ValueKey('antenna-forget-$radioKey'),
+        tooltip: 'Forget this radio\'s antenna',
+        icon: const Icon(Icons.delete_outline),
+        onPressed: locked ? null : () => _forget(context, name),
+      ),
+      onTap: locked ? null : () => showAntennaSheet(context, radioKey: radioKey),
     );
   }
 }
@@ -683,8 +721,6 @@ int nearestStop(List<int> stops, int v) {
   return best;
 }
 
-String _num(double v) => v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toString();
-
 /// A setting with a big value label and a slider over fixed [stops]. Saves when the drag ends (not every frame).
 class SliderTile extends StatefulWidget {
   final Key? sliderKey;
@@ -732,15 +768,23 @@ class _SliderTileState extends State<SliderTile> {
         Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
           Icon(widget.icon, color: muted ? c.outline : c.onSurfaceVariant),
           const SizedBox(width: 16),
+          // Title and value share a line when they fit; with large text the value moves under the title.
           Expanded(
-            child: Text(widget.title,
-                style: t.textTheme.titleMedium?.copyWith(color: muted ? c.onSurfaceVariant : null)),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: Text(widget.label(v),
-                key: widget.key is ValueKey<String> ? Key('${(widget.key as ValueKey<String>).value}-value') : null,
-                style: numberStyle(context, size: 22, color: muted ? c.onSurfaceVariant : c.primary)),
+            child: Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: Gap.s,
+              children: [
+                Text(widget.title,
+                    style: t.textTheme.titleMedium?.copyWith(color: muted ? c.onSurfaceVariant : null)),
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Text(widget.label(v),
+                      key: widget.key is ValueKey<String> ? Key('${(widget.key as ValueKey<String>).value}-value') : null,
+                      style: numberStyle(context, size: 22, color: muted ? c.onSurfaceVariant : c.primary)),
+                ),
+              ],
+            ),
           ),
         ]),
         if (widget.caption != null)
@@ -776,10 +820,9 @@ class _SliderTileState extends State<SliderTile> {
         if (widget.minLabel != null || widget.maxLabel != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(48, 0, 24, 6),
-            child: Row(children: [
-              Text(widget.minLabel ?? '', style: t.textTheme.labelSmall),
-              const Spacer(),
-              Text(widget.maxLabel ?? '', style: t.textTheme.labelSmall),
+            child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              Flexible(child: Text(widget.minLabel ?? '', style: t.textTheme.labelSmall)),
+              Flexible(child: Text(widget.maxLabel ?? '', style: t.textTheme.labelSmall, textAlign: TextAlign.end)),
             ]),
           ),
       ]),
@@ -825,7 +868,6 @@ Future<String?> _editText(
   String? hint,
   String? help,
   TextInputType? keyboard,
-  bool allowEmpty = false,
   String? Function(String)? validate,
 }) {
   final c = TextEditingController(text: initial);
@@ -845,7 +887,7 @@ Future<String?> _editText(
             decoration: InputDecoration(hintText: hint),
             validator: (v) {
               final s = v ?? '';
-              if (!allowEmpty && s.trim().isEmpty && validate == null) return 'Enter a value';
+              if (s.trim().isEmpty && validate == null) return 'Enter a value';
               return validate?.call(s);
             },
           ),
@@ -864,17 +906,4 @@ Future<String?> _editText(
       ],
     ),
   );
-}
-
-/// Returns null if cancelled; a box holding null if cleared.
-Future<({double? value})?> _editDouble(BuildContext context, {required String title, double? initial}) async {
-  final v = await _editText(context,
-      title: title,
-      initial: initial?.toString() ?? '',
-      help: 'Leave empty if you don\'t know.',
-      allowEmpty: true,
-      keyboard: const TextInputType.numberWithOptions(decimal: true, signed: true),
-      validate: (v) => v.trim().isEmpty || double.tryParse(v.trim()) != null ? null : 'Enter a number, or leave empty');
-  if (v == null) return null;
-  return (value: v.trim().isEmpty ? null : double.parse(v.trim()));
 }

@@ -1,6 +1,7 @@
 // Settings: sliders (auto-ping, distance, heard hold, upload period), antenna type, upload toggles.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/core/antenna_profile.dart';
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/ui/settings_screen.dart';
@@ -111,21 +112,29 @@ void main() {
     expect(valueText(tester, 'min-distance'), '100 m');
   });
 
-  testWidgets('antenna: internal by default, external keeps gain and height', (tester) async {
-    final h = await openSettings(tester,
-        settings: const Settings(antenna: Antenna(type: 'internal', gainDbi: 3, heightM: 1.5)));
-    await show(tester, 'antenna-type');
-    final seg = tester.widget<SegmentedButton<String>>(find.byKey(const Key('antenna-type')));
-    expect(seg.selected, {'internal'});
-    await tester.tap(find.byKey(const Key('settings-antenna-external')));
-    await tester.pumpAndSettle();
-    expect(h.settings.saved.antenna.type, 'external');
-    expect(h.settings.saved.antenna.gainDbi, 3);
-    expect(h.settings.saved.antenna.heightM, 1.5);
-    expect(find.text('3 dBi'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('settings-antenna-internal')));
-    await tester.pumpAndSettle();
-    expect(h.settings.saved.antenna.type, 'internal');
+  // 0.4.0 (spec m1-app-0.4.0 §4): the global antenna type toggle is gone; each radio has its own row.
+  testWidgets('antenna: no global type toggle; each saved radio shows its mount, gain and height', (tester) async {
+    await openSettings(tester,
+        settings: const Settings().copyWith(antennaProfiles: {
+          'abcdef0123': AntennaProfile(
+              mount: AntennaMount.roofMagMount, gainDbi: 5.8, heightM: 1.8, updatedAt: DateTime.utc(2026, 10, 16)),
+          'ffee000111': AntennaProfile(
+              mount: AntennaMount.fixedMast, gainDbi: null, heightM: 9, updatedAt: DateTime.utc(2026, 10, 16)),
+        }));
+    expect(find.byKey(const Key('antenna-type')), findsNothing);
+    expect(find.byKey(const Key('settings-antenna-external')), findsNothing);
+    for (final (key, mount, gain, height) in [
+      ('abcdef0123', 'Roof mag-mount', '5.8 dBi', '1.8 m'),
+      ('ffee000111', 'Fixed mast', null, '9 m'),
+    ]) {
+      await show(tester, 'antenna-profile-$key');
+      final row = find.byKey(ValueKey('antenna-profile-$key'));
+      expect(find.descendant(of: row, matching: find.textContaining(mount)), findsWidgets, reason: key);
+      if (gain != null) expect(find.descendant(of: row, matching: find.textContaining(gain)), findsWidgets, reason: key);
+      expect(find.descendant(of: row, matching: find.textContaining(height)), findsWidgets, reason: key);
+      expect(find.descendant(of: row, matching: find.textContaining('dBi')), gain == null ? findsNothing : findsWidgets,
+          reason: '"Don\'t know" gain shows no dBi value');
+    }
   });
 
   testWidgets('upload toggles: during-drive needs end-of-drive; the period slider follows', (tester) async {
@@ -134,15 +143,19 @@ void main() {
     expect(tester.widget<Slider>(find.byKey(const Key('sync-every-slider'))).onChanged, isNotNull);
     expect(valueText(tester, 'sync-every'), 'Every 5 min');
 
+    // Each control is brought into view before it is tapped (the list ends with the "saved on this phone" footer).
+    await show(tester, 'sync-during-drive');
     await tester.tap(find.byKey(const Key('sync-during-drive')));
     await tester.pumpAndSettle();
     expect(h.settings.saved.syncDuringDrive, isFalse);
     expect(tester.widget<Slider>(find.byKey(const Key('sync-every-slider'))).onChanged, isNull);
 
+    await show(tester, 'sync-during-drive');
     await tester.tap(find.byKey(const Key('sync-during-drive')));
     await tester.pumpAndSettle();
     expect(h.settings.saved.syncDuringDrive, isTrue);
 
+    await show(tester, 'auto-sync');
     await tester.tap(find.byKey(const Key('auto-sync')));
     await tester.pumpAndSettle();
     expect(h.settings.saved.autoSync, isFalse);

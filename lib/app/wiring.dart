@@ -10,6 +10,7 @@ import '../core/cmat_client.dart';
 import '../core/drive_store.dart';
 import '../core/position_filter.dart';
 import '../core/repeater_directory.dart';
+import '../core/report_draft_store.dart';
 import '../core/settings_store.dart';
 import '../core/sync_service.dart';
 import '../platform/app_version.dart';
@@ -77,6 +78,8 @@ Future<AppServices> buildRealServices() async {
     openUrl: openExternalUrl,
     appInfo: app,
     uiPrefsFile: File('${root.path}${Platform.pathSeparator}ui_prefs.json'),
+    // The one problem report that couldn't be sent yet, next to settings.json.
+    reportDraftStore: FileReportDraftStore(File('${root.path}${Platform.pathSeparator}report_draft.json')),
     // The public map is ~17 MB; repeaters rarely move, so refresh weekly (or when the drive area moves >75 km).
     directory: RepeaterDirectory(
         cacheFile: File('${root.path}${Platform.pathSeparator}node_directory.json'), ttl: const Duration(days: 7)),

@@ -1,7 +1,7 @@
 // Contract test: the app's store + client + sync against CMAT's REAL endpoint code
 // (meshcore-insights src/lib/drive/handlers.ts + validate.ts, in-memory store), served by bun from
 // test/fixtures/cmat_server.ts. If this passes, MeshSonar and the server agree on the wire format.
-// Skips when bun or the CMAT checkout isn't present.
+// Skips when bun or the CMAT checkout isn't present. CMAT_DIR=<meshcore-insights checkout>, BUN=<bun> (cmat_env.dart).
 import 'dart:convert';
 import 'dart:io';
 
@@ -15,30 +15,15 @@ import 'package:meshsonar/core/settings_store.dart';
 import 'package:meshsonar/core/sync_service.dart';
 import 'package:path/path.dart' as p;
 
+import 'cmat_env.dart';
 import 'helpers.dart';
 
 const adminKey = 'contract-admin-key-0123456789';
-const handlersPath = '/home/claude/meshcore-insights/src/lib/drive/handlers.ts';
-
-String? findBun() {
-  for (final c in [
-    Platform.environment['BUN'],
-    '/root/.bun/bin/bun',
-    if (Platform.environment['HOME'] != null) '${Platform.environment['HOME']}/.bun/bin/bun',
-  ]) {
-    if (c != null && File(c).existsSync()) return c;
-  }
-  final r = Process.runSync('which', ['bun']);
-  return r.exitCode == 0 ? (r.stdout as String).trim() : null;
-}
 
 void main() {
+  // CMAT_DIR / BUN as in cmat_env.dart; skipped with the reason when either is missing.
   final bun = findBun();
-  final skip = bun == null
-      ? 'bun not installed'
-      : !File(handlersPath).existsSync()
-          ? 'CMAT checkout not found at $handlersPath'
-          : null;
+  final skip = contractSkipReason('src/lib/drive/handlers.ts');
 
   Process? server;
   late Uri base;
@@ -47,7 +32,7 @@ void main() {
   setUpAll(() async {
     if (skip != null) return;
     final script = p.join(Directory.current.path, 'test', 'fixtures', 'cmat_server.ts');
-    server = await Process.start(bun!, ['run', script, adminKey]);
+    server = await Process.start(bun!, ['run', script, adminKey, cmatDir()]);
     server!.stderr.transform(utf8.decoder).listen(stderrBuf.write);
     final lines = server!.stdout.transform(utf8.decoder).transform(const LineSplitter()).asBroadcastStream();
     final portLine = await lines.firstWhere((l) => l.startsWith('PORT ')).timeout(const Duration(seconds: 20),

@@ -3,6 +3,7 @@
 //   <base>/api/cmh/driver-status    GET  x-driver-key                   -> {status, display}
 //   <base>/api/cmh/drive-upload     POST x-driver-key, upload body      -> {sessionId, stored, duplicate, rejected, rejections[]}
 //   <base>/api/cmh/drive-repeaters  GET  x-driver-key                   -> {repeaters[{key,name,lat,lon}], at}
+//   <base>/api/cmh/problem-report   POST x-driver-key, report body      -> 201 {id, status, receivedAt, redacted}
 // Errors come back as {error} (403 also carries {status}); they're thrown as CmatException(error, status: http code).
 // Network failures and timeouts are thrown as CmatException with status null.
 // Pure Dart: no Flutter imports.
@@ -14,6 +15,7 @@ import 'package:http/http.dart' as http;
 
 import 'api.dart';
 import 'model.dart';
+import 'report_body.dart' show problemReportMaxBytes;
 
 /// One rejected ping, as reported by the server (only the first 20 are listed).
 class PingRejection {
@@ -74,15 +76,17 @@ class HttpCmatClient implements CmatClient {
     String name, {
     String? driverKey,
     Object? body,
+    List<int>? bodyBytes,
     Duration? timeout,
     Set<int> ok = const {200},
   }) async {
     final req = http.Request(method, endpoint(name));
     req.headers['accept'] = 'application/json';
     if (driverKey != null) req.headers['x-driver-key'] = driverKey;
-    if (body != null) {
+    final bytes = bodyBytes ?? (body == null ? null : utf8.encode(jsonEncode(body)));
+    if (bytes != null) {
       req.headers['content-type'] = 'application/json';
-      req.bodyBytes = utf8.encode(jsonEncode(body));
+      req.bodyBytes = bytes;
     }
     http.Response res;
     try {
@@ -151,6 +155,19 @@ class HttpCmatClient implements CmatClient {
       rejections: rejections,
       sessionId: j['sessionId'] as String?,
     );
+  }
+
+  @override
+  Future<ProblemReportResult> reportProblem(String driverKey, String body) async {
+    final bytes = utf8.encode(body);
+    if (bytes.length > problemReportMaxBytes) {
+      // Refused here exactly as the server would refuse it, so nothing over the cap ever leaves the phone.
+      throw const CmatException('Report is larger than 5 MB.', status: 413);
+    }
+    final j = await _send('POST', 'problem-report', driverKey: driverKey, bodyBytes: bytes, ok: const {201});
+    final id = j['id'];
+    if (id is! String || id.isEmpty) throw const CmatException('server did not return a report id');
+    return ProblemReportResult(id: id, status: j['status'] as String?);
   }
 
   @override

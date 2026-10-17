@@ -53,8 +53,8 @@ personal, so it goes in an **untracked** file instead of the project:
 3. **Don't pick the team in Xcode's *Signing & Capabilities* tab.** That writes `DEVELOPMENT_TEAM = …` into
    `ios/Runner.xcodeproj/project.pbxproj`, and a value there overrides the xcconfig. If it happened, revert those lines
    (`git diff ios/Runner.xcodeproj/project.pbxproj`) and the tab will show the team from `Signing.xcconfig`.
-   - If Xcode says the bundle id `net.innovatexit.meshsonar` is unavailable (an id belongs to one team), you still
-     have to change it locally in the project (e.g. `net.innovatexit.meshsonar.<yourname>`) and not commit that; the
+   - If Xcode says the bundle id `com.meshsonar.app` is unavailable (an id belongs to one team), you still
+     have to change it locally in the project (e.g. `com.meshsonar.app.<yourname>`) and not commit that; the
      bundle id is set per target in `project.pbxproj`, so the xcconfig can't override it. To keep that local edit out
      of `git status`:
      ```sh
@@ -77,7 +77,7 @@ personal, so it goes in an **untracked** file instead of the project:
 ```sh
 flutter build ios --release
 xcrun devicectl device install app --device <device-identifier> build/ios/iphoneos/Runner.app
-xcrun devicectl device process launch --device <device-identifier> net.innovatexit.meshsonar   # optional
+xcrun devicectl device process launch --device <device-identifier> com.meshsonar.app   # optional
 ```
 
 On the first install, iOS refuses to open an app from an untrusted developer. Go to Settings → General → **VPN & Device
@@ -186,7 +186,7 @@ sleep 10 && import -window root shots/01-start.png
 ```
 
 - `MESHSONAR_THEME=dark|light` forces the theme on desktop builds (`lib/ui/theme.dart`).
-- Data goes to `$XDG_DATA_HOME/net.innovatexit.meshsonar/meshsonar/`.
+- Data goes to `$XDG_DATA_HOME/com.meshsonar.app/meshsonar/`.
 - Use the **Simulator** under Xvfb. There is no BlueZ/D-Bus in a bare container: a Bluetooth scan fails, and an
   earlier run logged an unhandled `SocketException` from the D-Bus client. There's no GeoClue either, so real-GPS
   drives can't start.

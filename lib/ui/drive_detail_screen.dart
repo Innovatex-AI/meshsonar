@@ -10,6 +10,7 @@ import 'drive_stats.dart';
 import 'onboarding/ui_prefs.dart';
 import 'report/drive_report_screen.dart';
 import 'ping_log_screen.dart';
+import 'report_problem_screen.dart';
 import 'sessions_screen.dart';
 import 'widgets.dart';
 
@@ -90,6 +91,20 @@ class _DriveDetailScreenState extends State<DriveDetailScreen> {
                         if (await runDriveAction(context, 'delete', summary)) nav.maybePop();
                       },
                 icon: const Icon(Icons.delete_outline),
+              ),
+              PopupMenuButton<void>(
+                key: const Key('detail-more'),
+                tooltip: 'More',
+                itemBuilder: (_) => [
+                  PopupMenuItem<void>(
+                    onTap: () => openReportProblem(context, driveId: ses.id),
+                    child: const ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.bug_report_outlined),
+                      title: Text('Report a problem with this drive'),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

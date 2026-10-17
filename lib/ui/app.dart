@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 
 import '../app/app_state.dart';
+import 'antenna_sheet.dart';
 import 'drive_screen.dart';
 import 'onboarding/first_run_gate.dart';
 import 'sessions_screen.dart';
@@ -31,6 +32,10 @@ class MeshSonarApp extends StatelessWidget {
     return AppScope(
       state: state,
       child: MaterialApp(
+        // Screens pushed for one AppState (a report form, its review) belong to it. Without this key, giving the app
+        // a new AppState (a restart in the same engine, as widget tests do) would keep the old screen stack and Navigator
+        // over the new state.
+        key: ObjectKey(state),
         title: 'MeshSonar',
         debugShowCheckedModeBanner: false,
         theme: meshSonarTheme(Brightness.light),
@@ -54,6 +59,7 @@ class _HomeShellState extends State<HomeShell> {
   late int _tab = widget.initialTab;
   AppState? _state;
   final _messengerKey = GlobalKey<ScaffoldMessengerState>();
+  bool _antennaSheetScheduled = false;
 
   @override
   void didChangeDependencies() {
@@ -69,7 +75,16 @@ class _HomeShellState extends State<HomeShell> {
 
   void _onState() {
     final s = _state;
-    if (s == null || s.pendingNotice == null || !mounted) return;
+    if (s == null || !mounted) return;
+    // A radio connected for the first time: ask about its antenna once the connect screen has closed.
+    if (s.antennaPromptPending && !_antennaSheetScheduled) {
+      _antennaSheetScheduled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _antennaSheetScheduled = false;
+        if (mounted && s.takeAntennaPrompt()) showAntennaSheet(context);
+      });
+    }
+    if (s.pendingNotice == null) return;
     final msg = s.takeNotice();
     if (msg == null) return;
     _messengerKey.currentState
