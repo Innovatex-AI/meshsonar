@@ -1,6 +1,6 @@
 // AC-5 / AC-6 (spec m1-app-0.4.0 §3, §8): client-side redaction and rounding, identical to CMAT §8.
 // test/fixtures/redaction-vectors.json is CMAT's canonical vectors file, copied unchanged from meshcore-insights
-// src/lib/platform/redaction-vectors.json (branch m1/problem-reports, 2026-10-17, md5 660d3fddcfc723ef50d1d3856d186f79).
+// src/lib/platform/redaction-vectors.json (branch m1/problem-reports; matches CMAT as of the Oct 17 L rule decisions, md5 dcaaa3f9de6b23c0ad0356bd115af706).
 // Re-copy it whenever CMAT changes it; both sides must give every output and count exactly.
 //
 // API under test (lib/core/redact.dart):
