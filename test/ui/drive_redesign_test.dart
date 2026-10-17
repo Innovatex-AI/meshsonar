@@ -122,27 +122,22 @@ void main() {
     await drain(tester);
   });
 
-  testWidgets('antenna toggle: internal by default, sets the type before a drive, locked while driving', (tester) async {
+  // 0.4.0 (spec m1-app-0.4.0 §4): the Internal/External toggle became the per-radio antenna chip.
+  testWidgets('antenna chip: shows the radio\'s antenna, the drive records it, locked while driving', (tester) async {
     useTallScreen(tester);
-    final h = Harness();
+    final h = Harness(); // the radio's saved antenna is inside car, 1.2 m (fakes.dart)
     await h.pumpApp(tester);
-    expect(h.state.settings.antenna.type, 'internal');
-    expect(find.byKey(const Key('antenna-unlocked')), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('antenna-external')));
-    await settle(tester);
-    expect(h.state.settings.antenna.type, 'external');
-    expect(h.settings.saved.antenna.type, 'external');
-
     await h.state.connect(h.bt.devices.first, RadioKind.bluetooth);
+    await settle(tester);
+    expect(find.text('Inside car · 1.2 m'), findsOneWidget);
+
     await tester.tap(find.byKey(const Key('start-stop')));
     await settle(tester);
     expect(h.state.driving, isTrue);
-    expect(h.store.sessionsById.values.single.antenna.type, 'external');
-    expect(find.byKey(const Key('antenna-locked')), findsOneWidget);
-    await tester.tap(find.byKey(const Key('antenna-internal')));
+    expect(h.store.sessionsById.values.single.antenna.type, 'internal');
+    await tester.tap(find.byKey(const Key('antenna-chip')));
     await settle(tester);
-    expect(h.state.settings.antenna.type, 'external', reason: 'locked while driving');
+    expect(find.byKey(const Key('antenna-sheet')), findsNothing, reason: 'locked while driving');
 
     await h.state.stopDrive();
     await settle(tester);
@@ -154,10 +149,9 @@ void main() {
       await settle(tester);
     }
     expect(find.byType(SnackBar), findsNothing);
-    expect(find.byKey(const Key('antenna-unlocked')), findsOneWidget);
-    await tester.tap(find.byKey(const Key('antenna-internal')));
-    await settle(tester);
-    expect(h.state.settings.antenna.type, 'internal');
+    await tester.tap(find.byKey(const Key('antenna-chip')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('antenna-sheet')), findsOneWidget, reason: 'editable again after the drive');
     await drain(tester);
   });
 

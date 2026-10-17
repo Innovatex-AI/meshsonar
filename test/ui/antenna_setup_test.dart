@@ -268,6 +268,7 @@ void main() {
 
     // Edit: tap the row, change the height.
     await tester.scrollUntilVisible(row, -150, scrollable: scroll);
+    await tester.pumpAndSettle();
     await tester.tap(row);
     await tester.pumpAndSettle();
     expect(sheet, findsOneWidget);
@@ -280,6 +281,7 @@ void main() {
     // Forget the connected radio: it prompts again on the next connect; the other radio is untouched.
     final forget = find.byKey(const ValueKey('antenna-forget-abcdef0123'));
     await tester.scrollUntilVisible(forget, 100, scrollable: scroll);
+    await tester.pumpAndSettle();
     await tester.tap(forget);
     await tester.pumpAndSettle();
     final confirm = find.byKey(const Key('antenna-forget-confirm'));

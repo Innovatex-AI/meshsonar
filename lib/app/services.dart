@@ -7,6 +7,7 @@ import 'dart:io';
 import '../core/api.dart';
 import '../core/model.dart';
 import '../core/repeater_directory.dart';
+import '../core/report_draft_store.dart';
 import '../radio/radio_api.dart';
 
 /// Local cache of CMAT's repeater list, so names show with no signal.
@@ -87,8 +88,11 @@ class AppServices {
   /// Opens a web page in the browser (url_launcher in the real app). Returns false if nothing could open it.
   final Future<bool> Function(Uri url) openUrl;
 
-  /// Name, version (from the build via package_info_plus) and platform.
+  /// Name, version and build (from the build via package_info_plus) and platform.
   final AppInfo appInfo;
+
+  /// Where the one unsent problem report is kept. Null = keep it in memory only.
+  final ReportDraftStore? reportDraftStore;
 
   /// Small JSON file for UI-only preferences (first-run intro seen, drive names). Null = keep them in memory only.
   final File? uiPrefsFile;
@@ -116,6 +120,7 @@ class AppServices {
     this.appInfo = const AppInfo(name: 'MeshSonar'),
     this.uiPrefsFile,
     this.directory,
+    this.reportDraftStore,
   });
 
   /// Public node directory (map.meshcore.io) for names/positions CMAT doesn't know. Null = not used (tests).

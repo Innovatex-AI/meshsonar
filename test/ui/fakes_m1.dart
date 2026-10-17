@@ -152,7 +152,9 @@ Future<void> openSettings(WidgetTester tester) async {
 /// Settings → About → "Report a problem".
 Future<void> openReportFromSettings(WidgetTester tester) async {
   await openSettings(tester);
-  await tester.scrollUntilVisible(find.byKey(const Key('report-problem')), 150, scrollable: settingsScrollable());
+  await tester.scrollUntilVisible(find.byKey(const Key('report-problem')), 150,
+      scrollable: settingsScrollable(), maxScrolls: 200);
+  await tester.pumpAndSettle();
   await tester.tap(find.byKey(const Key('report-problem')));
   await tester.pumpAndSettle();
 }

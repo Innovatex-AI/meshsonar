@@ -92,6 +92,7 @@ void main() {
       await h.pumpApp(tester);
       await openSettings(tester);
       await tester.scrollUntilVisible(find.byKey(const Key('about')), 150, scrollable: settingsScrollable());
+      await tester.pumpAndSettle();
       final row = find.byKey(const Key('report-problem'));
       expect(find.descendant(of: find.byKey(const Key('section-about-section')), matching: row), findsOneWidget);
       expect(find.descendant(of: row, matching: find.text('Report a problem')), findsOneWidget);

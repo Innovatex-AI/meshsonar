@@ -47,6 +47,22 @@ String friendlyError(Object e, {String action = 'That'}) {
   return firstLine.length > 160 ? '$action failed.' : '$action failed: $firstLine';
 }
 
+/// Shown when a problem report can't be sent for a reason signal will fix; the report stays saved on the phone.
+const String reportNotSentMessage = 'Not sent. Your report is saved on this phone; send it when you have signal.';
+
+/// Plain-language text for a problem report the server didn't take.
+String friendlyReportError(Object e) {
+  if (e is! CmatException) return friendlyError(e, action: 'Sending the report');
+  return switch (e.status) {
+    // 503 is the server's "problem reports are turned off"; other 5xx are outages.
+    404 || 503 => 'This server doesn\'t accept problem reports.',
+    401 || 403 || 429 => friendlyError(e),
+    413 => 'The report is too large.',
+    null || >= 500 => reportNotSentMessage,
+    _ => 'The server didn\'t take the report: ${e.message}',
+  };
+}
+
 /// Plain-language text for a sync error string coming back in a SyncReport.
 String friendlySyncError(String error) {
   final l = error.toLowerCase();

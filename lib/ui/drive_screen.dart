@@ -1,6 +1,6 @@
 // Home screen, built for one hand in a moving car. The live coverage map dominates, with the HEARD box floated on
 // it (who's in range right now, held for a few pings, then greyed) and a button to go full screen. Below the map:
-// the status line with what the next auto-ping is waiting for, a compact stats strip, the antenna toggle and the
+// the status line with what the next auto-ping is waiting for, a compact stats strip, the antenna chip and the
 // LOG button, the "View drive report" card after a drive, and the big Start/Stop and Ping now buttons in thumb
 // reach. The screen stays awake while driving.
 //
@@ -104,7 +104,11 @@ class _DriveScreenState extends State<DriveScreen> {
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: Gap.m),
-            child: ConnectionChip(state: s, onPressed: () => openConnect(context)),
+            // Leaves room for the title on narrow phones and with large text.
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.65),
+              child: ConnectionChip(state: s, onPressed: () => openConnect(context)),
+            ),
           ),
         ],
       ),
@@ -145,7 +149,7 @@ class _DriveScreenState extends State<DriveScreen> {
                 child: Row(
                   children: [
                     Expanded(
-                      child: Align(alignment: Alignment.centerLeft, child: AntennaToggle(state: s)),
+                      child: Align(alignment: Alignment.centerLeft, child: AntennaChip(state: s)),
                     ),
                     const SizedBox(width: Gap.s),
                     LogButton(state: s),
@@ -302,12 +306,13 @@ class ConnectionChip extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(s.connectionLabel, style: t.textTheme.labelLarge?.copyWith(height: 1.1)),
+                Text(s.connectionLabel,
+                    maxLines: 1, overflow: TextOverflow.ellipsis, style: t.textTheme.labelLarge?.copyWith(height: 1.1)),
                 const SizedBox(height: 2),
                 const SimulatedTag(key: Key('chip-simulated'), dense: true),
               ],
             )
-          : Text(s.connectionLabel),
+          : Text(s.connectionLabel, maxLines: 1, overflow: TextOverflow.ellipsis),
       side: BorderSide(color: dot.withValues(alpha: 0.6)),
       backgroundColor: dot.withValues(alpha: 0.10),
     );

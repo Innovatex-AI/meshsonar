@@ -3,6 +3,7 @@
 // so it can be built and tested against fakes.
 import 'dart:io';
 
+import 'antenna_profile.dart';
 import 'model.dart';
 
 /// Per-session numbers for lists.
@@ -101,6 +102,16 @@ abstract class CmatClient {
   Future<({DriverKeyStatus status, String display})> status(String driverKey);
   Future<UploadResult> upload(String driverKey, DriveBatch batch);
   Future<List<RepeaterRef>> repeaters(String driverKey);
+
+  /// Files a problem report. [body] is the exact JSON text the person reviewed; it is sent byte for byte.
+  Future<ProblemReportResult> reportProblem(String driverKey, String body);
+}
+
+/// The server's answer to a filed problem report.
+class ProblemReportResult {
+  final String id;
+  final String? status;
+  const ProblemReportResult({required this.id, this.status});
 }
 
 class SyncReport {
@@ -131,7 +142,14 @@ class Settings {
 
   /// Skip an auto-ping if we haven't moved this far since the last one.
   final int minDistanceM;
+
+  /// The one antenna setting of MeshSonar 0.3.x. Kept in the file, read-only, to prefill each radio's first
+  /// [antennaProfiles] entry; drives no longer use it.
   final Antenna antenna;
+
+  /// How each radio's antenna is set up, keyed by the companion's public key (lower-case hex). Drives use the
+  /// connected radio's profile.
+  final Map<String, AntennaProfile> antennaProfiles;
 
   /// Upload the drive when it ends (if the key is approved).
   final bool autoSync;
@@ -157,6 +175,7 @@ class Settings {
     this.intervalSec = 30,
     this.minDistanceM = 100,
     this.antenna = const Antenna(type: 'internal'),
+    this.antennaProfiles = const {},
     this.autoSync = true,
     this.syncDuringDrive = true,
     this.syncEveryMin = 5,
@@ -171,7 +190,7 @@ class Settings {
     String? channel,
     int? intervalSec,
     int? minDistanceM,
-    Antenna? antenna,
+    Map<String, AntennaProfile>? antennaProfiles,
     bool? autoSync,
     bool? syncDuringDrive,
     int? syncEveryMin,
@@ -186,7 +205,8 @@ class Settings {
         channel: channel ?? this.channel,
         intervalSec: intervalSec ?? this.intervalSec,
         minDistanceM: minDistanceM ?? this.minDistanceM,
-        antenna: antenna ?? this.antenna,
+        antenna: antenna,
+        antennaProfiles: antennaProfiles ?? this.antennaProfiles,
         autoSync: autoSync ?? this.autoSync,
         syncDuringDrive: syncDuringDrive ?? this.syncDuringDrive,
         syncEveryMin: syncEveryMin ?? this.syncEveryMin,
@@ -202,6 +222,7 @@ class Settings {
         'interval_sec': intervalSec,
         'min_distance_m': minDistanceM,
         'antenna': antenna.toJson(),
+        'antenna_profiles': {for (final e in antennaProfiles.entries) e.key: e.value.toJson()},
         'auto_sync': autoSync,
         'sync_during_drive': syncDuringDrive,
         'sync_every_min': syncEveryMin,
@@ -217,6 +238,7 @@ class Settings {
         intervalSec: (_int(j['interval_sec']) ?? 30).clamp(minIntervalSec, maxIntervalSec),
         minDistanceM: (_int(j['min_distance_m']) ?? 100).clamp(minDistance, maxDistance),
         antenna: _antennaFrom(j['antenna']),
+        antennaProfiles: _profilesFrom(j['antenna_profiles']),
         autoSync: j['auto_sync'] is bool ? j['auto_sync'] as bool : true,
         syncDuringDrive: j['sync_during_drive'] is bool ? j['sync_during_drive'] as bool : true,
         syncEveryMin: (_int(j['sync_every_min']) ?? 5).clamp(minSyncEveryMin, maxSyncEveryMin),
@@ -239,6 +261,15 @@ class Settings {
     }
     final t = a.type == 'external' ? 'external' : 'internal';
     return Antenna(type: t, gainDbi: a.gainDbi, heightM: a.heightM);
+  }
+
+  /// Saved radios with lower-case keys; a profile that doesn't parse is dropped on its own.
+  static Map<String, AntennaProfile> _profilesFrom(Object? raw) {
+    if (raw is! Map) return const {};
+    return {
+      for (final e in raw.entries)
+        if ((e.key, AntennaProfile.tryParse(e.value)) case (final String key, final AntennaProfile p)) key.toLowerCase(): p,
+    };
   }
 }
 

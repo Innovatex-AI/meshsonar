@@ -3,13 +3,17 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 import '../core/model.dart';
 
-/// App name/version/platform sent with every upload and export and shown in About. If the platform can't report a
-/// version, it's left null (unknown) rather than guessed.
+/// App name/version/build/platform, sent with uploads, exports and problem reports and shown in About. Anything the
+/// platform can't report is left null (unknown) rather than guessed.
 Future<AppInfo> loadAppInfo({required String platform, Future<PackageInfo> Function()? read}) async {
   String? version;
+  String? build;
   try {
     final info = await (read ?? PackageInfo.fromPlatform)();
-    version = info.version.trim().isEmpty ? null : info.version.trim();
+    version = _blankToNull(info.version);
+    build = _blankToNull(info.buildNumber);
   } catch (_) {}
-  return AppInfo(name: 'MeshSonar', version: version, platform: platform);
+  return AppInfo(name: 'MeshSonar', version: version, build: build, platform: platform);
 }
+
+String? _blankToNull(String s) => s.trim().isEmpty ? null : s.trim();

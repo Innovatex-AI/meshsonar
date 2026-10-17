@@ -207,14 +207,24 @@ void main() {
     expect(h.settings.saved.intervalSec, 45);
     await slide('min-distance-slider', 8); // … 200, 250
     expect(h.settings.saved.minDistanceM, 250);
-    await tester.scrollUntilVisible(find.byKey(const Key('settings-antenna-external')), 100, scrollable: settingsScroll);
-    await tester.tap(find.byKey(const Key('settings-antenna-external')));
+    // 0.4.0: the antenna is set per radio (spec m1-app-0.4.0 §4), edited from its row in Settings → Antenna.
+    await tester.scrollUntilVisible(find.byKey(const Key('antenna-profile-abcdef0123')), 100, scrollable: settingsScroll);
+    await tester.tap(find.byKey(const Key('antenna-profile-abcdef0123')));
     await tester.pumpAndSettle();
-    await edit('antenna-gain', '5.8');
-    await edit('antenna-height', '1.6');
-    expect(h.settings.saved.antenna.type, 'external');
-    expect(h.settings.saved.antenna.gainDbi, 5.8);
-    expect(h.settings.saved.antenna.heightM, 1.6);
+    await tester.tap(find.byKey(const Key('mount-roofMagMount')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('antenna-gain-unknown'))); // the seeded profile's gain is "Don't know"
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('antenna-gain-field')), '5.8');
+    await tester.enterText(find.byKey(const Key('antenna-height-field')), '1.6');
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('antenna-save')));
+    await tester.tap(find.byKey(const Key('antenna-save')));
+    await tester.pumpAndSettle();
+    final antenna = h.settings.saved.antennaProfiles['abcdef0123']!.toAntenna();
+    expect(antenna.type, 'external');
+    expect(antenna.gainDbi, 5.8);
+    expect(antenna.heightM, 1.6);
 
     await tester.scrollUntilVisible(find.byKey(const Key('auto-sync')), 100, scrollable: settingsScroll);
     await tester.tap(find.byKey(const Key('auto-sync')));
@@ -227,7 +237,7 @@ void main() {
     h2.settings.saved = h2Settings;
     await h2.state.init();
     expect(h2.state.settings.channel, '#cmh-drive');
-    expect(h2.state.settings.antenna.gainDbi, 5.8);
+    expect(h2.state.settings.antennaProfiles['abcdef0123']!.gainDbi, 5.8);
     expect(h2.state.settings.autoSync, isFalse);
   });
 

@@ -743,14 +743,18 @@ class SimulatedTag extends StatelessWidget {
             children: [
               Icon(Icons.science_rounded, size: dense ? 10 : 13, color: mc.onBeacon),
               SizedBox(width: dense ? 2 : 4),
-              Text(
-                'SIMULATED GPS & RADIO',
-                style: t.textTheme.labelSmall?.copyWith(
-                  color: mc.onBeacon,
-                  fontSize: dense ? 9 : 11,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.6,
-                  height: 1.1,
+              Flexible(
+                child: Text(
+                  'SIMULATED GPS & RADIO',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: t.textTheme.labelSmall?.copyWith(
+                    color: mc.onBeacon,
+                    fontSize: dense ? 9 : 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.6,
+                    height: 1.1,
+                  ),
                 ),
               ),
             ],

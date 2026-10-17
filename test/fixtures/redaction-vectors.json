@@ -1,5 +1,6 @@
 {
   "about": "CMAT problem reports: canonical redaction and rounding vectors (docs/specs/m1-problem-reports.md section 8). Owned by Q. MeshSonar copies this file unchanged; both sides must produce every output and count exactly. Rules apply in order R1..R6 then C1 to each string; counts are the number of replacements per count key (R4 and R5 both count as mqtt).",
+  "idempotence": "Applying the table to any vector's output must return the same text with every count 0 (L, Oct 17).",
   "countKeys": [
     "driverKey",
     "jwt",
@@ -37,7 +38,7 @@
       "id": "R4",
       "name": "URL credentials",
       "count": "mqtt",
-      "pattern": "\\b((?:mqtts?|wss?|https?|tcp|ssl):\\/\\/[^\\s:\\/@]+):[^\\s@\\/]+@",
+      "pattern": "\\b((?:mqtts?|wss?|https?|tcp|ssl):\\/\\/[^\\s:\\/@]+):(?!\\[redacted\\]@[^\\s\\/@]*(?:[\\s\\/]|$))[^\\s\\/]+@",
       "flags": "gi",
       "replace": "$1:[redacted]@"
     },
@@ -45,7 +46,7 @@
       "id": "R5",
       "name": "observer CLI password",
       "count": "mqtt",
-      "pattern": "\\b(set\\s+mqtt\\d*\\.(?:password|pass|token))\\s+\\S+",
+      "pattern": "\\b(set\\s+mqtt\\d*\\.(?:password|pass|token))\\s+(?!\\[redacted\\](?!\\S))\\S+",
       "flags": "gi",
       "replace": "$1 [redacted]"
     },
@@ -61,7 +62,7 @@
       "id": "C1",
       "name": "coordinate in text",
       "count": "coords",
-      "pattern": "(-?)\\b(\\d{1,3}\\.\\d{4,})\\b",
+      "pattern": "(?<![\\d.])(-?)\\b(\\d{1,3}\\.\\d{4,})\\b(?!\\d|\\.\\d)",
       "flags": "g",
       "replace": "sign + value rounded to 3 decimals (sign x round(|v| x 1000) / 1000, half away from zero), printed with exactly 3 decimals; only when the value is <= 180"
     },
@@ -71,7 +72,7 @@
       "count": "coords",
       "pattern": null,
       "flags": null,
-      "replace": "keys lat, lon, lng, latitude, longitude with a number value in device/radio: number rounded to 3 decimals"
+      "replace": "keys lat, lon, lng, latitude, longitude with a number value in device/radio: number rounded to 3 decimals; counted only when the value changed"
     }
   ],
   "vectors": [
@@ -398,6 +399,123 @@
         "secret": 0,
         "mqtt": 0,
         "coords": 0
+      }
+    },
+    {
+      "name": "R4 userinfo up to the last @ before the host",
+      "input": "broker mqtt://u:p@ss@host:1883/meshcore",
+      "output": "broker mqtt://u:[redacted]@host:1883/meshcore",
+      "counts": {
+        "driverKey": 0,
+        "jwt": 0,
+        "bearer": 0,
+        "secret": 0,
+        "mqtt": 1,
+        "coords": 0
+      }
+    },
+    {
+      "name": "R4 app-pre-redacted URL is not matched again",
+      "input": "connect mqtts://observer:[redacted]@mqtt.example.org:8883/topic",
+      "output": "connect mqtts://observer:[redacted]@mqtt.example.org:8883/topic",
+      "counts": {
+        "driverKey": 0,
+        "jwt": 0,
+        "bearer": 0,
+        "secret": 0,
+        "mqtt": 0,
+        "coords": 0
+      }
+    },
+    {
+      "name": "R5 app-pre-redacted CLI password is not matched again",
+      "input": "> set mqtt.password [redacted]\n> set mqtt2.token [redacted]",
+      "output": "> set mqtt.password [redacted]\n> set mqtt2.token [redacted]",
+      "counts": {
+        "driverKey": 0,
+        "jwt": 0,
+        "bearer": 0,
+        "secret": 0,
+        "mqtt": 0,
+        "coords": 0
+      }
+    },
+    {
+      "name": "C1 chained dotted value is untouched",
+      "input": "build 10.12345.6789 and 40.1234.5 stay",
+      "output": "build 10.12345.6789 and 40.1234.5 stay",
+      "counts": {
+        "driverKey": 0,
+        "jwt": 0,
+        "bearer": 0,
+        "secret": 0,
+        "mqtt": 0,
+        "coords": 0
+      }
+    },
+    {
+      "name": "C1 version strings are untouched",
+      "input": "MeshSonar v1.2.34567, firmware 1.12.34567-rc1, ip 10.0.12345.1",
+      "output": "MeshSonar v1.2.34567, firmware 1.12.34567-rc1, ip 10.0.12345.1",
+      "counts": {
+        "driverKey": 0,
+        "jwt": 0,
+        "bearer": 0,
+        "secret": 0,
+        "mqtt": 0,
+        "coords": 0
+      }
+    },
+    {
+      "name": "C1 a leading dot blocks rounding; a sentence-ending period does not",
+      "input": ".40.12345 and 40.12345. stay",
+      "output": ".40.12345 and 40.123. stay",
+      "counts": {
+        "driverKey": 0,
+        "jwt": 0,
+        "bearer": 0,
+        "secret": 0,
+        "mqtt": 0,
+        "coords": 1
+      }
+    },
+    {
+      "name": "already redacted by the app: every rule counts 0",
+      "input": "x-driver-key: [redacted:driver-key] [redacted:jwt] Bearer [redacted] mqtt://u:[redacted]@h set mqtt.pass [redacted] token=[redacted] at 40.128,-82.978",
+      "output": "x-driver-key: [redacted:driver-key] [redacted:jwt] Bearer [redacted] mqtt://u:[redacted]@h set mqtt.pass [redacted] token=[redacted] at 40.128,-82.978",
+      "counts": {
+        "driverKey": 0,
+        "jwt": 0,
+        "bearer": 0,
+        "secret": 0,
+        "mqtt": 0,
+        "coords": 0
+      }
+    },
+    {
+      "name": "C1 coordinate before a sentence-ending period is rounded",
+      "input": "fix at -82.977705.",
+      "output": "fix at -82.978.",
+      "counts": {
+        "driverKey": 0,
+        "jwt": 0,
+        "bearer": 0,
+        "secret": 0,
+        "mqtt": 0,
+        "coords": 1
+      }
+    },
+    {
+      "name": "C1 coordinate pair before a period: both rounded",
+      "input": "40.128091,-82.977705.",
+      "output": "40.128,-82.978.",
+      "counts": {
+        "driverKey": 0,
+        "jwt": 0,
+        "bearer": 0,
+        "secret": 0,
+        "mqtt": 0,
+        "coords": 2
       }
     }
   ]

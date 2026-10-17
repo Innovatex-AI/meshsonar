@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 
 import '../app/app_state.dart';
+import 'antenna_sheet.dart';
 import 'drive_screen.dart';
 import 'onboarding/first_run_gate.dart';
 import 'sessions_screen.dart';
@@ -22,21 +23,51 @@ class AppScope extends InheritedNotifier<AppState> {
       (context.getElementForInheritedWidgetOfExactType<AppScope>()!.widget as AppScope).notifier!;
 }
 
-class MeshSonarApp extends StatelessWidget {
+/// Lets any screen, including ones opened over the tabs, send the person to a place in the tab shell.
+class ShellNavigation {
+  VoidCallback? _showDriverKey;
+
+  /// Closes the screens open over the tabs and shows Settings at the driver key.
+  void showDriverKey() => _showDriverKey?.call();
+}
+
+/// Gives every screen (and every pushed route) the app's [ShellNavigation].
+class ShellScope extends InheritedWidget {
+  final ShellNavigation navigation;
+  const ShellScope({super.key, required this.navigation, required super.child});
+
+  static ShellNavigation of(BuildContext context) => context.getInheritedWidgetOfExactType<ShellScope>()!.navigation;
+
+  @override
+  bool updateShouldNotify(ShellScope oldWidget) => !identical(navigation, oldWidget.navigation);
+}
+
+class MeshSonarApp extends StatefulWidget {
   final AppState state;
   const MeshSonarApp({super.key, required this.state});
+  @override
+  State<MeshSonarApp> createState() => _MeshSonarAppState();
+}
+
+class _MeshSonarAppState extends State<MeshSonarApp> {
+  final _navigation = ShellNavigation();
 
   @override
   Widget build(BuildContext context) {
     return AppScope(
-      state: state,
-      child: MaterialApp(
-        title: 'MeshSonar',
-        debugShowCheckedModeBanner: false,
-        theme: meshSonarTheme(Brightness.light),
-        darkTheme: meshSonarTheme(Brightness.dark),
-        themeMode: meshSonarThemeMode(),
-        home: FirstRunGate(builder: (tab) => HomeShell(key: ValueKey('shell-$tab'), initialTab: tab)),
+      state: widget.state,
+      child: ShellScope(
+        navigation: _navigation,
+        child: MaterialApp(
+          // A different AppState is a different app (e.g. after a restart): it starts on a fresh screen stack.
+          key: ObjectKey(widget.state),
+          title: 'MeshSonar',
+          debugShowCheckedModeBanner: false,
+          theme: meshSonarTheme(Brightness.light),
+          darkTheme: meshSonarTheme(Brightness.dark),
+          themeMode: meshSonarThemeMode(),
+          home: FirstRunGate(builder: (tab) => HomeShell(key: ValueKey('shell-$tab'), initialTab: tab)),
+        ),
       ),
     );
   }
@@ -53,7 +84,10 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   late int _tab = widget.initialTab;
   AppState? _state;
+  ShellNavigation? _navigation;
   final _messengerKey = GlobalKey<ScaffoldMessengerState>();
+  final _settingsScroll = ScrollController();
+  bool _antennaSheetScheduled = false;
 
   @override
   void didChangeDependencies() {
@@ -65,11 +99,25 @@ class _HomeShellState extends State<HomeShell> {
       s.addListener(_onState);
       WidgetsBinding.instance.addPostFrameCallback((_) => _onState());
     }
+    final nav = ShellScope.of(context);
+    if (!identical(nav, _navigation)) {
+      _navigation?._showDriverKey = null;
+      _navigation = nav.._showDriverKey = _showDriverKey;
+    }
   }
 
   void _onState() {
     final s = _state;
-    if (s == null || s.pendingNotice == null || !mounted) return;
+    if (s == null || !mounted) return;
+    // A radio connected for the first time: ask about its antenna once the connect screen has closed.
+    if (s.antennaPromptPending && !_antennaSheetScheduled) {
+      _antennaSheetScheduled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _antennaSheetScheduled = false;
+        if (mounted && s.takeAntennaPrompt()) showAntennaSheet(context);
+      });
+    }
+    if (s.pendingNotice == null) return;
     final msg = s.takeNotice();
     if (msg == null) return;
     _messengerKey.currentState
@@ -77,15 +125,30 @@ class _HomeShellState extends State<HomeShell> {
       ..showSnackBar(SnackBar(content: Text(msg, style: const TextStyle(fontSize: 16)), duration: const Duration(seconds: 6)));
   }
 
+  void _showDriverKey() {
+    if (!mounted) return;
+    Navigator.of(context).popUntil((r) => r.isFirst);
+    setState(() => _tab = 2);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // The driver key section is the first thing in Settings.
+      if (_settingsScroll.hasClients) {
+        _settingsScroll.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+      }
+    });
+  }
+
   @override
   void dispose() {
     _state?.removeListener(_onState);
+    // A newer shell may have taken over the link already (FirstRunGate swaps shells).
+    if (_navigation?._showDriverKey == _showDriverKey) _navigation?._showDriverKey = null;
+    _settingsScroll.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    const pages = [DriveScreen(), SessionsScreen(), SettingsScreen()];
+    final pages = [const DriveScreen(), const SessionsScreen(), SettingsScreen(scrollController: _settingsScroll)];
     return ScaffoldMessenger(
       key: _messengerKey,
       child: Scaffold(

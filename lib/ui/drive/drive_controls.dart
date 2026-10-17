@@ -1,5 +1,5 @@
 // Drive-screen parts below (and on) the map: the stats strip, the status line with the next-ping indicator, the
-// antenna toggle, the log button, the drive-report card, the Start/Stop + Ping now buttons, the empty-map hint and
+// antenna chip, the log button, the drive-report card, the Start/Stop + Ping now buttons, the empty-map hint and
 // the ping result flash. Shared by the Drive screen and the full-screen map.
 import 'dart:async';
 
@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import '../../app/app_state.dart';
 import '../../core/model.dart';
 import '../../radio/radio_api.dart';
+import '../antenna_sheet.dart';
 import '../connect_screen.dart';
 import '../ping_log_screen.dart' show openPingLog;
 import '../report/drive_report_screen.dart';
@@ -247,63 +248,37 @@ class LiveDot extends StatelessWidget {
 
 // ------------------------------------------------------------------------------------------------ antenna + log
 
-/// 'internal' unless the setting says 'external' (older settings may say "stock" etc.).
-String antennaChoice(String? type) => type == 'external' ? 'external' : 'internal';
-
-/// Internal / External. Changeable before a drive; while driving it's locked and shows what this drive records.
-class AntennaToggle extends StatelessWidget {
+/// The connected radio's antenna ("Roof mag-mount · 5.8 dBi · 1.8 m"); tap to change it before a drive, locked while
+/// driving. A radio that hasn't been set up shows "Set up this radio's antenna" instead, and Start drive waits for it.
+class AntennaChip extends StatelessWidget {
   final AppState state;
-  const AntennaToggle({super.key = const Key('antenna-toggle'), required this.state});
+  const AntennaChip({super.key, required this.state});
 
   @override
   Widget build(BuildContext context) {
     final s = state;
-    final t = Theme.of(context);
+    if (!s.connected) return const SizedBox.shrink();
+    final profile = s.antennaProfile;
+    if (profile == null) {
+      return TextButton.icon(
+        key: const Key('antenna-setup'),
+        onPressed: () => showAntennaSheet(context),
+        icon: const Icon(Icons.warning_amber_rounded),
+        label: const Text('Set up this radio\'s antenna'),
+      );
+    }
     final locked = s.driving;
-    final value = antennaChoice(locked ? (s.currentSession?.antenna.type ?? s.settings.antenna.type) : s.settings.antenna.type);
-    final seg = SegmentedButton<String>(
-      showSelectedIcon: false,
-      style: ButtonStyle(
-        visualDensity: VisualDensity.compact,
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 10)),
-        textStyle: WidgetStatePropertyAll(t.textTheme.labelLarge),
-        shape: WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: BorderRadius.circular(Corners.small))),
-        backgroundColor: WidgetStateProperty.resolveWith(
-          (st) => st.contains(WidgetState.selected)
-              ? (locked ? t.colorScheme.surfaceContainerHighest : t.colorScheme.primaryContainer)
-              : null,
-        ),
-        foregroundColor: WidgetStateProperty.resolveWith(
-          (st) => st.contains(WidgetState.selected)
-              ? (locked ? t.colorScheme.onSurface : t.colorScheme.onPrimaryContainer)
-              : t.colorScheme.onSurfaceVariant,
-        ),
+    final t = Theme.of(context);
+    return ActionChip(
+      key: const Key('antenna-chip'),
+      tooltip: locked ? 'Antenna, locked while driving' : 'Change this radio\'s antenna',
+      avatar: Icon(
+        locked ? Icons.lock_rounded : Icons.settings_input_antenna_rounded,
+        size: 18,
+        color: t.colorScheme.onSurfaceVariant,
       ),
-      segments: const [
-        ButtonSegment(value: 'internal', label: Text('Internal', key: Key('antenna-internal'))),
-        ButtonSegment(value: 'external', label: Text('External', key: Key('antenna-external'))),
-      ],
-      selected: {value},
-      onSelectionChanged: locked ? null : (v) => s.setAntennaType(v.first),
-    );
-    return Semantics(
-      label: locked ? 'Antenna $value, locked while driving' : 'Antenna type',
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            locked ? Icons.lock_rounded : Icons.settings_input_antenna_rounded,
-            key: Key(locked ? 'antenna-locked' : 'antenna-unlocked'),
-            size: 18,
-            color: t.colorScheme.onSurfaceVariant,
-          ),
-          const SizedBox(width: 4),
-          Text('Antenna', style: t.textTheme.labelMedium),
-          const SizedBox(width: Gap.s),
-          Flexible(child: SizedBox(height: 40, child: seg)),
-        ],
-      ),
+      label: Text(profile.summary, maxLines: 1, overflow: TextOverflow.ellipsis),
+      onPressed: locked ? null : () => showAntennaSheet(context),
     );
   }
 }
@@ -425,7 +400,8 @@ class DriveActionButtons extends StatelessWidget {
                   foregroundColor: driving ? t.colorScheme.onError : null,
                   textStyle: TextStyle(fontFamily: 'Barlow', fontSize: compact ? 19 : 22, fontWeight: FontWeight.w700),
                 ),
-                onPressed: s.busy
+                // A radio not set up yet waits for its antenna (the hint above opens the setup).
+                onPressed: s.busy || (!driving && s.needsAntennaSetup)
                     ? null
                     : () {
                         if (driving) {

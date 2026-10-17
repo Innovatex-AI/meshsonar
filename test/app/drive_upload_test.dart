@@ -220,6 +220,9 @@ class RecordingClient implements CmatClient {
 
   @override
   Future<List<RepeaterRef>> repeaters(String driverKey) async => const [];
+
+  @override
+  Future<ProblemReportResult> reportProblem(String driverKey, String body) => throw UnimplementedError();
 }
 
 /// Harness whose sync service is the real DefaultSyncService over the fake store.

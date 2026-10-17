@@ -111,21 +111,13 @@ void main() {
     expect(valueText(tester, 'min-distance'), '100 m');
   });
 
-  testWidgets('antenna: internal by default, external keeps gain and height', (tester) async {
-    final h = await openSettings(tester,
+  // 0.4.0 (spec m1-app-0.4.0 §4): the global antenna type toggle is gone; each radio has its own row.
+  testWidgets('antenna: no global type toggle; each saved radio shows its mount, gain and height', (tester) async {
+    await openSettings(tester,
         settings: const Settings(antenna: Antenna(type: 'internal', gainDbi: 3, heightM: 1.5)));
-    await show(tester, 'antenna-type');
-    final seg = tester.widget<SegmentedButton<String>>(find.byKey(const Key('antenna-type')));
-    expect(seg.selected, {'internal'});
-    await tester.tap(find.byKey(const Key('settings-antenna-external')));
-    await tester.pumpAndSettle();
-    expect(h.settings.saved.antenna.type, 'external');
-    expect(h.settings.saved.antenna.gainDbi, 3);
-    expect(h.settings.saved.antenna.heightM, 1.5);
-    expect(find.text('3 dBi'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('settings-antenna-internal')));
-    await tester.pumpAndSettle();
-    expect(h.settings.saved.antenna.type, 'internal');
+    await show(tester, 'antenna-profile-abcdef0123');
+    expect(find.byKey(const Key('antenna-type')), findsNothing);
+    expect(find.text('Inside car · 1.2 m'), findsOneWidget);
   });
 
   testWidgets('upload toggles: during-drive needs end-of-drive; the period slider follows', (tester) async {

@@ -14,8 +14,13 @@ const String driveFormat = 'meshsonar.drive.v1';
 class AppInfo {
   final String? name;
   final String? version;
+
+  /// Build number (pubspec `+N`). Sent with problem reports only: it is not part of the Drive Format v1 `app` object.
+  final String? build;
   final String? platform;
-  const AppInfo({this.name, this.version, this.platform});
+  const AppInfo({this.name, this.version, this.build, this.platform});
+
+  /// The Drive Format v1 `app` object (uploads and exports).
   Map<String, dynamic> toJson() => {'name': name, 'version': version, 'platform': platform};
   factory AppInfo.fromJson(Map<String, dynamic> j) =>
       AppInfo(name: j['name'] as String?, version: j['version'] as String?, platform: j['platform'] as String?);

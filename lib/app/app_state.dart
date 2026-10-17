@@ -5,20 +5,34 @@
 // happens to it. If a write fails, the ping stays in memory and is retried on the next ping and at Stop,
 // and the user is told. Sync failures never touch stored pings.
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io' show Platform;
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
+import '../core/antenna_profile.dart';
 import '../core/api.dart';
+import '../core/diagnostics.dart';
 import '../core/drive_store.dart' show closeOrphanedSessions;
 import '../core/heard.dart';
 import '../core/model.dart';
 import '../core/repeater_directory.dart';
+import '../core/report_body.dart';
 import '../radio/radio_api.dart';
 import 'messages.dart';
 import 'services.dart';
 
 enum RadioKind { none, bluetooth, simulator }
+
+/// What became of a problem report the person sent.
+class ProblemReportOutcome {
+  final bool sent;
+
+  /// Plain-language result to show.
+  final String message;
+  const ProblemReportOutcome({required this.sent, required this.message});
+}
 
 class AppState extends ChangeNotifier {
   final AppServices services;
@@ -71,8 +85,16 @@ class AppState extends ChangeNotifier {
 
   void _say(String msg) {
     _notice = msg;
+    diagnostics.add(msg);
     notifyListeners();
   }
+
+  /// What happened in the app recently (memory only), for problem reports.
+  late final Diagnostics diagnostics = Diagnostics(clock: services.clock);
+
+  /// Logs a caught error: its type and message, never a stack trace.
+  void _logError(String what, Object e) =>
+      diagnostics.add('$what: ${e is CmatException ? 'HTTP ${e.status ?? 'none'}, ${e.message}' : '${e.runtimeType}: $e'}');
 
   // ---------- radio ----------
   RadioKind _radioKind = RadioKind.none;
@@ -123,6 +145,10 @@ class AppState extends ChangeNotifier {
       _link = link;
       _selfInfo = info;
       _connecting = false;
+      // A radio used for the first time is asked once how its antenna is set up (the UI opens the sheet).
+      _antennaPrompt = antennaProfile == null;
+      diagnostics.add('Connected to ${kind == RadioKind.simulator ? 'the simulator' : 'radio "${info.name}"'}, '
+          'firmware ${info.firmware ?? 'unknown'}');
       notifyListeners();
       return true;
     } catch (e) {
@@ -137,6 +163,7 @@ class AppState extends ChangeNotifier {
       _connectError = e is TimeoutException
           ? 'The radio didn\'t answer. Make sure it\'s on, nearby, and not connected to another app.'
           : 'Couldn\'t connect to ${device.name}. ${friendlyError(e, action: 'Connecting')}';
+      _logError('Connecting failed', e);
       notifyListeners();
       return false;
     }
@@ -163,7 +190,9 @@ class AppState extends ChangeNotifier {
     _selfInfo = null;
     _device = null;
     _radioKind = RadioKind.none;
+    _antennaPrompt = false;
     if (link != null) {
+      diagnostics.add('Radio disconnected');
       try {
         await link.close();
       } catch (_) {}
@@ -211,11 +240,63 @@ class AppState extends ChangeNotifier {
     heard.relookup(_lookup);
   }
 
-  /// Antenna type for the next drive ("internal" or "external"); saved to settings.
-  Future<void> setAntennaType(String type) async {
-    final t = type == 'external' ? 'external' : 'internal';
+  // ---------- antenna, per radio ----------
+  String? get _radioKey => _selfInfo?.publicKey.toLowerCase();
+
+  /// How the connected radio's antenna is set up; null when no radio is connected or it was never set up.
+  AntennaProfile? get antennaProfile {
+    final k = _radioKey;
+    return k == null ? null : _settings.antennaProfiles[k];
+  }
+
+  /// A radio is connected whose antenna hasn't been set up yet; Start drive waits for it.
+  bool get needsAntennaSetup => connected && antennaProfile == null;
+
+  bool _antennaPrompt = false;
+
+  /// A radio without an antenna profile just connected and the setup sheet should open (once).
+  bool get antennaPromptPending => _antennaPrompt;
+
+  /// True once per connect that needs the antenna setup; the caller opens the sheet.
+  bool takeAntennaPrompt() {
+    final p = _antennaPrompt && needsAntennaSetup;
+    _antennaPrompt = false;
+    return p;
+  }
+
+  /// The single antenna setting from before 0.4.0, if the person ever changed it from the default; it prefills a
+  /// radio's first setup.
+  Antenna? get legacyAntenna {
     final a = _settings.antenna;
-    await updateSettings(_settings.copyWith(antenna: Antenna(type: t, gainDbi: a.gainDbi, heightM: a.heightM)));
+    return (a.type == 'external' || a.gainDbi != null || a.heightM != null) ? a : null;
+  }
+
+  /// Saves [profile] for [radioKey] (default: the connected radio). Used by the next drive with that radio.
+  Future<void> saveAntennaProfile(AntennaProfile profile, {String? radioKey}) async {
+    final k = (radioKey ?? _radioKey)?.toLowerCase();
+    if (k == null) return;
+    _antennaPrompt = false;
+    await updateSettings(_settings.copyWith(antennaProfiles: {..._settings.antennaProfiles, k: profile}));
+  }
+
+  /// Forgets a radio's antenna; it is asked again the next time it connects.
+  Future<void> forgetAntennaProfile(String radioKey) async {
+    final k = radioKey.toLowerCase();
+    await updateSettings(_settings.copyWith(antennaProfiles: {
+      for (final e in _settings.antennaProfiles.entries)
+        if (e.key != k) e.key: e.value,
+    }));
+  }
+
+  /// A radio's name: the connected radio's, else the one recorded with its most recent drive.
+  String? radioName(String radioKey) {
+    final k = radioKey.toLowerCase();
+    if (_radioKey == k) return _selfInfo?.name;
+    for (final x in _sessions) {
+      final c = x.session.companion;
+      if (c.publicKey?.toLowerCase() == k && (c.name ?? '').isNotEmpty) return c.name;
+    }
+    return null;
   }
   static const int recentLimit = 50;
 
@@ -301,6 +382,7 @@ class AppState extends ChangeNotifier {
     try {
       await _writeChain; // only pings already saved on the phone are sent
       final r = await _syncService.syncSession(sessionId);
+      _logSync('Upload during the drive', r);
       if (r.error != null) {
         _lastUploadError = friendlySyncError(r.error!);
         final l = r.error!.toLowerCase();
@@ -312,6 +394,7 @@ class AppState extends ChangeNotifier {
         _lastUploadError = null;
       }
     } catch (e) {
+      _logError('Upload during the drive failed', e);
       _lastUploadError = friendlyError(e, action: 'Upload');
       if (e is CmatException && e.status == 403) unawaited(refreshKeyStatus(quiet: true));
     } finally {
@@ -325,6 +408,13 @@ class AppState extends ChangeNotifier {
     final link = _link;
     if (link == null || !link.isConnected) {
       _say('Connect a radio (or the simulator) first.');
+      return;
+    }
+    final profile = antennaProfile;
+    // Every real drive records how its antenna was set up. The simulator's antenna is pretend, so a simulated drive
+    // without a profile still runs and records the antenna as unknown.
+    if (profile == null && _radioKind != RadioKind.simulator) {
+      _say('Set up this radio\'s antenna before driving with it.');
       return;
     }
     _busy = true;
@@ -345,7 +435,7 @@ class AppState extends ChangeNotifier {
         label: (label == null || label.trim().isEmpty) ? null : label.trim(),
         channel: s.channel,
         radio: info?.radio ?? const Radio(),
-        antenna: s.antenna,
+        antenna: profile?.toAntenna() ?? const Antenna(),
         companion: Companion(
           publicKey: info?.publicKey.toLowerCase(),
           name: info?.name,
@@ -382,6 +472,7 @@ class AppState extends ChangeNotifier {
         txPowerW: txW,
       ));
       _scheduleDriveSync();
+      diagnostics.add('Drive started on ${s.channel}, auto-ping every ${s.intervalSec} s');
       unawaited(refreshSessions());
     } catch (e) {
       // The session folder may exist. With no pings it's just an empty drive, so remove it; otherwise close it so it
@@ -405,6 +496,7 @@ class AppState extends ChangeNotifier {
         }
       }
       _session = null;
+      _logError('Starting the drive failed', e);
       _say('Couldn\'t start the drive. ${friendlyError(e, action: 'Starting')}');
     } finally {
       _busy = false;
@@ -512,6 +604,7 @@ class AppState extends ChangeNotifier {
       }
       _lastSession = session.copyWith(endedAt: services.clock().toUtc());
       _lastFinishedSessionId = session.id;
+      diagnostics.add('Drive stopped after $_pingCount ping${_pingCount == 1 ? '' : 's'}');
       _session = null;
       _status = const EngineStatus(EngineState.idle);
     } finally {
@@ -625,9 +718,11 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     try {
       final r = await _syncService.syncSession(sessionId);
+      _logSync('Upload of one drive', r);
       _handleReport(r, quietIfNothing: quietIfNothing);
       return r;
     } catch (e) {
+      _logError('Upload of one drive failed', e);
       _syncFailed(friendlyError(e, action: 'Sync'), e);
       return null;
     } finally {
@@ -642,9 +737,11 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     try {
       final r = await _syncService.syncAll();
+      _logSync('Upload of all drives', r);
       _handleReport(r);
       return r;
     } catch (e) {
+      _logError('Upload of all drives failed', e);
       _syncFailed(friendlyError(e, action: 'Sync'), e);
       return null;
     } finally {
@@ -652,6 +749,10 @@ class AppState extends ChangeNotifier {
       await refreshSessions();
     }
   }
+
+  void _logSync(String what, SyncReport r) => diagnostics.add(r.error != null
+      ? '$what failed: ${r.error}'
+      : '$what: ${r.stored} stored, ${r.duplicate} already on the server, ${r.rejected} rejected');
 
   void _handleReport(SyncReport r, {bool quietIfNothing = false}) {
     if (r.error != null) {
@@ -763,6 +864,7 @@ class AppState extends ChangeNotifier {
       _setRepeaters(await services.repeaterCache.load());
     } catch (_) {}
     unawaited(_loadDirectory());
+    await _loadSavedReport();
     _loaded = true;
     notifyListeners();
     // A drive cut off by a crash or an app kill is still open; close it at its last ping so its end gets synced.
@@ -977,10 +1079,106 @@ class AppState extends ChangeNotifier {
         _setRepeaters(list);
         await services.repeaterCache.save(list);
       }
+      diagnostics.add('Repeater names: ${list.length} from the server');
       if (!quiet) _say('Updated ${list.length} repeater names.');
       notifyListeners();
     } catch (e) {
+      _logError('Updating repeater names failed', e);
       if (!quiet) _say(friendlyError(e, action: 'Updating repeater names'));
+    }
+  }
+
+  // ---------- problem reports ----------
+  /// Reports go with the driver key; the server takes them from pending and approved keys.
+  bool get canReport =>
+      hasKey && (_settings.keyStatus == DriverKeyStatus.pending || _settings.keyStatus == DriverKeyStatus.approved);
+
+  ProblemReport? _savedReport;
+
+  /// The last report that wasn't sent, kept on the phone until it is sent or discarded. Never sent on its own.
+  ProblemReport? get savedReport => _savedReport;
+
+  Future<void> _loadSavedReport() async {
+    try {
+      final raw = await services.reportDraftStore?.load();
+      if (raw != null) _savedReport = ProblemReport.fromJson((jsonDecode(raw) as Map).cast<String, dynamic>());
+    } catch (e) {
+      _logError('The saved problem report couldn\'t be read', e);
+    }
+  }
+
+  /// Builds the report exactly as it would be sent: what the person wrote, app, phone and radio details, and (if
+  /// [includeLog]) the diagnostic log plus a settings snapshot, all redacted. [driveId] attaches a drive by id only.
+  Future<ProblemReport> previewProblemReport({
+    required String category,
+    required String description,
+    bool includeLog = true,
+    String? driveId,
+  }) async {
+    final info = connected ? _selfInfo : null;
+    return buildProblemReport(
+      category: category,
+      description: description,
+      app: services.appInfo,
+      device: {'os': Platform.operatingSystem, 'osVersion': Platform.operatingSystemVersion, 'locale': Platform.localeName},
+      radio: info == null
+          ? null
+          : {
+              'name': info.name,
+              'firmware': info.firmware,
+              'freqMhz': info.radio.freqMhz,
+              'bwKhz': info.radio.bwKhz,
+              'sf': info.radio.sf,
+              'cr': info.radio.cr,
+              'txDbm': info.radio.txDbm,
+            },
+      driveId: driveId,
+      log: includeLog ? [...diagnostics.lines, ...settingsSnapshot(_settings, antenna: antennaProfile)] : null,
+      // The key and the server's full address never leave in a report, even where no redaction rule spots them.
+      secrets: [?_settings.driverKey, _settings.serverUrl, client.baseUrl.toString()],
+    );
+  }
+
+  /// Sends a report the person reviewed. It is saved on the phone first and stays saved unless the server takes it.
+  Future<ProblemReportOutcome> sendProblemReport(ProblemReport report) async {
+    final key = _settings.driverKey;
+    if (!canReport || key == null) {
+      return const ProblemReportOutcome(sent: false, message: 'Reports are sent with your driver key. Check it in Settings.');
+    }
+    if (report.tooLarge) return const ProblemReportOutcome(sent: false, message: 'The report is too large.');
+    _savedReport = report;
+    notifyListeners();
+    try {
+      await services.reportDraftStore?.save(jsonEncode(report.toJson()));
+    } catch (e) {
+      _logError('Saving the problem report on the phone failed', e);
+    }
+    try {
+      final r = await client.reportProblem(key, report.body);
+      final id = r.id.length > 8 ? r.id.substring(0, 8) : r.id;
+      diagnostics.add('Problem report sent ($id)');
+      await _clearSavedReport();
+      return ProblemReportOutcome(sent: true, message: 'Sent. Thank you. Your report number is $id.');
+    } catch (e) {
+      _logError('Problem report not sent', e);
+      return ProblemReportOutcome(sent: false, message: friendlyReportError(e));
+    } finally {
+      notifyListeners();
+    }
+  }
+
+  /// Deletes the saved report without sending it.
+  Future<void> discardSavedReport() async {
+    await _clearSavedReport();
+    notifyListeners();
+  }
+
+  Future<void> _clearSavedReport() async {
+    _savedReport = null;
+    try {
+      await services.reportDraftStore?.clear();
+    } catch (e) {
+      _logError('Deleting the saved problem report failed', e);
     }
   }
 
@@ -1018,8 +1216,14 @@ class AppState extends ChangeNotifier {
     }
     if (lat == null || lon == null) return;
     try {
-      _applyDirectory(await d.refresh(lat: lat, lon: lon, force: force));
-    } catch (_) {}
+      final snap = await d.refresh(lat: lat, lon: lon, force: force);
+      if (snap != null && !identical(snap, _directory)) {
+        diagnostics.add('Public node map: ${snap.repeaters.length} repeaters nearby');
+      }
+      _applyDirectory(snap);
+    } catch (e) {
+      _logError('Refreshing the public node map failed', e);
+    }
   }
 
   @override
