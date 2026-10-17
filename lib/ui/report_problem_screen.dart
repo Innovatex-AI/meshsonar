@@ -342,7 +342,10 @@ class _ReportPreviewScreenState extends State<ReportPreviewScreen> {
   bool _sending = false;
   ProblemReportOutcome? _outcome;
 
-  static String _size(int bytes) => '${(bytes / 1000000).toStringAsFixed(1)} MB of 5 MB';
+  /// "12 KB of 5 MB" below 0.1 MB (so a small report never reads "0.0 MB"), else "0.2 MB of 5 MB".
+  static String _size(int bytes) => bytes < 100000
+      ? '${(bytes / 1000).ceil()} KB of 5 MB' // rounded up: never "0 KB"
+      : '${(bytes / 1000000).toStringAsFixed(1)} MB of 5 MB';
 
   static String _plural(int n, String one) => '$n $one${n == 1 ? '' : 's'}';
 
