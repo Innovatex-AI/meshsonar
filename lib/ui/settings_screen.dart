@@ -460,6 +460,8 @@ class _DriverKeySectionState extends State<_DriverKeySection> {
   final _name = TextEditingController();
   final _callsign = TextEditingController();
   final _email = TextEditingController();
+  final _pasted = TextEditingController();
+  bool _showPaste = false;
   final _form = GlobalKey<FormState>();
 
   @override
@@ -467,6 +469,7 @@ class _DriverKeySectionState extends State<_DriverKeySection> {
     _name.dispose();
     _callsign.dispose();
     _email.dispose();
+    _pasted.dispose();
     super.dispose();
   }
 
@@ -538,6 +541,17 @@ class _DriverKeySectionState extends State<_DriverKeySection> {
     );
   }
 
+  /// Saves the pasted key; on success the field is wiped and folded away so the full key never shows again.
+  Future<void> _usePasted(AppState s) async {
+    final ok = await s.useExistingKey(_pasted.text);
+    if (ok && mounted) {
+      setState(() {
+        _pasted.clear();
+        _showPaste = false;
+      });
+    }
+  }
+
   Widget _requestForm(BuildContext context, AppState s) {
     final t = Theme.of(context);
     return Padding(
@@ -587,7 +601,7 @@ class _DriverKeySectionState extends State<_DriverKeySection> {
                       (v != null && v.trim().isNotEmpty && !v.contains('@')) ? 'That doesn\'t look like an email' : null,
                 ),
                 const SizedBox(height: 16),
-                if (s.keyError != null) ErrorBanner(s.keyError!),
+                if (s.keyError != null && !_showPaste) ErrorBanner(s.keyError!),
                 FilledButton.icon(
                   key: const Key('key-request'),
                   onPressed: s.keyBusy
@@ -604,6 +618,45 @@ class _DriverKeySectionState extends State<_DriverKeySection> {
                 ),
                 const SizedBox(height: 12),
                 const _AccountLinks(),
+                if (!_showPaste)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      key: const Key('key-have'),
+                      style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 0)),
+                      onPressed: () => setState(() => _showPaste = true),
+                      icon: const Icon(Icons.key, size: 18),
+                      label: const Text('I already have a key'),
+                    ),
+                  )
+                else ...[
+                  const SizedBox(height: 8),
+                  TextField(
+                    key: const Key('key-paste'),
+                    controller: _pasted,
+                    autofocus: true,
+                    decoration: const InputDecoration(labelText: 'Paste your driver key'),
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) {
+                      if (!s.keyBusy) _usePasted(s);
+                    },
+                  ),
+                  if (s.keyError != null) ...[const SizedBox(height: 8), ErrorBanner(s.keyError!, key: const Key('key-paste-error'))],
+                  const SizedBox(height: 8),
+                  FilledButton.icon(
+                    key: const Key('key-use'),
+                    onPressed: s.keyBusy
+                        ? null
+                        : () {
+                            FocusScope.of(context).unfocus();
+                            _usePasted(s);
+                          },
+                    icon: const Icon(Icons.key),
+                    label: const Text('Use this key'),
+                  ),
+                ],
               ],
             ),
           ),

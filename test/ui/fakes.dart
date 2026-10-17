@@ -136,6 +136,9 @@ class FakeCmatClient implements CmatClient {
   List<RepeaterRef> repeaterList = const [];
   int requestCalls = 0;
   int statusCalls = 0;
+  Object? statusError;
+  Completer<void>? statusGate;
+  String? lastStatusKey;
   Map<String, String?>? lastRequest;
 
   @override
@@ -149,6 +152,9 @@ class FakeCmatClient implements CmatClient {
   @override
   Future<({DriverKeyStatus status, String display})> status(String driverKey) async {
     statusCalls++;
+    if (statusGate != null) await statusGate!.future;
+    if (statusError != null) throw statusError!;
+    lastStatusKey = driverKey;
     return statusResult;
   }
 

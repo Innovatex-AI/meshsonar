@@ -42,6 +42,7 @@ DriverKeyStatus parseDriverKeyStatus(Object? s) => switch (s) {
       'approved' => DriverKeyStatus.approved,
       'rejected' => DriverKeyStatus.rejected,
       'revoked' => DriverKeyStatus.revoked,
+      'banned' => DriverKeyStatus.revoked, // a banned driver's key can't upload; shown like a revoked key
       'none' => DriverKeyStatus.none,
       _ => DriverKeyStatus.unknown,
     };
