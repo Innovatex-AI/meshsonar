@@ -557,46 +557,8 @@ class _DriverKeySectionState extends State<_DriverKeySection> {
                 Row(children: [
                   Text('Driver key', style: t.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
                   const Spacer(),
-                  if (!_showPaste)
-                    TextButton(
-                      key: const Key('key-have'),
-                      style: TextButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                      ),
-                      onPressed: () => setState(() => _showPaste = true),
-                      child: const Text('Have a key?'),
-                    ),
                   const KeyStatusBadge(status: DriverKeyStatus.none),
                 ]),
-                if (_showPaste) ...[
-                  const SizedBox(height: 8),
-                  TextField(
-                    key: const Key('key-paste'),
-                    controller: _pasted,
-                    autofocus: true,
-                    decoration: const InputDecoration(labelText: 'Paste your driver key'),
-                    autocorrect: false,
-                    enableSuggestions: false,
-                    textInputAction: TextInputAction.done,
-                    onSubmitted: (_) {
-                      if (!s.keyBusy) s.useExistingKey(_pasted.text);
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  FilledButton.icon(
-                    key: const Key('key-use'),
-                    onPressed: s.keyBusy
-                        ? null
-                        : () {
-                            FocusScope.of(context).unfocus();
-                            s.useExistingKey(_pasted.text);
-                          },
-                    icon: const Icon(Icons.key),
-                    label: const Text('Use this key'),
-                  ),
-                ],
                 const SizedBox(height: 6),
                 Text(
                   'To upload drives, ask the server for a driver key. Your callsign (or "Driver N") is shown publicly; '
@@ -645,6 +607,44 @@ class _DriverKeySectionState extends State<_DriverKeySection> {
                 ),
                 const SizedBox(height: 12),
                 const _AccountLinks(),
+                if (!_showPaste)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      key: const Key('key-have'),
+                      style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 0)),
+                      onPressed: () => setState(() => _showPaste = true),
+                      icon: const Icon(Icons.key, size: 18),
+                      label: const Text('I already have a key'),
+                    ),
+                  )
+                else ...[
+                  const SizedBox(height: 8),
+                  TextField(
+                    key: const Key('key-paste'),
+                    controller: _pasted,
+                    autofocus: true,
+                    decoration: const InputDecoration(labelText: 'Paste your driver key'),
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) {
+                      if (!s.keyBusy) s.useExistingKey(_pasted.text);
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  FilledButton.icon(
+                    key: const Key('key-use'),
+                    onPressed: s.keyBusy
+                        ? null
+                        : () {
+                            FocusScope.of(context).unfocus();
+                            s.useExistingKey(_pasted.text);
+                          },
+                    icon: const Icon(Icons.key),
+                    label: const Text('Use this key'),
+                  ),
+                ],
               ],
             ),
           ),
