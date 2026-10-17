@@ -5,9 +5,10 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
-/// The default server (changes only with the M1 domain move, which updates this list on purpose), the public node
+/// The default server (0.5.0 domain move: https://meshsonar.com; the old Lovable host is only a bare alias in
+/// lib/core/server_url.dart, never contacted as written), the public node
 /// map, and OpenStreetMap tiles.
-const allowedLiteralHosts = {'cmh-meshcore.lovable.app', 'map.meshcore.io', 'tile.openstreetmap.org'};
+const allowedLiteralHosts = {'meshsonar.com', 'map.meshcore.io', 'tile.openstreetmap.org'};
 
 void main() {
   test('every http(s) host in lib/ is allowed; only cmat_client and repeater_directory make HTTP clients', () {

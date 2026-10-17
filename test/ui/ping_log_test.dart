@@ -43,7 +43,7 @@ void main() {
       expect(find.text('Polaris Tower'), findsOneWidget);
       expect(find.text('DF01'), findsOneWidget);
       expect(find.text('+6.5 dB'), findsOneWidget);
-      expect(find.text('CMAT'), findsOneWidget);
+      expect(find.text('MeshSonar'), findsOneWidget);
       final facts = tester.widget<Text>(find.byKey(const ValueKey('echo-facts-df01'))).data!;
       expect(facts, 'direct · RSSI -92 dBm · 840 ms · 5.1 km NW');
     });

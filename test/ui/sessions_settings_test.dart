@@ -171,7 +171,7 @@ void main() {
     await h.pumpApp(tester);
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
-    expect(find.text('https://cmh-meshcore.lovable.app'), findsOneWidget);
+    expect(find.text('https://meshsonar.com'), findsOneWidget);
     // The list builds lazily; scroll the channel row in rather than assuming it fits on the first screen.
     await tester.scrollUntilVisible(find.text('#wardriving'), 100, scrollable: settingsScroll);
     expect(find.text('#wardriving'), findsOneWidget);

@@ -3,6 +3,27 @@
 All notable changes to MeshSonar. Dates are local (US Eastern). This changelog was reconstructed from the commit
 history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md](ROADMAP.md).
 
+## [0.5.0] — 2026-10-17 — new server address, MeshSonar name
+
+`pubspec.yaml` is `0.5.0+6`. Bundle id unchanged (`com.meshsonar.app`). Drive Format v1 and the problem-report body are
+unchanged (`app.name` is still `MeshSonar`). Spec: `docs/specs/app-0.5.0.md`.
+
+### Upgrading from 0.4.0
+- Nothing to do. If the app was set to the old address (`https://cmh-meshcore.lovable.app`), it switches to
+  `https://meshsonar.com` on first launch and **keeps your driver key** (same server, same database).
+
+### Changed
+- **Default server is `https://meshsonar.com`.** The old Lovable address is rewritten at launch, whatever its spelling.
+- **Same server, different address keeps the key:** moving between the old Lovable address, `meshsonar.com` and
+  `cmh.meshsonar.com` in Settings no longer asks to remove the key. Any other server change still removes it (and asks
+  first). The list lives in `lib/core/server_url.dart`.
+- **The website is called MeshSonar in the app:** the repeater source badge, "not on MeshSonar" report tags, the
+  report's grid and repeater lines, the repeater sheet and the onboarding key page no longer say "CMAT".
+
+### Tests
+- New: `server_url_test`, `server_migration_test`, `no_cmat_strings_test` (fails on any "CMAT" string literal in
+  `lib/`, with an allow-list for wire values, empty today). Updated the settings, ping-log, report and hosts tests.
+
 ## [0.4.0] — 2026-10-17 — report a problem, antenna per radio
 
 `pubspec.yaml` is `0.4.0+5`. Drive Format v1 is unchanged: uploads and exports carry the same keys as 0.3.x (the
