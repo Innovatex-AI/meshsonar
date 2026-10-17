@@ -44,6 +44,16 @@ affects correctness or polish, **P3** is housekeeping. Items fixed since are lis
 | P3 | **Layering** | `ui/drive_stats.dart` and `ui/report/drive_report.dart` are pure Dart and belong in `core`. `drive_map_model.dart` imports the simulator for its repeater list. |
 | P3 | **Distance is ping-to-ping** | Drive and report distances sum straight lines between pings, so they under-count on winding roads. Recording the filtered GPS track (without uploading it) would fix that. |
 
+## Where data goes
+
+MeshSonar sends drives (and, from 0.4.0, problem reports) only to the server configured in Settings. It has never
+had MeshMapper or any other forwarding, and none is planned; `test/integration/hosts_test.dart` checks every request
+of a full drive, sync and report.
+
+| P | Item | Detail |
+|---|---|---|
+| P2 | **Settings is long with large text** | At 2.0× text on a 320 dp phone the Settings list is about 12,900 px. Consider folding the section help texts away. |
+
 ## Possible next steps (not started)
 
 - **Web build** with an IndexedDB store, Web Bluetooth, and CORS on CMAT. Checklist in [PORTING.md](PORTING.md#web).

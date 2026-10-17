@@ -1,6 +1,6 @@
 # MeshSonar features and behaviour rules
 
-Every screen and every user-visible rule in v0.3.0, with the numbers the code uses. Widget keys are given where
+Every screen and every user-visible rule in v0.4.0, with the numbers the code uses. Widget keys are given where
 tests rely on them (`Key('…')`), because a port's UI tests can reuse the same names.
 
 ```mermaid
@@ -60,8 +60,15 @@ and ≥ 640 px) the map sits on the left and the controls on the right.
 - **Stats strip:** Pings · *N heard* with heard % · Last SNR dB ("none" if the last ping heard nothing) · Synced. These
   are the current drive's numbers, or the last drive's after Stop.
 - **Unsaved banner** while pings are waiting to be written to the device.
-- **Antenna toggle** (`antenna-toggle`): Internal / External. It's editable before a drive and **locked while
-  driving**, showing what this drive records.
+- **Antenna chip** (`antenna-chip`): the connected radio's antenna, e.g. "Roof mag-mount · 5.8 dBi · 1.8 m". Tap it
+  to change it before a drive; it's **locked while driving**. A radio that hasn't been set up shows "Set up this
+  radio's antenna" instead (`antenna-setup`), and Start drive is disabled until it is.
+- **Antenna setup, once per radio** (`antenna-sheet`): when a radio without a saved antenna connects, "How is this
+  radio's antenna set up?" opens: mount (`mount-handheld`, `mount-insideCar`, `mount-roofMagMount`,
+  `mount-fixedMast`), gain −10 to 20 dBi or "Don't know" (`antenna-gain-unknown`), height 0 to 300 m. Saved per
+  companion public key; handheld and inside car upload as `internal`, the others as `external`. After an upgrade
+  from 0.3.x, gain and height are prefilled from the old setting and the matching mounts are offered first. A
+  simulated drive without a profile still runs (its antenna is recorded as unknown).
 - **Log** button (`open-log`): "Log · N". Opens the live ping log.
 - **Start drive / Stop drive** (`start-stop`). It reads "Connect radio" when nothing is connected. Next to it is **Ping
   now** (`ping-now`), enabled only while driving and not already pinging.
@@ -245,8 +252,8 @@ unmeasured values and a dashed 0 dB line.
 (`ui/drive_detail_screen.dart`, `drive-detail`) Shows the whole route on a map (framed to the pings, zoom ≤ 15.5, no
 rings or links), a header (name, date, channel, radio name, antenna, sync badge), **Sync N / Synced**, **Export**,
 **Ping log**, then an 8-tile stats grid, the heard strip, "Repeaters heard" (most pings first, with a bar), and the
-pings (newest first, 60 at a time, "Show all N pings"). The app bar has **Report**, **Rename** and **Delete**
-(disabled while recording).
+pings (newest first, 60 at a time, "Show all N pings"). The app bar has **Report**, **Rename**, **Delete**
+(disabled while recording) and a ⋮ menu (`detail-more`) with "Report a problem with this drive".
 
 Stats definitions (`DriveStats.of`):
 
@@ -307,14 +314,14 @@ Metric definitions (`DriveReport.compute`):
 | | **Auto-ping** | Slider, every 5 s from **10 to 120 s** (default 30) |
 | | **Minimum distance** | Slider stops 15, 25, 50, 75, 100, 125, 150, 200, 250, 300, 400, **500 m** (default 100) |
 | | **Heard list hold** | 1–10 pings (default 3) |
-| Antenna | **Antenna type** | Internal / External (same setting as the Drive-screen toggle) |
-| | Gain (dBi), height (m) | Optional numbers; leave empty for unknown |
+| Antenna | **Each saved radio** (`antenna-profile-<key>`) | Name (or key prefix) with mount, gain and height. Tap to edit; **Forget** (`antenna-forget-<key>`) asks again on that radio's next connect |
 | Upload | **Upload at end of drive** | `autoSync`, default on |
 | | **Upload during the drive** | Default on; needs the end-of-drive toggle |
 | | **Upload interval** | 1–30 min (default 5) |
 | | Last upload | "Uploading…", "Last upload HH:MM:SS · OK", "Last upload failed: …", or "No uploads yet" |
 | | **Repeater names** | Count saved for offline use. Tap (needs a key) to refresh CMAT names and force a public-directory refresh. |
-| About | **About MeshSonar** | Version (from the build via `package_info_plus`), MIT text, short notices, Flutter licence page |
+| About | **Report a problem** (`report-problem`) | See [Report a problem](#report-a-problem) |
+| | **About MeshSonar** | Version (from the build via `package_info_plus`), MIT text, short notices, Flutter licence page |
 | | **Show the welcome tour** | Reopens the intro |
 
 ## Uploads
@@ -332,6 +339,32 @@ Metric definitions (`DriveReport.compute`):
   Sync is enabled when pings are waiting or a renamed drive's new name hasn't been sent; rejected pings never enable it.
 - **At launch:** drives closed after a crash (see Drive screen) are uploaded quietly when the key is approved.
 - Rules for what's sent are in [DATA_MODEL.md §5](DATA_MODEL.md#5-sync-rules).
+- **Where data goes:** drives (and problem reports) are sent **only to the server in Settings**. The only other
+  hosts the app contacts are `map.meshcore.io` (a GET of the public node map, with no location in it) and the map
+  tiles. There is no MeshMapper forwarding (`test/integration/hosts_test.dart`).
+
+## Report a problem
+
+(`ui/report_problem_screen.dart`, `report-screen`) From Settings → About or a drive's ⋮ menu (which attaches that
+drive). Needs a driver key that is pending or approved; otherwise the screen says why (`report-needs-key`) and links
+to the driver key in Settings (`report-key-settings`).
+
+- **Form:** category chips (`report-category-<bug|radio|gps|upload|map|idea|other>`); description, 1 to 4,000
+  characters with a live counter (`report-counter`, red over the limit); **Include app log** (on by default);
+  **Attach a drive** (none or one of the 20 most recent; only its id is sent). **Review report** (`report-review`).
+- **Review** (`report-preview`): the exact JSON body that will be sent, selectable; its size ("3.2 KB of 5 MB");
+  "We removed N keys and rounded M locations."; "Log shortened to fit 5 MB." when the oldest log lines had to go.
+  **Send report** (`report-send`) is the only Send button.
+- **What's added:** app name, version, build and platform; the phone's OS, OS version and locale; the connected
+  radio's name, firmware and radio settings (not its public key); with the log, the last 1,000 app events plus a
+  settings snapshot (server host only). Everything is redacted on the phone first (`lib/core/redact.dart`), and the
+  driver key and full server address are removed word for word.
+- **Results:** 201 "Sent. Thank you." with the first 8 characters of the report id; 401/403 the driver key text;
+  404/503 "This server doesn't accept problem reports."; 413 "The report is too large."; 429 the busy text; no
+  signal, a timeout or a 5xx "Not sent. Your report is saved on this phone; send it when you have signal."
+- **Saved report:** the report is saved (`report_draft.json`) before sending and deleted only when the server takes
+  it. Opening Report a problem then offers **Send saved report** (the same review again) or **Discard**. It is never
+  sent without that tap.
 
 ## Repeater directory (names and positions)
 
