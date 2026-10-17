@@ -137,6 +137,7 @@ class FakeCmatClient implements CmatClient {
   int requestCalls = 0;
   int statusCalls = 0;
   Object? statusError;
+  Completer<void>? statusGate;
   String? lastStatusKey;
   Map<String, String?>? lastRequest;
 
@@ -151,6 +152,7 @@ class FakeCmatClient implements CmatClient {
   @override
   Future<({DriverKeyStatus status, String display})> status(String driverKey) async {
     statusCalls++;
+    if (statusGate != null) await statusGate!.future;
     if (statusError != null) throw statusError!;
     lastStatusKey = driverKey;
     return statusResult;

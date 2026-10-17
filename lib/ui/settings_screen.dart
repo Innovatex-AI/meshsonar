@@ -541,6 +541,17 @@ class _DriverKeySectionState extends State<_DriverKeySection> {
     );
   }
 
+  /// Saves the pasted key; on success the field is wiped and folded away so the full key never shows again.
+  Future<void> _usePasted(AppState s) async {
+    final ok = await s.useExistingKey(_pasted.text);
+    if (ok && mounted) {
+      setState(() {
+        _pasted.clear();
+        _showPaste = false;
+      });
+    }
+  }
+
   Widget _requestForm(BuildContext context, AppState s) {
     final t = Theme.of(context);
     return Padding(
@@ -590,7 +601,7 @@ class _DriverKeySectionState extends State<_DriverKeySection> {
                       (v != null && v.trim().isNotEmpty && !v.contains('@')) ? 'That doesn\'t look like an email' : null,
                 ),
                 const SizedBox(height: 16),
-                if (s.keyError != null) ErrorBanner(s.keyError!),
+                if (s.keyError != null && !_showPaste) ErrorBanner(s.keyError!),
                 FilledButton.icon(
                   key: const Key('key-request'),
                   onPressed: s.keyBusy
@@ -629,9 +640,10 @@ class _DriverKeySectionState extends State<_DriverKeySection> {
                     enableSuggestions: false,
                     textInputAction: TextInputAction.done,
                     onSubmitted: (_) {
-                      if (!s.keyBusy) s.useExistingKey(_pasted.text);
+                      if (!s.keyBusy) _usePasted(s);
                     },
                   ),
+                  if (s.keyError != null) ...[const SizedBox(height: 8), ErrorBanner(s.keyError!, key: const Key('key-paste-error'))],
                   const SizedBox(height: 8),
                   FilledButton.icon(
                     key: const Key('key-use'),
@@ -639,7 +651,7 @@ class _DriverKeySectionState extends State<_DriverKeySection> {
                         ? null
                         : () {
                             FocusScope.of(context).unfocus();
-                            s.useExistingKey(_pasted.text);
+                            _usePasted(s);
                           },
                     icon: const Icon(Icons.key),
                     label: const Text('Use this key'),

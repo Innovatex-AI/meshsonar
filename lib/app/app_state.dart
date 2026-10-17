@@ -850,9 +850,11 @@ class AppState extends ChangeNotifier {
   }
 
   /// Uses a driver key created on the website (or copied from another device). The key is checked with the
-  /// server first and saved only if the server knows it, so a typo never replaces a working setup.
+  /// server first and saved only if it can upload (pending or approved), so a typo, a key from another server or a
+  /// dead key never replaces a working setup.
   Future<bool> useExistingKey(String raw) async {
-    final key = raw.trim();
+    // Keys never contain whitespace; a paste from a wrapped page or an email can carry a line break mid-key.
+    final key = raw.replaceAll(RegExp(r'\s+'), '');
     if (key.isEmpty) {
       _keyError = 'Paste the driver key from the website.';
       notifyListeners();
@@ -868,12 +870,21 @@ class AppState extends ChangeNotifier {
         _keyError = 'The server changed while the key was being checked. Paste it again.';
         return false;
       }
+      if (r.status != DriverKeyStatus.pending && r.status != DriverKeyStatus.approved) {
+        final why = switch (r.status) {
+          DriverKeyStatus.rejected => 'was rejected',
+          DriverKeyStatus.revoked => 'was revoked',
+          _ => "can't upload",
+        };
+        _keyError = 'That key $why. Create a new one at ${webPage('/me/devices')}.';
+        return false;
+      }
       await updateSettings(_settings.copyWith(driverKey: key, keyStatus: r.status, display: r.display));
       if (r.status == DriverKeyStatus.approved) unawaited(refreshRepeaters(quiet: true));
       return true;
     } catch (e) {
       _keyError = (e is CmatException && e.status == 401)
-          ? 'This server doesn\'t recognise that key. Check you copied all of it, and that it came from ${webPage('/me/devices')}.'
+          ? "This server doesn't recognise that key. Check you copied all of it, and that it came from ${webPage('/me/devices')}."
           : friendlyError(e, action: 'Checking the key');
       return false;
     } finally {

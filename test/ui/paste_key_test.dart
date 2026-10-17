@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/core/api.dart';
@@ -74,5 +76,66 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('The server had a problem (503)'), findsOneWidget);
     expect(h.settings.saved.driverKey, isNull);
+  });
+
+  testWidgets('the error shows next to the paste field, not above the request form', (tester) async {
+    final h = await openSettings(tester);
+    h.client.statusError = const CmatException('', status: 401);
+    await tester.enterText(find.byKey(const Key('key-paste')), 'ms_typo');
+    await tester.tap(find.byKey(const Key('key-use')));
+    await tester.pumpAndSettle();
+    final err = find.byKey(const Key('key-paste-error'));
+    expect(err, findsOneWidget);
+    expect(tester.getTopLeft(err).dy, greaterThan(tester.getTopLeft(find.byKey(const Key('key-paste'))).dy));
+  });
+
+  for (final dead in [DriverKeyStatus.rejected, DriverKeyStatus.revoked]) {
+    testWidgets('a ${dead.name} key from the website is not saved', (tester) async {
+      final h = await openSettings(tester);
+      h.client.statusResult = (status: dead, display: 'KE4BFI');
+      await tester.enterText(find.byKey(const Key('key-paste')), 'ms_deadkey');
+      await tester.tap(find.byKey(const Key('key-use')));
+      await tester.pumpAndSettle();
+      expect(h.settings.saved.driverKey, isNull);
+      expect(find.textContaining('That key was ${dead.name}'), findsOneWidget);
+    });
+  }
+
+  testWidgets('a key with a line break in the middle is cleaned before it is checked and saved', (tester) async {
+    final h = await openSettings(tester);
+    await tester.enterText(find.byKey(const Key('key-paste')), 'ms_abcdefghij\nklmnop qrst\tuvwx');
+    await tester.tap(find.byKey(const Key('key-use')));
+    await tester.pumpAndSettle();
+    expect(h.client.lastStatusKey, 'ms_abcdefghijklmnopqrstuvwx');
+    expect(h.settings.saved.driverKey, 'ms_abcdefghijklmnopqrstuvwx');
+  });
+
+  testWidgets('after saving, removing the key brings back an empty, folded form (the key never reappears)', (tester) async {
+    final h = await openSettings(tester);
+    await tester.enterText(find.byKey(const Key('key-paste')), 'ms_secretfragmentXYZ1234');
+    await tester.tap(find.byKey(const Key('key-use')));
+    await tester.pumpAndSettle();
+    expect(h.settings.saved.driverKey, 'ms_secretfragmentXYZ1234');
+    await tester.tap(find.byKey(const Key('forget-key')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Remove'));
+    await tester.pumpAndSettle();
+    expect(h.settings.saved.driverKey, isNull);
+    expect(find.byKey(const Key('key-paste')), findsNothing, reason: 'paste field is folded away again');
+    expect(find.textContaining('secretfragment'), findsNothing);
+  });
+
+  testWidgets('if the server changes while the key is being checked, nothing is saved', (tester) async {
+    final h = await openSettings(tester);
+    final first = h.client;
+    first.statusGate = Completer<void>();
+    await tester.enterText(find.byKey(const Key('key-paste')), 'ms_racekey');
+    await tester.tap(find.byKey(const Key('key-use')));
+    await tester.pump();
+    await h.state.updateSettings(h.state.settings.copyWith(serverUrl: 'https://other.example.org'));
+    first.statusGate!.complete();
+    await tester.pumpAndSettle();
+    expect(h.settings.saved.driverKey, isNull);
+    expect(find.textContaining('The server changed while the key was being checked'), findsOneWidget);
   });
 }
