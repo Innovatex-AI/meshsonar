@@ -3,7 +3,8 @@
 //   → MeshCoreCompanionLink → DefaultWardriveEngine
 //   → JsonlDriveStore (on disk) → DefaultSyncService → HttpCmatClient
 //   → CMAT's REAL endpoint code (meshcore-insights src/lib/drive/handlers.ts, in-memory store, served by bun)
-// and then checks the server holds exactly what the radio heard. Skips when bun or the CMAT checkout is missing.
+// and then checks the server holds exactly what the radio heard. Skips when bun or the CMAT checkout is missing
+// (CMAT_DIR=<meshcore-insights checkout>, BUN=<bun>; see test/core/cmat_env.dart).
 import 'dart:convert';
 import 'dart:io';
 
@@ -22,23 +23,21 @@ import 'package:meshsonar/radio/wardrive_engine.dart';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
+import '../core/cmat_env.dart';
+
 const adminKey = 'e2e-admin-key-0123456789abcdef';
-const handlersPath = '/home/claude/meshcore-insights/src/lib/drive/handlers.ts';
-const bunPath = '/root/.bun/bin/bun';
 
 void main() {
-  final skip = !File(bunPath).existsSync()
-      ? 'bun not installed'
-      : !File(handlersPath).existsSync()
-          ? 'CMAT checkout not found'
-          : null;
+  // CMAT_DIR / BUN as in test/core/cmat_env.dart; skipped with the reason when either is missing.
+  final bunPath = findBun();
+  final skip = contractSkipReason('src/lib/drive/handlers.ts');
 
   Process? server;
   late Uri base;
 
   setUpAll(() async {
     if (skip != null) return;
-    server = await Process.start(bunPath, ['run', p.join(Directory.current.path, 'test', 'fixtures', 'cmat_server.ts'), adminKey]);
+    server = await Process.start(bunPath!, ['run', p.join(Directory.current.path, 'test', 'fixtures', 'cmat_server.ts'), adminKey, cmatDir()]);
     final err = StringBuffer();
     server!.stderr.transform(utf8.decoder).listen(err.write);
     final lines = server!.stdout.transform(utf8.decoder).transform(const LineSplitter()).asBroadcastStream();

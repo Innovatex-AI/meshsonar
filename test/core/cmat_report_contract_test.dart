@@ -13,19 +13,13 @@ import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/core/report_body.dart';
 import 'package:path/path.dart' as p;
 
-import 'cmat_contract_test.dart' show findBun;
+import 'cmat_env.dart';
 
 const driverKey = 'ms_contractReportKey_0123456789abcdefghijklmn';
 
 void main() {
-  final cmatDir = Platform.environment['CMAT_DIR'] ?? '/home/claude/meshcore-insights';
-  final handlers = '$cmatDir/src/lib/platform/report-handlers.ts';
   final bun = findBun();
-  final skip = bun == null
-      ? 'bun not installed'
-      : !File(handlers).existsSync()
-          ? 'CMAT report handlers not found at $handlers'
-          : null;
+  final skip = contractSkipReason('src/lib/platform/report-handlers.ts');
 
   Process? server;
   late Uri base;
@@ -34,7 +28,7 @@ void main() {
   setUpAll(() async {
     if (skip != null) return;
     server = await Process.start(
-        bun!, ['run', p.join(Directory.current.path, 'test', 'fixtures', 'cmat_report_server.ts'), cmatDir, driverKey]);
+        bun!, ['run', p.join(Directory.current.path, 'test', 'fixtures', 'cmat_report_server.ts'), cmatDir(), driverKey]);
     server!.stderr.transform(utf8.decoder).listen(err.write);
     final lines = server!.stdout.transform(utf8.decoder).transform(const LineSplitter()).asBroadcastStream();
     final port = await lines.firstWhere((l) => l.startsWith('PORT ')).timeout(const Duration(seconds: 20),
