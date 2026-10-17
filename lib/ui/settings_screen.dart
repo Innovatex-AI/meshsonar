@@ -425,9 +425,7 @@ Future<bool> confirmServerChange(BuildContext context, String newUrl) async {
 
 /// Where to manage drives and privacy on the website, and a button to get a key there.
 class _AccountLinks extends StatelessWidget {
-  /// When set, an "I already have a key" button sits next to the website button.
-  final VoidCallback? onHaveKey;
-  const _AccountLinks({this.onHaveKey});
+  const _AccountLinks();
   @override
   Widget build(BuildContext context) {
     final s = AppScope.of(context);
@@ -438,23 +436,16 @@ class _AccountLinks extends StatelessWidget {
         key: const Key('account-hint'),
         style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
       ),
-      Wrap(spacing: 16, crossAxisAlignment: WrapCrossAlignment.center, children: [
-        TextButton.icon(
+      Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
           key: const Key('key-website'),
           style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 0)),
           onPressed: () => s.openWebPage('/me/devices'),
           icon: const Icon(Icons.open_in_new, size: 18),
           label: const Text('Get a key on the website'),
         ),
-        if (onHaveKey != null)
-          TextButton.icon(
-            key: const Key('key-have'),
-            style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 0)),
-            onPressed: onHaveKey,
-            icon: const Icon(Icons.key, size: 18),
-            label: const Text('Have a key?'),
-          ),
-      ]),
+      ),
     ]);
   }
 }
@@ -566,8 +557,46 @@ class _DriverKeySectionState extends State<_DriverKeySection> {
                 Row(children: [
                   Text('Driver key', style: t.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
                   const Spacer(),
+                  if (!_showPaste)
+                    TextButton(
+                      key: const Key('key-have'),
+                      style: TextButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                      ),
+                      onPressed: () => setState(() => _showPaste = true),
+                      child: const Text('Have a key?'),
+                    ),
                   const KeyStatusBadge(status: DriverKeyStatus.none),
                 ]),
+                if (_showPaste) ...[
+                  const SizedBox(height: 8),
+                  TextField(
+                    key: const Key('key-paste'),
+                    controller: _pasted,
+                    autofocus: true,
+                    decoration: const InputDecoration(labelText: 'Paste your driver key'),
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) {
+                      if (!s.keyBusy) s.useExistingKey(_pasted.text);
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  FilledButton.icon(
+                    key: const Key('key-use'),
+                    onPressed: s.keyBusy
+                        ? null
+                        : () {
+                            FocusScope.of(context).unfocus();
+                            s.useExistingKey(_pasted.text);
+                          },
+                    icon: const Icon(Icons.key),
+                    label: const Text('Use this key'),
+                  ),
+                ],
                 const SizedBox(height: 6),
                 Text(
                   'To upload drives, ask the server for a driver key. Your callsign (or "Driver N") is shown publicly; '
@@ -615,34 +644,7 @@ class _DriverKeySectionState extends State<_DriverKeySection> {
                   label: const Text('Request key'),
                 ),
                 const SizedBox(height: 12),
-                _AccountLinks(onHaveKey: _showPaste ? null : () => setState(() => _showPaste = true)),
-                if (_showPaste) ...[
-                  const SizedBox(height: 8),
-                  TextField(
-                    key: const Key('key-paste'),
-                    controller: _pasted,
-                    autofocus: true,
-                    decoration: const InputDecoration(labelText: 'Paste your driver key'),
-                    autocorrect: false,
-                    enableSuggestions: false,
-                    textInputAction: TextInputAction.done,
-                    onSubmitted: (_) {
-                      if (!s.keyBusy) s.useExistingKey(_pasted.text);
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  FilledButton.icon(
-                    key: const Key('key-use'),
-                    onPressed: s.keyBusy
-                        ? null
-                        : () {
-                            FocusScope.of(context).unfocus();
-                            s.useExistingKey(_pasted.text);
-                          },
-                    icon: const Icon(Icons.key),
-                    label: const Text('Use this key'),
-                  ),
-                ],
+                const _AccountLinks(),
               ],
             ),
           ),
