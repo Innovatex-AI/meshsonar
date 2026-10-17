@@ -13,6 +13,8 @@ void main() {
     await h.pumpApp(tester);
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('key-have')));
+    await tester.pumpAndSettle();
     return h;
   }
 
