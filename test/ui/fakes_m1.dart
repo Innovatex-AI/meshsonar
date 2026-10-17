@@ -149,12 +149,19 @@ Future<void> openSettings(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+/// Scrolls the settings list until [target] is built and then into view. The step is most of a phone screen (400 dp)
+/// so the list's far end is reached within the default 50 steps even at 320 dp wide with 2.0× text (AC-16), where
+/// the list is several times taller than at 1×. scrollUntilVisible scrolls by drag gestures, which leave a ballistic
+/// scroll running; pumpAndSettle lets it come to rest so the tap that follows lands on the target.
+Future<void> scrollSettingsTo(WidgetTester tester, Finder target, {double step = 400}) async {
+  await tester.scrollUntilVisible(target, step, scrollable: settingsScrollable());
+  await tester.pumpAndSettle();
+}
+
 /// Settings → About → "Report a problem".
 Future<void> openReportFromSettings(WidgetTester tester) async {
   await openSettings(tester);
-  await tester.scrollUntilVisible(find.byKey(const Key('report-problem')), 150,
-      scrollable: settingsScrollable(), maxScrolls: 200);
-  await tester.pumpAndSettle();
+  await scrollSettingsTo(tester, find.byKey(const Key('report-problem')));
   await tester.tap(find.byKey(const Key('report-problem')));
   await tester.pumpAndSettle();
 }

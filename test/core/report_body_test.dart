@@ -6,7 +6,7 @@
 //   ProblemReport buildProblemReport({required String category, required String description, required AppInfo app,
 //       Map<String, Object?> device = const {}, Map<String, Object?>? radio, String? driveId,
 //       List<String>? log /* null = "Include app log" off; oldest line first */,
-//       List<String> secrets = const [] /* literal strings that must never be sent: driver key, full server URL */,
+//       String? driverKey, String? serverUrl /* removed word for word from log lines only (L, Oct 17) */,
 //       int maxBytes = problemReportMaxBytes})
 //   ProblemReport: .body (pretty-printed JSON text, the exact bytes sent), .bytes (UTF-8 length of body),
 //       .redacted (Map<String,int>, summed over every string), .removedKeys (all counts except coords),
@@ -99,19 +99,48 @@ void main() {
     expect(r.roundedLocations, 4);
   });
 
-  test('AC-6: the driver key and the full server URL never appear, even when the log contains them', () {
-    const driverKey = 'secretkey-abcdef-1234'; // not ms_-shaped, so only the literal scrub catches it
+  // L, Oct 17 (review fix 9): the literal key/URL pass applies to log lines only; the description goes through §8 alone.
+  test('AC-6: the driver key and the full server URL never appear in the log, even when the app wrote them there', () {
+    const driverKey = 'secretkey-abcdef-1234'; // not ms_-shaped, so only the literal pass catches it
     const serverUrl = 'https://cmat.example.org/private/path';
     final r = buildProblemReport(
       category: 'upload',
-      description: 'pasted $driverKey by mistake',
+      description: 'Upload failed',
       app: app,
       log: const ['2026-10-17T14:02:11Z POST $serverUrl/api/cmh/drive-upload x-driver-key $driverKey'],
-      secrets: const [driverKey, serverUrl],
+      driverKey: driverKey,
+      serverUrl: serverUrl,
     );
     expect(r.body, isNot(contains(driverKey)));
     expect(r.body, isNot(contains(serverUrl)));
     expect(r.body, isNot(contains('/private/path')));
+    final log = decode(r)['log'] as String;
+    expect(log, contains('[redacted:driver-key]'), reason: 'a literal driver-key hit reads like R1');
+    expect(r.redacted['driverKey'], 1, reason: 'a literal driver-key hit counts as driverKey');
+    expect(r.redacted['secret'], 1, reason: 'a literal server-URL hit counts as secret');
+    expect(r.removedKeys, 2);
+  });
+
+  test('AC-6: a key typed into the description is removed by R1; the site link in the description is left as written', () {
+    const serverUrl = 'https://cmat.example.org/private/path';
+    final r = buildProblemReport(
+      category: 'upload',
+      description: 'I pasted $msKey from $serverUrl/me and it failed',
+      app: app,
+      log: const ['2026-10-17T14:02:11Z sync ok'],
+      driverKey: msKey,
+      serverUrl: serverUrl,
+    );
+    expect(decode(r)['description'], 'I pasted [redacted:driver-key] from $serverUrl/me and it failed');
+    expect(r.redacted['driverKey'], 1);
+    expect(r.redacted['secret'], 0);
+  });
+
+  test('blank or missing driverKey/serverUrl change nothing', () {
+    final a = buildProblemReport(category: 'bug', description: 'x', app: app, log: const ['a b c']);
+    final b = buildProblemReport(category: 'bug', description: 'x', app: app, log: const ['a b c'], driverKey: ' ', serverUrl: '');
+    expect(b.body, a.body);
+    expect(decode(b)['log'], contains('a b c'));
   });
 
   group('AC-7: 5 MB cap', () {

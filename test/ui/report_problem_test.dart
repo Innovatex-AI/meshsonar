@@ -17,7 +17,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/app/app_state.dart';
-import 'package:meshsonar/app/messages.dart';
 import 'package:meshsonar/core/api.dart';
 
 import 'fakes.dart';
@@ -91,8 +90,7 @@ void main() {
       final h = M1Harness()..approveKey();
       await h.pumpApp(tester);
       await openSettings(tester);
-      await tester.scrollUntilVisible(find.byKey(const Key('about')), 150, scrollable: settingsScrollable());
-      await tester.pumpAndSettle();
+      await scrollSettingsTo(tester, find.byKey(const Key('about')));
       final row = find.byKey(const Key('report-problem'));
       expect(find.descendant(of: find.byKey(const Key('section-about-section')), matching: row), findsOneWidget);
       expect(find.descendant(of: row, matching: find.text('Report a problem')), findsOneWidget);
@@ -287,15 +285,19 @@ void main() {
     final cases = <(String, Object?, String, bool)>[
       // (label, error thrown by the fake server or null for 201, text the app shows, draft kept?)
       ('201', null, 'Sent. Thank you.', false),
+      // Report-specific copy (review fix 7, L Oct 17): the drive-upload wording ("your pings are saved") doesn't fit.
       ('401', const CmatException('x-driver-key required', status: 401),
-          friendlyError(const CmatException('x', status: 401)), true),
+          'The server doesn\'t recognise this driver key. Your report is saved on this phone.', true),
       ('403', const CmatException('driver key is revoked', status: 403),
-          friendlyError(const CmatException('x', status: 403)), true),
+          'This driver key can\'t send reports (rejected or revoked). Your report is saved on this phone.', true),
       ('404', const CmatException('not found', status: 404), 'This server doesn\'t accept problem reports.', true),
       ('503', const CmatException('Problem reports are turned off on this server.', status: 503),
           'This server doesn\'t accept problem reports.', true),
       ('413', const CmatException('Report is larger than 5 MB.', status: 413), 'The report is too large.', true),
-      ('429', const CmatException('Too many requests. Try again later.', status: 429), 'The server is busy', true),
+      ('429', const CmatException('Too many requests. Try again later.', status: 429),
+          'Too many reports in the last hour. Try again later. Your report is saved on this phone.', true),
+      ('400', const CmatException('category: required', status: 400),
+          'The server couldn\'t accept this report as written.', true),
       ('network error', const CmatException('network error: no route'), notSent, true),
       ('timeout', const CmatException('timed out talking to cmat.example.org'), notSent, true),
       ('500', const CmatException('boom', status: 500), notSent, true),

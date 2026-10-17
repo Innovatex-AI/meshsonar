@@ -61,7 +61,7 @@ void main() {
         '2026-10-17T14:02:13Z > set mqtt1.password x',
         '2026-10-17T14:02:14Z password=hunter2',
       ],
-      secrets: const [driverKey],
+      driverKey: driverKey,
     );
     final r = await HttpCmatClient(base).reportProblem(driverKey, report.body);
     expect(r.id, matches(RegExp(r'^[0-9a-f-]{36}$')));

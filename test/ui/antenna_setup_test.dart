@@ -255,20 +255,18 @@ void main() {
     expect(sheet, findsNothing);
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
-    final scroll = settingsScrollable();
     final row = find.byKey(const ValueKey('antenna-profile-abcdef0123'));
-    await tester.scrollUntilVisible(row, 150, scrollable: scroll);
+    await scrollSettingsTo(tester, row, step: 150);
     expect(find.descendant(of: row, matching: find.textContaining(RegExp('Truck Radio|abcdef', caseSensitive: false))),
         findsWidgets, reason: 'name if known, else key prefix');
     expect(find.descendant(of: row, matching: find.textContaining('Roof mag-mount')), findsWidgets);
     expect(find.descendant(of: row, matching: find.textContaining('5.8')), findsWidgets);
-    await tester.scrollUntilVisible(find.byKey(const ValueKey('antenna-profile-ffee000111')), 150, scrollable: scroll);
+    await scrollSettingsTo(tester, find.byKey(const ValueKey('antenna-profile-ffee000111')), step: 150);
     expect(find.descendant(of: find.byKey(const ValueKey('antenna-profile-ffee000111')), matching: find.textContaining('Fixed mast')),
         findsWidgets);
 
     // Edit: tap the row, change the height.
-    await tester.scrollUntilVisible(row, -150, scrollable: scroll);
-    await tester.pumpAndSettle();
+    await scrollSettingsTo(tester, row, step: -150);
     await tester.tap(row);
     await tester.pumpAndSettle();
     expect(sheet, findsOneWidget);
@@ -280,8 +278,7 @@ void main() {
 
     // Forget the connected radio: it prompts again on the next connect; the other radio is untouched.
     final forget = find.byKey(const ValueKey('antenna-forget-abcdef0123'));
-    await tester.scrollUntilVisible(forget, 100, scrollable: scroll);
-    await tester.pumpAndSettle();
+    await scrollSettingsTo(tester, forget, step: 100);
     await tester.tap(forget);
     await tester.pumpAndSettle();
     final confirm = find.byKey(const Key('antenna-forget-confirm'));
