@@ -89,6 +89,11 @@ List<String> shapeProblems(Object? body) {
     if (!range(p['gps_accuracy_m'], 0, 10000) || !range(p['speed_mps'], 0, 150) || !range(p['noise_floor_dbm'], -160, 0)) {
       out.add('ping $i ranges');
     }
+    // Drive Format v1.1 (optional): pkt_hash 16 lower-case hex, tx_epoch_s an integer second, tx_dbm −10…40.
+    if (p['pkt_hash'] != null && !(p['pkt_hash'] is String && RegExp(r'^[0-9a-f]{16}$').hasMatch(p['pkt_hash'] as String))) {
+      out.add('ping $i pkt_hash');
+    }
+    if (!range(p['tx_epoch_s'], 1420070400, 4294967295, integer: true) || !range(p['tx_dbm'], -10, 40)) out.add('ping $i v1.1');
     final echoes = p['echoes'];
     if (echoes is! List) {
       out.add('ping $i echoes');

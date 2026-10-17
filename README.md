@@ -1,6 +1,6 @@
 # MeshSonar
 
-**Version 0.5.0** · Open-source MeshCore wardriving. MeshSonar pings a channel from your MeshCore companion radio,
+**Version 0.6.0** · Open-source MeshCore wardriving. MeshSonar pings a channel from your MeshCore companion radio,
 listens for the repeaters that echo it, and records every ping with GPS — including the ones nobody heard. Drives are
 saved on the device first, can be exported as files, and sync to [MeshSonar](https://meshsonar.com) or any server that
 implements the [MeshSonar Drive Format v1](https://github.com/Innovatex-AI/meshcore-insights/blob/main/docs/MESHSONAR_DRIVE_FORMAT.md).

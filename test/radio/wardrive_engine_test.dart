@@ -4,6 +4,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/radio/companion_link.dart';
+import 'package:meshsonar/radio/crypto.dart';
+import 'package:meshsonar/radio/packet.dart';
 import 'package:meshsonar/radio/radio_api.dart';
 import 'package:meshsonar/radio/simulator.dart';
 import 'package:meshsonar/radio/wardrive_engine.dart';
@@ -186,6 +188,44 @@ void main() {
     expect(p.neighbor!.repeater.length, 64);
     expect(p.neighbor!.remoteSnrDb, isNotNull);
     expect(p.neighbor!.localSnrDb, isNotNull);
+    await rig.engine.stop();
+  });
+
+  test('v1.1: each ping carries pkt_hash, tx_epoch_s and tx_dbm for the exact packet sent', () async {
+    final rig = Rig(speedMps: 0);
+    await rig.open();
+    await rig.engine.start(const WardriveConfig(intervalSec: 0, minDistanceM: 100, listenWindow: window, txPowerW: 0.16, txDbm: 22));
+    final a = await rig.engine.pingNow();
+    final b = await rig.engine.pingNow();
+    for (final p in [a, b]) {
+      final sent = rig.radio.sentFrames.where((f) => f[0] == 3).toList()[p == a ? 0 : 1];
+      final ts = sent[3] | (sent[4] << 8) | (sent[5] << 16) | (sent[6] << 24);
+      expect(p.txEpochS, ts, reason: 'the second inside the packet, not a guess from ts');
+      expect(p.txEpochS! - p.ts.millisecondsSinceEpoch ~/ 1000, inInclusiveRange(0, 1));
+      final text = String.fromCharCodes(sent.sublist(7));
+      expect(p.pktHash, groupTextPacketHashHex(hashtagChannelSecret('#wardriving'), ts, 'MeshSonar Sim', text));
+      expect(p.pktHash, hasLength(16));
+      expect(p.txDbm, 22);
+      expect(p.toJson()['pkt_hash'], p.pktHash);
+    }
+    expect(a.echoes, isNotEmpty, reason: 'the hash also agrees with the heard repeats (taken from them when present)');
+    expect(a.pktHash, isNot(b.pktHash));
+    await rig.engine.stop();
+  });
+
+  test('v1.1: with nothing heard the hash is predicted from the send; unknown power stays null', () async {
+    final rig = Rig(speedMps: 0);
+    rig.radio.repeaters.clear();
+    await rig.open();
+    await rig.engine.start(manual());
+    final p = await rig.engine.pingNow();
+    expect(p.echoes, isEmpty);
+    final sent = rig.radio.sentFrames.lastWhere((f) => f[0] == 3);
+    final ts = sent[3] | (sent[4] << 8) | (sent[5] << 16) | (sent[6] << 24);
+    expect(p.txEpochS, ts);
+    expect(p.pktHash,
+        groupTextPacketHashHex(hashtagChannelSecret('#wardriving'), ts, 'MeshSonar Sim', String.fromCharCodes(sent.sublist(7))));
+    expect(p.txDbm, isNull);
     await rig.engine.stop();
   });
 }

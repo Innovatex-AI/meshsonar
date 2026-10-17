@@ -136,6 +136,7 @@ class DefaultWardriveEngine implements WardriveEngine {
         minDistanceM: c.minDistanceM.clamp(Settings.minDistance, Settings.maxDistance),
         listenWindow: c.listenWindow,
         txPowerW: c.txPowerW,
+        txDbm: c.txDbm,
       );
 
   /// Shortest time between two auto pings: the interval, and never less than one listen window.
@@ -194,6 +195,7 @@ class DefaultWardriveEngine implements WardriveEngine {
       minDistanceM: c.minDistanceM,
       listenWindow: c.listenWindow,
       txPowerW: c.txPowerW,
+      txDbm: c.txDbm,
     );
     _startAuto();
     if (_config.intervalSec <= 0 && !_busy) _setStatus(EngineState.driving, 'Ready (manual pings)');
@@ -353,6 +355,7 @@ class DefaultWardriveEngine implements WardriveEngine {
     final idx = _channelIndex!;
     final secret = _secret!;
     final text = formatPingText(fix.lat, fix.lon, txPowerW: _config.txPowerW);
+    final txDbm = _inRange(_config.txDbm, -10, 40); // the power this ping goes out at, before any mid-listen change
     final heard = <_Heard>[];
     final ctl = <_Ctl>[];
     StreamSubscription<ControlPacket>? ctlSub;
@@ -393,6 +396,7 @@ class DefaultWardriveEngine implements WardriveEngine {
       _collector = null;
 
       final echoes = _buildEchoes(heard, secret, text, sentTs, sentAt);
+      final pktHash = _packetHash(heard, secret, text, sentTs, l is MeshCoreCompanionLink ? l.selfInfo?.name : null);
       final neighbor = tag == null ? null : _bestNeighbor(ctl, tag);
       if (cutShort && echoes.isEmpty && neighbor == null) {
         return null;
@@ -408,6 +412,9 @@ class DefaultWardriveEngine implements WardriveEngine {
         noiseFloorDbm: _inRange(noise, -160, 0),
         echoes: echoes,
         neighbor: neighbor,
+        pktHash: pktHash,
+        txEpochS: sentTs,
+        txDbm: txDbm,
       );
       if (!_pings.isClosed) _pings.add(ping);
       if (_running && !_stopping) {
@@ -486,6 +493,27 @@ class DefaultWardriveEngine implements WardriveEngine {
       }
     }
     return [for (final r in order) best[r]!.echo];
+  }
+
+  /// Drive Format v1.1 `pkt_hash`: the MeshCore packet hash of what we sent (Packet::calculatePacketHash).
+  ///
+  /// The channel send reply is a bare RESP_CODE_OK (companion MyMesh.cpp CMD_SEND_CHANNEL_TXT_MSG): the companion
+  /// reports no hash or packet for a channel message. But the GRP_TXT it builds is deterministic, so:
+  ///  1. a heard repeat of this exact send (matched by MAC, timestamp and text) carries the on-air payload, and its
+  ///     hash is the truth (repeats change only the path, which isn't hashed);
+  ///  2. otherwise the payload is rebuilt from the timestamp we put in the command, the companion's node name and
+  ///     the text (BaseChatMesh::sendGroupMessage). Checked against 301 of 301 #wardriving copies an observer heard
+  ///     on Oct 17 (test/radio/packet_hash_test.dart).
+  /// Null without the send timestamp (non-companion links) or, with nothing heard, without the node name.
+  static String? _packetHash(List<_Heard> heard, Uint8List secret, String text, int? sentTs, String? nodeName) {
+    if (sentTs == null) return null;
+    for (final h in heard) {
+      final pkt = MeshPacket.tryParse(h.rx.raw);
+      if (pkt == null || matchEcho(pkt, secret, text, timestamp: sentTs) == null) continue;
+      return pkt.hashHex;
+    }
+    if (nodeName == null) return null;
+    return groupTextPacketHashHex(secret, sentTs, nodeName, text);
   }
 
   Neighbor? _bestNeighbor(List<_Ctl> ctl, int tag) {

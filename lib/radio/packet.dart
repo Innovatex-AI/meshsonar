@@ -24,6 +24,7 @@
 //  - We also verify the MAC and (when known) the 4-byte timestamp we put in the send command, so a later ping with the
 //    same text can't claim an earlier ping's echoes.
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'crypto.dart';
@@ -83,6 +84,9 @@ class MeshPacket {
   int get pathHashSize => (pathLenByte >> 6) + 1;
   int get hopCount => pathLenByte & 63;
 
+  /// Packet::calculatePacketHash of this packet, lower-case hex (16 chars).
+  String get hashHex => toHex(packetHash(payloadType, payload, pathLenByte: pathLenByte));
+
   /// Path as lower-case hex, one string per hop.
   List<String> get pathHex => path.map(toHex).toList();
 
@@ -137,6 +141,24 @@ class MeshPacket {
   }
 }
 
+/// MAX_HASH_SIZE (src/MeshCore.h line 7): packet hashes are truncated to 8 bytes.
+const int packetHashSize = 8;
+
+/// MeshCore packet hash, as Packet::calculatePacketHash (src/Packet.cpp line 41): SHA-256 over the payload type byte,
+/// then (TRACE only) the path_len byte, then the payload; first 8 bytes. Route bits, transport codes and the path are
+/// not hashed, so every repeat of one transmission has the same hash. This is what observers publish as `hash` and
+/// what the server joins drive pings to observer receptions on.
+Uint8List packetHash(int payloadType, List<int> payload, {int pathLenByte = 0}) {
+  final t = payloadType & 0x0F;
+  final data = <int>[t, if (t == PayloadType.trace) pathLenByte & 0xff, ...payload];
+  return Uint8List.sublistView(sha256(data), 0, packetHashSize);
+}
+
+/// The hash of the GRP_TXT a companion sends for CMD_SEND_CHANNEL_TXT_MSG(timestamp, text) on the channel with
+/// [secret16], when its node name is [senderName]. Lower-case hex, 16 characters.
+String groupTextPacketHashHex(List<int> secret16, int timestamp, String senderName, String text) =>
+    toHex(packetHash(PayloadType.grpTxt, buildGroupTextPayload(secret16, timestamp, senderName, text)));
+
 /// Encodes a path_len byte (Packet::setPathHashSizeAndCount).
 int encodePathLen(int hashSize, int count) => ((hashSize - 1) << 6) | (count & 63);
 
@@ -152,10 +174,19 @@ class GroupText {
   const GroupText(this.timestamp, this.flags, this.text);
 }
 
+/// MAX_TEXT_LEN (src/helpers/BaseChatMesh.h line 8): 10 × CIPHER_BLOCK_SIZE.
+const int maxTextLen = 160;
+
 /// Builds the GRP_TXT payload a companion produces for [text] from [senderName] (BaseChatMesh::sendGroupMessage +
-/// Mesh::createGroupDatagram). Used by the simulator and tests.
+/// Mesh::createGroupDatagram), byte for byte: `sprintf("%s: ", sender_name)`, then the text cut to
+/// MAX_TEXT_LEN − prefix bytes (a raw byte cut, as the firmware does), no NUL terminator in the encrypted length.
+/// The companion is deterministic (AES-128-ECB, no IV), so this is exactly what goes on the air; the simulator uses
+/// it to make echoes and the engine uses it to predict the packet hash.
 Uint8List buildGroupTextPayload(List<int> secret16, int timestamp, String senderName, String text) {
-  final body = utf8.encode('$senderName: $text');
+  final prefix = utf8.encode('$senderName: ');
+  var msg = utf8.encode(text);
+  if (msg.length + prefix.length > maxTextLen) msg = msg.sublist(0, math.max(0, maxTextLen - prefix.length));
+  final body = [...prefix, ...msg];
   final plain = Uint8List(5 + body.length);
   ByteData.sublistView(plain).setUint32(0, timestamp, Endian.little);
   plain[4] = 0; // TXT_TYPE_PLAIN

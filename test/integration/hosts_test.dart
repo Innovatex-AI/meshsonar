@@ -54,7 +54,8 @@ class FastEngine implements WardriveEngine {
       intervalSec: c.intervalSec,
       minDistanceM: c.minDistanceM,
       listenWindow: const Duration(milliseconds: 600),
-      txPowerW: c.txPowerW));
+      txPowerW: c.txPowerW,
+      txDbm: c.txDbm));
   @override
   void updateConfig(WardriveConfig c) => inner.updateConfig(c);
   @override
