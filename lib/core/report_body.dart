@@ -52,11 +52,65 @@ class ProblemReport {
   );
 }
 
+/// What the person entered on the report form, kept with an unsent report so the form can be restored.
+class ReportForm {
+  final String category;
+  final String description;
+  final bool includeLog;
+  final String? driveId;
+  const ReportForm({required this.category, required this.description, this.includeLog = true, this.driveId});
+
+  Map<String, dynamic> toJson() => {
+    'category': category,
+    'description': description,
+    'include_log': includeLog,
+    'drive_id': driveId,
+  };
+
+  /// The form a report body came from (category, description, whether it has a log, the attached drive).
+  factory ReportForm.fromBody(String body) {
+    final b = jsonDecode(body) as Map;
+    return ReportForm(
+      category: b['category'] as String,
+      description: b['description'] as String,
+      includeLog: b['log'] != null,
+      driveId: b['driveId'] as String?,
+    );
+  }
+
+  /// Null when [j] isn't a form saved by [toJson].
+  static ReportForm? tryParse(Object? j) {
+    if (j is! Map || j['category'] is! String || j['description'] is! String) return null;
+    return ReportForm(
+      category: j['category'] as String,
+      description: j['description'] as String,
+      includeLog: j['include_log'] != false,
+      driveId: j['drive_id'] is String ? j['drive_id'] as String : null,
+    );
+  }
+}
+
+/// The one unsent report kept on the phone: the reviewed report and the form it came from.
+class ProblemReportDraft {
+  final ProblemReport report;
+  final ReportForm form;
+  const ProblemReportDraft({required this.report, required this.form});
+
+  Map<String, dynamic> toJson() => {'report': report.toJson(), 'form': form.toJson()};
+
+  factory ProblemReportDraft.fromJson(Map<String, dynamic> j) {
+    final report = ProblemReport.fromJson((j['report'] as Map).cast<String, dynamic>());
+    // A form that can't be read is rebuilt from the report itself, which holds the category and description.
+    return ProblemReportDraft(report: report, form: ReportForm.tryParse(j['form']) ?? ReportForm.fromBody(report.body));
+  }
+}
+
 /// Builds the report body.
 ///
-/// [log] is null when "Include app log" is off; oldest line first. [secrets] are literal strings that must never be
-/// sent (the driver key and the full server URL), even where no redaction rule recognises them. If the body is over
-/// [maxBytes], the oldest log lines are dropped until it fits.
+/// [log] is null when "Include app log" is off; oldest line first. [driverKey] and [serverUrl] are removed word for
+/// word from the log, where the app itself may have written them, even when no redaction rule recognises them (a
+/// driver key typed into the description is still caught by R1). If the body is over [maxBytes], the oldest log
+/// lines are dropped until it fits.
 ProblemReport buildProblemReport({
   required String category,
   required String description,
@@ -65,14 +119,15 @@ ProblemReport buildProblemReport({
   Map<String, Object?>? radio,
   String? driveId,
   List<String>? log,
-  List<String> secrets = const [],
+  String? driverKey,
+  String? serverUrl,
   int maxBytes = problemReportMaxBytes,
 }) {
   final counts = {for (final k in redactionCountKeys) k: 0};
   void add(Map<String, int> c) => c.forEach((k, v) => counts[k] = counts[k]! + v);
 
   String clean(String s) {
-    final r = redactText(_withoutControlChars(s), secrets: secrets);
+    final r = redactText(_withoutControlChars(s));
     add(r.counts);
     return r.text;
   }
@@ -98,9 +153,13 @@ ProblemReport buildProblemReport({
   final lines = <String>[];
   final lineCounts = <Map<String, int>>[];
   for (final l in log ?? const <String>[]) {
-    final r = redactText(_withoutControlChars(l), secrets: secrets);
+    final literal = {for (final k in redactionCountKeys) k: 0};
+    var text = _withoutControlChars(l);
+    text = _replaceLiteral(text, serverUrl, '[redacted]', 'secret', literal);
+    text = _replaceLiteral(text, driverKey, '[redacted:driver-key]', 'driverKey', literal);
+    final r = redactText(text);
     lines.add(r.text);
-    lineCounts.add(r.counts);
+    lineCounts.add({for (final k in redactionCountKeys) k: literal[k]! + r.counts[k]!});
   }
 
   const encoder = JsonEncoder.withIndent('  ');
@@ -128,6 +187,15 @@ ProblemReport buildProblemReport({
     logShortened: dropped > 0,
     tooLarge: utf8.encode(body).length > maxBytes,
   );
+}
+
+/// Replaces every [value] in [text] (nothing when it is blank) and counts the hits under [countKey].
+String _replaceLiteral(String text, String? value, String replacement, String countKey, Map<String, int> counts) {
+  if (value == null || value.trim().isEmpty) return text;
+  final n = value.allMatches(text).length;
+  if (n == 0) return text;
+  counts[countKey] = counts[countKey]! + n;
+  return text.replaceAll(value, replacement);
 }
 
 const _coordinateKeys = {'lat', 'lon', 'lng', 'latitude', 'longitude'};

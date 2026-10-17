@@ -205,7 +205,7 @@ class Settings {
         channel: channel ?? this.channel,
         intervalSec: intervalSec ?? this.intervalSec,
         minDistanceM: minDistanceM ?? this.minDistanceM,
-        antenna: antenna,
+        antenna: antenna, // the 0.3.x setting is read-only: always kept as loaded
         antennaProfiles: antennaProfiles ?? this.antennaProfiles,
         autoSync: autoSync ?? this.autoSync,
         syncDuringDrive: syncDuringDrive ?? this.syncDuringDrive,

@@ -11,29 +11,30 @@ import 'app.dart';
 import 'report_problem_screen.dart';
 import 'widgets.dart';
 
+const String _driverHelp =
+    'Your driver key lets this phone upload drives to the coverage map. Without one, drives stay on this phone (you '
+    'can still export them).';
+
 class SettingsScreen extends StatelessWidget {
-  /// Lets the tab shell bring the driver key section into view.
-  final ScrollController? scrollController;
-  const SettingsScreen({super.key, this.scrollController});
+  const SettingsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     final s = AppScope.of(context);
     final st = s.settings;
+    final t = Theme.of(context);
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: SafeArea(
         child: ListView(
           key: const Key('settings-list'),
-          controller: scrollController,
-          padding: const EdgeInsets.fromLTRB(0, 4, 0, 12),
+          padding: const EdgeInsets.fromLTRB(0, 4, 0, 24),
           children: [
             _Section(
               id: 'driver',
               title: 'Driver & server',
               icon: Icons.badge_outlined,
-              help: 'Your driver key lets this phone upload drives to the coverage map. Without one, drives stay on '
-                  'this phone (you can still export them).',
+              help: _driverHelp,
               children: [
                 const _DriverKeySection(),
                 ListTile(
@@ -234,6 +235,11 @@ class SettingsScreen extends StatelessWidget {
                 ),
               ],
             ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+              child: Text('Settings are saved on this phone as you change them.',
+                  style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+            ),
           ],
         ),
       ),
@@ -290,6 +296,33 @@ class _Section extends StatelessWidget {
   }
 }
 
+/// The driver key part of Settings on a screen of its own, opened over screens that need a key (Report a problem);
+/// Back returns there with nothing lost.
+class DriverKeyScreen extends StatelessWidget {
+  const DriverKeyScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Driver key')),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(0, 4, 0, 24),
+          children: const [
+            _Section(
+              id: 'driver',
+              title: 'Driver key',
+              icon: Icons.badge_outlined,
+              help: _driverHelp,
+              children: [_DriverKeySection()],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// One saved radio in Settings → Antenna: tap to edit, or forget it (it is asked again on its next connect).
 class _AntennaProfileTile extends StatelessWidget {
   final String radioKey;
@@ -321,18 +354,20 @@ class _AntennaProfileTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = AppScope.of(context);
     final name = s.radioName(radioKey) ?? 'Radio ${radioKey.length > 8 ? radioKey.substring(0, 8) : radioKey}';
+    // The radio in use keeps its antenna until the drive ends (the drive has already recorded it).
+    final locked = s.driving && s.selfInfo?.publicKey.toLowerCase() == radioKey;
     return ListTile(
       key: ValueKey('antenna-profile-$radioKey'),
-      leading: const Icon(Icons.settings_input_antenna),
+      leading: Icon(locked ? Icons.lock_outline : Icons.settings_input_antenna),
       title: Text(name),
-      subtitle: Text(profile.summary),
+      subtitle: Text(locked ? '${profile.summary}\nLocked while driving' : profile.summary),
       trailing: IconButton(
         key: ValueKey('antenna-forget-$radioKey'),
         tooltip: 'Forget this radio\'s antenna',
         icon: const Icon(Icons.delete_outline),
-        onPressed: () => _forget(context, name),
+        onPressed: locked ? null : () => _forget(context, name),
       ),
-      onTap: () => showAntennaSheet(context, radioKey: radioKey),
+      onTap: locked ? null : () => showAntennaSheet(context, radioKey: radioKey),
     );
   }
 }

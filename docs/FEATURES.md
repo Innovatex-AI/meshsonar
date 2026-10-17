@@ -61,14 +61,17 @@ and ≥ 640 px) the map sits on the left and the controls on the right.
   are the current drive's numbers, or the last drive's after Stop.
 - **Unsaved banner** while pings are waiting to be written to the device.
 - **Antenna chip** (`antenna-chip`): the connected radio's antenna, e.g. "Roof mag-mount · 5.8 dBi · 1.8 m". Tap it
-  to change it before a drive; it's **locked while driving**. A radio that hasn't been set up shows "Set up this
-  radio's antenna" instead (`antenna-setup`), and Start drive is disabled until it is.
+  to change it before a drive. While driving it's **locked** and shows what the drive records ("External · 5.8 dBi ·
+  1.8 m"). A radio that hasn't been set up shows "Set up this radio's antenna" instead (`antenna-setup`, also on the
+  full-screen map), and Start drive is disabled until it is.
 - **Antenna setup, once per radio** (`antenna-sheet`): when a radio without a saved antenna connects, "How is this
   radio's antenna set up?" opens: mount (`mount-handheld`, `mount-insideCar`, `mount-roofMagMount`,
   `mount-fixedMast`), gain −10 to 20 dBi or "Don't know" (`antenna-gain-unknown`), height 0 to 300 m. Saved per
   companion public key; handheld and inside car upload as `internal`, the others as `external`. After an upgrade
-  from 0.3.x, gain and height are prefilled from the old setting and the matching mounts are offered first. A
-  simulated drive without a profile still runs (its antenna is recorded as unknown).
+  from 0.3.x (an old setting other than the untouched default), gain and height are prefilled, "Don't know" is on
+  when the old gain was empty, and the matching mounts are offered first. Save stays disabled, with "Pick a mount,
+  enter the height, and a gain or Don't know" under it, until all three are valid. The simulator follows the same
+  rule.
 - **Log** button (`open-log`): "Log · N". Opens the live ping log.
 - **Start drive / Stop drive** (`start-stop`). It reads "Connect radio" when nothing is connected. Next to it is **Ping
   now** (`ping-now`), enabled only while driving and not already pinging.
@@ -314,7 +317,7 @@ Metric definitions (`DriveReport.compute`):
 | | **Auto-ping** | Slider, every 5 s from **10 to 120 s** (default 30) |
 | | **Minimum distance** | Slider stops 15, 25, 50, 75, 100, 125, 150, 200, 250, 300, 400, **500 m** (default 100) |
 | | **Heard list hold** | 1–10 pings (default 3) |
-| Antenna | **Each saved radio** (`antenna-profile-<key>`) | Name (or key prefix) with mount, gain and height. Tap to edit; **Forget** (`antenna-forget-<key>`) asks again on that radio's next connect |
+| Antenna | **Each saved radio** (`antenna-profile-<key>`) | Name (or key prefix) with mount, gain and height. Tap to edit; **Forget** (`antenna-forget-<key>`) asks again on that radio's next connect. Both are locked for the radio in use while driving ("Locked while driving") |
 | Upload | **Upload at end of drive** | `autoSync`, default on |
 | | **Upload during the drive** | Default on; needs the end-of-drive toggle |
 | | **Upload interval** | 1–30 min (default 5) |
@@ -346,25 +349,29 @@ Metric definitions (`DriveReport.compute`):
 ## Report a problem
 
 (`ui/report_problem_screen.dart`, `report-screen`) From Settings → About or a drive's ⋮ menu (which attaches that
-drive). Needs a driver key that is pending or approved; otherwise the screen says why (`report-needs-key`) and links
-to the driver key in Settings (`report-key-settings`).
+drive). Needs a driver key that is pending or approved; otherwise the screen says why (`report-needs-key`), and
+**Open driver key settings** (`report-key-settings`) opens the driver key over the form; Back returns to the form as
+it was.
 
 - **Form:** category chips (`report-category-<bug|radio|gps|upload|map|idea|other>`); description, 1 to 4,000
   characters with a live counter (`report-counter`, red over the limit); **Include app log** (on by default);
   **Attach a drive** (none or one of the 20 most recent; only its id is sent). **Review report** (`report-review`).
-- **Review** (`report-preview`): the exact JSON body that will be sent, selectable; its size ("3.2 KB of 5 MB");
+- **Review** (`report-preview`): the exact JSON body that will be sent, selectable; its size ("0.2 MB of 5 MB");
   "We removed N keys and rounded M locations."; "Log shortened to fit 5 MB." when the oldest log lines had to go.
   **Send report** (`report-send`) is the only Send button.
 - **What's added:** app name, version, build and platform; the phone's OS, OS version and locale; the connected
   radio's name, firmware and radio settings (not its public key); with the log, the last 1,000 app events plus a
   settings snapshot (server host only). Everything is redacted on the phone first (`lib/core/redact.dart`), and the
-  driver key and full server address are removed word for word.
-- **Results:** 201 "Sent. Thank you." with the first 8 characters of the report id; 401/403 the driver key text;
-  404/503 "This server doesn't accept problem reports."; 413 "The report is too large."; 429 the busy text; no
-  signal, a timeout or a 5xx "Not sent. Your report is saved on this phone; send it when you have signal."
-- **Saved report:** the report is saved (`report_draft.json`) before sending and deleted only when the server takes
-  it. Opening Report a problem then offers **Send saved report** (the same review again) or **Discard**. It is never
-  sent without that tap.
+  driver key and full server address are removed word for word from the log.
+- **Results:** 201 "Sent. Thank you." with the first 8 characters of the report id; 401 "The server doesn't
+  recognise this driver key."; 403 "This driver key can't send reports (rejected or revoked)."; 429 "Too many reports
+  in the last hour. Try again later." (each followed by "Your report is saved on this phone."); 404/503 "This server
+  doesn't accept problem reports."; 413 "The report is too large."; 400 "The server couldn't accept this report as
+  written." with **Edit report** (`report-edit`) and **Discard** (`report-discard`); no signal, a timeout or a 5xx
+  "Not sent. Your report is saved on this phone; send it when you have signal."
+- **Saved report:** the report and its form are saved (`report_draft.json`) before sending and deleted only when the
+  server takes it. Opening Report a problem then restores the form and offers **Send saved report** (the same review
+  again) or **Discard**. It is never sent without that tap.
 
 ## Repeater directory (names and positions)
 

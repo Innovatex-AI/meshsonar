@@ -104,6 +104,8 @@ switch, height field in metres. Save is disabled until mount and height are vali
 after upgrading, the sheet opens prefilled from the old global setting: gain and height copied; mount left unselected but the
 sheet notes "Before 0.4.0 you chose External" (or Internal) and offers the two matching mounts first. Once saved, that radio
 never prompts again. The old `antenna` key is kept in the file (read-only, for this prefill) and is no longer used for drives.
+Build note (M, Oct 17): the prefill applies only when the old setting differs from the untouched default (`external`, or a
+gain or height set), so a fresh 0.4.0 install never sees "Before 0.4.0 you chose Internal".
 
 **Editing later:** Settings → Antenna lists saved radios (name if known, else key prefix) with mount, gain and height; tap to
 edit; "Forget" removes a profile (that radio prompts again on next connect). The drive-screen `AntennaToggle` becomes an

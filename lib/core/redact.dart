@@ -64,20 +64,9 @@ final RegExp _coordinate = RegExp(r'(?<![\d.])(-?)\b(\d{1,3}\.\d{4,})\b(?!\d|\.\
 double roundCoordinate(double v) => v.sign * (v.abs() * 1000).round() / 1000;
 
 /// Applies R1–R6 then C1 to [input].
-///
-/// [secrets] are literal strings that must never leave the phone even when no rule recognises them (the driver key,
-/// the full server URL); each is replaced by `[redacted]` first and counted as `secret`. Blank entries are ignored.
-RedactionResult redactText(String input, {Iterable<String> secrets = const []}) {
+RedactionResult redactText(String input) {
   final counts = {for (final k in redactionCountKeys) k: 0};
   var text = input;
-  final literals = secrets.where((s) => s.trim().isNotEmpty).toSet().toList()
-    ..sort((a, b) => b.length.compareTo(a.length)); // longest first, so one secret inside another can't leave a piece
-  for (final s in literals) {
-    final n = s.allMatches(text).length;
-    if (n == 0) continue;
-    counts['secret'] = counts['secret']! + n;
-    text = text.replaceAll(s, '[redacted]');
-  }
   for (final r in _rules) {
     text = text.replaceAllMapped(r.pattern, (m) {
       counts[r.countKey] = counts[r.countKey]! + 1;

@@ -53,13 +53,16 @@ const String reportNotSentMessage = 'Not sent. Your report is saved on this phon
 /// Plain-language text for a problem report the server didn't take.
 String friendlyReportError(Object e) {
   if (e is! CmatException) return friendlyError(e, action: 'Sending the report');
+  const saved = 'Your report is saved on this phone.';
   return switch (e.status) {
     // 503 is the server's "problem reports are turned off"; other 5xx are outages.
     404 || 503 => 'This server doesn\'t accept problem reports.',
-    401 || 403 || 429 => friendlyError(e),
+    401 => 'The server doesn\'t recognise this driver key. $saved',
+    403 => 'This driver key can\'t send reports (rejected or revoked). $saved',
+    429 => 'Too many reports in the last hour. Try again later. $saved',
     413 => 'The report is too large.',
     null || >= 500 => reportNotSentMessage,
-    _ => 'The server didn\'t take the report: ${e.message}',
+    _ => 'The server couldn\'t accept this report as written.',
   };
 }
 

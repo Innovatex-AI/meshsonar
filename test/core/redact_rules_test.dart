@@ -21,7 +21,11 @@ void main() {
       expect(redactText('fw 10.12345.6789').text, 'fw 10.12345.6789');
       expect(redactText('v1.23456.7').text, 'v1.23456.7');
       expect(redactText('at -82.977705 now').text, 'at -82.978 now');
-      expect(redactText('fix at 40.128091,-82.977705.').text, 'fix at 40.128,-82.978.', reason: 'sentence-ending period');
+      expect(
+        redactText('fix at 40.128091,-82.977705.').text,
+        'fix at 40.128,-82.978.',
+        reason: 'sentence-ending period',
+      );
     });
 
     test('redacting twice gives the same text and zero new counts', () {
@@ -31,15 +35,24 @@ void main() {
       expect(twice.text, once.text);
       expect(twice.counts.values.every((n) => n == 0), isTrue, reason: '${twice.counts}');
     });
+  });
 
-    test('literal secrets are removed first and counted as secret', () {
-      final r = redactText(
-        'key abc-def-123456 at https://x.org/p',
-        secrets: const ['abc-def-123456', 'https://x.org/p', ' '],
-      );
-      expect(r.text, 'key [redacted] at [redacted]');
-      expect(r.counts['secret'], 2);
-    });
+  test('the driver key and server URL are removed word for word from the log only, and counted', () {
+    const key = 'abc-def-123456';
+    const url = 'https://x.org/p';
+    final r = buildProblemReport(
+      category: 'upload',
+      description: 'The site $url looks fine',
+      app: const AppInfo(name: 'MeshSonar'),
+      log: const ['POST $url/api/cmh/drive-upload key $key'],
+      driverKey: key,
+      serverUrl: url,
+    );
+    final j = jsonDecode(r.body) as Map<String, dynamic>;
+    expect(j['description'], 'The site $url looks fine', reason: 'the literal pass is for the log only');
+    expect(j['log'], 'POST [redacted]/api/cmh/drive-upload key [redacted:driver-key]');
+    expect(r.redacted['driverKey'], 1);
+    expect(r.redacted['secret'], 1);
   });
 
   test('a saved report comes back identical (draft round trip)', () {
@@ -57,6 +70,23 @@ void main() {
     expect(back.logShortened, r.logShortened);
   });
 
+  test('a saved draft keeps its form; a draft without a readable form gets it back from the report', () {
+    final r = buildProblemReport(category: 'map', description: 'Tiles missing', app: const AppInfo(), driveId: 'd1');
+    const form = ReportForm(category: 'map', description: 'Tiles missing ', includeLog: false, driveId: 'd1');
+    final back = ProblemReportDraft.fromJson(
+      jsonDecode(jsonEncode(ProblemReportDraft(report: r, form: form).toJson())) as Map<String, dynamic>,
+    );
+    expect(back.report.body, r.body);
+    expect(back.form.toJson(), form.toJson());
+    final rebuilt = ProblemReportDraft.fromJson({'report': r.toJson(), 'form': 'damaged'});
+    expect(rebuilt.form.toJson(), {
+      'category': 'map',
+      'description': 'Tiles missing',
+      'include_log': false,
+      'drive_id': 'd1',
+    });
+  });
+
   test('server answers map to the report messages', () {
     expect(
       friendlyReportError(const CmatException('off', status: 503)),
@@ -64,6 +94,9 @@ void main() {
     );
     expect(friendlyReportError(const CmatException('x', status: 502)), reportNotSentMessage);
     expect(friendlyReportError(const CmatException('network error')), reportNotSentMessage);
-    expect(friendlyReportError(const CmatException('category: required', status: 400)), contains('category: required'));
+    expect(
+      friendlyReportError(const CmatException('category: required', status: 400)),
+      'The server couldn\'t accept this report as written.',
+    );
   });
 }

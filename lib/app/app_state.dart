@@ -29,9 +29,12 @@ enum RadioKind { none, bluetooth, simulator }
 class ProblemReportOutcome {
   final bool sent;
 
+  /// The server refused the report as written (400): sending it again won't help, editing it might.
+  final bool rejected;
+
   /// Plain-language result to show.
   final String message;
-  const ProblemReportOutcome({required this.sent, required this.message});
+  const ProblemReportOutcome({required this.sent, required this.message, this.rejected = false});
 }
 
 class AppState extends ChangeNotifier {
@@ -410,10 +413,9 @@ class AppState extends ChangeNotifier {
       _say('Connect a radio (or the simulator) first.');
       return;
     }
+    // Every drive records how its radio's antenna is set up (the simulator's too, like a real radio).
     final profile = antennaProfile;
-    // Every real drive records how its antenna was set up. The simulator's antenna is pretend, so a simulated drive
-    // without a profile still runs and records the antenna as unknown.
-    if (profile == null && _radioKind != RadioKind.simulator) {
+    if (profile == null) {
       _say('Set up this radio\'s antenna before driving with it.');
       return;
     }
@@ -435,7 +437,7 @@ class AppState extends ChangeNotifier {
         label: (label == null || label.trim().isEmpty) ? null : label.trim(),
         channel: s.channel,
         radio: info?.radio ?? const Radio(),
-        antenna: profile?.toAntenna() ?? const Antenna(),
+        antenna: profile.toAntenna(),
         companion: Companion(
           publicKey: info?.publicKey.toLowerCase(),
           name: info?.name,
@@ -1093,15 +1095,16 @@ class AppState extends ChangeNotifier {
   bool get canReport =>
       hasKey && (_settings.keyStatus == DriverKeyStatus.pending || _settings.keyStatus == DriverKeyStatus.approved);
 
-  ProblemReport? _savedReport;
+  ProblemReportDraft? _savedReport;
 
-  /// The last report that wasn't sent, kept on the phone until it is sent or discarded. Never sent on its own.
-  ProblemReport? get savedReport => _savedReport;
+  /// The last report that wasn't sent, with its form, kept on the phone until it is sent or discarded. Never sent on
+  /// its own.
+  ProblemReportDraft? get savedReport => _savedReport;
 
   Future<void> _loadSavedReport() async {
     try {
       final raw = await services.reportDraftStore?.load();
-      if (raw != null) _savedReport = ProblemReport.fromJson((jsonDecode(raw) as Map).cast<String, dynamic>());
+      if (raw != null) _savedReport = ProblemReportDraft.fromJson((jsonDecode(raw) as Map).cast<String, dynamic>());
     } catch (e) {
       _logError('The saved problem report couldn\'t be read', e);
     }
@@ -1134,22 +1137,25 @@ class AppState extends ChangeNotifier {
             },
       driveId: driveId,
       log: includeLog ? [...diagnostics.lines, ...settingsSnapshot(_settings, antenna: antennaProfile)] : null,
-      // The key and the server's full address never leave in a report, even where no redaction rule spots them.
-      secrets: [?_settings.driverKey, _settings.serverUrl, client.baseUrl.toString()],
+      // The app's own log may hold the key and the server's full address; they never leave in a report.
+      driverKey: _settings.driverKey,
+      serverUrl: _settings.serverUrl,
     );
   }
 
-  /// Sends a report the person reviewed. It is saved on the phone first and stays saved unless the server takes it.
-  Future<ProblemReportOutcome> sendProblemReport(ProblemReport report) async {
+  /// Sends a report the person reviewed. It is saved on the phone first (with [form], so the form can be restored;
+  /// without one, the form is read back from the report) and stays saved unless the server takes it.
+  Future<ProblemReportOutcome> sendProblemReport(ProblemReport report, {ReportForm? form}) async {
     final key = _settings.driverKey;
     if (!canReport || key == null) {
       return const ProblemReportOutcome(sent: false, message: 'Reports are sent with your driver key. Check it in Settings.');
     }
     if (report.tooLarge) return const ProblemReportOutcome(sent: false, message: 'The report is too large.');
-    _savedReport = report;
+    final draft = ProblemReportDraft(report: report, form: form ?? ReportForm.fromBody(report.body));
+    _savedReport = draft;
     notifyListeners();
     try {
-      await services.reportDraftStore?.save(jsonEncode(report.toJson()));
+      await services.reportDraftStore?.save(jsonEncode(draft.toJson()));
     } catch (e) {
       _logError('Saving the problem report on the phone failed', e);
     }
@@ -1161,7 +1167,11 @@ class AppState extends ChangeNotifier {
       return ProblemReportOutcome(sent: true, message: 'Sent. Thank you. Your report number is $id.');
     } catch (e) {
       _logError('Problem report not sent', e);
-      return ProblemReportOutcome(sent: false, message: friendlyReportError(e));
+      return ProblemReportOutcome(
+        sent: false,
+        message: friendlyReportError(e),
+        rejected: e is CmatException && e.status == 400,
+      );
     } finally {
       notifyListeners();
     }

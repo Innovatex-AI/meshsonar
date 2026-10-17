@@ -6,6 +6,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../app/app_state.dart';
+import '../../core/antenna_profile.dart';
 import '../../core/model.dart';
 import '../../radio/radio_api.dart';
 import '../antenna_sheet.dart';
@@ -248,8 +249,9 @@ class LiveDot extends StatelessWidget {
 
 // ------------------------------------------------------------------------------------------------ antenna + log
 
-/// The connected radio's antenna ("Roof mag-mount · 5.8 dBi · 1.8 m"); tap to change it before a drive, locked while
-/// driving. A radio that hasn't been set up shows "Set up this radio's antenna" instead, and Start drive waits for it.
+/// The connected radio's antenna ("Roof mag-mount · 5.8 dBi · 1.8 m"); tap to change it before a drive. While driving
+/// it is locked and shows what the drive records ("External · 5.8 dBi · 1.8 m"). A radio that hasn't been set up
+/// shows [AntennaSetupHint] instead, and Start drive waits for it.
 class AntennaChip extends StatelessWidget {
   final AppState state;
   const AntennaChip({super.key, required this.state});
@@ -257,17 +259,17 @@ class AntennaChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = state;
-    if (!s.connected) return const SizedBox.shrink();
+    final recorded = s.currentSession?.antenna;
     final profile = s.antennaProfile;
-    if (profile == null) {
-      return TextButton.icon(
-        key: const Key('antenna-setup'),
-        onPressed: () => showAntennaSheet(context),
-        icon: const Icon(Icons.warning_amber_rounded),
-        label: const Text('Set up this radio\'s antenna'),
-      );
+    final String text;
+    if (recorded != null) {
+      text = recordedAntennaSummary(recorded);
+    } else if (profile != null) {
+      text = profile.summary;
+    } else {
+      return s.needsAntennaSetup ? const AntennaSetupHint() : const SizedBox.shrink();
     }
-    final locked = s.driving;
+    final locked = recorded != null;
     final t = Theme.of(context);
     return ActionChip(
       key: const Key('antenna-chip'),
@@ -277,8 +279,29 @@ class AntennaChip extends StatelessWidget {
         size: 18,
         color: t.colorScheme.onSurfaceVariant,
       ),
-      label: Text(profile.summary, maxLines: 1, overflow: TextOverflow.ellipsis),
+      label: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis),
       onPressed: locked ? null : () => showAntennaSheet(context),
+    );
+  }
+}
+
+/// "External · 5.8 dBi · 1.8 m": the Drive Format v1 antenna a drive records (the mount itself isn't recorded).
+String recordedAntennaSummary(Antenna a) => [
+  a.type == 'external' ? 'External' : 'Internal',
+  if (a.gainDbi != null) '${formatAntennaNumber(a.gainDbi!)} dBi',
+  if (a.heightM != null) '${formatAntennaNumber(a.heightM!)} m',
+].join(' · ');
+
+/// "Set up this radio's antenna": shown where Start drive is, while it waits for the connected radio's antenna.
+class AntennaSetupHint extends StatelessWidget {
+  const AntennaSetupHint({super.key = const Key('antenna-setup')});
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton.icon(
+      onPressed: () => showAntennaSheet(context),
+      icon: const Icon(Icons.warning_amber_rounded),
+      label: const Text('Set up this radio\'s antenna'),
     );
   }
 }

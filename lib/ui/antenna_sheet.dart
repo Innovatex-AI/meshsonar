@@ -57,6 +57,7 @@ class _AntennaSheetState extends State<_AntennaSheet> {
       _height.text = formatAntennaNumber(saved.heightM);
     } else if (s.legacyAntenna case final a?) {
       _legacy = a;
+      _gainUnknown = a.gainDbi == null;
       _gain.text = a.gainDbi == null ? '' : formatAntennaNumber(a.gainDbi!);
       _height.text = a.heightM == null ? '' : formatAntennaNumber(a.heightM!);
     }
@@ -171,7 +172,7 @@ class _AntennaSheetState extends State<_AntennaSheet> {
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               decoration: InputDecoration(
                 labelText: 'Height above ground (metres)',
-                helperText: 'Roughly: about 1.5 m for a car roof.',
+                helperText: 'Roughly: about 1 m in a hand or inside a car, 1.5 m on a car roof.',
                 errorText: heightText.isNotEmpty && _heightValue == null ? 'Enter 0 to 300 metres' : null,
               ),
               onChanged: (_) => setState(() {}),
@@ -183,6 +184,15 @@ class _AntennaSheetState extends State<_AntennaSheet> {
               onPressed: _valid ? _save : null,
               child: const Text('Save antenna'),
             ),
+            if (!_valid) ...[
+              const SizedBox(height: Gap.xs),
+              Text(
+                'Pick a mount, enter the height, and a gain or Don\'t know',
+                key: const Key('antenna-save-hint'),
+                textAlign: TextAlign.center,
+                style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
+              ),
+            ],
           ],
         ),
       ),

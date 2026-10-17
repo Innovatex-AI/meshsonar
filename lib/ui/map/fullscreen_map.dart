@@ -148,6 +148,8 @@ class FullscreenMapScreen extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       DriveStatusRow(state: s, padding: const EdgeInsets.fromLTRB(Gap.l, Gap.s, Gap.m, 0)),
+                      // Start drive is disabled until the radio's antenna is set up; say why, here too.
+                      if (s.needsAntennaSetup && !s.driving) const AntennaSetupHint(),
                       DriveActionButtons(
                         state: s,
                         compact: true,

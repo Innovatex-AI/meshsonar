@@ -1,6 +1,7 @@
 // "Report a problem": the person describes it, reviews the exact text that will be sent (keys removed, locations
 // rounded), and sends it to the server in Settings with their driver key. A report that can't be sent stays saved on
-// the phone until they send or discard it; nothing is ever sent without the Send tap on the review screen.
+// the phone, with its form, until they send or discard it; nothing is ever sent without the Send tap on the review
+// screen.
 import 'package:flutter/material.dart';
 
 import '../app/app_state.dart';
@@ -8,6 +9,7 @@ import '../core/api.dart';
 import '../core/report_body.dart';
 import 'app.dart';
 import 'onboarding/ui_prefs.dart';
+import 'settings_screen.dart' show DriverKeyScreen;
 import 'widgets.dart';
 
 /// Opens the report form; [driveId] pre-selects that drive to attach.
@@ -41,6 +43,24 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
   bool _includeLog = true;
   late String? _driveId = widget.driveId;
   bool _building = false;
+  bool _restored = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_restored) return;
+    _restored = true;
+    // A report that wasn't sent comes back as it was written (a drive chosen on the way in still wins).
+    final form = AppScope.read(context).savedReport?.form;
+    if (form == null) return;
+    _category = form.category;
+    _description.text = form.description;
+    _includeLog = form.includeLog;
+    _driveId = widget.driveId ?? form.driveId;
+  }
+
+  ReportForm get _form =>
+      ReportForm(category: _category!, description: _description.text, includeLog: _includeLog, driveId: _driveId);
 
   @override
   void dispose() {
@@ -58,13 +78,18 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
     );
     if (!mounted) return;
     setState(() => _building = false);
-    await _openPreview(report);
+    await _openPreview(report, _form);
   }
 
-  Future<void> _openPreview(ProblemReport report) async {
+  /// The review screen pops true when the report is finished with (sent or discarded), and the form closes too.
+  Future<void> _openPreview(ProblemReport report, ReportForm form) async {
     final nav = Navigator.of(context);
-    final sent = await nav.push<bool>(MaterialPageRoute(builder: (_) => ReportPreviewScreen(report: report)));
-    if (sent == true && mounted) nav.pop();
+    final done = await nav.push<bool>(
+      MaterialPageRoute(
+        builder: (_) => ReportPreviewScreen(report: report, form: form),
+      ),
+    );
+    if (done == true && mounted) nav.pop();
   }
 
   @override
@@ -85,7 +110,7 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (saved != null) _SavedReport(report: saved, onSend: () => _openPreview(saved)),
+              if (saved != null) _SavedReport(onSend: () => _openPreview(saved.report, saved.form)),
               if (!s.canReport) _NeedsKey(status: s.hasKey ? s.settings.keyStatus : DriverKeyStatus.none),
               Text('What kind of problem?', style: t.textTheme.titleMedium),
               const SizedBox(height: Gap.s),
@@ -165,9 +190,8 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
 
 /// The report saved on the phone after it couldn't be sent: send it (after seeing it again) or discard it.
 class _SavedReport extends StatelessWidget {
-  final ProblemReport report;
   final VoidCallback onSend;
-  const _SavedReport({required this.report, required this.onSend});
+  const _SavedReport({required this.onSend});
 
   Future<void> _discard(BuildContext context) async {
     final s = AppScope.read(context);
@@ -250,7 +274,9 @@ class _NeedsKey extends StatelessWidget {
           ErrorBanner(why),
           TextButton.icon(
             key: const Key('report-key-settings'),
-            onPressed: () => ShellScope.of(context).showDriverKey(),
+            // The key settings open over this form, so what was typed is still here on the way back.
+            onPressed: () =>
+                Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const DriverKeyScreen())),
             icon: const Icon(Icons.vpn_key_outlined),
             label: const Text('Open driver key settings'),
           ),
@@ -304,7 +330,10 @@ class _DrivePicker extends StatelessWidget {
 /// The exact report that will be sent, with its size and what was removed. The only Send button is here.
 class ReportPreviewScreen extends StatefulWidget {
   final ProblemReport report;
-  const ReportPreviewScreen({super.key, required this.report});
+
+  /// The form [report] was built from; kept with it on the phone until the server takes it.
+  final ReportForm form;
+  const ReportPreviewScreen({super.key, required this.report, required this.form});
   @override
   State<ReportPreviewScreen> createState() => _ReportPreviewScreenState();
 }
@@ -313,22 +342,26 @@ class _ReportPreviewScreenState extends State<ReportPreviewScreen> {
   bool _sending = false;
   ProblemReportOutcome? _outcome;
 
-  static String _size(int bytes) => bytes < 1000000
-      ? '${(bytes / 1000).toStringAsFixed(1)} KB of 5 MB'
-      : '${(bytes / 1000000).toStringAsFixed(1)} MB of 5 MB';
+  static String _size(int bytes) => '${(bytes / 1000000).toStringAsFixed(1)} MB of 5 MB';
 
   static String _plural(int n, String one) => '$n $one${n == 1 ? '' : 's'}';
 
   Future<void> _send(AppState s) async {
     final saved = s.savedReport;
-    if (saved != null && saved.body != widget.report.body && !await _confirmReplace()) return;
+    if (saved != null && saved.report.body != widget.report.body && !await _confirmReplace()) return;
     setState(() => _sending = true);
-    final outcome = await s.sendProblemReport(widget.report);
+    final outcome = await s.sendProblemReport(widget.report, form: widget.form);
     if (!mounted) return;
     setState(() {
       _sending = false;
       _outcome = outcome;
     });
+  }
+
+  Future<void> _discard(AppState s) async {
+    final nav = Navigator.of(context);
+    await s.discardSavedReport();
+    nav.pop(true);
   }
 
   Future<bool> _confirmReplace() async {
@@ -360,6 +393,7 @@ class _ReportPreviewScreenState extends State<ReportPreviewScreen> {
     final r = widget.report;
     final outcome = _outcome;
     final sent = outcome?.sent ?? false;
+    final rejected = outcome?.rejected ?? false;
     final host = Uri.tryParse(s.settings.serverUrl)?.host ?? s.settings.serverUrl;
     final note = t.textTheme.bodyMedium;
     return Scaffold(
@@ -419,7 +453,20 @@ class _ReportPreviewScreenState extends State<ReportPreviewScreen> {
                             )
                           : ErrorBanner(outcome.message, key: const Key('report-result')),
                     ),
-                  if (sent)
+                  if (rejected) ...[
+                    FilledButton.icon(
+                      key: const Key('report-edit'),
+                      style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+                      onPressed: () => Navigator.of(context).pop(false),
+                      icon: const Icon(Icons.edit_outlined),
+                      label: const Text('Edit report'),
+                    ),
+                    TextButton(
+                      key: const Key('report-discard'),
+                      onPressed: () => _discard(s),
+                      child: const Text('Discard'),
+                    ),
+                  ] else if (sent)
                     FilledButton(
                       key: const Key('report-done'),
                       style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
