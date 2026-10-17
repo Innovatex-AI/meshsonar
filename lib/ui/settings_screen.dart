@@ -452,7 +452,7 @@ class _AccountLinks extends StatelessWidget {
             style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 0)),
             onPressed: onHaveKey,
             icon: const Icon(Icons.key, size: 18),
-            label: const Text('I already have a key'),
+            label: const Text('Have a key?'),
           ),
       ]),
     ]);
