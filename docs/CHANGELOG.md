@@ -3,6 +3,13 @@
 All notable changes to MeshSonar. Dates are local (US Eastern). This changelog was reconstructed from the commit
 history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md](ROADMAP.md).
 
+## [0.7.2] — 2026-10-18 — see your driver key
+
+`pubspec.yaml` is `0.7.2+10`. Bundle id unchanged.
+
+- Settings > Driver key: tap the eye to show the full key (monospace, selectable), Copy, and it hides again by itself after 30 s.
+  It also says which server the key works on. The key stays only on this phone; nothing new is sent anywhere.
+
 ## [0.7.1] — 2026-10-18 — privacy: pings no longer carry your position
 
 `pubspec.yaml` is `0.7.1+9`. Bundle id unchanged. **Fixes a privacy leak.**
