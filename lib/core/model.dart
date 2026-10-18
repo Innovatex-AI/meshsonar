@@ -1,4 +1,4 @@
-// MeshSonar data model — MeshSonar Drive Format v1.
+// MeshSonar data model — MeshSonar Drive Format v1 with the v1.1 per-ping fields (pkt_hash, tx_epoch_s, tx_dbm).
 //
 // Source of truth for the wire format: CMAT docs/MESHSONAR_DRIVE_FORMAT.md and src/lib/drive/validate.ts
 // (Innovatex-AI/meshcore-insights). toJson() here must produce exactly what that validator accepts.
@@ -9,6 +9,9 @@
 //  - A tx ping with an empty echoes list means "pinged here, heard nothing".
 //  - Every ping and session has a UUID made on the phone, so re-sending is harmless.
 
+/// The `format` id on the wire. Still `meshsonar.drive.v1`: live CMAT accepts only that id exactly
+/// (src/lib/drive/validate.ts readDriveUpload) and ignores fields it doesn't know, so the v1.1 ping fields ride on the
+/// v1 id until the site accepts `meshsonar.drive.v1.1` everywhere; then this flips (Drive Format v1.1, plan M1).
 const String driveFormat = 'meshsonar.drive.v1';
 
 class AppInfo {
@@ -179,6 +182,18 @@ class DrivePing {
   /// Empty on a tx ping = pinged here, heard nothing.
   final List<Echo> echoes;
   final Neighbor? neighbor;
+
+  /// v1.1: MeshCore packet hash of the transmission (Packet::calculatePacketHash, 8 bytes as 16 lower-case hex), the
+  /// key the server joins observer receptions on. From a heard repeat when there is one, else computed from the
+  /// exact GRP_TXT payload the companion builds. Null when unknown (rx pings, or the channel key/name is unknown).
+  final String? pktHash;
+
+  /// v1.1: the epoch second inside the sent packet (the timestamp in CMD_SEND_CHANNEL_TXT_MSG). Can be a second
+  /// after [ts] because sends keep it strictly increasing. Null when unknown.
+  final int? txEpochS;
+
+  /// v1.1: the radio's TX power for this ping in dBm (power can change mid-drive). Null when unknown.
+  final double? txDbm;
   const DrivePing({
     required this.id,
     required this.ts,
@@ -190,6 +205,9 @@ class DrivePing {
     this.noiseFloorDbm,
     this.echoes = const [],
     this.neighbor,
+    this.pktHash,
+    this.txEpochS,
+    this.txDbm,
   });
 
   bool get heardNothing => kind == PingKind.tx && echoes.isEmpty && neighbor == null;
@@ -205,6 +223,9 @@ class DrivePing {
         'noise_floor_dbm': noiseFloorDbm,
         'echoes': echoes.map((e) => e.toJson()).toList(),
         'neighbor': neighbor?.toJson(),
+        'pkt_hash': pktHash,
+        'tx_epoch_s': txEpochS,
+        'tx_dbm': txDbm,
       };
   factory DrivePing.fromJson(Map<String, dynamic> j) => DrivePing(
         id: j['id'] as String,
@@ -217,7 +238,17 @@ class DrivePing {
         noiseFloorDbm: (j['noise_floor_dbm'] as num?)?.toDouble(),
         echoes: ((j['echoes'] as List?) ?? const []).map((e) => Echo.fromJson((e as Map).cast<String, dynamic>())).toList(),
         neighbor: j['neighbor'] == null ? null : Neighbor.fromJson((j['neighbor'] as Map).cast<String, dynamic>()),
+        pktHash: _hash16(j['pkt_hash']),
+        txEpochS: (j['tx_epoch_s'] as num?)?.toInt(),
+        txDbm: (j['tx_dbm'] as num?)?.toDouble(),
       );
+
+  static final _hex16 = RegExp(r'^[0-9a-f]{16}$');
+  static String? _hash16(Object? v) {
+    if (v is! String) return null;
+    final s = v.trim().toLowerCase();
+    return _hex16.hasMatch(s) ? s : null;
+  }
 }
 
 /// One upload / one export file: { format, app, session, pings }.

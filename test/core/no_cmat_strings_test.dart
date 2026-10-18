@@ -34,6 +34,10 @@ class _DartLexer {
   /// True right after a literal while only whitespace, `+` or comments follow: the next literal joins its run.
   bool joinable = false;
 
+  /// Index in [literals] of the run the next joinable literal belongs to. Recorded when the run starts, because
+  /// literals inside an interpolation are added after it (`'CM' '${'x'}AT'` must not join "AT" onto "x").
+  int _runStart = -1;
+
   _DartLexer(this.s);
 
   DartText get result => DartText(code.toString(), literals);
@@ -100,6 +104,7 @@ class _DartLexer {
 
   void _lexString({required bool raw}) {
     final joinAtStart = joinable;
+    final runAtStart = _runStart;
     final q = s[i];
     final triple = s.startsWith(q * 3, i);
     i += triple ? 3 : 1;
@@ -123,8 +128,15 @@ class _DartLexer {
           i += 2;
           joinable = false;
           code.write(' ');
+          final bodyStart = i, litStart = literals.length;
           lexCode(untilBrace: true); // the interpolation is code: its own literals and tokens are checked too
           code.write(' ');
+          // An interpolation that is just a string literal is that text (`'CM${''}AT'` is "CMAT", `'${'x'}AT'` is
+          // "xAT"); any other expression may be empty, so it is dropped and the text around it joins.
+          final body = s.substring(bodyStart, i - 1).trim();
+          if (literals.length == litStart + 1 && RegExp(r'''^r?(['"]).*\1$''', dotAll: true).hasMatch(body)) {
+            value.write(literals[litStart]);
+          }
           continue;
         }
         i++;
@@ -140,9 +152,11 @@ class _DartLexer {
       i++;
     }
     code.write(q);
-    if (joinAtStart && literals.isNotEmpty) {
-      literals[literals.length - 1] += value.toString();
+    if (joinAtStart && runAtStart >= 0) {
+      _runStart = runAtStart; // literals inside our interpolations may have moved it
+      literals[runAtStart] += value.toString();
     } else {
+      _runStart = literals.length;
       literals.add(value.toString());
     }
     joinable = true;
@@ -227,7 +241,7 @@ void main() {
       'interpolation with nested braces': r"""final a = '${{1: 'CMAT'}[1]}';""",
       'multi-line string body': "final a = '''\nfirst line\nnot on CMAT yet\n''';",
       'multi-line double-quoted': 'final a = """\nCMAT\n""";',
-      'unicode escape of C': r"final a = 'CMAT';",
+      'unicode escape of C': r"final a = '\u0043MAT';",
       'braced unicode escape': r"final a = '\u{43}MAT';",
       'hex escape': r"final a = '\x43\x4d\x41\x54';",
       'escaped plain letter': r"final a = '\CMAT';",
@@ -253,16 +267,35 @@ void main() {
       'lower case / longer word': "final a = 'cmat'; final b = 'CMATS'; final c = 'XCMAT';",
       'separate literals': "f('CM', 'AT');",
       'url with //': "final a = 'https://meshsonar.com'; // not CMAT",
+      'adjacent literal whose interpolation holds a literal': r"""final a = 'CM' '${'x'}AT';""",
+      'invalid unicode escape': r"final a = '\u00ZZMAT';",
     };
     clean.forEach((name, src) {
       test('not flagged: $name', () => expect(cmatInDart(src), isEmpty, reason: src));
     });
 
+    test('escape cases are written escaped and decode to exactly CMAT', () {
+      for (final name in ['unicode escape of C', 'braced unicode escape', 'hex escape']) {
+        final src = caught[name]!;
+        expect(src.contains('CMAT'), isFalse, reason: '$name must not hold a literal CMAT: $src');
+        expect(lexDart(src).literals, ['CMAT'], reason: name);
+      }
+      expect(lexDart(r"final a = '\u0043MAX';").literals, ['CMAX']);
+    });
+
+    test('joins attach to the run they started in', () {
+      expect(lexDart(r"""final a = 'CM' '${'x'}AT';""").literals, ['CMxAT', 'x']);
+      expect(lexDart(r"""final a = 'CM' '${y}AT';""").literals, ['CMAT']);
+      expect(lexDart(r"""final a = 'CM${''}AT';""").literals, ['', 'CMAT'], reason: 'the inner literal is lexed first');
+    });
+
     test('markup: comments stripped, entities and \\u escapes decoded', () {
       expect(_cmat.hasMatch(decodeMarkup('<string>&#67;MAT</string>')), isTrue);
       expect(_cmat.hasMatch(decodeMarkup('<string>&#x43;MAT</string>')), isTrue);
-      expect(_cmat.hasMatch(decodeMarkup(r'<string>CMAT</string>')), isTrue);
+      expect(_cmat.hasMatch(decodeMarkup(r'<string>\u0043MAT</string>')), isTrue);
       expect(_cmat.hasMatch(decodeMarkup('<!-- CMAT --><string>MeshSonar</string>')), isFalse);
+      expect(decodeMarkup(r'<string>\u0043MAT</string>'), '<string>CMAT</string>');
+      expect(_cmat.hasMatch(r'<string>\u0043MAT</string>'), isFalse, reason: 'the input really is escaped');
     });
   });
 
