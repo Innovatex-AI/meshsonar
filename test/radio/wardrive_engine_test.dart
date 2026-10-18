@@ -1,6 +1,8 @@
 // End-to-end: DefaultWardriveEngine → MeshCoreCompanionLink → SimulatedTransport (real companion frames, real
 // over-the-air packets). Time is sped up: the simulator's delays are divided by timeScale, listen windows are short.
 
+import 'dart:math' as math;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/radio/companion_link.dart';
@@ -41,15 +43,24 @@ class Rig {
 WardriveConfig manual() => const WardriveConfig(intervalSec: 0, minDistanceM: 100, listenWindow: window, txPowerW: 1.0);
 
 void main() {
-  test('ping text is MeshSonar-branded and carries no position', () {
-    expect(formatPingText(), '@[MeshSonar]');
-    expect(formatPingText(txPowerW: 1.0), '@[MeshSonar] [1.0w]');
-    expect(formatPingText(txPowerW: 0.3), '@[MeshSonar] [0.3w]');
-    // PRIVACY: nothing that looks like a coordinate, whatever the power
-    for (final w in [null, 0.05, 0.2, 1.0, 2.0]) {
-      expect(formatPingText(txPowerW: w), isNot(matches(RegExp(r'-?\d{1,3}\.\d{3,}'))));
-      expect(formatPingText(txPowerW: w), isNot(contains('MapperBot')));
+  test('ping text is "MS:" plus a random 10-character tag, nothing else', () {
+    expect(formatPingText('m3jnr7dan5'), 'MS:m3jnr7dan5');
+    final seen = <String>{};
+    for (var i = 0; i < 2000; i++) {
+      final tag = newPingTag();
+      expect(tag, matches(RegExp(r'^[0-9a-z]{10}$')));
+      expect(formatPingText(tag), matches(RegExp(r'^MS:[0-9a-z]{10}$')));
+      seen.add(tag);
     }
+    expect(seen.length, 2000, reason: 'a fresh random tag every time');
+    // PRIVACY: no coordinate-looking text, no old branding
+    expect(formatPingText(newPingTag()), isNot(matches(RegExp(r'-?\d{1,3}\.\d{3,}'))));
+    expect(formatPingText(newPingTag()), isNot(contains('MapperBot')));
+  });
+
+  test('the tag is not derived from anything: seeded randoms differ from each other, same seed repeats only itself', () {
+    expect(newPingTag(random: math.Random(1)), newPingTag(random: math.Random(1)));
+    expect(newPingTag(random: math.Random(1)), isNot(newPingTag(random: math.Random(2))));
   });
 
   test('start joins the channel; pingNow emits one finished ping with real echoes', () async {
@@ -80,7 +91,8 @@ void main() {
     // The ping text on air: MeshSonar's, with the power and NO position (public channel).
     final sent = rig.radio.sentFrames.lastWhere((f) => f[0] == 3);
     final onAir = String.fromCharCodes(sent.sublist(7));
-    expect(onAir, '@[MeshSonar] [1.0w]');
+    expect(onAir, matches(RegExp(r'^MS:[0-9a-z]{10}$')));
+    expect(p.wireTag, onAir.substring(3), reason: 'the ping stores the tag it sent');
     expect(onAir, isNot(contains('40.1')));
     expect(onAir, isNot(contains('-82.')));
     await rig.engine.stop();
@@ -123,7 +135,7 @@ void main() {
     expect(moving.pings.length, 1, reason: 'never more often than 10 s, however fast we drive');
     expect(moving.engine.current.waitingFor, PingWait.time);
     expect(moving.engine.current.nextPingAt, isNotNull);
-    expect(String.fromCharCodes(moving.radio.sentFrames.lastWhere((f) => f[0] == 3).sublist(7)), equals('@[MeshSonar]'));
+    expect(String.fromCharCodes(moving.radio.sentFrames.lastWhere((f) => f[0] == 3).sublist(7)), matches(RegExp(r'^MS:[0-9a-z]{10}$')));
     // A manual ping is allowed any time.
     await moving.engine.pingNow();
     expect(moving.pings.length, 2);

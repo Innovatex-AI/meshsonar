@@ -87,7 +87,7 @@ sequenceDiagram
   Note over App,R: each ping
   App->>R: 38 01                              (GET_STATS radio)
   R-->>App: 18 01 noise… / 01 01 (unsupported → never asked again)
-  App->>R: 03 00 idx <ts u32> "@[MeshSonar] [power]" (SEND_CHANNEL_TXT_MSG)
+  App->>R: 03 00 idx <ts u32> "MS:<tag>" (SEND_CHANNEL_TXT_MSG)
   R-->>App: 00 OK
   R-->>App: 88 snr rssi <raw packet> …        (LOG_RX_DATA pushes, for 7 s)
 ```
@@ -179,12 +179,12 @@ crypto package.
 ### 5.1 Ping text (MeshMapper-compatible)
 
 ```
-@[MeshSonar][ [<power>w]]
-e.g.  @[MeshSonar] [0.2w]
-(no position: the channel is public. Versions up to 0.7.0 sent "@[MapperBot] lat, lon [power]".)
+MS:<10 random chars 0-9a-z>
+e.g.  MS:m3jnr7dan5
+(no position, no power, nothing about the driver: the channel is public. 0.7.1 and 0.7.2 sent "@[MeshSonar] [power]"; 0.7.0 and earlier sent "@[MapperBot] lat, lon [power]".)
 ```
 
-- Prefix `@[MeshSonar]`. Unlike MeshMapper's `buildPayload()` (`@[MapperBot] lat, lon`), MeshSonar puts NO position on the
+- Prefix `MS:` and a random tag (stored as `wire_tag`). Unlike MeshMapper's `buildPayload()` (`@[MapperBot] lat, lon`), MeshSonar puts NO position on the
   channel: it is public. The site joins observer receptions by packet hash instead (v1.1 `pkt_hash`).
 - The power suffix is appended when the radio's TX power is known: `W = 10^(tx_dbm/10) / 1000`, formatted with one
   decimal (two below 0.1 W) plus `w`. MeshMapper offers fixed choices (`0.3w`, `0.6w`, `1.0w`, `2.0w`). MeshSonar

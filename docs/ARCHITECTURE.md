@@ -110,7 +110,7 @@ sequenceDiagram
   end
   EN->>LK: noiseFloor()  (GET_STATS radio)
   EN->>GPS: current()
-  EN->>LK: sendChannelText(idx, "@[MeshSonar] [power]")  // no position on a public channel
+  EN->>LK: sendChannelText(idx, "MS:<random tag>")  // no position on a public channel
   TR-->>LK: PUSH LOG_RX_DATA (raw packets) for 7 s
   LK-->>EN: rxPackets
   EN->>EN: matchEcho() per packet → best echo per repeater

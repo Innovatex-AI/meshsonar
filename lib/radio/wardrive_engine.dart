@@ -1,10 +1,12 @@
 // DefaultWardriveEngine: pings a channel on a time/distance schedule and records which repeaters repeated each ping.
 //
 // Behaviour is modelled on the MeshMapper web client (MIT, © 2025 MrAlders0n), content/wardrive.js:
-//  - ping text: "@[MeshSonar]" plus " [<power>]" when the power is known. PRIVACY: the text goes out on a public channel
-//    that anyone can read, so it NEVER carries a position (MeshMapper's "@[MapperBot] <lat>, <lon>" does; we do not).
-//    Where a ping happened is recorded on the phone from its GPS and uploaded to the site with the drive, and the site
-//    joins observer receptions to it by packet hash (Drive Format v1.1 pkt_hash), so the air needs no coordinates;
+//  - ping text: "MS:" + a random 10-character tag (e.g. "MS:m3jnr7dan5"). PRIVACY: the text goes out on a public channel
+//    that anyone can read, so it NEVER carries a position or anything about the driver (MeshMapper's "@[MapperBot] <lat>,
+//    <lon>" does; we do not). The tag is random per ping, made from the secure random source, and is stored with the ping
+//    (`wire_tag`) so a heard repeat can be matched to exactly this ping during analysis. Where the ping happened is
+//    recorded on the phone from its GPS and uploaded with the drive; the site also joins observer receptions by packet
+//    hash (Drive Format v1.1 pkt_hash), so the air needs no coordinates;
 //  - sendPing(): read the noise floor (CMD_GET_STATS radio), take a GPS fix, send on the channel, then listen to the
 //    RX log for the listen window (RX_LOG_LISTEN_WINDOW_MS); auto mode waits the interval after each ping and won't
 //    ping too close to the last one (validateMinimumDistance, haversine);
@@ -25,15 +27,26 @@ import 'packet.dart';
 import 'protocol.dart';
 import 'radio_api.dart';
 
-/// What every MeshSonar ping starts with on the channel (so people reading it see what it is).
-const String pingPrefix = '@[MeshSonar]';
+/// What every MeshSonar ping starts with on the channel.
+const String pingPrefix = 'MS:';
 
-/// The text of a ping on the public channel: the prefix and, when known, the transmit power. It takes no position on
-/// purpose: nothing about where the driver is may go out on a channel anyone can read.
-String formatPingText({double? txPowerW}) {
-  final suffix = txPowerW == null ? '' : ' [${formatPowerW(txPowerW)}]';
-  return '$pingPrefix$suffix';
+const String _tagAlphabet = '0123456789abcdefghijklmnopqrstuvwxyz';
+
+/// Length of the random part of a ping's tag.
+const int pingTagLength = 10;
+
+final math.Random _secureRandom = math.Random.secure();
+
+/// A fresh random tag for one ping: [pingTagLength] characters of 0-9 a-z, from the secure random source, with no link to
+/// the position, the time or the driver. Pass [random] only in tests.
+String newPingTag({math.Random? random}) {
+  final r = random ?? _secureRandom;
+  return String.fromCharCodes([for (var i = 0; i < pingTagLength; i++) _tagAlphabet.codeUnitAt(r.nextInt(_tagAlphabet.length))]);
 }
+
+/// The text of a ping on the public channel: "MS:" and the ping's tag. It takes no position (and nothing else) on purpose:
+/// nothing about where the driver is may go out on a channel anyone can read.
+String formatPingText(String tag) => '$pingPrefix$tag';
 
 /// "1.0w", "0.3w", "2.0w" — MeshMapper's style. Small powers keep two decimals so they don't round to "0.0w".
 String formatPowerW(double w) => '${w < 0.1 ? w.toStringAsFixed(2) : w.toStringAsFixed(1)}w';
@@ -356,7 +369,8 @@ class DefaultWardriveEngine implements WardriveEngine {
     _busy = true;
     final idx = _channelIndex!;
     final secret = _secret!;
-    final text = formatPingText(txPowerW: _config.txPowerW);
+    final pingTag = newPingTag();
+    final text = formatPingText(pingTag);
     final txDbm = _inRange(_config.txDbm, -10, 40); // the power this ping goes out at, before any mid-listen change
     final heard = <_Heard>[];
     final ctl = <_Ctl>[];
@@ -416,6 +430,7 @@ class DefaultWardriveEngine implements WardriveEngine {
         neighbor: neighbor,
         pktHash: pktHash,
         txEpochS: sentTs,
+        wireTag: pingTag,
         txDbm: txDbm,
       );
       if (!_pings.isClosed) _pings.add(ping);
