@@ -473,6 +473,7 @@ class AppState extends ChangeNotifier {
         intervalSec: s.intervalSec,
         minDistanceM: s.minDistanceM,
         txPowerW: txW,
+        txDbm: info?.radio.txDbm,
       ));
       _scheduleDriveSync();
       diagnostics.add('Drive started on ${s.channel}, auto-ping every ${s.intervalSec} s');
@@ -938,6 +939,7 @@ class AppState extends ChangeNotifier {
       intervalSec: s.intervalSec,
       minDistanceM: s.minDistanceM,
       txPowerW: txDbm == null ? null : _dbmToWatts(txDbm),
+      txDbm: txDbm,
     ));
   }
 

@@ -20,20 +20,25 @@ enum PingColorMode {
 @immutable
 class MapLayers {
   final bool pings;
+
+  /// The drive's pings rolled up onto the website's H3 hexagons (resolution 9).
+  final bool hexes;
   final PingColorMode pingColors;
   final bool repeaters;
   final bool links;
   final bool rings;
   const MapLayers({
     this.pings = true,
+    this.hexes = true,
     this.pingColors = PingColorMode.snr,
     this.repeaters = true,
     this.links = true,
     this.rings = true,
   });
 
-  MapLayers copyWith({bool? pings, PingColorMode? pingColors, bool? repeaters, bool? links, bool? rings}) => MapLayers(
+  MapLayers copyWith({bool? pings, bool? hexes, PingColorMode? pingColors, bool? repeaters, bool? links, bool? rings}) => MapLayers(
     pings: pings ?? this.pings,
+    hexes: hexes ?? this.hexes,
     pingColors: pingColors ?? this.pingColors,
     repeaters: repeaters ?? this.repeaters,
     links: links ?? this.links,
@@ -44,13 +49,14 @@ class MapLayers {
   bool operator ==(Object other) =>
       other is MapLayers &&
       other.pings == pings &&
+      other.hexes == hexes &&
       other.pingColors == pingColors &&
       other.repeaters == repeaters &&
       other.links == links &&
       other.rings == rings;
 
   @override
-  int get hashCode => Object.hash(pings, pingColors, repeaters, links, rings);
+  int get hashCode => Object.hash(pings, hexes, pingColors, repeaters, links, rings);
 }
 
 /// Where a heard repeater sits in its hold period.

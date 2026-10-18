@@ -88,6 +88,18 @@ pending); CMAT upserts the session, so the new name replaces the old one. Export
 | noiseFloorDbm | `noise_floor_dbm` | dBm | −160…0 | firmware has no stats, reading was 0 (uncalibrated), or timeout |
 | echoes | `echoes` | list of Echo | 0…64 | never null. `[]` = heard nothing. |
 | neighbor | `neighbor` | Neighbor | — | no discovery exchange (always today; discovery is off) |
+| pktHash *(v1.1)* | `pkt_hash` | MeshCore packet hash, 16 lower-case hex (8 bytes) | 16 hex | non-companion link, or nothing heard and no node name. From a heard repeat when there is one, else rebuilt from the send (see below). |
+| txEpochS *(v1.1)* | `tx_epoch_s` | epoch seconds, the timestamp inside the sent packet | integer 2015…2³²−1 | non-companion link. Can be `ts`'s second + 1 (sends keep it strictly increasing). |
+| txDbm *(v1.1)* | `tx_dbm` | dBm, radio TX power for this ping | −10…40 | the radio didn't report it |
+
+**Drive Format v1.1 ping fields (0.6.0).** The server joins each ping to observer receptions by `pkt_hash` (meshsonar-infra
+`docs/specs/m2-observer-ingest.md` §3). `pkt_hash` = MeshCore `Packet::calculatePacketHash` = SHA-256(payload type ‖
+payload)[0..8] (TRACE also hashes `path_len`); route bits, transport codes and the path are not hashed, so every repeat
+has the same hash. A channel send gets only `RESP_CODE_OK` back (no hash), but the companion's GRP_TXT is
+deterministic: `[channel hash][MAC x2][AES-128-ECB(ts u32 LE ‖ 0x00 ‖ "<node name>: <text>")]`
+(`buildGroupTextPayload`, `lib/radio/packet.dart`). Verified against the Oct 17 observer capture: 456/456 hashes, 301/301
+MeshSonar copies rebuilt byte for byte (`test/radio/packet_hash_test.dart`). The fields ride on the `meshsonar.drive.v1`
+id: live CMAT accepts only that id and ignores fields it doesn't know.
 
 `DrivePing.heardNothing` is `kind == tx && echoes.isEmpty && neighbor == null`.
 

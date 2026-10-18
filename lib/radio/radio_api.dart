@@ -90,12 +90,14 @@ class WardriveConfig {
   final int minDistanceM; // clamped by the engine to 15–500 m
   final Duration listenWindow; // how long to collect echoes after each ping
   final double? txPowerW; // shown in the ping text when known
+  final double? txDbm; // the radio's TX power, recorded on each ping (Drive Format v1.1 tx_dbm) when known
   const WardriveConfig({
     this.channel = '#wardriving',
     this.intervalSec = 30,
     this.minDistanceM = 100,
     this.listenWindow = const Duration(seconds: 7),
     this.txPowerW,
+    this.txDbm,
   });
 }
 

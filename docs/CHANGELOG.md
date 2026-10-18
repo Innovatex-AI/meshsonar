@@ -3,6 +3,42 @@
 All notable changes to MeshSonar. Dates are local (US Eastern). This changelog was reconstructed from the commit
 history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md](ROADMAP.md).
 
+## [0.7.0] — 2026-10-18 — hex coverage on the map
+
+`pubspec.yaml` is `0.7.0+8`. Bundle id unchanged. Builds on 0.6.0.
+
+- **Hex coverage layer** on the drive map, the full-screen map and the drive-detail map: your tx pings rolled up onto the same H3
+  hexagons the website draws (resolution 9, about 350 m). Green when the mesh heard something from inside the hexagon (shade by best
+  SNR), red when it heard nothing. Toggle: Map layers > Hex coverage (on by default).
+- The roll-up is by the parent of the resolution-11 cell, like the server, never a direct resolution-9 lookup (they differ for about 6%
+  of points). Tests compare cell ids and outlines with h3-js 4.5.0 (`test/hex_cells_test.dart`; needs `brew install h3` to run).
+- New dependency: `h3_flutter` (H3 core v4 linked into the app). If the library cannot load, the map just draws no hexagons.
+
+## [0.6.0] — 2026-10-17 — packet hash for the observer join (Drive Format v1.1 ping fields)
+
+`pubspec.yaml` is `0.6.0+7`. Bundle id unchanged. Builds on 0.5.0. Spec: meshsonar-infra
+`docs/specs/m2-observer-ingest.md` §3 (source `upload`); build plan M1 "v1.1 fields".
+
+### Added
+- **Every ping now carries `pkt_hash`, `tx_epoch_s` and `tx_dbm`** (Drive Format v1.1, all optional, null when unknown):
+  - `pkt_hash`: the MeshCore packet hash of the ping (SHA-256(0x05 ‖ GRP_TXT payload), first 8 bytes, 16 hex), the
+    key the server uses to join a ping to every observer that heard it. Taken from a heard repeat of this exact send
+    when there is one; otherwise rebuilt from the send command (timestamp, the companion's node name, the ping text,
+    the channel key). The companion's channel-send reply has no hash, but its packet is deterministic.
+  - `tx_epoch_s`: the second inside the packet (the timestamp MeshSonar put in the send command), not a guess from `ts`.
+  - `tx_dbm`: the radio's TX power for that ping.
+- The wire `format` id stays `meshsonar.drive.v1`: the live server accepts only that id and ignores unknown fields,
+  so uploads keep working before and after the server learns the new fields. Older saved pings load with the fields null.
+
+### Tests
+- New `test/radio/packet_hash_test.dart`: golden vectors from real #wardriving pings in the Oct 17 observer capture
+  (observer hash = hash of the heard `raw` = hash predicted from the send), route/path independence, TRACE path_len,
+  MAX_TEXT_LEN cut, JSON round-trip. Two engine tests (hash and send second per ping, with and without echoes).
+  The Drive Format shape mirror (`test/core/helpers.dart`) checks the v1.1 fields.
+- `no_cmat_strings_test` (0.5.0 re-review): the `\u0043` cases are written escaped again and checked to decode to
+  exactly `CMAT`; a joined literal run attaches to the literal where it started, not one nested in an interpolation
+  (`'CM' '${'x'}AT'` is `CMxAT`, not flagged); a literal-only interpolation counts as its text.
+
 ## [0.5.0] — 2026-10-17 — new server address, MeshSonar name
 
 `pubspec.yaml` is `0.5.0+6`. Bundle id unchanged (`com.meshsonar.app`). Drive Format v1 and the problem-report body are
