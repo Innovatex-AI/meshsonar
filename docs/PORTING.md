@@ -168,7 +168,7 @@ A native (Swift/Kotlin), web (TypeScript) or other rewrite should keep these **c
    serialise syncs, and treat 401/403 as fatal for a sync-all.
 4. **Echo recognition** ([PROTOCOL.md §5](PROTOCOL.md#5-the-ping-and-its-echoes)): channel hash + MAC + timestamp +
    text, non-empty flood path, `repeater = path[0]`, hash-size-aware path decoding, fewest hops then best SNR.
-5. **Ping text** `@[MapperBot] lat5, lon5 [power]` so MeshMapper and community tools recognise it.
+5. **Ping text** `@[MeshSonar] [power]`. NEVER put a position in it: the channel is public.
 6. **Cadence** (time AND distance, first ping immediately, manual ping resets both, no overlap, 7 s listen window)
    and the **GPS filter** thresholds ([FEATURES.md](FEATURES.md#gps-filter)).
 7. Optional but recommended: the **on-device layout** (folder per session, JSONL, ledgers), so drives can be copied

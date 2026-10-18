@@ -3,6 +3,17 @@
 All notable changes to MeshSonar. Dates are local (US Eastern). This changelog was reconstructed from the commit
 history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md](ROADMAP.md).
 
+## [0.7.1] — 2026-10-18 — privacy: pings no longer carry your position
+
+`pubspec.yaml` is `0.7.1+9`. Bundle id unchanged. **Fixes a privacy leak.**
+
+- The ping text on the public channel was MeshMapper's `@[MapperBot] <lat>, <lon> [power]`, so anyone reading the channel saw the
+  driver's position to 5 decimals (about 1 m). It is now `@[MeshSonar] [power]` (power only when known). **No coordinates, ever**:
+  `formatPingText` no longer takes a position, and tests assert nothing coordinate-like is on air.
+- The site does not need coordinates on the air: your position is recorded on the phone and uploaded with the drive, and the site
+  joins observer receptions to each ping by packet hash (Drive Format v1.1 `pkt_hash`, sent since 0.6.0).
+- Pings from 0.7.0 and earlier still carry coordinates on the channel. Update every phone and iPad.
+
 ## [0.7.0] — 2026-10-18 — hex coverage on the map
 
 `pubspec.yaml` is `0.7.0+8`. Bundle id unchanged. Builds on 0.6.0.
