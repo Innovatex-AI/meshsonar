@@ -192,6 +192,10 @@ class DrivePing {
   /// after [ts] because sends keep it strictly increasing. Null when unknown.
   final int? txEpochS;
 
+  /// v1.1: the random tag in the ping's text on the channel ("MS:" plus the tag), so a heard repeat matches exactly this ping.
+  /// Random per ping, never derived from position or time. Null for pings made before 0.7.3 and for rx pings.
+  final String? wireTag;
+
   /// v1.1: the radio's TX power for this ping in dBm (power can change mid-drive). Null when unknown.
   final double? txDbm;
   const DrivePing({
@@ -207,6 +211,7 @@ class DrivePing {
     this.neighbor,
     this.pktHash,
     this.txEpochS,
+    this.wireTag,
     this.txDbm,
   });
 
@@ -225,6 +230,7 @@ class DrivePing {
         'neighbor': neighbor?.toJson(),
         'pkt_hash': pktHash,
         'tx_epoch_s': txEpochS,
+        'wire_tag': wireTag,
         'tx_dbm': txDbm,
       };
   factory DrivePing.fromJson(Map<String, dynamic> j) => DrivePing(
@@ -240,6 +246,7 @@ class DrivePing {
         neighbor: j['neighbor'] == null ? null : Neighbor.fromJson((j['neighbor'] as Map).cast<String, dynamic>()),
         pktHash: _hash16(j['pkt_hash']),
         txEpochS: (j['tx_epoch_s'] as num?)?.toInt(),
+        wireTag: j['wire_tag'] as String?,
         txDbm: (j['tx_dbm'] as num?)?.toDouble(),
       );
 

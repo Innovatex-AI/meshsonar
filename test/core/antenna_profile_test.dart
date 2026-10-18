@@ -68,7 +68,7 @@ void main() {
         expect(ping.keys.toSet(),
             {'id', 'ts', 'lat', 'lon', 'gps_accuracy_m', 'speed_mps', 'kind', 'noise_floor_dbm', 'echoes', 'neighbor',
               // 0.6.0: the Drive Format v1.1 ping fields (optional; the v1 server ignores them)
-              'pkt_hash', 'tx_epoch_s', 'tx_dbm'});
+              'pkt_hash', 'tx_epoch_s', 'tx_dbm', 'wire_tag'});
       }
       expect(jsonEncode(body), isNot(contains('mount')));
       expect(jsonEncode(body), isNot(contains('fixedMast')));

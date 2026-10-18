@@ -3,6 +3,15 @@
 All notable changes to MeshSonar. Dates are local (US Eastern). This changelog was reconstructed from the commit
 history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md](ROADMAP.md).
 
+## [0.7.3] — 2026-10-18 — ping text is "MS:" + a random tag
+
+`pubspec.yaml` is `0.7.3+11`. Bundle id unchanged.
+
+- The ping on the public channel is now `MS:` plus a random 10-character tag from the secure random source, for example
+  `MS:m3jnr7dan5`. Nothing else: no position, no power, no name. A new tag for every ping, never derived from position, time or driver.
+- The tag is stored with the ping and uploaded as `wire_tag` (Drive Format v1.1, optional; servers that do not know it ignore it), so a
+  heard repeat can be matched to exactly that ping in analysis. The transmit power is already sent as `tx_dbm`.
+
 ## [0.7.2] — 2026-10-18 — see your driver key
 
 `pubspec.yaml` is `0.7.2+10`. Bundle id unchanged.
