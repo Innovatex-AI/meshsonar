@@ -40,7 +40,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
+import 'package:h3_flutter/h3_flutter.dart' show H3;
+
 import '../../core/heard.dart' show haversineM;
+import '../../core/hex_cells.dart';
 import '../../core/model.dart';
 import '../theme.dart';
 import '../widgets.dart';
@@ -207,6 +210,26 @@ class _CoverageMapState extends State<CoverageMap> {
   List<HeardView>? _markerSrcHeard;
   List<RepeaterRef> _markerRepeaters = const [];
   Map<String, HeardView> _heardByKey = const {};
+
+  // Hexagons: the H3 library is loaded once; the roll-up reruns only when the ping list changes.
+  static final H3? _h3 = loadHexEngine();
+  List<DrivePing>? _hexSrc;
+  int _hexSrcLen = -1;
+  List<HexCell> _hexCells = const [];
+
+  List<HexCell> _ensureHexes() {
+    final h3 = _h3;
+    if (h3 == null) return const [];
+    if (identical(_hexSrc, widget.pings) && _hexSrcLen == widget.pings.length) return _hexCells;
+    _hexSrc = widget.pings;
+    _hexSrcLen = widget.pings.length;
+    try {
+      _hexCells = buildHexCells(widget.pings, h3);
+    } catch (_) {
+      _hexCells = const [];
+    }
+    return _hexCells;
+  }
 
   DrivePing? get _latest {
     _ensureSorted();
@@ -501,6 +524,18 @@ class _CoverageMapState extends State<CoverageMap> {
                           ? [mc.forPing(heard: true, snr: h.snrDb), mc.beacon.withValues(alpha: 0.85)]
                           : null,
                       color: h.phase == HeardPhase.fresh ? Colors.transparent : mc.beacon.withValues(alpha: 0.45),
+                    ),
+                ],
+              ),
+            if (layers.hexes)
+              PolygonLayer(
+                polygons: [
+                  for (final h in _ensureHexes())
+                    Polygon(
+                      points: [for (final b in h.boundary) LatLng(b.lat, b.lon)],
+                      color: (h.wasHeard ? mc.forPing(heard: true, snr: h.bestSnrDb) : mc.silent).withValues(alpha: h.wasHeard ? 0.34 : 0.22),
+                      borderColor: (h.wasHeard ? mc.forPing(heard: true, snr: h.bestSnrDb) : mc.silent).withValues(alpha: 0.75),
+                      borderStrokeWidth: 1.2,
                     ),
                 ],
               ),

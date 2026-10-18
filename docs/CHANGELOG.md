@@ -3,6 +3,17 @@
 All notable changes to MeshSonar. Dates are local (US Eastern). This changelog was reconstructed from the commit
 history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md](ROADMAP.md).
 
+## [0.7.0] — 2026-10-18 — hex coverage on the map
+
+`pubspec.yaml` is `0.7.0+8`. Bundle id unchanged. Builds on 0.6.0.
+
+- **Hex coverage layer** on the drive map, the full-screen map and the drive-detail map: your tx pings rolled up onto the same H3
+  hexagons the website draws (resolution 9, about 350 m). Green when the mesh heard something from inside the hexagon (shade by best
+  SNR), red when it heard nothing. Toggle: Map layers > Hex coverage (on by default).
+- The roll-up is by the parent of the resolution-11 cell, like the server, never a direct resolution-9 lookup (they differ for about 6%
+  of points). Tests compare cell ids and outlines with h3-js 4.5.0 (`test/hex_cells_test.dart`; needs `brew install h3` to run).
+- New dependency: `h3_flutter` (H3 core v4 linked into the app). If the library cannot load, the map just draws no hexagons.
+
 ## [0.6.0] — 2026-10-17 — packet hash for the observer join (Drive Format v1.1 ping fields)
 
 `pubspec.yaml` is `0.6.0+7`. Bundle id unchanged. Builds on 0.5.0. Spec: meshsonar-infra

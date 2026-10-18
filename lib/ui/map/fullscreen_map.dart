@@ -192,6 +192,14 @@ Future<void> showMapLayersSheet(BuildContext context, DriveMapModel model) {
                   child: Text('Map layers', style: t.textTheme.titleLarge),
                 ),
                 SwitchListTile(
+                  key: const Key('layer-hexes'),
+                  secondary: const Icon(Icons.hexagon_outlined),
+                  title: const Text('Hex coverage'),
+                  subtitle: const Text('Your pings on the same hexagons as the website'),
+                  value: l.hexes,
+                  onChanged: (v) => set(l.copyWith(hexes: v)),
+                ),
+                SwitchListTile(
                   key: const Key('layer-pings'),
                   secondary: const Icon(Icons.scatter_plot_rounded),
                   title: const Text('Pings'),
