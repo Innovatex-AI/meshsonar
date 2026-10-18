@@ -105,7 +105,7 @@ class RepeaterDetailSheet extends StatelessWidget {
       ('Last SNR', last?.snrDb == null ? '—' : formatSnrShort(last!.snrDb!)),
       ('Best SNR', best == null ? '—' : formatSnrShort(best)),
       if (last != null) ('Last heard', '${formatTime(last.ts)}${last.hops == null ? '' : ' · ${hopsLabel(last.hops)}'}'),
-      if (m.source != RepeaterSource.none) ('Name from', m.source == RepeaterSource.cmat ? 'CMAT' : 'map.meshcore.io'),
+      if (m.source != RepeaterSource.none) ('Name from', m.source == RepeaterSource.cmat ? 'MeshSonar' : 'map.meshcore.io'),
     ];
 
     return ListView(
@@ -161,7 +161,7 @@ class RepeaterDetailSheet extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(top: Gap.s),
             child: Text(
-              'Its name and position will show once CMAT or the public node map knows this repeater.',
+              'Its name and position will show once the MeshSonar site or the public node map knows this repeater.',
               style: t.textTheme.bodySmall,
             ),
           ),

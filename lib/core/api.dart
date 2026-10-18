@@ -5,6 +5,7 @@ import 'dart:io';
 
 import 'antenna_profile.dart';
 import 'model.dart';
+import 'server_url.dart';
 
 /// Per-session numbers for lists.
 class SessionSummary {
@@ -167,7 +168,7 @@ class Settings {
   static const int minSyncEveryMin = 1, maxSyncEveryMin = 30;
 
   const Settings({
-    this.serverUrl = 'https://cmh-meshcore.lovable.app',
+    this.serverUrl = defaultServerUrl,
     this.driverKey,
     this.keyStatus = DriverKeyStatus.none,
     this.display,
@@ -229,7 +230,7 @@ class Settings {
         'heard_hold_pings': heardHoldPings,
       };
   factory Settings.fromJson(Map<String, dynamic> j) => Settings(
-        serverUrl: _str(j['server_url']) ?? 'https://cmh-meshcore.lovable.app',
+        serverUrl: _str(j['server_url']) ?? defaultServerUrl,
         driverKey: _str(j['driver_key']),
         keyStatus: DriverKeyStatus.values.firstWhere((s) => s.name == j['key_status'], orElse: () => DriverKeyStatus.none),
         display: _str(j['display']),

@@ -104,7 +104,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         key: const Key('onboarding-page-3'),
                         art: const KeyCloudIllustration(),
                         title: 'Get a driver key',
-                        body: 'Drives are always saved on this phone. To add them to the CMAT coverage map, request a '
+                        body: 'Drives are always saved on this phone. To add them to the MeshSonar coverage map, request a '
                             'driver key — an admin approves it, then your drives upload automatically.',
                         actions: [
                           FilledButton.icon(

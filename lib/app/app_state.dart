@@ -19,6 +19,7 @@ import '../core/heard.dart';
 import '../core/model.dart';
 import '../core/repeater_directory.dart';
 import '../core/report_body.dart';
+import '../core/server_url.dart';
 import '../radio/radio_api.dart';
 import 'messages.dart';
 import 'services.dart';
@@ -861,6 +862,21 @@ class AppState extends ChangeNotifier {
       _settings = const Settings();
       _notice = 'Settings couldn\'t be read, so defaults are in use.';
     }
+    // 0.5.0: the website moved off Lovable to MeshSonar's own server (same API and database), so a saved retired
+    // address is rewritten to https://meshsonar.com and the driver key is kept (see lib/core/server_url.dart).
+    final migrated = migratedServerUrl(_settings.serverUrl);
+    if (migrated != null) {
+      final from = Uri.tryParse(_settings.serverUrl.trim())?.host ?? 'the old address';
+      _settings = _settings.copyWith(serverUrl: migrated);
+      diagnostics.add('Server address moved from $from to $migrated (same server, driver key kept)');
+      try {
+        await services.settingsStore.save(_settings);
+      } catch (e) {
+        // In use for this run either way; the rewrite repeats at the next launch until a save succeeds.
+        _logError('Saving the moved server address failed', e);
+        debugPrint('MeshSonar: saving the moved server address failed: $e');
+      }
+    }
     heard.holdPings = _settings.heardHoldPings;
     try {
       _setRepeaters(await services.repeaterCache.load());
@@ -892,7 +908,11 @@ class AppState extends ChangeNotifier {
 
   Future<void> updateSettings(Settings s) async {
     // Keys belong to one server: a new server URL with the old key would only be refused, so the key goes with it.
-    if (s.serverUrl != _settings.serverUrl && s.driverKey != null && s.driverKey == _settings.driverKey) {
+    // Another address of the same server (lib/core/server_url.dart sameServerHosts) keeps it.
+    if (s.serverUrl != _settings.serverUrl &&
+        !isSameServer(s.serverUrl, _settings.serverUrl) &&
+        s.driverKey != null &&
+        s.driverKey == _settings.driverKey) {
       s = s.copyWith(clearKey: true);
       _keyError = null;
     }

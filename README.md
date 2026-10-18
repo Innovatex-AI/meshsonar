@@ -1,9 +1,9 @@
 # MeshSonar
 
-**Version 0.4.0** · Open-source MeshCore wardriving. MeshSonar pings a channel from your MeshCore companion radio,
+**Version 0.5.0** · Open-source MeshCore wardriving. MeshSonar pings a channel from your MeshCore companion radio,
 listens for the repeaters that echo it, and records every ping with GPS — including the ones nobody heard. Drives are
-saved on the device first, can be exported as files, and sync to [CMAT](https://cmh-meshcore.lovable.app) or any server
-that implements the [MeshSonar Drive Format v1](https://github.com/Innovatex-AI/meshcore-insights/blob/main/docs/MESHSONAR_DRIVE_FORMAT.md).
+saved on the device first, can be exported as files, and sync to [MeshSonar](https://meshsonar.com) or any server that
+implements the [MeshSonar Drive Format v1](https://github.com/Innovatex-AI/meshcore-insights/blob/main/docs/MESHSONAR_DRIVE_FORMAT.md).
 
 One Flutter codebase: iPhone, iPad, Android, macOS, Linux. A Windows runner is configured but untested.
 
@@ -13,7 +13,7 @@ One Flutter codebase: iPhone, iPad, Android, macOS, Linux. A Windows runner is c
   now. Each ping is listened to for 7 seconds. Every repeater that repeated it is recorded with SNR, RSSI, hop count
   and path. "Heard nothing" is recorded too.
 - **See who's in range:** a heard box over the live map, a full-screen map, a ping log with per-echo detail, and
-  repeater names and distances (from CMAT and the public MeshCore node map).
+  repeater names and distances (from the MeshSonar site and the public MeshCore node map).
 - **Not locked down:** the channel (default `#wardriving`, same ping format as MeshMapper) and the server are settings.
 - **Save first:** every ping is on disk the moment it's finished. Uploads run during the drive and/or at Stop, and are
   retry-safe (ping UUIDs; re-sends count as duplicates).
@@ -28,8 +28,9 @@ flutter analyze
 flutter test                       # unit, widget, contract and end-to-end tests
 flutter build ios --release        # or: apk, macos, linux
 ```
-The contract and end-to-end tests run CMAT's real endpoint code with [bun](https://bun.sh) when a CMAT checkout is at
-`/home/claude/meshcore-insights`; otherwise they skip. Details in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+The contract and end-to-end tests run the MeshSonar website's real endpoint code with [bun](https://bun.sh) when a
+[meshcore-insights](https://github.com/Innovatex-AI/meshcore-insights) checkout is at `CMAT_DIR` (default
+`/home/claude/meshcore-insights`); otherwise they skip. Details in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
 ## Documentation
 | Document | What's in it |
@@ -46,7 +47,7 @@ The contract and end-to-end tests run CMAT's real endpoint code with [bun](https
 | [docs/CONTRACTS.md](docs/CONTRACTS.md) | The original build contracts: shared types, class names, folder ownership |
 
 ## Layout
-- `lib/core/` — data model, on-device store, CMAT client, sync, settings, GPS filter, repeater lookup (pure Dart)
+- `lib/core/` — data model, on-device store, server client (`CmatClient`), sync, settings, GPS filter, repeater lookup (pure Dart)
 - `lib/radio/` — MeshCore companion protocol, packets, crypto, wardrive engine, simulator (pure Dart) and Bluetooth
 - `lib/app/` — app state and wiring; `lib/ui/` — screens, map, report; `lib/platform/` — GPS and sharing
 - `test/`, `integration_test/` — see docs/TESTING.md

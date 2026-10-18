@@ -3,13 +3,22 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/core/server_url.dart';
 import 'package:path/path.dart' as p;
 
-/// The default server (changes only with the M1 domain move, which updates this list on purpose), the public node
-/// map, and OpenStreetMap tiles.
-const allowedLiteralHosts = {'cmh-meshcore.lovable.app', 'map.meshcore.io', 'tile.openstreetmap.org'};
+/// The MeshSonar server's addresses (0.5.0: the default https://meshsonar.com plus the aliases in
+/// lib/core/server_url.dart, kept equal to [sameServerHosts] by the test below), the public node map, and
+/// OpenStreetMap tiles.
+const allowedServerHosts = {'meshsonar.com', 'cmh.meshsonar.com', 'cmh-meshcore.lovable.app'};
+const allowedLiteralHosts = {...allowedServerHosts, 'map.meshcore.io', 'tile.openstreetmap.org'};
 
 void main() {
+  test('the allow-list matches the alias set, and the default server is one of them', () {
+    expect(allowedServerHosts, sameServerHosts);
+    expect(retiredServerHosts.difference(sameServerHosts), isEmpty);
+    expect(sameServerHosts, contains(Uri.parse(defaultServerUrl).host));
+  });
+
   test('every http(s) host in lib/ is allowed; only cmat_client and repeater_directory make HTTP clients', () {
     final hostRe = RegExp(r'''https?://([A-Za-z0-9.-]+)''');
     final clientRe = RegExp(r'''http\.Client\(|HttpClient\(|IOClient\(|http\.(get|post|put|patch|delete|head|read|readBytes)\(''');

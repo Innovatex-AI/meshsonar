@@ -4,7 +4,7 @@
 //
 //   EchoTile(echo: e, lookup: state.lookup, fromLat: ping.lat, fromLon: ping.lon, onTap: …)
 //     One echo of one ping: repeater name (or "Unknown repeater" / "3 possible repeaters"), id chip, SNR pill coloured on the theme's SNR
-//     scale, then one muted line: direct / N hops · RSSI · delay · "2.4 km NE" · source badge (CMAT / map), and a
+//     scale, then one muted line: direct / N hops · RSSI · delay · "2.4 km NE" · source badge (MeshSonar / map), and a
 //     "via A → B" line for multi-hop echoes when a path was reported. fromLat/fromLon are the ping's position; omit
 //     them to hide distance.
 //
@@ -14,7 +14,7 @@
 //
 //   RepeaterIdChip('df01')     small monospace chip with the hex id as heard.
 //   SnrPill(snr)               "+6.5 dB" pill coloured by SNR (or "—").
-//   SourceBadge(source)        "CMAT" / "map" badge (nothing for unknown).
+//   SourceBadge(source)        "MeshSonar" / "map" badge (nothing for unknown).
 //   formatDistanceBearing(m, deg) → "2.4 km NE";  hopsLabel(hops) → "direct" / "2 hops" / null.
 import 'package:flutter/material.dart';
 
@@ -105,7 +105,7 @@ class SourceBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     if (source == RepeaterSource.none) return const SizedBox.shrink();
     final c = Theme.of(context).colorScheme;
-    final label = source == RepeaterSource.cmat ? 'CMAT' : 'map';
+    final label = source == RepeaterSource.cmat ? 'MeshSonar' : 'map';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
       decoration: BoxDecoration(

@@ -131,7 +131,7 @@ positions and distances only. It never changes recorded data.
 
 | Field | JSON | Default | Range (clamped on load) | Notes |
 |---|---|---|---|---|
-| serverUrl | `server_url` | `https://cmh-meshcore.lovable.app` | http(s) URL | trailing `/` removed when edited |
+| serverUrl | `server_url` | `https://meshsonar.com` | http(s) URL | trailing `/` removed when edited; a saved `cmh-meshcore.lovable.app` URL is rewritten to the default at launch (0.5.0, key kept) |
 | driverKey | `driver_key` | null | — | shown by the server once; the UI shows only `••••` + last 4 |
 | keyStatus | `key_status` | `none` | `none`, `pending`, `approved`, `rejected`, `revoked`, `unknown` | `unknown` = server said 401 |
 | display | `display` | null | — | public handle from the server |

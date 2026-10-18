@@ -131,7 +131,7 @@ When either is missing, these tests **skip** (they don't fail).
 **deployed** server and re-syncs (expecting duplicates only). It's skipped unless both variables are set:
 
 ```sh
-MESHSONAR_LIVE_URL=https://cmh-meshcore.lovable.app \
+MESHSONAR_LIVE_URL=https://meshsonar.com \
 MESHSONAR_LIVE_KEY=<an APPROVED driver key> \
 flutter test test/integration/live_smoke_test.dart
 ```

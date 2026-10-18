@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../app/app_state.dart';
 import '../core/antenna_profile.dart';
 import '../core/api.dart';
+import '../core/server_url.dart';
 import 'about_screen.dart';
 import 'antenna_sheet.dart';
 import 'onboarding/onboarding_screen.dart';
@@ -47,7 +48,7 @@ class SettingsScreen extends StatelessWidget {
                     final v = await _editText(context,
                         title: 'Server URL',
                         initial: st.serverUrl,
-                        hint: 'https://cmh-meshcore.lovable.app',
+                        hint: defaultServerUrl,
                         keyboard: TextInputType.url,
                         help: 'Any server that speaks the MeshSonar Drive Format works. A key from one server '
                             'doesn\'t work on another.',
@@ -61,7 +62,10 @@ class SettingsScreen extends StatelessWidget {
                     if (v == null || !context.mounted) return;
                     final url = v.trim().replaceAll(RegExp(r'/+$'), '');
                     if (url == s.settings.serverUrl) return;
-                    if (s.hasKey && !await confirmServerChange(context, url)) return;
+                    // Another address of the same server (old Lovable host, meshsonar.com, cmh.meshsonar.com) keeps
+                    // the key, so there is nothing to ask.
+                    final sameServer = isSameServer(url, s.settings.serverUrl);
+                    if (s.hasKey && !sameServer && !await confirmServerChange(context, url)) return;
                     await s.updateSettings(s.settings.copyWith(serverUrl: url));
                   },
                 ),

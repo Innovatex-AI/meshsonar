@@ -1,5 +1,5 @@
 // Drive report screen: opened from the drive detail screen and the drives list menu; hero numbers, new
-// grids/repeaters against an earlier drive, "not on CMAT" tags, charts and Share report.
+// grids/repeaters against an earlier drive, "not on MeshSonar" tags, charts and Share report.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/core/model.dart';
@@ -49,7 +49,7 @@ void main() {
     expect(find.text('+1 new'), findsOneWidget); // repeaters
     expect(tester.widget<Text>(find.byKey(const Key('report-distance'))).data, '712 m');
     expect(find.textContaining('New repeater heard: E5F6'), findsOneWidget);
-    expect(find.textContaining('isn\'t on CMAT\'s list'), findsOneWidget);
+    expect(find.textContaining('isn\'t on MeshSonar\'s list'), findsOneWidget);
     expect(find.byKey(const Key('report-map')), findsOneWidget);
     expect(find.textContaining('3 cells'), findsOneWidget);
 
@@ -101,7 +101,7 @@ void main() {
     expect(find.textContaining('First drive on this phone'), findsOneWidget);
     expect(find.byKey(const ValueKey('report-new-a1b2')), findsNothing);
     // CMAT list not loaded: nothing is flagged unknown to CMAT.
-    expect(find.textContaining('CMAT\'s list'), findsNothing);
+    expect(find.textContaining('MeshSonar\'s list'), findsNothing);
   });
 
   testWidgets('DriveReportScreen can be pushed directly (Drive screen card)', (tester) async {

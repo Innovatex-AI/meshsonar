@@ -362,7 +362,7 @@ class _Highlights extends StatelessWidget {
     }
     if (r.cmatChecked && r.unknownToCmat.isNotEmpty) {
       items.add((Icons.help_outline, c.tertiary,
-          '${r.unknownToCmat.length} repeater${r.unknownToCmat.length == 1 ? ' isn\'t' : 's aren\'t'} on CMAT\'s list yet.'));
+          '${r.unknownToCmat.length} repeater${r.unknownToCmat.length == 1 ? ' isn\'t' : 's aren\'t'} on MeshSonar\'s list yet.'));
     }
     if (items.isEmpty) return const SizedBox.shrink();
     return _Panel(
@@ -513,7 +513,7 @@ class _CellMap extends StatelessWidget {
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4),
         child: Text(
-          '${r.gridsMapped} cells (≈220 m, the same grid as CMAT\'s coverage map) · ${r.gridsWithCoverage} with coverage · '
+          '${r.gridsMapped} cells (≈220 m, the same grid as MeshSonar\'s coverage map) · ${r.gridsWithCoverage} with coverage · '
           '${r.newGrids} new',
           key: const Key('report-grid-caption'),
           style: t.textTheme.bodySmall,
@@ -769,7 +769,7 @@ class _Leaderboard extends StatelessWidget {
                       Text(name ?? x.label, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
                       if (x.isNew && report.earlierDrives > 0)
                         _Tag('NEW', m.beacon, key: ValueKey('report-new-${x.id}')),
-                      if (x.unknownToCmat) _Tag('not on CMAT', t.colorScheme.tertiary, key: ValueKey('report-unknown-${x.id}')),
+                      if (x.unknownToCmat) _Tag('not on MeshSonar', t.colorScheme.tertiary, key: ValueKey('report-unknown-${x.id}')),
                     ]),
                     if (details.isNotEmpty) Text(details, style: t.textTheme.bodySmall),
                     const SizedBox(height: 5),

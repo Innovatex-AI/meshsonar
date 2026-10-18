@@ -227,9 +227,12 @@ class FakeSettingsStore implements SettingsStore {
     if (existing is Map && existing.isNotEmpty) return saved;
     return Settings.fromJson({...j, 'antenna_profiles': testAntennaProfiles});
   }
+  /// When set, [save] throws it (and keeps [saved] as it was).
+  Object? failSave;
   @override
   Future<void> save(Settings settings) async {
     saveCount++;
+    if (failSave != null) throw failSave!;
     saved = settings;
   }
 }

@@ -109,16 +109,36 @@ void main() {
     }
 
     // Same URL: nothing to confirm, nothing changes.
-    await enterUrl('https://cmh-meshcore.lovable.app/');
+    await enterUrl('https://meshsonar.com/');
     expect(find.byKey(const Key('server-change-dialog')), findsNothing);
     expect(h.settings.saved.driverKey, isNotNull);
+
+    // Another address of the same server (0.5.0): no question, the key stays.
+    await enterUrl('https://cmh.meshsonar.com');
+    expect(find.byKey(const Key('server-change-dialog')), findsNothing);
+    expect(h.settings.saved.serverUrl, 'https://cmh.meshsonar.com');
+    expect(h.settings.saved.driverKey, isNotNull);
+    await enterUrl('https://meshsonar.com');
+    expect(find.byKey(const Key('server-change-dialog')), findsNothing);
+    expect(h.settings.saved.serverUrl, 'https://meshsonar.com');
+    expect(h.settings.saved.driverKey, isNotNull);
+
+    // Not a plain https alias (http, a port, a sub-path): asks like any other server.
+    for (final url in ['http://meshsonar.com', 'https://meshsonar.com:8443', 'https://cmh.meshsonar.com/api']) {
+      await enterUrl(url);
+      expect(find.byKey(const Key('server-change-dialog')), findsOneWidget, reason: url);
+      await tester.tap(find.byKey(const Key('server-change-cancel')));
+      await tester.pumpAndSettle();
+      expect(h.state.settings.serverUrl, 'https://meshsonar.com');
+      expect(h.settings.saved.driverKey, isNotNull);
+    }
 
     await enterUrl('https://other.example');
     expect(find.byKey(const Key('server-change-dialog')), findsOneWidget);
     expect(find.textContaining('only works on the server that issued it'), findsOneWidget);
     await tester.tap(find.byKey(const Key('server-change-cancel')));
     await tester.pumpAndSettle();
-    expect(h.state.settings.serverUrl, 'https://cmh-meshcore.lovable.app');
+    expect(h.state.settings.serverUrl, 'https://meshsonar.com');
     expect(h.state.settings.driverKey, isNotNull);
 
     await enterUrl('https://other.example');

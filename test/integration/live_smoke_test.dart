@@ -1,5 +1,5 @@
 // Live smoke test against a deployed server. Skipped unless both are set:
-//   MESHSONAR_LIVE_URL  e.g. https://cmh-meshcore.lovable.app
+//   MESHSONAR_LIVE_URL  e.g. https://meshsonar.com
 //   MESHSONAR_LIVE_KEY  an APPROVED driver key (use a test driver; reject it afterwards to keep it off the public map)
 // Drives the simulator through the real engine, saves to disk, syncs to the live server, re-syncs (duplicates only).
 import 'dart:io';
