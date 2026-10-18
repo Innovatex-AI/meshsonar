@@ -1,5 +1,8 @@
 // Settings, grouped: Driver & server, Wardriving, Antenna (per radio), Sync, About.
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../app/app_state.dart';
 import '../core/antenna_profile.dart';
@@ -503,6 +506,20 @@ class _DriverKeySectionState extends State<_DriverKeySection> {
   final _callsign = TextEditingController();
   final _email = TextEditingController();
   final _pasted = TextEditingController();
+
+  // Tap-to-reveal: the full key is on screen only while the person asks for it (hides itself after 30 s).
+  bool _revealKey = false;
+  Timer? _hideTimer;
+
+  void _setReveal(bool on) {
+    _hideTimer?.cancel();
+    setState(() => _revealKey = on);
+    if (on) {
+      _hideTimer = Timer(const Duration(seconds: 30), () {
+        if (mounted) setState(() => _revealKey = false);
+      });
+    }
+  }
   bool _showPaste = false;
   final _form = GlobalKey<FormState>();
 
@@ -512,6 +529,7 @@ class _DriverKeySectionState extends State<_DriverKeySection> {
     _callsign.dispose();
     _email.dispose();
     _pasted.dispose();
+    _hideTimer?.cancel();
     super.dispose();
   }
 
@@ -549,7 +567,34 @@ class _DriverKeySectionState extends State<_DriverKeySection> {
           const SizedBox(height: 10),
           if (st.display != null)
             Text('Shown on the map as: ${st.display}', style: t.textTheme.titleSmall),
-          Text('Driver key: ${s.maskedKey}', key: const Key('masked-key'), style: t.textTheme.bodyMedium),
+          Row(children: [
+            Expanded(
+              child: _revealKey
+                  ? SelectableText(st.driverKey ?? '',
+                      key: const Key('revealed-key'), style: t.textTheme.bodyMedium?.copyWith(fontFamily: 'monospace'))
+                  : Text('Driver key: ${s.maskedKey}', key: const Key('masked-key'), style: t.textTheme.bodyMedium),
+            ),
+            IconButton(
+              key: const Key('key-reveal'),
+              tooltip: _revealKey ? 'Hide key' : 'Show key',
+              icon: Icon(_revealKey ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+              onPressed: () => _setReveal(!_revealKey),
+            ),
+            if (_revealKey)
+              IconButton(
+                key: const Key('key-copy'),
+                tooltip: 'Copy key',
+                icon: const Icon(Icons.copy_rounded),
+                onPressed: () async {
+                  await Clipboard.setData(ClipboardData(text: st.driverKey ?? ''));
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Key copied')));
+                  }
+                },
+              ),
+          ]),
+          Text('Works on ${st.serverUrl}. Keep it private: anyone with it can upload drives as you.',
+              key: const Key('key-info'), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
           const SizedBox(height: 6),
           Text(keyStatusHelp(st.keyStatus), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
           if (s.keyError != null) ...[const SizedBox(height: 8), ErrorBanner(s.keyError!)],
@@ -566,7 +611,7 @@ class _DriverKeySectionState extends State<_DriverKeySection> {
                   builder: (ctx) => AlertDialog(
                     title: const Text('Remove this driver key?'),
                     content: const Text(
-                        'The key is shown only once by the server. If you remove it you\'ll need to request a new one.'),
+                        'Make sure you can get it again before you remove it: the website\'s Devices page shows keys made after it was updated, otherwise you\'ll need a new one.'),
                     actions: [
                       TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
                       FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Remove')),
