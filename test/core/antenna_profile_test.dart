@@ -25,7 +25,7 @@ AntennaProfile prof(AntennaMount m, {double? gain, double height = 1.8}) =>
     AntennaProfile(mount: m, gainDbi: gain, heightM: height, updatedAt: t0);
 
 void main() {
-  group('AC-14 wire mapping (Drive Format v1, unchanged)', () {
+  group('AC-14 wire mapping (Drive Format v1 session, v1.1 ping fields)', () {
     test('handheld and inside car → internal; roof mag-mount and fixed mast → external', () {
       expect(prof(AntennaMount.handheld).toAntenna().type, 'internal');
       expect(prof(AntennaMount.insideCar).toAntenna().type, 'internal');
@@ -66,7 +66,9 @@ void main() {
       expect((s['companion'] as Map).keys.toSet(), {'public_key', 'name', 'firmware'});
       for (final ping in (body['pings'] as List).cast<Map>()) {
         expect(ping.keys.toSet(),
-            {'id', 'ts', 'lat', 'lon', 'gps_accuracy_m', 'speed_mps', 'kind', 'noise_floor_dbm', 'echoes', 'neighbor'});
+            {'id', 'ts', 'lat', 'lon', 'gps_accuracy_m', 'speed_mps', 'kind', 'noise_floor_dbm', 'echoes', 'neighbor',
+              // 0.6.0: the Drive Format v1.1 ping fields (optional; the v1 server ignores them)
+              'pkt_hash', 'tx_epoch_s', 'tx_dbm'});
       }
       expect(jsonEncode(body), isNot(contains('mount')));
       expect(jsonEncode(body), isNot(contains('fixedMast')));
