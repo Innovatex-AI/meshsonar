@@ -1,6 +1,6 @@
 # MeshSonar
 
-**Version 0.6.0** · Open-source MeshCore wardriving. MeshSonar pings a channel from your MeshCore companion radio,
+**Version 0.7.3** · Open-source MeshCore wardriving. MeshSonar pings a channel from your MeshCore companion radio,
 listens for the repeaters that echo it, and records every ping with GPS — including the ones nobody heard. Drives are
 saved on the device first, can be exported as files, and sync to [MeshSonar](https://meshsonar.com) or any server that
 implements the [MeshSonar Drive Format v1](https://github.com/Innovatex-AI/meshcore-insights/blob/main/docs/MESHSONAR_DRIVE_FORMAT.md).
@@ -14,12 +14,14 @@ One Flutter codebase: iPhone, iPad, Android, macOS, Linux. A Windows runner is c
   and path. "Heard nothing" is recorded too.
 - **See who's in range:** a heard box over the live map, a full-screen map, a ping log with per-echo detail, and
   repeater names and distances (from the MeshSonar site and the public MeshCore node map).
-- **Not locked down:** the channel (default `#wardriving`, same ping format as MeshMapper) and the server are settings.
+- **Not locked down:** the channel (default `#wardriving`; the ping text is `MS:` plus 10 random characters, with no location or other data on the air) and the server are settings.
 - **Save first:** every ping is on disk the moment it's finished. Uploads run during the drive and/or at Stop, and are
   retry-safe (ping UUIDs; re-sends count as duplicates).
 - **Drive report** after each drive: grids mapped, new grids and repeaters, signal over the drive, best and dead spots.
 - **Export** any drive as a Drive Format v1 JSON file.
-- **Driver keys:** request one in Settings; the server admin approves it. Only the last 4 characters are ever shown.
+- **Hex coverage:** drive maps draw H3 resolution-9 hexagons (parent of the res-11 cell), matching the website.
+- **Driver key:** create one on the website (`/me/devices`) and paste it in Settings. The eye button shows or copies it and hides it after 30 s.
+- **Privacy:** pings never carry your position. Only `MS:<random tag>` goes over the air; the tag is stored and uploaded so the server can join repeater observations.
 
 ## Build and test
 ```sh
@@ -31,6 +33,9 @@ flutter build ios --release        # or: apk, macos, linux
 The contract and end-to-end tests run the MeshSonar website's real endpoint code with [bun](https://bun.sh) when a
 [meshcore-insights](https://github.com/Innovatex-AI/meshcore-insights) checkout is at `CMAT_DIR` (default
 `/home/claude/meshcore-insights`); otherwise they skip. Details in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+
+## For agents
+Start with [AGENTS.md](AGENTS.md) (rules) and the platform handoff in [meshsonar-infra/docs/HANDOFF.md](https://github.com/Innovatex-AI/meshsonar-infra/blob/main/docs/HANDOFF.md).
 
 ## Documentation
 | Document | What's in it |
