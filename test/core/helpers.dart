@@ -1,4 +1,4 @@
-// Shared builders and a Dart mirror of the Drive Format v1 shape rules (CMAT src/lib/drive/validate.ts) for tests.
+// Shared builders and a Dart mirror of the Drive Format v1 (+ v1.1 ping fields) shape rules (CMAT src/lib/drive/validate.ts) for tests.
 import 'package:meshsonar/core/model.dart';
 import 'package:uuid/uuid.dart';
 
@@ -32,9 +32,13 @@ DrivePing makePing(int i, {DateTime? ts, String? id}) {
       return DrivePing(
           id: base.id, ts: t, lat: base.lat, lon: base.lon, gpsAccuracyM: base.gpsAccuracyM, speedMps: base.speedMps,
           noiseFloorDbm: -94,
-          echoes: const [Echo(repeater: 'df0136', snrDb: 12.75, rssiDbm: -71, hops: 1, path: ['df0136'], delayMs: 840)]);
+          echoes: const [Echo(repeater: 'df0136', snrDb: 12.75, rssiDbm: -71, hops: 1, path: ['df0136'], delayMs: 840)],
+          // Drive Format v1.1 fields, so every contract run sends them through the real validator.
+          pktHash: i.toRadixString(16).padLeft(16, 'c'),
+          txEpochS: t.millisecondsSinceEpoch ~/ 1000 + 1,
+          txDbm: 22);
     case 2:
-      return DrivePing(id: base.id, ts: t, lat: base.lat, lon: base.lon, echoes: const [
+      return DrivePing(id: base.id, ts: t, lat: base.lat, lon: base.lon, pktHash: '94ac75928507bfbd', echoes: const [
         Echo(repeater: 'ab12', snrDb: -3.5, rssiDbm: null, hops: 2, path: ['ab12', 'cd34'], delayMs: null),
         Echo(repeater: '0e', snrDb: null, rssiDbm: null, hops: null, path: null, delayMs: 1200),
       ]);
