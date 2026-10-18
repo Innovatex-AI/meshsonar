@@ -87,7 +87,7 @@ sequenceDiagram
   Note over App,R: each ping
   App->>R: 38 01                              (GET_STATS radio)
   R-->>App: 18 01 noise… / 01 01 (unsupported → never asked again)
-  App->>R: 03 00 idx <ts u32> "@[MapperBot] …" (SEND_CHANNEL_TXT_MSG)
+  App->>R: 03 00 idx <ts u32> "@[MeshSonar] [power]" (SEND_CHANNEL_TXT_MSG)
   R-->>App: 00 OK
   R-->>App: 88 snr rssi <raw packet> …        (LOG_RX_DATA pushes, for 7 s)
 ```
@@ -179,12 +179,13 @@ crypto package.
 ### 5.1 Ping text (MeshMapper-compatible)
 
 ```
-@[MapperBot] <lat, 5 decimals>, <lon, 5 decimals>[ [<power>w]]
-e.g.  @[MapperBot] 40.12620, -82.92930 [0.2w]
+@[MeshSonar][ [<power>w]]
+e.g.  @[MeshSonar] [0.2w]
+(no position: the channel is public. Versions up to 0.7.0 sent "@[MapperBot] lat, lon [power]".)
 ```
 
-- Prefix `@[MapperBot]` is MeshMapper's `PING_PREFIX`; coordinates use `toStringAsFixed(5)`. This is MeshMapper's
-  `buildPayload()`.
+- Prefix `@[MeshSonar]`. Unlike MeshMapper's `buildPayload()` (`@[MapperBot] lat, lon`), MeshSonar puts NO position on the
+  channel: it is public. The site joins observer receptions by packet hash instead (v1.1 `pkt_hash`).
 - The power suffix is appended when the radio's TX power is known: `W = 10^(tx_dbm/10) / 1000`, formatted with one
   decimal (two below 0.1 W) plus `w`. MeshMapper offers fixed choices (`0.3w`, `0.6w`, `1.0w`, `2.0w`). MeshSonar
   derives the value from SELF_INFO, so a 22 dBm radio sends `0.2w` (see §7).

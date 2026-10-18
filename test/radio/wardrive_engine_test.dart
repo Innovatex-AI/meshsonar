@@ -41,10 +41,15 @@ class Rig {
 WardriveConfig manual() => const WardriveConfig(intervalSec: 0, minDistanceM: 100, listenWindow: window, txPowerW: 1.0);
 
 void main() {
-  test('ping text matches MeshMapper buildPayload', () {
-    expect(formatPingText(40.126234, -82.929312), '@[MapperBot] 40.12623, -82.92931');
-    expect(formatPingText(40.126234, -82.929312, txPowerW: 1.0), '@[MapperBot] 40.12623, -82.92931 [1.0w]');
-    expect(formatPingText(40.1, -82.9, txPowerW: 0.3), '@[MapperBot] 40.10000, -82.90000 [0.3w]');
+  test('ping text is MeshSonar-branded and carries no position', () {
+    expect(formatPingText(), '@[MeshSonar]');
+    expect(formatPingText(txPowerW: 1.0), '@[MeshSonar] [1.0w]');
+    expect(formatPingText(txPowerW: 0.3), '@[MeshSonar] [0.3w]');
+    // PRIVACY: nothing that looks like a coordinate, whatever the power
+    for (final w in [null, 0.05, 0.2, 1.0, 2.0]) {
+      expect(formatPingText(txPowerW: w), isNot(matches(RegExp(r'-?\d{1,3}\.\d{3,}'))));
+      expect(formatPingText(txPowerW: w), isNot(contains('MapperBot')));
+    }
   });
 
   test('start joins the channel; pingNow emits one finished ping with real echoes', () async {
@@ -72,10 +77,12 @@ void main() {
       expect(e.delayMs, inInclusiveRange(0, window.inMilliseconds + 100));
     }
     expect(p.echoes.map((e) => e.repeater).toSet().length, p.echoes.length, reason: 'one echo per repeater');
-    // The ping text on air is MeshMapper's format.
+    // The ping text on air: MeshSonar's, with the power and NO position (public channel).
     final sent = rig.radio.sentFrames.lastWhere((f) => f[0] == 3);
-    expect(String.fromCharCodes(sent.sublist(7)), startsWith('@[MapperBot] 40.1262'));
-    expect(String.fromCharCodes(sent.sublist(7)), endsWith(' [1.0w]'));
+    final onAir = String.fromCharCodes(sent.sublist(7));
+    expect(onAir, '@[MeshSonar] [1.0w]');
+    expect(onAir, isNot(contains('40.1')));
+    expect(onAir, isNot(contains('-82.')));
     await rig.engine.stop();
     expect(rig.engine.current.state, EngineState.idle);
   });
@@ -116,7 +123,7 @@ void main() {
     expect(moving.pings.length, 1, reason: 'never more often than 10 s, however fast we drive');
     expect(moving.engine.current.waitingFor, PingWait.time);
     expect(moving.engine.current.nextPingAt, isNotNull);
-    expect(String.fromCharCodes(moving.radio.sentFrames.lastWhere((f) => f[0] == 3).sublist(7)), matches(r'^@\[MapperBot\] -?\d+\.\d{5}, -?\d+\.\d{5}$'));
+    expect(String.fromCharCodes(moving.radio.sentFrames.lastWhere((f) => f[0] == 3).sublist(7)), equals('@[MeshSonar]'));
     // A manual ping is allowed any time.
     await moving.engine.pingNow();
     expect(moving.pings.length, 2);

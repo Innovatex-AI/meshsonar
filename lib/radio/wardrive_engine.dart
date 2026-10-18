@@ -1,8 +1,10 @@
 // DefaultWardriveEngine: pings a channel on a time/distance schedule and records which repeaters repeated each ping.
 //
 // Behaviour is modelled on the MeshMapper web client (MIT, © 2025 MrAlders0n), content/wardrive.js:
-//  - ping text  buildPayload(): "@[MapperBot] <lat 5dp>, <lon 5dp>" plus " [<power>]" when the power is known
-//    (MeshMapper's power choices are "0.3w", "0.6w", "1.0w", "2.0w"); kept identical so community tools recognise it;
+//  - ping text: "@[MeshSonar]" plus " [<power>]" when the power is known. PRIVACY: the text goes out on a public channel
+//    that anyone can read, so it NEVER carries a position (MeshMapper's "@[MapperBot] <lat>, <lon>" does; we do not).
+//    Where a ping happened is recorded on the phone from its GPS and uploaded to the site with the drive, and the site
+//    joins observer receptions to it by packet hash (Drive Format v1.1 pkt_hash), so the air needs no coordinates;
 //  - sendPing(): read the noise floor (CMD_GET_STATS radio), take a GPS fix, send on the channel, then listen to the
 //    RX log for the listen window (RX_LOG_LISTEN_WINDOW_MS); auto mode waits the interval after each ping and won't
 //    ping too close to the last one (validateMinimumDistance, haversine);
@@ -23,14 +25,14 @@ import 'packet.dart';
 import 'protocol.dart';
 import 'radio_api.dart';
 
-/// The prefix MeshMapper and its community tools look for (wardrive.js PING_PREFIX).
-const String mapperPingPrefix = '@[MapperBot]';
+/// What every MeshSonar ping starts with on the channel (so people reading it see what it is).
+const String pingPrefix = '@[MeshSonar]';
 
-/// Ping text exactly as MeshMapper formats it (wardrive.js buildPayload), with an optional power suffix.
-String formatPingText(double lat, double lon, {double? txPowerW}) {
-  final coords = '${lat.toStringAsFixed(5)}, ${lon.toStringAsFixed(5)}';
+/// The text of a ping on the public channel: the prefix and, when known, the transmit power. It takes no position on
+/// purpose: nothing about where the driver is may go out on a channel anyone can read.
+String formatPingText({double? txPowerW}) {
   final suffix = txPowerW == null ? '' : ' [${formatPowerW(txPowerW)}]';
-  return '$mapperPingPrefix $coords$suffix';
+  return '$pingPrefix$suffix';
 }
 
 /// "1.0w", "0.3w", "2.0w" — MeshMapper's style. Small powers keep two decimals so they don't round to "0.0w".
@@ -354,7 +356,7 @@ class DefaultWardriveEngine implements WardriveEngine {
     _busy = true;
     final idx = _channelIndex!;
     final secret = _secret!;
-    final text = formatPingText(fix.lat, fix.lon, txPowerW: _config.txPowerW);
+    final text = formatPingText(txPowerW: _config.txPowerW);
     final txDbm = _inRange(_config.txDbm, -10, 40); // the power this ping goes out at, before any mid-listen change
     final heard = <_Heard>[];
     final ctl = <_Ctl>[];
