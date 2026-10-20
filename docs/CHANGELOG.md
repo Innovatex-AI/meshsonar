@@ -3,6 +3,41 @@
 All notable changes to MeshSonar. Dates are local (US Eastern). This changelog was reconstructed from the commit
 history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md](ROADMAP.md).
 
+## [0.9.0] — 2026-10-20 — network coverage on the live map
+
+`pubspec.yaml` is `0.9.0+13`. Bundle id unchanged. Builds on the website's `GET /api/cmh/public-coverage`
+(already live, serving the same cells `/coverage` draws on meshcore-insights).
+
+- **Network-wide coverage, drawn on the Drive screen's map by default.** A new quiet background layer shows
+  every driver's measured coverage (squares or H3 hexagons, whichever grid the region uses) underneath the
+  pings, repeaters and links — "where hasn't this been driven", not just this drive's own pings. On by default,
+  no extra step to find it, since basic visibility while driving was the point. Coloured by best SNR, the same
+  4-step legend the website's `/coverage` page uses (strong/likely/possible/stretch green/blue/amber/red); an
+  area nobody has measured is simply left blank — that absence is the gap indicator, so there's no "no data"
+  placeholder to build or to misread.
+  - New `CmatClient.publicCoverage()` (public, no driver key) and `CoverageCell`/`CoverageGrid`/`PublicCoverage`
+    models in `lib/core/api.dart`, matching the server's response field for field (minus the per-source split,
+    out of scope for this pass).
+  - New `lib/core/network_coverage.dart`: pure logic turning a `PublicCoverage` answer into drawable cells
+    (square bbox or H3 hexagon boundary) bucketed by colour-by dimension. Best SNR is the one wired into the map
+    today; share-heard and noise-floor buckets are implemented and tested too, ready for a picker later if
+    that's ever wanted.
+  - `CoverageMap` (`lib/ui/map/coverage_map.dart`) gained a `networkCells` parameter, drawn as a new layer right
+    above the basemap tiles (the bottom of the data stack) — reusing the exact same widget the live drive map
+    already uses, not a parallel implementation.
+  - New `MapLayers.networkCoverage` toggle (default on), with a matching switch in the existing layers sheet
+    (`showMapLayersSheet`, shared by the Drive screen and the full-screen map) — "Network coverage" alongside
+    "Hex coverage", "Pings", etc.
+  - `AppState.refreshNetworkCoverage()` fetches once at startup and again on a server-URL change (mirroring
+    `refreshSiteConfig()`'s pattern exactly); a failed refresh is logged quietly and never clears cells already
+    on screen — stale coverage is still useful for "where hasn't this been driven", so a network hiccup keeps
+    showing the last good answer instead of blanking the map.
+- **Deliberately left out of this pass** (basic visibility, not full feature parity with the website's
+  `/coverage` page): no colour-by picker in the UI (one dimension, best SNR, is enough for an always-on
+  background layer — adding a mode switch would be UI weight in the wrong place); no since/source filters, no
+  place-picker, no cell-click-for-detail drill-down; no separate region-picker "Stats" dashboard (considered,
+  deferred — a good next step, not blocking this one).
+
 ## [0.8.0] — 2026-10-20 — Settings knows the server's region and its radio preset
 
 `pubspec.yaml` is `0.8.0+12`. Bundle id unchanged. Builds on the server's `GET /api/cmh/site-config` region +

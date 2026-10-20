@@ -6,7 +6,8 @@
 // the heard snapshot, the selected repeater and the layer choices are shared both ways.
 //
 // Keys: 'fullscreen-map' (the screen), 'fullscreen-close', 'map-layers', 'layers-sheet', 'layer-pings',
-// 'layer-color-result', 'layer-color-snr', 'layer-repeaters', 'layer-links', 'layer-rings'.
+// 'layer-color-result', 'layer-color-snr', 'layer-repeaters', 'layer-links', 'layer-rings',
+// 'layer-network-coverage'.
 import 'package:flutter/material.dart';
 
 import '../app.dart';
@@ -64,6 +65,7 @@ class FullscreenMapScreen extends StatelessWidget {
                   repeaterLabel: s.repeaterLabel,
                   heard: model.heard,
                   layers: model.layers,
+                  networkCells: model.networkCells,
                   highlightKey: model.selected,
                   onSelectRepeater: model.select,
                   simulated: model.simulated,
@@ -190,6 +192,14 @@ Future<void> showMapLayersSheet(BuildContext context, DriveMapModel model) {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(Gap.m, 0, Gap.m, Gap.s),
                   child: Text('Map layers', style: t.textTheme.titleLarge),
+                ),
+                SwitchListTile(
+                  key: const Key('layer-network-coverage'),
+                  secondary: const Icon(Icons.public_rounded),
+                  title: const Text('Network coverage'),
+                  subtitle: const Text("Everyone's measured coverage, not just this drive"),
+                  value: l.networkCoverage,
+                  onChanged: (v) => set(l.copyWith(networkCoverage: v)),
                 ),
                 SwitchListTile(
                   key: const Key('layer-hexes'),

@@ -6,6 +6,9 @@
 //   <base>/api/cmh/problem-report   POST x-driver-key, report body      -> 201 {id, status, receivedAt, redacted}
 //   <base>/api/cmh/site-config      GET  (public, no driver key)        -> {region:{slug,url}, radioPreset:{name,
 //                                                                          freqMHz,bwKHz,sf,cr}|null, ...}
+//   <base>/api/cmh/public-coverage  GET  (public, no driver key)        -> {cells[{lat,lon,pings,heard,bestSnr,
+//                                                                          medianSnr,repeaters,lastAt,h3?,
+//                                                                          noiseFloor?}], asOf, grid?, totals}
 // Errors come back as {error} (403 also carries {status}); they're thrown as CmatException(error, status: http code).
 // Network failures and timeouts are thrown as CmatException with status null.
 // Pure Dart: no Flutter imports.
@@ -213,5 +216,54 @@ class HttpCmatClient implements CmatClient {
     }
 
     return SiteConfig(region: regionInfo, radioPreset: preset);
+  }
+
+  @override
+  Future<PublicCoverage> publicCoverage() async {
+    // Public endpoint: no x-driver-key. No query params: this pass always takes the server's defaults (merged
+    // sources, no since/cell/res override) — see docs on CoverageMap's `networkCells`.
+    final j = await _send('GET', 'public-coverage');
+    final rawCells = j['cells'];
+    if (rawCells is! List) throw const CmatException('server sent a public-coverage answer without cells');
+    final asOf = j['asOf'];
+    if (asOf is! String) throw const CmatException('server sent a public-coverage answer without asOf');
+    final cellDegRaw = j['cellDeg'];
+    final cellDeg = cellDegRaw is num ? cellDegRaw.toDouble() : 0.005;
+
+    CoverageGrid grid;
+    final rawGrid = j['grid'];
+    if (rawGrid is Map && rawGrid['kind'] == 'h3') {
+      final res = rawGrid['res'];
+      if (res is! num) throw const CmatException('server sent a malformed h3 grid');
+      final pending = rawGrid['pending'];
+      grid = CoverageGrid.h3(res: res.toInt(), cellDeg: cellDeg, pending: pending is num ? pending.toInt() : 0);
+    } else if (rawGrid is Map && rawGrid['kind'] == 'square') {
+      final deg = rawGrid['cellDeg'];
+      grid = CoverageGrid.square(cellDeg: deg is num ? deg.toDouble() : cellDeg);
+    } else {
+      // No grid field at all: an older server, squares (the website's own handler falls back the same way).
+      grid = CoverageGrid.square(cellDeg: cellDeg);
+    }
+
+    final cells = <CoverageCell>[];
+    for (final c in rawCells) {
+      if (c is! Map) continue;
+      final lat = c['lat'], lon = c['lon'];
+      if (lat is! num || lon is! num) continue; // skip an unusable cell rather than lose the whole map
+      num? asNum(Object? v) => v is num ? v : null;
+      cells.add(CoverageCell(
+        lat: lat.toDouble(),
+        lon: lon.toDouble(),
+        pings: asNum(c['pings'])?.toInt() ?? 0,
+        heard: asNum(c['heard'])?.toInt() ?? 0,
+        bestSnr: asNum(c['bestSnr'])?.toDouble(),
+        medianSnr: asNum(c['medianSnr'])?.toDouble(),
+        repeaters: asNum(c['repeaters'])?.toInt() ?? 0,
+        lastAt: c['lastAt'] as String? ?? '',
+        h3: c['h3'] as String?,
+        noiseFloor: asNum(c['noiseFloor'])?.toDouble(),
+      ));
+    }
+    return PublicCoverage(cells: cells, asOf: asOf, grid: grid);
   }
 }

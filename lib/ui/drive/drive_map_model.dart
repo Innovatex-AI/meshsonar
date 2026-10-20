@@ -7,11 +7,15 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:h3_flutter/h3_flutter.dart' show H3;
 import 'package:latlong2/latlong.dart';
 
 import '../../app/app_state.dart';
+import '../../core/api.dart' show PublicCoverage;
 import '../../core/heard.dart';
+import '../../core/hex_cells.dart' show loadHexEngine;
 import '../../core/model.dart';
+import '../../core/network_coverage.dart';
 import '../../radio/radio_api.dart';
 import '../../radio/simulator.dart' show defaultSimulatedRepeaters;
 import '../map/map_layers.dart';
@@ -56,6 +60,16 @@ class DriveMapModel extends ChangeNotifier {
     _layers = l;
     notifyListeners();
   }
+
+  // Network-wide coverage (every driver's measured cells, not just this drive's pings): the background
+  // "where hasn't this been driven" layer. Recomputed only when AppState's own fetch identity changes (see
+  // _onState below), same memoise-on-identity convention as [repeaters].
+  static final H3? _h3 = loadHexEngine();
+  PublicCoverage? _networkSrc;
+  List<NetworkCell> _networkCells = const [];
+
+  /// Network-wide measured coverage cells for the map's background layer; empty until the first fetch answers.
+  List<NetworkCell> get networkCells => _networkCells;
 
   bool get simulated => state.radioKind == RadioKind.simulator;
 
@@ -167,6 +181,14 @@ class DriveMapModel extends ChangeNotifier {
     }
     if (s.driving != _driving) {
       _driving = s.driving;
+      changed = true;
+    }
+
+    // Network-wide coverage: a new fetch (initial, or after a server change) redraws the background layer even
+    // if nothing else about the drive changed (most often: the fetch lands before anyone has started driving).
+    if (!identical(s.networkCoverage, _networkSrc)) {
+      _networkSrc = s.networkCoverage;
+      _networkCells = _networkSrc == null ? const [] : buildNetworkCells(_networkSrc!, _h3, CoverageColorBy.snr);
       changed = true;
     }
 

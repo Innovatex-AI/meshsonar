@@ -153,18 +153,23 @@ ping positions all share one filter instance.
 (`ui/map/coverage_map.dart`; used on the Drive screen, in full-screen, in drive detail; the report has its own cell map)
 
 Layers, bottom to top: a chart grid (visible with no tiles), **OpenStreetMap tiles** (colour-graded to the theme; after
-two tile errors a "Map offline. Pings still record." pill appears), **range rings** at 1 km and 2 km, **links** to
-every live heard repeater with a known position (solid for fresh, dashed for holding, each with a distance label),
-**repeater markers** (amber diamonds that pop and glow when fresh, stay lit while holding and grey out when stale; the
-CMAT list plus heard repeaters found in the public directory, plus the simulator's repeaters in Simulator mode),
-**ping dots**, and the current **position**.
+two tile errors a "Map offline. Pings still record." pill appears), **network coverage** (every driver's measured
+cells from `GET /api/cmh/public-coverage`, squares or H3 hexagons depending on the region's grid, coloured by best
+SNR on the website's own 4-step legend — a quiet "where hasn't this been driven" background layer; an area nobody
+has measured is simply left blank, which is itself the gap indicator, so there's no "no data" placeholder), **range
+rings** at 1 km and 2 km, **links** to every live heard repeater with a known position (solid for fresh, dashed for
+holding, each with a distance label), **repeater markers** (amber diamonds that pop and glow when fresh, stay lit
+while holding and grey out when stale; the CMAT list plus heard repeaters found in the public directory, plus the
+simulator's repeaters in Simulator mode), **ping dots**, and the current **position**.
 
 - Ping colours: **red** = heard nothing. Heard pings are coloured by best SNR on a **−10 → +10 dB** scale (blue → teal
   → green), or plain green in "Heard / not" mode. Unknown SNR shows mid teal. The newest dot pulses once.
 - **Follow mode** keeps the position centred. Dragging turns it off and shows **Recenter** (`map-recenter`).
 - Tap a repeater to see its name, a short key, "Heard N pings ago", SNR and distance.
-- **Layers sheet** (`layers-sheet`): Pings (colour by SNR / heard-not), Repeaters, Links to heard repeaters, Range
-  rings. All are on by default. The choices are shared between the Drive and full-screen maps but not saved.
+- **Layers sheet** (`layers-sheet`): Network coverage, Hex coverage, Pings (colour by SNR / heard-not), Repeaters,
+  Links to heard repeaters, Range rings. All are on by default. The choices are shared between the Drive and
+  full-screen maps but not saved. Network coverage fetches once at startup (and again if the server URL changes);
+  a fetch failure keeps showing whatever was already drawn rather than clearing it.
 - Attribution "© OpenStreetMap contributors" is always shown with tiles. Tiles are off under `flutter test`.
 - If there's no position or pings, the map centres on Columbus, Ohio (39.9612, −82.9988).
 

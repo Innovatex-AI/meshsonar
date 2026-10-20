@@ -91,6 +91,30 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  // ---------- network coverage (the website's /coverage cells, network-wide) ----------
+  PublicCoverage? _networkCoverage;
+
+  /// Network-wide measured coverage cells (`GET /api/cmh/public-coverage`) — the map's background "where hasn't
+  /// this been driven" layer (see lib/ui/map/map_layers.dart's `networkCoverage`). Null until the first fetch
+  /// answers.
+  PublicCoverage? get networkCoverage => _networkCoverage;
+
+  /// Fetches [networkCoverage] once. A failure never clears cells already on screen — stale coverage is still
+  /// useful for "where hasn't this been driven", so it's kept rather than blanked on a network hiccup; failures
+  /// are logged quietly, same as [refreshSiteConfig]. Called unawaited at startup and again whenever the server
+  /// URL changes.
+  Future<void> refreshNetworkCoverage() async {
+    final server = _settings.serverUrl;
+    try {
+      final c = await client.publicCoverage();
+      if (_settings.serverUrl != server) return; // the server changed again while this was in flight
+      _networkCoverage = c;
+      notifyListeners();
+    } catch (e) {
+      _logError('Fetching network coverage failed', e);
+    }
+  }
+
   /// Last few characters only; the full key is never shown.
   String get maskedKey {
     final k = _settings.driverKey ?? '';
@@ -906,6 +930,7 @@ class AppState extends ChangeNotifier {
     } catch (_) {}
     unawaited(_loadDirectory());
     unawaited(refreshSiteConfig());
+    unawaited(refreshNetworkCoverage());
     await _loadSavedReport();
     _loaded = true;
     notifyListeners();
@@ -944,12 +969,16 @@ class AppState extends ChangeNotifier {
     // is cleared immediately and refetched, rather than left stale until the fetch comes back.
     final serverChanged = s.serverUrl != _settings.serverUrl;
     if (serverChanged) _siteConfig = null;
+    // Same reasoning as _siteConfig: a new server means new (or no) network-wide coverage; the old server's
+    // cells must never display against the new one.
+    if (serverChanged) _networkCoverage = null;
     _settings = s;
     heard.holdPings = s.heardHoldPings; // the heard list's live/stale rule follows the slider at once, even mid-drive
     _scheduleDriveSync(); // in-drive upload follows the toggles, the period and the key status
     _applyPingCadence(s);
     notifyListeners();
     if (serverChanged) unawaited(refreshSiteConfig());
+    if (serverChanged) unawaited(refreshNetworkCoverage());
     try {
       await services.settingsStore.save(s);
     } catch (e) {

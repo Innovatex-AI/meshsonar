@@ -181,6 +181,22 @@ class FakeCmatClient implements CmatClient {
     return c;
   }
 
+  /// What [publicCoverage] answers. Null (the default) behaves like a server with no public-coverage endpoint —
+  /// it throws, same as a real 404 would — so every test that doesn't care about the network-coverage layer sees
+  /// `AppState.networkCoverage` stay null, exactly like before this feature existed.
+  PublicCoverage? publicCoverageResult;
+  Object? publicCoverageError;
+  int publicCoverageCalls = 0;
+
+  @override
+  Future<PublicCoverage> publicCoverage() async {
+    publicCoverageCalls++;
+    if (publicCoverageError != null) throw publicCoverageError!;
+    final c = publicCoverageResult;
+    if (c == null) throw const CmatException('no public-coverage endpoint', status: 404);
+    return c;
+  }
+
   /// Members added to [CmatClient] later (0.4.0's `reportProblem`) don't break every UI test: a fake that needs one
   /// overrides it (see `ReportingCmatClient` in fakes_m1.dart); calling one that isn't faked fails loudly.
   @override
