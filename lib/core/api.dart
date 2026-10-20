@@ -95,6 +95,36 @@ class CmatException implements Exception {
   String toString() => 'CmatException($status): $message';
 }
 
+/// Which MeshSonar region a server URL resolves to, from `GET /api/cmh/site-config`. There is no separate
+/// human-readable region name on the wire; [url]'s host is the recognisable part to show.
+class RegionInfo {
+  final String slug;
+  final String url;
+  const RegionInfo({required this.slug, required this.url});
+}
+
+/// A region's suggested MeshCore radio/channel parameters (`GET /api/cmh/site-config`'s `radioPreset`).
+/// Informational only: the app only ever reads the connected radio's own live RF parameters off the hardware
+/// ([Radio] in model.dart) and never pushes a preset to it — this is a side-by-side comparison, not a control.
+class RadioPreset {
+  final String name;
+  final double freqMhz;
+  final double bwKhz;
+  final int sf;
+  final int cr;
+  const RadioPreset({required this.name, required this.freqMhz, required this.bwKhz, required this.sf, required this.cr});
+}
+
+/// `GET /api/cmh/site-config`'s region and radio-preset fields. (The endpoint also carries viewerGate,
+/// driverRegistration and appLinks; not modeled here, the app doesn't use them.)
+class SiteConfig {
+  final RegionInfo region;
+
+  /// Null when the region has no suggested preset configured — a real, expected state, not an error.
+  final RadioPreset? radioPreset;
+  const SiteConfig({required this.region, this.radioPreset});
+}
+
 /// HTTP client for CMAT's MeshSonar endpoints (docs/MESHSONAR_DRIVE_FORMAT.md). Base URL is configurable:
 /// any community's server that implements the spec works.
 abstract class CmatClient {
@@ -106,6 +136,9 @@ abstract class CmatClient {
 
   /// Files a problem report. [body] is the exact JSON text the person reviewed; it is sent byte for byte.
   Future<ProblemReportResult> reportProblem(String driverKey, String body);
+
+  /// The server's active region and its suggested radio preset (if any). Public: no driver key needed.
+  Future<SiteConfig> siteConfig();
 }
 
 /// The server's answer to a filed problem report.

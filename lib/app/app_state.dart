@@ -69,6 +69,28 @@ class AppState extends ChangeNotifier {
   bool get hasKey => (_settings.driverKey ?? '').isNotEmpty;
   bool get keyApproved => hasKey && _settings.keyStatus == DriverKeyStatus.approved;
 
+  // ---------- site config (region + radio preset) ----------
+  SiteConfig? _siteConfig;
+
+  /// The server's active region and its suggested radio preset, from `GET /api/cmh/site-config`. Null until the
+  /// first fetch answers (or if it fails) — informational only, so Settings must keep working either way.
+  SiteConfig? get siteConfig => _siteConfig;
+
+  /// Fetches [siteConfig] once. Failures are swallowed quietly (logged, not shown) so the Server URL tile keeps
+  /// working regardless of whether this server's `site-config` endpoint exists or answers. Called unawaited at
+  /// startup and again whenever the server URL changes.
+  Future<void> refreshSiteConfig() async {
+    final server = _settings.serverUrl;
+    try {
+      final c = await client.siteConfig();
+      if (_settings.serverUrl != server) return; // the server changed again while this was in flight
+      _siteConfig = c;
+      notifyListeners();
+    } catch (e) {
+      _logError('Fetching site-config failed', e);
+    }
+  }
+
   /// Last few characters only; the full key is never shown.
   String get maskedKey {
     final k = _settings.driverKey ?? '';
@@ -883,6 +905,7 @@ class AppState extends ChangeNotifier {
       _setRepeaters(await services.repeaterCache.load());
     } catch (_) {}
     unawaited(_loadDirectory());
+    unawaited(refreshSiteConfig());
     await _loadSavedReport();
     _loaded = true;
     notifyListeners();
@@ -917,11 +940,16 @@ class AppState extends ChangeNotifier {
       s = s.copyWith(clearKey: true);
       _keyError = null;
     }
+    // A new server means a new (or no) region/preset; the old one must never display against the new server, so it
+    // is cleared immediately and refetched, rather than left stale until the fetch comes back.
+    final serverChanged = s.serverUrl != _settings.serverUrl;
+    if (serverChanged) _siteConfig = null;
     _settings = s;
     heard.holdPings = s.heardHoldPings; // the heard list's live/stale rule follows the slider at once, even mid-drive
     _scheduleDriveSync(); // in-drive upload follows the toggles, the period and the key status
     _applyPingCadence(s);
     notifyListeners();
+    if (serverChanged) unawaited(refreshSiteConfig());
     try {
       await services.settingsStore.save(s);
     } catch (e) {

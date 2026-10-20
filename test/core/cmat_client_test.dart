@@ -158,4 +158,72 @@ void main() {
   test('parseDriverKeyStatus handles null', () {
     expect(parseDriverKeyStatus(null), DriverKeyStatus.unknown);
   });
+
+  test('siteConfig GETs with no x-driver-key and parses region + radioPreset', () async {
+    final c = HttpCmatClient(Uri.parse('https://x.org'), client: MockClient((req) async {
+      expect(req.method, 'GET');
+      expect(req.url.path, '/api/cmh/site-config');
+      expect(req.headers.containsKey('x-driver-key'), isFalse);
+      return jsonRes({
+        'viewerGate': 'open',
+        'driverRegistration': 'open',
+        'appLinks': {'ios': null, 'android': null, 'source': 'https://example.org'},
+        'region': {'slug': 'cmh', 'url': 'https://cmh.meshsonar.com'},
+        'radioPreset': {'name': 'MeshCore US Recommended', 'freqMHz': 910.525, 'bwKHz': 62.5, 'sf': 7, 'cr': 5},
+      });
+    }));
+    final r = await c.siteConfig();
+    expect(r.region.slug, 'cmh');
+    expect(r.region.url, 'https://cmh.meshsonar.com');
+    expect(r.radioPreset, isNotNull);
+    expect(r.radioPreset!.name, 'MeshCore US Recommended');
+    expect(r.radioPreset!.freqMhz, 910.525);
+    expect(r.radioPreset!.bwKhz, 62.5);
+    expect(r.radioPreset!.sf, 7);
+    expect(r.radioPreset!.cr, 5);
+  });
+
+  test('siteConfig: radioPreset null is a real, expected state, not an error', () async {
+    final c = HttpCmatClient(Uri.parse('https://x.org'), client: MockClient((_) async => jsonRes({
+          'region': {'slug': 'cmh', 'url': 'https://cmh.meshsonar.com'},
+          'radioPreset': null,
+        })));
+    final r = await c.siteConfig();
+    expect(r.region.slug, 'cmh');
+    expect(r.radioPreset, isNull);
+  });
+
+  test('siteConfig: missing region throws CmatException', () async {
+    final c = HttpCmatClient(Uri.parse('https://x.org'),
+        client: MockClient((_) async => jsonRes({'radioPreset': null})));
+    await expectLater(c.siteConfig(), throwsA(isA<CmatException>()));
+  });
+
+  test('siteConfig: region missing url/slug throws CmatException', () async {
+    final c = HttpCmatClient(Uri.parse('https://x.org'),
+        client: MockClient((_) async => jsonRes({'region': {'slug': 'cmh'}})));
+    await expectLater(c.siteConfig(), throwsA(isA<CmatException>()));
+  });
+
+  test('siteConfig: malformed radioPreset (missing field) throws CmatException', () async {
+    final c = HttpCmatClient(Uri.parse('https://x.org'), client: MockClient((_) async => jsonRes({
+          'region': {'slug': 'cmh', 'url': 'https://cmh.meshsonar.com'},
+          'radioPreset': {'name': 'MeshCore US Recommended', 'freqMHz': 910.525, 'bwKHz': 62.5, 'sf': 7},
+        })));
+    await expectLater(c.siteConfig(), throwsA(isA<CmatException>()));
+  });
+
+  test('siteConfig: radioPreset not an object (and not null) throws CmatException', () async {
+    final c = HttpCmatClient(Uri.parse('https://x.org'), client: MockClient((_) async => jsonRes({
+          'region': {'slug': 'cmh', 'url': 'https://cmh.meshsonar.com'},
+          'radioPreset': 'nope',
+        })));
+    await expectLater(c.siteConfig(), throwsA(isA<CmatException>()));
+  });
+
+  test('siteConfig: 404 maps to CmatException', () async {
+    final c = HttpCmatClient(Uri.parse('https://x.org'),
+        client: MockClient((_) async => jsonRes({'error': 'not found'}, 404)));
+    await expectLater(c.siteConfig(), throwsA(isA<CmatException>().having((e) => e.status, 's', 404)));
+  });
 }

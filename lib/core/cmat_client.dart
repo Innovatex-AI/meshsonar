@@ -4,6 +4,8 @@
 //   <base>/api/cmh/drive-upload     POST x-driver-key, upload body      -> {sessionId, stored, duplicate, rejected, rejections[]}
 //   <base>/api/cmh/drive-repeaters  GET  x-driver-key                   -> {repeaters[{key,name,lat,lon}], at}
 //   <base>/api/cmh/problem-report   POST x-driver-key, report body      -> 201 {id, status, receivedAt, redacted}
+//   <base>/api/cmh/site-config      GET  (public, no driver key)        -> {region:{slug,url}, radioPreset:{name,
+//                                                                          freqMHz,bwKHz,sf,cr}|null, ...}
 // Errors come back as {error} (403 also carries {status}); they're thrown as CmatException(error, status: http code).
 // Network failures and timeouts are thrown as CmatException with status null.
 // Pure Dart: no Flutter imports.
@@ -182,5 +184,34 @@ class HttpCmatClient implements CmatClient {
       }
     }
     return out;
+  }
+
+  @override
+  Future<SiteConfig> siteConfig() async {
+    // Public endpoint: no x-driver-key.
+    final j = await _send('GET', 'site-config');
+    final region = j['region'];
+    if (region is! Map || region['slug'] is! String || region['url'] is! String) {
+      throw const CmatException('server sent a site-config answer without a region');
+    }
+    final regionInfo = RegionInfo(slug: region['slug'] as String, url: region['url'] as String);
+
+    final rawPreset = j['radioPreset'];
+    RadioPreset? preset;
+    if (rawPreset is Map) {
+      final name = rawPreset['name'];
+      final freq = rawPreset['freqMHz'];
+      final bw = rawPreset['bwKHz'];
+      final sf = rawPreset['sf'];
+      final cr = rawPreset['cr'];
+      if (name is! String || freq is! num || bw is! num || sf is! num || cr is! num) {
+        throw const CmatException('server sent a malformed radio preset');
+      }
+      preset = RadioPreset(name: name, freqMhz: freq.toDouble(), bwKhz: bw.toDouble(), sf: sf.toInt(), cr: cr.toInt());
+    } else if (rawPreset != null) {
+      throw const CmatException('server sent a malformed radio preset');
+    }
+
+    return SiteConfig(region: regionInfo, radioPreset: preset);
   }
 }
