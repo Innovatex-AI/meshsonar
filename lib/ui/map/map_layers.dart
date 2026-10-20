@@ -27,6 +27,12 @@ class MapLayers {
   final bool repeaters;
   final bool links;
   final bool rings;
+
+  /// Network-wide measured coverage (every driver, not just this one) from `GET /api/cmh/public-coverage`, drawn
+  /// underneath everything else as a quiet "where hasn't this been driven" background layer. On by default: it's
+  /// basic visibility, meant to be there the first time anyone opens the Drive screen, not a layer you have to
+  /// find.
+  final bool networkCoverage;
   const MapLayers({
     this.pings = true,
     this.hexes = true,
@@ -34,15 +40,25 @@ class MapLayers {
     this.repeaters = true,
     this.links = true,
     this.rings = true,
+    this.networkCoverage = true,
   });
 
-  MapLayers copyWith({bool? pings, bool? hexes, PingColorMode? pingColors, bool? repeaters, bool? links, bool? rings}) => MapLayers(
+  MapLayers copyWith({
+    bool? pings,
+    bool? hexes,
+    PingColorMode? pingColors,
+    bool? repeaters,
+    bool? links,
+    bool? rings,
+    bool? networkCoverage,
+  }) => MapLayers(
     pings: pings ?? this.pings,
     hexes: hexes ?? this.hexes,
     pingColors: pingColors ?? this.pingColors,
     repeaters: repeaters ?? this.repeaters,
     links: links ?? this.links,
     rings: rings ?? this.rings,
+    networkCoverage: networkCoverage ?? this.networkCoverage,
   );
 
   @override
@@ -53,10 +69,11 @@ class MapLayers {
       other.pingColors == pingColors &&
       other.repeaters == repeaters &&
       other.links == links &&
-      other.rings == rings;
+      other.rings == rings &&
+      other.networkCoverage == networkCoverage;
 
   @override
-  int get hashCode => Object.hash(pings, hexes, pingColors, repeaters, links, rings);
+  int get hashCode => Object.hash(pings, hexes, pingColors, repeaters, links, rings, networkCoverage);
 }
 
 /// Where a heard repeater sits in its hold period.

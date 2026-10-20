@@ -8,6 +8,7 @@
 //     repeaterLabel: state.repeaterLabel, // optional: prefix -> display name for the link labels
 //     heard: heardSnapshot(state.heard),  // optional: live/holding/stale repeaters (Drive screen)
 //     layers: const MapLayers(),          // optional: which layers to draw
+//     networkCells: cells,                // optional: network-wide coverage cells (GET public-coverage)
 //   )
 //
 // Live drive: pass `position` and leave `follow: true`. Dragging the map turns follow off and shows a
@@ -16,14 +17,18 @@
 // What's drawn, bottom to top:
 //   1. A chart grid on the map background (so the map looks intentional with no tiles / no signal).
 //   2. OpenStreetMap tiles (colour-graded to the theme; cached; failures fall back to the grid, never an error).
-//   3. Sonar range rings (1 km, 2 km) around the current position.
-//   4. Links. With [heard]: from the current position to every LIVE heard repeater with a known location, solid
+//   3. Network-wide measured coverage (every driver, GET /api/cmh/public-coverage, gated by
+//      MapLayers.networkCoverage): a quiet "where hasn't this been driven" background layer. Only cells the
+//      network actually measured are tinted; everywhere else is left blank map — that absence is the gap
+//      indicator, so there is no "no data" placeholder for it.
+//   4. Sonar range rings (1 km, 2 km) around the current position.
+//   5. Links. With [heard]: from the current position to every LIVE heard repeater with a known location, solid
 //      when heard on the latest ping, dashed while it is holding, each with a distance label. Without [heard]:
 //      from the latest ping to each repeater it heard; they fade over ~15 s.
-//   5. Repeaters (amber beacons). Heard ones pop up and glow while live, then grey out when stale. Tap for the name.
-//   6. Ping dots: heard = blue→teal→green by best SNR (-10 → +10 dB) or plain green in "result" mode; heard nothing
+//   6. Repeaters (amber beacons). Heard ones pop up and glow while live, then grey out when stale. Tap for the name.
+//   7. Ping dots: heard = blue→teal→green by best SNR (-10 → +10 dB) or plain green in "result" mode; heard nothing
 //      = red. The newest dot pulses once.
-//   7. Current position.
+//   8. Current position.
 //
 // Efficiency: inputs are snapshots taken once per ping (the heard list, the ping list); derived lists (sorted pings,
 // the repeater marker set) are memoised on input identity, so a rebuild between pings costs nothing new. Markers are
@@ -45,6 +50,7 @@ import 'package:h3_flutter/h3_flutter.dart' show H3;
 import '../../core/heard.dart' show haversineM;
 import '../../core/hex_cells.dart';
 import '../../core/model.dart';
+import '../../core/network_coverage.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import 'map_layers.dart';
@@ -99,6 +105,26 @@ Color pingColor(MeshSonarColors c, DrivePing p, [PingColorMode mode = PingColorM
     ? (p.heardNothing ? c.silent : c.snrStrong)
     : c.forPing(heard: !p.heardNothing, snr: bestSnr(p));
 
+/// Colour for a network-coverage [CoverageLevel]: the website's own discrete `/coverage` legend steps (strong
+/// green, likely blue, possible amber, stretch red; same hex values as its light/dark CSS tokens), not this
+/// drive's continuous SNR gradient — the two data sets are deliberately told apart at a glance. [none] (no data
+/// for the chosen dimension) is a neutral outline colour, never one of the four steps.
+Color networkLevelColor(BuildContext context, CoverageLevel level) {
+  final dark = Theme.of(context).brightness == Brightness.dark;
+  switch (level) {
+    case CoverageLevel.strong:
+      return dark ? const Color(0xFF79BE69) : const Color(0xFF2F7A3B);
+    case CoverageLevel.good:
+      return dark ? const Color(0xFF6AAEE0) : const Color(0xFF2A6B9C);
+    case CoverageLevel.fair:
+      return dark ? const Color(0xFFE2B04A) : const Color(0xFFB07D16);
+    case CoverageLevel.weak:
+      return dark ? const Color(0xFFF07B6B) : const Color(0xFFB23B2E);
+    case CoverageLevel.none:
+      return Theme.of(context).colorScheme.outlineVariant;
+  }
+}
+
 class CoverageMap extends StatefulWidget {
   /// Pings to draw. Order doesn't matter; the newest (by timestamp) gets the links and the pulse.
   final List<DrivePing> pings;
@@ -145,6 +171,11 @@ class CoverageMap extends StatefulWidget {
   /// Which layers to draw.
   final MapLayers layers;
 
+  /// Network-wide measured coverage cells (e.g. from `CmatClient.publicCoverage()`), drawn as the background
+  /// "where hasn't this been driven" layer when [MapLayers.networkCoverage] is on. Empty/not-yet-loaded draws
+  /// nothing — there is no placeholder for "no data"; absence of a drawn cell is the point.
+  final List<NetworkCell> networkCells;
+
   /// Repeater (map key) to highlight and bring into view, e.g. tapped in the heard box.
   final String? highlightKey;
 
@@ -171,6 +202,7 @@ class CoverageMap extends StatefulWidget {
     this.overlayPadding = EdgeInsets.zero,
     this.heard,
     this.layers = const MapLayers(),
+    this.networkCells = const [],
     this.highlightKey,
     this.onSelectRepeater,
     this.simulated = false,
@@ -288,12 +320,23 @@ class _CoverageMapState extends State<CoverageMap> {
   }
 
   CameraFit? get _initialFit {
-    if (!widget.fitToPings || widget.pings.length < 2) return null;
-    return CameraFit.coordinates(
-      coordinates: [for (final p in widget.pings) LatLng(p.lat, p.lon)],
-      padding: const EdgeInsets.all(40) + widget.overlayPadding,
-      maxZoom: 15.5, // a short drive should still show its streets, not upscaled blurry tiles
-    );
+    if (widget.fitToPings && widget.pings.length >= 2) {
+      return CameraFit.coordinates(
+        coordinates: [for (final p in widget.pings) LatLng(p.lat, p.lon)],
+        padding: const EdgeInsets.all(40) + widget.overlayPadding,
+        maxZoom: 15.5, // a short drive should still show its streets, not upscaled blurry tiles
+      );
+    }
+    // Nothing of our own to frame yet (no position, no pings): frame the network-coverage cells instead, so the
+    // background layer is actually visible on first open rather than requiring a manual pan to find it.
+    if (widget.position == null && widget.pings.isEmpty && widget.networkCells.isNotEmpty) {
+      return CameraFit.coordinates(
+        coordinates: [for (final n in widget.networkCells) for (final b in n.boundary) LatLng(b.lat, b.lon)],
+        padding: const EdgeInsets.all(40) + widget.overlayPadding,
+        maxZoom: 15,
+      );
+    }
+    return null;
   }
 
   @override
@@ -467,6 +510,18 @@ class _CoverageMapState extends State<CoverageMap> {
                 errorTileCallback: (_, _, _) => _onTileError(),
                 tileBuilder: (context, tile, _) =>
                     ColorFiltered(colorFilter: ColorFilter.matrix(mc.tileMatrix), child: tile),
+              ),
+            if (layers.networkCoverage && widget.networkCells.isNotEmpty)
+              PolygonLayer(
+                polygons: [
+                  for (final n in widget.networkCells)
+                    Polygon(
+                      points: [for (final b in n.boundary) LatLng(b.lat, b.lon)],
+                      color: networkLevelColor(context, n.level).withValues(alpha: n.level == CoverageLevel.none ? 0.10 : 0.34),
+                      borderColor: networkLevelColor(context, n.level).withValues(alpha: n.level == CoverageLevel.none ? 0.25 : 0.8),
+                      borderStrokeWidth: 1,
+                    ),
+                ],
               ),
             if (widget.showRings && layers.rings && pos != null) _RangeRings(center: pos, color: t.colorScheme.primary),
             if (widget.showRings && layers.rings && pos != null)

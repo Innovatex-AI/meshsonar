@@ -125,6 +125,73 @@ class SiteConfig {
   const SiteConfig({required this.region, this.radioPreset});
 }
 
+/// One measured coverage cell from `GET /api/cmh/public-coverage` — the same cells the website's `/coverage` map
+/// draws, network-wide (every driver, not just this phone). A square or an H3 hexagon depending on
+/// [PublicCoverage]'s grid. Mirrors meshcore-insights `CoverageCell` (`src/lib/platform/types.ts`) field for
+/// field, minus `sources` (the per-source MeshSonar/MeshMapper split): the source filter is out of scope for this
+/// pass, so it's left unparsed rather than modeled unused.
+class CoverageCell {
+  /// Centre of the cell (a square's centre, or an H3 hexagon's centre).
+  final double lat;
+  final double lon;
+  final int pings;
+  final int heard;
+  final double? bestSnr;
+  final double? medianSnr;
+  final int repeaters;
+  final String lastAt;
+
+  /// Lower-case H3 hex id, present only on the hexagon grid.
+  final String? h3;
+
+  /// Mean noise floor (dBm) of the cell's attempts; null with no readings, absent from servers before migration
+  /// 0025.
+  final double? noiseFloor;
+  const CoverageCell({
+    required this.lat,
+    required this.lon,
+    required this.pings,
+    required this.heard,
+    required this.bestSnr,
+    required this.medianSnr,
+    required this.repeaters,
+    required this.lastAt,
+    this.h3,
+    this.noiseFloor,
+  });
+}
+
+/// Which grid [PublicCoverage.cells] sit on. Squares were the only grid before the H3 migration (still the
+/// fallback for an older server); [res] (7, 8 or 9) and [pending] (pings not yet assigned an H3 id) are only
+/// meaningful for the hexagon grid.
+enum CoverageGridKind { square, h3 }
+
+class CoverageGrid {
+  final CoverageGridKind kind;
+
+  /// Square side in degrees. Always set (even on the hexagon grid, where it mirrors the wire's legacy top-level
+  /// `cellDeg`, unused for drawing) so callers never need a null check just to read it.
+  final double cellDeg;
+
+  /// H3 resolution; null on the square grid.
+  final int? res;
+
+  /// Pings still waiting for an H3 id; 0 on the square grid.
+  final int pending;
+  const CoverageGrid.square({required this.cellDeg}) : kind = CoverageGridKind.square, res = null, pending = 0;
+  const CoverageGrid.h3({required this.res, required this.cellDeg, this.pending = 0}) : kind = CoverageGridKind.h3;
+}
+
+/// `GET /api/cmh/public-coverage` (public, no driver key): network-wide measured coverage cells, the same data the
+/// website's `/coverage` page renders. The server also sends `totals` (headline stats); not modeled here, nothing
+/// in the app reads it yet (the always-on map layer only needs the cells and the grid).
+class PublicCoverage {
+  final List<CoverageCell> cells;
+  final String asOf;
+  final CoverageGrid grid;
+  const PublicCoverage({required this.cells, required this.asOf, required this.grid});
+}
+
 /// HTTP client for CMAT's MeshSonar endpoints (docs/MESHSONAR_DRIVE_FORMAT.md). Base URL is configurable:
 /// any community's server that implements the spec works.
 abstract class CmatClient {
@@ -139,6 +206,9 @@ abstract class CmatClient {
 
   /// The server's active region and its suggested radio preset (if any). Public: no driver key needed.
   Future<SiteConfig> siteConfig();
+
+  /// Network-wide measured coverage cells (the website's `/coverage` map data). Public: no driver key needed.
+  Future<PublicCoverage> publicCoverage();
 }
 
 /// The server's answer to a filed problem report.
