@@ -232,11 +232,11 @@ void main() {
     final h = Harness();
     await h.pumpApp(tester);
     await openSettings(tester);
-    await tester.scrollUntilVisible(
-      find.byKey(const Key('server-url')),
-      100,
-      scrollable: settingsScroll,
-    );
+    // With no key, the request form above this tile (now with the privacy-zones link too, 0.8.0) can leave it
+    // right at the fold; ensureVisible after the scroll clears it of the bottom navigation bar.
+    await tester.scrollUntilVisible(find.byKey(const Key('server-url')), 100, scrollable: settingsScroll);
+    await tester.ensureVisible(find.byKey(const Key('server-url')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('server-url')));
     await tester.pumpAndSettle();
     await tester.enterText(

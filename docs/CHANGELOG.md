@@ -3,6 +3,26 @@
 All notable changes to MeshSonar. Dates are local (US Eastern). This changelog was reconstructed from the commit
 history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md](ROADMAP.md).
 
+## [0.8.0] — 2026-10-20 — Settings knows the server's region and its radio preset
+
+`pubspec.yaml` is `0.8.0+12`. Bundle id unchanged. Builds on the server's `GET /api/cmh/site-config` region +
+radio-preset fields (already live).
+
+- **Server region, shown next to the Server URL tile:** a read-only "Connected to: `<host>`" row names the region
+  the configured server resolves to (e.g. `cmh.meshsonar.com`). Shown only once the server answers; a slow or
+  missing answer leaves today's Server URL tile exactly as it was.
+- **Radio preset comparison (informational only — the app never writes to the radio):** a new Settings row shows the
+  region's suggested MeshCore RF parameters (name, frequency, bandwidth, spreading factor, coding rate). If the
+  region has none configured, it says so plainly. If a radio is connected, its own live parameters are shown
+  alongside the region's, each clearly labeled ("Yours" vs. the region's); with no radio connected, the preset is
+  shown with a "No radio connected to compare" note.
+- **"Manage privacy zones on the website"** button next to "Get a key on the website": opens `<server>/me/privacy`
+  in the system browser, same treatment as the existing key-request link. Drivers manage trim radius and privacy
+  zones on the site's `/me` pages; no new driver-key endpoints were added.
+- A server-URL change clears the old region/preset immediately (never shows a stale region against a new server)
+  and refetches once the new URL is saved. All of this is best-effort: fetch failures are logged quietly, never
+  shown as an error, and never affect the Server URL tile.
+
 ## [0.7.3] — 2026-10-18 — ping text is "MS:" + a random tag
 
 `pubspec.yaml` is `0.7.3+11`. Bundle id unchanged.

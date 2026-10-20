@@ -6,6 +6,9 @@ import 'package:meshsonar/core/api.dart';
 
 import 'fakes.dart';
 
+final settingsScroll =
+    find.descendant(of: find.byKey(const Key('settings-list')), matching: find.byType(Scrollable)).first;
+
 /// A driver key created on the website (/me/devices) can be pasted into the app.
 void main() {
   Future<Harness> openSettings(WidgetTester tester) async {
@@ -15,6 +18,12 @@ void main() {
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('key-have')));
+    await tester.pumpAndSettle();
+    // The privacy-zones link added below "Get a key on the website" (0.8.0) pushes the paste field and its button
+    // past the fold on some screens; scroll it clear of the bottom navigation bar so every test below can tap it
+    // straight away (scrollUntilVisible alone only guarantees the target's *top* is on screen).
+    await tester.scrollUntilVisible(find.byKey(const Key('key-use')), 100, scrollable: settingsScroll);
+    await tester.ensureVisible(find.byKey(const Key('key-use')));
     await tester.pumpAndSettle();
     return h;
   }
@@ -32,6 +41,10 @@ void main() {
     expect(h.client.lastStatusKey, 'ms_websiteKey0123456789abcdefghijklmnopqrstuv9876', reason: 'key is trimmed');
     expect(h.settings.saved.driverKey, 'ms_websiteKey0123456789abcdefghijklmnopqrstuv9876');
     expect(h.settings.saved.keyStatus, DriverKeyStatus.approved);
+    // The saved status view is shorter than the paste form just scrolled past, so `key-badge` sits above the
+    // current viewport and (being a lazily-built sliver list) isn't built at all right now.
+    await tester.scrollUntilVisible(find.byKey(const Key('key-badge')), -100, scrollable: settingsScroll);
+    await tester.pumpAndSettle();
     expect(find.text('Approved'), findsOneWidget);
     expect(find.text('Driver key: ••••9876'), findsOneWidget);
     expect(find.textContaining('websiteKey'), findsNothing, reason: 'the full key is never shown');
@@ -116,6 +129,11 @@ void main() {
     await tester.tap(find.byKey(const Key('key-use')));
     await tester.pumpAndSettle();
     expect(h.settings.saved.driverKey, 'ms_secretfragmentXYZ1234');
+    // The saved form (shorter than the paste form just scrolled past) means `forget-key` sits above the current
+    // viewport and, being a lazily-built sliver list, isn't built at all right now; scroll back up to reach it.
+    await tester.scrollUntilVisible(find.byKey(const Key('forget-key')), -100, scrollable: settingsScroll);
+    await tester.ensureVisible(find.byKey(const Key('forget-key')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('forget-key')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Remove'));

@@ -165,6 +165,22 @@ class FakeCmatClient implements CmatClient {
   @override
   Future<List<RepeaterRef>> repeaters(String driverKey) async => repeaterList;
 
+  /// What [siteConfig] answers. Null (the default) behaves like a server with no site-config endpoint — it throws,
+  /// same as a real 404 would — so every test that doesn't care about regions/presets sees `AppState.siteConfig`
+  /// stay null, exactly like before this feature existed.
+  SiteConfig? siteConfigResult;
+  Object? siteConfigError;
+  int siteConfigCalls = 0;
+
+  @override
+  Future<SiteConfig> siteConfig() async {
+    siteConfigCalls++;
+    if (siteConfigError != null) throw siteConfigError!;
+    final c = siteConfigResult;
+    if (c == null) throw const CmatException('no site-config endpoint', status: 404);
+    return c;
+  }
+
   /// Members added to [CmatClient] later (0.4.0's `reportProblem`) don't break every UI test: a fake that needs one
   /// overrides it (see `ReportingCmatClient` in fakes_m1.dart); calling one that isn't faked fails loudly.
   @override

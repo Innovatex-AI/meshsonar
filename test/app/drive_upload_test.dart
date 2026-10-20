@@ -223,6 +223,9 @@ class RecordingClient implements CmatClient {
 
   @override
   Future<ProblemReportResult> reportProblem(String driverKey, String body) => throw UnimplementedError();
+
+  @override
+  Future<SiteConfig> siteConfig() => throw UnimplementedError();
 }
 
 /// Harness whose sync service is the real DefaultSyncService over the fake store.
