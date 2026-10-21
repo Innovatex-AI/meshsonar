@@ -343,7 +343,10 @@ class _SessionCard extends StatelessWidget {
     final ses = summary.session;
     final id = ses.id;
     final active = s.currentSession?.id == id;
-    final pct = summary.pingCount == 0 ? null : (100 * summary.heardCount / summary.pingCount).round();
+    // tx-aware guard (lib/ui/drive_stats.dart's DriveStats.heardPercent does the same): an all-rx (discovery/
+    // listen-only) drive has no tx pings at all, so "0% heard" would misread as a failed drive, not a successful
+    // listen session.
+    final pct = summary.txCount == 0 ? null : (100 * summary.heardCount / summary.txCount).round();
     final syncing = s.isSyncing(id) || s.isSyncing('*');
     final label = driveLabel(s, id, ses.label);
     final cache = driveStatsCache(s);

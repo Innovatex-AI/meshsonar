@@ -13,6 +13,12 @@ class SessionSummary {
   final DriveSession session;
   final int pingCount;
 
+  /// tx pings only. Used for the heard-% guard: an all-rx (discovery/listen-only) drive has no tx pings at all, so
+  /// "0% heard" would misread as a failed drive rather than a successful listen session (see [lib/ui/drive_stats.
+  /// dart]'s `heardPercent`, which already guards on tx pings the same way). Defaults to [pingCount] when not given,
+  /// matching every caller's old all-tx assumption.
+  final int txCount;
+
   /// tx pings with at least one echo or a neighbor exchange.
   final int heardCount;
 
@@ -29,11 +35,12 @@ class SessionSummary {
   const SessionSummary({
     required this.session,
     required this.pingCount,
+    int? txCount,
     required this.heardCount,
     required this.syncedCount,
     this.rejectedCount = 0,
     this.sessionResendPending = false,
-  });
+  }) : txCount = txCount ?? pingCount;
 
   /// Pings still waiting to upload (neither confirmed nor rejected).
   int get unsyncedCount {
@@ -272,6 +279,11 @@ class Settings {
   /// Keep a repeater "live" in the heard panel/map for this many pings after it was last heard, then grey it out.
   final int heardHoldPings;
 
+  /// Discovery / listen-only mode: the next drive transmits nothing at all (not even the `MS:<tag>` ping) and only
+  /// records what it overhears. Locked while a drive is active (the UI disables the switch rather than silently
+  /// ignoring a mid-drive change) — see [WardriveConfig.listenOnly].
+  final bool discoveryMode;
+
   /// Allowed ranges (UI sliders and clamping).
   static const int minIntervalSec = 10, maxIntervalSec = 120;
   static const int minDistance = 15, maxDistance = 500;
@@ -291,6 +303,7 @@ class Settings {
     this.syncDuringDrive = true,
     this.syncEveryMin = 5,
     this.heardHoldPings = 3,
+    this.discoveryMode = false,
   });
 
   Settings copyWith({
@@ -306,6 +319,7 @@ class Settings {
     bool? syncDuringDrive,
     int? syncEveryMin,
     int? heardHoldPings,
+    bool? discoveryMode,
     bool clearKey = false,
   }) =>
       Settings(
@@ -322,6 +336,7 @@ class Settings {
         syncDuringDrive: syncDuringDrive ?? this.syncDuringDrive,
         syncEveryMin: syncEveryMin ?? this.syncEveryMin,
         heardHoldPings: heardHoldPings ?? this.heardHoldPings,
+        discoveryMode: discoveryMode ?? this.discoveryMode,
       );
 
   Map<String, dynamic> toJson() => {
@@ -338,6 +353,7 @@ class Settings {
         'sync_during_drive': syncDuringDrive,
         'sync_every_min': syncEveryMin,
         'heard_hold_pings': heardHoldPings,
+        'discovery_mode': discoveryMode,
       };
   factory Settings.fromJson(Map<String, dynamic> j) => Settings(
         serverUrl: _str(j['server_url']) ?? defaultServerUrl,
@@ -354,6 +370,7 @@ class Settings {
         syncDuringDrive: j['sync_during_drive'] is bool ? j['sync_during_drive'] as bool : true,
         syncEveryMin: (_int(j['sync_every_min']) ?? 5).clamp(minSyncEveryMin, maxSyncEveryMin),
         heardHoldPings: (_int(j['heard_hold_pings']) ?? 3).clamp(1, 20),
+        discoveryMode: j['discovery_mode'] is bool ? j['discovery_mode'] as bool : false,
       );
 
   /// A string field; anything else is null so the default applies.

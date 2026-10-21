@@ -547,12 +547,15 @@ class DriveActionButtons extends StatelessWidget {
     final driving = s.driving;
     final canPing = driving && !s.pinging && !s.busy;
     final h = compact ? 56.0 : 68.0;
+    // Discovery (listen-only) transmits nothing at all, so "Ping now" doesn't apply — hidden entirely, not just
+    // disabled, while this drive is in that mode.
+    final discovery = driving ? s.settings.discoveryMode : false;
     return Padding(
       padding: padding,
       child: Row(
         children: [
           Expanded(
-            flex: 3,
+            flex: discovery ? 1 : 3,
             child: SizedBox(
               height: h,
               child: FilledButton.icon(
@@ -587,30 +590,32 @@ class DriveActionButtons extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: Gap.m),
-          Expanded(
-            flex: 2,
-            child: SizedBox(
-              height: h,
-              child: OutlinedButton.icon(
-                key: const Key('ping-now'),
-                style: OutlinedButton.styleFrom(
-                  side: BorderSide(color: canPing ? t.colorScheme.primary : t.colorScheme.outlineVariant, width: 2),
-                  foregroundColor: t.colorScheme.primary,
-                  backgroundColor: compact ? t.colorScheme.surface.withValues(alpha: 0.92) : null,
-                ),
-                onPressed: canPing ? () => s.pingNow() : null,
-                icon: s.pinging
-                    ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2.5))
-                    : const Icon(Icons.wifi_tethering, size: 28),
-                // one line at every phone width: scale down rather than wrap
-                label: const FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text('Ping now', maxLines: 1, softWrap: false, style: TextStyle(fontSize: 18)),
+          if (!discovery) ...[
+            const SizedBox(width: Gap.m),
+            Expanded(
+              flex: 2,
+              child: SizedBox(
+                height: h,
+                child: OutlinedButton.icon(
+                  key: const Key('ping-now'),
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: canPing ? t.colorScheme.primary : t.colorScheme.outlineVariant, width: 2),
+                    foregroundColor: t.colorScheme.primary,
+                    backgroundColor: compact ? t.colorScheme.surface.withValues(alpha: 0.92) : null,
+                  ),
+                  onPressed: canPing ? () => s.pingNow() : null,
+                  icon: s.pinging
+                      ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2.5))
+                      : const Icon(Icons.wifi_tethering, size: 28),
+                  // one line at every phone width: scale down rather than wrap
+                  label: const FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text('Ping now', maxLines: 1, softWrap: false, style: TextStyle(fontSize: 18)),
+                  ),
                 ),
               ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -627,8 +632,15 @@ class MapHint extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = state;
     final t = Theme.of(context);
-    final title = s.driving ? 'Waiting for the first ping' : 'No pings yet';
-    final body = s.driving
+    final discovery = s.driving && s.settings.discoveryMode;
+    final title = discovery
+        ? 'Listening'
+        : s.driving
+        ? 'Waiting for the first ping'
+        : 'No pings yet';
+    final body = discovery
+        ? 'Nothing is transmitted. Overheard repeaters land on the map as they\'re heard.'
+        : s.driving
         ? 'Each ping lands on the map when its listen window closes.'
         : s.connected
         ? 'Press Start drive. Every ping is saved on this phone right away.'

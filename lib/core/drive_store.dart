@@ -312,10 +312,12 @@ class JsonlDriveStore implements DriveStore, SyncLedger {
         final pings = await _readPings(id);
         final synced = await _readIds(id, 'synced.txt');
         final rejected = await _readIds(id, 'rejected.txt');
+        final txPings = pings.where((p) => p.kind == PingKind.tx);
         return SessionSummary(
           session: s,
           pingCount: pings.length,
-          heardCount: pings.where((p) => p.kind == PingKind.tx && (p.echoes.isNotEmpty || p.neighbor != null)).length,
+          txCount: txPings.length,
+          heardCount: txPings.where((p) => p.echoes.isNotEmpty || p.neighbor != null).length,
           syncedCount: pings.where((p) => synced.contains(p.id)).length,
           rejectedCount: pings.where((p) => rejected.contains(p.id) && !synced.contains(p.id)).length,
           sessionResendPending: await _readResend(id) != null,

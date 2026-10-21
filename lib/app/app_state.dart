@@ -424,12 +424,17 @@ class AppState extends ChangeNotifier {
   static const int recentLimit = 50;
 
   int _pingCount = 0;
+  int _txCount = 0;
   int _heardCount = 0;
   int _syncedCount = 0;
   int get pingCount => _pingCount;
   int get heardCount => _heardCount;
   int get syncedCount => _syncedCount;
-  int? get heardPercent => _pingCount == 0 ? null : (100 * _heardCount / _pingCount).round();
+
+  /// tx-aware guard, same as [lib/ui/drive_stats.dart]'s `DriveStats.heardPercent` and `SessionSummary.txCount`:
+  /// an all-rx (discovery/listen-only) drive has no tx pings at all, so "0% heard" would misread live as a failed
+  /// drive rather than a successful listen session.
+  int? get heardPercent => _txCount == 0 ? null : (100 * _heardCount / _txCount).round();
 
   final Set<String> _seenPingIds = {};
   final List<DrivePing> _unsaved = [];
@@ -575,6 +580,7 @@ class AppState extends ChangeNotifier {
         ..reset();
       _seenPingIds.clear();
       _pingCount = 0;
+      _txCount = 0;
       _heardCount = 0;
       _syncedCount = 0;
 
@@ -596,9 +602,12 @@ class AppState extends ChangeNotifier {
         minDistanceM: s.minDistanceM,
         txPowerW: txW,
         txDbm: info?.radio.txDbm,
+        listenOnly: s.discoveryMode,
       ));
       _scheduleDriveSync();
-      diagnostics.add('Drive started on ${s.channel}, auto-ping every ${s.intervalSec} s');
+      diagnostics.add(s.discoveryMode
+          ? 'Drive started on ${s.channel}, listen-only (nothing transmitted)'
+          : 'Drive started on ${s.channel}, auto-ping every ${s.intervalSec} s');
       unawaited(refreshSessions());
     } catch (e) {
       // The session folder may exist. With no pings it's just an empty drive, so remove it; otherwise close it so it
@@ -637,7 +646,10 @@ class AppState extends ChangeNotifier {
     final sid = _session?.id;
     if (sid == null) return;
     _pingCount++;
-    if (!ping.heardNothing && ping.kind == PingKind.tx) _heardCount++;
+    if (ping.kind == PingKind.tx) {
+      _txCount++;
+      if (!ping.heardNothing) _heardCount++;
+    }
     _recent.insert(0, ping);
     if (_recent.length > recentLimit) _recent.removeLast();
     _drivePings.add(ping);
@@ -801,6 +813,7 @@ class AppState extends ChangeNotifier {
             _syncedCount = s.syncedCount;
             if (_session == null) {
               _pingCount = s.pingCount;
+              _txCount = s.txCount;
               _heardCount = s.heardCount;
             }
           }
@@ -964,6 +977,7 @@ class AppState extends ChangeNotifier {
       if (_lastSession?.id == sessionId) {
         _lastSession = null;
         _pingCount = 0;
+        _txCount = 0;
         _heardCount = 0;
         _syncedCount = 0;
         _recent.clear();
@@ -1077,6 +1091,7 @@ class AppState extends ChangeNotifier {
       minDistanceM: s.minDistanceM,
       txPowerW: txDbm == null ? null : _dbmToWatts(txDbm),
       txDbm: txDbm,
+      listenOnly: s.discoveryMode, // ignored by a running engine anyway: listenOnly can't change mid-drive
     ));
   }
 

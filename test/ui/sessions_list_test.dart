@@ -42,6 +42,25 @@ void main() {
     expect(st.distanceM, 0);
   });
 
+  testWidgets('an all-rx (discovery) drive card shows "Heard —", not a misleading "Heard 0%"', (tester) async {
+    useTallScreen(tester);
+    final h = Harness();
+    h.store.seed(
+      DriveSession(id: 'rx1', startedAt: DateTime.utc(2026, 10, 19, 10), endedAt: DateTime.utc(2026, 10, 19, 10, 20)),
+      [
+        DrivePing(id: 'r1', ts: DateTime.utc(2026, 10, 19, 10, 1), lat: 40, lon: -82.9, kind: PingKind.rx, echoes: const [Echo(repeater: 'aa', snrDb: 3)]),
+        DrivePing(id: 'r2', ts: DateTime.utc(2026, 10, 19, 10, 2), lat: 40.01, lon: -82.9, kind: PingKind.rx, echoes: const [Echo(repeater: 'bb', snrDb: 1)]),
+      ],
+    );
+    await h.pumpApp(tester);
+    await tester.tap(find.text('Drives'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('2 pings'), findsOneWidget);
+    expect(find.text('Heard —'), findsOneWidget);
+    expect(find.text('Heard 0%'), findsNothing);
+  });
+
   testWidgets('drive card shows duration, distance, heard strip and sync badge; Sync all', (tester) async {
     useTallScreen(tester);
     final h = Harness()..approveKey();

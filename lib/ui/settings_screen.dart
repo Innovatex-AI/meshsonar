@@ -104,6 +104,17 @@ class SettingsScreen extends StatelessWidget {
                     }
                   },
                 ),
+                SwitchListTile(
+                  key: const Key('discovery-mode'),
+                  secondary: Icon(s.driving ? Icons.lock_outline : Icons.hearing_outlined),
+                  title: const Text('Discovery (listen-only)'),
+                  subtitle: Text(s.driving
+                      ? 'Locked while driving: stop the drive to change it.'
+                      : 'The next drive transmits nothing at all — not even the privacy-hardened ping — and only '
+                          'records what it overhears from other mesh traffic.'),
+                  value: st.discoveryMode,
+                  onChanged: s.driving ? null : (v) => s.updateSettings(st.copyWith(discoveryMode: v)),
+                ),
                 SliderTile(
                   key: const Key('interval'),
                   sliderKey: const Key('interval-slider'),
@@ -112,8 +123,10 @@ class SettingsScreen extends StatelessWidget {
                   stops: intervalStops,
                   value: st.intervalSec,
                   label: (v) => 'Every $v s',
+                  caption: st.discoveryMode ? 'Doesn\'t apply in discovery mode: nothing is ever transmitted.' : null,
                   minLabel: '10 s',
                   maxLabel: '2 min',
+                  enabled: !st.discoveryMode,
                   onChanged: (v) => s.updateSettings(s.settings.copyWith(intervalSec: v)),
                 ),
                 SliderTile(
@@ -124,9 +137,12 @@ class SettingsScreen extends StatelessWidget {
                   stops: distanceStops,
                   value: st.minDistanceM,
                   label: (v) => '$v m',
-                  caption: 'Skips auto-pings while you\'re stopped at lights.',
+                  caption: st.discoveryMode
+                      ? 'Doesn\'t apply in discovery mode: nothing is ever transmitted.'
+                      : 'Skips auto-pings while you\'re stopped at lights.',
                   minLabel: '15 m',
                   maxLabel: '500 m',
+                  enabled: !st.discoveryMode,
                   onChanged: (v) => s.updateSettings(s.settings.copyWith(minDistanceM: v)),
                 ),
                 SliderTile(
