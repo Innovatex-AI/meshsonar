@@ -130,9 +130,10 @@ class HeardTracker {
     _pingIndex = -1;
   }
 
-  /// Feed every finished tx ping, in order.
+  /// Feed every finished ping, in order (tx or rx — a discovery/listen-only drive emits only rx pings, so the live
+  /// Heard panel/map needs these too; a normal tx drive never emits rx pings, before or after this, so tx-drive
+  /// behaviour is unchanged).
   void addPing(DrivePing ping) {
-    if (ping.kind != PingKind.tx) return;
     _pingIndex++;
     for (final e in ping.echoes) {
       final h = _byId.putIfAbsent(

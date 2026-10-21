@@ -1,6 +1,7 @@
-// Settings: sliders (auto-ping, distance, heard hold, upload period), antenna type, upload toggles.
+// Settings: sliders (auto-ping, distance, heard hold, upload period), antenna type, upload toggles, discovery mode.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/app/app_state.dart';
 import 'package:meshsonar/core/antenna_profile.dart';
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/model.dart';
@@ -180,5 +181,47 @@ void main() {
     await h.state.syncSession('s2');
     await tester.pumpAndSettle();
     expect(find.textContaining('Last upload failed'), findsOneWidget);
+  });
+
+  testWidgets('discovery mode: greys the interval/distance sliders, persists, and locks the switch while driving',
+      (tester) async {
+    final h = await openSettings(tester);
+    await show(tester, 'discovery-mode');
+    expect(tester.widget<SwitchListTile>(find.byKey(const Key('discovery-mode'))).value, isFalse);
+    expect(tester.widget<Slider>(find.byKey(const Key('interval-slider'))).onChanged, isNotNull);
+    expect(tester.widget<Slider>(find.byKey(const Key('min-distance-slider'))).onChanged, isNotNull);
+
+    await tester.tap(find.byKey(const Key('discovery-mode')));
+    await tester.pumpAndSettle();
+    expect(h.settings.saved.discoveryMode, isTrue);
+    await show(tester, 'interval-slider');
+    expect(tester.widget<Slider>(find.byKey(const Key('interval-slider'))).onChanged, isNull);
+    await show(tester, 'min-distance-slider');
+    expect(tester.widget<Slider>(find.byKey(const Key('min-distance-slider'))).onChanged, isNull);
+
+    // Turned back off (not driving yet), then a drive starts: the switch locks, disabled rather than hidden.
+    await show(tester, 'discovery-mode');
+    await tester.tap(find.byKey(const Key('discovery-mode')));
+    await tester.pumpAndSettle();
+    expect(h.settings.saved.discoveryMode, isFalse);
+
+    await h.state.connect(h.bt.devices.first, RadioKind.bluetooth);
+    await h.state.startDrive();
+    await tester.pumpAndSettle();
+    await show(tester, 'discovery-mode');
+    expect(tester.widget<SwitchListTile>(find.byKey(const Key('discovery-mode'))).onChanged, isNull,
+        reason: 'privacy-critical toggle: disabled, not hidden, while a drive is active');
+    await h.state.stopDrive();
+  });
+
+  testWidgets('discovery mode on at Start drive: the engine is told listenOnly, not the usual auto-ping config',
+      (tester) async {
+    final h = Harness()..settings.saved = const Settings().copyWith(discoveryMode: true);
+    await h.pumpApp(tester);
+    await h.state.connect(h.bt.devices.first, RadioKind.bluetooth);
+    await h.state.startDrive();
+    await tester.pumpAndSettle();
+    expect(h.engines.single.config!.listenOnly, isTrue);
+    await h.state.stopDrive();
   });
 }

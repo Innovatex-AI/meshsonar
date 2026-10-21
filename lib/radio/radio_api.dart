@@ -91,6 +91,11 @@ class WardriveConfig {
   final Duration listenWindow; // how long to collect echoes after each ping
   final double? txPowerW; // shown in the ping text when known
   final double? txDbm; // the radio's TX power, recorded on each ping (Drive Format v1.1 tx_dbm) when known
+
+  /// Discovery / listen-only mode: the engine transmits nothing at all — not even the privacy-hardened `MS:<tag>`
+  /// ping — and only records what it overhears from other mesh traffic (rx-kind pings). Immutable mid-drive, the
+  /// same as [channel]: see DefaultWardriveEngine's passive RX pipeline.
+  final bool listenOnly;
   const WardriveConfig({
     this.channel = '#wardriving',
     this.intervalSec = 30,
@@ -98,6 +103,7 @@ class WardriveConfig {
     this.listenWindow = const Duration(seconds: 7),
     this.txPowerW,
     this.txDbm,
+    this.listenOnly = false,
   });
 }
 

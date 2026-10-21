@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/app/app_state.dart';
+import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/radio/radio_api.dart';
 import 'package:meshsonar/ui/device_feedback.dart';
@@ -109,6 +110,43 @@ void main() {
     await h.state.stopDrive();
     await settle(tester);
     expect(find.byKey(const Key('next-ping-countdown')), findsNothing);
+    await drain(tester);
+  });
+
+  testWidgets('discovery mode: Ping now is hidden (not just disabled) and the map hint says Listening',
+      (tester) async {
+    useTallScreen(tester);
+    final h = Harness()..settings.saved = const Settings().copyWith(discoveryMode: true);
+    await h.pumpApp(tester);
+    await h.state.connect(h.bt.devices.first, RadioKind.bluetooth);
+    await h.state.startDrive();
+    await settle(tester);
+
+    expect(h.engines.single.config!.listenOnly, isTrue);
+    expect(find.byKey(const Key('ping-now')), findsNothing);
+    expect(find.byKey(const Key('start-stop')), findsOneWidget);
+    expect(find.text('Listening'), findsOneWidget);
+    expect(find.textContaining('Nothing is transmitted'), findsOneWidget);
+
+    await h.state.stopDrive();
+    await settle(tester);
+    await drain(tester);
+  });
+
+  testWidgets('a normal (non-discovery) drive still shows Ping now and ping-oriented hints', (tester) async {
+    useTallScreen(tester);
+    final h = Harness();
+    await h.pumpApp(tester);
+    await h.state.connect(h.bt.devices.first, RadioKind.bluetooth);
+    await h.state.startDrive();
+    await settle(tester);
+
+    expect(h.engines.single.config!.listenOnly, isFalse);
+    expect(find.byKey(const Key('ping-now')), findsOneWidget);
+    expect(find.text('Waiting for the first ping'), findsOneWidget);
+
+    await h.state.stopDrive();
+    await settle(tester);
     await drain(tester);
   });
 

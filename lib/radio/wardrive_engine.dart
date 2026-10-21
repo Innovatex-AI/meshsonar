@@ -72,6 +72,26 @@ class _Ctl {
   _Ctl(this.pkt);
 }
 
+// ------------------------------------------------------------------ discovery / listen-only (passive RX)
+//
+// Source: meshsonar-infra/docs/planning/meshmapper-teardown.md §3.3-3.4 (this project's own prior research, citing
+// wiki.meshmapper.net and github.com/MeshMapper/MeshMapper_Flutter_App). MeshMapper's own "Passive" mode still
+// transmits a zero-hop DISC request every 30 s — not fully silent. Its separate Passive RX logging pipeline is
+// continuous and independent of transmission: it overhears GRP_TXT/ADVERT traffic, keys each sighting by the
+// LAST-hop repeater (src/Mesh.cpp routeRecvPacket() appends each repeater's own hash to the END of the path before
+// re-flooding, so the last path entry — not the first — is the repeater we actually, physically heard), keeps the
+// best-SNR sighting per repeater, and flushes a batch every 25 m moved or 30 s elapsed, whichever comes first.
+//
+// This app's privacy stance is non-negotiable and stricter than MeshMapper's: listen-only means nothing goes out,
+// not even a zero-hop ping. So we mirror the Passive RX pipeline (continuous overhearing, last-hop keying, 25 m /
+// 30 s batching, best-SNR-per-repeater) but drop the DISC-every-30s transmission entirely.
+
+/// How often a passive (listen-only) batch flushes, at most, even standing still.
+const Duration passiveFlushInterval = Duration(seconds: 30);
+
+/// How far the phone must move since the last flush to force an early one.
+const double passiveFlushDistanceM = 25;
+
 class DefaultWardriveEngine implements WardriveEngine {
   final CompanionLink link;
   final LocationSource location;
@@ -114,6 +134,14 @@ class DefaultWardriveEngine implements WardriveEngine {
   GeoFix? _lastFix;
   final _rng = math.Random();
 
+  // Passive (listen-only) pipeline state: best echo seen per repeater since the last flush, the position the
+  // current window started at, and when it must flush at the latest.
+  final Map<String, Echo> _passiveBest = {};
+  ({double lat, double lon})? _passiveOrigin;
+  DateTime? _passiveFlushDeadline;
+  Timer? _passiveTimer;
+  StreamSubscription<GeoFix>? _passiveFixSub;
+
   DefaultWardriveEngine({
     required this.link,
     required this.location,
@@ -131,7 +159,8 @@ class DefaultWardriveEngine implements WardriveEngine {
   EngineStatus get current => _current;
 
   void _setStatus(EngineState s, [String? message]) {
-    final auto = _running && _config.intervalSec > 0;
+    // Listen-only never pings, so a countdown / "move N m" / waiting-for-GPS status is meaningless in this mode.
+    final auto = _running && !_config.listenOnly && _config.intervalSec > 0;
     _current = EngineStatus(
       s,
       message: message,
@@ -152,6 +181,7 @@ class DefaultWardriveEngine implements WardriveEngine {
         listenWindow: c.listenWindow,
         txPowerW: c.txPowerW,
         txDbm: c.txDbm,
+        listenOnly: c.listenOnly,
       );
 
   /// Shortest time between two auto pings: the interval, and never less than one listen window.
@@ -196,8 +226,13 @@ class DefaultWardriveEngine implements WardriveEngine {
       rethrow;
     }
     _running = true;
-    _setStatus(EngineState.driving, config.intervalSec > 0 ? 'Driving' : 'Ready (manual pings)');
-    _startAuto();
+    if (_config.listenOnly) {
+      _setStatus(EngineState.driving, 'Listening');
+      _startPassive();
+    } else {
+      _setStatus(EngineState.driving, config.intervalSec > 0 ? 'Driving' : 'Ready (manual pings)');
+      _startAuto();
+    }
   }
 
   @override
@@ -211,7 +246,9 @@ class DefaultWardriveEngine implements WardriveEngine {
       listenWindow: c.listenWindow,
       txPowerW: c.txPowerW,
       txDbm: c.txDbm,
+      listenOnly: _config.listenOnly, // can't switch mid-drive either, same as the channel
     );
+    if (_config.listenOnly) return; // interval/distance don't apply; the passive pipeline is already running
     _startAuto();
     if (_config.intervalSec <= 0 && !_busy) _setStatus(EngineState.driving, 'Ready (manual pings)');
   }
@@ -220,7 +257,107 @@ class DefaultWardriveEngine implements WardriveEngine {
     if (!_running) return;
     _running = false;
     _stopAuto();
+    if (_config.listenOnly) _stopPassive();
     _setStatus(EngineState.error, 'Radio disconnected');
+  }
+
+  // ------------------------------------------------------------------ passive (listen-only) pipeline
+
+  void _startPassive() {
+    _passiveBest.clear();
+    _passiveOrigin = _lastFix == null ? null : (lat: _lastFix!.lat, lon: _lastFix!.lon);
+    _passiveFlushDeadline = _clock().add(passiveFlushInterval);
+    _collector = _onPassiveHeard;
+    _passiveTimer = Timer.periodic(tick, (_) {
+      final deadline = _passiveFlushDeadline;
+      if (deadline != null && !_clock().isBefore(deadline)) _flushPassive();
+    });
+    try {
+      _passiveFixSub = location.fixes.listen((f) {
+        _lastFix = f;
+        _onPassiveFix(f);
+      }, onError: (Object _) {});
+    } catch (_) {
+      _passiveFixSub = null; // no stream: the timer still flushes on elapsed time
+    }
+    // Don't wait on the GPS stream's own cadence for a starting position: ask once up front too, same helper the
+    // ping flows use, so a batch heard before the stream's first fix still has somewhere to land.
+    if (_passiveOrigin == null) {
+      unawaited(_fix().then((f) {
+        if (f != null && _passiveOrigin == null && _running) _passiveOrigin = (lat: f.lat, lon: f.lon);
+      }));
+    }
+  }
+
+  void _onPassiveFix(GeoFix f) {
+    final origin = _passiveOrigin;
+    if (origin == null) {
+      _passiveOrigin = (lat: f.lat, lon: f.lon);
+      return;
+    }
+    if (haversineM(origin.lat, origin.lon, f.lat, f.lon) >= passiveFlushDistanceM) _flushPassive();
+  }
+
+  /// Called for every packet the radio hears while listen-only is active (the whole drive, not a short window
+  /// after a ping — there is no ping). Filters to flood GRP_TXT with a non-empty path, decryptable on the
+  /// channel's own secret; keys the sighting by the LAST path hop (the repeater we actually, physically heard —
+  /// see the pipeline note above), keeping the best SNR per repeater since the last flush.
+  void _onPassiveHeard(RxPacket rx) {
+    final secret = _secret;
+    if (secret == null) return;
+    final pkt = MeshPacket.tryParse(rx.raw);
+    if (pkt == null) return;
+    if (pkt.payloadType != PayloadType.grpTxt || !pkt.isFlood || pkt.path.isEmpty) return;
+    if (decryptGroupText(secret, pkt.payload) == null) return;
+    final repeater = pkt.pathHex.last;
+    final snr = _inRange(rx.snrDb, -40, 40);
+    final prev = _passiveBest[repeater];
+    if (prev != null && (prev.snrDb ?? double.negativeInfinity) >= (snr ?? double.negativeInfinity)) return;
+    _passiveBest[repeater] = Echo(
+      repeater: repeater,
+      snrDb: snr,
+      rssiDbm: _inRange(rx.rssiDbm, -160, 0),
+      hops: 1, // the last-hop repeater is always a direct hear, whatever the packet's total hop count was
+      path: pkt.pathHex,
+    );
+  }
+
+  /// Emits one rx-kind [DrivePing] per repeater heard since the last flush, then resets the window. Called at
+  /// [passiveFlushInterval] elapsed, [passiveFlushDistanceM] moved, or when listen-only stops (so a partial batch
+  /// is never silently lost).
+  void _flushPassive() {
+    final fix = _lastFix;
+    final origin = _passiveOrigin ?? (fix == null ? null : (lat: fix.lat, lon: fix.lon));
+    if (_passiveBest.isNotEmpty && origin != null) {
+      final now = _clock();
+      for (final echo in _passiveBest.values) {
+        final ping = DrivePing(
+          id: _newId(),
+          ts: now.toUtc(),
+          lat: origin.lat,
+          lon: origin.lon,
+          gpsAccuracyM: _inRange(fix?.accuracyM, 0, 10000),
+          speedMps: _inRange(fix?.speedMps, 0, 150),
+          kind: PingKind.rx,
+          echoes: [echo],
+        );
+        if (!_pings.isClosed) _pings.add(ping);
+      }
+    }
+    _passiveBest.clear();
+    _passiveOrigin = fix == null ? null : (lat: fix.lat, lon: fix.lon);
+    _passiveFlushDeadline = _clock().add(passiveFlushInterval);
+  }
+
+  void _stopPassive() {
+    _passiveTimer?.cancel();
+    _passiveTimer = null;
+    final sub = _passiveFixSub;
+    _passiveFixSub = null;
+    if (sub != null) unawaited(sub.cancel());
+    _flushPassive(); // save whatever's pending rather than drop it
+    _passiveFlushDeadline = null;
+    _collector = null;
   }
 
   // ------------------------------------------------------------------ auto pinging
@@ -329,6 +466,7 @@ class DefaultWardriveEngine implements WardriveEngine {
   @override
   Future<DrivePing> pingNow() async {
     if (!_running || _stopping) throw StateError('Not driving: start() first');
+    if (_config.listenOnly) throw StateError('Listen-only: this drive transmits nothing, including manual pings');
     return _serial(() async {
       if (!_running || _stopping) throw StateError('Not driving');
       final fix = await _fix();
@@ -571,6 +709,7 @@ class DefaultWardriveEngine implements WardriveEngine {
     _stopping = true;
     if (wasRunning) _setStatus(EngineState.stopping, 'Stopping');
     _stopAuto();
+    if (_config.listenOnly) _stopPassive(); // flushes whatever's pending rather than dropping it
     // Let a ping that is already on the air finish its listen window so its data isn't lost.
     final inflight = _inFlight;
     if (inflight != null) {

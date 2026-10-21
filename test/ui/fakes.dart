@@ -80,7 +80,8 @@ class FakeDriveStore implements DriveStore {
         SessionSummary(
           session: s,
           pingCount: pingsBySession[s.id]!.length,
-          heardCount: pingsBySession[s.id]!.where((p) => !p.heardNothing).length,
+          txCount: pingsBySession[s.id]!.where((p) => p.kind == PingKind.tx).length,
+          heardCount: pingsBySession[s.id]!.where((p) => p.kind == PingKind.tx && !p.heardNothing).length,
           syncedCount: synced[s.id]!.length,
           rejectedCount: (rejected[s.id] ?? const {}).length,
           sessionResendPending: resend.contains(s.id),

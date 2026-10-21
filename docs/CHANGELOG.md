@@ -3,6 +3,48 @@
 All notable changes to MeshSonar. Dates are local (US Eastern). This changelog was reconstructed from the commit
 history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md](ROADMAP.md).
 
+## [0.11.0] — 2026-10-20 — discovery (listen-only) mode
+
+`pubspec.yaml` is `0.11.0+15`. Bundle id unchanged. A pure app-side feature — no server change (`docs/
+MESHSONAR_DRIVE_FORMAT.md` already documents `"kind": "tx" | "rx"` as current, accepted, default `"tx"`), and no
+collision with the in-progress drive-stats work in its own separate worktree.
+
+Research grounding this build (`meshsonar-infra/docs/planning/meshmapper-teardown.md` §3.3-3.4, citing
+`wiki.meshmapper.net` and `github.com/MeshMapper/MeshMapper_Flutter_App`): MeshMapper's own "Passive" mode still
+transmits a zero-hop discovery request every 30 s — not fully silent. Its separate Passive RX logging pipeline is
+continuous and independent of transmission: it overhears `GRP_TXT`/`ADVERT` traffic, keys each sighting by the
+**last-hop** repeater (MeshCore's `Mesh.cpp` appends each repeater's hash to the end of the path before
+re-flooding, so the last path entry is the one physically heard, not the first), keeps the best-SNR sighting per
+repeater, and flushes a batch every 25 m moved or 30 s elapsed. This project's privacy stance is stricter than
+MeshMapper's: listen-only means nothing goes out at all, so the DISC-every-30s transmission is dropped; everything
+else about the Passive RX pipeline (continuous overhearing, last-hop keying, 25 m / 30 s batching, best-SNR per
+repeater) is mirrored.
+
+- **A discovery/listen-only drive mode: the phone transmits nothing — not even the privacy-hardened `MS:<tag>`
+  ping — and only records what it overhears.** `WardriveConfig.listenOnly` (immutable mid-drive, same as
+  `channel`) and `Settings.discoveryMode` (persisted, locked while driving). The engine still joins the channel
+  (`ensureChannel` is BLE-local, never an RF transmission) to get the secret needed to decrypt overheard traffic,
+  but a continuous RX collector (`DefaultWardriveEngine._onPassiveHeard`, running for the whole drive, not a
+  few-second window around a ping) replaces the auto-ping cadence entirely. `pingNow()` throws in this mode;
+  interval/distance/next-ping status fields go null — they don't apply when nothing is ever transmitted.
+- **`HeardTracker.addPing`** (`lib/core/heard.dart`) no longer gates on `kind == PingKind.tx`: the live Heard
+  panel/map now populates during a discovery drive too. Safe change — a normal tx drive never emits rx pings,
+  before or after this, so tx-drive behaviour is unchanged.
+- **UI**: Settings → Wardriving gains a "Discovery (listen-only)" switch, disabled (not hidden) while a drive is
+  active — a privacy-critical toggle, no silent-ignore-mid-drive ambiguity. The interval/minimum-distance sliders
+  show as greyed out with a "doesn't apply" caption when discovery mode is on. The Drive screen hides "Ping now"
+  entirely in discovery mode (not just disabled) and the map hint/status text says "Listening" instead of
+  ping-oriented language.
+- **Fixed a real pre-existing bug this feature surfaced**: the drives list' "Heard %" (`heardCount/pingCount`)
+  would show a misleading "0% heard" for an all-rx (discovery) drive — reading as a failed drive, not a successful
+  listen session. `lib/ui/drive_stats.dart`'s `DriveStats.heardPercent` already guarded this correctly
+  (`txPings == 0 ? null : …`); `SessionSummary` (`lib/core/api.dart`) gained the same tx-aware `txCount` field,
+  computed in `lib/core/drive_store.dart`, and `lib/ui/sessions_screen.dart`'s percentage now guards on it the
+  same way. `AppState.heardPercent` (the live Drive-screen stats strip) had the identical bug — only ever dormant
+  before this feature made an all-rx drive possible — and got the same fix (`AppState._txCount`).
+- Gate: `flutter analyze` clean, `flutter test` all green (baseline 588 passing / 7 skipped, plus this feature's
+  new tests).
+
 ## [0.10.0] — 2026-10-20 — live region awareness
 
 `pubspec.yaml` is `0.10.0+14`. Bundle id unchanged. Builds on the website's `GET /api/cmh/regions-index`

@@ -2,8 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/core/heard.dart';
 import 'package:meshsonar/core/model.dart';
 
-DrivePing p(int i, List<Echo> e, {double lat = 40.1, double lon = -82.9}) =>
-    DrivePing(id: 'p$i', ts: DateTime.utc(2026, 10, 16, 12, 0, i), lat: lat, lon: lon, echoes: e);
+DrivePing p(int i, List<Echo> e, {double lat = 40.1, double lon = -82.9, PingKind kind = PingKind.tx}) =>
+    DrivePing(id: 'p$i', ts: DateTime.utc(2026, 10, 16, 12, 0, i), lat: lat, lon: lon, echoes: e, kind: kind);
 
 void main() {
   const a = RepeaterRef(key: 'df0136aa', name: 'Smith Park', lat: 40.12, lon: -82.93);
@@ -41,6 +41,19 @@ void main() {
     t.addPing(p(4, [const Echo(repeater: 'df', snrDb: 1)]));
     expect(t.repeaters.first.id, 'df');
     expect(t.repeaters.first.state, HeardState.live);
+  });
+
+  test('tracker populates from rx pings too (a discovery/listen-only drive emits only these)', () {
+    final t = HeardTracker(holdPings: 2, lookup: RepeaterLookup([(RepeaterSource.cmat, [a])]));
+    t.addPing(p(0, [const Echo(repeater: 'df', snrDb: 5, hops: 1)], kind: PingKind.rx));
+    expect(t.live.map((h) => h.id), ['df']);
+    final df = t.repeaters.single;
+    expect(df.timesHeard, 1);
+    expect(df.bestSnrDb, 5);
+    expect(df.lastDistanceM, greaterThan(1000));
+    // A second rx ping for a different repeater stacks normally, same as tx pings do.
+    t.addPing(p(1, [const Echo(repeater: 'ee', snrDb: -1)], kind: PingKind.rx));
+    expect(t.live.map((h) => h.id), containsAll(['df', 'ee']));
   });
 
   test('bearing and compass', () {
