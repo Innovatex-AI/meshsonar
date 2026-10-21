@@ -179,6 +179,11 @@ There are no state-management packages. All of it is plain Flutter:
 - **`DriveMapModel`** (`lib/ui/drive/drive_map_model.dart`) is a second `ChangeNotifier`, owned by the Drive screen and
   shared with the full-screen map. It holds the ping list, a frozen heard snapshot (`HeardView`s), the selected
   repeater, the layer toggles and the live GPS position. It recomputes only when a ping finishes or the lookup changes.
+- **`DriveLiveStats`** (`lib/ui/drive/drive_live_stats.dart`) is a third `ChangeNotifier`, owned by the Drive screen,
+  behind the mid-drive-only second stats strip's new-vs-repeat grid-cell tally. On a new drive it reads every earlier
+  local drive's tx-ping cells once (async, same store reads `loadDriveReport` uses), then classifies each new tx ping
+  against that set incrementally — same `cellIndexOf` cell identity as the after-drive report, just kept running
+  instead of recomputed once at the end.
 - **`UiPrefs`** (`lib/ui/onboarding/ui_prefs.dart`) is a `ChangeNotifier` for UI-only preferences (intro seen, plus
   drive names typed under 0.2.x until they're migrated into the drives). It hangs off `AppState` through an `Expando`. `DriveStatsCache` in `sessions_screen.dart` works the
   same way.
@@ -276,8 +281,9 @@ names.
 | `ui/widgets.dart` | ui | Shared formatters (`formatTime`, `formatDateTime`, `formatSnr`, `bestSnr`, `repeatersHeard`) and small widgets (`StatTile`, `StatStrip`, `EmptyState`, `ErrorBanner`, `SectionLabel`, `SignalBars`, `ResultDot`, `PingTile`). |
 | `ui/device_feedback.dart` | platform | `DeviceFeedback` (wake lock + haptics) with a no-op under `flutter test`. |
 | `ui/drive_screen.dart` | ui | Drive tab: map + heard box + controls; keeps the screen awake while driving; `ConnectionChip`. |
-| `ui/drive/drive_controls.dart` | ui | Stats strip, status row, next-ping indicator, antenna toggle, Log button, report card, Start/Stop + Ping now, map hint, ping flash, map icon button. |
+| `ui/drive/drive_controls.dart` | ui | Stats strip, live stats strip, status row, next-ping indicator, antenna toggle, Log button, report card, Start/Stop + Ping now, map hint, ping flash, map icon button. |
 | `ui/drive/drive_map_model.dart` | ui | `DriveMapModel` shared by the Drive screen and full-screen map. |
+| `ui/drive/drive_live_stats.dart` | ui | `DriveLiveStats`: live new-vs-repeat grid-cell tally for the mid-drive stats strip. |
 | `ui/drive/heard_box.dart` | ui | `HeardBox`: live / holding / stale repeaters over the map. |
 | `ui/map/coverage_map.dart` | ui | `CoverageMap` (flutter_map): grid, OSM tiles, rings, links, repeaters, ping dots, position, compass, recenter, attribution; `SimulatedTag`. |
 | `ui/map/fullscreen_map.dart` | ui | Full-screen live map; `showMapLayersSheet`. |
