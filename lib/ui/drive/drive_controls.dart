@@ -7,14 +7,17 @@ import 'package:flutter/material.dart';
 
 import '../../app/app_state.dart';
 import '../../core/antenna_profile.dart';
+import '../../core/heard.dart' show haversineM;
 import '../../core/model.dart';
 import '../../radio/radio_api.dart';
 import '../antenna_sheet.dart';
 import '../connect_screen.dart';
+import '../drive_stats.dart' show formatDistance, formatDuration;
 import '../ping_log_screen.dart' show openPingLog;
 import '../report/drive_report_screen.dart';
 import '../theme.dart';
 import '../widgets.dart';
+import 'drive_live_stats.dart';
 
 void openConnect(BuildContext context) {
   Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const ConnectScreen()));
@@ -61,6 +64,95 @@ class DriveStatsStrip extends StatelessWidget {
         ),
         StatTile(label: 'Last SNR dB', value: snrText, valueKey: const Key('stat-snr'), valueColor: snrColor),
         StatTile(label: 'Synced', value: '${s.syncedCount}', valueKey: const Key('stat-synced')),
+      ],
+    );
+  }
+}
+
+/// Four more live numbers, shown only while actually driving: distance and elapsed time this session, a running
+/// new-vs-repeat tally of map grid cells (the live counterpart of the drive report's "new grids" figure, same
+/// cell identity -- see [DriveLiveStats]), and the current GPS fix's accuracy. [DriveStatsStrip]'s own numbers
+/// (pings/heard/SNR/synced) stay worth a glance after Stop, as a quick recap; these four describe the drive in
+/// progress and have nothing left to say once it's over -- the drive report covers the final figures instead.
+double _liveDistanceM(List<DrivePing> pings) {
+  if (pings.length < 2) return 0;
+  var d = 0.0;
+  for (var i = 1; i < pings.length; i++) {
+    d += haversineM(pings[i - 1].lat, pings[i - 1].lon, pings[i].lat, pings[i].lon);
+  }
+  return d;
+}
+
+class DriveLiveStatsStrip extends StatefulWidget {
+  final AppState state;
+  final DriveLiveStats liveStats;
+  final GeoFix? fix;
+  const DriveLiveStatsStrip({super.key, required this.state, required this.liveStats, this.fix});
+  @override
+  State<DriveLiveStatsStrip> createState() => _DriveLiveStatsStripState();
+}
+
+class _DriveLiveStatsStripState extends State<DriveLiveStatsStrip> {
+  Timer? _tick;
+
+  /// Elapsed only otherwise refreshes when something unrelated (a ping, a GPS fix) happens to rebuild the
+  /// screen -- minutes apart with auto-pinging off. Same "tick while on screen" pattern as NextPingIndicator.
+  void _wantTick(bool on) {
+    if (on && _tick == null) {
+      _tick = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted) setState(() {});
+      });
+    } else if (!on && _tick != null) {
+      _tick!.cancel();
+      _tick = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.state;
+    final liveStats = widget.liveStats;
+    final fix = widget.fix;
+    final t = Theme.of(context);
+    final mc = MeshSonarColors.of(context);
+    final session = s.currentSession;
+    _wantTick(session != null && TickerMode.valuesOf(context).enabled);
+    final elapsed = session == null ? null : s.services.clock().toUtc().difference(session.startedAt);
+    final distance = _liveDistanceM(s.drivePings);
+
+    final acc = fix?.accuracyM;
+    final String gpsValue;
+    Color? gpsColor;
+    if (fix == null) {
+      gpsValue = 'No fix';
+      gpsColor = mc.silent;
+    } else if (acc == null) {
+      gpsValue = '—';
+      gpsColor = null;
+    } else {
+      gpsValue = '±${acc.round()} m';
+      gpsColor = acc <= 10 ? mc.snrStrong : (acc <= 30 ? mc.snrMid : mc.snrWeak);
+    }
+
+    final ready = liveStats.historyLoaded;
+    return StatStrip(
+      tiles: [
+        StatTile(label: 'Distance', value: formatDistance(distance), valueKey: const Key('stat-distance')),
+        StatTile(label: 'Elapsed', value: formatDuration(elapsed), valueKey: const Key('stat-elapsed')),
+        StatTile(
+          label: ready ? '${liveStats.repeatCells} repeat' : 'Cells',
+          labelKey: const Key('stat-cells-label'),
+          value: ready ? '${liveStats.newCells} new' : '—',
+          valueKey: const Key('stat-cells'),
+          valueColor: ready && liveStats.newCells > 0 ? t.colorScheme.primary : null,
+        ),
+        StatTile(label: 'GPS', value: gpsValue, valueKey: const Key('stat-gps'), valueColor: gpsColor),
       ],
     );
   }

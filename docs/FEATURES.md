@@ -59,6 +59,12 @@ and ≥ 640 px) the map sits on the left and the controls on the right.
   for GPS".
 - **Stats strip:** Pings · *N heard* with heard % · Last SNR dB ("none" if the last ping heard nothing) · Synced. These
   are the current drive's numbers, or the last drive's after Stop.
+- **Live stats strip, while actually driving only** (hidden before Start and after Stop — the drive report covers the
+  final figures once it's over): Distance and Elapsed for this session (`DriveMapModel`/`AppState.drivePings`, same
+  haversine math as `DriveStats`/`DriveReport`) · a running **new vs. repeat grid-cell tally** — *N repeat* / *N new*
+  — the live counterpart of the drive report's "new grids" figure (`DriveLiveStats`, same `cellIndexOf` cell identity
+  and earlier-local-drives history rule as `drive_report.dart`, kept incrementally instead of recomputed once at the
+  end) · **GPS accuracy** of the current fix ("±N m", colour-coded good/fair/poor; "No fix" while waiting for one).
 - **Unsaved banner** while pings are waiting to be written to the device.
 - **Antenna chip** (`antenna-chip`): the connected radio's antenna, e.g. "Roof mag-mount · 5.8 dBi · 1.8 m". Tap it
   to change it before a drive. While driving it's **locked** and shows what the drive records ("External · 5.8 dBi ·
