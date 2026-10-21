@@ -9,6 +9,7 @@ import 'package:meshsonar/app/app_state.dart';
 import 'package:meshsonar/app/services.dart';
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/model.dart';
+import 'package:meshsonar/core/region_lookup.dart';
 import 'package:meshsonar/radio/radio_api.dart';
 import 'package:meshsonar/ui/app.dart';
 
@@ -195,6 +196,19 @@ class FakeCmatClient implements CmatClient {
     final c = publicCoverageResult;
     if (c == null) throw const CmatException('no public-coverage endpoint', status: 404);
     return c;
+  }
+
+  /// What [regionsIndex] answers. Empty (the default) is a legitimate wire answer too ("no regions configured"),
+  /// not a stand-in for "no endpoint" — tests that want a fetch failure set [regionsIndexError] instead.
+  List<RegionIndexEntry> regionsIndexResult = const [];
+  Object? regionsIndexError;
+  int regionsIndexCalls = 0;
+
+  @override
+  Future<List<RegionIndexEntry>> regionsIndex() async {
+    regionsIndexCalls++;
+    if (regionsIndexError != null) throw regionsIndexError!;
+    return regionsIndexResult;
   }
 
   /// Members added to [CmatClient] later (0.4.0's `reportProblem`) don't break every UI test: a fake that needs one
@@ -423,6 +437,7 @@ class Harness {
   final location = FakeLocation();
   final simLocation = FakeLocation();
   final cache = MemoryRepeaterCache();
+  final regionIndexCache = MemoryRegionIndexCache();
   final List<FakeCmatClient> clients = [];
   final List<FakeEngine> engines = [];
   final List<File> shared = [];
@@ -495,6 +510,7 @@ class Harness {
     shareFile: (f) async => shared.add(f),
     clock: () => DateTime.utc(2026, 10, 16, 18, 0, 0),
     newId: nextId,
+    regionIndexCache: regionIndexCache,
   );
 
   late final AppState state = AppState(services);

@@ -285,6 +285,53 @@ class AntennaChip extends StatelessWidget {
   }
 }
 
+/// Which MeshSonar region the phone is physically in right now (live, local awareness — see lib/core/
+/// region_lookup.dart). Four states, each shown plainly rather than left blank:
+///  - nothing yet (no cache, no fetch has ever answered): hidden, same convention as [AntennaChip]'s "nothing
+///    to show" case;
+///  - no GPS fix yet: "Locating…";
+///  - a fix, but outside every known region's bbox: "Outside coverage";
+///  - a fix inside a region: the region's code, with its full name (and, if the index itself may be stale, a
+///    note to that effect) in the tooltip.
+class RegionChip extends StatelessWidget {
+  final AppState state;
+  const RegionChip({super.key = const Key('region-chip'), required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    final s = state;
+    if (!s.regionIndexLoaded) return const SizedBox.shrink();
+    final t = Theme.of(context);
+    final mc = MeshSonarColors.of(context);
+    final region = s.currentRegion;
+    final String label;
+    final String tooltip;
+    final Color color;
+    if (!s.regionFixKnown) {
+      label = 'Locating…';
+      tooltip = 'Waiting for a GPS fix to find the MeshSonar region';
+      color = mc.silent;
+    } else if (region == null) {
+      label = 'Outside coverage';
+      tooltip = 'No known MeshSonar region covers this location';
+      color = mc.silent;
+    } else {
+      label = region.code;
+      tooltip = s.regionIndexStale ? '${region.name} (offline: showing the last-known regions)' : region.name;
+      color = t.colorScheme.primary;
+    }
+    return Tooltip(
+      message: tooltip,
+      child: Chip(
+        avatar: Icon(Icons.map_outlined, size: 18, color: color),
+        label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+        backgroundColor: color.withValues(alpha: 0.10),
+        side: BorderSide(color: color.withValues(alpha: 0.5)),
+      ),
+    );
+  }
+}
+
 /// "External · 5.8 dBi · 1.8 m": the Drive Format v1 antenna a drive records (the mount itself isn't recorded).
 String recordedAntennaSummary(Antenna a) => [
   a.type == 'external' ? 'External' : 'Internal',

@@ -9,6 +9,8 @@
 //   <base>/api/cmh/public-coverage  GET  (public, no driver key)        -> {cells[{lat,lon,pings,heard,bestSnr,
 //                                                                          medianSnr,repeaters,lastAt,h3?,
 //                                                                          noiseFloor?}], asOf, grid?, totals}
+//   <base>/api/cmh/regions-index   GET  (public, no driver key)        -> {regions[{code,slug,name,url,
+//                                                                          bbox:[w,s,e,n]|null,boundary?}], asOf}
 // Errors come back as {error} (403 also carries {status}); they're thrown as CmatException(error, status: http code).
 // Network failures and timeouts are thrown as CmatException with status null.
 // Pure Dart: no Flutter imports.
@@ -20,6 +22,7 @@ import 'package:http/http.dart' as http;
 
 import 'api.dart';
 import 'model.dart';
+import 'region_lookup.dart';
 import 'report_body.dart' show problemReportMaxBytes;
 
 /// One rejected ping, as reported by the server (only the first 20 are listed).
@@ -265,5 +268,20 @@ class HttpCmatClient implements CmatClient {
       ));
     }
     return PublicCoverage(cells: cells, asOf: asOf, grid: grid);
+  }
+
+  @override
+  Future<List<RegionIndexEntry>> regionsIndex() async {
+    // Public endpoint: no x-driver-key.
+    final j = await _send('GET', 'regions-index');
+    final raw = j['regions'];
+    if (raw is! List) throw const CmatException('server sent a regions-index answer without regions');
+    if (j['asOf'] is! String) throw const CmatException('server sent a regions-index answer without asOf');
+    final regions = <RegionIndexEntry>[];
+    for (final r in raw) {
+      final parsed = RegionIndexEntry.tryParse(r);
+      if (parsed != null) regions.add(parsed); // skip a malformed region rather than lose the whole index
+    }
+    return regions;
   }
 }

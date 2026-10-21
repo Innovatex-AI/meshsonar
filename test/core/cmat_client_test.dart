@@ -226,4 +226,61 @@ void main() {
         client: MockClient((_) async => jsonRes({'error': 'not found'}, 404)));
     await expectLater(c.siteConfig(), throwsA(isA<CmatException>().having((e) => e.status, 's', 404)));
   });
+
+  test('regionsIndex GETs with no x-driver-key and parses every region', () async {
+    final c = HttpCmatClient(Uri.parse('https://x.org'), client: MockClient((req) async {
+      expect(req.method, 'GET');
+      expect(req.url.path, '/api/cmh/regions-index');
+      expect(req.headers.containsKey('x-driver-key'), isFalse);
+      return jsonRes({
+        'regions': [
+          {
+            'code': 'CMH',
+            'slug': 'cmh',
+            'name': 'Columbus, US',
+            'url': 'https://cmh.meshsonar.com',
+            'bbox': [-83.5, 39.75, -82.45, 40.65],
+            'boundary': {'type': 'Polygon', 'coordinates': []},
+          },
+          {'code': 'DAY', 'slug': 'day', 'name': 'Dayton, US', 'url': 'https://day.meshsonar.com', 'bbox': null},
+        ],
+        'asOf': '2026-10-20T12:00:00.000Z',
+      });
+    }));
+    final r = await c.regionsIndex();
+    expect(r.map((e) => e.code), ['CMH', 'DAY']);
+    expect(r.first.bbox, [-83.5, 39.75, -82.45, 40.65]);
+    expect(r.first.boundary?['type'], 'Polygon');
+    expect(r.last.bbox, isNull); // a real, expected state: the region just never matches
+  });
+
+  test('regionsIndex: a malformed region in the list is skipped, the rest of the index still comes back', () async {
+    final c = HttpCmatClient(Uri.parse('https://x.org'), client: MockClient((_) async => jsonRes({
+          'regions': [
+            {'code': 'CMH', 'slug': 'cmh', 'name': 'Columbus, US', 'url': 'https://cmh.meshsonar.com'},
+            {'slug': 'bad', 'name': 'No code'}, // missing required 'code'
+            'not even a map',
+          ],
+          'asOf': '2026-10-20T12:00:00.000Z',
+        })));
+    final r = await c.regionsIndex();
+    expect(r.map((e) => e.code), ['CMH']);
+  });
+
+  test('regionsIndex: missing regions throws CmatException', () async {
+    final c = HttpCmatClient(Uri.parse('https://x.org'),
+        client: MockClient((_) async => jsonRes({'asOf': '2026-10-20T12:00:00.000Z'})));
+    await expectLater(c.regionsIndex(), throwsA(isA<CmatException>()));
+  });
+
+  test('regionsIndex: missing asOf throws CmatException', () async {
+    final c = HttpCmatClient(Uri.parse('https://x.org'), client: MockClient((_) async => jsonRes({'regions': []})));
+    await expectLater(c.regionsIndex(), throwsA(isA<CmatException>()));
+  });
+
+  test('regionsIndex: 404 maps to CmatException', () async {
+    final c = HttpCmatClient(Uri.parse('https://x.org'),
+        client: MockClient((_) async => jsonRes({'error': 'not found'}, 404)));
+    await expectLater(c.regionsIndex(), throwsA(isA<CmatException>().having((e) => e.status, 's', 404)));
+  });
 }
