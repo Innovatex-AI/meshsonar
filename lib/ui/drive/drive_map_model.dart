@@ -38,8 +38,12 @@ class DriveMapModel extends ChangeNotifier {
   List<HeardView> get heard => _heard;
 
   GeoFix? _fix;
+
+  /// The live fix behind [position] (continuous while driving, via the same subscription), for callers that
+  /// need more than lat/lon -- e.g. its reported accuracy for a live GPS-accuracy indicator.
+  GeoFix? get fix => _fix ?? (state.driving ? state.status.lastFix : null);
   LatLng? get position {
-    final f = _fix ?? (state.driving ? state.status.lastFix : null);
+    final f = fix;
     return f == null ? null : LatLng(f.lat, f.lon);
   }
 

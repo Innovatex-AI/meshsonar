@@ -13,6 +13,7 @@ import '../app/app_state.dart';
 import 'app.dart';
 import 'device_feedback.dart';
 import 'drive/drive_controls.dart';
+import 'drive/drive_live_stats.dart';
 import 'drive/drive_map_model.dart';
 import 'drive/heard_box.dart';
 import 'map/coverage_map.dart';
@@ -31,6 +32,7 @@ class _DriveScreenState extends State<DriveScreen> {
   AppState? _state;
   DeviceFeedback? _feedback;
   DriveMapModel? _model;
+  DriveLiveStats? _liveStats;
 
   String? _lastPingId;
   bool _awake = false;
@@ -46,8 +48,10 @@ class _DriveScreenState extends State<DriveScreen> {
     if (!identical(s, _state)) {
       _state?.removeListener(_onState);
       _model?.dispose();
+      _liveStats?.dispose();
       _state = s;
       _model = DriveMapModel(s);
+      _liveStats = DriveLiveStats(s);
       s.addListener(_onState);
       _onState();
     }
@@ -78,6 +82,7 @@ class _DriveScreenState extends State<DriveScreen> {
   void dispose() {
     _state?.removeListener(_onState);
     _model?.dispose();
+    _liveStats?.dispose();
     if (_awake) unawaited(_feedback?.keepAwake(false));
     super.dispose();
   }
@@ -87,6 +92,7 @@ class _DriveScreenState extends State<DriveScreen> {
     final s = AppScope.of(context);
     final t = Theme.of(context);
     final model = _model!;
+    final liveStats = _liveStats!;
     final report = s.driving ? null : s.lastFinishedSessionId;
     final showReport = report != null && report != _dismissedReport;
 
@@ -139,6 +145,16 @@ class _DriveScreenState extends State<DriveScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: Gap.m),
                 child: DriveStatsStrip(state: s),
               ),
+              if (s.driving)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(Gap.m, Gap.s, Gap.m, 0),
+                  // liveStats notifies on its own, separately from AppState (e.g. once its one-time local-history
+                  // read for the new/repeat cell tally resolves), so this tile needs its own small listener too.
+                  child: AnimatedBuilder(
+                    animation: liveStats,
+                    builder: (context, _) => DriveLiveStatsStrip(state: s, liveStats: liveStats, fix: model.fix),
+                  ),
+                ),
               if (s.unsavedCount > 0)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: Gap.m),

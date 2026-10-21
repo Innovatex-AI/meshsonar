@@ -3,9 +3,9 @@
 All notable changes to MeshSonar. Dates are local (US Eastern). This changelog was reconstructed from the commit
 history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md](ROADMAP.md).
 
-## [0.11.0] — 2026-10-20 — discovery (listen-only) mode
+## [0.12.0] — 2026-10-21 — discovery (listen-only) mode
 
-`pubspec.yaml` is `0.11.0+15`. Bundle id unchanged. A pure app-side feature — no server change (`docs/
+`pubspec.yaml` is `0.12.0+16`. Bundle id unchanged. A pure app-side feature — no server change (`docs/
 MESHSONAR_DRIVE_FORMAT.md` already documents `"kind": "tx" | "rx"` as current, accepted, default `"tx"`), and no
 collision with the in-progress drive-stats work in its own separate worktree.
 
@@ -42,8 +42,30 @@ repeater) is mirrored.
   computed in `lib/core/drive_store.dart`, and `lib/ui/sessions_screen.dart`'s percentage now guards on it the
   same way. `AppState.heardPercent` (the live Drive-screen stats strip) had the identical bug — only ever dormant
   before this feature made an all-rx drive possible — and got the same fix (`AppState._txCount`).
-- Gate: `flutter analyze` clean, `flutter test` all green (baseline 588 passing / 7 skipped, plus this feature's
-  new tests).
+- Gate: `flutter analyze` clean, `flutter test` all green (baseline 591 passing / 7 skipped after the previous
+  release below, plus this feature's new tests).
+
+## [0.11.0] — 2026-10-21 — more live, mid-drive stats
+
+`pubspec.yaml` is `0.11.0+15`. Bundle id unchanged. Pure UI/local-logic addition — no wire format change, no new
+server calls.
+
+- **A second stats strip on the Drive screen, shown only while actually driving** (hidden before Start and after
+  Stop — the drive report covers the final figures once the drive is over):
+  - **Distance** and **Elapsed** for this session, summed/measured the same way `DriveStats`/`DriveReport` already
+    do (ping-to-ping haversine; `session.startedAt` vs. the clock) — just live instead of computed once at the end.
+  - **A running new-vs-repeat grid-cell tally** ("N new" / "N repeat"): the live counterpart of the after-drive
+    report's "new grids" figure. New `lib/ui/drive/drive_live_stats.dart` (`DriveLiveStats`, a `ChangeNotifier` owned
+    by the Drive screen) reuses `drive_report.dart`'s exact cell identity (`cellIndexOf`, CMAT's 0.002°×0.0025° grid)
+    and its earlier-local-drives history rule, reading that history once per drive (async) and then classifying each
+    new tx ping against it incrementally, rather than recomputing the whole drive's cells on every ping.
+  - **GPS accuracy of the current fix** ("±N m", colour-coded good/fair/poor by the same bands `position_filter.dart`
+    already treats as acceptable/marginal; "No fix" while waiting for one). `DriveMapModel` gained a `fix` getter
+    (the `GeoFix` behind the existing `position`) so this reads the same continuously-updated fix the live map
+    position already uses, rather than opening a second GPS subscription.
+- **Deliberately left out this pass:** a "time since last heard repeater" stat — the live heard box already shows
+  each repeater's `pings ago`/`missed N` state, and a second, wall-clock-based number next to it would compete for
+  attention rather than add anything a driver can't already see at a glance.
 
 ## [0.10.0] — 2026-10-20 — live region awareness
 
