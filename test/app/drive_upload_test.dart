@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/app/services.dart';
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/model.dart';
+import 'package:meshsonar/core/region_lookup.dart';
 import 'package:meshsonar/core/sync_service.dart';
 
 import '../ui/fakes.dart';
@@ -229,6 +230,9 @@ class RecordingClient implements CmatClient {
 
   @override
   Future<PublicCoverage> publicCoverage() => throw UnimplementedError();
+
+  @override
+  Future<List<RegionIndexEntry>> regionsIndex() => throw UnimplementedError();
 }
 
 /// Harness whose sync service is the real DefaultSyncService over the fake store.

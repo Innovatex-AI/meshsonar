@@ -17,6 +17,7 @@ import '../core/diagnostics.dart';
 import '../core/drive_store.dart' show closeOrphanedSessions;
 import '../core/heard.dart';
 import '../core/model.dart';
+import '../core/region_lookup.dart';
 import '../core/repeater_directory.dart';
 import '../core/report_body.dart';
 import '../core/server_url.dart';
@@ -113,6 +114,78 @@ class AppState extends ChangeNotifier {
     } catch (e) {
       _logError('Fetching network coverage failed', e);
     }
+  }
+
+  // ---------- region awareness (live, local; GET /api/cmh/regions-index) ----------
+  // The server already tags every ping's true region correctly at upload time regardless of connectivity — this
+  // is purely live, in-app feedback: "which region is the phone physically in right now", for a badge on the
+  // Drive screen and a one-shot notice on a border crossing mid-drive. bbox-only this pass (lib/core/
+  // region_lookup.dart's regionAt).
+  late final RegionIndexService _regionIndexService = RegionIndexService(
+    fetch: () => client.regionsIndex(),
+    cache: services.regionIndexCache ?? MemoryRegionIndexCache(),
+  );
+
+  /// Every region `regions-index` knows about: the on-disk cache before the first fetch answers, then whatever
+  /// the most recent successful fetch returned. Empty before anything has ever loaded (first run, offline).
+  List<RegionIndexEntry> get regionIndex => _regionIndexService.regions;
+
+  /// True once [regionIndex] holds something (cache or a live fetch); false only on a first run with no cache
+  /// and no connectivity yet. Drives the Drive screen's region badge: nothing to show before this is true.
+  bool get regionIndexLoaded => _regionIndexService.everLoaded;
+
+  /// True when [regionIndex] is the last-known cache rather than a fresh fetch — the live `regions-index` fetch
+  /// most recently failed (offline, server hiccup). Region matching still runs off the stale cache; this only
+  /// says it might be stale.
+  bool get regionIndexStale => _regionIndexService.lastError != null;
+
+  RegionIndexEntry? _currentRegion;
+
+  /// Which MeshSonar region the phone is physically in right now (bbox-only match against [regionIndex]). Null
+  /// with no GPS fix yet, or with a fix outside every known region's bbox — both real, expected states, not
+  /// errors.
+  RegionIndexEntry? get currentRegion => _currentRegion;
+
+  GeoFix? _lastRegionFix;
+
+  /// True once a GPS fix has ever been used to evaluate [currentRegion] (distinguishes "still locating" from
+  /// "located, but outside coverage" — both show as [currentRegion] == null).
+  bool get regionFixKnown => _lastRegionFix != null;
+
+  /// Re-evaluates [currentRegion] for [fix] against [regionIndex]. A genuine crossing into a different *known*
+  /// region while driving fires the one-shot notice (reusing [_say]/[takeNotice], the same mechanism the upload
+  /// success/error banners use) — detection at startup or while idle updates the badge quietly, with no popup.
+  void _updateRegion(GeoFix? fix) {
+    if (fix == null) return;
+    _lastRegionFix = fix;
+    final next = regionAt(regionIndex, fix.lat, fix.lon);
+    final changed = next?.code != _currentRegion?.code;
+    _currentRegion = next;
+    if (changed && next != null && driving) _say('Entered ${next.code}');
+    notifyListeners();
+  }
+
+  /// Loads the cached regions-index (if any), fetches the live one, and re-checks [currentRegion] against the
+  /// best GPS fix available — all at startup, before any drive begins (the owner wants region awareness the
+  /// moment the app opens, not only once a drive starts). Called unawaited by [init] and again whenever the
+  /// server URL changes. Failures are quiet (logged, not shown): the badge just falls back to "no fix"/"no
+  /// region" states, exactly like [refreshSiteConfig].
+  Future<void> refreshRegionIndex() async {
+    await _regionIndexService.loadCached();
+    notifyListeners();
+    GeoFix? fix;
+    try {
+      fix = await _locationSource.current();
+    } catch (e) {
+      _logError('Getting a GPS fix for region awareness failed', e);
+    }
+    if (fix != null) _updateRegion(fix);
+    await _regionIndexService.refresh();
+    final regionErr = _regionIndexService.lastError;
+    if (regionErr != null) diagnostics.add('Fetching regions-index failed: $regionErr');
+    // The index may have just changed (first fetch, or a different index than the cache): re-check the same fix.
+    if (fix != null) _updateRegion(fix);
+    notifyListeners();
   }
 
   /// Last few characters only; the full key is never shown.
@@ -511,6 +584,9 @@ class AppState extends ChangeNotifier {
       _pingSub = engine.pings.listen(_onPing, onError: (Object e) => _say(friendlyError(e, action: 'A ping')));
       _statusSub = engine.status.listen((st) {
         _status = st;
+        // Rides the engine's own GPS stream (already gated to active drives only) rather than opening a second,
+        // always-on Geolocator subscription just for region awareness.
+        if (st.lastFix != null) _updateRegion(st.lastFix);
         notifyListeners();
       });
       final txW = info?.radio.txDbm == null ? null : _dbmToWatts(info!.radio.txDbm!);
@@ -931,6 +1007,7 @@ class AppState extends ChangeNotifier {
     unawaited(_loadDirectory());
     unawaited(refreshSiteConfig());
     unawaited(refreshNetworkCoverage());
+    unawaited(refreshRegionIndex());
     await _loadSavedReport();
     _loaded = true;
     notifyListeners();
@@ -979,6 +1056,9 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     if (serverChanged) unawaited(refreshSiteConfig());
     if (serverChanged) unawaited(refreshNetworkCoverage());
+    // Not cleared immediately like siteConfig/networkCoverage: the phone's physical region hasn't changed just
+    // because the server did, and the old index is a defensible stale guess until the new one answers.
+    if (serverChanged) unawaited(refreshRegionIndex());
     try {
       await services.settingsStore.save(s);
     } catch (e) {

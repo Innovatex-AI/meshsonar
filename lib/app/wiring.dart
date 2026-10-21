@@ -9,6 +9,7 @@ import 'package:uuid/uuid.dart';
 import '../core/cmat_client.dart';
 import '../core/drive_store.dart';
 import '../core/position_filter.dart';
+import '../core/region_lookup.dart';
 import '../core/repeater_directory.dart';
 import '../core/report_draft_store.dart';
 import '../core/settings_store.dart';
@@ -83,6 +84,7 @@ Future<AppServices> buildRealServices() async {
     // The public map is ~17 MB; repeaters rarely move, so refresh weekly (or when the drive area moves >75 km).
     directory: RepeaterDirectory(
         cacheFile: File('${root.path}${Platform.pathSeparator}node_directory.json'), ttl: const Duration(days: 7)),
+    regionIndexCache: FileRegionIndexCache(File('${root.path}${Platform.pathSeparator}regions_index.json')),
     clock: DateTime.now,
     newId: () => uuid.v4(),
   );

@@ -245,7 +245,18 @@ class _MapPane extends StatelessWidget {
               right: Gap.s,
               top: Gap.s,
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
+                  // Region awareness lives in this corner, above the icon buttons, so it never competes with
+                  // the hint/heard-box/report overlays for the same space. Nothing is added here (no chip, no
+                  // gap) until there's something real to show — see RegionChip's own "no cache yet" state.
+                  if (s.regionIndexLoaded) ...[
+                    ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: (box.maxWidth - 2 * Gap.s - 46).clamp(80.0, 180.0)),
+                      child: RegionChip(state: s),
+                    ),
+                    const SizedBox(height: Gap.s),
+                  ],
                   MapIconButton(
                     key: const Key('map-fullscreen'),
                     icon: Icons.open_in_full_rounded,

@@ -5,6 +5,7 @@ import 'dart:io';
 
 import 'antenna_profile.dart';
 import 'model.dart';
+import 'region_lookup.dart';
 import 'server_url.dart';
 
 /// Per-session numbers for lists.
@@ -209,6 +210,12 @@ abstract class CmatClient {
 
   /// Network-wide measured coverage cells (the website's `/coverage` map data). Public: no driver key needed.
   Future<PublicCoverage> publicCoverage();
+
+  /// Every MeshSonar region this server (or federation) knows about (`GET /api/cmh/regions-index`): code, slug,
+  /// name, URL, bbox and boundary — used entirely on-device for live, local region awareness (lib/core/
+  /// region_lookup.dart), never to decide a ping's region (the server already does that at upload time
+  /// regardless of connectivity). Public: no driver key needed.
+  Future<List<RegionIndexEntry>> regionsIndex();
 }
 
 /// The server's answer to a filed problem report.

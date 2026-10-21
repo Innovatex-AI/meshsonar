@@ -6,6 +6,7 @@ import 'dart:io';
 
 import '../core/api.dart';
 import '../core/model.dart';
+import '../core/region_lookup.dart';
 import '../core/repeater_directory.dart';
 import '../core/report_draft_store.dart';
 import '../radio/radio_api.dart';
@@ -97,6 +98,10 @@ class AppServices {
   /// Small JSON file for UI-only preferences (first-run intro seen, drive names). Null = keep them in memory only.
   final File? uiPrefsFile;
 
+  /// Local cache of the last-fetched regions-index (live region awareness). Null = in-memory only for this run
+  /// (tests; AppState falls back to a [MemoryRegionIndexCache]).
+  final RegionIndexCache? regionIndexCache;
+
   final DateTime Function() clock;
   final String Function() newId;
 
@@ -121,6 +126,7 @@ class AppServices {
     this.uiPrefsFile,
     this.directory,
     this.reportDraftStore,
+    this.regionIndexCache,
   });
 
   /// Public node directory (map.meshcore.io) for names/positions CMAT doesn't know. Null = not used (tests).

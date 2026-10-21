@@ -3,6 +3,40 @@
 All notable changes to MeshSonar. Dates are local (US Eastern). This changelog was reconstructed from the commit
 history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md](ROADMAP.md).
 
+## [0.10.0] — 2026-10-20 — live region awareness
+
+`pubspec.yaml` is `0.10.0+14`. Bundle id unchanged. Builds on the website's `GET /api/cmh/regions-index`
+(already live, serving the same region codes/bboxes/boundaries for `meshsonar.com` and every `<region>.
+meshsonar.com` host). This is purely live, local, in-app feedback — the server already tags every ping's true
+region correctly at upload time regardless of connectivity, so this never changes what a ping is tagged as.
+
+- **Drive-screen badge: which MeshSonar region the phone is physically in, right now.** A small chip above the
+  map's full-screen/layers buttons shows the region's code (e.g. "CMH") once a fix and a regions index are both
+  known. Detected at app startup (one-shot GPS fix, before any drive begins) and kept live during a drive by
+  riding the engine's own GPS stream — no second, always-on `Geolocator` subscription. States handled
+  explicitly, each shown plainly rather than left blank: nothing yet (no cache, no fetch has ever answered) —
+  badge hidden; a fix but no regions-index data — "Locating…"; a fix outside every known region's bbox —
+  "Outside coverage"; offline on a stale cache — the matched code, with the tooltip saying so; a normal match —
+  the code, full name in the tooltip.
+- **A one-shot "Entered DAY" notice on a border crossing mid-drive.** Reuses the same transient-notice mechanism
+  as the upload success/error banners (`AppState._say`/`pendingNotice`/`takeNotice`, shown as a `SnackBar` by
+  `HomeShell`) rather than inventing a new one. Only fires for a genuine change into a different *named* region
+  while actively driving; silent background detection at startup or while idle never pops a toast.
+  - New `CmatClient.regionsIndex()` (public, no driver key) in `lib/core/api.dart`/`cmat_client.dart`, following
+    `siteConfig()`'s parsing/error convention exactly (malformed response → `CmatException`, not silent garbage).
+  - New `lib/core/region_lookup.dart` (pure Dart): `RegionIndexEntry` model (code/slug/name/url/bbox/boundary),
+    `regionAt()` — bbox-only point-in-rectangle matching with a nearest-bbox-centroid tiebreak for overlaps — and
+    `RegionIndexCache`/`FileRegionIndexCache`/`MemoryRegionIndexCache` + `RegionIndexService`, a fetch-then-cache
+    wrapper mirroring `FileRepeaterCache`'s shape: a failed fetch falls back to the last-cached index rather than
+    going blank.
+  - **Scope cut, deliberate:** matching is bbox-only this pass, not point-in-polygon against `boundary` (real
+    algorithmic risk under a same-day deadline) — `boundary` (`Polygon` or `MultiPolygon`) is parsed and cached
+    for later, never evaluated yet. No per-ping region/IATA field was added to the upload wire format (a
+    separate, lower-value, cross-repo change). Overlapping bboxes at a point are resolved by nearest centroid —
+    simple and defensible, not a geometric guarantee; a judgment call for this pass.
+  - `AppServices` gained an optional `regionIndexCache` (null in tests unless set; the real app wires a
+    `FileRegionIndexCache` next to `settings.json`).
+
 ## [0.9.0] — 2026-10-20 — network coverage on the live map
 
 `pubspec.yaml` is `0.9.0+13`. Bundle id unchanged. Builds on the website's `GET /api/cmh/public-coverage`
