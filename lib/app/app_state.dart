@@ -15,6 +15,8 @@ import '../core/antenna_profile.dart';
 import '../core/api.dart';
 import '../core/coverage_query.dart';
 import '../core/diagnostics.dart';
+import '../core/drive_context.dart' show stripContextCategories;
+import '../core/drive_context_session.dart';
 import '../core/drive_store.dart' show closeOrphanedSessions;
 import '../core/heard.dart';
 import '../core/model.dart';
@@ -32,9 +34,11 @@ import '../core/report_body.dart';
 import '../core/server_url.dart';
 import '../core/telemetry.dart';
 import '../core/telemetry_uploader.dart';
+import '../core/phone_sensors.dart';
 import '../core/units.dart';
 import '../platform/app_lifecycle_bridge.dart';
 import '../radio/radio_api.dart';
+import 'drive_context_hook.dart';
 import 'messages.dart';
 import 'services.dart';
 
@@ -816,6 +820,51 @@ class AppState extends ChangeNotifier {
     return _tele.eraseServerData();
   }
 
+  // ---------- drive context (stream 7: lib/app/drive_context_hook.dart, lib/core/drive_context_session.dart) ----------
+  DriveContextSession? _ctx;
+  bool _collectionSeen = false;
+  SensorStatus? _baroStatus;
+
+  /// The collection category [id] is on: its switch (opt-out) AND the disclosure that lists it has been seen. Read at
+  /// every write of the drive context, so off takes effect at the next sample.
+  bool collectionOn(String id) =>
+      _settings.collectionOn(id) && (id == 'packet_headers' ? _telemetryDisclosed() : _collectionDisclosed());
+
+  bool _collectionDisclosed() {
+    if (_collectionSeen) return true;
+    final f = services.uiPrefsFile;
+    if (f == null) return _collectionSeen = true; // tests / no file system, as for packet headers
+    return _collectionSeen = collectionDisclosureSeenIn(f);
+  }
+
+  /// The disclosure sheet was just seen: collection may start now (also mid-drive).
+  void noteCollectionDisclosed() {
+    _collectionSeen = true;
+    _telemetryDisclosedSeen = true;
+    _ctx?.refresh();
+    notifyListeners();
+  }
+
+  /// The phone barometer as last seen by a drive (Settings shows it); unsupported when this build has none.
+  SensorStatus get barometerStatus =>
+      services.barometer == null ? SensorStatus.unsupported : (_ctx?.barometerStatus ?? _baroStatus ?? SensorStatus.notStarted);
+
+  /// Deletes category [id]'s recorded context from every drive on this phone. Returns how many drives changed.
+  Future<int> deleteCollectedLocally(String id) async {
+    final ledger = contextLedgerOf(services);
+    if (ledger == null) return 0;
+    final ids = [for (final x in await services.store.sessions()) x.session.id];
+    return (await stripContextCategories(ledger, ids, {id})).length;
+  }
+
+  void _stopDriveContext() {
+    final c = _ctx;
+    if (c == null) return;
+    _baroStatus = c.barometerStatus;
+    c.stop();
+    _ctx = null;
+  }
+
   Future<bool> connect(RadioDevice device, RadioKind kind) async {
     if (driving) {
       _say('Stop the drive before switching radios.');
@@ -1172,6 +1221,7 @@ class AppState extends ChangeNotifier {
         // Rides the engine's own GPS stream (already gated to active drives only) rather than opening a second,
         // always-on Geolocator subscription just for region awareness.
         if (st.lastFix != null) _updateRegion(st.lastFix);
+        if (st.lastFix != null) _ctx?.onFix(st.lastFix!);
         notifyListeners();
       });
       final txW = info?.radio.txDbm == null ? null : _dbmToWatts(info!.radio.txDbm!);
@@ -1183,6 +1233,14 @@ class AppState extends ChangeNotifier {
         txDbm: info?.radio.txDbm,
         listenOnly: s.discoveryMode,
       ));
+      _ctx = newDriveContext(
+          services: services,
+          sessionId: session.id,
+          link: link,
+          isOn: collectionOn,
+          pingBusy: () => _pinging || engine.current.state == EngineState.pinging,
+          onStatus: notifyListeners);
+      unawaited(_ctx?.start());
       _scheduleDriveSync();
       unawaited(_idle?.setDriving(true));
       diagnostics.add(s.discoveryMode
@@ -1194,6 +1252,7 @@ class AppState extends ChangeNotifier {
       // doesn't look "still driving".
       final sid = _session?.id;
       _cancelDriveSync();
+      _stopDriveContext();
       await _teardownEngine();
       await _flushWrites();
       if (sid != null) {
@@ -1253,6 +1312,7 @@ class AppState extends ChangeNotifier {
       for (var i = 0; i < pending.length; i++) {
         try {
           await services.store.appendPing(sessionId, pending[i]);
+          if (_session?.id == sessionId) unawaited(_ctx?.onPingSaved(pending[i])); // context only after the ping is saved
         } catch (e) {
           _unsaved.addAll(pending.sublist(i));
           _say('Couldn\'t save a ping to this device; will retry. ${friendlyError(e, action: 'Saving')}');
@@ -1317,6 +1377,7 @@ class AppState extends ChangeNotifier {
       await Future<void>.microtask(() {});
       await _teardownEngine();
       await _flushWrites();
+      _stopDriveContext();
       try {
         await services.store.endSession(session.id, services.clock().toUtc());
       } catch (e) {
@@ -1679,6 +1740,7 @@ class AppState extends ChangeNotifier {
     heard.holdPings = s.heardHoldPings; // the heard list's live/stale rule follows the slider at once, even mid-drive
     _scheduleDriveSync(); // in-drive upload follows the toggles, the period and the key status
     _applyPingCadence(s);
+    _ctx?.refresh(); // a drive-context category switched off stops at once, one switched on starts now
     notifyListeners();
     if (serverChanged) unawaited(refreshSiteConfig());
     if (serverChanged) unawaited(refreshNetworkCoverage());

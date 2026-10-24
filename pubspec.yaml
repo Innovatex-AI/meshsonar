@@ -50,6 +50,9 @@ dependencies:
   crypto: ^3.0.7
   vector_map_tiles: ^9.0.0-beta.13
   vector_tile_renderer: ^6.1.0
+  sensors_plus: ^7.1.1
+  battery_plus: ^7.1.2
+  device_info_plus: ^13.3.0
 dev_dependencies:
   integration_test:
     sdk: flutter

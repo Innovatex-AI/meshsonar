@@ -4,6 +4,8 @@
 import 'package:flutter/material.dart';
 
 import '../../app/app_state.dart';
+import '../../core/data_categories.dart' show CategoryId;
+import '../../core/phone_sensors.dart' show phoneTemperatureNote;
 import '../always_location_screen.dart';
 import '../app.dart';
 import 'data_sharing.dart';
@@ -78,17 +80,10 @@ class DataCategoryTile extends StatelessWidget {
     final s = AppScope.of(context);
     final c = category;
     final on = c.isOn(s.settings);
-    final waiting = c.queued?.call(s) ?? 0;
-    final status = !on
-        ? 'Off: nothing is collected.'
-        : !s.hasKey
-            ? 'On, but nothing is collected until this phone has a driver key.'
-            : waiting > 0
-                ? '$waiting waiting on this phone to be sent.'
-                : null;
+    final status = !on ? 'Off: nothing is collected.' : c.onStatus?.call(s);
     return SwitchListTile(
       key: Key(c.toggleKey),
-      secondary: const Icon(Icons.podcasts),
+      secondary: Icon(categoryIcon(c.coreId)),
       title: Text(c.title),
       subtitle: Text(status == null ? c.summary : '${c.summary}\n$status'),
       value: on,
@@ -96,6 +91,18 @@ class DataCategoryTile extends StatelessWidget {
     );
   }
 }
+
+/// The icon of a category's switch.
+IconData categoryIcon(String coreId) => switch (coreId) {
+      CategoryId.motion => Icons.terrain_outlined,
+      CategoryId.barometer => Icons.speed_outlined,
+      CategoryId.phoneBattery => Icons.battery_std_outlined,
+      CategoryId.device => Icons.smartphone_outlined,
+      CategoryId.radioHealth => Icons.monitor_heart_outlined,
+      CategoryId.radioConfig => Icons.settings_input_antenna,
+      CategoryId.weather => Icons.cloud_outlined,
+      _ => Icons.podcasts,
+    };
 
 /// Turning sharing on asks first (it states exactly what goes where). Turning it off takes effect at once (collection
 /// stops, the unsent queue is deleted); with a driver key, so something may have been sent, the person is also asked
@@ -115,6 +122,10 @@ Future<void> setDataCategory(BuildContext context, AppState s, DataCategory c, b
     return;
   }
   await s.updateSettings(c.set(s.settings, false));
+  if (c.localOnly) {
+    if (context.mounted) await _offerLocalDelete(context, s, c, messenger);
+    return;
+  }
   if (c.eraseFromServer == null || !s.hasKey || !context.mounted) {
     messenger?.showSnackBar(SnackBar(content: Text('${c.title} is off. ${c.offEffect}')));
     return;
@@ -135,6 +146,35 @@ Future<void> setDataCategory(BuildContext context, AppState s, DataCategory c, b
   if (erase != true) return;
   final n = await c.eraseFromServer!(s);
   messenger?.showSnackBar(SnackBar(content: Text(_erasedText(c, n))));
+}
+
+/// Off for a category whose data never left the phone: says so, and offers to delete what is saved here (default
+/// Keep: it is the driver's own data and the drive reports use it).
+Future<void> _offerLocalDelete(
+    BuildContext context, AppState s, DataCategory c, ScaffoldMessengerState? messenger) async {
+  final delete = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      key: Key('${c.id}-local-dialog'),
+      title: Text('${c.title} is off'),
+      content: Text('${c.offEffect}\n\nDelete removes the ${c.erasedNoun} from every drive on this phone. The drives '
+          'themselves stay.'),
+      actions: [
+        TextButton(key: Key('${c.id}-local-keep'), onPressed: () => Navigator.pop(ctx, false), child: const Text('Keep')),
+        FilledButton(
+            key: Key('${c.id}-local-delete'), onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
+      ],
+    ),
+  );
+  if (delete != true) {
+    messenger?.showSnackBar(SnackBar(content: Text('${c.title} is off. What is saved on this phone stays.')));
+    return;
+  }
+  final n = await c.deleteLocal(s);
+  messenger?.showSnackBar(SnackBar(
+      content: Text(n == 0
+          ? 'Nothing of it was saved on this phone.'
+          : 'Deleted the ${c.erasedNoun} from $n drive${n == 1 ? '' : 's'} on this phone.')));
 }
 
 String _erasedText(DataCategory c, int? n) =>
@@ -192,6 +232,8 @@ class WhatIsSharedScreen extends StatelessWidget {
             Text(c.destination),
             Text(c.offEffect),
           ],
+          head('Not collected'),
+          const Text(phoneTemperatureNote),
           for (final f in otherDataFlows) ...[head(f.title), Text(f.body)],
           head('Location'),
           for (final p in locationPoints) ...[

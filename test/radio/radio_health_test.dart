@@ -89,6 +89,9 @@ class FakeStats implements RadioStatsSource {
   bool get isConnected => connected;
   @override
   Future<BattAndStorageFrame?> batteryAndStorage() async => _rec('batt', batt);
+  SelfTelemetry? telemetry = const SelfTelemetry(mcuTempC: 31.5, voltageV: 3.91);
+  @override
+  Future<SelfTelemetry?> selfTelemetry() async => _rec('telemetry', telemetry);
   @override
   Future<CoreStatsFrame?> coreStats() async => _rec('core', core);
   @override
@@ -130,7 +133,7 @@ void main() {
   test('first poll at start: radio, core, packets, battery+storage in order; one sample with every field', () async {
     poller.start();
     await time.advance(Duration.zero);
-    expect(src.calls.map((c) => c.$1), ['radio', 'core', 'packets', 'batt']);
+    expect(src.calls.map((c) => c.$1), ['radio', 'core', 'packets', 'batt', 'telemetry']);
     expect(out, hasLength(1));
     final j = out.single.toJson();
     expect(j, {
@@ -155,6 +158,7 @@ void main() {
         'recv_errors': 37
       },
       'storage_kb': {'used': 120, 'total': 1984},
+      'mcu_temp_c': 31.5,
     });
     expect(poller.lastSample, same(out.single));
   });
@@ -181,7 +185,7 @@ void main() {
     expect(src.calls, isEmpty);
     busy = false;
     await time.advance(const Duration(seconds: 1));
-    expect(src.calls.map((c) => c.$1), ['radio', 'core', 'packets', 'batt']);
+    expect(src.calls.map((c) => c.$1), ['radio', 'core', 'packets', 'batt', 'telemetry']);
     expect(src.calls.every((c) => !c.$3), isTrue);
     expect(out.single.ts, DateTime.utc(2026, 10, 24, 20), reason: 'sample time = poll start');
   });
@@ -198,7 +202,7 @@ void main() {
     src.after = null;
     busy = false;
     await time.advance(const Duration(seconds: 1));
-    expect(src.calls.map((c) => c.$1), ['radio', 'core', 'packets', 'batt']);
+    expect(src.calls.map((c) => c.$1), ['radio', 'core', 'packets', 'batt', 'telemetry']);
     expect(src.calls.every((c) => !c.$3), isTrue);
     expect(out, hasLength(1));
   });
@@ -255,6 +259,7 @@ void main() {
     src.core = null;
     src.radio = null;
     src.packets = null;
+    src.telemetry = null;
     poller.start();
     await time.advance(Duration.zero);
     await time.advance(const Duration(seconds: 60));
@@ -276,6 +281,7 @@ void main() {
     src.radio = null;
     src.packets = null;
     src.batt = null;
+    src.telemetry = null;
     poller.start();
     await time.advance(Duration.zero);
     expect(out, isEmpty);

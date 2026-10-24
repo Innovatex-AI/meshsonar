@@ -30,6 +30,7 @@ DriveSample fullRadio() => DriveSample(
       storageUsedKb: 120,
       storageTotalKb: 1984,
       bleRssi: -61,
+      mcuTempC: 31.5,
     );
 
 DriveSample fullPhone() => DriveSample(
@@ -63,7 +64,7 @@ void main() {
         'weather',
       ]);
       expect(dataCategories.every((c) => c.defaultOn), isTrue);
-      expect(dataCategories.where((c) => c.availability == CategoryAvailability.live).map((c) => c.id), ['packet_headers']);
+      expect(dataCategories.where((c) => c.availability != CategoryAvailability.live).map((c) => c.id), ['weather']);
       expect(dataCategory('barometer')!.permission, 'motion');
       expect(dataCategory('nope'), isNull);
     });

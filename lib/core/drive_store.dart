@@ -498,11 +498,23 @@ class JsonlDriveStore implements DriveStore, SyncLedger, StorageSized, DriveCont
 
   @override
   Future<File> exportSession(String sessionId, AppInfo app, Directory outDir) async {
-    final (s, pings) = await _locked(sessionId, () async => (await _readSession(sessionId), await _readPings(sessionId)));
+    final (s, pings, ctx) = await _locked(
+        sessionId,
+        () async => (
+              await _readSession(sessionId),
+              await _readPings(sessionId),
+              exportContextJson(
+                samples: await _readSamples(sessionId),
+                pingContexts: await _readPingContexts(sessionId),
+                session: await _readSessionContext(sessionId),
+              ),
+            ));
     if (s == null) throw StateError('no such session: $sessionId');
     await outDir.create(recursive: true);
     final f = File(p.join(outDir.path, exportFileName(s)));
-    await _writeAtomic(f, jsonEncode(DriveBatch(app: app, session: s, pings: pings).toJson()));
+    // The drive itself is exactly the upload body; the driver's recorded context rides along as `context` (their own
+    // file; nothing of it is uploaded).
+    await _writeAtomic(f, jsonEncode({...DriveBatch(app: app, session: s, pings: pings).toJson(), 'context': ?ctx}));
     return f;
   }
 }

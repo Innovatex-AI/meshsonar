@@ -6,6 +6,7 @@ import 'dart:io';
 
 import '../core/api.dart';
 import '../core/model.dart';
+import '../core/phone_sensors.dart';
 import '../core/idle_region_watcher.dart';
 import '../core/region_cache.dart';
 import '../core/region_lookup.dart';
@@ -122,6 +123,12 @@ class AppServices {
   /// Region roster + network repeater list sync with its on-disk store. Null = off (tests).
   final RepeaterSync? repeaterSync;
 
+  /// Phone sensors for the drive context (stream 7, lib/platform/phone_sensors_plus.dart). Null = this phone/build
+  /// has none (tests, desktop): the category says so and nothing is read.
+  final BarometerSource? barometer;
+  final PhoneBatterySource? phoneBattery;
+  final DeviceDetailsSource? deviceDetails;
+
   final DateTime Function() clock;
   final String Function() newId;
 
@@ -153,6 +160,9 @@ class AppServices {
     this.lastKnownStore,
     this.locationAccess,
     this.repeaterSync,
+    this.barometer,
+    this.phoneBattery,
+    this.deviceDetails,
   });
 
   /// Public node directory (map.meshcore.io) for names/positions CMAT doesn't know. Null = not used (tests).
