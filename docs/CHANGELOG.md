@@ -3,6 +3,11 @@
 All notable changes to MeshSonar. Dates are local (US Eastern). This changelog was reconstructed from the commit
 history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md](ROADMAP.md).
 
+## [0.17.0] — 2026-10-23 — Units everywhere, offline map packs
+
+- Settings > Units (Auto / Metric / Imperial) now drives every distance, speed and height shown in the app: drive stats, drive detail and sessions, the drive report and its exported text, map rings and repeater link tags, heard box and repeater widgets, ping detail, the antenna sheet and the min-distance slider; the region Stats, All regions, Reports and Repeater detail screens follow it too. Auto follows the phone's region (US, Liberia and Myanmar are imperial).
+- Offline map packs (Settings > About > Offline maps): download, pause, update and delete per-region PMTiles packs; the map draws a pack when one covers the view. No pack is published yet.
+
 ## [0.16.0] — 2026-10-23 — Stats, All regions, Live, Radio tab, border-crossing polish
 
 - Region screen: Stats tab (live drivers, figures, 30-day leaderboard), All regions screen (groups, per-region figures, sortable compare table), and a Live tab streaming region packets over SSE (reconnect with backoff, 65 s watchdog, pauses in the background).

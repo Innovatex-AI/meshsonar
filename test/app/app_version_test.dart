@@ -26,9 +26,9 @@ void main() {
     expect((await loadAppInfo(platform: 'linux', read: () async => empty)).version, isNull);
   });
 
-  test('pubspec is 0.16.0+20 and no Dart file hard-codes an app version any more', () {
+  test('pubspec is 0.17.0+21 and no Dart file hard-codes an app version any more', () {
     final pubspec = File('pubspec.yaml').readAsStringSync();
-    expect(RegExp(r'^version: (\S+)$', multiLine: true).firstMatch(pubspec)!.group(1), '0.16.0+20');
+    expect(RegExp(r'^version: (\S+)$', multiLine: true).firstMatch(pubspec)!.group(1), '0.17.0+21');
     final offenders = <String>[];
     for (final f in Directory('lib').listSync(recursive: true).whereType<File>().where((f) => f.path.endsWith('.dart'))) {
       final src = f.readAsStringSync();
