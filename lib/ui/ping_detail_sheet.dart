@@ -5,7 +5,8 @@ import 'package:flutter/services.dart';
 
 import '../core/heard.dart';
 import '../core/model.dart';
-import 'drive_stats.dart' show formatDistance;
+import '../core/units.dart';
+import 'app.dart' show AppScope;
 import 'repeater_widgets.dart';
 import 'theme.dart';
 import 'widgets.dart';
@@ -33,8 +34,6 @@ Future<void> showPingDetail(
   );
 }
 
-String _speed(double mps) => '${(mps * 3.6).round()} km/h · ${(mps * 2.236936).round()} mph';
-
 String _ll(double v) => v.toStringAsFixed(5);
 
 String _result(DrivePing p) {
@@ -45,12 +44,12 @@ String _result(DrivePing p) {
 }
 
 /// Plain-text version of a ping (for "Copy as text"). Unmeasured values are left out, never guessed.
-String pingAsText(DrivePing p, RepeaterLookup lookup) {
+String pingAsText(DrivePing p, RepeaterLookup lookup, [Units units = Units.metric]) {
   final b = StringBuffer()
     ..writeln('MeshSonar ping ${formatDateTime(p.ts)} (${formatTime(p.ts)})')
     ..writeln('Result: ${_result(p)}')
-    ..writeln('Position: ${_ll(p.lat)}, ${_ll(p.lon)}${p.gpsAccuracyM == null ? '' : ' ±${p.gpsAccuracyM!.round()} m'}');
-  if (p.speedMps != null) b.writeln('Speed: ${_speed(p.speedMps!)}');
+    ..writeln('Position: ${_ll(p.lat)}, ${_ll(p.lon)}${p.gpsAccuracyM == null ? '' : ' ±${units.shortLength(p.gpsAccuracyM!)}'}');
+  if (p.speedMps != null) b.writeln('Speed: ${units.speed(p.speedMps!)}');
   if (p.noiseFloorDbm != null) b.writeln('Noise floor: ${p.noiseFloorDbm!.round()} dBm');
   for (final e in p.echoes) {
     final m = lookup.resolve(e.repeater);
@@ -61,7 +60,7 @@ String pingAsText(DrivePing p, RepeaterLookup lookup) {
       if (e.rssiDbm != null) 'RSSI ${e.rssiDbm!.round()} dBm',
       ?hopsLabel(e.hops),
       if (e.delayMs != null) '${e.delayMs} ms',
-      if (d != null) formatDistanceBearing(d, m.bearingFrom(p.lat, p.lon)),
+      if (d != null) formatDistanceBearing(units, d, m.bearingFrom(p.lat, p.lon)),
       if (e.path != null && e.path!.length > 1) 'path ${e.path!.map((x) => x.toUpperCase()).join('>')}',
       if (m.ref != null) 'key ${m.ref!.key}',
     ];
@@ -93,12 +92,13 @@ class PingDetailSheet extends StatelessWidget {
     final t = Theme.of(context);
     final mc = MeshSonarColors.of(context);
     final p = ping;
+    final units = AppScope.unitsOf(context);
     final snr = bestSnr(p);
     final color = mc.forPing(heard: !p.heardNothing, snr: snr);
     final facts = <(String, String)>[
       ('Position', '${_ll(p.lat)}, ${_ll(p.lon)}'),
-      ('GPS accuracy', p.gpsAccuracyM == null ? '—' : '±${p.gpsAccuracyM!.round()} m'),
-      ('Speed', p.speedMps == null ? '—' : _speed(p.speedMps!)),
+      ('GPS accuracy', p.gpsAccuracyM == null ? '—' : '±${units.shortLength(p.gpsAccuracyM!)}'),
+      ('Speed', p.speedMps == null ? '—' : units.speed(p.speedMps!)),
       ('Noise floor', p.noiseFloorDbm == null ? '—' : '${p.noiseFloorDbm!.round()} dBm'),
     ];
     return ListView(
@@ -179,7 +179,7 @@ class PingDetailSheet extends StatelessWidget {
             key: const Key('ping-copy'),
             onPressed: () async {
               final messenger = ScaffoldMessenger.maybeOf(context);
-              await Clipboard.setData(ClipboardData(text: pingAsText(p, lookup)));
+              await Clipboard.setData(ClipboardData(text: pingAsText(p, lookup, AppScope.read(context).units)));
               messenger?.showSnackBar(const SnackBar(content: Text('Ping copied as text.')));
             },
             icon: const Icon(Icons.copy_all_outlined),
@@ -220,7 +220,7 @@ class _Candidates extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = Theme.of(context);
     final c = [for (final r in match.candidates) (r, haversineM(lat, lon, r.lat, r.lon))]..sort((a, b) => a.$2.compareTo(b.$2));
-    final shown = c.take(3).map((x) => '${x.$1.name.isEmpty ? x.$1.key.substring(0, 8).toUpperCase() : x.$1.name} (${formatDistance(x.$2)})');
+    final shown = c.take(3).map((x) => '${x.$1.name.isEmpty ? x.$1.key.substring(0, 8).toUpperCase() : x.$1.name} (${AppScope.unitsOf(context).distance(x.$2)})');
     return Padding(
       padding: const EdgeInsets.fromLTRB(Gap.l + 32, 0, Gap.l, Gap.s),
       child: Text(

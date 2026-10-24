@@ -11,6 +11,7 @@ import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart' hide Path;
 
 import '../../core/repeater_detail_api.dart';
+import '../app.dart' show AppScope;
 import '../map/coverage_map.dart';
 import '../theme.dart';
 
@@ -392,7 +393,7 @@ class _RepeaterDetailScreenState extends State<RepeaterDetailScreen> {
         'Measured reach',
         d.reachMaxKm == null
             ? 'unknown'
-            : '${d.reachMaxKm!.toStringAsFixed(1)} km',
+            : AppScope.unitsOf(context).distance(d.reachMaxKm! * 1000),
       ),
     ];
     return Wrap(
@@ -612,7 +613,7 @@ class _RepeaterDetailScreenState extends State<RepeaterDetailScreen> {
                       [
                         _kindLabel(n.kind),
                         if (n.distanceKm != null)
-                          '${n.distanceKm!.toStringAsFixed(1)} km',
+                          AppScope.unitsOf(context).distance(n.distanceKm! * 1000),
                         if (n.packets != null) '${n.packets} packets',
                         if (n.lastAt != null) _ago(n.lastAt, _now),
                       ].join(' / '),

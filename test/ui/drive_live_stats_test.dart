@@ -4,9 +4,10 @@
 import 'package:flutter/material.dart' hide Radio;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/app/app_state.dart';
+import 'package:meshsonar/core/units.dart';
 import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/radio/radio_api.dart';
-import 'package:meshsonar/ui/drive_stats.dart' show formatDistance, haversineM;
+import 'package:meshsonar/ui/drive_stats.dart' show haversineM;
 import 'package:meshsonar/ui/theme.dart';
 
 import 'fakes.dart';
@@ -91,7 +92,7 @@ void main() {
 
     // Distance is the same running sum DriveStats/DriveReport use (haversine, ping to ping, in arrival order).
     final expectedM = haversineM(p0.lat, p0.lon, p1.lat, p1.lon) + haversineM(p1.lat, p1.lon, p2.lat, p2.lon);
-    expect(tester.widget<Text>(distanceTile).data, formatDistance(expectedM));
+    expect(tester.widget<Text>(distanceTile).data, Units.metric.distance(expectedM));
 
     // Elapsed ticks off the harness's clock (fixed in tests), so it reads a real, computed zero, not a placeholder.
     expect(tester.widget<Text>(elapsedTile).data, '0 s');

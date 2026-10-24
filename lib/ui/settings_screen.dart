@@ -150,14 +150,14 @@ class SettingsScreen extends StatelessWidget {
                   sliderKey: const Key('min-distance-slider'),
                   icon: Icons.straighten,
                   title: 'Minimum distance',
-                  stops: distanceStops,
+                  stops: s.units.minDistanceStops(distanceStops),
                   value: st.minDistanceM,
-                  label: (v) => '$v m',
+                  label: s.units.sliderDistance,
                   caption: st.discoveryMode
                       ? 'Doesn\'t apply in discovery mode: nothing is ever transmitted.'
                       : 'Skips auto-pings while you\'re stopped at lights.',
-                  minLabel: '15 m',
-                  maxLabel: '500 m',
+                  minLabel: s.units.sliderDistance(s.units.minDistanceStops(distanceStops).first),
+                  maxLabel: s.units.sliderDistance(s.units.minDistanceStops(distanceStops).last),
                   enabled: !st.discoveryMode,
                   onChanged: (v) => s.updateSettings(s.settings.copyWith(minDistanceM: v)),
                 ),
@@ -426,7 +426,7 @@ class _AntennaProfileTile extends StatelessWidget {
       key: ValueKey('antenna-profile-$radioKey'),
       leading: Icon(locked ? Icons.lock_outline : Icons.settings_input_antenna),
       title: Text(name),
-      subtitle: Text(locked ? '${profile.summary}\nLocked while driving' : profile.summary),
+      subtitle: Text(locked ? '${profile.summaryIn(s.units)}\nLocked while driving' : profile.summaryIn(s.units)),
       trailing: IconButton(
         key: ValueKey('antenna-forget-$radioKey'),
         tooltip: 'Forget this radio\'s antenna',

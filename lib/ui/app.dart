@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 
 import '../app/app_state.dart';
+import '../core/units.dart';
 import 'antenna_sheet.dart';
 import 'drive_screen.dart';
 import 'onboarding/first_run_gate.dart';
@@ -22,6 +23,10 @@ class AppScope extends InheritedNotifier<AppState> {
 
   static AppState of(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<AppScope>()!.notifier!;
+
+  /// The Units for the current Settings (rebuilds on change); metric when there is no AppScope (isolated widget tests).
+  static Units unitsOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<AppScope>()?.notifier?.units ?? Units.metric;
 
   /// Read without subscribing (for callbacks).
   static AppState read(BuildContext context) =>

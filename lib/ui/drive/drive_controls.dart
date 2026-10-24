@@ -10,9 +10,11 @@ import '../../core/antenna_profile.dart';
 import '../../core/heard.dart' show haversineM;
 import '../../core/model.dart';
 import '../../radio/radio_api.dart';
+import '../../core/units.dart';
 import '../antenna_sheet.dart';
+import '../app.dart' show AppScope;
 import '../connect_screen.dart';
-import '../drive_stats.dart' show formatDistance, formatDuration;
+import '../drive_stats.dart' show formatDuration;
 import '../ping_log_screen.dart' show openPingLog;
 import '../report/drive_report_screen.dart';
 import '../theme.dart';
@@ -136,14 +138,14 @@ class _DriveLiveStatsStripState extends State<DriveLiveStatsStrip> {
       gpsValue = '—';
       gpsColor = null;
     } else {
-      gpsValue = '±${acc.round()} m';
+      gpsValue = '±${s.units.shortLength(acc)}';
       gpsColor = acc <= 10 ? mc.snrStrong : (acc <= 30 ? mc.snrMid : mc.snrWeak);
     }
 
     final ready = liveStats.historyLoaded;
     return StatStrip(
       tiles: [
-        StatTile(label: 'Distance', value: formatDistance(distance), valueKey: const Key('stat-distance')),
+        StatTile(label: 'Distance', value: s.units.distance(distance), valueKey: const Key('stat-distance')),
         StatTile(label: 'Elapsed', value: formatDuration(elapsed), valueKey: const Key('stat-elapsed')),
         StatTile(
           label: ready ? '${liveStats.repeatCells} repeat' : 'Cells',
@@ -260,7 +262,7 @@ class _NextPingIndicatorState extends State<NextPingIndicator> {
       return _Badge(
         key: const Key('next-ping-move'),
         icon: Icons.directions_car_rounded,
-        text: 'Move ${st.metresToGo!.ceil()} m',
+        text: 'Move ${AppScope.unitsOf(context).shortLength(st.metresToGo!.ceilToDouble())}',
       );
     }
     if (next == null) return const SizedBox.shrink();
@@ -355,9 +357,9 @@ class AntennaChip extends StatelessWidget {
     final profile = s.antennaProfile;
     final String text;
     if (recorded != null) {
-      text = recordedAntennaSummary(recorded);
+      text = recordedAntennaSummary(recorded, s.units);
     } else if (profile != null) {
-      text = profile.summary;
+      text = profile.summaryIn(s.units);
     } else {
       return s.needsAntennaSetup ? const AntennaSetupHint() : const SizedBox.shrink();
     }
@@ -425,10 +427,10 @@ class RegionChip extends StatelessWidget {
 }
 
 /// "External · 5.8 dBi · 1.8 m": the Drive Format v1 antenna a drive records (the mount itself isn't recorded).
-String recordedAntennaSummary(Antenna a) => [
+String recordedAntennaSummary(Antenna a, [Units units = Units.metric]) => [
   a.type == 'external' ? 'External' : 'Internal',
   if (a.gainDbi != null) '${formatAntennaNumber(a.gainDbi!)} dBi',
-  if (a.heightM != null) '${formatAntennaNumber(a.heightM!)} m',
+  if (a.heightM != null) units.height(a.heightM!),
 ].join(' · ');
 
 /// "Set up this radio's antenna": shown where Start drive is, while it waits for the connected radio's antenna.

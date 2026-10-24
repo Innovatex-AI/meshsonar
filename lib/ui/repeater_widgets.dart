@@ -15,20 +15,21 @@
 //   RepeaterIdChip('df01')     small monospace chip with the hex id as heard.
 //   SnrPill(snr)               "+6.5 dB" pill coloured by SNR (or "—").
 //   SourceBadge(source)        "MeshSonar" / "map" badge (nothing for unknown).
-//   formatDistanceBearing(m, deg) → "2.4 km NE";  hopsLabel(hops) → "direct" / "2 hops" / null.
+//   formatDistanceBearing(units, m, deg) → "2.4 km NE";  hopsLabel(hops) → "direct" / "2 hops" / null.
 import 'package:flutter/material.dart';
 
 import '../core/heard.dart';
 import '../core/model.dart';
-import 'drive_stats.dart' show formatDistance;
+import 'app.dart' show AppScope;
+import '../core/units.dart';
 import 'theme.dart';
 
 /// "direct" for 1 hop, "N hops" otherwise, null when unknown.
 String? hopsLabel(int? hops) => hops == null ? null : (hops <= 1 ? 'direct' : '$hops hops');
 
-/// "2.4 km NE" (bearing optional).
-String formatDistanceBearing(double m, [double? bearing]) =>
-    bearing == null ? formatDistance(m) : '${formatDistance(m)} ${compass(bearing)}';
+/// "2.4 km NE" / "1.5 mi NE" (bearing optional).
+String formatDistanceBearing(Units u, double m, [double? bearing]) =>
+    bearing == null ? u.distance(m) : '${u.distance(m)} ${compass(bearing)}';
 
 /// "+6.5 dB" / "-3.0 dB".
 String formatSnrShort(double snr) => '${snr > 0 ? '+' : ''}${snr.toStringAsFixed(1)} dB';
@@ -142,7 +143,7 @@ class EchoTile extends StatelessWidget {
       ?hopsLabel(echo.hops),
       if (echo.rssiDbm != null) 'RSSI ${echo.rssiDbm!.round()} dBm',
       if (echo.delayMs != null) '${echo.delayMs} ms',
-      if (dist != null) formatDistanceBearing(dist, brg),
+      if (dist != null) formatDistanceBearing(AppScope.unitsOf(context), dist, brg),
     ];
     final path = echo.path;
     final showPath = path != null && path.length > 1;
@@ -226,7 +227,7 @@ class HeardRepeaterTile extends StatelessWidget {
     final facts = <String>[
       if (h.bestSnrDb != null) 'best ${formatSnrShort(h.bestSnrDb!)}',
       '${h.timesHeard}× heard',
-      if (h.lastDistanceM != null) formatDistance(h.lastDistanceM!),
+      if (h.lastDistanceM != null) AppScope.unitsOf(context).distance(h.lastDistanceM!),
       ?hopsLabel(h.lastHops),
     ];
     return Opacity(

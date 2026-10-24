@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/region_stats_api.dart';
+import '../app.dart' show AppScope;
 import '../theme.dart';
 import '../widgets.dart';
 import 'region_common.dart';
@@ -148,7 +149,7 @@ class StatsFigures extends StatelessWidget {
     final cells = <(String, String)>[
       ('Drives', _n(s.drives)),
       ('Drivers', _n(s.drivers)),
-      ('Km driven', s.km == null ? '—' : groupInt(s.km!.round())),
+      (AppScope.unitsOf(context).isImperial ? 'Miles driven' : 'Km driven', s.km == null ? '—' : AppScope.unitsOf(context).total(s.km! * 1000, groupInt).split(' ').first),
       ('Pings', _n(s.pings)),
       ('Pings heard', _pct(s.heardPct)),
       ('Squares heard', _pct(s.cellsHeardPct)),
@@ -209,7 +210,7 @@ class LeaderboardView extends StatelessWidget {
             leading: CircleAvatar(radius: 14, child: Text('${r.rank}')),
             title: Text(r.callsign),
             subtitle: Text('${r.drives} drives · ${r.cells} squares · ${r.repeatersHeard} repeaters'),
-            trailing: Text('${r.km.toStringAsFixed(1)} km'),
+            trailing: Text(AppScope.unitsOf(context).distance(r.km * 1000)),
           ),
       ],
     );
