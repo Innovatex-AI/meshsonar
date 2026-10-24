@@ -1,1194 +1,254 @@
-// Settings, grouped: Driver & server, Wardriving, Antenna (per radio), Sync, About.
-import 'dart:async';
+// Settings shell: a search field, then the sections (lib/ui/settings/*_section.dart, one file each) in the order of
+// lib/ui/settings/settings_index.dart. Phone: one scrolling list of collapsible section cards.
+// Wide screens (>= 840 dp, e.g. iPad landscape): sections on the left, the chosen section on the right.
+// Search matches titles, explanations and keywords and jumps to the row (opening its section, tinting the row).
+import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 
-import 'package:flutter/material.dart' hide Radio;
-import 'package:flutter/services.dart';
-
-import '../app/app_state.dart';
-import '../core/antenna_profile.dart';
-import '../core/api.dart';
-import '../core/model.dart' show Radio;
-import '../core/server_url.dart';
-import '../core/units.dart';
-import 'region/region_switcher.dart';
-import 'about_screen.dart';
-import 'antenna_sheet.dart';
-import 'onboarding/onboarding_screen.dart';
 import 'app.dart';
-import 'report_problem_screen.dart';
-import 'settings/offline_packs_screen.dart';
-import 'telemetry_sheet.dart';
-import 'widgets.dart';
+import 'settings/about_section.dart';
+import 'settings/account_section.dart';
+import 'settings/diagnostics_section.dart';
+import 'settings/display_section.dart';
+import 'settings/drives_section.dart';
+import 'settings/maps_section.dart';
+import 'settings/privacy_section.dart';
+import 'settings/radio_section.dart';
+import 'settings/region_section.dart';
+import 'settings/settings_index.dart';
+import 'settings/settings_kit.dart';
+import 'settings/storage_section.dart';
 
-const String _driverHelp =
-    'Your driver key lets this phone upload drives to the coverage map. Without one, drives stay on this phone (you '
-    'can still export them).';
+export 'settings/account_section.dart'
+    show DriverKeyScreen, KeyStatusBadge, keyStatusLabel, keyStatusHelp, confirmServerChange;
+export 'settings/settings_kit.dart'
+    show SliderTile, intervalStops, distanceStops, holdStops, syncEveryStops, nearestStop;
 
-/// Turning telemetry off stops and discards it at once; with a driver key (so something may have been sent) the person is also
-/// asked whether to erase what the server already holds (DELETE /api/cmh/telemetry).
-Future<void> _setTelemetry(BuildContext context, AppState s, bool on) async {
-  await s.updateSettings(s.settings.copyWith(telemetryEnabled: on));
-  if (on || !s.hasKey || !context.mounted) return;
-  final messenger = ScaffoldMessenger.maybeOf(context);
-  final erase = await showDialog<bool>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      key: const Key('telemetry-erase-dialog'),
-      title: const Text('Erase what was already shared?'),
-      content: const Text('Sharing is off. You can also delete the packet headers this phone already sent to the server.'),
-      actions: [
-        TextButton(key: const Key('telemetry-erase-keep'), onPressed: () => Navigator.pop(ctx, false), child: const Text('Keep')),
-        FilledButton(key: const Key('telemetry-erase-yes'), onPressed: () => Navigator.pop(ctx, true), child: const Text('Erase')),
-      ],
-    ),
-  );
-  if (erase != true) return;
-  final n = await s.eraseTelemetry();
-  messenger?.showSnackBar(SnackBar(
-      content: Text(n == null ? 'Couldn\'t reach the server. The erase will be retried.' : 'Erased $n shared packet headers.')));
+/// Width from which Settings shows sections and content side by side (Material "expanded" window class; the app's
+/// design plan uses the same 840 dp for iPad master-detail).
+const double settingsTwoPaneWidth = 840;
+
+List<Widget> settingsSectionRows(BuildContext context, String id) => switch (id) {
+      'driver' => accountSectionRows(context),
+      'region' => regionSectionRows(context),
+      'display' => displaySectionRows(context),
+      'maps' => mapsSectionRows(context),
+      'privacy' => privacySectionRows(context),
+      'radio' => radioSectionRows(context),
+      'drives' => drivesSectionRows(context),
+      'storage' => storageSectionRows(context),
+      'diagnostics' => diagnosticsSectionRows(context),
+      _ => aboutSectionRows(context),
+    };
+
+String? settingsSectionHelp(String id) => switch (id) {
+      'driver' => driverHelp,
+      'region' => regionHelp,
+      'display' => displayHelp,
+      'maps' => mapsHelp,
+      'privacy' => privacyHelp,
+      'radio' => radioHelp,
+      'drives' => drivesHelp,
+      'storage' => storageHelp,
+      'diagnostics' => diagnosticsHelp,
+      _ => null,
+    };
+
+class SettingsScreen extends StatefulWidget {
+  const SettingsScreen({super.key});
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-class SettingsScreen extends StatelessWidget {
-  const SettingsScreen({super.key});
+class _SettingsScreenState extends State<SettingsScreen> {
+  final _search = TextEditingController();
+  final Map<String, GlobalKey> _anchors = {};
+  final Set<String> _collapsed = {};
+  String _query = '';
+  String _selected = settingsSections.first.id;
+  String? _highlight;
 
   @override
-  Widget build(BuildContext context) {
-    final s = AppScope.of(context);
-    final st = s.settings;
-    final t = Theme.of(context);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
-      body: SafeArea(
-        child: ListView(
-          key: const Key('settings-list'),
-          padding: const EdgeInsets.fromLTRB(0, 4, 0, 24),
-          children: [
-            _Section(
-              id: 'driver',
-              title: 'Driver & server',
-              icon: Icons.badge_outlined,
-              help: _driverHelp,
-              children: [
-                const _DriverKeySection(),
-                ListTile(
-                  key: const Key('server-url'),
-                  leading: const Icon(Icons.dns_outlined),
-                  title: const Text('Server URL'),
-                  subtitle: Text(st.serverUrl),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () async {
-                    final v = await _editText(context,
-                        title: 'Server URL',
-                        initial: st.serverUrl,
-                        hint: defaultServerUrl,
-                        keyboard: TextInputType.url,
-                        help: 'Any server that speaks the MeshSonar Drive Format works. A key from one server '
-                            'doesn\'t work on another.',
-                        validate: (v) {
-                          final u = Uri.tryParse(v.trim());
-                          if (u == null || !(u.scheme == 'https' || u.scheme == 'http') || u.host.isEmpty) {
-                            return 'Enter a full address starting with https://';
-                          }
-                          return null;
-                        });
-                    if (v == null || !context.mounted) return;
-                    final url = v.trim().replaceAll(RegExp(r'/+$'), '');
-                    if (url == s.settings.serverUrl) return;
-                    // Another address of the same server (old Lovable host, meshsonar.com, cmh.meshsonar.com) keeps
-                    // the key, so there is nothing to ask.
-                    final sameServer = isSameServer(url, s.settings.serverUrl);
-                    if (s.hasKey && !sameServer && !await confirmServerChange(context, url)) return;
-                    await s.updateSettings(s.settings.copyWith(serverUrl: url));
-                  },
-                ),
-                if (s.siteConfig != null) const _RegionTile(),
-                if (s.siteConfig != null && s.viewingRegion == null) const _RadioPresetTile(),
-              ],
-            ),
-            _Section(
-              id: 'region',
-              title: 'Region & units',
-              icon: Icons.public,
-              help: 'The app opens on the region your phone is in. Pick any region to view its coverage, repeaters '
-                  'and activity. This never changes your radio.',
-              children: [
-                const _RegionPickTile(),
-                if (s.siteConfig != null && s.viewingRegion != null) const _RadioPresetTile(),
-                const _UnitsTile(),
-              ],
-            ),
-            _Section(
-              id: 'wardriving',
-              title: 'Wardriving',
-              icon: Icons.radar,
-              help: 'An auto-ping goes out when BOTH are met: the time has passed and you\'ve moved the distance. '
-                  'Ping now works any time. Changes apply straight away, even mid-drive.',
-              children: [
-                ListTile(
-                  key: const Key('channel'),
-                  leading: const Icon(Icons.tag),
-                  title: const Text('Channel'),
-                  subtitle: Text(st.channel),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () async {
-                    final v = await _editText(context,
-                        title: 'Channel',
-                        initial: st.channel,
-                        hint: '#wardriving',
-                        help: 'The channel pings are sent on. Use the one your mesh community wardrives on.',
-                        validate: (v) => v.trim().isEmpty ? 'Enter a channel name' : null);
-                    if (v != null) {
-                      var c = v.trim();
-                      if (!c.startsWith('#')) c = '#$c';
-                      await s.updateSettings(st.copyWith(channel: c));
-                    }
-                  },
-                ),
-                SwitchListTile(
-                  key: const Key('discovery-mode'),
-                  secondary: Icon(s.driving ? Icons.lock_outline : Icons.hearing_outlined),
-                  title: const Text('Discovery (listen-only)'),
-                  subtitle: Text(s.driving
-                      ? 'Locked while driving: stop the drive to change it.'
-                      : 'The next drive transmits nothing at all — not even the privacy-hardened ping — and only '
-                          'records what it overhears from other mesh traffic.'),
-                  value: st.discoveryMode,
-                  onChanged: s.driving ? null : (v) => s.updateSettings(st.copyWith(discoveryMode: v)),
-                ),
-                SliderTile(
-                  key: const Key('interval'),
-                  sliderKey: const Key('interval-slider'),
-                  icon: Icons.timer_outlined,
-                  title: 'Auto-ping',
-                  stops: intervalStops,
-                  value: st.intervalSec,
-                  label: (v) => 'Every $v s',
-                  caption: st.discoveryMode ? 'Doesn\'t apply in discovery mode: nothing is ever transmitted.' : null,
-                  minLabel: '10 s',
-                  maxLabel: '2 min',
-                  enabled: !st.discoveryMode,
-                  onChanged: (v) => s.updateSettings(s.settings.copyWith(intervalSec: v)),
-                ),
-                SliderTile(
-                  key: const Key('min-distance'),
-                  sliderKey: const Key('min-distance-slider'),
-                  icon: Icons.straighten,
-                  title: 'Minimum distance',
-                  stops: s.units.minDistanceStops(distanceStops),
-                  value: st.minDistanceM,
-                  label: s.units.sliderDistance,
-                  caption: st.discoveryMode
-                      ? 'Doesn\'t apply in discovery mode: nothing is ever transmitted.'
-                      : 'Skips auto-pings while you\'re stopped at lights.',
-                  minLabel: s.units.sliderDistance(s.units.minDistanceStops(distanceStops).first),
-                  maxLabel: s.units.sliderDistance(s.units.minDistanceStops(distanceStops).last),
-                  enabled: !st.discoveryMode,
-                  onChanged: (v) => s.updateSettings(s.settings.copyWith(minDistanceM: v)),
-                ),
-                SliderTile(
-                  key: const Key('heard-hold'),
-                  sliderKey: const Key('heard-hold-slider'),
-                  icon: Icons.cell_tower,
-                  title: 'Heard list hold',
-                  stops: holdStops,
-                  value: st.heardHoldPings,
-                  label: (v) => '$v ping${v == 1 ? '' : 's'}',
-                  caption: 'Keep repeaters in the heard list for this many pings after they were last heard, then grey '
-                      'them out (they never disappear during a drive).',
-                  minLabel: '1',
-                  maxLabel: '10',
-                  onChanged: (v) => s.updateSettings(s.settings.copyWith(heardHoldPings: v)),
-                ),
-              ],
-            ),
-            _Section(
-              id: 'antenna',
-              title: 'Antenna',
-              icon: Icons.settings_input_antenna,
-              help: 'Each radio remembers how its antenna is set up. It is saved with every drive, so coverage can be '
-                  'compared like with like.',
-              children: [
-                if (st.antennaProfiles.isEmpty)
-                  const ListTile(
-                    key: Key('antenna-none'),
-                    leading: Icon(Icons.info_outline),
-                    title: Text('No radios set up yet'),
-                    subtitle: Text('Connect a radio and MeshSonar asks how its antenna is set up.'),
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  void _setQuery(String q) => setState(() => _query = q);
+
+  /// Opens [section], scrolls [anchorId] into view and tints it; screen readers hear where focus went.
+  void _jumpTo(String anchorId, String section, String announcement) {
+    setState(() {
+      _search.clear();
+      _query = '';
+      _collapsed.remove(section);
+      _selected = section;
+      _highlight = anchorId;
+    });
+    FocusManager.instance.primaryFocus?.unfocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final ctx = _anchors[anchorId]?.currentContext;
+      if (ctx != null && ctx.mounted) {
+        Scrollable.ensureVisible(ctx, alignment: 0.05, duration: const Duration(milliseconds: 300), curve: Curves.easeOutCubic);
+      }
+      SemanticsService.sendAnnouncement(View.of(context), announcement, Directionality.of(context));
+    });
+  }
+
+  void _openEntry(SettingsEntry e) =>
+      _jumpTo(e.id, e.section, '${e.title}, in ${sectionInfo(e.section).title}');
+
+  void _toggle(String id) => setState(() => _collapsed.contains(id) ? _collapsed.remove(id) : _collapsed.add(id));
+
+  Widget _section(BuildContext context, SettingsSectionInfo info, {required bool collapsible}) => SettingsSection(
+        id: info.id,
+        title: info.title,
+        icon: info.icon,
+        help: settingsSectionHelp(info.id),
+        collapsed: collapsible && _collapsed.contains(info.id),
+        onToggle: collapsible ? () => _toggle(info.id) : null,
+        children: settingsSectionRows(context, info.id),
+      );
+
+  Widget _searchField() => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+        child: TextField(
+          key: const Key('settings-search'),
+          controller: _search,
+          onChanged: _setQuery,
+          textInputAction: TextInputAction.search,
+          decoration: InputDecoration(
+            labelText: 'Search settings',
+            hintText: 'For example: upload, units, privacy',
+            prefixIcon: const Icon(Icons.search),
+            suffixIcon: _query.isEmpty
+                ? null
+                : IconButton(
+                    key: const Key('settings-search-clear'),
+                    tooltip: 'Clear search',
+                    icon: const Icon(Icons.close),
+                    onPressed: () {
+                      _search.clear();
+                      _setQuery('');
+                    },
                   ),
-                for (final e in st.antennaProfiles.entries) _AntennaProfileTile(radioKey: e.key, profile: e.value),
-              ],
-            ),
-            _Section(
-              id: 'sync',
-              title: 'Upload',
-              icon: Icons.cloud_sync_outlined,
-              help: 'Drives are always saved on this phone first. Uploads need an approved driver key, are safe to '
-                  'retry, and never send a ping twice.',
-              children: [
-                SwitchListTile(
-                  key: const Key('auto-sync'),
-                  secondary: const Icon(Icons.cloud_upload_outlined),
-                  title: const Text('Upload at end of drive'),
-                  subtitle: const Text('Sends the drive when you press Stop.'),
-                  value: st.autoSync,
-                  onChanged: (v) => s.updateSettings(s.settings.copyWith(autoSync: v)),
-                ),
-                SwitchListTile(
-                  key: const Key('sync-during-drive'),
-                  secondary: const Icon(Icons.sync),
-                  title: const Text('Upload during the drive'),
-                  subtitle: Text(st.autoSync
-                      ? 'Sends new pings while you drive, so nothing waits for Stop.'
-                      : 'Turn on "Upload at end of drive" first.'),
-                  value: st.autoSync && st.syncDuringDrive,
-                  onChanged: st.autoSync ? (v) => s.updateSettings(s.settings.copyWith(syncDuringDrive: v)) : null,
-                ),
-                SliderTile(
-                  key: const Key('sync-every'),
-                  sliderKey: const Key('sync-every-slider'),
-                  icon: Icons.schedule,
-                  title: 'Upload interval',
-                  stops: syncEveryStops,
-                  value: st.syncEveryMin,
-                  label: (v) => 'Every $v min',
-                  minLabel: '1 min',
-                  maxLabel: '30 min',
-                  enabled: st.autoSync && st.syncDuringDrive,
-                  onChanged: (v) => s.updateSettings(s.settings.copyWith(syncEveryMin: v)),
-                ),
-                _LastUpload(state: s),
-                ListTile(
-                  key: const Key('refresh-repeaters'),
-                  leading: const Icon(Icons.cell_tower),
-                  title: const Text('Repeater names'),
-                  subtitle: Text(s.repeaters.isEmpty
-                      ? 'None saved yet. Names download once your key is approved.'
-                      : '${s.repeaters.length} saved for offline use'),
-                  trailing: const Icon(Icons.refresh),
-                  onTap: s.hasKey ? () => s.refreshRepeaters() : null,
-                ),
-              ],
-            ),
-            _Section(
-              id: 'privacy',
-              title: 'Privacy',
-              icon: Icons.privacy_tip_outlined,
-              help: telemetryHelp,
-              children: [
-                SwitchListTile(
-                  key: const Key('telemetry-toggle'),
-                  secondary: const Icon(Icons.podcasts),
-                  title: const Text('Share packet headers'),
-                  subtitle: const Text('Type, path, signal strength, time and region. Never message content.'),
-                  value: st.telemetryEnabled,
-                  onChanged: (v) => _setTelemetry(context, s, v),
-                ),
-              ],
-            ),
-            _Section(
-              id: 'about-section',
-              title: 'About',
-              icon: Icons.info_outline,
-              children: [
-                ListTile(
-                  key: const Key('offline-maps'),
-                  leading: const Icon(Icons.map_outlined),
-                  title: const Text('Offline maps'),
-                  subtitle: const Text('Download a region so the map works with no signal'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const OfflinePacksScreen())),
-                ),
-                ListTile(
-                  key: const Key('report-problem'),
-                  leading: const Icon(Icons.bug_report_outlined),
-                  title: const Text('Report a problem'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => openReportProblem(context),
-                ),
-                ListTile(
-                  key: const Key('about'),
-                  leading: const Icon(Icons.info_outline),
-                  title: const Text('About MeshSonar'),
-                  subtitle: Text('Version ${s.services.appInfo.version ?? ''} · MIT licence'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const AboutScreen())),
-                ),
-                ListTile(
-                  key: const Key('show-intro'),
-                  leading: const Icon(Icons.auto_awesome_outlined),
-                  title: const Text('Show the welcome tour'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                    fullscreenDialog: true,
-                    builder: (ctx) => OnboardingScreen(onFinish: (_) => Navigator.of(ctx).pop()),
-                  )),
-                ),
-              ],
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
-              child: Text('Settings are saved on this phone as you change them.',
-                  style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
-            ),
-          ],
+          ),
+        ),
+      );
+
+  Widget _results(BuildContext context) {
+    final t = Theme.of(context);
+    final hits = searchSettings(_query, state: AppScope.of(context));
+    return Column(key: const Key('settings-search-results'), crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
+        child: Semantics(
+          liveRegion: true,
+          child: Text(
+            hits.isEmpty
+                ? 'No setting matches "${_query.trim()}". Try another word, such as upload, units or privacy.'
+                : '${hits.length} setting${hits.length == 1 ? '' : 's'} match.',
+            key: const Key('settings-search-count'),
+            style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant),
+          ),
         ),
       ),
+      for (final e in hits)
+        ListTile(
+          key: Key('search-result-${e.id}'),
+          leading: Icon(sectionInfo(e.section).icon),
+          title: Text(e.title),
+          subtitle: Text('${e.summary}\n${sectionInfo(e.section).title}'),
+          isThreeLine: true,
+          onTap: () => _openEntry(e),
+        ),
+    ]);
+  }
+
+  Widget _footer(BuildContext context) {
+    final t = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+      child: Text('Settings are saved on this phone as you change them.',
+          style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
     );
   }
-}
 
-/// A titled group of settings in one rounded card.
-class _Section extends StatelessWidget {
-  final String id;
-  final String? title;
-  final IconData? icon;
-  final String? help;
-  final List<Widget> children;
-  const _Section({required this.id, this.title, this.icon, this.help, required this.children});
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    final c = t.colorScheme;
-    return Padding(
-      key: Key('section-$id'),
-      padding: EdgeInsets.fromLTRB(12, title == null ? 0 : 14, 12, 6),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        if (title != null)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
-            child: Row(children: [
-              if (icon != null) ...[Icon(icon, size: 18, color: c.primary), const SizedBox(width: 8)],
-              Flexible(
-                child: Text(title!.toUpperCase(),
-                    style: t.textTheme.labelLarge
-                        ?.copyWith(color: c.primary, fontWeight: FontWeight.w800, letterSpacing: 0.8)),
-              ),
+  Widget _phone(BuildContext context) => SingleChildScrollView(
+        key: const Key('settings-list'),
+        padding: const EdgeInsets.fromLTRB(0, 4, 0, 24),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 720),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              _searchField(),
+              if (_query.trim().isNotEmpty)
+                _results(context)
+              else ...[
+                for (final info in settingsSections) _section(context, info, collapsible: true),
+                _footer(context),
+              ],
             ]),
           ),
-        if (help != null)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-            child: Text(help!, style: t.textTheme.bodySmall?.copyWith(color: c.onSurfaceVariant)),
-          ),
-        Card(
-          margin: EdgeInsets.zero,
-          clipBehavior: Clip.antiAlias,
-          child: Column(children: [
-            for (var i = 0; i < children.length; i++) ...[
-              if (i > 0) Divider(height: 1, indent: 56, color: c.outlineVariant.withValues(alpha: 0.5)),
-              children[i],
-            ],
-          ]),
         ),
-      ]),
-    );
-  }
-}
-
-/// The driver key part of Settings on a screen of its own, opened over screens that need a key (Report a problem);
-/// Back returns there with nothing lost.
-class DriverKeyScreen extends StatelessWidget {
-  const DriverKeyScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Driver key')),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(0, 4, 0, 24),
-          children: const [
-            _Section(
-              id: 'driver',
-              title: 'Driver key',
-              icon: Icons.badge_outlined,
-              help: _driverHelp,
-              children: [_DriverKeySection()],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// One saved radio in Settings → Antenna: tap to edit, or forget it (it is asked again on its next connect).
-class _AntennaProfileTile extends StatelessWidget {
-  final String radioKey;
-  final AntennaProfile profile;
-  const _AntennaProfileTile({required this.radioKey, required this.profile});
-
-  Future<void> _forget(BuildContext context, String name) async {
-    final s = AppScope.read(context);
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Forget the antenna of $name?'),
-        content: const Text('Its drives keep what they recorded. The next time this radio connects, MeshSonar asks '
-            'about its antenna again.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(
-            key: const Key('antenna-forget-confirm'),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Forget'),
-          ),
-        ],
-      ),
-    );
-    if (ok == true) await s.forgetAntennaProfile(radioKey);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final s = AppScope.of(context);
-    final name = s.radioName(radioKey) ?? 'Radio ${radioKey.length > 8 ? radioKey.substring(0, 8) : radioKey}';
-    // The radio in use keeps its antenna until the drive ends (the drive has already recorded it).
-    final locked = s.driving && s.selfInfo?.publicKey.toLowerCase() == radioKey;
-    return ListTile(
-      key: ValueKey('antenna-profile-$radioKey'),
-      leading: Icon(locked ? Icons.lock_outline : Icons.settings_input_antenna),
-      title: Text(name),
-      subtitle: Text(locked ? '${profile.summaryIn(s.units)}\nLocked while driving' : profile.summaryIn(s.units)),
-      trailing: IconButton(
-        key: ValueKey('antenna-forget-$radioKey'),
-        tooltip: 'Forget this radio\'s antenna',
-        icon: const Icon(Icons.delete_outline),
-        onPressed: locked ? null : () => _forget(context, name),
-      ),
-      onTap: locked ? null : () => showAntennaSheet(context, radioKey: radioKey),
-    );
-  }
-}
-
-/// Coloured pill for the driver-key status.
-class KeyStatusBadge extends StatelessWidget {
-  final DriverKeyStatus status;
-  const KeyStatusBadge({super.key, required this.status});
-
-  static Color colorFor(BuildContext context, DriverKeyStatus st) {
-    final c = Theme.of(context).colorScheme;
-    final m = MeshSonarColors.of(context);
-    return switch (st) {
-      DriverKeyStatus.approved => m.snrStrong,
-      DriverKeyStatus.pending => m.beacon,
-      DriverKeyStatus.none => c.outline,
-      _ => c.error,
-    };
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final color = colorFor(context, status);
-    final icon = switch (status) {
-      DriverKeyStatus.approved => Icons.verified,
-      DriverKeyStatus.pending => Icons.hourglass_top,
-      DriverKeyStatus.none => Icons.key_off,
-      _ => Icons.block,
-    };
-    return Container(
-      key: const Key('key-badge'),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withValues(alpha: 0.45)),
-      ),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(icon, size: 16, color: color),
-        const SizedBox(width: 6),
-        Flexible(
-          child: Text(keyStatusLabel(status),
-              key: const Key('key-status'),
-              style: TextStyle(color: color, fontWeight: FontWeight.w800, fontSize: 14)),
-        ),
-      ]),
-    );
-  }
-}
-
-String keyStatusLabel(DriverKeyStatus s) => switch (s) {
-      DriverKeyStatus.none => 'No key',
-      DriverKeyStatus.pending => 'Pending approval',
-      DriverKeyStatus.approved => 'Approved',
-      DriverKeyStatus.rejected => 'Rejected',
-      DriverKeyStatus.revoked => 'Revoked',
-      DriverKeyStatus.unknown => 'Not recognised by this server',
-    };
-
-String keyStatusHelp(DriverKeyStatus s) => switch (s) {
-      DriverKeyStatus.none => 'Request a key to upload your drives.',
-      DriverKeyStatus.pending =>
-        'An admin needs to approve your key. You can drive now; your drives upload once it\'s approved. Tap Refresh to check.',
-      DriverKeyStatus.approved => 'Your drives can upload.',
-      DriverKeyStatus.rejected => 'This key was rejected. Contact the server admin, or request a new key.',
-      DriverKeyStatus.revoked => 'This key was revoked. Contact the server admin, or request a new key.',
-      DriverKeyStatus.unknown => 'The server doesn\'t know this key (maybe a different server). Request a new key.',
-    };
-
-/// Asks before switching servers when this phone has a driver key: keys only work on the server that issued them,
-/// so the key is removed. Returns true to go ahead.
-Future<bool> confirmServerChange(BuildContext context, String newUrl) async {
-  final ok = await showDialog<bool>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      key: const Key('server-change-dialog'),
-      title: const Text('Change server and remove your key?'),
-      content: Text('A driver key only works on the server that issued it, so your current key will be removed. '
-          'Request a new key from $newUrl afterwards.\n\n'
-          'Drives already uploaded stay on the old server. Drives not yet uploaded stay on this phone and will upload '
-          'to the new server once you have a key there.'),
-      actions: [
-        TextButton(key: const Key('server-change-cancel'), onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-        FilledButton(
-            key: const Key('server-change-confirm'),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Change server')),
-      ],
-    ),
-  );
-  return ok == true;
-}
-
-/// Which region the current server URL resolves to (`GET /api/cmh/site-config`). Only built once that answer has
-/// arrived (see the `if (s.siteConfig != null)` above) — a slow or failing fetch simply leaves this tile out, the
-/// Server URL tile above it is unaffected either way.
-class _RegionTile extends StatelessWidget {
-  const _RegionTile();
-  @override
-  Widget build(BuildContext context) {
-    final s = AppScope.of(context);
-    final region = s.siteConfig!.region;
-    // No human-readable region name exists on the wire; the host is the recognisable part.
-    final host = Uri.tryParse(region.url)?.host ?? region.url;
-    return ListTile(
-      key: const Key('site-region'),
-      leading: const Icon(Icons.public),
-      title: const Text('Connected to'),
-      subtitle: Text(host),
-    );
-  }
-}
-
-/// This region's suggested MeshCore radio/channel preset, compared against whatever the connected radio is actually
-/// using. Informational only — the app only ever reads RF parameters off the connected hardware; it never writes a
-/// preset to it. Covers every state: no preset configured for the region, a preset with no radio connected, and a
-/// preset shown side by side with the connected radio's own live parameters.
-class _RadioPresetTile extends StatelessWidget {
-  const _RadioPresetTile();
-
-  @override
-  Widget build(BuildContext context) {
-    final s = AppScope.of(context);
-    final t = Theme.of(context);
-    final c = t.colorScheme;
-    final preset = s.siteConfig!.radioPreset;
-
-    if (preset == null) {
-      return const ListTile(
-        key: Key('site-radio-preset'),
-        leading: Icon(Icons.settings_input_antenna_outlined),
-        title: Text('Radio preset'),
-        subtitle: Text('This region has no suggested preset.'),
       );
-    }
 
-    final radio = s.selfInfo?.radio; // the connected radio's own live RF parameters, or null if none is connected
-    return Padding(
-      key: const Key('site-radio-preset'),
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Icon(Icons.settings_input_antenna_outlined, color: c.onSurfaceVariant),
-          const SizedBox(width: 16),
-          Expanded(child: Text('Radio preset', style: t.textTheme.titleMedium)),
-        ]),
-        Padding(
-          padding: const EdgeInsets.only(left: 40, top: 8),
-          child: radio == null
-              ? Column(
-                  key: const Key('site-radio-preset-no-radio'),
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('${preset.name} (this region)', style: t.textTheme.bodySmall?.copyWith(color: c.onSurfaceVariant)),
-                    Text(_formatPreset(preset), style: numberStyle(context, size: 16, color: c.primary)),
-                    const SizedBox(height: 6),
-                    Text('No radio connected to compare.', style: t.textTheme.bodySmall?.copyWith(color: c.onSurfaceVariant)),
-                  ],
-                )
-              : Column(
-                  key: const Key('site-radio-preset-compare'),
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Yours', style: t.textTheme.bodySmall?.copyWith(color: c.onSurfaceVariant)),
-                    Text(_formatRadio(radio), style: numberStyle(context, size: 16)),
-                    const SizedBox(height: 8),
-                    Text('${preset.name} (this region)', style: t.textTheme.bodySmall?.copyWith(color: c.onSurfaceVariant)),
-                    Text(_formatPreset(preset), style: numberStyle(context, size: 16, color: c.primary)),
-                  ],
-                ),
-        ),
-      ]),
-    );
-  }
-}
-
-/// `freqMHz · bwKHz · SFn · CRn`, matching the fields CMAT's site-config sends.
-String _formatPreset(RadioPreset p) =>
-    '${p.freqMhz.toStringAsFixed(3)} MHz · ${p.bwKhz.toStringAsFixed(1)} kHz · SF${p.sf} · CR${p.cr}';
-
-/// Same shape as [_formatPreset] but for the connected radio's own readings, any of which can be unmeasured (null).
-String _formatRadio(Radio r) {
-  final freq = r.freqMhz == null ? '—' : '${r.freqMhz!.toStringAsFixed(3)} MHz';
-  final bw = r.bwKhz == null ? '—' : '${r.bwKhz!.toStringAsFixed(1)} kHz';
-  final sf = r.sf == null ? '—' : 'SF${r.sf}';
-  final cr = r.cr == null ? '—' : 'CR${r.cr}';
-  return '$freq · $bw · $sf · $cr';
-}
-
-/// Where to manage drives and privacy on the website, and a button to get a key there.
-class _AccountLinks extends StatelessWidget {
-  const _AccountLinks();
-  @override
-  Widget build(BuildContext context) {
-    final s = AppScope.of(context);
+  Widget _wide(BuildContext context) {
     final t = Theme.of(context);
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-      Text(
-        'Manage your drives and privacy at ${s.webPage('/me')} — sign in with the same email you registered with',
-        key: const Key('account-hint'),
-        style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
+    return Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      SizedBox(
+        width: 320,
+        child: ListView(key: const Key('settings-section-pane'), padding: const EdgeInsets.only(bottom: 24), children: [
+          _searchField(),
+          if (_query.trim().isNotEmpty)
+            _results(context)
+          else
+            for (final info in settingsSections)
+              ListTile(
+                key: Key('section-nav-${info.id}'),
+                leading: Icon(info.icon),
+                title: Text(info.title),
+                selected: info.id == _selected,
+                selectedTileColor: t.colorScheme.primary.withValues(alpha: 0.10),
+                onTap: () => setState(() {
+                  _selected = info.id;
+                  _highlight = null;
+                }),
+              ),
+        ]),
       ),
-      Align(
-        alignment: Alignment.centerLeft,
-        child: TextButton.icon(
-          key: const Key('key-website'),
-          style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 0)),
-          onPressed: () => s.openWebPage('/me/devices'),
-          icon: const Icon(Icons.open_in_new, size: 18),
-          label: const Text('Get a key on the website'),
-        ),
-      ),
-      Align(
-        alignment: Alignment.centerLeft,
-        child: TextButton.icon(
-          key: const Key('privacy-zones-website'),
-          style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 0)),
-          onPressed: () => s.openWebPage('/me/privacy'),
-          icon: const Icon(Icons.open_in_new, size: 18),
-          label: const Text('Manage privacy zones on the website'),
+      const VerticalDivider(width: 1),
+      Expanded(
+        child: SingleChildScrollView(
+          key: const Key('settings-list'),
+          padding: const EdgeInsets.fromLTRB(0, 4, 0, 24),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 760),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                _section(context, sectionInfo(_selected), collapsible: false),
+                _footer(context),
+              ]),
+            ),
+          ),
         ),
       ),
     ]);
   }
-}
-
-class _DriverKeySection extends StatefulWidget {
-  const _DriverKeySection();
-  @override
-  State<_DriverKeySection> createState() => _DriverKeySectionState();
-}
-
-class _DriverKeySectionState extends State<_DriverKeySection> {
-  final _name = TextEditingController();
-  final _callsign = TextEditingController();
-  final _email = TextEditingController();
-  final _pasted = TextEditingController();
-
-  // Tap-to-reveal: the full key is on screen only while the person asks for it (hides itself after 30 s).
-  bool _revealKey = false;
-  Timer? _hideTimer;
-
-  void _setReveal(bool on) {
-    _hideTimer?.cancel();
-    setState(() => _revealKey = on);
-    if (on) {
-      _hideTimer = Timer(const Duration(seconds: 30), () {
-        if (mounted) setState(() => _revealKey = false);
-      });
-    }
-  }
-  bool _showPaste = false;
-  final _form = GlobalKey<FormState>();
-
-  @override
-  void dispose() {
-    _name.dispose();
-    _callsign.dispose();
-    _email.dispose();
-    _pasted.dispose();
-    _hideTimer?.cancel();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
-    final s = AppScope.of(context);
-    final st = s.settings;
-    if (s.hasKey) return _status(context, s, st);
-    return _requestForm(context, s);
-  }
-
-  Widget _status(BuildContext context, AppState s, Settings st) {
-    final t = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 12, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(children: [
-            Flexible(child: KeyStatusBadge(status: st.keyStatus)),
-            const Spacer(),
-            if (s.keyBusy)
-              const Padding(
-                padding: EdgeInsets.all(12),
-                child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
-              )
-            else
-              TextButton.icon(
-                key: const Key('key-refresh'),
-                onPressed: () => s.refreshKeyStatus(),
-                icon: const Icon(Icons.refresh),
-                label: const Text('Refresh'),
-              ),
-          ]),
-          const SizedBox(height: 10),
-          if (st.display != null)
-            Text('Shown on the map as: ${st.display}', style: t.textTheme.titleSmall),
-          Row(children: [
-            Expanded(
-              child: _revealKey
-                  ? SelectableText(st.driverKey ?? '',
-                      key: const Key('revealed-key'), style: t.textTheme.bodyMedium?.copyWith(fontFamily: 'monospace'))
-                  : Text('Driver key: ${s.maskedKey}', key: const Key('masked-key'), style: t.textTheme.bodyMedium),
-            ),
-            IconButton(
-              key: const Key('key-reveal'),
-              tooltip: _revealKey ? 'Hide key' : 'Show key',
-              icon: Icon(_revealKey ? Icons.visibility_off_outlined : Icons.visibility_outlined),
-              onPressed: () => _setReveal(!_revealKey),
-            ),
-            if (_revealKey)
-              IconButton(
-                key: const Key('key-copy'),
-                tooltip: 'Copy key',
-                icon: const Icon(Icons.copy_rounded),
-                onPressed: () async {
-                  await Clipboard.setData(ClipboardData(text: st.driverKey ?? ''));
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Key copied')));
-                  }
-                },
-              ),
-          ]),
-          Text('Works on ${st.serverUrl}. Keep it private: anyone with it can upload drives as you.',
-              key: const Key('key-info'), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
-          const SizedBox(height: 6),
-          Text(keyStatusHelp(st.keyStatus), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
-          if (s.keyError != null) ...[const SizedBox(height: 8), ErrorBanner(s.keyError!)],
-          const SizedBox(height: 8),
-          const _AccountLinks(),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton(
-              key: const Key('forget-key'),
-              style: TextButton.styleFrom(foregroundColor: t.colorScheme.error),
-              onPressed: () async {
-                final ok = await showDialog<bool>(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    title: const Text('Remove this driver key?'),
-                    content: const Text(
-                        'Make sure you can get it again before you remove it: the website\'s Devices page shows keys made after it was updated, otherwise you\'ll need a new one.'),
-                    actions: [
-                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-                      FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Remove')),
-                    ],
-                  ),
-                );
-                if (ok == true) await s.forgetKey();
-              },
-              child: const Text('Remove key'),
-            ),
+    AppScope.of(context); // rebuild with the app state
+    return Scaffold(
+      appBar: AppBar(title: const Text('Settings')),
+      body: SafeArea(
+        child: SettingsAnchors(
+          keys: _anchors,
+          highlighted: _highlight,
+          child: LayoutBuilder(
+            builder: (context, box) => box.maxWidth >= settingsTwoPaneWidth ? _wide(context) : _phone(context),
           ),
-        ],
-      ),
-    );
-  }
-
-  /// Saves the pasted key; on success the field is wiped and folded away so the full key never shows again.
-  Future<void> _usePasted(AppState s) async {
-    final ok = await s.useExistingKey(_pasted.text);
-    if (ok && mounted) {
-      setState(() {
-        _pasted.clear();
-        _showPaste = false;
-      });
-    }
-  }
-
-  Widget _requestForm(BuildContext context, AppState s) {
-    final t = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-      child: SizedBox(
-        width: double.infinity,
-        child: Material(
-          type: MaterialType.transparency,
-          child: Form(
-            key: _form,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(children: [
-                  Text('Driver key', style: t.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                  const Spacer(),
-                  const KeyStatusBadge(status: DriverKeyStatus.none),
-                ]),
-                const SizedBox(height: 6),
-                Text(
-                  'To upload drives, ask the server for a driver key. Your callsign (or "Driver N") is shown publicly; '
-                  'your name and email are only seen by the server admin.',
-                  style: t.textTheme.bodySmall,
-                ),
-                const SizedBox(height: 8),
-                TextFormField(
-                  key: const Key('key-name'),
-                  controller: _name,
-                  decoration: const InputDecoration(labelText: 'Name (required)'),
-                  textInputAction: TextInputAction.next,
-                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter your name' : null,
-                ),
-                const SizedBox(height: 10),
-                TextFormField(
-                  key: const Key('key-callsign'),
-                  controller: _callsign,
-                  decoration: const InputDecoration(labelText: 'Callsign (optional)'),
-                  textInputAction: TextInputAction.next,
-                ),
-                const SizedBox(height: 10),
-                TextFormField(
-                  key: const Key('key-email'),
-                  controller: _email,
-                  decoration: const InputDecoration(labelText: 'Email (optional)'),
-                  keyboardType: TextInputType.emailAddress,
-                  validator: (v) =>
-                      (v != null && v.trim().isNotEmpty && !v.contains('@')) ? 'That doesn\'t look like an email' : null,
-                ),
-                const SizedBox(height: 16),
-                if (s.keyError != null && !_showPaste) ErrorBanner(s.keyError!),
-                FilledButton.icon(
-                  key: const Key('key-request'),
-                  onPressed: s.keyBusy
-                      ? null
-                      : () {
-                          if (!(_form.currentState?.validate() ?? false)) return;
-                          FocusScope.of(context).unfocus();
-                          s.requestKey(name: _name.text, callsign: _callsign.text, email: _email.text);
-                        },
-                  icon: s.keyBusy
-                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(Icons.vpn_key),
-                  label: const Text('Request key'),
-                ),
-                const SizedBox(height: 12),
-                const _AccountLinks(),
-                if (!_showPaste)
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
-                      key: const Key('key-have'),
-                      style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 0)),
-                      onPressed: () => setState(() => _showPaste = true),
-                      icon: const Icon(Icons.key, size: 18),
-                      label: const Text('I already have a key'),
-                    ),
-                  )
-                else ...[
-                  const SizedBox(height: 8),
-                  TextField(
-                    key: const Key('key-paste'),
-                    controller: _pasted,
-                    autofocus: true,
-                    decoration: const InputDecoration(labelText: 'Paste your driver key'),
-                    autocorrect: false,
-                    enableSuggestions: false,
-                    textInputAction: TextInputAction.done,
-                    onSubmitted: (_) {
-                      if (!s.keyBusy) _usePasted(s);
-                    },
-                  ),
-                  if (s.keyError != null) ...[const SizedBox(height: 8), ErrorBanner(s.keyError!, key: const Key('key-paste-error'))],
-                  const SizedBox(height: 8),
-                  FilledButton.icon(
-                    key: const Key('key-use'),
-                    onPressed: s.keyBusy
-                        ? null
-                        : () {
-                            FocusScope.of(context).unfocus();
-                            _usePasted(s);
-                          },
-                    icon: const Icon(Icons.key),
-                    label: const Text('Use this key'),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ---------- sliders ----------
-
-/// Slider stops (values outside these, e.g. from an older settings file, snap to the nearest stop).
-const List<int> intervalStops = [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120];
-const List<int> distanceStops = [15, 25, 50, 75, 100, 125, 150, 200, 250, 300, 400, 500];
-const List<int> holdStops = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-final List<int> syncEveryStops = [for (var m = Settings.minSyncEveryMin; m <= Settings.maxSyncEveryMin; m++) m];
-
-/// Index of the stop closest to [v].
-int nearestStop(List<int> stops, int v) {
-  var best = 0;
-  for (var i = 1; i < stops.length; i++) {
-    if ((stops[i] - v).abs() < (stops[best] - v).abs()) best = i;
-  }
-  return best;
-}
-
-/// A setting with a big value label and a slider over fixed [stops]. Saves when the drag ends (not every frame).
-class SliderTile extends StatefulWidget {
-  final Key? sliderKey;
-  final IconData icon;
-  final String title;
-  final String? caption;
-  final List<int> stops;
-  final int value;
-  final String Function(int v) label;
-  final String? minLabel, maxLabel;
-  final bool enabled;
-  final ValueChanged<int> onChanged;
-  const SliderTile({
-    super.key,
-    this.sliderKey,
-    required this.icon,
-    required this.title,
-    this.caption,
-    required this.stops,
-    required this.value,
-    required this.label,
-    this.minLabel,
-    this.maxLabel,
-    this.enabled = true,
-    required this.onChanged,
-  });
-
-  @override
-  State<SliderTile> createState() => _SliderTileState();
-}
-
-class _SliderTileState extends State<SliderTile> {
-  int? _dragIndex;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    final c = t.colorScheme;
-    final idx = _dragIndex ?? nearestStop(widget.stops, widget.value);
-    final v = widget.stops[idx];
-    final muted = !widget.enabled;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 8, 4),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-          Icon(widget.icon, color: muted ? c.outline : c.onSurfaceVariant),
-          const SizedBox(width: 16),
-          // Title and value share a line when they fit; with large text the value moves under the title.
-          Expanded(
-            child: Wrap(
-              alignment: WrapAlignment.spaceBetween,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: Gap.s,
-              children: [
-                Text(widget.title,
-                    style: t.textTheme.titleMedium?.copyWith(color: muted ? c.onSurfaceVariant : null)),
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: Text(widget.label(v),
-                      key: widget.key is ValueKey<String> ? Key('${(widget.key as ValueKey<String>).value}-value') : null,
-                      style: numberStyle(context, size: 22, color: muted ? c.onSurfaceVariant : c.primary)),
-                ),
-              ],
-            ),
-          ),
-        ]),
-        if (widget.caption != null)
-          Padding(
-            padding: const EdgeInsets.only(left: 40, top: 2, right: 8),
-            child: Text(widget.caption!, style: t.textTheme.bodySmall),
-          ),
-        Padding(
-          padding: const EdgeInsets.only(left: 24),
-          child: SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              trackHeight: 6,
-              tickMarkShape: SliderTickMarkShape.noTickMark,
-              showValueIndicator: ShowValueIndicator.never,
-            ),
-            child: Slider(
-              key: widget.sliderKey,
-              value: idx.toDouble(),
-              min: 0,
-              max: (widget.stops.length - 1).toDouble(),
-              divisions: widget.stops.length - 1,
-              onChanged: widget.enabled ? (d) => setState(() => _dragIndex = d.round()) : null,
-              onChangeEnd: widget.enabled
-                  ? (d) {
-                      final nv = widget.stops[d.round()];
-                      setState(() => _dragIndex = null);
-                      if (nv != widget.value) widget.onChanged(nv);
-                    }
-                  : null,
-            ),
-          ),
-        ),
-        if (widget.minLabel != null || widget.maxLabel != null)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(48, 0, 24, 6),
-            child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              Flexible(child: Text(widget.minLabel ?? '', style: t.textTheme.labelSmall)),
-              Flexible(child: Text(widget.maxLabel ?? '', style: t.textTheme.labelSmall, textAlign: TextAlign.end)),
-            ]),
-          ),
-      ]),
-    );
-  }
-}
-
-/// "Last upload 14:05 · OK" / the reason it failed / "Uploading…".
-class _LastUpload extends StatelessWidget {
-  final AppState state;
-  const _LastUpload({required this.state});
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    final m = MeshSonarColors.of(context);
-    final s = state;
-    final (IconData icon, Color color, String text) = s.uploading
-        ? (Icons.sync, t.colorScheme.primary, 'Uploading…')
-        : s.lastUploadError != null
-            ? (Icons.cloud_off, t.colorScheme.error, 'Last upload failed: ${s.lastUploadError}')
-            : s.lastUploadAt != null
-                ? (Icons.cloud_done, m.snrStrong, 'Last upload ${formatTime(s.lastUploadAt!)} · OK')
-                : (Icons.cloud_queue, t.colorScheme.onSurfaceVariant,
-                    s.keyApproved ? 'No uploads yet.' : 'No uploads yet. Uploads start once your key is approved.');
-    return Padding(
-      key: const Key('last-upload'),
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Icon(icon, color: color, size: 22),
-        const SizedBox(width: 18),
-        Expanded(child: Text(text, style: t.textTheme.bodyMedium?.copyWith(color: color, fontWeight: FontWeight.w600))),
-      ]),
-    );
-  }
-}
-
-// ---------- edit dialogs ----------
-
-Future<String?> _editText(
-  BuildContext context, {
-  required String title,
-  required String initial,
-  String? hint,
-  String? help,
-  TextInputType? keyboard,
-  String? Function(String)? validate,
-}) {
-  final c = TextEditingController(text: initial);
-  final formKey = GlobalKey<FormState>();
-  return showDialog<String>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: Text(title),
-      content: Form(
-        key: formKey,
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          TextFormField(
-            key: const Key('edit-field'),
-            controller: c,
-            autofocus: true,
-            keyboardType: keyboard,
-            decoration: InputDecoration(hintText: hint),
-            validator: (v) {
-              final s = v ?? '';
-              if (s.trim().isEmpty && validate == null) return 'Enter a value';
-              return validate?.call(s);
-            },
-          ),
-          if (help != null) ...[const SizedBox(height: 8), Text(help, style: Theme.of(ctx).textTheme.bodySmall)],
-        ]),
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-        FilledButton(
-          key: const Key('edit-save'),
-          onPressed: () {
-            if (formKey.currentState?.validate() ?? false) Navigator.pop(ctx, c.text);
-          },
-          child: const Text('Save'),
-        ),
-      ],
-    ),
-  );
-}
-
-/// Which region the app is viewing; opens the switcher.
-class _RegionPickTile extends StatelessWidget {
-  const _RegionPickTile();
-  @override
-  Widget build(BuildContext context) {
-    final s = AppScope.of(context);
-    final v = s.viewingRegion;
-    return ListTile(
-      key: const Key('region-pick'),
-      leading: const Icon(Icons.map_outlined),
-      title: const Text('Region'),
-      subtitle: Text(v == null
-          ? 'Not loaded yet'
-          : '${v.name} (${v.code}) · ${s.viewingIsManual ? 'picked by you' : 'following your location'}'),
-      trailing: const Icon(Icons.chevron_right),
-      onTap: () => showRegionSwitcher(context),
-    );
-  }
-}
-
-/// Metric, imperial, or follow the phone's locale.
-class _UnitsTile extends StatelessWidget {
-  const _UnitsTile();
-  @override
-  Widget build(BuildContext context) {
-    final s = AppScope.of(context);
-    final pref = s.settings.units;
-    return ListTile(
-      key: const Key('units-tile'),
-      leading: const Icon(Icons.straighten),
-      title: const Text('Units'),
-      subtitle: Padding(
-        padding: const EdgeInsets.only(top: 8),
-        child: SegmentedButton<UnitsPreference>(
-          key: const Key('units-selector'),
-          showSelectedIcon: false,
-          segments: const [
-            ButtonSegment(value: UnitsPreference.auto, label: Text('Auto')),
-            ButtonSegment(value: UnitsPreference.metric, label: Text('Metric')),
-            ButtonSegment(value: UnitsPreference.imperial, label: Text('Imperial')),
-          ],
-          selected: {pref},
-          onSelectionChanged: (v) => s.updateSettings(s.settings.copyWith(units: v.first)),
         ),
       ),
     );

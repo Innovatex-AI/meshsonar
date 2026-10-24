@@ -1,7 +1,7 @@
 // "Report a problem" (spec m1-app-0.4.0 §3): AC-2, AC-3, AC-4, AC-5, AC-6, AC-8, AC-9, AC-16 (report screens).
 //
 // UI contract (keys chosen by Q; texts from the spec):
-//   Settings → About: ListTile Key('report-problem') "Report a problem", above Key('about').
+//   Settings → Diagnostics: ListTile Key('report-problem') "Report a problem", above Key('about') (About section).
 //   Drive detail: overflow button Key('detail-more') → item "Report a problem with this drive" (pre-selects the drive).
 //   Form screen Key('report-screen'): category chips ValueKey('report-category-<bug|radio|gps|upload|map|idea|other>'),
 //     description TextField Key('report-description') with live counter Text Key('report-counter'),
@@ -85,14 +85,16 @@ bool counterInError(WidgetTester tester) {
 
 void main() {
   group('AC-2 entry points and the key rule', () {
-    testWidgets('Settings → About has "Report a problem" above "About MeshSonar"', (tester) async {
+    // Settings restructure (stream 6): Report a problem moved from About to the Diagnostics section, which sits
+    // directly above About, so it is still above "About MeshSonar".
+    testWidgets('Settings → Diagnostics has "Report a problem", above "About MeshSonar"', (tester) async {
       useTallScreen(tester);
       final h = M1Harness()..approveKey();
       await h.pumpApp(tester);
       await openSettings(tester);
       await scrollSettingsTo(tester, find.byKey(const Key('about')));
       final row = find.byKey(const Key('report-problem'));
-      expect(find.descendant(of: find.byKey(const Key('section-about-section')), matching: row), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const Key('section-diagnostics')), matching: row), findsOneWidget);
       expect(find.descendant(of: row, matching: find.text('Report a problem')), findsOneWidget);
       expect(tester.getTopLeft(row).dy, lessThan(tester.getTopLeft(find.byKey(const Key('about'))).dy));
       await tester.tap(row);

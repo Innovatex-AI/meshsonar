@@ -124,6 +124,10 @@ RegionCache? _sharedCache;
 /// get plain clients).
 EtagClient? get sharedEtagClient => _shared;
 
+/// The disk cache behind [sharedEtagClient], or null when it is not installed (tests). Settings > Data & storage shows
+/// its size and can clear it.
+RegionCache? get sharedEtagCache => _sharedCache;
+
 /// Called once at startup (lib/app/wiring.dart) with the cache directory.
 void installSharedEtagClient(Directory dir) {
   _sharedCache = RegionCache(dir, maxEntries: 150);
