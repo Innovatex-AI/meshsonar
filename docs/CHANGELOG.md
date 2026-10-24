@@ -3,6 +3,14 @@
 All notable changes to MeshSonar. Dates are local (US Eastern). This changelog was reconstructed from the commit
 history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md](ROADMAP.md).
 
+## [0.19.0] — 2026-10-24 — Timeline, telemetry, offline cache
+
+- Map layers > Network coverage > Coverage options: "Coverage growth (as of)" slider with play/pause and a Live reset; the map shows a "Coverage as of <date>" badge while scrubbed back (server `public-coverage?until=`).
+- Opt-out telemetry uploader: packet headers and metadata only (type, route, path hashes, SNR/RSSI, time, packet hash), never payloads or coordinates, never your own pings or private message types. Turning it off clears the queue and offers to erase what was already shared.
+- Region data is cached with ETags; with no network the Region tab shows stored data labelled "Offline - as of ...".
+- The region follows the phone's GPS when not driving (same preset: notice and switch; different preset: prompt; the radio is never changed silently).
+- Repeater detail screen (tap a repeater in the Region tab > Repeaters).
+
 ## [0.18.0] — 2026-10-23 — Coverage layer controls
 
 - Map layers sheet > Network coverage > "Coverage options": hex detail (Auto picks H3 resolution 7 to 11 by zoom, or pin one), colour by Best SNR / Share heard / Noise floor with a legend, since chips (1 h, 24 h, 7 d, All) and source chips (All, MeshSonar, MeshMapper); tapping a cell opens a sheet with pings, heard share, best and median SNR, repeaters heard, noise floor and last measured. The coverage timeline needs a server change and is not built.
