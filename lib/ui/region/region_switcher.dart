@@ -1,10 +1,13 @@
 // The region switcher (Andy, Oct 21): lists ALL regions, the phone's GPS region first, then nearest; picking one
 // swaps the whole Region tab, the coverage layer and the radio preset shown. "Follow my location" goes back to GPS.
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../app/app_state.dart';
 import '../../core/region_lookup.dart';
 import '../app.dart';
+import 'regions_screen.dart';
 
 Future<void> showRegionSwitcher(BuildContext context) {
   final state = AppScope.read(context);
@@ -39,6 +42,18 @@ class RegionSwitcherSheet extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
                   child: Text('Choose a region', style: t.textTheme.titleLarge),
+                ),
+                ListTile(
+                  key: const Key('region-all'),
+                  leading: const Icon(Icons.public),
+                  title: const Text('All regions'),
+                  subtitle: const Text('Compare every region and switch'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    final nav = Navigator.of(context);
+                    nav.pop();
+                    unawaited(nav.push(MaterialPageRoute<void>(builder: (_) => const RegionsScreen())));
+                  },
                 ),
                 RadioGroup<String>(
                   groupValue: state.viewingIsManual ? viewing?.code : '',

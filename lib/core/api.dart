@@ -294,6 +294,10 @@ class Settings {
   /// Metric / imperial / auto (phone locale).
   final UnitsPreference units;
 
+  /// Share packet headers and radio metrics (never message content) to build the live packet feed. On by default;
+  /// this is the opt-out. See lib/core/telemetry.dart.
+  final bool telemetryEnabled;
+
   /// Allowed ranges (UI sliders and clamping).
   static const int minIntervalSec = 10, maxIntervalSec = 120;
   static const int minDistance = 15, maxDistance = 500;
@@ -317,6 +321,7 @@ class Settings {
     this.regionManual,
     this.regionLast,
     this.units = UnitsPreference.auto,
+    this.telemetryEnabled = true,
   });
 
   Settings copyWith({
@@ -337,6 +342,7 @@ class Settings {
     bool clearRegionManual = false,
     String? regionLast,
     UnitsPreference? units,
+    bool? telemetryEnabled,
     bool clearKey = false,
   }) =>
       Settings(
@@ -357,6 +363,7 @@ class Settings {
         regionManual: clearRegionManual ? null : (regionManual ?? this.regionManual),
         regionLast: regionLast ?? this.regionLast,
         units: units ?? this.units,
+        telemetryEnabled: telemetryEnabled ?? this.telemetryEnabled,
       );
 
   Map<String, dynamic> toJson() => {
@@ -377,6 +384,7 @@ class Settings {
         if (regionManual != null) 'region_manual': regionManual,
         if (regionLast != null) 'region_last': regionLast,
         if (units != UnitsPreference.auto) 'units': units.name,
+        if (!telemetryEnabled) 'telemetry_enabled': false,
       };
   factory Settings.fromJson(Map<String, dynamic> j) => Settings(
         serverUrl: _str(j['server_url']) ?? defaultServerUrl,
@@ -397,6 +405,7 @@ class Settings {
         regionManual: _str(j['region_manual']),
         regionLast: _str(j['region_last']),
         units: UnitsPreference.parse(j['units']),
+        telemetryEnabled: j['telemetry_enabled'] is bool ? j['telemetry_enabled'] as bool : true,
       );
 
   /// A string field; anything else is null so the default applies.

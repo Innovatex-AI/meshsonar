@@ -9,6 +9,7 @@ import 'package:uuid/uuid.dart';
 import '../core/cmat_client.dart';
 import '../core/drive_store.dart';
 import '../core/position_filter.dart';
+import '../core/region_cache.dart';
 import '../core/region_lookup.dart';
 import '../core/repeater_directory.dart';
 import '../core/report_draft_store.dart';
@@ -85,6 +86,7 @@ Future<AppServices> buildRealServices() async {
     directory: RepeaterDirectory(
         cacheFile: File('${root.path}${Platform.pathSeparator}node_directory.json'), ttl: const Duration(days: 7)),
     regionIndexCache: FileRegionIndexCache(File('${root.path}${Platform.pathSeparator}regions_index.json')),
+    regionCache: RegionCache(Directory('${root.path}${Platform.pathSeparator}region_cache')),
     clock: DateTime.now,
     newId: () => uuid.v4(),
   );

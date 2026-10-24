@@ -6,6 +6,7 @@ import 'dart:io';
 
 import '../core/api.dart';
 import '../core/model.dart';
+import '../core/region_cache.dart';
 import '../core/region_lookup.dart';
 import '../core/repeater_directory.dart';
 import '../core/report_draft_store.dart';
@@ -102,6 +103,9 @@ class AppServices {
   /// (tests; AppState falls back to a [MemoryRegionIndexCache]).
   final RegionIndexCache? regionIndexCache;
 
+  /// Disk cache (ETag/LRU) for per-region site-config and coverage, with offline/as-of labels. Null = no caching.
+  final RegionCache? regionCache;
+
   final DateTime Function() clock;
   final String Function() newId;
 
@@ -127,6 +131,7 @@ class AppServices {
     this.directory,
     this.reportDraftStore,
     this.regionIndexCache,
+    this.regionCache,
   });
 
   /// Public node directory (map.meshcore.io) for names/positions CMAT doesn't know. Null = not used (tests).
