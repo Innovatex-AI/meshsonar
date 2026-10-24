@@ -229,7 +229,7 @@ class RecordingClient implements CmatClient {
   Future<SiteConfig> siteConfig() => throw UnimplementedError();
 
   @override
-  Future<PublicCoverage> publicCoverage({int? res, DateTime? since, String? source}) => throw UnimplementedError();
+  Future<PublicCoverage> publicCoverage({int? res, DateTime? since, DateTime? until, String? source}) => throw UnimplementedError();
 
   @override
   Future<List<RegionIndexEntry>> regionsIndex() => throw UnimplementedError();

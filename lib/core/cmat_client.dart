@@ -261,11 +261,12 @@ class HttpCmatClient implements CmatClient, TelemetryTransport {
   }
 
   @override
-  Future<PublicCoverage> publicCoverage({int? res, DateTime? since, String? source}) async {
+  Future<PublicCoverage> publicCoverage({int? res, DateTime? since, DateTime? until, String? source}) async {
     // Public endpoint: no x-driver-key. Params are the website's own layer filters; omitted = server defaults.
     final q = <String, String>{
       if (res != null) 'res': '$res',
       if (since != null) 'since': since.toUtc().toIso8601String(),
+      if (until != null) 'until': until.toUtc().toIso8601String(),
       if (source != null && source != 'all') 'source': source,
     };
     final j = await _send('GET', 'public-coverage', query: q);

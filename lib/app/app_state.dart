@@ -155,6 +155,14 @@ class AppState extends ChangeNotifier {
   PublicCoverage? _networkCoverage;
   CoverageQuery _coverageQuery = const CoverageQuery();
   int _coverageSeq = 0;
+  bool _coverageLoading = false;
+  bool _coverageFailed = false;
+
+  /// True while the newest network-coverage request is in flight (the timeline slider's "loading" state).
+  bool get networkCoverageLoading => _coverageLoading;
+
+  /// True when the newest network-coverage request failed (cells already on screen, if any, are stale).
+  bool get networkCoverageFailed => _coverageFailed;
 
   /// What the layer last asked for (res null = server default).
   CoverageQuery get coverageQuery => _coverageQuery;
@@ -173,14 +181,20 @@ class AppState extends ChangeNotifier {
     if (query != null) _coverageQuery = query;
     final q = _coverageQuery;
     final seq = ++_coverageSeq;
+    _coverageLoading = true;
+    notifyListeners();
     try {
       final viewing = viewingRegion;
-      final key = 'coverage_${viewing?.code ?? 'default'}_r${q.res ?? 'd'}_${q.since.name}_${q.source.name}';
+      final until = q.until;
+      final key = 'coverage_${viewing?.code ?? 'default'}_r${q.res ?? 'd'}_${q.since.name}_${q.source.name}'
+          '${until == null ? '' : '_u${until.toUtc().millisecondsSinceEpoch ~/ 1000}'}';
       final r = await _cachedFetch<PublicCoverage>(
         key,
         () => _coverageClient(viewing).publicCoverage(
           res: q.res,
-          since: q.since.window == null ? null : DateTime.now().toUtc().subtract(q.since.window!),
+          // "Measured in the last X" is relative to the as-of instant when the timeline is scrubbed back.
+          since: q.since.window == null ? null : (until ?? DateTime.now().toUtc()).subtract(q.since.window!),
+          until: until,
           source: q.source.wire,
         ),
         publicCoverageToJson,
@@ -191,9 +205,16 @@ class AppState extends ChangeNotifier {
       if (viewing?.code != viewingRegion?.code) return; // the viewed region changed while this was in flight
       _networkCoverage = r.value;
       _coverageMeta = r.meta;
+      _coverageLoading = false;
+      _coverageFailed = false;
       notifyListeners();
     } catch (e) {
       _logError('Fetching network coverage failed', e);
+      if (seq == _coverageSeq) {
+        _coverageLoading = false;
+        _coverageFailed = true;
+        notifyListeners();
+      }
     }
   }
 

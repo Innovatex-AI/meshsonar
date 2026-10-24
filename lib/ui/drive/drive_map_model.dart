@@ -16,10 +16,13 @@ import '../../core/coverage_query.dart';
 import '../../core/heard.dart';
 import '../../core/hex_cells.dart' show loadHexEngine;
 import '../../core/model.dart';
+import '../../core/coverage_timeline.dart';
+import '../../core/region_timeline_api.dart';
 import '../../core/network_coverage.dart';
 import '../../core/region_repeaters_api.dart';
 import '../../radio/radio_api.dart';
 import '../../radio/simulator.dart' show defaultSimulatedRepeaters;
+import '../map/coverage_timeline_controller.dart';
 import '../map/map_layers.dart';
 
 class DriveMapModel extends ChangeNotifier {
@@ -229,6 +232,14 @@ class DriveMapModel extends ChangeNotifier {
       changed = true;
     }
 
+    // The viewed region changed: the timeline's first-data date is per region, so go back to live and reload it.
+    final rc = s.viewingRegion?.code;
+    if (rc != _timelineRegion) {
+      final first = _timelineRegion == null;
+      _timelineRegion = rc;
+      if (!first) timeline.regionChanged();
+    }
+
     // Network-wide coverage: a new fetch (initial, or after a server change) redraws the background layer even
     // if nothing else about the drive changed (most often: the fetch lands before anyone has started driving).
     if (!identical(s.networkCoverage, _networkSrc)) {
@@ -279,6 +290,20 @@ class DriveMapModel extends ChangeNotifier {
     _scheduleCoverageFetch(immediate: true);
   }
 
+  /// The coverage-growth slider ("as of" date). Owned here so the layer sheet and the map label share one state.
+  late final CoverageTimelineController timeline = CoverageTimelineController(
+    getQuery: () => _query,
+    setQuery: (q) => coverageQuery = q,
+    baseUrl: () => state.viewingRegion?.url ?? state.siteConfig?.region.url ?? state.client.baseUrl.toString(),
+    fetchTimeline: (u) => timelineFetcher(u),
+    clock: state.services.clock,
+    budget: RateBudget(),
+  )..addListener(notifyListeners);
+  String? _timelineRegion;
+
+  /// Test seam: how the region's first-data date is fetched.
+  Future<RegionTimeline?> Function(String baseUrl) timelineFetcher = fetchRegionTimeline;
+
   double? _zoom;
 
   /// The resolution actually requested: the pinned one, else the one for the map's zoom (res 9 until the map reports).
@@ -298,8 +323,8 @@ class DriveMapModel extends ChangeNotifier {
       final res = effectiveRes;
       final shown = state.networkCoverage?.grid.res;
       final asked = state.coverageQuery;
-      if (!immediate && shown == res && asked.since == _query.since && asked.source == _query.source) return;
-      unawaited(state.refreshNetworkCoverage(query: CoverageQuery(res: res, since: _query.since, source: _query.source)));
+      if (!immediate && shown == res && asked.since == _query.since && asked.source == _query.source && asked.until == _query.until) return;
+      unawaited(state.refreshNetworkCoverage(query: CoverageQuery(res: res, since: _query.since, source: _query.source, until: _query.until)));
     }
 
     if (immediate) {
@@ -315,6 +340,7 @@ class DriveMapModel extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _fetchTimer?.cancel();
+    timeline.dispose();
     state.removeListener(_onState);
     unawaited(_fixSub?.cancel());
     super.dispose();

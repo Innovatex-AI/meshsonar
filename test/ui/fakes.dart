@@ -192,10 +192,12 @@ class FakeCmatClient implements CmatClient {
   int? lastCoverageRes;
   String? lastCoverageSource;
   DateTime? lastCoverageSince;
+  DateTime? lastCoverageUntil;
 
   @override
-  Future<PublicCoverage> publicCoverage({int? res, DateTime? since, String? source}) async {
+  Future<PublicCoverage> publicCoverage({int? res, DateTime? since, DateTime? until, String? source}) async {
     publicCoverageCalls++;
+    lastCoverageUntil = until;
     lastCoverageRes = res;
     lastCoverageSource = source;
     lastCoverageSince = since;

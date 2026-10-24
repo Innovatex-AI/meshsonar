@@ -15,6 +15,7 @@ import '../drive/drive_controls.dart';
 import '../drive/drive_map_model.dart';
 import '../drive/heard_box.dart';
 import 'coverage_layer_controls.dart';
+import 'coverage_timeline_slider.dart';
 import 'coverage_map.dart';
 import 'region_center.dart';
 import 'map_layers.dart';
@@ -106,6 +107,11 @@ class FullscreenMapScreen extends StatelessWidget {
                     ),
                   ),
                 ),
+              ),
+              Positioned(
+                left: safe.left + Gap.m,
+                top: safe.top + Gap.m,
+                child: CoverageAsOfBadge(model: model),
               ),
               Positioned(
                 right: safe.right + Gap.m,
