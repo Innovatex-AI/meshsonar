@@ -388,13 +388,20 @@ keywords and section names (every word must match; title hits first); tapping a 
 section, scrolls to the row and tints it, and announces "<row>, in <section>". Rows that are not on screen in the
 current state (no key, no site-config yet) are never offered. The index lives in `ui/settings/settings_index.dart`.
 
+Phone layout: one list of section cards (expanded; a header tap folds one), search at the top, and two app bar
+buttons: **Search** (back to the field from anywhere) and **Sections** (a sheet listing every section; tap to open and
+scroll to it). No dead ends: every row is actionable, a declared information row, or says why it is unavailable and
+how to make it available (e.g. "Off in discovery mode: nothing is transmitted. Turn Discovery (listen-only) off to use
+it."); `test/ui/settings_no_dead_end_test.dart` enforces it.
+
 | Section | Item | Behaviour |
 |---|---|---|
 | Account & driver key (`driver`) | **Driver key** | Without a key: a request form (name required, callsign and email optional) → `driver-request`, or paste a key from the website. With a key: a status badge (No key / Pending approval / Approved / Rejected / Revoked / Not recognised by this server), the public display name, the masked key (tap to reveal for 30 s, copy), **Refresh** (`driver-status`) and **Remove key** (asks; says drives stay on the phone and headers stop). Approval also downloads repeater names. "Manage your drives at `<server>/me`" and **Get a key on the website**. |
 | | **Server URL** | Must be http(s) with a host. Keys are per server: with a key saved, moving to another server asks "Change server and remove your key?", then removes the key. Another address of the same server keeps it. Unsent drives stay on the phone. |
 | Region (`region`) | **Region** | Which region the app shows (follows your location unless you pick one; opens the switcher). |
 | | **Connected to** (`site-region`), **Radio preset** (`site-radio-preset`) | From `GET /api/cmh/site-config`, shown only once it has answered. The preset row compares the region's suggested preset with the connected radio's own ("Yours"); states: no preset, preset with no radio, both. Information only: the app never writes to the radio. |
-| Units & display (`display`) | **Units** | Auto / Metric / Imperial with the explanation of what Auto resolves to on this phone ("Auto follows your phone's region: imperial in the US, Liberia and Myanmar, metric elsewhere. Showing imperial (ft, mi, mph)."). Stored data never changes. |
+| Units & display (`display`) | **Units** | Auto / Metric / Imperial with the explanation of what Auto resolves to on this phone ("Auto follows your phone's region: imperial in the US, Liberia and Myanmar, metric elsewhere. Showing imperial (ft, mi, mph)."). Stored data never changes. With any per-quantity unit set it says which ("Own choice below: speed in mph") and offers **Make every quantity follow Units** (Undo in the snackbar). |
+| | **Distance**, **Speed**, **Height and altitude**, **Temperature**, **Air pressure** (`unit-*`) | Each "Follows Units" by default; tap for a picker: Follow / Metric / Imperial (temperature °C / °F; pressure hPa / inHg / mmHg). Applies everywhere numbers are shown (all formatting goes through `core/units.dart`; reports say e.g. "Units: metric, with speed in mph"). Saved as `unit_overrides` in settings.json. |
 | | **Heard list hold** | 1–10 pings (default 3). |
 | Map & offline maps (`maps`) | **Offline maps** | Opens the offline map packs screen (download, update, delete per region). |
 | Privacy & data sharing (`privacy`) | **One switch per data category** | From the registry in `ui/settings/data_sharing.dart`; today only **Share packet headers** (`telemetry-toggle`). On by default (opt-out). The row shows its state: off, on but waiting for a key, or N headers waiting on the phone. Turning it **on** asks first and lists exactly what is shared and never shared. Turning it **off** stops collection at once and deletes the unsent queue; with a key it then offers to erase the server copy (`DELETE /api/cmh/telemetry`). |
@@ -438,8 +445,9 @@ goes, and "Change your mind any time in Settings, under Privacy & data sharing";
   after that.
 - **No fake border crossings:** a region seeded from an old fix (last-known, or an OS-cached one older than 15 min) is
   re-seeded by the first live fix, so opening the app somewhere else never shows "Entered ..." or a preset prompt.
-- **Stale fixes** (older than 24 h) still centre the map and pick the region; the map says "Last known location, 3 d
-  ago" until a live fix arrives.
+- **Stale fixes** (older than 72 h) are labelled ("Last known location, 4 d ago") and may still centre the map as a
+  fallback, but never move the region: no switch, no "Entered ..." notice, no preset prompt. A picked or remembered
+  region that does not hold the stale fix wins the map centre. Any non-live fix is labelled until a live fix arrives.
 - **Fallbacks:** no fix at all: the last viewed region's centre; never viewed a region: the middle of every region; no
   regions known either: the whole world. A region picked by hand that does not contain the phone opens on that region.
 - **Location states** (Drive tab under the map, Region tab on top; `lib/ui/location_status.dart`): not asked / denied

@@ -5,6 +5,10 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- Units: besides Auto / Metric / Imperial, distance, speed, height and altitude, temperature (°C/°F) and air pressure (hPa/inHg/mmHg) can each have their own unit; each follows Units by default. Old settings files load unchanged.
+- Settings on phones: app bar Search and Sections (jump to any section); every unavailable control now says why and how to enable it; removing the driver key says how to undo it.
+- A last-known position older than 72 hours (was 24 h) is labelled and can still centre the map, but no longer switches the region or shows a region notice or preset prompt.
+
 - The Drive map and the Region tab open on the phone at once (last-known position), then move to the fresh GPS fix unless you moved the map; an old position is labelled "Last known location, 3 d ago". With no position the app opens on the last region, else on all regions.
 - Location off, not asked, denied, restricted, approximate or services off: a plain note with the right action (Allow location, Open Settings) and "Choose region". Nothing is asked on launch.
 - Repeater lists sync on app open and resume (region roster with ETag, and the server's network repeater list once it is offered) and are stored for offline names and map pins; the Repeaters panel shows "Updated 5m ago" / "Offline - as of 2d ago".
