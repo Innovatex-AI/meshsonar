@@ -9,6 +9,8 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
+import 'etag_client.dart';
+
 /// The server's per-dataset state (`Sourced.state`), plus [unknown] for a value this app does not know.
 enum DataState { ready, partial, pending, unavailable, stale, unknown }
 
@@ -272,7 +274,7 @@ class RegionReportsApi {
 
   RegionReportsApi(String baseUrl, {http.Client? client, this.timeout = const Duration(seconds: 25)})
       : baseUrl = Uri.parse(baseUrl.trim()),
-        _http = client ?? http.Client();
+        _http = client ?? newRegionWireClient();
 
   /// `<baseUrl>/api/<slug>/<name>`.
   Uri endpoint(String slug, String name) {

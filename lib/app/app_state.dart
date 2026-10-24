@@ -18,8 +18,10 @@ import '../core/diagnostics.dart';
 import '../core/drive_store.dart' show closeOrphanedSessions;
 import '../core/heard.dart';
 import '../core/model.dart';
-import '../core/region_lookup.dart';
+import '../core/etag_client.dart';
+import '../core/idle_region_watcher.dart';
 import '../core/region_cache.dart';
+import '../core/region_lookup.dart';
 import '../core/region_pick.dart';
 import '../core/region_preset.dart';
 import '../core/region_tracker.dart';
@@ -29,6 +31,7 @@ import '../core/server_url.dart';
 import '../core/telemetry.dart';
 import '../core/telemetry_uploader.dart';
 import '../core/units.dart';
+import '../platform/app_lifecycle_bridge.dart';
 import '../radio/radio_api.dart';
 import 'messages.dart';
 import 'services.dart';
@@ -122,7 +125,9 @@ class AppState extends ChangeNotifier {
   /// failed; null when everything is live (or no cache is in use).
   String? get regionDataOfflineLabel {
     final m = (_coverageMeta?.offline ?? false) ? _coverageMeta : ((_siteConfigMeta?.offline ?? false) ? _siteConfigMeta : null);
-    return m == null ? null : asOfLabel(m.fetchedAt, services.clock(), offline: true);
+    if (m != null) return asOfLabel(m.fetchedAt, services.clock(), offline: true);
+    final wire = sharedEtagClient?.offlineSince; // a region panel was served from the on-disk ETag cache
+    return wire == null ? null : asOfLabel(wire, services.clock(), offline: true);
   }
 
   // ---------- site config (region + radio preset) ----------
@@ -382,13 +387,32 @@ class AppState extends ChangeNotifier {
     } catch (e) {
       _logError('Getting a GPS fix for region awareness failed', e);
     }
+    // No live fix (indoors, slow GPS, permission pending): the last place the phone was seen, persisted by the idle
+    // watcher, so the Region tab opens on the right region.
+    fix ??= await services.lastKnownStore?.load();
     if (fix != null) _updateRegion(fix);
+    _startIdleWatcher();
     await _regionIndexService.refresh();
     final regionErr = _regionIndexService.lastError;
     if (regionErr != null) diagnostics.add('Fetching regions-index failed: $regionErr');
     // The index may have just changed (first fetch, or a different index than the cache): re-check the same fix.
     if (fix != null) _updateRegion(fix);
     notifyListeners();
+  }
+
+  // Idle region detection (WP-R4): a low-power foreground stream while NOT driving feeds the same tracker the drive
+  // uses, so a same-preset crossing notifies and switches the view, and a different-preset one prompts (never a
+  // silent radio change). Paused during drives and, unless "Always" location is granted, while backgrounded.
+  IdleRegionWatcher? _idle;
+  AppLifecycleBridge? _lifecycle;
+
+  void _startIdleWatcher() {
+    final src = services.idleLocation;
+    if (src == null || _idle != null) return;
+    final w = _idle = IdleRegionWatcher(source: src, store: services.lastKnownStore, onFix: _updateRegion);
+    _lifecycle = AppLifecycleBridge((fg) => unawaited(w.setForeground(fg)))..attach();
+    unawaited(w.setDriving(driving));
+    unawaited(w.start());
   }
 
   /// Last few characters only; the full key is never shown.
@@ -859,6 +883,7 @@ class AppState extends ChangeNotifier {
         listenOnly: s.discoveryMode,
       ));
       _scheduleDriveSync();
+      unawaited(_idle?.setDriving(true));
       diagnostics.add(s.discoveryMode
           ? 'Drive started on ${s.channel}, listen-only (nothing transmitted)'
           : 'Drive started on ${s.channel}, auto-ping every ${s.intervalSec} s');
@@ -1003,6 +1028,7 @@ class AppState extends ChangeNotifier {
       _lastFinishedSessionId = session.id;
       diagnostics.add('Drive stopped after $_pingCount ping${_pingCount == 1 ? '' : 's'}');
       _session = null;
+      unawaited(_idle?.setDriving(false));
       _status = const EngineStatus(EngineState.idle);
     } finally {
       _busy = false;
@@ -1682,6 +1708,8 @@ class AppState extends ChangeNotifier {
 
   @override
   void dispose() {
+    _lifecycle?.detach();
+    unawaited(_idle?.dispose());
     _cancelDriveSync();
     _pingSub?.cancel();
     _statusSub?.cancel();

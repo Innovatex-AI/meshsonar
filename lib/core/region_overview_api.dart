@@ -6,6 +6,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'etag_client.dart';
+
 enum RegionDataState { ready, partial, pending, unavailable, stale }
 
 RegionDataState _stateFrom(Object? v) => switch (v) {
@@ -236,7 +238,7 @@ class RegionOverviewApi {
     this.baseUrl, {
     http.Client? client,
     this.timeout = const Duration(seconds: 15),
-  }) : _client = client ?? http.Client();
+  }) : _client = client ?? newRegionWireClient();
 
   Uri endpoint(String name) {
     final b = baseUrl.endsWith('/')
