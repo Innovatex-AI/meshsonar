@@ -9,6 +9,7 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 - Location off, not asked, denied, restricted, approximate or services off: a plain note with the right action (Allow location, Open Settings) and "Choose region". Nothing is asked on launch.
 - Repeater lists sync on app open and resume (region roster with ETag, and the server's network repeater list once it is offered) and are stored for offline names and map pins; the Repeaters panel shows "Updated 5m ago" / "Offline - as of 2d ago".
 - Repeater names: region roster first, then MeshSonar's list, then the network list near you, then map.meshcore.io; prefixes the region marks as shared are never guessed. With the network list available the 17 MB map.meshcore.io download is skipped.
+- Map engine groundwork (not on screen yet): grid clustering for 5-20k points (`core/cluster_index.dart`), map links compatible with the website's `/coverage` URL (`core/map_view_state.dart`), the layer registry with website `?show=` keys and honest per-layer availability, a single-painter clustered repeater layer for the global "All MeshCore repeaters" list and the region roster, and a repeater detail sheet (copy key, last advert, distance in your units, Open repeater page).
 
 ## [0.19.0] — 2026-10-24 — Timeline, telemetry, offline cache
 
