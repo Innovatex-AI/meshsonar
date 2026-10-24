@@ -12,21 +12,36 @@ import '../../app/app_state.dart';
 
 class UiPrefs extends ChangeNotifier {
   bool _onboardingSeen;
+  bool _telemetryDisclosed;
   final Map<String, String> _labels;
   bool _loaded;
 
-  UiPrefs({bool seen = false, Map<String, String>? labels})
+  /// [telemetryDisclosed] defaults to true so tests and file-less runs never open the disclosure sheet.
+  UiPrefs({bool seen = false, Map<String, String>? labels, bool telemetryDisclosed = true})
       : _onboardingSeen = seen,
+        // ignore: prefer_initializing_formals
+        _telemetryDisclosed = telemetryDisclosed,
         _labels = {...?labels},
         _loaded = true;
 
   UiPrefs._unloaded()
       : _onboardingSeen = false,
+        _telemetryDisclosed = false,
         _labels = {},
         _loaded = false;
 
   bool get loaded => _loaded;
   bool get onboardingSeen => _onboardingSeen;
+
+  /// True once the person has seen the telemetry disclosure sheet (whatever they chose).
+  bool get telemetryDisclosed => _telemetryDisclosed;
+
+  Future<void> markTelemetryDisclosed() async {
+    if (_telemetryDisclosed) return;
+    _telemetryDisclosed = true;
+    notifyListeners();
+    await persist();
+  }
 
   /// Name typed on this phone for a drive, if any.
   String? labelFor(String sessionId) => _labels[sessionId];
@@ -65,7 +80,7 @@ class UiPrefs extends ChangeNotifier {
   /// Saves. The in-memory version only keeps values.
   Future<void> persist() async {}
 
-  Map<String, dynamic> toJson() => {'onboarding_seen': _onboardingSeen, 'labels': _labels};
+  Map<String, dynamic> toJson() => {'onboarding_seen': _onboardingSeen, 'telemetry_disclosed': _telemetryDisclosed, 'labels': _labels};
 }
 
 /// JSON file next to settings.json. A damaged or missing file means "first run" with no names.
@@ -83,6 +98,7 @@ class FileUiPrefs extends UiPrefs {
         final j = jsonDecode(await file.readAsString());
         if (j is Map) {
           _onboardingSeen = j['onboarding_seen'] == true;
+          _telemetryDisclosed = j['telemetry_disclosed'] == true;
           final l = j['labels'];
           if (l is Map) l.forEach((k, v) => _labels['$k'] = '$v');
         }
