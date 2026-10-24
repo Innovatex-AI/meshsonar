@@ -236,6 +236,7 @@ class _MapPane extends StatelessWidget {
                 heard: model.heard,
                 layers: model.layers,
                 networkCells: model.networkCells,
+                regionRepeaters: model.regionRepeaters,
                 highlightKey: model.selected,
                 onSelectRepeater: model.select,
                 simulated: model.simulated,

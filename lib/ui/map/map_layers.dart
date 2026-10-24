@@ -33,6 +33,9 @@ class MapLayers {
   /// basic visibility, meant to be there the first time anyone opens the Drive screen, not a layer you have to
   /// find.
   final bool networkCoverage;
+
+  /// The selected region's whole repeater roster (`region-repeaters`), not just the ones this drive heard. Off by default.
+  final bool regionRepeaters;
   const MapLayers({
     this.pings = true,
     this.hexes = true,
@@ -41,6 +44,7 @@ class MapLayers {
     this.links = true,
     this.rings = true,
     this.networkCoverage = true,
+    this.regionRepeaters = false,
   });
 
   MapLayers copyWith({
@@ -51,6 +55,7 @@ class MapLayers {
     bool? links,
     bool? rings,
     bool? networkCoverage,
+    bool? regionRepeaters,
   }) => MapLayers(
     pings: pings ?? this.pings,
     hexes: hexes ?? this.hexes,
@@ -59,6 +64,7 @@ class MapLayers {
     links: links ?? this.links,
     rings: rings ?? this.rings,
     networkCoverage: networkCoverage ?? this.networkCoverage,
+    regionRepeaters: regionRepeaters ?? this.regionRepeaters,
   );
 
   @override
@@ -70,10 +76,11 @@ class MapLayers {
       other.repeaters == repeaters &&
       other.links == links &&
       other.rings == rings &&
-      other.networkCoverage == networkCoverage;
+      other.networkCoverage == networkCoverage &&
+      other.regionRepeaters == regionRepeaters;
 
   @override
-  int get hashCode => Object.hash(pings, hexes, pingColors, repeaters, links, rings, networkCoverage);
+  int get hashCode => Object.hash(pings, hexes, pingColors, repeaters, links, rings, networkCoverage, regionRepeaters);
 }
 
 /// Where a heard repeater sits in its hold period.

@@ -16,6 +16,7 @@ import '../../core/heard.dart';
 import '../../core/hex_cells.dart' show loadHexEngine;
 import '../../core/model.dart';
 import '../../core/network_coverage.dart';
+import '../../core/region_repeaters_api.dart';
 import '../../radio/radio_api.dart';
 import '../../radio/simulator.dart' show defaultSimulatedRepeaters;
 import '../map/map_layers.dart';
@@ -61,8 +62,47 @@ class DriveMapModel extends ChangeNotifier {
   MapLayers get layers => _layers;
   set layers(MapLayers l) {
     if (l == _layers) return;
+    final turnedOn = l.regionRepeaters && !_layers.regionRepeaters;
     _layers = l;
     notifyListeners();
+    if (turnedOn && _regionRepeaters.isEmpty) unawaited(loadRegionRepeaters());
+  }
+
+  // The region's whole repeater roster for the "Region repeaters" layer. Fetched the first time the layer is
+  // switched on (or by [loadRegionRepeaters] / [regionRepeaters]=, e.g. when the region switcher changes region).
+  List<RegionRepeater> _regionRepeaters = const [];
+  bool _regionRepeatersLoading = false;
+
+  /// Test seam / wiring seam: how the roster is fetched.
+  Future<RegionRepeaters> Function(String baseUrl, String regionSlug) regionRepeatersFetcher = fetchRegionRepeaters;
+
+  /// Roster pins for the map; empty until loaded.
+  List<RegionRepeater> get regionRepeaters => _regionRepeaters;
+  set regionRepeaters(List<RegionRepeater> v) {
+    _regionRepeaters = v;
+    notifyListeners();
+  }
+
+  bool get regionRepeatersLoading => _regionRepeatersLoading;
+
+  /// Loads the roster of [slug] at [baseUrl], defaulting to the region the phone is in (else the server's active
+  /// region). Failures leave the layer empty (it is a bonus layer, never an error screen).
+  Future<void> loadRegionRepeaters({String? baseUrl, String? slug}) async {
+    final region = state.currentRegion;
+    final site = state.siteConfig?.region;
+    final url = baseUrl ?? region?.url ?? site?.url;
+    final sl = slug ?? region?.slug ?? site?.slug;
+    if (url == null || sl == null || _regionRepeatersLoading) return;
+    _regionRepeatersLoading = true;
+    try {
+      final r = await regionRepeatersFetcher(url, sl);
+      _regionRepeaters = r.positioned;
+    } catch (_) {
+      // leave whatever was there
+    } finally {
+      _regionRepeatersLoading = false;
+      if (!_disposed) notifyListeners();
+    }
   }
 
   // Network-wide coverage (every driver's measured cells, not just this drive's pings): the background
@@ -217,8 +257,11 @@ class DriveMapModel extends ChangeNotifier {
     if (changed) notifyListeners();
   }
 
+  bool _disposed = false;
+
   @override
   void dispose() {
+    _disposed = true;
     state.removeListener(_onState);
     unawaited(_fixSub?.cancel());
     super.dispose();
