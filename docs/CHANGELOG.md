@@ -5,6 +5,14 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- Radio protocol: decoders, encoders and byte tests for GET_STATS core (battery, uptime, error flags, queue) and packets
+  (30 B and 26 B), and GET_BATT_AND_STORAGE; `MeshCoreCompanionLink` reads them (unsupported asked once). The simulator
+  answers all of them.
+- Drive context core (stream 7, not yet switched on in a drive): `RadioHealthPoller` (60 s, never during a ping),
+  `DriveContextRecorder`, per-drive `samples.jsonl` / `ctx.jsonl` / `context.json` beside the drive (uploads and
+  exports byte-identical), category list with disclosure text (`lib/core/data_categories.dart`), GPS altitude, course
+  and accuracies kept on `GeoFix`.
+- Units: air pressure (hPa / inHg) and temperature (°C / °F).
 - Map engine groundwork (not on screen yet): grid clustering for 5-20k points (`core/cluster_index.dart`), map links compatible with the website's `/coverage` URL (`core/map_view_state.dart`), the layer registry with website `?show=` keys and honest per-layer availability, a single-painter clustered repeater layer for the global "All MeshCore repeaters" list and the region roster, and a repeater detail sheet (copy key, last advert, distance in your units, Open repeater page).
 
 ## [0.19.0] — 2026-10-24 — Timeline, telemetry, offline cache

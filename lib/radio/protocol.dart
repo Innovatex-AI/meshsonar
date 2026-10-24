@@ -1,7 +1,7 @@
 // MeshCore companion-radio protocol: frame codes, command encoders and response/push decoders.
 //
 // Source of truth: MeshCore firmware (MIT, © 2025 Scott Powell / rippleradios.com),
-// examples/companion_radio/MyMesh.cpp — code tables at lines 9–140, command handling in handleCmdFrame()
+// examples/companion_radio/MyMesh.cpp (stats/battery layouts re-read Oct 24 2026 at main b204f9a, FIRMWARE_VER_CODE 14) — code tables at lines 9–140, command handling in handleCmdFrame()
 // (line ~1055 onward), logRxRaw() at line ~291, onControlDataRecv() at line ~810.
 // Cross-checked against MeshCore Open lib/connector/meshcore_protocol.dart (MIT, © 2025 zjs81) and the
 // MeshMapper web client content/mc/connection/connection.js (MIT, © 2025 MrAlders0n). Where they differ the
@@ -18,6 +18,7 @@ abstract final class Cmd {
   static const appStart = 1;
   static const sendChannelTxtMsg = 3;
   static const getDeviceTime = 5;
+  static const getBattAndStorage = 20; // was CMD_GET_BATTERY_VOLTAGE
   static const setDeviceTime = 6;
   static const syncNextMessage = 10;
   static const deviceQuery = 22;
@@ -36,6 +37,7 @@ abstract final class Resp {
   static const channelMsgRecv = 8;
   static const currTime = 9;
   static const noMoreMessages = 10;
+  static const battAndStorage = 12;
   static const deviceInfo = 13;
   static const disabled = 15;
   static const contactMsgRecvV3 = 16;
@@ -152,6 +154,9 @@ Uint8List encodeSendChannelText(int channelIdx, int epochSecs, String text) =>
 /// CMD_SYNC_NEXT_MESSAGE: [0x0A] (MyMesh.cpp ~1415).
 Uint8List encodeSyncNextMessage() => Uint8List.fromList([Cmd.syncNextMessage]);
 
+/// CMD_GET_BATT_AND_STORAGE: [0x14] (MyMesh.cpp ~1517). Answered by every firmware that has it, no version gate.
+Uint8List encodeGetBattAndStorage() => Uint8List.fromList([Cmd.getBattAndStorage]);
+
 /// CMD_GET_STATS: [0x38][stats_type] (MyMesh.cpp ~1914, firmware v8+).
 Uint8List encodeGetStats(int statsType) => Uint8List.fromList([Cmd.getStats, statsType]);
 
@@ -256,6 +261,57 @@ class RadioStatsFrame extends Frame {
   final int txAirSecs;
   final int rxAirSecs;
   const RadioStatsFrame(this.noiseFloorDbm, this.lastRssiDbm, this.lastSnrDb, this.txAirSecs, this.rxAirSecs);
+}
+
+/// RESP_CODE_BATT_AND_STORAGE (MyMesh.cpp ~1517-1527): [12][battery_mv u16][used_kb u32][total_kb u32] = 11 bytes.
+/// battery_mv is board.getBattMilliVolts(): 0 on boards without battery sensing (treat as unmeasured). Firmware from
+/// before storage was added (the command was CMD_GET_BATTERY_VOLTAGE) sends only the first 3 bytes: storage is null.
+class BattAndStorageFrame extends Frame {
+  final int batteryMv;
+  final int? storageUsedKb;
+  final int? storageTotalKb;
+  const BattAndStorageFrame({required this.batteryMv, this.storageUsedKb, this.storageTotalKb});
+}
+
+/// RESP_CODE_STATS / STATS_TYPE_CORE (MyMesh.cpp ~1916-1927): [24][0][battery_mv u16][uptime_secs u32]
+/// [err_flags u16][queue_len u8] = 11 bytes. err_flags is the Dispatcher's `_err_flags` BITMASK (src/Dispatcher.h
+/// ~110: bit 0 ERR_EVENT_FULL, bit 1 ERR_EVENT_CAD_TIMEOUT, bit 2 ERR_EVENT_STARTRX_TIMEOUT), sticky until
+/// resetStats(); it is not an error counter. queue_len = outbound packets queued.
+class CoreStatsFrame extends Frame {
+  final int batteryMv;
+  final int uptimeSecs;
+  final int errFlags;
+  final int queueLen;
+  const CoreStatsFrame({required this.batteryMv, required this.uptimeSecs, required this.errFlags, required this.queueLen});
+}
+
+/// err_flags bits (src/Dispatcher.h ~110-112).
+abstract final class RadioErrFlag {
+  static const queueFull = 1 << 0;
+  static const cadTimeout = 1 << 1;
+  static const startRxTimeout = 1 << 2;
+}
+
+/// RESP_CODE_STATS / STATS_TYPE_PACKETS (MyMesh.cpp ~1943-1962): [24][2] then u32 recv, sent, n_sent_flood,
+/// n_sent_direct, n_recv_flood, n_recv_direct, n_recv_errors = 30 bytes. Cumulative since boot, wrap at 2^32. The
+/// 26-byte form without recv_errors (older firmware, per the radio plan doc) is accepted: recvErrors is then null.
+class PacketStatsFrame extends Frame {
+  final int recv;
+  final int sent;
+  final int floodTx;
+  final int directTx;
+  final int floodRx;
+  final int directRx;
+  final int? recvErrors;
+  const PacketStatsFrame({
+    required this.recv,
+    required this.sent,
+    required this.floodTx,
+    required this.directTx,
+    required this.floodRx,
+    required this.directRx,
+    this.recvErrors,
+  });
 }
 
 /// Any other RESP_CODE_STATS sub-type (kept raw).
@@ -398,7 +454,37 @@ Frame decodeFrame(Uint8List f) {
           bd.getUint32(10, Endian.little),
         );
       }
+      if (f[1] == StatsType.core) {
+        need(11, 'STATS/CORE');
+        return CoreStatsFrame(
+          batteryMv: bd.getUint16(2, Endian.little),
+          uptimeSecs: bd.getUint32(4, Endian.little),
+          errFlags: bd.getUint16(8, Endian.little),
+          queueLen: f[10],
+        );
+      }
+      if (f[1] == StatsType.packets) {
+        need(26, 'STATS/PACKETS');
+        int u(int at) => bd.getUint32(at, Endian.little);
+        return PacketStatsFrame(
+          recv: u(2),
+          sent: u(6),
+          floodTx: u(10),
+          directTx: u(14),
+          floodRx: u(18),
+          directRx: u(22),
+          recvErrors: f.length >= 30 ? u(26) : null,
+        );
+      }
       return OtherStatsFrame(f[1], Uint8List.fromList(f.sublist(2)));
+    case Resp.battAndStorage:
+      need(3, 'BATT_AND_STORAGE');
+      final full = f.length >= 11;
+      return BattAndStorageFrame(
+        batteryMv: bd.getUint16(1, Endian.little),
+        storageUsedKb: full ? bd.getUint32(3, Endian.little) : null,
+        storageTotalKb: full ? bd.getUint32(7, Endian.little) : null,
+      );
     case Resp.currTime:
       need(5, 'CURR_TIME');
       return CurrTimeFrame(bd.getUint32(1, Endian.little));
@@ -521,6 +607,46 @@ Uint8List encodeRadioStats({required int noiseFloorDbm, int lastRssiDbm = 0, dou
     ..setInt8(5, (lastSnrDb * 4).round())
     ..setUint32(6, txAirSecs, Endian.little)
     ..setUint32(10, rxAirSecs, Endian.little);
+  return bd.buffer.asUint8List();
+}
+
+Uint8List encodeCoreStats({required int batteryMv, required int uptimeSecs, int errFlags = 0, int queueLen = 0}) {
+  final bd = ByteData(11)
+    ..setUint8(0, Resp.stats)
+    ..setUint8(1, StatsType.core)
+    ..setUint16(2, batteryMv, Endian.little)
+    ..setUint32(4, uptimeSecs & 0xffffffff, Endian.little)
+    ..setUint16(8, errFlags, Endian.little)
+    ..setUint8(10, queueLen);
+  return bd.buffer.asUint8List();
+}
+
+/// [recvErrors] null writes the 26-byte older form.
+Uint8List encodePacketStats({
+  required int recv,
+  required int sent,
+  required int floodTx,
+  required int directTx,
+  required int floodRx,
+  required int directRx,
+  int? recvErrors = 0,
+}) {
+  final vals = [recv, sent, floodTx, directTx, floodRx, directRx, ?recvErrors];
+  final bd = ByteData(2 + 4 * vals.length)
+    ..setUint8(0, Resp.stats)
+    ..setUint8(1, StatsType.packets);
+  for (var i = 0; i < vals.length; i++) {
+    bd.setUint32(2 + 4 * i, vals[i] & 0xffffffff, Endian.little);
+  }
+  return bd.buffer.asUint8List();
+}
+
+Uint8List encodeBattAndStorage({required int batteryMv, int usedKb = 0, int totalKb = 0}) {
+  final bd = ByteData(11)
+    ..setUint8(0, Resp.battAndStorage)
+    ..setUint16(1, batteryMv, Endian.little)
+    ..setUint32(3, usedKb, Endian.little)
+    ..setUint32(7, totalKb, Endian.little);
   return bd.buffer.asUint8List();
 }
 
