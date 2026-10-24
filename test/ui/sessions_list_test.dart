@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/core/units.dart';
 import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/ui/drive_stats.dart';
 
@@ -29,7 +30,7 @@ void main() {
     expect(st.repeaters.map((r) => r.repeater), ['aa', 'bb', 'cc']);
     expect(st.timeline, [true, false, true, true]);
     expect(st.duration, const Duration(minutes: 25));
-    expect(formatDistance(st.distanceM), '3.3 km');
+    expect(Units.metric.distance(st.distanceM), '3.3 km');
     expect(formatDuration(st.duration), '25 min');
     expect(formatDuration(const Duration(hours: 1, minutes: 5)), '1 h 05 min');
   });

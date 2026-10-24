@@ -8,6 +8,7 @@ import 'dart:math' as math;
 
 import '../../core/heard.dart';
 import '../../core/model.dart';
+import '../../core/units.dart';
 
 /// CMAT's coverage grid cell size in degrees.
 const double cellLatDeg = 0.002;
@@ -304,9 +305,8 @@ class DriveReport {
   }
 
   /// Plain-text summary for sharing.
-  String toText({String? title, String Function(double m)? distance, String Function(Duration? d)? duration}) {
-    String km(double m) => m < 1000 ? '${m.round()} m' : '${(m / 1000).toStringAsFixed(1)} km';
-    final dist = distance ?? km;
+  String toText({String? title, Units units = Units.metric, String Function(Duration? d)? duration}) {
+    final dist = units.distance;
     String dur(Duration? d) {
       if (d == null) return '—';
       if (d.inMinutes < 1) return '${d.inSeconds} s';
@@ -317,10 +317,10 @@ class DriveReport {
     final fmtDur = duration ?? dur;
     final b = StringBuffer()
       ..writeln(title ?? 'MeshSonar drive report')
-      ..writeln('${dist(distanceM)} (${(distanceM / 1609.344).toStringAsFixed(1)} mi) in ${fmtDur(this.duration)}');
+      ..writeln('${dist(distanceM)} in ${fmtDur(this.duration)}');
     if (avgSpeedMps != null) {
-      b.writeln('Avg ${(avgSpeedMps! * 2.236936).toStringAsFixed(0)} mph'
-          '${maxSpeedMps == null ? '' : ', max ${(maxSpeedMps! * 2.236936).toStringAsFixed(0)} mph'}');
+      b.writeln('Avg ${units.speed(avgSpeedMps!)}'
+          '${maxSpeedMps == null ? '' : ', max ${units.speed(maxSpeedMps!)}'}');
     }
     b
       ..writeln('$txPings pings, ${heardPercent == null ? '—' : '$heardPercent%'} heard')

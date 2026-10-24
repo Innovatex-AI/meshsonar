@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 
 import '../app.dart';
+import 'live_screen.dart';
 import 'region_panels.dart';
 import 'stats_panel.dart';
 import 'region_switcher.dart';
@@ -14,7 +15,7 @@ class RegionHubScreen extends StatelessWidget {
     final s = AppScope.of(context);
     final region = s.viewingRegion;
     return DefaultTabController(
-      length: 7,
+      length: 8,
       child: Scaffold(
         appBar: AppBar(
           title: Text(region?.name ?? 'Region', key: const Key('region-title')),
@@ -22,7 +23,7 @@ class RegionHubScreen extends StatelessWidget {
           bottom: const TabBar(
             isScrollable: true,
             tabAlignment: TabAlignment.start,
-            tabs: [Tab(text: 'Overview'), Tab(text: 'Repeaters'), Tab(text: 'Observers'), Tab(text: 'Packets'), Tab(text: 'Analysis'), Tab(text: 'Reports'), Tab(text: 'Stats')],
+            tabs: [Tab(text: 'Overview'), Tab(text: 'Repeaters'), Tab(text: 'Observers'), Tab(text: 'Packets'), Tab(text: 'Analysis'), Tab(text: 'Reports'), Tab(text: 'Stats'), Tab(text: 'Live')],
           ),
         ),
         body: region == null
@@ -48,6 +49,7 @@ class RegionHubScreen extends StatelessWidget {
                   buildAnalysisPanel(region.url, region.slug),
                   buildReportsPanel(region.url, region.slug),
                   StatsPanel(baseUrl: region.url, regionSlug: region.slug),
+                  LivePanel(baseUrl: region.url, regionSlug: region.slug),
                 ],
               ),
       ),

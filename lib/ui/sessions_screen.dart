@@ -400,7 +400,7 @@ class _SessionCard extends StatelessWidget {
                   return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Wrap(spacing: 18, runSpacing: 6, children: [
                       _Fact(Icons.timer_outlined, formatDuration(st?.duration), key: ValueKey('duration-$id')),
-                      _Fact(Icons.route, st == null ? '—' : formatDistance(st.distanceM), key: ValueKey('distance-$id')),
+                      _Fact(Icons.route, st == null ? '—' : s.units.distance(st.distanceM), key: ValueKey('distance-$id')),
                       _Fact(Icons.podcasts, '${summary.pingCount} pings'),
                       _Fact(Icons.cell_tower, pct == null ? 'Heard —' : 'Heard $pct%', strong: true),
                     ]),

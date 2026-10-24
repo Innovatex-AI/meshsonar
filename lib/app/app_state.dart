@@ -26,6 +26,7 @@ import '../core/region_tracker.dart';
 import '../core/repeater_directory.dart';
 import '../core/report_body.dart';
 import '../core/server_url.dart';
+import '../core/units.dart';
 import '../radio/radio_api.dart';
 import 'messages.dart';
 import 'services.dart';
@@ -51,6 +52,18 @@ class AppState extends ChangeNotifier {
   // ---------- settings ----------
   Settings _settings = const Settings();
   Settings get settings => _settings;
+
+  /// Distance/speed/height formatting for the current Units setting (Auto follows the phone's region).
+  Units get units => Units.resolve(_settings.units, localeName: localeNameProvider());
+
+  /// The device locale name for Auto units; tests replace it so results do not depend on the host Mac's region.
+  static String? Function() localeNameProvider = () {
+    try {
+      return Platform.localeName;
+    } catch (_) {
+      return null;
+    }
+  };
   bool _loaded = false;
   bool get loaded => _loaded;
 

@@ -3,6 +3,7 @@
 // kept on the phone only. Ranges follow CMAT's validator (src/lib/drive/validate.ts).
 // Pure Dart: no Flutter imports.
 import 'model.dart';
+import 'units.dart';
 
 enum AntennaMount {
   handheld('Handheld', 'internal'),
@@ -39,10 +40,13 @@ class AntennaProfile {
   Antenna toAntenna() => Antenna(type: mount.wireType, gainDbi: gainDbi, heightM: heightM);
 
   /// "Roof mag-mount · 5.8 dBi · 1.8 m" (gain left out when it isn't known).
-  String get summary => [
+  String get summary => summaryIn(Units.metric);
+
+  /// [summary] with the height in the person's units ("Roof mag-mount · 5.8 dBi · 6 ft").
+  String summaryIn(Units units) => [
     mount.label,
     if (gainDbi != null) '${formatAntennaNumber(gainDbi!)} dBi',
-    '${formatAntennaNumber(heightM)} m',
+    units.height(heightM),
   ].join(' · ');
 
   Map<String, dynamic> toJson() => {

@@ -16,6 +16,8 @@ import 'antenna_sheet.dart';
 import 'onboarding/onboarding_screen.dart';
 import 'app.dart';
 import 'report_problem_screen.dart';
+import 'settings/offline_packs_screen.dart';
+import 'telemetry_sheet.dart';
 import 'widgets.dart';
 
 const String _driverHelp =
@@ -148,14 +150,14 @@ class SettingsScreen extends StatelessWidget {
                   sliderKey: const Key('min-distance-slider'),
                   icon: Icons.straighten,
                   title: 'Minimum distance',
-                  stops: distanceStops,
+                  stops: s.units.minDistanceStops(distanceStops),
                   value: st.minDistanceM,
-                  label: (v) => '$v m',
+                  label: s.units.sliderDistance,
                   caption: st.discoveryMode
                       ? 'Doesn\'t apply in discovery mode: nothing is ever transmitted.'
                       : 'Skips auto-pings while you\'re stopped at lights.',
-                  minLabel: '15 m',
-                  maxLabel: '500 m',
+                  minLabel: s.units.sliderDistance(s.units.minDistanceStops(distanceStops).first),
+                  maxLabel: s.units.sliderDistance(s.units.minDistanceStops(distanceStops).last),
                   enabled: !st.discoveryMode,
                   onChanged: (v) => s.updateSettings(s.settings.copyWith(minDistanceM: v)),
                 ),
@@ -244,10 +246,34 @@ class SettingsScreen extends StatelessWidget {
               ],
             ),
             _Section(
+              id: 'privacy',
+              title: 'Privacy',
+              icon: Icons.privacy_tip_outlined,
+              help: telemetryHelp,
+              children: [
+                SwitchListTile(
+                  key: const Key('telemetry-toggle'),
+                  secondary: const Icon(Icons.podcasts),
+                  title: const Text('Share packet headers'),
+                  subtitle: const Text('Type, path, signal strength, time and region. Never message content.'),
+                  value: st.telemetryEnabled,
+                  onChanged: (v) => s.updateSettings(s.settings.copyWith(telemetryEnabled: v)),
+                ),
+              ],
+            ),
+            _Section(
               id: 'about-section',
               title: 'About',
               icon: Icons.info_outline,
               children: [
+                ListTile(
+                  key: const Key('offline-maps'),
+                  leading: const Icon(Icons.map_outlined),
+                  title: const Text('Offline maps'),
+                  subtitle: const Text('Download a region so the map works with no signal'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const OfflinePacksScreen())),
+                ),
                 ListTile(
                   key: const Key('report-problem'),
                   leading: const Icon(Icons.bug_report_outlined),
@@ -400,7 +426,7 @@ class _AntennaProfileTile extends StatelessWidget {
       key: ValueKey('antenna-profile-$radioKey'),
       leading: Icon(locked ? Icons.lock_outline : Icons.settings_input_antenna),
       title: Text(name),
-      subtitle: Text(locked ? '${profile.summary}\nLocked while driving' : profile.summary),
+      subtitle: Text(locked ? '${profile.summaryIn(s.units)}\nLocked while driving' : profile.summaryIn(s.units)),
       trailing: IconButton(
         key: ValueKey('antenna-forget-$radioKey'),
         tooltip: 'Forget this radio\'s antenna',

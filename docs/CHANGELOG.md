@@ -3,6 +3,17 @@
 All notable changes to MeshSonar. Dates are local (US Eastern). This changelog was reconstructed from the commit
 history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md](ROADMAP.md).
 
+## [0.17.0] — 2026-10-23 — Units everywhere, offline map packs
+
+- Settings > Units (Auto / Metric / Imperial) now drives every distance, speed and height shown in the app: drive stats, drive detail and sessions, the drive report and its exported text, map rings and repeater link tags, heard box and repeater widgets, ping detail, the antenna sheet and the min-distance slider; the region Stats, All regions, Reports and Repeater detail screens follow it too. Auto follows the phone's region (US, Liberia and Myanmar are imperial).
+- Offline map packs (Settings > About > Offline maps): download, pause, update and delete per-region PMTiles packs; the map draws a pack when one covers the view. No pack is published yet.
+
+## [0.16.0] — 2026-10-23 — Stats, All regions, Live, Radio tab, border-crossing polish
+
+- Region screen: Stats tab (live drivers, figures, 30-day leaderboard), All regions screen (groups, per-region figures, sortable compare table), and a Live tab streaming region packets over SSE (reconnect with backoff, 65 s watchdog, pauses in the background).
+- Radio tab (read-only): the connected radio's settings beside the viewed region's preset with Matches/Differs per field, plus an on-demand community preset comparison. Telemetry: first-run disclosure and a Settings switch (on by default, opt-out); packet headers/metadata only, never message content; no uploader is wired yet.
+- Region awareness: a region change commits after 3 consecutive fixes with 100 m edge hysteresis; banner on automatic switches; a different radio preset asks first and never writes to the radio; iOS "Always" location explainer; the map centres on the viewed region; region data cached on disk with an "Offline, as of" chip.
+
 ## [0.15.0] — 2026-10-23 — Packets panel
 
 - The Region tab's Packets panel is live: recent packets for the viewed region with route filter chips (All, Flood, Direct, T-flood, T-direct), a Live/Paused switch that polls every 10 s while visible, pull-to-refresh and honest pending, busy and reconnecting states.

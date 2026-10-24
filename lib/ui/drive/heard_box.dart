@@ -16,6 +16,7 @@ import 'package:latlong2/latlong.dart';
 import '../../core/heard.dart' show haversineM;
 
 import '../map/map_layers.dart';
+import '../app.dart' show AppScope;
 import '../theme.dart';
 
 class HeardBox extends StatefulWidget {
@@ -227,7 +228,7 @@ class _Row extends StatelessWidget {
     final ref = h.ref;
     final dist = (here != null && ref != null) ? haversineM(here!.latitude, here!.longitude, ref.lat, ref.lon) : h.distanceM;
     final sub = <String>[
-      if (dist != null) formatDistance(dist) else if (h.ref == null) h.id.toUpperCase(),
+      if (dist != null) AppScope.unitsOf(context).distance(dist) else if (h.ref == null) h.id.toUpperCase(),
       if (stale) '${h.pingsAgo} pings ago' else if (!fresh) 'missed ${h.pingsAgo}' else '×${h.timesHeard}',
     ];
 

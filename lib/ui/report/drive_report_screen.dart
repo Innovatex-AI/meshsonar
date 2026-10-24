@@ -12,7 +12,7 @@ import 'package:latlong2/latlong.dart' hide Path;
 import '../../app/app_state.dart';
 import '../../core/model.dart';
 import '../app.dart';
-import '../drive_stats.dart' show formatDistance, formatDuration, formatMiles;
+import '../drive_stats.dart' show formatDuration;
 import '../map/coverage_map.dart' show CoverageMap;
 import '../onboarding/ui_prefs.dart' show driveLabel;
 import '../sessions_screen.dart' show HeardStrip;
@@ -43,8 +43,6 @@ Future<DriveReport> loadDriveReport(AppState s, String sessionId) async {
   );
 }
 
-String _mph(double mps) => '${(mps * 2.236936).toStringAsFixed(0)} mph';
-
 class DriveReportScreen extends StatefulWidget {
   final String sessionId;
   const DriveReportScreen({super.key, required this.sessionId});
@@ -67,7 +65,7 @@ class _DriveReportScreenState extends State<DriveReportScreen> {
     try {
       final dir = await s.services.exportDir();
       final f = File('${dir.path}/meshsonar-report-${widget.sessionId.split('-').first}.txt');
-      await f.writeAsString(r.toText(title: 'MeshSonar drive report: $title', distance: formatDistance, duration: formatDuration));
+      await f.writeAsString(r.toText(title: 'MeshSonar drive report: $title', units: s.units, duration: formatDuration));
       await s.services.shareFile(f);
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text('Couldn\'t share the report. $e')));
@@ -256,13 +254,7 @@ class _Hero extends StatelessWidget {
           fit: BoxFit.scaleDown,
           alignment: Alignment.centerLeft,
           child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-            Text(formatDistance(r.distanceM), key: const Key('report-distance'), style: numberStyle(context, size: 52)),
-            const SizedBox(width: 10),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Text(formatMiles(r.distanceM),
-                  style: numberStyle(context, size: 22, color: c.onSurfaceVariant, weight: FontWeight.w600)),
-            ),
+            Text(AppScope.unitsOf(context).distance(r.distanceM), key: const Key('report-distance'), style: numberStyle(context, size: 52)),
           ]),
         ),
         const SizedBox(height: 16),
@@ -358,7 +350,7 @@ class _Highlights extends StatelessWidget {
     }
     final f = r.farthest;
     if (f != null) {
-      items.add((Icons.wifi_tethering, m.snrStrong, 'Farthest: ${s.repeaterName(f.id) ?? f.label}, ${formatDistance(f.farthestM!)} away.'));
+      items.add((Icons.wifi_tethering, m.snrStrong, 'Farthest: ${s.repeaterName(f.id) ?? f.label}, ${s.units.distance(f.farthestM!)} away.'));
     }
     if (r.cmatChecked && r.unknownToCmat.isNotEmpty) {
       items.add((Icons.help_outline, c.tertiary,
@@ -529,9 +521,10 @@ class _NumberGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final r = report;
+    final units = AppScope.unitsOf(context);
     final tiles = <(String, String, String)>[
-      ('Avg speed', r.avgSpeedMps == null ? '—' : _mph(r.avgSpeedMps!), 'report-avg-speed'),
-      ('Top speed', r.maxSpeedMps == null ? '—' : _mph(r.maxSpeedMps!), 'report-max-speed'),
+      ('Avg speed', r.avgSpeedMps == null ? '—' : units.speed(r.avgSpeedMps!), 'report-avg-speed'),
+      ('Top speed', r.maxSpeedMps == null ? '—' : units.speed(r.maxSpeedMps!), 'report-max-speed'),
       ('Pings', '${r.txPings}', 'report-pings'),
       ('Heard', '${r.heardPings}', 'report-heard-count'),
       ('Best SNR', r.bestSnr == null ? '—' : '${r.bestSnr!.toStringAsFixed(1)} dB', 'report-best-snr'),
@@ -751,7 +744,7 @@ class _Leaderboard extends StatelessWidget {
             final name = s.repeaterName(x.id);
             final details = [
               if (x.bestSnr != null) 'best ${x.bestSnr!.toStringAsFixed(1)} dB',
-              if (x.farthestM != null) 'up to ${formatDistance(x.farthestM!)}',
+              if (x.farthestM != null) 'up to ${s.units.distance(x.farthestM!)}',
               if (name != null) x.id,
             ].join(' · ');
             return Padding(

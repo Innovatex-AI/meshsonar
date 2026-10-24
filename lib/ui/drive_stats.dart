@@ -125,14 +125,6 @@ class DriveStats {
   }
 }
 
-/// "12.4 km" / "850 m". The app is used in the US too, so miles are shown alongside on the detail screen.
-String formatDistance(double m) {
-  if (m < 1000) return '${m.round()} m';
-  return '${(m / 1000).toStringAsFixed(m < 10000 ? 1 : 0)} km';
-}
-
-String formatMiles(double m) => '${(m / 1609.344).toStringAsFixed(1)} mi';
-
 /// "1 h 05 min" / "12 min" / "45 s".
 String formatDuration(Duration? d) {
   if (d == null) return '—';

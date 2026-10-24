@@ -21,7 +21,7 @@
 //      MapLayers.networkCoverage): a quiet "where hasn't this been driven" background layer. Only cells the
 //      network actually measured are tinted; everywhere else is left blank map — that absence is the gap
 //      indicator, so there is no "no data" placeholder for it.
-//   4. Sonar range rings (1 km, 2 km) around the current position.
+//   4. Sonar range rings (1 km / 2 km, or 0.5 mi / 1 mi) around the current position.
 //   5. Links. With [heard]: from the current position to every LIVE heard repeater with a known location, solid
 //      when heard on the latest ping, dashed while it is holding, each with a distance label. Without [heard]:
 //      from the latest ping to each repeater it heard; they fade over ~15 s.
@@ -55,7 +55,9 @@ import '../../core/network_coverage.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import 'cell_sheet.dart';
+import '../app.dart' show AppScope;
 import 'map_layers.dart';
+import 'offline_basemap.dart';
 import 'region_repeater_layer.dart';
 
 /// A line from a ping to a repeater it heard.
@@ -356,6 +358,14 @@ class _CoverageMapState extends State<CoverageMap> {
   void initState() {
     super.initState();
     _selectedRepeater = widget.highlightKey;
+    if (widget.showTiles ?? CoverageMap.tilesByDefault) {
+      OfflineBasemap.instance.addListener(_onPacksChanged);
+      OfflineBasemap.instance.ensureOpen();
+    }
+  }
+
+  void _onPacksChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -451,6 +461,7 @@ class _CoverageMapState extends State<CoverageMap> {
 
   @override
   void dispose() {
+    OfflineBasemap.instance.removeListener(_onPacksChanged);
     _controller.dispose();
     super.dispose();
   }
@@ -460,6 +471,8 @@ class _CoverageMapState extends State<CoverageMap> {
     final mc = MeshSonarColors.of(context);
     final t = Theme.of(context);
     final tiles = widget.showTiles ?? CoverageMap.tilesByDefault;
+    // A downloaded region pack covering the map wins over online tiles; no pack (or a corrupt one) means online as before.
+    final offlinePack = tiles ? OfflineBasemap.instance.readerCovering(_initialCenter.latitude, _initialCenter.longitude) : null;
     final layers = widget.layers;
     _ensureSorted();
     _ensureMarkers();
@@ -531,7 +544,9 @@ class _CoverageMapState extends State<CoverageMap> {
           ),
           children: [
             _ChartGrid(color: mc.mapGrid),
-            if (tiles)
+            if (offlinePack != null)
+              OfflineBasemapLayer(key: ValueKey(offlinePack), reader: offlinePack)
+            else if (tiles)
               TileLayer(
                 urlTemplate: CoverageMap.tileUrl,
                 userAgentPackageName: CoverageMap.userAgentPackageName,
@@ -554,18 +569,18 @@ class _CoverageMapState extends State<CoverageMap> {
                     ),
                 ],
               ),
-            if (widget.showRings && layers.rings && pos != null) _RangeRings(center: pos, color: t.colorScheme.primary),
+            if (widget.showRings && layers.rings && pos != null) _RangeRings(center: pos, color: t.colorScheme.primary, ringMetres: AppScope.unitsOf(context).rangeRingMetres),
             if (widget.showRings && layers.rings && pos != null)
               MarkerLayer(
                 markers: [
-                  for (final m in const [1, 2])
+                  for (final (i, ringM) in AppScope.unitsOf(context).rangeRingMetres.indexed)
                     Marker(
-                      point: _offsetNorth(pos, -m * 1000.0),
+                      point: _offsetNorth(pos, -ringM),
                       width: 44,
                       height: 18,
                       child: Center(
                         child: Text(
-                          '$m km',
+                          AppScope.unitsOf(context).rangeRingLabels[i],
                           style: t.textTheme.labelSmall?.copyWith(
                             color: t.colorScheme.primary.withValues(alpha: 0.8),
                             fontWeight: FontWeight.w600,
@@ -682,7 +697,7 @@ class _CoverageMapState extends State<CoverageMap> {
                         child: Center(
                           child: _MapTag(
                             key: ValueKey('map-link-distance-${h.ref!.key}'),
-                            text: formatDistance(haversineM(origin.latitude, origin.longitude, h.ref!.lat, h.ref!.lon)),
+                            text: AppScope.unitsOf(context).distance(approx: true, haversineM(origin.latitude, origin.longitude, h.ref!.lat, h.ref!.lon)),
                             color: h.phase == HeardPhase.fresh ? mc.beacon : t.colorScheme.outline,
                           ),
                         ),
@@ -836,7 +851,7 @@ class _CoverageMapState extends State<CoverageMap> {
       parts.add(h.pingsAgo == 0 ? 'Heard now' : (h.live ? 'Heard ${h.pingsAgo} ping${h.pingsAgo == 1 ? '' : 's'} ago' : 'Not heard lately'));
       if (h.snrDb != null) parts.add('${formatSnrShort(h.snrDb!)} dB');
     }
-    if (here != null) parts.add(formatDistance(haversineM(here.latitude, here.longitude, r.lat, r.lon)));
+    if (here != null) parts.add(AppScope.unitsOf(context).distance(approx: true, haversineM(here.latitude, here.longitude, r.lat, r.lon)));
     return parts.isEmpty ? null : parts.join(' · ');
   }
 
@@ -1212,16 +1227,17 @@ class _GridPainter extends CustomPainter {
       old.camera.size != camera.size;
 }
 
-/// Dashed range rings (1 km, 2 km) around the current position, drawn directly so they stay crisp at any zoom.
+/// Dashed range rings (1 km / 2 km, or 0.5 mi / 1 mi) around the current position, drawn directly so they stay crisp at any zoom.
 class _RangeRings extends StatelessWidget {
   final LatLng center;
   final Color color;
-  const _RangeRings({required this.center, required this.color});
+  final List<double> ringMetres;
+  const _RangeRings({required this.center, required this.color, required this.ringMetres});
   @override
   Widget build(BuildContext context) {
     final camera = MapCamera.of(context);
     return IgnorePointer(
-      child: CustomPaint(painter: _RingPainter(camera, center, color), size: Size.infinite),
+      child: CustomPaint(painter: _RingPainter(camera, center, color, ringMetres), size: Size.infinite),
     );
   }
 }
@@ -1230,19 +1246,20 @@ class _RingPainter extends CustomPainter {
   final MapCamera camera;
   final LatLng center;
   final Color color;
-  _RingPainter(this.camera, this.center, this.color);
+  final List<double> ringMetres;
+  _RingPainter(this.camera, this.center, this.color, this.ringMetres);
 
   @override
   void paint(Canvas canvas, Size size) {
     final c = camera.latLngToScreenOffset(center);
-    for (final m in const [1000.0, 2000.0]) {
+    for (final m in ringMetres) {
       final edge = camera.latLngToScreenOffset(LatLng(center.latitude + m / 111320.0, center.longitude));
       final r = (c - edge).distance;
       if (r < 6 || r > 6000) continue;
       final paint = Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.4
-        ..color = color.withValues(alpha: m == 1000 ? 0.55 : 0.35);
+        ..color = color.withValues(alpha: m == ringMetres.first ? 0.55 : 0.35);
       // Dashes: ~60 per ring, capped so small rings stay readable.
       final n = (2 * math.pi * r / 14).clamp(24, 160).round();
       for (var i = 0; i < n; i++) {
@@ -1256,6 +1273,7 @@ class _RingPainter extends CustomPainter {
   bool shouldRepaint(_RingPainter old) =>
       old.center != center ||
       old.color != color ||
+      old.ringMetres.first != ringMetres.first ||
       old.camera.center != camera.center ||
       old.camera.zoom != camera.zoom;
 }

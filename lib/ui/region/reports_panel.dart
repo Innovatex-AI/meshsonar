@@ -10,6 +10,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/region_reports_api.dart';
+import '../app.dart' show AppScope;
 import '../theme.dart';
 
 class ReportsPanel extends StatefulWidget {
@@ -231,7 +232,7 @@ class _ReportsPanelState extends State<ReportsPanel> {
           : Wrap(spacing: Gap.s, runSpacing: Gap.s, children: [
               _Stat('Cells', _n(d.coverageCells)),
               _Stat('Drives', _n(d.coverageDrives)),
-              if (d.coverageKm != null) _Stat('Distance', '${d.coverageKm!.round()} km'),
+              if (d.coverageKm != null) _Stat('Distance', AppScope.unitsOf(context).distance(d.coverageKm! * 1000)),
               if (d.coverageHeardPct != null) _Stat('Heard', '${d.coverageHeardPct!.round()}%'),
             ]),
     ));

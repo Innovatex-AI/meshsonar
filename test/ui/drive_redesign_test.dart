@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/app/app_state.dart';
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/heard.dart';
+import 'package:meshsonar/core/units.dart';
 import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/radio/radio_api.dart';
 import 'package:meshsonar/ui/map/map_layers.dart';
@@ -53,8 +54,8 @@ void main() {
     expect(heardSnapshot(t).single.holdLeft, 1);
     t.addPing(silentPing('3'));
     expect(heardSnapshot(t).single.phase, HeardPhase.stale);
-    expect(formatDistance(840), '840 m');
-    expect(formatDistance(2345), '2.3 km');
+    expect(Units.metric.distance(840, approx: true), '840 m');
+    expect(Units.metric.distance(2345, approx: true), '2.3 km');
   });
 
   testWidgets('heard box: live while heard, dimmed while holding, greyed into "+N earlier" after holdPings pings',
