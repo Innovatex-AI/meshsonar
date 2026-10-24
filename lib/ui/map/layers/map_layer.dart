@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import '../../../core/cluster_index.dart' show ClusterTap;
 import '../../../core/map_view_state.dart' show kAppOnlyShowKeys, kWebsiteShowKeys;
 import '../../../core/network_coverage.dart' show NetworkCell;
+import '../../../core/region_overview_api.dart' show RegionObserver;
 import 'repeater_map_source.dart' show RepeaterPoint;
 
 /// Sections of the layers sheet, in this order.
@@ -178,4 +179,14 @@ final class ClusterHit extends MapHit {
   /// The members when they are co-located (a stack of repeaters on one tower); empty otherwise.
   final List<RepeaterPoint> colocated;
   const ClusterHit(this.layerId, this.tap, {this.colocated = const []});
+}
+
+/// An observer of the viewed region (opens the observer sheet). Only observers whose owner made the position public
+/// are drawn (the server sends `lat`/`lon` per the observer's `location_public`; otherwise null).
+final class ObserverHit extends MapHit {
+  final RegionObserver observer;
+
+  /// The region the observer belongs to (display name), for the sheet's source line.
+  final String? regionName;
+  const ObserverHit(this.observer, {this.regionName});
 }

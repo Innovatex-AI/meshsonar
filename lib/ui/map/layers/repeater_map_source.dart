@@ -7,6 +7,7 @@
 // the lists implements (or wraps in [StaticRepeaterMapFeed]); [RepeaterMapSource] turns each list into
 // [RepeaterPoints] + a [ClusterIndex] (built off the UI isolate for big lists) only when the list's identity changes.
 import 'dart:async';
+import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 
@@ -63,6 +64,9 @@ class MapRepeaterSet {
   /// "Offline - as of 2 h ago" style label from the feed's cache, when it has one.
   final String? freshnessLabel;
 
+  /// The rows are limited to this area ("Columbus, US"): the viewed region plus a margin. Null = the whole list.
+  final String? scope;
+
   const MapRepeaterSet({
     required this.rows,
     required this.state,
@@ -71,6 +75,7 @@ class MapRepeaterSet {
     this.attribution,
     this.hidden = 0,
     this.freshnessLabel,
+    this.scope,
   });
 
   static const MapRepeaterSet idle = MapRepeaterSet(rows: [], state: MapFeedState.idle);
@@ -214,7 +219,13 @@ class _Built {
   final bool dedupe;
   final RepeaterPoints points;
   final ClusterIndex index;
-  _Built(this.rows, this.dedupe, this.points, this.index);
+
+  /// The list's `fetchedAt` when built: a refresh that confirms the same rows (a 304) still recomputes the age bands.
+  final DateTime? fetchedAt;
+
+  /// When the bands were computed (the clock passed to [RepeaterPoints.fromRows]).
+  final DateTime builtAt;
+  _Built(this.rows, this.dedupe, this.points, this.index, this.fetchedAt, this.builtAt);
 }
 
 /// Builds and caches the render-ready form of both lists. Notifies when a new index is ready.
@@ -241,7 +252,7 @@ class RepeaterMapSource extends ChangeNotifier {
   set dedupeAgainstRoster(bool v) {
     if (v == _dedupe) return;
     _dedupe = v;
-    _onFeed();
+    _rebuild();
   }
 
   RepeaterPoints get globalPoints => _global?.points ?? RepeaterPoints.empty;
@@ -255,10 +266,28 @@ class RepeaterMapSource extends ChangeNotifier {
   /// Completes when the build started by the latest feed change is done (tests, and a host that wants to wait).
   Future<void> get settled => _pending ?? Future.value();
 
-  void _onFeed() {
-    final g = feed.global.rows, r = feed.region.rows;
-    final needRoster = _roster == null || !identical(_roster!.rows, r);
-    final needGlobal = _global == null || !identical(_global!.rows, g) || _global!.dedupe != _dedupe || (needRoster && _dedupe);
+  void _onFeed() => _rebuild();
+
+  /// Recomputes the advert-age bands of both lists if they were computed more than [maxAge] ago (the bands are fixed
+  /// at build time; a list nobody refreshes would otherwise keep "24 h" colours for days). Hosts call it when a
+  /// repeater layer is switched on. A refresh from the server (new rows, or the same rows confirmed with a newer
+  /// `fetchedAt`) recomputes them anyway.
+  void refreshAges({Duration maxAge = const Duration(minutes: 10)}) {
+    final now = clock();
+    final stale = [_global, _roster].any((b) => b != null && now.difference(b.builtAt) > maxAge);
+    if (stale) _rebuild(force: true);
+  }
+
+  void _rebuild({bool force = false}) {
+    final gs = feed.global, rs = feed.region;
+    final g = gs.rows, r = rs.rows;
+    final needRoster = force || _roster == null || !identical(_roster!.rows, r) || _roster!.fetchedAt != rs.fetchedAt;
+    final needGlobal = force ||
+        _global == null ||
+        !identical(_global!.rows, g) ||
+        _global!.fetchedAt != gs.fetchedAt ||
+        _global!.dedupe != _dedupe ||
+        (needRoster && _dedupe);
     if (!needRoster && !needGlobal) {
       // State or labels changed only: availability may differ.
       notifyListeners();
@@ -269,16 +298,14 @@ class RepeaterMapSource extends ChangeNotifier {
     _pending = () async {
       _Built? roster = _roster;
       if (needRoster) {
-        final pts = RepeaterPoints.fromRows(r, now: now);
-        final idx = await ClusterIndex.build(pts.lat, pts.lon, band: pts.band, isolateThreshold: isolateThreshold);
-        roster = _Built(r, false, pts, idx);
+        final (pts, idx) = await _points(r, now, const {});
+        roster = _Built(r, false, pts, idx, rs.fetchedAt, now);
       }
       _Built? global = _global;
       if (needGlobal) {
         final skip = _dedupe ? roster!.points.key.toSet() : const <String>{};
-        final pts = RepeaterPoints.fromRows(g, now: now, skipKeys: skip);
-        final idx = await ClusterIndex.build(pts.lat, pts.lon, band: pts.band, isolateThreshold: isolateThreshold);
-        global = _Built(g, _dedupe, pts, idx);
+        final (pts, idx) = await _points(g, now, skip);
+        global = _Built(g, _dedupe, pts, idx, gs.fetchedAt, now);
       }
       if (_disposed || gen != _gen) return;
       _roster = roster;
@@ -286,6 +313,21 @@ class RepeaterMapSource extends ChangeNotifier {
       notifyListeners();
     }();
   }
+
+  /// Rows -> points (validation, dedupe, age bands) -> cluster index. A list of at least [isolateThreshold] rows does
+  /// both steps in one background isolate (Isolate.run copies the rows in and the typed lists back), so a 15-20k
+  /// global list never costs the UI isolate more than the copy.
+  Future<(RepeaterPoints, ClusterIndex)> _points(List<MapRepeaterRow> rows, DateTime now, Set<String> skip) =>
+      rows.length < isolateThreshold ? Future.value(_buildPoints(rows, now, skip)) : _buildPointsInIsolate(rows, now, skip);
+
+  // Static so the isolate closure captures only its arguments (never this source and its listeners).
+  static (RepeaterPoints, ClusterIndex) _buildPoints(List<MapRepeaterRow> rows, DateTime now, Set<String> skip) {
+    final pts = RepeaterPoints.fromRows(rows, now: now, skipKeys: skip);
+    return (pts, ClusterIndex.buildSync(pts.lat, pts.lon, band: pts.band));
+  }
+
+  static Future<(RepeaterPoints, ClusterIndex)> _buildPointsInIsolate(List<MapRepeaterRow> rows, DateTime now, Set<String> skip) =>
+      Isolate.run(() => _buildPoints(rows, now, skip), debugName: 'repeater-points');
 
   /// The sheet row for point [i] of [layerId].
   RepeaterPoint pointAt(String layerId, int i) {
@@ -321,7 +363,9 @@ class RepeaterMapSource extends ChangeNotifier {
     final built = global ? _global : _roster;
     final ready = built != null && identical(built.rows, set.rows);
     final count = ready ? built.points.length + built.points.skipped : set.rows.length;
-    String what(int n) => '$n ${global ? (n == 1 ? 'repeater' : 'repeaters') : (n == 1 ? 'repeater with a position' : 'repeaters with a position')}';
+    final near = global && set.scope != null ? ' in and around ${set.scope}' : '';
+    String what(int n) =>
+        '$n ${global ? (n == 1 ? 'repeater' : 'repeaters') : (n == 1 ? 'repeater with a position' : 'repeaters with a position')}$near';
     String countLine() {
       final parts = <String>[
         what(count),
@@ -344,7 +388,9 @@ class RepeaterMapSource extends ChangeNotifier {
         if (set.rows.isEmpty) {
           return LayerStatus(
             LayerAvailability.empty,
-            detail: global ? 'No repeaters reported yet' : 'No repeaters with a position in ${region!.name}',
+            detail: global
+                ? (set.scope == null ? 'No repeaters reported yet' : 'No repeaters reported in or around ${set.scope}')
+                : 'No repeaters with a position in ${region!.name}',
           );
         }
         if (!ready) return LayerStatus(LayerAvailability.loading, detail: 'Preparing ${what(set.rows.length)}…');

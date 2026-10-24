@@ -6,9 +6,10 @@ import 'package:flutter_map/flutter_map.dart';
 import '../cell_sheet.dart' show showCellSheet;
 import '../layers/clustered_points_layer.dart' show cameraFitForCluster;
 import '../layers/map_layer.dart';
+import 'observer_sheet.dart';
 import 'repeater_sheet.dart';
 
-/// Opens the sheet for [hit]. A cell opens the cell sheet, a repeater the repeater sheet, repeaters stacked on one
+/// Opens the sheet for [hit]. A cell opens the cell sheet, a repeater the repeater sheet, an observer the observer sheet, repeaters stacked on one
 /// spot a list; a plain cluster moves [controller]'s camera to its members (when a controller is given). Returns
 /// true when a sheet was opened.
 Future<bool> showMapHitSheet(
@@ -16,6 +17,7 @@ Future<bool> showMapHitSheet(
   MapHit hit, {
   MapController? controller,
   RepeaterSheetContext repeaterContext = const RepeaterSheetContext(),
+  ObserverSheetContext observerContext = const ObserverSheetContext(),
 }) async {
   switch (hit) {
     case CellHit(:final cell):
@@ -23,6 +25,9 @@ Future<bool> showMapHitSheet(
       return true;
     case RepeaterHit(:final point):
       await showRepeaterSheet(context, point, ctx: repeaterContext);
+      return true;
+    case ObserverHit(:final observer, :final regionName):
+      await showObserverSheet(context, observer, regionName: regionName, ctx: observerContext);
       return true;
     case ClusterHit(:final tap, :final colocated):
       if (colocated.length > 1) {

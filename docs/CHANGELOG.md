@@ -5,6 +5,13 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- Map layers sheet rebuilt from the layer registry: sections This drive / Coverage / Network / Around you, and every server-fed layer says where it stands (count and source, loading, "Couldn't load" with Retry, "Offline - as of …", or the switch disabled with the reason, e.g. "Not available on this server yet").
+- New map layer "All MeshCore repeaters", on by default: every repeater with a public position from the server's network list (live: 55.6k), coloured by last advert (24 h / 7 d / 30 d / older), with a legend and the MeshCore Map credit. In your region it shows that region plus 40 km around it; with no region known it shows the whole world as count bubbles that split as you zoom in. Bubble counts are large, high-contrast and read by screen readers. Shows "Not available on this server yet" (switch off and disabled) on a server without the list.
+- Region repeaters on the map are now clustered and come from the synced roster (offline too); tap one for its sheet with "Open repeater page" (was a name tooltip).
+- New map layer "Observers": the region's observers that share their position; tap for online state, noise floor, packets per hour and more.
+- Tap a cluster to zoom into it; tap a repeater or observer for its detail sheet.
+- Fix: the network repeater list never loaded in the app (its background decode failed with "object is unsendable"); it is now decoded off the main isolate as intended.
+
 - The Drive map and the Region tab open on the phone at once (last-known position), then move to the fresh GPS fix unless you moved the map; an old position is labelled "Last known location, 3 d ago". With no position the app opens on the last region, else on all regions.
 - Location off, not asked, denied, restricted, approximate or services off: a plain note with the right action (Allow location, Open Settings) and "Choose region". Nothing is asked on launch.
 - Repeater lists sync on app open and resume (region roster with ETag, and the server's network repeater list once it is offered) and are stored for offline names and map pins; the Repeaters panel shows "Updated 5m ago" / "Offline - as of 2d ago".
