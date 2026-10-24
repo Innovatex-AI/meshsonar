@@ -73,11 +73,15 @@ void main() {
       final size = f.lengthSync();
       expect(size, lessThan(24 * 1024 * 1024));
       final re = Stopwatch()..start();
-      final back = await RepeaterSyncStore(Directory('${tmp.path}/sync')).loadNetwork();
+      final back = await RepeaterSyncStore(Directory('${tmp.path}/sync')).loadNetwork(); // isolate path (default)
       re.stop();
+      final reMain = Stopwatch()..start();
+      await RepeaterSyncStore(Directory('${tmp.path}/sync'), parseInIsolate: false).loadNetwork();
+      reMain.stop();
       expect(back!.data.rows.length, g.rows.length);
       _log('syncNetwork (MockClient, decode+parse in Isolate.run, save) ${sw.elapsedMilliseconds} ms; network.json $size bytes '
-          '(${(size / 1048576).toStringAsFixed(1)} MB of the 24 MB cap); reload from disk ${re.elapsedMilliseconds} ms');
+          '(${(size / 1048576).toStringAsFixed(1)} MB of the 24 MB cap); reload from disk ${re.elapsedMilliseconds} ms in Isolate.run '
+          '(the same decode on the main isolate: ${reMain.elapsedMilliseconds} ms)');
     } finally {
       await tmp.delete(recursive: true);
     }

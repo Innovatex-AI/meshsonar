@@ -102,7 +102,10 @@ class RepeaterSyncStore {
 
   /// A file larger than this is not written (memory only for this run).
   final int maxFileBytes;
-  RepeaterSyncStore(this.dir, {this.maxRosters = 8, this.maxFileBytes = 24 * 1024 * 1024});
+  /// Decode the stored network list (MB-sized: 6.2 MB for the 55.6k-row list of Oct 2026) in a background isolate, so
+  /// the launch read never stalls the UI isolate. Tests may turn it off; both paths use [decodeStoredNetwork].
+  final bool parseInIsolate;
+  RepeaterSyncStore(this.dir, {this.maxRosters = 8, this.maxFileBytes = 24 * 1024 * 1024, this.parseInIsolate = true});
 
   File _f(String name) => File('${dir.path}${Platform.pathSeparator}$name');
   static String _safe(String slug) => slug.replaceAll(RegExp(r'[^a-z0-9-]'), '_');
@@ -188,13 +191,11 @@ class RepeaterSyncStore {
   }
 
   Future<NetworkRecord?> loadNetwork() async {
-    final j = await _read(_f('network.json'));
-    if (j == null) return null;
-    final fetched = _time(j['fetchedAt']), checked = _time(j['checkedAt']);
-    if (fetched == null || checked == null) return null;
     try {
-      final data = NetworkRepeaters.parse({'asOf': j['asOf'], 'hidden': j['hidden'], 'rows': j['rows']});
-      return NetworkRecord(data: data, etag: j['etag'] as String?, fetchedAt: fetched, checkedAt: checked);
+      final f = _f('network.json');
+      if (!await f.exists()) return null;
+      final text = await f.readAsString();
+      return parseInIsolate ? await decodeStoredNetworkInIsolate(text) : decodeStoredNetwork(text);
     } catch (_) {
       return null;
     }
@@ -729,3 +730,23 @@ class RepeaterSync {
 /// cannot send ("object is unsendable - _Future"): every real fetch failed that way. Here the closure holds [bytes] only.
 Future<NetworkRepeaters> parseNetworkBodyInIsolate(Uint8List bytes) =>
     Isolate.run(() => NetworkRepeaters.parse(jsonDecode(utf8.decode(bytes))), debugName: 'network-repeaters-parse');
+
+/// The stored `network.json` text as a [NetworkRecord]; null when it is another version, damaged or incomplete.
+NetworkRecord? decodeStoredNetwork(String text) {
+  try {
+    final j = jsonDecode(text);
+    if (j is! Map || j['v'] != RepeaterSyncStore.version) return null;
+    DateTime? time(Object? v) => v is String ? DateTime.tryParse(v)?.toUtc() : null;
+    final fetched = time(j['fetchedAt']), checked = time(j['checkedAt']);
+    if (fetched == null || checked == null) return null;
+    final data = NetworkRepeaters.parse({'asOf': j['asOf'], 'hidden': j['hidden'], 'rows': j['rows']});
+    final etag = j['etag'];
+    return NetworkRecord(data: data, etag: etag is String ? etag : null, fetchedAt: fetched, checkedAt: checked);
+  } catch (_) {
+    return null;
+  }
+}
+
+/// [decodeStoredNetwork] in a background isolate (top level for the same reason as [parseNetworkBodyInIsolate]).
+Future<NetworkRecord?> decodeStoredNetworkInIsolate(String text) =>
+    Isolate.run(() => decodeStoredNetwork(text), debugName: 'network-store-load');
