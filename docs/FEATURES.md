@@ -347,6 +347,28 @@ Metric definitions (`DriveReport.compute`):
 - **Telemetry uploader** (`lib/core/telemetry_uploader.dart`, `telemetry.dart`): on by default with a first-run disclosure and a visible opt-out in Settings. Sends packet headers and metadata only (type, route, path hashes, SNR/RSSI, time, packet hash) to `POST /api/cmh/telemetry` with the driver key. Never payloads, coordinates, your own pings or private message types. Turning it off clears the queue and offers `DELETE` to erase what was already shared.
 - **Coverage timeline**: Map layers > Network coverage > Coverage options > "Coverage growth (as of)" slider with play/pause and a Live reset. Built from windowed `public-coverage?until=` calls; the first-data day comes from `region-timeline` (days only).
 
+## Drive context: data collected (stream 7, core only, not switched on yet)
+
+Built as pure-Dart pieces; nothing below is collected in a drive until the drive flow starts the recorder and the
+versioned disclosure + Settings categories ship (separate work). Design: meshsonar-infra planning
+`stream-7-data-collection.md`.
+
+- **Categories** (`lib/core/data_categories.dart`): packet headers (live today), motion and altitude, air pressure,
+  phone battery, phone and app details, radio health, radio settings, weather. Each has a stable id, title, exact
+  disclosure sentence, the stored keys it owns, default ON (opt-out, Andy Oct 24 2026), destination and availability
+  (`live`, `recorderReady`, `needsSensorPlugin`, `needsServer`) so the UI never presents uncollected data as collected.
+- **Radio health** (`lib/radio/radio_health.dart`): every 60 s during a drive, GET_STATS radio/core/packets plus
+  GET_BATT_AND_STORAGE every 15 min; never while a ping is in flight (it waits, then skips); firmware that lacks a
+  command is asked once. Values the radio did not measure stay empty (0 mV battery, 0 noise floor, 0 RSSI).
+  `err_flags` is the firmware's sticky error bitmask, not a counter. Channel utilisation is not reported by MeshCore.
+- **Storage** (`JsonlDriveStore`): `samples.jsonl` (no coordinates), `ctx.jsonl` (per ping), `context.json` (per
+  drive) beside the drive, crash-safe like `pings.jsonl`. The upload and the export are byte-identical to before.
+  Turning a category off strips its keys from stored context (`stripCategories`, atomic rewrite).
+- **GPS extras**: `GeoFix` keeps altitude, vertical accuracy, course over ground and its accuracy, speed accuracy
+  (null when the phone did not measure them); they are context only, never part of the drive upload.
+- **Simulator**: answers every stats command with counters that follow what it did (pings sent, packets heard,
+  airtime, a slowly draining battery, 120 / 1984 KB storage).
+
 ## Uploads
 
 - **During the drive:** a timer every `syncEveryMin` minutes runs while *driving* **and** both toggles are on

@@ -3,6 +3,17 @@
 All notable changes to MeshSonar. Dates are local (US Eastern). This changelog was reconstructed from the commit
 history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md](ROADMAP.md).
 
+## [Unreleased]
+
+- Radio protocol: decoders, encoders and byte tests for GET_STATS core (battery, uptime, error flags, queue) and packets
+  (30 B and 26 B), and GET_BATT_AND_STORAGE; `MeshCoreCompanionLink` reads them (unsupported asked once). The simulator
+  answers all of them.
+- Drive context core (stream 7, not yet switched on in a drive): `RadioHealthPoller` (60 s, never during a ping),
+  `DriveContextRecorder`, per-drive `samples.jsonl` / `ctx.jsonl` / `context.json` beside the drive (uploads and
+  exports byte-identical), category list with disclosure text (`lib/core/data_categories.dart`), GPS altitude, course
+  and accuracies kept on `GeoFix`.
+- Units: air pressure (hPa / inHg) and temperature (°C / °F).
+
 ## [0.19.0] — 2026-10-24 — Timeline, telemetry, offline cache
 
 - Map layers > Network coverage > Coverage options: "Coverage growth (as of)" slider with play/pause and a Live reset; the map shows a "Coverage as of <date>" badge while scrubbed back (server `public-coverage?until=`).

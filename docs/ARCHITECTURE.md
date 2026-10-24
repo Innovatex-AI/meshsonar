@@ -256,7 +256,10 @@ names.
 | `app/messages.dart` | app | `friendlyError` / `friendlySyncError`: exceptions → short plain-language messages. |
 | `core/model.dart` | core (contract) | Drive Format v1 records: `AppInfo`, `Radio`, `Antenna`, `Companion`, `DriveSession`, `Echo`, `Neighbor`, `DrivePing`, `DriveBatch`, `RepeaterRef`. |
 | `core/api.dart` | core (contract) | `DriveStore`, `CmatClient`, `SyncService`, `SettingsStore` interfaces; `Settings`, `SessionSummary`, `DriverKeyStatus`, `UploadResult`, `SyncReport`, `CmatException`, `RegionInfo`, `RadioPreset`, `SiteConfig`, `CoverageCell`, `CoverageGrid`, `PublicCoverage`. |
-| `core/drive_store.dart` | core | `JsonlDriveStore` (one folder per drive, JSONL pings, sync ledgers, rename + re-send mark), the `SyncLedger` extension interface, and `closeOrphanedSessions` (closes crashed drives at launch). |
+| `core/drive_store.dart` | core | `JsonlDriveStore` (one folder per drive, JSONL pings, sync ledgers, rename + re-send mark, and the drive-context files `samples.jsonl` / `ctx.jsonl` / `context.json` via `DriveContextLedger`), the `SyncLedger` extension interface, and `closeOrphanedSessions` (closes crashed drives at launch). |
+| `core/drive_context.dart` | core | Drive context stored beside a drive, never in its upload: `PingContext` (per ping), `DriveSample` (time series, no coordinates), `SessionContext` (`DeviceDetails`, `CompanionDetails`); range checks (out of range = null); per-category `without()`; the `DriveContextLedger` interface and `stripContextCategories`. |
+| `core/drive_context_recorder.dart` | core | `DriveContextRecorder`: one per drive; matches fixes to pings, writes samples/ping context/session snapshot, reads the category switches at every write. Not yet started by `AppState` (stream 7 WP2 hook). |
+| `core/data_categories.dart` | core | `dataCategories`: every collected category (id, title, exact disclosure text, stored field keys, default on, destination, availability, permission) for the Settings registry and the disclosure sheet; `fieldCategory` key map. |
 | `core/cmat_client.dart` | core | `HttpCmatClient` for `driver-request`, `driver-status`, `drive-upload`, `drive-repeaters`, `site-config`, `public-coverage` (both public, no driver key); `DetailedUploadResult`, `PingRejection`. |
 | `core/network_coverage.dart` | core | `buildNetworkCells`/`levelFor`: turns a `PublicCoverage` answer into drawable `NetworkCell`s (square bbox or H3 hexagon boundary) bucketed by `CoverageColorBy` — the Drive map's network-wide background layer. |
 | `core/sync_service.dart` | core | `DefaultSyncService`: chunked, serialised, retry-safe uploads; rejection discovery; end-time reporting. |
@@ -268,7 +271,8 @@ names.
 | `radio/protocol.dart` | radio | Companion protocol codes, command encoders, frame decoders, plus the radio-side encoders the simulator uses. |
 | `radio/packet.dart` | radio | Over-the-air packet parser/serialiser, path-hash decoding, GRP_TXT build/decrypt, `matchEcho`. |
 | `radio/crypto.dart` | radio | Pure-Dart SHA-256, HMAC-SHA256, AES-128; channel secrets and hash; MeshCore encrypt-then-MAC. |
-| `radio/companion_link.dart` | radio | `MeshCoreCompanionLink`: serialised commands, push handling, `ensureChannel`, `sendChannelText`, `noiseFloor`, discovery request, offline-queue drain. |
+| `radio/companion_link.dart` | radio | `MeshCoreCompanionLink`: serialised commands, push handling, `ensureChannel`, `sendChannelText`, `noiseFloor`, radio health reads (`coreStats`, `radioStats`, `packetStats`, `batteryAndStorage`; unsupported asked once), discovery request, offline-queue drain. |
+| `radio/radio_health.dart` | radio | `RadioStatsSource`, `radioSampleFrom` (frames to a `DriveSample`, unmeasured = null), `RadioHealthPoller` (every 60 s, never while a ping is in flight; injectable clock + timer). |
 | `radio/wardrive_engine.dart` | radio | `DefaultWardriveEngine`: cadence, one ping at a time, listen window, echo building, optional neighbour discovery; `formatPingText`. |
 | `radio/simulator.dart` | radio | `SimulatedLocationSource` (Westerville loop), `SimulatedTransport` (speaks real frames and real encrypted packets), `SimulatedRadioScanner`, simulated repeaters. |
 | `radio/ble_transport.dart` | platform | `BleRadioScanner` / `_BleTransport` over flutter_blue_plus (Nordic-UART-style service). |
