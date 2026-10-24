@@ -1,0 +1,1199 @@
+{
+ "generatedAt": "2026-10-24T01:41:46.525Z",
+ "region": {
+  "slug": "cmh",
+  "name": "Columbus, US",
+  "code": "CMH"
+ },
+ "overview": {
+  "status": {
+   "state": "ready",
+   "reason": null,
+   "computedAt": "2026-10-24T01:41:46.568Z",
+   "source": "meshsonar-observers+corescope"
+  },
+  "packets24h": 612,
+  "observersOnline": 1,
+  "observersTotal": 9,
+  "repeaters": 326,
+  "repeatersHeard24h": 64,
+  "packetsPerHour": [
+   {
+    "at": "2026-10-23T02:00:00.000Z",
+    "n": 7
+   },
+   {
+    "at": "2026-10-23T03:00:00.000Z",
+    "n": 28
+   },
+   {
+    "at": "2026-10-23T04:00:00.000Z",
+    "n": 44
+   },
+   {
+    "at": "2026-10-23T05:00:00.000Z",
+    "n": 35
+   },
+   {
+    "at": "2026-10-23T06:00:00.000Z",
+    "n": 35
+   },
+   {
+    "at": "2026-10-23T07:00:00.000Z",
+    "n": 18
+   },
+   {
+    "at": "2026-10-23T08:00:00.000Z",
+    "n": 27
+   },
+   {
+    "at": "2026-10-23T09:00:00.000Z",
+    "n": 36
+   },
+   {
+    "at": "2026-10-23T10:00:00.000Z",
+    "n": 68
+   },
+   {
+    "at": "2026-10-23T11:00:00.000Z",
+    "n": 27
+   },
+   {
+    "at": "2026-10-23T12:00:00.000Z",
+    "n": 26
+   },
+   {
+    "at": "2026-10-23T13:00:00.000Z",
+    "n": 72
+   },
+   {
+    "at": "2026-10-23T14:00:00.000Z",
+    "n": 13
+   },
+   {
+    "at": "2026-10-23T15:00:00.000Z",
+    "n": 10
+   },
+   {
+    "at": "2026-10-23T16:00:00.000Z",
+    "n": 10
+   },
+   {
+    "at": "2026-10-23T17:00:00.000Z",
+    "n": 10
+   },
+   {
+    "at": "2026-10-23T18:00:00.000Z",
+    "n": 11
+   },
+   {
+    "at": "2026-10-23T19:00:00.000Z",
+    "n": 11
+   },
+   {
+    "at": "2026-10-23T20:00:00.000Z",
+    "n": 12
+   },
+   {
+    "at": "2026-10-23T21:00:00.000Z",
+    "n": 30
+   },
+   {
+    "at": "2026-10-23T22:00:00.000Z",
+    "n": 11
+   },
+   {
+    "at": "2026-10-23T23:00:00.000Z",
+    "n": 14
+   },
+   {
+    "at": "2026-10-24T00:00:00.000Z",
+    "n": 35
+   },
+   {
+    "at": "2026-10-24T01:00:00.000Z",
+    "n": 18
+   }
+  ],
+  "lastPacketAt": "2026-10-24T01:28:26.654Z",
+  "recentEvents": [
+   {
+    "type": "repeater_new",
+    "key": "79a82b71864ecf7b09039097d07ce24e11b8a503a38ff913e50294937eefdadb",
+    "detail": "BARKS-WEST 1W Repeater appeared",
+    "at": "2026-10-23T00:01:21.620Z"
+   },
+   {
+    "type": "link_new",
+    "key": "96295eb05f0b7e5d6817a8b2d749c54e07c1b2776fa7d0003738673ca988fd48",
+    "detail": "New link: Scooby2 Repeater and RTLBase RTLnet",
+    "at": "2026-10-23T00:01:21.620Z"
+   },
+   {
+    "type": "link_new",
+    "key": "69d27b71a7040637167bfbd28e841604ab0eaa5aa561c78eeceed5a4db5b52f7",
+    "detail": "New link: INNO-R01 and OH.DEL.POLARIS East",
+    "at": "2026-10-23T00:01:21.620Z"
+   },
+   {
+    "type": "link_lost",
+    "key": "3e49a2d3df934d30109f53e3686997038ff30d71607b9a85f03027b488bac107",
+    "detail": "Link lost: PeakMesh 1W Repeater and KF8DDU Heltec Tower Rep",
+    "at": "2026-10-23T00:01:21.620Z"
+   },
+   {
+    "type": "link_lost",
+    "key": "6dbd1e44de95a119b80bc5d56da2053ba3c578843a06b4952aab204edeb1b848",
+    "detail": "Link lost: GoshenMesh and StillMesh",
+    "at": "2026-10-23T00:01:21.620Z"
+   },
+   {
+    "type": "link_lost",
+    "key": "297d23c0321930513f10b4010e5f847084911b50edc010e70910adb97ea92d35",
+    "detail": "Link lost: Blacklick RTLnet and INNO-ALBANY-WEST",
+    "at": "2026-10-23T00:01:21.620Z"
+   },
+   {
+    "type": "link_lost",
+    "key": "bf69f09521eb0245b118ac61c9cf4f43615edc77d72617296dab552bcf818cc8",
+    "detail": "Link lost: Ham Solo and OH-MAR-EarthStation51",
+    "at": "2026-10-23T00:01:21.620Z"
+   },
+   {
+    "type": "link_lost",
+    "key": "ef3fcacf2bc3f0176f0a2bbb88a25de76497cfcac98b13d6d240468211d08494",
+    "detail": "Link lost: OH-MAR-EarthStation51 and MKS Repeater",
+    "at": "2026-10-23T00:01:21.620Z"
+   },
+   {
+    "type": "link_lost",
+    "key": "3c4d94a3dc66eacf34c2f32f75080a94870119cab5f8338ad3f1c42dae42baa6",
+    "detail": "Link lost: \ud83e\udd84Repeater and WesterCore 1",
+    "at": "2026-10-23T00:01:21.620Z"
+   },
+   {
+    "type": "link_lost",
+    "key": "c70f625e7e7240bb2578db2ba153523cd224a5c5f5056762b30bb4b9fc8f7a67",
+    "detail": "Link lost: SR 161 S. Sharon Woods and INNO-STONERIDGE",
+    "at": "2026-10-23T00:01:21.620Z"
+   }
+  ],
+  "sources": [
+   {
+    "kind": "meshsonar-observers",
+    "name": "MeshSonar observers",
+    "ok": true,
+    "staleSince": null,
+    "lastOkAt": "2026-10-24T01:28:26.654Z"
+   },
+   {
+    "kind": "corescope",
+    "name": "map.okimesh.org",
+    "ok": false,
+    "staleSince": "2026-10-23T01:04:00.448Z",
+    "lastOkAt": "2026-10-23T00:01:21.573Z"
+   }
+  ]
+ },
+ "repeaters": {
+  "status": {
+   "state": "ready",
+   "reason": null,
+   "computedAt": "2026-10-24T01:41:46.537Z",
+   "source": "meshsonar-observers+corescope"
+  },
+  "rows": [
+   {
+    "key": "da5dc89c937225aadced4a1cb8a689c0d34ccab96576a0d0f69f3186c879c854",
+    "hashPrefix": "da5d",
+    "name": "INNO-ALBANY-WEST",
+    "role": "repeater",
+    "lat": 40.078675,
+    "lon": -82.854534,
+    "firstSeenAt": "2026-09-24T22:52:22.000Z",
+    "lastHeardAt": "2026-10-24T01:23:00.414Z",
+    "relays24h": 75,
+    "adverts24h": 7,
+    "neighbours": 27,
+    "observers24h": 1,
+    "heardHoursPct": 54.2,
+    "snrMeanDb": 8.5,
+    "signalGrade": "B",
+    "hashSizeBytes": 2,
+    "ambiguous": false,
+    "status": "active"
+   },
+   {
+    "key": "e51477364cc38b1605f783aca73362e9325029a1b9c15604eabd9c8a7394cbc7",
+    "hashPrefix": "e5",
+    "name": "MeshThor R2",
+    "role": "repeater",
+    "lat": 40.137056,
+    "lon": -82.960814,
+    "firstSeenAt": "2026-07-15T04:21:11.000Z",
+    "lastHeardAt": "2026-10-24T01:21:01.983Z",
+    "relays24h": null,
+    "adverts24h": 7,
+    "neighbours": 5,
+    "observers24h": 1,
+    "heardHoursPct": 29.2,
+    "snrMeanDb": 8.4,
+    "signalGrade": "B",
+    "hashSizeBytes": 1,
+    "ambiguous": true,
+    "status": "active"
+   }
+  ],
+  "counts": {
+   "active": 62,
+   "quiet": 152,
+   "new": 123,
+   "stale": 1
+  }
+ },
+ "observers": {
+  "status": {
+   "state": "ready",
+   "reason": null,
+   "computedAt": "2026-10-24T01:41:46.537Z",
+   "source": "meshsonar-observers+corescope"
+  },
+  "rows": [
+   {
+    "key": "df0136c20a99f519286d14e5b95e9d807c9472aa83ffefd9a15f8238afdecd48",
+    "name": "INNO-OB-2",
+    "online": false,
+    "lastPacketAt": "2026-10-21T16:19:35.152Z",
+    "lastStatusAt": "2026-10-21T16:15:33.699Z",
+    "packetsPerHour": 0,
+    "noiseFloorDbm": -97,
+    "radio": "910.525024,62.5,7,5",
+    "firmware": "v1.17.1.5-observer-7403067",
+    "model": "Heltec V4.3 OLED",
+    "batteryMv": 2759,
+    "lat": null,
+    "lon": null,
+    "nodesHeard24h": 0,
+    "trusted": true,
+    "source": "meshsonar"
+   },
+   {
+    "key": "e066d11b642e9e36e1b89617ec7947b5e1bb41a31da9cd8f7b796c3b47ef5560",
+    "name": "OH.FRA.ForestPark.OB",
+    "online": true,
+    "lastPacketAt": "2026-10-24T01:28:26.654Z",
+    "lastStatusAt": "2026-10-24T01:38:24.346Z",
+    "packetsPerHour": 64,
+    "noiseFloorDbm": -73,
+    "radio": "910.525,62.5,7,5",
+    "firmware": "v1.17.1 (Build: 14 Aug 2026)",
+    "model": "Heltec V4.3 OLED",
+    "batteryMv": 4174,
+    "lat": null,
+    "lon": null,
+    "nodesHeard24h": 71,
+    "trusted": true,
+    "source": "meshsonar"
+   }
+  ]
+ },
+ "activity": {
+  "status": {
+   "state": "ready",
+   "reason": null,
+   "computedAt": "2026-10-24T01:41:46.652Z",
+   "source": "meshsonar-observers"
+  },
+  "bucket": "day",
+  "rows": [
+   {
+    "at": "2026-09-24T00:00:00.000Z",
+    "byType": {},
+    "total": 0
+   },
+   {
+    "at": "2026-09-25T00:00:00.000Z",
+    "byType": {},
+    "total": 0
+   },
+   {
+    "at": "2026-09-26T00:00:00.000Z",
+    "byType": {},
+    "total": 0
+   },
+   {
+    "at": "2026-09-27T00:00:00.000Z",
+    "byType": {},
+    "total": 0
+   },
+   {
+    "at": "2026-09-28T00:00:00.000Z",
+    "byType": {},
+    "total": 0
+   },
+   {
+    "at": "2026-09-29T00:00:00.000Z",
+    "byType": {},
+    "total": 0
+   },
+   {
+    "at": "2026-09-30T00:00:00.000Z",
+    "byType": {},
+    "total": 0
+   },
+   {
+    "at": "2026-10-01T00:00:00.000Z",
+    "byType": {},
+    "total": 0
+   },
+   {
+    "at": "2026-10-02T00:00:00.000Z",
+    "byType": {},
+    "total": 0
+   },
+   {
+    "at": "2026-10-03T00:00:00.000Z",
+    "byType": {},
+    "total": 0
+   },
+   {
+    "at": "2026-10-04T00:00:00.000Z",
+    "byType": {},
+    "total": 0
+   },
+   {
+    "at": "2026-10-05T00:00:00.000Z",
+    "byType": {},
+    "total": 0
+   },
+   {
+    "at": "2026-10-06T00:00:00.000Z",
+    "byType": {},
+    "total": 0
+   },
+   {
+    "at": "2026-10-07T00:00:00.000Z",
+    "byType": {},
+    "total": 0
+   },
+   {
+    "at": "2026-10-08T00:00:00.000Z",
+    "byType": {},
+    "total": 0
+   },
+   {
+    "at": "2026-10-09T00:00:00.000Z",
+    "byType": {},
+    "total": 0
+   },
+   {
+    "at": "2026-10-10T00:00:00.000Z",
+    "byType": {},
+    "total": 0
+   },
+   {
+    "at": "2026-10-11T00:00:00.000Z",
+    "byType": {},
+    "total": 0
+   },
+   {
+    "at": "2026-10-12T00:00:00.000Z",
+    "byType": {},
+    "total": 0
+   },
+   {
+    "at": "2026-10-13T00:00:00.000Z",
+    "byType": {},
+    "total": 0
+   },
+   {
+    "at": "2026-10-14T00:00:00.000Z",
+    "byType": {},
+    "total": 0
+   },
+   {
+    "at": "2026-10-15T00:00:00.000Z",
+    "byType": {},
+    "total": 0
+   },
+   {
+    "at": "2026-10-16T00:00:00.000Z",
+    "byType": {},
+    "total": 0
+   },
+   {
+    "at": "2026-10-17T00:00:00.000Z",
+    "byType": {},
+    "total": 0
+   },
+   {
+    "at": "2026-10-18T00:00:00.000Z",
+    "byType": {
+     "0": 182,
+     "1": 190,
+     "2": 52,
+     "3": 6,
+     "4": 202,
+     "5": 572,
+     "6": 1,
+     "7": 24,
+     "8": 95,
+     "10": 2,
+     "11": 271
+    },
+    "total": 1597
+   },
+   {
+    "at": "2026-10-19T00:00:00.000Z",
+    "byType": {
+     "0": 356,
+     "1": 299,
+     "2": 54,
+     "3": 3,
+     "4": 220,
+     "5": 465,
+     "6": 16,
+     "7": 143,
+     "8": 85,
+     "11": 235
+    },
+    "total": 1876
+   },
+   {
+    "at": "2026-10-20T00:00:00.000Z",
+    "byType": {
+     "0": 614,
+     "1": 294,
+     "2": 66,
+     "3": 3,
+     "4": 275,
+     "5": 810,
+     "6": 119,
+     "7": 384,
+     "8": 129,
+     "11": 187
+    },
+    "total": 2881
+   },
+   {
+    "at": "2026-10-21T00:00:00.000Z",
+    "byType": {
+     "0": 806,
+     "1": 405,
+     "2": 255,
+     "3": 8,
+     "4": 334,
+     "5": 988,
+     "6": 154,
+     "7": 518,
+     "8": 146,
+     "11": 140
+    },
+    "total": 3754
+   },
+   {
+    "at": "2026-10-22T00:00:00.000Z",
+    "byType": {
+     "0": 1005,
+     "1": 345,
+     "2": 225,
+     "3": 8,
+     "4": 219,
+     "5": 1067,
+     "6": 156,
+     "7": 961,
+     "8": 237,
+     "11": 15
+    },
+    "total": 4238
+   },
+   {
+    "at": "2026-10-23T00:00:00.000Z",
+    "byType": {
+     "0": 84,
+     "1": 111,
+     "2": 20,
+     "4": 138,
+     "5": 223,
+     "7": 50,
+     "8": 65,
+     "11": 8
+    },
+    "total": 699
+   },
+   {
+    "at": "2026-10-24T00:00:00.000Z",
+    "byType": {
+     "0": 5,
+     "1": 6,
+     "4": 6,
+     "5": 19,
+     "7": 13,
+     "8": 4
+    },
+    "total": 53
+   },
+   {
+    "at": "2026-10-25T00:00:00.000Z",
+    "byType": {},
+    "total": 0
+   }
+  ]
+ },
+ "rf": {
+  "status": {
+   "state": "ready",
+   "reason": null,
+   "computedAt": "2026-10-24T01:41:46.624Z",
+   "source": "meshsonar-observers"
+  },
+  "observers": [
+   {
+    "key": "df0136c20a99f519286d14e5b95e9d807c9472aa83ffefd9a15f8238afdecd48",
+    "name": "INNO-OB-2",
+    "series": [
+     {
+      "at": "2026-10-18T00:00:00.000Z",
+      "dbm": -92.4
+     },
+     {
+      "at": "2026-10-18T01:00:00.000Z",
+      "dbm": -92
+     }
+    ],
+    "meanDbm": -97.1,
+    "maxDbm": -88.1
+   },
+   {
+    "key": "e066d11b642e9e36e1b89617ec7947b5e1bb41a31da9cd8f7b796c3b47ef5560",
+    "name": "OH.FRA.ForestPark.OB",
+    "series": [
+     {
+      "at": "2026-10-18T00:00:00.000Z",
+      "dbm": -81.7
+     },
+     {
+      "at": "2026-10-18T01:00:00.000Z",
+      "dbm": -81.6
+     }
+    ],
+    "meanDbm": -78.2,
+    "maxDbm": -67.8
+   }
+  ],
+  "noiseByHour": [
+   {
+    "hour": 0,
+    "meanDbm": -85.7
+   },
+   {
+    "hour": 1,
+    "meanDbm": -85.2
+   },
+   {
+    "hour": 2,
+    "meanDbm": -85.7
+   },
+   {
+    "hour": 3,
+    "meanDbm": -85.7
+   },
+   {
+    "hour": 4,
+    "meanDbm": -85.6
+   },
+   {
+    "hour": 5,
+    "meanDbm": -86.2
+   },
+   {
+    "hour": 6,
+    "meanDbm": -85.7
+   },
+   {
+    "hour": 7,
+    "meanDbm": -85.9
+   },
+   {
+    "hour": 8,
+    "meanDbm": -85.8
+   },
+   {
+    "hour": 9,
+    "meanDbm": -85.7
+   },
+   {
+    "hour": 10,
+    "meanDbm": -85.9
+   },
+   {
+    "hour": 11,
+    "meanDbm": -85.4
+   },
+   {
+    "hour": 12,
+    "meanDbm": -85.7
+   },
+   {
+    "hour": 13,
+    "meanDbm": -85.3
+   },
+   {
+    "hour": 14,
+    "meanDbm": -85.4
+   },
+   {
+    "hour": 15,
+    "meanDbm": -84.6
+   },
+   {
+    "hour": 16,
+    "meanDbm": -85.7
+   },
+   {
+    "hour": 17,
+    "meanDbm": -84
+   },
+   {
+    "hour": 18,
+    "meanDbm": -83.8
+   },
+   {
+    "hour": 19,
+    "meanDbm": -84.3
+   },
+   {
+    "hour": 20,
+    "meanDbm": -85.9
+   },
+   {
+    "hour": 21,
+    "meanDbm": -85.7
+   },
+   {
+    "hour": 22,
+    "meanDbm": -84.9
+   },
+   {
+    "hour": 23,
+    "meanDbm": -84.7
+   }
+  ],
+  "snrHistogram": [
+   {
+    "n": 20,
+    "toDb": -10,
+    "fromDb": -12
+   },
+   {
+    "n": 335,
+    "toDb": -8,
+    "fromDb": -10
+   },
+   {
+    "n": 1031,
+    "toDb": -6,
+    "fromDb": -8
+   },
+   {
+    "n": 1287,
+    "toDb": -4,
+    "fromDb": -6
+   },
+   {
+    "n": 1149,
+    "toDb": -2,
+    "fromDb": -4
+   },
+   {
+    "n": 845,
+    "toDb": 0,
+    "fromDb": -2
+   },
+   {
+    "n": 824,
+    "toDb": 2,
+    "fromDb": 0
+   },
+   {
+    "n": 975,
+    "toDb": 4,
+    "fromDb": 2
+   },
+   {
+    "n": 1260,
+    "toDb": 6,
+    "fromDb": 4
+   },
+   {
+    "n": 1849,
+    "toDb": 8,
+    "fromDb": 6
+   },
+   {
+    "n": 3328,
+    "toDb": 10,
+    "fromDb": 8
+   },
+   {
+    "n": 15538,
+    "toDb": 12,
+    "fromDb": 10
+   },
+   {
+    "n": 10248,
+    "toDb": 14,
+    "fromDb": 12
+   }
+  ]
+ },
+ "hash": {
+  "status": {
+   "state": "ready",
+   "reason": null,
+   "computedAt": "2026-10-24T01:41:46.534Z",
+   "source": "meshsonar-observers+corescope"
+  },
+  "sizes": [
+   {
+    "bytes": 1,
+    "nodes": 22
+   },
+   {
+    "bytes": 2,
+    "nodes": 30
+   },
+   {
+    "bytes": 3,
+    "nodes": 5
+   }
+  ],
+  "collisions": [
+   {
+    "prefix": "33",
+    "nodes": [
+     {
+      "key": "330640e1991a0a1ea9ab2fd3354c7891264dd16f5754fb1ead8fb1984f1d12a7",
+      "name": "pi-zero station g3"
+     },
+     {
+      "key": "3388c021ad2cd43fb5dd8f93231a9bf1e1900116c00e76612489ba89ef82b7d8",
+      "name": "ORD-WRNVL-MTHOY-RD-3388"
+     },
+     {
+      "key": "33914d3ef8e30c7ddbea9e9e49c14dc1d7a7bea63dd72b6487c06e14b876ce33",
+      "name": "MoJo"
+     },
+     {
+      "key": "3398265039e1e76905b3e4694728221153a75daf060f34b0ccec49c4971e1d66",
+      "name": "GreenPeats"
+     },
+     {
+      "key": "339c89640825f72f438f3222cf9fcd3f77e7684279b5da560f142d3df50f20cd",
+      "name": "Luckey2-RPTR"
+     },
+     {
+      "key": "33a9bd43dc243da0ce2a7e9da8a47c44b85e099758d4591d88239628a4be1ea1",
+      "name": "Oakdale Weather Rptr"
+     }
+    ]
+   },
+   {
+    "prefix": "ac",
+    "nodes": [
+     {
+      "key": "ac010fe80fd3c2442e94be9d419d03c07c86d4da9719bc1f489cfa7cad125b2e",
+      "name": "OKI.O.WAR.AC01 okimesh."
+     },
+     {
+      "key": "ac031685a88a635dd75594a17926fc5cf913bffcb408794a20a0b890d4cf22da",
+      "name": "OKI.O.WAR.AC03"
+     },
+     {
+      "key": "ac040f7da5173995d7e1fc2ba5cb3bec4c090c5a46443d3543fa1e833b84b998",
+      "name": "OKI.O.WAR.AC04"
+     },
+     {
+      "key": "ac05a3ad1d5c1fd43c8edd124a4ec42f623eb5913ba294f731e7d2177686f97b",
+      "name": "OKI.O.WAR.AC05 okimesh."
+     },
+     {
+      "key": "ac06e5334d18909bf1998dd1ec97331e3dbbe231c3ad2eea22d23ef9b9666082",
+      "name": "OKI.O.WAR.AC06"
+     }
+    ]
+   }
+  ]
+ },
+ "paths": {
+  "status": {
+   "state": "ready",
+   "reason": null,
+   "computedAt": "2026-10-24T01:41:46.656Z",
+   "source": "meshsonar-observers"
+  },
+  "hopHistogram": [
+   {
+    "n": 4014,
+    "hops": 0
+   },
+   {
+    "n": 2472,
+    "hops": 1
+   },
+   {
+    "n": 2714,
+    "hops": 2
+   },
+   {
+    "n": 3064,
+    "hops": 3
+   },
+   {
+    "n": 2067,
+    "hops": 4
+   },
+   {
+    "n": 1505,
+    "hops": 5
+   },
+   {
+    "n": 1633,
+    "hops": 6
+   },
+   {
+    "n": 2121,
+    "hops": 7
+   },
+   {
+    "n": 2139,
+    "hops": 8
+   },
+   {
+    "n": 1944,
+    "hops": 9
+   },
+   {
+    "n": 1778,
+    "hops": 10
+   },
+   {
+    "n": 1648,
+    "hops": 11
+   },
+   {
+    "n": 1480,
+    "hops": 12
+   },
+   {
+    "n": 1277,
+    "hops": 13
+   },
+   {
+    "n": 1052,
+    "hops": 14
+   },
+   {
+    "n": 949,
+    "hops": 15
+   },
+   {
+    "n": 822,
+    "hops": 16
+   },
+   {
+    "n": 754,
+    "hops": 17
+   },
+   {
+    "n": 607,
+    "hops": 18
+   },
+   {
+    "n": 509,
+    "hops": 19
+   },
+   {
+    "n": 499,
+    "hops": 20
+   },
+   {
+    "n": 446,
+    "hops": 21
+   },
+   {
+    "n": 346,
+    "hops": 22
+   },
+   {
+    "n": 311,
+    "hops": 23
+   },
+   {
+    "n": 265,
+    "hops": 24
+   },
+   {
+    "n": 233,
+    "hops": 25
+   },
+   {
+    "n": 207,
+    "hops": 26
+   },
+   {
+    "n": 219,
+    "hops": 27
+   },
+   {
+    "n": 207,
+    "hops": 28
+   },
+   {
+    "n": 178,
+    "hops": 29
+   },
+   {
+    "n": 171,
+    "hops": 30
+   },
+   {
+    "n": 158,
+    "hops": 31
+   },
+   {
+    "n": 178,
+    "hops": 32
+   },
+   {
+    "n": 97,
+    "hops": 33
+   },
+   {
+    "n": 85,
+    "hops": 34
+   },
+   {
+    "n": 83,
+    "hops": 35
+   },
+   {
+    "n": 73,
+    "hops": 36
+   },
+   {
+    "n": 64,
+    "hops": 37
+   },
+   {
+    "n": 52,
+    "hops": 38
+   },
+   {
+    "n": 31,
+    "hops": 39
+   },
+   {
+    "n": 35,
+    "hops": 40
+   },
+   {
+    "n": 24,
+    "hops": 41
+   },
+   {
+    "n": 7,
+    "hops": 42
+   },
+   {
+    "n": 21,
+    "hops": 43
+   },
+   {
+    "n": 20,
+    "hops": 44
+   },
+   {
+    "n": 14,
+    "hops": 45
+   },
+   {
+    "n": 14,
+    "hops": 46
+   },
+   {
+    "n": 12,
+    "hops": 47
+   },
+   {
+    "n": 6,
+    "hops": 48
+   },
+   {
+    "n": 12,
+    "hops": 49
+   },
+   {
+    "n": 7,
+    "hops": 50
+   },
+   {
+    "n": 10,
+    "hops": 51
+   },
+   {
+    "n": 8,
+    "hops": 52
+   },
+   {
+    "n": 6,
+    "hops": 53
+   },
+   {
+    "n": 2,
+    "hops": 54
+   },
+   {
+    "n": 8,
+    "hops": 55
+   },
+   {
+    "n": 4,
+    "hops": 56
+   },
+   {
+    "n": 4,
+    "hops": 57
+   },
+   {
+    "n": 6,
+    "hops": 58
+   },
+   {
+    "n": 7,
+    "hops": 59
+   },
+   {
+    "n": 4,
+    "hops": 60
+   },
+   {
+    "n": 5,
+    "hops": 61
+   },
+   {
+    "n": 1,
+    "hops": 62
+   }
+  ],
+  "floodShare": 0.8198,
+  "carryShare": [
+   {
+    "key": "d4038f3c44ef64c8cbc61913da407d07c5e5fcc4acdfdfa1dabed3aaaeb214a5",
+    "name": "OH.DEL.POLARIS East",
+    "share": 0.4128
+   },
+   {
+    "key": "1cf74b1e7a66809442931982d3cbba9e7fd7df7f495a72715cfac9e9d51abd5c",
+    "name": "OH.FRA.ForestPark",
+    "share": 0.3738
+   },
+   {
+    "key": "1bcee248bf9e92447ce9edd76dd0657acf457db0441d82098795147b1b50d82e",
+    "name": "OH.FRA.KB8SXI \ud83c\udfe0",
+    "share": 0.3465
+   },
+   {
+    "key": "dd01058dd299541e961bfb62228583900fce8b402358361a6738643fcf165591",
+    "name": "INNO-STONERIDGE",
+    "share": 0.3114
+   },
+   {
+    "key": "f26ae5f81679bfef88f3ba2048eb4089ea187d3b6e64bb0847c2a5d279ba0a96",
+    "name": "OH.DEL.POLARIS West",
+    "share": 0.294
+   },
+   {
+    "key": "da5dc89c937225aadced4a1cb8a689c0d34ccab96576a0d0f69f3186c879c854",
+    "name": "INNO-ALBANY-WEST",
+    "share": 0.2806
+   },
+   {
+    "key": "13f0e87c694d705624bef353062ac9ed5029648744a407fab27770c23c536789",
+    "name": "OH.FRA.ForestPark",
+    "share": 0.2708
+   },
+   {
+    "key": "ceed2573b22bf1660ed5748dce965a0c245a7a881bef27162ef8ee375ff3c2d3",
+    "name": "\ud83d\ude82 ORMX RAK 1",
+    "share": 0.2625
+   },
+   {
+    "key": "db24126f6f2f59375749adea633c11b91cfda25ac32245f3ea4ecbdd340c845b",
+    "name": "OH.FRA.Polaris South",
+    "share": 0.2368
+   },
+   {
+    "key": "cfa7961cf00f924fd10d20f0ca1468d6744ad938ced3a23430ec720c2c1353c8",
+    "name": "RTLBase RTLnet",
+    "share": 0.1594
+   },
+   {
+    "key": "ac010fe80fd3c2442e94be9d419d03c07c86d4da9719bc1f489cfa7cad125b2e",
+    "name": "OKI.O.WAR.AC01 okimesh.",
+    "share": 0.1582
+   },
+   {
+    "key": "2451a3061af09c55cbf3907af4593ea9d08a8a111f4b8058ebb545c89d8d3aad",
+    "name": "SnagNet Base",
+    "share": 0.1093
+   },
+   {
+    "key": "3bba4a9a020d503130cb7ebf28e7112bbefe6869b486b52bb7faa4f76c92fabd",
+    "name": "443 Lt. Hunter Seidler",
+    "share": 0.1034
+   },
+   {
+    "key": "3e49a2d3df934d30109f53e3686997038ff30d71607b9a85f03027b488bac107",
+    "name": "PeakMesh 1W Repeater",
+    "share": 0.0918
+   },
+   {
+    "key": "1b1e9213a55a289d069daa37d22fcbd1ce4075ba49e22aeab9faf07572fcc4ad",
+    "name": "OH.WESTERVILLE - 2",
+    "share": 0.0832
+   },
+   {
+    "key": "fedb38dfedceca3bccf389cc79b30e91e2ce332ac9536836ac92069073505c81",
+    "name": "StillMesh",
+    "share": 0.0824
+   },
+   {
+    "key": "ea7b7cf84567fde27c0d6ea898d300468e4abefc4448fb6d5d99a79da4b868e7",
+    "name": "St. Newman",
+    "share": 0.0821
+   },
+   {
+    "key": "6224f26cc802cb1fadc29f2f5cd2609b891b214a1c1b4b27bfaf2fa38931c9cb",
+    "name": "NR8O Repeater NKY",
+    "share": 0.0796
+   },
+   {
+    "key": "ac05a3ad1d5c1fd43c8edd124a4ec42f623eb5913ba294f731e7d2177686f97b",
+    "name": "OKI.O.WAR.AC05 okimesh.",
+    "share": 0.0753
+   },
+   {
+    "key": "02488bef2074cc7e2693eaf34ec5421040c80a15da2d4caa38d8460301edcc12",
+    "name": "\ud83c\udfb8HENDRIX REPEATER",
+    "share": 0.0704
+   }
+  ]
+ },
+ "coverage": {
+  "cells": 685,
+  "drives": 33,
+  "km": null,
+  "heardPct": 49.5
+ }
+}
