@@ -306,15 +306,22 @@ Stats definitions (`DriveStats.of`):
 
 ## Drive report
 
-(`ui/report/*`, `drive-report`) Opened from the Drive screen card after Stop, from drive detail ("Report") and from the
-drive card menu. It's computed once per open. **Share report** (`report-share`, `report-share-button`) shares a
-plain-text summary (`.txt` plus the text itself).
+(`ui/report/*`, maths in `core/drive_report.dart` + `core/drive_report_rf.dart`) Opened from the Drive screen card
+after Stop, from drive detail ("Report") and from the drive card menu. It's computed once per open. **Export**
+(app bar menu `report-export`: `report-export-text`, `report-export-csv`; buttons `report-share-button`,
+`report-csv-button`) shares a plain-text summary (`.txt`, in the person's units and saying which) or ONE CSV file
+(`core/drive_report_export.dart`: first column `table` = `pings`, `cells`, `repeaters`, `snr-by-distance`,
+`heard-by-speed`; SI units in the column names, UTC ISO times; the menu says "Contains your exact track").
 
 Sections: **hero** (distance in km and mi, date, duration, antenna; grids mapped, % pings heard, repeaters),
 **highlights**, a **grid map** of cells coloured by heard % (red = 0%, then blue → teal → green), with new cells
 outlined and heard repeaters with known positions marked. Then **the drive** numbers, **signal over the drive** (SNR
-chart and heard strip), **how echoes came back** (hops), the **repeater leaderboard** (`NEW`, `not on CMAT` tags) and
-**best / dead spot**.
+chart and heard strip), **noise floor** (line with the -100 dBm interference line; "Your radio did not report a noise
+floor for this drive." when there is none), **reply strength** (strongest reply RSSI per ping), **transmit power** (one
+line, or its change points), **how echoes came back** (hops), **signal by distance** (mean direct-link SNR per band),
+**heard by speed**, **GPS accuracy** (median, 90%, fixes worse than 50 m), the **repeater leaderboard** (`NEW`,
+`not on CMAT` tags) and **best / dead spot**. Every chart is a `ChartFrame` (`ui/charts/`): a Chart / Table switch and
+a semantics label carrying the numbers; times are the phone's local time; distances and speeds follow Settings > Units.
 
 Metric definitions (`DriveReport.compute`):
 
@@ -337,6 +344,12 @@ Metric definitions (`DriveReport.compute`):
 | Best spot | Heard cell with the highest best SNR, then highest heard % |
 | Dead spot | Cell with unanswered pings and the lowest heard %, then the most unanswered |
 | Highlights | First drive ("every grid is new"), or N new grids; new repeaters (if there are earlier drives); farthest repeater; repeaters not on CMAT |
+| Noise floor | `noise_floor_dbm` of every ping (tx and rx) that carried one; median, range |
+| Reply RSSI | Per tx ping, the strongest `rssi_dbm` of its echoes or the neighbour reply |
+| TX power | `tx_dbm` change points (first value, then each change) |
+| Signal by distance | Direct links only (echo hops = 1, or a neighbour reply's local SNR) from repeaters with a known position, in the server's repeater-reach bands 0-1, 1-2, 2-5, 5-10, 10-20, 20+ km (an edge belongs to the band above). Multi-hop echoes are left out: their SNR is the last hop's, not the named repeater's. |
+| Heard by speed | Tx pings with a speed, bands 0-5, 5-15, 15-25, 25+ m/s; heard ÷ pings |
+| GPS accuracy | `gps_accuracy_m` of every ping: median, nearest-rank 90th percentile, count above 50 m |
 
 ## Settings (tab 3)
 
@@ -369,6 +382,27 @@ Metric definitions (`DriveReport.compute`):
 - **Idle region detection** (`lib/core/idle_region_watcher.dart`): when not driving, a coarse, distance-filtered location stream (at most one fix per 20 s) feeds the region tracker so the Region tab follows the phone. It is cancelled during a drive and in the background unless "Always" location is granted. The last fix is kept in `last_known_fix.json` so the next launch shows the right region before the first GPS fix. The radio preset is never changed silently: same preset notifies and switches, a different preset prompts.
 - **Telemetry uploader** (`lib/core/telemetry_uploader.dart`, `telemetry.dart`): on by default with a first-run disclosure and a visible opt-out in Settings. Sends packet headers and metadata only (type, route, path hashes, SNR/RSSI, time, packet hash) to `POST /api/cmh/telemetry` with the driver key. Never payloads, coordinates, your own pings or private message types. Turning it off clears the queue and offers `DELETE` to erase what was already shared.
 - **Coverage timeline**: Map layers > Network coverage > Coverage options > "Coverage growth (as of)" slider with play/pause and a Live reset. Built from windowed `public-coverage?until=` calls; the first-data day comes from `region-timeline` (days only).
+
+## Region RF, Growth and report export
+
+(`ui/region/rf_panel.dart`, `growth_panel.dart`, `region_report_export_sheet.dart`; shared shell
+`region_dataset_view.dart`) Two Region tabs after Analysis, as on the website's /analysis:
+
+- **RF** (`region-rf`, `core/region_rf_api.dart`): the website's one-line reading, figures (observers reporting,
+  quietest and noisiest mean noise floor, weak-signal share), "What this means" per observer, noise floor by observer
+  over time (up to 6 lines, -100 dBm line, a line breaks after 3 hours without data, the axis runs to the server's
+  computedAt), noise floor by hour of day (shifted from the server's UTC hours to the phone's hours when its offset is
+  whole hours; otherwise UTC, said so), SNR histogram. An observer that stopped reporting is named with the time of its
+  last reading ("INNO-OB-2 has sent no noise reading since ... Its line stops there.").
+- **Growth** (`region-ext-growth?days=365`, `core/region_growth_api.dart`): source attribution, known nodes over time
+  (running total, UTC days), churn by week (appeared / gone), nodes by role and by hash size; firmware only when the
+  server sends any.
+- Both: loading, error with Retry, "not published for this region" (404), the server's status chip and reason, the
+  offline "Offline - as of ..." label when the ETag cache served a stored copy, an honest empty state.
+- **Export region report** (app bar icon `region-report-export`): fetches `region-report` and shares a text summary,
+  the JSON (pretty-printed like the website's download), every table in one CSV, or any single table as the website's
+  own file (`<slug>-<table>.csv`, same column heads and bytes; checked against the site's code on the recorded cmh
+  body). Empty tables are disabled. Times in the files are UTC, like the website.
 
 ## Drive context: data collected (stream 7, core only, not switched on yet)
 
