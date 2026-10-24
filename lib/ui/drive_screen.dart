@@ -19,6 +19,7 @@ import 'drive/drive_map_model.dart';
 import 'drive/heard_box.dart';
 import 'map/coverage_map.dart';
 import 'map/fullscreen_map.dart';
+import 'map/coverage_timeline_slider.dart';
 import 'widgets.dart';
 
 export 'drive/drive_controls.dart' show openConnect;
@@ -245,6 +246,7 @@ class _MapPane extends StatelessWidget {
                 fallbackCenter: viewedRegionCenter(s),
               ),
             ),
+            Positioned(left: Gap.s, bottom: 44, child: CoverageAsOfBadge(model: model)),
             if (s.regionDataOfflineLabel != null)
               Positioned(
                 left: Gap.s,

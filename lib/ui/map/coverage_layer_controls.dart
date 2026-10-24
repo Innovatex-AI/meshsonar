@@ -2,9 +2,7 @@
 // noise floor), detail (automatic H3 resolution by zoom, or pinned 7-11), a "since" window and a source filter.
 // Lives in the map-layers sheet under the "Network coverage" switch; all state is on [DriveMapModel].
 //
-// Coverage-growth timeline: not built. `public-coverage` only takes `since` (cells measured after a moment), there is
-// no `until`/as-of, so a slider cannot replay how coverage grew (server item S6 in the parity spec). The "since"
-// chips are the honest version of that today.
+// Coverage-growth timeline: the "as of" slider (coverage_timeline_slider.dart) re-queries public-coverage with `until`.
 import 'package:flutter/material.dart';
 
 import '../../core/coverage_query.dart';
@@ -12,6 +10,7 @@ import '../../core/network_coverage.dart';
 import '../drive/drive_map_model.dart';
 import '../theme.dart';
 import 'coverage_map.dart' show networkLevelColor;
+import 'coverage_timeline_slider.dart';
 
 String colorByLabel(CoverageColorBy by) => switch (by) {
   CoverageColorBy.snr => 'Best SNR',
@@ -160,6 +159,7 @@ class CoverageLayerControls extends StatelessWidget {
                 (v) => model.coverageQuery = q.copyWith(since: v),
               ),
             ),
+            CoverageTimelineSlider(model: model),
             row(
               'Source',
               chips<CoverageSource>(

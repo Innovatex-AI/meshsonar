@@ -45,10 +45,14 @@ class CoverageQuery {
   final int? res;
   final CoverageSince since;
   final CoverageSource source;
+
+  /// Timeline "as of": only pings measured before this instant (exclusive). null = live (no bound).
+  final DateTime? until;
   const CoverageQuery({
     this.res,
     this.since = CoverageSince.all,
     this.source = CoverageSource.all,
+    this.until,
   });
 
   CoverageQuery copyWith({
@@ -56,10 +60,13 @@ class CoverageQuery {
     bool autoRes = false,
     CoverageSince? since,
     CoverageSource? source,
+    DateTime? until,
+    bool clearUntil = false,
   }) => CoverageQuery(
     res: autoRes ? null : (res ?? this.res),
     since: since ?? this.since,
     source: source ?? this.source,
+    until: clearUntil ? null : (until ?? this.until),
   );
 
   @override
@@ -67,8 +74,9 @@ class CoverageQuery {
       other is CoverageQuery &&
       other.res == res &&
       other.since == since &&
-      other.source == source;
+      other.source == source &&
+      other.until == until;
 
   @override
-  int get hashCode => Object.hash(res, since, source);
+  int get hashCode => Object.hash(res, since, source, until);
 }
