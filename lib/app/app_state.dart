@@ -61,7 +61,7 @@ class AppState extends ChangeNotifier {
   Settings get settings => _settings;
 
   /// Distance/speed/height formatting for the current Units setting (Auto follows the phone's region).
-  Units get units => Units.resolve(_settings.units, localeName: localeNameProvider());
+  Units get units => Units.resolve(_settings.units, localeName: localeNameProvider(), overrides: _settings.unitOverrides);
 
   /// The device locale name for Auto units; tests replace it so results do not depend on the host Mac's region.
   static String? Function() localeNameProvider = () {

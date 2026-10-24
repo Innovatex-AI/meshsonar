@@ -12,6 +12,9 @@ import 'settings_kit.dart';
 const String radioHelp = 'An auto-ping goes out when BOTH are met: the time has passed and you\'ve moved the distance. '
     'Ping now works any time. Changes apply straight away, even mid-drive.';
 
+const String _discoveryReason = 'Off in discovery mode: nothing is transmitted. Turn Discovery (listen-only) off to '
+    'use it.';
+
 List<Widget> radioSectionRows(BuildContext context) {
   final s = AppScope.of(context);
   final st = s.settings;
@@ -61,9 +64,9 @@ List<Widget> radioSectionRows(BuildContext context) {
         key: const Key('discovery-mode'),
         secondary: Icon(s.driving ? Icons.lock_outline : Icons.hearing_outlined),
         title: const Text('Discovery (listen-only)'),
-        subtitle: Text(s.driving
-            ? 'Locked while driving: stop the drive to change it.'
-            : 'The next drive transmits nothing at all — not even the privacy-hardened ping — and only '
+        subtitle: s.driving
+            ? const SettingsWhyNot('Locked while driving: stop the drive to change it.')
+            : const Text('The next drive transmits nothing at all — not even the privacy-hardened ping — and only '
                 'records what it overhears from other mesh traffic.'),
         value: st.discoveryMode,
         onChanged: s.driving ? null : (v) => s.updateSettings(st.copyWith(discoveryMode: v)),
@@ -79,7 +82,8 @@ List<Widget> radioSectionRows(BuildContext context) {
         stops: intervalStops,
         value: st.intervalSec,
         label: (v) => 'Every $v s',
-        caption: st.discoveryMode ? 'Doesn\'t apply in discovery mode: nothing is ever transmitted.' : null,
+        caption: 'How often an automatic ping may go out while driving.',
+        disabledReason: _discoveryReason,
         minLabel: '10 s',
         maxLabel: '2 min',
         enabled: !st.discoveryMode,
@@ -96,9 +100,8 @@ List<Widget> radioSectionRows(BuildContext context) {
         stops: s.units.minDistanceStops(distanceStops),
         value: st.minDistanceM,
         label: s.units.sliderDistance,
-        caption: st.discoveryMode
-            ? 'Doesn\'t apply in discovery mode: nothing is ever transmitted.'
-            : 'Skips auto-pings while you\'re stopped at lights.',
+        caption: 'Skips auto-pings while you\'re stopped at lights.',
+        disabledReason: _discoveryReason,
         minLabel: s.units.sliderDistance(s.units.minDistanceStops(distanceStops).first),
         maxLabel: s.units.sliderDistance(s.units.minDistanceStops(distanceStops).last),
         enabled: !st.discoveryMode,
@@ -109,11 +112,14 @@ List<Widget> radioSectionRows(BuildContext context) {
       id: 'antenna',
       child: Column(key: const Key('antenna-group'), children: [
         if (st.antennaProfiles.isEmpty)
-          const ListTile(
-            key: Key('antenna-none'),
-            leading: Icon(Icons.info_outline),
-            title: Text('No radios set up yet'),
-            subtitle: Text('Connect a radio and MeshSonar asks how its antenna is set up.'),
+          ListTile(
+            key: const Key('antenna-none'),
+            leading: const Icon(Icons.info_outline),
+            title: const Text('No radios set up yet'),
+            subtitle: const Text('Connect a radio and MeshSonar asks how its antenna is set up. Tap to open the Radio '
+                'tab.'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const RadioScreen())),
           ),
         for (final e in st.antennaProfiles.entries) AntennaProfileTile(radioKey: e.key, profile: e.value),
       ]),
@@ -158,7 +164,9 @@ class AntennaProfileTile extends StatelessWidget {
       key: ValueKey('antenna-profile-$radioKey'),
       leading: Icon(locked ? Icons.lock_outline : Icons.settings_input_antenna),
       title: Text(name),
-      subtitle: Text(locked ? '${profile.summaryIn(s.units)}\nLocked while driving' : profile.summaryIn(s.units)),
+      subtitle: locked
+          ? SettingsWhyNot('${profile.summaryIn(s.units)}\nLocked while this radio is on a drive: stop the drive to change it.')
+          : Text('${profile.summaryIn(s.units)}\nTap to change; forget it to be asked again on the next connect.'),
       trailing: IconButton(
         key: ValueKey('antenna-forget-$radioKey'),
         tooltip: 'Forget this radio\'s antenna',

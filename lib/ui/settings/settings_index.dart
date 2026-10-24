@@ -42,7 +42,12 @@ class SettingsEntry {
   /// Rows that only exist in some states (a server answer, a key on the phone) say so, so search never offers a row
   /// that is not on screen.
   final bool Function(AppState s)? available;
-  const SettingsEntry(this.id, this.section, this.title, this.summary, {this.keywords = const [], this.available});
+
+  /// A row that only shows information (a status, a read-only comparison) and has nothing to tap by design. Every other
+  /// row is actionable, or says why not and how to make it so (SettingsWhyNot).
+  final bool info;
+  const SettingsEntry(this.id, this.section, this.title, this.summary,
+      {this.keywords = const [], this.available, this.info = false});
 
   bool isAvailable(AppState s) => available?.call(s) ?? true;
 }
@@ -65,15 +70,27 @@ const List<SettingsEntry> settingsEntries = [
       'Which region the app shows. It follows your location unless you pick one. Never changes your radio.',
       keywords: ['area', 'city', 'columbus', 'dayton', 'switch', 'location']),
   SettingsEntry('site-region', 'region', 'Connected to', 'The region your server answers for.',
-      keywords: ['site', 'host', 'server region'], available: _hasSiteConfig),
+      keywords: ['site', 'host', 'server region'], available: _hasSiteConfig, info: true),
   SettingsEntry('site-radio-preset', 'region', 'Radio preset',
       'The region\'s suggested radio settings next to your radio\'s. Information only; nothing is written to the radio.',
       keywords: ['frequency', 'bandwidth', 'spreading factor', 'sf', 'cr', 'mhz', 'preset', 'lora'],
-      available: _hasSiteConfig),
+      available: _hasSiteConfig,
+      info: true),
   // Units & display
   SettingsEntry('units-tile', 'display', 'Units',
-      'Distances, speeds and heights everywhere in the app. Stored data is unchanged.',
+      'Distances, speeds, heights, temperature and pressure everywhere in the app. Stored data is unchanged.',
       keywords: ['metric', 'imperial', 'miles', 'feet', 'kilometres', 'km', 'mph', 'auto', 'locale']),
+  SettingsEntry('unit-distance', 'display', 'Distance',
+      'Drive distance, GPS accuracy, range rings and minimum distance: km and m, or miles and feet.',
+      keywords: ['distance', 'miles', 'km', 'kilometres', 'feet', 'metres', 'mi', 'ft', 'units']),
+  SettingsEntry('unit-speed', 'display', 'Speed', 'Driving speed in reports and ping details: km/h or mph.',
+      keywords: ['speed', 'mph', 'km/h', 'kph', 'units']),
+  SettingsEntry('unit-height', 'display', 'Height and altitude', 'Antenna height and altitude: metres or feet.',
+      keywords: ['height', 'altitude', 'elevation', 'antenna', 'feet', 'metres', 'units']),
+  SettingsEntry('unit-temperature', 'display', 'Temperature', 'Temperature readings: °C or °F.',
+      keywords: ['temperature', 'celsius', 'fahrenheit', 'c', 'f', 'degrees', 'units']),
+  SettingsEntry('unit-pressure', 'display', 'Air pressure', 'Barometer readings: hPa, inHg or mmHg.',
+      keywords: ['pressure', 'barometer', 'hpa', 'inhg', 'mmhg', 'millibar', 'mbar', 'units']),
   SettingsEntry('heard-hold', 'display', 'Heard list hold',
       'How long a repeater stays bright in the heard list after it was last heard.',
       keywords: ['heard', 'repeaters', 'list', 'grey', 'stale', 'pings']),
@@ -124,7 +141,7 @@ const List<SettingsEntry> settingsEntries = [
   SettingsEntry('sync-every', 'drives', 'Upload interval', 'How often pings upload during a drive.',
       keywords: ['upload', 'period', 'minutes', 'every', 'sync']),
   SettingsEntry('last-upload', 'drives', 'Last upload', 'When the last upload happened, or why it failed.',
-      keywords: ['upload', 'status', 'error', 'failed', 'sync']),
+      keywords: ['upload', 'status', 'error', 'failed', 'sync'], info: true),
   // Data & storage
   SettingsEntry('storage-drives', 'storage', 'Drives on this phone',
       'Space drives use. Remove uploaded drives; drives not fully uploaded always stay.',

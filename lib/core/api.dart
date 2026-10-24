@@ -296,6 +296,9 @@ class Settings {
   /// Metric / imperial / auto (phone locale).
   final UnitsPreference units;
 
+  /// Per-quantity exceptions to [units] (distance, speed, height, temperature, pressure); empty = all follow it.
+  final UnitOverrides unitOverrides;
+
   /// Share packet headers and radio metrics (never message content) to build the live packet feed. On by default;
   /// this is the opt-out. See lib/core/telemetry.dart.
   final bool telemetryEnabled;
@@ -323,6 +326,7 @@ class Settings {
     this.regionManual,
     this.regionLast,
     this.units = UnitsPreference.auto,
+    this.unitOverrides = const UnitOverrides(),
     this.telemetryEnabled = true,
   });
 
@@ -344,6 +348,7 @@ class Settings {
     bool clearRegionManual = false,
     String? regionLast,
     UnitsPreference? units,
+    UnitOverrides? unitOverrides,
     bool? telemetryEnabled,
     bool clearKey = false,
   }) =>
@@ -365,6 +370,7 @@ class Settings {
         regionManual: clearRegionManual ? null : (regionManual ?? this.regionManual),
         regionLast: regionLast ?? this.regionLast,
         units: units ?? this.units,
+        unitOverrides: unitOverrides ?? this.unitOverrides,
         telemetryEnabled: telemetryEnabled ?? this.telemetryEnabled,
       );
 
@@ -386,6 +392,7 @@ class Settings {
         if (regionManual != null) 'region_manual': regionManual,
         if (regionLast != null) 'region_last': regionLast,
         if (units != UnitsPreference.auto) 'units': units.name,
+        if (!unitOverrides.isEmpty) 'unit_overrides': unitOverrides.toJson(),
         if (!telemetryEnabled) 'telemetry_enabled': false,
       };
   factory Settings.fromJson(Map<String, dynamic> j) => Settings(
@@ -407,6 +414,7 @@ class Settings {
         regionManual: _str(j['region_manual']),
         regionLast: _str(j['region_last']),
         units: UnitsPreference.parse(j['units']),
+        unitOverrides: UnitOverrides.fromJson(j['unit_overrides']),
         telemetryEnabled: j['telemetry_enabled'] is bool ? j['telemetry_enabled'] as bool : true,
       );
 

@@ -183,7 +183,7 @@ ReportDoc driveReportPdf(
     title: 'MeshSonar drive report: $title',
     subtitle: [
       'Started ${when(r.session.startedAt)} ($z). Times are your phone\'s local time.',
-      'Units: ${u.isImperial ? 'imperial' : 'metric'}. Contains where you drove (grid cells).',
+      'Units: ${u.description}. Contains where you drove (grid cells).',
     ],
     blocks: blocks,
     footer: 'Recorded with MeshSonar (meshsonar.com). The CSV export has every ping.',

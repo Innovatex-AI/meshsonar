@@ -385,7 +385,7 @@ class DriveReport {
           '${g.poor > 0 ? ', ${g.poor} worse than ${units.shortLength(poorGpsAccuracyM)}' : ''}');
     }
     b
-      ..writeln('Units: ${units.isImperial ? 'imperial' : 'metric'}')
+      ..writeln('Units: ${units.description}')
       ..writeln('Recorded with MeshSonar');
     return b.toString();
   }
