@@ -16,6 +16,7 @@ import 'antenna_sheet.dart';
 import 'onboarding/onboarding_screen.dart';
 import 'app.dart';
 import 'report_problem_screen.dart';
+import 'settings/offline_packs_screen.dart';
 import 'telemetry_sheet.dart';
 import 'widgets.dart';
 
@@ -265,6 +266,14 @@ class SettingsScreen extends StatelessWidget {
               title: 'About',
               icon: Icons.info_outline,
               children: [
+                ListTile(
+                  key: const Key('offline-maps'),
+                  leading: const Icon(Icons.map_outlined),
+                  title: const Text('Offline maps'),
+                  subtitle: const Text('Download a region so the map works with no signal'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const OfflinePacksScreen())),
+                ),
                 ListTile(
                   key: const Key('report-problem'),
                   leading: const Icon(Icons.bug_report_outlined),
