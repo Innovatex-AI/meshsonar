@@ -303,7 +303,27 @@ unmeasured values and a dashed 0 dB line.
   it, and marks the drive so the next sync sends the session again with the new name, even if every ping is already
   up. Empty clears the name (the card shows the date). Names typed under 0.2.x, which lived only in `ui_prefs.json`,
   are moved into their drives once at launch.
+- **Your progress card** (`progress-card`, under the overview): this ISO week from the drive list ("This week (since
+  Monday Oct 12): 2 drives, 412 pings, 61% heard"); tap for **Your progress** (below).
 - Pull to refresh, or use the refresh button.
+
+## Your progress
+
+(`ui/report/progress_screen.dart`, maths in `core/personal_progress.dart`) Every drive stored on this phone, and it
+says so at the top ("From drives stored on this phone: N drives since ... Drives deleted from this phone or recorded on
+another phone are not included."). There is no server-wide history yet (the `driver-summary` endpoint is requested in
+the stream 5 design doc). A drive that cannot be read is skipped and counted in a banner.
+
+- **Totals:** drives, distance, time driving, pings, heard %, grid cells, repeaters heard, best SNR.
+- **By week** (ISO weeks starting Monday in the phone's local time, zone named in every caption; a drive counts in the
+  week it started; weeks run without holes to the current week; charts show the last 26 weeks, tables all):
+  distance per week (km or mi), heard % per week (no bar = no pings), new grid cells per week and new repeaters per
+  week (new = first time any drive on this phone had it; tables carry the running totals).
+- **Best drives:** longest drive, longest time out, best heard % (at least 10 pings), most new grid cells, most
+  repeaters on one drive, best SNR; tap one for its drive report.
+- **Your radio:** noise floor per drive (median, -100 dBm line), noise floor by hour of day (local), TX power per drive
+  (one line when it never changed). Only what the radio reported; "Your radio has not reported ..." otherwise.
+- Every chart has the Chart / Table switch and its numbers in the semantics label. Empty store: "No drives yet".
 
 ## Drive detail
 
@@ -329,10 +349,14 @@ Stats definitions (`DriveStats.of`):
 
 (`ui/report/*`, maths in `core/drive_report.dart` + `core/drive_report_rf.dart`) Opened from the Drive screen card
 after Stop, from drive detail ("Report") and from the drive card menu. It's computed once per open. **Export**
-(app bar menu `report-export`: `report-export-text`, `report-export-csv`; buttons `report-share-button`,
-`report-csv-button`) shares a plain-text summary (`.txt`, in the person's units and saying which) or ONE CSV file
-(`core/drive_report_export.dart`: first column `table` = `pings`, `cells`, `repeaters`, `snr-by-distance`,
-`heard-by-speed`; SI units in the column names, UTC ISO times; the menu says "Contains your exact track").
+(app bar menu `report-export`: `report-export-text`, `report-export-csv`, `report-export-pdf`; buttons
+`report-share-button`, `report-csv-button`) shares a plain-text summary (`.txt`, in the person's units and saying
+which), ONE CSV file (`core/drive_report_export.dart`: first column `table` = `pings`, `cells`, `repeaters`,
+`snr-by-distance`, `heard-by-speed`; SI units in the column names, UTC ISO times; the menu says "Contains your exact
+track") or a **PDF** (`core/drive_report_pdf.dart`: summary, SNR / noise floor charts drawn as vector graphics with
+their numbers in words, distance and speed bars, TX power, GPS, the repeaters table and the grid-cells table; the menu
+says "Contains where you drove (grid cells)"; units as set, phone local time with the zone named; Barlow embedded,
+characters it lacks shown as "?" and said in the footer). PDF and CSV are disabled for a drive with no pings.
 
 Sections: **hero** (distance in km and mi, date, duration, antenna; grids mapped, % pings heard, repeaters),
 **highlights**, a **grid map** of cells coloured by heard % (red = 0%, then blue → teal → green), with new cells
@@ -464,7 +488,22 @@ goes, and "Change your mind any time in Settings, under Privacy & data sharing";
 - **Export region report** (app bar icon `region-report-export`): fetches `region-report` and shares a text summary,
   the JSON (pretty-printed like the website's download), every table in one CSV, or any single table as the website's
   own file (`<slug>-<table>.csv`, same column heads and bytes; checked against the site's code on the recorded cmh
-  body). Empty tables are disabled. Times in the files are UTC, like the website.
+  body), or a **PDF** (`export-pdf`, `<slug>-region-report.pdf`, `core/region_report_pdf.dart`: overview, packets per
+  hour, repeater status and every repeater row, observers, noise floor by hour with the -100 dBm line, SNR histogram,
+  noise by observer, hash sizes and shared prefixes, hops and top carriers, coverage in the person's units, recent
+  changes; a section the server marks partial/pending quotes its reason). Empty tables are disabled. Times in the files
+  are UTC, like the website.
+
+## Repeater "Your drives"
+
+(`ui/your_drives_section.dart`, maths in `core/repeater_history.dart`) At the end of the repeater detail screen (Region
+tab) and the drive repeater sheet (ping log): how the drives stored on this phone heard this repeater. A heard id
+matches when either it or the key is a prefix of the other; an id the repeater lists give to another repeater is not
+counted, and hearings by a short id several known repeaters share are counted and said ("some may be another
+repeater"). Shows times heard and on how many drives (direct = 1 hop or a neighbour reply), best SNR and on which
+drive, last and first heard, farthest from the repeater (units), the grid cells (about 220 m x 210 m, never the raw
+track) on a small map coloured by best SNR, and the 5 newest drives (tap for the drive report). "From drives stored on
+this phone."; "None of the N drives on this phone heard this repeater." when none did.
 
 ## Drive context: data collected (stream 7, core only, not switched on yet)
 

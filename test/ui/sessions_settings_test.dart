@@ -67,7 +67,9 @@ void main() {
     expect(find.text('All synced'), findsNWidgets(2));
     expect(find.text('Uploaded 3 new pings.'), findsOneWidget);
 
-    // Export & share
+    // Export & share (the progress card above the list puts this button under the sync SnackBar: close it first)
+    ScaffoldMessenger.of(tester.element(find.byKey(const ValueKey('export-old')))).hideCurrentSnackBar();
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('export-old')));
     await tester.pumpAndSettle();
     expect(h.store.exportCount, 1);
