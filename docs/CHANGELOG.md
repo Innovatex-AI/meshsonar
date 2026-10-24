@@ -13,6 +13,7 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
   exports byte-identical), category list with disclosure text (`lib/core/data_categories.dart`), GPS altitude, course
   and accuracies kept on `GeoFix`.
 - Units: air pressure (hPa / inHg) and temperature (°C / °F).
+- Map engine groundwork (not on screen yet): grid clustering for 5-20k points (`core/cluster_index.dart`), map links compatible with the website's `/coverage` URL (`core/map_view_state.dart`), the layer registry with website `?show=` keys and honest per-layer availability, a single-painter clustered repeater layer for the global "All MeshCore repeaters" list and the region roster, and a repeater detail sheet (copy key, last advert, distance in your units, Open repeater page).
 
 ## [0.19.0] — 2026-10-24 — Timeline, telemetry, offline cache
 
