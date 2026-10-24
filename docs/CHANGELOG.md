@@ -3,6 +3,13 @@
 All notable changes to MeshSonar. Dates are local (US Eastern). This changelog was reconstructed from the commit
 history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md](ROADMAP.md).
 
+## [Unreleased]
+
+- The Drive map and the Region tab open on the phone at once (last-known position), then move to the fresh GPS fix unless you moved the map; an old position is labelled "Last known location, 3 d ago". With no position the app opens on the last region, else on all regions.
+- Location off, not asked, denied, restricted, approximate or services off: a plain note with the right action (Allow location, Open Settings) and "Choose region". Nothing is asked on launch.
+- Repeater lists sync on app open and resume (region roster with ETag, and the server's network repeater list once it is offered) and are stored for offline names and map pins; the Repeaters panel shows "Updated 5m ago" / "Offline - as of 2d ago".
+- Repeater names: region roster first, then MeshSonar's list, then the network list near you, then map.meshcore.io; prefixes the region marks as shared are never guessed. With the network list available the 17 MB map.meshcore.io download is skipped.
+
 ## [0.19.0] — 2026-10-24 — Timeline, telemetry, offline cache
 
 - Map layers > Network coverage > Coverage options: "Coverage growth (as of)" slider with play/pause and a Live reset; the map shows a "Coverage as of <date>" badge while scrubbed back (server `public-coverage?until=`).
