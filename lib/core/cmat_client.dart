@@ -87,8 +87,10 @@ class HttpCmatClient implements CmatClient {
     List<int>? bodyBytes,
     Duration? timeout,
     Set<int> ok = const {200},
+    Map<String, String>? query,
   }) async {
-    final req = http.Request(method, endpoint(name));
+    final ep = endpoint(name);
+    final req = http.Request(method, query == null || query.isEmpty ? ep : ep.replace(queryParameters: query));
     req.headers['accept'] = 'application/json';
     if (driverKey != null) req.headers['x-driver-key'] = driverKey;
     final bytes = bodyBytes ?? (body == null ? null : utf8.encode(jsonEncode(body)));
@@ -222,10 +224,14 @@ class HttpCmatClient implements CmatClient {
   }
 
   @override
-  Future<PublicCoverage> publicCoverage() async {
-    // Public endpoint: no x-driver-key. No query params: this pass always takes the server's defaults (merged
-    // sources, no since/cell/res override) — see docs on CoverageMap's `networkCells`.
-    final j = await _send('GET', 'public-coverage');
+  Future<PublicCoverage> publicCoverage({int? res, DateTime? since, String? source}) async {
+    // Public endpoint: no x-driver-key. Params are the website's own layer filters; omitted = server defaults.
+    final q = <String, String>{
+      if (res != null) 'res': '$res',
+      if (since != null) 'since': since.toUtc().toIso8601String(),
+      if (source != null && source != 'all') 'source': source,
+    };
+    final j = await _send('GET', 'public-coverage', query: q);
     final rawCells = j['cells'];
     if (rawCells is! List) throw const CmatException('server sent a public-coverage answer without cells');
     final asOf = j['asOf'];

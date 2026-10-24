@@ -189,10 +189,16 @@ class FakeCmatClient implements CmatClient {
   PublicCoverage? publicCoverageResult;
   Object? publicCoverageError;
   int publicCoverageCalls = 0;
+  int? lastCoverageRes;
+  String? lastCoverageSource;
+  DateTime? lastCoverageSince;
 
   @override
-  Future<PublicCoverage> publicCoverage() async {
+  Future<PublicCoverage> publicCoverage({int? res, DateTime? since, String? source}) async {
     publicCoverageCalls++;
+    lastCoverageRes = res;
+    lastCoverageSource = source;
+    lastCoverageSince = since;
     if (publicCoverageError != null) throw publicCoverageError!;
     final c = publicCoverageResult;
     if (c == null) throw const CmatException('no public-coverage endpoint', status: 404);

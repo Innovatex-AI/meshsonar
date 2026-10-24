@@ -217,7 +217,9 @@ abstract class CmatClient {
   Future<SiteConfig> siteConfig();
 
   /// Network-wide measured coverage cells (the website's `/coverage` map data). Public: no driver key needed.
-  Future<PublicCoverage> publicCoverage();
+  /// [res] (H3 7..11), [since] (only cells measured after it) and [source] (`all`, `meshsonar`, `meshmapper`) are the
+  /// website's own layer filters; all optional, the server defaults apply when omitted.
+  Future<PublicCoverage> publicCoverage({int? res, DateTime? since, String? source});
 
   /// Every MeshSonar region this server (or federation) knows about (`GET /api/cmh/regions-index`): code, slug,
   /// name, URL, bbox and boundary — used entirely on-device for live, local region awareness (lib/core/

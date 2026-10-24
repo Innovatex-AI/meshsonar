@@ -10,9 +10,7 @@ import 'package:h3_flutter/h3_flutter.dart';
 import 'api.dart';
 import 'hex_cells.dart' show HexPoint;
 
-/// Which dimension buckets a cell's colour. Only [snr] is wired into the always-on map layer today (no mode
-/// picker: it's a quiet background layer, not a page to configure) — [heard] and [noise] are kept here, fully
-/// tested, for when/if that changes.
+/// Which dimension buckets a cell's colour (the layer's colour-by picker: best SNR / share heard / noise floor).
 enum CoverageColorBy { snr, heard, noise }
 
 /// A cell's bucket on its [CoverageColorBy] legend, weakest to strongest. [none] means "nothing to show" (no
@@ -27,7 +25,10 @@ class NetworkCell {
   /// The outline, not closed (first point is not repeated) — same convention as [HexCell].
   final List<HexPoint> boundary;
   final CoverageLevel level;
-  const NetworkCell({required this.id, required this.boundary, required this.level});
+
+  /// The measured numbers behind the cell (tap-cell sheet).
+  final CoverageCell? cell;
+  const NetworkCell({required this.id, required this.boundary, required this.level, this.cell});
 }
 
 /// Buckets one [CoverageCell] by [by], using the website's own `/coverage` thresholds (meshcore-insights
@@ -96,7 +97,7 @@ List<NetworkCell> buildNetworkCells(PublicCoverage coverage, H3? h3, CoverageCol
       boundary = _squareBoundary(c.lat, c.lon, coverage.grid.cellDeg);
       id = '${c.lat},${c.lon}';
     }
-    out.add(NetworkCell(id: id, boundary: boundary, level: levelFor(c, by)));
+    out.add(NetworkCell(id: id, boundary: boundary, level: levelFor(c, by), cell: c));
   }
   return out;
 }

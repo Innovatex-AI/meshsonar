@@ -12,6 +12,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../../app/app_state.dart';
 import '../../core/api.dart' show PublicCoverage;
+import '../../core/coverage_query.dart';
 import '../../core/heard.dart';
 import '../../core/hex_cells.dart' show loadHexEngine;
 import '../../core/model.dart';
@@ -232,7 +233,7 @@ class DriveMapModel extends ChangeNotifier {
     // if nothing else about the drive changed (most often: the fetch lands before anyone has started driving).
     if (!identical(s.networkCoverage, _networkSrc)) {
       _networkSrc = s.networkCoverage;
-      _networkCells = _networkSrc == null ? const [] : buildNetworkCells(_networkSrc!, _h3, CoverageColorBy.snr);
+      _networkCells = _networkSrc == null ? const [] : buildNetworkCells(_networkSrc!, _h3, _colorBy);
       changed = true;
     }
 
@@ -257,11 +258,63 @@ class DriveMapModel extends ChangeNotifier {
     if (changed) notifyListeners();
   }
 
+  // ---------- network-coverage layer controls (res by zoom, colour-by, since, source) ----------
+  CoverageColorBy _colorBy = CoverageColorBy.snr;
+  CoverageColorBy get colorBy => _colorBy;
+  set colorBy(CoverageColorBy v) {
+    if (v == _colorBy) return;
+    _colorBy = v;
+    _networkCells = _networkSrc == null ? const [] : buildNetworkCells(_networkSrc!, _h3, _colorBy);
+    notifyListeners();
+  }
+
+  CoverageQuery _query = const CoverageQuery();
+
+  /// The layer's filters; `res == null` means automatic by zoom.
+  CoverageQuery get coverageQuery => _query;
+  set coverageQuery(CoverageQuery q) {
+    if (q == _query) return;
+    _query = q;
+    notifyListeners();
+    _scheduleCoverageFetch(immediate: true);
+  }
+
+  double? _zoom;
+
+  /// The resolution actually requested: the pinned one, else the one for the map's zoom (res 9 until the map reports).
+  int get effectiveRes => _query.res ?? (_zoom == null ? 9 : coverageResForZoom(_zoom!));
+
+  /// Called by the map as it zooms; in automatic mode a new resolution band re-fetches (debounced).
+  void onMapZoom(double zoom) {
+    _zoom = zoom;
+    if (_query.res == null) _scheduleCoverageFetch();
+  }
+
+  Timer? _fetchTimer;
+  void _scheduleCoverageFetch({bool immediate = false}) {
+    _fetchTimer?.cancel();
+    void go() {
+      if (_disposed) return;
+      final res = effectiveRes;
+      final shown = state.networkCoverage?.grid.res;
+      final asked = state.coverageQuery;
+      if (!immediate && shown == res && asked.since == _query.since && asked.source == _query.source) return;
+      unawaited(state.refreshNetworkCoverage(query: CoverageQuery(res: res, since: _query.since, source: _query.source)));
+    }
+
+    if (immediate) {
+      go();
+    } else {
+      _fetchTimer = Timer(const Duration(milliseconds: 500), go);
+    }
+  }
+
   bool _disposed = false;
 
   @override
   void dispose() {
     _disposed = true;
+    _fetchTimer?.cancel();
     state.removeListener(_onState);
     unawaited(_fixSub?.cancel());
     super.dispose();

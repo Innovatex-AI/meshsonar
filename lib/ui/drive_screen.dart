@@ -240,6 +240,7 @@ class _MapPane extends StatelessWidget {
                 highlightKey: model.selected,
                 onSelectRepeater: model.select,
                 simulated: model.simulated,
+                onZoomChanged: model.onMapZoom,
               ),
             ),
             if (pings.isEmpty) Positioned(left: 0, right: 50, top: Gap.s, child: MapHint(state: s)),
