@@ -158,7 +158,8 @@ ping positions all share one filter instance.
 
 (`ui/map/coverage_map.dart`; used on the Drive screen, in full-screen, in drive detail; the report has its own cell map)
 
-Layers, bottom to top: a chart grid (visible with no tiles), **OpenStreetMap tiles** (colour-graded to the theme; after
+Layers, bottom to top: a chart grid (visible with no tiles), a downloaded **offline region pack** where one covers the
+view (see [Offline maps](#offline-maps-region-packs)), otherwise **OpenStreetMap tiles** (colour-graded to the theme; after
 two tile errors a "Map offline. Pings still record." pill appears), **network coverage** (every driver's measured
 cells from `GET /api/cmh/public-coverage`, squares or H3 hexagons depending on the region's grid, coloured by best
 SNR on the website's own 4-step legend — a quiet "where hasn't this been driven" background layer; an area nobody
@@ -346,6 +347,42 @@ Metric definitions (`DriveReport.compute`):
 - **Idle region detection** (`lib/core/idle_region_watcher.dart`): when not driving, a coarse, distance-filtered location stream (at most one fix per 20 s) feeds the region tracker so the Region tab follows the phone. It is cancelled during a drive and in the background unless "Always" location is granted. The last fix is kept in `last_known_fix.json` so the next launch shows the right region before the first GPS fix. The radio preset is never changed silently: same preset notifies and switches, a different preset prompts.
 - **Telemetry uploader** (`lib/core/telemetry_uploader.dart`, `telemetry.dart`): on by default with a first-run disclosure and a visible opt-out in Settings. Sends packet headers and metadata only (type, route, path hashes, SNR/RSSI, time, packet hash) to `POST /api/cmh/telemetry` with the driver key. Never payloads, coordinates, your own pings or private message types. Turning it off clears the queue and offers `DELETE` to erase what was already shared.
 - **Coverage timeline**: Map layers > Network coverage > Coverage options > "Coverage growth (as of)" slider with play/pause and a Live reset. Built from windowed `public-coverage?until=` calls; the first-data day comes from `region-timeline` (days only).
+
+## Offline maps (region packs)
+
+Settings > About > **Offline maps** (`lib/ui/settings/offline_packs_screen.dart`, logic in `lib/core/offline_packs.dart`).
+Packs are our own OpenStreetMap-derived vector tiles (PMTiles, OpenMapTiles schema, z0-14) hosted at
+`https://tiles.meshsonar.com/manifest.json`; today one pack: CMH (50.5 MB).
+
+- **Download** verifies size and SHA-256 before installing. Interrupted downloads keep a `.part` and resume with an
+  HTTP Range request; a `.part` from another version is discarded. A transfer that stalls for 30 s fails (Retry resumes).
+- **Download on Wi-Fi only** (default on). On cellular the app shows the pack size and asks: *Download now* or *Wait
+  for Wi-Fi*. Queued downloads start by themselves when Wi-Fi is back, when the app returns to the foreground, and
+  after a restart (with the app open; there is no iOS background transfer). Dropping to cellular mid-download pauses it
+  ("Waiting for Wi-Fi"). Pausing by hand is never resumed automatically.
+- **Updates**: a newer manifest version shows "Update available (size)"; the installed version stays in use until the
+  new one is verified, then the map switches to it.
+- **Storage**: per-pack size, total, Delete and Delete all (also removes partial and stray files). Free device space is
+  not shown (no plugin for it); a full disk gives "Not enough free space on this device" and keeps the partial file.
+- **Offline list**: the manifest is cached with its ETag (304 when unchanged); offline the screen shows the saved list
+  with "Offline - pack list as of <time>".
+- **On the map** (`lib/ui/map/offline_basemap.dart`): when an installed pack covers the view centre it replaces the
+  online OSM tiles; the map follows the camera into another pack (sticking with the current one where packs overlap)
+  and falls back to online tiles outside every pack. Style: roads, motorways, water, rivers, land use, parks,
+  buildings, boundaries, and labels (cities/towns/villages/neighbourhoods by zoom, road names along roads, motorway
+  refs, water names) in light and dark palettes with wide halos. Labels use the bundled Barlow fonts; no glyph files.
+
+## Region tab offline
+
+- Every panel (Overview, Observers, Packets, Analysis, Reports, Stats) shows the last copy saved on the phone with an
+  "Offline - as of 2 h ago" banner and a Retry.
+- Nothing saved yet and no connection: the panel says "No connection" plainly, with no endless spinner, and Retry
+  fetches again. Packets keeps polling while offline and the list returns by itself when the connection does.
+- Stats: numbers and leaderboard come from the saved copy; the live-drivers chip is never saved and says "Live drivers
+  need a connection."
+- Live tab: when it can't reach the stream it says "Live needs a connection", keeps retrying in the background, and
+  Retry reconnects right away.
+- Reports and the Analysis "Busiest hours" card are saved for offline use in every region.
 
 ## Uploads
 

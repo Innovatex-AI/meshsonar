@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Verify an app build end to end on iOS simulators before hand-off.
 #   scripts/verify_sim.sh <path-to-checkout-or-worktree> [out-dir]
-# Env: DEVICES="iPad Pro 11-inch|iPhone 17 Pro" (| separated name prefixes), MODE=debug|release (default debug)
+# Env: DEVICES="iPad Pro 11-inch|iPhone 17 Pro" (| separated name prefixes), MODE=debug|release (default debug),
+#      OFFLINE_MAPS=1 also runs integration_test/offline_maps_test.dart (in-app download of the real CMH pack, then
+#      z10/z14 light/dark shots of the offline map).
 # For each device: boot, `flutter build ios --simulator`, install + launch com.meshsonar.app, then run
 # integration_test/verify_screens_test.dart (screens listed in integration_test/screens.dart) and screenshot every
 # "SCREEN <name>" it prints. Prints screenshot paths and the app's installed version. Talks to production, no sign-in.
@@ -24,6 +26,38 @@ flutter pub get >/dev/null
 
 pick_udid() { # name prefix -> udid of newest available match
   xcrun simctl list devices available | grep -F "$1" | grep -v "Pro Max\|13-inch" | tail -1 | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/'
+}
+
+# run_flow <integration test> <log>: runs it on $UDID, screenshots every "SCREEN <name>" line into $D. Retries once
+# when the Xcode build behind `flutter test -d` produced no test run ("No tests ran": seen when another build held
+# the simulator or DerivedData), and prints the build error instead of failing silently.
+run_flow() {
+  local TEST="$1" LOG="$2" try RC
+  for try in 1 2; do
+    echo "-- flow test ($TEST -d $UDID, try $try)"
+    : > "$LOG"
+    set +e
+    flutter test "$TEST" -d "$UDID" 2>&1 | while IFS= read -r line; do
+      echo "$line" >> "$LOG"
+      case "$line" in
+        *"SCREEN "*)
+          name="${line##*SCREEN }"; name="${name%%[[:space:]]*}"
+          f="$D/$(date +%H%M%S)-$name.png"
+          xcrun simctl io "$UDID" screenshot "$f" >/dev/null 2>&1 && echo "$f" ;;
+        *APP_VERSION*|*DOWNLOAD*|*PACK_FILE*|*SKIPPED*|*FAILED*|*VERIFY_DONE*|*"All tests passed"*|*"Some tests failed"*|*"No tests ran"*) echo "$line" ;;
+      esac
+    done
+    RC=${PIPESTATUS[0]}
+    set -e
+    if [ "$RC" -eq 0 ] && grep -q VERIFY_DONE "$LOG"; then return 0; fi
+    if grep -q "No tests ran" "$LOG" && [ "$try" = 1 ]; then
+      echo "!! no test ran (build problem?); last build lines:"; grep -iE "error|failed" "$LOG" | tail -5
+      continue
+    fi
+    break
+  done
+  echo "!! $NAME: $TEST FAILED (see $LOG)"; grep -iE "error|exception|failed" "$LOG" | tail -5
+  return 1
 }
 
 FAIL=0
@@ -52,24 +86,14 @@ for NAME in "${LIST[@]}"; do
   xcrun simctl terminate "$UDID" "$BUNDLE" 2>/dev/null || true
   xcrun simctl uninstall "$UDID" "$BUNDLE" 2>/dev/null || true
 
-  echo "-- flow test (flutter test integration_test/verify_screens_test.dart -d $UDID)"
-  LOG="$D/test.log"; : > "$LOG"
   N=0
-  set +e
-  flutter test integration_test/verify_screens_test.dart -d "$UDID" 2>&1 | while IFS= read -r line; do
-    echo "$line" >> "$LOG"
-    case "$line" in
-      *"SCREEN "*)
-        name="${line##*SCREEN }"; name="${name%%[[:space:]]*}"; N=$((N+1))
-        f="$D/$(printf '%02d' $N)-$name.png"
-        xcrun simctl io "$UDID" screenshot "$f" >/dev/null 2>&1 && echo "$f" ;;
-      *APP_VERSION*|*SKIPPED*|*FAILED*|*VERIFY_DONE*|*"All tests passed"*|*"Some tests failed"*) echo "$line" ;;
-    esac
-  done
-  RC=${PIPESTATUS[0]}
-  set -e
-  grep -o 'APP_VERSION [^ ]*' "$LOG" | tail -1 > "$D/version.txt" || true
-  if [ "$RC" -ne 0 ] || ! grep -q VERIFY_DONE "$LOG"; then echo "!! $NAME: flow test FAILED (see $LOG)"; FAIL=1; else echo "== $NAME OK: $(cat "$D/version.txt")"; fi
+  run_flow integration_test/verify_screens_test.dart "$D/test.log" || FAIL=1
+  grep -o 'APP_VERSION [^ ]*' "$D/test.log" | tail -1 > "$D/version.txt" || true
+  if [ "${OFFLINE_MAPS:-0}" = 1 ]; then
+    # Downloads the real CMH pack in-app (53 MB from tiles.meshsonar.com) and shows it at z10/z14 light/dark.
+    run_flow integration_test/offline_maps_test.dart "$D/offline-maps.log" || FAIL=1
+  fi
+  [ "$FAIL" = 0 ] && echo "== $NAME OK: $(cat "$D/version.txt")"
 done
 
 echo; echo "Screenshots in: $OUT"; find "$OUT" -name '*.png' | sort

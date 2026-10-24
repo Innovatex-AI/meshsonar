@@ -264,6 +264,8 @@ names.
 | `core/position_filter.dart` | core | `PositionFilter` (accuracy gate, Kalman smoothing, stationary hold) and `FilteredLocationSource` wrapper. |
 | `core/heard.dart` | core | `haversineM`, `bearingDeg`, `compass`; `RepeaterLookup` (prefix → repeater, CMAT first); `HeardTracker` (live/stale per repeater). |
 | `core/repeater_directory.dart` | core | `RepeaterDirectory`: streams map.meshcore.io's node list, keeps nearby repeaters, caches to disk; `JsonArraySplitter`. |
+| `core/pmtiles_reader.dart` | core | Read-only PMTiles v3 reader: header, metadata, root/leaf directories, run-length entries, gzip; reads queued on one file handle; `allTileEntries` walk for diagnostics. |
+| `core/offline_packs.dart` | core | Pack manifest (https, same host), `OfflinePackManager`: ETag-cached manifest, resumable verified downloads (`.part` + version sidecar), Wi-Fi-only policy (`NetworkKind`, `NetworkMonitor` seam, queued/pending downloads persisted in `prefs.json`), update, delete/delete all, storage, `packCovering`. |
 | `radio/radio_api.dart` | radio (contract) | `ByteTransport`, `RadioScanner`, `RadioDevice`, `SelfInfo`, `RxPacket`, `CompanionLink`, `GeoFix`, `LocationSource`, `WardriveConfig`, `EngineState`, `PingWait`, `EngineStatus`, `WardriveEngine`. |
 | `radio/protocol.dart` | radio | Companion protocol codes, command encoders, frame decoders, plus the radio-side encoders the simulator uses. |
 | `radio/packet.dart` | radio | Over-the-air packet parser/serialiser, path-hash decoding, GRP_TXT build/decrypt, `matchEcho`. |
@@ -276,6 +278,7 @@ names.
 | `platform/share.dart` | platform | `shareDriveFile`: share sheet for exports (JSON) and reports (text). |
 | `platform/app_version.dart` | platform | `loadAppInfo`: name, version (from the build via package_info_plus) and platform. |
 | `platform/open_url.dart` | platform | `openExternalUrl`: opens the server's web pages in the browser (url_launcher). |
+| `platform/network_monitor.dart` | platform | `ConnectivityNetworkMonitor` (connectivity_plus) → `NetworkKind` for the offline-pack Wi-Fi-only rule. |
 | `ui/app.dart` | ui | `MeshSonarApp`, `AppScope`, `HomeShell` (Drive / Drives / Settings tabs, SnackBar notices), `StartupErrorApp`. |
 | `ui/theme.dart` | ui | Design system: `Gap`, `Corners`, palettes, `MeshSonarColors` (SNR scale, beacon, map tile matrix), `numberStyle`, theme mode. |
 | `ui/widgets.dart` | ui | Shared formatters (`formatTime`, `formatDateTime`, `formatSnr`, `bestSnr`, `repeatersHeard`) and small widgets (`StatTile`, `StatStrip`, `EmptyState`, `ErrorBanner`, `SectionLabel`, `SignalBars`, `ResultDot`, `PingTile`). |
@@ -286,6 +289,8 @@ names.
 | `ui/drive/drive_live_stats.dart` | ui | `DriveLiveStats`: live new-vs-repeat grid-cell tally for the mid-drive stats strip. |
 | `ui/drive/heard_box.dart` | ui | `HeardBox`: live / holding / stale repeaters over the map. |
 | `ui/map/coverage_map.dart` | ui | `CoverageMap` (flutter_map): grid, OSM tiles, rings, links, repeaters, ping dots, position, compass, recenter, attribution; `SimulatedTag`. |
+| `ui/map/offline_basemap.dart` | ui | `OfflineBasemap` (shared pack manager + open PMTiles readers, network/lifecycle hooks that resume queued downloads), `OfflinePackSelection` (which pack the camera centre is in, sticky in overlaps), `OfflineBasemapLayer` (vector_map_tiles in raster mode), `offlineMapStyle` (MapLibre-style JSON, OpenMapTiles schema, light/dark, labels drawn with Flutter text, no glyph files). |
+| `ui/settings/offline_packs_screen.dart` | ui | Settings > Offline maps: pack list (ETag-cached manifest), download/pause/update/delete/delete all, Wi-Fi-only switch and cellular prompt, storage. |
 | `ui/map/fullscreen_map.dart` | ui | Full-screen live map; `showMapLayersSheet`. |
 | `ui/map/map_layers.dart` | ui | `MapLayers`, `PingColorMode`, `HeardView` / `HeardPhase`, `heardSnapshot`, `formatDistance` (map style), `formatSnrShort`. |
 | `ui/connect_screen.dart` | ui | Scan for radios, connect/disconnect, Simulator entry. |
