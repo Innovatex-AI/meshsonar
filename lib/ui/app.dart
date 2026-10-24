@@ -6,10 +6,13 @@ import 'antenna_sheet.dart';
 import 'drive_screen.dart';
 import 'onboarding/first_run_gate.dart';
 import 'always_location_screen.dart';
+import 'radio/radio_screen.dart';
 import 'region/region_hub_screen.dart';
 import 'sessions_screen.dart';
 import 'settings_screen.dart';
+import 'telemetry_sheet.dart';
 import 'theme.dart';
+import 'onboarding/ui_prefs.dart';
 
 export 'theme.dart' show meshSonarTheme, meshSonarThemeMode, MeshSonarColors, Gap, Corners, numberStyle;
 
@@ -50,7 +53,7 @@ class MeshSonarApp extends StatelessWidget {
 }
 
 class HomeShell extends StatefulWidget {
-  /// 0 Drive, 1 Region, 2 Drives, 3 Settings.
+  /// 0 Drive, 1 Region, 2 Drives, 3 Radio, 4 Settings.
   final int initialTab;
   const HomeShell({super.key, this.initialTab = 0});
   @override
@@ -62,6 +65,7 @@ class _HomeShellState extends State<HomeShell> {
   AppState? _state;
   final _messengerKey = GlobalKey<ScaffoldMessengerState>();
   bool _antennaSheetScheduled = false;
+  bool _telemetrySheetScheduled = false;
   bool _presetDialogOpen = false;
 
   @override
@@ -96,6 +100,13 @@ class _HomeShellState extends State<HomeShell> {
         if (mounted && s.takeAntennaPrompt()) showAntennaSheet(context);
       });
     }
+    // First run: tell the person what telemetry shares (it is on unless they opt out).
+    if (!_telemetrySheetScheduled && !uiPrefsFor(s).telemetryDisclosed) {
+      _telemetrySheetScheduled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) showTelemetryDisclosure(context);
+      });
+    }
     // A border crossing into a region with a different radio preset: ask (never while driving; never touches the radio).
     final prompt = s.presetPrompt;
     if (prompt != null && !s.driving && !_presetDialogOpen) {
@@ -122,7 +133,7 @@ class _HomeShellState extends State<HomeShell> {
 
   @override
   Widget build(BuildContext context) {
-    const pages = [DriveScreen(), RegionHubScreen(), SessionsScreen(), SettingsScreen()];
+    const pages = [DriveScreen(), RegionHubScreen(), SessionsScreen(), RadioScreen(), SettingsScreen()];
     return ScaffoldMessenger(
       key: _messengerKey,
       child: Scaffold(
@@ -137,6 +148,7 @@ class _HomeShellState extends State<HomeShell> {
             NavigationDestination(icon: Icon(Icons.radar), label: 'Drive'),
             NavigationDestination(icon: Icon(Icons.public), label: 'Region'),
             NavigationDestination(icon: Icon(Icons.list_alt), label: 'Drives'),
+            NavigationDestination(icon: Icon(Icons.settings_input_antenna), label: 'Radio'),
             NavigationDestination(icon: Icon(Icons.settings), label: 'Settings'),
           ],
         ),

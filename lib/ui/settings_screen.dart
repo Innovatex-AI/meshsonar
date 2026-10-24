@@ -16,6 +16,7 @@ import 'antenna_sheet.dart';
 import 'onboarding/onboarding_screen.dart';
 import 'app.dart';
 import 'report_problem_screen.dart';
+import 'telemetry_sheet.dart';
 import 'widgets.dart';
 
 const String _driverHelp =
@@ -240,6 +241,22 @@ class SettingsScreen extends StatelessWidget {
                       : '${s.repeaters.length} saved for offline use'),
                   trailing: const Icon(Icons.refresh),
                   onTap: s.hasKey ? () => s.refreshRepeaters() : null,
+                ),
+              ],
+            ),
+            _Section(
+              id: 'privacy',
+              title: 'Privacy',
+              icon: Icons.privacy_tip_outlined,
+              help: telemetryHelp,
+              children: [
+                SwitchListTile(
+                  key: const Key('telemetry-toggle'),
+                  secondary: const Icon(Icons.podcasts),
+                  title: const Text('Share packet headers'),
+                  subtitle: const Text('Type, path, signal strength, time and region. Never message content.'),
+                  value: st.telemetryEnabled,
+                  onChanged: (v) => s.updateSettings(s.settings.copyWith(telemetryEnabled: v)),
                 ),
               ],
             ),

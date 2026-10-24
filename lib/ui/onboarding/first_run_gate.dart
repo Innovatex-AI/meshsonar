@@ -8,7 +8,7 @@ import 'onboarding_screen.dart';
 import 'ui_prefs.dart';
 
 class FirstRunGate extends StatefulWidget {
-  /// Builds the app shell; [initialTab] is 0 Drive, 1 Region, 2 Drives, 3 Settings.
+  /// Builds the app shell; [initialTab] is 0 Drive, 1 Region, 2 Drives, 3 Radio, 4 Settings.
   final Widget Function(int initialTab) builder;
   const FirstRunGate({super.key, required this.builder});
   @override
@@ -21,7 +21,7 @@ class _FirstRunGateState extends State<FirstRunGate> {
   Future<void> _finish(OnboardingExit exit) async {
     final s = AppScope.read(context);
     final prefs = uiPrefsFor(s);
-    setState(() => _tab = exit == OnboardingExit.driverKey ? 3 : 0);
+    setState(() => _tab = exit == OnboardingExit.driverKey ? 4 : 0);
     await prefs.markOnboardingSeen();
     if (!mounted) return;
     switch (exit) {
