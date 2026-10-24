@@ -80,6 +80,7 @@ Future<AppServices> buildRealServices() async {
     openUrl: openExternalUrl,
     appInfo: app,
     uiPrefsFile: File('${root.path}${Platform.pathSeparator}ui_prefs.json'),
+    telemetryQueueFile: File('${root.path}${Platform.pathSeparator}telemetry_queue.json'),
     // The one problem report that couldn't be sent yet, next to settings.json.
     reportDraftStore: FileReportDraftStore(File('${root.path}${Platform.pathSeparator}report_draft.json')),
     // The public map is ~17 MB; repeaters rarely move, so refresh weekly (or when the drive area moves >75 km).

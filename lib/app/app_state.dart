@@ -26,6 +26,8 @@ import '../core/region_tracker.dart';
 import '../core/repeater_directory.dart';
 import '../core/report_body.dart';
 import '../core/server_url.dart';
+import '../core/telemetry.dart';
+import '../core/telemetry_uploader.dart';
 import '../core/units.dart';
 import '../radio/radio_api.dart';
 import 'messages.dart';
@@ -450,6 +452,53 @@ class AppState extends ChangeNotifier {
   /// The location source a drive uses with the current radio (read-only; the Drive screen's map follows it).
   LocationSource get activeLocation => _locationSource;
 
+  // ---------- packet-header telemetry (lib/core/telemetry_uploader.dart) ----------
+  // On by default, off with the Settings toggle; headers and signal metadata only, sent only to the configured server.
+  StreamSubscription<RxPacket>? _telemetrySub;
+  bool _telemetryDisclosedSeen = false;
+  TelemetryUploader? _telemetry;
+  TelemetryUploader get _tele => _telemetry ??= TelemetryUploader(
+        // Nothing is collected before the person has seen the first-run disclosure (the sheet in lib/ui/telemetry_sheet.dart).
+        enabled: () => _settings.telemetryEnabled && _telemetryDisclosed(),
+        driverKey: () => _settings.driverKey,
+        keyApproved: () => keyApproved,
+        transport: () {
+          final c = client;
+          return c is TelemetryTransport ? c as TelemetryTransport : null;
+        },
+        appVersion: services.appInfo.version,
+        platform: services.appInfo.platform,
+        queueFile: services.telemetryQueueFile,
+        now: () => services.clock().toUtc(),
+      );
+
+  bool _telemetryDisclosed() {
+    if (_telemetryDisclosedSeen) return true;
+    final f = services.uiPrefsFile;
+    if (f == null) return _telemetryDisclosedSeen = true; // tests / no file system: nothing is ever sent anyway
+    try {
+      final j = jsonDecode(f.readAsStringSync());
+      if (j is Map && j['telemetry_disclosed'] == true) return _telemetryDisclosedSeen = true;
+    } catch (_) {}
+    return false;
+  }
+
+  void _onTelemetryRx(RxPacket rx) {
+    if (!_settings.telemetryEnabled) return;
+    final r = TelemetryRecord.fromRx(rx, region: _currentRegion?.code);
+    if (r != null) _tele.add(r);
+  }
+
+  /// Sends what is due now (the uploader also does this on its own timer). For tests and an app-resume hook.
+  Future<void> flushTelemetry() => _tele.flush();
+
+  /// Opt-out follow-up: asks the server to erase every packet header this phone ever sent. Returns the number erased, or
+  /// null if it could not be done yet (it is remembered and retried).
+  Future<int?> eraseTelemetry() {
+    _tele.discard();
+    return _tele.eraseServerData();
+  }
+
   Future<bool> connect(RadioDevice device, RadioKind kind) async {
     if (driving) {
       _say('Stop the drive before switching radios.');
@@ -468,6 +517,8 @@ class AppState extends ChangeNotifier {
       final info = await link.start().timeout(const Duration(seconds: 20));
       _link = link;
       _selfInfo = info;
+      unawaited(_telemetrySub?.cancel());
+      _telemetrySub = link.rxPackets.listen(_onTelemetryRx, onError: (Object _) {});
       _connecting = false;
       // A radio used for the first time is asked once how its antenna is set up (the UI opens the sheet).
       _antennaPrompt = antennaProfile == null;
@@ -511,6 +562,8 @@ class AppState extends ChangeNotifier {
     if (driving) await stopDrive();
     final link = _link;
     _link = null;
+    unawaited(_telemetrySub?.cancel());
+    _telemetrySub = null;
     _selfInfo = null;
     _device = null;
     _radioKind = RadioKind.none;
@@ -842,8 +895,13 @@ class AppState extends ChangeNotifier {
 
   static double _dbmToWatts(double dbm) => math.pow(10, dbm / 10) / 1000;
 
+  @visibleForTesting
+  void debugOnPing(DrivePing ping) => _onPing(ping);
+
   void _onPing(DrivePing ping) {
     if (!_seenPingIds.add(ping.id)) return;
+    // Our own transmission (and so its echoes) is never telemetry.
+    if (ping.pktHash != null) _telemetry?.excludeHash(ping.pktHash!);
     final sid = _session?.id;
     if (sid == null) return;
     _pingCount++;
@@ -1232,6 +1290,11 @@ class AppState extends ChangeNotifier {
       orphans = await closeOrphanedSessions(services.store, except: {if (_session != null) _session!.id});
     } catch (_) {}
     await refreshSessions();
+    if (services.telemetryQueueFile != null) {
+      // Resume queued headers and any erase request that could not reach the server last time.
+      await _tele.load();
+      unawaited(_tele.flush());
+    }
     if (keyApproved) unawaited(refreshRepeaters(quiet: true));
     if (orphans.isNotEmpty && _settings.autoSync && keyApproved) unawaited(_syncClosedQuietly(orphans));
   }
@@ -1269,6 +1332,7 @@ class AppState extends ChangeNotifier {
       _siteConfigMeta = null;
       _tracker.reset();
     }
+    if (_settings.telemetryEnabled && !s.telemetryEnabled) _telemetry?.discard(); // the opt-out takes effect at once
     _settings = s;
     heard.holdPings = s.heardHoldPings; // the heard list's live/stale rule follows the slider at once, even mid-drive
     _scheduleDriveSync(); // in-drive upload follows the toggles, the period and the key status
@@ -1621,6 +1685,8 @@ class AppState extends ChangeNotifier {
     _cancelDriveSync();
     _pingSub?.cancel();
     _statusSub?.cancel();
+    _telemetrySub?.cancel();
+    unawaited(_telemetry?.dispose());
     super.dispose();
   }
 }
