@@ -43,6 +43,7 @@ const List<({String name, String license, String note})> thirdPartyNotices = [
   (name: 'geolocator', license: 'MIT, © Baseflow', note: 'GPS.'),
   (name: 'share_plus, path_provider', license: 'BSD-3-Clause, © Flutter Community / The Flutter Authors', note: 'Sharing and file locations.'),
   (name: 'http, path, uuid', license: 'BSD-3-Clause / MIT', note: 'Networking and utilities.'),
+  (name: 'pdf', license: 'Apache-2.0, © David PHAM-VAN', note: 'Drive and region reports as PDF (made on the phone).'),
 ];
 
 class AboutScreen extends StatelessWidget {

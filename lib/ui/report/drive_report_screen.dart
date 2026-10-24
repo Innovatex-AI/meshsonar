@@ -1,6 +1,6 @@
 // After-drive report: hero numbers, a map of the drive's grid cells coloured by heard %, new grids and repeaters,
 // SNR over time, heard/not timeline, noise floor, reply RSSI, TX power, hops, signal by distance, heard by speed, GPS
-// accuracy, a repeater leaderboard, best/worst spots, and Export (text or one CSV file).
+// accuracy, a repeater leaderboard, best/worst spots, and Export (text, one CSV file, or a PDF: drive_report_pdf.dart).
 // Opened from the drive detail screen ("Report") and from the Drive screen's "View drive report" card.
 // The numbers come from lib/core/drive_report.dart, computed once per open (async; fine for drives of thousands of
 // pings). The v2 chart sections live in drive_report_sections.dart.
@@ -14,6 +14,7 @@ import 'package:latlong2/latlong.dart' hide Path;
 import '../../app/app_state.dart';
 import '../../core/drive_report.dart';
 import '../../core/drive_report_export.dart';
+import '../../core/drive_report_pdf.dart';
 import '../../core/drive_stats.dart' show formatDuration;
 import '../../core/model.dart';
 import '../app.dart';
@@ -21,6 +22,7 @@ import '../map/coverage_map.dart' show CoverageMap;
 import '../onboarding/ui_prefs.dart' show driveLabel;
 import '../widgets.dart';
 import 'drive_report_sections.dart';
+import 'pdf_export.dart';
 
 void openDriveReport(BuildContext context, String sessionId) {
   Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => DriveReportScreen(sessionId: sessionId)));
@@ -72,6 +74,16 @@ class _DriveReportScreenState extends State<DriveReportScreen> {
     return _write('$_fileBase.csv', () => r.toCsv(nameOf: s.repeaterName));
   }
 
+  Future<void> _sharePdf(DriveReport r, String title) async {
+    final s = AppScope.read(context);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await shareReportPdf(s, '$_fileBase.pdf', driveReportPdf(r, title: title, units: s.units, duration: formatDuration));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Couldn\'t make the PDF. Text and CSV still work. $e')));
+    }
+  }
+
   Future<void> _write(String name, String Function() body) async {
     final s = AppScope.read(context);
     final messenger = ScaffoldMessenger.of(context);
@@ -106,7 +118,11 @@ class _DriveReportScreenState extends State<DriveReportScreen> {
                   key: const Key('report-export'),
                   tooltip: 'Export report',
                   icon: const Icon(Icons.ios_share),
-                  onSelected: (v) => v == 'csv' ? _shareCsv(r) : _share(r, title),
+                  onSelected: (v) => switch (v) {
+                    'csv' => _shareCsv(r),
+                    'pdf' => _sharePdf(r, title),
+                    _ => _share(r, title),
+                  },
                   itemBuilder: (_) => [
                     const PopupMenuItem(
                       key: Key('report-export-text'),
@@ -121,6 +137,17 @@ class _DriveReportScreenState extends State<DriveReportScreen> {
                         leading: Icon(Icons.table_chart_outlined),
                         title: Text('CSV (all tables, one file)'),
                         subtitle: Text('Contains your exact track'),
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ),
+                    PopupMenuItem(
+                      key: const Key('report-export-pdf'),
+                      value: 'pdf',
+                      enabled: r.sortedPings.isNotEmpty,
+                      child: const ListTile(
+                        leading: Icon(Icons.picture_as_pdf_outlined),
+                        title: Text('PDF report'),
+                        subtitle: Text('Contains where you drove (grid cells)'),
                         contentPadding: EdgeInsets.zero,
                       ),
                     ),

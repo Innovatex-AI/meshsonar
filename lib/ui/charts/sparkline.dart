@@ -1,6 +1,7 @@
 // Sparkline: a small axis-less line of evenly spaced values. One painter for the app's former copies
-// (repeater_detail_screen.dart's SparklinePainter and repeater_detail_sheet.dart's _SparkPainter), with their exact
-// drawing kept as two presets: [SparkStyle.plain] and [SparkStyle.snr]. Unknown values (null) are gaps, never zero.
+// (repeater_detail_screen.dart's SparklinePainter, repeater_detail_sheet.dart's _SparkPainter and overview_panel.dart's
+// filled SparklinePainter), with their exact drawing kept as presets: [SparkStyle.plain], [SparkStyle.snr] and
+// [SparkStyle.counts] (+ fill and baseline colours). Unknown values (null) are gaps, never zero.
 // The widget always carries a [summary] with the numbers as its semantics label.
 import 'dart:math' as math;
 
@@ -44,6 +45,11 @@ class SparkStyle {
   /// SNR: the scale always spans -5..+5 dB, dashed 0 dB line, 2 px line, every point a 3 px dot.
   static const snr = SparkStyle(
       strokeWidth: 2, inset: 0, includeLo: -5, includeHi: 5, ref: 0, dots: SparkDots.all, dotRadius: 3, centreSingle: true);
+
+  /// Counts (the region overview's packets per hour, formerly overview_panel.dart's SparklinePainter): scale 0..max
+  /// (at least 1, so an all-zero day is a flat line on the floor), 3 px inset, 2 px line, no dots. Pair with
+  /// [Sparkline.fillColor] and [Sparkline.baseColor] for that chart's filled look.
+  static const counts = SparkStyle(strokeWidth: 2, inset: 3, includeLo: 0, includeHi: 1, dots: SparkDots.none);
 }
 
 class Sparkline extends StatelessWidget {
@@ -59,6 +65,12 @@ class Sparkline extends StatelessWidget {
 
   /// Reference line colour (default: outline at half opacity).
   final Color? refColor;
+
+  /// Fills under each run of the line down to the bottom edge (null = no fill).
+  final Color? fillColor;
+
+  /// A 1 px baseline along the bottom edge (null = none).
+  final Color? baseColor;
   final double height;
 
   const Sparkline({
@@ -69,6 +81,8 @@ class Sparkline extends StatelessWidget {
     this.style = SparkStyle.plain,
     this.dotColor,
     this.refColor,
+    this.fillColor,
+    this.baseColor,
     this.height = 56,
   });
 
@@ -88,6 +102,8 @@ class Sparkline extends StatelessWidget {
               style: style,
               dotColor: dotColor,
               refColor: refColor ?? Theme.of(context).colorScheme.outline.withValues(alpha: 0.5),
+              fillColor: fillColor,
+              baseColor: baseColor,
             ),
           ),
         ),
@@ -100,10 +116,17 @@ class SparklinePainter extends CustomPainter {
   final SparkStyle style;
   final Color Function(double v)? dotColor;
   final Color refColor;
-  SparklinePainter({required this.values, required this.color, required this.style, this.dotColor, required this.refColor});
+  final Color? fillColor, baseColor;
+  SparklinePainter(
+      {required this.values, required this.color, required this.style, this.dotColor, required this.refColor, this.fillColor, this.baseColor});
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (baseColor != null) {
+      canvas.drawLine(Offset(0, size.height - .5), Offset(size.width, size.height - .5), Paint()
+        ..color = baseColor!
+        ..strokeWidth = 1);
+    }
     final known = [for (final v in values) if (v != null && v.isFinite) v];
     if (known.isEmpty) return;
     if (known.length < 2 && values.length < 2 && style.dots == SparkDots.isolated) return;
@@ -126,6 +149,30 @@ class SparklinePainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = style.strokeWidth
       ..strokeJoin = StrokeJoin.round;
+    if (fillColor != null) {
+      // One closed area per run of known values, down to the bottom edge.
+      final fill = Paint()..color = fillColor!;
+      var i = 0;
+      while (i < n) {
+        if (values[i] == null || !values[i]!.isFinite) {
+          i++;
+          continue;
+        }
+        final start = i;
+        final area = Path()..moveTo(x(i), y(values[i]!));
+        while (i + 1 < n && values[i + 1] != null && values[i + 1]!.isFinite) {
+          i++;
+          area.lineTo(x(i), y(values[i]!));
+        }
+        area
+          ..lineTo(x(i), size.height)
+          ..lineTo(x(start), size.height)
+          ..close();
+        canvas.drawPath(area, fill);
+        i++;
+      }
+    }
+
     final path = Path();
     var pen = false;
     for (var i = 0; i < n; i++) {
@@ -158,7 +205,12 @@ class SparklinePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(SparklinePainter old) =>
-      old.values != values || old.color != color || old.style != style || old.refColor != refColor;
+      old.values != values ||
+      old.color != color ||
+      old.style != style ||
+      old.refColor != refColor ||
+      old.fillColor != fillColor ||
+      old.baseColor != baseColor;
 }
 
 /// "Lowest -3.5, highest 8.0, latest 6.5; 3 of 24 hours have no data" for a sparkline's semantics.

@@ -7,11 +7,15 @@ import 'package:flutter/material.dart';
 import '../app/app_state.dart';
 import '../core/api.dart';
 import 'app.dart';
+import 'charts/heard_strip.dart';
 import 'drive_detail_screen.dart';
 import 'drive_stats.dart';
 import 'onboarding/ui_prefs.dart';
 import 'report/drive_report_screen.dart';
+import 'report/progress_screen.dart' show ProgressCard;
 import 'widgets.dart';
+
+export 'charts/heard_strip.dart' show HeardStrip;
 
 /// Loads and caches per-drive stats (they need the drive's pings). Reloaded when a drive's ping count changes.
 class DriveStatsCache {
@@ -126,65 +130,6 @@ class SyncBadge extends StatelessWidget {
   }
 }
 
-/// One bar per ping (bucketed on long drives): coloured by SNR when heard, the "silent" colour when nothing heard.
-class HeardStrip extends StatelessWidget {
-  final List<bool> timeline;
-  final List<double?> snr;
-  final double height;
-  const HeardStrip({super.key, required this.timeline, this.snr = const [], this.height = 14});
-
-  @override
-  Widget build(BuildContext context) {
-    final m = MeshSonarColors.of(context);
-    return SizedBox(
-      height: height,
-      width: double.infinity,
-      child: CustomPaint(painter: _StripPainter(timeline, snr, m, Theme.of(context).colorScheme.surfaceContainerHighest)),
-    );
-  }
-}
-
-class _StripPainter extends CustomPainter {
-  final List<bool> t;
-  final List<double?> snr;
-  final MeshSonarColors m;
-  final Color track;
-  _StripPainter(this.t, this.snr, this.m, this.track);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final rr = RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(4));
-    canvas.clipRRect(rr);
-    canvas.drawRect(Offset.zero & size, Paint()..color = track);
-    if (t.isEmpty) return;
-    // Bucket long drives so each bar is at least 3 px wide.
-    final buckets = (size.width / 4).floor().clamp(1, t.length);
-    final w = size.width / buckets;
-    for (var b = 0; b < buckets; b++) {
-      final from = (b * t.length / buckets).floor();
-      final to = ((b + 1) * t.length / buckets).ceil().clamp(from + 1, t.length);
-      var heard = 0;
-      double? best;
-      for (var i = from; i < to; i++) {
-        if (t[i]) heard++;
-        final v = i < snr.length ? snr[i] : null;
-        if (v != null && (best == null || v > best)) best = v;
-      }
-      final frac = heard / (to - from);
-      final color = frac == 0 ? m.silent.withValues(alpha: 0.55) : m.forPing(heard: true, snr: best);
-      final h = frac == 0 ? size.height * 0.4 : size.height * (0.6 + 0.4 * frac);
-      final gap = w > 4 ? 1.5 : 0.75;
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(Rect.fromLTWH(b * w, size.height - h, w - gap, h), const Radius.circular(1.5)),
-        Paint()..color = color,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(_StripPainter old) => old.t != t || old.snr != snr || old.m != m;
-}
-
 class SessionsScreen extends StatefulWidget {
   const SessionsScreen({super.key});
   @override
@@ -237,6 +182,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
                     syncing: s.anySyncing,
                     onSyncAll: () => s.syncAll(),
                   ),
+                if (list.isNotEmpty) ProgressCard(sessions: list, now: s.services.clock()),
                 if (list.isEmpty && s.sessionsError == null)
                   Padding(
                     padding: const EdgeInsets.only(top: 80),
@@ -407,7 +353,12 @@ class _SessionCard extends StatelessWidget {
                     const SizedBox(height: 10),
                     Padding(
                       padding: const EdgeInsets.only(right: 8),
-                      child: HeardStrip(key: ValueKey('strip-$id'), timeline: st?.timeline ?? const [], snr: st?.timelineSnr ?? const []),
+                      child: HeardStrip(
+                        key: ValueKey('strip-$id'),
+                        timeline: st?.timeline ?? const [],
+                        snr: st?.timelineSnr ?? const [],
+                        summary: st == null ? null : 'Heard on ${st.heard} of ${st.txPings} pings, ping by ping.',
+                      ),
                     ),
                   ]);
                 },
