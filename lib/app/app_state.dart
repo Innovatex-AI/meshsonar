@@ -26,6 +26,8 @@ import '../core/region_pick.dart';
 import '../core/region_preset.dart';
 import '../core/region_tracker.dart';
 import '../core/repeater_directory.dart';
+import '../core/repeater_sync.dart';
+import '../core/startup_location.dart';
 import '../core/report_body.dart';
 import '../core/server_url.dart';
 import '../core/telemetry.dart';
@@ -276,13 +278,18 @@ class AppState extends ChangeNotifier {
     final v = viewingRegion;
     if (v?.code == _viewCode) return;
     _viewCode = v?.code;
-    if (v != null && v.code != _settings.regionLast) {
+    _refreshSyncedNames();
+    // The first-region fallback (nothing picked, never located) is not remembered: it is a guess, and remembering it
+    // would hide the hub view (Stream 4) on the next launch without a fix.
+    final guess = _settings.regionManual == null && _viewHoldCode == null && _currentRegion == null && _lastRegionFix == null;
+    if (v != null && v.code != _settings.regionLast && !(guess && _settings.regionLast == null)) {
       _settings = _settings.copyWith(regionLast: v.code);
       unawaited(services.settingsStore.save(_settings).catchError((_) {}));
     }
     if (v != null) {
       unawaited(refreshNetworkCoverage());
       unawaited(refreshSiteConfig());
+      unawaited(syncRepeaterLists(SyncTrigger.view));
     }
   }
 
@@ -331,12 +338,22 @@ class AppState extends ChangeNotifier {
   /// Re-evaluates [currentRegion] for [fix] against [regionIndex]. A genuine crossing into a different *known*
   /// region while driving fires the one-shot notice (reusing [_say]/[takeNotice], the same mechanism the upload
   /// success/error banners use) — detection at startup or while idle updates the badge quietly, with no popup.
-  void _updateRegion(GeoFix? fix) {
+  void _updateRegion(GeoFix? fix, {bool live = true}) {
     if (fix == null) return;
+    if (live) {
+      // The region was seeded at launch from an old position (last-known on disk, or an OS-cached fix): the first live
+      // fix re-seeds it, so opening the app somewhere else never reads as "you crossed a border" (no notice, no prompt).
+      if (_regionSeededFromOld && _isLiveAge(fix)) {
+        _regionSeededFromOld = false;
+        _tracker.reset();
+      }
+      _notePhoneFix(fix);
+    }
     _lastRegionFix = fix;
     final u = _tracker.update(regionIndex, fix.lat, fix.lon, fix.at);
     _regionNearEdge = u.nearEdge;
     _currentRegion = u.current;
+    if (_loaded) _refreshSyncedNames();
     if (u.changed) {
       _viewHoldCode = null;
       final next = u.current;
@@ -402,23 +419,252 @@ class AppState extends ChangeNotifier {
   Future<void> refreshRegionIndex() async {
     await _regionIndexService.loadCached();
     notifyListeners();
-    GeoFix? fix;
-    try {
-      fix = await _locationSource.current();
-    } catch (e) {
-      _logError('Getting a GPS fix for region awareness failed', e);
+    // Stream 4: never wait for GPS to show something. The last place the phone was seen goes on screen at once; a fresh
+    // fix refines it in parallel (bounded by [launchFixWait]); the idle watcher starts after that.
+    Future<void>? locating;
+    if (!_launchLocated) {
+      _launchLocated = true;
+      final last = await services.lastKnownStore?.load();
+      if (last != null && _phoneFix == null) {
+        _phoneFix = PhoneFix(last, live: false);
+        _regionSeededFromOld = true;
+        _updateRegion(last, live: false);
+      }
+      locating = _locateFresh();
     }
-    // No live fix (indoors, slow GPS, permission pending): the last place the phone was seen, persisted by the idle
-    // watcher, so the Region tab opens on the right region.
-    fix ??= await services.lastKnownStore?.load();
-    if (fix != null) _updateRegion(fix);
-    _startIdleWatcher();
     await _regionIndexService.refresh();
     final regionErr = _regionIndexService.lastError;
     if (regionErr != null) diagnostics.add('Fetching regions-index failed: $regionErr');
-    // The index may have just changed (first fetch, or a different index than the cache): re-check the same fix.
-    if (fix != null) _updateRegion(fix);
+    // The index may have just changed (first fetch, or a different index than the cache): re-check the best fix.
+    final best = _phoneFix?.fix ?? _lastRegionFix;
+    if (best != null) _updateRegion(best, live: false);
     notifyListeners();
+    unawaited(syncRepeaterLists(SyncTrigger.launch));
+    if (locating != null) {
+      await locating;
+      _startIdleWatcher();
+    }
+  }
+
+  // ---------- where the phone is (Stream 4: open on the phone at once) ----------
+  bool _launchLocated = false;
+  bool _regionSeededFromOld = false;
+  PhoneFix? _phoneFix;
+  DateTime? _lastKnownSavedAt;
+
+  /// How long launch waits for a fresh GPS fix (the last-known fix is already on screen). Tests shorten it.
+  @visibleForTesting
+  Duration launchFixWait = launchFixTimeout;
+
+  /// The best-known position of the phone: a live GPS fix of this run, else the last-known one from disk (labelled by
+  /// [phoneFixLabel] when it is not live). Null when the phone has never been located.
+  PhoneFix? get phoneFix => _phoneFix;
+
+  /// "Last known location, 2 d ago" while the position on screen is not a live fix; null otherwise.
+  String? get phoneFixNote => phoneFixLabel(_phoneFix, services.clock());
+
+  /// Where a map with no drive on it opens (phone, else the viewed region, else every region, else the world).
+  MapStart get mapStart => mapStartFor(
+        phone: _phoneFix,
+        viewing: viewingRegion,
+        viewingIsManual: viewingIsManual,
+        viewingRemembered: _settings.regionLast != null,
+        index: regionIndex,
+      );
+
+  bool _isLiveAge(GeoFix f) {
+    final d = services.clock().toUtc().difference(f.at.toUtc());
+    return d <= liveFixAge;
+  }
+
+  /// A GPS fix of this run: becomes [phoneFix] (unless older than the one held) and is saved as the last-known
+  /// position (at most once a minute, so a drive's 1 Hz fixes do not hammer the disk).
+  void _notePhoneFix(GeoFix fix) {
+    final cur = _phoneFix;
+    if (cur != null && cur.live && fix.at.isBefore(cur.fix.at)) return;
+    _phoneFix = PhoneFix(fix, live: true);
+    final now = services.clock();
+    final saved = _lastKnownSavedAt;
+    if (saved == null || now.difference(saved).abs() >= const Duration(minutes: 1)) {
+      _lastKnownSavedAt = now;
+      unawaited(services.lastKnownStore?.save(fix));
+    }
+  }
+
+  Future<void> _locateFresh() async {
+    final fix = await fixWithin(services.location, launchFixWait,
+        onError: (e) => _logError('Getting a GPS fix at launch failed', e));
+    if (fix == null) {
+      if (_phoneFix == null) diagnostics.add('No GPS fix at launch; showing the last region');
+      return;
+    }
+    _updateRegion(fix);
+  }
+
+  LocationAccess _locationAccess = LocationAccess.unknown;
+
+  /// Location permission as last read (never prompts). Drives [locationNote].
+  LocationAccess get locationAccess => _locationAccess;
+
+  /// The plain-language location state and its action for the Drive and Region screens; null when all is well.
+  LocationNote? get locationNote => locationNoteFor(_locationAccess, regionName: viewingRegion?.name);
+
+  /// Re-reads the permission (launch and every resume, e.g. back from Settings). When it just became usable, locates
+  /// the phone and lets the idle watcher start.
+  Future<void> refreshLocationAccess() async {
+    final probe = services.locationAccess;
+    if (probe == null) return;
+    LocationAccess a;
+    try {
+      a = await probe.check();
+    } catch (_) {
+      a = LocationAccess.unknown;
+    }
+    _setLocationAccess(a);
+  }
+
+  void _setLocationAccess(LocationAccess a) {
+    final was = _locationAccess;
+    _locationAccess = a;
+    final usable = a == LocationAccess.granted || a == LocationAccess.approximate;
+    final wasUsable = was == LocationAccess.granted || was == LocationAccess.approximate;
+    if (usable && !wasUsable && was != LocationAccess.unknown) {
+      diagnostics.add('Location allowed; locating the phone');
+      unawaited(_locateFresh());
+      unawaited(_idle?.setForeground(true)); // re-checks the permission and opens the idle stream
+    }
+    if (a != was) notifyListeners();
+  }
+
+  /// The action of [locationNote], after the person tapped it: the system question, or the phone's Settings.
+  Future<void> resolveLocationNote() async {
+    final probe = services.locationAccess;
+    final note = locationNote;
+    if (probe == null || note == null) return;
+    try {
+      switch (note.action) {
+        case LocationAction.ask:
+          _setLocationAccess(await probe.request());
+        case LocationAction.openAppSettings:
+          if (!await probe.openAppSettings()) _say('Open the Settings app, then Privacy, Location Services, MeshSonar.');
+        case LocationAction.openLocationSettings:
+          if (!await probe.openLocationSettings()) _say('Open the Settings app and turn on Location Services.');
+        case null:
+          break;
+      }
+    } catch (e) {
+      _logError('Location permission action failed', e);
+    }
+  }
+
+  // ---------- repeater lists (Stream 3: roster + network list, synced on open and resume) ----------
+  /// The region roster / network repeater sync, or null when this build has none (tests). The map layer reads
+  /// `repeaterSync.regionSet(slug)` and `repeaterSync.globalSet`; AppState notifies whenever either changes.
+  RepeaterSync? get repeaterSync => services.repeaterSync;
+
+  /// The viewed region's roster as map rows (empty without a sync or a stored roster).
+  RepeaterSet get regionRepeaterSet => services.repeaterSync?.regionSet(viewingRegion?.slug) ?? RepeaterSet.empty;
+
+  /// The whole network's repeaters as map rows (empty until the server offers network-repeaters).
+  RepeaterSet get globalRepeaterSet => services.repeaterSync?.globalSet ?? RepeaterSet.empty;
+
+  bool _syncListening = false;
+
+  /// Where a region's roster is read: its own host on the MeshSonar hub, else the configured server (custom server).
+  String _rosterBase(RegionIndexEntry r) => isSameServer(_settings.serverUrl, defaultServerUrl) ? r.url : _settings.serverUrl;
+
+  /// Syncs the rosters of the region the phone is in and the viewed one, and the network list, within the sync's rate
+  /// limits. [trigger] force = pull to refresh. Never throws; failures only reach the diagnostics log.
+  Future<void> syncRepeaterLists(SyncTrigger trigger) async {
+    final sync = services.repeaterSync;
+    if (sync == null || !_loaded) return;
+    final regions = <String, RegionIndexEntry>{};
+    for (final r in [_currentRegion, viewingRegion]) {
+      if (r != null) regions[r.slug] = r;
+    }
+    final server = Uri.tryParse(_settings.serverUrl);
+    await Future.wait([
+      for (final r in regions.values) sync.syncRoster(baseUrl: _rosterBase(r), slug: r.slug, trigger: trigger),
+      if (server != null && server.host.isNotEmpty) sync.syncNetwork(server: server, trigger: trigger),
+    ]);
+  }
+
+  /// Pull to refresh on a region's repeater list: that roster and the network list, forced (still floored so a
+  /// repeated pull cannot loop).
+  Future<void> refreshRegionRoster(String baseUrl, String slug) async {
+    final sync = services.repeaterSync;
+    if (sync == null) return;
+    final server = Uri.tryParse(_settings.serverUrl);
+    await Future.wait([
+      sync.syncRoster(baseUrl: baseUrl, slug: slug, trigger: SyncTrigger.force),
+      if (server != null && server.host.isNotEmpty) sync.syncNetwork(server: server, trigger: SyncTrigger.force),
+    ]);
+  }
+
+  /// Back in front: permission may have changed in Settings, and the lists may be due (rate limits apply).
+  void _onForeground(bool fg) {
+    if (!fg) return;
+    unawaited(refreshLocationAccess());
+    unawaited(syncRepeaterLists(SyncTrigger.resume));
+  }
+
+  List<RosterRecord> _lookupRosterSrc = const [];
+  List<RepeaterRef> _rosterRefs = const [];
+  Set<String> _rosterShared = const {};
+  NetworkRecord? _nearbySrc;
+  ({double lat, double lon})? _nearbyAt;
+  List<RepeaterRef> _networkNearby = const [];
+
+  /// Called when the sync's stored lists change: names and pins follow at once.
+  void _onRepeaterSync() {
+    _refreshSyncedNames();
+    notifyListeners();
+  }
+
+  /// Rebuilds the name sources that come from the sync, only when their inputs changed.
+  void _refreshSyncedNames() {
+    final sync = services.repeaterSync;
+    if (sync == null) return;
+    var changed = false;
+    // Rosters of the region the phone is in and the viewed one (current first).
+    final slugs = <String>{?_currentRegion?.slug, ?viewingRegion?.slug};
+    final records = [for (final slug in slugs) ?sync.roster(slug)];
+    final same = records.length == _lookupRosterSrc.length &&
+        [for (var i = 0; i < records.length; i++) identical(records[i].data, _lookupRosterSrc[i].data)].every((x) => x);
+    if (!same) {
+      final refs = <String, RepeaterRef>{};
+      final shared = <String>{};
+      for (final r in records) {
+        for (final x in r.data.rows) {
+          if (x.ambiguous) shared.add(x.hashPrefix);
+          if (x.hasPosition) refs.putIfAbsent(x.key, () => RepeaterRef(key: x.key, name: x.name?.trim() ?? '', lat: x.lat!, lon: x.lon!));
+        }
+      }
+      _lookupRosterSrc = records;
+      _rosterRefs = refs.values.toList();
+      _rosterShared = shared;
+      changed = true;
+    }
+    // The network list near the phone (the same 150 km neighbourhood the map.meshcore.io directory keeps).
+    final n = sync.network;
+    final centre = _phoneFix == null ? null : (lat: _phoneFix!.fix.lat, lon: _phoneFix!.fix.lon);
+    final at = centre ?? (viewingRegion == null ? null : regionCenter(viewingRegion!));
+    final moved = at == null || _nearbyAt == null || haversineM(at.lat, at.lon, _nearbyAt!.lat, _nearbyAt!.lon) > 75000;
+    if (n == null) {
+      if (_networkNearby.isNotEmpty) {
+        _networkNearby = const [];
+        changed = true;
+      }
+    } else if (at != null && (!identical(n, _nearbySrc) || moved)) {
+      final next = n.data.nearby(at.lat, at.lon, now: services.clock().toUtc());
+      if (!identical(n.data, _nearbySrc?.data) || moved) {
+        _networkNearby = next;
+        changed = true;
+      }
+      _nearbySrc = n;
+      _nearbyAt = at;
+    }
+    if (changed) _rebuildLookup();
   }
 
   // Idle region detection (WP-R4): a low-power foreground stream while NOT driving feeds the same tracker the drive
@@ -426,6 +672,7 @@ class AppState extends ChangeNotifier {
   // silent radio change). Paused during drives and, unless "Always" location is granted, while backgrounded.
   IdleRegionWatcher? _idle;
   AppLifecycleBridge? _lifecycle;
+  AppLifecycleBridge? _resumeBridge;
 
   void _startIdleWatcher() {
     final src = services.idleLocation;
@@ -656,8 +903,16 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Name priority (Stream 3): the region roster (MeshSonar's own, per-region, freshest view) before drive-repeaters
+  /// (MeshSonar's key-gated list), then the network list near the phone, then the map.meshcore.io directory download.
+  /// Prefixes the roster marks as shared never resolve to one name (RepeaterLookup.ambiguousPrefixes).
   void _rebuildLookup() {
-    _lookup = RepeaterLookup([(RepeaterSource.cmat, _repeaters), (RepeaterSource.publicMap, _extraRepeaters)]);
+    _lookup = RepeaterLookup([
+      (RepeaterSource.cmat, _rosterRefs),
+      (RepeaterSource.cmat, _repeaters),
+      (RepeaterSource.publicMap, _networkNearby),
+      (RepeaterSource.publicMap, _extraRepeaters),
+    ], ambiguousPrefixes: _rosterShared);
     _nameCache.clear(); // names from either list may have changed
     heard.relookup(_lookup);
   }
@@ -1324,6 +1579,18 @@ class AppState extends ChangeNotifier {
     try {
       _setRepeaters(await services.repeaterCache.load());
     } catch (_) {}
+    final rs = services.repeaterSync;
+    if (rs != null) {
+      rs.log ??= diagnostics.add;
+      if (!_syncListening) {
+        _syncListening = true;
+        rs.addListener(_onRepeaterSync);
+      }
+      await rs.load(); // stored rosters + network list: names and pins before any network call
+      _refreshSyncedNames();
+    }
+    unawaited(refreshLocationAccess());
+    _resumeBridge ??= (AppLifecycleBridge(_onForeground)..attach());
     unawaited(_loadDirectory());
     unawaited(refreshSiteConfig());
     unawaited(refreshNetworkCoverage());
@@ -1331,6 +1598,7 @@ class AppState extends ChangeNotifier {
     await _loadSavedReport();
     _loaded = true;
     notifyListeners();
+    unawaited(syncRepeaterLists(SyncTrigger.launch));
     // A drive cut off by a crash or an app kill is still open; close it at its last ping so its end gets synced.
     var orphans = const <String>[];
     try {
@@ -1684,6 +1952,10 @@ class AppState extends ChangeNotifier {
   }
 
   // ---------- public node directory (map.meshcore.io; Agent 2) ----------
+  /// True when the MeshSonar server's network list (synced, confirmed within 14 days) stands in for the direct
+  /// map.meshcore.io download. Without it (404, never fetched, too old) the directory works exactly as before.
+  bool get _networkListReplacesDirectory => services.repeaterSync?.networkUsable() ?? false;
+
   DirectorySnapshot? _directory;
 
   /// The cached public node directory (repeaters near the last drive area), or null.
@@ -1701,7 +1973,7 @@ class AppState extends ChangeNotifier {
     try {
       final s = await d.load();
       _applyDirectory(s);
-      if (s != null && d.isStale(s)) await refreshDirectory(); // once a day, around the last area used
+      if (s != null && d.isStale(s) && !_networkListReplacesDirectory) await refreshDirectory(); // once a day, around the last area used
     } catch (_) {}
   }
 
@@ -1716,6 +1988,12 @@ class AppState extends ChangeNotifier {
       lon = last?.lon ?? _directory?.centerLon;
     }
     if (lat == null || lon == null) return;
+    if (_networkListReplacesDirectory) {
+      // The server's network list already holds every repeater with a position: no 17 MB map.meshcore.io download.
+      _refreshSyncedNames();
+      notifyListeners();
+      return;
+    }
     try {
       final snap = await d.refresh(lat: lat, lon: lon, force: force);
       if (snap != null && !identical(snap, _directory)) {
@@ -1730,6 +2008,8 @@ class AppState extends ChangeNotifier {
   @override
   void dispose() {
     _lifecycle?.detach();
+    _resumeBridge?.detach();
+    services.repeaterSync?.removeListener(_onRepeaterSync);
     unawaited(_idle?.dispose());
     _cancelDriveSync();
     _pingSub?.cancel();

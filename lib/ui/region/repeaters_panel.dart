@@ -1,14 +1,20 @@
 // Repeaters panel: a region's repeater roster (GET region-repeaters) as a searchable, sortable list with status
 // filters. Loading / empty / error states are explicit; the server's "partial / pending" honesty note is shown.
 //
+// Inside the app the roster comes from the repeater sync (lib/core/repeater_sync.dart): the stored copy shows at once
+// (offline too) with "Updated 5m ago" / "Offline - as of 2d ago", the panel revalidates it within the sync's rate
+// limits, and pull to refresh forces it. A [client] passed in (tests, standalone use) fetches directly as before.
+//
 //   RepeatersPanel(baseUrl: 'https://cmh.meshsonar.com', regionSlug: 'cmh')
 import 'repeater_detail_screen.dart';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
+import '../../app/app_state.dart';
 import '../../core/region_repeaters_api.dart';
-import '../theme.dart';
+import '../../core/repeater_sync.dart';
+import '../app.dart';
 
 enum RepeaterSort { lastHeard, name, snr, neighbours }
 
@@ -98,10 +104,34 @@ class _RepeatersPanelState extends State<RepeatersPanel> {
   RepeaterActivity? _only;
   RepeaterSort _sort = RepeaterSort.lastHeard;
 
+  /// The app (and its repeater sync) when the panel runs inside it and no test client was given.
+  AppState? _app;
+  RepeaterSync? get _sync => _app?.repeaterSync;
+  String? _kicked;
+  bool _started = false;
+
   @override
-  void initState() {
-    super.initState();
-    _load();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _app = widget.client != null ? null : context.dependOnInheritedWidgetOfExactType<AppScope>()?.notifier;
+    if (_sync != null) {
+      _kickSync();
+    } else if (!_started) {
+      _started = true;
+      _load();
+    }
+  }
+
+  void _kickSync() {
+    final key = '${widget.baseUrl}|${widget.regionSlug}';
+    if (_kicked == key) return;
+    _kicked = key;
+    final sync = _sync!;
+    // After this frame: the sync notifies AppState, which must not happen while this widget is building.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      sync.syncRoster(baseUrl: widget.baseUrl, slug: widget.regionSlug, trigger: SyncTrigger.view);
+    });
   }
 
   @override
@@ -109,8 +139,18 @@ class _RepeatersPanelState extends State<RepeatersPanel> {
     super.didUpdateWidget(old);
     if (old.baseUrl != widget.baseUrl || old.regionSlug != widget.regionSlug) {
       _data = null;
-      _load();
+      if (_sync != null) {
+        _kickSync();
+      } else {
+        _load();
+      }
     }
+  }
+
+  Future<void> _refresh() async {
+    final app = _app;
+    if (app != null && _sync != null) return app.refreshRegionRoster(widget.baseUrl, widget.regionSlug);
+    return _load();
   }
 
   Future<void> _load() async {
@@ -142,6 +182,16 @@ class _RepeatersPanelState extends State<RepeatersPanel> {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
+    final sync = _sync;
+    String? asOf;
+    if (sync != null) {
+      final stored = sync.roster(widget.regionSlug);
+      _data = stored?.data;
+      final err = sync.rosterError(widget.regionSlug);
+      _error = stored == null ? err : null;
+      _loading = stored == null && err == null;
+      asOf = sync.rosterLabel(widget.regionSlug);
+    }
     if (_loading && _data == null) {
       return const Center(
         key: Key('repeaters-loading'),
@@ -172,7 +222,7 @@ class _RepeatersPanelState extends State<RepeatersPanel> {
               const SizedBox(height: Gap.m),
               FilledButton.tonal(
                 key: const Key('repeaters-retry'),
-                onPressed: _load,
+                onPressed: _refresh,
                 child: const Text('Try again'),
               ),
             ],
@@ -281,6 +331,18 @@ class _RepeatersPanelState extends State<RepeatersPanel> {
             ],
           ),
         ),
+        if (asOf != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(Gap.m, 0, Gap.m, Gap.xs),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                '$asOf · ${data.rows.length} repeater${data.rows.length == 1 ? '' : 's'}',
+                key: const Key('repeaters-as-of'),
+                style: t.textTheme.bodySmall,
+              ),
+            ),
+          ),
         if (data.status.state != 'ready' && data.status.reason != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(Gap.m, 0, Gap.m, Gap.xs),
@@ -292,7 +354,7 @@ class _RepeatersPanelState extends State<RepeatersPanel> {
           ),
         Expanded(
           child: RefreshIndicator(
-            onRefresh: _load,
+            onRefresh: _refresh,
             child: shown.isEmpty
                 ? ListView(
                     children: [

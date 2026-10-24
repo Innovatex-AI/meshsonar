@@ -78,4 +78,27 @@ void main() {
     expect(t.holdPings, 1);
     expect(t.live, isEmpty);
   });
+
+  test('ambiguousPrefixes: a prefix a server marks as shared never resolves to one name, from any list', () {
+    const roster = RepeaterRef(key: 'ee01aa', name: 'Roster-EE', lat: 40, lon: -83);
+    const cmat = RepeaterRef(key: 'ee77bb', name: 'CMAT-EE', lat: 40, lon: -83);
+    const other = RepeaterRef(key: 'ff00cc', name: 'Other', lat: 40, lon: -83);
+    final l = RepeaterLookup([
+      (RepeaterSource.cmat, const [roster, other]),
+      (RepeaterSource.cmat, const [cmat]),
+    ], ambiguousPrefixes: {'EE'});
+    final m = l.resolve('ee');
+    expect(m.ref, isNull);
+    expect(m.ambiguous, isTrue);
+    expect(m.candidates.map((r) => r.name).toSet(), {'Roster-EE', 'CMAT-EE'});
+    expect(l.resolve('e').ref, isNull, reason: 'a shorter id is at least as ambiguous');
+    expect(l.resolve('ee77').ref?.name, 'CMAT-EE', reason: 'a longer id can still be told apart');
+    expect(l.resolve('ff').ref?.name, 'Other');
+    // Earlier lists still win for prefixes nobody marked shared.
+    final l2 = RepeaterLookup([
+      (RepeaterSource.cmat, const [roster]),
+      (RepeaterSource.publicMap, const [cmat]),
+    ]);
+    expect(l2.resolve('ee').ref?.name, 'Roster-EE');
+  });
 }

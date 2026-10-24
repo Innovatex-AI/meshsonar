@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 
 import '../app.dart';
+import '../location_status.dart';
 import 'live_screen.dart';
 import 'region_panels.dart';
 import 'stats_panel.dart';
@@ -23,7 +24,16 @@ class RegionHubScreen extends StatelessWidget {
           bottom: const TabBar(
             isScrollable: true,
             tabAlignment: TabAlignment.start,
-            tabs: [Tab(text: 'Overview'), Tab(text: 'Repeaters'), Tab(text: 'Observers'), Tab(text: 'Packets'), Tab(text: 'Analysis'), Tab(text: 'Reports'), Tab(text: 'Stats'), Tab(text: 'Live')],
+            tabs: [
+              Tab(text: 'Overview'),
+              Tab(text: 'Repeaters'),
+              Tab(text: 'Observers'),
+              Tab(text: 'Packets'),
+              Tab(text: 'Analysis'),
+              Tab(text: 'Reports'),
+              Tab(text: 'Stats'),
+              Tab(text: 'Live'),
+            ],
           ),
         ),
         body: region == null
@@ -38,18 +48,29 @@ class RegionHubScreen extends StatelessWidget {
                   ),
                 ),
               )
-            : TabBarView(
-                // Keyed by region: switching region rebuilds every panel against the new region host.
-                key: ValueKey('region-tabs-${region.code}'),
+            : Column(
                 children: [
-                  buildOverviewPanel(region.url, region.slug),
-                  buildRepeatersPanel(region.url, region.slug),
-                  buildObserversPanel(region.url, region.slug),
-                  buildPacketsPanel(region.url, region.slug),
-                  buildAnalysisPanel(region.url, region.slug),
-                  buildReportsPanel(region.url, region.slug),
-                  StatsPanel(baseUrl: region.url, regionSlug: region.slug),
-                  LivePanel(baseUrl: region.url, regionSlug: region.slug),
+                  if (s.locationNote != null)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                      child: LocationNoteBanner(state: s),
+                    ),
+                  Expanded(
+                    child: TabBarView(
+                      // Keyed by region: switching region rebuilds every panel against the new region host.
+                      key: ValueKey('region-tabs-${region.code}'),
+                      children: [
+                        buildOverviewPanel(region.url, region.slug),
+                        buildRepeatersPanel(region.url, region.slug),
+                        buildObserversPanel(region.url, region.slug),
+                        buildPacketsPanel(region.url, region.slug),
+                        buildAnalysisPanel(region.url, region.slug),
+                        buildReportsPanel(region.url, region.slug),
+                        StatsPanel(baseUrl: region.url, regionSlug: region.slug),
+                        LivePanel(baseUrl: region.url, regionSlug: region.slug),
+                      ],
+                    ),
+                  ),
                 ],
               ),
       ),

@@ -35,7 +35,7 @@ void main() {
     expect(hosts.keys, containsAll(['map.meshcore.io', 'tile.openstreetmap.org']), reason: 'the scan itself works');
     final unknown = {for (final e in hosts.entries) if (!allowedLiteralHosts.contains(e.key)) e.key: e.value};
     expect(unknown, isEmpty, reason: 'a new host in lib/ needs a spec decision (MeshSonar sends only to its server)');
-    expect(clients.difference({'cmat_client.dart', 'repeater_directory.dart', 'region_repeaters_api.dart', 'region_overview_api.dart', 'region_reports_api.dart', 'region_packets_api.dart', 'region_analysis_api.dart', 'repeater_detail_api.dart', 'etag_client.dart', 'region_stats_api.dart', 'region_timeline_api.dart', 'live_stream.dart', 'radio_presets.dart', 'offline_packs.dart', 'offline_basemap.dart'}), isEmpty);
+    expect(clients.difference({'cmat_client.dart', 'repeater_directory.dart', 'region_repeaters_api.dart', 'region_overview_api.dart', 'region_reports_api.dart', 'region_packets_api.dart', 'region_analysis_api.dart', 'repeater_detail_api.dart', 'etag_client.dart', 'region_stats_api.dart', 'region_timeline_api.dart', 'live_stream.dart', 'radio_presets.dart', 'offline_packs.dart', 'offline_basemap.dart', 'repeater_sync.dart'}), isEmpty);
     expect(hosts.keys.where((h) => h.contains('meshmapper')), isEmpty);
   });
 

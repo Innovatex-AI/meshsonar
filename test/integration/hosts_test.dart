@@ -20,6 +20,7 @@ import 'package:meshsonar/core/cmat_client.dart';
 import 'package:meshsonar/core/drive_store.dart';
 import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/core/repeater_directory.dart';
+import 'package:meshsonar/core/repeater_sync.dart';
 import 'package:meshsonar/core/report_draft_store.dart';
 import 'package:meshsonar/core/settings_store.dart';
 import 'package:meshsonar/core/sync_service.dart';
@@ -123,6 +124,12 @@ void main() {
         openUrl: (_) async => true,
         appInfo: app,
         directory: RepeaterDirectory(cacheFile: File(p.join(tmp.path, 'nodes.json')), client: recorder),
+        // Stream 3: the roster/network list sync through the same recorder (network-repeaters goes to the server only).
+        repeaterSync: RepeaterSync(
+            store: RepeaterSyncStore(Directory(p.join(tmp.path, 'repeater_sync'))),
+            rosterClient: () => recorder,
+            networkClient: () => recorder,
+            parseInIsolate: false),
         reportDraftStore: FileReportDraftStore(File(p.join(tmp.path, 'report_draft.json'))),
         clock: DateTime.now,
         newId: () => const Uuid().v4(),
@@ -165,5 +172,11 @@ void main() {
     }
     final names = seen.where((s) => s.url.host == server.host).map((s) => s.url.pathSegments.last).toSet();
     expect(names, containsAll(['drive-upload', 'problem-report']), reason: 'the test must really drive, sync and report');
+    expect(names, contains('network-repeaters'), reason: 'the network list is asked of the configured server, nowhere else');
+    for (final s in seen.where((s) => s.url.pathSegments.last == 'network-repeaters')) {
+      expect(s.method, 'GET');
+      expect(s.url.hasQuery, isFalse);
+      expect(s.headers.keys.map((k) => k.toLowerCase()), isNot(contains('x-driver-key')));
+    }
   }, timeout: const Timeout(Duration(minutes: 2)));
 }
