@@ -14,6 +14,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'etag_client.dart';
+
 /// Thrown for a non-200 answer, a network failure or a body that is not a valid roster.
 class RegionRepeatersException implements Exception {
   final String message;
@@ -218,7 +220,7 @@ Future<RegionRepeaters> fetchRegionRepeaters(
   Duration timeout = const Duration(seconds: 20),
 }) async {
   final uri = regionRepeatersUri(baseUrl, regionSlug);
-  final c = client ?? http.Client();
+  final c = client ?? newRegionWireClient();
   try {
     final res = await c
         .get(uri, headers: const {'accept': 'application/json'})

@@ -7,6 +7,8 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
+import 'etag_client.dart';
+
 /// Payload type names (MeshCore header bits 2-5), same table as the site's `packet-types.ts`.
 const Map<int, String> packetTypeNames = {
   0: 'Request',
@@ -132,7 +134,7 @@ class HttpRegionPacketsApi implements RegionPacketsApi {
   final http.Client _http;
   final Duration timeout;
   HttpRegionPacketsApi(this.baseUrl, {http.Client? client, this.timeout = const Duration(seconds: 20)})
-      : _http = client ?? http.Client();
+      : _http = client ?? newRegionWireClient();
 
   Uri endpoint(Map<String, String> query) {
     var path = baseUrl.path;

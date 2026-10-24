@@ -10,6 +10,8 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
+import 'etag_client.dart';
+
 /// Server-reported data state: ready | partial | pending | unavailable | stale | not_found.
 class RegionStatus {
   final String state;
@@ -223,7 +225,7 @@ class RegionAnalysisApi {
   }
 
   Future<RegionAnalysis> fetch() async {
-    final c = client ?? http.Client();
+    final c = client ?? newRegionWireClient();
     try {
       final r = await Future.wait<Object>([
         _get(c, 'region-activity', RegionActivity.parse, activityQuery()),

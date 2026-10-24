@@ -6,6 +6,7 @@ import 'dart:io';
 
 import '../core/api.dart';
 import '../core/model.dart';
+import '../core/idle_region_watcher.dart';
 import '../core/region_cache.dart';
 import '../core/region_lookup.dart';
 import '../core/repeater_directory.dart';
@@ -106,6 +107,10 @@ class AppServices {
   /// Disk cache (ETag/LRU) for per-region site-config and coverage, with offline/as-of labels. Null = no caching.
   final RegionCache? regionCache;
 
+  /// Low-power GPS for region detection while not driving, and the persisted last-known fix. Null = off (tests).
+  final IdleLocationSource? idleLocation;
+  final LastKnownStore? lastKnownStore;
+
   final DateTime Function() clock;
   final String Function() newId;
 
@@ -132,6 +137,8 @@ class AppServices {
     this.reportDraftStore,
     this.regionIndexCache,
     this.regionCache,
+    this.idleLocation,
+    this.lastKnownStore,
   });
 
   /// Public node directory (map.meshcore.io) for names/positions CMAT doesn't know. Null = not used (tests).
