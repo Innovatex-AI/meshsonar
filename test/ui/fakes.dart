@@ -9,6 +9,7 @@ import 'package:meshsonar/app/app_state.dart';
 import 'package:meshsonar/app/services.dart';
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/model.dart';
+import 'package:meshsonar/core/offline_packs.dart' show NetworkKind, NetworkMonitor;
 import 'package:meshsonar/core/region_lookup.dart';
 import 'package:meshsonar/radio/radio_api.dart';
 import 'package:meshsonar/ui/app.dart';
@@ -540,4 +541,19 @@ void useTallScreen(WidgetTester tester) {
   tester.view.physicalSize = const Size(1080, 2400);
   tester.view.devicePixelRatio = 2.5;
   addTearDown(tester.view.reset);
+}
+
+/// Network seam for the offline-pack download policy: set [kind] and call [emit] to simulate a change.
+class FakeNetworkMonitor implements NetworkMonitor {
+  NetworkKind kind;
+  FakeNetworkMonitor([this.kind = NetworkKind.wifi]);
+  final _c = StreamController<NetworkKind>.broadcast();
+  @override
+  Future<NetworkKind> current() async => kind;
+  @override
+  Stream<NetworkKind> get changes => _c.stream;
+  void emit(NetworkKind k) {
+    kind = k;
+    _c.add(k);
+  }
 }

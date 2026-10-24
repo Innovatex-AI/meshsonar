@@ -359,13 +359,19 @@ class _CoverageMapState extends State<CoverageMap> {
     super.initState();
     _selectedRepeater = widget.highlightKey;
     if (widget.showTiles ?? CoverageMap.tilesByDefault) {
-      OfflineBasemap.instance.addListener(_onPacksChanged);
-      OfflineBasemap.instance.ensureOpen();
+      _pack.basemap.addListener(_onPacksChanged);
+      _pack.basemap.ensureOpen();
+      _pack.update(_initialCenter.latitude, _initialCenter.longitude);
     }
   }
 
+  // Offline region pack drawn under the overlays; follows the camera centre (see OfflinePackSelection).
+  late final OfflinePackSelection _pack = OfflinePackSelection(OfflineBasemap.instance);
+
   void _onPacksChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    _pack.refresh();
+    setState(() {});
   }
 
   @override
@@ -461,7 +467,7 @@ class _CoverageMapState extends State<CoverageMap> {
 
   @override
   void dispose() {
-    OfflineBasemap.instance.removeListener(_onPacksChanged);
+    _pack.basemap.removeListener(_onPacksChanged);
     _controller.dispose();
     super.dispose();
   }
@@ -472,7 +478,7 @@ class _CoverageMapState extends State<CoverageMap> {
     final t = Theme.of(context);
     final tiles = widget.showTiles ?? CoverageMap.tilesByDefault;
     // A downloaded region pack covering the map wins over online tiles; no pack (or a corrupt one) means online as before.
-    final offlinePack = tiles ? OfflineBasemap.instance.readerCovering(_initialCenter.latitude, _initialCenter.longitude) : null;
+    final offlinePack = tiles ? _pack.reader : null;
     final layers = widget.layers;
     _ensureSorted();
     _ensureMarkers();
@@ -528,6 +534,7 @@ class _CoverageMapState extends State<CoverageMap> {
               if (hit != null) showCellSheet(context, hit);
             },
             onPositionChanged: (camera, hasGesture) {
+              if (tiles && _pack.update(camera.center.latitude, camera.center.longitude)) setState(() {});
               if (camera.zoom != _lastZoom) {
                 _lastZoom = camera.zoom;
                 widget.onZoomChanged?.call(camera.zoom);
@@ -545,7 +552,7 @@ class _CoverageMapState extends State<CoverageMap> {
           children: [
             _ChartGrid(color: mc.mapGrid),
             if (offlinePack != null)
-              OfflineBasemapLayer(key: ValueKey(offlinePack), reader: offlinePack)
+              OfflineBasemapLayer(key: ValueKey('offline-pack-${_pack.code}'), reader: offlinePack)
             else if (tiles)
               TileLayer(
                 urlTemplate: CoverageMap.tileUrl,
