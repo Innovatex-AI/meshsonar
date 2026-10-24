@@ -278,6 +278,18 @@ List<NetworkRepeater> rosterAsRows(RegionRepeaters r) => [
 class RepeaterSync {
   /// Null = memory only (tests).
   final RepeaterSyncStore? store;
+
+  // Disk writes run one after another, so two answers for the same list never race on one temp file and the roster
+  // eviction always sees the previous write.
+  Future<void> _writes = Future<void>.value();
+  Future<T> _serial<T>(Future<T> Function() write) {
+    final r = _writes.then((_) => write());
+    _writes = r.then((_) {}, onError: (Object _) {});
+    return r;
+  }
+
+  /// Completes when every disk write queued so far has finished.
+  Future<void> get writesDone => _writes;
   final http.Client Function() rosterClient;
   final http.Client Function() networkClient;
   final DateTime Function() clock;
@@ -464,7 +476,7 @@ class RepeaterSync {
         final r = stored.checked(clock());
         _rosters[slug] = r;
         _rosterOk(slug);
-        unawaited(store?.saveRoster(r));
+        unawaited(_serial(() => store?.saveRoster(r) ?? Future<void>.value()));
         _changed();
         return true;
       }
@@ -493,7 +505,7 @@ class RepeaterSync {
       );
       _rosters[slug] = r;
       _rosterOk(slug);
-      unawaited(store?.saveRoster(r));
+      unawaited(_serial(() => store?.saveRoster(r) ?? Future<void>.value()));
       log?.call('Region repeaters ($slug): ${data.rows.length} from the server');
       _changed();
       return true;
@@ -582,7 +594,7 @@ class RepeaterSync {
         _capability = NetworkCapability.absent;
         _networkFailures = 0;
         _networkError = null;
-        unawaited(store?.saveMeta(_capability, now));
+        unawaited(_serial(() => store?.saveMeta(_capability, now) ?? Future<void>.value()));
         if (was != NetworkCapability.absent) {
           log?.call(
             'Network repeater list: not offered by this server (HTTP ${res.statusCode}); using the other sources',
@@ -595,7 +607,7 @@ class RepeaterSync {
         final r = stored.checked(clock());
         _network = r;
         _networkOk();
-        unawaited(store?.saveNetwork(r));
+        unawaited(_serial(() => store?.saveNetwork(r) ?? Future<bool>.value(true)));
         _changed();
         return true;
       }
@@ -615,7 +627,7 @@ class RepeaterSync {
       final r = NetworkRecord(data: data, etag: res.headers['etag'], fetchedAt: at, checkedAt: at);
       _network = r;
       _networkOk();
-      final saved = await (store?.saveNetwork(r) ?? Future.value(true));
+      final saved = await _serial(() => store?.saveNetwork(r) ?? Future<bool>.value(true));
       log?.call(
         'Network repeater list: ${data.rows.length} repeaters'
         '${data.dropped > 0 ? ', ${data.dropped} malformed rows dropped' : ''}${saved ? '' : ' (not saved: too large or disk full)'}',
@@ -635,13 +647,13 @@ class RepeaterSync {
     _capability = NetworkCapability.available;
     _networkFailures = 0;
     _networkError = null;
-    unawaited(store?.saveMeta(_capability, _networkAttemptAt));
+    unawaited(_serial(() => store?.saveMeta(_capability, _networkAttemptAt) ?? Future<void>.value()));
   }
 
   bool _networkFailed(String why) {
     _networkFailures++;
     _networkError = why;
-    unawaited(store?.saveMeta(_capability, _networkAttemptAt));
+    unawaited(_serial(() => store?.saveMeta(_capability, _networkAttemptAt) ?? Future<void>.value()));
     log?.call('Network repeater list not updated: $why');
     _changed();
     return false;

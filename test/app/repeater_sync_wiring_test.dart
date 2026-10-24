@@ -54,6 +54,7 @@ void main() {
   late Directory tmp;
   late List<Uri> seen;
   late int networkStatus;
+  _DirHarness? current;
 
   setUp(() async {
     tmp = await Directory.systemTemp.createTemp('ms_rsw_');
@@ -61,7 +62,8 @@ void main() {
     networkStatus = 200;
   });
   tearDown(() async {
-    await Future<void>.delayed(const Duration(milliseconds: 100));
+    await current?.state.repeaterSync?.writesDone;
+    current = null;
     try {
       await tmp.delete(recursive: true);
     } catch (_) {}
@@ -122,10 +124,13 @@ void main() {
       RepeaterRef(key: cmatDa, name: 'CMAT-DA', lat: 40.0, lon: -83.0),
       RepeaterRef(key: cmatEe, name: 'CMAT-EE', lat: 40.0, lon: -83.0),
     ];
+    current = h;
     return h;
   }
 
-  Future<void> settle() => Future<void>.delayed(const Duration(milliseconds: 120));
+  // Waits on the real completion signal: launch has fetched the index, located the phone, run the launch sync and
+  // written what it fetched (no fixed delay).
+  Future<void> settle() => current!.state.launchSettled.timeout(const Duration(seconds: 20));
 
   test('priority: roster > drive-repeaters > network nearby > directory; roster-shared prefixes never resolve', () async {
     final h = make();
@@ -164,7 +169,7 @@ void main() {
     expect(h.state.diagnostics.lines.join('\n'), contains('Network repeater list: 2 repeaters'));
 
     networkStatus = 404;
-    await Future<void>.delayed(const Duration(milliseconds: 100));
+    await h.state.repeaterSync!.writesDone;
     await tmp.delete(recursive: true);
     tmp = await Directory.systemTemp.createTemp('ms_rsw_');
     seen.clear();
@@ -195,9 +200,10 @@ void main() {
     h2.client.regionsIndexResult = const [cmh];
     await h2.state.init();
     expect(h2.state.repeaterSync!.roster('cmh'), isNotNull, reason: 'loaded before any network call');
-    await settle();
+    await h2.state.launchSettled.timeout(const Duration(seconds: 20));
     expect(h2.state.repeaterName('da'), 'Roster-DA');
     expect(h2.state.repeaterName('ab'), 'Global-AB');
     expect(h2.state.repeaterSync!.rosterLabel('cmh'), 'Offline - as of 1h ago');
+    await h2.state.repeaterSync!.writesDone;
   });
 }

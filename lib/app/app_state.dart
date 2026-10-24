@@ -439,12 +439,31 @@ class AppState extends ChangeNotifier {
     final best = _phoneFix?.fix ?? _lastRegionFix;
     if (best != null) _updateRegion(best, live: false);
     notifyListeners();
-    unawaited(syncRepeaterLists(SyncTrigger.launch));
-    if (locating != null) {
-      await locating;
-      _startIdleWatcher();
+    // The rosters need the region, the region needs the index: sync once both are in (and init has finished loading).
+    final syncing = () async {
+      if (!_loaded) await _loadedSignal.future;
+      await syncRepeaterLists(SyncTrigger.launch);
+    }();
+    if (locating == null) {
+      unawaited(syncing);
+      return;
     }
+    await locating;
+    _startIdleWatcher();
+    await syncing;
+    await _initSync;
+    await services.repeaterSync?.writesDone;
+    if (!_launchSettled.isCompleted) _launchSettled.complete();
   }
+
+  final Completer<void> _loadedSignal = Completer<void>();
+  final Completer<void> _launchSettled = Completer<void>();
+  Future<void>? _initSync;
+
+  /// Completes once launch has done everything it starts in the background: the regions index, the fresh GPS fix
+  /// (or its timeout), the launch repeater sync and the store writes it queued. For tests and diagnostics; the app
+  /// never waits on it.
+  Future<void> get launchSettled => _launchSettled.future;
 
   // ---------- where the phone is (Stream 4: open on the phone at once) ----------
   bool _launchLocated = false;
@@ -1598,7 +1617,8 @@ class AppState extends ChangeNotifier {
     await _loadSavedReport();
     _loaded = true;
     notifyListeners();
-    unawaited(syncRepeaterLists(SyncTrigger.launch));
+    _initSync = syncRepeaterLists(SyncTrigger.launch);
+    if (!_loadedSignal.isCompleted) _loadedSignal.complete();
     // A drive cut off by a crash or an app kill is still open; close it at its last ping so its end gets synced.
     var orphans = const <String>[];
     try {

@@ -81,20 +81,28 @@ void main() {
     server = FakeServer();
     clock = _Clock();
   });
+  final made = <RepeaterSync>[];
   tearDown(() async {
-    await Future<void>.delayed(const Duration(milliseconds: 100)); // let unawaited store writes land
+    for (final m in made) {
+      await m.writesDone; // every queued store write has landed before the folder goes
+    }
+    made.clear();
     try {
       await dir.delete(recursive: true);
     } catch (_) {}
   });
 
-  RepeaterSync make({bool store = true}) => RepeaterSync(
-        store: store ? RepeaterSyncStore(dir) : null,
-        rosterClient: () => server.client,
-        networkClient: () => server.client,
-        clock: clock.call,
-        parseInIsolate: false,
-      );
+  RepeaterSync make({bool store = true}) {
+    final s = RepeaterSync(
+      store: store ? RepeaterSyncStore(dir) : null,
+      rosterClient: () => server.client,
+      networkClient: () => server.client,
+      clock: clock.call,
+      parseInIsolate: false,
+    );
+    made.add(s);
+    return s;
+  }
 
   test('launch fetches the roster; a second launch-trigger in the same run and a resume within 10 min do not', () async {
     final s = make();
@@ -171,7 +179,7 @@ void main() {
     await s.syncNetwork(server: hub, trigger: SyncTrigger.resume);
     expect(server.count('network-repeaters'), 1);
     // Persisted: a new run within the 6 h does not ask again either.
-    await Future<void>.delayed(const Duration(milliseconds: 50)); // the meta write is not awaited
+    await s.writesDone; // the meta write is queued, not awaited by syncNetwork
     final s2 = make();
     await s2.syncNetwork(server: hub, trigger: SyncTrigger.launch);
     expect(server.count('network-repeaters'), 1);
@@ -205,7 +213,7 @@ void main() {
     final s = make();
     await s.syncRoster(baseUrl: 'https://cmh.meshsonar.com', slug: 'cmh', trigger: SyncTrigger.launch);
     await s.syncNetwork(server: hub, trigger: SyncTrigger.launch);
-    await Future<void>.delayed(const Duration(milliseconds: 50)); // unawaited writes
+    await s.writesDone;
     server.offline = true;
     final before = server.seen.length;
     final s2 = make();
@@ -231,10 +239,11 @@ void main() {
     expect(s.roster('cmh'), isNull);
     final store = RepeaterSyncStore(dir, maxRosters: 2);
     final small = RepeaterSync(store: store, rosterClient: () => server.client, networkClient: () => server.client, clock: clock.call);
+    made.add(small);
     for (final slug in ['a', 'b', 'c']) {
       clock.advance(const Duration(minutes: 1));
       await small.syncRoster(baseUrl: 'https://$slug.meshsonar.com', slug: slug, trigger: SyncTrigger.launch);
-      await Future<void>.delayed(const Duration(milliseconds: 30));
+      await small.writesDone;
     }
     final kept = await store.loadRosters();
     expect(kept.keys.toSet(), {'b', 'c'});

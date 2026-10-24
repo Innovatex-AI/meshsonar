@@ -29,12 +29,15 @@ class MemLastKnown extends LastKnownStore {
   }
 }
 
-Future<void> settle() => Future<void>.delayed(const Duration(milliseconds: 30));
+// Everything in these tests is in memory: flushing the event queue runs launch to its next real wait (a gated GPS fix)
+// or to the end; [launched] waits for launch's own completion signal. No fixed delays.
+Future<void> settle() => pumpEventQueue();
 
 void main() {
   late Harness h;
   late MemLastKnown last;
   DateTime now() => h.clockNow;
+  Future<void> launched() => h.state.launchSettled.timeout(const Duration(seconds: 20));
 
   Harness make({GeoFix? stored, List<RegionIndexEntry> index = const [cmh, day], Settings? settings, LocationAccessProbe? probe}) {
     h = Harness();
@@ -53,7 +56,7 @@ void main() {
       ..currentGate = gate
       ..currentFix = () => GeoFix(lat: 40.0, lon: -83.0, at: now()); // Columbus, live
     await h.state.init();
-    await settle();
+    await settle(); // launch is now parked on the gated GPS fix
     // GPS has not answered yet: the map and the region already follow the last-known fix.
     expect(h.state.phoneFix?.live, isFalse);
     expect(h.state.currentRegion?.code, 'DAY');
@@ -62,7 +65,7 @@ void main() {
     expect(h.state.mapStart.lon, -84.0);
     expect(h.state.phoneFixNote, 'Last known location, 2 h ago');
     gate.complete();
-    await settle();
+    await launched();
     expect(h.state.phoneFix?.live, isTrue);
     expect(h.state.phoneFixNote, isNull);
     expect(h.state.currentRegion?.code, 'CMH', reason: 'one fresh fix re-seeds: no 3-fix border hysteresis at launch');
@@ -77,7 +80,7 @@ void main() {
     make(stored: GeoFix(lat: 39.9, lon: -84.0, at: DateTime.utc(2026, 10, 13, 18)));
     h.location.currentFix = () => null;
     await h.state.init();
-    await settle();
+    await launched();
     expect(h.state.phoneFix!.isStale(now()), isTrue);
     expect(h.state.phoneFixNote, 'Last known location, 3 d ago');
     expect(h.state.mapStart.kind, MapStartKind.phone);
@@ -92,7 +95,7 @@ void main() {
     make(stored: GeoFix(lat: 39.9, lon: -84.0, at: DateTime.utc(2026, 10, 16, 17)));
     h.location.currentError = StateError('kCLErrorDomain');
     await h.state.init();
-    await settle();
+    await launched();
     expect(h.state.phoneFix?.fix.lon, -84.0);
     expect(h.state.diagnostics.lines.join('\n'), contains('Getting a GPS fix at launch failed'));
   });
@@ -102,9 +105,8 @@ void main() {
     h.state.launchFixWait = const Duration(milliseconds: 40);
     h.location.currentGate = Completer<void>(); // never answers
     await h.state.init();
-    await settle();
+    await launched();
     expect(h.state.currentRegion?.code, 'DAY');
-    await Future<void>.delayed(const Duration(milliseconds: 80));
     expect(h.state.diagnostics.lines.join('\n'), contains('TimeoutException'));
     expect(h.state.phoneFix?.live, isFalse);
   });
@@ -113,7 +115,7 @@ void main() {
     make(settings: const Settings(regionLast: 'DAY'));
     h.location.currentFix = () => null;
     await h.state.init();
-    await settle();
+    await launched();
     expect(h.state.phoneFix, isNull);
     expect(h.state.regionFixKnown, isFalse);
     expect(h.state.viewingRegion?.code, 'DAY');
@@ -127,13 +129,13 @@ void main() {
     make();
     h.location.currentFix = () => null;
     await h.state.init();
-    await settle();
+    await launched();
     expect(h.state.mapStart.kind, MapStartKind.hub);
 
     make(index: const []);
     h.location.currentFix = () => null;
     await h.state.init();
-    await settle();
+    await launched();
     expect(h.state.mapStart.kind, MapStartKind.world);
   });
 
@@ -143,7 +145,7 @@ void main() {
       make(probe: probe);
       h.location.currentFix = () => null;
       await h.state.init();
-      await settle();
+      await launched();
       expect(probe.requests, 0, reason: 'never a prompt on launch');
       final note = h.state.locationNote!;
       expect(note.action, LocationAction.ask);
@@ -169,7 +171,7 @@ void main() {
         make(settings: const Settings(regionLast: 'CMH'), probe: probe);
         h.location.currentFix = () => null;
         await h.state.init();
-        await settle();
+        await launched();
         final note = h.state.locationNote!;
         expect(note.access, access);
         expect(h.state.viewingRegion?.code, 'CMH', reason: '$access: the app still opens on the last region');
@@ -183,7 +185,7 @@ void main() {
       final probe = FakeLocationAccess(LocationAccess.deniedForever);
       make(probe: probe);
       await h.state.init();
-      await settle();
+      await launched();
       expect(h.state.locationNote, isNotNull);
       probe.access = LocationAccess.granted;
       await h.state.refreshLocationAccess();
