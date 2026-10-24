@@ -1,6 +1,8 @@
 // Native Live feed for one region: the website's `region-live` SSE stream as a scrolling packet list plus a small map of
 // the repeaters (resolved hops) that carried recent packets. Battery-conscious: the connection is dropped when the app is
 // backgrounded / the screen is off / the tab is hidden, and reopened on return. View-only, so safe while driving.
+// Offline: Live is never stored on the phone, so when the stream cannot be reached it says Live needs a connection,
+// keeps retrying with backoff on its own, and offers a Retry that reconnects right away.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -10,6 +12,7 @@ import 'package:latlong2/latlong.dart';
 import '../../core/live_stream.dart';
 import '../../core/region_packets_api.dart' show packetTypeName, packetRouteName;
 import '../map/coverage_map.dart';
+import '../widgets.dart';
 import 'region_common.dart';
 
 class LivePanel extends StatefulWidget {
@@ -67,6 +70,16 @@ class _LivePanelState extends State<LivePanel> with WidgetsBindingObserver {
     _sync();
   }
 
+  /// Reconnect now instead of waiting out the backoff (the Retry button).
+  void _retryNow() {
+    if (!_foreground || !_visible) return;
+    _stream.pause();
+    _stream.resume();
+  }
+
+  /// The last connection attempt failed (no connection, server not answering) and the stream is retrying.
+  bool get _unreachable => _conn == LiveConnState.reconnecting;
+
   void _sync() {
     if (_foreground && _visible) {
       _stream.resume();
@@ -116,7 +129,7 @@ class _LivePanelState extends State<LivePanel> with WidgetsBindingObserver {
     return switch (_conn) {
       LiveConnState.live => (_online == null ? 'Live' : 'Live, $_online observers online', cs.primary),
       LiveConnState.connecting => ('Connecting', cs.outline),
-      LiveConnState.reconnecting => ('Reconnecting', cs.error),
+      LiveConnState.reconnecting => (_rows.isEmpty ? "Can't reach the live feed, retrying" : 'Reconnecting, showing earlier packets', cs.error),
       LiveConnState.paused => ('Paused (app in background)', cs.outline),
       LiveConnState.idle => ('Idle', cs.outline),
     };
@@ -146,7 +159,25 @@ class _LivePanelState extends State<LivePanel> with WidgetsBindingObserver {
         ),
         if (_showMap && _hops.isNotEmpty) SizedBox(height: 150, child: _MiniMap(hops: _hops.values.toList())),
         Expanded(
-          child: _rows.isEmpty
+          child: _rows.isEmpty && _unreachable
+              ? SingleChildScrollView(
+                  child: KeyedSubtree(
+                    key: const Key('live-offline'),
+                    child: EmptyState(
+                      icon: Icons.cloud_off,
+                      title: 'Live needs a connection',
+                      body: "Can't reach the live feed right now (no connection, or the server isn't answering). "
+                          'Live packets only stream while online and are not saved on this phone. Retrying automatically.',
+                      action: FilledButton.icon(
+                        key: const Key('live-retry'),
+                        onPressed: _retryNow,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Retry'),
+                      ),
+                    ),
+                  ),
+                )
+              : _rows.isEmpty
               ? Center(
                   child: Padding(
                     padding: const EdgeInsets.all(24),

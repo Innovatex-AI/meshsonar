@@ -225,7 +225,9 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.textContaining('Could not reach the server'), findsOneWidget);
+    // Unreachable with nothing stored: the shared honest offline state (region_offline_test.dart covers Retry).
+    expect(find.byKey(const Key('region-offline-empty')), findsOneWidget);
+    expect(find.text('No connection'), findsOneWidget);
   });
 
   test('agoText and groupInt', () {

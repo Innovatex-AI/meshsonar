@@ -4,7 +4,8 @@
 //
 // Honest states: loading; a region the server does not publish yet (404); network/server errors with Retry; a dataset
 // the server marks partial/pending/stale is labelled as such; the two requests fail independently, so a failed
-// Sources request never hides the report (and the reverse).
+// Sources request never hides the report (and the reverse). Offline: either part from the phone's stored copy under one
+// "Offline - as of" banner; both unreachable with nothing stored is its own state with Retry.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -12,6 +13,7 @@ import 'package:flutter/material.dart';
 import '../../core/region_reports_api.dart';
 import '../app.dart' show AppScope;
 import '../theme.dart';
+import 'region_common.dart';
 
 class ReportsPanel extends StatefulWidget {
   final String baseUrl;
@@ -94,7 +96,17 @@ class _ReportsPanelState extends State<ReportsPanel> {
     }
     final report = _report!;
     final sources = _sources!;
+    if (report.error?.kind == FetchErrorKind.network && sources.error?.kind == FetchErrorKind.network) {
+      return ListView(
+        key: const Key('reports-offline'),
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(Gap.l),
+        children: [RegionOfflineEmpty(what: 'the report', onRetry: _load)],
+      );
+    }
     final children = <Widget>[];
+    final asOf = oldestAsOf([report.offlineAsOf, sources.offlineAsOf]);
+    if (asOf != null) children.add(RegionOfflineAsOf(asOf: asOf, onRetry: _load, now: _now()));
     if (report.ok) {
       final d = report.data!;
       if (d.isEmpty) {

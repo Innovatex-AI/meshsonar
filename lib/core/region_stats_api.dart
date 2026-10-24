@@ -18,12 +18,16 @@ class RegionPublicStats {
   final int? drives, drivers, pings, repeatersHeard;
   final double? km, heardPct, cellsHeardPct;
   final DateTime? lastDriveAt;
-  const RegionPublicStats({this.drives, this.drivers, this.pings, this.repeatersHeard, this.km, this.heardPct, this.cellsHeardPct, this.lastDriveAt});
+
+  /// Set when this is the copy stored on the phone, served because the network failed: when it was fetched.
+  final DateTime? offlineAsOf;
+  const RegionPublicStats(
+      {this.drives, this.drivers, this.pings, this.repeatersHeard, this.km, this.heardPct, this.cellsHeardPct, this.lastDriveAt, this.offlineAsOf});
 
   /// True when nothing has been driven yet (the server sends zeros and a null lastDriveAt).
   bool get isEmpty => (drives ?? 0) == 0 && (pings ?? 0) == 0;
 
-  factory RegionPublicStats.fromJson(Map<String, dynamic> j) => RegionPublicStats(
+  factory RegionPublicStats.fromJson(Map<String, dynamic> j, {DateTime? offlineAsOf}) => RegionPublicStats(
         drives: _int(j['drives']),
         drivers: _int(j['drivers']),
         pings: _int(j['pings']),
@@ -32,6 +36,7 @@ class RegionPublicStats {
         heardPct: _dbl(j['heardPct']),
         cellsHeardPct: _dbl(j['cellsHeardPct']),
         lastDriveAt: _time(j['lastDriveAt']),
+        offlineAsOf: offlineAsOf,
       );
 }
 
@@ -58,15 +63,19 @@ class LeaderRow {
 class Leaderboard {
   final String period;
   final List<LeaderRow> rows;
-  const Leaderboard({required this.period, required this.rows});
 
-  factory Leaderboard.fromJson(Map<String, dynamic> j) => Leaderboard(
+  /// Set when this is the copy stored on the phone, served because the network failed: when it was fetched.
+  final DateTime? offlineAsOf;
+  const Leaderboard({required this.period, required this.rows, this.offlineAsOf});
+
+  factory Leaderboard.fromJson(Map<String, dynamic> j, {DateTime? offlineAsOf}) => Leaderboard(
         period: _str(j['period']) ?? '30d',
         rows: [
           if (j['rows'] is List)
             for (final e in j['rows'] as List)
               ?LeaderRow.tryParse(e),
         ],
+        offlineAsOf: offlineAsOf,
       );
 }
 
@@ -121,7 +130,10 @@ class HubRegions {
 
 class RegionStatsException implements Exception {
   final String message;
-  const RegionStatsException(this.message);
+
+  /// True when the server could not be reached at all (no connection, timeout), not an error answer.
+  final bool offline;
+  const RegionStatsException(this.message, {this.offline = false});
   @override
   String toString() => message;
 }
@@ -137,24 +149,36 @@ class RegionStatsApi {
     return Uri.parse('$b$path').replace(queryParameters: q);
   }
 
-  Future<RegionPublicStats> stats() async => RegionPublicStats.fromJson(await _get(_uri('/api/cmh/public-stats')));
-  Future<Leaderboard> leaderboard({String period = '30d'}) async => Leaderboard.fromJson(await _get(_uri('/api/cmh/leaderboard', {'period': period})));
+  Future<RegionPublicStats> stats() async {
+    final (j, asOf) = await _getWithAsOf(_uri('/api/cmh/public-stats'));
+    return RegionPublicStats.fromJson(j, offlineAsOf: asOf);
+  }
+
+  Future<Leaderboard> leaderboard({String period = '30d'}) async {
+    final (j, asOf) = await _getWithAsOf(_uri('/api/cmh/leaderboard', {'period': period}));
+    return Leaderboard.fromJson(j, offlineAsOf: asOf);
+  }
+
+  /// Never cached (live counts from a disk copy would lie), so offline this throws with `offline: true`.
   Future<RegionLive> live() async => RegionLive.fromJson(await _get(_uri('/api/cmh/public-live')));
   Future<HubRegions> hubRegions() async => HubRegions.fromJson(await _get(_uri('/v1/regions')));
 
-  Future<Map<String, dynamic>> _get(Uri u) async {
+  Future<Map<String, dynamic>> _get(Uri u) async => (await _getWithAsOf(u)).$1;
+
+  /// The decoded body and, when it is the stored copy served offline, its fetch time.
+  Future<(Map<String, dynamic>, DateTime?)> _getWithAsOf(Uri u) async {
     final http.Response res;
     try {
       res = await _client.get(u, headers: const {'accept': 'application/json'}).timeout(timeout);
     } on TimeoutException {
-      throw const RegionStatsException('The server took too long to answer.');
+      throw const RegionStatsException('The server took too long to answer.', offline: true);
     } catch (_) {
-      throw const RegionStatsException('Could not reach the server. Check your connection.');
+      throw const RegionStatsException('Could not reach the server. Check your connection.', offline: true);
     }
     if (res.statusCode != 200) throw RegionStatsException('The server answered ${res.statusCode}.');
     try {
       final b = jsonDecode(utf8.decode(res.bodyBytes));
-      if (b is Map<String, dynamic>) return b;
+      if (b is Map<String, dynamic>) return (b, offlineAsOfOf(res));
     } catch (_) {}
     throw const RegionStatsException('The server sent something unreadable.');
   }
