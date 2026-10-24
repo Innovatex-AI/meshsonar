@@ -16,6 +16,8 @@ import 'antenna_sheet.dart';
 import 'onboarding/onboarding_screen.dart';
 import 'app.dart';
 import 'report_problem_screen.dart';
+import 'settings/offline_packs_screen.dart';
+import 'telemetry_sheet.dart';
 import 'widgets.dart';
 
 const String _driverHelp =
@@ -244,10 +246,34 @@ class SettingsScreen extends StatelessWidget {
               ],
             ),
             _Section(
+              id: 'privacy',
+              title: 'Privacy',
+              icon: Icons.privacy_tip_outlined,
+              help: telemetryHelp,
+              children: [
+                SwitchListTile(
+                  key: const Key('telemetry-toggle'),
+                  secondary: const Icon(Icons.podcasts),
+                  title: const Text('Share packet headers'),
+                  subtitle: const Text('Type, path, signal strength, time and region. Never message content.'),
+                  value: st.telemetryEnabled,
+                  onChanged: (v) => s.updateSettings(s.settings.copyWith(telemetryEnabled: v)),
+                ),
+              ],
+            ),
+            _Section(
               id: 'about-section',
               title: 'About',
               icon: Icons.info_outline,
               children: [
+                ListTile(
+                  key: const Key('offline-maps'),
+                  leading: const Icon(Icons.map_outlined),
+                  title: const Text('Offline maps'),
+                  subtitle: const Text('Download a region so the map works with no signal'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const OfflinePacksScreen())),
+                ),
                 ListTile(
                   key: const Key('report-problem'),
                   leading: const Icon(Icons.bug_report_outlined),
