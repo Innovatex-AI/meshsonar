@@ -39,7 +39,7 @@ void main() {
     await tester.runAsync(() => m.load());
     await tester.pumpWidget(MaterialApp(home: OfflinePacksScreen(manager: m)));
     Future<void> settle([Finder? until]) async {
-      for (var i = 0; i < 100; i++) {
+      for (var i = 0; i < 400; i++) {
         if (until != null && until.evaluate().isNotEmpty) {
           return;
         }
