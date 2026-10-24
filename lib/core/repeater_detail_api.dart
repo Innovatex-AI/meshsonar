@@ -12,6 +12,8 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
+import 'etag_client.dart';
+
 enum RepeaterDetailFailure { badKey, notFound, network, server, unreadable }
 
 class RepeaterDetailException implements Exception {
@@ -328,7 +330,7 @@ Future<RepeaterDetailData> fetchRepeaterDetail(
     queryParameters: {'key': repeaterKey.toLowerCase()},
     fragment: null,
   );
-  final c = client ?? http.Client();
+  final c = client ?? newRegionWireClient();
   try {
     final res = await c
         .get(uri, headers: {'accept': 'application/json'})

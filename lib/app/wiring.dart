@@ -8,6 +8,8 @@ import 'package:uuid/uuid.dart';
 
 import '../core/cmat_client.dart';
 import '../core/drive_store.dart';
+import '../core/etag_client.dart';
+import '../core/idle_region_watcher.dart';
 import '../core/position_filter.dart';
 import '../core/region_cache.dart';
 import '../core/region_lookup.dart';
@@ -16,6 +18,7 @@ import '../core/report_draft_store.dart';
 import '../core/settings_store.dart';
 import '../core/sync_service.dart';
 import '../platform/app_version.dart';
+import '../platform/geolocator_idle_location.dart';
 import '../platform/geolocator_location.dart';
 import '../platform/open_url.dart';
 import '../platform/share.dart';
@@ -52,6 +55,7 @@ Future<AppServices> buildRealServices() async {
   final settingsStore = FileSettingsStore(File('${root.path}${Platform.pathSeparator}settings.json'));
   // Version comes from the build (pubspec.yaml's `version:`), never a constant here.
   final app = await loadAppInfo(platform: _platformName());
+  installSharedEtagClient(Directory('${root.path}${Platform.pathSeparator}etag_cache'));
   const uuid = Uuid();
   // One simulated car: the simulated radio decides which repeaters hear it from the same position the engine records.
   final simLocation = SimulatedLocationSource();
@@ -59,7 +63,7 @@ Future<AppServices> buildRealServices() async {
   return AppServices(
     store: store,
     settingsStore: settingsStore,
-    cmatClientFactory: (url) => HttpCmatClient(url),
+    cmatClientFactory: (url) => HttpCmatClient(url, client: newCmatWireClient()),
     syncServiceFactory: (client) =>
         DefaultSyncService(store: store, client: client, settings: settingsStore, app: app),
     bluetoothScanner: BleRadioScanner(),
@@ -87,6 +91,8 @@ Future<AppServices> buildRealServices() async {
     directory: RepeaterDirectory(
         cacheFile: File('${root.path}${Platform.pathSeparator}node_directory.json'), ttl: const Duration(days: 7)),
     regionIndexCache: FileRegionIndexCache(File('${root.path}${Platform.pathSeparator}regions_index.json')),
+    idleLocation: GeolocatorIdleLocationSource(),
+    lastKnownStore: LastKnownStore(File('${root.path}${Platform.pathSeparator}last_known_fix.json')),
     regionCache: RegionCache(Directory('${root.path}${Platform.pathSeparator}region_cache')),
     clock: DateTime.now,
     newId: () => uuid.v4(),

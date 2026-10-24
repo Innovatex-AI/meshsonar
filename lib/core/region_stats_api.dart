@@ -7,6 +7,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'etag_client.dart';
+
 int? _int(Object? v) => v is num ? v.toInt() : null;
 double? _dbl(Object? v) => v is num ? v.toDouble() : null;
 String? _str(Object? v) => v is String && v.isNotEmpty ? v : null;
@@ -128,7 +130,7 @@ class RegionStatsApi {
   final String baseUrl;
   final http.Client _client;
   final Duration timeout;
-  RegionStatsApi(this.baseUrl, {http.Client? client, this.timeout = const Duration(seconds: 15)}) : _client = client ?? http.Client();
+  RegionStatsApi(this.baseUrl, {http.Client? client, this.timeout = const Duration(seconds: 15)}) : _client = client ?? newRegionWireClient();
 
   Uri _uri(String path, [Map<String, String>? q]) {
     final b = baseUrl.endsWith('/') ? baseUrl.substring(0, baseUrl.length - 1) : baseUrl;
