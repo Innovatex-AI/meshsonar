@@ -24,6 +24,30 @@ const String _driverHelp =
     'Your driver key lets this phone upload drives to the coverage map. Without one, drives stay on this phone (you '
     'can still export them).';
 
+/// Turning telemetry off stops and discards it at once; with a driver key (so something may have been sent) the person is also
+/// asked whether to erase what the server already holds (DELETE /api/cmh/telemetry).
+Future<void> _setTelemetry(BuildContext context, AppState s, bool on) async {
+  await s.updateSettings(s.settings.copyWith(telemetryEnabled: on));
+  if (on || !s.hasKey || !context.mounted) return;
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  final erase = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      key: const Key('telemetry-erase-dialog'),
+      title: const Text('Erase what was already shared?'),
+      content: const Text('Sharing is off. You can also delete the packet headers this phone already sent to the server.'),
+      actions: [
+        TextButton(key: const Key('telemetry-erase-keep'), onPressed: () => Navigator.pop(ctx, false), child: const Text('Keep')),
+        FilledButton(key: const Key('telemetry-erase-yes'), onPressed: () => Navigator.pop(ctx, true), child: const Text('Erase')),
+      ],
+    ),
+  );
+  if (erase != true) return;
+  final n = await s.eraseTelemetry();
+  messenger?.showSnackBar(SnackBar(
+      content: Text(n == null ? 'Couldn\'t reach the server. The erase will be retried.' : 'Erased $n shared packet headers.')));
+}
+
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
@@ -257,7 +281,7 @@ class SettingsScreen extends StatelessWidget {
                   title: const Text('Share packet headers'),
                   subtitle: const Text('Type, path, signal strength, time and region. Never message content.'),
                   value: st.telemetryEnabled,
-                  onChanged: (v) => s.updateSettings(s.settings.copyWith(telemetryEnabled: v)),
+                  onChanged: (v) => _setTelemetry(context, s, v),
                 ),
               ],
             ),

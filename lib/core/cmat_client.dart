@@ -24,6 +24,7 @@ import 'api.dart';
 import 'model.dart';
 import 'region_lookup.dart';
 import 'report_body.dart' show problemReportMaxBytes;
+import 'telemetry_uploader.dart';
 
 /// One rejected ping, as reported by the server (only the first 20 are listed).
 class PingRejection {
@@ -57,7 +58,7 @@ DriverKeyStatus parseDriverKeyStatus(Object? s) => switch (s) {
       _ => DriverKeyStatus.unknown,
     };
 
-class HttpCmatClient implements CmatClient {
+class HttpCmatClient implements CmatClient, TelemetryTransport {
   @override
   final Uri baseUrl;
   final http.Client _http;
@@ -143,6 +144,42 @@ class HttpCmatClient implements CmatClient {
   Future<({DriverKeyStatus status, String display})> status(String driverKey) async {
     final j = await _send('GET', 'driver-status', driverKey: driverKey);
     return (status: parseDriverKeyStatus(j['status']), display: j['display'] as String? ?? '');
+  }
+
+  /// `POST /api/cmh/telemetry` (lib/core/telemetry_uploader.dart). Returns the status instead of throwing on a refusal, so the
+  /// uploader can tell 429/401/400 apart; network failures throw [CmatException].
+  @override
+  Future<TelemetryHttpResult> postTelemetry(String driverKey, List<int> body) => _telemetry('POST', driverKey, body);
+
+  /// `DELETE /api/cmh/telemetry`: erases everything this driver sent.
+  @override
+  Future<TelemetryHttpResult> deleteTelemetry(String driverKey) => _telemetry('DELETE', driverKey, null);
+
+  Future<TelemetryHttpResult> _telemetry(String method, String driverKey, List<int>? body) async {
+    final req = http.Request(method, endpoint('telemetry'));
+    req.headers['accept'] = 'application/json';
+    req.headers['x-driver-key'] = driverKey;
+    if (body != null) {
+      req.headers['content-type'] = 'application/json';
+      req.bodyBytes = body;
+    }
+    try {
+      final res = await _http.send(req).then(http.Response.fromStream).timeout(timeout);
+      Map<String, dynamic>? j;
+      try {
+        final d = res.body.isEmpty ? null : jsonDecode(res.body);
+        if (d is Map) j = d.cast<String, dynamic>();
+      } catch (_) {}
+      return TelemetryHttpResult(res.statusCode, retryAfterSec: int.tryParse(res.headers['retry-after'] ?? ''), body: j);
+    } on TimeoutException {
+      throw CmatException('timed out talking to ${baseUrl.host}');
+    } on SocketException catch (e) {
+      throw CmatException('network error: ${e.message}');
+    } on http.ClientException catch (e) {
+      throw CmatException('network error: ${e.message}');
+    } on HandshakeException catch (e) {
+      throw CmatException('secure connection failed: ${e.message}');
+    }
   }
 
   @override

@@ -99,6 +99,9 @@ class AppServices {
   /// Small JSON file for UI-only preferences (first-run intro seen, drive names). Null = keep them in memory only.
   final File? uiPrefsFile;
 
+  /// Where the unsent telemetry headers wait (lib/core/telemetry_uploader.dart). Null = memory only.
+  final File? telemetryQueueFile;
+
   /// Local cache of the last-fetched regions-index (live region awareness). Null = in-memory only for this run
   /// (tests; AppState falls back to a [MemoryRegionIndexCache]).
   final RegionIndexCache? regionIndexCache;
@@ -128,6 +131,7 @@ class AppServices {
     this.openUrl = _noBrowser,
     this.appInfo = const AppInfo(name: 'MeshSonar'),
     this.uiPrefsFile,
+    this.telemetryQueueFile,
     this.directory,
     this.reportDraftStore,
     this.regionIndexCache,
