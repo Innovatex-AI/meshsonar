@@ -166,12 +166,5 @@ List<HeardView> heardSnapshot(HeardTracker t) {
   ];
 }
 
-/// "850 m", "2.3 km", "14 km".
-String formatDistance(double m) {
-  if (m < 950) return '${(m / 10).round() * 10} m';
-  final km = m / 1000;
-  return km < 10 ? '${km.toStringAsFixed(1)} km' : '${km.round()} km';
-}
-
 /// "+6.5", "-3.0".
 String formatSnrShort(double snr) => '${snr > 0 ? '+' : ''}${snr.toStringAsFixed(1)}';

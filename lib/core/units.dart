@@ -79,13 +79,20 @@ class Units {
       return '${m.round()} m';
     }
     final km = m / 1000;
-    return km < 9.95 ? '${km.toStringAsFixed(1)} km' : '${km.round()} km';
+    final km1 = (km * 10).round() / 10; // round half up on the tenth (0.95 -> 1.0, not 0.9)
+    return km < 9.95 ? '${km1.toStringAsFixed(1)} km' : '${km.round()} km';
   }
 
   /// A speed given in metres per second, whole numbers.
   String speed(double mps) {
     final v = mps.isFinite ? mps : 0.0;
     return isImperial ? '${(v * mphPerMps).round()} mph' : '${(v * kmhPerMps).round()} km/h';
+  }
+
+  /// A short length such as GPS accuracy or "move N more": whole metres or whole feet, never switching to km/mi.
+  String shortLength(double metres) {
+    final m = metres.isFinite ? metres : 0.0;
+    return isImperial ? '${(m / metresPerFoot).round()} ft' : '${m.round()} m';
   }
 
   /// Antenna height / elevation: metres (up to 2 decimals, trimmed) or whole feet.

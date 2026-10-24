@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../core/heard.dart';
 import '../core/model.dart';
+import 'app.dart' show AppScope;
 import 'repeater_widgets.dart';
 import 'theme.dart';
 import 'widgets.dart';
@@ -100,7 +101,7 @@ class RepeaterDetailSheet extends StatelessWidget {
       ('Id as heard', id.toUpperCase()),
       ('Full key', ref?.key ?? (m.ambiguous ? '${m.candidates.length} known repeaters share this id' : 'Not in any repeater list')),
       if (ref != null) ('Position', '${ref.lat.toStringAsFixed(5)}, ${ref.lon.toStringAsFixed(5)}'),
-      if (distNow != null) ('Distance now', formatDistanceBearing(distNow, brgNow)),
+      if (distNow != null) ('Distance now', formatDistanceBearing(AppScope.unitsOf(context), distNow, brgNow)),
       ('Times heard', '${hs.length}'),
       ('Last SNR', last?.snrDb == null ? '—' : formatSnrShort(last!.snrDb!)),
       ('Best SNR', best == null ? '—' : formatSnrShort(best)),

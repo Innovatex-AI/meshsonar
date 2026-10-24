@@ -288,7 +288,7 @@ class _StatsGrid extends StatelessWidget {
     final tiles = <(String, String, String)>[
       ('Pings', '${st.pings}', 'stat-pings'),
       ('Heard', st.heardPercent == null ? '—' : '${st.heardPercent}%', 'stat-heard-pct'),
-      ('Distance', formatDistance(st.distanceM), 'stat-distance'),
+      ('Distance', AppScope.unitsOf(context).distance(st.distanceM), 'stat-distance'),
       ('Duration', formatDuration(st.duration), 'stat-duration'),
       ('Best SNR', snr(st.bestSnr), 'stat-best-snr'),
       ('Median SNR', snr(st.medianSnr), 'stat-median-snr'),

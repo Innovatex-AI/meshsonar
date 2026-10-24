@@ -143,7 +143,7 @@ void main() {
       expect(find.byType(EchoTile), findsNWidgets(2));
       expect(find.text('±4 m'), findsOneWidget);
       expect(find.text('-110 dBm'), findsOneWidget);
-      expect(find.text('48 km/h · 30 mph'), findsOneWidget);
+      expect(find.text('48 km/h'), findsOneWidget);
 
       String? copied;
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {

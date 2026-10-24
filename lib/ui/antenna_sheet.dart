@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../core/antenna_profile.dart';
 import '../core/model.dart';
+import '../core/units.dart';
 import 'app.dart';
 
 /// Opens the antenna sheet for [radioKey] (default: the connected radio), prefilled from its saved profile, or for a
@@ -41,6 +42,7 @@ class _AntennaSheetState extends State<_AntennaSheet> {
   /// The 0.3.x setting this first setup was prefilled from, if any.
   Antenna? _legacy;
   bool _started = false;
+  Units _units = Units.metric;
 
   @override
   void didChangeDependencies() {
@@ -48,18 +50,19 @@ class _AntennaSheetState extends State<_AntennaSheet> {
     if (_started) return;
     _started = true;
     final s = AppScope.read(context);
+    _units = s.units;
     final key = widget.radioKey;
     final saved = key == null ? s.antennaProfile : s.settings.antennaProfiles[key];
     if (saved != null) {
       _mount = saved.mount;
       _gainUnknown = saved.gainDbi == null;
       _gain.text = saved.gainDbi == null ? '' : formatAntennaNumber(saved.gainDbi!);
-      _height.text = formatAntennaNumber(saved.heightM);
+      _height.text = _units.heightNumber(saved.heightM);
     } else if (s.legacyAntenna case final a?) {
       _legacy = a;
       _gainUnknown = a.gainDbi == null;
       _gain.text = a.gainDbi == null ? '' : formatAntennaNumber(a.gainDbi!);
-      _height.text = a.heightM == null ? '' : formatAntennaNumber(a.heightM!);
+      _height.text = a.heightM == null ? '' : _units.heightNumber(a.heightM!);
     }
   }
 
@@ -78,7 +81,7 @@ class _AntennaSheetState extends State<_AntennaSheet> {
   }
 
   double? get _heightValue {
-    final v = _number(_height.text);
+    final v = _units.parseHeightToM(_height.text);
     return v != null && AntennaProfile.validHeight(v) ? v : null;
   }
 
@@ -171,9 +174,11 @@ class _AntennaSheetState extends State<_AntennaSheet> {
               controller: _height,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               decoration: InputDecoration(
-                labelText: 'Height above ground (metres)',
-                helperText: 'Roughly: about 1 m in a hand or inside a car, 1.5 m on a car roof.',
-                errorText: heightText.isNotEmpty && _heightValue == null ? 'Enter 0 to 300 metres' : null,
+                labelText: 'Height above ground (${_units.isImperial ? 'feet' : 'metres'})',
+                helperText: _units.isImperial
+                    ? 'Roughly: about 3 ft in a hand or inside a car, 5 ft on a car roof.'
+                    : 'Roughly: about 1 m in a hand or inside a car, 1.5 m on a car roof.',
+                errorText: heightText.isNotEmpty && _heightValue == null ? _units.isImperial ? 'Enter 0 to 984 feet' : 'Enter 0 to 300 metres' : null,
               ),
               onChanged: (_) => setState(() {}),
             ),

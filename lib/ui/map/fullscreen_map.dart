@@ -264,7 +264,7 @@ Future<void> showMapLayersSheet(BuildContext context, DriveMapModel model) {
                   key: const Key('layer-rings'),
                   secondary: const Icon(Icons.radar_rounded),
                   title: const Text('Range rings'),
-                  subtitle: const Text('1 km and 2 km around you'),
+                  subtitle: Text(AppScope.unitsOf(context).isImperial ? 'Half a mile and 1 mile around you' : '1 km and 2 km around you'),
                   value: l.rings,
                   onChanged: (v) => set(l.copyWith(rings: v)),
                 ),
