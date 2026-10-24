@@ -55,6 +55,7 @@ import '../../core/network_coverage.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import 'map_layers.dart';
+import 'offline_basemap.dart';
 import 'region_repeater_layer.dart';
 
 /// A line from a ping to a repeater it heard.
@@ -349,6 +350,14 @@ class _CoverageMapState extends State<CoverageMap> {
   void initState() {
     super.initState();
     _selectedRepeater = widget.highlightKey;
+    if (widget.showTiles ?? CoverageMap.tilesByDefault) {
+      OfflineBasemap.instance.addListener(_onPacksChanged);
+      OfflineBasemap.instance.ensureOpen();
+    }
+  }
+
+  void _onPacksChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -435,6 +444,7 @@ class _CoverageMapState extends State<CoverageMap> {
 
   @override
   void dispose() {
+    OfflineBasemap.instance.removeListener(_onPacksChanged);
     _controller.dispose();
     super.dispose();
   }
@@ -444,6 +454,8 @@ class _CoverageMapState extends State<CoverageMap> {
     final mc = MeshSonarColors.of(context);
     final t = Theme.of(context);
     final tiles = widget.showTiles ?? CoverageMap.tilesByDefault;
+    // A downloaded region pack covering the map wins over online tiles; no pack (or a corrupt one) means online as before.
+    final offlinePack = tiles ? OfflineBasemap.instance.readerCovering(_initialCenter.latitude, _initialCenter.longitude) : null;
     final layers = widget.layers;
     _ensureSorted();
     _ensureMarkers();
@@ -506,7 +518,9 @@ class _CoverageMapState extends State<CoverageMap> {
           ),
           children: [
             _ChartGrid(color: mc.mapGrid),
-            if (tiles)
+            if (offlinePack != null)
+              OfflineBasemapLayer(key: ValueKey(offlinePack), reader: offlinePack)
+            else if (tiles)
               TileLayer(
                 urlTemplate: CoverageMap.tileUrl,
                 userAgentPackageName: CoverageMap.userAgentPackageName,
