@@ -5,6 +5,13 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- Map layers sheet rebuilt from the layer registry: sections This drive / Coverage / Network / Around you, and every server-fed layer says where it stands (count and source, loading, "Couldn't load" with Retry, "Offline - as of …", or the switch disabled with the reason, e.g. "Not available on this server yet").
+- New map layer "All MeshCore repeaters", on by default: every repeater with a public position from the server's network list (live: 55.6k), coloured by last advert (24 h / 7 d / 30 d / older), with a legend and the MeshCore Map credit. In your region it shows that region plus 40 km around it; with no region known it shows the whole world as count bubbles that split as you zoom in. Bubble counts are large, high-contrast and read by screen readers. Shows "Not available on this server yet" (switch off and disabled) on a server without the list.
+- Region repeaters on the map are now clustered and come from the synced roster (offline too); tap one for its sheet with "Open repeater page" (was a name tooltip).
+- New map layer "Observers": the region's observers that share their position; tap for online state, noise floor, packets per hour and more.
+- Tap a cluster to zoom into it; tap a repeater or observer for its detail sheet.
+- Fix: the network repeater list never loaded in the app (its background decode failed with "object is unsendable"); it is now decoded off the main isolate as intended.
+
 - The Drive map and the Region tab open on the phone at once (last-known position), then move to the fresh GPS fix unless you moved the map; an old position is labelled "Last known location, 3 d ago". With no position the app opens on the last region, else on all regions.
 - Location off, not asked, denied, restricted, approximate or services off: a plain note with the right action (Allow location, Open Settings) and "Choose region". Nothing is asked on launch.
 - Repeater lists sync on app open and resume (region roster with ETag, and the server's network repeater list once it is offered) and are stored for offline names and map pins; the Repeaters panel shows "Updated 5m ago" / "Offline - as of 2d ago".
@@ -20,6 +27,10 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 - Drive report v2: noise floor during the drive, reply RSSI, TX power, signal by distance to the repeater (direct links, the website's distance bands), heard by speed, GPS accuracy; Export as text or one CSV file (contains your exact track).
 - Region tab: new RF tab (noise floor by observer, by hour of day, SNR histogram; an observer that went quiet is named and its line stops) and Growth tab (known nodes over time, weekly churn, roles, hash sizes).
 - Region tab: Export region report as text, JSON, one CSV with every table, or any table as the website's own CSV file.
+- Your progress (Drives tab card): every drive on this phone by ISO week (Monday start, your local time): distance, heard %, new grid cells, new repeaters; totals, best drives, and your radio's noise floor and TX power across drives. It says plainly that it covers drives stored on this phone.
+- Repeater "Your drives": on the repeater detail screen and the drive repeater sheet, how often and where (grid cells on a small map, never your track) your drives heard it, best SNR, last heard and farthest.
+- PDF export: the drive report and the region report as PDF (charts, every table row, Barlow embedded, your units), shared through the share sheet (Print / Save to Files). New dependency `pdf` (Apache-2.0, pure Dart, no network).
+- Charts: the region overview sparkline, the Reports panel bars, the Analysis heatmap and the drive heard strip moved onto the chart kit; the sparkline, bars and drive-card strip now read their numbers to VoiceOver.
 - Radio protocol: decoders, encoders and byte tests for GET_STATS core (battery, uptime, error flags, queue) and packets
   (30 B and 26 B), and GET_BATT_AND_STORAGE; `MeshCoreCompanionLink` reads them (unsupported asked once). The simulator
   answers all of them.

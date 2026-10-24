@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/region_reports_api.dart';
 import '../app.dart' show AppScope;
+import '../charts/bar_strip.dart';
 import '../theme.dart';
 
 class ReportsPanel extends StatefulWidget {
@@ -152,7 +153,11 @@ class _ReportsPanelState extends State<ReportsPanel> {
           const SizedBox(height: Gap.m),
           const _Muted('Packets per hour'),
           const SizedBox(height: Gap.xs),
-          _Bars(key: const Key('bars-hourly'), values: [for (final p in d.packetsPerHour) p.n]),
+          BarStrip(
+            key: const Key('bars-hourly'),
+            values: [for (final p in d.packetsPerHour) p.n],
+            summary: barStripSummary([for (final p in d.packetsPerHour) p.n], what: 'Packets per hour'),
+          ),
         ],
       ]),
     ));
@@ -167,7 +172,12 @@ class _ReportsPanelState extends State<ReportsPanel> {
           : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               _Muted('Packets per ${d.activityBucket}, last ${trend.length} ${d.activityBucket == 'hour' ? 'hours' : 'days'}'),
               const SizedBox(height: Gap.xs),
-              _Bars(key: const Key('bars-trend'), values: [for (final p in trend) p.n]),
+              BarStrip(
+                key: const Key('bars-trend'),
+                values: [for (final p in trend) p.n],
+                summary: barStripSummary([for (final p in trend) p.n],
+                    what: 'Packets per ${d.activityBucket}', labelOf: (i) => _dayLabel(trend[i].at)),
+              ),
               const SizedBox(height: Gap.xs),
               Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                 _Muted(_dayLabel(trend.first.at)),
@@ -474,33 +484,6 @@ class _ErrorCard extends StatelessWidget {
         ]),
         const SizedBox(height: Gap.s),
         TextButton.icon(onPressed: onRetry, icon: const Icon(Icons.refresh), label: const Text('Retry')),
-      ]),
-    );
-  }
-}
-
-/// Plain bar strip; the tallest bar fills the height. A value of 0 still draws a hairline so the axis reads.
-class _Bars extends StatelessWidget {
-  final List<int> values;
-  const _Bars({super.key, required this.values});
-  @override
-  Widget build(BuildContext context) {
-    final max = values.fold<int>(0, (a, b) => b > a ? b : a);
-    final color = Theme.of(context).colorScheme.primary;
-    return SizedBox(
-      height: 56,
-      child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-        for (final v in values)
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 1),
-              child: FractionallySizedBox(
-                heightFactor: max == 0 ? 0.03 : (v / max).clamp(0.03, 1.0),
-                alignment: Alignment.bottomCenter,
-                child: ColoredBox(color: color),
-              ),
-            ),
-          ),
       ]),
     );
   }

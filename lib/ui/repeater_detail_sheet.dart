@@ -1,5 +1,6 @@
 // Bottom sheet for one repeater heard on a drive: name, full key, position, distance from the latest position,
-// times heard, last/best SNR, an SNR-over-the-drive sparkline and when it was last heard.
+// times heard, last/best SNR, an SNR-over-the-drive sparkline and when it was last heard, then "Your drives" (every
+// drive on this phone that heard it: your_drives_section.dart).
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -11,6 +12,7 @@ import 'charts/sparkline.dart';
 import 'repeater_widgets.dart';
 import 'theme.dart';
 import 'widgets.dart';
+import 'your_drives_section.dart';
 
 /// One hearing of a repeater on a ping (echo or neighbour exchange).
 class RepeaterHearing {
@@ -167,6 +169,8 @@ class RepeaterDetailSheet extends StatelessWidget {
               style: t.textTheme.bodySmall,
             ),
           ),
+        const SizedBox(height: Gap.l),
+        YourDrivesSection(repeaterKey: yourDrivesKey(id, lookup), lat: ref?.lat, lon: ref?.lon),
       ],
     );
   }

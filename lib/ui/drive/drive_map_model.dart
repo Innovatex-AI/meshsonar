@@ -19,18 +19,37 @@ import '../../core/model.dart';
 import '../../core/coverage_timeline.dart';
 import '../../core/region_timeline_api.dart';
 import '../../core/network_coverage.dart';
+import '../../core/region_overview_api.dart' show RegionObserver, RegionObservers;
 import '../../core/region_repeaters_api.dart';
+import '../../core/repeater_sync.dart' show SyncTrigger;
 import '../../radio/radio_api.dart';
 import '../../radio/simulator.dart' show defaultSimulatedRepeaters;
 import '../map/coverage_timeline_controller.dart';
+import '../map/layers/app_repeater_feed.dart';
+import '../map/layers/map_layer.dart';
+import '../map/layers/map_layers_adapter.dart';
+import '../map/layers/observer_layer.dart' show positionedObservers;
+import '../map/layers/registry.dart';
+import '../map/layers/repeater_map_source.dart';
 import '../map/map_layers.dart';
+import '../region/region_common.dart' show regionApiFactory;
 
 class DriveMapModel extends ChangeNotifier {
   final AppState state;
-  DriveMapModel(this.state) {
+  DriveMapModel(this.state, {int repeaterIsolateThreshold = 2000}) {
+    repeaterFeed = AppStateRepeaterFeed(state, fallbackRoster: _fallbackRoster);
+    repeaterSource = RepeaterMapSource(repeaterFeed, clock: state.services.clock, isolateThreshold: repeaterIsolateThreshold)
+      ..dedupeAgainstRoster = _layerState.isOn(kRosterLayerId);
     state.addListener(_onState);
     _onState();
   }
+
+  /// The two repeater lists the map draws (`network`: every MeshCore repeater; `repeaters`: the viewed region's roster),
+  /// read from the repeater sync through AppState.
+  late final AppStateRepeaterFeed repeaterFeed;
+
+  /// Render-ready points + cluster indexes for both repeater layers (built off the UI isolate for big lists).
+  late final RepeaterMapSource repeaterSource;
 
   List<DrivePing> _pings = const [];
 
@@ -62,20 +81,53 @@ class DriveMapModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  MapLayers _layers = const MapLayers();
-  MapLayers get layers => _layers;
-  set layers(MapLayers l) {
-    if (l == _layers) return;
-    final turnedOn = l.regionRepeaters && !_layers.regionRepeaters;
-    _layers = l;
+  // Which layers are on (registry ids, lib/ui/map/layers/registry.dart) plus their modes. [layers] is the old bool bag
+  // view of the same state, kept for one release (stream-1-maps.md 4.1).
+  MapLayerState _layerState = kDefaultLayerState;
+  MapLayerState get layerState => _layerState;
+  set layerState(MapLayerState n) {
+    if (n == _layerState) return;
+    final was = _layerState;
+    _layerState = n;
+    _layersView = null;
+    repeaterSource.dedupeAgainstRoster = n.isOn(kRosterLayerId);
     notifyListeners();
-    if (turnedOn && _regionRepeaters.isEmpty) unawaited(loadRegionRepeaters());
+    bool turnedOn(String id) => n.isOn(id) && !was.isOn(id);
+    if (turnedOn(kRosterLayerId) || turnedOn(kNetworkLayerId)) repeaterSource.refreshAges();
+    if (turnedOn(kRosterLayerId) && _regionRepeaters.isEmpty && repeaterFeed.region.rows.isEmpty) unawaited(loadRegionRepeaters());
+    if (turnedOn('observers')) unawaited(loadObservers());
   }
+
+  /// Turns one registry layer on or off.
+  void setLayer(String id, bool on) => layerState = _layerState.toggle(id, on);
+
+  MapLayers? _layersView;
+  MapLayers get layers => _layersView ??= mapLayersFromState(_layerState);
+  set layers(MapLayers l) {
+    if (l == layers) return;
+    // Layers the bool bag has no field for (network, observers, neighbours) keep their state.
+    final keep = {for (final id in _layerState.on) if (!_layersIds.contains(id)) id};
+    final next = l.toLayerState(mode: _layerState.mode);
+    layerState = MapLayerState(on: Set.unmodifiable({...next.on, ...keep}), mode: next.mode);
+  }
+
+  static const Set<String> _layersIds = {'measured', 'hexes', 'repeaters', 'links', 'heard', 'pings', 'rings'};
 
   // The region's whole repeater roster for the "Region repeaters" layer. Fetched the first time the layer is
   // switched on (or by [loadRegionRepeaters] / [regionRepeaters]=, e.g. when the region switcher changes region).
   List<RegionRepeater> _regionRepeaters = const [];
   bool _regionRepeatersLoading = false;
+  bool _regionRepeatersFailed = false;
+  bool _regionRepeatersLoaded = false;
+  RosterRegion? _regionRepeatersRegion;
+
+  FallbackRoster _fallbackRoster() => FallbackRoster(
+    region: _regionRepeatersRegion,
+    rows: _regionRepeaters,
+    state: _regionRepeatersLoading
+        ? MapFeedState.loading
+        : (_regionRepeatersFailed ? MapFeedState.failed : (_regionRepeatersLoaded ? MapFeedState.ready : MapFeedState.idle)),
+  );
 
   /// Test seam / wiring seam: how the roster is fetched.
   Future<RegionRepeaters> Function(String baseUrl, String regionSlug) regionRepeatersFetcher = fetchRegionRepeaters;
@@ -84,6 +136,8 @@ class DriveMapModel extends ChangeNotifier {
   List<RegionRepeater> get regionRepeaters => _regionRepeaters;
   set regionRepeaters(List<RegionRepeater> v) {
     _regionRepeaters = v;
+    _regionRepeatersLoaded = true;
+    repeaterFeed.refresh();
     notifyListeners();
   }
 
@@ -98,14 +152,104 @@ class DriveMapModel extends ChangeNotifier {
     final sl = slug ?? region?.slug ?? site?.slug;
     if (url == null || sl == null || _regionRepeatersLoading) return;
     _regionRepeatersLoading = true;
+    _regionRepeatersRegion = RosterRegion(slug: sl, name: region?.name ?? sl.toUpperCase(), baseUrl: url);
+    repeaterFeed.refresh();
     try {
       final r = await regionRepeatersFetcher(url, sl);
       _regionRepeaters = r.positioned;
+      _regionRepeatersFailed = false;
+      _regionRepeatersLoaded = true;
     } catch (_) {
-      // leave whatever was there
+      // leave whatever was there; the layers sheet says it failed (with Retry)
+      _regionRepeatersFailed = true;
     } finally {
       _regionRepeatersLoading = false;
-      if (!_disposed) notifyListeners();
+      if (!_disposed) {
+        repeaterFeed.refresh();
+        notifyListeners();
+      }
+    }
+  }
+
+  // ---------- observers layer (the viewed region's `region-observers` rows with a public position) ----------
+  List<RegionObserver> _observers = const [];
+  MapFeedState _observersState = MapFeedState.idle;
+  String? _observersSlug;
+  int _observersSeq = 0;
+
+  /// Test seam: how a region's observers are fetched (the same client the Observers panel uses).
+  Future<RegionObservers> Function(String baseUrl) observersFetcher = (b) async {
+    final api = regionApiFactory(b);
+    try {
+      return await api.observers();
+    } finally {
+      api.close();
+    }
+  };
+
+  /// The viewed region's observers that have a public position (what the layer draws).
+  List<RegionObserver> get observers => _observers;
+  MapFeedState get observersState => _observersState;
+
+  /// Fetches the viewed region's observers (once per region unless [force]). Failures leave what was there and show
+  /// as failed in the layers sheet.
+  Future<void> loadObservers({bool force = false}) async {
+    final v = state.viewingRegion;
+    if (v == null) return;
+    if (!force && _observersSlug == v.slug && (_observersState == MapFeedState.ready || _observersState == MapFeedState.loading)) return;
+    final seq = ++_observersSeq;
+    if (_observersSlug != v.slug) _observers = const [];
+    _observersSlug = v.slug;
+    _observersState = _observers.isEmpty ? MapFeedState.loading : _observersState;
+    notifyListeners();
+    try {
+      final r = await observersFetcher(v.url);
+      if (_disposed || seq != _observersSeq) return;
+      _observers = List.unmodifiable(positionedObservers(r.rows));
+      _observersState = MapFeedState.ready;
+    } catch (_) {
+      if (_disposed || seq != _observersSeq) return;
+      _observersState = _observers.isEmpty ? MapFeedState.failed : MapFeedState.stale;
+    }
+    notifyListeners();
+  }
+
+  // ---------- layer availability (the generated layers sheet) ----------
+  MapFeedState get _coverageState {
+    if (state.networkCoverage != null) return state.networkCoverageFailed ? MapFeedState.stale : MapFeedState.ready;
+    if (state.networkCoverageLoading) return MapFeedState.loading;
+    return state.networkCoverageFailed ? MapFeedState.failed : MapFeedState.idle;
+  }
+
+  /// The switch state and the line under it for registry layer [id].
+  LayerStatus statusOf(String id) => layerStatus(
+    id,
+    MapLayerInputs(
+      coverageState: _coverageState,
+      coverageCells: _networkCells.length,
+      observersState: _observersSlug == state.viewingRegion?.slug ? _observersState : MapFeedState.idle,
+      observersWithPosition: _observers.length,
+      regionName: state.viewingRegion?.name,
+      repeaterSelected: _selected != null,
+    ),
+    repeaters: repeaterSource,
+  );
+
+  /// Retry for a layer whose status says it can be retried.
+  Future<void> retry(String id) async {
+    switch (id) {
+      case 'measured':
+        await state.refreshNetworkCoverage();
+      case 'observers':
+        await loadObservers(force: true);
+      case kRosterLayerId:
+        if (state.repeaterSync == null || (repeaterFeed.region.rows.isEmpty && _regionRepeatersRegion != null)) {
+          await loadRegionRepeaters();
+        } else {
+          await state.syncRepeaterLists(SyncTrigger.force);
+        }
+      case kNetworkLayerId:
+        await state.syncRepeaterLists(SyncTrigger.force);
     }
   }
 
@@ -238,6 +382,7 @@ class DriveMapModel extends ChangeNotifier {
       final first = _timelineRegion == null;
       _timelineRegion = rc;
       if (!first) timeline.regionChanged();
+      if (!first && _layerState.isOn('observers')) unawaited(loadObservers());
     }
 
     // Network-wide coverage: a new fetch (initial, or after a server change) redraws the background layer even
@@ -342,6 +487,8 @@ class DriveMapModel extends ChangeNotifier {
     _fetchTimer?.cancel();
     timeline.dispose();
     state.removeListener(_onState);
+    repeaterSource.dispose();
+    repeaterFeed.dispose();
     unawaited(_fixSub?.cancel());
     super.dispose();
   }

@@ -31,9 +31,10 @@ void main() {
       expect(kWebsiteKeysNotDrawn, {'model', 'reach'});
     });
 
-    test('defaults: the drive layers and measured on, network layers off (today\'s MapLayers defaults)', () {
-      expect(kDefaultLayerState.on, {'measured', 'hexes', 'links', 'heard', 'pings', 'rings'});
-      expect(kDefaultLayerState, const MapLayers().toLayerState(mode: const {'measured': 'snr'}));
+    test('defaults: the drive layers, measured and the global repeater layer on (D3, Andy Oct 24); roster/observers off', () {
+      expect(kDefaultLayerState.on, {'measured', 'hexes', 'links', 'heard', 'pings', 'rings', 'network'});
+      // MapLayers has no field for `network`: its defaults are the registry defaults minus the global layer.
+      expect(kDefaultLayerState.toggle('network', false), const MapLayers().toLayerState(mode: const {'measured': 'snr'}));
       expect(layerSpec('network')!.label, 'All MeshCore repeaters');
       expect(layerSpec('nope'), isNull);
       final groups = layersByGroup();
@@ -49,7 +50,8 @@ void main() {
       expect(s.modeOf('measured'), 'noise');
       expect(s.toggle('network', true), same(s));
       expect(s.withMode('measured', 'noise'), same(s));
-      expect(s.toggle('network', false).withMode('measured', 'snr'), kDefaultLayerState);
+      expect(s.withMode('measured', 'snr'), kDefaultLayerState, reason: 'network is a default layer');
+      expect(s.toggle('network', false).withMode('measured', 'snr'), isNot(kDefaultLayerState));
       expect(s.hashCode, kDefaultLayerState.toggle('network', true).withMode('measured', 'noise').hashCode);
     });
 

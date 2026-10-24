@@ -172,32 +172,53 @@ simulator's repeaters in Simulator mode), **ping dots**, and the current **posit
   → green), or plain green in "Heard / not" mode. Unknown SNR shows mid teal. The newest dot pulses once.
 - **Follow mode** keeps the position centred. Dragging turns it off and shows **Recenter** (`map-recenter`).
 - Tap a repeater to see its name, a short key, "Heard N pings ago", SNR and distance.
-- **Layers sheet** (`layers-sheet`): Network coverage, Hex coverage, Pings (colour by SNR / heard-not), Repeaters,
-  Links to heard repeaters, Range rings. All are on by default. The choices are shared between the Drive and
-  full-screen maps but not saved. Network coverage fetches once at startup (and again if the server URL changes);
-  a fetch failure keeps showing whatever was already drawn rather than clearing it.
+- **Layers sheet** (`layers-sheet`), generated from the layer registry, in four sections: **This drive** (Hex
+  coverage, Links to heard repeaters, Repeaters heard, Pings with colour by SNR / heard-not), **Coverage** (Network
+  coverage with its colour-by / detail / since / source controls), **Network** (All MeshCore repeaters, Region
+  repeaters, Observers) and **Around you** (Range rings). Drive layers, Network coverage and All MeshCore repeaters are on by
+  default; Region repeaters and Observers are off. A default-on layer the server cannot offer shows off and disabled. Every server-fed layer says where it stands under its switch: a count and source ("3
+  repeaters · 4 hidden by their owners · Data: MeshCore Map (map.meshcore.io)", "1 observer with a public position",
+  "753 cells measured"), "Loading…", "Couldn't load. Check the connection and retry." with **Retry**, "… · Offline - as
+  of 2h ago" for a stored copy (with Retry), or a reason with the switch disabled: "Not available on this server yet"
+  (the server answers 404), "No repeaters reported yet", "Pick a region to see its observers". A layer that is on can
+  always be switched off. The choices are shared between the Drive and full-screen maps but not saved. Network coverage
+  fetches once at startup (and again if the server URL changes); a fetch failure keeps showing whatever was already
+  drawn rather than clearing it.
+- **All MeshCore repeaters** (`network`, on by default): every repeater and room server with a public position, from
+  the server's `network-repeaters` list (live since Oct 24 2026, 55.6k rows; synced on open, at most every 6 h, stored for offline use, about 6 MB on disk). Clustered: one
+  painter, only what is on screen, clusters with counts that split as you zoom. Colour = last advert (24 h green, 7 days
+  blue, 30 days amber, older grey; room servers are rings). **Scope**: when your region is known (the phone is in it,
+  you picked it, or it is the remembered one while the phone's position is unknown) only that region's repeaters plus
+  40 km around its edges are drawn ("N repeaters in and around Columbus, US"); otherwise (new visitor, phone outside
+  every region) the whole world as count bubbles, like the other online MeshCore maps: bubbles show their total (13/15
+  px heavy text on an opaque fill, ink chosen for at least 4.5:1 contrast in light and dark), split as you zoom in,
+  merge as you zoom out, single dots at street zoom; screen readers hear "1,234 repeaters". The list is built off the
+  UI thread and the layer appears when it is ready. Legend in the sheet with the data's "as of" time, and a
+  small legend + "Data: MeshCore Map (map.meshcore.io)" on the map while it is on. Advert-age colours are recomputed
+  when the list is refreshed (also a 304 "unchanged") and when the layer is switched on if they are over 10 minutes
+  old. With Region repeaters also on, roster repeaters are drawn once, by the roster layer.
+- **Region repeaters** (`repeaters`): the viewed region's roster from the repeater sync (offline copy included),
+  clustered, coloured by status (active, quiet, new, stale; legend in the sheet).
+- **Observers** (`observers`): the viewed region's observers whose owner made the position public
+  (`region-observers`, fetched when the layer is switched on and when the viewed region changes), triangles (online
+  filled teal, offline outline).
+- **Tap for detail**: a coverage cell opens the cell sheet; a repeater (either layer) the repeater sheet (name, type,
+  copyable key, last advert / last heard, distance from you in your Units, roster status / SNR / grade / adverts /
+  neighbours / hash prefix when known, source, **Open repeater page** for a roster repeater); several repeaters on one
+  spot a list; a cluster zooms to its members (follow stops, Recenter appears); an observer the observer sheet (online
+  state, last seen, noise floor, packets per hour, nodes heard in 24 h, radio, reported battery mV, distance, source and
+  how the position was published).
 - Attribution "© OpenStreetMap contributors" is always shown with tiles. Tiles are off under `flutter test`.
 - If there's no position or pings, the map centres on Columbus, Ohio (39.9612, −82.9988).
 
-### Map layer engine (built, not on screen yet)
+### Map layer engine
 
-New building blocks for the map redesign (stream-1-maps.md), merged ahead of the screens that use them, so nothing
-below is visible in the app yet:
+Building blocks behind the layers above (stream-1-maps.md), in `ui/map/layers/` and `ui/map/sheets/`:
 
-- **Layer registry** (`ui/map/layers/`): every map layer with the website's `?show=` key where the website has the
-  same layer (`measured`, `repeaters`, `observers`, `network`) and app-only keys for the drive layers (`hexes`,
-  `links`, `neighbours`, `heard`, `pings`, `rings`). Each layer reports whether its switch works and why not:
-  "Not available on this server yet" (404), "Loading…", "Couldn't load. Check the connection and retry." (with
-  Retry), "No repeaters reported yet", "No observers with a public position in CMH", "Offline copy".
-- **Clustered repeater layers**: "All MeshCore repeaters" (`network`, from `GET /api/cmh/network-repeaters` once the
-  server ships it; coloured by last advert: 24 h green, 7 days blue, 30 days amber, older grey; room servers are
-  rings) and "Region repeaters" (`repeaters`, the roster, coloured by status). One painter per layer, only what is
-  on screen, clusters with counts that split as you zoom; tap a cluster to zoom to it, tap a stack on one tower for a
-  list, tap a repeater for its sheet.
-- **Repeater sheet**: name, repeater or room server, the full key (first 8 bold, copy button), last advert or last
-  heard ("3 h ago (2026-10-24)"), distance from you in your Units, the roster's status / mean SNR / grade / adverts /
-  neighbours / hash prefix when the key is in the viewed region's roster, the data source, and "Open repeater page"
-  when the region is known.
+- **Layer registry**: every map layer with the website's `?show=` key where the website has the same layer
+  (`measured`, `repeaters`, `observers`, `network`) and app-only keys for the drive layers (`hexes`, `links`,
+  `neighbours`, `heard`, `pings`, `rings`). `neighbours` (links of the selected repeater) is registered but not drawn
+  yet, so the sheet does not list it.
 - **Map links**: `MapViewState` reads and writes `https://<region>.meshsonar.com/coverage?show=…&color=…&since=…&src=…
   &res=…&lat=…&lon=…` (the website's own parameters, same validation) plus `z` and `until`, and the same query on
   `meshsonar://map?…&region=cmh`. Opening such a link in the app (URL scheme, app_links) is not built yet.
@@ -282,7 +303,27 @@ unmeasured values and a dashed 0 dB line.
   it, and marks the drive so the next sync sends the session again with the new name, even if every ping is already
   up. Empty clears the name (the card shows the date). Names typed under 0.2.x, which lived only in `ui_prefs.json`,
   are moved into their drives once at launch.
+- **Your progress card** (`progress-card`, under the overview): this ISO week from the drive list ("This week (since
+  Monday Oct 12): 2 drives, 412 pings, 61% heard"); tap for **Your progress** (below).
 - Pull to refresh, or use the refresh button.
+
+## Your progress
+
+(`ui/report/progress_screen.dart`, maths in `core/personal_progress.dart`) Every drive stored on this phone, and it
+says so at the top ("From drives stored on this phone: N drives since ... Drives deleted from this phone or recorded on
+another phone are not included."). There is no server-wide history yet (the `driver-summary` endpoint is requested in
+the stream 5 design doc). A drive that cannot be read is skipped and counted in a banner.
+
+- **Totals:** drives, distance, time driving, pings, heard %, grid cells, repeaters heard, best SNR.
+- **By week** (ISO weeks starting Monday in the phone's local time, zone named in every caption; a drive counts in the
+  week it started; weeks run without holes to the current week; charts show the last 26 weeks, tables all):
+  distance per week (km or mi), heard % per week (no bar = no pings), new grid cells per week and new repeaters per
+  week (new = first time any drive on this phone had it; tables carry the running totals).
+- **Best drives:** longest drive, longest time out, best heard % (at least 10 pings), most new grid cells, most
+  repeaters on one drive, best SNR; tap one for its drive report.
+- **Your radio:** noise floor per drive (median, -100 dBm line), noise floor by hour of day (local), TX power per drive
+  (one line when it never changed). Only what the radio reported; "Your radio has not reported ..." otherwise.
+- Every chart has the Chart / Table switch and its numbers in the semantics label. Empty store: "No drives yet".
 
 ## Drive detail
 
@@ -308,10 +349,14 @@ Stats definitions (`DriveStats.of`):
 
 (`ui/report/*`, maths in `core/drive_report.dart` + `core/drive_report_rf.dart`) Opened from the Drive screen card
 after Stop, from drive detail ("Report") and from the drive card menu. It's computed once per open. **Export**
-(app bar menu `report-export`: `report-export-text`, `report-export-csv`; buttons `report-share-button`,
-`report-csv-button`) shares a plain-text summary (`.txt`, in the person's units and saying which) or ONE CSV file
-(`core/drive_report_export.dart`: first column `table` = `pings`, `cells`, `repeaters`, `snr-by-distance`,
-`heard-by-speed`; SI units in the column names, UTC ISO times; the menu says "Contains your exact track").
+(app bar menu `report-export`: `report-export-text`, `report-export-csv`, `report-export-pdf`; buttons
+`report-share-button`, `report-csv-button`) shares a plain-text summary (`.txt`, in the person's units and saying
+which), ONE CSV file (`core/drive_report_export.dart`: first column `table` = `pings`, `cells`, `repeaters`,
+`snr-by-distance`, `heard-by-speed`; SI units in the column names, UTC ISO times; the menu says "Contains your exact
+track") or a **PDF** (`core/drive_report_pdf.dart`: summary, SNR / noise floor charts drawn as vector graphics with
+their numbers in words, distance and speed bars, TX power, GPS, the repeaters table and the grid-cells table; the menu
+says "Contains where you drove (grid cells)"; units as set, phone local time with the zone named; Barlow embedded,
+characters it lacks shown as "?" and said in the footer). PDF and CSV are disabled for a drive with no pings.
 
 Sections: **hero** (distance in km and mi, date, duration, antenna; grids mapped, % pings heard, repeaters),
 **highlights**, a **grid map** of cells coloured by heard % (red = 0%, then blue → teal → green), with new cells
@@ -443,7 +488,22 @@ goes, and "Change your mind any time in Settings, under Privacy & data sharing";
 - **Export region report** (app bar icon `region-report-export`): fetches `region-report` and shares a text summary,
   the JSON (pretty-printed like the website's download), every table in one CSV, or any single table as the website's
   own file (`<slug>-<table>.csv`, same column heads and bytes; checked against the site's code on the recorded cmh
-  body). Empty tables are disabled. Times in the files are UTC, like the website.
+  body), or a **PDF** (`export-pdf`, `<slug>-region-report.pdf`, `core/region_report_pdf.dart`: overview, packets per
+  hour, repeater status and every repeater row, observers, noise floor by hour with the -100 dBm line, SNR histogram,
+  noise by observer, hash sizes and shared prefixes, hops and top carriers, coverage in the person's units, recent
+  changes; a section the server marks partial/pending quotes its reason). Empty tables are disabled. Times in the files
+  are UTC, like the website.
+
+## Repeater "Your drives"
+
+(`ui/your_drives_section.dart`, maths in `core/repeater_history.dart`) At the end of the repeater detail screen (Region
+tab) and the drive repeater sheet (ping log): how the drives stored on this phone heard this repeater. A heard id
+matches when either it or the key is a prefix of the other; an id the repeater lists give to another repeater is not
+counted, and hearings by a short id several known repeaters share are counted and said ("some may be another
+repeater"). Shows times heard and on how many drives (direct = 1 hop or a neighbour reply), best SNR and on which
+drive, last and first heard, farthest from the repeater (units), the grid cells (about 220 m x 210 m, never the raw
+track) on a small map coloured by best SNR, and the 5 newest drives (tap for the drive report). "From drives stored on
+this phone."; "None of the N drives on this phone heard this repeater." when none did.
 
 ## Drive context: data collected (stream 7)
 

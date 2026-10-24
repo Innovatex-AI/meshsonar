@@ -49,6 +49,10 @@ class FakeDriveStore implements DriveStore, DriveContextLedger {
 
   /// Makes [startSession] fail (e.g. a full disk).
   bool failStart = false;
+
+  /// Makes [sessions] fail (set after the app's first load), and [pings] fail for these drive ids (a damaged file).
+  bool failSessions = false;
+  final Set<String> failPings = {};
   bool failAppend = false;
   int exportCount = 0;
 
@@ -98,6 +102,7 @@ class FakeDriveStore implements DriveStore, DriveContextLedger {
 
   @override
   Future<List<SessionSummary>> sessions() async {
+    if (failSessions) throw const FileSystemException('drive folder unreadable');
     final list = sessionsById.values.toList()..sort((a, b) => b.startedAt.compareTo(a.startedAt));
     return [
       for (final s in list)
@@ -114,7 +119,10 @@ class FakeDriveStore implements DriveStore, DriveContextLedger {
   }
 
   @override
-  Future<List<DrivePing>> pings(String sessionId) async => List.of(pingsBySession[sessionId] ?? const []);
+  Future<List<DrivePing>> pings(String sessionId) async {
+    if (failPings.contains(sessionId)) throw const FileSystemException('damaged drive file');
+    return List.of(pingsBySession[sessionId] ?? const []);
+  }
 
   @override
   Future<List<DrivePing>> unsyncedPings(String sessionId) async =>
