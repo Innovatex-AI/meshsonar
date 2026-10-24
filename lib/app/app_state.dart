@@ -349,6 +349,12 @@ class AppState extends ChangeNotifier {
       }
       _notePhoneFix(fix);
     }
+    // Older than [staleFixAge] (72 h): never moves the region (no switch, no notice, no preset prompt). It can still
+    // centre the map as [phoneFix], labelled with its age.
+    if (services.clock().toUtc().difference(fix.at.toUtc()) > staleFixAge) {
+      notifyListeners();
+      return;
+    }
     _lastRegionFix = fix;
     final u = _tracker.update(regionIndex, fix.lat, fix.lon, fix.at);
     _regionNearEdge = u.nearEdge;
@@ -489,6 +495,7 @@ class AppState extends ChangeNotifier {
         viewingIsManual: viewingIsManual,
         viewingRemembered: _settings.regionLast != null,
         index: regionIndex,
+        now: services.clock(),
       );
 
   bool _isLiveAge(GeoFix f) {

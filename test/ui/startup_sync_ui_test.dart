@@ -116,6 +116,20 @@ void main() {
       expect(find.text('Last known location, 3 d ago'), findsOneWidget);
     });
 
+    testWidgets('a fix older than 72 h: the Drive map still centres on it, labelled "4 d ago"; no region switch',
+        (tester) async {
+      useTallScreen(tester);
+      final h = Harness();
+      h.lastKnownStore = _MemLastKnown(GeoFix(lat: 40.0, lon: -83.0, at: DateTime.utc(2026, 10, 12, 18)));
+      h.location.currentFix = () => null;
+      h.client.regionsIndexResult = const [cmh];
+      await h.pumpApp(tester);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('map-position')), findsOneWidget);
+      expect(find.text('Last known location, 4 d ago'), findsOneWidget);
+      expect(h.state.currentRegion, isNull);
+    });
+
     testWidgets('location not asked: a note with "Allow location" on Drive and Region; asked only on tap', (tester) async {
       useTallScreen(tester);
       final probe = FakeLocationAccess(LocationAccess.notAsked);
