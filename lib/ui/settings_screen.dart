@@ -9,6 +9,8 @@ import '../core/antenna_profile.dart';
 import '../core/api.dart';
 import '../core/model.dart' show Radio;
 import '../core/server_url.dart';
+import '../core/units.dart';
+import 'region/region_switcher.dart';
 import 'about_screen.dart';
 import 'antenna_sheet.dart';
 import 'onboarding/onboarding_screen.dart';
@@ -74,7 +76,19 @@ class SettingsScreen extends StatelessWidget {
                   },
                 ),
                 if (s.siteConfig != null) const _RegionTile(),
-                if (s.siteConfig != null) const _RadioPresetTile(),
+                if (s.siteConfig != null && s.viewingRegion == null) const _RadioPresetTile(),
+              ],
+            ),
+            _Section(
+              id: 'region',
+              title: 'Region & units',
+              icon: Icons.public,
+              help: 'The app opens on the region your phone is in. Pick any region to view its coverage, repeaters '
+                  'and activity. This never changes your radio.',
+              children: [
+                const _RegionPickTile(),
+                if (s.siteConfig != null && s.viewingRegion != null) const _RadioPresetTile(),
+                const _UnitsTile(),
               ],
             ),
             _Section(
@@ -1080,4 +1094,53 @@ Future<String?> _editText(
       ],
     ),
   );
+}
+
+/// Which region the app is viewing; opens the switcher.
+class _RegionPickTile extends StatelessWidget {
+  const _RegionPickTile();
+  @override
+  Widget build(BuildContext context) {
+    final s = AppScope.of(context);
+    final v = s.viewingRegion;
+    return ListTile(
+      key: const Key('region-pick'),
+      leading: const Icon(Icons.map_outlined),
+      title: const Text('Region'),
+      subtitle: Text(v == null
+          ? 'Not loaded yet'
+          : '${v.name} (${v.code}) · ${s.viewingIsManual ? 'picked by you' : 'following your location'}'),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () => showRegionSwitcher(context),
+    );
+  }
+}
+
+/// Metric, imperial, or follow the phone's locale.
+class _UnitsTile extends StatelessWidget {
+  const _UnitsTile();
+  @override
+  Widget build(BuildContext context) {
+    final s = AppScope.of(context);
+    final pref = s.settings.units;
+    return ListTile(
+      key: const Key('units-tile'),
+      leading: const Icon(Icons.straighten),
+      title: const Text('Units'),
+      subtitle: Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: SegmentedButton<UnitsPreference>(
+          key: const Key('units-selector'),
+          showSelectedIcon: false,
+          segments: const [
+            ButtonSegment(value: UnitsPreference.auto, label: Text('Auto')),
+            ButtonSegment(value: UnitsPreference.metric, label: Text('Metric')),
+            ButtonSegment(value: UnitsPreference.imperial, label: Text('Imperial')),
+          ],
+          selected: {pref},
+          onSelectionChanged: (v) => s.updateSettings(s.settings.copyWith(units: v.first)),
+        ),
+      ),
+    );
+  }
 }

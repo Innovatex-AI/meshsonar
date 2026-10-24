@@ -3,6 +3,20 @@
 All notable changes to MeshSonar. Dates are local (US Eastern). This changelog was reconstructed from the commit
 history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md](ROADMAP.md).
 
+## [0.13.0] — 2026-10-23 — region switcher and Region tab
+
+`pubspec.yaml` is `0.13.0+17`.
+
+- **Region tab (new, 2nd tab)** hosting website data for the viewed region as tabs (Overview, Repeaters, Observers,
+  Packets, Analysis, Reports; panels land as their own files, see `lib/ui/region/region_panels.dart`).
+- **Region switcher** (chip on the Region tab and the Settings "Region" tile): lists ALL regions from `regions-index`,
+  the phone's GPS region first, then nearest; "Follow my location" returns to automatic. Outside every region the
+  nearest region shows. The choice and the last viewed region are saved (`region_manual`, `region_last`).
+- The coverage layer and the radio-preset display now follow the viewed region (read from that region's own host);
+  a custom server keeps single-region behaviour. Region detection now uses the real boundary polygon.
+- Settings: new "Region & units" section (region, preset of the viewed region, Auto/Metric/Imperial). The setting is
+  stored; `lib/core/units.dart` (tested) is the formatting core, screens migrate next.
+
 ## [0.12.0] — 2026-10-21 — discovery (listen-only) mode
 
 `pubspec.yaml` is `0.12.0+16`. Bundle id unchanged. A pure app-side feature — no server change (`docs/

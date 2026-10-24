@@ -19,7 +19,7 @@ void main() {
     expect(sameServerHosts, contains(Uri.parse(defaultServerUrl).host));
   });
 
-  test('every http(s) host in lib/ is allowed; only cmat_client, repeater_directory and repeater_detail_api (region host, GET only) make HTTP clients', () {
+  test('every http(s) host in lib/ is allowed; only cmat_client, repeater_directory and region_repeaters_api make HTTP clients', () {
     final hostRe = RegExp(r'''https?://([A-Za-z0-9.-]+)''');
     final clientRe = RegExp(r'''http\.Client\(|HttpClient\(|IOClient\(|http\.(get|post|put|patch|delete|head|read|readBytes)\(''');
     final hosts = <String, String>{};
@@ -34,7 +34,7 @@ void main() {
     expect(hosts.keys, containsAll(['map.meshcore.io', 'tile.openstreetmap.org']), reason: 'the scan itself works');
     final unknown = {for (final e in hosts.entries) if (!allowedLiteralHosts.contains(e.key)) e.key: e.value};
     expect(unknown, isEmpty, reason: 'a new host in lib/ needs a spec decision (MeshSonar sends only to its server)');
-    expect(clients.difference({'cmat_client.dart', 'repeater_directory.dart', 'repeater_detail_api.dart'}), isEmpty);
+    expect(clients.difference({'cmat_client.dart', 'repeater_directory.dart', 'region_repeaters_api.dart', 'region_overview_api.dart', 'region_reports_api.dart', 'repeater_detail_api.dart'}), isEmpty);
     expect(hosts.keys.where((h) => h.contains('meshmapper')), isEmpty);
   });
 
