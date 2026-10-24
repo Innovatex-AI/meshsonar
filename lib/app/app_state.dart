@@ -18,7 +18,10 @@ import '../core/drive_store.dart' show closeOrphanedSessions;
 import '../core/heard.dart';
 import '../core/model.dart';
 import '../core/region_lookup.dart';
+import '../core/region_cache.dart';
 import '../core/region_pick.dart';
+import '../core/region_preset.dart';
+import '../core/region_tracker.dart';
 import '../core/repeater_directory.dart';
 import '../core/report_body.dart';
 import '../core/server_url.dart';
@@ -71,6 +74,41 @@ class AppState extends ChangeNotifier {
   bool get hasKey => (_settings.driverKey ?? '').isNotEmpty;
   bool get keyApproved => hasKey && _settings.keyStatus == DriverKeyStatus.approved;
 
+  // ---------- region data disk cache (offline / as-of labels) ----------
+  CachedBody? _siteConfigMeta;
+  CachedBody? _coverageMeta;
+
+  /// Loads [load] live and mirrors it into the region disk cache; when the live load fails, serves the cached copy
+  /// (flagged offline). Rethrows only when there is nothing cached either. Without a cache it is a plain call.
+  Future<({T value, CachedBody? meta})> _cachedFetch<T>(
+      String key, Future<T> Function() load, String Function(T) encode, T? Function(String) decode) async {
+    final cache = services.regionCache;
+    if (cache == null) return (value: await load(), meta: null);
+    Object? failure;
+    T? live;
+    final got = await cache.fetch(key, (etag) async {
+      try {
+        live = await load();
+      } catch (e) {
+        failure = e;
+        rethrow;
+      }
+      return CacheFetch.fresh(encode(live as T));
+    });
+    if (got == null) throw failure ?? StateError('nothing cached for $key');
+    if (!got.offline && live != null) return (value: live as T, meta: got);
+    final cachedValue = decode(got.body);
+    if (cachedValue == null) throw failure ?? StateError('cached $key unreadable');
+    return (value: cachedValue, meta: got);
+  }
+
+  /// "Offline - as of 3h ago" when the coverage/preset on screen came from the disk cache because the live fetch
+  /// failed; null when everything is live (or no cache is in use).
+  String? get regionDataOfflineLabel {
+    final m = (_coverageMeta?.offline ?? false) ? _coverageMeta : ((_siteConfigMeta?.offline ?? false) ? _siteConfigMeta : null);
+    return m == null ? null : asOfLabel(m.fetchedAt, services.clock(), offline: true);
+  }
+
   // ---------- site config (region + radio preset) ----------
   SiteConfig? _siteConfig;
 
@@ -85,10 +123,12 @@ class AppState extends ChangeNotifier {
     final server = _settings.serverUrl;
     try {
       final viewing = viewingRegion;
-      final c = await _coverageClient(viewing).siteConfig();
+      final r = await _cachedFetch<SiteConfig>('siteconfig_${viewing?.code ?? 'default'}', () => _coverageClient(viewing).siteConfig(),
+          siteConfigToJson, siteConfigFromJson);
       if (_settings.serverUrl != server) return; // the server changed again while this was in flight
       if (viewing?.code != viewingRegion?.code) return;
-      _siteConfig = c;
+      _siteConfig = r.value;
+      _siteConfigMeta = r.meta;
       notifyListeners();
     } catch (e) {
       _logError('Fetching site-config failed', e);
@@ -111,10 +151,12 @@ class AppState extends ChangeNotifier {
     final server = _settings.serverUrl;
     try {
       final viewing = viewingRegion;
-      final c = await _coverageClient(viewing).publicCoverage();
+      final r = await _cachedFetch<PublicCoverage>('coverage_${viewing?.code ?? 'default'}', () => _coverageClient(viewing).publicCoverage(),
+          publicCoverageToJson, publicCoverageFromJson);
       if (_settings.serverUrl != server) return; // the server changed again while this was in flight
       if (viewing?.code != viewingRegion?.code) return; // the viewed region changed while this was in flight
-      _networkCoverage = c;
+      _networkCoverage = r.value;
+      _coverageMeta = r.meta;
       notifyListeners();
     } catch (e) {
       _logError('Fetching network coverage failed', e);
@@ -147,6 +189,8 @@ class AppState extends ChangeNotifier {
 
     final manual = byCode(_settings.regionManual);
     if (manual != null) return manual;
+    final hold = byCode(_viewHoldCode);
+    if (hold != null) return hold; // a different-preset border crossing waits for the person's answer
     if (_currentRegion != null) return _currentRegion;
     final f = _lastRegionFix;
     if (f != null) {
@@ -230,10 +274,63 @@ class AppState extends ChangeNotifier {
   void _updateRegion(GeoFix? fix) {
     if (fix == null) return;
     _lastRegionFix = fix;
-    final next = regionContaining(regionIndex, fix.lat, fix.lon);
-    final changed = next?.code != _currentRegion?.code;
-    _currentRegion = next;
-    if (changed && next != null && driving) _say('Entered ${next.code}');
+    final u = _tracker.update(regionIndex, fix.lat, fix.lon, fix.at);
+    _regionNearEdge = u.nearEdge;
+    _currentRegion = u.current;
+    if (u.changed) {
+      _viewHoldCode = null;
+      final next = u.current;
+      if (next != null && u.previous != null) unawaited(_onRegionChanged(u.previous!, next));
+    }
+    notifyListeners();
+  }
+
+  final RegionTracker _tracker = RegionTracker();
+  bool _regionNearEdge = false;
+
+  /// True when the last fix was within a few hundred metres of the current region's edge (the badge can hint
+  /// "near the border"; the tracker already refuses to flap there).
+  bool get regionNearEdge => _regionNearEdge;
+
+  String? _viewHoldCode;
+  RegionPresetPrompt? _presetPrompt;
+
+  /// A pending "this region uses a different radio preset" question for the person; null when none. The UI shows
+  /// a dialog (not while driving) and answers through [resolvePresetPrompt]. The radio is never changed by it.
+  RegionPresetPrompt? get presetPrompt => _presetPrompt;
+
+  /// Answer the prompt: [switchView] true = show the new region now (the person will change their radio themselves);
+  /// false = keep showing the region they were in.
+  void resolvePresetPrompt({required bool switchView}) {
+    final p = _presetPrompt;
+    if (p == null) return;
+    _presetPrompt = null;
+    if (switchView) _viewHoldCode = null;
+    notifyListeners();
+  }
+
+  /// Genuine crossing into [next] from [prev] (the tracker has already debounced it). Same radio preset (or nothing
+  /// to compare): tell the person and, when following GPS, the view switches by itself. Different preset: hold the
+  /// view and ask. Nothing here ever touches the radio.
+  Future<void> _onRegionChanged(RegionIndexEntry prev, RegionIndexEntry next) async {
+    SiteConfig? sc;
+    try {
+      sc = (await _cachedFetch<SiteConfig>('siteconfig_${next.code}', () => _coverageClient(next).siteConfig(), siteConfigToJson, siteConfigFromJson)).value;
+    } catch (e) {
+      _logError('Fetching ${next.code} site-config for the border crossing failed', e);
+    }
+    if (_currentRegion?.code != next.code) return; // moved on again while this was in flight
+    final radio = _selfInfo?.radio;
+    final preset = sc?.radioPreset;
+    final manual = _settings.regionManual != null;
+    final differs = radio != null && preset != null && !presetMatchesRadio(preset, radio);
+    if (!differs) {
+      _say(manual ? 'Entered ${next.name}. Still viewing your chosen region.' : 'Entered ${next.name}. Now showing ${next.code}.');
+    } else {
+      if (!manual) _viewHoldCode = prev.code;
+      _presetPrompt = RegionPresetPrompt(from: prev, to: next, preset: preset, radio: radio);
+      _say('Entered ${next.name}. It uses a different radio preset; your radio was not changed.');
+    }
     notifyListeners();
   }
 
@@ -1134,7 +1231,12 @@ class AppState extends ChangeNotifier {
     if (serverChanged) _siteConfig = null;
     // Same reasoning as _siteConfig: a new server means new (or no) network-wide coverage; the old server's
     // cells must never display against the new one.
-    if (serverChanged) _networkCoverage = null;
+    if (serverChanged) {
+      _networkCoverage = null;
+      _coverageMeta = null;
+      _siteConfigMeta = null;
+      _tracker.reset();
+    }
     _settings = s;
     heard.holdPings = s.heardHoldPings; // the heard list's live/stale rule follows the slider at once, even mid-drive
     _scheduleDriveSync(); // in-drive upload follows the toggles, the period and the key status
