@@ -8,7 +8,7 @@ import '../../core/region_analysis_api.dart';
 import '../theme.dart';
 
 class AnalysisPanel extends StatefulWidget {
-  /// Region host, e.g. `https://day.meshsonar.com` (the server picks the region by host).
+  /// Region host, the region's own subdomain (the server picks the region by host).
   final String baseUrl;
   final String regionSlug;
 
