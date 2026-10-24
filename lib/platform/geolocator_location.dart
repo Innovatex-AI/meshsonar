@@ -55,6 +55,13 @@ class GeolocatorLocationSource implements LocationSource {
         // Speed 0 is a real reading when parked, but only trust it if the platform says it measured speed.
         speedMps: p.speedAccuracy > 0 ? _nonNegative(p.speed) : (p.speed > 0 ? p.speed : null),
         at: p.timestamp.toUtc(),
+        // Altitude is only trusted with a positive vertical accuracy (0 = the platform did not measure it).
+        altitudeM: p.altitudeAccuracy > 0 && p.altitude.isFinite ? p.altitude : null,
+        altitudeAccuracyM: _positive(p.altitudeAccuracy),
+        // Course is valid only while moving; iOS reports -1 when unknown.
+        courseDeg: p.headingAccuracy > 0 && p.heading >= 0 && p.heading < 360 ? p.heading : null,
+        courseAccuracyDeg: _positive(p.headingAccuracy),
+        speedAccuracyMps: _positive(p.speedAccuracy),
       );
 
   @override

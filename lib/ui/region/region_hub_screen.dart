@@ -1,10 +1,13 @@
-// The Region tab: the viewed region (switcher at the top) and seven tabs of website data for it.
+// The Region tab: the viewed region (switcher at the top), ten tabs of website data for it, and Export region report.
 import 'package:flutter/material.dart';
 
 import '../app.dart';
 import '../location_status.dart';
+import 'growth_panel.dart';
 import 'live_screen.dart';
 import 'region_panels.dart';
+import 'region_report_export_sheet.dart';
+import 'rf_panel.dart';
 import 'stats_panel.dart';
 import 'region_switcher.dart';
 
@@ -16,11 +19,21 @@ class RegionHubScreen extends StatelessWidget {
     final s = AppScope.of(context);
     final region = s.viewingRegion;
     return DefaultTabController(
-      length: 8,
+      length: 10,
       child: Scaffold(
         appBar: AppBar(
           title: Text(region?.name ?? 'Region', key: const Key('region-title')),
-          actions: const [RegionSwitcherChip(), SizedBox(width: 12)],
+          actions: [
+            if (region != null)
+              IconButton(
+                key: const Key('region-report-export'),
+                tooltip: 'Export region report',
+                icon: const Icon(Icons.ios_share),
+                onPressed: () => showRegionReportExport(context, baseUrl: region.url, regionSlug: region.slug),
+              ),
+            const RegionSwitcherChip(),
+            const SizedBox(width: 12),
+          ],
           bottom: const TabBar(
             isScrollable: true,
             tabAlignment: TabAlignment.start,
@@ -30,6 +43,8 @@ class RegionHubScreen extends StatelessWidget {
               Tab(text: 'Observers'),
               Tab(text: 'Packets'),
               Tab(text: 'Analysis'),
+              Tab(text: 'RF'),
+              Tab(text: 'Growth'),
               Tab(text: 'Reports'),
               Tab(text: 'Stats'),
               Tab(text: 'Live'),
@@ -65,6 +80,8 @@ class RegionHubScreen extends StatelessWidget {
                         buildObserversPanel(region.url, region.slug),
                         buildPacketsPanel(region.url, region.slug),
                         buildAnalysisPanel(region.url, region.slug),
+                        RfPanel(baseUrl: region.url, regionSlug: region.slug),
+                        GrowthPanel(baseUrl: region.url, regionSlug: region.slug),
                         buildReportsPanel(region.url, region.slug),
                         StatsPanel(baseUrl: region.url, regionSlug: region.slug),
                         LivePanel(baseUrl: region.url, regionSlug: region.slug),

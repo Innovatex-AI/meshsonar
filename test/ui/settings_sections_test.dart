@@ -12,25 +12,55 @@ void main() {
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
     final scroll = find.descendant(of: find.byKey(const Key('settings-list')), matching: find.byType(Scrollable)).first;
+    // Stream 6 restructure: Wardriving + Antenna became Radio, Upload became Drives & uploads, the heard-list hold moved
+    // to Units & display, Report a problem to Diagnostics, Offline maps to Map & offline maps.
     for (final (section, field) in [
       ('driver', 'key-request'),
       ('driver', 'server-url'),
-      ('wardriving', 'interval'),
-      ('wardriving', 'min-distance'),
-      ('wardriving', 'heard-hold'),
-      ('antenna', 'antenna-profile-abcdef0123'), // 0.4.0: one row per radio replaces the global type and gain
-      ('sync', 'auto-sync'),
-      ('sync', 'sync-during-drive'),
-      ('sync', 'sync-every'),
-      ('sync', 'last-upload'),
+      ('region', 'region-pick'),
+      ('display', 'units-tile'),
+      ('display', 'heard-hold'),
+      ('maps', 'offline-maps'),
+      ('privacy', 'telemetry-toggle'),
+      ('privacy', 'privacy-what-shared'),
+      ('privacy', 'privacy-location'),
+      ('privacy', 'privacy-zones-website'),
+      ('radio', 'radio-tab-link'),
+      ('radio', 'channel'),
+      ('radio', 'discovery-mode'),
+      ('radio', 'interval'),
+      ('radio', 'min-distance'),
+      ('radio', 'antenna-profile-abcdef0123'), // 0.4.0: one row per radio replaces the global type and gain
+      ('drives', 'auto-sync'),
+      ('drives', 'sync-during-drive'),
+      ('drives', 'sync-every'),
+      ('drives', 'last-upload'),
+      ('storage', 'storage-drives'),
+      ('storage', 'storage-region'),
+      ('storage', 'refresh-repeaters'),
+      ('storage', 'storage-offline-maps'),
+      ('diagnostics', 'diagnostics-log'),
+      ('diagnostics', 'report-problem'),
       ('about-section', 'about'),
+      ('about-section', 'show-intro'),
     ]) {
       await tester.scrollUntilVisible(find.byKey(Key(field)), 120, scrollable: scroll);
       expect(find.descendant(of: find.byKey(Key('section-$section')), matching: find.byKey(Key(field))), findsOneWidget,
           reason: '$field should be in $section');
     }
-    await tester.scrollUntilVisible(find.text('DRIVER & SERVER'), -120, scrollable: scroll);
-    for (final title in ['DRIVER & SERVER', 'WARDRIVING', 'ANTENNA', 'UPLOAD', 'ABOUT']) {
+    await tester.scrollUntilVisible(find.text('ACCOUNT & DRIVER KEY'), -120, scrollable: scroll);
+    for (final title in [
+      'ACCOUNT & DRIVER KEY',
+      'REGION',
+      'UNITS & DISPLAY',
+      'MAP & OFFLINE MAPS',
+      'PRIVACY & DATA SHARING',
+      'RADIO',
+      'DRIVES & UPLOADS',
+      'DATA & STORAGE',
+      'DIAGNOSTICS',
+      'ABOUT',
+    ]) {
       await tester.scrollUntilVisible(find.text(title), 120, scrollable: scroll);
       expect(find.text(title), findsOneWidget);
     }
@@ -61,7 +91,7 @@ void main() {
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
     final scroll = find.descendant(of: find.byKey(const Key('settings-list')), matching: find.byType(Scrollable)).first;
-    await tester.drag(scroll, const Offset(0, -3000));
+    await tester.scrollUntilVisible(find.byKey(const Key('show-intro')), 300, scrollable: scroll);
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('show-intro')));
     await tester.pumpAndSettle();

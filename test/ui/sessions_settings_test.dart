@@ -247,7 +247,8 @@ void main() {
     await h.pumpApp(tester);
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
-    await tester.drag(settingsScroll, const Offset(0, -3000));
+    // About is the last section; the list grew (Privacy, Data & storage, Diagnostics), so scroll to it, not a fixed drag.
+    await tester.scrollUntilVisible(find.byKey(const Key('about')), 300, scrollable: settingsScroll);
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('about')));
     await tester.pumpAndSettle();

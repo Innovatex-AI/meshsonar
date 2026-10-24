@@ -800,6 +800,12 @@ class AppState extends ChangeNotifier {
     if (r != null) _tele.add(r);
   }
 
+  /// Packet headers waiting on this phone to be sent (Settings > Privacy & data sharing shows the count).
+  int get telemetryQueued => _telemetry?.queued ?? 0;
+
+  /// An erase of the server's copy was asked for but has not gone through yet (it is retried).
+  bool get telemetryErasePending => _telemetry?.pendingErase ?? false;
+
   /// Sends what is due now (the uploader also does this on its own timer). For tests and an app-resume hook.
   Future<void> flushTelemetry() => _tele.flush();
 
@@ -1546,9 +1552,10 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  Future<bool> deleteSession(String sessionId) async {
+  /// [quiet]: no "Drive deleted." notice (Settings > Data & storage removes several at once and says so itself).
+  Future<bool> deleteSession(String sessionId, {bool quiet = false}) async {
     if (_session?.id == sessionId) {
-      _say('Stop the drive before deleting it.');
+      if (!quiet) _say('Stop the drive before deleting it.');
       return false;
     }
     try {
@@ -1563,10 +1570,10 @@ class AppState extends ChangeNotifier {
         _recent.clear();
       }
       await refreshSessions();
-      _say('Drive deleted.');
+      if (!quiet) _say('Drive deleted.');
       return true;
     } catch (e) {
-      _say(friendlyError(e, action: 'Delete'));
+      if (!quiet) _say(friendlyError(e, action: 'Delete'));
       return false;
     }
   }
@@ -1867,6 +1874,27 @@ class AppState extends ChangeNotifier {
       _logError('Updating repeater names failed', e);
       if (!quiet) _say(friendlyError(e, action: 'Updating repeater names'));
     }
+  }
+
+  /// Settings > Data & storage: forgets the saved repeater names (on disk and in memory). Repeaters show as short codes
+  /// until [refreshRepeaters] downloads the list again.
+  Future<void> clearRepeaterNames() async {
+    try {
+      await services.repeaterCache.save(const []);
+    } catch (e) {
+      _logError('Clearing the saved repeater names failed', e);
+    }
+    _setRepeaters(const []);
+    _repeatersAt = null;
+    notifyListeners();
+  }
+
+  /// Settings > Data & storage: forgets the cached public node map (map.meshcore.io). It downloads again around the
+  /// first ping of the next drive.
+  Future<void> clearPublicNodeMap() async {
+    await services.directory?.clear();
+    _directory = null;
+    setExtraRepeaters(const []);
   }
 
   // ---------- problem reports ----------

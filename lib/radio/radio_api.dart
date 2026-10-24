@@ -73,7 +73,28 @@ class GeoFix {
   final double? accuracyM;
   final double? speedMps;
   final DateTime at;
-  const GeoFix({required this.lat, required this.lon, required this.at, this.accuracyM, this.speedMps});
+
+  /// Drive context (stream 7, category `motion`): never part of the drive upload. Null = the platform did not
+  /// measure it (accuracy 0 or negative means unknown).
+  final double? altitudeM;
+  final double? altitudeAccuracyM;
+
+  /// Course over ground (direction of travel), degrees; not the compass heading.
+  final double? courseDeg;
+  final double? courseAccuracyDeg;
+  final double? speedAccuracyMps;
+  const GeoFix({
+    required this.lat,
+    required this.lon,
+    required this.at,
+    this.accuracyM,
+    this.speedMps,
+    this.altitudeM,
+    this.altitudeAccuracyM,
+    this.courseDeg,
+    this.courseAccuracyDeg,
+    this.speedAccuracyMps,
+  });
 }
 
 abstract class LocationSource {

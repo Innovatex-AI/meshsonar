@@ -9,6 +9,25 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 - Location off, not asked, denied, restricted, approximate or services off: a plain note with the right action (Allow location, Open Settings) and "Choose region". Nothing is asked on launch.
 - Repeater lists sync on app open and resume (region roster with ETag, and the server's network repeater list once it is offered) and are stored for offline names and map pins; the Repeaters panel shows "Updated 5m ago" / "Offline - as of 2d ago".
 - Repeater names: region roster first, then MeshSonar's list, then the network list near you, then map.meshcore.io; prefixes the region marks as shared are never guessed. With the network list available the 17 MB map.meshcore.io download is skipped.
+
+- Settings restructured into Account & driver key, Region, Units & display, Map & offline maps, Privacy & data sharing, Radio, Drives & uploads, Data & storage, Diagnostics and About, one file per section under `lib/ui/settings/`. Every row explains what it does; destructive and sharing changes ask first.
+- Settings search: matches titles, explanations and keywords and jumps to the row (opens its section, tints the row, announces it to screen readers). Sections fold from their headers on phones; wide screens (>= 840 dp) show sections and content side by side.
+- Privacy & data sharing: one switch per data category from a registry (today only packet headers); turning sharing on asks and lists exactly what is shared; erase what the server holds at any time; "What MeshSonar shares" page; the location explainer is reachable from Settings. The first-run sheet and Settings now use the same text, and it lists every field actually sent (packet fingerprint, app version and platform were missing).
+- Data & storage: space used by drives, saved region data, repeater names, the public node map and offline maps, with clear actions that state the cost first. Only fully uploaded drives can be removed there; drives with pings waiting or rejected always stay.
+- Diagnostics: view, copy (secrets hidden, coordinates rounded, same rules as problem reports) or clear the diagnostic log.
+- Location explainer wording corrected: between drives a coarse position is used on the phone to keep the region right (it said "no tracking when you are not driving").
+- Charts: every chart now has a Chart / Table switch and reads its numbers to VoiceOver (one chart kit, `lib/ui/charts`); the repeater sparklines use it too.
+- Drive report v2: noise floor during the drive, reply RSSI, TX power, signal by distance to the repeater (direct links, the website's distance bands), heard by speed, GPS accuracy; Export as text or one CSV file (contains your exact track).
+- Region tab: new RF tab (noise floor by observer, by hour of day, SNR histogram; an observer that went quiet is named and its line stops) and Growth tab (known nodes over time, weekly churn, roles, hash sizes).
+- Region tab: Export region report as text, JSON, one CSV with every table, or any table as the website's own CSV file.
+- Radio protocol: decoders, encoders and byte tests for GET_STATS core (battery, uptime, error flags, queue) and packets
+  (30 B and 26 B), and GET_BATT_AND_STORAGE; `MeshCoreCompanionLink` reads them (unsupported asked once). The simulator
+  answers all of them.
+- Drive context core (stream 7, not yet switched on in a drive): `RadioHealthPoller` (60 s, never during a ping),
+  `DriveContextRecorder`, per-drive `samples.jsonl` / `ctx.jsonl` / `context.json` beside the drive (uploads and
+  exports byte-identical), category list with disclosure text (`lib/core/data_categories.dart`), GPS altitude, course
+  and accuracies kept on `GeoFix`.
+- Units: air pressure (hPa / inHg) and temperature (°C / °F).
 - Map engine groundwork (not on screen yet): grid clustering for 5-20k points (`core/cluster_index.dart`), map links compatible with the website's `/coverage` URL (`core/map_view_state.dart`), the layer registry with website `?show=` keys and honest per-layer availability, a single-painter clustered repeater layer for the global "All MeshCore repeaters" list and the region roster, and a repeater detail sheet (copy key, last advert, distance in your units, Open repeater page).
 
 ## [0.19.0] — 2026-10-24 — Timeline, telemetry, offline cache
