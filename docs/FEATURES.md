@@ -173,12 +173,56 @@ simulator's repeaters in Simulator mode), **ping dots**, and the current **posit
   → green), or plain green in "Heard / not" mode. Unknown SNR shows mid teal. The newest dot pulses once.
 - **Follow mode** keeps the position centred. Dragging turns it off and shows **Recenter** (`map-recenter`).
 - Tap a repeater to see its name, a short key, "Heard N pings ago", SNR and distance.
-- **Layers sheet** (`layers-sheet`): Network coverage, Hex coverage, Pings (colour by SNR / heard-not), Repeaters,
-  Links to heard repeaters, Range rings. All are on by default. The choices are shared between the Drive and
-  full-screen maps but not saved. Network coverage fetches once at startup (and again if the server URL changes);
-  a fetch failure keeps showing whatever was already drawn rather than clearing it.
+- **Layers sheet** (`layers-sheet`), generated from the layer registry, in four sections: **This drive** (Hex
+  coverage, Links to heard repeaters, Repeaters heard, Pings with colour by SNR / heard-not), **Coverage** (Network
+  coverage with its colour-by / detail / since / source controls), **Network** (All MeshCore repeaters, Region
+  repeaters, Observers) and **Around you** (Range rings). Drive layers, Network coverage and All MeshCore repeaters are on by
+  default; Region repeaters and Observers are off. A default-on layer the server cannot offer shows off and disabled. Every server-fed layer says where it stands under its switch: a count and source ("3
+  repeaters · 4 hidden by their owners · Data: MeshCore Map (map.meshcore.io)", "1 observer with a public position",
+  "753 cells measured"), "Loading…", "Couldn't load. Check the connection and retry." with **Retry**, "… · Offline - as
+  of 2h ago" for a stored copy (with Retry), or a reason with the switch disabled: "Not available on this server yet"
+  (the server answers 404), "No repeaters reported yet", "Pick a region to see its observers". A layer that is on can
+  always be switched off. The choices are shared between the Drive and full-screen maps but not saved. Network coverage
+  fetches once at startup (and again if the server URL changes); a fetch failure keeps showing whatever was already
+  drawn rather than clearing it.
+- **All MeshCore repeaters** (`network`, on by default): every repeater and room server with a public position, from
+  the server's `network-repeaters` list (live since Oct 24 2026, 55.6k rows; synced on open, at most every 6 h, stored for offline use, about 6 MB on disk). Clustered: one
+  painter, only what is on screen, clusters with counts that split as you zoom. Colour = last advert (24 h green, 7 days
+  blue, 30 days amber, older grey; room servers are rings). **Scope**: when your region is known (the phone is in it,
+  you picked it, or it is the remembered one while the phone's position is unknown) only that region's repeaters plus
+  40 km around its edges are drawn ("N repeaters in and around Columbus, US"); otherwise (new visitor, phone outside
+  every region) the whole world as count bubbles, like the other online MeshCore maps: bubbles show their total (13/15
+  px heavy text on an opaque fill, ink chosen for at least 4.5:1 contrast in light and dark), split as you zoom in,
+  merge as you zoom out, single dots at street zoom; screen readers hear "1,234 repeaters". The list is built off the
+  UI thread and the layer appears when it is ready. Legend in the sheet with the data's "as of" time, and a
+  small legend + "Data: MeshCore Map (map.meshcore.io)" on the map while it is on. Advert-age colours are recomputed
+  when the list is refreshed (also a 304 "unchanged") and when the layer is switched on if they are over 10 minutes
+  old. With Region repeaters also on, roster repeaters are drawn once, by the roster layer.
+- **Region repeaters** (`repeaters`): the viewed region's roster from the repeater sync (offline copy included),
+  clustered, coloured by status (active, quiet, new, stale; legend in the sheet).
+- **Observers** (`observers`): the viewed region's observers whose owner made the position public
+  (`region-observers`, fetched when the layer is switched on and when the viewed region changes), triangles (online
+  filled teal, offline outline).
+- **Tap for detail**: a coverage cell opens the cell sheet; a repeater (either layer) the repeater sheet (name, type,
+  copyable key, last advert / last heard, distance from you in your Units, roster status / SNR / grade / adverts /
+  neighbours / hash prefix when known, source, **Open repeater page** for a roster repeater); several repeaters on one
+  spot a list; a cluster zooms to its members (follow stops, Recenter appears); an observer the observer sheet (online
+  state, last seen, noise floor, packets per hour, nodes heard in 24 h, radio, reported battery mV, distance, source and
+  how the position was published).
 - Attribution "© OpenStreetMap contributors" is always shown with tiles. Tiles are off under `flutter test`.
 - If there's no position or pings, the map centres on Columbus, Ohio (39.9612, −82.9988).
+
+### Map layer engine
+
+Building blocks behind the layers above (stream-1-maps.md), in `ui/map/layers/` and `ui/map/sheets/`:
+
+- **Layer registry**: every map layer with the website's `?show=` key where the website has the same layer
+  (`measured`, `repeaters`, `observers`, `network`) and app-only keys for the drive layers (`hexes`, `links`,
+  `neighbours`, `heard`, `pings`, `rings`). `neighbours` (links of the selected repeater) is registered but not drawn
+  yet, so the sheet does not list it.
+- **Map links**: `MapViewState` reads and writes `https://<region>.meshsonar.com/coverage?show=…&color=…&since=…&src=…
+  &res=…&lat=…&lon=…` (the website's own parameters, same validation) plus `z` and `until`, and the same query on
+  `meshsonar://map?…&region=cmh`. Opening such a link in the app (URL scheme, app_links) is not built yet.
 
 ## Full-screen map
 
@@ -260,7 +304,27 @@ unmeasured values and a dashed 0 dB line.
   it, and marks the drive so the next sync sends the session again with the new name, even if every ping is already
   up. Empty clears the name (the card shows the date). Names typed under 0.2.x, which lived only in `ui_prefs.json`,
   are moved into their drives once at launch.
+- **Your progress card** (`progress-card`, under the overview): this ISO week from the drive list ("This week (since
+  Monday Oct 12): 2 drives, 412 pings, 61% heard"); tap for **Your progress** (below).
 - Pull to refresh, or use the refresh button.
+
+## Your progress
+
+(`ui/report/progress_screen.dart`, maths in `core/personal_progress.dart`) Every drive stored on this phone, and it
+says so at the top ("From drives stored on this phone: N drives since ... Drives deleted from this phone or recorded on
+another phone are not included."). There is no server-wide history yet (the `driver-summary` endpoint is requested in
+the stream 5 design doc). A drive that cannot be read is skipped and counted in a banner.
+
+- **Totals:** drives, distance, time driving, pings, heard %, grid cells, repeaters heard, best SNR.
+- **By week** (ISO weeks starting Monday in the phone's local time, zone named in every caption; a drive counts in the
+  week it started; weeks run without holes to the current week; charts show the last 26 weeks, tables all):
+  distance per week (km or mi), heard % per week (no bar = no pings), new grid cells per week and new repeaters per
+  week (new = first time any drive on this phone had it; tables carry the running totals).
+- **Best drives:** longest drive, longest time out, best heard % (at least 10 pings), most new grid cells, most
+  repeaters on one drive, best SNR; tap one for its drive report.
+- **Your radio:** noise floor per drive (median, -100 dBm line), noise floor by hour of day (local), TX power per drive
+  (one line when it never changed). Only what the radio reported; "Your radio has not reported ..." otherwise.
+- Every chart has the Chart / Table switch and its numbers in the semantics label. Empty store: "No drives yet".
 
 ## Drive detail
 
@@ -284,15 +348,26 @@ Stats definitions (`DriveStats.of`):
 
 ## Drive report
 
-(`ui/report/*`, `drive-report`) Opened from the Drive screen card after Stop, from drive detail ("Report") and from the
-drive card menu. It's computed once per open. **Share report** (`report-share`, `report-share-button`) shares a
-plain-text summary (`.txt` plus the text itself).
+(`ui/report/*`, maths in `core/drive_report.dart` + `core/drive_report_rf.dart`) Opened from the Drive screen card
+after Stop, from drive detail ("Report") and from the drive card menu. It's computed once per open. **Export**
+(app bar menu `report-export`: `report-export-text`, `report-export-csv`, `report-export-pdf`; buttons
+`report-share-button`, `report-csv-button`) shares a plain-text summary (`.txt`, in the person's units and saying
+which), ONE CSV file (`core/drive_report_export.dart`: first column `table` = `pings`, `cells`, `repeaters`,
+`snr-by-distance`, `heard-by-speed`; SI units in the column names, UTC ISO times; the menu says "Contains your exact
+track") or a **PDF** (`core/drive_report_pdf.dart`: summary, SNR / noise floor charts drawn as vector graphics with
+their numbers in words, distance and speed bars, TX power, GPS, the repeaters table and the grid-cells table; the menu
+says "Contains where you drove (grid cells)"; units as set, phone local time with the zone named; Barlow embedded,
+characters it lacks shown as "?" and said in the footer). PDF and CSV are disabled for a drive with no pings.
 
 Sections: **hero** (distance in km and mi, date, duration, antenna; grids mapped, % pings heard, repeaters),
 **highlights**, a **grid map** of cells coloured by heard % (red = 0%, then blue → teal → green), with new cells
 outlined and heard repeaters with known positions marked. Then **the drive** numbers, **signal over the drive** (SNR
-chart and heard strip), **how echoes came back** (hops), the **repeater leaderboard** (`NEW`, `not on CMAT` tags) and
-**best / dead spot**.
+chart and heard strip), **noise floor** (line with the -100 dBm interference line; "Your radio did not report a noise
+floor for this drive." when there is none), **reply strength** (strongest reply RSSI per ping), **transmit power** (one
+line, or its change points), **how echoes came back** (hops), **signal by distance** (mean direct-link SNR per band),
+**heard by speed**, **GPS accuracy** (median, 90%, fixes worse than 50 m), the **repeater leaderboard** (`NEW`,
+`not on CMAT` tags) and **best / dead spot**. Every chart is a `ChartFrame` (`ui/charts/`): a Chart / Table switch and
+a semantics label carrying the numbers; times are the phone's local time; distances and speeds follow Settings > Units.
 
 Metric definitions (`DriveReport.compute`):
 
@@ -315,31 +390,59 @@ Metric definitions (`DriveReport.compute`):
 | Best spot | Heard cell with the highest best SNR, then highest heard % |
 | Dead spot | Cell with unanswered pings and the lowest heard %, then the most unanswered |
 | Highlights | First drive ("every grid is new"), or N new grids; new repeaters (if there are earlier drives); farthest repeater; repeaters not on CMAT |
+| Noise floor | `noise_floor_dbm` of every ping (tx and rx) that carried one; median, range |
+| Reply RSSI | Per tx ping, the strongest `rssi_dbm` of its echoes or the neighbour reply |
+| TX power | `tx_dbm` change points (first value, then each change) |
+| Signal by distance | Direct links only (echo hops = 1, or a neighbour reply's local SNR) from repeaters with a known position, in the server's repeater-reach bands 0-1, 1-2, 2-5, 5-10, 10-20, 20+ km (an edge belongs to the band above). Multi-hop echoes are left out: their SNR is the last hop's, not the named repeater's. |
+| Heard by speed | Tx pings with a speed, bands 0-5, 5-15, 15-25, 25+ m/s; heard ÷ pings |
+| GPS accuracy | `gps_accuracy_m` of every ping: median, nearest-rank 90th percentile, count above 50 m |
 
-## Settings (tab 3)
+## Settings (tab 5)
 
-(`ui/settings_screen.dart`) Changes are saved immediately, and sliders save when the drag ends.
+(`ui/settings_screen.dart` is the shell; each section is its own file in `ui/settings/`.) Changes are saved
+immediately, and sliders save when the drag ends. Every row has a one-line explanation of what it does. Anything
+destructive or that starts sharing asks first and states the consequence; nothing changes silently.
+
+**Layout.** Phone: one scrolling list of section cards; tapping a section header folds it (the header says
+expanded/collapsed to screen readers). Wide screens (>= 840 dp, iPad landscape): sections in a left pane, the chosen
+section on the right. **Search** (`settings-search`, top of the list / left pane) matches titles, explanations,
+keywords and section names (every word must match; title hits first); tapping a result clears the search, opens the
+section, scrolls to the row and tints it, and announces "<row>, in <section>". Rows that are not on screen in the
+current state (no key, no site-config yet) are never offered. The index lives in `ui/settings/settings_index.dart`.
 
 | Section | Item | Behaviour |
 |---|---|---|
-| Driver & server | **Driver key** | Without a key: a request form (name required, callsign and email optional) → `driver-request`. With a key: a status badge (No key / Pending approval / Approved / Rejected / Revoked / Not recognised by this server), the public display name, the masked key `••••abcd`, **Refresh** (`driver-status`) and **Remove key**. Approval also downloads repeater names. |
-| | **Server URL** | Must be http(s) with a host. Any Drive Format v1 server works, and keys are per server: with a key saved, changing the URL first asks "Change server and remove your key?" (explaining that a key only works on the server that issued it), then removes the key and its status. Unsent drives stay on the phone and upload to the new server once it gives you a key. |
-| | **Connected to** (`site-region`) | Read-only, from `GET /api/cmh/site-config`. Names the host the server URL resolves to (e.g. `cmh.meshsonar.com`; there is no separate region name on the wire). Shown only once the server has answered; absent while loading, on a server with no `site-config` endpoint, or on any fetch failure — the Server URL tile above it is unaffected either way. Refetched once at startup and again whenever the server URL changes (the old value is cleared immediately on a change, so a stale region never shows against the new server). |
-| | **Radio preset** (`site-radio-preset`) | Informational comparison only — the app never writes to the radio. Shows the region's suggested MeshCore RF preset (name, frequency, bandwidth, spreading factor, coding rate) from `site-config`'s `radioPreset`. States: no `siteConfig` yet → nothing shown; `radioPreset: null` → "This region has no suggested preset."; a preset with no radio connected → the preset plus "No radio connected to compare."; a preset with a radio connected → both shown side by side, labeled "Yours" and the region's preset name. |
-| | **Account link** | Under the driver key (with or without one): "Manage your drives and privacy at `<server>/me` — sign in with the same email you registered with", **Get a key on the website** (opens `<server>/me/devices`), and **Manage privacy zones on the website** (`privacy-zones-website`, opens `<server>/me/privacy`) — both in the browser (url_launcher). If no browser opens, a message gives the address. |
-| Wardriving | **Channel** | Default `#wardriving`; `#` is added if missing |
-| | **Auto-ping** | Slider, every 5 s from **10 to 120 s** (default 30) |
-| | **Minimum distance** | Slider stops 15, 25, 50, 75, 100, 125, 150, 200, 250, 300, 400, **500 m** (default 100) |
-| | **Heard list hold** | 1–10 pings (default 3) |
-| Antenna | **Each saved radio** (`antenna-profile-<key>`) | Name (or key prefix) with mount, gain and height. Tap to edit; **Forget** (`antenna-forget-<key>`) asks again on that radio's next connect. Both are locked for the radio in use while driving ("Locked while driving") |
-| Upload | **Upload at end of drive** | `autoSync`, default on |
-| | **Upload during the drive** | Default on; needs the end-of-drive toggle |
-| | **Upload interval** | 1–30 min (default 5) |
-| | Last upload | "Uploading…", "Last upload HH:MM:SS · OK", "Last upload failed: …", or "No uploads yet" |
-| | **Repeater names** | Count saved for offline use. Tap (needs a key) to refresh CMAT names and force a public-directory refresh. |
-| About | **Report a problem** (`report-problem`) | See [Report a problem](#report-a-problem) |
-| | **About MeshSonar** | Version (from the build via `package_info_plus`), MIT text, short notices, Flutter licence page |
-| | **Show the welcome tour** | Reopens the intro |
+| Account & driver key (`driver`) | **Driver key** | Without a key: a request form (name required, callsign and email optional) → `driver-request`, or paste a key from the website. With a key: a status badge (No key / Pending approval / Approved / Rejected / Revoked / Not recognised by this server), the public display name, the masked key (tap to reveal for 30 s, copy), **Refresh** (`driver-status`) and **Remove key** (asks; says drives stay on the phone and headers stop). Approval also downloads repeater names. "Manage your drives at `<server>/me`" and **Get a key on the website**. |
+| | **Server URL** | Must be http(s) with a host. Keys are per server: with a key saved, moving to another server asks "Change server and remove your key?", then removes the key. Another address of the same server keeps it. Unsent drives stay on the phone. |
+| Region (`region`) | **Region** | Which region the app shows (follows your location unless you pick one; opens the switcher). |
+| | **Connected to** (`site-region`), **Radio preset** (`site-radio-preset`) | From `GET /api/cmh/site-config`, shown only once it has answered. The preset row compares the region's suggested preset with the connected radio's own ("Yours"); states: no preset, preset with no radio, both. Information only: the app never writes to the radio. |
+| Units & display (`display`) | **Units** | Auto / Metric / Imperial with the explanation of what Auto resolves to on this phone ("Auto follows your phone's region: imperial in the US, Liberia and Myanmar, metric elsewhere. Showing imperial (ft, mi, mph)."). Stored data never changes. |
+| | **Heard list hold** | 1–10 pings (default 3). |
+| Map & offline maps (`maps`) | **Offline maps** | Opens the offline map packs screen (download, update, delete per region). |
+| Privacy & data sharing (`privacy`) | **One switch per data category** | From the registry in `ui/settings/data_sharing.dart`; today only **Share packet headers** (`telemetry-toggle`). On by default (opt-out). The row shows its state: off, on but waiting for a key, or N headers waiting on the phone. Turning it **on** asks first and lists exactly what is shared and never shared. Turning it **off** stops collection at once and deletes the unsent queue; with a key it then offers to erase the server copy (`DELETE /api/cmh/telemetry`). |
+| | **Erase shared packet headers** (`telemetry-erase-now`, with a key) | Destructive confirm, then `DELETE`; sharing stays as it was. Shows when an erase is waiting to be retried. |
+| | **What MeshSonar shares** | One page: every category (state, shared, never shared, where it goes), the other flows (drives, the on-air ping, problem reports, region/map downloads) and the location points. |
+| | **Location while driving** | Opens the same "Always" explainer as first run, read-only (Done; no permission prompt). |
+| | **Manage privacy zones on the website** (`privacy-zones-website`) | Opens `<server>/me/privacy`. |
+| Radio (`radio`) | **Radio details** | Opens the Radio tab's read-only screen. |
+| | **Channel** | Default `#wardriving`; `#` is added if missing. |
+| | **Discovery (listen-only)** | The next drive transmits nothing. Locked (disabled, not hidden) while driving. |
+| | **Auto-ping** | Every 5 s from **10 to 120 s** (default 30). |
+| | **Minimum distance** | Stops 15 … 500 m (feet in imperial; default 100 m). |
+| | **Each saved radio** (`antenna-profile-<key>`) | Mount, gain and height; tap to edit; **Forget** asks. Locked for the radio in use while driving. |
+| Drives & uploads (`drives`) | **Upload at end of drive**, **Upload during the drive**, **Upload interval** (1–30 min), last upload line | As before; during-drive needs end-of-drive. |
+| Data & storage (`storage`) | **Drives on this phone** | Count and bytes; "N fully uploaded, M not fully uploaded". **Remove uploaded drives** removes only ended drives whose every ping the server confirmed (none waiting, none rejected, no rename pending) and never the drive being recorded; the dialog says what stays and how many pings the server lacks. Others are deleted one by one from Drives. |
+| | **Saved region data** | Bytes of the per-region cache and the shared ETag cache; **Clear** (asks) deletes them; they download again. |
+| | **Repeater names** (`refresh-repeaters`) | Count; tap to refresh (needs a key); **Forget saved names** (asks). |
+| | **Public node map** | Repeaters and bytes of the map.meshcore.io cache; **Clear** (asks); it downloads again around the next drive's first ping. |
+| | **Offline maps space** | Packs and bytes; opens the Offline maps screen to delete (each asks). |
+| | **Unsent problem report** | Only when one is saved; **Discard** (asks). |
+| Diagnostics (`diagnostics`) | **Diagnostic log** | Memory-only log since the app started. View (shown redacted), **Copy** (app line + settings snapshot + log, through `core/redact.dart`: keys/tokens/passwords replaced, coordinates rounded to 3 decimals; the snackbar says how many were hidden/rounded), **Clear** (asks). |
+| | **Report a problem** (`report-problem`) | See [Report a problem](#report-a-problem). |
+| About (`about-section`) | **About MeshSonar**, **Show the welcome tour** | Version and licences; reopens the intro. |
+
+The first-run disclosure sheet lists every registry category with exactly what is shared and never shared, where it
+goes, and "Change your mind any time in Settings, under Privacy & data sharing"; both choices stay pinned on screen.
 
 ## Region data, telemetry and timeline (0.19)
 
@@ -350,7 +453,7 @@ Metric definitions (`DriveReport.compute`):
 
 ## Offline maps (region packs)
 
-Settings > About > **Offline maps** (`lib/ui/settings/offline_packs_screen.dart`, logic in `lib/core/offline_packs.dart`).
+Settings > Map & offline maps > **Offline maps** (`lib/ui/settings/offline_packs_screen.dart`, logic in `lib/core/offline_packs.dart`).
 Packs are our own OpenStreetMap-derived vector tiles (PMTiles, OpenMapTiles schema, z0-14) hosted at
 `https://tiles.meshsonar.com/manifest.json`; today one pack: CMH (50.5 MB).
 
@@ -387,6 +490,83 @@ Packs are our own OpenStreetMap-derived vector tiles (PMTiles, OpenMapTiles sche
 - Live tab: when it can't reach the stream it says "Live needs a connection", keeps retrying in the background, and
   Retry reconnects right away.
 - Reports and the Analysis "Busiest hours" card are saved for offline use in every region.
+
+## Opening on the phone (unreleased)
+
+- **Instant start** (`lib/core/startup_location.dart`): at launch the last-known fix (`last_known_fix.json`) is applied
+  at once, so the Drive map and the Region tab open on the phone and its region without waiting for GPS. A fresh fix is
+  asked for in parallel (up to 20 s) and wins when it arrives: the map moves to it only if the person has not dragged
+  it. Every live fix is saved as the next launch's last-known (at most once a minute). The idle region watcher starts
+  after that.
+- **No fake border crossings:** a region seeded from an old fix (last-known, or an OS-cached one older than 15 min) is
+  re-seeded by the first live fix, so opening the app somewhere else never shows "Entered ..." or a preset prompt.
+- **Stale fixes** (older than 24 h) still centre the map and pick the region; the map says "Last known location, 3 d
+  ago" until a live fix arrives.
+- **Fallbacks:** no fix at all: the last viewed region's centre; never viewed a region: the middle of every region; no
+  regions known either: the whole world. A region picked by hand that does not contain the phone opens on that region.
+- **Location states** (Drive tab under the map, Region tab on top; `lib/ui/location_status.dart`): not asked / denied
+  ("Allow location", which shows the system question only after the tap), denied for good / restricted ("Open
+  Settings"), services off ("Open Settings" for location services), approximate ("drives need Precise Location").
+  Each offers "Choose region" too, and the app still opens on the last region. The state is read again on every
+  resume (back from Settings). Nothing prompts on launch.
+
+## Region RF, Growth and report export
+
+(`ui/region/rf_panel.dart`, `growth_panel.dart`, `region_report_export_sheet.dart`; shared shell
+`region_dataset_view.dart`) Two Region tabs after Analysis, as on the website's /analysis:
+
+- **RF** (`region-rf`, `core/region_rf_api.dart`): the website's one-line reading, figures (observers reporting,
+  quietest and noisiest mean noise floor, weak-signal share), "What this means" per observer, noise floor by observer
+  over time (up to 6 lines, -100 dBm line, a line breaks after 3 hours without data, the axis runs to the server's
+  computedAt), noise floor by hour of day (shifted from the server's UTC hours to the phone's hours when its offset is
+  whole hours; otherwise UTC, said so), SNR histogram. An observer that stopped reporting is named with the time of its
+  last reading ("INNO-OB-2 has sent no noise reading since ... Its line stops there.").
+- **Growth** (`region-ext-growth?days=365`, `core/region_growth_api.dart`): source attribution, known nodes over time
+  (running total, UTC days), churn by week (appeared / gone), nodes by role and by hash size; firmware only when the
+  server sends any.
+- Both: loading, error with Retry, "not published for this region" (404), the server's status chip and reason, the
+  offline "Offline - as of ..." label when the ETag cache served a stored copy, an honest empty state.
+- **Export region report** (app bar icon `region-report-export`): fetches `region-report` and shares a text summary,
+  the JSON (pretty-printed like the website's download), every table in one CSV, or any single table as the website's
+  own file (`<slug>-<table>.csv`, same column heads and bytes; checked against the site's code on the recorded cmh
+  body), or a **PDF** (`export-pdf`, `<slug>-region-report.pdf`, `core/region_report_pdf.dart`: overview, packets per
+  hour, repeater status and every repeater row, observers, noise floor by hour with the -100 dBm line, SNR histogram,
+  noise by observer, hash sizes and shared prefixes, hops and top carriers, coverage in the person's units, recent
+  changes; a section the server marks partial/pending quotes its reason). Empty tables are disabled. Times in the files
+  are UTC, like the website.
+
+## Repeater "Your drives"
+
+(`ui/your_drives_section.dart`, maths in `core/repeater_history.dart`) At the end of the repeater detail screen (Region
+tab) and the drive repeater sheet (ping log): how the drives stored on this phone heard this repeater. A heard id
+matches when either it or the key is a prefix of the other; an id the repeater lists give to another repeater is not
+counted, and hearings by a short id several known repeaters share are counted and said ("some may be another
+repeater"). Shows times heard and on how many drives (direct = 1 hop or a neighbour reply), best SNR and on which
+drive, last and first heard, farthest from the repeater (units), the grid cells (about 220 m x 210 m, never the raw
+track) on a small map coloured by best SNR, and the 5 newest drives (tap for the drive report). "From drives stored on
+this phone."; "None of the N drives on this phone heard this repeater." when none did.
+
+## Drive context: data collected (stream 7, core only, not switched on yet)
+
+Built as pure-Dart pieces; nothing below is collected in a drive until the drive flow starts the recorder and the
+versioned disclosure + Settings categories ship (separate work). Design: meshsonar-infra planning
+`stream-7-data-collection.md`.
+
+- **Categories** (`lib/core/data_categories.dart`): packet headers (live today), motion and altitude, air pressure,
+  phone battery, phone and app details, radio health, radio settings, weather. Each has a stable id, title, exact
+  disclosure sentence, the stored keys it owns, default ON (opt-out, Andy Oct 24 2026), destination and availability
+  (`live`, `recorderReady`, `needsSensorPlugin`, `needsServer`) so the UI never presents uncollected data as collected.
+- **Radio health** (`lib/radio/radio_health.dart`): every 60 s during a drive, GET_STATS radio/core/packets plus
+  GET_BATT_AND_STORAGE every 15 min; never while a ping is in flight (it waits, then skips); firmware that lacks a
+  command is asked once. Values the radio did not measure stay empty (0 mV battery, 0 noise floor, 0 RSSI).
+  `err_flags` is the firmware's sticky error bitmask, not a counter. Channel utilisation is not reported by MeshCore.
+- **Storage** (`JsonlDriveStore`): `samples.jsonl` (no coordinates), `ctx.jsonl` (per ping), `context.json` (per
+  drive) beside the drive, crash-safe like `pings.jsonl`. The upload and the export are byte-identical to before.
+  Turning a category off strips its keys from stored context (`stripCategories`, atomic rewrite).
+- **GPS extras**: `GeoFix` keeps altitude, vertical accuracy, course over ground and its accuracy, speed accuracy
+  (null when the phone did not measure them); they are context only, never part of the drive upload.
+- **Simulator**: answers every stats command with counters that follow what it did (pings sent, packets heard,
+  airtime, a slowly draining battery, 120 / 1984 KB storage).
 
 ## Uploads
 
@@ -447,8 +627,20 @@ it was.
   - It's triggered at launch (if stale) and on the **first ping of each drive** (around that position).
   - A failure backs off for **30 min**. There's a 20 s idle timeout, a 120 s total cap, and the download stops above
     120 MiB. It never throws: offline only means fewer names.
-- **Lookup order:** CMAT first, then the public map. A prefix that matches several different keys is "ambiguous" and
-  is never guessed. Two entries with the same full key count as one.
+- **Synced lists (unreleased, `lib/core/repeater_sync.dart`):** on app open, on resume and on a region switch the app
+  syncs the roster of the region the phone is in and of the viewed region (`region-repeaters`, ETag/304) and the global
+  network list (`GET <server>/api/cmh/network-repeaters`, not deployed yet: a 404 means "not offered", logged only). Both
+  are stored in `repeater_sync/` (versioned, atomic, at most 8 rosters, 24 MB per file) and read at launch before any
+  network call, so names and pins work offline. Limits: no background fetch; a roster at most once per region per
+  10 min on resume (launch always revalidates, a cheap 304); the network list at most once per 6 h unless pull to
+  refresh; failures back off; a forced refresh is floored at 10 s. No key, no identifier and no position is sent.
+- **Network list replaces the 17 MB download:** once the server offers the network list (and a copy confirmed within
+  14 days is stored), the app no longer downloads map.meshcore.io's node list; names come from the network list near the
+  phone (same 150 km / 180-day / 3,000 rules). Without it the directory works exactly as before.
+- **Lookup order:** region roster, then `drive-repeaters` (both "MeshSonar"), then the network list near the phone, then
+  the map.meshcore.io directory (both "map"). A prefix that matches several different keys is "ambiguous" and is never
+  guessed; a prefix the region roster marks as shared (`ambiguous: true`) never resolves to one name from any list (a
+  longer heard id can still). Two entries with the same full key count as one.
 
 ## Export & share
 

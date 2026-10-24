@@ -13,6 +13,7 @@ import '../core/model.dart';
 import 'crypto.dart';
 import 'protocol.dart';
 import 'radio_api.dart';
+import 'radio_health.dart';
 
 class CompanionException implements Exception {
   final String message;
@@ -32,7 +33,7 @@ class ControlPacket {
   const ControlPacket(this.at, this.snrDb, this.rssiDbm, this.pathLen, this.payload);
 }
 
-class MeshCoreCompanionLink implements CompanionLink {
+class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource {
   final ByteTransport _transport;
   final Duration timeout;
   final DateTime Function() _clock;
@@ -48,6 +49,9 @@ class MeshCoreCompanionLink implements CompanionLink {
   bool _closed = false;
   bool _syncing = false;
   bool _statsUnsupported = false;
+
+  /// GET_STATS sub-types (and -1 = GET_BATT_AND_STORAGE) this radio said it does not support; never asked again.
+  final Set<int> _unsupported = {};
 
   int? _maxChannels;
   int? _firmwareVerCode;
@@ -284,6 +288,55 @@ class MeshCoreCompanionLink implements CompanionLink {
       return null;
     }
   }
+
+  // ---------------------------------------------------------------- radio health (RadioStatsSource)
+  // Each goes through the same single command queue as everything else. Callers must not ask while a ping is in
+  // flight (RadioHealthPoller checks the engine first). ERR unsupported (no GET_STATS at all, firmware < v8) or ERR
+  // illegal arg (sub-type unknown to this firmware) is remembered per link so the radio is asked once, not every
+  // minute. Timeouts and other errors give null for that call only.
+
+  static const _battKey = -1;
+
+  Future<T?> _readStats<T extends Frame>(int key, Uint8List cmd) async {
+    if (!isConnected || _unsupported.contains(key)) return null;
+    if (key != _battKey && _statsUnsupported) return null;
+    try {
+      final f = await _command(cmd);
+      if (f is T) return f;
+      if (f is ErrFrame) {
+        if (f.code == ErrCode.unsupportedCmd) {
+          if (key == _battKey) {
+            _unsupported.add(key);
+          } else {
+            _statsUnsupported = true;
+          }
+        } else if (f.code == ErrCode.illegalArg) {
+          _unsupported.add(key);
+        }
+      }
+      return null;
+    } on TimeoutException {
+      return null;
+    } on CompanionException {
+      return null;
+    } on StateError {
+      return null;
+    }
+  }
+
+  @override
+  Future<BattAndStorageFrame?> batteryAndStorage() =>
+      _readStats<BattAndStorageFrame>(_battKey, encodeGetBattAndStorage());
+
+  @override
+  Future<CoreStatsFrame?> coreStats() => _readStats<CoreStatsFrame>(StatsType.core, encodeGetStats(StatsType.core));
+
+  @override
+  Future<RadioStatsFrame?> radioStats() => _readStats<RadioStatsFrame>(StatsType.radio, encodeGetStats(StatsType.radio));
+
+  @override
+  Future<PacketStatsFrame?> packetStats() =>
+      _readStats<PacketStatsFrame>(StatsType.packets, encodeGetStats(StatsType.packets));
 
   /// Sends a zero-hop NODE_DISCOVER_REQ for repeaters (firmware v8+). Answers arrive on [controlPackets].
   Future<void> sendDiscoverRequest(int tag) async {

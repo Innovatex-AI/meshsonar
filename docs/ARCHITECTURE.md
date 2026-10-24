@@ -256,26 +256,37 @@ names.
 | `app/messages.dart` | app | `friendlyError` / `friendlySyncError`: exceptions → short plain-language messages. |
 | `core/model.dart` | core (contract) | Drive Format v1 records: `AppInfo`, `Radio`, `Antenna`, `Companion`, `DriveSession`, `Echo`, `Neighbor`, `DrivePing`, `DriveBatch`, `RepeaterRef`. |
 | `core/api.dart` | core (contract) | `DriveStore`, `CmatClient`, `SyncService`, `SettingsStore` interfaces; `Settings`, `SessionSummary`, `DriverKeyStatus`, `UploadResult`, `SyncReport`, `CmatException`, `RegionInfo`, `RadioPreset`, `SiteConfig`, `CoverageCell`, `CoverageGrid`, `PublicCoverage`. |
-| `core/drive_store.dart` | core | `JsonlDriveStore` (one folder per drive, JSONL pings, sync ledgers, rename + re-send mark), the `SyncLedger` extension interface, and `closeOrphanedSessions` (closes crashed drives at launch). |
+| `core/drive_store.dart` | core | `JsonlDriveStore` (one folder per drive, JSONL pings, sync ledgers, rename + re-send mark, and the drive-context files `samples.jsonl` / `ctx.jsonl` / `context.json` via `DriveContextLedger`), the `SyncLedger` extension interface, and `closeOrphanedSessions` (closes crashed drives at launch). |
+| `core/drive_context.dart` | core | Drive context stored beside a drive, never in its upload: `PingContext` (per ping), `DriveSample` (time series, no coordinates), `SessionContext` (`DeviceDetails`, `CompanionDetails`); range checks (out of range = null); per-category `without()`; the `DriveContextLedger` interface and `stripContextCategories`. |
+| `core/drive_context_recorder.dart` | core | `DriveContextRecorder`: one per drive; matches fixes to pings, writes samples/ping context/session snapshot, reads the category switches at every write. Not yet started by `AppState` (stream 7 WP2 hook). |
+| `core/data_categories.dart` | core | `dataCategories`: every collected category (id, title, exact disclosure text, stored field keys, default on, destination, availability, permission) for the Settings registry and the disclosure sheet; `fieldCategory` key map. |
 | `core/cmat_client.dart` | core | `HttpCmatClient` for `driver-request`, `driver-status`, `drive-upload`, `drive-repeaters`, `site-config`, `public-coverage` (both public, no driver key); `DetailedUploadResult`, `PingRejection`. |
 | `core/network_coverage.dart` | core | `buildNetworkCells`/`levelFor`: turns a `PublicCoverage` answer into drawable `NetworkCell`s (square bbox or H3 hexagon boundary) bucketed by `CoverageColorBy` — the Drive map's network-wide background layer. |
 | `core/sync_service.dart` | core | `DefaultSyncService`: chunked, serialised, retry-safe uploads; rejection discovery; end-time reporting. |
 | `core/settings_store.dart` | core | `FileSettingsStore`: atomic JSON settings; missing/corrupt → defaults. |
 | `core/position_filter.dart` | core | `PositionFilter` (accuracy gate, Kalman smoothing, stationary hold) and `FilteredLocationSource` wrapper. |
 | `core/heard.dart` | core | `haversineM`, `bearingDeg`, `compass`; `RepeaterLookup` (prefix → repeater, CMAT first); `HeardTracker` (live/stale per repeater). |
+| `core/startup_location.dart` | core | Stream 4: `PhoneFix` (live vs last-known, stale > 24 h), `fixWithin` (bounded launch fix), `LocationAccess` / `LocationNote` / `LocationAccessProbe` (permission states and actions), `mapStartFor` (phone > viewed region > hub > world). |
+| `core/network_repeaters.dart` | core | Global network list (`/api/cmh/network-repeaters`): `NetworkRepeater`, tolerant envelope + strict row parser, `nearby` (150 km). |
+| `core/repeater_sync.dart` | core | Stream 3: `RepeaterSync` (roster + network list on open/resume/switch, ETag, rate limits, back-off, capability check) and `RepeaterSyncStore` (versioned, atomic, bounded); `RepeaterSet` for the map layer. |
 | `core/repeater_directory.dart` | core | `RepeaterDirectory`: streams map.meshcore.io's node list, keeps nearby repeaters, caches to disk; `JsonArraySplitter`. |
 | `core/pmtiles_reader.dart` | core | Read-only PMTiles v3 reader: header, metadata, root/leaf directories, run-length entries, gzip; reads queued on one file handle; `allTileEntries` walk for diagnostics. |
 | `core/offline_style.dart` | core | `offlineStyle`: MapLibre style JSON (OpenMapTiles schema) = OSM Carto colours through the online tile matrices (`osmTintLight/Dark`, pinned to ui/theme.dart by a test); app (Flutter fonts) and web (glyph stacks + pmtiles source) targets; `offlineStyleVersion`. |
 | `core/offline_packs.dart` | core | Pack manifest (https, same host), `OfflinePackManager`: ETag-cached manifest, resumable verified downloads (`.part` + version sidecar), Wi-Fi-only policy (`NetworkKind`, `NetworkMonitor` seam, queued/pending downloads persisted in `prefs.json`), update, delete/delete all, storage, `packCovering`. |
+| `core/cluster_index.dart` | core | `ClusterIndex`: grid clustering of big point layers, precomputed for zooms 0..14 (one integer sort on Morton cell codes, one scan per level; 64 px cells), stable cluster ids, O(visible) viewport `query` (antimeridian copies), `hitTest` (nearest point/cluster within N px, co-located stacks), `build` runs in `Isolate.run` from 2,000 points; Web Mercator helpers. Not wired into a screen yet (stream-1-maps.md WP-M2/M3). |
+| `core/map_view_state.dart` | core | `MapViewState`: the map view as a URL, parse/serialise compatible with the website's `/coverage` params (`show, color, since, src, res, lat, lon, label, from`) plus app `z`/`until`; `https://<region>.meshsonar.com/coverage` and `meshsonar://map` forms; every bad parameter dropped alone. The URL scheme is not registered yet (WP-M4). |
+| `core/repeater_points.dart` | core | `MapRepeaterRow` (neutral row the repeater layers take), `RepeaterPoints` (typed lists: position check, newest-wins key dedupe, skip keys, name fallback), website advert-age bands and `advertText`. |
 | `radio/radio_api.dart` | radio (contract) | `ByteTransport`, `RadioScanner`, `RadioDevice`, `SelfInfo`, `RxPacket`, `CompanionLink`, `GeoFix`, `LocationSource`, `WardriveConfig`, `EngineState`, `PingWait`, `EngineStatus`, `WardriveEngine`. |
 | `radio/protocol.dart` | radio | Companion protocol codes, command encoders, frame decoders, plus the radio-side encoders the simulator uses. |
 | `radio/packet.dart` | radio | Over-the-air packet parser/serialiser, path-hash decoding, GRP_TXT build/decrypt, `matchEcho`. |
 | `radio/crypto.dart` | radio | Pure-Dart SHA-256, HMAC-SHA256, AES-128; channel secrets and hash; MeshCore encrypt-then-MAC. |
-| `radio/companion_link.dart` | radio | `MeshCoreCompanionLink`: serialised commands, push handling, `ensureChannel`, `sendChannelText`, `noiseFloor`, discovery request, offline-queue drain. |
+| `radio/companion_link.dart` | radio | `MeshCoreCompanionLink`: serialised commands, push handling, `ensureChannel`, `sendChannelText`, `noiseFloor`, radio health reads (`coreStats`, `radioStats`, `packetStats`, `batteryAndStorage`; unsupported asked once), discovery request, offline-queue drain. |
+| `radio/radio_health.dart` | radio | `RadioStatsSource`, `radioSampleFrom` (frames to a `DriveSample`, unmeasured = null), `RadioHealthPoller` (every 60 s, never while a ping is in flight; injectable clock + timer). |
 | `radio/wardrive_engine.dart` | radio | `DefaultWardriveEngine`: cadence, one ping at a time, listen window, echo building, optional neighbour discovery; `formatPingText`. |
 | `radio/simulator.dart` | radio | `SimulatedLocationSource` (Westerville loop), `SimulatedTransport` (speaks real frames and real encrypted packets), `SimulatedRadioScanner`, simulated repeaters. |
 | `radio/ble_transport.dart` | platform | `BleRadioScanner` / `_BleTransport` over flutter_blue_plus (Nordic-UART-style service). |
 | `platform/geolocator_location.dart` | platform | `GeolocatorLocationSource`: per-OS location settings (Android foreground notification, iOS background updates), permission. |
+| `platform/location_access.dart` | platform | `GeolocatorLocationAccess`: reads permission without prompting (not asked / denied / forever / restricted / approximate / services off), asks only on tap, opens Settings. |
 | `platform/share.dart` | platform | `shareDriveFile`: share sheet for exports (JSON) and reports (text). |
 | `platform/app_version.dart` | platform | `loadAppInfo`: name, version (from the build via package_info_plus) and platform. |
 | `platform/open_url.dart` | platform | `openExternalUrl`: opens the server's web pages in the browser (url_launcher). |
@@ -284,16 +295,31 @@ names.
 | `ui/theme.dart` | ui | Design system: `Gap`, `Corners`, palettes, `MeshSonarColors` (SNR scale, beacon, map tile matrix), `numberStyle`, theme mode. |
 | `ui/widgets.dart` | ui | Shared formatters (`formatTime`, `formatDateTime`, `formatSnr`, `bestSnr`, `repeatersHeard`) and small widgets (`StatTile`, `StatStrip`, `EmptyState`, `ErrorBanner`, `SectionLabel`, `SignalBars`, `ResultDot`, `PingTile`). |
 | `ui/device_feedback.dart` | platform | `DeviceFeedback` (wake lock + haptics) with a no-op under `flutter test`. |
+| `ui/location_status.dart` | ui | `LocationNoteBanner` (location state + action + Choose region) and `PhoneFixNoteChip` ("Last known location, 3 d ago"). |
 | `ui/drive_screen.dart` | ui | Drive tab: map + heard box + controls; keeps the screen awake while driving; `ConnectionChip`. |
 | `ui/drive/drive_controls.dart` | ui | Stats strip, live stats strip, status row, next-ping indicator, antenna toggle, Log button, report card, Start/Stop + Ping now, map hint, ping flash, map icon button. |
-| `ui/drive/drive_map_model.dart` | ui | `DriveMapModel` shared by the Drive screen and full-screen map. |
+| `ui/drive/drive_map_model.dart` | ui | `DriveMapModel` shared by the Drive screen and full-screen map: pings, heard, selection, `layerState` (registry ids; `layers` is the old bool view), the `RepeaterMapSource` over `AppStateRepeaterFeed`, observers fetch, `statusOf`/`retry` per layer, coverage query/timeline. |
 | `ui/drive/drive_live_stats.dart` | ui | `DriveLiveStats`: live new-vs-repeat grid-cell tally for the mid-drive stats strip. |
 | `ui/drive/heard_box.dart` | ui | `HeardBox`: live / holding / stale repeaters over the map. |
-| `ui/map/coverage_map.dart` | ui | `CoverageMap` (flutter_map): grid, OSM tiles, rings, links, repeaters, ping dots, position, compass, recenter, attribution; `SimulatedTag`. |
+| `ui/map/coverage_map.dart` | ui | `CoverageMap` (flutter_map): grid, OSM tiles, rings, links, the clustered `network` / `repeaters` layers (from a host `RepeaterMapSource`, or its own built from `regionRepeaters`), observers, heard repeaters, ping dots, position, compass, recenter, attribution (+ the network layer's legend and credit); taps routed through `showMapHitSheet`; `SimulatedTag`. |
+| `ui/map/fullscreen_map.dart` | ui | Full-screen live map; `showMapLayersSheet` (opens the generated sheet). |
+| `ui/map/repeater_page_link.dart` | ui | `openRepeaterPageFromMap`: "Open repeater page" from a map repeater sheet. |
+| `ui/map/region_repeater_layer.dart` | ui | `regionRepeaterColor` (roster status colours; the layer itself is the clustered painter). |
 | `ui/map/offline_basemap.dart` | ui | `OfflineBasemap` (shared pack manager + open PMTiles readers, network/lifecycle hooks that resume queued downloads), `OfflinePackSelection` (which pack the camera centre is in, sticky in overlaps), `OfflineBasemapLayer` (vector_map_tiles in raster mode), `offlineMapStyle` (MapLibre-style JSON, OpenMapTiles schema, light/dark, labels drawn with Flutter text, no glyph files). |
 | `ui/settings/offline_packs_screen.dart` | ui | Settings > Offline maps: pack list (ETag-cached manifest), download/pause/update/delete/delete all, Wi-Fi-only switch and cellular prompt, storage. |
-| `ui/map/fullscreen_map.dart` | ui | Full-screen live map; `showMapLayersSheet`. |
 | `ui/map/map_layers.dart` | ui | `MapLayers`, `PingColorMode`, `HeardView` / `HeardPhase`, `heardSnapshot`, `formatDistance` (map style), `formatSnrShort`. |
+| `ui/map/layers/map_layer.dart` | ui | Layer vocabulary: `MapLayerSpec`, `LayerGroup`, `LayerAvailability` + `LayerStatus` (switch enabled + reason text), `MapLayerState` (on set + modes, `toShow`/`fromShow` with the website's `?show=` keys), `MapHit` (`CellHit`, `RepeaterHit`, `ClusterHit`, `ObserverHit`). |
+| `ui/map/layers/registry.dart` | ui | `kMapLayers` in paint order (measured, hexes, network, repeaters, observers, links, neighbours, heard, pings, rings), defaults, `layerStateForLink`, `layerStatus` for every layer from `MapLayerInputs`. |
+| `ui/map/layers/map_layers_adapter.dart` | ui | `MapLayers` <-> `MapLayerState` bridge for the migration (heard = old `repeaters`, repeaters = old `regionRepeaters`, measured = old `networkCoverage`). |
+| `ui/map/layers/repeater_map_source.dart` | ui | `RepeaterMapFeed` (what the owner of the repeater lists implements; `StaticRepeaterMapFeed`), `RepeaterMapSource` (points + cluster index per list, rebuilt on rows identity or `fetchedAt` change, both steps in one `Isolate.run` from 2,000 rows, `refreshAges`, roster keys left out of the global layer, status texts), `RepeaterPoint`, `rosterRows`. |
+| `ui/map/layers/app_repeater_feed.dart` | ui | `AppStateRepeaterFeed`: the app's `RepeaterMapFeed` over AppState (`globalRepeaterSet` scoped by `scopeRegion` to the known region's bbox + `kRegionRepeaterMarginKm` (40), else the whole list; the sync's stored roster of the viewed region, host fallback roster); roster detail by key map; forwards only real changes. |
+| `ui/map/layers/layers_sheet.dart` | ui | The layers sheet generated from the registry (sections, switches with status/Retry, controls, legends), `layerSwitchKey` (legacy keys), `NetworkAgeLegend`, `RosterStatusLegend`. |
+| `ui/map/layers/observer_layer.dart` | ui | `ObserverLayer` (triangles for observers with a public position, tap -> `ObserverHit`), `positionedObservers`. |
+| `ui/map/sheets/observer_sheet.dart` | ui | Observer detail sheet (online, last seen, noise floor, packets/h, nodes 24 h, radio, battery mV, distance via Units, source). |
+| `ui/map/layers/clustered_points_layer.dart` | ui | `ClusteredPointsLayer`: one `CustomPainter` flutter_map child (viewport query, LOD below zoom 5, drawPoints per colour, cached count labels on opaque bubbles with contrast-picked ink (`clusterLabelInk`, `clusterFontSize`, `clusterBubbleRadius`), a semantics node per visible cluster (`clusterSemanticsLabel`), own hit test; misses fall through to the map); `clusterTapAt`, `cameraFitForCluster`. |
+| `ui/map/layers/repeater_cluster_layer.dart` | ui | `RepeaterClusterLayer` for `network` (advert-age colours, website tokens) and `repeaters` (roster status colours); `repeaterHitFor`. |
+| `ui/map/sheets/repeater_sheet.dart` | ui | Repeater detail sheet (name, role, copyable key, last advert/heard, distance via Units, roster figures, source line, "Open repeater page") and the co-located list sheet. |
+| `ui/map/sheets/map_hit_sheet.dart` | ui | `showMapHitSheet`: cell -> cell sheet, repeater -> repeater sheet, observer -> observer sheet, stack -> list, cluster -> camera fit. |
 | `ui/connect_screen.dart` | ui | Scan for radios, connect/disconnect, Simulator entry. |
 | `ui/ping_log_screen.dart` | ui | Ping log (live or saved): summary, filters, pings / repeaters tabs; `aggregateRepeaters`. |
 | `ui/ping_detail_sheet.dart` | ui | One ping: facts, echoes, neighbour, ambiguous-prefix candidates, "Copy as text" (`pingAsText`). |
@@ -305,6 +331,54 @@ names.
 | `ui/drive_stats.dart` | ui (pure Dart) | `DriveStats.of` (distance, duration, heard %, best/median SNR, repeaters, multi-hop, timeline); `formatDistance`, `formatMiles`, `formatDuration`. |
 | `ui/report/drive_report.dart` | ui (pure Dart) | `DriveReport.compute`: CMAT-grid cells, new grids/repeaters vs earlier drives, speeds, hops, best/worst spot, text summary. |
 | `ui/report/drive_report_screen.dart` | ui | Drive report screen and `loadDriveReport`; share as text. |
+| `ui/settings_screen.dart` | ui | Settings shell: search, phone list of collapsible section cards, wide (>= 840 dp) two-pane layout; re-exports `DriverKeyScreen`, `SliderTile` and the stop lists. |
+| `ui/settings/settings_index.dart` | ui | Section order and the searchable index of every row (`SettingsEntry`: id, section, title, explanation, keywords, availability); `searchSettings`. |
+| `ui/settings/settings_kit.dart` | ui | `SettingsSection` (collapsible card), `SettingsAnchors`/`SettingsAnchor` (jump + tint targets), `confirmSettingsChange`, `SliderTile` + stops, `editSettingText`. |
+| `ui/settings/data_sharing.dart` | ui | The one source of disclosure text: `DataCategory` registry (`dataCategories`, today only `telemetryCategory`), other data flows, location explainer points, `privacySectionTitle`. |
+| `ui/settings/account_section.dart` | ui | Driver key (request, paste, reveal, remove), Server URL, `DriverKeyScreen`, `KeyStatusBadge`, `confirmServerChange`, `AccountLinks`. |
+| `ui/settings/region_section.dart` | ui | Region pick, Connected to, region radio preset comparison (read-only). |
+| `ui/settings/display_section.dart` | ui | Units (with `unitsExplanation`) and heard list hold. |
+| `ui/settings/maps_section.dart` | ui | Offline maps link. |
+| `ui/settings/privacy_section.dart` | ui | Category switches, on-confirm / off-erase flow, erase now, `WhatIsSharedScreen`, location and privacy-zone links. |
+| `ui/settings/radio_section.dart` | ui | Radio tab link, channel, discovery, auto-ping sliders, per-radio antenna rows. |
+| `ui/settings/drives_section.dart` | ui | Upload toggles, upload interval, `LastUpload`. |
+| `ui/settings/storage_section.dart` | ui | Data & storage: sizes and per-item clear actions (uploaded drives only, region cache, repeater names, node map, offline maps link, unsent report). `storagePackManager` test seam. |
+| `ui/settings/diagnostics_section.dart` | ui | Diagnostic log screen (redacted view, copy, clear), `diagnosticsExport`, Report a problem link. |
+| `ui/settings/about_section.dart` | ui | About and welcome tour rows. |
+| `core/storage_usage.dart` | core | `StorageSized`, `bytesOnDisk`, `driveSafeToRemove` / `splitDrives` (which drives may leave the phone), `formatStorageBytes`. |
+| `core/drive_stats.dart` | core | `DriveStats.of` (distance, duration, heard %, best/median SNR, repeaters, multi-hop, timeline); `formatDuration`. `ui/drive_stats.dart` is a re-export shim. |
+| `core/drive_report.dart` | core | `DriveReport.compute`: CMAT-grid cells, new grids/repeaters vs earlier drives, speeds, hops, best/worst spot, radio side (`rf`), text summary v2; band labels. `ui/report/drive_report.dart` is a re-export shim. |
+| `core/drive_report_rf.dart` | core | `DriveRf`: noise floor, reply RSSI, TX power change points, direct-link SNR by distance band, heard by speed band, GPS median/p90. |
+| `core/drive_report_export.dart` | core | Drive report CSV tables (pings, cells, repeaters, distance, speed) and the one-file CSV. |
+| `core/report_csv.dart` | core | `csvCell`/`toCsv` byte-compatible with the website's report CSVs, `ReportTable`, `combinedCsv`, `fileSlug`. |
+| `core/rf_thresholds.dart` | core | The website's noise-floor thresholds (-100 interference, -110 elevated, -120 baseline) and verdict text. |
+| `core/region_dataset_fetch.dart` | core | `fetchRegionDataset`: `<region host>/api/cmh/<name>` through the ETag client; `RegionFetch` (data, body, 404, error, offline as-of). |
+| `core/region_rf_api.dart` | core | `region-rf` client and model: observers' series, noise by hour, SNR histogram, silent observers, the website's finding. |
+| `core/region_growth_api.dart` | core | `region-ext-growth` client and model: churn, daily, cumulative, roles, firmware, hash sizes, basis. |
+| `core/region_report_export.dart` | core | `region-report` as the website's tables (ids, heads, cells), text summary, pretty JSON, file names. |
+| `core/personal_progress.dart` | core | `PersonalProgress.compute`: every drive on the phone rolled up: ISO weeks (Monday, phone local), new grid cells / repeaters per drive and week, records, noise floor per drive and by local hour, TX power per drive. |
+| `core/repeater_history.dart` | core | `RepeaterHistory.compute`: one repeater across local drives (prefix match both ways, ids the lookup gives another repeater excluded, shared short ids counted apart): hearings, direct, best SNR, first/last, farthest, grid cells, drives. |
+| `core/report_pdf.dart` | core | PDF document model (heading, text, facts, table, bars, line) and `renderReportPdf` on the `pdf` package: vector charts, Barlow embedded when given, missing glyphs as "?". |
+| `core/drive_report_pdf.dart` | core | `driveReportPdf`: the drive report as a `ReportDoc` (units, local time + zone). |
+| `core/region_report_pdf.dart` | core | `regionReportPdf`: the `region-report` body as a `ReportDoc` (UTC, every row, server status notes). |
+| `ui/charts/chart_frame.dart` | ui | `ChartFrame` (title, Chart/Table switch, one semantics node "title. summary", caption), `ChartTable`, `chartPalette`. |
+| `ui/charts/time_line_chart.dart` | ui | `TimeLineChart`: series over time with gap breaks, reference line, floor marks, fill, dots. |
+| `ui/charts/bar_chart.dart` | ui | `BarChart`: bars or grouped bars on a baseline, reference line, per-bar colour. |
+| `ui/charts/sparkline.dart` | ui | `Sparkline` (+ `SparkStyle.plain` / `.snr` / `.counts` presets of the former copies, optional fill and baseline) with a semantics summary; `sparkSummary`. |
+| `ui/charts/bar_strip.dart` | ui | `BarStrip` (the Reports panel's axis-less bars, moved) with a semantics summary; `barStripSummary`. |
+| `ui/charts/heatmap.dart` | ui | `HeatmapPainter` (weekday x hour, moved unchanged from the Analysis panel). |
+| `ui/charts/heard_strip.dart` | ui | `HeardStrip` (heard / not per ping, moved from the Drives list; re-exported by `sessions_screen.dart`), optional semantics label. |
+| `ui/charts/chart_scale.dart` | ui | `niceTicks`, `tickLabel`, dashed lines, canvas text. |
+| `ui/report/drive_report_screen.dart` | ui | Drive report screen and `loadDriveReport`; Export menu (text, CSV, PDF). |
+| `ui/report/progress_screen.dart` | ui | "Your progress" screen (totals, weekly charts, records, your radio) and the Drives tab's `ProgressCard`. |
+| `ui/report/local_drives.dart` | ui | `loadLocalDrives`: every drive in the store with its pings (damaged ones skipped and counted). |
+| `ui/report/pdf_export.dart` | ui | Loads Barlow from the bundled fonts, renders a `ReportDoc` and shares the `.pdf` through `exportDir` / `shareFile`. |
+| `ui/your_drives_section.dart` | ui | Repeater "Your drives" section (repeater detail screen and drive repeater sheet): facts, cell map, drives list. |
+| `ui/report/drive_report_sections.dart` | ui | Drive report v2 sections: SNR, noise floor, RSSI, TX power, distance, speed, GPS. |
+| `ui/region/rf_panel.dart` | ui | Region RF tab. |
+| `ui/region/growth_panel.dart` | ui | Region Growth tab. |
+| `ui/region/region_dataset_view.dart` | ui | Shared shell of the RF/Growth tabs (states, status, offline label); `DatasetCard`, `FigureStrip`. |
+| `ui/region/region_report_export_sheet.dart` | ui | Export region report sheet (text, PDF, JSON, all tables, one table). |
 | `ui/settings_screen.dart` | ui | Settings sections, driver key request/status, sliders (`SliderTile`, stop lists), upload status, About/intro links. |
 | `ui/about_screen.dart` | ui | About: version, MIT text, short third-party notices, licence page. |
 | `ui/onboarding/first_run_gate.dart` | ui | Shows the intro once, then routes to Connect / Simulator / Settings. |

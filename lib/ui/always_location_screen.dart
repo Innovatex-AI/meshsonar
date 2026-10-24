@@ -1,9 +1,13 @@
 // Plain-language explanation shown BEFORE iOS's one-shot "Always" location prompt, plus the region-change preset
-// question. Both are full explanations first, system prompt / action second.
+// question. Both are full explanations first, system prompt / action second. The explainer's words live in
+// lib/ui/settings/data_sharing.dart (locationPoints), shared with Settings > Privacy & data sharing.
 import 'package:flutter/material.dart';
 
 import '../core/region_preset.dart';
 import '../platform/always_location.dart';
+import 'settings/data_sharing.dart' show locationPoints;
+
+const List<IconData> _pointIcons = [Icons.lock_outline, Icons.public, Icons.visibility_off_outlined, Icons.tune];
 
 /// Shows the explainer (once) when iOS is at "While Using" and Always could still be granted.
 Future<void> maybeAskAlwaysLocation(BuildContext context) async {
@@ -16,7 +20,10 @@ Future<void> maybeAskAlwaysLocation(BuildContext context) async {
 }
 
 class AlwaysLocationScreen extends StatelessWidget {
-  const AlwaysLocationScreen({super.key});
+  /// Opened from Settings to read again: one Done button, no permission request (iOS only asks once anyway; a change
+  /// is made in iOS Settings, as the last point says).
+  final bool explainOnly;
+  const AlwaysLocationScreen({super.key, this.explainOnly = false});
 
   @override
   Widget build(BuildContext context) {
@@ -41,28 +48,29 @@ class AlwaysLocationScreen extends StatelessWidget {
         child: ListView(padding: const EdgeInsets.all(20), children: [
           Text('Let MeshSonar keep recording when the screen is off', style: t.textTheme.headlineSmall),
           const SizedBox(height: 18),
-          point(Icons.lock_outline, 'Why "Always"',
-              'On a drive your phone is usually locked or showing navigation. Without Always, iOS stops giving MeshSonar your position and the drive has gaps.'),
-          point(Icons.public, 'Which region you are in',
-              'The same position is used on this phone to tell which MeshSonar region you are in (for example Columbus or Dayton) and to tell you when you cross into another.'),
-          point(Icons.visibility_off_outlined, 'What it is NOT used for',
-              'No tracking when you are not driving. Position is never put in the on-air ping, and drive data goes only to the server you chose, under your driver key.'),
-          point(Icons.tune, 'You stay in control',
-              'iOS shows a blue bar while MeshSonar uses your location in the background. You can change this any time in iOS Settings > MeshSonar > Location.'),
+          for (final (i, p) in locationPoints.indexed) point(_pointIcons[i % _pointIcons.length], p.head, p.body),
           const SizedBox(height: 8),
-          FilledButton(
-            key: const Key('always-location-continue'),
-            onPressed: () async {
-              await requestAlwaysLocation();
-              if (context.mounted) Navigator.of(context).pop();
-            },
-            child: const Text('Continue'),
-          ),
-          TextButton(
-            key: const Key('always-location-not-now'),
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Not now'),
-          ),
+          if (explainOnly)
+            FilledButton(
+              key: const Key('always-location-done'),
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Done'),
+            )
+          else ...[
+            FilledButton(
+              key: const Key('always-location-continue'),
+              onPressed: () async {
+                await requestAlwaysLocation();
+                if (context.mounted) Navigator.of(context).pop();
+              },
+              child: const Text('Continue'),
+            ),
+            TextButton(
+              key: const Key('always-location-not-now'),
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Not now'),
+            ),
+          ],
         ]),
       ),
     );

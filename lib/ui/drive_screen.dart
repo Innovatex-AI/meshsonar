@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import '../app/app_state.dart';
 import 'app.dart';
 import 'device_feedback.dart';
+import 'location_status.dart';
 import 'map/region_center.dart';
 import 'drive/drive_controls.dart';
 import 'drive/drive_live_stats.dart';
@@ -19,6 +20,7 @@ import 'drive/drive_map_model.dart';
 import 'drive/heard_box.dart';
 import 'map/coverage_map.dart';
 import 'map/fullscreen_map.dart';
+import 'map/repeater_page_link.dart';
 import 'map/coverage_timeline_slider.dart';
 import 'widgets.dart';
 
@@ -142,6 +144,12 @@ class _DriveScreenState extends State<DriveScreen> {
               ),
             );
             final controls = <Widget>[
+              // Location off / not asked / approximate: say so with the one action (the map still opens on the region).
+              if (s.locationNote != null && !s.driving)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(Gap.m, Gap.s, Gap.m, 0),
+                  child: LocationNoteBanner(state: s),
+                ),
               DriveStatusRow(state: s),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: Gap.m),
@@ -233,12 +241,19 @@ class _MapPane extends StatelessWidget {
                 key: const Key('drive-map'),
                 pings: model.pings,
                 repeaters: model.repeaters,
-                position: model.position,
+                // Not driving: the phone's position (last-known at once, then the fresh fix) so the map opens on it.
+                position: model.position ?? (model.pings.isEmpty ? idleMapPosition(s) : null),
+                showRings: s.driving,
                 repeaterLabel: s.repeaterLabel,
                 heard: model.heard,
                 layers: model.layers,
                 networkCells: model.networkCells,
                 regionRepeaters: model.regionRepeaters,
+                repeaterSource: model.repeaterSource,
+                layerState: model.layerState,
+                observers: model.observers,
+                observersRegionName: s.viewingRegion?.name,
+                openRepeaterPage: openRepeaterPageFromMap,
                 highlightKey: model.selected,
                 onSelectRepeater: model.select,
                 simulated: model.simulated,
@@ -287,6 +302,13 @@ class _MapPane extends StatelessWidget {
                     ConstrainedBox(
                       constraints: BoxConstraints(maxWidth: (box.maxWidth - 2 * Gap.s - 46).clamp(80.0, 180.0)),
                       child: RegionChip(state: s),
+                    ),
+                    const SizedBox(height: Gap.s),
+                  ],
+                  if (s.phoneFixNote != null && !s.driving && model.pings.isEmpty) ...[
+                    ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: (box.maxWidth - 2 * Gap.s - 46).clamp(80.0, 220.0)),
+                      child: PhoneFixNoteChip(state: s),
                     ),
                     const SizedBox(height: Gap.s),
                   ],

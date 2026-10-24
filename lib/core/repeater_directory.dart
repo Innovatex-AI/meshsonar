@@ -223,6 +223,18 @@ class RepeaterDirectory {
     }
   }
 
+  /// Forgets the cached map, in memory and on disk (Settings > Data & storage); the next [refresh] downloads it again.
+  /// A download already running still saves what it gets. Never throws.
+  Future<void> clear() async {
+    _snapshot = null;
+    lastError = null;
+    for (final f in [cacheFile, File('${cacheFile.path}.tmp')]) {
+      try {
+        if (await f.exists()) await f.delete();
+      } catch (_) {}
+    }
+  }
+
   static String _describe(Object e) {
     if (e is TimeoutException) return 'The node map didn\'t answer in time.';
     if (e is SocketException || e is http.ClientException) return 'No connection to the node map.';

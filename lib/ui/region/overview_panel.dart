@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../core/region_overview_api.dart';
+import '../charts/sparkline.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import 'region_common.dart';
@@ -298,18 +299,18 @@ class _SparkCard extends StatelessWidget {
                 style: t.textTheme.bodyMedium,
               )
             else ...[
-              SizedBox(
+              Sparkline(
+                key: const Key('sparkline'),
                 height: 64,
-                width: double.infinity,
-                child: CustomPaint(
-                  key: const Key('sparkline'),
-                  painter: SparklinePainter(
-                    values: [for (final h in hours) h.n],
-                    line: t.colorScheme.primary,
-                    fill: t.colorScheme.primary.withValues(alpha: .15),
-                    base: t.colorScheme.outlineVariant,
-                  ),
-                ),
+                values: [for (final h in hours) h.n.toDouble()],
+                color: t.colorScheme.primary,
+                style: SparkStyle.counts,
+                fillColor: t.colorScheme.primary.withValues(alpha: .15),
+                baseColor: t.colorScheme.outlineVariant,
+                summary: total == 0
+                    ? 'Packets per hour: none in the last ${hours.length} hours.'
+                    : 'Packets per hour, last ${hours.length} hours: peak $peak, ${groupInt(total)} in all. '
+                        '${sparkSummary([for (final h in hours) h.n.toDouble()], decimals: 0, gapWord: 'hours')}',
               ),
               const SizedBox(height: 6),
               Text(
@@ -333,56 +334,4 @@ class _SparkCard extends StatelessWidget {
       ),
     );
   }
-}
-
-/// A filled line chart of [values], scaled 0..max. An all-zero series draws a flat baseline.
-class SparklinePainter extends CustomPainter {
-  final List<int> values;
-  final Color line, fill, base;
-  SparklinePainter({
-    required this.values,
-    required this.line,
-    required this.fill,
-    required this.base,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final basePaint = Paint()
-      ..color = base
-      ..strokeWidth = 1;
-    canvas.drawLine(
-      Offset(0, size.height - .5),
-      Offset(size.width, size.height - .5),
-      basePaint,
-    );
-    if (values.isEmpty) return;
-    final maxV = math.max(1, values.fold<int>(0, math.max));
-    final dx = values.length == 1 ? 0.0 : size.width / (values.length - 1);
-    Offset pt(int i) => Offset(
-      i * dx,
-      (size.height - 3) - (values[i] / maxV) * (size.height - 6),
-    );
-    final path = Path()..moveTo(pt(0).dx, pt(0).dy);
-    for (var i = 1; i < values.length; i++) {
-      path.lineTo(pt(i).dx, pt(i).dy);
-    }
-    final area = Path.from(path)
-      ..lineTo(pt(values.length - 1).dx, size.height)
-      ..lineTo(0, size.height)
-      ..close();
-    canvas.drawPath(area, Paint()..color = fill);
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = line
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2
-        ..strokeJoin = StrokeJoin.round,
-    );
-  }
-
-  @override
-  bool shouldRepaint(SparklinePainter o) =>
-      o.values != values || o.line != line || o.fill != fill;
 }

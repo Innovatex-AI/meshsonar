@@ -10,6 +10,8 @@ import '../core/idle_region_watcher.dart';
 import '../core/region_cache.dart';
 import '../core/region_lookup.dart';
 import '../core/repeater_directory.dart';
+import '../core/repeater_sync.dart';
+import '../core/startup_location.dart';
 import '../core/report_draft_store.dart';
 import '../radio/radio_api.dart';
 
@@ -114,6 +116,12 @@ class AppServices {
   final IdleLocationSource? idleLocation;
   final LastKnownStore? lastKnownStore;
 
+  /// Reads location permission without prompting (and asks only when the person taps). Null = not shown (tests).
+  final LocationAccessProbe? locationAccess;
+
+  /// Region roster + network repeater list sync with its on-disk store. Null = off (tests).
+  final RepeaterSync? repeaterSync;
+
   final DateTime Function() clock;
   final String Function() newId;
 
@@ -143,6 +151,8 @@ class AppServices {
     this.regionCache,
     this.idleLocation,
     this.lastKnownStore,
+    this.locationAccess,
+    this.repeaterSync,
   });
 
   /// Public node directory (map.meshcore.io) for names/positions CMAT doesn't know. Null = not used (tests).

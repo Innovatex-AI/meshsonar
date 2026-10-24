@@ -58,11 +58,18 @@ class RepeaterMatch {
   double? bearingFrom(double lat, double lon) => ref == null ? null : bearingDeg(lat, lon, ref!.lat, ref!.lon);
 }
 
-/// Prefix lookup over one or more repeater lists. Earlier lists win (CMAT before public directories).
+/// Prefix lookup over one or more repeater lists. Earlier lists win (the app's order: region roster, MeshSonar's
+/// drive-repeaters, the network list near the phone, then the map.meshcore.io directory; see AppState._rebuildLookup).
+///
+/// [ambiguousPrefixes]: hash prefixes a server already knows are shared by more than one node (the region roster's
+/// `ambiguous` flag). A heard id that is one of them, or shorter than one of them, never resolves to a single name,
+/// whatever any list says: the candidates from every list are returned instead.
 class RepeaterLookup {
   final List<(RepeaterSource, List<RepeaterRef>)> _lists;
+  final Set<String> _shared;
   final Map<String, RepeaterMatch> _memo = {};
-  RepeaterLookup(this._lists);
+  RepeaterLookup(this._lists, {Set<String> ambiguousPrefixes = const {}})
+      : _shared = {for (final p in ambiguousPrefixes) p.toLowerCase()};
   static final RepeaterLookup empty = RepeaterLookup(const []);
 
   int get size => _lists.fold(0, (n, l) => n + l.$2.length);
@@ -70,6 +77,16 @@ class RepeaterLookup {
   RepeaterMatch resolve(String id) {
     final p = id.toLowerCase();
     return _memo.putIfAbsent(p, () {
+      if (p.isNotEmpty && _shared.any((s) => s.startsWith(p))) {
+        final byKey = <String, RepeaterRef>{};
+        RepeaterSource? src;
+        for (final (s, list) in _lists) {
+          for (final r in list) {
+            if (r.key.startsWith(p) && byKey.putIfAbsent(r.key, () => r) == r) src ??= s;
+          }
+        }
+        return RepeaterMatch(id: p, candidates: byKey.values.toList(), source: byKey.length > 1 ? (src ?? RepeaterSource.none) : RepeaterSource.none);
+      }
       for (final (src, list) in _lists) {
         final hits = [for (final r in list) if (r.key.startsWith(p)) r];
         if (hits.length == 1) return RepeaterMatch(id: p, ref: hits.single, candidates: hits, source: src);

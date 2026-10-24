@@ -14,12 +14,14 @@ import '../core/position_filter.dart';
 import '../core/region_cache.dart';
 import '../core/region_lookup.dart';
 import '../core/repeater_directory.dart';
+import '../core/repeater_sync.dart';
 import '../core/report_draft_store.dart';
 import '../core/settings_store.dart';
 import '../core/sync_service.dart';
 import '../platform/app_version.dart';
 import '../platform/geolocator_idle_location.dart';
 import '../platform/geolocator_location.dart';
+import '../platform/location_access.dart';
 import '../platform/open_url.dart';
 import '../platform/share.dart';
 import '../radio/ble_transport.dart';
@@ -93,6 +95,9 @@ Future<AppServices> buildRealServices() async {
     regionIndexCache: FileRegionIndexCache(File('${root.path}${Platform.pathSeparator}regions_index.json')),
     idleLocation: GeolocatorIdleLocationSource(),
     lastKnownStore: LastKnownStore(File('${root.path}${Platform.pathSeparator}last_known_fix.json')),
+    locationAccess: GeolocatorLocationAccess(),
+    // Region rosters + the network repeater list, stored for offline names and pins (lib/core/repeater_sync.dart).
+    repeaterSync: RepeaterSync(store: RepeaterSyncStore(Directory('${root.path}${Platform.pathSeparator}repeater_sync'))),
     regionCache: RegionCache(Directory('${root.path}${Platform.pathSeparator}region_cache')),
     clock: DateTime.now,
     newId: () => uuid.v4(),

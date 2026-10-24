@@ -45,7 +45,8 @@ Any other byte pipe works as long as it keeps frame boundaries: `ByteTransport` 
 | Command | `CMD_DEVICE_QUERY` | 22 (0x16) | Firmware version, channel count |
 | Command | `CMD_GET_CHANNEL` / `CMD_SET_CHANNEL` | 31 / 32 | Find / install the wardriving channel |
 | Command | `CMD_SEND_CONTROL_DATA` | 55 (v8+) | Neighbour discovery request (optional) |
-| Command | `CMD_GET_STATS` | 56 (v8+) | Noise floor |
+| Command | `CMD_GET_BATT_AND_STORAGE` | 20 | Radio health: battery mV, storage (stream 7) |
+| Command | `CMD_GET_STATS` | 56 (v8+) | Noise floor (type 1, per ping); radio health (types 0, 1, 2, every 60 s during a drive) |
 | Reply | `RESP_CODE_OK` / `ERR` | 0 / 1 | `ERR` byte 1 = error code (1 unsupported, 2 not found, 3 table full, 4 bad state, 5 file I/O, 6 illegal arg) |
 | Reply | `SELF_INFO` | 5 | |
 | Reply | `SENT` | 6 | Accepted as a send reply (see §7) |
@@ -53,6 +54,7 @@ Any other byte pipe works as long as it keeps frame boundaries: `ByteTransport` 
 | Reply | `CHANNEL_MSG_RECV` / `_V3` | 8 / 17 | Drained, ignored by the engine |
 | Reply | `CURR_TIME` | 9 | Decoded only |
 | Reply | `NO_MORE_MESSAGES` | 10 | End of drain |
+| Reply | `BATT_AND_STORAGE` | 12 | |
 | Reply | `DEVICE_INFO` | 13 | |
 | Reply | `DISABLED` | 15 | Decoded only |
 | Reply | `CHANNEL_INFO` | 18 | |
@@ -103,7 +105,8 @@ sequenceDiagram
 | SET_CHANNEL | `[0x20][idx][name ×32, NUL-padded, ≤31 bytes][secret ×16]` = **50 bytes**. The 66-byte 32-byte-secret variant is rejected by the firmware. |
 | SEND_CHANNEL_TXT_MSG | `[0x03][txt_type=0 plain][channel_idx][timestamp u32][text UTF-8 to end of frame, no NUL]` |
 | SYNC_NEXT_MESSAGE | `[0x0A]` |
-| GET_STATS | `[0x38][stats_type]` (0 core, 1 radio, 2 packets; MeshSonar uses 1) |
+| GET_BATT_AND_STORAGE | `[0x14]` |
+| GET_STATS | `[0x38][stats_type]` (0 core, 1 radio, 2 packets; unknown type = `ERR illegal arg`) |
 | SEND_CONTROL_DATA | `[0x37][payload…]`, `payload[0] & 0x80` must be set; sent zero-hop |
 
 ### 2.4 Byte layouts (radio → app)
@@ -114,6 +117,9 @@ sequenceDiagram
 | DEVICE_INFO | 0 `0x0D` · 1 fw_ver_code · 2 max_contacts/2 · 3 max_channels · 4 ble_pin u32 · 8 build_date ×12 · 20 manufacturer ×40 · 60 fw_version ×20 · 80 repeat (v9+) · 81 path_hash_mode (v10+). Shorter frames: missing fields are null. |
 | CHANNEL_INFO (≥ 50 B) | 0 `0x12` · 1 idx · 2–33 name ×32 (C string) · 34–49 secret ×16. Empty slot = empty name and all-zero secret. |
 | STATS / radio (≥ 14 B) | 0 `0x18` · 1 `0x01` · 2 noise_floor i16 dBm · 4 last_rssi i8 · 5 last_snr i8 (÷4) · 6 tx_air_secs u32 · 10 rx_air_secs u32 |
+| STATS / core (11 B) | 0 `0x18` · 1 `0x00` · 2 battery_mv u16 · 4 uptime_secs u32 · 8 err_flags u16 (**bitmask**: bit 0 queue full, bit 1 CAD timeout, bit 2 start-RX timeout; sticky) · 10 queue_len u8 |
+| STATS / packets (30 B; 26 B accepted) | 0 `0x18` · 1 `0x02` · then u32: 2 recv · 6 sent · 10 flood_tx · 14 direct_tx · 18 flood_rx · 22 direct_rx · 26 recv_errors (absent in the 26 B form) |
+| BATT_AND_STORAGE (11 B; 3 B accepted) | 0 `0x0C` · 1 battery_mv u16 · 3 used_kb u32 · 7 total_kb u32 (absent in the 3 B legacy form) |
 | CHANNEL_MSG_RECV_V3 | 0 `0x11` · 1 snr i8 (÷4) · 2–3 reserved · 4 ch_idx · 5 path_len (0xFF = direct) · 6 txt_type · 7 ts u32 · 11… text |
 | CHANNEL_MSG_RECV (legacy) | 0 `0x08` · 1 ch_idx · 2 path_len · 3 txt_type · 4 ts u32 · 8… text |
 | LOG_RX_DATA push | 0 `0x88` · 1 snr i8 (= SNR×4) · 2 rssi i8 dBm · 3… **raw over-the-air packet** (§3) |
@@ -228,6 +234,20 @@ recorded as "heard nothing".
 Before each ping the engine calls `noiseFloor()`: `[0x38][0x01]` → `STATS/radio`. `noise_floor i16` is used as
 dBm. **0 means "not calibrated yet"** (RadioLib starts at 0) and becomes `null`. `ERR unsupported` sets a per-link flag
 so the app never asks again. Timeouts and errors give `null`. The value is range-checked to −160…0.
+
+### 6.1a Radio health (stream 7)
+
+`MeshCoreCompanionLink.coreStats()`, `radioStats()`, `packetStats()`, `batteryAndStorage()` read the frames above
+through the same one-at-a-time command queue. `ERR unsupported` for GET_STATS (firmware < v8) turns off every
+GET_STATS read for the link, `ERR illegal arg` turns off that sub-type, `ERR unsupported` for GET_BATT_AND_STORAGE
+turns that off; each is asked once per link. Timeouts/errors give null for that call. Unmeasured is null, never 0:
+battery 0 mV (board without battery sense), noise floor 0, last RSSI 0 (nothing heard yet; its SNR is then dropped
+too), storage total 0. `RadioHealthPoller` (`lib/radio/radio_health.dart`) asks radio, core, packets every 60 s
+(battery+storage every 15 min, or every poll when core stats are missing), and checks before **each** command that
+no ping is in flight (engine state `pinging`, which spans the noise-floor read, the send and the listen window); it
+waits up to half the interval, then skips. The layouts were re-read from MeshCore `main` b204f9a (FIRMWARE_VER_CODE
+14); the 26 B packets form and the 3 B battery form come from the radio plan doc only. No real-radio capture of these
+three frames exists yet. Not wired into a drive yet (AppState hook, stream 7 WP2).
 
 ### 6.2 Neighbour discovery (off by default)
 

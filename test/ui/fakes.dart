@@ -9,8 +9,11 @@ import 'package:meshsonar/app/app_state.dart';
 import 'package:meshsonar/app/services.dart';
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/model.dart';
+import 'package:meshsonar/core/idle_region_watcher.dart';
 import 'package:meshsonar/core/offline_packs.dart' show NetworkKind, NetworkMonitor;
 import 'package:meshsonar/core/region_lookup.dart';
+import 'package:meshsonar/core/repeater_sync.dart';
+import 'package:meshsonar/core/startup_location.dart';
 import 'package:meshsonar/radio/radio_api.dart';
 import 'package:meshsonar/ui/app.dart';
 
@@ -26,6 +29,10 @@ class FakeDriveStore implements DriveStore {
 
   /// Makes [startSession] fail (e.g. a full disk).
   bool failStart = false;
+
+  /// Makes [sessions] fail (set after the app's first load), and [pings] fail for these drive ids (a damaged file).
+  bool failSessions = false;
+  final Set<String> failPings = {};
   bool failAppend = false;
   int exportCount = 0;
 
@@ -75,6 +82,7 @@ class FakeDriveStore implements DriveStore {
 
   @override
   Future<List<SessionSummary>> sessions() async {
+    if (failSessions) throw const FileSystemException('drive folder unreadable');
     final list = sessionsById.values.toList()..sort((a, b) => b.startedAt.compareTo(a.startedAt));
     return [
       for (final s in list)
@@ -91,7 +99,10 @@ class FakeDriveStore implements DriveStore {
   }
 
   @override
-  Future<List<DrivePing>> pings(String sessionId) async => List.of(pingsBySession[sessionId] ?? const []);
+  Future<List<DrivePing>> pings(String sessionId) async {
+    if (failPings.contains(sessionId)) throw const FileSystemException('damaged drive file');
+    return List.of(pingsBySession[sessionId] ?? const []);
+  }
 
   @override
   Future<List<DrivePing>> unsyncedPings(String sessionId) async =>
@@ -347,13 +358,66 @@ class FakeLink implements CompanionLink {
 
 class FakeLocation implements LocationSource {
   bool permission;
-  FakeLocation({this.permission = true});
+
+  /// What [current] answers. Default: a fix in Columbus (what every older test expects).
+  GeoFix? Function() currentFix;
+
+  /// [current] throws this instead (null = no error).
+  Object? currentError;
+
+  /// [current] waits this long first (a slow, indoor fix).
+  Duration currentDelay;
+
+  /// [current] waits for this to complete first, when set (tests decide exactly when the fix "arrives").
+  Completer<void>? currentGate;
+  int currentCalls = 0;
+  FakeLocation({this.permission = true, GeoFix? Function()? currentFix, this.currentError, this.currentDelay = Duration.zero})
+      : currentFix = currentFix ?? (() => GeoFix(lat: 40.126, lon: -82.93, at: DateTime.utc(2026, 10, 16)));
   @override
   Stream<GeoFix> get fixes => const Stream.empty();
   @override
-  Future<GeoFix?> current() async => GeoFix(lat: 40.126, lon: -82.93, at: DateTime.utc(2026, 10, 16));
+  Future<GeoFix?> current() async {
+    currentCalls++;
+    if (currentDelay > Duration.zero) await Future<void>.delayed(currentDelay);
+    if (currentGate != null) await currentGate!.future;
+    if (currentError != null) throw currentError!;
+    return currentFix();
+  }
+
   @override
   Future<bool> ensurePermission() async => permission;
+}
+
+/// Location permission as the test sets it; [request] moves to [afterRequest].
+class FakeLocationAccess implements LocationAccessProbe {
+  LocationAccess access;
+  LocationAccess afterRequest;
+  int checks = 0, requests = 0, appSettingsOpened = 0, locationSettingsOpened = 0;
+  FakeLocationAccess([this.access = LocationAccess.granted, LocationAccess? afterRequest])
+      : afterRequest = afterRequest ?? LocationAccess.granted;
+  @override
+  Future<LocationAccess> check() async {
+    checks++;
+    return access;
+  }
+
+  @override
+  Future<LocationAccess> request() async {
+    requests++;
+    return access = afterRequest;
+  }
+
+  @override
+  Future<bool> openAppSettings() async {
+    appSettingsOpened++;
+    return true;
+  }
+
+  @override
+  Future<bool> openLocationSettings() async {
+    locationSettingsOpened++;
+    return true;
+  }
 }
 
 /// Engine driven by the test: call [emit] to finish a ping.
@@ -454,6 +518,12 @@ class Harness {
   LocationSource? engineLocation;
   int _id = 0;
 
+  /// Optional services (null = off, as before). Set them before [services] is first read.
+  LocationAccessProbe? locationAccess;
+  RepeaterSync? repeaterSync;
+  LastKnownStore? lastKnownStore;
+  DateTime clockNow = DateTime.utc(2026, 10, 16, 18, 0, 0);
+
   /// The next engine's start fails with this (and first emits [engineStartPings]).
   Object? engineStartError;
   List<DrivePing> engineStartPings = const [];
@@ -518,9 +588,12 @@ class Harness {
     repeaterCache: cache,
     exportDir: () async => Directory.systemTemp,
     shareFile: (f) async => shared.add(f),
-    clock: () => DateTime.utc(2026, 10, 16, 18, 0, 0),
+    clock: () => clockNow,
     newId: nextId,
     regionIndexCache: regionIndexCache,
+    locationAccess: locationAccess,
+    repeaterSync: repeaterSync,
+    lastKnownStore: lastKnownStore,
   );
 
   late final AppState state = AppState(services);
