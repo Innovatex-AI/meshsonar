@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../core/model.dart';
 import 'app.dart';
 import 'map/coverage_map.dart';
+import 'map/region_center.dart';
 
 class DriveDetailMap extends StatelessWidget {
   final List<DrivePing> pings;
@@ -20,6 +21,7 @@ class DriveDetailMap extends StatelessWidget {
       fitToPings: true,
       showRings: false,
       showLinks: false,
+      fallbackCenter: viewedRegionCenter(s),
     );
   }
 }

@@ -2,6 +2,8 @@
 // filters. Loading / empty / error states are explicit; the server's "partial / pending" honesty note is shown.
 //
 //   RepeatersPanel(baseUrl: 'https://cmh.meshsonar.com', regionSlug: 'cmh')
+import 'repeater_detail_screen.dart';
+
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
@@ -307,7 +309,11 @@ class _RepeatersPanelState extends State<RepeatersPanel> {
                   )
                 : ListView.builder(
                     itemCount: shown.length,
-                    itemBuilder: (_, i) => _RepeaterTile(shown[i]),
+                    itemBuilder: (_, i) => _RepeaterTile(
+                      shown[i],
+                      baseUrl: widget.baseUrl,
+                      regionSlug: widget.regionSlug,
+                    ),
                   ),
           ),
         ),
@@ -328,7 +334,13 @@ class _RepeatersPanelState extends State<RepeatersPanel> {
 
 class _RepeaterTile extends StatelessWidget {
   final RegionRepeater r;
-  const _RepeaterTile(this.r);
+  final String baseUrl;
+  final String regionSlug;
+  const _RepeaterTile(
+    this.r, {
+    required this.baseUrl,
+    required this.regionSlug,
+  });
 
   Color _dot(BuildContext context) {
     final mc = MeshSonarColors.of(context);
@@ -368,7 +380,13 @@ class _RepeaterTile extends StatelessWidget {
           if (r.ambiguous) Text('shared', style: t.textTheme.labelSmall),
         ],
       ),
-      onTap: () => showModalBottomSheet<void>(
+      onTap: () => openRepeaterDetail(
+        context,
+        baseUrl: baseUrl,
+        regionSlug: regionSlug,
+        repeaterKey: r.key,
+      ),
+      onLongPress: () => showModalBottomSheet<void>(
         context: context,
         showDragHandle: true,
         builder: (_) => SafeArea(child: _RepeaterDetail(r)),
