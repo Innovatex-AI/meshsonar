@@ -1,4 +1,4 @@
-// The one place that turns SI numbers (metres, m/s) into text for the screen, in metric or imperial.
+// The one place that turns SI numbers (metres, m/s, hPa, °C) into text for the screen, in metric or imperial.
 // Storage and the wire stay SI forever (docs/MESHSONAR_DRIVE_FORMAT.md: antenna.height_m, speed in m/s); conversion
 // happens only at the edge, in display and in text input. Spec: app-website-parity-and-region-spec section D.
 // Pure Dart: no Flutter imports.
@@ -35,6 +35,9 @@ const double metresPerMile = 1609.344;
 const double metresPerFoot = 0.3048;
 const double kmhPerMps = 3.6;
 const double mphPerMps = 2.236936;
+
+/// Inches of mercury per hectopascal (1 inHg = 33.8638866667 hPa, at 0 °C).
+const double inHgPerHpa = 1 / 33.8638866667;
 
 class Units {
   final UnitSystem system;
@@ -119,6 +122,22 @@ class Units {
     final unit = m.group(2);
     final feet = unit == null ? isImperial : unit.startsWith('f');
     return feet ? v * metresPerFoot : v;
+  }
+
+  String get pressureUnit => isImperial ? 'inHg' : 'hPa';
+  String get temperatureUnit => isImperial ? '°F' : '°C';
+
+  /// Air pressure, stored in hPa: metric "987.4 hPa" (1 decimal), imperial "29.16 inHg" (2 decimals).
+  String pressure(double hPa) {
+    final v = hPa.isFinite ? hPa : 0.0;
+    return isImperial ? '${(v * inHgPerHpa).toStringAsFixed(2)} inHg' : '${v.toStringAsFixed(1)} hPa';
+  }
+
+  /// A temperature, stored in °C: whole degrees, "11 °C" or "52 °F".
+  String temperature(double celsius) {
+    final c = celsius.isFinite ? celsius : 0.0;
+    final n = (isImperial ? c * 9 / 5 + 32 : c).round(); // an int: never "-0"
+    return '$n ${isImperial ? '°F' : '°C'}';
   }
 
   /// Range rings drawn around the phone: 1 km and 2 km, or half a mile and a mile.

@@ -179,6 +179,29 @@ simulator's repeaters in Simulator mode), **ping dots**, and the current **posit
 - Attribution "© OpenStreetMap contributors" is always shown with tiles. Tiles are off under `flutter test`.
 - If there's no position or pings, the map centres on Columbus, Ohio (39.9612, −82.9988).
 
+### Map layer engine (built, not on screen yet)
+
+New building blocks for the map redesign (stream-1-maps.md), merged ahead of the screens that use them, so nothing
+below is visible in the app yet:
+
+- **Layer registry** (`ui/map/layers/`): every map layer with the website's `?show=` key where the website has the
+  same layer (`measured`, `repeaters`, `observers`, `network`) and app-only keys for the drive layers (`hexes`,
+  `links`, `neighbours`, `heard`, `pings`, `rings`). Each layer reports whether its switch works and why not:
+  "Not available on this server yet" (404), "Loading…", "Couldn't load. Check the connection and retry." (with
+  Retry), "No repeaters reported yet", "No observers with a public position in CMH", "Offline copy".
+- **Clustered repeater layers**: "All MeshCore repeaters" (`network`, from `GET /api/cmh/network-repeaters` once the
+  server ships it; coloured by last advert: 24 h green, 7 days blue, 30 days amber, older grey; room servers are
+  rings) and "Region repeaters" (`repeaters`, the roster, coloured by status). One painter per layer, only what is
+  on screen, clusters with counts that split as you zoom; tap a cluster to zoom to it, tap a stack on one tower for a
+  list, tap a repeater for its sheet.
+- **Repeater sheet**: name, repeater or room server, the full key (first 8 bold, copy button), last advert or last
+  heard ("3 h ago (2026-10-24)"), distance from you in your Units, the roster's status / mean SNR / grade / adverts /
+  neighbours / hash prefix when the key is in the viewed region's roster, the data source, and "Open repeater page"
+  when the region is known.
+- **Map links**: `MapViewState` reads and writes `https://<region>.meshsonar.com/coverage?show=…&color=…&since=…&src=…
+  &res=…&lat=…&lon=…` (the website's own parameters, same validation) plus `z` and `until`, and the same query on
+  `meshsonar://map?…&region=cmh`. Opening such a link in the app (URL scheme, app_links) is not built yet.
+
 ## Full-screen map
 
 (`ui/map/fullscreen_map.dart`, `fullscreen-map`) The whole screen is map. It shows the heard box (top left), exit
@@ -380,6 +403,28 @@ Metric definitions (`DriveReport.compute`):
   the JSON (pretty-printed like the website's download), every table in one CSV, or any single table as the website's
   own file (`<slug>-<table>.csv`, same column heads and bytes; checked against the site's code on the recorded cmh
   body). Empty tables are disabled. Times in the files are UTC, like the website.
+
+## Drive context: data collected (stream 7, core only, not switched on yet)
+
+Built as pure-Dart pieces; nothing below is collected in a drive until the drive flow starts the recorder and the
+versioned disclosure + Settings categories ship (separate work). Design: meshsonar-infra planning
+`stream-7-data-collection.md`.
+
+- **Categories** (`lib/core/data_categories.dart`): packet headers (live today), motion and altitude, air pressure,
+  phone battery, phone and app details, radio health, radio settings, weather. Each has a stable id, title, exact
+  disclosure sentence, the stored keys it owns, default ON (opt-out, Andy Oct 24 2026), destination and availability
+  (`live`, `recorderReady`, `needsSensorPlugin`, `needsServer`) so the UI never presents uncollected data as collected.
+- **Radio health** (`lib/radio/radio_health.dart`): every 60 s during a drive, GET_STATS radio/core/packets plus
+  GET_BATT_AND_STORAGE every 15 min; never while a ping is in flight (it waits, then skips); firmware that lacks a
+  command is asked once. Values the radio did not measure stay empty (0 mV battery, 0 noise floor, 0 RSSI).
+  `err_flags` is the firmware's sticky error bitmask, not a counter. Channel utilisation is not reported by MeshCore.
+- **Storage** (`JsonlDriveStore`): `samples.jsonl` (no coordinates), `ctx.jsonl` (per ping), `context.json` (per
+  drive) beside the drive, crash-safe like `pings.jsonl`. The upload and the export are byte-identical to before.
+  Turning a category off strips its keys from stored context (`stripCategories`, atomic rewrite).
+- **GPS extras**: `GeoFix` keeps altitude, vertical accuracy, course over ground and its accuracy, speed accuracy
+  (null when the phone did not measure them); they are context only, never part of the drive upload.
+- **Simulator**: answers every stats command with counters that follow what it did (pings sent, packets heard,
+  airtime, a slowly draining battery, 120 / 1984 KB storage).
 
 ## Uploads
 

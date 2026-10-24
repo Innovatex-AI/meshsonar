@@ -166,7 +166,57 @@ void main() {
       expect(s.txAirSecs, 16);
       expect(s.rxAirSecs, 32);
       expect(encodeRadioStats(noiseFloorDbm: -112, lastRssiDbm: -75, lastSnrDb: 11.25, txAirSecs: 16, rxAirSecs: 32), f);
-      expect(decodeFrame(b([0x18, 0x00, 1, 2])), isA<OtherStatsFrame>());
+      expect(decodeFrame(b([0x18, 0x07, 1, 2])), isA<OtherStatsFrame>(), reason: 'unknown sub-type kept raw');
+    });
+
+    // Layouts below re-read from MeshCore main b204f9a (FIRMWARE_VER_CODE 14), examples/companion_radio/MyMesh.cpp.
+    // No captured real-radio frame exists yet: these vectors are built from the firmware's memcpy order.
+    test('STATS core (lines 1916-1927): battery u16, uptime u32, err_flags u16 bitmask, queue u8 = 11 B', () {
+      final f = b([0x18, 0x00, 0x48, 0x0F, 0x03, 0x50, 0x01, 0x00, 0x06, 0x00, 0x02]);
+      final s = decodeFrame(f) as CoreStatsFrame;
+      expect(s.batteryMv, 3912);
+      expect(s.uptimeSecs, 86019);
+      expect(s.errFlags, RadioErrFlag.cadTimeout | RadioErrFlag.startRxTimeout);
+      expect(s.queueLen, 2);
+      expect(encodeCoreStats(batteryMv: 3912, uptimeSecs: 86019, errFlags: 6, queueLen: 2), f);
+      expect(() => decodeFrame(b([0x18, 0x00, 1, 2])), throwsA(isA<ProtocolException>()));
+      expect(encodeGetStats(StatsType.core), b([0x38, 0x00]));
+    });
+
+    test('STATS packets (lines 1943-1962): 7 x u32 = 30 B; the 26 B form has no recv_errors', () {
+      final f = encodePacketStats(
+          recv: 18233, sent: 412, floodTx: 400, directTx: 12, floodRx: 17001, directRx: 1232, recvErrors: 37);
+      expect(f.length, 30);
+      expect(f.sublist(0, 6), b([0x18, 0x02, 0x39, 0x47, 0x00, 0x00]));
+      expect(f.sublist(26), b([37, 0, 0, 0]));
+      final s = decodeFrame(f) as PacketStatsFrame;
+      expect([s.recv, s.sent, s.floodTx, s.directTx, s.floodRx, s.directRx, s.recvErrors],
+          [18233, 412, 400, 12, 17001, 1232, 37]);
+      final old = encodePacketStats(recv: 1, sent: 2, floodTx: 3, directTx: 4, floodRx: 5, directRx: 6, recvErrors: null);
+      expect(old.length, 26);
+      final o = decodeFrame(old) as PacketStatsFrame;
+      expect(o.directRx, 6);
+      expect(o.recvErrors, isNull);
+      expect(decodeFrame(encodePacketStats(
+              recv: 0xFFFFFFFF, sent: 0, floodTx: 0, directTx: 0, floodRx: 0, directRx: 0)) as PacketStatsFrame,
+          isA<PacketStatsFrame>().having((x) => x.recv, 'recv', 0xFFFFFFFF));
+      expect(() => decodeFrame(old.sublist(0, 25)), throwsA(isA<ProtocolException>()));
+    });
+
+    test('BATT_AND_STORAGE (lines 1517-1527): [0C][mv u16][used_kb u32][total_kb u32] = 11 B; 3 B legacy', () {
+      expect(Cmd.getBattAndStorage, 20);
+      expect(Resp.battAndStorage, 12);
+      expect(encodeGetBattAndStorage(), b([0x14]));
+      final f = b([0x0C, 0x48, 0x0F, 0x78, 0, 0, 0, 0xC0, 0x07, 0, 0]);
+      final s = decodeFrame(f) as BattAndStorageFrame;
+      expect(s.batteryMv, 3912);
+      expect(s.storageUsedKb, 120);
+      expect(s.storageTotalKb, 1984);
+      expect(encodeBattAndStorage(batteryMv: 3912, usedKb: 120, totalKb: 1984), f);
+      final legacy = decodeFrame(b([0x0C, 0x48, 0x0F])) as BattAndStorageFrame;
+      expect(legacy.batteryMv, 3912);
+      expect(legacy.storageTotalKb, isNull);
+      expect(() => decodeFrame(b([0x0C, 0x48])), throwsA(isA<ProtocolException>()));
     });
 
     test('LOG_RX_DATA push (logRxRaw line 291): [88][snr*4 i8][rssi i8][raw...]', () {

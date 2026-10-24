@@ -191,9 +191,30 @@ class PositionFilter {
       }
     }
 
+    // Altitude and the accuracies pass through unchanged (drive context, stream 7); course only while moving.
     final out = _stationary
-        ? GeoFix(lat: _aLat!, lon: _aLon!, at: raw.at, accuracyM: raw.accuracyM, speedMps: 0)
-        : GeoFix(lat: _lat!, lon: _lon!, at: raw.at, accuracyM: raw.accuracyM, speedMps: speed);
+        ? GeoFix(
+            lat: _aLat!,
+            lon: _aLon!,
+            at: raw.at,
+            accuracyM: raw.accuracyM,
+            speedMps: 0,
+            altitudeM: raw.altitudeM,
+            altitudeAccuracyM: raw.altitudeAccuracyM,
+            speedAccuracyMps: raw.speedAccuracyMps,
+          )
+        : GeoFix(
+            lat: _lat!,
+            lon: _lon!,
+            at: raw.at,
+            accuracyM: raw.accuracyM,
+            speedMps: speed,
+            altitudeM: raw.altitudeM,
+            altitudeAccuracyM: raw.altitudeAccuracyM,
+            courseDeg: raw.courseDeg,
+            courseAccuracyDeg: raw.courseAccuracyDeg,
+            speedAccuracyMps: raw.speedAccuracyMps,
+          );
     _last = out;
     return out;
   }

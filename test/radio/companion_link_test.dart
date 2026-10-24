@@ -104,6 +104,42 @@ void main() {
     await l2.close();
   });
 
+  test('radio health: core, radio, packets and battery+storage over the real protocol (simulator)', () async {
+    await link.start();
+    final idx = await link.ensureChannel('#wardriving');
+    await link.sendChannelText(idx, 'MS:abcdefghij');
+    final core = await link.coreStats();
+    expect(core!.batteryMv, inInclusiveRange(3400, 4100));
+    expect(core.errFlags, 0);
+    expect(core.queueLen, 0);
+    final pk = await link.packetStats();
+    expect(pk!.sent, 1);
+    expect(pk.floodTx, 1);
+    expect(pk.recvErrors, 0);
+    final rs = await link.radioStats();
+    expect(rs!.noiseFloorDbm, inInclusiveRange(-114, -110));
+    final bs = await link.batteryAndStorage();
+    expect(bs!.storageUsedKb, 120);
+    expect(bs.storageTotalKb, 1984);
+    final cmds = radio.sentFrames.map((f) => f[0]).toList();
+    expect(cmds.where((c) => c == Cmd.getStats), hasLength(3));
+    expect(cmds.last, Cmd.getBattAndStorage);
+  });
+
+  test('radio health: firmware without GET_STATS is asked once, then never again; battery still read', () async {
+    final old = SimulatedTransport(seed: 2, timeScale: 50, noiseFloorDbm: null);
+    final l2 = MeshCoreCompanionLink(old);
+    await l2.start();
+    expect(await l2.coreStats(), isNull);
+    expect(await l2.packetStats(), isNull);
+    expect(await l2.radioStats(), isNull);
+    expect(await l2.noiseFloor(), isNull);
+    expect(old.sentFrames.where((f) => f[0] == Cmd.getStats), hasLength(1));
+    expect((await l2.batteryAndStorage())!.batteryMv, greaterThan(0));
+    await l2.close();
+    expect(await l2.coreStats(), isNull, reason: 'closed link: null, no throw');
+  });
+
   test('a radio that never answers times out', () async {
     radio.responsive = false;
     final quick = MeshCoreCompanionLink(radio, timeout: const Duration(milliseconds: 100));
