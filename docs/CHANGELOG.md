@@ -3,6 +3,10 @@
 All notable changes to MeshSonar. Dates are local (US Eastern). This changelog was reconstructed from the commit
 history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md](ROADMAP.md).
 
+## [0.18.0] — 2026-10-23 — Coverage layer controls
+
+- Map layers sheet > Network coverage > "Coverage options": hex detail (Auto picks H3 resolution 7 to 11 by zoom, or pin one), colour by Best SNR / Share heard / Noise floor with a legend, since chips (1 h, 24 h, 7 d, All) and source chips (All, MeshSonar, MeshMapper); tapping a cell opens a sheet with pings, heard share, best and median SNR, repeaters heard, noise floor and last measured. The coverage timeline needs a server change and is not built.
+
 ## [0.17.0] — 2026-10-23 — Units everywhere, offline map packs
 
 - Settings > Units (Auto / Metric / Imperial) now drives every distance, speed and height shown in the app: drive stats, drive detail and sessions, the drive report and its exported text, map rings and repeater link tags, heard box and repeater widgets, ping detail, the antenna sheet and the min-distance slider; the region Stats, All regions, Reports and Repeater detail screens follow it too. Auto follows the phone's region (US, Liberia and Myanmar are imperial).
