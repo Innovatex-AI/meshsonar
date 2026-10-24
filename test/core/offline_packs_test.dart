@@ -29,6 +29,22 @@ void main() {
   setUp(() => tmp = Directory.systemTemp.createTempSync('packs'));
   tearDown(() => tmp.deleteSync(recursive: true));
 
+  test('manifest with the new style fields (style_version, styles, glyphs, fonts) parses exactly like before', () {
+    final m = PackManifest.parse(
+      jsonEncode({
+        'attribution': '(c) OpenStreetMap contributors',
+        'packs': [entryJson()],
+        'style_version': 4,
+        'styles': {'light': 'https://tiles.meshsonar.com/styles/v4/light.json', 'dark': 'https://tiles.meshsonar.com/styles/v4/dark.json'},
+        'glyphs': 'https://tiles.meshsonar.com/fonts/{fontstack}/{range}.pbf',
+        'fonts': ['Barlow-Regular', 'Barlow-Medium', 'BarlowSemiCondensed-SemiBold'],
+      }),
+      manifestUri,
+    );
+    expect(m.packs.single.code, 'CMH');
+    expect(m.attribution, '(c) OpenStreetMap contributors');
+  });
+
   test('manifest keeps good entries and drops foreign-host, http and malformed ones', () {
     final m = PackManifest.parse(
       jsonEncode({

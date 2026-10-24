@@ -368,9 +368,13 @@ Packs are our own OpenStreetMap-derived vector tiles (PMTiles, OpenMapTiles sche
   with "Offline - pack list as of <time>".
 - **On the map** (`lib/ui/map/offline_basemap.dart`): when an installed pack covers the view centre it replaces the
   online OSM tiles; the map follows the camera into another pack (sticking with the current one where packs overlap)
-  and falls back to online tiles outside every pack. Style: roads, motorways, water, rivers, land use, parks,
-  buildings, boundaries, and labels (cities/towns/villages/neighbourhoods by zoom, road names along roads, motorway
-  refs, water names) in light and dark palettes with wide halos. Labels use the bundled Barlow fonts; no glyph files.
+  and falls back to online tiles outside every pack. Style (`lib/core/offline_style.dart`): the online map's look,
+  i.e. OpenStreetMap Carto's colours and road hierarchy (motorway/trunk/primary/secondary/tertiary/minor with casings,
+  land use, parks, woods, water, rivers, buildings, rail, paths, state boundaries) passed through the same colour
+  matrix the app applies to online OSM tiles, so light stays grey/paper and dark stays the inverted chart. Labels:
+  cities/towns/villages/neighbourhoods by zoom, road names along roads, motorway refs, water names, with wide halos,
+  drawn with the bundled Barlow fonts (no glyph files in the app). The same style code writes the MapLibre web
+  styles (`tool/make_web_styles.dart`).
 
 ## Region tab offline
 

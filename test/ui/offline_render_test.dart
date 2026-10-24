@@ -7,6 +7,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/painting.dart' show Color;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/core/offline_style.dart';
 import 'package:meshsonar/core/pmtiles_reader.dart';
 import 'package:meshsonar/ui/map/offline_basemap.dart';
 import 'package:vector_tile_renderer/vector_tile_renderer.dart' as vtr;
@@ -135,7 +136,7 @@ void main() {
       final layers = (style['layers'] as List).cast<Map<String, dynamic>>();
       final ids = {for (final l in layers) l['id']};
       expect(ids, containsAll(['label-city', 'label-town', 'label-village', 'label-road-major', 'label-motorway', 'label-water', 'label-river']));
-      const known = {'water', 'waterway', 'landcover', 'landuse', 'park', 'building', 'transportation', 'transportation_name', 'boundary', 'place', 'water_name'};
+      const known = {'aeroway', 'water', 'waterway', 'landcover', 'landuse', 'park', 'building', 'transportation', 'transportation_name', 'boundary', 'place', 'water_name'};
       for (final l in layers.where((l) => l['type'] != 'background')) {
         expect(known, contains(l['source-layer']), reason: l['id'] as String);
       }

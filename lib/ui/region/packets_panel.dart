@@ -27,7 +27,11 @@ class PacketsPanel extends StatefulWidget {
     required this.regionSlug,
     this.api,
     this.pollEvery = const Duration(seconds: 10),
+    this.clock,
   });
+
+  /// Test seam for the "30s" age text (wall clock by default); a fixed clock keeps the age deterministic.
+  final DateTime Function()? clock;
 
   @override
   State<PacketsPanel> createState() => _PacketsPanelState();
@@ -315,7 +319,7 @@ class _PacketsPanelState extends State<PacketsPanel> with WidgetsBindingObserver
           if (i == 0) return _banner(c, note, Icons.info_outline);
           i--;
         }
-        return PacketTile(row: _rows[i], now: DateTime.now().toUtc());
+        return PacketTile(row: _rows[i], now: (widget.clock ?? DateTime.now)().toUtc());
       },
     );
   }

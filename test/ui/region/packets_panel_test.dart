@@ -24,12 +24,12 @@ class FakeApi implements RegionPacketsApi {
 PacketPage page(List<PacketRow> rows, [PacketsStatus st = const PacketsStatus(SourcedState.ready, null)]) =>
     PacketPage(status: st, rows: rows);
 
-Widget host(FakeApi api, {Duration poll = const Duration(seconds: 10), bool visible = true}) => MaterialApp(
+Widget host(FakeApi api, {Duration poll = const Duration(seconds: 10), bool visible = true, DateTime Function()? clock}) => MaterialApp(
       theme: meshSonarTheme(Brightness.light),
       home: Scaffold(
         body: TickerMode(
           enabled: visible,
-          child: PacketsPanel(baseUrl: Uri.parse('https://cmh.meshsonar.com'), regionSlug: 'cmh', api: api, pollEvery: poll),
+          child: PacketsPanel(baseUrl: Uri.parse('https://cmh.meshsonar.com'), regionSlug: 'cmh', api: api, pollEvery: poll, clock: clock),
         ),
       ),
     );
@@ -39,7 +39,7 @@ void main() {
 
   testWidgets('shows rows with type, route, hops, observers and SNR', (t) async {
     final api = FakeApi([page([row('a1', now.subtract(const Duration(seconds: 30)), type: 4, route: 2, hops: 0, snr: -3.5, obs: 1)])]);
-    await t.pumpWidget(host(api));
+    await t.pumpWidget(host(api, clock: () => now)); // fixed clock: the age was '31s' on a slow run
     await t.pumpAndSettle(const Duration(milliseconds: 1));
     expect(find.text('Advert'), findsOneWidget);
     expect(find.textContaining('Direct · direct · 1 observer'), findsOneWidget);
