@@ -3,6 +3,10 @@
 All notable changes to MeshSonar. Dates are local (US Eastern). This changelog was reconstructed from the commit
 history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md](ROADMAP.md).
 
+## [0.15.0] — 2026-10-23 — Packets panel
+
+- The Region tab's Packets panel is live: recent packets for the viewed region with route filter chips (All, Flood, Direct, T-flood, T-direct), a Live/Paused switch that polls every 10 s while visible, pull-to-refresh and honest pending, busy and reconnecting states.
+
 ## [0.14.0] — 2026-10-23 — Region tab panels
 
 - The Region tab now shows real data for the viewed region: Overview (stats, packets-per-hour sparkline, recent events), Repeaters (searchable, sortable, filterable list with detail sheet and an optional "Region repeaters" map layer), Observers, Analysis (role and hash-size mix, busiest-hours heatmap, hops, top repeaters) and Reports (24 h figures, trend, notable events, network health, data sources). Packets is still a placeholder.
