@@ -6,6 +6,7 @@ import '../core/units.dart';
 import 'antenna_sheet.dart';
 import 'drive_screen.dart';
 import 'onboarding/first_run_gate.dart';
+import 'always_location_screen.dart';
 import 'region/region_hub_screen.dart';
 import 'sessions_screen.dart';
 import 'settings_screen.dart';
@@ -66,6 +67,16 @@ class _HomeShellState extends State<HomeShell> {
   AppState? _state;
   final _messengerKey = GlobalKey<ScaffoldMessengerState>();
   bool _antennaSheetScheduled = false;
+  bool _presetDialogOpen = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // iOS only (no-op elsewhere): explain, then ask for "Always" location once.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) maybeAskAlwaysLocation(context);
+    });
+  }
 
   @override
   void didChangeDependencies() {
@@ -88,6 +99,16 @@ class _HomeShellState extends State<HomeShell> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _antennaSheetScheduled = false;
         if (mounted && s.takeAntennaPrompt()) showAntennaSheet(context);
+      });
+    }
+    // A border crossing into a region with a different radio preset: ask (never while driving; never touches the radio).
+    final prompt = s.presetPrompt;
+    if (prompt != null && !s.driving && !_presetDialogOpen) {
+      _presetDialogOpen = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted) return;
+        await showPresetPrompt(context, prompt, onAnswer: (v) => s.resolvePresetPrompt(switchView: v));
+        _presetDialogOpen = false;
       });
     }
     if (s.pendingNotice == null) return;
