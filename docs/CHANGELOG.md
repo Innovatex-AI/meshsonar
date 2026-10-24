@@ -3,6 +3,13 @@
 All notable changes to MeshSonar. Dates are local (US Eastern). This changelog was reconstructed from the commit
 history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md](ROADMAP.md).
 
+## [Unreleased]
+
+- Charts: every chart now has a Chart / Table switch and reads its numbers to VoiceOver (one chart kit, `lib/ui/charts`); the repeater sparklines use it too.
+- Drive report v2: noise floor during the drive, reply RSSI, TX power, signal by distance to the repeater (direct links, the website's distance bands), heard by speed, GPS accuracy; Export as text or one CSV file (contains your exact track).
+- Region tab: new RF tab (noise floor by observer, by hour of day, SNR histogram; an observer that went quiet is named and its line stops) and Growth tab (known nodes over time, weekly churn, roles, hash sizes).
+- Region tab: Export region report as text, JSON, one CSV with every table, or any table as the website's own CSV file.
+
 ## [0.19.0] — 2026-10-24 — Timeline, telemetry, offline cache
 
 - Map layers > Network coverage > Coverage options: "Coverage growth (as of)" slider with play/pause and a Live reset; the map shows a "Coverage as of <date>" badge while scrubbed back (server `public-coverage?until=`).

@@ -296,9 +296,27 @@ names.
 | `ui/sessions_screen.dart` | ui | Drives tab: overview + Sync all, drive cards, sync badge, heard strip, rename/delete/export/report actions; `DriveStatsCache`. |
 | `ui/drive_detail_screen.dart` | ui | One saved drive: map, stats grid, heard strip, repeaters, pings, Sync/Export/Ping log/Report/Rename/Delete. |
 | `ui/drive_detail_map.dart` | ui | `CoverageMap` framed on a whole saved drive. |
-| `ui/drive_stats.dart` | ui (pure Dart) | `DriveStats.of` (distance, duration, heard %, best/median SNR, repeaters, multi-hop, timeline); `formatDistance`, `formatMiles`, `formatDuration`. |
-| `ui/report/drive_report.dart` | ui (pure Dart) | `DriveReport.compute`: CMAT-grid cells, new grids/repeaters vs earlier drives, speeds, hops, best/worst spot, text summary. |
-| `ui/report/drive_report_screen.dart` | ui | Drive report screen and `loadDriveReport`; share as text. |
+| `core/drive_stats.dart` | core | `DriveStats.of` (distance, duration, heard %, best/median SNR, repeaters, multi-hop, timeline); `formatDuration`. `ui/drive_stats.dart` is a re-export shim. |
+| `core/drive_report.dart` | core | `DriveReport.compute`: CMAT-grid cells, new grids/repeaters vs earlier drives, speeds, hops, best/worst spot, radio side (`rf`), text summary v2; band labels. `ui/report/drive_report.dart` is a re-export shim. |
+| `core/drive_report_rf.dart` | core | `DriveRf`: noise floor, reply RSSI, TX power change points, direct-link SNR by distance band, heard by speed band, GPS median/p90. |
+| `core/drive_report_export.dart` | core | Drive report CSV tables (pings, cells, repeaters, distance, speed) and the one-file CSV. |
+| `core/report_csv.dart` | core | `csvCell`/`toCsv` byte-compatible with the website's report CSVs, `ReportTable`, `combinedCsv`, `fileSlug`. |
+| `core/rf_thresholds.dart` | core | The website's noise-floor thresholds (-100 interference, -110 elevated, -120 baseline) and verdict text. |
+| `core/region_dataset_fetch.dart` | core | `fetchRegionDataset`: `<region host>/api/cmh/<name>` through the ETag client; `RegionFetch` (data, body, 404, error, offline as-of). |
+| `core/region_rf_api.dart` | core | `region-rf` client and model: observers' series, noise by hour, SNR histogram, silent observers, the website's finding. |
+| `core/region_growth_api.dart` | core | `region-ext-growth` client and model: churn, daily, cumulative, roles, firmware, hash sizes, basis. |
+| `core/region_report_export.dart` | core | `region-report` as the website's tables (ids, heads, cells), text summary, pretty JSON, file names. |
+| `ui/charts/chart_frame.dart` | ui | `ChartFrame` (title, Chart/Table switch, one semantics node "title. summary", caption), `ChartTable`, `chartPalette`. |
+| `ui/charts/time_line_chart.dart` | ui | `TimeLineChart`: series over time with gap breaks, reference line, floor marks, fill, dots. |
+| `ui/charts/bar_chart.dart` | ui | `BarChart`: bars or grouped bars on a baseline, reference line, per-bar colour. |
+| `ui/charts/sparkline.dart` | ui | `Sparkline` (+ `SparkStyle.plain` / `.snr` presets of the former copies) with a semantics summary; `sparkSummary`. |
+| `ui/charts/chart_scale.dart` | ui | `niceTicks`, `tickLabel`, dashed lines, canvas text. |
+| `ui/report/drive_report_screen.dart` | ui | Drive report screen and `loadDriveReport`; Export menu (text, CSV). |
+| `ui/report/drive_report_sections.dart` | ui | Drive report v2 sections: SNR, noise floor, RSSI, TX power, distance, speed, GPS. |
+| `ui/region/rf_panel.dart` | ui | Region RF tab. |
+| `ui/region/growth_panel.dart` | ui | Region Growth tab. |
+| `ui/region/region_dataset_view.dart` | ui | Shared shell of the RF/Growth tabs (states, status, offline label); `DatasetCard`, `FigureStrip`. |
+| `ui/region/region_report_export_sheet.dart` | ui | Export region report sheet (text, JSON, all tables, one table). |
 | `ui/settings_screen.dart` | ui | Settings sections, driver key request/status, sliders (`SliderTile`, stop lists), upload status, About/intro links. |
 | `ui/about_screen.dart` | ui | About: version, MIT text, short third-party notices, licence page. |
 | `ui/onboarding/first_run_gate.dart` | ui | Shows the intro once, then routes to Connect / Simulator / Settings. |
