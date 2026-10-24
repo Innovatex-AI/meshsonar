@@ -15,6 +15,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:typed_data' show Uint8List;
 
 import 'package:http/http.dart' as http;
 
@@ -616,7 +617,7 @@ class RepeaterSync {
       try {
         final bytes = res.bodyBytes;
         data = parseInIsolate
-            ? await Isolate.run(() => NetworkRepeaters.parse(jsonDecode(utf8.decode(bytes))))
+            ? await parseNetworkBodyInIsolate(bytes)
             : NetworkRepeaters.parse(jsonDecode(utf8.decode(bytes)));
       } on FormatException {
         return _networkFailed('invalid JSON');
@@ -722,3 +723,9 @@ class RepeaterSync {
   /// True once this run has asked the server for the network list (or decided it was not due).
   bool get networkLaunchDone => _networkLaunchDone;
 }
+
+/// Decodes and parses a network-repeaters body in a background isolate. Top level on purpose: a closure created inside
+/// an async instance method captures that method's whole context (its pending Futures included), which Isolate.run
+/// cannot send ("object is unsendable - _Future"): every real fetch failed that way. Here the closure holds [bytes] only.
+Future<NetworkRepeaters> parseNetworkBodyInIsolate(Uint8List bytes) =>
+    Isolate.run(() => NetworkRepeaters.parse(jsonDecode(utf8.decode(bytes))), debugName: 'network-repeaters-parse');

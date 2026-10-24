@@ -20,6 +20,7 @@ import 'drive/drive_map_model.dart';
 import 'drive/heard_box.dart';
 import 'map/coverage_map.dart';
 import 'map/fullscreen_map.dart';
+import 'map/repeater_page_link.dart';
 import 'map/coverage_timeline_slider.dart';
 import 'widgets.dart';
 
@@ -248,6 +249,11 @@ class _MapPane extends StatelessWidget {
                 layers: model.layers,
                 networkCells: model.networkCells,
                 regionRepeaters: model.regionRepeaters,
+                repeaterSource: model.repeaterSource,
+                layerState: model.layerState,
+                observers: model.observers,
+                observersRegionName: s.viewingRegion?.name,
+                openRepeaterPage: openRepeaterPageFromMap,
                 highlightKey: model.selected,
                 onSelectRepeater: model.select,
                 simulated: model.simulated,

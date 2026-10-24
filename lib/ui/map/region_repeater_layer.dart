@@ -1,8 +1,7 @@
-// The "Region repeaters" map layer: the selected region's full roster (GET region-repeaters) as small status-coloured
-// pins, separate from the amber beacons of repeaters this drive heard. Off by default; toggled in the layers sheet.
+// Colours of the "Region repeaters" map layer (the viewed region's roster, GET region-repeaters), by roster status.
+// The layer itself is drawn by the clustered painter (layers/repeater_cluster_layer.dart, layer id `repeaters`); the
+// old one-Marker-per-repeater widget layer was folded into it (tap now opens the repeater sheet instead of a tooltip).
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
 
 import '../../core/region_repeaters_api.dart';
 
@@ -12,37 +11,3 @@ Color regionRepeaterColor(RepeaterActivity s) => switch (s) {
   RepeaterActivity.fresh => const Color(0xFF3B82F6),
   RepeaterActivity.stale => const Color(0xFF8A8F98),
 };
-
-class RegionRepeaterLayer extends StatelessWidget {
-  final List<RegionRepeater> repeaters;
-  const RegionRepeaterLayer({super.key, required this.repeaters});
-
-  @override
-  Widget build(BuildContext context) {
-    final ring = Theme.of(context).colorScheme.surface;
-    return MarkerLayer(
-      markers: [
-        for (final r in repeaters)
-          if (r.hasPosition)
-            Marker(
-              point: LatLng(r.lat!, r.lon!),
-              width: 34,
-              height: 34,
-              child: Tooltip(
-                message: '${r.displayName} (${r.hashPrefix})',
-                triggerMode: TooltipTriggerMode.tap,
-                child: Container(
-                  key: ValueKey('region-repeater-${r.key}'),
-                  margin: const EdgeInsets.all(9),
-                  decoration: BoxDecoration(
-                    color: regionRepeaterColor(r.status),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: ring, width: 2),
-                  ),
-                ),
-              ),
-            ),
-      ],
-    );
-  }
-}

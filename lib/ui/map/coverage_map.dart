@@ -25,6 +25,10 @@
 //   5. Links. With [heard]: from the current position to every LIVE heard repeater with a known location, solid
 //      when heard on the latest ping, dashed while it is holding, each with a distance label. Without [heard]:
 //      from the latest ping to each repeater it heard; they fade over ~15 s.
+//   5b. Network layers (registry ids, layers/registry.dart): the global "All MeshCore repeaters" layer (`network`,
+//      off by default) and the region roster (`repeaters`) as clustered painters from a [RepeaterMapSource], then
+//      the viewed region's observers with a public position (`observers`). Taps open detail sheets through
+//      showMapHitSheet (sheets/map_hit_sheet.dart); a cluster zooms to its members.
 //   6. Repeaters (amber beacons). Heard ones pop up and glow while live, then grey out when stale. Tap for the name.
 //   7. Ping dots: heard = blue→teal→green by best SNR (-10 → +10 dB) or plain green in "result" mode; heard nothing
 //      = red. The newest dot pulses once.
@@ -36,6 +40,8 @@
 //
 // Widget keys (for tests): 'map-ping-<pingId>' (the dot: a DecoratedBox whose BoxDecoration.color is the result),
 // 'map-repeater-<key>' (+ 'map-repeater-state-<key>-<fresh|holding|stale|idle>'), 'map-repeater-label',
+// 'layer-network-paint' / 'layer-repeaters-paint' (the clustered layers), 'map-observer-<key>', 'map-network-legend',
+// 'map-network-attribution',
 // 'map-heard-label-<key>', 'map-link-distance-<key>', 'map-position', 'map-recenter', 'map-compass', 'map-offline',
 // 'map-attribution', 'map-simulated'.
 import 'dart:io' show Platform;
@@ -50,15 +56,24 @@ import 'package:h3_flutter/h3_flutter.dart' show H3;
 import '../../core/heard.dart' show haversineM;
 import '../../core/hex_cells.dart';
 import '../../core/model.dart';
+import '../../core/region_overview_api.dart' show RegionObserver;
 import '../../core/region_repeaters_api.dart' show RegionRepeater;
 import '../../core/network_coverage.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import 'cell_sheet.dart';
 import '../app.dart' show AppScope;
+import 'layers/layers_sheet.dart' show NetworkAgeLegend;
+import 'layers/map_layer.dart';
+import 'layers/map_layers_adapter.dart';
+import 'layers/observer_layer.dart';
+import 'layers/repeater_cluster_layer.dart';
+import 'layers/repeater_map_source.dart';
 import 'map_layers.dart';
 import 'offline_basemap.dart';
-import 'region_repeater_layer.dart';
+import 'sheets/map_hit_sheet.dart';
+import 'sheets/observer_sheet.dart' show ObserverSheetContext;
+import 'sheets/repeater_sheet.dart' show RepeaterSheetContext;
 
 /// A line from a ping to a repeater it heard.
 class PingLink {
@@ -182,8 +197,25 @@ class CoverageMap extends StatefulWidget {
   /// nothing — there is no placeholder for "no data"; absence of a drawn cell is the point.
   final List<NetworkCell> networkCells;
 
-  /// The region's whole repeater roster, drawn when [MapLayers.regionRepeaters] is on.
+  /// The region's whole repeater roster, drawn (clustered, tap for a sheet) when [MapLayers.regionRepeaters] is on.
+  /// Used only when no [repeaterSource] is given; with one, the roster comes from the source.
   final List<RegionRepeater> regionRepeaters;
+
+  /// Both repeater lists, render-ready (global `network` layer + region roster `repeaters` layer). Owned by the host
+  /// (e.g. DriveMapModel); the map never disposes it.
+  final RepeaterMapSource? repeaterSource;
+
+  /// Which registry layers are on. Null = derived from [layers] (which has no field for `network` / `observers`).
+  final MapLayerState? layerState;
+
+  /// The viewed region's observers with a public position, drawn when the `observers` layer is on.
+  final List<RegionObserver> observers;
+
+  /// Display name of the region [observers] belong to (for the observer sheet).
+  final String? observersRegionName;
+
+  /// "Open repeater page" from a repeater sheet (null = no button).
+  final void Function(BuildContext context, RepeaterPoint point)? openRepeaterPage;
 
   /// Repeater (map key) to highlight and bring into view, e.g. tapped in the heard box.
   final String? highlightKey;
@@ -216,6 +248,11 @@ class CoverageMap extends StatefulWidget {
     this.layers = const MapLayers(),
     this.networkCells = const [],
     this.regionRepeaters = const [],
+    this.repeaterSource,
+    this.layerState,
+    this.observers = const [],
+    this.observersRegionName,
+    this.openRepeaterPage,
     this.highlightKey,
     this.onSelectRepeater,
     this.simulated = false,
@@ -257,6 +294,40 @@ class _CoverageMapState extends State<CoverageMap> {
   List<HeardView>? _markerSrcHeard;
   List<RepeaterRef> _markerRepeaters = const [];
   Map<String, HeardView> _heardByKey = const {};
+
+  // Without a host RepeaterMapSource, [CoverageMap.regionRepeaters] is drawn through a source of our own (rebuilt only
+  // when that list's identity changes).
+  StaticRepeaterMapFeed? _ownFeed;
+  RepeaterMapSource? _ownSource;
+  List<RegionRepeater>? _ownSrc;
+
+  RepeaterMapSource? _rosterSource() {
+    if (widget.repeaterSource != null) return widget.repeaterSource;
+    final list = widget.regionRepeaters;
+    if (list.isEmpty && _ownSource == null) return null;
+    if (!identical(list, _ownSrc)) {
+      _ownSrc = list;
+      if (_ownFeed == null) {
+        _ownFeed = StaticRepeaterMapFeed();
+        _ownSource = RepeaterMapSource(_ownFeed!);
+      }
+      _ownFeed!.setRoster(null, list);
+    }
+    return _ownSource;
+  }
+
+  /// A tap on a clustered repeater layer or an observer (cells come through [MapOptions.onTap]).
+  void _onHit(MapHit hit) {
+    if (hit is ClusterHit && hit.colocated.length <= 1) setState(() => _follow = false); // the camera moves to it
+    final here = widget.position ?? (_latest == null ? null : LatLng(_latest!.lat, _latest!.lon));
+    showMapHitSheet(
+      context,
+      hit,
+      controller: _controller,
+      repeaterContext: RepeaterSheetContext(position: here, openRegionPage: widget.openRepeaterPage),
+      observerContext: ObserverSheetContext(position: here),
+    );
+  }
 
   // Hexagons: the H3 library is loaded once; the roll-up reruns only when the ping list changes.
   static final H3? _h3 = loadHexEngine();
@@ -462,6 +533,8 @@ class _CoverageMapState extends State<CoverageMap> {
   @override
   void dispose() {
     OfflineBasemap.instance.removeListener(_onPacksChanged);
+    _ownSource?.dispose();
+    _ownFeed?.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -480,6 +553,10 @@ class _CoverageMapState extends State<CoverageMap> {
     final pos = widget.position;
     final heardMode = widget.heard != null;
     final showLinks = widget.showLinks && layers.links;
+    final layerState = widget.layerState ?? layers.toLayerState();
+    final networkSource = widget.repeaterSource;
+    final rosterSource = layerState.isOn(kRosterLayerId) ? _rosterSource() : null;
+    final showNetwork = networkSource != null && layerState.isOn(kNetworkLayerId);
 
     // Legacy links (no heard list): from the newest ping to what it heard.
     final links = (!heardMode && showLinks && latest != null)
@@ -525,7 +602,7 @@ class _CoverageMapState extends State<CoverageMap> {
             onTap: (_, point) {
               if (!widget.layers.networkCoverage) return;
               final hit = networkCellAt(widget.networkCells, point);
-              if (hit != null) showCellSheet(context, hit);
+              if (hit != null) showMapHitSheet(context, CellHit(hit));
             },
             onPositionChanged: (camera, hasGesture) {
               if (camera.zoom != _lastZoom) {
@@ -640,7 +717,12 @@ class _CoverageMapState extends State<CoverageMap> {
                     ),
                 ],
               ),
-            if (layers.regionRepeaters && widget.regionRepeaters.isNotEmpty) RegionRepeaterLayer(repeaters: widget.regionRepeaters),
+            if (showNetwork)
+              RepeaterClusterLayer(source: networkSource, layerId: kNetworkLayerId, selectedKey: _selectedRepeater, onHit: _onHit),
+            if (rosterSource != null)
+              RepeaterClusterLayer(source: rosterSource, layerId: kRosterLayerId, selectedKey: _selectedRepeater, onHit: _onHit),
+            if (layerState.isOn('observers') && widget.observers.isNotEmpty)
+              ObserverLayer(observers: widget.observers, regionName: widget.observersRegionName, onHit: _onHit),
             if (layers.repeaters)
               MarkerLayer(
                 markers: [
@@ -808,6 +890,30 @@ class _CoverageMapState extends State<CoverageMap> {
                 _Pill(
                   key: const Key('map-attribution'),
                   child: Text('© OpenStreetMap contributors', style: t.textTheme.labelSmall?.copyWith(fontSize: 11)),
+                ),
+              // The global repeater layer's legend and credit (its data is MeshCore Map's), only while it draws.
+              if (showNetwork)
+                ListenableBuilder(
+                  listenable: networkSource,
+                  builder: (context, _) {
+                    if (networkSource.globalPoints.length == 0) return const SizedBox.shrink();
+                    final set = networkSource.feed.global;
+                    return Padding(
+                      padding: const EdgeInsets.only(top: Gap.xs),
+                      child: _Pill(
+                        key: const Key('map-network-attribution'),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            NetworkAgeLegend(set: set, dense: true),
+                            if (set.attribution != null)
+                              Text(set.attribution!, style: t.textTheme.labelSmall?.copyWith(fontSize: 11)),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
                 ),
             ],
           ),

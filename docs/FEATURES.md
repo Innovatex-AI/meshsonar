@@ -172,32 +172,47 @@ simulator's repeaters in Simulator mode), **ping dots**, and the current **posit
   → green), or plain green in "Heard / not" mode. Unknown SNR shows mid teal. The newest dot pulses once.
 - **Follow mode** keeps the position centred. Dragging turns it off and shows **Recenter** (`map-recenter`).
 - Tap a repeater to see its name, a short key, "Heard N pings ago", SNR and distance.
-- **Layers sheet** (`layers-sheet`): Network coverage, Hex coverage, Pings (colour by SNR / heard-not), Repeaters,
-  Links to heard repeaters, Range rings. All are on by default. The choices are shared between the Drive and
-  full-screen maps but not saved. Network coverage fetches once at startup (and again if the server URL changes);
-  a fetch failure keeps showing whatever was already drawn rather than clearing it.
+- **Layers sheet** (`layers-sheet`), generated from the layer registry, in four sections: **This drive** (Hex
+  coverage, Links to heard repeaters, Repeaters heard, Pings with colour by SNR / heard-not), **Coverage** (Network
+  coverage with its colour-by / detail / since / source controls), **Network** (All MeshCore repeaters, Region
+  repeaters, Observers) and **Around you** (Range rings). Drive layers and Network coverage are on by default; the three
+  network layers are off. Every server-fed layer says where it stands under its switch: a count and source ("3
+  repeaters · 4 hidden by their owners · Data: MeshCore Map (map.meshcore.io)", "1 observer with a public position",
+  "753 cells measured"), "Loading…", "Couldn't load. Check the connection and retry." with **Retry**, "… · Offline - as
+  of 2h ago" for a stored copy (with Retry), or a reason with the switch disabled: "Not available on this server yet"
+  (the server answers 404), "No repeaters reported yet", "Pick a region to see its observers". A layer that is on can
+  always be switched off. The choices are shared between the Drive and full-screen maps but not saved. Network coverage
+  fetches once at startup (and again if the server URL changes); a fetch failure keeps showing whatever was already
+  drawn rather than clearing it.
+- **All MeshCore repeaters** (`network`, off by default): every repeater and room server with a public position, from
+  the server's `network-repeaters` list (live since Oct 24 2026, 55.6k rows; synced on open, at most every 6 h, stored for offline use, about 6 MB on disk). Clustered: one
+  painter, only what is on screen, clusters with counts that split as you zoom. Colour = last advert (24 h green, 7 days
+  blue, 30 days amber, older grey; room servers are rings), legend in the sheet with the data's "as of" time, and a
+  small legend + "Data: MeshCore Map (map.meshcore.io)" on the map while it is on. Advert-age colours are recomputed
+  when the list is refreshed (also a 304 "unchanged") and when the layer is switched on if they are over 10 minutes
+  old. With Region repeaters also on, roster repeaters are drawn once, by the roster layer.
+- **Region repeaters** (`repeaters`): the viewed region's roster from the repeater sync (offline copy included),
+  clustered, coloured by status (active, quiet, new, stale; legend in the sheet).
+- **Observers** (`observers`): the viewed region's observers whose owner made the position public
+  (`region-observers`, fetched when the layer is switched on and when the viewed region changes), triangles (online
+  filled teal, offline outline).
+- **Tap for detail**: a coverage cell opens the cell sheet; a repeater (either layer) the repeater sheet (name, type,
+  copyable key, last advert / last heard, distance from you in your Units, roster status / SNR / grade / adverts /
+  neighbours / hash prefix when known, source, **Open repeater page** for a roster repeater); several repeaters on one
+  spot a list; a cluster zooms to its members (follow stops, Recenter appears); an observer the observer sheet (online
+  state, last seen, noise floor, packets per hour, nodes heard in 24 h, radio, reported battery mV, distance, source and
+  how the position was published).
 - Attribution "© OpenStreetMap contributors" is always shown with tiles. Tiles are off under `flutter test`.
 - If there's no position or pings, the map centres on Columbus, Ohio (39.9612, −82.9988).
 
-### Map layer engine (built, not on screen yet)
+### Map layer engine
 
-New building blocks for the map redesign (stream-1-maps.md), merged ahead of the screens that use them, so nothing
-below is visible in the app yet:
+Building blocks behind the layers above (stream-1-maps.md), in `ui/map/layers/` and `ui/map/sheets/`:
 
-- **Layer registry** (`ui/map/layers/`): every map layer with the website's `?show=` key where the website has the
-  same layer (`measured`, `repeaters`, `observers`, `network`) and app-only keys for the drive layers (`hexes`,
-  `links`, `neighbours`, `heard`, `pings`, `rings`). Each layer reports whether its switch works and why not:
-  "Not available on this server yet" (404), "Loading…", "Couldn't load. Check the connection and retry." (with
-  Retry), "No repeaters reported yet", "No observers with a public position in CMH", "Offline copy".
-- **Clustered repeater layers**: "All MeshCore repeaters" (`network`, from `GET /api/cmh/network-repeaters` once the
-  server ships it; coloured by last advert: 24 h green, 7 days blue, 30 days amber, older grey; room servers are
-  rings) and "Region repeaters" (`repeaters`, the roster, coloured by status). One painter per layer, only what is
-  on screen, clusters with counts that split as you zoom; tap a cluster to zoom to it, tap a stack on one tower for a
-  list, tap a repeater for its sheet.
-- **Repeater sheet**: name, repeater or room server, the full key (first 8 bold, copy button), last advert or last
-  heard ("3 h ago (2026-10-24)"), distance from you in your Units, the roster's status / mean SNR / grade / adverts /
-  neighbours / hash prefix when the key is in the viewed region's roster, the data source, and "Open repeater page"
-  when the region is known.
+- **Layer registry**: every map layer with the website's `?show=` key where the website has the same layer
+  (`measured`, `repeaters`, `observers`, `network`) and app-only keys for the drive layers (`hexes`, `links`,
+  `neighbours`, `heard`, `pings`, `rings`). `neighbours` (links of the selected repeater) is registered but not drawn
+  yet, so the sheet does not list it.
 - **Map links**: `MapViewState` reads and writes `https://<region>.meshsonar.com/coverage?show=…&color=…&since=…&src=…
   &res=…&lat=…&lon=…` (the website's own parameters, same validation) plus `z` and `until`, and the same query on
   `meshsonar://map?…&region=cmh`. Opening such a link in the app (URL scheme, app_links) is not built yet.

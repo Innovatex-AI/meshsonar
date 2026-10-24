@@ -104,15 +104,24 @@ void main() {
     await settle(tester);
     await tester.tap(find.byKey(const Key('drive-map-layers')));
     await tester.pumpAndSettle();
+    // The generated sheet lists "This drive" first, so the coverage controls sit lower: scroll them into view.
+    await tester.ensureVisible(find.byKey(const Key('coverage-layer-controls')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('coverage-layer-controls')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('cov-source-MeshMapper')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('cov-source-MeshMapper')));
     await settle(tester);
     expect(h.client.lastCoverageSource, 'meshmapper');
     expect(h.client.lastCoverageRes, inInclusiveRange(7, 11)); // auto: from the map zoom
+    await tester.ensureVisible(find.byKey(const Key('cov-since-24 h')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('cov-since-24 h')));
     await settle(tester);
     expect(h.client.lastCoverageSince, isNotNull);
+    await tester.ensureVisible(find.byKey(const Key('cov-res-11')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('cov-res-11')));
     await settle(tester);
     expect(h.client.lastCoverageRes, 11);
