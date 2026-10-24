@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../core/heard.dart';
 import '../core/model.dart';
 import 'app.dart' show AppScope;
+import 'charts/sparkline.dart';
 import 'repeater_widgets.dart';
 import 'theme.dart';
 import 'widgets.dart';
@@ -178,64 +179,14 @@ class SnrSparkline extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mc = MeshSonarColors.of(context);
-    return CustomPaint(
-      size: Size.infinite,
-      painter: _SparkPainter(values, mc, Theme.of(context).colorScheme.outline),
+    return Sparkline(
+      values: values,
+      color: mc.snrMid,
+      style: SparkStyle.snr,
+      dotColor: (s) => mc.forPing(heard: true, snr: s),
+      refColor: Theme.of(context).colorScheme.outline.withValues(alpha: 0.5),
+      height: double.infinity,
+      summary: 'SNR per ping. ${sparkSummary(values, unit: 'dB', gapWord: 'pings')}',
     );
   }
-}
-
-class _SparkPainter extends CustomPainter {
-  final List<double?> v;
-  final MeshSonarColors mc;
-  final Color zero;
-  _SparkPainter(this.v, this.mc, this.zero);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final nums = v.whereType<double>();
-    if (nums.isEmpty) return;
-    var lo = math.min(nums.reduce(math.min), -5.0), hi = math.max(nums.reduce(math.max), 5.0);
-    if (hi - lo < 1) hi = lo + 1;
-    double y(double s) => size.height - (s - lo) / (hi - lo) * size.height;
-    double x(int i) => v.length == 1 ? size.width / 2 : i * size.width / (v.length - 1);
-
-    // 0 dB reference
-    final zp = Paint()
-      ..color = zero.withValues(alpha: 0.5)
-      ..strokeWidth = 1;
-    for (var dx = 0.0; dx < size.width; dx += 8) {
-      canvas.drawLine(Offset(dx, y(0)), Offset(math.min(dx + 4, size.width), y(0)), zp);
-    }
-
-    final line = Paint()
-      ..color = mc.snrMid
-      ..strokeWidth = 2
-      ..style = PaintingStyle.stroke
-      ..strokeJoin = StrokeJoin.round;
-    Path? path;
-    for (var i = 0; i < v.length; i++) {
-      final s = v[i];
-      if (s == null) {
-        if (path != null) canvas.drawPath(path, line);
-        path = null;
-        continue;
-      }
-      final o = Offset(x(i), y(s));
-      if (path == null) {
-        path = Path()..moveTo(o.dx, o.dy);
-      } else {
-        path.lineTo(o.dx, o.dy);
-      }
-    }
-    if (path != null) canvas.drawPath(path, line);
-    for (var i = 0; i < v.length; i++) {
-      final s = v[i];
-      if (s == null) continue;
-      canvas.drawCircle(Offset(x(i), y(s)), 3, Paint()..color = mc.forPing(heard: true, snr: s));
-    }
-  }
-
-  @override
-  bool shouldRepaint(_SparkPainter old) => old.v != v || old.mc != mc;
 }

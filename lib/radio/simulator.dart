@@ -214,6 +214,20 @@ class SimulatedTransport implements ByteTransport {
   final List<_Slot> _slots;
   int _clockSecs = 0;
 
+  // Radio health counters, answered to GET_STATS core/packets and GET_BATT_AND_STORAGE (firmware layouts in
+  // protocol.dart). Plausible, deterministic numbers that follow what the simulation actually did; not a model of
+  // any real board.
+  late final DateTime _bootAt;
+  int _sent = 0;
+  int _recv = 0;
+  int _txAirMs = 0;
+  int _rxAirMs = 0;
+  int _lastRssi = 0; // 0 until something is heard, like the firmware
+  double _lastSnr = 0;
+
+  /// About what one short GRP_TXT costs on air at SF7 / 62.5 kHz.
+  static const int _airMsPerPacket = 110;
+
   /// Received commands, for tests.
   final List<Uint8List> sentFrames = [];
 
@@ -237,7 +251,14 @@ class SimulatedTransport implements ByteTransport {
         publicKey = sha256(utf8.encode('meshsonar-sim-companion')),
         _slots = List.generate(maxChannels, (i) => _Slot('', Uint8List(16))) {
     _slots[0] = _Slot('Public', Uint8List.fromList(publicChannelSecret));
+    _bootAt = _clock();
   }
+
+  /// Simulated seconds since this radio "booted" (scaled like the drive).
+  int get _uptimeSecs => (_clock().difference(_bootAt).inMilliseconds * timeScale / 1000).floor();
+
+  /// A LiPo slowly draining from 4.10 V: 1 mV per simulated 2 minutes, floor 3.40 V.
+  int get _batteryMv => math.max(3400, 4100 - _uptimeSecs ~/ 120);
 
   @override
   Stream<Uint8List> get incoming => _out.stream;
@@ -329,14 +350,34 @@ class SimulatedTransport implements ByteTransport {
         final ts = bd.getUint32(3, Endian.little);
         final text = utf8.decode(frame.sublist(7), allowMalformed: true);
         _emit(encodeOk());
+        _sent++;
+        _txAirMs += _airMsPerPacket;
         _simulateFlood(_slots[i].secret, ts, text);
       case Cmd.syncNextMessage:
         _emit(encodeNoMoreMessages());
       case Cmd.getStats:
         final nf = noiseFloorDbm;
         if (nf == null) return _emit(encodeErr(ErrCode.unsupportedCmd));
-        if (frame.length < 2 || frame[1] != StatsType.radio) return _emit(encodeErr(ErrCode.illegalArg));
-        _emit(encodeRadioStats(noiseFloorDbm: nf + _rng.nextInt(5) - 2));
+        if (frame.length < 2) return _emit(encodeErr(ErrCode.illegalArg));
+        switch (frame[1]) {
+          case StatsType.radio:
+            _emit(encodeRadioStats(
+              noiseFloorDbm: nf + _rng.nextInt(5) - 2,
+              lastRssiDbm: _lastRssi,
+              lastSnrDb: _lastSnr,
+              txAirSecs: _txAirMs ~/ 1000,
+              rxAirSecs: _rxAirMs ~/ 1000,
+            ));
+          case StatsType.core:
+            _emit(encodeCoreStats(batteryMv: _batteryMv, uptimeSecs: _uptimeSecs));
+          case StatsType.packets:
+            _emit(encodePacketStats(
+                recv: _recv, sent: _sent, floodTx: _sent, directTx: 0, floodRx: _recv, directRx: 0, recvErrors: 0));
+          default:
+            _emit(encodeErr(ErrCode.illegalArg));
+        }
+      case Cmd.getBattAndStorage:
+        _emit(encodeBattAndStorage(batteryMv: _batteryMv, usedKb: 120, totalKb: 1984));
       case Cmd.sendControlData:
         if (frame.length < 2 || (frame[1] & 0x80) == 0) return _emit(encodeErr(ErrCode.unsupportedCmd));
         _emit(encodeOk());
@@ -374,8 +415,12 @@ class SimulatedTransport implements ByteTransport {
   /// Reports a heard packet. RSSI follows the true link, but reported SNR saturates like a real LoRa radio's
   /// (about +10…+14 dB at most, however strong the signal), so strong links read realistically, not +26 dB.
   void _hearPacket(MeshPacket pkt, double snr, Duration delay) {
+    _recv++;
+    _rxAirMs += _airMsPerPacket;
     final rssi = (_nf + snr).clamp(-140.0, -20.0).round();
     final reported = math.min(snr, 11.5 + _gauss() * 0.75);
+    _lastRssi = rssi;
+    _lastSnr = reported.clamp(-31.0, 31.0);
     _emit(encodeLogRxData(reported.clamp(-31.0, 31.0), rssi, pkt.toBytes()), delay);
   }
 

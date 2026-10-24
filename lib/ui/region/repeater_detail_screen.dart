@@ -12,6 +12,7 @@ import 'package:latlong2/latlong.dart' hide Path;
 
 import '../../core/repeater_detail_api.dart';
 import '../app.dart' show AppScope;
+import '../charts/sparkline.dart';
 import '../map/coverage_map.dart';
 import '../theme.dart';
 
@@ -493,15 +494,11 @@ class _RepeaterDetailScreenState extends State<RepeaterDetailScreen> {
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: Gap.xs),
-            SizedBox(
-              height: 56,
-              width: double.infinity,
-              child: CustomPaint(
-                key: const Key('repdetail-sparkline'),
-                painter: SparklinePainter([
-                  for (final v in flat) v.toDouble(),
-                ], Theme.of(context).colorScheme.primary),
-              ),
+            Sparkline(
+              key: const Key('repdetail-sparkline'),
+              values: [for (final v in flat) v.toDouble()],
+              color: Theme.of(context).colorScheme.primary,
+              summary: 'Packets heard per hour. ${sparkSummary([for (final v in flat) v.toDouble()], decimals: 0, gapWord: 'hours')}',
             ),
             const SizedBox(height: Gap.m),
             Text(
@@ -520,15 +517,11 @@ class _RepeaterDetailScreenState extends State<RepeaterDetailScreen> {
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: Gap.xs),
-            SizedBox(
-              height: 56,
-              width: double.infinity,
-              child: CustomPaint(
-                key: const Key('repdetail-snr-sparkline'),
-                painter: SparklinePainter([
-                  for (final p in snr) p.mean ?? double.nan,
-                ], MeshSonarColors.of(context).snrStrong),
-              ),
+            Sparkline(
+              key: const Key('repdetail-snr-sparkline'),
+              values: [for (final p in snr) p.mean],
+              color: MeshSonarColors.of(context).snrStrong,
+              summary: 'Mean SNR by hour. ${sparkSummary([for (final p in snr) p.mean], unit: 'dB', gapWord: 'hours')}',
             ),
           ],
         ],
@@ -729,52 +722,6 @@ class _StatTile extends StatelessWidget {
       ),
     );
   }
-}
-
-/// Line sparkline; NaN values leave a gap (unknown is not zero).
-class SparklinePainter extends CustomPainter {
-  final List<double> values;
-  final Color color;
-  SparklinePainter(this.values, this.color);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final known = values.where((v) => !v.isNaN).toList();
-    if (known.length < 2 && values.length < 2) return;
-    final lo = known.isEmpty ? 0.0 : known.reduce(math.min);
-    final hi = known.isEmpty ? 1.0 : known.reduce(math.max);
-    final span = hi - lo == 0 ? 1.0 : hi - lo;
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.6
-      ..strokeJoin = StrokeJoin.round;
-    final path = Path();
-    var pen = false;
-    for (var i = 0; i < values.length; i++) {
-      final v = values[i];
-      if (v.isNaN) {
-        pen = false;
-        continue;
-      }
-      final x = values.length == 1 ? 0.0 : size.width * i / (values.length - 1);
-      final y = size.height - 3 - (size.height - 6) * ((v - lo) / span);
-      if (pen) {
-        path.lineTo(x, y);
-      } else {
-        path.moveTo(x, y);
-        pen = true;
-        if (i == values.length - 1 || values[i + 1].isNaN) {
-          canvas.drawCircle(Offset(x, y), 1.5, Paint()..color = color);
-        }
-      }
-    }
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(SparklinePainter old) =>
-      old.values != values || old.color != color;
 }
 
 String _roleLabel(String r) => switch (r) {

@@ -8,6 +8,11 @@
 //     end_sent.txt   ended_at the server has been told about (so a finished drive is reported once)
 //     resend.txt     present when the session's details changed (a rename) since the server last saw them; holds a
 //                    token so a rename during an upload isn't cleared by that upload
+//     samples.jsonl  drive context (stream 7): one DriveSample per line (radio health, phone readings; no
+//                    coordinates); appended and flushed like pings.jsonl
+//     ctx.jsonl      drive context per ping: {"ping": <id>, "ctx": {...}} per line, last record per ping wins
+//     context.json   drive context per session (phone/app details, radio identity); rewritten atomically
+//   None of the context files is read by the upload or the export: their bytes are exactly what they were before.
 //
 // A crash mid-write can leave a truncated last line in pings.jsonl; readers skip it, and the next append trims it
 // first so a new ping is never glued onto the broken one.
@@ -20,6 +25,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import 'api.dart';
+import 'drive_context.dart';
 import 'model.dart';
 import 'storage_usage.dart';
 
@@ -61,11 +67,12 @@ Future<List<String>> closeOrphanedSessions(DriveStore store, {Set<String> except
   return closed;
 }
 
-class JsonlDriveStore implements DriveStore, SyncLedger, StorageSized {
+class JsonlDriveStore implements DriveStore, SyncLedger, StorageSized, DriveContextLedger {
   final Directory root;
   final Directory _sessionsDir;
   final Map<String, Future<void>> _locks = {};
   final Set<String> _repaired = {};
+  final Set<String> _repairedFiles = {}; // '<session>/<file>' of context files already tail-repaired this run
 
   JsonlDriveStore._(this.root) : _sessionsDir = Directory(p.join(root.path, 'sessions'));
 
@@ -234,6 +241,152 @@ class JsonlDriveStore implements DriveStore, SyncLedger, StorageSized {
         final dir = _dir(sessionId);
         if (await dir.exists()) await dir.delete(recursive: true);
         _repaired.remove(sessionId);
+        _repairedFiles.removeWhere((k) => k.startsWith('$sessionId/'));
+      });
+
+  // ---- drive context (DriveContextLedger) ----
+
+  static const _samplesFile = 'samples.jsonl';
+  static const _ctxFile = 'ctx.jsonl';
+  static const _contextFile = 'context.json';
+
+  Future<void> _appendContextLines(String sessionId, String name, List<String> lines) async {
+    if (!await _dir(sessionId).exists()) throw StateError('no such session: $sessionId');
+    if (lines.isEmpty) return;
+    final f = _file(sessionId, name);
+    if (_repairedFiles.add('$sessionId/$name')) await _repairTail(f);
+    await _appendLines(f, lines);
+  }
+
+  @override
+  Future<void> appendSamples(String sessionId, Iterable<DriveSample> samples) => _locked(sessionId, () async {
+        final lines = [for (final x in samples) if (!x.isEmpty) jsonEncode(x.toJson())];
+        await _appendContextLines(sessionId, _samplesFile, lines);
+      });
+
+  @override
+  Future<void> appendPingContext(String sessionId, String pingId, PingContext ctx) => _locked(sessionId, () async {
+        final lines = [if (!ctx.isEmpty) jsonEncode({'ping': pingId, 'ctx': ctx.toJson()})];
+        await _appendContextLines(sessionId, _ctxFile, lines);
+      });
+
+  @override
+  Future<void> writeSessionContext(String sessionId, SessionContext ctx) => _locked(sessionId, () async {
+        if (!await _dir(sessionId).exists()) throw StateError('no such session: $sessionId');
+        final f = _file(sessionId, _contextFile);
+        if (ctx.isEmpty) {
+          if (await f.exists()) await f.delete();
+          return;
+        }
+        await _writeAtomic(f, jsonEncode(ctx.toJson()));
+      });
+
+  /// Readable JSON objects of a JSONL file, in order; broken lines (a crash mid-write) are skipped.
+  Future<List<Map<String, dynamic>>> _readJsonl(String sessionId, String name) async {
+    final f = _file(sessionId, name);
+    if (!await f.exists()) return [];
+    final out = <Map<String, dynamic>>[];
+    final text = utf8.decode(await f.readAsBytes(), allowMalformed: true);
+    for (final line in const LineSplitter().convert(text)) {
+      if (line.trim().isEmpty) continue;
+      try {
+        final v = jsonDecode(line);
+        if (v is Map) out.add(v.cast<String, dynamic>());
+      } catch (_) {}
+    }
+    return out;
+  }
+
+  Future<List<DriveSample>> _readSamples(String sessionId) async {
+    final out = <DriveSample>[];
+    for (final j in await _readJsonl(sessionId, _samplesFile)) {
+      try {
+        out.add(DriveSample.fromJson(j));
+      } catch (_) {}
+    }
+    return out;
+  }
+
+  Future<Map<String, PingContext>> _readPingContexts(String sessionId) async {
+    final out = <String, PingContext>{};
+    for (final j in await _readJsonl(sessionId, _ctxFile)) {
+      final id = j['ping'], c = j['ctx'];
+      if (id is! String || c is! Map) continue;
+      out[id] = PingContext.fromJson(c.cast<String, dynamic>());
+    }
+    out.removeWhere((_, c) => c.isEmpty);
+    return out;
+  }
+
+  Future<SessionContext?> _readSessionContext(String sessionId) async {
+    for (final name in [_contextFile, '$_contextFile.tmp']) {
+      final f = _file(sessionId, name);
+      try {
+        if (!await f.exists()) continue;
+        final c = SessionContext.fromJson((jsonDecode(await f.readAsString()) as Map).cast<String, dynamic>());
+        return c.isEmpty ? null : c;
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  @override
+  Future<List<DriveSample>> samples(String sessionId) => _locked(sessionId, () => _readSamples(sessionId));
+
+  @override
+  Future<Map<String, PingContext>> pingContexts(String sessionId) =>
+      _locked(sessionId, () => _readPingContexts(sessionId));
+
+  @override
+  Future<SessionContext?> sessionContext(String sessionId) => _locked(sessionId, () => _readSessionContext(sessionId));
+
+  @override
+  Future<ContextStripResult> stripCategories(String sessionId, Set<String> categoryIds) => _locked(sessionId, () async {
+        if (categoryIds.isEmpty || !await _dir(sessionId).exists()) return const ContextStripResult();
+
+        var samplesChanged = 0;
+        final samples = await _readSamples(sessionId);
+        final keptSamples = <DriveSample>[];
+        for (final x in samples) {
+          final y = x.without(categoryIds);
+          if (jsonEncode(y.toJson()) != jsonEncode(x.toJson())) samplesChanged++;
+          if (!y.isEmpty) keptSamples.add(y);
+        }
+        if (samplesChanged > 0) {
+          await _writeAtomic(_file(sessionId, _samplesFile), keptSamples.map((x) => '${jsonEncode(x.toJson())}\n').join());
+          _repairedFiles.add('$sessionId/$_samplesFile');
+        }
+
+        var ctxChanged = 0;
+        final ctx = await _readPingContexts(sessionId);
+        final keptCtx = <String, PingContext>{};
+        for (final e in ctx.entries) {
+          final y = e.value.without(categoryIds);
+          if (jsonEncode(y.toJson()) != jsonEncode(e.value.toJson())) ctxChanged++;
+          if (!y.isEmpty) keptCtx[e.key] = y;
+        }
+        if (ctxChanged > 0) {
+          await _writeAtomic(
+              _file(sessionId, _ctxFile),
+              keptCtx.entries.map((e) => '${jsonEncode({'ping': e.key, 'ctx': e.value.toJson()})}\n').join());
+          _repairedFiles.add('$sessionId/$_ctxFile');
+        }
+
+        var sessionChanged = false;
+        final sc = await _readSessionContext(sessionId);
+        if (sc != null) {
+          final y = sc.without(categoryIds);
+          if (jsonEncode(y.toJson()) != jsonEncode(sc.toJson())) {
+            sessionChanged = true;
+            final f = _file(sessionId, _contextFile);
+            if (y.isEmpty) {
+              if (await f.exists()) await f.delete();
+            } else {
+              await _writeAtomic(f, jsonEncode(y.toJson()));
+            }
+          }
+        }
+        return ContextStripResult(pingContexts: ctxChanged, samples: samplesChanged, session: sessionChanged);
       });
 
   // ---- reads ----
