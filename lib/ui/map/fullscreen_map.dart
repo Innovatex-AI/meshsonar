@@ -14,6 +14,7 @@ import '../app.dart';
 import '../drive/drive_controls.dart';
 import '../drive/drive_map_model.dart';
 import '../drive/heard_box.dart';
+import 'coverage_layer_controls.dart';
 import 'coverage_map.dart';
 import 'region_center.dart';
 import 'map_layers.dart';
@@ -71,6 +72,7 @@ class FullscreenMapScreen extends StatelessWidget {
                   highlightKey: model.selected,
                   onSelectRepeater: model.select,
                   simulated: model.simulated,
+                  onZoomChanged: model.onMapZoom,
                   fallbackCenter: viewedRegionCenter(s),
                   rotatable: true,
                   // Keep map buttons, attribution and framed repeaters clear of the control panel (bottom in
@@ -185,7 +187,8 @@ Future<void> showMapLayersSheet(BuildContext context, DriveMapModel model) {
           final t = Theme.of(context);
           final l = model.layers;
           void set(MapLayers n) => model.layers = n;
-          return Padding(
+          return SingleChildScrollView(
+            child: Padding(
             key: const Key('layers-sheet'),
             padding: const EdgeInsets.fromLTRB(Gap.s, 0, Gap.s, Gap.m),
             child: Column(
@@ -204,6 +207,7 @@ Future<void> showMapLayersSheet(BuildContext context, DriveMapModel model) {
                   value: l.networkCoverage,
                   onChanged: (v) => set(l.copyWith(networkCoverage: v)),
                 ),
+                if (l.networkCoverage) CoverageLayerControls(model: model),
                 SwitchListTile(
                   key: const Key('layer-hexes'),
                   secondary: const Icon(Icons.hexagon_outlined),
@@ -271,6 +275,7 @@ Future<void> showMapLayersSheet(BuildContext context, DriveMapModel model) {
                   onChanged: (v) => set(l.copyWith(rings: v)),
                 ),
               ],
+            ),
             ),
           );
         },

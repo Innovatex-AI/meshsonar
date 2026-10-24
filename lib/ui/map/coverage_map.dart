@@ -54,6 +54,7 @@ import '../../core/region_repeaters_api.dart' show RegionRepeater;
 import '../../core/network_coverage.dart';
 import '../theme.dart';
 import '../widgets.dart';
+import 'cell_sheet.dart';
 import '../app.dart' show AppScope;
 import 'map_layers.dart';
 import 'offline_basemap.dart';
@@ -193,6 +194,9 @@ class CoverageMap extends StatefulWidget {
   /// Show the "SIMULATED GPS & RADIO" tag.
   final bool simulated;
 
+  /// Reports the map zoom as it changes (the coverage layer picks its H3 resolution from it).
+  final ValueChanged<double>? onZoomChanged;
+
   const CoverageMap({
     super.key,
     required this.pings,
@@ -215,6 +219,7 @@ class CoverageMap extends StatefulWidget {
     this.highlightKey,
     this.onSelectRepeater,
     this.simulated = false,
+    this.onZoomChanged,
   });
 
   /// True unless running under `flutter test`.
@@ -242,6 +247,7 @@ class _CoverageMapState extends State<CoverageMap> {
   bool _tilesFailing = false;
   int _tileErrors = 0;
   double _rotation = 0;
+  double? _lastZoom;
 
   // Memoised on input identity (see the header comment).
   List<DrivePing>? _sortedSrc;
@@ -516,7 +522,16 @@ class _CoverageMapState extends State<CoverageMap> {
                 });
               }
             },
+            onTap: (_, point) {
+              if (!widget.layers.networkCoverage) return;
+              final hit = networkCellAt(widget.networkCells, point);
+              if (hit != null) showCellSheet(context, hit);
+            },
             onPositionChanged: (camera, hasGesture) {
+              if (camera.zoom != _lastZoom) {
+                _lastZoom = camera.zoom;
+                widget.onZoomChanged?.call(camera.zoom);
+              }
               final rot = camera.rotation;
               final rotChanged = widget.rotatable && (rot - _rotation).abs() > 0.5;
               if ((hasGesture && _follow) || rotChanged) {

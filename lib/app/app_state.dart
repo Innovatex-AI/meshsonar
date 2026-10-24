@@ -13,6 +13,7 @@ import 'package:flutter/foundation.dart';
 
 import '../core/antenna_profile.dart';
 import '../core/api.dart';
+import '../core/coverage_query.dart';
 import '../core/diagnostics.dart';
 import '../core/drive_store.dart' show closeOrphanedSessions;
 import '../core/heard.dart';
@@ -150,6 +151,11 @@ class AppState extends ChangeNotifier {
 
   // ---------- network coverage (the website's /coverage cells, network-wide) ----------
   PublicCoverage? _networkCoverage;
+  CoverageQuery _coverageQuery = const CoverageQuery();
+  int _coverageSeq = 0;
+
+  /// What the layer last asked for (res null = server default).
+  CoverageQuery get coverageQuery => _coverageQuery;
 
   /// Network-wide measured coverage cells (`GET /api/cmh/public-coverage`) — the map's background "where hasn't
   /// this been driven" layer (see lib/ui/map/map_layers.dart's `networkCoverage`). Null until the first fetch
@@ -160,12 +166,25 @@ class AppState extends ChangeNotifier {
   /// useful for "where hasn't this been driven", so it's kept rather than blanked on a network hiccup; failures
   /// are logged quietly, same as [refreshSiteConfig]. Called unawaited at startup and again whenever the server
   /// URL changes.
-  Future<void> refreshNetworkCoverage() async {
+  Future<void> refreshNetworkCoverage({CoverageQuery? query}) async {
     final server = _settings.serverUrl;
+    if (query != null) _coverageQuery = query;
+    final q = _coverageQuery;
+    final seq = ++_coverageSeq;
     try {
       final viewing = viewingRegion;
-      final r = await _cachedFetch<PublicCoverage>('coverage_${viewing?.code ?? 'default'}', () => _coverageClient(viewing).publicCoverage(),
-          publicCoverageToJson, publicCoverageFromJson);
+      final key = 'coverage_${viewing?.code ?? 'default'}_r${q.res ?? 'd'}_${q.since.name}_${q.source.name}';
+      final r = await _cachedFetch<PublicCoverage>(
+        key,
+        () => _coverageClient(viewing).publicCoverage(
+          res: q.res,
+          since: q.since.window == null ? null : DateTime.now().toUtc().subtract(q.since.window!),
+          source: q.source.wire,
+        ),
+        publicCoverageToJson,
+        publicCoverageFromJson,
+      );
+      if (seq != _coverageSeq) return; // a newer request (zoom/filter change) superseded this one
       if (_settings.serverUrl != server) return; // the server changed again while this was in flight
       if (viewing?.code != viewingRegion?.code) return; // the viewed region changed while this was in flight
       _networkCoverage = r.value;

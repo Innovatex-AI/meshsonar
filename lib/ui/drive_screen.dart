@@ -241,6 +241,7 @@ class _MapPane extends StatelessWidget {
                 highlightKey: model.selected,
                 onSelectRepeater: model.select,
                 simulated: model.simulated,
+                onZoomChanged: model.onMapZoom,
                 fallbackCenter: viewedRegionCenter(s),
               ),
             ),
