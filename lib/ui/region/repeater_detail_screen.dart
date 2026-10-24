@@ -2,6 +2,7 @@
 // Data: `region-repeater` on the region host (lib/core/repeater_detail_api.dart). Every state is honest: loading,
 // not found in this region, offline/error with retry, and the server's own `Sourced` state (partial / pending /
 // stale / unavailable) shown as a banner. Unknown values render as "unknown", never as zero.
+// Ends with "Your drives" (your_drives_section.dart): how the drives stored on this phone heard this repeater.
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -15,6 +16,7 @@ import '../app.dart' show AppScope;
 import '../charts/sparkline.dart';
 import '../map/coverage_map.dart';
 import '../theme.dart';
+import '../your_drives_section.dart';
 
 /// Pushes the detail screen for one repeater of the region served at [baseUrl].
 Future<void> openRepeaterDetail(
@@ -157,6 +159,10 @@ class _RepeaterDetailScreenState extends State<RepeaterDetailScreen> {
           _activity(context, d),
           _neighbours(context, d),
           _observers(context, d),
+          Padding(
+            padding: const EdgeInsets.only(bottom: Gap.l),
+            child: YourDrivesSection(repeaterKey: widget.repeaterKey, lat: row.lat, lon: row.lon, mapTiles: widget.mapTiles),
+          ),
           _packetTypes(context, d),
           _events(context, d),
           const SizedBox(height: Gap.xl),

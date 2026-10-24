@@ -1,9 +1,11 @@
 // "Export region report" sheet (opened from the Region tab's app bar): fetches the region's `region-report` (through the
-// ETag client, so offline it offers the stored copy and says how old it is) and shares it as a text summary, the JSON
+// ETag client, so offline it offers the stored copy and says how old it is) and shares it as a text summary, a PDF
+// (lib/core/region_report_pdf.dart), the JSON
 // file (pretty-printed like the website's download), all tables in one CSV, or any single table as its own CSV with
 // the website's file name and bytes (lib/core/region_report_export.dart). Empty tables are disabled (never an empty
 // file). Only public data the endpoint already publishes; files go only to the share sheet.
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -11,10 +13,16 @@ import 'package:http/http.dart' as http;
 import '../../core/region_cache.dart' show asOfLabel;
 import '../../core/region_dataset_fetch.dart';
 import '../../core/region_report_export.dart';
+import '../../core/region_report_pdf.dart';
+import '../../core/report_pdf.dart';
+import '../report/pdf_export.dart';
 import '../app.dart';
 
 /// Writes [content] to a file called [name] and opens the share sheet.
 typedef ShareText = Future<void> Function(String name, String content);
+
+/// Same for binary content (the PDF).
+typedef ShareBytes = Future<void> Function(String name, Uint8List content);
 
 Future<void> showRegionReportExport(BuildContext context, {required String baseUrl, required String regionSlug, http.Client? client}) =>
     showModalBottomSheet<void>(
@@ -31,9 +39,10 @@ class RegionReportExportSheet extends StatefulWidget {
   /// Test seams.
   final http.Client? client;
   final ShareText? share;
+  final ShareBytes? shareBytes;
   final DateTime Function() now;
   const RegionReportExportSheet(
-      {super.key, required this.baseUrl, required this.regionSlug, this.client, this.share, this.now = DateTime.now});
+      {super.key, required this.baseUrl, required this.regionSlug, this.client, this.share, this.shareBytes, this.now = DateTime.now});
 
   @override
   State<RegionReportExportSheet> createState() => _RegionReportExportSheetState();
@@ -61,6 +70,25 @@ class _RegionReportExportSheetState extends State<RegionReportExportSheet> {
       await (widget.share ?? _defaultShare)(name, content());
     } catch (e) {
       messenger?.showSnackBar(SnackBar(content: Text('Couldn\'t share the report. $e')));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _sharePdf(RegionReportExport e) async {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    final units = AppScope.unitsOf(context);
+    final name = '${e.slug}-region-report.pdf';
+    setState(() => _busy = true);
+    try {
+      final doc = regionReportPdf(e, units: units);
+      if (widget.shareBytes != null) {
+        await widget.shareBytes!(name, await renderReportPdf(doc, fonts: await loadReportFonts()));
+      } else {
+        await shareReportPdf(AppScope.read(context), name, doc);
+      }
+    } catch (err) {
+      messenger?.showSnackBar(SnackBar(content: Text('Couldn\'t make the PDF. Text, JSON and CSV still work. $err')));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -128,6 +156,13 @@ class _RegionReportExportSheetState extends State<RegionReportExportSheet> {
                   leading: const Icon(Icons.notes),
                   title: const Text('Text summary'),
                   onTap: _busy ? null : () => _share(e.textName, e.toText),
+                ),
+                ListTile(
+                  key: const Key('export-pdf'),
+                  leading: const Icon(Icons.picture_as_pdf_outlined),
+                  title: const Text('PDF report'),
+                  subtitle: Text('${e.slug}-region-report.pdf · charts and every table row'),
+                  onTap: _busy ? null : () => _sharePdf(e),
                 ),
                 ListTile(
                   key: const Key('export-json'),

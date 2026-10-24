@@ -20,6 +20,10 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 - Drive report v2: noise floor during the drive, reply RSSI, TX power, signal by distance to the repeater (direct links, the website's distance bands), heard by speed, GPS accuracy; Export as text or one CSV file (contains your exact track).
 - Region tab: new RF tab (noise floor by observer, by hour of day, SNR histogram; an observer that went quiet is named and its line stops) and Growth tab (known nodes over time, weekly churn, roles, hash sizes).
 - Region tab: Export region report as text, JSON, one CSV with every table, or any table as the website's own CSV file.
+- Your progress (Drives tab card): every drive on this phone by ISO week (Monday start, your local time): distance, heard %, new grid cells, new repeaters; totals, best drives, and your radio's noise floor and TX power across drives. It says plainly that it covers drives stored on this phone.
+- Repeater "Your drives": on the repeater detail screen and the drive repeater sheet, how often and where (grid cells on a small map, never your track) your drives heard it, best SNR, last heard and farthest.
+- PDF export: the drive report and the region report as PDF (charts, every table row, Barlow embedded, your units), shared through the share sheet (Print / Save to Files). New dependency `pdf` (Apache-2.0, pure Dart, no network).
+- Charts: the region overview sparkline, the Reports panel bars, the Analysis heatmap and the drive heard strip moved onto the chart kit; the sparkline, bars and drive-card strip now read their numbers to VoiceOver.
 - Radio protocol: decoders, encoders and byte tests for GET_STATS core (battery, uptime, error flags, queue) and packets
   (30 B and 26 B), and GET_BATT_AND_STORAGE; `MeshCoreCompanionLink` reads them (unsupported asked once). The simulator
   answers all of them.
