@@ -18,6 +18,7 @@ import '../core/drive_store.dart' show closeOrphanedSessions;
 import '../core/heard.dart';
 import '../core/model.dart';
 import '../core/region_lookup.dart';
+import '../core/region_pick.dart';
 import '../core/repeater_directory.dart';
 import '../core/report_body.dart';
 import '../core/server_url.dart';
@@ -83,8 +84,10 @@ class AppState extends ChangeNotifier {
   Future<void> refreshSiteConfig() async {
     final server = _settings.serverUrl;
     try {
-      final c = await client.siteConfig();
+      final viewing = viewingRegion;
+      final c = await _coverageClient(viewing).siteConfig();
       if (_settings.serverUrl != server) return; // the server changed again while this was in flight
+      if (viewing?.code != viewingRegion?.code) return;
       _siteConfig = c;
       notifyListeners();
     } catch (e) {
@@ -107,13 +110,82 @@ class AppState extends ChangeNotifier {
   Future<void> refreshNetworkCoverage() async {
     final server = _settings.serverUrl;
     try {
-      final c = await client.publicCoverage();
+      final viewing = viewingRegion;
+      final c = await _coverageClient(viewing).publicCoverage();
       if (_settings.serverUrl != server) return; // the server changed again while this was in flight
+      if (viewing?.code != viewingRegion?.code) return; // the viewed region changed while this was in flight
       _networkCoverage = c;
       notifyListeners();
     } catch (e) {
       _logError('Fetching network coverage failed', e);
     }
+  }
+
+  /// The client that reads coverage: the viewed region's own host when this app talks to the MeshSonar hub, else
+  /// the configured server (a custom server keeps single-region behaviour).
+  CmatClient _coverageClient(RegionIndexEntry? viewing) {
+    if (viewing != null && isSameServer(_settings.serverUrl, defaultServerUrl)) {
+      final u = Uri.tryParse(viewing.url);
+      if (u != null && u.host.isNotEmpty) return services.cmatClientFactory(u);
+    }
+    return client;
+  }
+
+  // ---------- viewed region (the switcher) ----------
+  /// Andy's rule (Oct 21): the app opens on the region the phone's GPS is in; the switcher lists every region; outside
+  /// every region the nearest one shows. A manual pick wins until the person goes back to "follow my location".
+  RegionIndexEntry? get viewingRegion {
+    final idx = regionIndex;
+    if (idx.isEmpty) return null;
+    RegionIndexEntry? byCode(String? c) {
+      if (c == null) return null;
+      for (final r in idx) {
+        if (r.code == c) return r;
+      }
+      return null;
+    }
+
+    final manual = byCode(_settings.regionManual);
+    if (manual != null) return manual;
+    if (_currentRegion != null) return _currentRegion;
+    final f = _lastRegionFix;
+    if (f != null) {
+      final n = nearestRegion(idx, f.lat, f.lon);
+      if (n != null) return n;
+    }
+    return byCode(_settings.regionLast) ?? idx.first;
+  }
+
+  /// True when the person picked the region (not following GPS).
+  bool get viewingIsManual => _settings.regionManual != null && viewingRegion?.code == _settings.regionManual;
+
+  /// Every region for the switcher: GPS region first, then nearest.
+  List<RegionIndexEntry> get switcherRegions =>
+      regionsForSwitcher(regionIndex, gpsRegion: _currentRegion, lat: _lastRegionFix?.lat, lon: _lastRegionFix?.lon);
+
+  /// Picks [code] to view, or null to follow the phone's GPS region again.
+  Future<void> setViewingRegion(String? code) =>
+      updateSettings(code == null ? _settings.copyWith(clearRegionManual: true) : _settings.copyWith(regionManual: code));
+
+  String? _viewCode;
+  void _syncViewing() {
+    final v = viewingRegion;
+    if (v?.code == _viewCode) return;
+    _viewCode = v?.code;
+    if (v != null && v.code != _settings.regionLast) {
+      _settings = _settings.copyWith(regionLast: v.code);
+      unawaited(services.settingsStore.save(_settings).catchError((_) {}));
+    }
+    if (v != null) {
+      unawaited(refreshNetworkCoverage());
+      unawaited(refreshSiteConfig());
+    }
+  }
+
+  @override
+  void notifyListeners() {
+    if (_loaded) _syncViewing();
+    super.notifyListeners();
   }
 
   // ---------- region awareness (live, local; GET /api/cmh/regions-index) ----------
@@ -158,7 +230,7 @@ class AppState extends ChangeNotifier {
   void _updateRegion(GeoFix? fix) {
     if (fix == null) return;
     _lastRegionFix = fix;
-    final next = regionAt(regionIndex, fix.lat, fix.lon);
+    final next = regionContaining(regionIndex, fix.lat, fix.lon);
     final changed = next?.code != _currentRegion?.code;
     _currentRegion = next;
     if (changed && next != null && driving) _say('Entered ${next.code}');

@@ -5,6 +5,7 @@ import '../app/app_state.dart';
 import 'antenna_sheet.dart';
 import 'drive_screen.dart';
 import 'onboarding/first_run_gate.dart';
+import 'region/region_hub_screen.dart';
 import 'sessions_screen.dart';
 import 'settings_screen.dart';
 import 'theme.dart';
@@ -48,7 +49,7 @@ class MeshSonarApp extends StatelessWidget {
 }
 
 class HomeShell extends StatefulWidget {
-  /// 0 Drive, 1 Drives, 2 Settings.
+  /// 0 Drive, 1 Region, 2 Drives, 3 Settings.
   final int initialTab;
   const HomeShell({super.key, this.initialTab = 0});
   @override
@@ -100,7 +101,7 @@ class _HomeShellState extends State<HomeShell> {
 
   @override
   Widget build(BuildContext context) {
-    const pages = [DriveScreen(), SessionsScreen(), SettingsScreen()];
+    const pages = [DriveScreen(), RegionHubScreen(), SessionsScreen(), SettingsScreen()];
     return ScaffoldMessenger(
       key: _messengerKey,
       child: Scaffold(
@@ -109,10 +110,11 @@ class _HomeShellState extends State<HomeShell> {
           selectedIndex: _tab,
           onDestinationSelected: (i) {
             setState(() => _tab = i);
-            if (i == 1) AppScope.read(context).refreshSessions();
+            if (i == 2) AppScope.read(context).refreshSessions();
           },
           destinations: const [
             NavigationDestination(icon: Icon(Icons.radar), label: 'Drive'),
+            NavigationDestination(icon: Icon(Icons.public), label: 'Region'),
             NavigationDestination(icon: Icon(Icons.list_alt), label: 'Drives'),
             NavigationDestination(icon: Icon(Icons.settings), label: 'Settings'),
           ],
