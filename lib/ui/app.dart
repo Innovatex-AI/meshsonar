@@ -117,8 +117,6 @@ class _HomeShellState extends State<HomeShell> {
         _presetDialogOpen = false;
       });
     }
-      });
-    }
     if (s.pendingNotice == null) return;
     final msg = s.takeNotice();
     if (msg == null) return;
