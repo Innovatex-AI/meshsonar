@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/region_lookup.dart';
 import '../../core/region_stats_api.dart';
+import '../../core/units.dart';
 import '../app.dart';
 import '../widgets.dart';
 import 'region_common.dart';
@@ -190,12 +191,12 @@ class _RegionsScreenState extends State<RegionsScreen> {
     return out;
   }
 
-  String _figureLine(RegionFigures? f) {
+  String _figureLine(RegionFigures? f, Units units) {
     if (_loading && f == null) return 'Loading numbers…';
     if (f == null || f.stats == null) return 'Numbers unavailable right now';
     final s = f.stats!;
     if (s.isEmpty) return 'No drives yet';
-    return '${s.km == null ? '—' : groupInt(s.km!.round())} km · ${s.drives == null ? '—' : groupInt(s.drives!)} drives · '
+    return '${s.km == null ? '—' : units.total(s.km! * 1000, groupInt)} · ${s.drives == null ? '—' : groupInt(s.drives!)} drives · '
         '${s.drivers == null ? '—' : groupInt(s.drivers!)} drivers · ${s.repeatersHeard == null ? '—' : groupInt(s.repeatersHeard!)} repeaters heard';
   }
 
@@ -205,7 +206,7 @@ class _RegionsScreenState extends State<RegionsScreen> {
       child: ListTile(
         key: Key('regions-tile-${r.code}'),
         title: Text(r.name),
-        subtitle: Text('${r.code} · ${_figureLine(_figures[r.code])}'),
+        subtitle: Text('${r.code} · ${_figureLine(_figures[r.code], AppScope.unitsOf(context))}'),
         trailing: isViewing ? const Chip(label: Text('Viewing')) : const Icon(Icons.chevron_right),
         onTap: () => _open(r),
       ),

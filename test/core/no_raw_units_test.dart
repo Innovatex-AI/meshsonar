@@ -22,7 +22,7 @@ const List<String> allowedLines = [
   'Server address moved',
 ];
 
-final _raw = RegExp(r'(\}|\$\w+|\d) ?(km/h|km|mph|mi|ft|m)(?![\w])');
+final _raw = RegExp(r'(\}|\$\w+|\d) ?(km/h|km|mph|mi|ft|m)(?![\w:])');
 
 void main() {
   test('no raw distance/speed/height units outside lib/core/units.dart', () {

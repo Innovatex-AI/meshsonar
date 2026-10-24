@@ -83,6 +83,12 @@ class Units {
     return km < 9.95 ? '${km1.toStringAsFixed(1)} km' : '${km.round()} km';
   }
 
+  /// A large total (lifetime distance driven) as whole km or miles, digits grouped by [group] ("12,345 km").
+  String total(double metres, String Function(int) group) {
+    final m = metres.isFinite ? metres : 0.0;
+    return isImperial ? '${group((m / metresPerMile).round())} mi' : '${group((m / 1000).round())} km';
+  }
+
   /// A speed given in metres per second, whole numbers.
   String speed(double mps) {
     final v = mps.isFinite ? mps : 0.0;
