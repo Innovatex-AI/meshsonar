@@ -16,6 +16,7 @@ import '../drive/drive_map_model.dart';
 import '../drive/heard_box.dart';
 import 'coverage_layer_controls.dart';
 import 'coverage_map.dart';
+import 'region_center.dart';
 import 'map_layers.dart';
 
 void openFullscreenMap(BuildContext context, DriveMapModel model) {
@@ -72,6 +73,7 @@ class FullscreenMapScreen extends StatelessWidget {
                   onSelectRepeater: model.select,
                   simulated: model.simulated,
                   onZoomChanged: model.onMapZoom,
+                  fallbackCenter: viewedRegionCenter(s),
                   rotatable: true,
                   // Keep map buttons, attribution and framed repeaters clear of the control panel (bottom in
                   // portrait, bottom-right in landscape).

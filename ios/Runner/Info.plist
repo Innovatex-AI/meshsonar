@@ -73,7 +73,7 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>MeshSonar records where each ping was sent so your drive can be mapped.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>MeshSonar keeps recording ping locations during a drive while the screen is off or another app (like navigation) is in front.</string>
+	<string>MeshSonar keeps recording ping locations during a drive while the screen is off or another app (like navigation) is in front, and uses the same position to tell which MeshSonar region you are in. It is never used when you are not driving, and never put in the on-air ping.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>

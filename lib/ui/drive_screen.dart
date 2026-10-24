@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import '../app/app_state.dart';
 import 'app.dart';
 import 'device_feedback.dart';
+import 'map/region_center.dart';
 import 'drive/drive_controls.dart';
 import 'drive/drive_live_stats.dart';
 import 'drive/drive_map_model.dart';
@@ -241,8 +242,20 @@ class _MapPane extends StatelessWidget {
                 onSelectRepeater: model.select,
                 simulated: model.simulated,
                 onZoomChanged: model.onMapZoom,
+                fallbackCenter: viewedRegionCenter(s),
               ),
             ),
+            if (s.regionDataOfflineLabel != null)
+              Positioned(
+                left: Gap.s,
+                bottom: Gap.s,
+                child: Chip(
+                  key: const Key('region-offline-label'),
+                  avatar: const Icon(Icons.cloud_off, size: 16),
+                  label: Text(s.regionDataOfflineLabel!),
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
             if (pings.isEmpty) Positioned(left: 0, right: 50, top: Gap.s, child: MapHint(state: s)),
             if (showHeard)
               Positioned(

@@ -162,8 +162,9 @@ class CoverageMap extends StatefulWidget {
   /// Prefix -> display name (falls back to the repeater's cached name).
   final String Function(String prefix)? repeaterLabel;
 
-  /// Map used when there's nothing else to centre on (Columbus, Ohio).
-  final LatLng fallbackCenter;
+  /// Where to centre when there's nothing else to centre on: the viewed region's centre (from regions-index).
+  /// Null (index never loaded) shows a whole-world view rather than guessing a city.
+  final LatLng? fallbackCenter;
 
   /// Extra space at the edges for overlays drawn on top of the map by the parent (e.g. a chip row).
   final EdgeInsets overlayPadding;
@@ -207,7 +208,7 @@ class CoverageMap extends StatefulWidget {
     this.rotatable = false,
     this.showTiles,
     this.repeaterLabel,
-    this.fallbackCenter = const LatLng(39.9612, -82.9988),
+    this.fallbackCenter,
     this.overlayPadding = EdgeInsets.zero,
     this.heard,
     this.layers = const MapLayers(),
@@ -322,13 +323,13 @@ class _CoverageMapState extends State<CoverageMap> {
       }
       return LatLng(lat / widget.repeaters.length, lon / widget.repeaters.length);
     }
-    return widget.fallbackCenter;
+    return widget.fallbackCenter ?? const LatLng(20, 0);
   }
 
   double get _initialZoom {
     if (widget.position != null || widget.pings.isNotEmpty) return 13.6;
     if (widget.repeaters.isNotEmpty) return 11;
-    return 10;
+    return widget.fallbackCenter == null ? 1.5 : 8;
   }
 
   CameraFit? get _initialFit {
@@ -361,6 +362,15 @@ class _CoverageMapState extends State<CoverageMap> {
   void didUpdateWidget(CoverageMap old) {
     super.didUpdateWidget(old);
     if (old.follow != widget.follow) _follow = widget.follow;
+    // The viewed region changed (or the index finished loading) while there is nothing else to look at: recentre.
+    if (old.fallbackCenter != widget.fallbackCenter &&
+        widget.fallbackCenter != null &&
+        _ready &&
+        widget.position == null &&
+        widget.pings.isEmpty &&
+        widget.repeaters.isEmpty) {
+      _controller.move(widget.fallbackCenter!, 10);
+    }
     if (old.highlightKey != widget.highlightKey) {
       _selectedRepeater = widget.highlightKey;
       if (widget.highlightKey != null) _focusRepeater(widget.highlightKey!);
