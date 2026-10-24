@@ -64,6 +64,9 @@ class MapRepeaterSet {
   /// "Offline - as of 2 h ago" style label from the feed's cache, when it has one.
   final String? freshnessLabel;
 
+  /// The rows are limited to this area ("Columbus, US"): the viewed region plus a margin. Null = the whole list.
+  final String? scope;
+
   const MapRepeaterSet({
     required this.rows,
     required this.state,
@@ -72,6 +75,7 @@ class MapRepeaterSet {
     this.attribution,
     this.hidden = 0,
     this.freshnessLabel,
+    this.scope,
   });
 
   static const MapRepeaterSet idle = MapRepeaterSet(rows: [], state: MapFeedState.idle);
@@ -359,7 +363,9 @@ class RepeaterMapSource extends ChangeNotifier {
     final built = global ? _global : _roster;
     final ready = built != null && identical(built.rows, set.rows);
     final count = ready ? built.points.length + built.points.skipped : set.rows.length;
-    String what(int n) => '$n ${global ? (n == 1 ? 'repeater' : 'repeaters') : (n == 1 ? 'repeater with a position' : 'repeaters with a position')}';
+    final near = global && set.scope != null ? ' in and around ${set.scope}' : '';
+    String what(int n) =>
+        '$n ${global ? (n == 1 ? 'repeater' : 'repeaters') : (n == 1 ? 'repeater with a position' : 'repeaters with a position')}$near';
     String countLine() {
       final parts = <String>[
         what(count),
@@ -382,7 +388,9 @@ class RepeaterMapSource extends ChangeNotifier {
         if (set.rows.isEmpty) {
           return LayerStatus(
             LayerAvailability.empty,
-            detail: global ? 'No repeaters reported yet' : 'No repeaters with a position in ${region!.name}',
+            detail: global
+                ? (set.scope == null ? 'No repeaters reported yet' : 'No repeaters reported in or around ${set.scope}')
+                : 'No repeaters with a position in ${region!.name}',
           );
         }
         if (!ready) return LayerStatus(LayerAvailability.loading, detail: 'Preparing ${what(set.rows.length)}…');

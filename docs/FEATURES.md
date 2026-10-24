@@ -175,8 +175,8 @@ simulator's repeaters in Simulator mode), **ping dots**, and the current **posit
 - **Layers sheet** (`layers-sheet`), generated from the layer registry, in four sections: **This drive** (Hex
   coverage, Links to heard repeaters, Repeaters heard, Pings with colour by SNR / heard-not), **Coverage** (Network
   coverage with its colour-by / detail / since / source controls), **Network** (All MeshCore repeaters, Region
-  repeaters, Observers) and **Around you** (Range rings). Drive layers and Network coverage are on by default; the three
-  network layers are off. Every server-fed layer says where it stands under its switch: a count and source ("3
+  repeaters, Observers) and **Around you** (Range rings). Drive layers, Network coverage and All MeshCore repeaters are on by
+  default; Region repeaters and Observers are off. A default-on layer the server cannot offer shows off and disabled. Every server-fed layer says where it stands under its switch: a count and source ("3
   repeaters · 4 hidden by their owners · Data: MeshCore Map (map.meshcore.io)", "1 observer with a public position",
   "753 cells measured"), "Loading…", "Couldn't load. Check the connection and retry." with **Retry**, "… · Offline - as
   of 2h ago" for a stored copy (with Retry), or a reason with the switch disabled: "Not available on this server yet"
@@ -184,10 +184,16 @@ simulator's repeaters in Simulator mode), **ping dots**, and the current **posit
   always be switched off. The choices are shared between the Drive and full-screen maps but not saved. Network coverage
   fetches once at startup (and again if the server URL changes); a fetch failure keeps showing whatever was already
   drawn rather than clearing it.
-- **All MeshCore repeaters** (`network`, off by default): every repeater and room server with a public position, from
+- **All MeshCore repeaters** (`network`, on by default): every repeater and room server with a public position, from
   the server's `network-repeaters` list (live since Oct 24 2026, 55.6k rows; synced on open, at most every 6 h, stored for offline use, about 6 MB on disk). Clustered: one
   painter, only what is on screen, clusters with counts that split as you zoom. Colour = last advert (24 h green, 7 days
-  blue, 30 days amber, older grey; room servers are rings), legend in the sheet with the data's "as of" time, and a
+  blue, 30 days amber, older grey; room servers are rings). **Scope**: when your region is known (the phone is in it,
+  you picked it, or it is the remembered one while the phone's position is unknown) only that region's repeaters plus
+  40 km around its edges are drawn ("N repeaters in and around Columbus, US"); otherwise (new visitor, phone outside
+  every region) the whole world as count bubbles, like the other online MeshCore maps: bubbles show their total (13/15
+  px heavy text on an opaque fill, ink chosen for at least 4.5:1 contrast in light and dark), split as you zoom in,
+  merge as you zoom out, single dots at street zoom; screen readers hear "1,234 repeaters". The list is built off the
+  UI thread and the layer appears when it is ready. Legend in the sheet with the data's "as of" time, and a
   small legend + "Data: MeshCore Map (map.meshcore.io)" on the map while it is on. Advert-age colours are recomputed
   when the list is refreshed (also a 304 "unchanged") and when the layer is switched on if they are over 10 minutes
   old. With Region repeaters also on, roster repeaters are drawn once, by the roster layer.

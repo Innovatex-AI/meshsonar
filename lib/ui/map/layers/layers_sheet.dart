@@ -114,6 +114,7 @@ class MapLayersSheet extends StatelessWidget {
     final p = layerPresentation(context, spec);
     final on = st.isOn(spec.id);
     final status = model.statusOf(spec.id);
+    final unsupported = status.availability == LayerAvailability.unsupported;
     // Drive layers draw what this phone recorded: no status line. Server-fed layers always say where they stand.
     final detail = spec.serverFed ? status.detail : null;
     final subtitle = [?p.description, ?detail];
@@ -138,9 +139,10 @@ class MapLayersSheet extends StatelessWidget {
                     ),
                 ],
               ),
-        value: on,
-        // Unsupported/empty layers cannot be switched on; a layer that is on can always be switched off.
-        onChanged: (on || status.enabled) ? (v) => model.setLayer(spec.id, v) : null,
+        // A default-on layer the server does not offer shows off and disabled (it cannot draw anything). Otherwise
+        // unsupported/empty layers cannot be switched on, and a layer that is on can always be switched off.
+        value: on && !unsupported,
+        onChanged: unsupported ? null : ((on || status.enabled) ? (v) => model.setLayer(spec.id, v) : null),
       ),
       if (spec.serverFed && status.canRetry)
         Padding(

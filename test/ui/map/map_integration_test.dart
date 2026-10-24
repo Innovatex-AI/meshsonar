@@ -14,6 +14,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/region_lookup.dart';
 import 'package:meshsonar/core/region_overview_api.dart';
+import 'package:meshsonar/radio/radio_api.dart' show GeoFix;
 import 'package:meshsonar/core/repeater_sync.dart';
 import 'package:meshsonar/ui/map/layers/clustered_points_layer.dart' show ClusteredPointsPainter;
 import 'package:meshsonar/ui/region/region_common.dart' as region_common;
@@ -55,7 +56,7 @@ class FakeMapServer {
         jsonEncode({
           'v': 1,
           'asOf': '2026-10-16T12:00:00Z',
-          'count': 3,
+          'count': 4,
           'hidden': 4,
           'attribution': {'name': 'MeshCore Map', 'url': 'https://map.meshcore.io'},
           'rows': [
@@ -63,6 +64,8 @@ class FakeMapServer {
             [k('a'), 'Alpha', 40.1265, -82.9305, 2, advertEpoch],
             [k('b'), 'Bravo', 40.12672, -82.93052, 3, advertEpoch],
             [k('c'), 'Roster-C (global)', 40.13, -82.92, 2, null],
+            // Seattle: outside Columbus' bbox + 40 km, left out while CMH is the phone's region.
+            [k('d'), 'Seattle', 47.61, -122.33, 2, advertEpoch],
           ],
         }),
         200,
@@ -124,9 +127,11 @@ void main() {
         expect(find.byKey(Key(key), skipOffstage: false), findsOneWidget, reason: key);
       }
       expect(find.byKey(const Key('layer-neighbours'), skipOffstage: false), findsNothing, reason: 'no renderer yet (WP-M4)');
-      // Defaults match the old MapLayers(): drive layers + coverage on, network layers off.
+      // Defaults: drive layers + coverage + the global layer on (D3); it shows off here because this build cannot
+      // offer it (no sync), and its switch is disabled.
       expect(sw(t, 'layer-repeaters').value, isTrue);
       expect(sw(t, 'layer-network-coverage').value, isTrue);
+      expect(h.state.services.repeaterSync, isNull);
       expect(sw(t, 'layer-network').value, isFalse);
       expect(sw(t, 'layer-region-repeaters').value, isFalse);
       // No sync in this build and no region: honest reasons, switches that cannot work are disabled.
@@ -171,6 +176,7 @@ void main() {
       expect(h.state.globalRepeaterSet.state, SyncState.unsupported);
       await openSheet(t);
       expect(sw(t, 'layer-network').onChanged, isNull);
+      expect(sw(t, 'layer-network').value, isFalse, reason: 'default on, but shown off: the server cannot offer it');
       expect(statusText(t, 'network'), 'Not available on this server yet');
       expect(find.byKey(const ValueKey('layer-network-paint')), findsNothing);
     });
@@ -191,19 +197,22 @@ void main() {
       await t.tap(find.byKey(const Key('layer-network-retry')));
       await t.pumpAndSettle();
       expect(srv.networkCalls, calls + 1);
-      expect(statusText(t, 'network'), startsWith('3 repeaters'));
+      expect(statusText(t, 'network'), startsWith('3 repeaters in and around Columbus, US'));
     });
 
-    testWidgets('ready: off by default; on draws the clustered layer with legend + credit; the fullscreen map shares it', (t) async {
+    testWidgets('ready: ON by default, limited to the phone\'s region + margin, legend + credit; the fullscreen map shares it', (t) async {
       useTallScreen(t);
       final srv = FakeMapServer();
       final h = make(srv);
       await h.pumpApp(t);
       await t.pumpAndSettle();
-      expect(find.byKey(const ValueKey('layer-network-paint')), findsNothing, reason: 'off by default (D3)');
+      expect(h.state.currentRegion?.code, 'CMH');
+      expect(find.byKey(const ValueKey('layer-network-paint')), findsOneWidget, reason: 'on by default (D3, Andy Oct 24)');
+      final painter = t.widget<CustomPaint>(find.byKey(const ValueKey('layer-network-paint'))).painter! as ClusteredPointsPainter;
+      expect(painter.index.indexedCount, 3, reason: 'the Seattle repeater is outside CMH + 40 km');
       await openSheet(t);
-      expect(statusText(t, 'network'), '3 repeaters · 4 hidden by their owners · Data: MeshCore Map (map.meshcore.io)');
-      await toggle(t, 'layer-network');
+      expect(sw(t, 'layer-network').value, isTrue);
+      expect(statusText(t, 'network'), '3 repeaters in and around Columbus, US · 4 hidden by their owners · Data: MeshCore Map (map.meshcore.io)');
       expect(find.byKey(const Key('network-legend')), findsOneWidget);
       expect(find.textContaining('MeshCore Map data as of '), findsOneWidget);
       for (final l in ['24 h', '7 d', '30 d', 'Older']) {
@@ -232,9 +241,8 @@ void main() {
       await t.pumpAndSettle();
       expect(h.state.globalRepeaterSet.state, SyncState.stale);
       await openSheet(t);
-      expect(statusText(t, 'network'), startsWith('3 repeaters · 4 hidden by their owners · Data: MeshCore Map (map.meshcore.io) · Offline'));
+      expect(statusText(t, 'network'), startsWith('3 repeaters in and around Columbus, US · 4 hidden by their owners · Data: MeshCore Map (map.meshcore.io) · Offline'));
       expect(find.byKey(const Key('layer-network-retry')), findsOneWidget);
-      await toggle(t, 'layer-network');
       await closeSheet(t);
       expect(find.byKey(const ValueKey('layer-network-paint')), findsOneWidget, reason: 'offline copy still drawn');
     });
@@ -247,7 +255,6 @@ void main() {
       await t.pumpAndSettle();
       await openSheet(t);
       expect(statusText(t, 'repeaters'), '1 repeater with a position');
-      await toggle(t, 'layer-network');
       await toggle(t, 'layer-region-repeaters');
       expect(find.byKey(const Key('roster-legend')), findsOneWidget);
       await closeSheet(t);
@@ -265,9 +272,6 @@ void main() {
       final h = make(srv);
       await h.pumpApp(t);
       await t.pumpAndSettle();
-      await openSheet(t);
-      await toggle(t, 'layer-network');
-      await closeSheet(t);
       final paint = find.byKey(const ValueKey('layer-network-paint'));
       ClusteredPointsPainter painter() => t.widget<CustomPaint>(paint).painter! as ClusteredPointsPainter;
       Offset screenOf(LatLng p) => t.getTopLeft(paint) + painter().camera.latLngToScreenOffset(p);
@@ -284,6 +288,28 @@ void main() {
       expect(find.text('Alpha'), findsOneWidget);
       expect(find.descendant(of: find.byKey(const Key('repeater-sheet')), matching: find.text('Data: MeshCore Map (map.meshcore.io)')), findsOneWidget);
       expect(find.byKey(const Key('repeater-sheet-status')), findsNothing, reason: 'not in the roster');
+    });
+  });
+
+  group('global layer scope', () {
+    testWidgets('phone outside every region: the whole list (world view, count clusters); picking a region limits it', (t) async {
+      useTallScreen(t);
+      final srv = FakeMapServer();
+      final h = make(srv);
+      h.location.currentFix = () => GeoFix(lat: 47.6, lon: -122.3, at: DateTime.utc(2026, 10, 16, 17, 59));
+      await h.pumpApp(t);
+      await t.pumpAndSettle();
+      expect(h.state.currentRegion, isNull);
+      ClusteredPointsPainter painter() => t.widget<CustomPaint>(find.byKey(const ValueKey('layer-network-paint'))).painter! as ClusteredPointsPainter;
+      expect(painter().index.indexedCount, 4, reason: 'no region detected or picked: every repeater');
+      await openSheet(t);
+      expect(statusText(t, 'network'), startsWith('4 repeaters · '));
+      await closeSheet(t);
+
+      await h.state.setViewingRegion('CMH');
+      await t.pumpAndSettle();
+      expect(h.state.viewingIsManual, isTrue);
+      expect(painter().index.indexedCount, 3, reason: 'picked region: CMH + 40 km only');
     });
   });
 

@@ -6,7 +6,7 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 ## [Unreleased]
 
 - Map layers sheet rebuilt from the layer registry: sections This drive / Coverage / Network / Around you, and every server-fed layer says where it stands (count and source, loading, "Couldn't load" with Retry, "Offline - as of …", or the switch disabled with the reason, e.g. "Not available on this server yet").
-- New map layer "All MeshCore repeaters" (off by default): every repeater with a public position from the server's network list, clustered, coloured by last advert (24 h / 7 d / 30 d / older), with a legend and the MeshCore Map credit (live list: 55.6k repeaters). Shows "Not available on this server yet" on a server without the list (404).
+- New map layer "All MeshCore repeaters", on by default: every repeater with a public position from the server's network list (live: 55.6k), coloured by last advert (24 h / 7 d / 30 d / older), with a legend and the MeshCore Map credit. In your region it shows that region plus 40 km around it; with no region known it shows the whole world as count bubbles that split as you zoom in. Bubble counts are large, high-contrast and read by screen readers. Shows "Not available on this server yet" (switch off and disabled) on a server without the list.
 - Region repeaters on the map are now clustered and come from the synced roster (offline too); tap one for its sheet with "Open repeater page" (was a name tooltip).
 - New map layer "Observers": the region's observers that share their position; tap for online state, noise floor, packets per hour and more.
 - Tap a cluster to zoom into it; tap a repeater or observer for its detail sheet.
