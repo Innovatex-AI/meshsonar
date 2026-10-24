@@ -66,6 +66,7 @@ class FullscreenMapScreen extends StatelessWidget {
                   heard: model.heard,
                   layers: model.layers,
                   networkCells: model.networkCells,
+                  regionRepeaters: model.regionRepeaters,
                   highlightKey: model.selected,
                   onSelectRepeater: model.select,
                   simulated: model.simulated,
@@ -242,6 +243,14 @@ Future<void> showMapLayersSheet(BuildContext context, DriveMapModel model) {
                   title: const Text('Repeaters'),
                   value: l.repeaters,
                   onChanged: (v) => set(l.copyWith(repeaters: v)),
+                ),
+                SwitchListTile(
+                  key: const Key('layer-region-repeaters'),
+                  secondary: const Icon(Icons.cell_tower_outlined),
+                  title: const Text('Region repeaters'),
+                  subtitle: const Text('Every repeater in this region, by activity'),
+                  value: l.regionRepeaters,
+                  onChanged: (v) => set(l.copyWith(regionRepeaters: v)),
                 ),
                 SwitchListTile(
                   key: const Key('layer-links'),

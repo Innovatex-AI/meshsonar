@@ -7,6 +7,7 @@ import 'antenna_profile.dart';
 import 'model.dart';
 import 'region_lookup.dart';
 import 'server_url.dart';
+import 'units.dart';
 
 /// Per-session numbers for lists.
 class SessionSummary {
@@ -284,6 +285,15 @@ class Settings {
   /// ignoring a mid-drive change) — see [WardriveConfig.listenOnly].
   final bool discoveryMode;
 
+  /// Region the person picked in the switcher (code, e.g. DAY); null = follow the phone's GPS region.
+  final String? regionManual;
+
+  /// Last region the app viewed or detected, so a cold start offline shows it instead of a blank.
+  final String? regionLast;
+
+  /// Metric / imperial / auto (phone locale).
+  final UnitsPreference units;
+
   /// Allowed ranges (UI sliders and clamping).
   static const int minIntervalSec = 10, maxIntervalSec = 120;
   static const int minDistance = 15, maxDistance = 500;
@@ -304,6 +314,9 @@ class Settings {
     this.syncEveryMin = 5,
     this.heardHoldPings = 3,
     this.discoveryMode = false,
+    this.regionManual,
+    this.regionLast,
+    this.units = UnitsPreference.auto,
   });
 
   Settings copyWith({
@@ -320,6 +333,10 @@ class Settings {
     int? syncEveryMin,
     int? heardHoldPings,
     bool? discoveryMode,
+    String? regionManual,
+    bool clearRegionManual = false,
+    String? regionLast,
+    UnitsPreference? units,
     bool clearKey = false,
   }) =>
       Settings(
@@ -337,6 +354,9 @@ class Settings {
         syncEveryMin: syncEveryMin ?? this.syncEveryMin,
         heardHoldPings: heardHoldPings ?? this.heardHoldPings,
         discoveryMode: discoveryMode ?? this.discoveryMode,
+        regionManual: clearRegionManual ? null : (regionManual ?? this.regionManual),
+        regionLast: regionLast ?? this.regionLast,
+        units: units ?? this.units,
       );
 
   Map<String, dynamic> toJson() => {
@@ -354,6 +374,9 @@ class Settings {
         'sync_every_min': syncEveryMin,
         'heard_hold_pings': heardHoldPings,
         'discovery_mode': discoveryMode,
+        if (regionManual != null) 'region_manual': regionManual,
+        if (regionLast != null) 'region_last': regionLast,
+        if (units != UnitsPreference.auto) 'units': units.name,
       };
   factory Settings.fromJson(Map<String, dynamic> j) => Settings(
         serverUrl: _str(j['server_url']) ?? defaultServerUrl,
@@ -371,6 +394,9 @@ class Settings {
         syncEveryMin: (_int(j['sync_every_min']) ?? 5).clamp(minSyncEveryMin, maxSyncEveryMin),
         heardHoldPings: (_int(j['heard_hold_pings']) ?? 3).clamp(1, 20),
         discoveryMode: j['discovery_mode'] is bool ? j['discovery_mode'] as bool : false,
+        regionManual: _str(j['region_manual']),
+        regionLast: _str(j['region_last']),
+        units: UnitsPreference.parse(j['units']),
       );
 
   /// A string field; anything else is null so the default applies.

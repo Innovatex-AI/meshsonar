@@ -50,10 +50,12 @@ import 'package:h3_flutter/h3_flutter.dart' show H3;
 import '../../core/heard.dart' show haversineM;
 import '../../core/hex_cells.dart';
 import '../../core/model.dart';
+import '../../core/region_repeaters_api.dart' show RegionRepeater;
 import '../../core/network_coverage.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import 'map_layers.dart';
+import 'region_repeater_layer.dart';
 
 /// A line from a ping to a repeater it heard.
 class PingLink {
@@ -176,6 +178,9 @@ class CoverageMap extends StatefulWidget {
   /// nothing — there is no placeholder for "no data"; absence of a drawn cell is the point.
   final List<NetworkCell> networkCells;
 
+  /// The region's whole repeater roster, drawn when [MapLayers.regionRepeaters] is on.
+  final List<RegionRepeater> regionRepeaters;
+
   /// Repeater (map key) to highlight and bring into view, e.g. tapped in the heard box.
   final String? highlightKey;
 
@@ -203,6 +208,7 @@ class CoverageMap extends StatefulWidget {
     this.heard,
     this.layers = const MapLayers(),
     this.networkCells = const [],
+    this.regionRepeaters = const [],
     this.highlightKey,
     this.onSelectRepeater,
     this.simulated = false,
@@ -594,6 +600,7 @@ class _CoverageMapState extends State<CoverageMap> {
                     ),
                 ],
               ),
+            if (layers.regionRepeaters && widget.regionRepeaters.isNotEmpty) RegionRepeaterLayer(repeaters: widget.regionRepeaters),
             if (layers.repeaters)
               MarkerLayer(
                 markers: [
