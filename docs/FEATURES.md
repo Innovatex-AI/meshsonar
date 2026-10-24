@@ -405,6 +405,25 @@ goes, and "Change your mind any time in Settings, under Privacy & data sharing";
 - **Telemetry uploader** (`lib/core/telemetry_uploader.dart`, `telemetry.dart`): on by default with a first-run disclosure and a visible opt-out in Settings. Sends packet headers and metadata only (type, route, path hashes, SNR/RSSI, time, packet hash) to `POST /api/cmh/telemetry` with the driver key. Never payloads, coordinates, your own pings or private message types. Turning it off clears the queue and offers `DELETE` to erase what was already shared.
 - **Coverage timeline**: Map layers > Network coverage > Coverage options > "Coverage growth (as of)" slider with play/pause and a Live reset. Built from windowed `public-coverage?until=` calls; the first-data day comes from `region-timeline` (days only).
 
+## Opening on the phone (unreleased)
+
+- **Instant start** (`lib/core/startup_location.dart`): at launch the last-known fix (`last_known_fix.json`) is applied
+  at once, so the Drive map and the Region tab open on the phone and its region without waiting for GPS. A fresh fix is
+  asked for in parallel (up to 20 s) and wins when it arrives: the map moves to it only if the person has not dragged
+  it. Every live fix is saved as the next launch's last-known (at most once a minute). The idle region watcher starts
+  after that.
+- **No fake border crossings:** a region seeded from an old fix (last-known, or an OS-cached one older than 15 min) is
+  re-seeded by the first live fix, so opening the app somewhere else never shows "Entered ..." or a preset prompt.
+- **Stale fixes** (older than 24 h) still centre the map and pick the region; the map says "Last known location, 3 d
+  ago" until a live fix arrives.
+- **Fallbacks:** no fix at all: the last viewed region's centre; never viewed a region: the middle of every region; no
+  regions known either: the whole world. A region picked by hand that does not contain the phone opens on that region.
+- **Location states** (Drive tab under the map, Region tab on top; `lib/ui/location_status.dart`): not asked / denied
+  ("Allow location", which shows the system question only after the tap), denied for good / restricted ("Open
+  Settings"), services off ("Open Settings" for location services), approximate ("drives need Precise Location").
+  Each offers "Choose region" too, and the app still opens on the last region. The state is read again on every
+  resume (back from Settings). Nothing prompts on launch.
+
 ## Region RF, Growth and report export
 
 (`ui/region/rf_panel.dart`, `growth_panel.dart`, `region_report_export_sheet.dart`; shared shell
@@ -507,8 +526,20 @@ it was.
   - It's triggered at launch (if stale) and on the **first ping of each drive** (around that position).
   - A failure backs off for **30 min**. There's a 20 s idle timeout, a 120 s total cap, and the download stops above
     120 MiB. It never throws: offline only means fewer names.
-- **Lookup order:** CMAT first, then the public map. A prefix that matches several different keys is "ambiguous" and
-  is never guessed. Two entries with the same full key count as one.
+- **Synced lists (unreleased, `lib/core/repeater_sync.dart`):** on app open, on resume and on a region switch the app
+  syncs the roster of the region the phone is in and of the viewed region (`region-repeaters`, ETag/304) and the global
+  network list (`GET <server>/api/cmh/network-repeaters`, not deployed yet: a 404 means "not offered", logged only). Both
+  are stored in `repeater_sync/` (versioned, atomic, at most 8 rosters, 24 MB per file) and read at launch before any
+  network call, so names and pins work offline. Limits: no background fetch; a roster at most once per region per
+  10 min on resume (launch always revalidates, a cheap 304); the network list at most once per 6 h unless pull to
+  refresh; failures back off; a forced refresh is floored at 10 s. No key, no identifier and no position is sent.
+- **Network list replaces the 17 MB download:** once the server offers the network list (and a copy confirmed within
+  14 days is stored), the app no longer downloads map.meshcore.io's node list; names come from the network list near the
+  phone (same 150 km / 180-day / 3,000 rules). Without it the directory works exactly as before.
+- **Lookup order:** region roster, then `drive-repeaters` (both "MeshSonar"), then the network list near the phone, then
+  the map.meshcore.io directory (both "map"). A prefix that matches several different keys is "ambiguous" and is never
+  guessed; a prefix the region roster marks as shared (`ambiguous: true`) never resolves to one name from any list (a
+  longer heard id can still). Two entries with the same full key count as one.
 
 ## Export & share
 
