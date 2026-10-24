@@ -121,6 +121,16 @@ class Rig {
 
   Future<void> settle() => Future<void>.delayed(const Duration(milliseconds: 30));
 
+  /// Waits (bounded, 3 s) until at least [n] pings were emitted. The engine tick timer is real, so under full-suite load
+  /// it can lag the fake clock; a fixed wait made these tests flaky.
+  Future<void> waitPings(int n) async {
+    final end = DateTime.now().add(const Duration(seconds: 3));
+    while (pings.length < n && DateTime.now().isBefore(end)) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    await settle();
+  }
+
   /// Advances the fake clock and lets the real (short) periodic timer catch up to it.
   Future<void> advance(Duration d) async {
     now = now.add(d);
@@ -171,6 +181,7 @@ void main() {
     expect(r.pings, isEmpty, reason: 'not flushed yet: neither 30 s nor 25 m has passed');
 
     await r.advance(const Duration(seconds: 31));
+    await r.waitPings(1);
     expect(r.pings, hasLength(1));
     final p = r.pings.single;
     expect(p.kind, PingKind.rx);
@@ -192,7 +203,9 @@ void main() {
     // A 2-hop packet: repeater 0xA1 heard the original sender first, then 0xB2 repeated A1's copy. We physically
     // heard B2's transmission, not A1's — keying on path.first would wrongly credit A1.
     r.link.heard(ambientGrpTxt([0xA1, 0xB2]), snrDb: 2.0);
+    await r.settle();
     await r.advance(const Duration(seconds: 31));
+    await r.waitPings(1);
     expect(r.pings, hasLength(1));
     expect(r.pings.single.echoes.single.repeater, 'b2');
     expect(r.pings.single.echoes.single.path, ['a1', 'b2']);
@@ -212,8 +225,9 @@ void main() {
     r.link.heard(ambientGrpTxt([0xC1], ts: 1003), snrDb: 1.0); // weaker again: best (7.5) must stick
     await r.settle();
     r.link.heard(ambientGrpTxt([0xD9], ts: 1004), snrDb: 3.0); // a different repeater entirely
+    await r.settle(); // let the last packet reach the engine before the window closes (it was racing the flush tick)
     await r.advance(const Duration(seconds: 31));
-
+    await r.waitPings(2);
     expect(r.pings, hasLength(2), reason: 'one rx ping per repeater heard, not per packet');
     final byRepeater = {for (final p in r.pings) p.echoes.single.repeater: p};
     expect(byRepeater['c1']!.echoes.single.snrDb, 7.5);
@@ -230,6 +244,7 @@ void main() {
     await r.advance(const Duration(seconds: 29));
     expect(r.pings, isEmpty, reason: 'not yet 30 s');
     await r.advance(const Duration(seconds: 2));
+    await r.waitPings(1);
     expect(r.pings, hasLength(1));
     await r.engine.stop();
   });
@@ -312,7 +327,9 @@ void main() {
     expect(r.link.sentTexts, isEmpty, reason: 'still listen-only: updateConfig cannot flip it mid-drive');
 
     r.link.heard(ambientGrpTxt([0x77]));
+    await r.settle();
     await r.advance(const Duration(seconds: 31));
+    await r.waitPings(1);
     expect(r.pings, hasLength(1), reason: 'the passive pipeline is still the one running');
     await r.engine.stop();
   });
