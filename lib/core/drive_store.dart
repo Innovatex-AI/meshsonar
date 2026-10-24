@@ -21,6 +21,7 @@ import 'package:path/path.dart' as p;
 
 import 'api.dart';
 import 'model.dart';
+import 'storage_usage.dart';
 
 /// Extra bookkeeping the sync service needs beyond [DriveStore]. [JsonlDriveStore] implements it; the sync service
 /// falls back to in-memory tracking for stores that don't.
@@ -60,7 +61,7 @@ Future<List<String>> closeOrphanedSessions(DriveStore store, {Set<String> except
   return closed;
 }
 
-class JsonlDriveStore implements DriveStore, SyncLedger {
+class JsonlDriveStore implements DriveStore, SyncLedger, StorageSized {
   final Directory root;
   final Directory _sessionsDir;
   final Map<String, Future<void>> _locks = {};
@@ -75,6 +76,10 @@ class JsonlDriveStore implements DriveStore, SyncLedger {
   }
 
   static final _safeId = RegExp(r'^[A-Za-z0-9_-]{1,100}$');
+
+  /// Bytes every drive on this phone uses (Settings > Data & storage).
+  @override
+  Future<int> bytesUsed() => bytesOnDisk(_sessionsDir);
 
   Directory _dir(String sessionId) {
     if (!_safeId.hasMatch(sessionId)) throw ArgumentError.value(sessionId, 'sessionId', 'not a valid session id');

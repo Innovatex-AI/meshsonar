@@ -299,7 +299,21 @@ names.
 | `ui/drive_stats.dart` | ui (pure Dart) | `DriveStats.of` (distance, duration, heard %, best/median SNR, repeaters, multi-hop, timeline); `formatDistance`, `formatMiles`, `formatDuration`. |
 | `ui/report/drive_report.dart` | ui (pure Dart) | `DriveReport.compute`: CMAT-grid cells, new grids/repeaters vs earlier drives, speeds, hops, best/worst spot, text summary. |
 | `ui/report/drive_report_screen.dart` | ui | Drive report screen and `loadDriveReport`; share as text. |
-| `ui/settings_screen.dart` | ui | Settings sections, driver key request/status, sliders (`SliderTile`, stop lists), upload status, About/intro links. |
+| `ui/settings_screen.dart` | ui | Settings shell: search, phone list of collapsible section cards, wide (>= 840 dp) two-pane layout; re-exports `DriverKeyScreen`, `SliderTile` and the stop lists. |
+| `ui/settings/settings_index.dart` | ui | Section order and the searchable index of every row (`SettingsEntry`: id, section, title, explanation, keywords, availability); `searchSettings`. |
+| `ui/settings/settings_kit.dart` | ui | `SettingsSection` (collapsible card), `SettingsAnchors`/`SettingsAnchor` (jump + tint targets), `confirmSettingsChange`, `SliderTile` + stops, `editSettingText`. |
+| `ui/settings/data_sharing.dart` | ui | The one source of disclosure text: `DataCategory` registry (`dataCategories`, today only `telemetryCategory`), other data flows, location explainer points, `privacySectionTitle`. |
+| `ui/settings/account_section.dart` | ui | Driver key (request, paste, reveal, remove), Server URL, `DriverKeyScreen`, `KeyStatusBadge`, `confirmServerChange`, `AccountLinks`. |
+| `ui/settings/region_section.dart` | ui | Region pick, Connected to, region radio preset comparison (read-only). |
+| `ui/settings/display_section.dart` | ui | Units (with `unitsExplanation`) and heard list hold. |
+| `ui/settings/maps_section.dart` | ui | Offline maps link. |
+| `ui/settings/privacy_section.dart` | ui | Category switches, on-confirm / off-erase flow, erase now, `WhatIsSharedScreen`, location and privacy-zone links. |
+| `ui/settings/radio_section.dart` | ui | Radio tab link, channel, discovery, auto-ping sliders, per-radio antenna rows. |
+| `ui/settings/drives_section.dart` | ui | Upload toggles, upload interval, `LastUpload`. |
+| `ui/settings/storage_section.dart` | ui | Data & storage: sizes and per-item clear actions (uploaded drives only, region cache, repeater names, node map, offline maps link, unsent report). `storagePackManager` test seam. |
+| `ui/settings/diagnostics_section.dart` | ui | Diagnostic log screen (redacted view, copy, clear), `diagnosticsExport`, Report a problem link. |
+| `ui/settings/about_section.dart` | ui | About and welcome tour rows. |
+| `core/storage_usage.dart` | core | `StorageSized`, `bytesOnDisk`, `driveSafeToRemove` / `splitDrives` (which drives may leave the phone), `formatStorageBytes`. |
 | `ui/about_screen.dart` | ui | About: version, MIT text, short third-party notices, licence page. |
 | `ui/onboarding/first_run_gate.dart` | ui | Shows the intro once, then routes to Connect / Simulator / Settings. |
 | `ui/onboarding/onboarding_screen.dart` | ui | Three-page intro. |

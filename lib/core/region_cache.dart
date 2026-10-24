@@ -9,6 +9,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'api.dart';
+import 'storage_usage.dart';
 
 class CacheFetch {
   final bool notModified;
@@ -31,7 +32,7 @@ class CachedBody {
   const CachedBody({required this.body, required this.etag, required this.fetchedAt, required this.offline});
 }
 
-class RegionCache {
+class RegionCache implements StorageSized {
   final Directory dir;
   final int maxEntries;
   final DateTime Function() clock;
@@ -102,6 +103,30 @@ class RegionCache {
       // Mark as used so a region you keep opening offline is not the one evicted.
       return CachedBody(body: cached.body, etag: cached.etag, fetchedAt: cached.fetchedAt, offline: true);
     }
+  }
+
+  bool _isEntry(String path) => path.contains('${Platform.pathSeparator}rc_') && (path.endsWith('.json') || path.endsWith('.tmp'));
+
+  /// Bytes the cached entries use (Settings > Data & storage).
+  @override
+  Future<int> bytesUsed() => bytesOnDisk(dir, where: _isEntry);
+
+  /// Deletes every cached entry (Settings > Data & storage). The next fetch of each key downloads it in full again.
+  /// Returns how many entries were removed. Never throws.
+  Future<int> clear() async {
+    var n = 0;
+    try {
+      if (!await dir.exists()) return 0;
+      await for (final e in dir.list()) {
+        if (e is File && _isEntry(e.path)) {
+          try {
+            await e.delete();
+            if (e.path.endsWith('.json')) n++;
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+    return n;
   }
 
   /// Stores [body] under [key] (fetched now) without going through [fetch].

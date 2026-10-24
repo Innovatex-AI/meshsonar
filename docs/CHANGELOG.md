@@ -3,6 +3,15 @@
 All notable changes to MeshSonar. Dates are local (US Eastern). This changelog was reconstructed from the commit
 history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md](ROADMAP.md).
 
+## [Unreleased]
+
+- Settings restructured into Account & driver key, Region, Units & display, Map & offline maps, Privacy & data sharing, Radio, Drives & uploads, Data & storage, Diagnostics and About, one file per section under `lib/ui/settings/`. Every row explains what it does; destructive and sharing changes ask first.
+- Settings search: matches titles, explanations and keywords and jumps to the row (opens its section, tints the row, announces it to screen readers). Sections fold from their headers on phones; wide screens (>= 840 dp) show sections and content side by side.
+- Privacy & data sharing: one switch per data category from a registry (today only packet headers); turning sharing on asks and lists exactly what is shared; erase what the server holds at any time; "What MeshSonar shares" page; the location explainer is reachable from Settings. The first-run sheet and Settings now use the same text, and it lists every field actually sent (packet fingerprint, app version and platform were missing).
+- Data & storage: space used by drives, saved region data, repeater names, the public node map and offline maps, with clear actions that state the cost first. Only fully uploaded drives can be removed there; drives with pings waiting or rejected always stay.
+- Diagnostics: view, copy (secrets hidden, coordinates rounded, same rules as problem reports) or clear the diagnostic log.
+- Location explainer wording corrected: between drives a coarse position is used on the phone to keep the region right (it said "no tracking when you are not driving").
+
 ## [0.19.0] — 2026-10-24 — Timeline, telemetry, offline cache
 
 - Map layers > Network coverage > Coverage options: "Coverage growth (as of)" slider with play/pause and a Live reset; the map shows a "Coverage as of <date>" badge while scrubbed back (server `public-coverage?until=`).
