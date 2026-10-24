@@ -1,7 +1,9 @@
 // After-drive report: hero numbers, a map of the drive's grid cells coloured by heard %, new grids and repeaters,
-// SNR over time, heard/not timeline, hops, a repeater leaderboard, best/worst spots, and "Share report".
+// SNR over time, heard/not timeline, noise floor, reply RSSI, TX power, hops, signal by distance, heard by speed, GPS
+// accuracy, a repeater leaderboard, best/worst spots, and Export (text or one CSV file).
 // Opened from the drive detail screen ("Report") and from the Drive screen's "View drive report" card.
-// The numbers come from drive_report.dart, computed once per open (async; fine for drives of thousands of pings).
+// The numbers come from lib/core/drive_report.dart, computed once per open (async; fine for drives of thousands of
+// pings). The v2 chart sections live in drive_report_sections.dart.
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -10,14 +12,15 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' hide Path;
 
 import '../../app/app_state.dart';
+import '../../core/drive_report.dart';
+import '../../core/drive_report_export.dart';
+import '../../core/drive_stats.dart' show formatDuration;
 import '../../core/model.dart';
 import '../app.dart';
-import '../drive_stats.dart' show formatDuration;
 import '../map/coverage_map.dart' show CoverageMap;
 import '../onboarding/ui_prefs.dart' show driveLabel;
-import '../sessions_screen.dart' show HeardStrip;
 import '../widgets.dart';
-import 'drive_report.dart';
+import 'drive_report_sections.dart';
 
 void openDriveReport(BuildContext context, String sessionId) {
   Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => DriveReportScreen(sessionId: sessionId)));
@@ -59,13 +62,24 @@ class _DriveReportScreenState extends State<DriveReportScreen> {
     _report ??= loadDriveReport(AppScope.read(context), widget.sessionId);
   }
 
-  Future<void> _share(DriveReport r, String title) async {
+  String get _fileBase => 'meshsonar-report-${widget.sessionId.split('-').first}';
+
+  Future<void> _share(DriveReport r, String title) => _write(
+      '$_fileBase.txt', () => r.toText(title: 'MeshSonar drive report: $title', units: AppScope.read(context).units, duration: formatDuration));
+
+  Future<void> _shareCsv(DriveReport r) {
+    final s = AppScope.read(context);
+    return _write('$_fileBase.csv', () => r.toCsv(nameOf: s.repeaterName));
+  }
+
+  Future<void> _write(String name, String Function() body) async {
     final s = AppScope.read(context);
     final messenger = ScaffoldMessenger.of(context);
     try {
+      final text = body();
       final dir = await s.services.exportDir();
-      final f = File('${dir.path}/meshsonar-report-${widget.sessionId.split('-').first}.txt');
-      await f.writeAsString(r.toText(title: 'MeshSonar drive report: $title', units: s.units, duration: formatDuration));
+      final f = File('${dir.path}/$name');
+      await f.writeAsString(text);
       await s.services.shareFile(f);
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text('Couldn\'t share the report. $e')));
@@ -88,11 +102,29 @@ class _DriveReportScreenState extends State<DriveReportScreen> {
             title: const Text('Drive report'),
             actions: [
               if (r != null)
-                IconButton(
-                  key: const Key('report-share'),
-                  tooltip: 'Share report',
-                  onPressed: () => _share(r, title),
+                PopupMenuButton<String>(
+                  key: const Key('report-export'),
+                  tooltip: 'Export report',
                   icon: const Icon(Icons.ios_share),
+                  onSelected: (v) => v == 'csv' ? _shareCsv(r) : _share(r, title),
+                  itemBuilder: (_) => [
+                    const PopupMenuItem(
+                      key: Key('report-export-text'),
+                      value: 'text',
+                      child: ListTile(leading: Icon(Icons.notes), title: Text('Text summary'), contentPadding: EdgeInsets.zero),
+                    ),
+                    PopupMenuItem(
+                      key: const Key('report-export-csv'),
+                      value: 'csv',
+                      enabled: r.sortedPings.isNotEmpty,
+                      child: const ListTile(
+                        leading: Icon(Icons.table_chart_outlined),
+                        title: Text('CSV (all tables, one file)'),
+                        subtitle: Text('Contains your exact track'),
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ),
+                  ],
                 ),
             ],
           ),
@@ -100,7 +132,7 @@ class _DriveReportScreenState extends State<DriveReportScreen> {
               ? Padding(padding: const EdgeInsets.all(16), child: ErrorBanner('Couldn\'t build the report. ${snap.error}'))
               : r == null
                   ? const Center(child: CircularProgressIndicator())
-                  : _ReportBody(report: r, title: title, onShare: () => _share(r, title)),
+                  : _ReportBody(report: r, title: title, onShare: () => _share(r, title), onCsv: () => _shareCsv(r)),
         );
       },
     );
@@ -110,8 +142,8 @@ class _DriveReportScreenState extends State<DriveReportScreen> {
 class _ReportBody extends StatelessWidget {
   final DriveReport report;
   final String title;
-  final VoidCallback onShare;
-  const _ReportBody({required this.report, required this.title, required this.onShare});
+  final VoidCallback onShare, onCsv;
+  const _ReportBody({required this.report, required this.title, required this.onShare, required this.onCsv});
 
   @override
   Widget build(BuildContext context) {
@@ -133,24 +165,33 @@ class _ReportBody extends StatelessWidget {
           _NumberGrid(report: r),
           if (r.snrSeries.isNotEmpty) ...[
             const _Heading('Signal over the drive', icon: Icons.show_chart),
-            _Panel(
-              key: const Key('report-snr-chart'),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                SizedBox(height: 170, child: _SnrChart(points: r.snrSeries)),
-                const SizedBox(height: 14),
-                Text('Heard / not heard, ping by ping', style: Theme.of(context).textTheme.labelMedium),
-                const SizedBox(height: 6),
-                HeardStrip(
-                  timeline: [for (final p in r.snrSeries) p.heard],
-                  snr: [for (final p in r.snrSeries) p.snr],
-                  height: 22,
-                ),
-              ]),
-            ),
+            _Panel(key: const Key('report-snr-chart'), child: SnrSection(report: r)),
+          ],
+          const _Heading('Noise floor', icon: Icons.graphic_eq),
+          _Panel(key: const Key('report-noise'), child: NoiseSection(report: r)),
+          if (r.rf.rssiSeries.isNotEmpty) ...[
+            const _Heading('Reply strength', icon: Icons.network_cell),
+            _Panel(key: const Key('report-rssi'), child: RssiSection(report: r)),
+          ],
+          if (r.rf.txPowerChanges.isNotEmpty) ...[
+            const _Heading('Transmit power', icon: Icons.bolt),
+            _Panel(child: TxPowerSection(report: r)),
           ],
           if (r.hops.values.any((n) => n > 0)) ...[
             const _Heading('How echoes came back', icon: Icons.alt_route),
             _Hops(hops: r.hops),
+          ],
+          if (r.rf.hasDistanceData) ...[
+            const _Heading('Signal by distance', icon: Icons.social_distance),
+            _Panel(key: const Key('report-distance-bands'), child: DistanceSection(report: r)),
+          ],
+          if (r.rf.hasSpeedData) ...[
+            const _Heading('Heard by speed', icon: Icons.speed),
+            _Panel(key: const Key('report-speed-bands'), child: SpeedSection(report: r)),
+          ],
+          if (r.rf.gps != null) ...[
+            const _Heading('GPS accuracy', icon: Icons.gps_fixed),
+            GpsSection(key: const Key('report-gps'), gps: r.rf.gps!),
           ],
           if (r.repeaters.isNotEmpty) ...[
             _Heading('Repeater leaderboard', icon: Icons.emoji_events_outlined, trailing: '${r.repeaters.length}'),
@@ -166,6 +207,13 @@ class _ReportBody extends StatelessWidget {
             onPressed: onShare,
             icon: const Icon(Icons.ios_share),
             label: const Text('Share report'),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            key: const Key('report-csv-button'),
+            onPressed: r.sortedPings.isEmpty ? null : onCsv,
+            icon: const Icon(Icons.table_chart_outlined),
+            label: const Text('Export CSV (contains your exact track)'),
           ),
         ],
       ),
@@ -557,126 +605,6 @@ class _NumberGrid extends StatelessWidget {
       ]);
     });
   }
-}
-
-/// SNR (best echo per ping) over time; pings that heard nothing are red ticks on the floor.
-class _SnrChart extends StatelessWidget {
-  final List<SnrPoint> points;
-  const _SnrChart({required this.points});
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    return CustomPaint(
-      size: Size.infinite,
-      painter: _SnrPainter(
-        points: points,
-        m: MeshSonarColors.of(context),
-        grid: t.colorScheme.outlineVariant,
-        label: t.textTheme.labelSmall!.copyWith(color: t.colorScheme.onSurfaceVariant),
-        line: t.colorScheme.primary,
-      ),
-    );
-  }
-}
-
-class _SnrPainter extends CustomPainter {
-  final List<SnrPoint> points;
-  final MeshSonarColors m;
-  final Color grid, line;
-  final TextStyle label;
-  _SnrPainter({required this.points, required this.m, required this.grid, required this.label, required this.line});
-
-  void _text(Canvas canvas, String s, Offset at, {bool right = false, bool center = false}) {
-    final tp = TextPainter(text: TextSpan(text: s, style: label), textDirection: TextDirection.ltr)..layout();
-    final dx = right ? at.dx - tp.width : (center ? at.dx - tp.width / 2 : at.dx);
-    tp.paint(canvas, Offset(dx, at.dy - tp.height / 2));
-  }
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (points.isEmpty) return;
-    const left = 34.0, bottom = 22.0, top = 18.0;
-    final w = size.width - left - 4, h = size.height - bottom - top;
-    var lo = -15.0, hi = 12.0;
-    for (final p in points) {
-      if (p.snr != null) {
-        lo = math.min(lo, p.snr!.floorToDouble());
-        hi = math.max(hi, p.snr!.ceilToDouble());
-      }
-    }
-    double y(double snr) => top + h * (1 - (snr - lo) / (hi - lo));
-    final t0 = points.first.ts.millisecondsSinceEpoch.toDouble();
-    final span = math.max(1.0, points.last.ts.millisecondsSinceEpoch - t0);
-    double x(DateTime ts) => left + w * ((ts.millisecondsSinceEpoch - t0) / span);
-
-    final gp = Paint()
-      ..color = grid
-      ..strokeWidth = 1;
-    for (final v in [-10.0, 0.0, 10.0]) {
-      if (v < lo || v > hi) continue;
-      final yy = y(v);
-      if (v == 0) {
-        // dashed zero line
-        for (var xx = left; xx < left + w; xx += 8) {
-          canvas.drawLine(Offset(xx, yy), Offset(math.min(xx + 4, left + w), yy), gp..strokeWidth = 1.4);
-        }
-        gp.strokeWidth = 1;
-      } else {
-        canvas.drawLine(Offset(left, yy), Offset(left + w, yy), gp);
-      }
-      _text(canvas, '${v > 0 ? '+' : ''}${v.toStringAsFixed(0)}', Offset(left - 6, yy), right: true);
-    }
-    _text(canvas, 'SNR dB', Offset(4, 6));
-
-    // Heard points as a line + soft fill.
-    final heard = [for (final p in points) if (p.snr != null) p];
-    if (heard.length >= 2) {
-      final path = Path()..moveTo(x(heard.first.ts), y(heard.first.snr!));
-      for (final p in heard.skip(1)) {
-        path.lineTo(x(p.ts), y(p.snr!));
-      }
-      final fill = Path.from(path)
-        ..lineTo(x(heard.last.ts), top + h)
-        ..lineTo(x(heard.first.ts), top + h)
-        ..close();
-      canvas.drawPath(
-          fill,
-          Paint()
-            ..shader = LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [line.withValues(alpha: 0.30), line.withValues(alpha: 0.02)],
-            ).createShader(Rect.fromLTWH(left, top, w, h)));
-      canvas.drawPath(
-          path,
-          Paint()
-            ..color = line.withValues(alpha: 0.85)
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 1.6
-            ..strokeJoin = StrokeJoin.round);
-    }
-    final dotR = points.length > 400 ? 1.6 : 3.0;
-    for (final p in points) {
-      if (p.snr != null) {
-        canvas.drawCircle(Offset(x(p.ts), y(p.snr!)), dotR, Paint()..color = m.forPing(heard: true, snr: p.snr));
-      } else {
-        final xx = x(p.ts);
-        canvas.drawLine(
-            Offset(xx, top + h - 7),
-            Offset(xx, top + h),
-            Paint()
-              ..color = (p.heard ? m.snrMid : m.silent).withValues(alpha: 0.9)
-              ..strokeWidth = 2);
-      }
-    }
-    canvas.drawLine(Offset(left, top + h), Offset(left + w, top + h), gp);
-    _text(canvas, formatTime(points.first.ts).substring(0, 5), Offset(left, size.height - 8));
-    _text(canvas, formatTime(points.last.ts).substring(0, 5), Offset(left + w, size.height - 8), right: true);
-    _text(canvas, 'red ticks = heard nothing', Offset(left + w / 2, size.height - 8), center: true);
-  }
-
-  @override
-  bool shouldRepaint(_SnrPainter old) => old.points != points || old.m != m || old.line != line;
 }
 
 class _Hops extends StatelessWidget {

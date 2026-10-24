@@ -112,11 +112,40 @@ class _TableView extends StatelessWidget {
   final String title;
   const _TableView({super.key, required this.table, required this.title});
 
+  /// Tables longer than this scroll inside a fixed-height list built lazily (a drive can have thousands of pings).
+  static const lazyAfter = 40;
+
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
     if (table.rows.isEmpty) return Text('No rows.', style: t.textTheme.bodyMedium);
     final num = t.textTheme.bodySmall?.copyWith(fontFeatures: const [FontFeature.tabularFigures()]);
+    if (table.rows.length > lazyAfter) {
+      Widget row(List<String> cells, TextStyle? style) => Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+            child: Row(children: [
+              for (var i = 0; i < table.head.length; i++)
+                Expanded(child: Text(i < cells.length ? cells[i] : '', style: style, overflow: TextOverflow.ellipsis)),
+            ]),
+          );
+      return Semantics(
+        label: '$title, table, ${table.rows.length} rows',
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          row(table.head, t.textTheme.labelMedium),
+          const Divider(height: 1),
+          SizedBox(
+            height: 320,
+            child: ListView.builder(
+              primary: false,
+              itemCount: table.rows.length,
+              itemExtent: 28,
+              itemBuilder: (_, i) => row(table.rows[i], num),
+            ),
+          ),
+          Text('${table.rows.length} rows', style: t.textTheme.labelSmall),
+        ]),
+      );
+    }
     return Semantics(
       label: '$title, table, ${table.rows.length} rows',
       child: SingleChildScrollView(
