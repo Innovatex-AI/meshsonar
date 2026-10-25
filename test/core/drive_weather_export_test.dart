@@ -8,7 +8,6 @@ import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/drive_report.dart';
 import 'package:meshsonar/core/drive_report_export.dart';
 import 'package:meshsonar/core/drive_report_pdf.dart';
-import 'package:meshsonar/core/drive_weather_export.dart';
 import 'package:meshsonar/core/heard.dart';
 import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/core/report_pdf.dart';
