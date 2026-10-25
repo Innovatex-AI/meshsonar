@@ -163,7 +163,10 @@ class AppState extends ChangeNotifier {
   /// Fetches [siteConfig] once. Failures are swallowed quietly (logged, not shown) so the Server URL tile keeps
   /// working regardless of whether this server's `site-config` endpoint exists or answers. Called unawaited at
   /// startup and again whenever the server URL changes.
-  Future<void> refreshSiteConfig() async {
+  Future<void> refreshSiteConfig() => _siteConfigLatest = _refreshSiteConfig();
+  Future<void>? _siteConfigLatest; // the newest fetch: the launch repeater sync waits for it (delta capability)
+
+  Future<void> _refreshSiteConfig() async {
     final server = _settings.serverUrl;
     try {
       final viewing = viewingRegion;
@@ -632,8 +635,19 @@ class AppState extends ChangeNotifier {
     final server = Uri.tryParse(_settings.serverUrl);
     await Future.wait([
       for (final r in regions.values) sync.syncRoster(baseUrl: _rosterBase(r), slug: r.slug, trigger: trigger),
-      if (server != null && server.host.isNotEmpty) sync.syncNetwork(server: server, trigger: trigger),
+      if (server != null && server.host.isNotEmpty) _syncNetworkWithCapability(sync, server, trigger),
     ]);
+  }
+
+  /// The network list, after the site config answered (it says whether `?updated_since=` deltas exist), but never
+  /// waiting more than a few seconds: without an answer the sync simply downloads the full list.
+  Future<void> _syncNetworkWithCapability(RepeaterSync sync, Uri server, SyncTrigger trigger) async {
+    if (_siteConfig == null) {
+      try {
+        await _siteConfigLatest?.timeout(const Duration(seconds: 4));
+      } catch (_) {}
+    }
+    await sync.syncNetwork(server: server, trigger: trigger);
   }
 
   /// Pull to refresh on a region's repeater list: that roster and the network list, forced (still floored so a
@@ -1693,6 +1707,7 @@ class AppState extends ChangeNotifier {
     final rs = services.repeaterSync;
     if (rs != null) {
       rs.log ??= diagnostics.add;
+      rs.deltaCapable = () => _siteConfig?.networkRepeatersDelta ?? false; // unknown site config = full list
       if (!_syncListening) {
         _syncListening = true;
         rs.addListener(_onRepeaterSync);

@@ -9,8 +9,15 @@
 //    [rosterMinGap] (10 min); failures back off (30 s doubling, capped at 30 min); a forced refresh waits [forceFloor];
 //  - network list: at most once per [networkMinGap] (6 h, persisted across launches) unless forced; a 404 means the
 //    server does not offer it yet ("capability absent"), checked again after the same 6 h; never retried in a loop;
-//  - one request per list in flight at a time (concurrent callers share it).
-// Requests carry no identifier, no driver key and no position: the region is only in the host name.
+//  - one request per list in flight at a time (concurrent callers share it);
+//  - delta refresh (site-config capability `networkRepeatersDelta`): a stored list with a cursor is refreshed with
+//    `?updated_since=<cursor>` (changed rows + removed keys, ~0.3 MB instead of ~6.5 MB decoded, ~190 KB instead of
+//    ~3.6 MB on the wire, Oct 2026); the full list (with ETag) is the fallback, asked for at most once per sync, on 410,
+//    any other refusal, a body that is not a consistent delta, a cursor older than [RepeaterSync.maxCursorAge] (13
+//    days; the server's floor is 14), a last full download older than [RepeaterSync.fullRefreshAge] (30 days), no
+//    stored list, or the capability off/unknown.
+// Requests carry no identifier, no driver key and no position: the region is only in the host name. The one query
+// parameter is the delta cursor (whole seconds, the same for everyone who last synced in that minute).
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -83,11 +90,33 @@ class RosterRecord {
 /// The stored network list.
 class NetworkRecord {
   final NetworkRepeaters data;
+
+  /// The ETag of the last FULL download; null once a delta changed the list (it no longer matches that body).
   final String? etag;
+
+  /// Last change of the stored rows (full download or delta).
   final DateTime fetchedAt;
+
+  /// Last 200 or 304 (confirmed current).
   final DateTime checkedAt;
-  const NetworkRecord({required this.data, required this.etag, required this.fetchedAt, required this.checkedAt});
-  NetworkRecord checked(DateTime at) => NetworkRecord(data: data, etag: etag, fetchedAt: fetchedAt, checkedAt: at);
+
+  /// The `updated_since` cursor: whole seconds since 1970. After a full download `floor(asOf)`, after a delta its
+  /// `asOfS`. Null when the list has no `asOf` (then no delta is asked for).
+  final int? cursorS;
+
+  /// When the stored rows last came from a full download (a delta-maintained list is re-downloaded after
+  /// [RepeaterSync.fullRefreshAge] as a guard against drift).
+  final DateTime fullAt;
+  NetworkRecord({
+    required this.data,
+    required this.etag,
+    required this.fetchedAt,
+    required this.checkedAt,
+    this.cursorS,
+    DateTime? fullAt,
+  }) : fullAt = fullAt ?? fetchedAt;
+  NetworkRecord checked(DateTime at) =>
+      NetworkRecord(data: data, etag: etag, fetchedAt: fetchedAt, checkedAt: at, cursorS: cursorS, fullAt: fullAt);
 }
 
 /// The on-disk store: one file per roster (`roster_<slug>.json`), one for the network list (`network.json`) and a small
@@ -206,6 +235,8 @@ class RepeaterSyncStore {
     'fetchedAt': r.fetchedAt.toUtc().toIso8601String(),
     'checkedAt': r.checkedAt.toUtc().toIso8601String(),
     'asOf': r.data.asOf?.toUtc().toIso8601String(),
+    'cursorS': r.cursorS,
+    'fullAt': r.fullAt.toUtc().toIso8601String(),
     'hidden': r.data.hidden,
     'rows': [for (final x in r.data.rows) x.toRow()],
   });
@@ -277,6 +308,8 @@ List<NetworkRepeater> rosterAsRows(RegionRepeaters r) => [
       ),
 ];
 
+bool _never() => false;
+
 class RepeaterSync {
   /// Null = memory only (tests).
   final RepeaterSyncStore? store;
@@ -306,6 +339,22 @@ class RepeaterSync {
   /// Decode the (MB-sized) network list on a background isolate so the UI never stalls. Widget tests turn it off.
   final bool parseInIsolate;
 
+  /// Whether the server advertises `GET network-repeaters?updated_since=` (site-config `networkRepeatersDelta`).
+  /// AppState points this at its site config; unknown site config = false = the full list with ETag, as before.
+  bool Function() deltaCapable;
+
+  /// A stored list whose cursor is older than this is not refreshed by delta (the server answers 410 beyond 14 days:
+  /// removals are kept 15 days). 13 days leaves a day of slack.
+  final Duration maxCursorAge;
+
+  /// A delta-maintained list is downloaded in full again after this long since its last full download (drift guard).
+  final Duration fullRefreshAge;
+
+  /// Decoded bytes of every network-list answer this run and how many requests carried them (delta saving is
+  /// visible in the log line and tests).
+  int networkBytesIn = 0;
+  int networkRequests = 0;
+
   RepeaterSync({
     this.store,
     http.Client Function()? rosterClient,
@@ -317,7 +366,11 @@ class RepeaterSync {
     this.timeout = const Duration(seconds: 20),
     this.networkTimeout = const Duration(seconds: 90),
     this.parseInIsolate = true,
-  }) : rosterClient = rosterClient ?? newRegionWireClient,
+    bool Function()? deltaCapable,
+    this.maxCursorAge = const Duration(days: 13),
+    this.fullRefreshAge = const Duration(days: 30),
+  }) : deltaCapable = deltaCapable ?? _never,
+       rosterClient = rosterClient ?? newRegionWireClient,
        networkClient = networkClient ?? http.Client.new,
        clock = clock ?? DateTime.now;
 
@@ -576,10 +629,112 @@ class RepeaterSync {
     return f;
   }
 
+  /// asOf of the list we held when a delta was last refused and the full list did not move past it: no delta is asked
+  /// for again until a different list is held (PLATFORM_CONTRACT client rule: no loop).
+  DateTime? _deltaGaveUpAsOf;
+
+  /// Why no delta may be asked for now, or null when one may. An empty string = silently (nothing to log).
+  String? _deltaBlocker(NetworkRecord? stored) {
+    if (stored == null || stored.cursorS == null || !deltaCapable()) return '';
+    final now = clock();
+    final cursorAge = now.difference(DateTime.fromMillisecondsSinceEpoch(stored.cursorS! * 1000, isUtc: true));
+    if (cursorAge > maxCursorAge) return 'stored list is ${cursorAge.inDays} days behind';
+    final fullAge = now.difference(stored.fullAt);
+    if (fullAge > fullRefreshAge) return 'last full download was ${fullAge.inDays} days ago';
+    final gaveUp = _deltaGaveUpAsOf;
+    if (gaveUp != null && stored.data.asOf == gaveUp) return '';
+    return null;
+  }
+
   Future<bool> _fetchNetwork(Uri server) async {
     final now = clock();
     _networkAttemptAt = now;
     _networkLaunchDone = true;
+    final stored = _network;
+    final blocker = _deltaBlocker(stored);
+    DateTime? goneAsOf;
+    if (blocker == null) {
+      final r = await _fetchNetworkDelta(server, stored!);
+      if (r != null) return r;
+      goneAsOf = stored.data.asOf;
+    } else if (blocker.isNotEmpty) {
+      log?.call('Network repeater list: full download ($blocker)');
+    }
+    return _fetchNetworkFull(server, now, goneAsOf: goneAsOf);
+  }
+
+  /// `?updated_since=<cursor>` against the stored list. True = applied; false = the attempt failed like any network
+  /// failure (offline, 5xx, 429: already recorded, the stored list stays); null = fall back to the full list, once
+  /// (410, any other refusal, a body that is not a consistent delta). Never throws.
+  Future<bool?> _fetchNetworkDelta(Uri server, NetworkRecord stored) async {
+    final http.Client c;
+    try {
+      c = networkClient();
+    } catch (e) {
+      return _networkFailed('no HTTP client: $e');
+    }
+    try {
+      final uri = networkUri(server).replace(queryParameters: {'updated_since': '${stored.cursorS}'});
+      final res = await c.get(uri, headers: const {'accept': 'application/json'}).timeout(networkTimeout);
+      networkRequests++;
+      networkBytesIn += res.bodyBytes.length;
+      final code = res.statusCode;
+      if (code == 429 || code >= 500) return _networkFailed('HTTP $code');
+      if (code != 200) {
+        log?.call('Network repeater list: delta refused (HTTP $code); downloading the full list');
+        return null;
+      }
+      final NetworkDelta delta;
+      final NetworkRepeaters merged;
+      try {
+        final bytes = res.bodyBytes;
+        delta = (parseInIsolate && bytes.length > _deltaIsolateBytes)
+            ? await parseNetworkDeltaInIsolate(bytes)
+            : NetworkDelta.parse(jsonDecode(utf8.decode(bytes)));
+        // The cursor may not move back in time and never into the future (the server would answer 400).
+        final nowS = clock().millisecondsSinceEpoch ~/ 1000;
+        if (delta.asOfS < stored.cursorS! - 60) throw const NetworkRepeatersFormatException('delta: cursor went backwards');
+        if (delta.asOfS > nowS + 300) throw const NetworkRepeatersFormatException('delta: cursor is in the future');
+        merged = delta.applyTo(stored.data);
+      } on FormatException catch (e) {
+        log?.call('Network repeater list: delta unusable (${e.message}); downloading the full list');
+        return null;
+      } on NetworkRepeatersFormatException catch (e) {
+        log?.call('Network repeater list: delta unusable (${e.message}); downloading the full list');
+        return null;
+      }
+      final at = clock();
+      final r = NetworkRecord(
+        data: merged,
+        etag: delta.isEmpty ? stored.etag : null, // a changed list no longer matches the full body's ETag
+        fetchedAt: delta.isEmpty ? stored.fetchedAt : at,
+        checkedAt: at,
+        cursorS: delta.asOfS,
+        fullAt: stored.fullAt,
+      );
+      _network = r;
+      _networkOk();
+      final saved = await _serial(() => store?.saveNetwork(r) ?? Future<bool>.value(true));
+      log?.call(
+        'Network repeater list: delta +${delta.rows.length} changed, -${delta.removed.length} removed, '
+        '${(res.bodyBytes.length / 1024).round()} KB, now ${merged.rows.length} repeaters'
+        '${saved ? '' : ' (not saved: too large or disk full)'}',
+      );
+      _changed();
+      return true;
+    } on TimeoutException {
+      return _networkFailed('timed out');
+    } catch (e) {
+      return _networkFailed('$e');
+    } finally {
+      c.close();
+    }
+  }
+
+  /// Bodies above this are decoded in the background isolate (the full list always is).
+  static const int _deltaIsolateBytes = 64 * 1024;
+
+  Future<bool> _fetchNetworkFull(Uri server, DateTime now, {DateTime? goneAsOf}) async {
     final stored = _network;
     final http.Client c;
     try {
@@ -591,6 +746,8 @@ class RepeaterSync {
       final headers = <String, String>{'accept': 'application/json'};
       if (stored?.etag != null) headers['if-none-match'] = stored!.etag!;
       final res = await c.get(networkUri(server), headers: headers).timeout(networkTimeout);
+      networkRequests++;
+      networkBytesIn += res.bodyBytes.length;
       if (res.statusCode == 404 || res.statusCode == 410) {
         final was = _capability;
         _capability = NetworkCapability.absent;
@@ -609,6 +766,7 @@ class RepeaterSync {
         final r = stored.checked(clock());
         _network = r;
         _networkOk();
+        _noteGaveUp(goneAsOf, r.data.asOf);
         unawaited(_serial(() => store?.saveNetwork(r) ?? Future<bool>.value(true)));
         _changed();
         return true;
@@ -626,9 +784,17 @@ class RepeaterSync {
         return _networkFailed(e.message);
       }
       final at = clock();
-      final r = NetworkRecord(data: data, etag: res.headers['etag'], fetchedAt: at, checkedAt: at);
+      final r = NetworkRecord(
+        data: data,
+        etag: res.headers['etag'],
+        fetchedAt: at,
+        checkedAt: at,
+        cursorS: deltaCursorOf(data),
+        fullAt: at,
+      );
       _network = r;
       _networkOk();
+      _noteGaveUp(goneAsOf, data.asOf);
       final saved = await _serial(() => store?.saveNetwork(r) ?? Future<bool>.value(true));
       log?.call(
         'Network repeater list: ${data.rows.length} repeaters'
@@ -643,6 +809,12 @@ class RepeaterSync {
     } finally {
       c.close();
     }
+  }
+
+  /// A delta was refused and the full list is the very list we already held: the server's floor is newer than that
+  /// list, so a delta from it keeps failing until the collector writes again. Do not ask again until the list moves.
+  void _noteGaveUp(DateTime? goneAsOf, DateTime? newAsOf) {
+    if (goneAsOf != null && newAsOf == goneAsOf) _deltaGaveUpAsOf = goneAsOf;
   }
 
   void _networkOk() {
@@ -731,6 +903,11 @@ class RepeaterSync {
 Future<NetworkRepeaters> parseNetworkBodyInIsolate(Uint8List bytes) =>
     Isolate.run(() => NetworkRepeaters.parse(jsonDecode(utf8.decode(bytes))), debugName: 'network-repeaters-parse');
 
+/// Parses a delta body in a background isolate (top level, like [parseNetworkBodyInIsolate]: the closure holds [bytes]
+/// only, no service state).
+Future<NetworkDelta> parseNetworkDeltaInIsolate(Uint8List bytes) =>
+    Isolate.run(() => NetworkDelta.parse(jsonDecode(utf8.decode(bytes))), debugName: 'network-repeaters-delta');
+
 /// The stored `network.json` text as a [NetworkRecord]; null when it is another version, damaged or incomplete.
 NetworkRecord? decodeStoredNetwork(String text) {
   try {
@@ -740,8 +917,16 @@ NetworkRecord? decodeStoredNetwork(String text) {
     final fetched = time(j['fetchedAt']), checked = time(j['checkedAt']);
     if (fetched == null || checked == null) return null;
     final data = NetworkRepeaters.parse({'asOf': j['asOf'], 'hidden': j['hidden'], 'rows': j['rows']});
-    final etag = j['etag'];
-    return NetworkRecord(data: data, etag: etag is String ? etag : null, fetchedAt: fetched, checkedAt: checked);
+    final etag = j['etag'], cursor = j['cursorS'];
+    // Files written before deltas have no cursor: the list's own asOf is the right one (PLATFORM_CONTRACT).
+    return NetworkRecord(
+      data: data,
+      etag: etag is String ? etag : null,
+      fetchedAt: fetched,
+      checkedAt: checked,
+      cursorS: cursor is int && cursor > 0 ? cursor : deltaCursorOf(data),
+      fullAt: time(j['fullAt']) ?? fetched,
+    );
   } catch (_) {
     return null;
   }
