@@ -8,6 +8,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/app/app_state.dart';
 import 'package:meshsonar/app/services.dart';
 import 'package:meshsonar/core/api.dart';
+import 'package:meshsonar/core/drive_context.dart';
+import 'package:meshsonar/core/phone_sensors.dart';
 import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/core/idle_region_watcher.dart';
 import 'package:meshsonar/core/offline_packs.dart' show NetworkKind, NetworkMonitor;
@@ -17,7 +19,26 @@ import 'package:meshsonar/core/startup_location.dart';
 import 'package:meshsonar/radio/radio_api.dart';
 import 'package:meshsonar/ui/app.dart';
 
-class FakeDriveStore implements DriveStore {
+class FakeDriveStore implements DriveStore, DriveContextLedger {
+  /// The drive context recorded beside each drive (stream 7).
+  final FakeContextLedger ctx = FakeContextLedger();
+
+  @override
+  Future<void> appendSamples(String sessionId, Iterable<DriveSample> samples) => ctx.appendSamples(sessionId, samples);
+  @override
+  Future<void> appendPingContext(String sessionId, String pingId, PingContext c) => ctx.appendPingContext(sessionId, pingId, c);
+  @override
+  Future<void> writeSessionContext(String sessionId, SessionContext c) => ctx.writeSessionContext(sessionId, c);
+  @override
+  Future<List<DriveSample>> samples(String sessionId) => ctx.samples(sessionId);
+  @override
+  Future<Map<String, PingContext>> pingContexts(String sessionId) => ctx.pingContexts(sessionId);
+  @override
+  Future<SessionContext?> sessionContext(String sessionId) => ctx.sessionContext(sessionId);
+  @override
+  Future<ContextStripResult> stripCategories(String sessionId, Set<String> categoryIds) =>
+      ctx.stripCategories(sessionId, categoryIds);
+
   final Map<String, DriveSession> sessionsById = {};
   final Map<String, List<DrivePing>> pingsBySession = {};
   final Map<String, Set<String>> synced = {};
@@ -121,6 +142,7 @@ class FakeDriveStore implements DriveStore {
     synced.remove(sessionId);
     rejected.remove(sessionId);
     resend.remove(sessionId);
+    ctx.forget(sessionId);
   }
 
   @override
@@ -522,6 +544,10 @@ class Harness {
   LocationAccessProbe? locationAccess;
   RepeaterSync? repeaterSync;
   LastKnownStore? lastKnownStore;
+  BarometerSource? barometer;
+  PhoneBatterySource? phoneBattery;
+  DeviceDetailsSource? deviceDetails;
+  File? uiPrefsFile;
   DateTime clockNow = DateTime.utc(2026, 10, 16, 18, 0, 0);
 
   /// The next engine's start fails with this (and first emits [engineStartPings]).
@@ -594,6 +620,10 @@ class Harness {
     locationAccess: locationAccess,
     repeaterSync: repeaterSync,
     lastKnownStore: lastKnownStore,
+    barometer: barometer,
+    phoneBattery: phoneBattery,
+    deviceDetails: deviceDetails,
+    uiPrefsFile: uiPrefsFile,
   );
 
   late final AppState state = AppState(services);
@@ -628,5 +658,139 @@ class FakeNetworkMonitor implements NetworkMonitor {
   void emit(NetworkKind k) {
     kind = k;
     _c.add(k);
+  }
+}
+
+/// In-memory drive context (same contract as JsonlDriveStore's ctx.jsonl / samples.jsonl / context.json).
+class FakeContextLedger implements DriveContextLedger {
+  final Map<String, List<DriveSample>> samplesBySession = {};
+  final Map<String, Map<String, PingContext>> ctxBySession = {};
+  final Map<String, SessionContext> sessionBySession = {};
+
+  @override
+  Future<void> appendSamples(String sessionId, Iterable<DriveSample> samples) async {
+    final keep = [for (final s in samples) if (!s.isEmpty) s];
+    if (keep.isEmpty) return;
+    (samplesBySession[sessionId] ??= []).addAll(keep);
+  }
+
+  @override
+  Future<void> appendPingContext(String sessionId, String pingId, PingContext ctx) async {
+    if (ctx.isEmpty) return;
+    (ctxBySession[sessionId] ??= {})[pingId] = ctx;
+  }
+
+  @override
+  Future<void> writeSessionContext(String sessionId, SessionContext ctx) async {
+    if (ctx.isEmpty) {
+      sessionBySession.remove(sessionId);
+    } else {
+      sessionBySession[sessionId] = ctx;
+    }
+  }
+
+  @override
+  Future<List<DriveSample>> samples(String sessionId) async => List.of(samplesBySession[sessionId] ?? const []);
+
+  @override
+  Future<Map<String, PingContext>> pingContexts(String sessionId) async => Map.of(ctxBySession[sessionId] ?? const {});
+
+  @override
+  Future<SessionContext?> sessionContext(String sessionId) async => sessionBySession[sessionId];
+
+  @override
+  Future<ContextStripResult> stripCategories(String sessionId, Set<String> categoryIds) async {
+    var pings = 0, samples = 0;
+    var session = false;
+    final c = ctxBySession[sessionId];
+    if (c != null) {
+      for (final id in c.keys.toList()) {
+        final before = c[id]!;
+        final after = before.without(categoryIds);
+        if (after.toJson().length == before.toJson().length) continue;
+        pings++;
+        if (after.isEmpty) {
+          c.remove(id);
+        } else {
+          c[id] = after;
+        }
+      }
+    }
+    final s = samplesBySession[sessionId];
+    if (s != null) {
+      final next = <DriveSample>[];
+      for (final x in s) {
+        final y = x.without(categoryIds);
+        if (y.toJson().length != x.toJson().length) samples++;
+        if (!y.isEmpty) next.add(y);
+      }
+      samplesBySession[sessionId] = next;
+    }
+    final ses = sessionBySession[sessionId];
+    if (ses != null) {
+      final after = ses.without(categoryIds);
+      if (after.toJson().length != ses.toJson().length) {
+        session = true;
+        if (after.isEmpty) {
+          sessionBySession.remove(sessionId);
+        } else {
+          sessionBySession[sessionId] = after;
+        }
+      }
+    }
+    return ContextStripResult(pingContexts: pings, samples: samples, session: session);
+  }
+
+  /// Forgets a session's context (the drive was deleted).
+  void forget(String sessionId) {
+    samplesBySession.remove(sessionId);
+    ctxBySession.remove(sessionId);
+    sessionBySession.remove(sessionId);
+  }
+}
+
+/// Phone barometer fake: a controllable stream; [fail] makes listening fail like a phone without a barometer.
+class FakeBarometer implements BarometerSource {
+  StreamController<double>? ctl;
+  bool fail;
+  int listens = 0;
+  FakeBarometer({this.fail = false});
+  bool get listening => ctl != null && ctl!.hasListener;
+
+  @override
+  Stream<double> readings() {
+    listens++;
+    if (fail) return Stream<double>.error(StateError('UNAVAILABLE: Barometer is not available on this device'));
+    final c = StreamController<double>();
+    ctl = c;
+    c.onCancel = () => ctl = null;
+    return c.stream;
+  }
+
+  void emit(double hpa) => ctl?.add(hpa);
+}
+
+class FakeBattery implements PhoneBatterySource {
+  PhoneBatteryReading? reading;
+  final StreamController<PhoneBatteryState> states = StreamController<PhoneBatteryState>.broadcast();
+  int reads = 0;
+  FakeBattery([this.reading = const PhoneBatteryReading(levelPct: 64, state: PhoneBatteryState.unplugged, lowPower: false)]);
+  @override
+  Future<PhoneBatteryReading?> read() async {
+    reads++;
+    return reading;
+  }
+
+  @override
+  Stream<PhoneBatteryState> get stateChanges => states.stream;
+}
+
+class FakeDeviceDetails implements DeviceDetailsSource {
+  DeviceDetails? details = DeviceDetails(os: 'ios', osVersion: '18.6', model: 'iPhone15,2', appBuild: '23');
+  int reads = 0;
+  @override
+  Future<DeviceDetails?> read() async {
+    reads++;
+    return details;
   }
 }

@@ -133,6 +133,16 @@ class Units {
     return isImperial ? '${(v * inHgPerHpa).toStringAsFixed(2)} inHg' : '${v.toStringAsFixed(1)} hPa';
   }
 
+  /// The pressure as a plain number in this system's unit (hPa or inHg), for chart axes.
+  double pressureValue(double hPa) => isImperial ? hPa * inHgPerHpa : hPa;
+
+  /// A height as a plain number in this system's unit (metres or feet), for chart axes; [heightUnit] names it.
+  double heightValue(double metres) => isImperial ? metres / metresPerFoot : metres;
+  String get heightUnit => isImperial ? 'ft' : 'm';
+
+  /// A temperature as a plain number in this system's unit (°C or °F), for chart axes.
+  double temperatureValue(double celsius) => isImperial ? celsius * 9 / 5 + 32 : celsius;
+
   /// A temperature, stored in °C: whole degrees, "11 °C" or "52 °F".
   String temperature(double celsius) {
     final c = celsius.isFinite ? celsius : 0.0;

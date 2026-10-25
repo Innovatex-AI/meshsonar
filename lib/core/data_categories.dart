@@ -27,16 +27,11 @@ enum CategoryDestination {
 }
 
 /// How far the app can collect the category today. The Settings / disclosure UI must not present a category as
-/// collecting when it is not ([live] is the only state that collects right now).
+/// collecting when it is not ([live] is the only state that collects). Every phone/radio category is [live] since
+/// stream 7 WP2/WP3 (recorded during drives, on this phone); weather waits for the server.
 enum CategoryAvailability {
   /// Collected by the app today.
   live,
-
-  /// The pure-Dart recorder and storage exist; collection starts once the drive flow starts the recorder (WP2 hook).
-  recorderReady,
-
-  /// Needs a phone sensor plugin that is not in the app yet (stream 7 WP3).
-  needsSensorPlugin,
 
   /// Needs a server feature that does not exist yet (stream 7 server contract S4).
   needsServer,
@@ -115,7 +110,7 @@ const List<DataCategory> dataCategories = [
     disclosure: 'Motion and altitude during a drive: height, direction of travel, GPS accuracy. Saved with your drive.',
     fields: ['ctx.alt_m', 'ctx.alt_acc_m', 'ctx.course_deg', 'ctx.course_acc_deg', 'ctx.speed_acc_mps'],
     destination: CategoryDestination.ownDrive,
-    availability: CategoryAvailability.recorderReady,
+    availability: CategoryAvailability.live,
   ),
   DataCategory(
     id: CategoryId.barometer,
@@ -124,7 +119,7 @@ const List<DataCategory> dataCategories = [
         'iPhone will ask for Motion & Fitness access.',
     fields: ['ctx.pressure_hpa', 'sample.pressure_hpa'],
     destination: CategoryDestination.ownDrive,
-    availability: CategoryAvailability.needsSensorPlugin,
+    availability: CategoryAvailability.live,
     permission: 'motion',
   ),
   DataCategory(
@@ -133,7 +128,7 @@ const List<DataCategory> dataCategories = [
     disclosure: 'Phone battery level and charging during a drive. Saved with your drive.',
     fields: ['ctx.phone_batt_pct', 'sample.batt_pct', 'sample.batt_state', 'sample.low_power'],
     destination: CategoryDestination.ownDrive,
-    availability: CategoryAvailability.needsSensorPlugin,
+    availability: CategoryAvailability.live,
   ),
   DataCategory(
     id: CategoryId.device,
@@ -141,13 +136,16 @@ const List<DataCategory> dataCategories = [
     disclosure: 'Phone and app details: system version, phone model, app version. Saved with your drive.',
     fields: ['session.device'],
     destination: CategoryDestination.ownDrive,
-    availability: CategoryAvailability.recorderReady,
+    availability: CategoryAvailability.live,
   ),
   DataCategory(
     id: CategoryId.radioHealth,
     title: 'Radio health',
-    disclosure: 'Radio health: radio battery, uptime, error flags and packet counters, airtime, storage, signal to your '
-        'phone. Saved with your drive.',
+    // BLE signal phone<->radio (sample.ble_rssi) is a stored key but is NOT read yet (needs a flutter_blue_plus
+    // readRssi seam), so the disclosure does not claim it. Add "signal to your phone" here when it is wired.
+    disclosure: 'Radio health: radio battery, uptime, error flags and packet counters, airtime, storage and the '
+        "radio chip's temperature (when the board reports it), read from your radio once a minute during a drive. "
+        'Saved with your drive.',
     fields: [
       'ctx.radio_batt_mv',
       'sample.batt_mv',
@@ -162,9 +160,10 @@ const List<DataCategory> dataCategories = [
       'sample.pkts',
       'sample.storage_kb',
       'sample.ble_rssi',
+      'sample.mcu_temp_c',
     ],
     destination: CategoryDestination.ownDrive,
-    availability: CategoryAvailability.recorderReady,
+    availability: CategoryAvailability.live,
   ),
   DataCategory(
     id: CategoryId.radioConfig,
@@ -172,13 +171,14 @@ const List<DataCategory> dataCategories = [
     disclosure: 'Radio settings: board, firmware, power limits. Saved with your drive.',
     fields: ['session.companion_ext'],
     destination: CategoryDestination.ownDrive,
-    availability: CategoryAvailability.recorderReady,
+    availability: CategoryAvailability.live,
   ),
   DataCategory(
     id: CategoryId.weather,
     title: 'Weather for my drives',
     disclosure: 'Weather for my drives: the server looks up weather near your drive (your phone sends nothing extra). '
-        'Data: Open-Meteo, CC BY 4.0.',
+        'Data: Open-Meteo, CC BY 4.0. Not available yet: no MeshSonar server does this today, so nothing happens '
+        'until it does.',
     fields: [],
     destination: CategoryDestination.serverDerived,
     availability: CategoryAvailability.needsServer,

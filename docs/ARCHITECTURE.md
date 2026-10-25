@@ -251,6 +251,7 @@ names.
 |---|---|---|
 | `main.dart` | app | Entry point: builds real services, runs `MeshSonarApp`, then `AppState.init()`; shows `StartupErrorApp` if storage can't open. |
 | `app/app_state.dart` | app | `AppState`: settings, radio connection, drive lifecycle, save-first queue, live counters, heard tracker, in-drive/end uploads, sync, export/delete, driver key, repeater names, public directory. |
+| `app/drive_context_hook.dart` | app | Builds a drive's `DriveContextSession` from the services and the link; `collectionDisclosureVersion` (2) and the ui-prefs flag reader; `contextLedgerOf`. |
 | `app/services.dart` | app | `AppServices` dependency container (incl. `openUrl` for web pages and `appInfo`); `RepeaterCache` + `FileRepeaterCache` / `MemoryRepeaterCache`. |
 | `app/wiring.dart` | app | `buildRealServices()`: data root, concrete store/client/sync/settings, BLE + simulator scanners, filtered GPS, engine factory, export dir, share, browser, directory (7-day TTL); app version via `loadAppInfo` (package_info_plus). |
 | `app/messages.dart` | app | `friendlyError` / `friendlySyncError`: exceptions → short plain-language messages. |
@@ -258,7 +259,10 @@ names.
 | `core/api.dart` | core (contract) | `DriveStore`, `CmatClient`, `SyncService`, `SettingsStore` interfaces; `Settings`, `SessionSummary`, `DriverKeyStatus`, `UploadResult`, `SyncReport`, `CmatException`, `RegionInfo`, `RadioPreset`, `SiteConfig`, `CoverageCell`, `CoverageGrid`, `PublicCoverage`. |
 | `core/drive_store.dart` | core | `JsonlDriveStore` (one folder per drive, JSONL pings, sync ledgers, rename + re-send mark, and the drive-context files `samples.jsonl` / `ctx.jsonl` / `context.json` via `DriveContextLedger`), the `SyncLedger` extension interface, and `closeOrphanedSessions` (closes crashed drives at launch). |
 | `core/drive_context.dart` | core | Drive context stored beside a drive, never in its upload: `PingContext` (per ping), `DriveSample` (time series, no coordinates), `SessionContext` (`DeviceDetails`, `CompanionDetails`); range checks (out of range = null); per-category `without()`; the `DriveContextLedger` interface and `stripContextCategories`. |
-| `core/drive_context_recorder.dart` | core | `DriveContextRecorder`: one per drive; matches fixes to pings, writes samples/ping context/session snapshot, reads the category switches at every write. Not yet started by `AppState` (stream 7 WP2 hook). |
+| `core/drive_context_recorder.dart` | core | `DriveContextRecorder`: one per drive; matches fixes to pings, writes samples/ping context/session snapshot, reads the category switches at every write. Started per drive by `DriveContextSession`. |
+| `core/drive_context_session.dart` | core | `DriveContextSession`: one drive's collectors (recorder, radio health poller, barometer subscription, minute phone sample, battery changes, session snapshot), each running only while its category is on; `refresh()` re-reads the switches. |
+| `core/drive_context_report.dart` | core | `DriveContextReport.compute`: the drive report's context series and summaries (airtime %, packet deltas, error flags in words). |
+| `core/phone_sensors.dart` | core | Seams `BarometerSource`, `PhoneBatterySource`, `DeviceDetailsSource`, `SensorStatus`, `phoneTemperatureNote`, `medianOf`. |
 | `core/data_categories.dart` | core | `dataCategories`: every collected category (id, title, exact disclosure text, stored field keys, default on, destination, availability, permission) for the Settings registry and the disclosure sheet; `fieldCategory` key map. |
 | `core/cmat_client.dart` | core | `HttpCmatClient` for `driver-request`, `driver-status`, `drive-upload`, `drive-repeaters`, `site-config`, `public-coverage` (both public, no driver key); `DetailedUploadResult`, `PingRejection`. |
 | `core/network_coverage.dart` | core | `buildNetworkCells`/`levelFor`: turns a `PublicCoverage` answer into drawable `NetworkCell`s (square bbox or H3 hexagon boundary) bucketed by `CoverageColorBy` — the Drive map's network-wide background layer. |
@@ -285,6 +289,7 @@ names.
 | `radio/wardrive_engine.dart` | radio | `DefaultWardriveEngine`: cadence, one ping at a time, listen window, echo building, optional neighbour discovery; `formatPingText`. |
 | `radio/simulator.dart` | radio | `SimulatedLocationSource` (Westerville loop), `SimulatedTransport` (speaks real frames and real encrypted packets), `SimulatedRadioScanner`, simulated repeaters. |
 | `radio/ble_transport.dart` | platform | `BleRadioScanner` / `_BleTransport` over flutter_blue_plus (Nordic-UART-style service). |
+| `platform/phone_sensors_plus.dart` | platform | `SensorsPlusBarometer` (sensors_plus), `BatteryPlusSource` (battery_plus), `DeviceInfoPlusDetails` (device_info_plus; hardware model id, never the device name). |
 | `platform/geolocator_location.dart` | platform | `GeolocatorLocationSource`: per-OS location settings (Android foreground notification, iOS background updates), permission. |
 | `platform/location_access.dart` | platform | `GeolocatorLocationAccess`: reads permission without prompting (not asked / denied / forever / restricted / approximate / services off), asks only on tap, opens Settings. |
 | `platform/share.dart` | platform | `shareDriveFile`: share sheet for exports (JSON) and reports (text). |
@@ -334,7 +339,7 @@ names.
 | `ui/settings_screen.dart` | ui | Settings shell: search, phone list of collapsible section cards, wide (>= 840 dp) two-pane layout; re-exports `DriverKeyScreen`, `SliderTile` and the stop lists. |
 | `ui/settings/settings_index.dart` | ui | Section order and the searchable index of every row (`SettingsEntry`: id, section, title, explanation, keywords, availability); `searchSettings`. |
 | `ui/settings/settings_kit.dart` | ui | `SettingsSection` (collapsible card), `SettingsAnchors`/`SettingsAnchor` (jump + tint targets), `confirmSettingsChange`, `SliderTile` + stops, `editSettingText`. |
-| `ui/settings/data_sharing.dart` | ui | The one source of disclosure text: `DataCategory` registry (`dataCategories`, today only `telemetryCategory`), other data flows, location explainer points, `privacySectionTitle`. |
+| `ui/settings/data_sharing.dart` | ui | The one source of disclosure text: `DataCategory` registry (`dataCategories` = `telemetryCategory` + `driveContextCategories` from `core/data_categories.dart`), other data flows, location explainer points, `privacySectionTitle`. |
 | `ui/settings/account_section.dart` | ui | Driver key (request, paste, reveal, remove), Server URL, `DriverKeyScreen`, `KeyStatusBadge`, `confirmServerChange`, `AccountLinks`. |
 | `ui/settings/region_section.dart` | ui | Region pick, Connected to, region radio preset comparison (read-only). |
 | `ui/settings/display_section.dart` | ui | Units (with `unitsExplanation`) and heard list hold. |
@@ -369,6 +374,8 @@ names.
 | `ui/charts/heatmap.dart` | ui | `HeatmapPainter` (weekday x hour, moved unchanged from the Analysis panel). |
 | `ui/charts/heard_strip.dart` | ui | `HeardStrip` (heard / not per ping, moved from the Drives list; re-exported by `sessions_screen.dart`), optional semantics label. |
 | `ui/charts/chart_scale.dart` | ui | `niceTicks`, `tickLabel`, dashed lines, canvas text. |
+| `ui/report/drive_report_screen.dart` | ui | Drive report screen and `loadDriveReport`; Export menu (text, CSV). |
+| `ui/report/drive_context_section.dart` | ui | Drive report "Phone and radio context" section (pressure, altitude, batteries charts; radio counters; empty state). |
 | `ui/report/drive_report_screen.dart` | ui | Drive report screen and `loadDriveReport`; Export menu (text, CSV, PDF). |
 | `ui/report/progress_screen.dart` | ui | "Your progress" screen (totals, weekly charts, records, your radio) and the Drives tab's `ProgressCard`. |
 | `ui/report/local_drives.dart` | ui | `loadLocalDrives`: every drive in the store with its pings (damaged ones skipped and counted). |

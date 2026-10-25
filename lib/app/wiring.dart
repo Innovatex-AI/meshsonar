@@ -23,6 +23,7 @@ import '../platform/geolocator_idle_location.dart';
 import '../platform/geolocator_location.dart';
 import '../platform/location_access.dart';
 import '../platform/open_url.dart';
+import '../platform/phone_sensors_plus.dart';
 import '../platform/share.dart';
 import '../radio/ble_transport.dart';
 import '../radio/companion_link.dart';
@@ -99,6 +100,10 @@ Future<AppServices> buildRealServices() async {
     // Region rosters + the network repeater list, stored for offline names and pins (lib/core/repeater_sync.dart).
     repeaterSync: RepeaterSync(store: RepeaterSyncStore(Directory('${root.path}${Platform.pathSeparator}repeater_sync'))),
     regionCache: RegionCache(Directory('${root.path}${Platform.pathSeparator}region_cache')),
+    // Drive context sensors (stream 7). The barometer plugin exists on iOS/Android only; elsewhere it is "unsupported".
+    barometer: (Platform.isIOS || Platform.isAndroid) ? SensorsPlusBarometer() : null,
+    phoneBattery: (Platform.isIOS || Platform.isAndroid) ? BatteryPlusSource() : null,
+    deviceDetails: DeviceInfoPlusDetails(appBuild: app.build),
     clock: DateTime.now,
     newId: () => uuid.v4(),
   );

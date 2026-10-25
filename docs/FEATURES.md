@@ -546,27 +546,51 @@ drive, last and first heard, farthest from the repeater (units), the grid cells 
 track) on a small map coloured by best SNR, and the 5 newest drives (tap for the drive report). "From drives stored on
 this phone."; "None of the N drives on this phone heard this repeater." when none did.
 
-## Drive context: data collected (stream 7, core only, not switched on yet)
+## Drive context: data collected (stream 7)
 
-Built as pure-Dart pieces; nothing below is collected in a drive until the drive flow starts the recorder and the
-versioned disclosure + Settings categories ship (separate work). Design: meshsonar-infra planning
-`stream-7-data-collection.md`.
+Collected during drives, on this phone, OPT-OUT (on by default, Andy Oct 24 2026), after the person has seen the
+version-2 disclosure. Nothing of it is uploaded: no server accepts it yet (stream 7 WP5, behind a capability). Design:
+meshsonar-infra planning `stream-7-data-collection.md`.
 
-- **Categories** (`lib/core/data_categories.dart`): packet headers (live today), motion and altitude, air pressure,
-  phone battery, phone and app details, radio health, radio settings, weather. Each has a stable id, title, exact
-  disclosure sentence, the stored keys it owns, default ON (opt-out, Andy Oct 24 2026), destination and availability
-  (`live`, `recorderReady`, `needsSensorPlugin`, `needsServer`) so the UI never presents uncollected data as collected.
-- **Radio health** (`lib/radio/radio_health.dart`): every 60 s during a drive, GET_STATS radio/core/packets plus
-  GET_BATT_AND_STORAGE every 15 min; never while a ping is in flight (it waits, then skips); firmware that lacks a
-  command is asked once. Values the radio did not measure stay empty (0 mV battery, 0 noise floor, 0 RSSI).
-  `err_flags` is the firmware's sticky error bitmask, not a counter. Channel utilisation is not reported by MeshCore.
-- **Storage** (`JsonlDriveStore`): `samples.jsonl` (no coordinates), `ctx.jsonl` (per ping), `context.json` (per
-  drive) beside the drive, crash-safe like `pings.jsonl`. The upload and the export are byte-identical to before.
-  Turning a category off strips its keys from stored context (`stripCategories`, atomic rewrite).
-- **GPS extras**: `GeoFix` keeps altitude, vertical accuracy, course over ground and its accuracy, speed accuracy
-  (null when the phone did not measure them); they are context only, never part of the drive upload.
-- **Simulator**: answers every stats command with counters that follow what it did (pings sent, packets heard,
-  airtime, a slowly draining battery, 120 / 1984 KB storage).
+- **Categories** (`lib/core/data_categories.dart`, mapped one-to-one in `lib/ui/settings/data_sharing.dart`): packet
+  headers (the live feed, unchanged), motion and altitude, air pressure, phone battery, phone and app details, radio
+  health, radio settings, weather (switch only; "Not available yet": no server looks up weather).
+- **Disclosure v2** (`lib/ui/telemetry_sheet.dart`): "What MeshSonar collects", one block and one switch per category
+  (packet headers with its full shared / never-shared list), the "saved with your drive" note, the air-temperature
+  note, and two equal buttons, Continue (keeps the switches) and Turn all off. The flag is versioned
+  (`ui_prefs.json` `collection_disclosed_v: 2`): people who saw only the packet-header sheet see it once. Packet headers
+  keep their earlier consent; every new category waits for v2 (`AppState.collectionOn`). Seen mid-drive, collection
+  starts at once.
+- **Settings > Privacy & data sharing**: one switch per category (keys `telemetry-toggle`, `collect-<id>-toggle`),
+  subtitle = the category sentence, plus a live status (no barometer support / the last drive got no barometer
+  readings / weather not available yet). On asks first with what is collected. Off takes effect at once (the
+  collector stops), says nothing of it left the phone, and offers Delete (from every drive on this phone; default
+  Keep). Stored as `collection_off: [ids]` in settings.json, only when something is off; unknown ids are kept.
+- **When**: only while a drive runs (`lib/core/drive_context_session.dart`, started/stopped by AppState with the
+  drive). Radio health every 60 s, never while a ping is in flight; barometer 1 Hz kept as a one-minute median and a
+  per-ping median (readings within 15 s of the ping); phone battery once a minute and on charging changes; phone/app
+  details and radio identity once per drive. Ping context is written only after the ping itself is saved.
+- **Sensors** (`lib/platform/phone_sensors_plus.dart`, seams `lib/core/phone_sensors.dart`): sensors_plus barometer
+  (iOS asks Motion & Fitness at the first drive with Air pressure on), battery_plus, device_info_plus (hardware model
+  identifier, never the device name). No phone air temperature: iPhones have no sensor; not invented.
+- **Radio health** (`lib/radio/radio_health.dart`): GET_STATS radio/core/packets every minute plus
+  GET_BATT_AND_STORAGE every 15 min; unsupported commands asked once. `err_flags` is a sticky bitmask shown as flags.
+  Channel utilisation is not reported by MeshCore; the report shows own-radio airtime and says it is not channel load.
+  BLE signal phone<->radio is NOT read yet (stored key exists, not claimed in the disclosure).
+- **Radio chip temperature**: the companion's "self" telemetry (CMD_SEND_TELEMETRY_REQ with 3 reserved bytes, answered
+  by PUSH_CODE_TELEMETRY_RESPONSE with CayenneLPP), channel-1 LPP_TEMPERATURE = the board's MCU temperature (ESP32 and
+  nRF52 boards; others send none). Read once a minute with the other radio stats (`mcu_temp_c`); everything else in
+  that answer (environment sensors, the board's GPS position) is skipped and never stored. The drive report charts it
+  (°C / °F) and shows noise floor and SNR by 5-degree band.
+- **Storage**: `samples.jsonl` (no coordinates), `ctx.jsonl`, `context.json` beside the drive. The upload is
+  byte-identical to before. The drive's Export file adds a `context` object (format
+  `meshsonar.drive-context.local.v1`) only when context exists; the drive part is byte-identical.
+- **Weather**: switch only. `site-config.capabilities.driveEnv` (server request S1) changes the status line; no
+  weather is shown in the app yet and nothing is invented.
+- **Drive report**: "Phone and radio context" section: air pressure (hPa / inHg, labelled phone barometer, cabin
+  pressure), GPS altitude (m / ft), phone battery %, radio battery V, radio uptime, airtime %, packets sent / heard,
+  storage, error flags in words, phone and radio details. "No phone or radio context was recorded" for older drives.
+- **Simulator**: answers every stats command, so a simulator drive records radio health.
 
 ## Uploads
 

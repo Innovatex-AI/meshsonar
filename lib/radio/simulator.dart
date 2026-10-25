@@ -257,6 +257,9 @@ class SimulatedTransport implements ByteTransport {
   /// Simulated seconds since this radio "booted" (scaled like the drive).
   int get _uptimeSecs => (_clock().difference(_bootAt).inMilliseconds * timeScale / 1000).floor();
 
+  /// Chip temperature: 24.0 °C at boot, warming 0.1 °C per simulated minute to 32.0 °C. Simulated, not a model.
+  double get _mcuTempC => math.min(32.0, 24.0 + (_uptimeSecs ~/ 60) / 10);
+
   /// A LiPo slowly draining from 4.10 V: 1 mV per simulated 2 minutes, floor 3.40 V.
   int get _batteryMv => math.max(3400, 4100 - _uptimeSecs ~/ 120);
 
@@ -378,6 +381,10 @@ class SimulatedTransport implements ByteTransport {
         }
       case Cmd.getBattAndStorage:
         _emit(encodeBattAndStorage(batteryMv: _batteryMv, usedKb: 120, totalKb: 1984));
+      case Cmd.sendTelemetryReq:
+        // Only the 'self' form ([39][3 reserved]); the answer is a push, like the firmware.
+        if (frame.length != 4) return _emit(encodeErr(ErrCode.unsupportedCmd));
+        _emit(encodeSelfTelemetryPush(prefix6: publicKey.sublist(0, 6), voltageV: _batteryMv / 1000, mcuTempC: _mcuTempC));
       case Cmd.sendControlData:
         if (frame.length < 2 || (frame[1] & 0x80) == 0) return _emit(encodeErr(ErrCode.unsupportedCmd));
         _emit(encodeOk());

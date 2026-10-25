@@ -9,10 +9,14 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import '../../app/app_state.dart';
+import '../../app/drive_context_hook.dart' show collectionDisclosureVersion, collectionDisclosedKey;
 
 class UiPrefs extends ChangeNotifier {
   bool _onboardingSeen;
   bool _telemetryDisclosed;
+
+  /// The collection disclosure version last seen (0 = never; 1 = the packet-header-only sheet of <= 0.19).
+  int _disclosedVersion;
   final Map<String, String> _labels;
   bool _loaded;
 
@@ -21,24 +25,35 @@ class UiPrefs extends ChangeNotifier {
       : _onboardingSeen = seen,
         // ignore: prefer_initializing_formals
         _telemetryDisclosed = telemetryDisclosed,
+        _disclosedVersion = telemetryDisclosed ? collectionDisclosureVersion : 0,
         _labels = {...?labels},
         _loaded = true;
 
   UiPrefs._unloaded()
       : _onboardingSeen = false,
         _telemetryDisclosed = false,
+        _disclosedVersion = 0,
         _labels = {},
         _loaded = false;
 
   bool get loaded => _loaded;
   bool get onboardingSeen => _onboardingSeen;
 
-  /// True once the person has seen the telemetry disclosure sheet (whatever they chose).
-  bool get telemetryDisclosed => _telemetryDisclosed;
+  /// True once the person has seen the CURRENT disclosure sheet (whatever they chose). Since stream 7 that is the
+  /// version-2 sheet listing every collection category: someone who only saw the packet-header sheet (version 1,
+  /// `telemetry_disclosed` alone) sees the new one once, and the app shell opens it while this is false.
+  bool get telemetryDisclosed => _disclosedVersion >= collectionDisclosureVersion;
+
+  /// The packet-header disclosure (version 1 or later) was seen: packet headers may flow as before.
+  bool get packetHeadersDisclosed => _telemetryDisclosed;
+
+  /// The disclosure version last seen.
+  int get disclosedVersion => _disclosedVersion;
 
   Future<void> markTelemetryDisclosed() async {
-    if (_telemetryDisclosed) return;
-    _telemetryDisclosed = true;
+    if (_telemetryDisclosed && telemetryDisclosed) return;
+    _telemetryDisclosed = true; // the v2 sheet lists packet headers too
+    _disclosedVersion = collectionDisclosureVersion;
     notifyListeners();
     await persist();
   }
@@ -80,7 +95,12 @@ class UiPrefs extends ChangeNotifier {
   /// Saves. The in-memory version only keeps values.
   Future<void> persist() async {}
 
-  Map<String, dynamic> toJson() => {'onboarding_seen': _onboardingSeen, 'telemetry_disclosed': _telemetryDisclosed, 'labels': _labels};
+  Map<String, dynamic> toJson() => {
+        'onboarding_seen': _onboardingSeen,
+        'telemetry_disclosed': _telemetryDisclosed,
+        if (_disclosedVersion > 0) collectionDisclosedKey: _disclosedVersion,
+        'labels': _labels,
+      };
 }
 
 /// JSON file next to settings.json. A damaged or missing file means "first run" with no names.
@@ -99,6 +119,8 @@ class FileUiPrefs extends UiPrefs {
         if (j is Map) {
           _onboardingSeen = j['onboarding_seen'] == true;
           _telemetryDisclosed = j['telemetry_disclosed'] == true;
+          final v = j[collectionDisclosedKey];
+          _disclosedVersion = v is num ? v.toInt() : (_telemetryDisclosed ? 1 : 0);
           final l = j['labels'];
           if (l is Map) l.forEach((k, v) => _labels['$k'] = '$v');
         }

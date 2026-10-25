@@ -48,6 +48,16 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
   exports byte-identical), category list with disclosure text (`lib/core/data_categories.dart`), GPS altitude, course
   and accuracies kept on `GeoFix`.
 - Units: air pressure (hPa / inHg) and temperature (°C / °F).
+- Data collected during drives (stream 7, opt-out): motion and altitude, phone barometer, phone battery, phone and app
+  details, radio health (battery, uptime, error flags, packet counters, airtime, storage, every minute, never during a
+  ping), the radio chip's temperature (from the radio's own telemetry, ESP32 / nRF52 boards) and radio settings,
+  recorded with the drive on this phone only (not uploaded). Drive report: noise floor and SNR by radio temperature. Weather is listed as not
+  available yet. No phone air temperature (iPhones have no sensor).
+- First-run disclosure v2 "What MeshSonar collects": every category with its own switch, Continue / Turn all off;
+  shown once to everyone who saw only the packet-header sheet; nothing new is collected before it is seen.
+- Settings > Privacy & data sharing: a switch per category; off stops at once and offers to delete it from the drives
+  on this phone. Drive report: new "Phone and radio context" section. Export files add the drive's context.
+- iOS: Motion & Fitness usage text for the barometer and an app privacy manifest (PrivacyInfo.xcprivacy).
 - Map engine groundwork (not on screen yet): grid clustering for 5-20k points (`core/cluster_index.dart`), map links compatible with the website's `/coverage` URL (`core/map_view_state.dart`), the layer registry with website `?show=` keys and honest per-layer availability, a single-painter clustered repeater layer for the global "All MeshCore repeaters" list and the region roster, and a repeater detail sheet (copy key, last advert, distance in your units, Open repeater page).
 
 ## [0.19.0] — 2026-10-24 — Timeline, telemetry, offline cache

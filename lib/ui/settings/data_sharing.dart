@@ -10,8 +10,15 @@
 // [dataCategories] with its Settings field, its first-run wording and, when the server can erase it, [eraseFromServer].
 // The first-run sheet, the Settings switch, the confirmations and the "What MeshSonar shares" page follow from that
 // entry. Only list a category once the app really collects it.
+//
+// Stream 7 (data collected): the drive-context categories of lib/core/data_categories.dart (the pure-Dart list: ids,
+// stored field keys, the one-sentence disclosure) are mapped one-to-one onto entries here ([driveContextCategories]),
+// so the core sentence is the Settings subtitle and the sheet line. Their data stays on this phone (no server accepts
+// it yet), so turning one off offers to delete it from this phone instead of a server erase.
 import '../../app/app_state.dart';
 import '../../core/api.dart';
+import '../../core/data_categories.dart' as core;
+import '../../core/phone_sensors.dart';
 
 /// The Settings section that holds the switches; the first-run sheet points people here by this exact name.
 const String privacySectionTitle = 'Privacy & data sharing';
@@ -65,6 +72,16 @@ class DataCategory {
   /// The server has an erase request it has not completed yet.
   final bool Function(AppState s)? erasePending;
 
+  /// The lib/core/data_categories.dart id this entry switches.
+  final String coreId;
+
+  /// The data stays on this phone (recorded with the driver's own drives, never uploaded yet): turning it off offers
+  /// [deleteLocal] instead of a server erase.
+  final bool localOnly;
+
+  /// Line under the switch while it is on (e.g. "no barometer on this phone"); null = nothing to add.
+  final String? Function(AppState s)? onStatus;
+
   const DataCategory({
     required this.id,
     required this.toggleKey,
@@ -84,7 +101,16 @@ class DataCategory {
     this.eraseFromServer,
     this.queued,
     this.erasePending,
+    this.coreId = '',
+    this.localOnly = false,
+    this.onStatus,
   });
+
+  /// Deletes what this phone recorded for the category from every drive on it; returns how many drives changed.
+  Future<int> deleteLocal(AppState s) => s.deleteCollectedLocally(coreId);
+
+  /// The core metadata (stored field keys, destination, availability).
+  core.DataCategory? get meta => core.dataCategory(coreId);
 }
 
 bool _telemetryOn(Settings s) => s.telemetryEnabled;
@@ -92,6 +118,11 @@ Settings _setTelemetry(Settings s, bool on) => s.copyWith(telemetryEnabled: on);
 Future<int?> _eraseTelemetry(AppState s) => s.eraseTelemetry();
 int _telemetryQueued(AppState s) => s.telemetryQueued;
 bool _telemetryErasePending(AppState s) => s.telemetryErasePending;
+String? _telemetryStatus(AppState s) {
+  final waiting = s.telemetryQueued;
+  if (!s.hasKey) return 'On, but nothing is collected until this phone has a driver key.';
+  return waiting > 0 ? '$waiting waiting on this phone to be sent.' : null;
+}
 
 /// Packet-header telemetry (lib/core/telemetry.dart is the record; its wire keys are pinned by a test). Changing what
 /// the record holds means changing [shared] here in the same commit.
@@ -128,10 +159,140 @@ const DataCategory telemetryCategory = DataCategory(
   erasedNoun: 'packet headers',
   queued: _telemetryQueued,
   erasePending: _telemetryErasePending,
+  coreId: core.CategoryId.packetHeaders,
+  onStatus: _telemetryStatus,
 );
 
-/// Every kind of data collection the app does today. Only real categories belong here (see the file comment).
-const List<DataCategory> dataCategories = [telemetryCategory];
+/// Where every drive-context category's data goes today (stream 7 section 4.2/4.4: local first; uploaded only once
+/// the server advertises it accepts it, which no server does yet).
+const String ownDriveDestination = 'Recorded only while a drive is running, saved with that drive on this phone and '
+    'shown in its drive report. Not uploaded: the server does not accept it yet. It is in the drive\'s Export file, '
+    'which is yours.';
+
+const String ownDriveOffEffect = 'Turning it off stops it at once. Nothing of it has left this phone, so there is '
+    'nothing to erase on the server; you can delete what is saved on this phone.';
+
+DataCategory _driveCategory(
+  String coreId, {
+  required List<String> shared,
+  required List<String> neverShared,
+  required String erasedNoun,
+  String destination = ownDriveDestination,
+  String offEffect = ownDriveOffEffect,
+  bool localOnly = true,
+  String? Function(AppState s)? onStatus,
+}) {
+  final m = core.dataCategory(coreId)!;
+  return DataCategory(
+    id: coreId,
+    toggleKey: 'collect-$coreId-toggle',
+    title: m.title,
+    summary: m.disclosure,
+    disclosureTitle: m.title,
+    disclosureLead: m.disclosure,
+    shared: shared,
+    neverShared: neverShared,
+    destination: destination,
+    offEffect: offEffect,
+    keepLabel: 'Turn on',
+    offLabel: 'Turn off',
+    isOn: (s) => s.collectionOn(coreId),
+    set: (s, on) => s.withCollection(coreId, on),
+    erasedNoun: erasedNoun,
+    coreId: coreId,
+    localOnly: localOnly,
+    onStatus: onStatus,
+  );
+}
+
+String? _barometerStatus(AppState s) => switch (s.barometerStatus) {
+      SensorStatus.unsupported => 'This phone or app build has no barometer support, so nothing is read.',
+      SensorStatus.unavailable =>
+        'The phone gave no barometer readings on the last drive: it has no barometer, or Motion & Fitness access is '
+            'off for MeshSonar in the phone\'s Settings.',
+      SensorStatus.notStarted => 'Read during your next drive. iPhone asks for Motion & Fitness access the first time.',
+      SensorStatus.reading => 'Reading the barometer during this drive.',
+    };
+
+String? _weatherStatus(AppState s) => s.siteConfig?.driveEnv == true
+    ? 'This server says it looks up weather for uploaded drives. The app does not show it yet.'
+    : 'Not available yet: no MeshSonar server looks up weather for drives today, so nothing is collected or sent. '
+        'Your choice is kept for when it is.';
+
+/// The stream-7 drive-context categories, in disclosure order (lib/core/data_categories.dart).
+final List<DataCategory> driveContextCategories = [
+  _driveCategory(core.CategoryId.motion,
+      shared: [
+        'Height above sea level and how accurate it is, from GPS, at each ping',
+        'Direction of travel and how accurate it is (from GPS movement, not the compass)',
+        'How accurate the GPS speed was',
+      ],
+      neverShared: ['Anything while no drive is running'],
+      erasedNoun: 'motion and altitude data'),
+  _driveCategory(core.CategoryId.barometer,
+      shared: [
+        'Air pressure from the phone barometer, read once a second during a drive and kept as a one-minute median and '
+            'one value per ping (inside a car this is cabin pressure, close to outside pressure)',
+      ],
+      neverShared: ['Any other motion or fitness data (steps, activity)', 'Anything while no drive is running'],
+      erasedNoun: 'air pressure readings',
+      onStatus: _barometerStatus),
+  _driveCategory(core.CategoryId.phoneBattery,
+      shared: [
+        'Battery level in percent, once a minute and when charging changes',
+        'Charging, full or unplugged',
+        'Low Power Mode (battery saver) on or off',
+      ],
+      neverShared: ['Anything while no drive is running'],
+      erasedNoun: 'phone battery readings'),
+  _driveCategory(core.CategoryId.device,
+      shared: [
+        'System (iOS or Android) and its version',
+        'Phone model code (for example iPhone15,2)',
+        'App build number',
+      ],
+      neverShared: [
+        'Your phone\'s name',
+        'Advertising or device identifiers',
+        'Your IP address, Wi-Fi or carrier',
+      ],
+      erasedNoun: 'phone and app details'),
+  _driveCategory(core.CategoryId.radioHealth,
+      shared: [
+        'Radio battery voltage, uptime and transmit queue length',
+        'Radio error flags (queue full, channel-activity timeout, receive-start timeout)',
+        'Packet counters: received, sent, flood and direct',
+        'Transmit and receive airtime, the last packet\'s signal strength and SNR, the noise floor',
+        'Radio storage used',
+        'The radio chip\'s temperature, when the board reports it (its processor, not the air)',
+      ],
+      neverShared: [
+        'Messages, contacts or channel content on the radio',
+        'Anything asked while a ping is being sent or listened for',
+      ],
+      erasedNoun: 'radio health readings'),
+  _driveCategory(core.CategoryId.radioConfig,
+      shared: [
+        'Board model, firmware version, build date and code',
+        'The highest transmit power the radio allows',
+        'Path hash mode',
+      ],
+      neverShared: ['Channel names or secrets', 'Contacts'],
+      erasedNoun: 'radio settings'),
+  _driveCategory(core.CategoryId.weather,
+      shared: ['Nothing from your phone: the server would look up weather near your uploaded drive'],
+      neverShared: ['Your live position (the phone contacts no weather service)'],
+      destination: 'Done by the server from the drive it already holds, with the position rounded to a coarse grid of a few kilometres. '
+          'Weather data: Open-Meteo.com, CC BY 4.0.',
+      offEffect: 'Turning it off asks the server not to look up weather for your drives.',
+      localOnly: false,
+      erasedNoun: 'weather lookups',
+      onStatus: _weatherStatus),
+];
+
+/// Every kind of data collection the app does, in disclosure order. Only real categories belong here (see the file
+/// comment); weather is listed because the person can already choose, and says plainly that it is not active yet.
+final List<DataCategory> dataCategories = [telemetryCategory, ...driveContextCategories];
 
 /// Kept for callers of the old constant: one-line help for the packet-header switch.
 const String telemetryHelp =

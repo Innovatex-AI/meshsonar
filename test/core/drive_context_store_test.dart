@@ -45,7 +45,7 @@ void main() {
     expect(ctxLine, {'ping': ping.id, 'ctx': fullCtx().toJson()});
   });
 
-  test('upload and export bytes are identical with or without stored context', () async {
+  test('upload bytes are identical with or without stored context; export adds only a `context` object', () async {
     final s = makeSession();
     await store.startSession(s);
     final pings = [for (var i = 0; i < 4; i++) makePing(i)];
@@ -71,8 +71,21 @@ void main() {
     final after = await (await store.exportSession(s.id, app, out2)).readAsString();
     final uploadAfter = jsonEncode(
         DriveBatch(app: app, session: (await store.session(s.id))!, pings: await store.unsyncedPings(s.id)).toJson());
-    expect(after, before);
-    expect(uploadAfter, uploadBefore);
+    expect(uploadAfter, uploadBefore, reason: 'the upload never carries context');
+    expect(before, uploadBefore, reason: 'a drive without context exports exactly the upload body, as before');
+    final exported = (jsonDecode(after) as Map).cast<String, dynamic>();
+    final ctx = (exported.remove('context') as Map).cast<String, dynamic>();
+    expect(jsonEncode(exported), before, reason: 'the drive part of the export is byte-identical');
+    expect(ctx['format'], exportContextFormat);
+    expect(exported['format'], isNot(exportContextFormat), reason: 'the drive keeps its own Drive Format id');
+    expect(ctx['session'], fullSession().toJson());
+    expect((ctx['pings'] as List).map((e) => (e as Map)['id']), [for (final x in pings) x.id]..sort());
+    expect(ctx['samples'], [fullRadio().toJson(), fullPhone().toJson()]);
+    for (final sample in ctx['samples'] as List) {
+      for (final k in ['lat', 'lon', 'latitude', 'longitude']) {
+        expect((sample as Map).containsKey(k), isFalse, reason: 'samples carry no coordinates');
+      }
+    }
     for (final k in ['ctx', 'samples', 'device', 'companion_ext', 'alt_m', 'batt_mv']) {
       expect(uploadAfter.contains('"$k"'), isFalse, reason: '$k leaked into the upload');
     }
