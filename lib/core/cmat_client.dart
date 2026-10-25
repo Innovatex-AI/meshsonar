@@ -205,6 +205,45 @@ class HttpCmatClient implements CmatClient, TelemetryTransport {
   }
 
   @override
+  Future<ContextEraseResult> deleteDriveContext(String driverKey, String category) async {
+    final j = await _send('DELETE', 'drive-context', driverKey: driverKey, query: {'category': category});
+    int n(Object? v) => v is num ? v.toInt() : 0;
+    return ContextEraseResult(category: j['category'] as String? ?? category, sessions: n(j['sessions']), pings: n(j['pings']), samples: n(j['samples']));
+  }
+
+  @override
+  Future<DriveEnv> driveEnv(String driverKey, String sessionId) async {
+    final j = await _send('GET', 'drive-env', driverKey: driverKey, query: {'session': sessionId});
+    final status = switch (j['status']) {
+      'ready' => DriveEnvStatus.ready,
+      'pending' => DriveEnvStatus.pending,
+      'disabled' => DriveEnvStatus.disabled,
+      _ => DriveEnvStatus.unavailable,
+    };
+    double? d(Object? v) => v is num && v.toDouble().isFinite ? v.toDouble() : null;
+    final snaps = <WeatherSnapshot>[];
+    for (final e in (j['snapshots'] as List?) ?? const []) {
+      if (e is! Map) continue;
+      final at = e['at'] is String ? DateTime.tryParse(e['at'] as String) : null;
+      if (at == null) continue;
+      snaps.add(WeatherSnapshot(
+        at: at.toUtc(),
+        temperatureC: d(e['temperatureC']),
+        humidityPct: d(e['humidityPct']),
+        dewPointC: d(e['dewPointC']),
+        pressureHpa: d(e['pressureHpa']),
+        precipMm: d(e['precipMm']),
+        cloudPct: d(e['cloudPct']),
+        windMs: d(e['windMs']),
+        windDirDeg: d(e['windDirDeg']),
+      ));
+    }
+    snaps.sort((a, b) => a.at.compareTo(b.at));
+    // The licence needs this exact line wherever the values are shown; never display a server-edited one in its place.
+    return DriveEnv(session: j['session'] as String? ?? sessionId, status: status, attribution: openMeteoCredit, snapshots: snaps);
+  }
+
+  @override
   Future<ProblemReportResult> reportProblem(String driverKey, String body) async {
     final bytes = utf8.encode(body);
     if (bytes.length > problemReportMaxBytes) {
@@ -257,7 +296,9 @@ class HttpCmatClient implements CmatClient, TelemetryTransport {
       throw const CmatException('server sent a malformed radio preset');
     }
 
-    return SiteConfig(region: regionInfo, radioPreset: preset, capabilities: parseCapabilities(j['capabilities']));
+    return SiteConfig(region: regionInfo, radioPreset: preset, capabilities: parseCapabilities(j['capabilities']),
+        driveFormats: parseCapabilityList(j['capabilities'], 'driveFormats'),
+        telemetryFormats: parseCapabilityList(j['capabilities'], 'telemetryFormats'));
   }
 
   @override

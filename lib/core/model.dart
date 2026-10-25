@@ -14,6 +14,10 @@
 /// v1 id until the site accepts `meshsonar.drive.v1.1` everywhere; then this flips (Drive Format v1.1, plan M1).
 const String driveFormat = 'meshsonar.drive.v1';
 
+/// Drive Format v1.2: v1.1 plus drive context (device, companion extras, per-ping `ctx`, `samples`). Sent only to a
+/// server that lists it in `site-config.capabilities.driveFormats`.
+const String driveFormatV12 = 'meshsonar.drive.v1.2';
+
 class AppInfo {
   final String? name;
   final String? version;
