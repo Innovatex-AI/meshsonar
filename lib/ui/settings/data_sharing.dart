@@ -16,6 +16,7 @@
 // so the core sentence is the Settings subtitle and the sheet line. Their data stays on this phone (no server accepts
 // it yet), so turning one off offers to delete it from this phone instead of a server erase.
 import '../../app/app_state.dart';
+import '../../app/context_upload_hook.dart' show serverCannotEraseText;
 import '../../core/api.dart';
 import '../../core/data_categories.dart' as core;
 import '../../core/phone_sensors.dart';
@@ -109,6 +110,21 @@ class DataCategory {
   /// Deletes what this phone recorded for the category from every drive on it; returns how many drives changed.
   Future<int> deleteLocal(AppState s) => s.deleteCollectedLocally(coreId);
 
+  /// The category records with the person's own drives (not packet headers, not the server-side weather lookup).
+  bool get isDriveContext => localOnly;
+
+  /// Where this category's data goes with the server the app uploads to right now (the static [destination] is the
+  /// text for a server that does not accept it).
+  String destinationNow(AppState s) => isDriveContext
+      ? ownDriveDestinationNow(s)
+      : (coreId == core.CategoryId.weather ? weatherDestinationNow(s) : destination);
+
+  /// What turning the switch off does with the server the app uploads to right now. [uploadedBefore]: some of this
+  /// category was uploaded in the past (so "nothing has left this phone" would be false).
+  String offEffectNow(AppState s, {bool uploadedBefore = false}) => isDriveContext
+      ? ownDriveOffEffectNow(s, uploadedBefore: uploadedBefore)
+      : (coreId == core.CategoryId.weather ? weatherOffEffectNow(s) : offEffect);
+
   /// The core metadata (stored field keys, destination, availability).
   core.DataCategory? get meta => core.dataCategory(coreId);
 }
@@ -163,14 +179,66 @@ const DataCategory telemetryCategory = DataCategory(
   onStatus: _telemetryStatus,
 );
 
-/// Where every drive-context category's data goes today (stream 7 section 4.2/4.4: local first; uploaded only once
-/// the server advertises it accepts it, which no server does yet).
+/// Where every drive-context category's data goes for a server that does not accept it (stream 7 section 4.2/4.4:
+/// local first). [ownDriveDestinationNow] is the live version, for the server the app really uploads to.
 const String ownDriveDestination = 'Recorded only while a drive is running, saved with that drive on this phone and '
     'shown in its drive report. Not uploaded: the server does not accept it yet. It is in the drive\'s Export file, '
     'which is yours.';
 
 const String ownDriveOffEffect = 'Turning it off stops it at once. Nothing of it has left this phone, so there is '
     'nothing to erase on the server; you can delete what is saved on this phone.';
+
+/// One line, per the connected server: where a drive-context category's data goes. These three states are the whole
+/// truth; nothing else is claimed.
+String contextDestinationLine(AppState s) {
+  final c = s.uploadSiteConfig;
+  if (c == null) {
+    return 'Saved on this phone only until the app can check what this server accepts (it needs a connection).';
+  }
+  if (!c.acceptsDriveV12) return 'Saved on this phone only: this server does not accept it yet.';
+  return s.keyApproved
+      ? 'Uploaded with your drive.'
+      : 'Uploaded with your drive once your driver key is approved; until then it is saved on this phone only.';
+}
+
+String ownDriveDestinationNow(AppState s) {
+  final c = s.uploadSiteConfig;
+  if (c != null && c.acceptsDriveV12) {
+    return 'Recorded only while a drive is running, saved with that drive on this phone and shown in its drive '
+        'report. ${contextDestinationLine(s)} It goes to the server you chose (the Server URL in Settings), under your '
+        'driver key, with the drive and the privacy settings it already has (start and end trim, privacy zones). It is '
+        'also in the drive\'s Export file, which is yours.';
+  }
+  return ownDriveDestination;
+}
+
+String ownDriveOffEffectNow(AppState s, {bool uploadedBefore = false}) {
+  final c = s.uploadSiteConfig;
+  final accepts = c != null && c.acceptsDriveV12;
+  if (!accepts && !uploadedBefore) return ownDriveOffEffect;
+  final erase = c == null
+      ? 'You can ask the server to erase what it already holds.'
+      : (c.driveContextErase ? 'You can also have the server erase what it already holds.' : serverCannotEraseText);
+  return 'Turning it off stops it at once'
+      '${accepts ? ' and removes it from drives that were not uploaded yet, so it is never sent' : ''}. '
+      '${uploadedBefore ? 'Some of it was uploaded earlier. ' : ''}$erase';
+}
+
+/// Weather is looked up by the server from the drive it holds; it is live only when the server says it does that and
+/// accepts the flag that allows it.
+bool weatherLive(AppState s) => s.serverDoesWeather && s.serverAcceptsDriveContext;
+
+String weatherDestinationNow(AppState s) => weatherLive(s)
+    ? 'Done by the server from the drive it holds: it looks up weather near your drive at about ${s.units.distance(5000)} '
+        '(a coarse grid, never your exact position) when the drive is uploaded. Your phone sends nothing extra and '
+        'contacts no weather service. Weather data: Open-Meteo.com, CC BY 4.0.'
+    : 'Done by the server from the drive it already holds, with the position rounded to a coarse grid of a few '
+        'kilometres. Weather data: Open-Meteo.com, CC BY 4.0. Not active: this server does not do it yet.';
+
+String weatherOffEffectNow(AppState s) => weatherLive(s)
+    ? 'Turning it off sends "no weather" with your next drives and asks the server to stop looking up weather for the '
+        'drives it already holds and delete what it stored.'
+    : 'Turning it off asks the server not to look up weather for your drives.';
 
 DataCategory _driveCategory(
   String coreId, {
@@ -183,6 +251,10 @@ DataCategory _driveCategory(
   String? Function(AppState s)? onStatus,
 }) {
   final m = core.dataCategory(coreId)!;
+  // Own-drive categories say where their data goes with the connected server, then any status of their own.
+  final extra = onStatus;
+  final String? Function(AppState s)? status =
+      localOnly ? (s) => [contextDestinationLine(s), extra?.call(s)].whereType<String>().join('\n') : extra;
   return DataCategory(
     id: coreId,
     toggleKey: 'collect-$coreId-toggle',
@@ -201,7 +273,7 @@ DataCategory _driveCategory(
     erasedNoun: erasedNoun,
     coreId: coreId,
     localOnly: localOnly,
-    onStatus: onStatus,
+    onStatus: status,
   );
 }
 
@@ -214,10 +286,11 @@ String? _barometerStatus(AppState s) => switch (s.barometerStatus) {
       SensorStatus.reading => 'Reading the barometer during this drive.',
     };
 
-String? _weatherStatus(AppState s) => s.siteConfig?.driveEnv == true
-    ? 'This server says it looks up weather for uploaded drives. The app does not show it yet.'
-    : 'Not available yet: no MeshSonar server looks up weather for drives today, so nothing is collected or sent. '
-        'Your choice is kept for when it is.';
+String? _weatherStatus(AppState s) => weatherLive(s)
+    ? 'On: this server looks up weather near your uploaded drives (about ${s.units.distance(5000)}). '
+        'Data: Open-Meteo.com, CC BY 4.0.'
+    : 'Not available yet on this server: it does not look up weather for drives, so nothing is collected or sent. '
+        'Your choice is kept for when it does.';
 
 /// The stream-7 drive-context categories, in disclosure order (lib/core/data_categories.dart).
 final List<DataCategory> driveContextCategories = [
@@ -280,8 +353,11 @@ final List<DataCategory> driveContextCategories = [
       neverShared: ['Channel names or secrets', 'Contacts'],
       erasedNoun: 'radio settings'),
   _driveCategory(core.CategoryId.weather,
-      shared: ['Nothing from your phone: the server would look up weather near your uploaded drive'],
-      neverShared: ['Your live position (the phone contacts no weather service)'],
+      shared: [
+        'Nothing extra from your phone. With each drive it uploads the app says whether weather is allowed; the server '
+            'then looks up weather near the drive, on its side',
+      ],
+      neverShared: ['Your live position (the phone contacts no weather service)', 'Your exact position (the server rounds it to a coarse grid first)'],
       destination: 'Done by the server from the drive it already holds, with the position rounded to a coarse grid of a few kilometres. '
           'Weather data: Open-Meteo.com, CC BY 4.0.',
       offEffect: 'Turning it off asks the server not to look up weather for your drives.',

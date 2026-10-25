@@ -9,6 +9,7 @@ import 'package:meshsonar/app/app_state.dart';
 import 'package:meshsonar/app/services.dart';
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/drive_context.dart';
+import 'package:meshsonar/core/drive_context_wire.dart';
 import 'package:meshsonar/core/phone_sensors.dart';
 import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/core/idle_region_watcher.dart';
@@ -19,9 +20,25 @@ import 'package:meshsonar/core/startup_location.dart';
 import 'package:meshsonar/radio/radio_api.dart';
 import 'package:meshsonar/ui/app.dart';
 
-class FakeDriveStore implements DriveStore, DriveContextLedger {
+class FakeDriveStore implements DriveStore, DriveContextLedger, ContextSyncLedger {
   /// The drive context recorded beside each drive (stream 7).
   final FakeContextLedger ctx = FakeContextLedger();
+
+  @override
+  Future<Set<String>> ctxSentPingIds(String sessionId) => ctx.ctxSentPingIds(sessionId);
+  @override
+  Future<void> markCtxSent(String sessionId, Iterable<String> pingIds) => ctx.markCtxSent(sessionId, pingIds);
+  @override
+  Future<Set<String>> samplesSentKeys(String sessionId) => ctx.samplesSentKeys(sessionId);
+  @override
+  Future<void> markSamplesSent(String sessionId, Iterable<String> keys) => ctx.markSamplesSent(sessionId, keys);
+  @override
+  Future<String?> sessionContextMark(String sessionId) => ctx.sessionContextMark(sessionId);
+  @override
+  Future<void> markSessionContext(String sessionId, String mark) => ctx.markSessionContext(sessionId, mark);
+  @override
+  Future<ContextStripResult> stripUnsentCategories(String sessionId, Set<String> categoryIds) =>
+      ctx.stripUnsentCategories(sessionId, categoryIds);
 
   @override
   Future<void> appendSamples(String sessionId, Iterable<DriveSample> samples) => ctx.appendSamples(sessionId, samples);
@@ -194,9 +211,14 @@ class FakeCmatClient implements CmatClient {
     return statusResult;
   }
 
+  /// Every drive-upload body this client was asked to send, in order.
+  final List<DriveBatch> uploads = [];
+
   @override
-  Future<UploadResult> upload(String driverKey, DriveBatch batch) async =>
-      UploadResult(stored: batch.pings.length, duplicate: 0, rejected: 0);
+  Future<UploadResult> upload(String driverKey, DriveBatch batch) async {
+    uploads.add(batch);
+    return UploadResult(stored: batch.pings.length, duplicate: 0, rejected: 0);
+  }
 
   @override
   Future<List<RepeaterRef>> repeaters(String driverKey) async => repeaterList;
@@ -252,6 +274,29 @@ class FakeCmatClient implements CmatClient {
     regionsIndexCalls++;
     if (regionsIndexError != null) throw regionsIndexError!;
     return regionsIndexResult;
+  }
+
+  /// `DELETE drive-context` (stream 7 WP5): the categories asked for, what the server answers, or the error thrown.
+  final List<String> erasedCategories = [];
+  ContextEraseResult eraseCounts = const ContextEraseResult(category: 'all', sessions: 3, pings: 120, samples: 340);
+  Object? eraseError;
+  Completer<void>? eraseGate;
+
+  @override
+  Future<ContextEraseResult> deleteDriveContext(String driverKey, String category) async {
+    erasedCategories.add(category);
+    if (eraseGate != null) await eraseGate!.future;
+    if (eraseError != null) throw eraseError!;
+    return ContextEraseResult(category: category, sessions: eraseCounts.sessions, pings: eraseCounts.pings, samples: eraseCounts.samples);
+  }
+
+  /// `POST drive-context`: nothing is stored, the batches are kept for assertions.
+  final List<DriveContextBatch> lateBatches = [];
+
+  @override
+  Future<ContextUploadResult> uploadDriveContext(String driverKey, DriveContextBatch batch) async {
+    lateBatches.add(batch);
+    return ContextUploadResult(pingsUpdated: batch.pings.length);
   }
 
   /// Members added to [CmatClient] later (0.4.0's `reportProblem`) don't break every UI test: a fake that needs one
@@ -662,10 +707,59 @@ class FakeNetworkMonitor implements NetworkMonitor {
 }
 
 /// In-memory drive context (same contract as JsonlDriveStore's ctx.jsonl / samples.jsonl / context.json).
-class FakeContextLedger implements DriveContextLedger {
+class FakeContextLedger implements DriveContextLedger, ContextSyncLedger {
   final Map<String, List<DriveSample>> samplesBySession = {};
   final Map<String, Map<String, PingContext>> ctxBySession = {};
   final Map<String, SessionContext> sessionBySession = {};
+
+  // What the server already has (ContextSyncLedger).
+  final Map<String, Set<String>> ctxSent = {};
+  final Map<String, Set<String>> samplesSent = {};
+  final Map<String, String> sessionMark = {};
+
+  @override
+  Future<Set<String>> ctxSentPingIds(String sessionId) async => {...?ctxSent[sessionId]};
+  @override
+  Future<void> markCtxSent(String sessionId, Iterable<String> pingIds) async => (ctxSent[sessionId] ??= {}).addAll(pingIds);
+  @override
+  Future<Set<String>> samplesSentKeys(String sessionId) async => {...?samplesSent[sessionId]};
+  @override
+  Future<void> markSamplesSent(String sessionId, Iterable<String> keys) async => (samplesSent[sessionId] ??= {}).addAll(keys);
+  @override
+  Future<String?> sessionContextMark(String sessionId) async => sessionMark[sessionId];
+  @override
+  Future<void> markSessionContext(String sessionId, String mark) async => sessionMark[sessionId] = mark;
+
+  @override
+  Future<ContextStripResult> stripUnsentCategories(String sessionId, Set<String> categoryIds) async {
+    var pings = 0, samples = 0;
+    final c = ctxBySession[sessionId];
+    if (c != null) {
+      for (final id in c.keys.toList()) {
+        if (ctxSent[sessionId]?.contains(id) ?? false) continue;
+        final before = c[id]!;
+        final after = before.without(categoryIds);
+        if (after.toJson().length == before.toJson().length) continue;
+        pings++;
+        after.isEmpty ? c.remove(id) : c[id] = after;
+      }
+    }
+    final s = samplesBySession[sessionId];
+    if (s != null) {
+      final next = <DriveSample>[];
+      for (final x in s) {
+        if (samplesSent[sessionId]?.contains(sampleKey(x)) ?? false) {
+          next.add(x);
+          continue;
+        }
+        final y = x.without(categoryIds);
+        if (y.toJson().length != x.toJson().length) samples++;
+        if (!y.isEmpty) next.add(y);
+      }
+      samplesBySession[sessionId] = next;
+    }
+    return ContextStripResult(pingContexts: pings, samples: samples);
+  }
 
   @override
   Future<void> appendSamples(String sessionId, Iterable<DriveSample> samples) async {

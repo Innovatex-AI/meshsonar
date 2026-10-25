@@ -514,3 +514,40 @@ Future<List<String>> stripContextCategories(
   }
   return changed;
 }
+
+// ------------------------------------------------------------------ what was already uploaded
+
+/// Which context the server already has (stream 7 WP5), beside the drive: crash-safe like synced.txt. Ping context is
+/// tracked per ping id, samples per `src|ts` key (the server dedupes on (session, src, ts)), the session-level part
+/// (device, radio extras) as the fingerprint of what was sent. [JsonlDriveStore] implements it.
+abstract class ContextSyncLedger {
+  /// Ping ids whose context the server confirmed (with the ping, or through `POST drive-context`).
+  Future<Set<String>> ctxSentPingIds(String sessionId);
+  Future<void> markCtxSent(String sessionId, Iterable<String> pingIds);
+
+  /// Sample keys (`src|ts`, see drive_context_wire.dart `sampleKey`) the server confirmed.
+  Future<Set<String>> samplesSentKeys(String sessionId);
+  Future<void> markSamplesSent(String sessionId, Iterable<String> keys);
+
+  /// Fingerprint of the session-level context (device, radio extras) the server last confirmed, or null.
+  Future<String?> sessionContextMark(String sessionId);
+  Future<void> markSessionContext(String sessionId, String mark);
+
+  /// Like [DriveContextLedger.stripCategories] but only for context the server does NOT have yet: what was already
+  /// uploaded stays on the phone (it is the driver's own history; the server copy is erased through the server).
+  Future<ContextStripResult> stripUnsentCategories(String sessionId, Set<String> categoryIds);
+}
+
+/// [ContextSyncLedger.stripUnsentCategories] for every session in [sessionIds]; returns the sessions that changed. A
+/// failure on one session does not stop the others.
+Future<List<String>> stripUnsentContextCategories(
+    ContextSyncLedger ledger, Iterable<String> sessionIds, Set<String> categoryIds) async {
+  final changed = <String>[];
+  if (categoryIds.isEmpty) return changed;
+  for (final id in sessionIds) {
+    try {
+      if ((await ledger.stripUnsentCategories(id, categoryIds)).changed) changed.add(id);
+    } catch (_) {}
+  }
+  return changed;
+}

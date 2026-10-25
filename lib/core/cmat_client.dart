@@ -2,6 +2,10 @@
 //   <base>/api/cmh/driver-request   POST {name, callsign?, email?}      -> 201 {driverId, key, status, display}
 //   <base>/api/cmh/driver-status    GET  x-driver-key                   -> {status, display}
 //   <base>/api/cmh/drive-upload     POST x-driver-key, upload body      -> {sessionId, stored, duplicate, rejected, rejections[]}
+//   <base>/api/cmh/drive-context    POST x-driver-key, late context     -> {session, pingsUpdated, rejected, rejections[],
+//                                                                          samplesStored, samplesDuplicate, samplesRejected,
+//                                                                          sampleRejections[]}      (Drive Format v1.2)
+//   <base>/api/cmh/drive-context    DELETE ?category=<id>|all           -> {category, sessions, pings, samples}
 //   <base>/api/cmh/drive-repeaters  GET  x-driver-key                   -> {repeaters[{key,name,lat,lon}], at}
 //   <base>/api/cmh/problem-report   POST x-driver-key, report body      -> 201 {id, status, receivedAt, redacted}
 //   <base>/api/cmh/site-config      GET  (public, no driver key)        -> {region:{slug,url}, radioPreset:{name,
@@ -21,6 +25,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 
 import 'api.dart';
+import 'drive_context_wire.dart';
 import 'model.dart';
 import 'region_lookup.dart';
 import 'report_body.dart' show problemReportMaxBytes;
@@ -39,12 +44,23 @@ class PingRejection {
 class DetailedUploadResult extends UploadResult {
   final List<PingRejection> rejections;
   final String? sessionId;
+
+  /// Drive Format v1.2 answers only (0 / empty otherwise): the drive-context samples the server stored, already had,
+  /// or refused (`sampleRejections[]`, at most 20 listed; the index is into the `samples` list that was sent).
+  final int samplesStored;
+  final int samplesDuplicate;
+  final int samplesRejected;
+  final List<SampleRejection> sampleRejections;
   DetailedUploadResult({
     required super.stored,
     required super.duplicate,
     required super.rejected,
     required this.rejections,
     this.sessionId,
+    this.samplesStored = 0,
+    this.samplesDuplicate = 0,
+    this.samplesRejected = 0,
+    this.sampleRejections = const [],
   }) : super(rejectionReasons: rejections.map((r) => r.reason).toList());
 }
 
@@ -201,6 +217,36 @@ class HttpCmatClient implements CmatClient, TelemetryTransport {
       rejected: n(j['rejected']),
       rejections: rejections,
       sessionId: j['sessionId'] as String?,
+      samplesStored: n(j['samplesStored']),
+      samplesDuplicate: n(j['samplesDuplicate']),
+      samplesRejected: n(j['samplesRejected']),
+      sampleRejections: _sampleRejections(j['sampleRejections']),
+    );
+  }
+
+  static List<SampleRejection> _sampleRejections(Object? raw) => [
+        for (final r in (raw as List?) ?? const [])
+          if (r is Map)
+            SampleRejection(index: r['index'] is num ? (r['index'] as num).toInt() : -1, reason: r['reason'] as String? ?? 'rejected'),
+      ];
+
+  @override
+  Future<ContextUploadResult> uploadDriveContext(String driverKey, DriveContextBatch batch) async {
+    final j = await _send('POST', 'drive-context', driverKey: driverKey, body: batch.toJson(), timeout: uploadTimeout);
+    int n(Object? v) => v is num ? v.toInt() : 0;
+    final rejections = <ContextRejection>[];
+    for (final r in (j['rejections'] as List?) ?? const []) {
+      if (r is! Map) continue;
+      rejections.add(ContextRejection(index: n(r['index']), id: r['id'] as String?, reason: r['reason'] as String? ?? 'rejected'));
+    }
+    return ContextUploadResult(
+      pingsUpdated: n(j['pingsUpdated']),
+      rejected: n(j['rejected']),
+      rejections: rejections,
+      samplesStored: n(j['samplesStored']),
+      samplesDuplicate: n(j['samplesDuplicate']),
+      samplesRejected: n(j['samplesRejected']),
+      sampleRejections: _sampleRejections(j['sampleRejections']),
     );
   }
 

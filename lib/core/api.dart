@@ -4,6 +4,7 @@
 import 'dart:io';
 
 import 'antenna_profile.dart';
+import 'drive_context_wire.dart' show ContextUploadResult, DriveContextBatch;
 import 'model.dart';
 import 'region_lookup.dart';
 import 'server_url.dart';
@@ -287,6 +288,11 @@ abstract class CmatClient {
   /// `GET /api/cmh/drive-env?session=<uuid>` (`capabilities.driveEnv`): server-side weather for the driver's own
   /// drive. Throws [CmatException] (404 = the server does not know that drive).
   Future<DriveEnv> driveEnv(String driverKey, String sessionId);
+
+  /// `POST /api/cmh/drive-context` (`capabilities.driveFormats` lists v1.2): context for a drive this driver already
+  /// uploaded (per-ping `ctx`, `samples`). Same rules as a v1.2 upload. Throws [CmatException] (404 = the server does
+  /// not know that drive).
+  Future<ContextUploadResult> uploadDriveContext(String driverKey, DriveContextBatch batch);
 }
 
 /// The server's answer to a drive-context erase.
@@ -352,7 +358,34 @@ class SyncReport {
   final int duplicate;
   final int rejected;
   final String? error; // first error, if any session failed
-  const SyncReport({this.sessions = 0, this.stored = 0, this.duplicate = 0, this.rejected = 0, this.error});
+
+  /// Drive context (Drive Format v1.2), counted separately from pings. Samples: newly stored / already on the server /
+  /// refused by the server's validator. Pings: context attached to pings the server already had / pings whose context
+  /// the server refused. [contextFallbacks] = drives whose v1.2 upload was refused as a whole and went up as the plain
+  /// drive instead (the drive is never lost; its context is tried again next time).
+  final int samplesStored;
+  final int samplesDuplicate;
+  final int samplesRejected;
+  final int contextPingsUpdated;
+  final int contextRejected;
+  final int contextFallbacks;
+  const SyncReport({
+    this.sessions = 0,
+    this.stored = 0,
+    this.duplicate = 0,
+    this.rejected = 0,
+    this.error,
+    this.samplesStored = 0,
+    this.samplesDuplicate = 0,
+    this.samplesRejected = 0,
+    this.contextPingsUpdated = 0,
+    this.contextRejected = 0,
+    this.contextFallbacks = 0,
+  });
+
+  /// True when anything about the drive context happened or went wrong in this sync.
+  bool get hasContextActivity =>
+      samplesStored + samplesDuplicate + samplesRejected + contextPingsUpdated + contextRejected + contextFallbacks > 0;
 }
 
 /// Uploads unsynced pings (≤5,000 per request), marks them synced only after the server confirms.
@@ -421,6 +454,10 @@ class Settings {
   final Set<String> collectionOff;
 
   /// Whether the collection category [id] is switched on (packet headers: [telemetryEnabled]).
+  /// Drive-context categories (or `all`) whose erase on the server was asked for but has not gone through yet (offline,
+  /// rate limit). Retried automatically; written only when non-empty so a default settings.json is unchanged.
+  final Set<String> contextErasePending;
+
   bool collectionOn(String id) => id == 'packet_headers' ? telemetryEnabled : !collectionOff.contains(id);
 
   /// A copy with category [id] switched [on].
@@ -454,6 +491,7 @@ class Settings {
     this.unitOverrides = const UnitOverrides(),
     this.telemetryEnabled = true,
     this.collectionOff = const {},
+    this.contextErasePending = const {},
   });
 
   Settings copyWith({
@@ -477,6 +515,7 @@ class Settings {
     UnitOverrides? unitOverrides,
     bool? telemetryEnabled,
     Set<String>? collectionOff,
+    Set<String>? contextErasePending,
     bool clearKey = false,
   }) =>
       Settings(
@@ -500,6 +539,7 @@ class Settings {
         unitOverrides: unitOverrides ?? this.unitOverrides,
         telemetryEnabled: telemetryEnabled ?? this.telemetryEnabled,
         collectionOff: collectionOff ?? this.collectionOff,
+        contextErasePending: contextErasePending ?? this.contextErasePending,
       );
 
   Map<String, dynamic> toJson() => {
@@ -523,6 +563,7 @@ class Settings {
         if (!unitOverrides.isEmpty) 'unit_overrides': unitOverrides.toJson(),
         if (!telemetryEnabled) 'telemetry_enabled': false,
         if (collectionOff.isNotEmpty) 'collection_off': collectionOff.toList()..sort(),
+        if (contextErasePending.isNotEmpty) 'context_erase_pending': contextErasePending.toList()..sort(),
       };
   factory Settings.fromJson(Map<String, dynamic> j) => Settings(
         serverUrl: _str(j['server_url']) ?? defaultServerUrl,
@@ -547,6 +588,11 @@ class Settings {
         telemetryEnabled: j['telemetry_enabled'] is bool ? j['telemetry_enabled'] as bool : true,
         collectionOff: {
           if (j['collection_off'] case final List l)
+            for (final v in l)
+              if (v is String && v.isNotEmpty) v,
+        },
+        contextErasePending: {
+          if (j['context_erase_pending'] case final List l)
             for (final v in l)
               if (v is String && v.isNotEmpty) v,
         },

@@ -104,8 +104,13 @@ class _CollectionSheetState extends State<_CollectionSheet> {
             for (final x in c.neverShared) bullet(Icons.block, x),
             const SizedBox(height: Gap.xs),
             Text(c.destination, style: t.textTheme.bodySmall),
-          ] else
+          ] else ...[
             Text(c.summary, style: t.textTheme.bodyMedium),
+            // Where it goes with the server the app uploads to right now (or that this is not known yet).
+            if (c.isDriveContext)
+              Text(contextDestinationLine(AppScope.read(context)),
+                  key: Key('disclosure-destination-${c.id}'), style: t.textTheme.bodySmall),
+          ],
         ]),
       );
     }

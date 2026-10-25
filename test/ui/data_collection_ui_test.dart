@@ -226,7 +226,7 @@ void main() {
       await showSetting(tester, 'collect-barometer-toggle');
       expect(find.textContaining('no barometer support'), findsOneWidget);
       await showSetting(tester, 'collect-weather-toggle');
-      expect(find.textContaining('Not available yet: no MeshSonar server looks up weather'), findsOneWidget);
+      expect(find.textContaining('Not available yet on this server: it does not look up weather'), findsOneWidget);
     });
 
     testWidgets('a barometer that gave nothing on the last drive says so', (tester) async {

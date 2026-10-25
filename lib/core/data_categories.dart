@@ -33,7 +33,9 @@ enum CategoryAvailability {
   /// Collected by the app today.
   live,
 
-  /// Needs a server feature that does not exist yet (stream 7 server contract S4).
+  /// Depends on what the connected server does (weather: `site-config.capabilities.driveEnv` plus v1.2). The Settings
+  /// UI shows whether it is active for the server the app uploads to right now (lib/ui/settings/data_sharing.dart
+  /// `weatherLive`); the app collects nothing for it either way.
   needsServer,
 }
 
@@ -84,8 +86,9 @@ abstract final class CategoryId {
 
 /// Shown under the list on the disclosure sheet: what "Saved with your drive" means.
 const String savedWithDriveNote =
-    '"Saved with your drive" means: on this phone, and uploaded with the drive only when the server supports it. '
-    "Your drive's location is handled by your drive privacy settings (start/end trim, privacy zones), as today.";
+    '"Saved with your drive" means: on this phone, and uploaded with the drive only when the server you upload to '
+    "accepts it (Settings > Privacy & data sharing says which). Your drive's location is handled by your drive privacy "
+    'settings (start/end trim, privacy zones), as today.';
 
 /// Heading line of the disclosure sheet.
 const String collectionDisclosureHeading =
@@ -176,9 +179,8 @@ const List<DataCategory> dataCategories = [
   DataCategory(
     id: CategoryId.weather,
     title: 'Weather for my drives',
-    disclosure: 'Weather for my drives: the server looks up weather near your drive (your phone sends nothing extra). '
-        'Data: Open-Meteo, CC BY 4.0. Not available yet: no MeshSonar server does this today, so nothing happens '
-        'until it does.',
+    disclosure: 'Weather for my drives: the server looks up weather near your drive at about 5 km, when it supports '
+        'that (your phone sends nothing extra). Data: Open-Meteo.com, CC BY 4.0.',
     fields: [],
     destination: CategoryDestination.serverDerived,
     availability: CategoryAvailability.needsServer,

@@ -3,6 +3,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/app/services.dart';
 import 'package:meshsonar/core/api.dart';
+import 'package:meshsonar/core/drive_context_wire.dart';
 import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/core/region_lookup.dart';
 import 'package:meshsonar/core/sync_service.dart';
@@ -239,6 +240,14 @@ class RecordingClient implements CmatClient {
 
   @override
   Future<DriveEnv> driveEnv(String driverKey, String sessionId) => throw UnimplementedError();
+
+  /// Late drive context (POST drive-context): recorded, like [uploads].
+  final List<DriveContextBatch> lateUploads = [];
+  @override
+  Future<ContextUploadResult> uploadDriveContext(String driverKey, DriveContextBatch batch) async {
+    lateUploads.add(batch);
+    return ContextUploadResult(pingsUpdated: batch.pings.length);
+  }
 }
 
 /// Harness whose sync service is the real DefaultSyncService over the fake store.

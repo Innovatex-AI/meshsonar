@@ -12,7 +12,11 @@
 //                    coordinates); appended and flushed like pings.jsonl
 //     ctx.jsonl      drive context per ping: {"ping": <id>, "ctx": {...}} per line, last record per ping wins
 //     context.json   drive context per session (phone/app details, radio identity); rewritten atomically
-//   None of the context files is read by the upload or the export: their bytes are exactly what they were before.
+//     ctx_sent.txt, samples_sent.txt, context_sent.txt  what the server already has of the context (stream 7 WP5):
+//                    append-only ping ids, append-only sample keys, atomic fingerprint of the session part
+//                    (ContextSyncLedger).
+//   The upload reads the context files only for a server that accepts Drive Format v1.2 (and the export puts them
+//   under `context`); against any other server the upload bytes are exactly what they were before.
 //
 // A crash mid-write can leave a truncated last line in pings.jsonl; readers skip it, and the next append trims it
 // first so a new ping is never glued onto the broken one.
@@ -26,6 +30,7 @@ import 'package:path/path.dart' as p;
 
 import 'api.dart';
 import 'drive_context.dart';
+import 'drive_context_wire.dart' show sampleKey;
 import 'model.dart';
 import 'storage_usage.dart';
 
@@ -67,7 +72,7 @@ Future<List<String>> closeOrphanedSessions(DriveStore store, {Set<String> except
   return closed;
 }
 
-class JsonlDriveStore implements DriveStore, SyncLedger, StorageSized, DriveContextLedger {
+class JsonlDriveStore implements DriveStore, SyncLedger, StorageSized, DriveContextLedger, ContextSyncLedger {
   final Directory root;
   final Directory _sessionsDir;
   final Map<String, Future<void>> _locks = {};
@@ -341,13 +346,33 @@ class JsonlDriveStore implements DriveStore, SyncLedger, StorageSized, DriveCont
   Future<SessionContext?> sessionContext(String sessionId) => _locked(sessionId, () => _readSessionContext(sessionId));
 
   @override
-  Future<ContextStripResult> stripCategories(String sessionId, Set<String> categoryIds) => _locked(sessionId, () async {
+  Future<ContextStripResult> stripCategories(String sessionId, Set<String> categoryIds) =>
+      _locked(sessionId, () => _strip(sessionId, categoryIds));
+
+  @override
+  Future<ContextStripResult> stripUnsentCategories(String sessionId, Set<String> categoryIds) =>
+      _locked(sessionId, () async {
+        if (categoryIds.isEmpty || !await _dir(sessionId).exists()) return const ContextStripResult();
+        return _strip(sessionId, categoryIds,
+            keepCtx: await _readIds(sessionId, _ctxSentFile),
+            keepSamples: await _readIds(sessionId, _samplesSentFile),
+            keepSession: await _readSessionMark(sessionId) != null);
+      });
+
+  /// Strips [categoryIds] from the stored context. With the `keep*` arguments the context the server already has is
+  /// left alone: ping ids in [keepCtx], sample keys in [keepSamples], the session part when [keepSession].
+  Future<ContextStripResult> _strip(String sessionId, Set<String> categoryIds,
+      {Set<String>? keepCtx, Set<String>? keepSamples, bool keepSession = false}) async {
         if (categoryIds.isEmpty || !await _dir(sessionId).exists()) return const ContextStripResult();
 
         var samplesChanged = 0;
         final samples = await _readSamples(sessionId);
         final keptSamples = <DriveSample>[];
         for (final x in samples) {
+          if (keepSamples != null && keepSamples.contains(sampleKey(x))) {
+            keptSamples.add(x);
+            continue;
+          }
           final y = x.without(categoryIds);
           if (jsonEncode(y.toJson()) != jsonEncode(x.toJson())) samplesChanged++;
           if (!y.isEmpty) keptSamples.add(y);
@@ -361,6 +386,10 @@ class JsonlDriveStore implements DriveStore, SyncLedger, StorageSized, DriveCont
         final ctx = await _readPingContexts(sessionId);
         final keptCtx = <String, PingContext>{};
         for (final e in ctx.entries) {
+          if (keepCtx != null && keepCtx.contains(e.key)) {
+            keptCtx[e.key] = e.value;
+            continue;
+          }
           final y = e.value.without(categoryIds);
           if (jsonEncode(y.toJson()) != jsonEncode(e.value.toJson())) ctxChanged++;
           if (!y.isEmpty) keptCtx[e.key] = y;
@@ -373,7 +402,7 @@ class JsonlDriveStore implements DriveStore, SyncLedger, StorageSized, DriveCont
         }
 
         var sessionChanged = false;
-        final sc = await _readSessionContext(sessionId);
+        final sc = keepSession ? null : await _readSessionContext(sessionId);
         if (sc != null) {
           final y = sc.without(categoryIds);
           if (jsonEncode(y.toJson()) != jsonEncode(sc.toJson())) {
@@ -387,6 +416,51 @@ class JsonlDriveStore implements DriveStore, SyncLedger, StorageSized, DriveCont
           }
         }
         return ContextStripResult(pingContexts: ctxChanged, samples: samplesChanged, session: sessionChanged);
+  }
+
+  // ---- what the server already has (ContextSyncLedger) ----
+
+  static const _ctxSentFile = 'ctx_sent.txt';
+  static const _samplesSentFile = 'samples_sent.txt';
+  static const _contextSentFile = 'context_sent.txt';
+
+  @override
+  Future<Set<String>> ctxSentPingIds(String sessionId) => _locked(sessionId, () => _readIds(sessionId, _ctxSentFile));
+
+  @override
+  Future<void> markCtxSent(String sessionId, Iterable<String> pingIds) => _locked(sessionId, () async {
+        if (!await _dir(sessionId).exists()) return;
+        await _appendLines(_file(sessionId, _ctxSentFile), pingIds);
+      });
+
+  @override
+  Future<Set<String>> samplesSentKeys(String sessionId) =>
+      _locked(sessionId, () => _readIds(sessionId, _samplesSentFile));
+
+  @override
+  Future<void> markSamplesSent(String sessionId, Iterable<String> keys) => _locked(sessionId, () async {
+        if (!await _dir(sessionId).exists()) return;
+        await _appendLines(_file(sessionId, _samplesSentFile), keys);
+      });
+
+  Future<String?> _readSessionMark(String sessionId) async {
+    final f = _file(sessionId, _contextSentFile);
+    try {
+      if (!await f.exists()) return null;
+      final t = (await f.readAsString()).trim();
+      return t.isEmpty ? null : t;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Future<String?> sessionContextMark(String sessionId) => _locked(sessionId, () => _readSessionMark(sessionId));
+
+  @override
+  Future<void> markSessionContext(String sessionId, String mark) => _locked(sessionId, () async {
+        if (!await _dir(sessionId).exists()) return;
+        await _writeAtomic(_file(sessionId, _contextSentFile), mark);
       });
 
   // ---- reads ----

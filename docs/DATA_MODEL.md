@@ -264,6 +264,16 @@ Implemented in `DefaultSyncService` (`lib/core/sync_service.dart`):
 9. **`syncAll`** goes through sessions oldest first, so a backlog drains in drive order.
 10. **When it runs.** In-drive timer, Stop, Sync on a card or in drive detail, and Sync all. See
     [FEATURES.md §Uploads](FEATURES.md#uploads).
+11. **Drive context (Drive Format v1.2).** Only when the upload server's site-config lists `meshsonar.drive.v1.2`
+    (unknown = no) and there is something to send, a request is v1.2: `session.device`, the radio extras merged into
+    `session.companion`, `session.enrich.weather`, per-ping `ctx` and up to 2,000 `samples`
+    (`lib/core/drive_context_wire.dart`; the server rejects unknown keys, so `ble_rssi` and any value its validator
+    refuses never leave). Delivered context is recorded beside the drive: `ctx_sent.txt` (ping ids), `samples_sent.txt`
+    (`src|ts` keys), `context_sent.txt` (fingerprint of the device / radio part), each written only after a 200. Context
+    recorded after its ping was confirmed, or for a drive uploaded before v1.2, goes through `POST drive-context`
+    (ping context) and a ping-less v1.2 upload (samples, device, radio extras). A v1.2 body answered 400 as a whole is
+    sent again as the plain drive (that session, this run); a ping whose `ctx` is refused is sent again without it. A
+    category that is off is never in a body.
 
 On a store that doesn't implement `SyncLedger` (test fakes), rejected ids and end markers are tracked in memory for
 the life of the sync service, and renames are not re-sent on their own.
