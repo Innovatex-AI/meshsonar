@@ -303,15 +303,18 @@ class Units {
     };
   }
 
-  /// The pressure as a plain number in this system's unit (hPa or inHg), for chart axes.
-  double pressureValue(double hPa) => isImperial ? hPa * inHgPerHpa : hPa;
+  /// The pressure as a plain number in the pressure unit ([pressureUnit]: hPa, inHg or mmHg), for chart axes.
+  double pressureValue(double hPa) => switch (pressureUnitKind) {
+        PressureUnit.hPa => hPa,
+        PressureUnit.inHg => hPa * inHgPerHpa,
+        PressureUnit.mmHg => hPa * mmHgPerHpa,
+      };
 
-  /// A height as a plain number in this system's unit (metres or feet), for chart axes; [heightUnit] names it.
-  double heightValue(double metres) => isImperial ? metres / metresPerFoot : metres;
-  String get heightUnit => isImperial ? 'ft' : 'm';
+  /// A height as a plain number in the height unit (metres or feet), for chart axes; [heightUnit] names it.
+  double heightValue(double metres) => heightImperial ? metres / metresPerFoot : metres;
 
-  /// A temperature as a plain number in this system's unit (°C or °F), for chart axes.
-  double temperatureValue(double celsius) => isImperial ? celsius * 9 / 5 + 32 : celsius;
+  /// A temperature as a plain number in the temperature unit (°C or °F), for chart axes.
+  double temperatureValue(double celsius) => temperatureImperial ? celsius * 9 / 5 + 32 : celsius;
 
   /// A temperature, stored in °C: whole degrees, "11 °C" or "52 °F".
   String temperature(double celsius) {
