@@ -9,7 +9,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/app/services.dart';
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/drive_context.dart';
-import 'package:meshsonar/core/drive_context_wire.dart';
 import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/core/sync_service.dart';
 
@@ -26,8 +25,8 @@ final t0 = DateTime.now().toUtc().subtract(const Duration(minutes: 30));
 /// sent-ledger in memory) and the app's own fake client, so the capability the app reads is the one that is used.
 class UploadHarness extends Harness {
   @override
-  late final AppServices services = () {
-    final b = super.services;
+  AppServices buildServices() {
+    final b = super.buildServices();
     return AppServices(
       store: b.store,
       settingsStore: b.settingsStore,
@@ -46,7 +45,7 @@ class UploadHarness extends Harness {
       uiPrefsFile: b.uiPrefsFile,
       clock: () => DateTime.now().toUtc(),
     );
-  }();
+  }
 
   FakeCmatClient get fake => state.client as FakeCmatClient;
 }
