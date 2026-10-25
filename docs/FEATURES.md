@@ -186,7 +186,7 @@ simulator's repeaters in Simulator mode), **ping dots**, and the current **posit
   fetches once at startup (and again if the server URL changes); a fetch failure keeps showing whatever was already
   drawn rather than clearing it.
 - **All MeshCore repeaters** (`network`, on by default): every repeater and room server with a public position, from
-  the server's `network-repeaters` list (live since Oct 24 2026, 55.6k rows; synced on open, at most every 6 h, stored for offline use, about 6 MB on disk). Clustered: one
+  the server's `network-repeaters` list (live since Oct 24 2026, 55.6k rows; synced on open, at most every 6 h, stored for offline use, about 6 MB on disk). **Cheap refresh:** once a list is stored and the server advertises `networkRepeatersDelta` (site-config), a refresh asks only for what changed since the stored cursor (`?updated_since=`): about 0.2 MB on the wire instead of 3.6 MB, applied to the stored list (removals first, then rows by key) and saved atomically. Anything unexpected (410 too old, a body that does not add up, a stored list more than 13 days behind, a last full download over 30 days ago, no capability) quietly downloads the full list once instead, never an error. Clustered: one
   painter, only what is on screen, clusters with counts that split as you zoom. Colour = last advert (24 h green, 7 days
   blue, 30 days amber, older grey; room servers are rings). **Scope**: when your region is known (the phone is in it,
   you picked it, or it is the remembered one while the phone's position is unknown) only that region's repeaters plus
