@@ -36,6 +36,9 @@ const double metresPerFoot = 0.3048;
 const double kmhPerMps = 3.6;
 const double mphPerMps = 2.236936;
 
+/// Millimetres in an inch (rain depth in imperial).
+const double mmPerInch = 25.4;
+
 /// Inches of mercury per hectopascal (1 inHg = 33.8638866667 hPa, at 0 °C).
 const double inHgPerHpa = 1 / 33.8638866667;
 
@@ -264,6 +267,21 @@ class Units {
     return speedImperial ? '${(v * mphPerMps).round()} mph' : '${(v * kmhPerMps).round()} km/h';
   }
 
+  /// A speed as a plain number in the speed unit ([speedUnit]: km/h or mph), for chart axes.
+  double speedValue(double mps) => speedImperial ? mps * mphPerMps : mps * kmhPerMps;
+
+  /// Rain / melted-snow depth follows the distance choice: millimetres, or inches.
+  String get precipitationUnit => distanceImperial ? 'in' : 'mm';
+
+  /// Depth stored in millimetres as a plain number in [precipitationUnit].
+  double precipitationValue(double mm) => distanceImperial ? mm / mmPerInch : mm;
+
+  /// Precipitation over an hour or a drive, stored in mm: "0 mm", "0.4 mm" (1 decimal, trimmed) or "0.02 in" (2 decimals).
+  String precipitation(double mm) {
+    final v = mm.isFinite && mm > 0 ? mm : 0.0;
+    return distanceImperial ? '${(v / mmPerInch).toStringAsFixed(2)} in' : '${_trim(v, 1)} mm';
+  }
+
   /// A short length such as GPS accuracy or "move N more": whole metres or whole feet, never switching to km/mi.
   String shortLength(double metres) {
     final m = metres.isFinite ? metres : 0.0;
@@ -300,6 +318,16 @@ class Units {
       PressureUnit.hPa => '${v.toStringAsFixed(1)} hPa',
       PressureUnit.inHg => '${(v * inHgPerHpa).toStringAsFixed(2)} inHg',
       PressureUnit.mmHg => '${(v * mmHgPerHpa).round()} mmHg',
+    };
+  }
+
+  /// A pressure DIFFERENCE (no sign), stored in hPa: "1.3 hPa", "0.04 inHg" or "1.0 mmHg".
+  String pressureDelta(double hPa) {
+    final v = hPa.isFinite ? hPa.abs() : 0.0;
+    return switch (pressureUnitKind) {
+      PressureUnit.hPa => '${v.toStringAsFixed(1)} hPa',
+      PressureUnit.inHg => '${(v * inHgPerHpa).toStringAsFixed(2)} inHg',
+      PressureUnit.mmHg => '${(v * mmHgPerHpa).toStringAsFixed(1)} mmHg',
     };
   }
 

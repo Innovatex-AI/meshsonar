@@ -6,7 +6,7 @@
 // and the user is told. Sync failures never touch stored pings.
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show Platform;
+import 'dart:io' show Directory, Platform;
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -18,6 +18,7 @@ import '../core/diagnostics.dart';
 import '../core/data_categories.dart' show CategoryId, dataCategories;
 import '../core/drive_context.dart' show ContextSyncLedger, stripContextCategories, stripUnsentContextCategories;
 import '../core/drive_context_session.dart';
+import '../core/drive_env_cache.dart';
 import '../core/drive_store.dart' show closeOrphanedSessions;
 import '../core/heard.dart';
 import '../core/model.dart';
@@ -109,6 +110,22 @@ class AppState extends ChangeNotifier {
   bool get hasKey => (_settings.driverKey ?? '').isNotEmpty;
   bool get keyApproved => hasKey && _settings.keyStatus == DriverKeyStatus.approved;
 
+  // ---------- drive weather (stream 7 WP6: lib/core/drive_env_cache.dart, lib/ui/report/drive_weather_section.dart) ----------
+  DriveEnvCache? _driveEnvCache;
+
+  /// The server looks up weather for uploaded drives, this driver key is approved and the weather category is on.
+  bool get driveWeatherEnabled => (siteConfig?.driveEnv ?? false) && keyApproved && collectionOn('weather');
+
+  /// Server weather for the uploaded drive [sessionId], from the on-disk cache while fresh. Throws [CmatException].
+  Future<DriveEnvResult> driveWeather(String sessionId) {
+    final key = _settings.driverKey;
+    if (key == null || key.isEmpty) return Future.error(const CmatException('no driver key', status: 401));
+    final rc = services.regionCache?.dir;
+    final cache = _driveEnvCache ??= DriveEnvCache(
+        dir: rc == null ? null : Directory('${rc.parent.path}${Platform.pathSeparator}drive_env'), clock: services.clock);
+    return cache.get(sessionId, () => client.driveEnv(key, sessionId));
+  }
+
   // ---------- region data disk cache (offline / as-of labels) ----------
   CachedBody? _siteConfigMeta;
   CachedBody? _coverageMeta;
@@ -156,7 +173,10 @@ class AppState extends ChangeNotifier {
   /// Fetches [siteConfig] once. Failures are swallowed quietly (logged, not shown) so the Server URL tile keeps
   /// working regardless of whether this server's `site-config` endpoint exists or answers. Called unawaited at
   /// startup and again whenever the server URL changes.
-  Future<void> refreshSiteConfig() async {
+  Future<void> refreshSiteConfig() => _siteConfigLatest = _refreshSiteConfig();
+  Future<void>? _siteConfigLatest; // the newest fetch: the launch repeater sync waits for it (delta capability)
+
+  Future<void> _refreshSiteConfig() async {
     final server = _settings.serverUrl;
     unawaited(refreshUploadSiteConfig()); // what the upload server accepts (drive context), separate from the viewed region
     try {
@@ -626,8 +646,19 @@ class AppState extends ChangeNotifier {
     final server = Uri.tryParse(_settings.serverUrl);
     await Future.wait([
       for (final r in regions.values) sync.syncRoster(baseUrl: _rosterBase(r), slug: r.slug, trigger: trigger),
-      if (server != null && server.host.isNotEmpty) sync.syncNetwork(server: server, trigger: trigger),
+      if (server != null && server.host.isNotEmpty) _syncNetworkWithCapability(sync, server, trigger),
     ]);
+  }
+
+  /// The network list, after the site config answered (it says whether `?updated_since=` deltas exist), but never
+  /// waiting more than a few seconds: without an answer the sync simply downloads the full list.
+  Future<void> _syncNetworkWithCapability(RepeaterSync sync, Uri server, SyncTrigger trigger) async {
+    if (_siteConfig == null) {
+      try {
+        await _siteConfigLatest?.timeout(const Duration(seconds: 4));
+      } catch (_) {}
+    }
+    await sync.syncNetwork(server: server, trigger: trigger);
   }
 
   /// Pull to refresh on a region's repeater list: that roster and the network list, forced (still floored so a
@@ -1849,6 +1880,7 @@ class AppState extends ChangeNotifier {
     final rs = services.repeaterSync;
     if (rs != null) {
       rs.log ??= diagnostics.add;
+      rs.deltaCapable = () => _siteConfig?.networkRepeatersDelta ?? false; // unknown site config = full list
       if (!_syncListening) {
         _syncListening = true;
         rs.addListener(_onRepeaterSync);

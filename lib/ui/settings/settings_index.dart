@@ -195,7 +195,7 @@ const List<SettingsEntry> settingsEntries = [
       keywords: ['bug', 'feedback', 'support', 'issue', 'help', 'contact']),
   // About
   SettingsEntry('about', 'about-section', 'About MeshSonar', 'Version, licence and third-party notices.',
-      keywords: ['version', 'licence', 'license', 'mit', 'credits', 'open source']),
+      keywords: ['version', 'licence', 'license', 'mit', 'credits', 'open source', 'open-meteo', 'attribution']),
   SettingsEntry('show-intro', 'about-section', 'Show the welcome tour', 'The three intro pages from first launch.',
       keywords: ['intro', 'onboarding', 'tour', 'welcome', 'help']),
 ];

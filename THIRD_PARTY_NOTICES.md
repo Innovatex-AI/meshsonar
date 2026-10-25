@@ -62,3 +62,15 @@ the full licence is bundled at assets/fonts/Barlow-OFL.txt. Used as the app type
 Map data © OpenStreetMap contributors, available under the Open Database License (https://www.openstreetmap.org/copyright).
 Tiles are loaded from tile.openstreetmap.org under the OSM tile usage policy; the app shows the required attribution on
 every map. Map rendering uses the flutter_map package (BSD-3-Clause).
+
+## Data (shown in the drive report)
+
+### Open-Meteo
+Weather data by Open-Meteo.com (CC BY 4.0) — https://open-meteo.com
+
+The weather block of the drive report shows hourly weather (temperature, humidity, dew point, wind, precipitation, cloud
+cover, station pressure) that the MeshSonar server looked up from Open-Meteo for a cell of about 5 km around a drive. The
+phone never contacts Open-Meteo and sends no position to it. The data is licensed under Creative Commons Attribution 4.0
+(https://creativecommons.org/licenses/by/4.0/); the credit line above is shown directly under any weather values. Open-Meteo's
+free API is for non-commercial use only: check its terms (or use its paid or self-hosted service) before any commercial use.
+Used in: lib/core/drive_env_cache.dart, lib/ui/report/drive_weather_section.dart.

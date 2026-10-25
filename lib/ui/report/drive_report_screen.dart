@@ -23,6 +23,7 @@ import '../onboarding/ui_prefs.dart' show driveLabel;
 import '../widgets.dart';
 import 'drive_context_section.dart';
 import 'drive_report_sections.dart';
+import 'drive_weather_section.dart';
 import 'pdf_export.dart';
 
 void openDriveReport(BuildContext context, String sessionId) {
@@ -222,6 +223,7 @@ class _ReportBody extends StatelessWidget {
             GpsSection(key: const Key('report-gps'), gps: r.rf.gps!),
           ],
           DriveContextSection(sessionId: r.session.id, pings: r.sortedPings),
+          DriveWeatherSection(sessionId: r.session.id, pings: r.sortedPings),
           if (r.repeaters.isNotEmpty) ...[
             _Heading('Repeater leaderboard', icon: Icons.emoji_events_outlined, trailing: '${r.repeaters.length}'),
             _Leaderboard(report: r),

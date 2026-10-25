@@ -186,7 +186,7 @@ simulator's repeaters in Simulator mode), **ping dots**, and the current **posit
   fetches once at startup (and again if the server URL changes); a fetch failure keeps showing whatever was already
   drawn rather than clearing it.
 - **All MeshCore repeaters** (`network`, on by default): every repeater and room server with a public position, from
-  the server's `network-repeaters` list (live since Oct 24 2026, 55.6k rows; synced on open, at most every 6 h, stored for offline use, about 6 MB on disk). Clustered: one
+  the server's `network-repeaters` list (live since Oct 24 2026, 55.6k rows; synced on open, at most every 6 h, stored for offline use, about 6 MB on disk). **Cheap refresh:** once a list is stored and the server advertises `networkRepeatersDelta` (site-config), a refresh asks only for what changed since the stored cursor (`?updated_since=`): about 0.2 MB on the wire instead of 3.6 MB, applied to the stored list (removals first, then rows by key) and saved atomically. Anything unexpected (410 too old, a body that does not add up, a stored list more than 13 days behind, a last full download over 30 days ago, no capability) quietly downloads the full list once instead, never an error. Clustered: one
   painter, only what is on screen, clusters with counts that split as you zoom. Colour = last advert (24 h green, 7 days
   blue, 30 days amber, older grey; room servers are rings). **Scope**: when your region is known (the phone is in it,
   you picked it, or it is the remembered one while the phone's position is unknown) only that region's repeaters plus
@@ -623,10 +623,24 @@ meshsonar-infra planning `stream-7-data-collection.md`.
   `category=all`, and the packet headers), with the server's counts; the hourly limit (429: "try again in an
   hour"), an unknown key, no key, no connection and an older server (button disabled, with the reason) are all said in
   words. A separate action, never the default, deletes the context saved on this phone. The drives stay.
-- **Weather**: the server looks up weather near the drive (about 5 km grid; the phone sends nothing extra and contacts no
-  weather service); the Weather switch is the `enrich.weather` flag. Live in the switch's status when the upload server
-  says `driveEnv` and accepts v1.2. Data: Open-Meteo.com, CC BY 4.0. Showing weather in the drive report is a separate
-  work package.
+- **Weather** (the switch plus the drive report block below): the Weather switch is the `session.enrich.weather` flag of a v1.2 upload (live in the switch's status when the upload server says `driveEnv` and accepts v1.2); the server looks up Open-Meteo for an uploaded drive
+  (about a 5 km cell, UTC hour) and the app shows its answer; the phone contacts no weather service and shows no
+  coordinate.
+- **Drive report, Weather**: shown only when `site-config.capabilities.driveEnv` is true, the driver key is approved,
+  the Weather category is on and the drive has been uploaded (otherwise the block is absent, nothing invented). Asked
+  once when the block scrolls into view (`GET drive-env`, `lib/core/drive_env_cache.dart`): a `ready` answer is kept
+  on disk for 6 hours, `pending` / `disabled` / `unavailable` are asked again only after 5 minutes, at most 50 asks a
+  minute, and a failed ask shows the stored copy as "Offline - as of ...". Content: summary tiles (temperature, dew
+  point, humidity, wind with the compass point it comes from, precipitation, cloud, station pressure), charts with
+  the Chart / Table switch (temperature and dew point, wind, air pressure) and "All hourly values". Pressure compares
+  the weather model's station pressure ("model value for about a 5 km cell") with the phone barometer ("cabin
+  pressure") and says the mean difference over the hours both have. Units follow the per-quantity choices
+  (temperature, speed, pressure, precipitation mm / in with distance). States: not looked up yet (the server checks
+  every 30 minutes after a drive has been quiet for 2 hours), partly looked up, off for this drive, nothing to look up
+  (nothing publicly visible - the start / end trim can cause it - or older than 60 days), offline, 404 (server does not
+  know the drive), 429 and other errors with Retry. The line "Weather data by Open-Meteo.com (CC BY 4.0)" links to
+  open-meteo.com and sits directly under any values; it is also in About and THIRD_PARTY_NOTICES.md. Weather is not
+  in the text / CSV / PDF drive reports.
 - **Drive report**: "Phone and radio context" section: air pressure (hPa / inHg, labelled phone barometer, cabin
   pressure), GPS altitude (m / ft), phone battery %, radio battery V, radio uptime, airtime %, packets sent / heard,
   storage, error flags in words, phone and radio details. "No phone or radio context was recorded" for older drives.
