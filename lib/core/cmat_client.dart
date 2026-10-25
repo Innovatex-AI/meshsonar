@@ -6,6 +6,7 @@
 //                                                                          samplesStored, samplesDuplicate, samplesRejected,
 //                                                                          sampleRejections[]}      (Drive Format v1.2)
 //   <base>/api/cmh/drive-context    DELETE ?category=<id>|all           -> {category, sessions, pings, samples}
+//   <base>/api/cmh/driver-summary   GET  x-driver-key                   -> {v:1, asOf, stats, weeks[], drives[]}  (lib/core/driver_summary.dart)
 //   <base>/api/cmh/drive-repeaters  GET  x-driver-key                   -> {repeaters[{key,name,lat,lon}], at}
 //   <base>/api/cmh/problem-report   POST x-driver-key, report body      -> 201 {id, status, receivedAt, redacted}
 //   <base>/api/cmh/site-config      GET  (public, no driver key)        -> {region:{slug,url}, radioPreset:{name,
@@ -26,6 +27,7 @@ import 'package:http/http.dart' as http;
 
 import 'api.dart';
 import 'drive_context_wire.dart';
+import 'driver_summary.dart';
 import 'model.dart';
 import 'region_lookup.dart';
 import 'report_body.dart' show problemReportMaxBytes;
@@ -135,8 +137,9 @@ class HttpCmatClient implements CmatClient, TelemetryTransport {
     }
     if (!ok.contains(res.statusCode)) {
       final err = decoded is Map && decoded['error'] is String ? decoded['error'] as String : null;
+      final word = decoded is Map && decoded['status'] is String && (decoded['status'] as String).length <= 24 ? decoded['status'] as String : null;
       throw CmatException(err ?? 'server answered ${res.statusCode}${res.reasonPhrase == null ? '' : ' ${res.reasonPhrase}'}',
-          status: res.statusCode);
+          status: res.statusCode, serverStatus: word);
     }
     if (decoded is! Map) throw CmatException('server sent an unreadable answer', status: res.statusCode);
     return decoded.cast<String, dynamic>();
@@ -287,6 +290,16 @@ class HttpCmatClient implements CmatClient, TelemetryTransport {
     snaps.sort((a, b) => a.at.compareTo(b.at));
     // The licence needs this exact line wherever the values are shown; never display a server-edited one in its place.
     return DriveEnv(session: j['session'] as String? ?? sessionId, status: status, attribution: openMeteoCredit, snapshots: snaps);
+  }
+
+  @override
+  Future<DriverSummary> driverSummary(String driverKey) async {
+    final j = await _send('GET', 'driver-summary', driverKey: driverKey);
+    try {
+      return DriverSummary.parse(j);
+    } on FormatException {
+      throw const CmatException('server sent an unreadable answer', status: 200);
+    }
   }
 
   @override

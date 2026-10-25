@@ -5,6 +5,7 @@ import 'dart:io';
 
 import 'antenna_profile.dart';
 import 'drive_context_wire.dart' show ContextUploadResult, DriveContextBatch;
+import 'driver_summary.dart' show DriverSummary;
 import 'model.dart';
 import 'region_lookup.dart';
 import 'server_url.dart';
@@ -100,7 +101,10 @@ class UploadResult {
 class CmatException implements Exception {
   final int? status;
   final String message;
-  const CmatException(this.message, {this.status});
+
+  /// The `status` word of a 403 body (`rejected`, `revoked`, `banned`, ...), when the server sent one.
+  final String? serverStatus;
+  const CmatException(this.message, {this.status, this.serverStatus});
   @override
   String toString() => 'CmatException($status): $message';
 }
@@ -293,6 +297,10 @@ abstract class CmatClient {
   /// uploaded (per-ping `ctx`, `samples`). Same rules as a v1.2 upload. Throws [CmatException] (404 = the server does
   /// not know that drive).
   Future<ContextUploadResult> uploadDriveContext(String driverKey, DriveContextBatch batch);
+
+  /// `GET /api/cmh/driver-summary` (`capabilities.driverSummary`): the account's history across phones and installs.
+  /// Throws [CmatException] (401 unknown key, 403 not allowed with [CmatException.serverStatus], 429 pause).
+  Future<DriverSummary> driverSummary(String driverKey) => throw const CmatException('not supported by this client');
 }
 
 /// The server's answer to a drive-context erase.

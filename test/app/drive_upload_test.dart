@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/app/services.dart';
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/drive_context_wire.dart';
+import 'package:meshsonar/core/driver_summary.dart';
 import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/core/region_lookup.dart';
 import 'package:meshsonar/core/sync_service.dart';
@@ -209,6 +210,8 @@ class RecordingClient implements CmatClient {
   final Uri baseUrl = Uri.parse('https://example.org');
   final List<DriveBatch> uploads;
   RecordingClient(this.uploads);
+  @override
+  Future<DriverSummary> driverSummary(String driverKey) => throw UnimplementedError();
   @override
   Future<KeyRequestResult> requestKey({required String name, String? callsign, String? email}) => throw UnimplementedError();
   @override
