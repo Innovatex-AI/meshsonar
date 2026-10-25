@@ -12,9 +12,10 @@ import '../radio/radio_api.dart';
 import 'region_lookup.dart';
 import 'region_pick.dart';
 
-/// A fix older than this is "stale": still used to centre the map (better than a blank world), labelled with its age,
-/// and never the cause of a "you entered another region" notice or preset prompt.
-const Duration staleFixAge = Duration(hours: 24);
+/// A fix older than this is "stale" (Andy, Oct 24 2026: 72 hours). It is labelled with its age ("Last known location,
+/// 4 d ago") and may still centre the map as a fallback, but it never moves the region: no switch, no "you entered
+/// another region" notice, no preset prompt. A fix exactly 72 h old is not stale.
+const Duration staleFixAge = Duration(hours: 72);
 
 /// A fix at most this old counts as "live" (the phone is there now). An OS-cached position handed back by a GPS call can
 /// be hours old; it centres the map but does not replace a launch seed as the region the phone is in.
@@ -219,11 +220,19 @@ MapStart mapStartFor({
   required bool viewingIsManual,
   required bool viewingRemembered,
   required List<RegionIndexEntry> index,
+  DateTime? now,
 }) {
   final p = phone;
   if (p != null) {
     final manualElsewhere = viewingIsManual && viewing != null && !_holds(viewing, p.fix.lat, p.fix.lon);
-    if (!manualElsewhere) return MapStart(MapStartKind.phone, lat: p.fix.lat, lon: p.fix.lon);
+    // A stale fix (older than [staleFixAge], judged at [now]) is only a fallback: a picked or remembered region that
+    // does not contain it wins, since the stale fix never moved the region there.
+    final staleElsewhere = now != null &&
+        p.isStale(now) &&
+        viewing != null &&
+        (viewingIsManual || viewingRemembered) &&
+        !_holds(viewing, p.fix.lat, p.fix.lon);
+    if (!manualElsewhere && !staleElsewhere) return MapStart(MapStartKind.phone, lat: p.fix.lat, lon: p.fix.lon);
   }
   if (viewing != null && (viewingIsManual || viewingRemembered || p != null)) {
     final c = regionCenter(viewing);

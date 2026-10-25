@@ -65,7 +65,7 @@ class AppState extends ChangeNotifier {
   Settings get settings => _settings;
 
   /// Distance/speed/height formatting for the current Units setting (Auto follows the phone's region).
-  Units get units => Units.resolve(_settings.units, localeName: localeNameProvider());
+  Units get units => Units.resolve(_settings.units, localeName: localeNameProvider(), overrides: _settings.unitOverrides);
 
   /// The device locale name for Auto units; tests replace it so results do not depend on the host Mac's region.
   static String? Function() localeNameProvider = () {
@@ -353,6 +353,12 @@ class AppState extends ChangeNotifier {
       }
       _notePhoneFix(fix);
     }
+    // Older than [staleFixAge] (72 h): never moves the region (no switch, no notice, no preset prompt). It can still
+    // centre the map as [phoneFix], labelled with its age.
+    if (services.clock().toUtc().difference(fix.at.toUtc()) > staleFixAge) {
+      notifyListeners();
+      return;
+    }
     _lastRegionFix = fix;
     final u = _tracker.update(regionIndex, fix.lat, fix.lon, fix.at);
     _regionNearEdge = u.nearEdge;
@@ -493,6 +499,7 @@ class AppState extends ChangeNotifier {
         viewingIsManual: viewingIsManual,
         viewingRemembered: _settings.regionLast != null,
         index: regionIndex,
+        now: services.clock(),
       );
 
   bool _isLiveAge(GeoFix f) {

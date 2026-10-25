@@ -327,10 +327,16 @@ class _DriverKeySectionState extends State<DriverKeySection> {
                     title: const Text('Remove this driver key?'),
                     content: const Text(
                         'Make sure you can get it again before you remove it: the website\'s Devices page shows keys made after it was updated, otherwise you\'ll need a new one.\n\n'
-                        'Without a key, drives stay on this phone and nothing uploads; packet headers stop being collected.'),
+                        'Without a key, drives stay on this phone and nothing uploads; packet headers stop being collected. '
+                        'The app keeps no copy: to undo, paste the same key again with "I already have a key".'),
                     actions: [
                       TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-                      FilledButton(key: const Key('forget-key-confirm'), onPressed: () => Navigator.pop(ctx, true), child: const Text('Remove')),
+                      FilledButton(
+                          key: const Key('forget-key-confirm'),
+                          style: FilledButton.styleFrom(
+                              backgroundColor: Theme.of(ctx).colorScheme.error, foregroundColor: Theme.of(ctx).colorScheme.onError),
+                          onPressed: () => Navigator.pop(ctx, true),
+                          child: const Text('Remove')),
                     ],
                   ),
                 );

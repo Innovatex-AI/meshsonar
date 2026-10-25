@@ -1,5 +1,7 @@
 // Settings shell: a search field, then the sections (lib/ui/settings/*_section.dart, one file each) in the order of
-// lib/ui/settings/settings_index.dart. Phone: one scrolling list of collapsible section cards.
+// lib/ui/settings/settings_index.dart. Phone: one scrolling list of collapsible section cards, expanded by default; the
+// app bar has Search (back to the field from anywhere in the list) and Sections (a sheet listing every section, which
+// jumps to it). Design reasoning: _docs/stream-6-settings.md "Build status (Andy decisions)".
 // Wide screens (>= 840 dp, e.g. iPad landscape): sections on the left, the chosen section on the right.
 // Search matches titles, explanations and keywords and jumps to the row (opening its section, tinting the row).
 import 'package:flutter/material.dart';
@@ -62,6 +64,8 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   final _search = TextEditingController();
+  final _searchFocus = FocusNode();
+  final _phoneScroll = ScrollController();
   final Map<String, GlobalKey> _anchors = {};
   final Set<String> _collapsed = {};
   String _query = '';
@@ -71,19 +75,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void dispose() {
     _search.dispose();
+    _searchFocus.dispose();
+    _phoneScroll.dispose();
     super.dispose();
   }
 
   void _setQuery(String q) => setState(() => _query = q);
 
-  /// Opens [section], scrolls [anchorId] into view and tints it; screen readers hear where focus went.
-  void _jumpTo(String anchorId, String section, String announcement) {
+  /// Opens [section], scrolls [anchorId] into view and tints it (unless [tint] is false, for whole sections); screen
+  /// readers hear where focus went.
+  void _jumpTo(String anchorId, String section, String announcement, {bool tint = true}) {
     setState(() {
       _search.clear();
       _query = '';
       _collapsed.remove(section);
       _selected = section;
-      _highlight = anchorId;
+      _highlight = tint ? anchorId : null;
     });
     FocusManager.instance.primaryFocus?.unfocus();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -98,6 +105,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   void _openEntry(SettingsEntry e) =>
       _jumpTo(e.id, e.section, '${e.title}, in ${sectionInfo(e.section).title}');
+
+  /// App bar Search: back to the top and into the field, from anywhere in the list.
+  void _focusSearch() {
+    if (_phoneScroll.hasClients) {
+      _phoneScroll.animateTo(0, duration: const Duration(milliseconds: 250), curve: Curves.easeOutCubic);
+    }
+    _searchFocus.requestFocus();
+  }
+
+  /// App bar Sections: every section in one short list; tapping one opens it and scrolls to it.
+  Future<void> _showSectionIndex(BuildContext context) async {
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (ctx) => ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(ctx).height * 0.8),
+        child: ListView(key: const Key('settings-section-index'), shrinkWrap: true, children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+            child: Semantics(header: true, child: Text('Jump to a section', style: Theme.of(ctx).textTheme.titleMedium)),
+          ),
+          for (final info in settingsSections)
+            ListTile(
+              key: Key('jump-${info.id}'),
+              leading: Icon(info.icon),
+              title: Text(info.title),
+              subtitle: _collapsed.contains(info.id) ? const Text('Folded; opens when you jump to it') : null,
+              onTap: () => Navigator.pop(ctx, info.id),
+            ),
+        ]),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    _jumpTo('section-$picked', picked, '${sectionInfo(picked).title} section', tint: false);
+  }
 
   void _toggle(String id) => setState(() => _collapsed.contains(id) ? _collapsed.remove(id) : _collapsed.add(id));
 
@@ -116,6 +160,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         child: TextField(
           key: const Key('settings-search'),
           controller: _search,
+          focusNode: _searchFocus,
           onChanged: _setQuery,
           textInputAction: TextInputAction.search,
           decoration: InputDecoration(
@@ -177,6 +222,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _phone(BuildContext context) => SingleChildScrollView(
         key: const Key('settings-list'),
+        controller: _phoneScroll,
         padding: const EdgeInsets.fromLTRB(0, 4, 0, 24),
         child: Center(
           child: ConstrainedBox(
@@ -240,8 +286,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     AppScope.of(context); // rebuild with the app state
+    final wide = MediaQuery.sizeOf(context).width >= settingsTwoPaneWidth;
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      appBar: AppBar(title: const Text('Settings'), actions: [
+        IconButton(
+          key: const Key('settings-search-action'),
+          tooltip: 'Search settings',
+          icon: const Icon(Icons.search),
+          onPressed: _focusSearch,
+        ),
+        // Wide screens already list the sections on the left.
+        if (!wide)
+          IconButton(
+            key: const Key('settings-sections-action'),
+            tooltip: 'Jump to a section',
+            icon: const Icon(Icons.toc),
+            onPressed: () => _showSectionIndex(context),
+          ),
+      ]),
       body: SafeArea(
         child: SettingsAnchors(
           keys: _anchors,

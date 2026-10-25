@@ -30,9 +30,9 @@ List<Widget> drivesSectionRows(BuildContext context) {
         key: const Key('sync-during-drive'),
         secondary: const Icon(Icons.sync),
         title: const Text('Upload during the drive'),
-        subtitle: Text(st.autoSync
-            ? 'Sends new pings while you drive, so nothing waits for Stop.'
-            : 'Turn on "Upload at end of drive" first.'),
+        subtitle: st.autoSync
+            ? const Text('Sends new pings while you drive, so nothing waits for Stop.')
+            : const SettingsWhyNot('Off while "Upload at end of drive" is off. Turn that on first.'),
         value: st.autoSync && st.syncDuringDrive,
         onChanged: st.autoSync ? (v) => s.updateSettings(s.settings.copyWith(syncDuringDrive: v)) : null,
       ),
@@ -50,6 +50,9 @@ List<Widget> drivesSectionRows(BuildContext context) {
         minLabel: '1 min',
         maxLabel: '30 min',
         caption: 'Shorter means the map is fresher; longer saves battery and data.',
+        disabledReason: st.autoSync
+            ? 'Only used while "Upload during the drive" is on. Turn it on to choose the interval.'
+            : 'Only used while "Upload at end of drive" and "Upload during the drive" are on. Turn them on first.',
         enabled: st.autoSync && st.syncDuringDrive,
         onChanged: (v) => s.updateSettings(s.settings.copyWith(syncEveryMin: v)),
       ),

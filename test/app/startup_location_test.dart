@@ -76,12 +76,12 @@ void main() {
     expect(last.saves.last.lon, -83.0, reason: 'fresh fixes are saved as the next launch\'s last-known');
   });
 
-  test('a stale fix (3 days) is labelled and centres the map, but never prompts; no GPS answer keeps it', () async {
-    make(stored: GeoFix(lat: 39.9, lon: -84.0, at: DateTime.utc(2026, 10, 13, 18)));
+  test('an old fix under 72 h (3 days exactly) is labelled, centres the map and sets the region, never prompts', () async {
+    make(stored: GeoFix(lat: 39.9, lon: -84.0, at: DateTime.utc(2026, 10, 13, 18))); // exactly 72 h before "now"
     h.location.currentFix = () => null;
     await h.state.init();
     await launched();
-    expect(h.state.phoneFix!.isStale(now()), isTrue);
+    expect(h.state.phoneFix!.isStale(now()), isFalse, reason: 'stale means older than 72 h');
     expect(h.state.phoneFixNote, 'Last known location, 3 d ago');
     expect(h.state.mapStart.kind, MapStartKind.phone);
     expect(h.state.viewingRegion?.code, 'DAY');
@@ -89,6 +89,84 @@ void main() {
     expect(h.state.pendingNotice, isNull);
     expect(h.state.diagnostics.lines.join('\n'), isNot(contains('No GPS fix at launch')),
         reason: 'only said when there is nothing at all to show');
+  });
+
+  group('the 72 h stale threshold (Andy, Oct 24)', () {
+    // "now" is 2026-10-16 18:00 UTC; the stored fix is in Dayton, the remembered region (when set) is Columbus.
+    final at71 = DateTime.utc(2026, 10, 13, 19);
+    final at73 = DateTime.utc(2026, 10, 13, 17);
+
+    test('71 h: the last-known fix still switches the region (quietly: no notice, no prompt)', () async {
+      make(stored: GeoFix(lat: 39.9, lon: -84.0, at: at71), settings: const Settings(regionLast: 'CMH'));
+      h.location.currentFix = () => null;
+      await h.state.init();
+      await launched();
+      expect(h.state.currentRegion?.code, 'DAY');
+      expect(h.state.viewingRegion?.code, 'DAY');
+      expect(h.state.regionFixKnown, isTrue);
+      expect(h.state.mapStart.kind, MapStartKind.phone);
+      expect(h.state.phoneFixNote, 'Last known location, 2 d ago');
+      expect(h.state.presetPrompt, isNull);
+      expect(h.state.pendingNotice, isNull);
+    });
+
+    test('73 h: labelled, but no switch, no notice, no prompt; the remembered region and its centre stay', () async {
+      make(stored: GeoFix(lat: 39.9, lon: -84.0, at: at73), settings: const Settings(regionLast: 'CMH'));
+      h.location.currentFix = () => null;
+      await h.state.init();
+      await launched();
+      expect(h.state.phoneFix?.isStale(now()), isTrue);
+      expect(h.state.phoneFixNote, 'Last known location, 3 d ago');
+      expect(h.state.currentRegion, isNull, reason: 'a stale fix never seeds the region tracker');
+      expect(h.state.regionFixKnown, isFalse);
+      expect(h.state.viewingRegion?.code, 'CMH');
+      expect(h.state.settings.regionLast, 'CMH');
+      expect(h.state.mapStart.kind, MapStartKind.region, reason: 'the stale fix is elsewhere: the remembered region wins');
+      expect(h.state.presetPrompt, isNull);
+      expect(h.state.pendingNotice, isNull);
+    });
+
+    test('73 h with no region ever viewed: still the map centre fallback, labelled; nothing remembered', () async {
+      make(stored: GeoFix(lat: 39.9, lon: -84.0, at: at73));
+      h.location.currentFix = () => null;
+      await h.state.init();
+      await launched();
+      expect(h.state.mapStart.kind, MapStartKind.phone);
+      expect(h.state.mapStart.lon, -84.0);
+      expect(h.state.phoneFixNote, 'Last known location, 3 d ago');
+      expect(h.state.currentRegion, isNull);
+      expect(h.state.settings.regionLast, isNull, reason: 'the first-region guess is not remembered');
+      expect(h.state.presetPrompt, isNull);
+      expect(h.state.pendingNotice, isNull);
+    });
+
+    test('73 h, then a live fix: the live fix sets the region at once with no crossing notice', () async {
+      make(stored: GeoFix(lat: 39.9, lon: -84.0, at: at73), settings: const Settings(regionLast: 'CMH'));
+      final gate = Completer<void>();
+      h.location
+        ..currentGate = gate
+        ..currentFix = () => GeoFix(lat: 39.9, lon: -84.0, at: now()); // Dayton, live
+      await h.state.init();
+      await settle();
+      expect(h.state.viewingRegion?.code, 'CMH');
+      gate.complete();
+      await launched();
+      expect(h.state.currentRegion?.code, 'DAY');
+      expect(h.state.viewingRegion?.code, 'DAY');
+      expect(h.state.phoneFixNote, isNull);
+      expect(h.state.pendingNotice ?? '', isNot(contains('Entered')));
+      expect(h.state.presetPrompt, isNull);
+    });
+
+    test('an OS-cached fix older than 72 h from the GPS call does not switch the region either', () async {
+      make(settings: const Settings(regionLast: 'CMH'));
+      h.location.currentFix = () => GeoFix(lat: 39.9, lon: -84.0, at: at73);
+      await h.state.init();
+      await launched();
+      expect(h.state.currentRegion, isNull);
+      expect(h.state.viewingRegion?.code, 'CMH');
+      expect(h.state.phoneFixNote, 'Last known location, 3 d ago');
+    });
   });
 
   test('a GPS error falls back to the last-known fix and is logged', () async {

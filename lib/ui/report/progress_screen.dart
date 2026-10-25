@@ -37,7 +37,7 @@ String weeksCaption(DateTime now) =>
     'ISO weeks starting Monday, your phone\'s local time (${now.toLocal().timeZoneName}). A drive counts in the week it started.';
 
 /// Distance as a plain number in the person's long-distance unit (km or mi), for bar heights.
-double _longUnits(double metres, Units u) => metres / (u.isImperial ? metresPerMile : 1000);
+double _longUnits(double metres, Units u) => metres / u.metresPerLongUnit;
 
 class ProgressScreen extends StatefulWidget {
   const ProgressScreen({super.key});
