@@ -8,6 +8,12 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 - Units: besides Auto / Metric / Imperial, distance, speed, height and altitude, temperature (°C/°F) and air pressure (hPa/inHg/mmHg) can each have their own unit; each follows Units by default. Old settings files load unchanged.
 - Settings on phones: app bar Search and Sections (jump to any section); every unavailable control now says why and how to enable it; removing the driver key says how to undo it.
 - A last-known position older than 72 hours (was 24 h) is labelled and can still centre the map, but no longer switches the region or shows a region notice or preset prompt.
+- Map layers sheet rebuilt from the layer registry: sections This drive / Coverage / Network / Around you, and every server-fed layer says where it stands (count and source, loading, "Couldn't load" with Retry, "Offline - as of …", or the switch disabled with the reason, e.g. "Not available on this server yet").
+- New map layer "All MeshCore repeaters", on by default: every repeater with a public position from the server's network list (live: 55.6k), coloured by last advert (24 h / 7 d / 30 d / older), with a legend and the MeshCore Map credit. In your region it shows that region plus 40 km around it; with no region known it shows the whole world as count bubbles that split as you zoom in. Bubble counts are large, high-contrast and read by screen readers. Shows "Not available on this server yet" (switch off and disabled) on a server without the list.
+- Region repeaters on the map are now clustered and come from the synced roster (offline too); tap one for its sheet with "Open repeater page" (was a name tooltip).
+- New map layer "Observers": the region's observers that share their position; tap for online state, noise floor, packets per hour and more.
+- Tap a cluster to zoom into it; tap a repeater or observer for its detail sheet.
+- Fix: the network repeater list never loaded in the app (its background decode failed with "object is unsendable"); it is now decoded off the main isolate as intended.
 
 - The Drive map and the Region tab open on the phone at once (last-known position), then move to the fresh GPS fix unless you moved the map; an old position is labelled "Last known location, 3 d ago". With no position the app opens on the last region, else on all regions.
 - Location off, not asked, denied, restricted, approximate or services off: a plain note with the right action (Allow location, Open Settings) and "Choose region". Nothing is asked on launch.
@@ -36,6 +42,16 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
   exports byte-identical), category list with disclosure text (`lib/core/data_categories.dart`), GPS altitude, course
   and accuracies kept on `GeoFix`.
 - Units: air pressure (hPa / inHg) and temperature (°C / °F).
+- Data collected during drives (stream 7, opt-out): motion and altitude, phone barometer, phone battery, phone and app
+  details, radio health (battery, uptime, error flags, packet counters, airtime, storage, every minute, never during a
+  ping), the radio chip's temperature (from the radio's own telemetry, ESP32 / nRF52 boards) and radio settings,
+  recorded with the drive on this phone only (not uploaded). Drive report: noise floor and SNR by radio temperature. Weather is listed as not
+  available yet. No phone air temperature (iPhones have no sensor).
+- First-run disclosure v2 "What MeshSonar collects": every category with its own switch, Continue / Turn all off;
+  shown once to everyone who saw only the packet-header sheet; nothing new is collected before it is seen.
+- Settings > Privacy & data sharing: a switch per category; off stops at once and offers to delete it from the drives
+  on this phone. Drive report: new "Phone and radio context" section. Export files add the drive's context.
+- iOS: Motion & Fitness usage text for the barometer and an app privacy manifest (PrivacyInfo.xcprivacy).
 - Map engine groundwork (not on screen yet): grid clustering for 5-20k points (`core/cluster_index.dart`), map links compatible with the website's `/coverage` URL (`core/map_view_state.dart`), the layer registry with website `?show=` keys and honest per-layer availability, a single-painter clustered repeater layer for the global "All MeshCore repeaters" list and the region roster, and a repeater detail sheet (copy key, last advert, distance in your units, Open repeater page).
 
 ## [0.19.0] — 2026-10-24 — Timeline, telemetry, offline cache

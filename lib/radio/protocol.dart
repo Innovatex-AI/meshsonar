@@ -26,6 +26,7 @@ abstract final class Cmd {
   static const setChannel = 32;
   static const sendControlData = 55; // v8+
   static const getStats = 56; // v8+
+  static const sendTelemetryReq = 39; // with exactly 3 reserved bytes = the companion's own ('self') telemetry
 }
 
 abstract final class Resp {
@@ -56,6 +57,7 @@ abstract final class Push {
   static const traceData = 0x89;
   static const newAdvert = 0x8A;
   static const controlData = 0x8E; // v8+
+  static const telemetryResponse = 0x8B;
 }
 
 abstract final class ErrCode {
@@ -660,3 +662,74 @@ Uint8List encodeControlDataPush(double snrDb, int rssiDbm, int pathLen, List<int
 
 Uint8List encodeMsgWaiting() => Uint8List.fromList([Push.msgWaiting]);
 Uint8List encodeNoMoreMessages() => Uint8List.fromList([Resp.noMoreMessages]);
+
+// ------------------------------------------------------------------ self telemetry (radio temperature)
+//
+// MeshCore companion firmware (examples/companion_radio/MyMesh.cpp ~1700-1718 at commit 81dbae5, 2026-10-15, v1.18.0):
+// CMD_SEND_TELEMETRY_REQ (39) with len == 4 ([39][3 reserved]) is the "self" telemetry request. The firmware answers
+// with ONE frame, PUSH_CODE_TELEMETRY_RESPONSE (0x8B): [0x8B][reserved 0][own pub key prefix, 6 B][CayenneLPP bytes].
+// The LPP holds, on channel TELEM_CHANNEL_SELF (1, src/helpers/SensorManager.h:10): LPP_VOLTAGE (battery) and, on
+// boards whose MCU has a sensor, LPP_TEMPERATURE = board.getMCUTemperature() (ESP32: temperatureRead(), ESP32Board.h
+// ~58; nRF52: sd_temp_get / NRF_TEMP, NRF52Board.cpp ~298; base MainBoard returns NAN = not sent, MeshCore.h:48).
+// After that, sensors.querySensors(0xFF, ...) may append environment sensors AND the board's GPS position on other
+// entries: MeshSonar reads ONLY the channel-1 temperature and voltage and never keeps anything else (no position).
+// The temperature is the radio's chip (MCU) temperature, not air temperature.
+
+/// CayenneLPP data sizes (electroniccats/CayenneLPP 1.6.1, used by the firmware). Unknown type = stop parsing.
+const Map<int, int> _lppSize = {
+  0: 1, 1: 1, 2: 2, 3: 2, 100: 4, 101: 2, 102: 1, 103: 2, 104: 1, 113: 6, 115: 2, 116: 2, 117: 2, 118: 4, 120: 1,
+  121: 2, 125: 2, 128: 2, 130: 4, 131: 4, 132: 2, 133: 4, 134: 6, 135: 3, 136: 9, 142: 1,
+};
+
+/// What MeshSonar keeps from the radio's self telemetry.
+class SelfTelemetry {
+  /// MCU (chip) temperature, °C (LPP 0.1 °C signed); null when the board does not report one.
+  final double? mcuTempC;
+
+  /// Battery voltage, volts (LPP 0.01 V).
+  final double? voltageV;
+  const SelfTelemetry({this.mcuTempC, this.voltageV});
+}
+
+Uint8List encodeSelfTelemetryReq() => Uint8List.fromList([Cmd.sendTelemetryReq, 0, 0, 0]);
+
+/// Decodes a PUSH_CODE_TELEMETRY_RESPONSE frame. Returns null when it is not one, is too short, or (with
+/// [selfPrefix]) answers for another node. Only channel-1 temperature and voltage are read.
+SelfTelemetry? decodeSelfTelemetryPush(Uint8List f, {List<int>? selfPrefix}) {
+  if (f.length < 8 || f[0] != Push.telemetryResponse) return null;
+  if (selfPrefix != null && selfPrefix.length >= 6) {
+    for (var i = 0; i < 6; i++) {
+      if (f[2 + i] != selfPrefix[i]) return null;
+    }
+  }
+  final bd = ByteData.sublistView(f);
+  double? temp, volt;
+  var i = 8;
+  while (i + 2 <= f.length) {
+    final ch = f[i], type = f[i + 1];
+    final size = _lppSize[type];
+    if (size == null || i + 2 + size > f.length) break;
+    if (ch == 1 && type == 103 && temp == null) temp = bd.getInt16(i + 2, Endian.big) / 10;
+    if (ch == 1 && type == 116 && volt == null) volt = bd.getUint16(i + 2, Endian.big) / 100;
+    i += 2 + size;
+  }
+  return SelfTelemetry(mcuTempC: temp, voltageV: volt);
+}
+
+/// Radio side of the self telemetry answer (simulator and tests).
+Uint8List encodeSelfTelemetryPush({required List<int> prefix6, double? voltageV, double? mcuTempC, List<int> extraLpp = const []}) {
+  final b = BytesBuilder()
+    ..addByte(Push.telemetryResponse)
+    ..addByte(0)
+    ..add(prefix6.take(6).toList());
+  if (voltageV != null) {
+    final v = (voltageV * 100).round().clamp(0, 0xffff);
+    b.add([1, 116, (v >> 8) & 0xff, v & 0xff]);
+  }
+  if (mcuTempC != null) {
+    final t = (mcuTempC * 10).round().clamp(-32768, 32767) & 0xffff;
+    b.add([1, 103, (t >> 8) & 0xff, t & 0xff]);
+  }
+  b.add(extraLpp);
+  return b.toBytes();
+}

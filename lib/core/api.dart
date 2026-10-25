@@ -131,8 +131,22 @@ class SiteConfig {
 
   /// Null when the region has no suggested preset configured — a real, expected state, not an error.
   final RadioPreset? radioPreset;
-  const SiteConfig({required this.region, this.radioPreset});
+
+  /// What this server accepts beyond the basics (stream 7 server request S1, `site-config.capabilities`). Absent key
+  /// = feature absent; no server sends any today. Only boolean flags are kept.
+  final Set<String> capabilities;
+  const SiteConfig({required this.region, this.radioPreset, this.capabilities = const {}});
+
+  /// The server looks up weather for uploaded drives and serves it (`capabilities.driveEnv`, S1 + S4).
+  bool get driveEnv => capabilities.contains('driveEnv');
 }
+
+/// The true flags of a `capabilities` object; anything malformed counts as absent.
+Set<String> parseCapabilities(Object? raw) => {
+      if (raw is Map)
+        for (final e in raw.entries)
+          if (e.key is String && e.value == true) e.key as String,
+    };
 
 /// One measured coverage cell from `GET /api/cmh/public-coverage` — the same cells the website's `/coverage` map
 /// draws, network-wide (every driver, not just this phone). A square or an H3 hexagon depending on
@@ -303,6 +317,20 @@ class Settings {
   /// this is the opt-out. See lib/core/telemetry.dart.
   final bool telemetryEnabled;
 
+  /// Drive-context categories (lib/core/data_categories.dart ids) the person switched off. Every category is on by
+  /// default (opt-out, Andy Oct 2026), so only the off ones are stored, under `collection_off`; ids this version does
+  /// not know are kept as they are (a newer app's choice survives a downgrade). Packet headers stay on
+  /// [telemetryEnabled].
+  final Set<String> collectionOff;
+
+  /// Whether the collection category [id] is switched on (packet headers: [telemetryEnabled]).
+  bool collectionOn(String id) => id == 'packet_headers' ? telemetryEnabled : !collectionOff.contains(id);
+
+  /// A copy with category [id] switched [on].
+  Settings withCollection(String id, bool on) => id == 'packet_headers'
+      ? copyWith(telemetryEnabled: on)
+      : copyWith(collectionOff: on ? ({...collectionOff}..remove(id)) : {...collectionOff, id});
+
   /// Allowed ranges (UI sliders and clamping).
   static const int minIntervalSec = 10, maxIntervalSec = 120;
   static const int minDistance = 15, maxDistance = 500;
@@ -328,6 +356,7 @@ class Settings {
     this.units = UnitsPreference.auto,
     this.unitOverrides = const UnitOverrides(),
     this.telemetryEnabled = true,
+    this.collectionOff = const {},
   });
 
   Settings copyWith({
@@ -350,6 +379,7 @@ class Settings {
     UnitsPreference? units,
     UnitOverrides? unitOverrides,
     bool? telemetryEnabled,
+    Set<String>? collectionOff,
     bool clearKey = false,
   }) =>
       Settings(
@@ -372,6 +402,7 @@ class Settings {
         units: units ?? this.units,
         unitOverrides: unitOverrides ?? this.unitOverrides,
         telemetryEnabled: telemetryEnabled ?? this.telemetryEnabled,
+        collectionOff: collectionOff ?? this.collectionOff,
       );
 
   Map<String, dynamic> toJson() => {
@@ -394,6 +425,7 @@ class Settings {
         if (units != UnitsPreference.auto) 'units': units.name,
         if (!unitOverrides.isEmpty) 'unit_overrides': unitOverrides.toJson(),
         if (!telemetryEnabled) 'telemetry_enabled': false,
+        if (collectionOff.isNotEmpty) 'collection_off': collectionOff.toList()..sort(),
       };
   factory Settings.fromJson(Map<String, dynamic> j) => Settings(
         serverUrl: _str(j['server_url']) ?? defaultServerUrl,
@@ -416,6 +448,11 @@ class Settings {
         units: UnitsPreference.parse(j['units']),
         unitOverrides: UnitOverrides.fromJson(j['unit_overrides']),
         telemetryEnabled: j['telemetry_enabled'] is bool ? j['telemetry_enabled'] as bool : true,
+        collectionOff: {
+          if (j['collection_off'] case final List l)
+            for (final v in l)
+              if (v is String && v.isNotEmpty) v,
+        },
       );
 
   /// A string field; anything else is null so the default applies.

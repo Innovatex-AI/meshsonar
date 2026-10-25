@@ -11,7 +11,9 @@ import 'repeater_map_source.dart';
 const List<MapLayerSpec> kMapLayers = [
   MapLayerSpec(id: 'measured', label: 'Network coverage', group: LayerGroup.coverage, z: 10, defaultOn: true, onWebsite: true, serverFed: true),
   MapLayerSpec(id: 'hexes', label: 'Drive hexagons', group: LayerGroup.drive, z: 20, defaultOn: true, onWebsite: false, serverFed: false),
-  MapLayerSpec(id: kNetworkLayerId, label: 'All MeshCore repeaters', group: LayerGroup.network, z: 30, defaultOn: false, onWebsite: true, serverFed: true),
+  // Default ON (Andy, Oct 24 2026; D3): scoped to the viewed region when one is detected or picked, grouped clusters
+  // with counts for the whole world otherwise (AppStateRepeaterFeed).
+  MapLayerSpec(id: kNetworkLayerId, label: 'All MeshCore repeaters', group: LayerGroup.network, z: 30, defaultOn: true, onWebsite: true, serverFed: true),
   MapLayerSpec(id: kRosterLayerId, label: 'Region repeaters', group: LayerGroup.network, z: 40, defaultOn: false, onWebsite: true, serverFed: true),
   MapLayerSpec(id: 'observers', label: 'Observers', group: LayerGroup.network, z: 45, defaultOn: false, onWebsite: true, serverFed: true),
   MapLayerSpec(id: 'links', label: 'Links to repeaters', group: LayerGroup.drive, z: 50, defaultOn: true, onWebsite: false, serverFed: false),
@@ -37,7 +39,8 @@ Map<LayerGroup, List<MapLayerSpec>> layersByGroup() => {
   for (final g in LayerGroup.values) g: [for (final l in kMapLayers) if (l.group == g) l],
 };
 
-/// The default state: every `defaultOn` layer on; modes measured=snr, pings=snr (today's defaults).
+/// The default state: every `defaultOn` layer on (the drive layers, measured coverage and the global repeater layer);
+/// modes measured=snr, pings=snr.
 final MapLayerState kDefaultLayerState = MapLayerState(
   on: Set.unmodifiable({for (final l in kMapLayers) if (l.defaultOn) l.id}),
   mode: const {'measured': 'snr', 'pings': 'snr'},

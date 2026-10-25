@@ -257,7 +257,7 @@ class HttpCmatClient implements CmatClient, TelemetryTransport {
       throw const CmatException('server sent a malformed radio preset');
     }
 
-    return SiteConfig(region: regionInfo, radioPreset: preset);
+    return SiteConfig(region: regionInfo, radioPreset: preset, capabilities: parseCapabilities(j['capabilities']));
   }
 
   @override

@@ -5,20 +5,20 @@
 // Opened from the Drive screen's map with the DriveMapModel the Drive screen already keeps, so the GPS stream,
 // the heard snapshot, the selected repeater and the layer choices are shared both ways.
 //
-// Keys: 'fullscreen-map' (the screen), 'fullscreen-close', 'map-layers', 'layers-sheet', 'layer-pings',
-// 'layer-color-result', 'layer-color-snr', 'layer-repeaters', 'layer-links', 'layer-rings',
-// 'layer-network-coverage'.
+// Keys: 'fullscreen-map' (the screen), 'fullscreen-close', 'map-layers', and the layers sheet's keys (see
+// layers/layers_sheet.dart: 'layers-sheet', 'layer-pings', 'layer-color-result', 'layer-color-snr', 'layer-repeaters',
+// 'layer-links', 'layer-rings', 'layer-network-coverage', 'layer-region-repeaters', 'layer-network', 'layer-observers').
 import 'package:flutter/material.dart';
 
 import '../app.dart';
 import '../drive/drive_controls.dart';
 import '../drive/drive_map_model.dart';
 import '../drive/heard_box.dart';
-import 'coverage_layer_controls.dart';
 import 'coverage_timeline_slider.dart';
 import 'coverage_map.dart';
+import 'layers/layers_sheet.dart' show showGeneratedLayersSheet;
 import 'region_center.dart';
-import 'map_layers.dart';
+import 'repeater_page_link.dart';
 
 void openFullscreenMap(BuildContext context, DriveMapModel model) {
   Navigator.of(context).push(
@@ -71,6 +71,11 @@ class FullscreenMapScreen extends StatelessWidget {
                   layers: model.layers,
                   networkCells: model.networkCells,
                   regionRepeaters: model.regionRepeaters,
+                  repeaterSource: model.repeaterSource,
+                  layerState: model.layerState,
+                  observers: model.observers,
+                  observersRegionName: s.viewingRegion?.name,
+                  openRepeaterPage: openRepeaterPageFromMap,
                   highlightKey: model.selected,
                   onSelectRepeater: model.select,
                   simulated: model.simulated,
@@ -181,112 +186,6 @@ class FullscreenMapScreen extends StatelessWidget {
   }
 }
 
-/// Layer toggles (shared with the Drive screen map).
-Future<void> showMapLayersSheet(BuildContext context, DriveMapModel model) {
-  return showModalBottomSheet<void>(
-    context: context,
-    showDragHandle: true,
-    isScrollControlled: true,
-    builder: (context) => SafeArea(
-      child: AnimatedBuilder(
-        animation: model,
-        builder: (context, _) {
-          final t = Theme.of(context);
-          final l = model.layers;
-          void set(MapLayers n) => model.layers = n;
-          return SingleChildScrollView(
-            child: Padding(
-            key: const Key('layers-sheet'),
-            padding: const EdgeInsets.fromLTRB(Gap.s, 0, Gap.s, Gap.m),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(Gap.m, 0, Gap.m, Gap.s),
-                  child: Text('Map layers', style: t.textTheme.titleLarge),
-                ),
-                SwitchListTile(
-                  key: const Key('layer-network-coverage'),
-                  secondary: const Icon(Icons.public_rounded),
-                  title: const Text('Network coverage'),
-                  subtitle: const Text("Everyone's measured coverage, not just this drive"),
-                  value: l.networkCoverage,
-                  onChanged: (v) => set(l.copyWith(networkCoverage: v)),
-                ),
-                if (l.networkCoverage) CoverageLayerControls(model: model),
-                SwitchListTile(
-                  key: const Key('layer-hexes'),
-                  secondary: const Icon(Icons.hexagon_outlined),
-                  title: const Text('Hex coverage'),
-                  subtitle: const Text('Your pings on the same hexagons as the website'),
-                  value: l.hexes,
-                  onChanged: (v) => set(l.copyWith(hexes: v)),
-                ),
-                SwitchListTile(
-                  key: const Key('layer-pings'),
-                  secondary: const Icon(Icons.scatter_plot_rounded),
-                  title: const Text('Pings'),
-                  value: l.pings,
-                  onChanged: (v) => set(l.copyWith(pings: v)),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(72, 0, Gap.l, Gap.s),
-                  child: SegmentedButton<PingColorMode>(
-                    showSelectedIcon: false,
-                    style: ButtonStyle(
-                      backgroundColor: WidgetStateProperty.resolveWith(
-                        (st) => st.contains(WidgetState.selected) ? t.colorScheme.primaryContainer : null,
-                      ),
-                      foregroundColor: WidgetStateProperty.resolveWith(
-                        (st) => st.contains(WidgetState.selected) ? t.colorScheme.onPrimaryContainer : null,
-                      ),
-                    ),
-                    segments: const [
-                      ButtonSegment(value: PingColorMode.snr, label: Text('By SNR', key: Key('layer-color-snr'))),
-                      ButtonSegment(value: PingColorMode.result, label: Text('Heard / not', key: Key('layer-color-result'))),
-                    ],
-                    selected: {l.pingColors},
-                    onSelectionChanged: l.pings ? (v) => set(l.copyWith(pingColors: v.first)) : null,
-                  ),
-                ),
-                SwitchListTile(
-                  key: const Key('layer-repeaters'),
-                  secondary: const Icon(Icons.cell_tower_rounded),
-                  title: const Text('Repeaters'),
-                  value: l.repeaters,
-                  onChanged: (v) => set(l.copyWith(repeaters: v)),
-                ),
-                SwitchListTile(
-                  key: const Key('layer-region-repeaters'),
-                  secondary: const Icon(Icons.cell_tower_outlined),
-                  title: const Text('Region repeaters'),
-                  subtitle: const Text('Every repeater in this region, by activity'),
-                  value: l.regionRepeaters,
-                  onChanged: (v) => set(l.copyWith(regionRepeaters: v)),
-                ),
-                SwitchListTile(
-                  key: const Key('layer-links'),
-                  secondary: const Icon(Icons.timeline_rounded),
-                  title: const Text('Links to heard repeaters'),
-                  subtitle: const Text('With distance'),
-                  value: l.links,
-                  onChanged: (v) => set(l.copyWith(links: v)),
-                ),
-                SwitchListTile(
-                  key: const Key('layer-rings'),
-                  secondary: const Icon(Icons.radar_rounded),
-                  title: const Text('Range rings'),
-                  subtitle: Text(AppScope.unitsOf(context).isImperial ? 'Half a mile and 1 mile around you' : '1 km and 2 km around you'),
-                  value: l.rings,
-                  onChanged: (v) => set(l.copyWith(rings: v)),
-                ),
-              ],
-            ),
-            ),
-          );
-        },
-      ),
-    ),
-  );
-}
+/// Layer toggles (shared with the Drive screen map): the sheet generated from the layer registry
+/// (layers/layers_sheet.dart).
+Future<void> showMapLayersSheet(BuildContext context, DriveMapModel model) => showGeneratedLayersSheet(context, model);

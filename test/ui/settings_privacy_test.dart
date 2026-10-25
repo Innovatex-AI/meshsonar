@@ -31,8 +31,9 @@ void main() {
   }
 
   group('registry', () {
-    test('only categories the app really collects are listed; packet headers is the one today', () {
-      expect(dataCategories.map((c) => c.id), ['telemetry']);
+    test('packet headers first, then the stream-7 drive-context categories (data_collection_ui_test covers them)', () {
+      expect(dataCategories.map((c) => c.id),
+          ['telemetry', 'motion', 'barometer', 'phone_battery', 'device', 'radio_health', 'radio_config', 'weather']);
       expect(telemetryCategory.toggleKey, 'telemetry-toggle', reason: 'existing key kept');
     });
 

@@ -8,6 +8,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show SemanticsProperties;
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
@@ -137,6 +138,38 @@ CameraFit cameraFitForCluster(ClusterTap t, MapCamera camera, {EdgeInsets paddin
   );
 }
 
+/// Ink for a cluster count on [fill]: whichever of near-black and white has the higher contrast ratio (WCAG). Every
+/// band colour of both themes gets at least 4.5:1 this way (asserted by tests).
+Color clusterLabelInk(Color fill) {
+  const dark = Color(0xFF1B1F24), light = Color(0xFFFFFFFF);
+  return contrastRatio(dark, fill) >= contrastRatio(light, fill) ? dark : light;
+}
+
+/// WCAG contrast ratio of two opaque colours (1..21).
+double contrastRatio(Color a, Color b) {
+  final la = a.computeLuminance(), lb = b.computeLuminance();
+  final hi = math.max(la, lb), lo = math.min(la, lb);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/// Count text size: 13 px, 15 px from 100 members (the bubble is then at its largest).
+double clusterFontSize(int count) => count >= 100 ? 15 : 13;
+
+/// The drawn bubble radius: the size-by-count radius, grown if needed so the count text has 5 px of fill around it.
+double clusterBubbleRadius(int count, double labelWidth, {double singleRadiusPx = 5}) =>
+    math.max(clusterRadiusPx(count, singleRadiusPx: singleRadiusPx), labelWidth / 2 + 5);
+
+/// What a screen reader says for a cluster: "1,234 repeaters".
+String clusterSemanticsLabel(int count) {
+  final s = '$count';
+  final b = StringBuffer();
+  for (var i = 0; i < s.length; i++) {
+    if (i > 0 && (s.length - i) % 3 == 0) b.write(',');
+    b.write(s[i]);
+  }
+  return '$b repeaters';
+}
+
 class ClusteredPointsPainter extends CustomPainter {
   final ClusterIndex index;
   final ClusterSlice slice;
@@ -253,31 +286,54 @@ class ClusteredPointsPainter extends CustomPainter {
     for (final k in clusters) {
       final c = offsetOf(k);
       final n = slice.count[k];
-      final rad = clusterRadiusPx(n, singleRadiusPx: singleRadiusPx);
       final col = _band(slice.band[k]);
+      final tp = _label(clusterLabel(n), clusterLabelInk(col), clusterFontSize(n));
+      final rad = clusterBubbleRadius(n, tp.width, singleRadiusPx: singleRadiusPx);
       canvas.drawCircle(c, rad + 2, Paint()..color = haloColor);
-      canvas.drawCircle(c, rad, Paint()..color = col.withValues(alpha: 0.88));
-      final tp = _label(clusterLabel(n), _onColor(col));
+      // Opaque fill: the count's contrast is then exactly the ink-on-fill ratio, whatever the basemap below.
+      canvas.drawCircle(c, rad, Paint()..color = col.withValues(alpha: 1));
       tp.paint(canvas, c - Offset(tp.width / 2, tp.height / 2));
     }
   }
 
-  /// Text colour that reads on [c]: dark ink on light fills, white on dark ones.
-  Color _onColor(Color c) => c.computeLuminance() > 0.45 ? const Color(0xFF1B1F24) : const Color(0xFFFFFFFF);
+  /// One semantics node per visible cluster ("1,234 repeaters"), so the counts are read out and testable.
+  @override
+  SemanticsBuilderCallback get semanticsBuilder => (size) {
+    final out = <CustomPainterSemantics>[];
+    for (var k = 0; k < slice.length; k++) {
+      final n = slice.count[k];
+      if (n <= 1) continue;
+      final c = offsetOf(k);
+      final rad = clusterRadiusPx(n, singleRadiusPx: singleRadiusPx) + 2;
+      final rect = Rect.fromCircle(center: c, radius: rad);
+      if (!rect.overlaps(Offset.zero & size)) continue;
+      out.add(
+        CustomPainterSemantics(
+          key: ValueKey('cluster-${slice.level}-${slice.cluster[k]}'),
+          rect: rect,
+          properties: SemanticsProperties(label: clusterSemanticsLabel(n), textDirection: TextDirection.ltr, button: true),
+        ),
+      );
+    }
+    return out;
+  };
+
+  @override
+  bool shouldRebuildSemantics(ClusteredPointsPainter oldDelegate) => !identical(oldDelegate.slice, slice) || oldDelegate.camera != camera;
 
   static final Map<String, TextPainter> _labels = {};
 
   /// A laid-out count label, cached by text and colour (visible clusters are bounded by the viewport, so this stays
   /// small; it is cleared past 256 entries).
-  static TextPainter _label(String text, Color color) {
-    final key = '$text|${color.toARGB32()}';
+  static TextPainter _label(String text, Color color, double fontSize) {
+    final key = '$text|${color.toARGB32()}|$fontSize';
     final hit = _labels[key];
     if (hit != null) return hit;
     if (_labels.length > 256) _labels.clear();
     final tp = TextPainter(
       text: TextSpan(
         text: text,
-        style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w700, height: 1),
+        style: TextStyle(color: color, fontSize: fontSize, fontWeight: FontWeight.w800, height: 1),
       ),
       textDirection: TextDirection.ltr,
     )..layout();

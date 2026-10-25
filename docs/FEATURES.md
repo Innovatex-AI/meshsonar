@@ -172,32 +172,53 @@ simulator's repeaters in Simulator mode), **ping dots**, and the current **posit
   → green), or plain green in "Heard / not" mode. Unknown SNR shows mid teal. The newest dot pulses once.
 - **Follow mode** keeps the position centred. Dragging turns it off and shows **Recenter** (`map-recenter`).
 - Tap a repeater to see its name, a short key, "Heard N pings ago", SNR and distance.
-- **Layers sheet** (`layers-sheet`): Network coverage, Hex coverage, Pings (colour by SNR / heard-not), Repeaters,
-  Links to heard repeaters, Range rings. All are on by default. The choices are shared between the Drive and
-  full-screen maps but not saved. Network coverage fetches once at startup (and again if the server URL changes);
-  a fetch failure keeps showing whatever was already drawn rather than clearing it.
+- **Layers sheet** (`layers-sheet`), generated from the layer registry, in four sections: **This drive** (Hex
+  coverage, Links to heard repeaters, Repeaters heard, Pings with colour by SNR / heard-not), **Coverage** (Network
+  coverage with its colour-by / detail / since / source controls), **Network** (All MeshCore repeaters, Region
+  repeaters, Observers) and **Around you** (Range rings). Drive layers, Network coverage and All MeshCore repeaters are on by
+  default; Region repeaters and Observers are off. A default-on layer the server cannot offer shows off and disabled. Every server-fed layer says where it stands under its switch: a count and source ("3
+  repeaters · 4 hidden by their owners · Data: MeshCore Map (map.meshcore.io)", "1 observer with a public position",
+  "753 cells measured"), "Loading…", "Couldn't load. Check the connection and retry." with **Retry**, "… · Offline - as
+  of 2h ago" for a stored copy (with Retry), or a reason with the switch disabled: "Not available on this server yet"
+  (the server answers 404), "No repeaters reported yet", "Pick a region to see its observers". A layer that is on can
+  always be switched off. The choices are shared between the Drive and full-screen maps but not saved. Network coverage
+  fetches once at startup (and again if the server URL changes); a fetch failure keeps showing whatever was already
+  drawn rather than clearing it.
+- **All MeshCore repeaters** (`network`, on by default): every repeater and room server with a public position, from
+  the server's `network-repeaters` list (live since Oct 24 2026, 55.6k rows; synced on open, at most every 6 h, stored for offline use, about 6 MB on disk). Clustered: one
+  painter, only what is on screen, clusters with counts that split as you zoom. Colour = last advert (24 h green, 7 days
+  blue, 30 days amber, older grey; room servers are rings). **Scope**: when your region is known (the phone is in it,
+  you picked it, or it is the remembered one while the phone's position is unknown) only that region's repeaters plus
+  40 km around its edges are drawn ("N repeaters in and around Columbus, US"); otherwise (new visitor, phone outside
+  every region) the whole world as count bubbles, like the other online MeshCore maps: bubbles show their total (13/15
+  px heavy text on an opaque fill, ink chosen for at least 4.5:1 contrast in light and dark), split as you zoom in,
+  merge as you zoom out, single dots at street zoom; screen readers hear "1,234 repeaters". The list is built off the
+  UI thread and the layer appears when it is ready. Legend in the sheet with the data's "as of" time, and a
+  small legend + "Data: MeshCore Map (map.meshcore.io)" on the map while it is on. Advert-age colours are recomputed
+  when the list is refreshed (also a 304 "unchanged") and when the layer is switched on if they are over 10 minutes
+  old. With Region repeaters also on, roster repeaters are drawn once, by the roster layer.
+- **Region repeaters** (`repeaters`): the viewed region's roster from the repeater sync (offline copy included),
+  clustered, coloured by status (active, quiet, new, stale; legend in the sheet).
+- **Observers** (`observers`): the viewed region's observers whose owner made the position public
+  (`region-observers`, fetched when the layer is switched on and when the viewed region changes), triangles (online
+  filled teal, offline outline).
+- **Tap for detail**: a coverage cell opens the cell sheet; a repeater (either layer) the repeater sheet (name, type,
+  copyable key, last advert / last heard, distance from you in your Units, roster status / SNR / grade / adverts /
+  neighbours / hash prefix when known, source, **Open repeater page** for a roster repeater); several repeaters on one
+  spot a list; a cluster zooms to its members (follow stops, Recenter appears); an observer the observer sheet (online
+  state, last seen, noise floor, packets per hour, nodes heard in 24 h, radio, reported battery mV, distance, source and
+  how the position was published).
 - Attribution "© OpenStreetMap contributors" is always shown with tiles. Tiles are off under `flutter test`.
 - If there's no position or pings, the map centres on Columbus, Ohio (39.9612, −82.9988).
 
-### Map layer engine (built, not on screen yet)
+### Map layer engine
 
-New building blocks for the map redesign (stream-1-maps.md), merged ahead of the screens that use them, so nothing
-below is visible in the app yet:
+Building blocks behind the layers above (stream-1-maps.md), in `ui/map/layers/` and `ui/map/sheets/`:
 
-- **Layer registry** (`ui/map/layers/`): every map layer with the website's `?show=` key where the website has the
-  same layer (`measured`, `repeaters`, `observers`, `network`) and app-only keys for the drive layers (`hexes`,
-  `links`, `neighbours`, `heard`, `pings`, `rings`). Each layer reports whether its switch works and why not:
-  "Not available on this server yet" (404), "Loading…", "Couldn't load. Check the connection and retry." (with
-  Retry), "No repeaters reported yet", "No observers with a public position in CMH", "Offline copy".
-- **Clustered repeater layers**: "All MeshCore repeaters" (`network`, from `GET /api/cmh/network-repeaters` once the
-  server ships it; coloured by last advert: 24 h green, 7 days blue, 30 days amber, older grey; room servers are
-  rings) and "Region repeaters" (`repeaters`, the roster, coloured by status). One painter per layer, only what is
-  on screen, clusters with counts that split as you zoom; tap a cluster to zoom to it, tap a stack on one tower for a
-  list, tap a repeater for its sheet.
-- **Repeater sheet**: name, repeater or room server, the full key (first 8 bold, copy button), last advert or last
-  heard ("3 h ago (2026-10-24)"), distance from you in your Units, the roster's status / mean SNR / grade / adverts /
-  neighbours / hash prefix when the key is in the viewed region's roster, the data source, and "Open repeater page"
-  when the region is known.
+- **Layer registry**: every map layer with the website's `?show=` key where the website has the same layer
+  (`measured`, `repeaters`, `observers`, `network`) and app-only keys for the drive layers (`hexes`, `links`,
+  `neighbours`, `heard`, `pings`, `rings`). `neighbours` (links of the selected repeater) is registered but not drawn
+  yet, so the sheet does not list it.
 - **Map links**: `MapViewState` reads and writes `https://<region>.meshsonar.com/coverage?show=…&color=…&since=…&src=…
   &res=…&lat=…&lon=…` (the website's own parameters, same validation) plus `z` and `until`, and the same query on
   `meshsonar://map?…&region=cmh`. Opening such a link in the app (URL scheme, app_links) is not built yet.
@@ -492,27 +513,51 @@ drive, last and first heard, farthest from the repeater (units), the grid cells 
 track) on a small map coloured by best SNR, and the 5 newest drives (tap for the drive report). "From drives stored on
 this phone."; "None of the N drives on this phone heard this repeater." when none did.
 
-## Drive context: data collected (stream 7, core only, not switched on yet)
+## Drive context: data collected (stream 7)
 
-Built as pure-Dart pieces; nothing below is collected in a drive until the drive flow starts the recorder and the
-versioned disclosure + Settings categories ship (separate work). Design: meshsonar-infra planning
-`stream-7-data-collection.md`.
+Collected during drives, on this phone, OPT-OUT (on by default, Andy Oct 24 2026), after the person has seen the
+version-2 disclosure. Nothing of it is uploaded: no server accepts it yet (stream 7 WP5, behind a capability). Design:
+meshsonar-infra planning `stream-7-data-collection.md`.
 
-- **Categories** (`lib/core/data_categories.dart`): packet headers (live today), motion and altitude, air pressure,
-  phone battery, phone and app details, radio health, radio settings, weather. Each has a stable id, title, exact
-  disclosure sentence, the stored keys it owns, default ON (opt-out, Andy Oct 24 2026), destination and availability
-  (`live`, `recorderReady`, `needsSensorPlugin`, `needsServer`) so the UI never presents uncollected data as collected.
-- **Radio health** (`lib/radio/radio_health.dart`): every 60 s during a drive, GET_STATS radio/core/packets plus
-  GET_BATT_AND_STORAGE every 15 min; never while a ping is in flight (it waits, then skips); firmware that lacks a
-  command is asked once. Values the radio did not measure stay empty (0 mV battery, 0 noise floor, 0 RSSI).
-  `err_flags` is the firmware's sticky error bitmask, not a counter. Channel utilisation is not reported by MeshCore.
-- **Storage** (`JsonlDriveStore`): `samples.jsonl` (no coordinates), `ctx.jsonl` (per ping), `context.json` (per
-  drive) beside the drive, crash-safe like `pings.jsonl`. The upload and the export are byte-identical to before.
-  Turning a category off strips its keys from stored context (`stripCategories`, atomic rewrite).
-- **GPS extras**: `GeoFix` keeps altitude, vertical accuracy, course over ground and its accuracy, speed accuracy
-  (null when the phone did not measure them); they are context only, never part of the drive upload.
-- **Simulator**: answers every stats command with counters that follow what it did (pings sent, packets heard,
-  airtime, a slowly draining battery, 120 / 1984 KB storage).
+- **Categories** (`lib/core/data_categories.dart`, mapped one-to-one in `lib/ui/settings/data_sharing.dart`): packet
+  headers (the live feed, unchanged), motion and altitude, air pressure, phone battery, phone and app details, radio
+  health, radio settings, weather (switch only; "Not available yet": no server looks up weather).
+- **Disclosure v2** (`lib/ui/telemetry_sheet.dart`): "What MeshSonar collects", one block and one switch per category
+  (packet headers with its full shared / never-shared list), the "saved with your drive" note, the air-temperature
+  note, and two equal buttons, Continue (keeps the switches) and Turn all off. The flag is versioned
+  (`ui_prefs.json` `collection_disclosed_v: 2`): people who saw only the packet-header sheet see it once. Packet headers
+  keep their earlier consent; every new category waits for v2 (`AppState.collectionOn`). Seen mid-drive, collection
+  starts at once.
+- **Settings > Privacy & data sharing**: one switch per category (keys `telemetry-toggle`, `collect-<id>-toggle`),
+  subtitle = the category sentence, plus a live status (no barometer support / the last drive got no barometer
+  readings / weather not available yet). On asks first with what is collected. Off takes effect at once (the
+  collector stops), says nothing of it left the phone, and offers Delete (from every drive on this phone; default
+  Keep). Stored as `collection_off: [ids]` in settings.json, only when something is off; unknown ids are kept.
+- **When**: only while a drive runs (`lib/core/drive_context_session.dart`, started/stopped by AppState with the
+  drive). Radio health every 60 s, never while a ping is in flight; barometer 1 Hz kept as a one-minute median and a
+  per-ping median (readings within 15 s of the ping); phone battery once a minute and on charging changes; phone/app
+  details and radio identity once per drive. Ping context is written only after the ping itself is saved.
+- **Sensors** (`lib/platform/phone_sensors_plus.dart`, seams `lib/core/phone_sensors.dart`): sensors_plus barometer
+  (iOS asks Motion & Fitness at the first drive with Air pressure on), battery_plus, device_info_plus (hardware model
+  identifier, never the device name). No phone air temperature: iPhones have no sensor; not invented.
+- **Radio health** (`lib/radio/radio_health.dart`): GET_STATS radio/core/packets every minute plus
+  GET_BATT_AND_STORAGE every 15 min; unsupported commands asked once. `err_flags` is a sticky bitmask shown as flags.
+  Channel utilisation is not reported by MeshCore; the report shows own-radio airtime and says it is not channel load.
+  BLE signal phone<->radio is NOT read yet (stored key exists, not claimed in the disclosure).
+- **Radio chip temperature**: the companion's "self" telemetry (CMD_SEND_TELEMETRY_REQ with 3 reserved bytes, answered
+  by PUSH_CODE_TELEMETRY_RESPONSE with CayenneLPP), channel-1 LPP_TEMPERATURE = the board's MCU temperature (ESP32 and
+  nRF52 boards; others send none). Read once a minute with the other radio stats (`mcu_temp_c`); everything else in
+  that answer (environment sensors, the board's GPS position) is skipped and never stored. The drive report charts it
+  (°C / °F) and shows noise floor and SNR by 5-degree band.
+- **Storage**: `samples.jsonl` (no coordinates), `ctx.jsonl`, `context.json` beside the drive. The upload is
+  byte-identical to before. The drive's Export file adds a `context` object (format
+  `meshsonar.drive-context.local.v1`) only when context exists; the drive part is byte-identical.
+- **Weather**: switch only. `site-config.capabilities.driveEnv` (server request S1) changes the status line; no
+  weather is shown in the app yet and nothing is invented.
+- **Drive report**: "Phone and radio context" section: air pressure (hPa / inHg, labelled phone barometer, cabin
+  pressure), GPS altitude (m / ft), phone battery %, radio battery V, radio uptime, airtime %, packets sent / heard,
+  storage, error flags in words, phone and radio details. "No phone or radio context was recorded" for older drives.
+- **Simulator**: answers every stats command, so a simulator drive records radio health.
 
 ## Uploads
 

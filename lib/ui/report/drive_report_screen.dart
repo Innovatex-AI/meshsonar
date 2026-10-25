@@ -21,6 +21,7 @@ import '../app.dart';
 import '../map/coverage_map.dart' show CoverageMap;
 import '../onboarding/ui_prefs.dart' show driveLabel;
 import '../widgets.dart';
+import 'drive_context_section.dart';
 import 'drive_report_sections.dart';
 import 'pdf_export.dart';
 
@@ -220,6 +221,7 @@ class _ReportBody extends StatelessWidget {
             const _Heading('GPS accuracy', icon: Icons.gps_fixed),
             GpsSection(key: const Key('report-gps'), gps: r.rf.gps!),
           ],
+          DriveContextSection(sessionId: r.session.id, pings: r.sortedPings),
           if (r.repeaters.isNotEmpty) ...[
             _Heading('Repeater leaderboard', icon: Icons.emoji_events_outlined, trailing: '${r.repeaters.length}'),
             _Leaderboard(report: r),
