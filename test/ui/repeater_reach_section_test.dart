@@ -34,8 +34,8 @@ RepeaterReach reach({bool bands = true, bool empty = false}) => empty
             : const [],
       );
 
-class _Client extends FakeCmatClient {
-  _Client(super.u);
+class ReachClient extends FakeCmatClient {
+  ReachClient(super.u);
   Future<RepeaterReach> Function(String key, double? lat, double? lon)? handler;
   final calls = <(String, String, double?, double?)>[];
   @override
@@ -45,17 +45,17 @@ class _Client extends FakeCmatClient {
   }
 }
 
-class _H extends Harness {
+class ReachHarness extends Harness {
   Future<RepeaterReach> Function(String key, double? lat, double? lon)? handler;
   SiteConfig? site = const SiteConfig(region: _region, capabilities: {'reachDriverKey'});
   @override
-  FakeCmatClient newClient(Uri u) => _Client(u)
+  FakeCmatClient newClient(Uri u) => ReachClient(u)
     ..siteConfigResult = site
     ..handler = (k, a, b) => handler!(k, a, b);
-  _Client get rc => client as _Client;
+  ReachClient get rc => client as ReachClient;
 }
 
-Future<_H> show(WidgetTester tester,
+Future<ReachHarness> show(WidgetTester tester,
     {Future<RepeaterReach> Function(String, double?, double?)? handler,
     bool approved = true,
     SiteConfig? site,
@@ -66,7 +66,7 @@ Future<_H> show(WidgetTester tester,
     UnitsPreference units = UnitsPreference.metric,
     double textScale = 1}) async {
   useTallScreen(tester);
-  final h = _H()..handler = handler ?? ((_, _, _) async => reach());
+  final h = ReachHarness()..handler = handler ?? ((_, _, _) async => reach());
   if (noCap) h.site = const SiteConfig(region: _region);
   if (site != null) h.site = site;
   if (approved) h.approveKey();
@@ -132,7 +132,7 @@ void main() {
   testWidgets('capability present, key missing or pending: one line and an Open driver key settings action, no ask', (tester) async {
     final h = await show(tester, approved: false);
     expect(find.byKey(const Key('reach-needs-key')), findsOneWidget);
-    expect(h.clients.every((c) => (c as _Client).calls.isEmpty), isTrue);
+    expect(h.clients.every((c) => (c as ReachClient).calls.isEmpty), isTrue);
     await tester.tap(find.byKey(const Key('reach-open-key-settings')));
     await tester.pumpAndSettle();
     expect(find.byType(DriverKeyScreen), findsOneWidget);
@@ -188,7 +188,7 @@ void main() {
 
   testWidgets('loading state is a progress bar', (tester) async {
     useTallScreen(tester);
-    final h = _H()..handler = (_, _, _) => Future<RepeaterReach>.delayed(const Duration(seconds: 5), reach);
+    final h = ReachHarness()..handler = (_, _, _) => Future<RepeaterReach>.delayed(const Duration(seconds: 5), reach);
     h.approveKey();
     await h.pumpApp(tester);
     await tester.runAsync(() => h.state.refreshUploadSiteConfig(force: true));
@@ -212,7 +212,7 @@ void main() {
 
   testWidgets('the drive repeater sheet hosts it for a resolved repeater with the repeater position', (tester) async {
     useTallScreen(tester);
-    final h = _H()..handler = (_, _, _) async => reach();
+    final h = ReachHarness()..handler = (_, _, _) async => reach();
     h.approveKey();
     h.cache.items = const [RepeaterRef(key: key, name: 'Albany West', lat: 40.101, lon: -82.931)];
     await h.pumpApp(tester);
