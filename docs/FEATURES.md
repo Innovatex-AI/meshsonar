@@ -312,8 +312,7 @@ unmeasured values and a dashed 0 dB line.
 
 (`ui/report/progress_screen.dart`, maths in `core/personal_progress.dart`) Every drive stored on this phone, and it
 says so at the top ("From drives stored on this phone: N drives since ... Drives deleted from this phone or recorded on
-another phone are not included."). There is no server-wide history yet (the `driver-summary` endpoint is requested in
-the stream 5 design doc). A drive that cannot be read is skipped and counted in a banner.
+another phone are not included."). With a server that offers `driverSummary` and an approved or pending key, a switch adds the account's history from the server (see "Your progress, server view" below). A drive that cannot be read is skipped and counted in a banner.
 
 - **Totals:** drives, distance, time driving, pings, heard %, grid cells, repeaters heard, best SNR.
 - **By week** (ISO weeks starting Monday in the phone's local time, zone named in every caption; a drive counts in the
@@ -529,6 +528,7 @@ Packs are our own OpenStreetMap-derived vector tiles (PMTiles, OpenMapTiles sche
   computedAt), noise floor by hour of day (shifted from the server's UTC hours to the phone's hours when its offset is
   whole hours; otherwise UTC, said so), SNR histogram. An observer that stopped reporting is named with the time of its
   last reading ("INNO-OB-2 has sent no noise reading since ... Its line stops there.").
+- **Time window** (only when the viewed region's site-config lists `capabilities.rfWindow`; otherwise no control and the plain request): a selector `rf-window` (24 hours, 7 days, 30 days, 90 days; starts on 7 days; kept while the tab lives) asks `region-rf?bucket=hour|day&days=1|7|30|90`. 24 h and 7 d are hourly; 30 d and 90 d are one point per UTC day (the mean of that day's hourly means, days named as UTC). The x axis spans the server's `window`; a line breaks after 3 hours (hourly) or 2 days (daily) without data; an observer is called silent when its last reading is that much before the window end; the SNR histogram says which days it covers. Each window is cached separately for offline use ('Offline - as of'). States: loading (the selector stays), error with Retry (keeps the window), 400 'This server cannot show the N window', empty window, 404 not published.
 - **Growth** (`region-ext-growth?days=365`, `core/region_growth_api.dart`): source attribution, known nodes over time
   (running total, UTC days), churn by week (appeared / gone), nodes by role and by hash size; firmware only when the
   server sends any.
@@ -553,6 +553,23 @@ repeater"). Shows times heard and on how many drives (direct = 1 hop or a neighb
 drive, last and first heard, farthest from the repeater (units), the grid cells (about 220 m x 210 m, never the raw
 track) on a small map coloured by best SNR, and the 5 newest drives (tap for the drive report). "From drives stored on
 this phone."; "None of the N drives on this phone heard this repeater." when none did.
+
+## Your progress, server view
+
+(`ui/report/server_progress.dart`, `core/driver_summary.dart`): when the upload server's site-config says `driverSummary` and the key is approved or pending, a switch (`progress-source`) offers "On the server": your account's history across phones and installs from `GET driver-summary`. It shows:
+
+- totals in your Units and the share confirmed by the mesh among settled pings;
+- distance, heard % and new grid cells per UTC Monday week, with the Chart/Table switch;
+- the newest 200 server drives;
+- a line comparing server drives with this phone by id.
+
+It is the default view when offered and is never mixed with the phone's numbers. The answer is stored on the phone, one file per server and key hash, with no key stored. It is fresh for 5 minutes, pull-to-refresh runs at most every 10 seconds, it shows as "Offline - as of ..." when the server is unreachable, and it is deleted when the key is removed or refused. States: loading, no connection, 401 (key not recognised), 403 (rejected, revoked or banned in words), 429 (pause), empty account, and unreadable rows (counted). Tapping a drive that is on the phone opens its report. A server-only drive opens a detail sheet. At large text sizes the Chart/Table toggle sits under the chart title.
+
+**Repeater "Where MeshSonar drives heard this repeater"** (`ui/repeater_reach_section.dart`, `core/repeater_reach.dart`) Under "Your drives" on the Region tab's repeater screen, and on the drive repeater sheet for a resolved repeater: where ALL MeshSonar drivers heard it, from `GET repeater-reach?key=&lat=&lon=` with the approved driver key. It is shown only when the upload server's site-config has `reachDriverKey` and the repeater's full key is known (at least 8 hex characters). The lat/lon sent is the repeater's own position, never the phone's. The server counts only visible pings of public drives (each drive's start and end trimmed, privacy zones removed), direct echoes, in 0.0025 degree cells, with times rounded down to the hour. The section is labelled as network-wide and says it is not the phone-only "Your drives". Content: tiles (heard pings, drives and drivers, best and median SNR, farthest in Units, last heard), a map of the reach cells coloured by best SNR (cells about 280 m by 210 m, never raw tracks), and a "Signal by distance from this repeater" bar chart (six server bands in Units, Chart / Table switch, numbers in the semantics label). Without the repeater position there is no farthest value and no chart, and the section says why. States: capability absent (nothing shown), key missing or pending (one line plus "Open driver key settings"), loading, 401 / 403 / 429 / other server errors in words with Retry, "No connection" with nothing stored, nothing heard (with the privacy reason), and a stored copy labelled "Offline - as of ...". Answers are stored on disk per server and repeater (10 minutes fresh, at most 40 entries, no driver key stored); a refused key (401/403) never serves a stored copy.
+
+## Repeater 30-day signal trend
+
+`region-repeater` `snrDaily` (shown when the viewed region's site-config lists `capabilities.snrDaily` and the answer carries the field; `ui/region/snr_trend_card.dart`, maths in `core/snr_trend.dart`). Mean SNR per UTC day of this repeater's adverts heard directly (0 hops) by MeshSonar's trusted observers, up to 30 days. Chart/Table switch (the table lists every day with its advert count and 'no reading' for gaps), latest/lowest/highest in words, a trend sentence only with at least 7 days of readings (the last k days with readings against the k before: 'steady within 1 dB' or 'about X dB stronger/weaker'), gaps never interpolated, days are UTC. No readings in 30 days says so and why; an older server or a missing capability shows no card.
 
 ## Drive context: data collected (stream 7)
 
@@ -629,7 +646,7 @@ meshsonar-infra planning `stream-7-data-collection.md`.
 - **Drive report, Weather**: shown only when `site-config.capabilities.driveEnv` is true, the driver key is approved,
   the Weather category is on and the drive has been uploaded (otherwise the block is absent, nothing invented). Asked
   once when the block scrolls into view (`GET drive-env`, `lib/core/drive_env_cache.dart`): a `ready` answer is kept
-  on disk for 6 hours, `pending` / `disabled` / `unavailable` are asked again only after 5 minutes, at most 50 asks a
+  on disk for 1 hour (and is dropped when the server's weather is erased or the Weather switch goes off), `pending` / `disabled` / `unavailable` are asked again only after 5 minutes, at most 50 asks a
   minute, and a failed ask shows the stored copy as "Offline - as of ...". Content: summary tiles (temperature, dew
   point, humidity, wind with the compass point it comes from, precipitation, cloud, station pressure), charts with
   the Chart / Table switch (temperature and dew point, wind, air pressure) and "All hourly values". Pressure compares
@@ -639,8 +656,12 @@ meshsonar-infra planning `stream-7-data-collection.md`.
   every 30 minutes after a drive has been quiet for 2 hours), partly looked up, off for this drive, nothing to look up
   (nothing publicly visible - the start / end trim can cause it - or older than 60 days), offline, 404 (server does not
   know the drive), 429 and other errors with Retry. The line "Weather data by Open-Meteo.com (CC BY 4.0)" links to
-  open-meteo.com and sits directly under any values; it is also in About and THIRD_PARTY_NOTICES.md. Weather is not
-  in the text / CSV / PDF drive reports.
+  open-meteo.com and sits directly under any values; it is also in About and THIRD_PARTY_NOTICES.md. **Exports**: the text
+  summary, the CSV (a `weather` table, SI units, UTC hours, empty cell = the source gave none) and the PDF (a Weather
+  section with the facts and the hourly table in the person's units, local hours) include the same hourly values when
+  the answer is `ready`; with no weather (pending, off, offline with nothing stored, no key, not uploaded) they carry
+  no weather section and say nothing about it. Each repeats the Open-Meteo line and says the values are model values
+  for a cell of about 5 km, not measured at the car (`core/drive_weather_export.dart`).
 - **Drive report**: "Phone and radio context" section: air pressure (hPa / inHg, labelled phone barometer, cabin
   pressure), GPS altitude (m / ft), phone battery %, radio battery V, radio uptime, airtime %, packets sent / heard,
   storage, error flags in words, phone and radio details. "No phone or radio context was recorded" for older drives.
