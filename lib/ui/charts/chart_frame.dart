@@ -71,21 +71,17 @@ class _ChartFrameState extends State<ChartFrame> {
       key: Key('chart-${w.id}'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(children: [
-          Expanded(child: Text(w.title, style: t.textTheme.titleSmall)),
-          const SizedBox(width: 8),
-          SegmentedButton<bool>(
-            key: Key('chart-${w.id}-toggle'),
-            showSelectedIcon: false,
-            style: const ButtonStyle(visualDensity: VisualDensity.compact, tapTargetSize: MaterialTapTargetSize.padded),
-            segments: const [
-              ButtonSegment(value: false, label: Text('Chart'), tooltip: 'Show as a chart'),
-              ButtonSegment(value: true, label: Text('Table'), tooltip: 'Show as a table'),
-            ],
-            selected: {_table},
-            onSelectionChanged: (s) => setState(() => _table = s.first),
-          ),
-        ]),
+        // Large text: the Chart / Table switch goes under the title instead of overflowing beside it.
+        if (MediaQuery.textScalerOf(context).scale(14) / 14 > 1.3) ...[
+          Text(w.title, style: t.textTheme.titleSmall),
+          const SizedBox(height: 4),
+          Align(alignment: Alignment.centerRight, child: _toggle(w)),
+        ] else
+          Row(children: [
+            Expanded(child: Text(w.title, style: t.textTheme.titleSmall)),
+            const SizedBox(width: 8),
+            _toggle(w),
+          ]),
         const SizedBox(height: 8),
         if (_table)
           _TableView(key: Key('chart-${w.id}-table'), table: w.table, title: w.title)
@@ -105,6 +101,18 @@ class _ChartFrameState extends State<ChartFrame> {
       ],
     );
   }
+
+  Widget _toggle(ChartFrame w) => SegmentedButton<bool>(
+        key: Key('chart-${w.id}-toggle'),
+        showSelectedIcon: false,
+        style: const ButtonStyle(visualDensity: VisualDensity.compact, tapTargetSize: MaterialTapTargetSize.padded),
+        segments: const [
+          ButtonSegment(value: false, label: Text('Chart'), tooltip: 'Show as a chart'),
+          ButtonSegment(value: true, label: Text('Table'), tooltip: 'Show as a table'),
+        ],
+        selected: {_table},
+        onSelectionChanged: (s) => setState(() => _table = s.first),
+      );
 }
 
 class _TableView extends StatelessWidget {

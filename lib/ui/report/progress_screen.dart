@@ -2,8 +2,9 @@
 // (Monday start, phone local time, zone named in the captions), distance / heard % / new grid cells / new repeaters
 // per week, personal records (tap one to open that drive's report) and "Your radio" (noise floor per drive and by hour
 // of day, TX power per drive), each chart with a Table view and its numbers in the semantics label.
-// Scope is said plainly at the top: drives stored on this phone. There is no server-wide history yet (the
-// `driver-summary` endpoint is requested in the stream 5 design doc as P1-a).
+// Scope is said plainly at the top: drives stored on this phone. When the upload server offers `driver-summary` and the
+// key can use it, a switch (`progress-source`) adds "On the server": the account's history across phones and installs
+// (lib/ui/report/server_progress.dart); the two are never mixed in one set of numbers.
 // Opened from the Drives tab's progress card (ProgressCard, below).
 import 'package:flutter/material.dart';
 
@@ -21,6 +22,7 @@ import '../region/region_common.dart' show groupInt;
 import '../widgets.dart';
 import 'drive_report_screen.dart' show openDriveReport;
 import 'local_drives.dart';
+import 'server_progress.dart';
 
 void openProgress(BuildContext context) =>
     Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const ProgressScreen()));
@@ -45,8 +47,13 @@ class ProgressScreen extends StatefulWidget {
   State<ProgressScreen> createState() => _ProgressScreenState();
 }
 
+enum ProgressSource { phone, server }
+
 class _ProgressScreenState extends State<ProgressScreen> {
   Future<(PersonalProgress, LocalDrives)>? _future;
+  Future<ServerLoad>? _server;
+  ProgressSource _source = ProgressSource.server; // the server view wins whenever it is offered
+  bool _capsAsked = false;
 
   Future<(PersonalProgress, LocalDrives)> _load() async {
     final s = AppScope.read(context);
@@ -54,52 +61,121 @@ class _ProgressScreenState extends State<ProgressScreen> {
     return (PersonalProgress.compute(local.drives, now: s.services.clock()), local);
   }
 
+  Future<ServerLoad> _loadServer({bool force = false}) async {
+    final s = AppScope.read(context);
+    final r = await s.driverSummary(force: force);
+    var ids = <String>{};
+    try {
+      ids = {for (final x in await s.services.store.sessions()) x.session.id};
+    } catch (_) {}
+    return ServerLoad(r, ids);
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _future ??= _load();
+    final s = AppScope.of(context);
+    if (!_capsAsked) {
+      _capsAsked = true;
+      // What the upload server offers may not be known yet (first run offline): ask once; AppState notifies when it lands.
+      s.refreshUploadSiteConfig().catchError((Object _) {});
+    }
+    if (s.driverSummaryAvailable) _server ??= _loadServer();
   }
+
+  void _retryLocal() => setState(() {
+        _future = _load();
+      });
+
+  Widget _local() => FutureBuilder<(PersonalProgress, LocalDrives)>(
+        future: _future,
+        builder: (context, snap) {
+          if (snap.hasError) {
+            return ListView(padding: const EdgeInsets.all(Gap.l), children: [
+              ErrorBanner('Couldn\'t read the drives on this phone. ${snap.error}', key: const Key('progress-error')),
+              const SizedBox(height: Gap.m),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: FilledButton.icon(
+                  key: const Key('progress-retry'),
+                  onPressed: _retryLocal,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Try again'),
+                ),
+              ),
+            ]);
+          }
+          final d = snap.data;
+          if (d == null) return const Center(child: CircularProgressIndicator(key: Key('progress-loading')));
+          final (p, local) = d;
+          if (p.isEmpty) {
+            return const EmptyState(
+              key: Key('progress-empty'),
+              icon: Icons.insights,
+              title: 'No drives yet',
+              body: 'From drives stored on this phone. Start a drive on the Drive tab and your progress shows here.',
+            );
+          }
+          return _ProgressBody(progress: p, unreadable: local.unreadable);
+        },
+      );
 
   @override
   Widget build(BuildContext context) {
+    final s = AppScope.of(context);
+    final offered = s.driverSummaryAvailable;
+    final showServer = offered && _source == ProgressSource.server;
     return Scaffold(
       key: const Key('progress-screen'),
       appBar: AppBar(title: const Text('Your progress')),
       body: SafeArea(
-        child: FutureBuilder<(PersonalProgress, LocalDrives)>(
-          future: _future,
-          builder: (context, snap) {
-            if (snap.hasError) {
-              return ListView(padding: const EdgeInsets.all(Gap.l), children: [
-                ErrorBanner('Couldn\'t read the drives on this phone. ${snap.error}', key: const Key('progress-error')),
-                const SizedBox(height: Gap.m),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: FilledButton.icon(
-                    key: const Key('progress-retry'),
-                    onPressed: () => setState(() {
-                      _future = _load();
-                    }),
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Try again'),
+        child: !offered
+            ? _local()
+            : Column(children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(Gap.l, Gap.s, Gap.l, Gap.s),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: SegmentedButton<ProgressSource>(
+                      key: const Key('progress-source'),
+                      showSelectedIcon: false,
+                      style: SegmentedButton.styleFrom(minimumSize: const Size(0, 48)),
+                      segments: const [
+                        ButtonSegment(
+                            value: ProgressSource.server,
+                            label: Text('On the server', key: Key('progress-source-server')),
+                            tooltip: 'Across all your drives on the server, from every phone'),
+                        ButtonSegment(
+                            value: ProgressSource.phone,
+                            label: Text('On this phone', key: Key('progress-source-phone')),
+                            tooltip: 'Only the drives stored on this phone'),
+                      ],
+                      selected: {_source},
+                      onSelectionChanged: (v) => setState(() => _source = v.first),
+                    ),
                   ),
                 ),
-              ]);
-            }
-            final d = snap.data;
-            if (d == null) return const Center(child: CircularProgressIndicator(key: Key('progress-loading')));
-            final (p, local) = d;
-            if (p.isEmpty) {
-              return const EmptyState(
-                key: Key('progress-empty'),
-                icon: Icons.insights,
-                title: 'No drives yet',
-                body: 'From drives stored on this phone. Start a drive on the Drive tab and your progress shows here.',
-              );
-            }
-            return _ProgressBody(progress: p, unreadable: local.unreadable);
-          },
-        ),
+                Expanded(
+                  child: showServer
+                      ? ServerProgressPanel(
+                          future: _server ??= _loadServer(),
+                          onRetry: () => setState(() {
+                            _server = _loadServer();
+                          }),
+                          onRefresh: () async {
+                            final f = _loadServer(force: true);
+                            setState(() {
+                              _server = f;
+                            });
+                            try {
+                              await f;
+                            } catch (_) {}
+                          },
+                        )
+                      : _local(),
+                ),
+              ]),
       ),
     );
   }
@@ -143,7 +219,7 @@ class _ProgressBody extends StatelessWidget {
               key: const Key('progress-unreadable')),
         const SizedBox(height: Gap.m),
         Wrap(spacing: Gap.m, runSpacing: Gap.m, children: [
-          for (final (id, k, v) in tiles) _Tile(key: Key('progress-total-$id'), label: k, value: v),
+          for (final (id, k, v) in tiles) ProgressTile(key: Key('progress-total-$id'), label: k, value: v),
         ]),
         const SizedBox(height: Gap.xl),
         _WeekCharts(progress: p, now: now),
@@ -156,9 +232,9 @@ class _ProgressBody extends StatelessWidget {
   }
 }
 
-class _Tile extends StatelessWidget {
+class ProgressTile extends StatelessWidget {
   final String label, value;
-  const _Tile({super.key, required this.label, required this.value});
+  const ProgressTile({super.key, required this.label, required this.value});
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);

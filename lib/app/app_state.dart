@@ -19,6 +19,7 @@ import '../core/data_categories.dart' show CategoryId, dataCategories;
 import '../core/drive_context.dart' show ContextSyncLedger, stripContextCategories, stripUnsentContextCategories;
 import '../core/drive_context_session.dart';
 import '../core/drive_env_cache.dart';
+import '../core/driver_summary.dart';
 import '../core/repeater_reach.dart';
 import '../core/drive_store.dart' show closeOrphanedSessions;
 import '../core/heard.dart';
@@ -136,6 +137,48 @@ class AppState extends ChangeNotifier {
     if (key == null || key.isEmpty) return Future.error(const CmatException('no driver key', status: 401));
     final cache = _envCache();
     return cache.get(sessionId, () => client.driveEnv(key, sessionId));
+  }
+
+  // ---------- driver summary (the account's history beyond this phone: lib/core/driver_summary.dart) ----------
+  DriverSummaryCache? _driverSummaryCache;
+
+  /// The upload server (the one the key belongs to) serves `driver-summary` and the key can use it (approved or
+  /// pending; a rejected or revoked key would be refused). Unknown capability counts as no.
+  bool get driverSummaryAvailable =>
+      (uploadSiteConfig?.driverSummary ?? false) && hasKey && (_settings.keyStatus == DriverKeyStatus.approved || _settings.keyStatus == DriverKeyStatus.pending);
+
+  String? _driverSummaryTag() {
+    final key = _settings.driverKey;
+    if (key == null || key.isEmpty) return null;
+    return DriverSummaryCache.tagOf(Uri.tryParse(_settings.serverUrl)?.host ?? _settings.serverUrl, key);
+  }
+
+  DriverSummaryCache _summaryCache() {
+    final rc = services.regionCache?.dir;
+    return _driverSummaryCache ??= DriverSummaryCache(
+        dir: rc == null ? null : Directory('${rc.parent.path}${Platform.pathSeparator}driver_summary'), clock: services.clock);
+  }
+
+  /// The stored account summary without asking the server (null when none).
+  Future<DriverSummaryResult?> storedDriverSummary() async {
+    final tag = _driverSummaryTag();
+    return tag == null ? null : _summaryCache().stored(tag);
+  }
+
+  /// The account summary: the stored answer while it is under 5 minutes old, else the server's (a forced refresh is
+  /// floored at 10 s). A failed ask serves the stored copy flagged stale. Throws [CmatException] with nothing stored.
+  Future<DriverSummaryResult> driverSummary({bool force = false}) {
+    final key = _settings.driverKey;
+    final tag = _driverSummaryTag();
+    if (key == null || key.isEmpty || tag == null) return Future.error(const CmatException('no driver key', status: 401));
+    return _summaryCache().get(tag, () => client.driverSummary(key), force: force);
+  }
+
+  /// Forgets the stored account summaries (the key was removed or changed).
+  Future<void> clearDriverSummaryCache() async {
+    try {
+      await _summaryCache().clear();
+    } catch (_) {}
   }
 
   // ---------- where all MeshSonar drivers heard a repeater (lib/core/repeater_reach.dart, lib/ui/repeater_reach_section.dart) ----------
@@ -2142,7 +2185,10 @@ class AppState extends ChangeNotifier {
     return ok;
   }
 
-  Future<void> forgetKey() => updateSettings(_settings.copyWith(clearKey: true));
+  Future<void> forgetKey() async {
+    await updateSettings(_settings.copyWith(clearKey: true));
+    await clearDriverSummaryCache(); // the account's drive list must not outlive its key on this phone
+  }
 
   static String? _blankToNull(String? s) => (s == null || s.trim().isEmpty) ? null : s.trim();
 
