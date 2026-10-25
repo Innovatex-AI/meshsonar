@@ -5,6 +5,14 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+## [0.20.0] — 2026-10-25 — Driver insights, RF windows, weather in reports
+
+- Your progress shows your whole account's history from the server (`driver-summary`, capability `driverSummary`): totals, weekly charts (UTC Monday weeks), recent server drives and a comparison with this phone, with a stored offline copy and explicit error states. The Chart/Table switch moves under the title at large text sizes.
+- Repeater detail (Region tab and drive repeater sheet): "Where MeshSonar drives heard this repeater" from `repeater-reach` with the driver key (`reachDriverKey`): tiles, map of reach cells, signal-by-distance chart, every state explicit, 10-minute on-disk cache with offline copy.
+- RF tab: time window selector (24 hours, 7 days, 30 days, 90 days) when the server offers `rfWindow`; daily points for 30 and 90 days; per-window offline copies. `RegionFetch.fail` carries the HTTP status.
+- Repeater detail: 30-day signal trend from `snrDaily` (daily mean direct SNR from our observers, honest gaps, trend sentence from 7 days of data).
+- Drive report text, CSV (`weather` table) and PDF now include the server's hourly weather when it is ready (model values, Open-Meteo credit); nothing when it is not.
+- Fix: the weather answer is kept 1 hour (was 6) and is dropped when the server's weather is erased or the Weather switch is turned off.
 - Drive context is uploaded (Drive Format v1.2) to a server that lists `meshsonar.drive.v1.2` in its site-config: device and radio details, the weather flag, per-ping altitude/course/pressure/battery and the radio-health and phone samples (never a coordinate, never the local-only BLE signal). Any other server gets exactly the plain drive, byte for byte. A drive is never lost to its context: a v1.2 upload refused as a whole is sent again as the plain drive, a ping whose context is refused is stored without it, and refusals are counted in the upload line. Context recorded after its ping was uploaded, and the context of drives uploaded before the server accepted it, is delivered by itself (`POST drive-context`); retries never double count.
 - Opt-out is real: a category switched off is never uploaded, its context is removed from every drive the server does not have it for (so turning it back on does not send it), and, with a key, a dialog offers to erase what the server already holds (Erase highlighted); a server that cannot erase says so. Weather off tells the server to stop and delete.
 - Settings > Privacy & data sharing: each category says where its data goes with the connected server ("Uploaded with your drive." / "Saved on this phone only: this server does not accept it yet."); Weather for my drives is live when the server looks it up (about 5 km, Open-Meteo.com, CC BY 4.0).
