@@ -1,6 +1,8 @@
-// Units migration (spec app-website-parity D.2): every distance, speed and height the person sees goes through
-// lib/core/units.dart so Settings > Units (Auto/Metric/Imperial) changes it. No code in lib/ui or lib/app may glue a
-// raw unit onto a number inside a string: `'${x} m'`, `'$n km'`, `'... mph'`, `'... ft'`, `'... mi'`.
+// Units migration (spec app-website-parity D.2): every distance, speed, height, temperature and pressure the person
+// sees goes through lib/core/units.dart so Settings > Units (Auto/Metric/Imperial, plus the per-quantity choices)
+// changes it. No code in lib/ui or lib/app may glue a raw unit onto a number inside a string: `'${x} m'`, `'$n km'`,
+// `'... mph'`, `'... ft'`, `'... mi'`, `'$t °C'`, `'$p hPa'`; and no code outside units.dart may convert units itself
+// (miles, feet, mph, °F, inHg, mmHg factors).
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -22,7 +24,12 @@ const List<String> allowedLines = [
   'Server address moved',
 ];
 
-final _raw = RegExp(r'(\}|\$\w+|\d) ?(km/h|km|mph|mi|ft|m)(?![\w:])');
+final _raw = RegExp(r'(\}|\$\w+|\d) ?(km/h|kph|km|mph|mi|ft|m|hPa|mbar|inHg|mmHg|°C|°F|° ?C|° ?F)(?![\w:])');
+
+/// Unit conversion done by hand: the constants and factors that belong to lib/core/units.dart only.
+final _conversion = RegExp(r'metresPerMile|metresPerFoot|mphPerMps|kmhPerMps|inHgPerHpa|mmHgPerHpa|\b1609(\.\d+)?\b|'
+    r'\b0\.3048\b|\b3\.28\d*\b|\b2\.236\d*\b|\b0\.6213\d*\b|\* ?3\.6\b|/ ?3\.6\b|\b9 ?/ ?5\b|\b5 ?/ ?9\b|\b33\.86\d*\b|'
+    r'\b0\.02953\d*\b|\b1\.3332\d*\b|\b0\.75006\d*\b');
 
 void main() {
   test('no raw distance/speed/height units outside lib/core/units.dart', () {
@@ -40,5 +47,33 @@ void main() {
       }
     }
     expect(hits, isEmpty, reason: 'format via Units (lib/core/units.dart) instead:\n${hits.join('\n')}');
+  });
+
+  test('no unit conversion outside lib/core/units.dart', () {
+    final hits = <String>[];
+    for (final f in Directory('lib').listSync(recursive: true).whereType<File>()) {
+      final path = f.path.replaceAll('\\', '/');
+      if (!path.endsWith('.dart') || path == 'lib/core/units.dart') continue;
+      for (final line in f.readAsLinesSync()) {
+        final t = line.trim();
+        if (t.startsWith('//')) continue;
+        final code = t.replaceFirst(RegExp(r'\s//.*$'), '');
+        if (_conversion.hasMatch(code)) hits.add('$path: $t');
+      }
+    }
+    expect(hits, isEmpty, reason: 'convert via Units (lib/core/units.dart) instead:\n${hits.join('\n')}');
+  });
+
+  test('the patterns catch what they are meant to', () {
+    for (final bad in [r"'${t.round()} °C'", r"'$p hPa'", r"'${x} mph'", r"'12 km'", r"'${v} inHg'", r"'$f °F'"]) {
+      expect(_raw.hasMatch(bad), isTrue, reason: bad);
+    }
+    for (final ok in [r"'5m ago'", r"'${u.speed(v)}'", r"'Celsius (°C)'", r"'km and m'"]) {
+      expect(_raw.hasMatch(ok) && !allowedLines.any(ok.contains), isFalse, reason: ok);
+    }
+    for (final bad in ['m / 1609.344', 'v * 3.6', 'c * 9 / 5 + 32', 'h * 3.28084', 'x * metresPerFoot']) {
+      expect(_conversion.hasMatch(bad), isTrue, reason: bad);
+    }
+    expect(_conversion.hasMatch('zoom 13.6'), isFalse);
   });
 }

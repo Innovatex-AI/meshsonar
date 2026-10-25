@@ -144,6 +144,18 @@ class InfoTile extends StatelessWidget {
       );
 }
 
+/// Says why a control in a Settings row cannot be used right now and what makes it usable ("Turn on X first",
+/// "Locked while driving: stop the drive to change it"). Every disabled control in Settings has one in its row, so no
+/// row is a dead end (test/ui/settings_no_dead_end_test.dart walks every row in several states).
+class SettingsWhyNot extends StatelessWidget {
+  final String text;
+  final TextStyle? style;
+  const SettingsWhyNot(this.text, {super.key, this.style});
+
+  @override
+  Widget build(BuildContext context) => Text(text, style: style);
+}
+
 // ---------- confirmation ----------
 
 /// Asks before a destructive or sharing-related change. The body states the consequence (no "Are you sure?").
@@ -208,6 +220,9 @@ class SliderTile extends StatefulWidget {
   final String Function(int v) label;
   final String? minLabel, maxLabel;
   final bool enabled;
+
+  /// Shown instead of [caption] while not [enabled]: why, and how to make it usable. Required when it can be disabled.
+  final String? disabledReason;
   final ValueChanged<int> onChanged;
   const SliderTile({
     super.key,
@@ -221,6 +236,7 @@ class SliderTile extends StatefulWidget {
     this.minLabel,
     this.maxLabel,
     this.enabled = true,
+    this.disabledReason,
     required this.onChanged,
   });
 
@@ -262,7 +278,12 @@ class _SliderTileState extends State<SliderTile> {
             ),
           ),
         ]),
-        if (widget.caption != null)
+        if (muted && widget.disabledReason != null)
+          Padding(
+            padding: const EdgeInsets.only(left: 40, top: 2, right: 8),
+            child: SettingsWhyNot(widget.disabledReason!, style: t.textTheme.bodySmall),
+          )
+        else if (widget.caption != null)
           Padding(
             padding: const EdgeInsets.only(left: 40, top: 2, right: 8),
             child: Text(widget.caption!, style: t.textTheme.bodySmall),

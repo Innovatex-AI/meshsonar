@@ -174,11 +174,11 @@ class _AntennaSheetState extends State<_AntennaSheet> {
               controller: _height,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               decoration: InputDecoration(
-                labelText: 'Height above ground (${_units.isImperial ? 'feet' : 'metres'})',
-                helperText: _units.isImperial
+                labelText: 'Height above ground (${_units.heightImperial ? 'feet' : 'metres'})',
+                helperText: _units.heightImperial
                     ? 'Roughly: about 3 ft in a hand or inside a car, 5 ft on a car roof.'
                     : 'Roughly: about 1 m in a hand or inside a car, 1.5 m on a car roof.',
-                errorText: heightText.isNotEmpty && _heightValue == null ? _units.isImperial ? 'Enter 0 to 984 feet' : 'Enter 0 to 300 metres' : null,
+                errorText: heightText.isNotEmpty && _heightValue == null ? _units.heightImperial ? 'Enter 0 to 984 feet' : 'Enter 0 to 300 metres' : null,
               ),
               onChanged: (_) => setState(() {}),
             ),

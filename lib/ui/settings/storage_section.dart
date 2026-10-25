@@ -233,6 +233,7 @@ class _StorageRowsState extends State<StorageRows> {
       required String text,
       required String explain,
       Widget? action,
+      String? whyNot,
     }) =>
         SettingsAnchor(
           id: id,
@@ -248,6 +249,11 @@ class _StorageRowsState extends State<StorageRows> {
                   const SizedBox(height: 2),
                   Text(text, key: Key('$id-value'), style: t.textTheme.bodyMedium),
                   Text(explain, style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+                  if (whyNot != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: SettingsWhyNot(whyNot, style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+                    ),
                   if (action != null) Align(alignment: Alignment.centerLeft, child: action),
                 ]),
               ),
@@ -290,6 +296,11 @@ class _StorageRowsState extends State<StorageRows> {
         text: drivesText,
         explain: 'Only fully uploaded drives can be removed here. A drive with pings waiting or rejected stays; delete it '
             'from Drives if you really mean to.',
+        whyNot: split.removable.isNotEmpty
+            ? null
+            : split.total == 0
+                ? 'Nothing to remove: there are no drives on this phone.'
+                : 'Nothing to remove yet: no drive is fully uploaded. Upload them from Drives first.',
         action: clearButton('storage-drives-clear', 'Remove uploaded drives',
             split.removable.isEmpty ? null : () => _removeUploadedDrives(split)),
       ),
@@ -303,6 +314,7 @@ class _StorageRowsState extends State<StorageRows> {
                 ? 'Nothing saved yet.'
                 : 'Coverage and region pages${size(z.region)}.',
         explain: 'Kept so region screens open with no signal, labelled with their age. Downloads again after clearing.',
+        whyNot: z.region == null || z.region == 0 ? 'Nothing to clear.' : null,
         action: z.region == null || z.region == 0 ? null : clearButton('storage-region-clear', 'Clear', _clearRegion),
       ),
       const Divider(height: 1, indent: 56),
@@ -312,9 +324,12 @@ class _StorageRowsState extends State<StorageRows> {
           key: const Key('refresh-repeaters'),
           leading: const Icon(Icons.cell_tower),
           title: Text(settingsEntry('refresh-repeaters').title),
-          subtitle: Text(repeaterCount == 0
-              ? 'None saved yet. Names download once your key is approved.'
-              : '$repeaterCount saved for offline use. Tap to download them again.'),
+          subtitle: !s.hasKey
+              ? SettingsWhyNot('${repeaterCount == 0 ? 'None saved yet.' : '$repeaterCount saved for offline use.'} '
+                  'Downloading names needs a driver key: request one in Account & driver key at the top.')
+              : Text(repeaterCount == 0
+                  ? 'None saved yet. Tap to download them; this needs an approved key and signal.'
+                  : '$repeaterCount saved for offline use. Tap to download them again.'),
           trailing: const Icon(Icons.refresh),
           onTap: s.hasKey ? () => s.refreshRepeaters() : null,
         ),
@@ -336,6 +351,7 @@ class _StorageRowsState extends State<StorageRows> {
               ? 'Not downloaded.'
               : '${_count(s.directory?.repeaters.length ?? 0, 'repeater')} near your drives${size(z.nodeMap)}.',
           explain: 'From map.meshcore.io, for names your server does not know. Refreshed weekly.',
+          whyNot: z.nodeMap == null || z.nodeMap == 0 ? 'Nothing to clear. It downloads around the start of a drive.' : null,
           action: z.nodeMap == null || z.nodeMap == 0 ? null : clearButton('storage-node-map-clear', 'Clear', _clearNodeMap),
         ),
       ],

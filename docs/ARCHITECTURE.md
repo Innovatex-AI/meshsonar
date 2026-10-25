@@ -270,7 +270,8 @@ names.
 | `core/settings_store.dart` | core | `FileSettingsStore`: atomic JSON settings; missing/corrupt → defaults. |
 | `core/position_filter.dart` | core | `PositionFilter` (accuracy gate, Kalman smoothing, stationary hold) and `FilteredLocationSource` wrapper. |
 | `core/heard.dart` | core | `haversineM`, `bearingDeg`, `compass`; `RepeaterLookup` (prefix → repeater, CMAT first); `HeardTracker` (live/stale per repeater). |
-| `core/startup_location.dart` | core | Stream 4: `PhoneFix` (live vs last-known, stale > 24 h), `fixWithin` (bounded launch fix), `LocationAccess` / `LocationNote` / `LocationAccessProbe` (permission states and actions), `mapStartFor` (phone > viewed region > hub > world). |
+| `core/units.dart` | core | The only place numbers get units: `Units` (Auto/Metric/Imperial resolved, plus `UnitOverrides` per quantity: distance, speed, height, temperature, pressure hPa/inHg/mmHg), all distance/speed/height/temperature/pressure formatting and parsing; `description` for report labels. `test/core/no_raw_units_test.dart` forbids unit literals and conversions elsewhere. |
+| `core/startup_location.dart` | core | Stream 4: `PhoneFix` (live vs last-known, stale > 72 h: labelled, never moves the region), `fixWithin` (bounded launch fix), `LocationAccess` / `LocationNote` / `LocationAccessProbe` (permission states and actions), `mapStartFor` (phone > viewed region > hub > world; a stale phone fix loses to a picked/remembered region elsewhere). |
 | `core/network_repeaters.dart` | core | Global network list (`/api/cmh/network-repeaters`): `NetworkRepeater`, tolerant envelope + strict row parser, `nearby` (150 km). |
 | `core/repeater_sync.dart` | core | Stream 3: `RepeaterSync` (roster + network list on open/resume/switch, ETag, rate limits, back-off, capability check) and `RepeaterSyncStore` (versioned, atomic, bounded); `RepeaterSet` for the map layer. |
 | `core/repeater_directory.dart` | core | `RepeaterDirectory`: streams map.meshcore.io's node list, keeps nearby repeaters, caches to disk; `JsonArraySplitter`. |
@@ -336,13 +337,17 @@ names.
 | `ui/drive_stats.dart` | ui (pure Dart) | `DriveStats.of` (distance, duration, heard %, best/median SNR, repeaters, multi-hop, timeline); `formatDistance`, `formatMiles`, `formatDuration`. |
 | `ui/report/drive_report.dart` | ui (pure Dart) | `DriveReport.compute`: CMAT-grid cells, new grids/repeaters vs earlier drives, speeds, hops, best/worst spot, text summary. |
 | `ui/report/drive_report_screen.dart` | ui | Drive report screen and `loadDriveReport`; share as text. |
+| `ui/settings_screen.dart` | ui | Settings shell: search, phone list of collapsible section cards, app bar Search and Sections (jump sheet), wide (>= 840 dp) two-pane layout; re-exports `DriverKeyScreen`, `SliderTile` and the stop lists. |
+| `ui/settings/settings_index.dart` | ui | Section order and the searchable index of every row (`SettingsEntry`: id, section, title, explanation, keywords, availability, `info` for read-only rows); `searchSettings`. |
+| `ui/settings/settings_kit.dart` | ui | `SettingsSection` (collapsible card), `SettingsAnchors`/`SettingsAnchor` (jump + tint targets), `confirmSettingsChange`, `SliderTile` + stops (with `disabledReason`), `SettingsWhyNot` (why a control is unavailable and how to enable it), `editSettingText`. |
+| `ui/settings/data_sharing.dart` | ui | The one source of disclosure text: `DataCategory` registry (`dataCategories`, today only `telemetryCategory`), other data flows, location explainer points, `privacySectionTitle`. |
 | `ui/settings_screen.dart` | ui | Settings shell: search, phone list of collapsible section cards, wide (>= 840 dp) two-pane layout; re-exports `DriverKeyScreen`, `SliderTile` and the stop lists. |
 | `ui/settings/settings_index.dart` | ui | Section order and the searchable index of every row (`SettingsEntry`: id, section, title, explanation, keywords, availability); `searchSettings`. |
 | `ui/settings/settings_kit.dart` | ui | `SettingsSection` (collapsible card), `SettingsAnchors`/`SettingsAnchor` (jump + tint targets), `confirmSettingsChange`, `SliderTile` + stops, `editSettingText`. |
 | `ui/settings/data_sharing.dart` | ui | The one source of disclosure text: `DataCategory` registry (`dataCategories` = `telemetryCategory` + `driveContextCategories` from `core/data_categories.dart`), other data flows, location explainer points, `privacySectionTitle`. |
 | `ui/settings/account_section.dart` | ui | Driver key (request, paste, reveal, remove), Server URL, `DriverKeyScreen`, `KeyStatusBadge`, `confirmServerChange`, `AccountLinks`. |
 | `ui/settings/region_section.dart` | ui | Region pick, Connected to, region radio preset comparison (read-only). |
-| `ui/settings/display_section.dart` | ui | Units (with `unitsExplanation`) and heard list hold. |
+| `ui/settings/display_section.dart` | ui | Units (with `unitsExplanation`), the per-quantity unit rows and picker (`unitQuantities`, `UnitOverrideTile`, `pickUnit`), heard list hold. |
 | `ui/settings/maps_section.dart` | ui | Offline maps link. |
 | `ui/settings/privacy_section.dart` | ui | Category switches, on-confirm / off-erase flow, erase now, `WhatIsSharedScreen`, location and privacy-zone links. |
 | `ui/settings/radio_section.dart` | ui | Radio tab link, channel, discovery, auto-ping sliders, per-radio antenna rows. |

@@ -39,24 +39,190 @@ const double mphPerMps = 2.236936;
 /// Inches of mercury per hectopascal (1 inHg = 33.8638866667 hPa, at 0 °C).
 const double inHgPerHpa = 1 / 33.8638866667;
 
+/// Millimetres of mercury per hectopascal (1 mmHg = 1.33322387415 hPa).
+const double mmHgPerHpa = 1 / 1.33322387415;
+
+/// A per-quantity override of the Units setting (Settings > Units & display > "More unit choices"). [follow] = use
+/// the Units setting (Auto / Metric / Imperial); the default for every quantity.
+enum UnitChoice {
+  follow,
+  metric,
+  imperial;
+
+  static UnitChoice parse(Object? v) => UnitChoice.values.firstWhere((e) => e.name == v, orElse: () => UnitChoice.follow);
+}
+
+/// The air-pressure unit a reading is shown in.
+enum PressureUnit { hPa, inHg, mmHg }
+
+/// The pressure override: [follow] = hPa for metric, inHg for imperial; or one fixed unit.
+enum PressureChoice {
+  follow,
+  hPa,
+  inHg,
+  mmHg;
+
+  static PressureChoice parse(Object? v) =>
+      PressureChoice.values.firstWhere((e) => e.name == v, orElse: () => PressureChoice.follow);
+}
+
+/// Per-quantity unit overrides. Stored in settings.json as `unit_overrides`, an object holding only the quantities
+/// that do not follow the Units setting (`{"speed": "imperial", "pressure": "mmHg"}`); missing keys, unknown keys
+/// and unknown values all mean "follow", so old and newer files load.
+class UnitOverrides {
+  /// Distances and short lengths (km/mi, m/ft): drive distance, GPS accuracy, "move N more", range rings.
+  final UnitChoice distance;
+  final UnitChoice speed;
+
+  /// Heights and altitudes (antenna height, GPS altitude): m or ft.
+  final UnitChoice height;
+  final UnitChoice temperature;
+  final PressureChoice pressure;
+
+  const UnitOverrides({
+    this.distance = UnitChoice.follow,
+    this.speed = UnitChoice.follow,
+    this.height = UnitChoice.follow,
+    this.temperature = UnitChoice.follow,
+    this.pressure = PressureChoice.follow,
+  });
+
+  /// True when every quantity follows the Units setting.
+  bool get isEmpty =>
+      distance == UnitChoice.follow &&
+      speed == UnitChoice.follow &&
+      height == UnitChoice.follow &&
+      temperature == UnitChoice.follow &&
+      pressure == PressureChoice.follow;
+
+  UnitOverrides copyWith({UnitChoice? distance, UnitChoice? speed, UnitChoice? height, UnitChoice? temperature, PressureChoice? pressure}) =>
+      UnitOverrides(
+        distance: distance ?? this.distance,
+        speed: speed ?? this.speed,
+        height: height ?? this.height,
+        temperature: temperature ?? this.temperature,
+        pressure: pressure ?? this.pressure,
+      );
+
+  Map<String, String> toJson() => {
+        if (distance != UnitChoice.follow) 'distance': distance.name,
+        if (speed != UnitChoice.follow) 'speed': speed.name,
+        if (height != UnitChoice.follow) 'height': height.name,
+        if (temperature != UnitChoice.follow) 'temperature': temperature.name,
+        if (pressure != PressureChoice.follow) 'pressure': pressure.name,
+      };
+
+  /// Anything that is not a JSON object (missing, null, a string) is "no overrides".
+  factory UnitOverrides.fromJson(Object? raw) {
+    if (raw is! Map) return const UnitOverrides();
+    return UnitOverrides(
+      distance: UnitChoice.parse(raw['distance']),
+      speed: UnitChoice.parse(raw['speed']),
+      height: UnitChoice.parse(raw['height']),
+      temperature: UnitChoice.parse(raw['temperature']),
+      pressure: PressureChoice.parse(raw['pressure']),
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is UnitOverrides &&
+      other.distance == distance &&
+      other.speed == speed &&
+      other.height == height &&
+      other.temperature == temperature &&
+      other.pressure == pressure;
+
+  @override
+  int get hashCode => Object.hash(distance, speed, height, temperature, pressure);
+}
+
+/// "a", "a and b", "a, b and c".
+String joinAnd(List<String> parts) => parts.length <= 1
+    ? parts.join()
+    : '${parts.sublist(0, parts.length - 1).join(', ')} and ${parts.last}';
+
 class Units {
+  /// The Units setting resolved (Auto already turned into metric or imperial). Quantities without an override use it.
   final UnitSystem system;
-  const Units(this.system);
+
+  /// Per-quantity overrides; empty by default, so `Units(UnitSystem.imperial)` is all-imperial as before.
+  final UnitOverrides overrides;
+  const Units(this.system, [this.overrides = const UnitOverrides()]);
 
   static const Units metric = Units(UnitSystem.metric);
   static const Units imperial = Units(UnitSystem.imperial);
 
-  /// Resolves a [UnitsPreference] against the device's [localeName] (e.g. `Platform.localeName`).
-  factory Units.resolve(UnitsPreference pref, {String? localeName}) => switch (pref) {
-        UnitsPreference.metric => metric,
-        UnitsPreference.imperial => imperial,
-        UnitsPreference.auto => Units(unitSystemForCountry(countryFromLocaleName(localeName))),
+  /// Resolves a [UnitsPreference] against the device's [localeName] (e.g. `Platform.localeName`), then applies the
+  /// per-quantity [overrides].
+  factory Units.resolve(UnitsPreference pref, {String? localeName, UnitOverrides overrides = const UnitOverrides()}) =>
+      Units(
+          switch (pref) {
+            UnitsPreference.metric => UnitSystem.metric,
+            UnitsPreference.imperial => UnitSystem.imperial,
+            UnitsPreference.auto => unitSystemForCountry(countryFromLocaleName(localeName)),
+          },
+          overrides);
+
+  UnitSystem _pick(UnitChoice c) => switch (c) {
+        UnitChoice.follow => system,
+        UnitChoice.metric => UnitSystem.metric,
+        UnitChoice.imperial => UnitSystem.imperial,
       };
 
-  bool get isImperial => system == UnitSystem.imperial;
-  String get lengthUnit => isImperial ? 'ft' : 'm';
-  String get speedUnit => isImperial ? 'mph' : 'km/h';
-  String get longDistanceUnit => isImperial ? 'mi' : 'km';
+  /// True when distances show in miles and feet, the headline quantity (with no overrides: the Units setting).
+  /// Existing call sites use it for distance wording ("Miles driven", range-ring labels). The Units setting itself is
+  /// [system]; "Units: ..." labels use [description].
+  bool get isImperial => distanceImperial;
+
+  bool get _baseImperial => system == UnitSystem.imperial;
+
+  /// Distances and short lengths in miles / feet.
+  bool get distanceImperial => _pick(overrides.distance) == UnitSystem.imperial;
+  bool get speedImperial => _pick(overrides.speed) == UnitSystem.imperial;
+
+  /// Heights and altitudes in feet.
+  bool get heightImperial => _pick(overrides.height) == UnitSystem.imperial;
+  bool get temperatureImperial => _pick(overrides.temperature) == UnitSystem.imperial;
+
+  /// The unit air pressure is shown in.
+  PressureUnit get pressureUnitKind => switch (overrides.pressure) {
+        PressureChoice.follow => _baseImperial ? PressureUnit.inHg : PressureUnit.hPa,
+        PressureChoice.hPa => PressureUnit.hPa,
+        PressureChoice.inHg => PressureUnit.inHg,
+        PressureChoice.mmHg => PressureUnit.mmHg,
+      };
+
+  /// Short distances (GPS accuracy, "move N more"): m or ft.
+  String get lengthUnit => distanceImperial ? 'ft' : 'm';
+  String get speedUnit => speedImperial ? 'mph' : 'km/h';
+  String get longDistanceUnit => distanceImperial ? 'mi' : 'km';
+
+  /// Heights and altitudes: m or ft.
+  String get heightUnit => heightImperial ? 'ft' : 'm';
+
+  /// Metres per [longDistanceUnit] (1000 or a mile), for charts that plot distances as plain numbers.
+  double get metresPerLongUnit => distanceImperial ? metresPerMile : 1000;
+
+  /// The quantities shown differently from the Units setting, as "speed in mph" phrases; empty when none.
+  List<String> get exceptions => [
+        if (distanceImperial != _baseImperial) 'distance in $longDistanceUnit',
+        if (speedImperial != _baseImperial) 'speed in $speedUnit',
+        if (heightImperial != _baseImperial) 'height in $heightUnit',
+        if (temperatureImperial != _baseImperial) 'temperature in $temperatureUnit',
+        if (pressureUnitKind != (_baseImperial ? PressureUnit.inHg : PressureUnit.hPa)) 'pressure in $pressureUnit',
+      ];
+
+  /// True when at least one quantity is shown in a different system than the Units setting.
+  bool get isMixed => exceptions.isNotEmpty;
+
+  /// "metric", "imperial", or "metric, with speed in mph and temperature in °F" for reports and exports.
+  String get description {
+    final base = _baseImperial ? 'imperial' : 'metric';
+    final ex = exceptions;
+    if (ex.isEmpty) return base;
+    return '$base, with ${joinAnd(ex)}';
+  }
 
   static String _trim(double v, int dp) {
     final s = v.toStringAsFixed(dp);
@@ -68,7 +234,7 @@ class Units {
   /// map labels and moves to km from 950 m.
   String distance(double metres, {bool approx = false}) {
     final m = metres.isFinite ? metres.abs() : 0.0;
-    if (isImperial) {
+    if (distanceImperial) {
       if (m < metresPerMile / 10) {
         final ft = (m / metresPerFoot / 10).round() * 10;
         if (ft < 530) return '$ft ft';
@@ -89,27 +255,27 @@ class Units {
   /// A large total (lifetime distance driven) as whole km or miles, digits grouped by [group] ("12,345 km").
   String total(double metres, String Function(int) group) {
     final m = metres.isFinite ? metres : 0.0;
-    return isImperial ? '${group((m / metresPerMile).round())} mi' : '${group((m / 1000).round())} km';
+    return distanceImperial ? '${group((m / metresPerMile).round())} mi' : '${group((m / 1000).round())} km';
   }
 
   /// A speed given in metres per second, whole numbers.
   String speed(double mps) {
     final v = mps.isFinite ? mps : 0.0;
-    return isImperial ? '${(v * mphPerMps).round()} mph' : '${(v * kmhPerMps).round()} km/h';
+    return speedImperial ? '${(v * mphPerMps).round()} mph' : '${(v * kmhPerMps).round()} km/h';
   }
 
   /// A short length such as GPS accuracy or "move N more": whole metres or whole feet, never switching to km/mi.
   String shortLength(double metres) {
     final m = metres.isFinite ? metres : 0.0;
-    return isImperial ? '${(m / metresPerFoot).round()} ft' : '${m.round()} m';
+    return distanceImperial ? '${(m / metresPerFoot).round()} ft' : '${m.round()} m';
   }
 
   /// Antenna height / elevation: metres (up to 2 decimals, trimmed) or whole feet.
   String height(double metres) =>
-      isImperial ? '${(metres / metresPerFoot).round()} ft' : '${_trim(metres, 2)} m';
+      heightImperial ? '${(metres / metresPerFoot).round()} ft' : '${_trim(metres, 2)} m';
 
   /// The height as the plain number a text field shows in this system.
-  String heightNumber(double metres) => isImperial ? '${(metres / metresPerFoot).round()}' : _trim(metres, 2);
+  String heightNumber(double metres) => heightImperial ? '${(metres / metresPerFoot).round()}' : _trim(metres, 2);
 
   /// Parses typed text to metres: `6ft`, `6 ft`, `1.8m`, `1,8`, or a bare number in this system's unit. Null when it
   /// is not a number.
@@ -120,48 +286,55 @@ class Units {
     final v = double.tryParse(m.group(1)!);
     if (v == null || !v.isFinite) return null;
     final unit = m.group(2);
-    final feet = unit == null ? isImperial : unit.startsWith('f');
+    final feet = unit == null ? heightImperial : unit.startsWith('f');
     return feet ? v * metresPerFoot : v;
   }
 
-  String get pressureUnit => isImperial ? 'inHg' : 'hPa';
-  String get temperatureUnit => isImperial ? '°F' : '°C';
+  String get pressureUnit => pressureUnitKind.name;
+  String get temperatureUnit => temperatureImperial ? '°F' : '°C';
 
-  /// Air pressure, stored in hPa: metric "987.4 hPa" (1 decimal), imperial "29.16 inHg" (2 decimals).
+  /// Air pressure, stored in hPa: "987.4 hPa" (1 decimal), "29.16 inHg" (2 decimals) or "741 mmHg" (whole).
   String pressure(double hPa) {
     final v = hPa.isFinite ? hPa : 0.0;
-    return isImperial ? '${(v * inHgPerHpa).toStringAsFixed(2)} inHg' : '${v.toStringAsFixed(1)} hPa';
+    return switch (pressureUnitKind) {
+      PressureUnit.hPa => '${v.toStringAsFixed(1)} hPa',
+      PressureUnit.inHg => '${(v * inHgPerHpa).toStringAsFixed(2)} inHg',
+      PressureUnit.mmHg => '${(v * mmHgPerHpa).round()} mmHg',
+    };
   }
 
-  /// The pressure as a plain number in this system's unit (hPa or inHg), for chart axes.
-  double pressureValue(double hPa) => isImperial ? hPa * inHgPerHpa : hPa;
+  /// The pressure as a plain number in the pressure unit ([pressureUnit]: hPa, inHg or mmHg), for chart axes.
+  double pressureValue(double hPa) => switch (pressureUnitKind) {
+        PressureUnit.hPa => hPa,
+        PressureUnit.inHg => hPa * inHgPerHpa,
+        PressureUnit.mmHg => hPa * mmHgPerHpa,
+      };
 
-  /// A height as a plain number in this system's unit (metres or feet), for chart axes; [heightUnit] names it.
-  double heightValue(double metres) => isImperial ? metres / metresPerFoot : metres;
-  String get heightUnit => isImperial ? 'ft' : 'm';
+  /// A height as a plain number in the height unit (metres or feet), for chart axes; [heightUnit] names it.
+  double heightValue(double metres) => heightImperial ? metres / metresPerFoot : metres;
 
-  /// A temperature as a plain number in this system's unit (°C or °F), for chart axes.
-  double temperatureValue(double celsius) => isImperial ? celsius * 9 / 5 + 32 : celsius;
+  /// A temperature as a plain number in the temperature unit (°C or °F), for chart axes.
+  double temperatureValue(double celsius) => temperatureImperial ? celsius * 9 / 5 + 32 : celsius;
 
   /// A temperature, stored in °C: whole degrees, "11 °C" or "52 °F".
   String temperature(double celsius) {
     final c = celsius.isFinite ? celsius : 0.0;
-    final n = (isImperial ? c * 9 / 5 + 32 : c).round(); // an int: never "-0"
-    return '$n ${isImperial ? '°F' : '°C'}';
+    final n = (temperatureImperial ? c * 9 / 5 + 32 : c).round(); // an int: never "-0"
+    return '$n ${temperatureImperial ? '°F' : '°C'}';
   }
 
   /// Range rings drawn around the phone: 1 km and 2 km, or half a mile and a mile.
-  List<double> get rangeRingMetres => isImperial ? const [metresPerMile / 2, metresPerMile] : const [1000, 2000];
-  List<String> get rangeRingLabels => isImperial ? const ['0.5 mi', '1 mi'] : const ['1 km', '2 km'];
+  List<double> get rangeRingMetres => distanceImperial ? const [metresPerMile / 2, metresPerMile] : const [1000, 2000];
+  List<String> get rangeRingLabels => distanceImperial ? const ['0.5 mi', '1 mi'] : const ['1 km', '2 km'];
 
   /// The min-distance slider's stops, in whole metres: metric as-is, imperial as the nearest metre to round feet.
-  List<int> minDistanceStops(List<int> metricStops) => isImperial
+  List<int> minDistanceStops(List<int> metricStops) => distanceImperial
       ? const [50, 100, 150, 250, 300, 400, 500, 650, 800, 1000, 1300, 1600].map((ft) => (ft * metresPerFoot).round()).toList()
       : metricStops;
 
   /// Label for a stored distance in metres on the slider ("328 ft" or "100 m").
   String sliderDistance(int metres) {
-    if (!isImperial) return '$metres m';
+    if (!distanceImperial) return '$metres m';
     final ft = metres / metresPerFoot;
     final snapped = ft < 1000 ? (ft / 10).round() * 10 : (ft / 100).round() * 100;
     return '$snapped ft';

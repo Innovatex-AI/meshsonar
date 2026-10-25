@@ -55,6 +55,22 @@ void main() {
       expect(m.lat, closeTo((39.5 + 40.65) / 2, 1e-9));
     });
 
+    test('a stale fix is only a fallback: a remembered or picked region elsewhere wins; with none it centres', () {
+      final stale = fixAt(40.0, -83.0, age: const Duration(hours: 73), live: false); // in CMH
+      final fresh = fixAt(40.0, -83.0, age: const Duration(hours: 71), live: false);
+      MapStart start(PhoneFix p, {bool remembered = true, bool manual = false, RegionIndexEntry v = day}) => mapStartFor(
+          phone: p, viewing: v, viewingIsManual: manual, viewingRemembered: remembered, index: const [cmh, day], now: now);
+      expect(start(stale).kind, MapStartKind.region, reason: 'remembered DAY, stale fix in CMH');
+      expect(start(stale).lon, closeTo((-84.5 + -83.6) / 2, 1e-9));
+      expect(start(fresh).kind, MapStartKind.phone, reason: 'under 72 h the fix still wins');
+      expect(start(stale, remembered: false).kind, MapStartKind.phone, reason: 'nothing better: centre on it, labelled');
+      expect(start(stale, v: cmh).kind, MapStartKind.phone, reason: 'the viewed region holds it');
+      expect(start(stale, manual: true, remembered: false).kind, MapStartKind.region);
+      // Without [now] (older callers) nothing changes.
+      expect(mapStartFor(phone: stale, viewing: day, viewingIsManual: false, viewingRemembered: true, index: const [cmh, day]).kind,
+          MapStartKind.phone);
+    });
+
     test('nothing known at all: whole world', () {
       expect(mapStartFor(phone: null, viewing: null, viewingIsManual: false, viewingRemembered: false, index: const []).kind,
           MapStartKind.world);
@@ -65,12 +81,23 @@ void main() {
     test('live, cached and stale fixes are told apart and labelled', () {
       expect(phoneFixLabel(fixAt(40, -83), now), isNull);
       expect(phoneFixLabel(fixAt(40, -83, age: const Duration(hours: 3), live: false), now), 'Last known location, 3 h ago');
-      final stale = fixAt(40, -83, age: const Duration(days: 2), live: false);
+      final old = fixAt(40, -83, age: const Duration(days: 2), live: false);
+      expect(old.isStale(now), isFalse, reason: 'stale starts after 72 h (Andy, Oct 24)');
+      expect(phoneFixLabel(old, now), 'Last known location, 2 d ago', reason: 'labelled whenever it is not live');
+      final stale = fixAt(40, -83, age: const Duration(days: 4), live: false);
       expect(stale.isStale(now), isTrue);
-      expect(phoneFixLabel(stale, now), 'Last known location, 2 d ago');
+      expect(phoneFixLabel(stale, now), 'Last known location, 4 d ago');
       // An OS-cached position handed back by a GPS call (live run, but old) is labelled too.
       expect(fixAt(40, -83, age: const Duration(hours: 1)).isLive(now), isFalse);
       expect(fixAt(40, -83, age: const Duration(hours: 23), live: false).isStale(now), isFalse);
+    });
+
+    test('the stale threshold is 72 hours: 71 h and exactly 72 h are not stale, 73 h is', () {
+      expect(staleFixAge, const Duration(hours: 72));
+      expect(fixAt(40, -83, age: const Duration(hours: 71), live: false).isStale(now), isFalse);
+      expect(fixAt(40, -83, age: const Duration(hours: 72), live: false).isStale(now), isFalse);
+      expect(fixAt(40, -83, age: const Duration(hours: 73), live: false).isStale(now), isTrue);
+      expect(phoneFixLabel(fixAt(40, -83, age: const Duration(hours: 73), live: false), now), 'Last known location, 3 d ago');
     });
   });
 

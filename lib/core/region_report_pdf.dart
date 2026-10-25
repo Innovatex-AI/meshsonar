@@ -241,7 +241,7 @@ ReportDoc regionReportPdf(RegionReportExport e, {required Units units}) {
     title: 'MeshSonar region report: ${e.name} (${e.code})',
     subtitle: [
       'Generated ${_utc(e.generatedAt)}. Times are UTC, like the website\'s report.',
-      'Units: ${units.isImperial ? 'imperial' : 'metric'}. Public region data from the MeshSonar server.',
+      'Units: ${units.description}. Public region data from the MeshSonar server.',
     ],
     blocks: blocks,
     footer: 'From MeshSonar (meshsonar.com). Every column is in the CSV export; the full data is in the JSON export.',

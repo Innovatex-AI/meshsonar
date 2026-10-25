@@ -37,5 +37,7 @@ List<String> settingsSnapshot(Settings s, {AntennaProfile? antenna}) {
     'Settings: upload at end of drive ${onOff(s.autoSync)}, during drive ${onOff(s.syncDuringDrive)}, '
         'every ${s.syncEveryMin} min',
     'Settings: antenna ${antenna?.summary ?? 'not set'}',
+    'Settings: units ${s.units.name}'
+        '${s.unitOverrides.isEmpty ? '' : ' (own unit: ${s.unitOverrides.toJson().entries.map((e) => '${e.key} ${e.value}').join(', ')})'}',
   ];
 }

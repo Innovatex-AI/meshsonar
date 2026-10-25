@@ -16,7 +16,7 @@ List<Widget> aboutSectionRows(BuildContext context) {
         key: const Key('about'),
         leading: const Icon(Icons.info_outline),
         title: Text(settingsEntry('about').title),
-        subtitle: Text('Version ${s.services.appInfo.version ?? ''} · MIT licence'),
+        subtitle: Text('${s.services.appInfo.version == null ? 'Version unknown' : 'Version ${s.services.appInfo.version}'} · MIT licence, third-party notices'),
         trailing: const Icon(Icons.chevron_right),
         onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const AboutScreen())),
       ),
