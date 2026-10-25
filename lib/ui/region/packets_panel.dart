@@ -1,11 +1,14 @@
 // "Live packets" panel for one region: recent packets from the website's `region-packets` read, pull-to-refresh, and a
 // live mode that polls every 10 s while the panel is visible (route/tab on top, app foreground). No SSE, by design.
+// Offline: the phone's stored copy of the last page is shown with "Offline - as of"; nothing stored is its own state
+// with Retry. Polling keeps going, so the list comes back by itself when the connection does.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 
 import '../../core/region_packets_api.dart';
 import '../theme.dart';
+import 'region_common.dart';
 
 enum PacketsLoad { loading, ready, error }
 
@@ -24,7 +27,11 @@ class PacketsPanel extends StatefulWidget {
     required this.regionSlug,
     this.api,
     this.pollEvery = const Duration(seconds: 10),
+    this.clock,
   });
+
+  /// Test seam for the "30s" age text (wall clock by default); a fixed clock keeps the age deterministic.
+  final DateTime Function()? clock;
 
   @override
   State<PacketsPanel> createState() => _PacketsPanelState();
@@ -39,6 +46,8 @@ class _PacketsPanelState extends State<PacketsPanel> with WidgetsBindingObserver
   PacketsStatus? _status;
   PacketsLoad _load = PacketsLoad.loading;
   String? _error;
+  bool _offline = false; // the first load failed because the server could not be reached
+  DateTime? _asOf; // rows on screen are the stored copy fetched at this time
   bool _busy = false; // server asked us to back off
   bool _reconnecting = false; // a poll failed but we still show older rows
   bool _live = true;
@@ -77,6 +86,8 @@ class _PacketsPanelState extends State<PacketsPanel> with WidgetsBindingObserver
       _rows = const [];
       _status = null;
       _error = null;
+      _offline = false;
+      _asOf = null;
       _busy = _reconnecting = false;
       _load = PacketsLoad.loading;
       _fetch();
@@ -120,6 +131,8 @@ class _PacketsPanelState extends State<PacketsPanel> with WidgetsBindingObserver
         _status = page.status;
         _load = PacketsLoad.ready;
         _error = null;
+        _offline = false;
+        _asOf = page.offlineAsOf;
         _busy = false;
         _reconnecting = false;
       });
@@ -129,6 +142,7 @@ class _PacketsPanelState extends State<PacketsPanel> with WidgetsBindingObserver
         if (_rows.isEmpty) {
           _load = PacketsLoad.error;
           _error = e.message;
+          _offline = e.offline;
         }
         _busy = e.busy;
         _reconnecting = !e.busy;
@@ -139,6 +153,7 @@ class _PacketsPanelState extends State<PacketsPanel> with WidgetsBindingObserver
         if (_rows.isEmpty) {
           _load = PacketsLoad.error;
           _error = 'unexpected error';
+          _offline = false;
         }
         _reconnecting = true;
       });
@@ -146,6 +161,12 @@ class _PacketsPanelState extends State<PacketsPanel> with WidgetsBindingObserver
       _inFlight = false;
       if (mounted) _syncTimer();
     }
+  }
+
+  /// Retry from the offline state: show the spinner so the tap visibly does something, then fetch.
+  void _retryNow() {
+    setState(() => _load = PacketsLoad.loading);
+    _fetch();
   }
 
   /// Newest first, deduped by hash (fresh copy wins), capped.
@@ -163,6 +184,8 @@ class _PacketsPanelState extends State<PacketsPanel> with WidgetsBindingObserver
       _rows = const [];
       _load = PacketsLoad.loading;
       _error = null;
+      _offline = false;
+      _asOf = null;
     });
     _fetch();
   }
@@ -211,6 +234,11 @@ class _PacketsPanelState extends State<PacketsPanel> with WidgetsBindingObserver
         ),
         if (_busy) _banner(context, 'Server busy, retrying shortly.', Icons.hourglass_top),
         if (_reconnecting) _banner(context, 'Reconnecting... showing the last packets.', Icons.sync_problem),
+        if (_asOf != null && _load == PacketsLoad.ready)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(Gap.l, Gap.xs, Gap.l, 0),
+            child: RegionOfflineAsOf(asOf: _asOf!, onRetry: _fetch),
+          ),
         Expanded(child: RefreshIndicator(onRefresh: _fetch, child: _body(context))),
       ],
     );
@@ -259,6 +287,13 @@ class _PacketsPanelState extends State<PacketsPanel> with WidgetsBindingObserver
         Center(child: CircularProgressIndicator(key: Key('packets-loading'))),
       ]);
     }
+    if (_load == PacketsLoad.error && _offline) {
+      return ListView(
+        key: const Key('packets-offline'),
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [RegionOfflineEmpty(what: 'packets', onRetry: _retryNow)],
+      );
+    }
     if (_load == PacketsLoad.error) {
       return _message(context,
           key: const Key('packets-error'), icon: Icons.cloud_off, title: 'Could not load packets', detail: _error);
@@ -284,7 +319,7 @@ class _PacketsPanelState extends State<PacketsPanel> with WidgetsBindingObserver
           if (i == 0) return _banner(c, note, Icons.info_outline);
           i--;
         }
-        return PacketTile(row: _rows[i], now: DateTime.now().toUtc());
+        return PacketTile(row: _rows[i], now: (widget.clock ?? DateTime.now)().toUtc());
       },
     );
   }

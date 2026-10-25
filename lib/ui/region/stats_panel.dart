@@ -1,5 +1,7 @@
 // "Stats" tab for the viewed region: public-stats numbers, the live-drivers chip (public-live) and the 30-day
 // leaderboard. Each of the three reads fails on its own; an empty leaderboard says so instead of showing zeros.
+// Offline: stats and leaderboard come from the phone's stored copy under one "Offline - as of" banner; the live chip
+// is never stored, so it says it needs a connection. All three unreachable with nothing stored: one offline state.
 import 'package:flutter/material.dart';
 
 import '../../core/region_stats_api.dart';
@@ -25,6 +27,9 @@ class _StatsPanelState extends State<StatsPanel> {
   late Future<RegionPublicStats> _stats;
   late Future<Leaderboard> _board;
   late Future<RegionLive> _live;
+  int _gen = 0;
+  DateTime? _statsAsOf, _boardAsOf;
+  bool _allOffline = false;
 
   @override
   void initState() {
@@ -34,9 +39,25 @@ class _StatsPanelState extends State<StatsPanel> {
   }
 
   void _load() {
+    final gen = ++_gen;
+    _statsAsOf = _boardAsOf = null;
+    _allOffline = false;
     _stats = _api.stats();
     _board = _api.leaderboard();
     _live = _api.live();
+    // Settle all three (errors included) to label stored copies and spot "nothing reachable, nothing stored".
+    Future.wait<Object?>([
+      _stats.then<Object?>((v) => v, onError: (Object e) => e),
+      _board.then<Object?>((v) => v, onError: (Object e) => e),
+      _live.then<Object?>((v) => v, onError: (Object e) => e),
+    ]).then((r) {
+      if (!mounted || gen != _gen) return;
+      setState(() {
+        _statsAsOf = r[0] is RegionPublicStats ? (r[0] as RegionPublicStats).offlineAsOf : null;
+        _boardAsOf = r[1] is Leaderboard ? (r[1] as Leaderboard).offlineAsOf : null;
+        _allOffline = r.every((x) => x is RegionStatsException && x.offline);
+      });
+    });
   }
 
   @override
@@ -60,6 +81,14 @@ class _StatsPanelState extends State<StatsPanel> {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
+    final asOf = oldestAsOf([_statsAsOf, _boardAsOf]);
+    if (_allOffline) {
+      return ListView(
+        key: const Key('stats-panel'),
+        padding: const EdgeInsets.all(12),
+        children: [RegionOfflineEmpty(what: 'the region stats', onRetry: _reload)],
+      );
+    }
     return RefreshIndicator(
       onRefresh: () async {
         _reload();
@@ -73,7 +102,14 @@ class _StatsPanelState extends State<StatsPanel> {
             Expanded(child: Text('Region stats', style: t.textTheme.titleLarge)),
             IconButton(tooltip: 'Refresh', onPressed: _reload, icon: const Icon(Icons.refresh)),
           ]),
-          _Section<RegionLive>(future: _live, loadingKey: const Key('stats-live-loading'), builder: (l) => _LiveChip(l), retry: _reload),
+          if (asOf != null) RegionOfflineAsOf(asOf: asOf, onRetry: _reload),
+          _Section<RegionLive>(
+            future: _live,
+            loadingKey: const Key('stats-live-loading'),
+            builder: (l) => _LiveChip(l),
+            retry: _reload,
+            offlineText: 'Live drivers need a connection.',
+          ),
           const SizedBox(height: Gap.m),
           _Section<RegionPublicStats>(future: _stats, loadingKey: const Key('stats-loading'), builder: (s) => StatsFigures(s), retry: _reload),
           const SizedBox(height: Gap.l),
@@ -91,7 +127,10 @@ class _Section<T> extends StatelessWidget {
   final Key loadingKey;
   final Widget Function(T) builder;
   final VoidCallback retry;
-  const _Section({required this.future, required this.loadingKey, required this.builder, required this.retry});
+
+  /// Shown instead of the error text when the server could not be reached.
+  final String? offlineText;
+  const _Section({required this.future, required this.loadingKey, required this.builder, required this.retry, this.offlineText});
 
   @override
   Widget build(BuildContext context) => FutureBuilder<T>(
@@ -101,8 +140,10 @@ class _Section<T> extends StatelessWidget {
             return Padding(padding: const EdgeInsets.all(Gap.m), child: Center(child: CircularProgressIndicator(key: loadingKey)));
           }
           if (snap.hasError) {
+            final e = snap.error;
+            final offline = e is RegionStatsException && e.offline;
             return Column(children: [
-              ErrorBanner('${snap.error}'),
+              ErrorBanner(offline && offlineText != null ? offlineText! : '$e'),
               TextButton.icon(onPressed: retry, icon: const Icon(Icons.refresh), label: const Text('Try again')),
             ]);
           }

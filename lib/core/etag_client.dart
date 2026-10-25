@@ -15,8 +15,27 @@ import 'package:http/http.dart' as http;
 
 import 'region_cache.dart';
 
-/// Paths (after the host) this client may cache. Everything else is passed through.
+/// Paths (after the host) this client may cache. Everything else is passed through. Region reads all live under
+/// `/api/cmh/` on the region's own host (the host picks the region).
 final _cacheablePath = RegExp(r'^/(api/cmh/(region-[a-z-]+|regions-index|public-coverage|site-config|public-stats|leaderboard)|v1/regions)/?$');
+
+/// Response header the [EtagClient] adds: `network`, `304` or `offline` (the stored copy, served because the network failed).
+const cacheSourceHeader = 'x-meshsonar-cache';
+
+/// Response header the [EtagClient] adds on an `offline` answer: when the stored copy was fetched (UTC ISO 8601).
+const cacheAsOfHeader = 'x-meshsonar-as-of';
+
+/// When [r] is the stored copy the [EtagClient] served because the network failed: the time that copy was fetched
+/// (the "Offline - as of" time). Null for a live answer or a 304 refresh.
+DateTime? offlineAsOfOf(http.BaseResponse r) {
+  if (r.headers[cacheSourceHeader] != 'offline') return null;
+  return DateTime.tryParse(r.headers[cacheAsOfHeader] ?? '')?.toUtc();
+}
+
+/// True when [e] means the server could not be reached at all (no connection, DNS, TLS, timeout), as opposed to the
+/// server answering with an error.
+bool isNetworkFailure(Object e) =>
+    e is SocketException || e is http.ClientException || e is TimeoutException || e is HandshakeException;
 
 class EtagClient extends http.BaseClient {
   final http.Client _inner;
@@ -37,6 +56,17 @@ class EtagClient extends http.BaseClient {
 
   static bool isCacheable(Uri u) => _cacheablePath.hasMatch(u.path);
 
+  /// `region-activity` asks for a sliding window (`since`/`until`, hour-aligned), so every hour is a new URL. It is
+  /// stored under its URL without the window, so offline the latest window is still there. Such a request never sends
+  /// If-None-Match: the stored ETag may belong to another window.
+  static Uri storageUri(Uri u) {
+    if (!u.path.endsWith('/region-activity')) return u;
+    final q = Map.of(u.queryParameters)
+      ..remove('since')
+      ..remove('until');
+    return u.replace(queryParameters: q.isEmpty ? null : q);
+  }
+
   /// File-safe, length-bounded key for a URL (host + path + a hash of the full URL incl. the query).
   static String keyFor(Uri u) {
     var h = 0xcbf29ce484222325;
@@ -53,10 +83,11 @@ class EtagClient extends http.BaseClient {
     if (request.method != 'GET' || !isCacheable(uri) || request.headers.containsKey('x-driver-key')) {
       return _inner.send(request);
     }
-    final key = keyFor(uri);
+    final stored = storageUri(uri);
+    final key = keyFor(stored);
     final cached = await _cache.read(key);
     final req = http.Request('GET', uri)..headers.addAll(request.headers);
-    if (cached?.etag != null) req.headers['if-none-match'] = cached!.etag!;
+    if (cached?.etag != null && stored == uri) req.headers['if-none-match'] = cached!.etag!;
 
     http.Response? live;
     Object? failure;
@@ -96,8 +127,8 @@ class EtagClient extends http.BaseClient {
       'content-type': headers['content-type'] ?? 'application/json; charset=utf-8',
       'content-length': '${bytes.length}',
       'etag': ?etag,
-      'x-meshsonar-cache': ?from,
-      'x-meshsonar-as-of': ?asOf?.toUtc().toIso8601String(),
+      cacheSourceHeader: ?from,
+      cacheAsOfHeader: ?asOf?.toUtc().toIso8601String(),
     };
     return http.StreamedResponse(Stream.value(Uint8List.fromList(bytes)), status,
         contentLength: bytes.length, headers: h, reasonPhrase: reason);

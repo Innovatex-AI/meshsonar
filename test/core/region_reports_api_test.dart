@@ -9,9 +9,30 @@ import 'package:meshsonar/core/region_reports_api.dart';
 String fixture(String n) => File('test/fixtures/$n').readAsStringSync();
 
 void main() {
-  test('endpoint is <base>/api/<slug>/<name>, tolerating a trailing slash', () {
+  test('endpoint is <region host>/api/cmh/<name> for every region (the host picks the region), tolerating a trailing slash', () {
     final a = RegionReportsApi('https://cmh.meshsonar.com/');
-    expect(a.endpoint('cmh', 'region-report').toString(), 'https://cmh.meshsonar.com/api/cmh/region-report');
+    expect(a.endpoint('region-report').toString(), 'https://cmh.meshsonar.com/api/cmh/region-report');
+    // Live: day.meshsonar.com/api/day/region-report is 404; /api/cmh/region-report on the DAY host answers DAY.
+    expect(RegionReportsApi('https://day.meshsonar.com').endpoint('region-report').toString(),
+        'https://day.meshsonar.com/api/cmh/region-report');
+  });
+
+  test('fetchReport/fetchSources for DAY and CVG request /api/cmh/ on the region host, never /api/<slug>/', () async {
+    final seen = <String>[];
+    for (final (host, slug) in [('https://day.meshsonar.com', 'day'), ('https://cvg.meshsonar.com', 'cvg')]) {
+      final a = RegionReportsApi(host, client: MockClient((r) async {
+        seen.add(r.url.toString());
+        return http.Response(r.url.path.endsWith('region-report') ? '{"region":{"slug":"$slug","name":"X","code":"${slug.toUpperCase()}"}}' : '{"sources":[]}', 200);
+      }));
+      expect((await a.fetchReport(slug)).ok, isTrue);
+      expect((await a.fetchSources(slug)).ok, isTrue);
+    }
+    expect(seen, [
+      'https://day.meshsonar.com/api/cmh/region-report',
+      'https://day.meshsonar.com/api/cmh/region-sources',
+      'https://cvg.meshsonar.com/api/cmh/region-report',
+      'https://cvg.meshsonar.com/api/cmh/region-sources',
+    ]);
   });
 
   test('parses the real CMH region-report', () {

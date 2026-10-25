@@ -54,10 +54,11 @@ void main() {
       return r.url.path.endsWith('region-report') ? ok(fixture('region_report_cmh.json')) : ok(fixture('region_sources_cmh.json'));
     })));
     await t.pumpAndSettle();
-    expect(find.byKey(const Key('reports-error')), findsOneWidget);
-    expect(find.byKey(const Key('sources-error')), findsOneWidget);
+    // Both requests unreachable, nothing stored: one honest offline state instead of two error cards.
+    expect(find.byKey(const Key('region-offline-empty')), findsOneWidget);
+    expect(find.byKey(const Key('reports-error')), findsNothing);
     fail = false;
-    await t.tap(find.text('Retry').first);
+    await t.tap(find.byKey(const Key('region-offline-retry')));
     await t.pumpAndSettle();
     expect(find.byKey(const Key('reports-error')), findsNothing);
     expect(find.text('Columbus, US'), findsOneWidget);
@@ -81,12 +82,17 @@ void main() {
   });
 
   testWidgets('switching region reloads and ignores the stale response', (t) async {
+    // Same client for both regions (the test seam), so the first report request is the slow CMH one.
     final slow = Completer<http.Response>();
     final calls = <String>[];
+    var reports = 0;
     final a = api((r) {
       calls.add(r.url.path);
-      if (r.url.path == '/api/cmh/region-report') return slow.future;
-      if (r.url.path.endsWith('region-report')) return Future.value(ok('{"region":{"slug":"day","name":"Dayton, US","code":"DAY"},"overview":{"packets24h":5}}'));
+      if (r.url.path.endsWith('region-report')) {
+        reports++;
+        if (reports == 1) return slow.future;
+        return Future.value(ok('{"region":{"slug":"day","name":"Dayton, US","code":"DAY"},"overview":{"packets24h":5}}'));
+      }
       return Future.value(ok('{"sources":[]}'));
     });
     await t.pumpWidget(host(a, slug: 'cmh'));
@@ -97,6 +103,7 @@ void main() {
     await t.pumpAndSettle();
     expect(find.text('Dayton, US'), findsOneWidget);
     expect(find.text('Columbus, US'), findsNothing);
-    expect(calls, contains('/api/day/region-report'));
+    expect(reports, 2);
+    expect(calls.where((c) => c.contains('region-report')).toSet(), {'/api/cmh/region-report'}); // host picks the region
   });
 }

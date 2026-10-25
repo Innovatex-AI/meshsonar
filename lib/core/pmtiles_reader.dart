@@ -1,5 +1,7 @@
 // Minimal read-only PMTiles v3 reader (protomaps spec v3).
 // Pure Dart (dart:io only). Own implementation because the pub `pmtiles` package pins latlong2 ^0.9 (we use ^0.10).
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -41,12 +43,20 @@ int pmtilesTileId(int z, int x, int y) {
 }
 
 class PmtilesHeader {
-  final int rootOffset, rootLength, leafOffset, leafLength, dataOffset, dataLength;
+  final int rootOffset, rootLength, metadataOffset, metadataLength, leafOffset, leafLength, dataOffset, dataLength;
+  final int addressedTiles, tileEntries, tileContents;
+  final bool clustered;
   final int internalCompression, tileCompression, tileType, minZoom, maxZoom;
   final double minLon, minLat, maxLon, maxLat;
   const PmtilesHeader({
     required this.rootOffset,
     required this.rootLength,
+    this.metadataOffset = 0,
+    this.metadataLength = 0,
+    this.addressedTiles = 0,
+    this.tileEntries = 0,
+    this.tileContents = 0,
+    this.clustered = false,
     required this.leafOffset,
     required this.leafLength,
     required this.dataOffset,
@@ -79,6 +89,12 @@ class PmtilesHeader {
     return PmtilesHeader(
       rootOffset: u64(8),
       rootLength: u64(16),
+      metadataOffset: u64(24),
+      metadataLength: u64(32),
+      addressedTiles: u64(72),
+      tileEntries: u64(80),
+      tileContents: u64(88),
+      clustered: b[96] == 1,
       leafOffset: u64(40),
       leafLength: u64(48),
       dataOffset: u64(56),
@@ -98,15 +114,20 @@ class PmtilesHeader {
   bool covers(double lat, double lon) => lat >= minLat && lat <= maxLat && lon >= minLon && lon <= maxLon;
 }
 
-class _Entry {
+/// One directory entry. runLength > 0: a tile (or run of identical tiles) at [offset] in the tile data section;
+/// runLength == 0: a leaf directory at [offset] in the leaf section.
+class PmtilesEntry {
   final int tileId, offset, length, runLength;
-  _Entry(this.tileId, this.offset, this.length, this.runLength);
+  const PmtilesEntry(this.tileId, this.offset, this.length, this.runLength);
 }
 
 class PmtilesReader {
   final RandomAccessFile _file;
   final PmtilesHeader header;
-  final Map<int, List<_Entry>> _dirCache = {};
+  final Map<int, List<PmtilesEntry>> _dirCache = {};
+  // A RandomAccessFile allows ONE pending async operation; the map asks for many tiles at once, so reads are queued.
+  Future<void> _tail = Future.value();
+  bool _closed = false;
   PmtilesReader._(this._file, this.header);
 
   static Future<PmtilesReader> open(File f) async {
@@ -120,15 +141,58 @@ class PmtilesReader {
     }
   }
 
-  Future<void> close() => _file.close().then((_) {});
+  bool get isClosed => _closed;
 
-  Future<Uint8List> _read(int offset, int length) async {
-    await _file.setPosition(offset);
-    final b = await _file.read(length);
-    if (b.length != length) {
-      throw PmtilesException('truncated file (wanted $length at $offset, got ${b.length})');
+  /// Closes the file after any queued reads. Later [tile] calls throw [PmtilesException].
+  Future<void> close() {
+    if (_closed) return _tail;
+    _closed = true;
+    return _tail = _tail.then((_) => _file.close()).then((_) {}, onError: (Object _) {});
+  }
+
+  Future<Uint8List> _read(int offset, int length) {
+    if (_closed) return Future.error(PmtilesException('pack closed'));
+    final done = Completer<Uint8List>();
+    _tail = _tail.then((_) async {
+      try {
+        await _file.setPosition(offset);
+        final b = await _file.read(length);
+        if (b.length != length) {
+          throw PmtilesException('truncated file (wanted $length at $offset, got ${b.length})');
+        }
+        done.complete(b);
+      } catch (e, st) {
+        done.completeError(e, st);
+      }
+    });
+    return done.future;
+  }
+
+  /// The pack's JSON metadata (vector_layers, attribution, planetiler version...). Empty map when absent.
+  Future<Map<String, dynamic>> metadata() async {
+    if (header.metadataLength == 0) return const {};
+    final raw = _decompress(await _read(header.metadataOffset, header.metadataLength), header.internalCompression);
+    final j = jsonDecode(utf8.decode(raw));
+    return j is Map<String, dynamic> ? j : const {};
+  }
+
+  /// Every tile entry (root and all leaf directories), in tile-id order. Walks the whole index: diagnostics and
+  /// tests only, never on the map's hot path.
+  Future<List<PmtilesEntry>> allTileEntries() async {
+    final out = <PmtilesEntry>[];
+    Future<void> walk(int off, int len, int depth) async {
+      if (depth > 3) throw PmtilesException('directory depth exceeded');
+      for (final e in _parseDir(_decompress(await _read(off, len), header.internalCompression))) {
+        if (e.runLength > 0) {
+          out.add(e);
+        } else {
+          await walk(header.leafOffset + e.offset, e.length, depth + 1);
+        }
+      }
     }
-    return b;
+
+    await walk(header.rootOffset, header.rootLength, 0);
+    return out;
   }
 
   Uint8List _decompress(Uint8List b, int compression) {
@@ -139,7 +203,7 @@ class PmtilesReader {
     throw PmtilesException('unsupported compression $compression (build packs with gzip)');
   }
 
-  static List<_Entry> _parseDir(Uint8List b) {
+  static List<PmtilesEntry> _parseDir(Uint8List b) {
     var pos = 0;
     int varint() {
       var result = 0, shift = 0;
@@ -168,10 +232,10 @@ class PmtilesReader {
       final v = varint();
       offs[i] = (v == 0 && i > 0) ? offs[i - 1] + lens[i - 1] : v - 1;
     }
-    return [for (var i = 0; i < n; i++) _Entry(ids[i], offs[i], lens[i], runs[i])];
+    return [for (var i = 0; i < n; i++) PmtilesEntry(ids[i], offs[i], lens[i], runs[i])];
   }
 
-  Future<List<_Entry>> _dir(int offset, int length) async {
+  Future<List<PmtilesEntry>> _dir(int offset, int length) async {
     final cached = _dirCache[offset];
     if (cached != null) return cached;
     final dir = _parseDir(_decompress(await _read(offset, length), header.internalCompression));

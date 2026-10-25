@@ -63,6 +63,10 @@ class _ObserversPanelState extends State<ObserversPanel> {
             ),
           );
         }
+        final err = snap.error;
+        if (err is RegionApiException && err.offline) {
+          return RegionOfflineEmpty(what: 'the observers', onRetry: _reload);
+        }
         if (snap.hasError) {
           return Padding(
             padding: const EdgeInsets.all(Gap.l),
@@ -79,7 +83,13 @@ class _ObserversPanelState extends State<ObserversPanel> {
             ),
           );
         }
-        return ObserversContent(data: snap.data!, onRefresh: _reload);
+        final asOf = snap.data!.offlineAsOf;
+        final body = ObserversContent(data: snap.data!, onRefresh: _reload);
+        if (asOf == null) return body;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [RegionOfflineAsOf(asOf: asOf, onRetry: _reload), body],
+        );
       },
     );
   }

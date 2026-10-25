@@ -66,6 +66,10 @@ class _OverviewPanelState extends State<OverviewPanel> {
             ),
           );
         }
+        final err = snap.error;
+        if (err is RegionApiException && err.offline) {
+          return RegionOfflineEmpty(what: 'the overview', onRetry: _reload);
+        }
         if (snap.hasError) {
           return Padding(
             padding: const EdgeInsets.all(Gap.l),
@@ -82,10 +86,16 @@ class _OverviewPanelState extends State<OverviewPanel> {
             ),
           );
         }
-        return OverviewContent(
+        final asOf = snap.data!.offlineAsOf;
+        final body = OverviewContent(
           overview: snap.data!,
           regionSlug: widget.regionSlug,
           onRefresh: _reload,
+        );
+        if (asOf == null) return body;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [RegionOfflineAsOf(asOf: asOf, onRetry: _reload), body],
         );
       },
     );

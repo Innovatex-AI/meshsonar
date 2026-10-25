@@ -12,6 +12,7 @@ import 'package:meshsonar/core/drive_context.dart';
 import 'package:meshsonar/core/phone_sensors.dart';
 import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/core/idle_region_watcher.dart';
+import 'package:meshsonar/core/offline_packs.dart' show NetworkKind, NetworkMonitor;
 import 'package:meshsonar/core/region_lookup.dart';
 import 'package:meshsonar/core/repeater_sync.dart';
 import 'package:meshsonar/core/startup_location.dart';
@@ -643,6 +644,21 @@ void useTallScreen(WidgetTester tester) {
   tester.view.physicalSize = const Size(1080, 2400);
   tester.view.devicePixelRatio = 2.5;
   addTearDown(tester.view.reset);
+}
+
+/// Network seam for the offline-pack download policy: set [kind] and call [emit] to simulate a change.
+class FakeNetworkMonitor implements NetworkMonitor {
+  NetworkKind kind;
+  FakeNetworkMonitor([this.kind = NetworkKind.wifi]);
+  final _c = StreamController<NetworkKind>.broadcast();
+  @override
+  Future<NetworkKind> current() async => kind;
+  @override
+  Stream<NetworkKind> get changes => _c.stream;
+  void emit(NetworkKind k) {
+    kind = k;
+    _c.add(k);
+  }
 }
 
 /// In-memory drive context (same contract as JsonlDriveStore's ctx.jsonl / samples.jsonl / context.json).

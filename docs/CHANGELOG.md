@@ -5,6 +5,15 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- Offline maps verified against the real hosted CMH pack (tiles.meshsonar.com): header, directories and tiles checked byte for byte against an independent reader; real tiles rendered in both palettes.
+- Fixed: the PMTiles reader failed every concurrent tile request ("async operation is currently pending"), so a downloaded pack would have drawn mostly blank on the map. Reads are now queued on the file handle.
+- Offline map style now matches the online map: OSM Carto colours and road hierarchy through the same grey/paper (light) and chart (dark) colour matrix as the online tiles. Labels: place names by size, road names along roads, motorway refs, river and lake names, with wide halos for reading in the car. No glyph files needed in the app.
+- The map now switches region pack as the view moves (sticky where packs overlap) and back to online tiles outside every pack, instead of choosing once from the starting centre.
+- Offline maps screen: "Download on Wi-Fi only" (default on; on cellular it shows the size and asks), downloads queue and resume by themselves on Wi-Fi, on return to the app and after a restart; "Update available (size)" with the old pack kept in use until the new one is verified; pack list cached with ETag so the screen works offline ("Offline - pack list as of"); per-pack size, total and Delete all; stalled downloads fail after 30 s instead of spinning; a partial download from another version is discarded instead of appended to; honest full-disk message.
+- Fixed: dark mode showed light offline map tiles (both palettes shared one tile-cache key); the style now has its own id and version per palette, so style changes also invalidate cached tiles.
+- Fixed: the Reports tab asked `/api/<slug>/region-report`, which is 404 for every region but CMH; it now uses `/api/cmh/` on the region's host like the other region data, so DAY and CVG reports load and are cached.
+- Fixed: Offline maps storage accounting could crash while a download finished (flaky screen test).
+- Region tab offline-first: saved data shown with "Offline - as of", honest "No connection" states with a working Retry on every panel, and a clear "Live needs a connection" on the Live tab. Busiest-hours data is now saved for offline use.
 - Units: besides Auto / Metric / Imperial, distance, speed, height and altitude, temperature (°C/°F) and air pressure (hPa/inHg/mmHg) can each have their own unit; each follows Units by default. Old settings files load unchanged.
 - Settings on phones: app bar Search and Sections (jump to any section); every unavailable control now says why and how to enable it; removing the driver key says how to undo it.
 - A last-known position older than 72 hours (was 24 h) is labelled and can still centre the map, but no longer switches the region or shows a region notice or preset prompt.

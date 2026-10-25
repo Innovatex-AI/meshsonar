@@ -1,12 +1,14 @@
 // "Analysis" panel for one region, mirroring the website's /analysis page: role mix, hash-size mix, busiest-hour
 // heatmap (last 7 days, phone-local time), hop spread and top carrying repeaters. Data: lib/core/region_analysis_api.dart.
 // Honest states: loading, error (retry), empty, and per-section partial/pending notices that quote the server's
-// status.reason. Firmware mix is omitted: no public endpoint serves it yet.
+// status.reason. Firmware mix is omitted: no public endpoint serves it yet. Offline: sections from the phone's stored
+// copy under one "Offline - as of" banner; nothing reachable and nothing stored is its own state with Retry.
 import 'package:flutter/material.dart';
 
 import '../../core/region_analysis_api.dart';
 import '../charts/heatmap.dart';
 import '../theme.dart';
+import 'region_common.dart';
 
 class AnalysisPanel extends StatefulWidget {
   /// Region host, the region's own subdomain (the server picks the region by host).
@@ -50,6 +52,13 @@ class _AnalysisPanelState extends State<AnalysisPanel> {
           return const Center(key: Key('analysis-loading'), child: CircularProgressIndicator());
         }
         final a = snap.data;
+        if (a != null && a.allOffline) {
+          return ListView(
+            key: const Key('analysis-offline'),
+            padding: const EdgeInsets.all(Gap.l),
+            children: [RegionOfflineEmpty(what: 'the analysis', onRetry: _retry)],
+          );
+        }
         if (a == null || a.allFailed) {
           final why = a?.activity.error ?? 'Could not load analysis.';
           return _Notice(
@@ -70,6 +79,7 @@ class _AnalysisPanelState extends State<AnalysisPanel> {
             children: [
               Text('${widget.regionSlug.toUpperCase()} analysis', style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: Gap.m),
+              if (a.offlineAsOf != null) RegionOfflineAsOf(asOf: a.offlineAsOf!, onRetry: _retry),
               if (a.anyFailed)
                 _Notice(
                   key: const Key('analysis-partial'),

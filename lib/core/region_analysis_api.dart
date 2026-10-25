@@ -166,8 +166,18 @@ class RoleMix {
 class Section<T> {
   final T? data;
   final String? error;
-  const Section.ok(T this.data) : error = null;
-  const Section.failed(String this.error) : data = null;
+
+  /// Set when [data] is the copy stored on the phone, served because the network failed: when it was fetched.
+  final DateTime? offlineAsOf;
+
+  /// True when the section failed because the server could not be reached at all (no connection, timeout).
+  final bool offline;
+  const Section.ok(T this.data, {this.offlineAsOf})
+      : error = null,
+        offline = false;
+  const Section.failed(String this.error, {this.offline = false})
+      : data = null,
+        offlineAsOf = null;
 }
 
 class RegionAnalysis {
@@ -180,6 +190,19 @@ class RegionAnalysis {
   List<Section> get _all => [activity, hash, paths, roles];
   bool get allFailed => _all.every((s) => s.data == null);
   bool get anyFailed => _all.any((s) => s.data == null);
+
+  /// Every section failed because the server could not be reached (nothing stored either).
+  bool get allOffline => _all.every((s) => s.data == null && s.offline);
+
+  /// The oldest fetch time among sections served from the phone's stored copy, or null when all are live.
+  DateTime? get offlineAsOf {
+    DateTime? oldest;
+    for (final s in _all) {
+      final t = s.offlineAsOf;
+      if (t != null && (oldest == null || t.isBefore(oldest))) oldest = t;
+    }
+    return oldest;
+  }
 }
 
 class RegionAnalysisApi {
@@ -212,13 +235,15 @@ class RegionAnalysisApi {
     try {
       final res = await c.get(endpoint(name, q), headers: {'accept': 'application/json'}).timeout(timeout);
       if (res.statusCode != 200) return Section.failed('The server answered ${res.statusCode}.');
-      return Section.ok(parse(jsonDecode(utf8.decode(res.bodyBytes))));
+      return Section.ok(parse(jsonDecode(utf8.decode(res.bodyBytes))), offlineAsOf: offlineAsOfOf(res));
     } on TimeoutException {
-      return const Section.failed('The server took too long to answer.');
+      return const Section.failed('The server took too long to answer.', offline: true);
     } on SocketException {
-      return const Section.failed('No connection to the server.');
+      return const Section.failed('No connection to the server.', offline: true);
     } on http.ClientException {
-      return const Section.failed('No connection to the server.');
+      return const Section.failed('No connection to the server.', offline: true);
+    } on HandshakeException {
+      return const Section.failed('No connection to the server.', offline: true);
     } on FormatException {
       return const Section.failed('The server sent something unreadable.');
     }

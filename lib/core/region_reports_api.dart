@@ -1,6 +1,7 @@
 // Read-only client for a region's public report and external-source coverage: `region-report` and `region-sources`
 // (shapes: meshcore-insights src/lib/region/types.ts, RegionReport and RegionSources). Both are public GETs on
-// `<baseUrl>/api/<slug>/...`, no key. Parsing is defensive: a missing or oddly typed field becomes null (never a made-up
+// `<region host>/api/cmh/...`, no key: the server picks the region from the HOST (day.meshsonar.com answers DAY under
+// `/api/cmh/`), like every other region client. `/api/<slug>/` is 404 for every slug but cmh (checked live Oct 24). Parsing is defensive: a missing or oddly typed field becomes null (never a made-up
 // zero), and every section keeps the server's own `status` so the UI can say "partial" or "pending" honestly.
 // Pure Dart: no Flutter imports.
 import 'dart:async';
@@ -262,8 +263,13 @@ class RegionFetchError {
 class FetchResult<T> {
   final T? data;
   final RegionFetchError? error;
-  const FetchResult.ok(T this.data) : error = null;
-  const FetchResult.fail(RegionFetchError this.error) : data = null;
+
+  /// Set when [data] is the copy stored on the phone, served because the network failed: when it was fetched.
+  final DateTime? offlineAsOf;
+  const FetchResult.ok(T this.data, {this.offlineAsOf}) : error = null;
+  const FetchResult.fail(RegionFetchError this.error)
+      : data = null,
+        offlineAsOf = null;
   bool get ok => data != null;
 }
 
@@ -276,13 +282,14 @@ class RegionReportsApi {
       : baseUrl = Uri.parse(baseUrl.trim()),
         _http = client ?? newRegionWireClient();
 
-  /// `<baseUrl>/api/<slug>/<name>`.
-  Uri endpoint(String slug, String name) {
+  /// `<baseUrl>/api/cmh/<name>`. The path segment is the API namespace, not the region: [baseUrl] is the region's own
+  /// host and the server scopes by host.
+  Uri endpoint(String name) {
     var path = baseUrl.path;
     while (path.endsWith('/')) {
       path = path.substring(0, path.length - 1);
     }
-    return baseUrl.replace(path: '$path/api/${Uri.encodeComponent(slug)}/$name', query: null, fragment: null);
+    return baseUrl.replace(path: '$path/api/cmh/$name', query: null, fragment: null);
   }
 
   Future<FetchResult<RegionReportData>> fetchReport(String slug) =>
@@ -294,7 +301,7 @@ class RegionReportsApi {
   Future<FetchResult<T>> _get<T extends Object>(String slug, String name, T Function(Map<String, dynamic>) parse) async {
     http.Response res;
     try {
-      res = await _http.get(endpoint(slug, name), headers: {'accept': 'application/json'}).timeout(timeout);
+      res = await _http.get(endpoint(name), headers: {'accept': 'application/json'}).timeout(timeout);
     } on TimeoutException {
       return FetchResult.fail(RegionFetchError(FetchErrorKind.network, 'timed out talking to ${baseUrl.host}'));
     } on SocketException catch (e) {
@@ -313,7 +320,7 @@ class RegionReportsApi {
     try {
       final decoded = jsonDecode(utf8.decode(res.bodyBytes));
       if (decoded is! Map<String, dynamic>) throw const FormatException('not an object');
-      return FetchResult.ok(parse(decoded));
+      return FetchResult.ok(parse(decoded), offlineAsOf: offlineAsOfOf(res));
     } catch (_) {
       return const FetchResult.fail(RegionFetchError(FetchErrorKind.badResponse, 'the server sent something unreadable'));
     }

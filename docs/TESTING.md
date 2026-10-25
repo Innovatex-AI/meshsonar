@@ -86,6 +86,21 @@ through `FLUTTER_TEST` in the environment.
 | `integration_test/app_flow_test.dart` | Real app on a device or simulator: first run → simulator drive → full-screen map → log → stop/report card → drives → detail → settings, printing `SCREEN <name>` for screenshots. |
 | `test/fixtures/cmat_server.ts` | bun server wrapping CMAT's `makeDriveHandlers` + `memoryDriveStore`, with one test repeater, `/__test/state` for assertions, and `PORT n` on stdout. |
 
+### Offline maps (real pack)
+
+| File | Covers |
+|---|---|
+| `test/core/pmtiles_reader_test.dart` | Hilbert ids, root + leaf lookup, run-length entries and contiguous offsets, concurrent lookups on one file handle, and the committed fixture `test/fixtures/cmh_mini.pmtiles` (3 real CMH tiles, built by `dart run tool/make_pack_fixture.dart <pack> <out>`, byte-reproducible, 98.5 KB). |
+| `test/core/pmtiles_real_pack_test.dart` | The real 53 MB CMH pack: header vs manifest, metadata layers, tiles at z0/z6/z10/z14 and the bbox corners hashed against the independent Python `pmtiles` reader (`tool/pmtiles_reference.py`), out-of-bbox nulls, a brute-force walk of all 8,196 entries, concurrency, close. |
+| `test/core/offline_packs_http_test.dart` | `OfflinePackManager` against a local `HttpServer` with Range serving the real pack: full download, kill + resume, Range ignored, checksum mismatch, full disk, stall timeout, foreign `.part`, Wi-Fi pause/resume, restart resume, user pause, manifest ETag/304/offline. |
+| `test/ui/offline_render_test.dart` | Renders real tiles with `offlineMapStyle` (light + dark): colour count, water where Hoover Reservoir is, labels change pixels; the fixture variant always runs. `MESHSONAR_RENDER_OUT=<dir>` writes the PNGs. |
+| `test/ui/offline_basemap_test.dart` | Pack choice as the camera moves (sticky overlap, switch, online outside), deleted/corrupt packs, and a drag on `CoverageMap` switching CMH -> DAY -> none. |
+| `test/integration/tiles_live_test.dart` | Opt-in (`MESHSONAR_LIVE_TILES=1`): real manifest + 127-byte Range header check per pack. |
+| `integration_test/offline_maps_test.dart` | Simulator/device: downloads the real pack in-app and shows it at z10/z14 light/dark (`SCREEN` lines). |
+
+The real-pack tests read `MESHSONAR_REAL_PACK` (default `/Users/innovatex/Developer/ms-app-wt/_packs/CMH-v261024.pmtiles`)
+and skip with a reason when it is absent. Never commit the pack.
+
 ## Running subsets
 
 ```sh

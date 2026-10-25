@@ -81,6 +81,9 @@ class RegionOverview {
   final List<HourlyCount> packetsPerHour;
   final DateTime? lastPacketAt;
   final List<RegionEvent> recentEvents;
+
+  /// Set when this is the copy stored on the phone, served because the network failed: when it was fetched.
+  final DateTime? offlineAsOf;
   const RegionOverview({
     required this.status,
     this.packets24h,
@@ -91,9 +94,10 @@ class RegionOverview {
     this.packetsPerHour = const [],
     this.lastPacketAt,
     this.recentEvents = const [],
+    this.offlineAsOf,
   });
 
-  factory RegionOverview.fromJson(Map<String, dynamic> j) {
+  factory RegionOverview.fromJson(Map<String, dynamic> j, {DateTime? offlineAsOf}) {
     final hours = <HourlyCount>[];
     final ph = j['packetsPerHour'];
     if (ph is List) {
@@ -130,6 +134,7 @@ class RegionOverview {
       packetsPerHour: hours,
       lastPacketAt: _time(j['lastPacketAt']),
       recentEvents: events,
+      offlineAsOf: offlineAsOf,
     );
   }
 }
@@ -205,9 +210,12 @@ class RegionObserver {
 class RegionObservers {
   final RegionDataStatus status;
   final List<RegionObserver> rows;
-  const RegionObservers({required this.status, required this.rows});
 
-  factory RegionObservers.fromJson(Map<String, dynamic> j) {
+  /// Set when this is the copy stored on the phone, served because the network failed: when it was fetched.
+  final DateTime? offlineAsOf;
+  const RegionObservers({required this.status, required this.rows, this.offlineAsOf});
+
+  factory RegionObservers.fromJson(Map<String, dynamic> j, {DateTime? offlineAsOf}) {
     final rows = <RegionObserver>[];
     final r = j['rows'];
     if (r is List) {
@@ -219,13 +227,17 @@ class RegionObservers {
     return RegionObservers(
       status: RegionDataStatus.fromJson(j['status']),
       rows: rows,
+      offlineAsOf: offlineAsOf,
     );
   }
 }
 
 class RegionApiException implements Exception {
   final String message;
-  const RegionApiException(this.message);
+
+  /// True when the server could not be reached at all (no connection, timeout), not an error answer.
+  final bool offline;
+  const RegionApiException(this.message, {this.offline = false});
   @override
   String toString() => message;
 }
@@ -247,23 +259,29 @@ class RegionOverviewApi {
     return Uri.parse('$b/api/cmh/$name');
   }
 
-  Future<RegionOverview> overview() async =>
-      RegionOverview.fromJson(await _get('region-overview'));
+  Future<RegionOverview> overview() async {
+    final (j, asOf) = await _get('region-overview');
+    return RegionOverview.fromJson(j, offlineAsOf: asOf);
+  }
 
-  Future<RegionObservers> observers() async =>
-      RegionObservers.fromJson(await _get('region-observers'));
+  Future<RegionObservers> observers() async {
+    final (j, asOf) = await _get('region-observers');
+    return RegionObservers.fromJson(j, offlineAsOf: asOf);
+  }
 
-  Future<Map<String, dynamic>> _get(String name) async {
+  /// The decoded body and, when it is the stored copy served offline, its fetch time.
+  Future<(Map<String, dynamic>, DateTime?)> _get(String name) async {
     final http.Response res;
     try {
       res = await _client
           .get(endpoint(name), headers: const {'accept': 'application/json'})
           .timeout(timeout);
     } on TimeoutException {
-      throw const RegionApiException('The server took too long to answer.');
+      throw const RegionApiException('The server took too long to answer.', offline: true);
     } catch (_) {
       throw const RegionApiException(
         'Could not reach the server. Check your connection.',
+        offline: true,
       );
     }
     if (res.statusCode != 200) {
@@ -276,7 +294,7 @@ class RegionOverviewApi {
     }
     try {
       final b = jsonDecode(utf8.decode(res.bodyBytes));
-      if (b is Map<String, dynamic>) return b;
+      if (b is Map<String, dynamic>) return (b, offlineAsOfOf(res));
     } catch (_) {}
     throw const RegionApiException('The server sent something unreadable.');
   }

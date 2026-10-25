@@ -95,9 +95,12 @@ class PacketPage {
   final PacketsStatus status;
   final List<PacketRow> rows;
   final String? nextCursor;
-  const PacketPage({required this.status, required this.rows, this.nextCursor});
 
-  factory PacketPage.fromJson(Map<String, dynamic> j) {
+  /// Set when this is the copy stored on the phone, served because the network failed: when it was fetched.
+  final DateTime? offlineAsOf;
+  const PacketPage({required this.status, required this.rows, this.nextCursor, this.offlineAsOf});
+
+  factory PacketPage.fromJson(Map<String, dynamic> j, {DateTime? offlineAsOf}) {
     final rows = <PacketRow>[];
     final raw = j['rows'];
     if (raw is List) {
@@ -110,6 +113,7 @@ class PacketPage {
       status: PacketsStatus.fromJson(j['status']),
       rows: rows,
       nextCursor: j['nextCursor'] is String ? j['nextCursor'] as String : null,
+      offlineAsOf: offlineAsOf,
     );
   }
 }
@@ -119,7 +123,10 @@ class PacketsException implements Exception {
   final String message;
   final int? status;
   final bool busy;
-  const PacketsException(this.message, {this.status, this.busy = false});
+
+  /// True when the server could not be reached at all (no connection, DNS, TLS, timeout), not an error answer.
+  final bool offline;
+  const PacketsException(this.message, {this.status, this.busy = false, this.offline = false});
   @override
   String toString() => message;
 }
@@ -156,13 +163,13 @@ class HttpRegionPacketsApi implements RegionPacketsApi {
     try {
       res = await _http.get(endpoint(q), headers: {'accept': 'application/json'}).timeout(timeout);
     } on TimeoutException {
-      throw PacketsException('timed out talking to ${baseUrl.host}');
+      throw PacketsException('timed out talking to ${baseUrl.host}', offline: true);
     } on SocketException catch (e) {
-      throw PacketsException('network error: ${e.message}');
+      throw PacketsException('network error: ${e.message}', offline: true);
     } on http.ClientException catch (e) {
-      throw PacketsException('network error: ${e.message}');
+      throw PacketsException('network error: ${e.message}', offline: true);
     } on HandshakeException catch (e) {
-      throw PacketsException('secure connection failed: ${e.message}');
+      throw PacketsException('secure connection failed: ${e.message}', offline: true);
     }
     Object? body;
     try {
@@ -176,6 +183,6 @@ class HttpRegionPacketsApi implements RegionPacketsApi {
       throw PacketsException(err ?? 'server answered ${res.statusCode}', status: res.statusCode, busy: busy);
     }
     if (body is! Map) throw PacketsException('server sent an unreadable answer', status: res.statusCode);
-    return PacketPage.fromJson(body.cast<String, dynamic>());
+    return PacketPage.fromJson(body.cast<String, dynamic>(), offlineAsOf: offlineAsOfOf(res));
   }
 }

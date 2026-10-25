@@ -275,6 +275,9 @@ names.
 | `core/network_repeaters.dart` | core | Global network list (`/api/cmh/network-repeaters`): `NetworkRepeater`, tolerant envelope + strict row parser, `nearby` (150 km). |
 | `core/repeater_sync.dart` | core | Stream 3: `RepeaterSync` (roster + network list on open/resume/switch, ETag, rate limits, back-off, capability check) and `RepeaterSyncStore` (versioned, atomic, bounded); `RepeaterSet` for the map layer. |
 | `core/repeater_directory.dart` | core | `RepeaterDirectory`: streams map.meshcore.io's node list, keeps nearby repeaters, caches to disk; `JsonArraySplitter`. |
+| `core/pmtiles_reader.dart` | core | Read-only PMTiles v3 reader: header, metadata, root/leaf directories, run-length entries, gzip; reads queued on one file handle; `allTileEntries` walk for diagnostics. |
+| `core/offline_style.dart` | core | `offlineStyle`: MapLibre style JSON (OpenMapTiles schema) = OSM Carto colours through the online tile matrices (`osmTintLight/Dark`, pinned to ui/theme.dart by a test); app (Flutter fonts) and web (glyph stacks + pmtiles source) targets; `offlineStyleVersion`. |
+| `core/offline_packs.dart` | core | Pack manifest (https, same host), `OfflinePackManager`: ETag-cached manifest, resumable verified downloads (`.part` + version sidecar), Wi-Fi-only policy (`NetworkKind`, `NetworkMonitor` seam, queued/pending downloads persisted in `prefs.json`), update, delete/delete all, storage, `packCovering`. |
 | `core/cluster_index.dart` | core | `ClusterIndex`: grid clustering of big point layers, precomputed for zooms 0..14 (one integer sort on Morton cell codes, one scan per level; 64 px cells), stable cluster ids, O(visible) viewport `query` (antimeridian copies), `hitTest` (nearest point/cluster within N px, co-located stacks), `build` runs in `Isolate.run` from 2,000 points; Web Mercator helpers. Not wired into a screen yet (stream-1-maps.md WP-M2/M3). |
 | `core/map_view_state.dart` | core | `MapViewState`: the map view as a URL, parse/serialise compatible with the website's `/coverage` params (`show, color, since, src, res, lat, lon, label, from`) plus app `z`/`until`; `https://<region>.meshsonar.com/coverage` and `meshsonar://map` forms; every bad parameter dropped alone. The URL scheme is not registered yet (WP-M4). |
 | `core/repeater_points.dart` | core | `MapRepeaterRow` (neutral row the repeater layers take), `RepeaterPoints` (typed lists: position check, newest-wins key dedupe, skip keys, name fallback), website advert-age bands and `advertText`. |
@@ -293,6 +296,7 @@ names.
 | `platform/share.dart` | platform | `shareDriveFile`: share sheet for exports (JSON) and reports (text). |
 | `platform/app_version.dart` | platform | `loadAppInfo`: name, version (from the build via package_info_plus) and platform. |
 | `platform/open_url.dart` | platform | `openExternalUrl`: opens the server's web pages in the browser (url_launcher). |
+| `platform/network_monitor.dart` | platform | `ConnectivityNetworkMonitor` (connectivity_plus) → `NetworkKind` for the offline-pack Wi-Fi-only rule. |
 | `ui/app.dart` | ui | `MeshSonarApp`, `AppScope`, `HomeShell` (Drive / Drives / Settings tabs, SnackBar notices), `StartupErrorApp`. |
 | `ui/theme.dart` | ui | Design system: `Gap`, `Corners`, palettes, `MeshSonarColors` (SNR scale, beacon, map tile matrix), `numberStyle`, theme mode. |
 | `ui/widgets.dart` | ui | Shared formatters (`formatTime`, `formatDateTime`, `formatSnr`, `bestSnr`, `repeatersHeard`) and small widgets (`StatTile`, `StatStrip`, `EmptyState`, `ErrorBanner`, `SectionLabel`, `SignalBars`, `ResultDot`, `PingTile`). |
@@ -307,6 +311,8 @@ names.
 | `ui/map/fullscreen_map.dart` | ui | Full-screen live map; `showMapLayersSheet` (opens the generated sheet). |
 | `ui/map/repeater_page_link.dart` | ui | `openRepeaterPageFromMap`: "Open repeater page" from a map repeater sheet. |
 | `ui/map/region_repeater_layer.dart` | ui | `regionRepeaterColor` (roster status colours; the layer itself is the clustered painter). |
+| `ui/map/offline_basemap.dart` | ui | `OfflineBasemap` (shared pack manager + open PMTiles readers, network/lifecycle hooks that resume queued downloads), `OfflinePackSelection` (which pack the camera centre is in, sticky in overlaps), `OfflineBasemapLayer` (vector_map_tiles in raster mode), `offlineMapStyle` (MapLibre-style JSON, OpenMapTiles schema, light/dark, labels drawn with Flutter text, no glyph files). |
+| `ui/settings/offline_packs_screen.dart` | ui | Settings > Offline maps: pack list (ETag-cached manifest), download/pause/update/delete/delete all, Wi-Fi-only switch and cellular prompt, storage. |
 | `ui/map/map_layers.dart` | ui | `MapLayers`, `PingColorMode`, `HeardView` / `HeardPhase`, `heardSnapshot`, `formatDistance` (map style), `formatSnrShort`. |
 | `ui/map/layers/map_layer.dart` | ui | Layer vocabulary: `MapLayerSpec`, `LayerGroup`, `LayerAvailability` + `LayerStatus` (switch enabled + reason text), `MapLayerState` (on set + modes, `toShow`/`fromShow` with the website's `?show=` keys), `MapHit` (`CellHit`, `RepeaterHit`, `ClusterHit`, `ObserverHit`). |
 | `ui/map/layers/registry.dart` | ui | `kMapLayers` in paint order (measured, hexes, network, repeaters, observers, links, neighbours, heard, pings, rings), defaults, `layerStateForLink`, `layerStatus` for every layer from `MapLayerInputs`. |
