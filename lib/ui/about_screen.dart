@@ -1,6 +1,7 @@
 // About: what MeshSonar is, its MIT licence, and third-party notices.
 import 'package:flutter/material.dart';
 
+import '../core/api.dart' show openMeteoCredit;
 import 'app.dart';
 
 const String mitLicenseText = '''MIT License
@@ -44,7 +45,15 @@ const List<({String name, String license, String note})> thirdPartyNotices = [
   (name: 'share_plus, path_provider', license: 'BSD-3-Clause, © Flutter Community / The Flutter Authors', note: 'Sharing and file locations.'),
   (name: 'http, path, uuid', license: 'BSD-3-Clause / MIT', note: 'Networking and utilities.'),
   (name: 'pdf', license: 'Apache-2.0, © David PHAM-VAN', note: 'Drive and region reports as PDF (made on the phone).'),
+  (
+    name: 'Open-Meteo',
+    license: 'Data under CC BY 4.0. Its free service is for non-commercial use.',
+    note: openMeteoCredit,
+  ),
 ];
+
+/// Credits that link out: the notice name -> the page its credit line opens.
+final Map<String, Uri> thirdPartyNoticeLinks = {'Open-Meteo': Uri.parse('https://open-meteo.com')};
 
 class AboutScreen extends StatelessWidget {
   const AboutScreen({super.key});
@@ -75,9 +84,12 @@ class AboutScreen extends StatelessWidget {
             for (final n in thirdPartyNotices)
               ListTile(
                 contentPadding: EdgeInsets.zero,
+                key: Key('notice-${n.name}'),
                 title: Text(n.name),
                 subtitle: Text('${n.license}\n${n.note}'),
                 isThreeLine: true,
+                trailing: thirdPartyNoticeLinks[n.name] == null ? null : const Icon(Icons.open_in_new, size: 18),
+                onTap: thirdPartyNoticeLinks[n.name] == null ? null : () => s.services.openUrl(thirdPartyNoticeLinks[n.name]!),
               ),
             const SizedBox(height: 8),
             OutlinedButton.icon(
