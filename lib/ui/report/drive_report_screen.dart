@@ -12,6 +12,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' hide Path;
 
 import '../../app/app_state.dart';
+import '../../core/api.dart' show DriveEnvStatus, WeatherSnapshot;
 import '../../core/drive_report.dart';
 import '../../core/drive_report_export.dart';
 import '../../core/drive_report_pdf.dart';
@@ -68,19 +69,43 @@ class _DriveReportScreenState extends State<DriveReportScreen> {
 
   String get _fileBase => 'meshsonar-report-${widget.sessionId.split('-').first}';
 
-  Future<void> _share(DriveReport r, String title) => _write(
-      '$_fileBase.txt', () => r.toText(title: 'MeshSonar drive report: $title', units: AppScope.read(context).units, duration: formatDuration));
-
-  Future<void> _shareCsv(DriveReport r) {
+  /// The server's hourly weather for this drive, for the exports: only when the Weather block would show it (server
+  /// does weather, key approved, category on, drive uploaded) and the answer is `ready`. Anything else (pending, off,
+  /// offline with nothing stored, an error) exports without a weather section; nothing is invented and the export is
+  /// never held up (8 s at most).
+  Future<List<WeatherSnapshot>> _weatherForExport(DriveReport r) async {
     final s = AppScope.read(context);
-    return _write('$_fileBase.csv', () => r.toCsv(nameOf: s.repeaterName));
+    if (!s.driveWeatherEnabled) return const [];
+    try {
+      final unsynced = (await s.services.store.unsyncedPings(r.session.id)).length;
+      if (r.sortedPings.length - unsynced <= 0) return const [];
+      final res = await s.driveWeather(r.session.id).timeout(const Duration(seconds: 8));
+      return res.env.status == DriveEnvStatus.ready ? res.env.snapshots : const [];
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<void> _share(DriveReport r, String title) async {
+    final s = AppScope.read(context);
+    final w = await _weatherForExport(r);
+    if (!mounted) return;
+    await _write('$_fileBase.txt', () => r.toText(title: 'MeshSonar drive report: $title', units: s.units, duration: formatDuration, weather: w));
+  }
+
+  Future<void> _shareCsv(DriveReport r) async {
+    final s = AppScope.read(context);
+    final w = await _weatherForExport(r);
+    if (!mounted) return;
+    await _write('$_fileBase.csv', () => r.toCsv(nameOf: s.repeaterName, weather: w));
   }
 
   Future<void> _sharePdf(DriveReport r, String title) async {
     final s = AppScope.read(context);
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await shareReportPdf(s, '$_fileBase.pdf', driveReportPdf(r, title: title, units: s.units, duration: formatDuration));
+      final w = await _weatherForExport(r);
+      await shareReportPdf(s, '$_fileBase.pdf', driveReportPdf(r, title: title, units: s.units, duration: formatDuration, weather: w));
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text('Couldn\'t make the PDF. Text and CSV still work. $e')));
     }

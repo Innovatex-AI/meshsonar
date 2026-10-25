@@ -2,7 +2,9 @@
 // graphics with their numbers in words, the repeaters and the grid cells as tables. Distances and speeds in the
 // person's Units (said in the header), times in the phone's local time with the zone named. The grid-cell table holds
 // where the drive went (cell centres, about 220 m by 210 m), so the export menu says so. Pure Dart: no Flutter imports.
+import 'api.dart' show WeatherSnapshot, openMeteoCredit;
 import 'drive_report.dart';
+import 'drive_weather_export.dart';
 import 'report_pdf.dart';
 import 'rf_thresholds.dart';
 import 'units.dart';
@@ -20,6 +22,7 @@ ReportDoc driveReportPdf(
   DateTime Function(DateTime utc)? wall,
   String? zone,
   String Function(Duration? d)? duration,
+  List<WeatherSnapshot> weather = const [],
 }) {
   final local = wall ?? (DateTime t) => t.toLocal();
   final z = zone ?? DateTime.now().timeZoneName;
@@ -143,6 +146,11 @@ ReportDoc driveReportPdf(
         '${g.poor > 0 ? ', ${g.poor} of ${g.n} worse than ${u.shortLength(poorGpsAccuracyM)}' : ''}.'));
   }
 
+  blocks.addAll(weatherPdfBlocks(weather, u, hour: (t) {
+    final l = local(t);
+    return '${_two(l.day)} ${_months[l.month - 1]} ${hm(t)}';
+  }, zone: z));
+
   blocks
     ..add(PdfTable(
       title: 'Repeaters heard (${r.repeaters.length})',
@@ -184,6 +192,7 @@ ReportDoc driveReportPdf(
     subtitle: [
       'Started ${when(r.session.startedAt)} ($z). Times are your phone\'s local time.',
       'Units: ${u.description}. Contains where you drove (grid cells).',
+      if (weather.isNotEmpty) openMeteoCredit,
     ],
     blocks: blocks,
     footer: 'Recorded with MeshSonar (meshsonar.com). The CSV export has every ping.',
