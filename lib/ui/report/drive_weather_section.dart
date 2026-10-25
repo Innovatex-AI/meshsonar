@@ -55,8 +55,9 @@ class _DriveWeatherSectionState extends State<DriveWeatherSection> {
     final s = AppScope.read(context);
     final unsynced = (await s.services.store.unsyncedPings(widget.sessionId))
         .length;
-    if (widget.pings.length - unsynced <= 0)
+    if (widget.pings.length - unsynced <= 0) {
       return null; // nothing confirmed by the server: it cannot know the drive
+    }
     final r = await s.driveWeather(widget.sessionId);
     var phone = const <TimeValue>[];
     if (r.env.snapshots.any((e) => e.pressureHpa != null)) {
@@ -249,8 +250,9 @@ class _WeatherBody extends StatelessWidget {
         snaps.isEmpty ? 'weather-pending' : 'weather-partial',
       DriveEnvStatus.ready => 'weather-empty',
     };
-    if (note != null)
+    if (note != null) {
       parts.add(Text(note, key: Key(noteKey), style: t.textTheme.bodyMedium));
+    }
 
     if (snaps.isNotEmpty) parts.addAll(_values(context));
     if (loaded.unsynced > 0) {
@@ -670,7 +672,7 @@ class _CreditLine extends StatelessWidget {
           final messenger = ScaffoldMessenger.of(context);
           final ok = await AppScope.read(context).services
               .openUrl(openMeteoUrl);
-          if (!ok)
+          if (!ok) {
             messenger.showSnackBar(
               const SnackBar(
                 content: Text(
@@ -678,6 +680,7 @@ class _CreditLine extends StatelessWidget {
                 ),
               ),
             );
+          }
         },
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 44),

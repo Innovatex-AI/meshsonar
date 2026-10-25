@@ -90,7 +90,7 @@ Future<WeatherHarness> open(
       [ping('a', 0), ping('b', 30), ping('c', 60)], syncedFirst: synced);
   setup?.call(h);
   await h.state.init();
-  h.weather.script = script ?? (_, __) async => ready();
+  h.weather.script = script ?? (_, _) async => ready();
   h.weather.siteConfigResult = SiteConfig(region: _region, capabilities: capability ? const {'driveEnv'} : const {});
   await h.state.refreshSiteConfig();
   await tester.pumpWidget(MeshSonarApp(state: h.state));
@@ -238,7 +238,7 @@ void main() {
     });
 
     testWidgets('a quantity the source did not give is not shown or invented', (tester) async {
-      await open(tester, script: (_, __) async => ready([snap(18, t: 10.0), snap(19, t: 12.0)]));
+      await open(tester, script: (_, _) async => ready([snap(18, t: 10.0), snap(19, t: 12.0)]));
       await toWeather(tester);
       expect(text(tester, 'weather-tile-temp'), '10 °C to 12 °C');
       for (final k in ['dew', 'humidity', 'wind', 'precip', 'cloud', 'pressure']) {
@@ -267,7 +267,7 @@ void main() {
 
   group('states', () {
     testWidgets('pending with nothing yet: explains the 30-minute job and the 2 hour wait; no credit (no values)', (tester) async {
-      await open(tester, script: (_, __) async => noSnaps(DriveEnvStatus.pending));
+      await open(tester, script: (_, _) async => noSnaps(DriveEnvStatus.pending));
       await toWeather(tester);
       expect(text(tester, 'weather-pending'),
           'Not looked up yet. The server checks every 30 minutes after a drive has been quiet for 2 hours.');
@@ -276,7 +276,7 @@ void main() {
     });
 
     testWidgets('pending with some hours: shows them with the credit and says more may follow', (tester) async {
-      await open(tester, script: (_, __) async => DriveEnv(session: 'd1', status: DriveEnvStatus.pending, attribution: 'x', snapshots: [snap(18, t: 9.0)]));
+      await open(tester, script: (_, _) async => DriveEnv(session: 'd1', status: DriveEnvStatus.pending, attribution: 'x', snapshots: [snap(18, t: 9.0)]));
       await toWeather(tester);
       expect(find.byKey(const Key('weather-partial')), findsOneWidget);
       expect(text(tester, 'weather-tile-temp'), '9 °C to 9 °C');
@@ -285,14 +285,14 @@ void main() {
     });
 
     testWidgets('disabled: weather is off for this drive', (tester) async {
-      await open(tester, script: (_, __) async => noSnaps(DriveEnvStatus.disabled));
+      await open(tester, script: (_, _) async => noSnaps(DriveEnvStatus.disabled));
       await toWeather(tester);
       expect(text(tester, 'weather-disabled'), 'Weather is off for this drive, so the server did not look it up.');
       expect(find.byKey(const Key('weather-credit')), findsNothing);
     });
 
     testWidgets('unavailable: nothing visible to look up or older than 60 days, and the start/end trim is named', (tester) async {
-      await open(tester, script: (_, __) async => noSnaps(DriveEnvStatus.unavailable));
+      await open(tester, script: (_, _) async => noSnaps(DriveEnvStatus.unavailable));
       await toWeather(tester);
       final t = text(tester, 'weather-unavailable');
       expect(t, contains('nothing was publicly visible to look up'));
@@ -302,14 +302,14 @@ void main() {
     });
 
     testWidgets('ready but no hours: said plainly', (tester) async {
-      await open(tester, script: (_, __) async => noSnaps(DriveEnvStatus.ready));
+      await open(tester, script: (_, _) async => noSnaps(DriveEnvStatus.ready));
       await toWeather(tester);
       expect(text(tester, 'weather-empty'), 'The server has no weather hours for this drive.');
     });
 
     testWidgets('offline on first open: error with Retry, then Retry works', (tester) async {
       var online = false;
-      final h = await open(tester, script: (_, __) async {
+      final h = await open(tester, script: (_, _) async {
         if (!online) throw const CmatException('Connection failed');
         return ready();
       });
@@ -325,7 +325,7 @@ void main() {
     });
 
     testWidgets('404: the server does not know this drive; no Retry', (tester) async {
-      await open(tester, script: (_, __) async => throw const CmatException('no such session', status: 404));
+      await open(tester, script: (_, _) async => throw const CmatException('no such session', status: 404));
       await toWeather(tester);
       expect(find.byKey(const Key('weather-error-404')), findsOneWidget);
       expect(find.textContaining('doesn\'t know this drive'), findsOneWidget);
@@ -333,21 +333,21 @@ void main() {
     });
 
     testWidgets('429: asks for a pause and offers Retry', (tester) async {
-      await open(tester, script: (_, __) async => throw const CmatException('slow', status: 429));
+      await open(tester, script: (_, _) async => throw const CmatException('slow', status: 429));
       await toWeather(tester);
       expect(find.textContaining('asked for a pause'), findsOneWidget);
       expect(find.byKey(const Key('weather-retry')), findsOneWidget);
     });
 
     testWidgets('500 and key trouble say what happened', (tester) async {
-      await open(tester, script: (_, __) async => throw const CmatException('boom', status: 500));
+      await open(tester, script: (_, _) async => throw const CmatException('boom', status: 500));
       await toWeather(tester);
       expect(find.textContaining('answered with an error (500)'), findsOneWidget);
     });
 
     testWidgets('offline later: the stored answer is shown with its age and the credit', (tester) async {
       var online = true;
-      final h = await open(tester, script: (_, __) async {
+      final h = await open(tester, script: (_, _) async {
         if (!online) throw const CmatException('Connection failed');
         return ready();
       });

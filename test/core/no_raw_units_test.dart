@@ -21,6 +21,9 @@ const List<String> allowedLines = [
   r'~ 60}m',
   // The fixed ~220 m size of a grid cell, a fact about the map grid rather than a measurement.
   '(≈220 m, the same grid',
+  // The fixed ~5 km size of the weather grid cell (0.05 degrees) the server looks up, a fact about the source.
+  'about 5 km',
+  'a 5 km cell',
   'Server address moved',
 ];
 

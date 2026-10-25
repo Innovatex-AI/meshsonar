@@ -199,8 +199,9 @@ class DriveEnvCache {
   Future<void> _evict() async {
     final files = <(File, DateTime)>[];
     await for (final e in dir!.list()) {
-      if (e is File && _isEntry(e.path) && e.path.endsWith('.json'))
+      if (e is File && _isEntry(e.path) && e.path.endsWith('.json')) {
         files.add((e, (await e.stat()).modified));
+      }
     }
     if (files.length <= maxEntries) return;
     files.sort((a, b) => a.$2.compareTo(b.$2));
