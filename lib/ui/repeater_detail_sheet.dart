@@ -12,6 +12,7 @@ import 'charts/sparkline.dart';
 import 'repeater_widgets.dart';
 import 'theme.dart';
 import 'widgets.dart';
+import 'repeater_reach_section.dart';
 import 'your_drives_section.dart';
 
 /// One hearing of a repeater on a ping (echo or neighbour exchange).
@@ -171,6 +172,11 @@ class RepeaterDetailSheet extends StatelessWidget {
           ),
         const SizedBox(height: Gap.l),
         YourDrivesSection(repeaterKey: yourDrivesKey(id, lookup), lat: ref?.lat, lon: ref?.lon),
+        // Network-wide reach needs the full key AND the repeater's position (the sheet has both only for a resolved repeater).
+        if (ref != null) ...[
+          const SizedBox(height: Gap.l),
+          RepeaterReachSection(repeaterKey: ref.key, lat: ref.lat, lon: ref.lon),
+        ],
       ],
     );
   }

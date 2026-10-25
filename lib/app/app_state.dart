@@ -19,6 +19,7 @@ import '../core/data_categories.dart' show CategoryId, dataCategories;
 import '../core/drive_context.dart' show ContextSyncLedger, stripContextCategories, stripUnsentContextCategories;
 import '../core/drive_context_session.dart';
 import '../core/drive_env_cache.dart';
+import '../core/repeater_reach.dart';
 import '../core/drive_store.dart' show closeOrphanedSessions;
 import '../core/heard.dart';
 import '../core/model.dart';
@@ -135,6 +136,28 @@ class AppState extends ChangeNotifier {
     if (key == null || key.isEmpty) return Future.error(const CmatException('no driver key', status: 401));
     final cache = _envCache();
     return cache.get(sessionId, () => client.driveEnv(key, sessionId));
+  }
+
+  // ---------- where all MeshSonar drivers heard a repeater (lib/core/repeater_reach.dart, lib/ui/repeater_reach_section.dart) ----------
+  RepeaterReachCache? _reachCache;
+
+  /// The upload server answers `repeater-reach` for an approved driver key (`capabilities.reachDriverKey`).
+  bool get serverHasReach => uploadSiteConfig?.reachDriverKey == true;
+
+  /// Reach can be asked now: the server has it and this driver key is approved.
+  bool get reachEnabled => serverHasReach && keyApproved;
+
+  /// Reach of [repeaterKey] (full key, hex) from the on-disk cache while fresh. [lat]/[lon] are the REPEATER's position.
+  /// Throws [CmatException] (401/403/429, no connection with nothing stored).
+  Future<ReachResult> repeaterReach(String repeaterKey, {double? lat, double? lon}) {
+    final key = _settings.driverKey;
+    if (key == null || key.isEmpty) return Future.error(const CmatException('no driver key', status: 401));
+    final rc = services.regionCache?.dir;
+    final cache = _reachCache ??= RepeaterReachCache(
+        dir: rc == null ? null : Directory('${rc.parent.path}${Platform.pathSeparator}repeater_reach'), clock: services.clock);
+    final withPos = lat != null && lon != null;
+    return cache.get(client.baseUrl.host, repeaterKey,
+        withPosition: withPos, fetch: () => client.repeaterReach(key, repeaterKey, lat: lat, lon: lon));
   }
 
   // ---------- region data disk cache (offline / as-of labels) ----------
