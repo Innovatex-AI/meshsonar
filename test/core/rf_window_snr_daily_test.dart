@@ -113,7 +113,7 @@ void main() {
     Map<String, dynamic> body(Object? daily) => {
           'status': {'state': 'ready'},
           'row': null,
-          if (daily != null) 'snrDaily': daily,
+          'snrDaily': ?daily,
         };
 
     test('absent field = null (not shown), never an empty list of zeros', () {
