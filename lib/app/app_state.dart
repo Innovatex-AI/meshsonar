@@ -20,6 +20,7 @@ import '../core/drive_context.dart' show ContextSyncLedger, stripContextCategori
 import '../core/drive_context_session.dart';
 import '../core/drive_env_cache.dart';
 import '../core/driver_summary.dart';
+import '../core/repeater_reach.dart';
 import '../core/drive_store.dart' show closeOrphanedSessions;
 import '../core/heard.dart';
 import '../core/model.dart';
@@ -114,6 +115,19 @@ class AppState extends ChangeNotifier {
   // ---------- drive weather (stream 7 WP6: lib/core/drive_env_cache.dart, lib/ui/report/drive_weather_section.dart) ----------
   DriveEnvCache? _driveEnvCache;
 
+  DriveEnvCache _envCache() {
+    final rc = services.regionCache?.dir;
+    return _driveEnvCache ??= DriveEnvCache(
+        dir: rc == null ? null : Directory('${rc.parent.path}${Platform.pathSeparator}drive_env'), clock: services.clock);
+  }
+
+  /// Forgets every stored weather answer (the server erased its weather, or the Weather switch went off). Never throws.
+  Future<void> clearDriveWeatherCache() async {
+    try {
+      await _envCache().clear();
+    } catch (_) {}
+  }
+
   /// The server looks up weather for uploaded drives, this driver key is approved and the weather category is on.
   bool get driveWeatherEnabled => (siteConfig?.driveEnv ?? false) && keyApproved && collectionOn('weather');
 
@@ -121,9 +135,7 @@ class AppState extends ChangeNotifier {
   Future<DriveEnvResult> driveWeather(String sessionId) {
     final key = _settings.driverKey;
     if (key == null || key.isEmpty) return Future.error(const CmatException('no driver key', status: 401));
-    final rc = services.regionCache?.dir;
-    final cache = _driveEnvCache ??= DriveEnvCache(
-        dir: rc == null ? null : Directory('${rc.parent.path}${Platform.pathSeparator}drive_env'), clock: services.clock);
+    final cache = _envCache();
     return cache.get(sessionId, () => client.driveEnv(key, sessionId));
   }
 
@@ -167,6 +179,28 @@ class AppState extends ChangeNotifier {
     try {
       await _summaryCache().clear();
     } catch (_) {}
+  }
+
+  // ---------- where all MeshSonar drivers heard a repeater (lib/core/repeater_reach.dart, lib/ui/repeater_reach_section.dart) ----------
+  RepeaterReachCache? _reachCache;
+
+  /// The upload server answers `repeater-reach` for an approved driver key (`capabilities.reachDriverKey`).
+  bool get serverHasReach => uploadSiteConfig?.reachDriverKey == true;
+
+  /// Reach can be asked now: the server has it and this driver key is approved.
+  bool get reachEnabled => serverHasReach && keyApproved;
+
+  /// Reach of [repeaterKey] (full key, hex) from the on-disk cache while fresh. [lat]/[lon] are the REPEATER's position.
+  /// Throws [CmatException] (401/403/429, no connection with nothing stored).
+  Future<ReachResult> repeaterReach(String repeaterKey, {double? lat, double? lon}) {
+    final key = _settings.driverKey;
+    if (key == null || key.isEmpty) return Future.error(const CmatException('no driver key', status: 401));
+    final rc = services.regionCache?.dir;
+    final cache = _reachCache ??= RepeaterReachCache(
+        dir: rc == null ? null : Directory('${rc.parent.path}${Platform.pathSeparator}repeater_reach'), clock: services.clock);
+    final withPos = lat != null && lon != null;
+    return cache.get(client.baseUrl.host, repeaterKey,
+        withPosition: withPos, fetch: () => client.repeaterReach(key, repeaterKey, lat: lat, lon: lon));
   }
 
   // ---------- region data disk cache (offline / as-of labels) ----------
@@ -1026,6 +1060,7 @@ class AppState extends ChangeNotifier {
   /// ever going to leave the phone and the Settings dialog offers the (default Keep) local delete instead.
   Future<void> _contextCategoriesOff(List<String> ids) async {
     try {
+      if (ids.contains(CategoryId.weather)) await clearDriveWeatherCache();
       final st = services.store;
       if (serverAcceptsDriveContext && st is ContextSyncLedger) {
         final sessions = [for (final x in await st.sessions()) x.session.id];
@@ -1050,6 +1085,7 @@ class AppState extends ChangeNotifier {
     try {
       final r = await client.deleteDriveContext(key, category);
       await _setErasePending(category, false);
+      if (category == CategoryId.weather || category == 'all') await clearDriveWeatherCache();
       return ContextEraseOutcome.fromResult(r);
     } catch (e) {
       final o = ContextEraseOutcome.fromError(e);

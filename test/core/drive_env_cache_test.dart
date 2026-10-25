@@ -29,7 +29,7 @@ void main() {
   DriveEnvCache cache({Directory? d, int max = 60, int perMinute = 50}) =>
       DriveEnvCache(dir: d ?? dir, clock: () => now, maxEntries: max, maxPerMinute: perMinute);
 
-  test('ready: asked once, then served from the cache for hours, with the licence line and not the server one', () async {
+  test('ready: asked once, then served from the cache for an hour, with the licence line and not the server one', () async {
     final c = cache();
     var asks = 0;
     Future<DriveEnv> ask() async {
@@ -41,11 +41,11 @@ void main() {
     expect(a.offline, isFalse);
     expect(a.env.attribution, openMeteoCredit);
     expect(a.env.snapshots, hasLength(2));
-    now = now.add(const Duration(hours: 5));
+    now = now.add(const Duration(minutes: 59));
     final b = await c.get(_id, ask);
     expect(asks, 1);
     expect(b.fetchedAt, a.fetchedAt);
-    now = now.add(const Duration(hours: 2)); // past the ready window
+    now = now.add(const Duration(minutes: 2)); // past the 1 h ready window
     await c.get(_id, ask);
     expect(asks, 2);
   });

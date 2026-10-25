@@ -7,6 +7,7 @@ import 'antenna_profile.dart';
 import 'drive_context_wire.dart' show ContextUploadResult, DriveContextBatch;
 import 'driver_summary.dart' show DriverSummary;
 import 'model.dart';
+import 'repeater_reach.dart';
 import 'region_lookup.dart';
 import 'server_url.dart';
 import 'units.dart';
@@ -301,6 +302,12 @@ abstract class CmatClient {
   /// `GET /api/cmh/driver-summary` (`capabilities.driverSummary`): the account's history across phones and installs.
   /// Throws [CmatException] (401 unknown key, 403 not allowed with [CmatException.serverStatus], 429 pause).
   Future<DriverSummary> driverSummary(String driverKey) => throw const CmatException('not supported by this client');
+
+  /// `GET /api/cmh/repeater-reach?key=&lat=&lon=` with an approved driver key (`capabilities.reachDriverKey`): where
+  /// all MeshSonar drivers (public drives, trimmed) heard one repeater. [lat]/[lon] are the REPEATER's position (never
+  /// the phone's). Throws [CmatException] (401 unknown key, 403 not approved, 429 limit). Default: not supported.
+  Future<RepeaterReach> repeaterReach(String driverKey, String repeaterKey, {double? lat, double? lon}) =>
+      throw const CmatException('not supported by this client');
 }
 
 /// The server's answer to a drive-context erase.

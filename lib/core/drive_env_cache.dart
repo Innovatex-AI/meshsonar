@@ -3,7 +3,8 @@
 // cache, same atomic-write and LRU pattern as lib/core/region_cache.dart). Pure Dart.
 //
 // Rules (docs/PLATFORM_CONTRACT.md "Drive weather"):
-//   - `ready` is final, so it is trusted for [readyTtl] (the server itself caches it for 1 h).
+//   - `ready` is trusted for [readyTtl] (1 h, the server's own cache time), so a server erase or switching Weather off
+//     is never out-lived by a stored copy for long; both also clear the whole cache (AppState.clearDriveWeatherCache).
 //   - `pending` / `disabled` / `unavailable` can change (the job runs every 30 minutes), but are asked again only after
 //     [retryAfter] (5 minutes, the server's own max-age), never in a loop.
 //   - A failed ask serves the stored copy flagged `offline`; with nothing stored it throws (the screen offers Retry).
@@ -41,7 +42,7 @@ class DriveEnvCache {
   DriveEnvCache({
     this.dir,
     DateTime Function()? clock,
-    this.readyTtl = const Duration(hours: 6),
+    this.readyTtl = const Duration(hours: 1),
     this.retryAfter = const Duration(minutes: 5),
     this.maxEntries = 60,
     this.maxPerMinute = 50,

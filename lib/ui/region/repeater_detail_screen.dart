@@ -16,7 +16,9 @@ import '../app.dart' show AppScope;
 import '../charts/sparkline.dart';
 import '../map/coverage_map.dart';
 import '../theme.dart';
+import '../repeater_reach_section.dart';
 import '../your_drives_section.dart';
+import 'snr_trend_card.dart';
 
 /// Pushes the detail screen for one repeater of the region served at [baseUrl].
 Future<void> openRepeaterDetail(
@@ -49,6 +51,10 @@ class RepeaterDetailScreen extends StatefulWidget {
   @visibleForTesting
   final DateTime? now;
 
+  /// Test seam: override of the viewed region's `capabilities.snrDaily` (otherwise read from the app state).
+  @visibleForTesting
+  final bool? snrDaily;
+
   const RepeaterDetailScreen({
     super.key,
     required this.baseUrl,
@@ -57,6 +63,7 @@ class RepeaterDetailScreen extends StatefulWidget {
     this.client,
     this.mapTiles = true,
     this.now,
+    this.snrDaily,
   });
 
   @override
@@ -98,6 +105,9 @@ class _RepeaterDetailScreenState extends State<RepeaterDetailScreen> {
       });
     }
   }
+
+  bool _snrDailyCapable(BuildContext context) =>
+      widget.snrDaily ?? context.dependOnInheritedWidgetOfExactType<AppScope>()?.notifier?.siteConfig?.snrDaily ?? false;
 
   DateTime get _now => widget.now ?? DateTime.now();
 
@@ -157,11 +167,16 @@ class _RepeaterDetailScreenState extends State<RepeaterDetailScreen> {
           const SizedBox(height: Gap.l),
           _position(context, row),
           _activity(context, d),
+          if (d.snrDaily != null && _snrDailyCapable(context)) SnrTrendCard(daily: d.snrDaily!),
           _neighbours(context, d),
           _observers(context, d),
           Padding(
             padding: const EdgeInsets.only(bottom: Gap.l),
             child: YourDrivesSection(repeaterKey: widget.repeaterKey, lat: row.lat, lon: row.lon, mapTiles: widget.mapTiles),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(bottom: Gap.l),
+            child: RepeaterReachSection(repeaterKey: widget.repeaterKey, lat: row.lat, lon: row.lon, mapTiles: widget.mapTiles),
           ),
           _packetTypes(context, d),
           _events(context, d),
