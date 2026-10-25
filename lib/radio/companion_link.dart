@@ -9,6 +9,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import '../core/drive_context.dart';
 import '../core/model.dart';
 import 'crypto.dart';
 import 'protocol.dart';
@@ -55,6 +56,8 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource {
 
   int? _maxChannels;
   int? _firmwareVerCode;
+  DeviceInfoFrame? _deviceInfo;
+  int? _maxTxDbm;
   SelfInfo? _self;
   final Map<int, Uint8List> _secrets = {};
   int _lastSentTs = 0;
@@ -76,6 +79,21 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource {
   /// FIRMWARE_VER_CODE from DEVICE_INFO (MyMesh.h line 7), or null before start().
   int? get firmwareVerCode => _firmwareVerCode;
 
+  /// The radio's identity beyond Drive Format v1 (stream 7 category `radio_config`): board model string (DEVICE_INFO
+  /// manufacturer), firmware ver code + build date, max TX power (SELF_INFO), path hash mode. Null before start().
+  CompanionDetails? get companionDetails {
+    final di = _deviceInfo;
+    if (di == null && _maxTxDbm == null) return null;
+    final d = CompanionDetails(
+      model: di?.manufacturer,
+      fwCode: di?.firmwareVerCode,
+      fwBuild: di?.buildDate,
+      maxTxDbm: _maxTxDbm,
+      pathHashMode: di?.pathHashMode,
+    );
+    return d.isEmpty ? null : d;
+  }
+
   /// The secret of a channel this link has read or written, for decrypting echoes.
   Uint8List? channelSecret(int index) => _secrets[index];
 
@@ -90,6 +108,16 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource {
 
   void _onFrame(Uint8List data) {
     if (data.isEmpty) return;
+    if (data[0] == Push.telemetryResponse) {
+      final w = _telemetryWaiter;
+      final self = _self?.publicKey;
+      final t = decodeSelfTelemetryPush(data, selfPrefix: self == null || self.length < 12 ? null : fromHex(self.substring(0, 12)));
+      if (t != null && w != null && !w.isCompleted) {
+        _telemetryWaiter = null;
+        w.complete(t);
+      }
+      return;
+    }
     Frame f;
     try {
       f = decodeFrame(data);
@@ -174,11 +202,13 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource {
   Future<SelfInfo> start() async {
     final si = await _command(encodeAppStart(appName));
     if (si is! SelfInfoFrame) _fail('app start', si);
+    _maxTxDbm = si.maxTxPowerDbm > 0 ? si.maxTxPowerDbm : null;
 
     String? firmware;
     try {
       final di = await _command(encodeDeviceQuery());
       if (di is DeviceInfoFrame) {
+        _deviceInfo = di;
         _firmwareVerCode = di.firmwareVerCode;
         _maxChannels = di.maxChannels;
         final v = di.firmwareVersion;
@@ -296,6 +326,8 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource {
   // minute. Timeouts and other errors give null for that call only.
 
   static const _battKey = -1;
+  static const _telemetryKey = -2;
+  Completer<SelfTelemetry>? _telemetryWaiter;
 
   Future<T?> _readStats<T extends Frame>(int key, Uint8List cmd) async {
     if (!isConnected || _unsupported.contains(key)) return null;
@@ -337,6 +369,37 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource {
   @override
   Future<PacketStatsFrame?> packetStats() =>
       _readStats<PacketStatsFrame>(StatsType.packets, encodeGetStats(StatsType.packets));
+
+  /// The radio's own telemetry (MCU temperature, battery voltage): CMD_SEND_TELEMETRY_REQ "self" form, answered by a
+  /// PUSH_CODE_TELEMETRY_RESPONSE instead of a reply (protocol.dart decodeSelfTelemetryPush). Goes through the command
+  /// queue like every other read; ERR unsupported = asked once per link; timeout = null for this call.
+  @override
+  Future<SelfTelemetry?> selfTelemetry() async {
+    if (!isConnected || _unsupported.contains(_telemetryKey)) return null;
+    final result = _queue.then((_) async {
+      if (!isConnected) return null;
+      final reply = Completer<Frame>();
+      final push = Completer<SelfTelemetry>();
+      _pending = reply;
+      _telemetryWaiter = push;
+      try {
+        await _transport.send(encodeSelfTelemetryReq());
+        final r = await Future.any<Object>([reply.future, push.future]).timeout(timeout);
+        if (r is SelfTelemetry) return r;
+        if (r is ErrFrame && (r.code == ErrCode.unsupportedCmd || r.code == ErrCode.illegalArg)) {
+          _unsupported.add(_telemetryKey);
+        }
+        return null;
+      } catch (_) {
+        return null;
+      } finally {
+        if (identical(_pending, reply)) _pending = null;
+        if (identical(_telemetryWaiter, push)) _telemetryWaiter = null;
+      }
+    });
+    _queue = result.then((_) {}, onError: (_) {});
+    return result;
+  }
 
   /// Sends a zero-hop NODE_DISCOVER_REQ for repeaters (firmware v8+). Answers arrive on [controlPackets].
   Future<void> sendDiscoverRequest(int tag) async {

@@ -77,7 +77,10 @@ class DriveContextRecorder {
   bool _fresh(DriveSample? s, DateTime at) => s != null && s.ts.difference(at).abs() <= sampleMaxAge;
 
   /// The context for a ping at [at] from what the recorder has seen, with switched-off categories removed.
-  PingContext contextAt(DateTime at) {
+  ///
+  /// [pressureHpa], when given, is the barometer reading for this ping's own moment (the drive flow passes the median
+  /// of the readings around the ping) and replaces the last phone sample's.
+  PingContext contextAt(DateTime at, {double? pressureHpa}) {
     final fix = _fixFor(at);
     final phone = _fresh(_lastPhone, at) ? _lastPhone : null;
     final radio = _fresh(_lastRadio, at) ? _lastRadio : null;
@@ -87,17 +90,17 @@ class DriveContextRecorder {
       courseDeg: fix?.courseDeg,
       courseAccDeg: fix?.courseAccuracyDeg,
       speedAccMps: fix?.speedAccuracyMps,
-      pressureHpa: phone?.pressureHpa,
+      pressureHpa: pressureHpa ?? phone?.pressureHpa,
       phoneBattPct: phone?.battPct,
       radioBattMv: radio?.battMv,
     ).without(offCategories());
   }
 
   /// Records the context of a finished ping. Returns what was written, or null when nothing was (all off, nothing
-  /// measured, closed, or the write failed).
-  Future<PingContext?> recordPing(DrivePing ping) async {
+  /// measured, closed, or the write failed). [pressureHpa]: see [contextAt].
+  Future<PingContext?> recordPing(DrivePing ping, {double? pressureHpa}) async {
     if (_closed) return null;
-    final ctx = contextAt(ping.ts);
+    final ctx = contextAt(ping.ts, pressureHpa: pressureHpa);
     if (ctx.isEmpty) return null;
     try {
       await ledger.appendPingContext(sessionId, ping.id, ctx);

@@ -209,6 +209,9 @@ class DriveSample {
   /// BLE signal phone <-> companion, dBm.
   final int? bleRssi;
 
+  /// The radio's MCU (chip) temperature from its self telemetry, °C, -40..125. Not air temperature.
+  final double? mcuTempC;
+
   // phone (categories phone_battery, barometer)
   final int? battPct;
   final PhoneBatteryState? battState;
@@ -232,6 +235,7 @@ class DriveSample {
     int? storageUsedKb,
     int? storageTotalKb,
     int? bleRssi,
+    double? mcuTempC,
     int? battPct,
     PhoneBatteryState? battState,
     bool? lowPower,
@@ -255,6 +259,7 @@ class DriveSample {
       storageUsedKb: used,
       storageTotalKb: used == null ? null : total,
       bleRssi: _int(bleRssi, -127, -1),
+      mcuTempC: _dbl(mcuTempC, -40, 125),
       battPct: _int(battPct, 0, 100),
       battState: battState,
       lowPower: lowPower,
@@ -278,6 +283,7 @@ class DriveSample {
     this.storageUsedKb,
     this.storageTotalKb,
     this.bleRssi,
+    this.mcuTempC,
     this.battPct,
     this.battState,
     this.lowPower,
@@ -302,6 +308,7 @@ class DriveSample {
         if (pkts != null) 'pkts': pkts!.toJson(),
         if (storageTotalKb != null) 'storage_kb': {'used': storageUsedKb, 'total': storageTotalKb},
         if (bleRssi != null) 'ble_rssi': bleRssi,
+        if (mcuTempC != null) 'mcu_temp_c': mcuTempC,
         if (battPct != null) 'batt_pct': battPct,
         if (battState != null) 'batt_state': battState!.name,
         if (lowPower != null) 'low_power': lowPower,
@@ -331,6 +338,7 @@ class DriveSample {
       storageUsedKb: st is Map ? _int(st['used'], 0, _u32Max) : null,
       storageTotalKb: st is Map ? _int(st['total'], 1, _u32Max) : null,
       bleRssi: _int(j['ble_rssi'], -127, -1),
+      mcuTempC: _n(j['mcu_temp_c']),
       battPct: _int(j['batt_pct'], 0, 100),
       battState: PhoneBatteryState.values.where((s) => s.name == bs).firstOrNull,
       lowPower: j['low_power'] is bool ? j['low_power'] as bool : null,
@@ -432,6 +440,31 @@ class SessionContext {
 
   SessionContext without(Set<String> offCategories) =>
       SessionContext.fromJson(_withoutKeys(toJson(), 'session', offCategories));
+}
+
+// ------------------------------------------------------------------ export
+
+/// Format id of the `context` object in the driver's own Export file. It is NOT an upload format: uploads stay Drive
+/// Format v1/v1.1 without context until the server advertises v1.2 (stream 7 section 4.4).
+const String exportContextFormat = 'meshsonar.drive-context.local.v1';
+
+/// The `context` object added to a drive's Export file (the driver's own copy of everything recorded with the drive),
+/// or null when nothing was recorded, so a drive without context exports exactly as before. The drive part of the
+/// file (format, app, session, pings) is unchanged; servers ignore unknown top-level keys.
+Map<String, dynamic>? exportContextJson({
+  required List<DriveSample> samples,
+  required Map<String, PingContext> pingContexts,
+  SessionContext? session,
+}) {
+  final hasSession = session != null && !session.isEmpty;
+  if (samples.isEmpty && pingContexts.isEmpty && !hasSession) return null;
+  final ids = pingContexts.keys.toList()..sort();
+  return {
+    'format': exportContextFormat,
+    if (hasSession) 'session': session.toJson(),
+    'pings': [for (final id in ids) {'id': id, 'ctx': pingContexts[id]!.toJson()}],
+    'samples': [for (final x in samples) x.toJson()],
+  };
 }
 
 // ------------------------------------------------------------------ storage contract

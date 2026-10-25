@@ -26,6 +26,9 @@ abstract class RadioStatsSource {
   Future<CoreStatsFrame?> coreStats();
   Future<RadioStatsFrame?> radioStats();
   Future<PacketStatsFrame?> packetStats();
+
+  /// The radio's self telemetry (MCU temperature); null when the board/firmware does not report it.
+  Future<SelfTelemetry?> selfTelemetry();
 }
 
 /// Builds one radio [DriveSample] from whatever replies arrived; null when nothing was measured.
@@ -35,6 +38,7 @@ DriveSample? radioSampleFrom({
   RadioStatsFrame? radio,
   PacketStatsFrame? packets,
   BattAndStorageFrame? battStorage,
+  SelfTelemetry? telemetry,
   int? bleRssi,
 }) {
   final rssiKnown = radio != null && radio.lastRssiDbm != 0;
@@ -64,6 +68,7 @@ DriveSample? radioSampleFrom({
     storageUsedKb: battStorage?.storageUsedKb,
     storageTotalKb: battStorage?.storageTotalKb,
     bleRssi: bleRssi,
+    mcuTempC: telemetry?.mcuTempC,
   );
   return s.isEmpty ? null : s;
 }
@@ -73,11 +78,12 @@ typedef TimerFactory = Timer Function(Duration delay, void Function() callback);
 
 /// Polls a [RadioStatsSource] every [interval] while running.
 ///
-/// One poll = up to four commands, sent one after another (never in parallel): GET_STATS radio, core, packets, then
+/// One poll = up to five commands, sent one after another (never in parallel): GET_STATS radio, core, packets, then
 /// GET_BATT_AND_STORAGE only every [storageEvery] (storage changes slowly) or when core stats are unavailable (older
 /// firmware: battery comes from that command instead). Before EACH command the poller checks [pingBusy]; while it is
 /// true it waits, re-checking every [busyRecheck], for at most half an [interval]; past that the rest of this poll is
-/// skipped (whatever was already read is still recorded with the poll's start time). Nothing is polled while the
+/// skipped (whatever was already read is still recorded with the poll's start time). The last command is the radio's
+/// self telemetry (MCU temperature). Nothing is polled while the
 /// radio is disconnected; a gap in samples stays a gap.
 class RadioHealthPoller {
   final RadioStatsSource source;
@@ -175,6 +181,7 @@ class RadioHealthPoller {
       CoreStatsFrame? core;
       PacketStatsFrame? packets;
       BattAndStorageFrame? battStorage;
+      SelfTelemetry? telemetry;
       int? ble;
       Future<T?> step<T>(Future<T?> Function() read) async {
         if (!await _idle(deadline)) return null;
@@ -196,6 +203,7 @@ class RadioHealthPoller {
           battStorage = await step(source.batteryAndStorage);
           if (battStorage != null) _storageAt = ts;
         }
+        telemetry = await step(source.selfTelemetry);
       }
       final b = bleRssi;
       if (b != null && _running && source.isConnected) {
@@ -206,7 +214,7 @@ class RadioHealthPoller {
         }
       }
       if (!_running) return null;
-      final s = radioSampleFrom(ts: ts, core: core, radio: radio, packets: packets, battStorage: battStorage, bleRssi: ble);
+      final s = radioSampleFrom(ts: ts, core: core, radio: radio, packets: packets, battStorage: battStorage, telemetry: telemetry, bleRssi: ble);
       if (s != null) {
         _last = s;
         onSample(s);

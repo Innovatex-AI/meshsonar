@@ -18,6 +18,8 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
+    <!-- Air pressure during a drive (Settings > Privacy & data sharing > Air pressure); phones without one still install. -->
+    <uses-feature android:name="android.hardware.sensor.barometer" android:required="false" />
     <application
         android:label="MeshSonar"
         android:name="${applicationName}"
