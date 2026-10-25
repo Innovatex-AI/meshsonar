@@ -13,6 +13,7 @@ import '../app.dart';
 import '../charts/bar_chart.dart';
 import '../charts/chart_frame.dart';
 import '../charts/time_line_chart.dart';
+import '../settings/data_sharing.dart' show contextDestinationLine;
 import '../widgets.dart';
 
 const _localTime = 'Times are your phone\'s local time.';
@@ -115,7 +116,7 @@ class _ContextBody extends StatelessWidget {
     final t = Theme.of(context);
     final pal = chartPalette(context);
     final parts = <Widget>[
-      Text('Recorded on this phone with the drive. Not uploaded: the server does not accept it yet.',
+      Text('Recorded on this phone with the drive. ${contextDestinationLine(AppScope.read(context))}',
           style: t.textTheme.bodySmall),
     ];
     void add(Widget w) => parts.addAll([const SizedBox(height: 16), w]);
