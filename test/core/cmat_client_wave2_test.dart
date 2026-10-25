@@ -26,7 +26,7 @@ const _liveCaps = {
 Map<String, dynamic> _site(Object? caps) => {
       'region': {'slug': 'cmh', 'url': 'https://cmh.meshsonar.com'},
       'radioPreset': null,
-      if (caps != null) 'capabilities': caps,
+      'capabilities': ?caps,
     };
 
 void main() {
