@@ -80,7 +80,7 @@ class RegionHubScreen extends StatelessWidget {
                         buildObserversPanel(region.url, region.slug),
                         buildPacketsPanel(region.url, region.slug),
                         buildAnalysisPanel(region.url, region.slug),
-                        RfPanel(baseUrl: region.url, regionSlug: region.slug),
+                        RfPanel(baseUrl: region.url, regionSlug: region.slug, windows: s.siteConfig?.rfWindow ?? false),
                         GrowthPanel(baseUrl: region.url, regionSlug: region.slug),
                         buildReportsPanel(region.url, region.slug),
                         StatsPanel(baseUrl: region.url, regionSlug: region.slug),

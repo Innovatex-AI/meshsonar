@@ -41,12 +41,41 @@ class SnrBin {
   const SnrBin(this.fromDb, this.toDb, this.n);
 }
 
+/// One of the RF tab's windows (`region-rf?bucket=&days=`, server capability `rfWindow`).
+class RfWindowChoice {
+  final String id; // 24h, 7d, 30d, 90d (also the widget key suffix)
+  final String label;
+  final String bucket; // hour | day
+  final int days;
+  const RfWindowChoice(this.id, this.label, this.bucket, this.days);
+
+  Map<String, String> get query => {'bucket': bucket, 'days': '$days'};
+
+  static const all = [
+    RfWindowChoice('24h', '24 hours', 'hour', 1),
+    RfWindowChoice('7d', '7 days', 'hour', 7),
+    RfWindowChoice('30d', '30 days', 'day', 30),
+    RfWindowChoice('90d', '90 days', 'day', 90),
+  ];
+  static const standard = RfWindowChoice('7d', '7 days', 'hour', 7);
+}
+
+/// The window every field of an answer covers [from, to); the SNR histogram starts at [histogramFrom].
+class RfWindowInfo {
+  final DateTime from, to, histogramFrom;
+  const RfWindowInfo(this.from, this.to, this.histogramFrom);
+}
+
 class RegionRf {
+  /// `hour` or `day`: what one point of an observer's series is. Null = an older server (hourly).
+  final String? bucket;
+  final RfWindowInfo? window;
+  bool get daily => bucket == 'day';
   final RegionDataStatus status;
   final List<RfObserver> observers;
   final List<NoiseHour> noiseByHour;
   final List<SnrBin> snrHistogram;
-  const RegionRf({required this.status, required this.observers, required this.noiseByHour, required this.snrHistogram});
+  const RegionRf({required this.status, required this.observers, required this.noiseByHour, required this.snrHistogram, this.bucket, this.window});
 
   bool get isEmpty => observers.isEmpty && noiseByHour.every((h) => h.meanDbm == null) && snrHistogram.isEmpty;
 
@@ -106,7 +135,17 @@ class RegionRf {
         if (jDbl(b['fromDb']) != null && jDbl(b['toDb']) != null && jInt(b['n']) != null)
           SnrBin(jDbl(b['fromDb'])!, jDbl(b['toDb'])!, jInt(b['n'])!),
     ]..sort((a, b) => a.fromDb.compareTo(b.fromDb));
-    return RegionRf(status: RegionDataStatus.fromJson(j['status']), observers: obs, noiseByHour: hours, snrHistogram: bins);
+    final w = jMap(j['window']);
+    final from = jTime(w['from']), to = jTime(w['to']);
+    final b = j['bucket'];
+    return RegionRf(
+      status: RegionDataStatus.fromJson(j['status']),
+      observers: obs,
+      noiseByHour: hours,
+      snrHistogram: bins,
+      bucket: b == 'hour' || b == 'day' ? b as String : null,
+      window: from != null && to != null && to.isAfter(from) ? RfWindowInfo(from, to, jTime(w['histogramFrom']) ?? from) : null,
+    );
   }
 }
 
@@ -115,6 +154,9 @@ class RegionRfApi {
   final http.Client? client;
   RegionRfApi(this.baseUrl, {this.client});
 
-  Uri get uri => regionDatasetUri(baseUrl, 'region-rf');
-  Future<RegionFetch<RegionRf>> fetch() => fetchRegionDataset(uri, RegionRf.parse, client: client);
+  /// With [window] the request names `bucket` and `days` (only for a server that advertises `rfWindow`); without, the
+  /// plain URL of before.
+  Uri uriFor([RfWindowChoice? window]) => regionDatasetUri(baseUrl, 'region-rf', window?.query);
+  Uri get uri => uriFor();
+  Future<RegionFetch<RegionRf>> fetch([RfWindowChoice? window]) => fetchRegionDataset(uriFor(window), RegionRf.parse, client: client);
 }

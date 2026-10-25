@@ -19,12 +19,16 @@ class RegionFetch<T> {
   final String? error;
   final bool notFound;
 
+  /// The HTTP status of a failed answer (null for network errors and unreadable bodies).
+  final int? status;
+
   /// Set when the answer is the stored copy because the network failed.
   final DateTime? offlineAsOf;
   const RegionFetch.ok(T this.data, {this.body, this.offlineAsOf})
       : error = null,
+        status = null,
         notFound = false;
-  const RegionFetch.fail(String this.error, {this.notFound = false})
+  const RegionFetch.fail(String this.error, {this.notFound = false, this.status})
       : data = null,
         body = null,
         offlineAsOf = null;
@@ -66,7 +70,7 @@ Future<RegionFetch<T>> fetchRegionDataset<T extends Object>(
         final b = jsonDecode(res.body);
         if (b is Map && b['error'] is String) msg = b['error'] as String;
       } catch (_) {}
-      return RegionFetch.fail(msg ?? 'The server answered ${res.statusCode}.');
+      return RegionFetch.fail(msg ?? 'The server answered ${res.statusCode}.', status: res.statusCode);
     }
     final String body;
     final Object? decoded;

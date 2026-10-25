@@ -102,6 +102,15 @@ class HourlyPoint {
   const HourlyPoint(this.at, this.mean, this.n);
 }
 
+/// One UTC day of `snrDaily`: the mean direct SNR our trusted observers heard from this repeater's adverts. [meanDb] null
+/// with [n] 0 = no reading that day (a gap, never zero).
+class DailySnr {
+  final DateTime day; // UTC midnight
+  final double? meanDb;
+  final int n;
+  const DailySnr(this.day, this.meanDb, this.n);
+}
+
 class PacketTypeCount {
   final int type, n;
   const PacketTypeCount(this.type, this.n);
@@ -139,6 +148,9 @@ class RepeaterDetailData {
   /// `YYYY-MM-DD` (UTC) of the last heatmap row; falls back to `status.computedAt` when the server omits it.
   final String? heatmapEnd;
   final List<HourlyPoint> snrHourly, rssiHourly;
+
+  /// `snrDaily`: up to 30 UTC days, oldest first. Null = the server did not send the field (older server): not shown.
+  final List<DailySnr>? snrDaily;
   final List<PacketTypeCount> packetTypes;
   final List<RepeaterObserverInfo> observers;
   final List<RepeaterEventInfo> events;
@@ -151,6 +163,7 @@ class RepeaterDetailData {
     this.heatmapEnd,
     this.snrHourly = const [],
     this.rssiHourly = const [],
+    this.snrDaily,
     this.packetTypes = const [],
     this.observers = const [],
     this.events = const [],
@@ -198,6 +211,7 @@ class RepeaterDetailData {
       heatmapEnd: _s(j['heatmapEnd']),
       snrHourly: _list(j['snrHourly'], _hourly),
       rssiHourly: _list(j['rssiHourly'], _hourly),
+      snrDaily: _snrDaily(j['snrDaily']),
       packetTypes: _list(j['packetTypes'], (e) {
         final t = _i(e['type']), n = _i(e['n']);
         return t == null || n == null ? null : PacketTypeCount(t, n);
@@ -240,6 +254,27 @@ List<T> _list<T>(Object? v, T? Function(Map e) f) {
     }
   }
   return out;
+}
+
+final _dayRe = RegExp(r'^\d{4}-\d{2}-\d{2}$');
+
+List<DailySnr>? _snrDaily(Object? v) {
+  if (v is! List) return null;
+  final byDay = <DateTime, DailySnr>{};
+  for (final e in v) {
+    if (e is! Map) continue;
+    final ds = _s(e['day']);
+    if (ds == null || !_dayRe.hasMatch(ds)) continue;
+    final p = DateTime.tryParse(ds);
+    if (p == null) continue;
+    final day = DateTime.utc(p.year, p.month, p.day);
+    final n = _i(e['n']) ?? 0;
+    final mean = _d(e['meanDb']);
+    // A mean with no readings behind it is not a measurement.
+    byDay[day] = DailySnr(day, n > 0 ? mean : null, n < 0 ? 0 : n);
+  }
+  final out = byDay.values.toList()..sort((a, b) => a.day.compareTo(b.day));
+  return out.length > 30 ? out.sublist(out.length - 30) : out;
 }
 
 HourlyPoint? _hourly(Map e) {
