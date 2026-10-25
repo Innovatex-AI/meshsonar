@@ -16,6 +16,7 @@ import '../app.dart' show AppScope;
 import '../charts/sparkline.dart';
 import '../map/coverage_map.dart';
 import '../theme.dart';
+import '../repeater_reach_section.dart';
 import '../your_drives_section.dart';
 import 'snr_trend_card.dart';
 
@@ -172,6 +173,10 @@ class _RepeaterDetailScreenState extends State<RepeaterDetailScreen> {
           Padding(
             padding: const EdgeInsets.only(bottom: Gap.l),
             child: YourDrivesSection(repeaterKey: widget.repeaterKey, lat: row.lat, lon: row.lon, mapTiles: widget.mapTiles),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(bottom: Gap.l),
+            child: RepeaterReachSection(repeaterKey: widget.repeaterKey, lat: row.lat, lon: row.lon, mapTiles: widget.mapTiles),
           ),
           _packetTypes(context, d),
           _events(context, d),

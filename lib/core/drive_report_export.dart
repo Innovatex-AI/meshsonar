@@ -3,7 +3,9 @@
 // the share sheet gets a single attachment. The pings table carries the driver's own exact positions: the export UI
 // says so.
 // Pure Dart: no Flutter imports.
+import 'api.dart' show WeatherSnapshot;
 import 'drive_report.dart';
+import 'drive_weather_export.dart';
 import 'model.dart';
 import 'report_csv.dart';
 
@@ -115,9 +117,16 @@ extension DriveReportTables on DriveReport {
         ],
       );
 
-  List<ReportTable> csvTables({String? Function(String id)? nameOf}) =>
-      [pingsTable(), cellsTable(), repeatersTable(nameOf: nameOf), snrByDistanceTable(), heardBySpeedTable()];
+  List<ReportTable> csvTables({String? Function(String id)? nameOf, List<WeatherSnapshot> weather = const []}) => [
+        pingsTable(),
+        cellsTable(),
+        repeatersTable(nameOf: nameOf),
+        snrByDistanceTable(),
+        heardBySpeedTable(),
+        if (weather.isNotEmpty) weatherTable(weather),
+      ];
 
-  /// The whole drive as one CSV file.
-  String toCsv({String? Function(String id)? nameOf}) => combinedCsv(csvTables(nameOf: nameOf));
+  /// The whole drive as one CSV file. [weather] adds the `weather` table (server model values, one row per UTC hour).
+  String toCsv({String? Function(String id)? nameOf, List<WeatherSnapshot> weather = const []}) =>
+      combinedCsv(csvTables(nameOf: nameOf, weather: weather));
 }

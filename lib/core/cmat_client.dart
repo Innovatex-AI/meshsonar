@@ -28,6 +28,7 @@ import 'api.dart';
 import 'drive_context_wire.dart';
 import 'model.dart';
 import 'region_lookup.dart';
+import 'repeater_reach.dart';
 import 'report_body.dart' show problemReportMaxBytes;
 import 'telemetry_uploader.dart';
 
@@ -287,6 +288,21 @@ class HttpCmatClient implements CmatClient, TelemetryTransport {
     snaps.sort((a, b) => a.at.compareTo(b.at));
     // The licence needs this exact line wherever the values are shown; never display a server-edited one in its place.
     return DriveEnv(session: j['session'] as String? ?? sessionId, status: status, attribution: openMeteoCredit, snapshots: snaps);
+  }
+
+  @override
+  Future<RepeaterReach> repeaterReach(String driverKey, String repeaterKey, {double? lat, double? lon}) async {
+    final q = <String, String>{'key': repeaterKey.trim().toLowerCase()};
+    if (lat != null && lon != null && lat.isFinite && lon.isFinite) {
+      q['lat'] = lat.toStringAsFixed(5);
+      q['lon'] = lon.toStringAsFixed(5);
+    }
+    final j = await _send('GET', 'repeater-reach', driverKey: driverKey, query: q);
+    try {
+      return RepeaterReach.parse(j);
+    } on FormatException {
+      throw CmatException('server sent an unreadable answer', status: 200);
+    }
   }
 
   @override
