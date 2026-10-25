@@ -2,9 +2,8 @@
 // MeshSonar's server republishes it from map.meshcore.io. Pure Dart.
 //
 // Endpoint: GET <server>/api/cmh/network-repeaters (public, no auth, GLOBAL: the same answer on every MeshSonar host).
-// Being built in meshcore-insights (branch feat/network-repeaters, migration 0045, not deployed as of Oct 24 2026: the
-// live server answers 404, which the app treats as "capability absent"). Contract read from that branch's
-// src/lib/network-repeaters.ts and docs/PLATFORM_CONTRACT.md:
+// Live since Oct 24 2026 (meshcore-insights migration 0045; PLATFORM_CONTRACT.md `network-repeaters`). A server that
+// answers 404 is treated as "capability absent". Full-list shape:
 //   {"v":1,"asOf":ISO|null,"generatedAt":ISO,"count":n,"hidden":n,
 //    "attribution":{"name":"MeshCore Map","url":"https://map.meshcore.io"},
 //    "rows":[[publicKey(64 hex), name|null, lat, lon, type(2 repeater|3 room), lastAdvertEpochS|null], ...]}
@@ -180,4 +179,137 @@ class NetworkRepeaters {
     out.sort((a, b) => a.$2.compareTo(b.$2));
     return [for (final e in out.take(max)) e.$1];
   }
+}
+
+/// One `GET network-repeaters?updated_since=<epochS>` answer (PLATFORM_CONTRACT, migration 0054, capability
+/// `networkRepeatersDelta`):
+///   {"v":1,"asOf":ISO,"asOfS":int,"since":int,"generatedAt":ISO,"count":n,"removedCount":n,"attribution":{...},
+///    "rows":[same row shape as the full list],"removed":["<64 hex key>", ...]}
+/// Apply: delete every `removed` key, then upsert every row by key. The next cursor is [asOfS] (it lies two minutes in
+/// the past on purpose, so the last two minutes can repeat; applying a row twice changes nothing).
+///
+/// [parse] is strict about the envelope (anything that is not recognisably a delta throws, so the caller falls back to
+/// the full list) and as tolerant about single rows as the full list is: a row that fails validation is dropped, and
+/// when its key can still be read, that key is deleted from the stored list (the full list would not contain it either).
+class NetworkDelta {
+  /// The cursor to ask for next time (whole seconds since 1970, UTC).
+  final int asOfS;
+  final DateTime asOf;
+
+  /// The server's own (minute-rounded) `since`, when it sent one.
+  final int? since;
+
+  /// Changed rows, one per key (the newer advert wins a duplicate).
+  final List<NetworkRepeater> rows;
+
+  /// Keys to delete (the server's `removed` list).
+  final List<String> removed;
+
+  /// Keys whose row the server sent but this app cannot use (bad position/type): deleted like [removed].
+  final List<String> invalidKeys;
+
+  /// Rows/keys that failed validation and were left out.
+  final int dropped;
+  const NetworkDelta({
+    required this.asOfS,
+    required this.asOf,
+    required this.rows,
+    required this.removed,
+    this.invalidKeys = const [],
+    this.since,
+    this.dropped = 0,
+  });
+
+  static final RegExp _hexKey = RegExp(r'^[0-9a-f]{64}$');
+
+  /// Throws [NetworkRepeatersFormatException] when [decoded] is not a consistent delta.
+  factory NetworkDelta.parse(Object? decoded) {
+    if (decoded is! Map) throw const NetworkRepeatersFormatException('delta: not a JSON object');
+    if (decoded['v'] != 1) throw NetworkRepeatersFormatException('delta: unsupported version ${decoded['v']}');
+    final rawRows = decoded['rows'], rawRemoved = decoded['removed'];
+    if (rawRows is! List) throw const NetworkRepeatersFormatException('delta: no "rows" list');
+    if (rawRemoved is! List) throw const NetworkRepeatersFormatException('delta: no "removed" list');
+    final a = decoded['asOfS'];
+    if (a is! num || !a.isFinite || a != a.truncate() || a <= 0) {
+      throw const NetworkRepeatersFormatException('delta: no usable "asOfS" cursor');
+    }
+    final asOfS = a.toInt();
+    // The counts the server states must match what it sent: a cut-off or tampered body is not applied.
+    final count = decoded['count'], removedCount = decoded['removedCount'];
+    if (count != null && count != rawRows.length) {
+      throw NetworkRepeatersFormatException('delta: count $count but ${rawRows.length} rows');
+    }
+    if (removedCount != null && removedCount != rawRemoved.length) {
+      throw NetworkRepeatersFormatException('delta: removedCount $removedCount but ${rawRemoved.length} keys');
+    }
+    final byKey = <String, NetworkRepeater>{};
+    final invalid = <String>{};
+    var dropped = 0;
+    for (final r in rawRows) {
+      final p = NetworkRepeater.tryParse(r);
+      if (p == null) {
+        dropped++;
+        final k = r is List && r.isNotEmpty ? r[0] : (r is Map ? (r['key'] ?? r['publicKey'] ?? r['public_key']) : null);
+        if (k is String && _hexKey.hasMatch(k.toLowerCase())) invalid.add(k.toLowerCase());
+        continue;
+      }
+      final prev = byKey[p.key];
+      if (prev == null || (p.lastAdvert?.millisecondsSinceEpoch ?? -1) >= (prev.lastAdvert?.millisecondsSinceEpoch ?? -1)) {
+        byKey[p.key] = p;
+      }
+    }
+    final removed = <String>[];
+    for (final k in rawRemoved) {
+      if (k is String && _hexKey.hasMatch(k.toLowerCase())) {
+        removed.add(k.toLowerCase());
+      } else {
+        dropped++;
+      }
+    }
+    final asOfText = decoded['asOf'];
+    final asOf = (asOfText is String ? DateTime.tryParse(asOfText)?.toUtc() : null) ??
+        DateTime.fromMillisecondsSinceEpoch(asOfS * 1000, isUtc: true);
+    final since = decoded['since'];
+    return NetworkDelta(
+      asOfS: asOfS,
+      asOf: asOf,
+      since: since is num && since.isFinite ? since.toInt() : null,
+      rows: List.unmodifiable(byKey.values),
+      removed: List.unmodifiable(removed),
+      invalidKeys: List.unmodifiable(invalid),
+      dropped: dropped,
+    );
+  }
+
+  /// Whether applying this changes nothing (no rows, no removals).
+  bool get isEmpty => rows.isEmpty && removed.isEmpty && invalidKeys.isEmpty;
+
+  /// [base] with the removals applied first and the rows upserted by key (stored order is kept, new keys are appended).
+  /// With nothing to change the same [rows] list instance is kept, so a map layer comparing identity does not rebuild.
+  /// Throws [NetworkRepeatersFormatException] when the result looks wrong (over [maxRows], or half of a list of 1,000+
+  /// rows gone at once): the caller then downloads the full list instead.
+  NetworkRepeaters applyTo(NetworkRepeaters base, {int maxRows = 100000}) {
+    if (isEmpty) return NetworkRepeaters(rows: base.rows, asOf: asOf, hidden: base.hidden);
+    final map = <String, NetworkRepeater>{for (final r in base.rows) r.key: r};
+    for (final k in removed) {
+      map.remove(k);
+    }
+    for (final k in invalidKeys) {
+      map.remove(k);
+    }
+    for (final r in rows) {
+      map[r.key] = r;
+    }
+    if (map.length > maxRows) throw NetworkRepeatersFormatException('delta: result has ${map.length} rows (cap $maxRows)');
+    if (base.rows.length >= 1000 && map.length < base.rows.length ~/ 2) {
+      throw NetworkRepeatersFormatException('delta: ${base.rows.length} rows would shrink to ${map.length}');
+    }
+    return NetworkRepeaters(rows: List.unmodifiable(map.values), asOf: asOf, hidden: base.hidden);
+  }
+}
+
+/// The cursor for a full list: `floor(Date.parse(asOf) / 1000)` (PLATFORM_CONTRACT); null when the list has no `asOf`.
+int? deltaCursorOf(NetworkRepeaters list) {
+  final a = list.asOf;
+  return a == null ? null : a.millisecondsSinceEpoch ~/ 1000;
 }
