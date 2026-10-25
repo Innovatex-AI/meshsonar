@@ -157,7 +157,12 @@ String siteConfigToJson(SiteConfig c) => jsonEncode({
       'preset': c.radioPreset == null
           ? null
           : {'name': c.radioPreset!.name, 'f': c.radioPreset!.freqMhz, 'bw': c.radioPreset!.bwKhz, 'sf': c.radioPreset!.sf, 'cr': c.radioPreset!.cr},
-      if (c.capabilities.isNotEmpty) 'caps': {for (final k in c.capabilities.toList()..sort()) k: true},
+      if (c.capabilities.isNotEmpty || c.driveFormats.isNotEmpty || c.telemetryFormats.isNotEmpty)
+        'caps': {
+          for (final k in c.capabilities.toList()..sort()) k: true,
+          if (c.driveFormats.isNotEmpty) 'driveFormats': c.driveFormats,
+          if (c.telemetryFormats.isNotEmpty) 'telemetryFormats': c.telemetryFormats,
+        },
     });
 
 SiteConfig? siteConfigFromJson(String s) {
@@ -172,6 +177,8 @@ SiteConfig? siteConfigFromJson(String s) {
               name: p['name'] as String, freqMhz: (p['f'] as num).toDouble(), bwKhz: (p['bw'] as num).toDouble(), sf: (p['sf'] as num).toInt(), cr: (p['cr'] as num).toInt())
           : null,
       capabilities: parseCapabilities(j['caps']),
+      driveFormats: parseCapabilityList(j['caps'], 'driveFormats'),
+      telemetryFormats: parseCapabilityList(j['caps'], 'telemetryFormats'),
     );
   } catch (_) {
     return null;

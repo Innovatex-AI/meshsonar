@@ -233,6 +233,12 @@ class RecordingClient implements CmatClient {
 
   @override
   Future<List<RegionIndexEntry>> regionsIndex() => throw UnimplementedError();
+
+  @override
+  Future<ContextEraseResult> deleteDriveContext(String driverKey, String category) => throw UnimplementedError();
+
+  @override
+  Future<DriveEnv> driveEnv(String driverKey, String sessionId) => throw UnimplementedError();
 }
 
 /// Harness whose sync service is the real DefaultSyncService over the fake store.

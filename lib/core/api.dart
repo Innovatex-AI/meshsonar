@@ -132,13 +132,52 @@ class SiteConfig {
   /// Null when the region has no suggested preset configured — a real, expected state, not an error.
   final RadioPreset? radioPreset;
 
-  /// What this server accepts beyond the basics (stream 7 server request S1, `site-config.capabilities`). Absent key
-  /// = feature absent; no server sends any today. Only boolean flags are kept.
+  /// What this server accepts beyond the basics (`site-config.capabilities`). Absent key = feature absent (an older
+  /// server sends none). Only boolean `true` flags are kept here; the format lists are in [driveFormats] and
+  /// [telemetryFormats].
   final Set<String> capabilities;
-  const SiteConfig({required this.region, this.radioPreset, this.capabilities = const {}});
 
-  /// The server looks up weather for uploaded drives and serves it (`capabilities.driveEnv`, S1 + S4).
+  /// `capabilities.driveFormats`: the drive upload format ids this server accepts (e.g. `meshsonar.drive.v1.2`).
+  /// Empty = not advertised (an older server): the app then sends the baseline format only.
+  final List<String> driveFormats;
+
+  /// `capabilities.telemetryFormats`.
+  final List<String> telemetryFormats;
+  const SiteConfig({
+    required this.region,
+    this.radioPreset,
+    this.capabilities = const {},
+    this.driveFormats = const [],
+    this.telemetryFormats = const [],
+  });
+
+  /// The server looks up weather for uploaded drives and serves it (`capabilities.driveEnv`).
   bool get driveEnv => capabilities.contains('driveEnv');
+
+  /// `DELETE /api/cmh/drive-context` exists (`capabilities.driveContextErase`).
+  bool get driveContextErase => capabilities.contains('driveContextErase');
+
+  /// The server accepts Drive Format v1.2 (drive context: sensors, radio health, device).
+  bool get acceptsDriveV12 => driveFormats.contains(driveFormatV12);
+
+  /// `GET network-repeaters?updated_since=` (`capabilities.networkRepeatersDelta`).
+  bool get networkRepeatersDelta => capabilities.contains('networkRepeatersDelta');
+
+  /// `GET driver-summary` (`capabilities.driverSummary`).
+  bool get driverSummary => capabilities.contains('driverSummary');
+
+  /// `repeater-reach` accepts `x-driver-key` (`capabilities.reachDriverKey`).
+  bool get reachDriverKey => capabilities.contains('reachDriverKey');
+  bool get rfWindow => capabilities.contains('rfWindow');
+  bool get snrDaily => capabilities.contains('snrDaily');
+}
+
+/// The non-empty list of format id strings under [key] of a `capabilities` object; malformed = empty.
+List<String> parseCapabilityList(Object? raw, String key) {
+  if (raw is! Map) return const [];
+  final v = raw[key];
+  if (v is! List) return const [];
+  return [for (final e in v) if (e is String && e.isNotEmpty && e.length <= 64) e];
 }
 
 /// The true flags of a `capabilities` object; anything malformed counts as absent.
@@ -240,7 +279,65 @@ abstract class CmatClient {
   /// region_lookup.dart), never to decide a ping's region (the server already does that at upload time
   /// regardless of connectivity). Public: no driver key needed.
   Future<List<RegionIndexEntry>> regionsIndex();
+
+  /// `DELETE /api/cmh/drive-context?category=<id>` (`capabilities.driveContextErase`): erases the server's copy of one
+  /// drive-context category (or `all`) for every drive of this driver. Idempotent. Throws [CmatException].
+  Future<ContextEraseResult> deleteDriveContext(String driverKey, String category);
+
+  /// `GET /api/cmh/drive-env?session=<uuid>` (`capabilities.driveEnv`): server-side weather for the driver's own
+  /// drive. Throws [CmatException] (404 = the server does not know that drive).
+  Future<DriveEnv> driveEnv(String driverKey, String sessionId);
 }
+
+/// The server's answer to a drive-context erase.
+class ContextEraseResult {
+  final String category;
+  final int sessions;
+  final int pings;
+  final int samples;
+  const ContextEraseResult({required this.category, this.sessions = 0, this.pings = 0, this.samples = 0});
+}
+
+enum DriveEnvStatus { ready, pending, disabled, unavailable }
+
+/// One hour of server-side weather for a drive (Open-Meteo, ~5 km model value, not a measurement at the driver).
+/// Every value null = the source gave none.
+class WeatherSnapshot {
+  final DateTime at; // UTC hour
+  final double? temperatureC;
+  final double? humidityPct;
+  final double? dewPointC;
+
+  /// Station (surface) pressure, comparable to the phone barometer.
+  final double? pressureHpa;
+  final double? precipMm;
+  final double? cloudPct;
+  final double? windMs;
+  final double? windDirDeg;
+  const WeatherSnapshot({
+    required this.at,
+    this.temperatureC,
+    this.humidityPct,
+    this.dewPointC,
+    this.pressureHpa,
+    this.precipMm,
+    this.cloudPct,
+    this.windMs,
+    this.windDirDeg,
+  });
+}
+
+/// `GET drive-env`. [attribution] must be shown wherever the values are shown (CC BY 4.0).
+class DriveEnv {
+  final String session;
+  final DriveEnvStatus status;
+  final String attribution;
+  final List<WeatherSnapshot> snapshots;
+  const DriveEnv({required this.session, required this.status, required this.attribution, this.snapshots = const []});
+}
+
+/// The credit line Open-Meteo's licence requires wherever its data is shown (also in About).
+const String openMeteoCredit = 'Weather data by Open-Meteo.com (CC BY 4.0)';
 
 /// The server's answer to a filed problem report.
 class ProblemReportResult {
