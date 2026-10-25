@@ -6,7 +6,7 @@
 // and the user is told. Sync failures never touch stored pings.
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show Platform;
+import 'dart:io' show Directory, Platform;
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -17,6 +17,7 @@ import '../core/coverage_query.dart';
 import '../core/diagnostics.dart';
 import '../core/drive_context.dart' show stripContextCategories;
 import '../core/drive_context_session.dart';
+import '../core/drive_env_cache.dart';
 import '../core/drive_store.dart' show closeOrphanedSessions;
 import '../core/heard.dart';
 import '../core/model.dart';
@@ -98,6 +99,22 @@ class AppState extends ChangeNotifier {
 
   bool get hasKey => (_settings.driverKey ?? '').isNotEmpty;
   bool get keyApproved => hasKey && _settings.keyStatus == DriverKeyStatus.approved;
+
+  // ---------- drive weather (stream 7 WP6: lib/core/drive_env_cache.dart, lib/ui/report/drive_weather_section.dart) ----------
+  DriveEnvCache? _driveEnvCache;
+
+  /// The server looks up weather for uploaded drives, this driver key is approved and the weather category is on.
+  bool get driveWeatherEnabled => (siteConfig?.driveEnv ?? false) && keyApproved && collectionOn('weather');
+
+  /// Server weather for the uploaded drive [sessionId], from the on-disk cache while fresh. Throws [CmatException].
+  Future<DriveEnvResult> driveWeather(String sessionId) {
+    final key = _settings.driverKey;
+    if (key == null || key.isEmpty) return Future.error(const CmatException('no driver key', status: 401));
+    final rc = services.regionCache?.dir;
+    final cache = _driveEnvCache ??= DriveEnvCache(
+        dir: rc == null ? null : Directory('${rc.parent.path}${Platform.pathSeparator}drive_env'), clock: services.clock);
+    return cache.get(sessionId, () => client.driveEnv(key, sessionId));
+  }
 
   // ---------- region data disk cache (offline / as-of labels) ----------
   CachedBody? _siteConfigMeta;
