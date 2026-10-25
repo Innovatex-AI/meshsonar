@@ -8,6 +8,7 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
+import '../../core/region_dataset_fetch.dart' show RegionFetch;
 import '../../core/region_rf_api.dart';
 import '../../core/rf_thresholds.dart';
 import '../charts/bar_chart.dart';
@@ -26,38 +27,93 @@ String _dayHour(DateTime t) {
   return '${_months[l.month - 1]} ${l.day} ${two(l.hour)}:00';
 }
 
-class RfPanel extends StatelessWidget {
+class RfPanel extends StatefulWidget {
   final String baseUrl;
   final String regionSlug;
+
+  /// The viewed region's server advertises `capabilities.rfWindow`: show the window selector (24 hours to 90 days).
+  /// False (or an older server): the tab is exactly the plain 7-day view with no control.
+  final bool windows;
 
   /// Test seams.
   final http.Client? client;
   final Duration? utcOffset;
   final DateTime Function() now;
-  const RfPanel({super.key, required this.baseUrl, required this.regionSlug, this.client, this.utcOffset, this.now = DateTime.now});
+  const RfPanel(
+      {super.key, required this.baseUrl, required this.regionSlug, this.windows = false, this.client, this.utcOffset, this.now = DateTime.now});
 
   @override
-  Widget build(BuildContext context) => RegionDatasetView<RegionRf>(
-        id: 'rf',
-        title: '${regionSlug.toUpperCase()} RF and noise floor',
-        reloadKey: '$baseUrl|$regionSlug',
-        now: now,
-        load: () => RegionRfApi(baseUrl, client: client).fetch(),
-        status: (d) => d.status,
-        isEmpty: (d) => d.isEmpty,
-        emptyText: 'No RF measurements yet. Observers report their noise floor in their status messages; it charts here once they do.',
-        build: (context, d) => _body(context, d),
-      );
+  State<RfPanel> createState() => _RfPanelState();
+}
+
+class _RfPanelState extends State<RfPanel> {
+  /// Remembered while the tab lives, not saved.
+  RfWindowChoice _win = RfWindowChoice.standard;
+
+  Future<RegionFetch<RegionRf>> _load() async {
+    final r = await RegionRfApi(widget.baseUrl, client: widget.client).fetch(widget.windows ? _win : null);
+    if (!r.ok && widget.windows && r.status == 400) {
+      return RegionFetch.fail('This server cannot show the ${_win.label} window. Pick another one.', status: 400);
+    }
+    return r;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final w = widget;
+    final view = RegionDatasetView<RegionRf>(
+      id: 'rf',
+      title: '${w.regionSlug.toUpperCase()} RF and noise floor',
+      reloadKey: '${w.baseUrl}|${w.regionSlug}|${w.windows ? _win.id : '-'}',
+      now: w.now,
+      load: _load,
+      status: (d) => d.status,
+      isEmpty: (d) => d.isEmpty,
+      emptyText: w.windows
+          ? 'No RF measurements in the last ${_win.label}. Observers report their noise floor in their status messages; it charts here once they do.'
+          : 'No RF measurements yet. Observers report their noise floor in their status messages; it charts here once they do.',
+      build: (context, d) => _body(context, d),
+    );
+    if (!w.windows) return view;
+    return Column(children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(Gap.l, Gap.s, Gap.l, 0),
+        child: Semantics(
+          container: true,
+          label: 'Time window, ${_win.label} selected',
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SegmentedButton<String>(
+              key: const Key('rf-window'),
+              showSelectedIcon: false,
+              style: const ButtonStyle(tapTargetSize: MaterialTapTargetSize.padded),
+              segments: [
+                for (final c in RfWindowChoice.all)
+                  ButtonSegment(value: c.id, label: Text(c.label, key: Key('rf-window-${c.id}')), tooltip: 'Show the last ${c.label}'),
+              ],
+              selected: {_win.id},
+              onSelectionChanged: (v) => setState(() => _win = RfWindowChoice.all.firstWhere((c) => c.id == v.first)),
+            ),
+          ),
+        ),
+      ),
+      Expanded(child: Semantics(liveRegion: true, child: view)),
+    ]);
+  }
 
   List<Widget> _body(BuildContext context, RegionRf d) {
     final t = Theme.of(context);
     final m = MeshSonarColors.of(context);
     final palette = chartPalette(context);
-    final offset = utcOffset ?? now().timeZoneOffset;
+    final nowFn = widget.now;
+    final offset = widget.utcOffset ?? nowFn().timeZoneOffset;
     final whole = offset.inMinutes % 60 == 0;
     String localHour(int utcHour) => whole ? '${two((utcHour + offset.inHours) % 24)}:00 your time' : '${two(utcHour)}:00 UTC';
-    final asOf = d.status.computedAt ?? now().toUtc();
-    final silent = d.silentObservers(asOf);
+    final win = d.window;
+    final daily = d.daily;
+    // With a window the x axis ends where the window ends; without one (older server) at the server's computedAt, as before.
+    final asOf = win?.to ?? d.status.computedAt ?? widget.now().toUtc();
+    final silent = d.silentObservers(asOf, after: daily ? const Duration(days: 2) : const Duration(hours: 3));
     final means = d.observerMeans..sort();
     final weak = d.weakSnrShare;
     final ref = noiseFloorInterferenceDbm.round();
@@ -108,7 +164,7 @@ class RfPanel extends StatelessWidget {
             Expanded(
               child: Text(
                 '${o.label} has sent no noise reading since ${formatDateTime(o.lastAt!)} '
-                '(${_age(asOf.difference(o.lastAt!))} before this data was computed). Its line stops there.',
+                '(${_age(asOf.difference(o.lastAt!))} before ${win == null ? 'this data was computed' : 'the end of this window'}). Its line stops there.',
                 style: t.textTheme.bodyMedium,
               ),
             ),
@@ -140,7 +196,9 @@ class RfPanel extends StatelessWidget {
             summary: lineSummary,
             height: 200,
             caption: 'Dashed line: $ref dBm, where interference is likely. A line breaks where an observer sent nothing for '
-                'more than 3 hours. Times are your phone\'s local time.${extra > 0 ? ' $extra more observers are in the table, not drawn.' : ''}',
+                '${daily ? 'more than 2 days' : 'more than 3 hours'}. '
+                '${daily ? 'One point per UTC day: the mean of that day\'s hourly means; days are UTC dates.' : 'Times are your phone\'s local time.'}'
+                '${win == null ? '' : ' Window: ${_span(win.from, win.to, daily)}.'}${extra > 0 ? ' $extra more observers are in the table, not drawn.' : ''}',
             table: ChartTable(head: const ['Observer', 'Mean (dBm)', 'Max (dBm)', 'Last reading'], rows: [
               for (final o in d.observers)
                 [
@@ -163,9 +221,10 @@ class RfPanel extends StatelessWidget {
                     yLabel: 'dBm',
                     refLine: noiseFloorInterferenceDbm,
                     refLabel: '$ref dBm',
-                    breakGap: const Duration(hours: 3),
+                    breakGap: daily ? const Duration(days: 2) : const Duration(hours: 3),
+                    xStart: win?.from,
                     xEnd: asOf,
-                    xFormat: _dayHour,
+                    xFormat: daily ? _utcDay : _dayHour,
                     legend: true,
                   ),
           ),
@@ -175,7 +234,7 @@ class RfPanel extends StatelessWidget {
           child: ChartFrame(
             id: 'rf-hours',
             title: 'Noise floor by hour of day',
-            summary: 'Mean across observers. Noisiest ${localHour(loudest!.hour)} at ${db1(loudest.meanDbm!)} dBm, '
+            summary: 'Mean across observers${win == null ? '' : ' over ${_span(win.from, win.to, daily)}'}. Noisiest ${localHour(loudest!.hour)} at ${db1(loudest.meanDbm!)} dBm, '
                 'quietest ${localHour(quietest!.hour)} at ${db1(quietest.meanDbm!)} dBm.',
             caption: '${whole ? 'Hours are your phone\'s local time (the server reports UTC hours).' : 'Hours are UTC.'} '
                 'Bars start at ${base.round()} dBm, a quiet receiver; a taller bar is a noisier hour. Red bars are above $ref dBm.',
@@ -201,7 +260,8 @@ class RfPanel extends StatelessWidget {
             title: 'SNR of received packets (dB)',
             summary: '$binTotal packets. Most common ${_range(peakBin!)} dB (${peakBin.n} packets).'
                 '${weak == null ? '' : ' ${(weak * 100).round()}% at or below 0 dB.'}',
-            caption: 'Higher is better; below 0 dB is at the edge of decoding (those bars are drawn in the weak colour).',
+            caption: 'Higher is better; below 0 dB is at the edge of decoding (those bars are drawn in the weak colour).'
+                '${win == null ? '' : ' Packets from ${_span(win.histogramFrom, win.to, true)}.'}',
             table: ChartTable(head: const ['SNR range (dB)', 'Packets'], rows: [
               for (final b in bins) [_range(b), '${b.n}'],
             ]),
@@ -215,6 +275,13 @@ class RfPanel extends StatelessWidget {
           ),
         ),
     ];
+  }
+
+  static String _utcDay(DateTime t) => '${_months[t.toUtc().month - 1]} ${t.toUtc().day}';
+  static String _span(DateTime from, DateTime to, bool dayLevel) {
+    String f(DateTime t) => dayLevel ? '${_utcDay(t)} (UTC)' : _dayHour(t);
+    // `to` is an exclusive bound (the next midnight / full hour): name the last moment inside for days.
+    return '${f(from)} to ${dayLevel ? f(to.subtract(const Duration(seconds: 1))) : f(to)}';
   }
 
   static String _range(SnrBin b) => '${b.fromDb.round()} to ${b.toDb.round()}';
