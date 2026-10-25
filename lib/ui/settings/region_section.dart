@@ -37,7 +37,10 @@ class RegionTile extends StatelessWidget {
       key: const Key('site-region'),
       leading: const Icon(Icons.public),
       title: const Text('Connected to'),
-      subtitle: Text('$host\nThe region your server answers for. Change it with Server URL.'),
+      subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(host),
+        const Text('The region your server answers for. Change it with Server URL.'),
+      ]),
     );
   }
 }
