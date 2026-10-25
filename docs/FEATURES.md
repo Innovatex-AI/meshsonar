@@ -557,12 +557,14 @@ this phone."; "None of the N drives on this phone heard this repeater." when non
 ## Drive context: data collected (stream 7)
 
 Collected during drives, on this phone, OPT-OUT (on by default, Andy Oct 24 2026), after the person has seen the
-version-2 disclosure. Nothing of it is uploaded: no server accepts it yet (stream 7 WP5, behind a capability). Design:
+version-2 disclosure. Uploaded with the drive only to a server whose `site-config` lists `meshsonar.drive.v1.2`
+(stream 7 WP5, see "Upload and erase" below); every other server gets exactly the plain drive. Design:
 meshsonar-infra planning `stream-7-data-collection.md`.
 
 - **Categories** (`lib/core/data_categories.dart`, mapped one-to-one in `lib/ui/settings/data_sharing.dart`): packet
   headers (the live feed, unchanged), motion and altitude, air pressure, phone battery, phone and app details, radio
-  health, radio settings, weather (switch only; "Not available yet": no server looks up weather).
+  health, radio settings, weather (the server looks it up from the uploaded drive; live when the upload server says
+  `driveEnv` and accepts v1.2, otherwise "Not available yet on this server").
 - **Disclosure v2** (`lib/ui/telemetry_sheet.dart`): "What MeshSonar collects", one block and one switch per category
   (packet headers with its full shared / never-shared list), the "saved with your drive" note, the air-temperature
   note, and two equal buttons, Continue (keeps the switches) and Turn all off. The flag is versioned
@@ -571,9 +573,11 @@ meshsonar-infra planning `stream-7-data-collection.md`.
   starts at once.
 - **Settings > Privacy & data sharing**: one switch per category (keys `telemetry-toggle`, `collect-<id>-toggle`),
   subtitle = the category sentence, plus a live status (no barometer support / the last drive got no barometer
-  readings / weather not available yet). On asks first with what is collected. Off takes effect at once (the
-  collector stops), says nothing of it left the phone, and offers Delete (from every drive on this phone; default
-  Keep). Stored as `collection_off: [ids]` in settings.json, only when something is off; unknown ids are kept.
+  readings / weather not available yet), and one line per category saying where its data goes with the connected
+  server: "Uploaded with your drive." (server accepts v1.2), "Saved on this phone only: this server does not accept it
+  yet.", or "...until the app can check what this server accepts" while the server is unknown. On asks first with what
+  is collected. Off takes effect at once (the collector stops); see "Upload and erase" for what happens to the data.
+  Stored as `collection_off: [ids]` in settings.json, only when something is off; unknown ids are kept.
 - **When**: only while a drive runs (`lib/core/drive_context_session.dart`, started/stopped by AppState with the
   drive). Radio health every 60 s, never while a ping is in flight; barometer 1 Hz kept as a one-minute median and a
   per-ping median (readings within 15 s of the ping); phone battery once a minute and on charging changes; phone/app
@@ -590,10 +594,36 @@ meshsonar-infra planning `stream-7-data-collection.md`.
   nRF52 boards; others send none). Read once a minute with the other radio stats (`mcu_temp_c`); everything else in
   that answer (environment sensors, the board's GPS position) is skipped and never stored. The drive report charts it
   (°C / °F) and shows noise floor and SNR by 5-degree band.
-- **Storage**: `samples.jsonl` (no coordinates), `ctx.jsonl`, `context.json` beside the drive. The upload is
-  byte-identical to before. The drive's Export file adds a `context` object (format
+- **Storage**: `samples.jsonl` (no coordinates), `ctx.jsonl`, `context.json` beside the drive, plus the sent-ledger
+  (`ctx_sent.txt`, `samples_sent.txt`, `context_sent.txt`: what the server already has). The upload to a server without
+  v1.2 is byte-identical to before. The drive's Export file adds a `context` object (format
   `meshsonar.drive-context.local.v1`) only when context exists; the drive part is byte-identical.
-- **Weather** (the switch plus the drive report block below): the server looks up Open-Meteo for an uploaded drive
+- **Upload and erase** (WP5): the app reads the UPLOAD server's `site-config` (not the viewed region's; cached, works
+  offline from the cache). Only when it lists `meshsonar.drive.v1.2` AND there is something to say, an upload is
+  Drive Format v1.2: `session.device`, the radio extras merged into `session.companion`, `session.enrich.weather`
+  (the Weather switch), each ping's `ctx` and up to 2,000 `samples` per request, never a coordinate and never a
+  local-only key (`ble_rssi`); values the server's strict validator would refuse (a desktop OS, a model with a
+  parenthesis) are left out, not sent. Unknown or absent capability = the plain drive. If the server answers a v1.2
+  body with 400 as a whole, the drive is sent once more as the plain drive for that session this run (never lost; the
+  context waits for the next run); a ping whose `ctx` the server refuses is re-sent without it. Refused samples and
+  context are counted in the upload line ("3 context items refused by the server"). Context recorded after its ping
+  was confirmed, and the context of drives uploaded before the server accepted v1.2, goes through
+  `POST drive-context` (ping context) and a ping-less v1.2 upload (samples, device, radio extras), automatically once
+  per run after the capability is known. Retries are idempotent (the server dedupes samples by session, source and
+  time; marks are written only after a 200).
+  **Off**: the collector stops; every drive's context the server does NOT have is stripped from the phone, so it is
+  never uploaded later even if the switch is turned back on (what was already uploaded stays on the phone; only for a
+  server that accepts v1.2, otherwise the local-delete dialog decides). A switch that is off is never in an upload
+  body, whatever is still on the phone. With a key and a server that accepts v1.2, a dialog offers to erase what the
+  server already holds (`DELETE drive-context?category=<id>`; Erase is the highlighted button); a server that cannot
+  erase says so in plain words and claims nothing else; then the (default Keep) delete of the context saved on this
+  phone. Weather off sends `enrich.weather=false` and asks the server to stop and delete (`category=weather`),
+  remembered and retried (settings key `context_erase_pending`) when offline or rate limited.
+- **Delete my collected data** (Settings > Privacy & data sharing): one action for the server (all drive context,
+  `category=all`, and the packet headers), with the server's counts; the hourly limit (429: "try again in an
+  hour"), an unknown key, no key, no connection and an older server (button disabled, with the reason) are all said in
+  words. A separate action, never the default, deletes the context saved on this phone. The drives stay.
+- **Weather** (the switch plus the drive report block below): the Weather switch is the `session.enrich.weather` flag of a v1.2 upload (live in the switch's status when the upload server says `driveEnv` and accepts v1.2); the server looks up Open-Meteo for an uploaded drive
   (about a 5 km cell, UTC hour) and the app shows its answer; the phone contacts no weather service and shows no
   coordinate.
 - **Drive report, Weather**: shown only when `site-config.capabilities.driveEnv` is true, the driver key is approved,

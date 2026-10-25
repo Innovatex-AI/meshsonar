@@ -15,7 +15,8 @@ import '../core/antenna_profile.dart';
 import '../core/api.dart';
 import '../core/coverage_query.dart';
 import '../core/diagnostics.dart';
-import '../core/drive_context.dart' show stripContextCategories;
+import '../core/data_categories.dart' show CategoryId, dataCategories;
+import '../core/drive_context.dart' show ContextSyncLedger, stripContextCategories, stripUnsentContextCategories;
 import '../core/drive_context_session.dart';
 import '../core/drive_env_cache.dart';
 import '../core/drive_store.dart' show closeOrphanedSessions;
@@ -33,12 +34,14 @@ import '../core/repeater_sync.dart';
 import '../core/startup_location.dart';
 import '../core/report_body.dart';
 import '../core/server_url.dart';
+import '../core/sync_service.dart' show DefaultSyncService;
 import '../core/telemetry.dart';
 import '../core/telemetry_uploader.dart';
 import '../core/phone_sensors.dart';
 import '../core/units.dart';
 import '../platform/app_lifecycle_bridge.dart';
 import '../radio/radio_api.dart';
+import 'context_upload_hook.dart';
 import 'drive_context_hook.dart';
 import 'messages.dart';
 import 'services.dart';
@@ -92,7 +95,14 @@ class AppState extends ChangeNotifier {
     final c = client;
     if (_sync == null || !identical(_syncClient, c)) {
       _syncClient = c;
-      _sync = services.syncServiceFactory(c);
+      final s = _sync = services.syncServiceFactory(c);
+      // Drive context (stream 7 WP5): the upload server's capabilities and the opt-out switches (with the
+      // disclosure gate) decide what rides with a drive.
+      if (s is DefaultSyncService) {
+        s
+          ..capabilities = _uploadCapabilities
+          ..categoryOn = collectionOn;
+      }
     }
     return _sync!;
   }
@@ -168,6 +178,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> _refreshSiteConfig() async {
     final server = _settings.serverUrl;
+    unawaited(refreshUploadSiteConfig()); // what the upload server accepts (drive context), separate from the viewed region
     try {
       final viewing = viewingRegion;
       final r = await _cachedFetch<SiteConfig>('siteconfig_${viewing?.code ?? 'default'}', () => _coverageClient(viewing).siteConfig(),
@@ -895,6 +906,166 @@ class AppState extends ChangeNotifier {
     return (await stripContextCategories(ledger, ids, {id})).length;
   }
 
+  // ---------- drive context upload (stream 7 WP5: lib/core/sync_service.dart, lib/app/context_upload_hook.dart) ----------
+  SiteConfig? _uploadCaps;
+  String? _uploadCapsServer;
+  DateTime? _uploadCapsAt;
+  Future<void>? _uploadCapsLoading;
+  final Set<String> _contextCatchUp = {};
+
+  /// What the server drives upload to says it accepts (its own site-config, not the viewed region's); null until
+  /// known. Unknown counts as "plain drive format" everywhere.
+  SiteConfig? get uploadSiteConfig => _uploadCapsServer == _settings.serverUrl ? _uploadCaps : null;
+
+  /// The upload server accepts Drive Format v1.2 (sensors, radio health, device, weather flag with the drive).
+  bool get serverAcceptsDriveContext => uploadSiteConfig?.acceptsDriveV12 == true;
+
+  /// The upload server can erase drive context (`DELETE drive-context`). Unknown (site-config never answered) is not
+  /// "no": the erase is tried and an old server's 404 says so.
+  bool get serverCanEraseContext => uploadSiteConfig?.driveContextErase == true;
+
+  /// The server looks up weather for uploaded drives (`capabilities.driveEnv`).
+  bool get serverDoesWeather => (uploadSiteConfig ?? _siteConfig)?.driveEnv == true;
+
+  /// Fetches the upload server's site-config (at most every 30 minutes; the disk cache answers when offline). The
+  /// sync service reads it through this before every upload.
+  Future<void> refreshUploadSiteConfig({bool force = false}) {
+    final server = _settings.serverUrl;
+    final at = _uploadCapsAt;
+    if (!force && _uploadCapsServer == server && at != null && services.clock().difference(at) < const Duration(minutes: 30)) {
+      return Future<void>.value();
+    }
+    return _uploadCapsLoading ??= _loadUploadCaps(server).whenComplete(() => _uploadCapsLoading = null);
+  }
+
+  Future<void> _loadUploadCaps(String server) async {
+    try {
+      final host = Uri.tryParse(server)?.host ?? 'server';
+      final r = await _cachedFetch<SiteConfig>('siteconfig_upload_$host', () => client.siteConfig(), siteConfigToJson, siteConfigFromJson);
+      if (_settings.serverUrl != server) return;
+      _uploadCaps = r.value;
+      _uploadCapsServer = server;
+      _uploadCapsAt = (r.meta?.offline ?? false) ? null : services.clock();
+      notifyListeners();
+      unawaited(_afterUploadCaps(server));
+    } catch (e) {
+      _logError('Fetching the upload server\'s site-config failed', e);
+    }
+  }
+
+  Future<SiteConfig?> _uploadCapabilities() async {
+    try {
+      await refreshUploadSiteConfig().timeout(const Duration(seconds: 8));
+    } catch (_) {}
+    return uploadSiteConfig;
+  }
+
+  /// Once the upload server's capabilities are known: finish erase requests that could not go through, and (once per
+  /// run and server) deliver the context of drives that were uploaded before the server accepted it.
+  Future<void> _afterUploadCaps(String server) async {
+    try {
+      if (hasKey && _settings.contextErasePending.isNotEmpty) await _retryPendingContextErase();
+      if (serverAcceptsDriveContext && keyApproved && _settings.autoSync && _contextCatchUp.add(server)) {
+        final s = _syncService;
+        if (s is DefaultSyncService) {
+          _logSync('Drive context catch-up', await s.syncContextOnly());
+          await refreshSessions();
+        }
+      }
+    } catch (e) {
+      _logError('Drive context catch-up failed', e);
+    }
+  }
+
+  /// Categories just switched off: strips their context from every drive the server does not have it for (what the
+  /// server already holds stays on the phone, the person can erase it on the server), and for weather asks the
+  /// server to stop looking it up and delete it. Only when the upload server accepts context: otherwise nothing was
+  /// ever going to leave the phone and the Settings dialog offers the (default Keep) local delete instead.
+  Future<void> _contextCategoriesOff(List<String> ids) async {
+    try {
+      final st = services.store;
+      if (serverAcceptsDriveContext && st is ContextSyncLedger) {
+        final sessions = [for (final x in await st.sessions()) x.session.id];
+        await stripUnsentContextCategories(st as ContextSyncLedger, sessions, ids.toSet());
+      }
+      if (ids.contains(CategoryId.weather) && hasKey && uploadSiteConfig?.driveContextErase == true) {
+        final o = await eraseServerContext(CategoryId.weather);
+        if (!o.done) _say(o.message); // the Settings text already says what a successful erase did
+      }
+    } catch (e) {
+      _logError('Switching a drive-context category off failed', e);
+    }
+  }
+
+  /// `DELETE drive-context?category=<id>` for this driver key. Remembered until it succeeds (offline, rate limit), so a
+  /// switch turned off is never left half done.
+  Future<ContextEraseOutcome> eraseServerContext(String category) async {
+    final key = _settings.driverKey;
+    if (key == null || key.isEmpty) return ContextEraseOutcome.noKey;
+    if (uploadSiteConfig != null && !serverCanEraseContext) return ContextEraseOutcome.unavailable;
+    await _setErasePending(category, true);
+    try {
+      final r = await client.deleteDriveContext(key, category);
+      await _setErasePending(category, false);
+      return ContextEraseOutcome.fromResult(r);
+    } catch (e) {
+      final o = ContextEraseOutcome.fromError(e);
+      if (o.status == ContextEraseStatus.keyRefused || o.status == ContextEraseStatus.unavailable) await _setErasePending(category, false);
+      return o;
+    }
+  }
+
+  Future<void> _setErasePending(String category, bool pending) async {
+    final has = _settings.contextErasePending.contains(category);
+    if (has == pending) return;
+    final next = {..._settings.contextErasePending};
+    pending ? next.add(category) : next.remove(category);
+    await updateSettings(_settings.copyWith(contextErasePending: next));
+  }
+
+  Future<void> _retryPendingContextErase() async {
+    for (final c in _settings.contextErasePending.toList()..sort()) {
+      final o = await eraseServerContext(c);
+      if (o.retrying) break;
+    }
+  }
+
+  /// Whether any drive context was ever confirmed by a server (so a "nothing has left this phone" claim would be false).
+  Future<bool> contextEverUploaded() async {
+    final st = services.store;
+    if (st is! ContextSyncLedger) return false;
+    final ledger = st as ContextSyncLedger;
+    for (final x in await st.sessions()) {
+      final id = x.session.id;
+      if ((await ledger.ctxSentPingIds(id)).isNotEmpty ||
+          (await ledger.samplesSentKeys(id)).isNotEmpty ||
+          await ledger.sessionContextMark(id) != null) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// Erase requests the server has not completed yet (shown next to the delete button).
+  bool get contextErasePending => _settings.contextErasePending.isNotEmpty;
+
+  /// "Delete my collected data" on the server: all drive context (`category=all`) and every packet header this phone
+  /// shared. The drives themselves (pings) are not touched: they are deleted from the drive's own screen.
+  Future<({ContextEraseOutcome context, int? headers})> deleteMyDataOnServer() async {
+    final ctx = await eraseServerContext('all');
+    final headers = hasKey ? await eraseTelemetry() : null;
+    return (context: ctx, headers: headers);
+  }
+
+  /// Deletes the recorded drive context of every category from every drive on this phone. Returns the drives changed.
+  Future<int> deleteAllCollectedLocally() async {
+    final ledger = contextLedgerOf(services);
+    if (ledger == null) return 0;
+    final ids = [for (final x in await services.store.sessions()) x.session.id];
+    final cats = {for (final c in dataCategories) if (c.id != CategoryId.packetHeaders) c.id};
+    return (await stripContextCategories(ledger, ids, cats)).length;
+  }
+
   void _stopDriveContext() {
     final c = _ctx;
     if (c == null) return;
@@ -1576,7 +1747,8 @@ class AppState extends ChangeNotifier {
 
   void _logSync(String what, SyncReport r) => diagnostics.add(r.error != null
       ? '$what failed: ${r.error}'
-      : '$what: ${r.stored} stored, ${r.duplicate} already on the server, ${r.rejected} rejected');
+      : '$what: ${r.stored} stored, ${r.duplicate} already on the server, ${r.rejected} rejected'
+          '${contextReportParts(r).map((p) => '; $p').join()}');
 
   void _handleReport(SyncReport r, {bool quietIfNothing = false}) {
     if (r.error != null) {
@@ -1593,8 +1765,9 @@ class AppState extends ChangeNotifier {
     final parts = <String>['Uploaded ${r.stored} new ping${r.stored == 1 ? '' : 's'}'];
     if (r.duplicate > 0) parts.add('${r.duplicate} already on the server');
     if (r.rejected > 0) parts.add('${r.rejected} rejected');
+    parts.addAll(contextReportParts(r));
     _lastSyncMessage = '${parts.join(', ')}.';
-    if (quietIfNothing && r.stored == 0 && r.duplicate == 0 && r.rejected == 0) {
+    if (quietIfNothing && r.stored == 0 && r.duplicate == 0 && r.rejected == 0 && !r.hasContextActivity) {
       _say('Drive saved. Nothing new to upload.');
     } else {
       _say(_lastSyncMessage!);
@@ -1765,7 +1938,12 @@ class AppState extends ChangeNotifier {
     // A new server means a new (or no) region/preset; the old one must never display against the new server, so it
     // is cleared immediately and refetched, rather than left stale until the fetch comes back.
     final serverChanged = s.serverUrl != _settings.serverUrl;
-    if (serverChanged) _siteConfig = null;
+    if (serverChanged) {
+      _siteConfig = null;
+      _uploadCaps = null;
+      _uploadCapsServer = null;
+      _uploadCapsAt = null;
+    }
     // Same reasoning as _siteConfig: a new server means new (or no) network-wide coverage; the old server's
     // cells must never display against the new one.
     if (serverChanged) {
@@ -1775,7 +1953,12 @@ class AppState extends ChangeNotifier {
       _tracker.reset();
     }
     if (_settings.telemetryEnabled && !s.telemetryEnabled) _telemetry?.discard(); // the opt-out takes effect at once
+    final switchedOff = [
+      for (final c in dataCategories)
+        if (c.id != CategoryId.packetHeaders && _settings.collectionOn(c.id) && !s.collectionOn(c.id)) c.id,
+    ];
     _settings = s;
+    if (switchedOff.isNotEmpty) unawaited(_contextCategoriesOff(switchedOff)); // unsent context is stripped, weather erased
     heard.holdPings = s.heardHoldPings; // the heard list's live/stale rule follows the slider at once, even mid-drive
     _scheduleDriveSync(); // in-drive upload follows the toggles, the period and the key status
     _applyPingCadence(s);

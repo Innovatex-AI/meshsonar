@@ -8,6 +8,7 @@
 //  - Unmeasured values are null, never guessed.
 //  - A tx ping with an empty echoes list means "pinged here, heard nothing".
 //  - Every ping and session has a UUID made on the phone, so re-sending is harmless.
+import 'drive_context_wire.dart' show ContextUpload;
 
 /// The `format` id on the wire. Still `meshsonar.drive.v1`: live CMAT accepts only that id exactly
 /// (src/lib/drive/validate.ts readDriveUpload) and ignores fields it doesn't know, so the v1.1 ping fields ride on the
@@ -263,13 +264,41 @@ class DrivePing {
 }
 
 /// One upload / one export file: { format, app, session, pings }.
+///
+/// [context] non-null makes this a Drive Format v1.2 upload body (device, companion extras, `session.enrich`, per-ping
+/// `ctx`, `samples`); the sync service sets it only for a server that advertises `meshsonar.drive.v1.2` and only when
+/// there is something to say. Without it the bytes are exactly the v1 / v1.1 body (golden:
+/// test/core/antenna_profile_test.dart), which is also what the driver's Export file uses.
 class DriveBatch {
   final AppInfo app;
   final DriveSession session;
   final List<DrivePing> pings;
-  const DriveBatch({required this.app, required this.session, required this.pings});
-  Map<String, dynamic> toJson() =>
-      {'format': driveFormat, 'app': app.toJson(), 'session': session.toJson(), 'pings': pings.map((p) => p.toJson()).toList()};
+  final ContextUpload? context;
+  const DriveBatch({required this.app, required this.session, required this.pings, this.context});
+
+  Map<String, dynamic> toJson() {
+    final c = context;
+    if (c == null) {
+      return {'format': driveFormat, 'app': app.toJson(), 'session': session.toJson(), 'pings': pings.map((p) => p.toJson()).toList()};
+    }
+    final s = session.toJson();
+    final ext = c.companionJson;
+    // The v1 companion keys stay, the extras are merged into the same object.
+    if (ext != null) s['companion'] = {...(s['companion'] as Map<String, dynamic>), ...ext};
+    final device = c.deviceJson;
+    if (device != null) s['device'] = device;
+    s['enrich'] = {'weather': c.weather};
+    final samples = c.samplesJson;
+    return {
+      'format': driveFormatV12,
+      'app': app.toJson(),
+      'session': s,
+      'pings': [
+        for (final p in pings) {...p.toJson(), 'ctx': ?c.ctxJson(p.id)},
+      ],
+      if (samples.isNotEmpty) 'samples': samples,
+    };
+  }
 }
 
 /// A repeater from CMAT's drive-repeaters endpoint, for offline names.

@@ -1,0 +1,194 @@
+{
+  "format": "meshsonar.drive.v1.2",
+  "app": {
+    "name": "MeshSonar",
+    "version": "0.19.0",
+    "platform": "ios"
+  },
+  "session": {
+    "id": "a1b2c3d4-0000-4000-8000-000000000001",
+    "started_at": "2026-10-24T10:00:00Z",
+    "ended_at": "2026-10-24T11:00:00Z",
+    "label": "Golden loop",
+    "channel": "#wardriving",
+    "radio": {
+      "freq_mhz": 910.525,
+      "bw_khz": 62.5,
+      "sf": 7,
+      "cr": 5,
+      "tx_dbm": 22
+    },
+    "antenna": {
+      "type": "external",
+      "gain_dbi": 5.8,
+      "height_m": 1.8
+    },
+    "companion": {
+      "public_key": "DF0136AA",
+      "name": "KE4BFI-v4",
+      "firmware": "1.9",
+      "model": "Heltec V3",
+      "fw_code": 9,
+      "fw_build": "19 Feb 2025",
+      "max_tx_dbm": 22,
+      "path_hash_mode": 1
+    },
+    "device": {
+      "os": "ios",
+      "os_version": "17.5.1",
+      "model": "iPhone15,2",
+      "app_build": "23"
+    },
+    "enrich": {
+      "weather": true
+    }
+  },
+  "pings": [
+    {
+      "id": "b1b2c3d4-0000-4000-8000-000000000001",
+      "ts": "2026-10-24T10:01:00Z",
+      "lat": 40.129090999999995,
+      "lon": -82.977705,
+      "gps_accuracy_m": 4.0,
+      "speed_mps": 13.2,
+      "kind": "tx",
+      "noise_floor_dbm": -94,
+      "echoes": [
+        {
+          "repeater": "DF0136",
+          "snr_db": 12.75,
+          "rssi_dbm": -71,
+          "hops": 1,
+          "path": [
+            "df0136"
+          ],
+          "delay_ms": 840
+        }
+      ],
+      "neighbor": null,
+      "ctx": {
+        "alt_m": 240.5,
+        "alt_acc_m": 3.5,
+        "course_deg": 271.0,
+        "course_acc_deg": 12,
+        "speed_acc_mps": 0.4,
+        "pressure_hpa": 980.1,
+        "phone_batt_pct": 81,
+        "radio_batt_mv": 4012
+      }
+    },
+    {
+      "id": "b1b2c3d4-0000-4000-8000-000000000002",
+      "ts": "2026-10-24T10:02:00Z",
+      "lat": 40.130091,
+      "lon": -82.977705,
+      "gps_accuracy_m": 4.0,
+      "speed_mps": 13.2,
+      "kind": "tx",
+      "noise_floor_dbm": -94,
+      "echoes": [],
+      "neighbor": null,
+      "ctx": {
+        "pressure_hpa": 980.0,
+        "alt_m": null
+      }
+    },
+    {
+      "id": "b1b2c3d4-0000-4000-8000-000000000003",
+      "ts": "2026-10-24T10:03:00Z",
+      "lat": 40.131091,
+      "lon": -82.977705,
+      "gps_accuracy_m": 4.0,
+      "speed_mps": 13.2,
+      "kind": "tx",
+      "noise_floor_dbm": -94,
+      "echoes": [
+        {
+          "repeater": "DF0136",
+          "snr_db": 12.75,
+          "rssi_dbm": -71,
+          "hops": 1,
+          "path": [
+            "df0136"
+          ],
+          "delay_ms": 840
+        }
+      ],
+      "neighbor": null
+    },
+    {
+      "id": "b1b2c3d4-0000-4000-8000-000000000004",
+      "ts": "2026-10-24T10:04:00Z",
+      "lat": 40.132090999999996,
+      "lon": -82.977705,
+      "gps_accuracy_m": 4.0,
+      "speed_mps": 13.2,
+      "kind": "tx",
+      "noise_floor_dbm": -94,
+      "echoes": [],
+      "neighbor": null,
+      "ctx": {
+        "alt_m": 9001
+      }
+    }
+  ],
+  "samples": [
+    {
+      "ts": "2026-10-24T10:05:00Z",
+      "src": "radio",
+      "batt_mv": 4012,
+      "uptime_s": 86400,
+      "err_flags": 2,
+      "queue": 0,
+      "tx_air_s": 120,
+      "rx_air_s": 900,
+      "last_rssi": -101,
+      "last_snr": 6.5,
+      "noise_dbm": -112,
+      "mcu_temp_c": 31.5,
+      "pkts": {
+        "recv": 100,
+        "sent": 20,
+        "flood_tx": 4,
+        "direct_tx": 16,
+        "flood_rx": 70,
+        "direct_rx": 30,
+        "recv_errors": 1
+      },
+      "storage_kb": {
+        "used": 120,
+        "total": 1024
+      }
+    },
+    {
+      "ts": "2026-10-24T10:05:00Z",
+      "src": "phone",
+      "batt_pct": 81,
+      "batt_state": "unplugged",
+      "low_power": false,
+      "pressure_hpa": 980.1
+    },
+    {
+      "ts": "2026-10-24T10:06:00Z",
+      "src": "phone",
+      "batt_pct": 80
+    },
+    {
+      "ts": "2026-10-24T08:00:00Z",
+      "src": "phone",
+      "batt_pct": 80
+    },
+    {
+      "ts": "2026-10-24T10:07:00Z",
+      "src": "phone",
+      "lat": 40.1,
+      "lon": -83.0,
+      "batt_pct": 80
+    },
+    {
+      "ts": "2026-10-24T10:07:00Z",
+      "src": "radio",
+      "batt_pct": 80
+    }
+  ]
+}

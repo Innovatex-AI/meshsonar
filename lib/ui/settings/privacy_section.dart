@@ -4,11 +4,13 @@
 import 'package:flutter/material.dart';
 
 import '../../app/app_state.dart';
+import '../../app/context_upload_hook.dart' show serverCannotEraseText;
 import '../../core/data_categories.dart' show CategoryId;
 import '../../core/phone_sensors.dart' show phoneTemperatureNote;
 import '../always_location_screen.dart';
 import '../app.dart';
 import 'data_sharing.dart';
+import 'delete_my_data.dart';
 import 'settings_index.dart';
 import 'settings_kit.dart';
 
@@ -34,6 +36,19 @@ List<Widget> privacySectionRows(BuildContext context) {
               onTap: () => eraseCategory(context, s, c),
             ),
           ),
+    SettingsAnchor(
+      id: 'delete-my-data',
+      child: ListTile(
+        key: const Key('delete-my-data'),
+        leading: const Icon(Icons.delete_forever_outlined),
+        title: Text(settingsEntry('delete-my-data').title),
+        subtitle: Text(s.contextErasePending
+            ? 'An erase is waiting to reach the server; it is retried automatically.'
+            : settingsEntry('delete-my-data').summary),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const DeleteMyDataScreen())),
+      ),
+    ),
     SettingsAnchor(
       id: 'privacy-what-shared',
       child: ListTile(
@@ -114,7 +129,7 @@ Future<void> setDataCategory(BuildContext context, AppState s, DataCategory c, b
       context,
       dialogKey: '${c.id}-on-dialog',
       title: 'Turn on: ${c.title}?',
-      body: 'Shared: ${c.shared.join('; ')}.\n\nNever shared: ${c.neverShared.join('; ')}.\n\n${c.destination}',
+      body: 'Shared: ${c.shared.join('; ')}.\n\nNever shared: ${c.neverShared.join('; ')}.\n\n${c.destinationNow(s)}',
       confirmLabel: c.keepLabel,
     );
     if (!ok) return;
@@ -122,12 +137,12 @@ Future<void> setDataCategory(BuildContext context, AppState s, DataCategory c, b
     return;
   }
   await s.updateSettings(c.set(s.settings, false));
-  if (c.localOnly) {
-    if (context.mounted) await _offerLocalDelete(context, s, c, messenger);
+  if (c.isDriveContext) {
+    if (context.mounted) await _offerContextOff(context, s, c, messenger);
     return;
   }
   if (c.eraseFromServer == null || !s.hasKey || !context.mounted) {
-    messenger?.showSnackBar(SnackBar(content: Text('${c.title} is off. ${c.offEffect}')));
+    messenger?.showSnackBar(SnackBar(content: Text('${c.title} is off. ${c.offEffectNow(s)}')));
     return;
   }
   final erase = await showDialog<bool>(
@@ -148,17 +163,54 @@ Future<void> setDataCategory(BuildContext context, AppState s, DataCategory c, b
   messenger?.showSnackBar(SnackBar(content: Text(_erasedText(c, n))));
 }
 
-/// Off for a category whose data never left the phone: says so, and offers to delete what is saved here (default
-/// Keep: it is the driver's own data and the drive reports use it).
-Future<void> _offerLocalDelete(
+/// Off for a drive-context category. Collection already stopped and the unsent part was stripped (AppState). If the
+/// server may hold some of it (it accepts context, or some was uploaded earlier) the person is offered the server
+/// erase, Erase highlighted (stream 7 D5); a server that cannot erase is said so plainly and nothing else is claimed.
+/// Then the (default Keep) delete of what is saved on this phone.
+Future<void> _offerContextOff(
     BuildContext context, AppState s, DataCategory c, ScaffoldMessengerState? messenger) async {
+  final before = await s.contextEverUploaded();
+  final held = s.hasKey && (s.serverAcceptsDriveContext || before);
+  var note = '';
+  if (held) {
+    final caps = s.uploadSiteConfig;
+    if (caps != null && !caps.driveContextErase) {
+      note = '$serverCannotEraseText Nothing else is claimed about it.\n\n';
+    } else if (context.mounted) {
+      final erase = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          key: Key('${c.id}-erase-dialog'),
+          title: const Text('Erase what the server already holds?'),
+          content: Text('${c.title} is off. ${c.offEffectNow(s, uploadedBefore: before)}\n\nErase asks the server to '
+              'delete the ${c.erasedNoun} it holds from your uploaded drives. Keep leaves it there. This cannot be '
+              'undone.'),
+          actions: [
+            TextButton(key: Key('${c.id}-erase-keep'), onPressed: () => Navigator.pop(ctx, false), child: const Text('Keep')),
+            FilledButton(key: Key('${c.id}-erase-yes'), onPressed: () => Navigator.pop(ctx, true), child: const Text('Erase')),
+          ],
+        ),
+      );
+      if (erase == true) {
+        final o = await s.eraseServerContext(c.coreId);
+        messenger?.showSnackBar(SnackBar(content: Text(o.message)));
+      }
+    }
+  }
+  if (context.mounted) await _offerLocalDelete(context, s, c, messenger, lead: note, uploadedBefore: before);
+}
+
+/// Off for a drive-context category: offers to delete what is saved on this phone (default Keep: it is the driver's own
+/// data and the drive reports use it).
+Future<void> _offerLocalDelete(BuildContext context, AppState s, DataCategory c, ScaffoldMessengerState? messenger,
+    {String lead = '', bool uploadedBefore = false}) async {
   final delete = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
       key: Key('${c.id}-local-dialog'),
       title: Text('${c.title} is off'),
-      content: Text('${c.offEffect}\n\nDelete removes the ${c.erasedNoun} from every drive on this phone. The drives '
-          'themselves stay.'),
+      content: Text('$lead${c.offEffectNow(s, uploadedBefore: uploadedBefore)}\n\nDelete removes the ${c.erasedNoun} '
+          'from every drive on this phone. The drives themselves stay.'),
       actions: [
         TextButton(key: Key('${c.id}-local-keep'), onPressed: () => Navigator.pop(ctx, false), child: const Text('Keep')),
         FilledButton(
@@ -229,8 +281,8 @@ class WhatIsSharedScreen extends StatelessWidget {
             for (final x in c.shared) line(Icons.check, x),
             for (final x in c.neverShared) line(Icons.block, 'Never: $x'),
             const SizedBox(height: 6),
-            Text(c.destination),
-            Text(c.offEffect),
+            Text(c.destinationNow(s)),
+            Text(c.offEffectNow(s)),
           ],
           head('Not collected'),
           const Text(phoneTemperatureNote),
