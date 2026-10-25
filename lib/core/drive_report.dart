@@ -8,7 +8,9 @@
 // central Ohio), cell index = floor(lat / 0.002), floor(lon / 0.0025). Cells count tx pings only, like CMAT.
 import 'dart:math' as math;
 
+import 'api.dart' show WeatherSnapshot;
 import 'drive_report_rf.dart';
+import 'drive_weather_export.dart';
 import 'heard.dart';
 import 'model.dart';
 import 'units.dart';
@@ -320,7 +322,7 @@ class DriveReport {
   }
 
   /// Plain-text summary for sharing, in the person's units (said in the header).
-  String toText({String? title, Units units = Units.metric, String Function(Duration? d)? duration}) {
+  String toText({String? title, Units units = Units.metric, String Function(Duration? d)? duration, List<WeatherSnapshot> weather = const []}) {
     final dist = units.distance;
     String dur(Duration? d) {
       if (d == null) return '—';
@@ -383,6 +385,9 @@ class DriveReport {
     if (g != null) {
       b.writeln('GPS accuracy median ${units.shortLength(g.medianM)}, 90% within ${units.shortLength(g.p90M)}'
           '${g.poor > 0 ? ', ${g.poor} worse than ${units.shortLength(poorGpsAccuracyM)}' : ''}');
+    }
+    for (final line in weatherTextLines(weather, units)) {
+      b.writeln(line);
     }
     b
       ..writeln('Units: ${units.description}')
