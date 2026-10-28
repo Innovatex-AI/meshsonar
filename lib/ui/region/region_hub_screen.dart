@@ -11,6 +11,33 @@ import 'rf_panel.dart';
 import 'stats_panel.dart';
 import 'region_switcher.dart';
 
+/// A quiet line under the title of a region whose outline the server drew by machine (`machine_derived`): the border
+/// is approximate until a person reviews it. Nothing here changes how the app treats the region.
+class MachineDerivedNote extends StatelessWidget {
+  final String regionName;
+  const MachineDerivedNote({super.key, required this.regionName});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    return Padding(
+      key: const Key('region-machine-derived-note'),
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(Icons.auto_fix_normal_outlined, size: 14, color: t.colorScheme.onSurfaceVariant),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            'Machine-derived outline: the border of $regionName was drawn automatically from open map data and node '
+            'positions and has not been reviewed yet, so it is approximate near the edge.',
+            style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
 class RegionHubScreen extends StatelessWidget {
   const RegionHubScreen({super.key});
 
@@ -70,6 +97,7 @@ class RegionHubScreen extends StatelessWidget {
                       padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
                       child: LocationNoteBanner(state: s),
                     ),
+                  if (region.machineDerived) MachineDerivedNote(regionName: region.name),
                   Expanded(
                     child: TabBarView(
                       // Keyed by region: switching region rebuilds every panel against the new region host.

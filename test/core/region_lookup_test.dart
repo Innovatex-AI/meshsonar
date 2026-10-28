@@ -1,5 +1,6 @@
 // lib/core/region_lookup.dart: bbox-only region matching, the regions-index cache, and its fetch/cache wrapper.
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -33,6 +34,32 @@ const overlapper = RegionIndexEntry(
 const noBbox = RegionIndexEntry(code: 'NOX', slug: 'nox', name: 'No bbox yet', url: 'https://nox.meshsonar.com');
 
 void main() {
+  group('RegionIndexEntry country and machine_derived (server fields)', () {
+    const base = {'code': 'AAH', 'slug': 'aah', 'name': 'Aachen, DE', 'url': 'https://aah.meshsonar.com'};
+    test('country name, ISO code and the machine-derived flag are read; the code is upper-cased', () {
+      final e = RegionIndexEntry.tryParse({...base, 'country': 'Germany', 'country_code': 'de', 'machine_derived': true})!;
+      expect([e.country, e.countryCode, e.countryReported, e.machineDerived], ['Germany', 'DE', true, true]);
+    });
+    test('a server that says "unknown" is reported (null country) and is not second-guessed; an older server is not reported', () {
+      final unknown = RegionIndexEntry.tryParse({...base, 'country': null, 'country_code': null, 'machine_derived': false})!;
+      expect([unknown.country, unknown.countryCode, unknown.countryReported, unknown.machineDerived], [null, null, true, false]);
+      final old = RegionIndexEntry.tryParse(base)!;
+      expect([old.country, old.countryCode, old.countryReported, old.machineDerived], [null, null, false, false]);
+    });
+    test('a malformed code is unknown (never a guess), and its name is dropped with it', () {
+      final e = RegionIndexEntry.tryParse({...base, 'country': 'Germany', 'country_code': 'GER', 'machine_derived': 'yes'})!;
+      expect([e.country, e.countryCode, e.countryReported, e.machineDerived], [null, null, true, false]);
+    });
+    test('the cache round trip keeps all three, omits them for an older server, and the fingerprint sees a change', () {
+      final full = RegionIndexEntry.tryParse({...base, 'country': 'Germany', 'country_code': 'DE', 'machine_derived': true})!;
+      final back = RegionIndexEntry.tryParse(jsonDecode(jsonEncode(full.toJson())))!;
+      expect([back.country, back.countryCode, back.countryReported, back.machineDerived], ['Germany', 'DE', true, true]);
+      expect(RegionIndexEntry.tryParse(base)!.toJson().containsKey('country_code'), isFalse);
+      final plain = RegionIndexEntry.tryParse({...base, 'country': 'Germany', 'country_code': 'DE', 'machine_derived': false})!;
+      expect(regionsFingerprint([full]), isNot(regionsFingerprint([plain])));
+    });
+  });
+
   group('RegionIndexEntry.tryParse', () {
     test('parses a full entry (bbox + Polygon boundary)', () {
       final e = RegionIndexEntry.tryParse({

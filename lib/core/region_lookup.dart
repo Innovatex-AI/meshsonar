@@ -31,6 +31,20 @@ class RegionIndexEntry {
   final String url;
   final List<double>? bbox;
   final Map<String, dynamic>? boundary;
+
+  /// The country as the server states it: English name and ISO 3166-1 alpha-2 code (`country`, `country_code`). Null when
+  /// the server does not know the region's country. See [countryReported] for "the server never said anything".
+  final String? country;
+  final String? countryCode;
+
+  /// True when the server's answer carried the country keys at all (even as null). False for an older server (and for
+  /// a cache written before the keys existed): only then does the app fall back to reading the code off the end of the
+  /// region's name ("Aachen, DE"). A server that says "unknown" is believed, not second-guessed.
+  final bool countryReported;
+
+  /// True while the region's outline was drawn by machine from open data (Natural Earth plus node positions) and no
+  /// person has reviewed it yet (`machine_derived`). Absent from an older server = false.
+  final bool machineDerived;
   const RegionIndexEntry({
     required this.code,
     required this.slug,
@@ -38,7 +52,11 @@ class RegionIndexEntry {
     required this.url,
     this.bbox,
     this.boundary,
-  });
+    this.country,
+    this.countryCode,
+    bool? countryReported,
+    this.machineDerived = false,
+  }) : countryReported = countryReported ?? (countryCode != null || country != null);
 
   Map<String, dynamic> toJson() => {
         'code': code,
@@ -47,6 +65,9 @@ class RegionIndexEntry {
         'url': url,
         'bbox': bbox,
         'boundary': boundary,
+        if (countryReported) 'country': country,
+        if (countryReported) 'country_code': countryCode,
+        if (machineDerived) 'machine_derived': true,
       };
 
   /// Null if a required field is missing or the wrong shape — callers skip the entry so one malformed region
@@ -70,7 +91,23 @@ class RegionIndexEntry {
       if (type == 'Polygon' || type == 'MultiPolygon') boundary = rawBoundary.cast<String, dynamic>();
     }
 
-    return RegionIndexEntry(code: code, slug: slug, name: name, url: url, bbox: bbox, boundary: boundary);
+    // Country: a two-letter code (any case) and a non-empty name; anything else is "unknown", never a guess.
+    final rawCc = j['country_code'], rawCountry = j['country'];
+    final cc = rawCc is String && RegExp(r'^[A-Za-z]{2}$').hasMatch(rawCc.trim()) ? rawCc.trim().toUpperCase() : null;
+    final countryName = rawCountry is String && rawCountry.trim().isNotEmpty ? rawCountry.trim() : null;
+
+    return RegionIndexEntry(
+      code: code,
+      slug: slug,
+      name: name,
+      url: url,
+      bbox: bbox,
+      boundary: boundary,
+      country: cc == null ? null : countryName,
+      countryCode: cc,
+      countryReported: j.containsKey('country_code') || j.containsKey('country'),
+      machineDerived: j['machine_derived'] == true,
+    );
   }
 }
 
@@ -172,6 +209,9 @@ int _computeFingerprint(List<RegionIndexEntry> index) {
     mix(r.slug.hashCode);
     mix(r.name.hashCode);
     mix(r.url.hashCode);
+    mix((r.countryCode ?? '').hashCode);
+    mix((r.country ?? '').hashCode);
+    mix(r.machineDerived ? 1 : 0);
     final b = r.bbox;
     if (b != null) b.forEach(mixD);
     final bd = r.boundary;

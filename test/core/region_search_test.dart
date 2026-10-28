@@ -31,6 +31,41 @@ void main() {
     expect(countryLabel(null), 'Other');
   });
 
+  test('the server\'s country wins; only a server that says nothing falls back to the name suffix', () {
+    // stated: code and English name from the server, the suffix is cut only when it is that code
+    const de = RegionIndexEntry(code: 'AAH', slug: 'aah', name: 'Aachen, DE', url: 'https://x', country: 'Germany', countryCode: 'DE');
+    expect(countryCodeOf(de), 'DE');
+    expect(countryLabelOf(de), 'Germany');
+    expect(shortNameOf(de), 'Aachen');
+    // the server says a different country than the name's tail: the server is believed, the name is left whole
+    const odd = RegionIndexEntry(code: 'ZBE', slug: 'zbe', name: 'Zabreh, PL', url: 'https://x', country: 'Czechia', countryCode: 'CZ');
+    expect(countryCodeOf(odd), 'CZ');
+    expect(shortNameOf(odd), 'Zabreh, PL');
+    // a country the fallback table does not know: the server's name is shown
+    const tw = RegionIndexEntry(code: 'TPE', slug: 'tpe', name: 'Taipei, TW', url: 'https://x', country: 'Taiwan', countryCode: 'TW');
+    expect(countryLabelOf(tw), 'Taiwan');
+    // the server knows nothing about the country: no country, not the name's tail
+    const none = RegionIndexEntry(code: 'NEW', slug: 'new', name: 'Somewhere, DE', url: 'https://x', countryReported: true);
+    expect(countryCodeOf(none), isNull);
+    expect(countryLabelOf(none), 'Other');
+    expect(shortNameOf(none), 'Somewhere, DE');
+    // an older server: the name's tail, as before
+    expect(countryCodeOf(r('AAH', 'Aachen, DE')), 'DE');
+    expect(countryLabelOf(r('AAH', 'Aachen, DE')), 'Germany');
+  });
+
+  test('grouping and search use the stated country', () {
+    const list = [
+      RegionIndexEntry(code: 'TPE', slug: 'tpe', name: 'Taipei, TW', url: 'https://x', country: 'Taiwan', countryCode: 'TW'),
+      RegionIndexEntry(code: 'AAH', slug: 'aah', name: 'Aachen, DE', url: 'https://x', country: 'Germany', countryCode: 'DE'),
+      RegionIndexEntry(code: 'NEW', slug: 'new', name: 'Somewhere', url: 'https://x', countryReported: true),
+    ];
+    final g = groupByCountry(list);
+    expect(g.map((c) => c.label), ['Germany', 'Taiwan', 'Other']);
+    expect(RegionSearchIndex.of(list).search('taiwan').map((x) => x.code), ['TPE']);
+    expect(RegionSearchIndex.of(list).search('germany').map((x) => x.code), ['AAH']);
+  });
+
   final idx = [
     r('DUS', 'Düsseldorf, DE'),
     r('AAH', 'Aachen, DE'),

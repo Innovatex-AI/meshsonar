@@ -1,6 +1,11 @@
 // "All regions": the website hub's /regions as a screen. Regions under their group headers with each region's public
 // figures, a comparison table sortable by column, and tap-to-switch the viewed region. A region with no drives or whose
 // numbers cannot be read is shown with that state, never with zeros.
+//
+// Figures: ONE read of `regions-figures` (the server's cached numbers for every active region) fills the whole list. Only
+// when the server does not have that read (an older one, HTTP 404, or any other failure) does the screen fall back to the
+// polite per-region reads of the earlier versions (rows on screen only, a few at a time, paused on a 429). A 429 on the
+// single read waits and asks again; it never turns into 559 requests.
 import 'dart:async';
 import 'dart:collection';
 
@@ -70,8 +75,9 @@ List<RegionFigures> sortFigures(List<RegionFigures> rows, RegionSort by, {bool a
 Future<void> showRegionsScreen(BuildContext context) =>
     Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const RegionsScreen()));
 
-/// How many regions' figures are read at once, and how long a lane waits between two reads. 559 regions each have their
-/// own host and the public reads are limited per IP (300/min); only the rows on screen are read, newest first.
+/// FALLBACK ONLY (a server without `regions-figures`): how many regions' figures are read at once, and how long a lane
+/// waits between two reads. 559 regions each have their own host and the public reads are limited per IP (300/min);
+/// only the rows on screen are read, newest first.
 const int regionFigureLanes = 3;
 const Duration regionFigureGap = Duration(milliseconds: 450);
 
@@ -85,6 +91,9 @@ class RegionsScreen extends StatefulWidget {
   /// Test seams.
   final List<RegionIndexEntry>? regions;
   final Future<HubRegions> Function()? loadGroups;
+
+  /// The one-read figures for every region (default: `regions-figures` on the app's server).
+  final Future<RegionsFigures> Function()? loadFigures;
   final String? viewingCode;
   final void Function(RegionIndexEntry)? onPick;
   final int lanes;
@@ -94,6 +103,7 @@ class RegionsScreen extends StatefulWidget {
     super.key,
     this.regions,
     this.loadGroups,
+    this.loadFigures,
     this.viewingCode,
     this.onPick,
     this.lanes = regionFigureLanes,
@@ -119,7 +129,12 @@ class _Tile extends _Item {
   const _Tile(this.region);
 }
 
+/// Where the figures come from: not decided yet (the one read is in flight or backing off), the one read, or per region.
+enum _FigureMode { pending, bulk, perRegion }
+
 class _RegionsScreenState extends State<RegionsScreen> {
+  _FigureMode _mode = _FigureMode.pending;
+  DateTime? _figuresAsOf;
   final Map<String, RegionFigures> _figures = {};
   final Set<String> _asked = {};
   final LinkedHashSet<RegionIndexEntry> _queue = LinkedHashSet<RegionIndexEntry>();
@@ -147,6 +162,7 @@ class _RegionsScreenState extends State<RegionsScreen> {
     if (_started) return;
     _started = true;
     unawaited(_loadGroups());
+    unawaited(_loadFigures());
   }
 
   final Set<Timer> _timers = {};
@@ -193,11 +209,68 @@ class _RegionsScreenState extends State<RegionsScreen> {
     }
   }
 
-  // ---- figures: only the rows on screen, a few at a time, politely ----
+  // ---- figures: one read for all regions; per-region reads only as the fallback ----
 
-  /// A tile came on screen: read its figures once.
+  Future<RegionsFigures> _defaultFigures() async {
+    final api = regionStatsApiFactory(AppScope.read(context).settings.serverUrl);
+    try {
+      return await api.regionsFigures();
+    } finally {
+      api.close();
+    }
+  }
+
+  Future<void> _loadFigures() async {
+    final gen = _gen;
+    final RegionsFigures f;
+    try {
+      f = await (widget.loadFigures ?? _defaultFigures)();
+    } on RegionStatsException catch (e) {
+      if (!mounted || gen != _gen) return;
+      if (e.status == 429) {
+        // Asked too often: wait, then ask the same single question again.
+        setState(() {
+          _paused = true;
+          _pausedUntil = DateTime.now().add(widget.pause);
+        });
+        _later(widget.pause, () {
+          if (!mounted || gen != _gen) return;
+          setState(() {
+            _pausedUntil = null;
+            _paused = false;
+          });
+          unawaited(_loadFigures());
+        });
+        return;
+      }
+      _fallBackToRows();
+      return;
+    } catch (_) {
+      if (mounted && gen == _gen) _fallBackToRows();
+      return;
+    }
+    if (!mounted || gen != _gen) return;
+    final regions = _regions(context);
+    setState(() {
+      _mode = _FigureMode.bulk;
+      _figuresAsOf = f.asOf;
+      _queue.clear();
+      for (final r in regions) {
+        // A region the answer does not mention is shown as unavailable: never a zero, and never 559 more requests.
+        _figures[r.code] = RegionFigures(r, f.byCode[r.code]);
+        _asked.add(r.code);
+      }
+    });
+  }
+
+  void _fallBackToRows() {
+    setState(() => _mode = _FigureMode.perRegion);
+    _pump();
+  }
+
+  /// A tile came on screen: read its figures once (per-region fallback only).
   void _want(RegionIndexEntry r) {
-    if (_asked.contains(r.code)) return;
+    if (_mode == _FigureMode.bulk || _asked.contains(r.code)) return;
     _queue.remove(r);
     _queue.add(r);
     _pump();
@@ -208,6 +281,7 @@ class _RegionsScreenState extends State<RegionsScreen> {
 
   void _pump() {
     final gen = _gen;
+    if (_mode != _FigureMode.perRegion) return;
     while (_lanesBusy < widget.lanes && _queue.isNotEmpty && _pausedUntil == null) {
       final r = _queue.last; // newest first: what the person is looking at now
       _queue.remove(r);
@@ -272,11 +346,14 @@ class _RegionsScreenState extends State<RegionsScreen> {
       _lanesBusy = 0;
       _pausedUntil = null;
       _paused = false;
+      _mode = _FigureMode.pending;
+      _figuresAsOf = null;
     });
     unawaited(_loadGroups());
+    unawaited(_loadFigures());
   }
 
-  bool get _busy => _lanesBusy > 0 || _queue.isNotEmpty;
+  bool get _busy => _mode == _FigureMode.pending || _lanesBusy > 0 || _queue.isNotEmpty;
 
   void _open(RegionIndexEntry r) {
     if (widget.onPick != null) {
@@ -297,7 +374,7 @@ class _RegionsScreenState extends State<RegionsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('All regions'),
-        actions: [IconButton(tooltip: 'Refresh', onPressed: _busy ? null : _refresh, icon: const Icon(Icons.refresh))],
+        actions: [IconButton(key: const Key('regions-refresh'), tooltip: 'Refresh', onPressed: _busy ? null : _refresh, icon: const Icon(Icons.refresh))],
       ),
       body: regions.isEmpty
           ? const EmptyState(icon: Icons.map_outlined, title: 'No regions loaded yet', body: 'Connect to the internet once and they are remembered.')
@@ -327,6 +404,16 @@ class _RegionsScreenState extends State<RegionsScreen> {
                   ),
                 ),
               if (_busy) const LinearProgressIndicator(key: Key('regions-loading')),
+              if (_mode == _FigureMode.bulk && _figuresAsOf != null)
+                Padding(
+                  key: const Key('regions-figures-asof'),
+                  padding: const EdgeInsets.fromLTRB(16, 2, 16, 2),
+                  child: Text(
+                    'Numbers as of ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(_figuresAsOf!.toLocal()))}'
+                    ' (the server refreshes them every few minutes).',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
               if (_paused)
                 const Padding(
                   key: Key('regions-paused'),
@@ -426,8 +513,10 @@ class _RegionsScreenState extends State<RegionsScreen> {
         key: const Key('regions-compare-tile'),
         title: const Text('Compare regions'),
         subtitle: Text(
-          'Among the ${loaded.length} of ${regions.length} regions read so far that have drives'
-          '${loaded.length > rows.length ? ' (top ${rows.length})' : ''}. Scroll the list to read more.',
+          _mode == _FigureMode.bulk
+              ? '${loaded.length} of ${regions.length} regions have drives${loaded.length > rows.length ? ' (top ${rows.length} shown)' : ''}.'
+              : 'Among the ${loaded.length} of ${regions.length} regions read so far that have drives'
+                  '${loaded.length > rows.length ? ' (top ${rows.length})' : ''}. Scroll the list to read more.',
           key: const Key('regions-compare-scope'),
           style: t.textTheme.bodySmall,
         ),

@@ -1,10 +1,11 @@
 // Searching and grouping the region list (559 regions and growing): accent-insensitive matching on the name, code,
-// slug and country, ranked results, and the country each region belongs to (the part of its name after the last comma,
-// "Aachen, DE" -> DE). Pure Dart: no Flutter imports.
+// slug and country, ranked results, and the country each region belongs to. The country is what the server states
+// (`country` + `country_code` in regions-index). Only for a server that does not say (an older one, or a cache written
+// before the keys existed) the code is read off the end of the region's name ("Aachen, DE" -> DE). Pure Dart.
 import 'region_lookup.dart';
 
-/// ISO 3166-1 alpha-2 codes that appear in region names, with their English names. A code that is not here is shown as
-/// the code itself (never guessed).
+/// FALLBACK ONLY (a server that sends no country names): ISO 3166-1 alpha-2 codes that appear in region names, with their
+/// English names. A code that is not here is shown as the code itself (never guessed).
 const Map<String, String> countryNames = {
   'AE': 'United Arab Emirates',
   'AT': 'Austria',
@@ -260,25 +261,38 @@ String foldForSearch(String s) {
       .trim();
 }
 
-/// The country code at the end of a region name ("Aachen, DE" -> "DE"), or null when the name has no comma suffix of
-/// two letters.
-String? countryCodeOf(RegionIndexEntry r) {
-  final i = r.name.lastIndexOf(',');
+/// The country code of a region: the server's `country_code` when the server speaks about countries at all (null = it
+/// does not know, and that is believed); otherwise, for an older server, the two letters after the last comma of the
+/// name ("Aachen, DE" -> "DE"), or null when the name has no such suffix.
+String? countryCodeOf(RegionIndexEntry r) => r.countryReported ? r.countryCode : _suffixCode(r.name);
+
+String? _suffixCode(String name) {
+  final i = name.lastIndexOf(',');
   if (i < 0) return null;
-  final tail = r.name.substring(i + 1).trim();
+  final tail = name.substring(i + 1).trim();
   return RegExp(r'^[A-Za-z]{2}$').hasMatch(tail) ? tail.toUpperCase() : null;
 }
 
-/// Heading for a country group: the English name, the bare code when it is not in [countryNames], and "Other" for none.
+/// Heading for a country group from a code alone: the English name from the fallback table, the bare code when it is
+/// not in [countryNames], and "Other" for none. Prefer [countryLabelOf], which uses the server's name.
 String countryLabel(String? code) =>
     code == null ? 'Other' : (countryNames[code] ?? code);
 
-/// The name without its country suffix ("Aachen, DE" -> "Aachen").
+/// Heading for a region's country: the server's English name, else the fallback table, else the bare code; "Other" for none.
+String countryLabelOf(RegionIndexEntry r) {
+  final code = countryCodeOf(r);
+  if (code == null) return 'Other';
+  return r.country ?? countryNames[code] ?? code;
+}
+
+/// The name without its country suffix ("Aachen, DE" -> "Aachen"): the suffix is cut only when it is the region's
+/// country code (so "Detroit, Mi, US" keeps "Detroit, Mi").
 String shortNameOf(RegionIndexEntry r) {
   final c = countryCodeOf(r);
-  return c == null
-      ? r.name
-      : r.name.substring(0, r.name.lastIndexOf(',')).trim();
+  if (c == null) return r.name;
+  final i = r.name.lastIndexOf(',');
+  if (i < 0 || r.name.substring(i + 1).trim().toUpperCase() != c) return r.name;
+  return r.name.substring(0, i).trim();
 }
 
 class _Row {
@@ -320,7 +334,7 @@ class RegionSearchIndex {
               short.split(' '),
               foldForSearch(r.code),
               foldForSearch(r.slug),
-              foldForSearch(countryLabel(cc)),
+              foldForSearch(countryLabelOf(r)),
               foldForSearch(cc ?? ''),
             );
           }(),
@@ -385,7 +399,7 @@ List<CountryGroup> groupByCountry(List<RegionIndexEntry> regions) {
   }
   final out = [
     for (final e in by.entries)
-      CountryGroup(e.key, countryLabel(e.key), e.value),
+      CountryGroup(e.key, e.key == null ? 'Other' : countryLabelOf(e.value.first), e.value),
   ];
   out.sort((a, b) {
     if (a.code == null) return 1;

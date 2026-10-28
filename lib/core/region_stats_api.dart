@@ -41,6 +41,33 @@ class RegionPublicStats {
       );
 }
 
+/// `GET /api/cmh/regions-figures`: the figures of every active region in ONE answer (the hub's cached numbers, the same
+/// aggregates each region's own `public-stats` serves). A region whose numbers cannot be computed right now maps to
+/// null ("unavailable"); one with no drives maps to a [RegionPublicStats] that [RegionPublicStats.isEmpty]. A region the
+/// answer does not mention is absent from [byCode] (the caller decides what that means; it is never a zero).
+class RegionsFigures {
+  final Map<String, RegionPublicStats?> byCode;
+  final DateTime? asOf;
+  const RegionsFigures(this.byCode, {this.asOf});
+
+  static RegionsFigures? tryParse(Object? j) {
+    if (j is! Map || j['regions'] is! List) return null;
+    final by = <String, RegionPublicStats?>{};
+    for (final e in j['regions'] as List) {
+      if (e is! Map || e['code'] is! String) continue;
+      final state = e['state'];
+      if (state == 'ok') {
+        by[e['code'] as String] = RegionPublicStats.fromJson(e.cast<String, dynamic>());
+      } else if (state == 'empty') {
+        by[e['code'] as String] = const RegionPublicStats(drives: 0);
+      } else {
+        by[e['code'] as String] = null; // "unavailable", or a state this app does not know: say so, show nothing
+      }
+    }
+    return RegionsFigures(by, asOf: _time(j['asOf']));
+  }
+}
+
 class LeaderRow {
   final int rank;
   final String callsign;
@@ -213,6 +240,14 @@ class RegionStatsApi {
   /// Never cached (live counts from a disk copy would lie), so offline this throws with `offline: true`.
   Future<RegionLive> live() async => RegionLive.fromJson(await _get(_uri('/api/cmh/public-live')));
   Future<HubRegions> hubRegions() async => HubRegions.fromJson(await _get(_uri('/v1/regions')));
+
+  /// Every active region's figures in one read (server cache 5 minutes, ETag). Throws [RegionStatsException]: status 404 =
+  /// an older server without it, 429 = back off; the caller falls back to per-region reads only for the former.
+  Future<RegionsFigures> regionsFigures() async {
+    final f = RegionsFigures.tryParse(await _get(_uri('/api/cmh/regions-figures')));
+    if (f == null) throw const RegionStatsException('The server sent something unreadable.');
+    return f;
+  }
 
   Future<Map<String, dynamic>> _get(Uri u) async => (await _getWithAsOf(u)).$1;
 

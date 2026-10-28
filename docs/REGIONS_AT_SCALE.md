@@ -9,7 +9,7 @@ the region list, what was measured, what it assumes of the server and what it as
 `GET /api/cmh/regions-index`: 559 regions, **3.46 MB JSON / 1.13 MB gzip**, about 182,000 vertices (median 228 per outline,
 largest 2,805), outlines thinned to about 300 m, `ETag` (weak) and `Cache-Control: public, max-age=300`. Every row has
 `code, slug, name, url, bbox, boundary`. `?slug=a,b` answers just those regions at full detail (CMH 73 vertices against 52,
-MOW 3,798 against 2,805; 0.9 KB for one region). It carries **no** radio preset, time zone, group or country.
+MOW 3,798 against 2,805; 0.9 KB for one region). It carries no radio preset, time zone or group; since migration 0087 each row also has `country`, `country_code` and `machine_derived`.
 
 | Step | What the app does |
 |---|---|
@@ -39,7 +39,7 @@ MOW 3,798 against 2,805; 0.9 KB for one region). It carries **no** radio preset,
   switches, within 100 m of the committed edge the committed region is held, outside every region for 60 s drops it.
 * **Outside every region**: the nearest region by true edge distance (boxes only pick candidates, so a fix inside the *box* of an L-shaped
   zone but outside its outline goes to the nearer edge). Remembered per fix.
-* A machine-derived outline (62 of them; the server flags them, the index does not) is treated like any other: same rules, same seam
+* A machine-derived outline (62 of them; the server's `machine_derived` flag marks them) is treated like any other: same rules, same seam
   tolerance. If one is wrong the server's `/admin/regions` review replaces it and the next index carries the new outline.
 
 ## Picking a region
@@ -47,14 +47,16 @@ MOW 3,798 against 2,805; 0.9 KB for one region). It carries **no** radio preset,
   more than 8 regions: accent-insensitive ("dusseldorf" finds "Düsseldorf", "chisinau" finds "Chișinău", dashes are spaces), matches name,
   code, slug and country (name or code), every word must match, ranked (exact code, name prefix, word prefix, code prefix, substring,
   country). Without a query: All regions, Follow my location, "Near you" (six nearest, only with a fix), then every region under its country
-  (the part of the name after the last comma; an unknown code is shown as the code, a name without one goes under "Other").
+  (the server's `country` / `country_code`; for an older server the part of the name after the last comma, an unknown code is shown as the code; a region the server says has no country, or a name without one, goes under "Other").
 * **Nearest first** is by distance to the box, and among the regions whose box holds the fix by distance to their centre (one big box no
   longer lists its members alphabetically).
 * **All regions screen**: the same grouping, hub groups first. It used to fire one `public-stats` read **per region** on open (559 requests at
-  once, against a limit of 300/min/IP), and drew a 559-row comparison table. Now a row reads its figures only when it is on screen: three at a time,
-  newest first, 450 ms between reads per lane, queued reads are dropped when a row scrolls away or the screen closes, a 429 pauses all reads for
-  45 s and says so. The comparison table moved to the top as a collapsed "Compare regions" card, covers only the regions already read that have
-  drives (at most 25) and says so ("Among the 12 of 559 regions read so far ...").
+  once, against a limit of 300/min/IP), and drew a 559-row comparison table. Now **one** `GET /api/cmh/regions-figures` fills every row (the server's cached
+  hub numbers, about 80 KB, same on every host; "Numbers as of" line; a refresh asks the same single question). Only when the server has no such read (404
+  or any other failure) the screen falls back to the earlier polite per-region reads: a row reads its figures only when it is on screen, three at a time,
+  newest first, 450 ms between reads per lane, queued reads dropped when a row scrolls away, a 429 pauses all reads for 45 s and says so. A 429 on the single
+  read waits and asks that same question again (never 559). A region the answer does not mention, or marks `unavailable`, says "Numbers unavailable right now".
+  The comparison table is a collapsed "Compare regions" card, covers only regions with drives (at most 25) and says how many ("12 of 559 regions have drives").
 
 ## Radio preset and time zone
 The region **catalogue** (`/v1/regions`, 250 KB, ETag cached; already used for hub groups) carries each region's `default_preset` with `basis`
@@ -68,15 +70,18 @@ The region **catalogue** (`/v1/regions`, 250 KB, ETag cached; already used for h
 * A group host (`swoh`) has no single preset (`radioPreset: null`); the same honest state.
 * **Time zone**: shown on Settings > Region when the server sends `timezone`. Not used for any calculation yet (no zone database in the app).
 
-## Asks for the server (not built; the app reads them as soon as they exist)
-1. `GET /api/cmh/site-config` and `/v1/regions` rows: **`radioPresetNone: {reason, source}`** (site-config) and **`preset_none: {reason, source}`**
-   (catalogue) from `regions.settings.radio_preset_none`. The three regions without a preset are shown as "the server has not said why" until then.
-2. **`timezone`** (IANA name) in both.
-3. `regions-index` rows: `country` (or ISO code) so the app need not parse names, and `machine_derived: true` for the 62 derived outlines (the app could
-   say "approximate outline" near such a border).
-4. A bulk figures read (one `GET` for the per-region `public-stats` of all regions, or `drives`/`km` in `/v1/regions`): the All regions screen reads each visible
-   row on its own host.
-5. `regions-index` could drop `asOf` from the ETag input (it is stable; the body changes only when a region does): already true today (ETag is stable, 304 works).
+## Asks for the server (answered by meshcore-insights `api/app-559-asks`, migration 0087)
+The app reads each field when present and falls back when it is absent (an older server).
+1. `radioPresetNone: {reason, source}` in `GET /api/cmh/site-config` and `preset_none: {reason, source}` in `/v1/regions` rows, from `regions.settings.radio_preset_none`
+   (only while the region has no preset; `source` is an https link or null). The app already parsed both shapes.
+2. `timezone` (IANA, null when unknown) in both. Shown on Settings > Region; still not used for any calculation.
+3. `regions-index` rows: `country` (English name), `country_code` (ISO 3166-1 alpha-2), `machine_derived` (bool). The app groups and searches by them
+   and no longer reads the country off the end of a name; the name suffix is the fallback only when the server sends neither key. A server that says
+   `null` (unknown country) is believed: the region goes under "Other". A machine-derived region (62 on Oct 28) shows a quiet "Machine-derived outline" note on the Region tab;
+   detection treats it like any other outline.
+4. `GET /api/cmh/regions-figures` (capability `regionsFigures`): `{regions: [{code, slug, state: "ok"|"empty"|"unavailable", drives, drivers, km, pings,
+   repeatersHeard, heardPct, cellsHeardPct?, lastDriveAt}], asOf}`, one row per active region, aggregates only (what each region's `public-stats` serves).
+5. (unchanged) `regions-index` could drop `asOf` from the ETag input: already true today (ETag is stable, 304 works).
 
 ## Measured (Oct 28 2026, M-series Mac, the real payload; a phone is about 3-5x slower)
 `tool/bench_regions.dart` and `tool/bench_regions_new.dart` (`dart compile exe`, AOT; steps in the file headers).
