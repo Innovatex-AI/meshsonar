@@ -17,7 +17,8 @@ The platform went from about 5 to 559 active regions. Design, measurements and t
 - Brand-new region (no observers, no drives, no preset) checked against the real UKK answers: every panel says what is missing.
 - The viewed region and the switcher order are computed once per index / fix, not on every notification. `CmatException.retryAfterSec`, `RegionStatsException.status`.
 - Tests: new tests over a 559-region stand-in (`test/support/regions_559.dart`): geometry (agrees with the old ray cast on 20,000 points), border slivers, nested zones, seams, switcher order, search and accents, index service (fingerprint, back-off, refine, off-isolate parse, big file round trip, 304 on a 3.4 MB body), the picker sheet and All regions screen at 559 (built rows, reads in flight, 429 pause), preset states, crossing into a no-preset region, the foreground cadence, the empty new region.
-- Tooling: `tool/bench_regions.dart`, `tool/bench_regions_new.dart` (AOT benchmarks over a real `regions-index` body); `scripts/verify_sim.sh` flow gains a region picker screenshot step.
+- Gate: `flutter analyze` clean; `flutter test` 1,611 pass / 37 skip / 0 fail (baseline 1,534 / 37 / 0). Under heavy machine load `drive_report_v2_test`, `wardrive_cadence_test`, `wardrive_engine_test` and `offline_basemap_test` can time out; they pass alone.
+- Tooling: `tool/bench_regions.dart`, `tool/bench_regions_new.dart` (AOT benchmarks over a real `regions-index` body); `scripts/verify_sim.sh` flow gains a region picker screenshot step and no longer exits silently when no simulator matches (it prints which one is missing; this Mac has no iOS simulator runtime installed, so the flow was not run).
 
 ## [0.20.0] — 2026-10-25 — Driver insights, RF windows, weather in reports
 
