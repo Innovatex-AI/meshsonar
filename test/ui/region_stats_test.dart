@@ -83,6 +83,9 @@ void main() {
     expect(find.textContaining('533 km · 45 drives'), findsOneWidget);
     expect(find.textContaining('No drives yet'), findsOneWidget);
     expect(find.textContaining('Numbers unavailable'), findsOneWidget);
+    expect(find.byKey(const Key('regions-compare-tile')), findsOneWidget);
+    await t.tap(find.byKey(const Key('regions-compare-tile')));
+    await t.pumpAndSettle();
     expect(find.byKey(const Key('regions-compare')), findsOneWidget);
     expect(find.text('Viewing'), findsOneWidget);
     await t.tap(find.byKey(const Key('regions-tile-BBB')));

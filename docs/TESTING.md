@@ -35,6 +35,16 @@ through `FLUTTER_TEST` in the environment.
 | `heard_test.dart` | `RepeaterLookup` unique / ambiguous / unknown / later source; `HeardTracker` live for `holdPings` then stale, distance, best SNR; **hold changed mid-drive re-applies at once**; bearing and compass. |
 | `repeater_directory_test.dart` | Node filtering (type, radius, nearest first, lower-case); `JsonArraySplitter` across arbitrary chunk boundaries; refresh → cache file → `load()`; TTL, centre-moved and forced refetch; offline / HTTP error / bad JSON never throw and back off; no cache + offline; damaged cache; idle timeout; size limit; `maxRepeaters`. |
 
+### Regions at 559
+
+`test/support/regions_559.dart` builds a deterministic 559-region stand-in of `regions-index` (230-vertex outlines, accented names, country suffixes) and a
+`square()` helper for exact borders. `core/region_geometry_test.dart` (typed arrays agree with the old ray cast on 20,000 points, holes, MultiPolygon,
+malformed), `core/region_pick_559_test.dart` (slivers, nested zones, seams, L shapes, switcher order, 5,000 fixes), `core/region_search_test.dart`,
+`core/region_index_service_test.dart` (off-isolate parse, fingerprint, back-off, refine, big file round trip, `regionsIndex` 429/slugs, 304 on a 3.4 MB body),
+`app/region_559_state_test.dart` (also-in, seam, exact outline, foreground cadence), `ui/region_picker_559_test.dart` (sheet and All regions at 559),
+`ui/region_preset_states_test.dart`, `ui/region_crossing_no_preset_test.dart`, `ui/new_region_empty_states_test.dart` (real UKK answers in `test/fixtures/ukk_*`).
+Benchmarks over a real body: `tool/bench_regions.dart`, `tool/bench_regions_new.dart`.
+
 ### `test/radio`
 
 | File | Covers |

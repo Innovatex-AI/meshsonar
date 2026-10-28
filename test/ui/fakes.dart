@@ -15,6 +15,7 @@ import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/core/idle_region_watcher.dart';
 import 'package:meshsonar/core/offline_packs.dart' show NetworkKind, NetworkMonitor;
 import 'package:meshsonar/core/region_lookup.dart';
+import 'package:meshsonar/core/region_stats_api.dart' show HubRegions;
 import 'package:meshsonar/core/repeater_sync.dart';
 import 'package:meshsonar/core/startup_location.dart';
 import 'package:meshsonar/radio/radio_api.dart';
@@ -269,8 +270,16 @@ class FakeCmatClient implements CmatClient {
   Object? regionsIndexError;
   int regionsIndexCalls = 0;
 
+  /// What `regionsIndex(slugs: ...)` answers (full-detail outlines) and the slug lists it was asked for.
+  List<RegionIndexEntry> regionsIndexDetailResult = const [];
+  final List<List<String>> regionsIndexDetailAsks = [];
+
   @override
-  Future<List<RegionIndexEntry>> regionsIndex() async {
+  Future<List<RegionIndexEntry>> regionsIndex({List<String>? slugs}) async {
+    if (slugs != null) {
+      regionsIndexDetailAsks.add(slugs);
+      return [for (final r in regionsIndexDetailResult) if (slugs.contains(r.slug)) r];
+    }
     regionsIndexCalls++;
     if (regionsIndexError != null) throw regionsIndexError!;
     return regionsIndexResult;
@@ -579,6 +588,9 @@ class Harness {
   final simLocation = FakeLocation();
   final cache = MemoryRepeaterCache();
   final regionIndexCache = MemoryRegionIndexCache();
+
+  /// The hub catalogue read (`/v1/regions`); null = not fetched, as before.
+  Future<HubRegions> Function(String serverUrl)? regionCatalogFetch;
   final List<FakeCmatClient> clients = [];
   final List<FakeEngine> engines = [];
   final List<File> shared = [];
@@ -662,6 +674,7 @@ class Harness {
     clock: () => clockNow,
     newId: nextId,
     regionIndexCache: regionIndexCache,
+    regionCatalogFetch: regionCatalogFetch,
     locationAccess: locationAccess,
     repeaterSync: repeaterSync,
     lastKnownStore: lastKnownStore,

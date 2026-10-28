@@ -2,10 +2,12 @@
 // figures, a comparison table sortable by column, and tap-to-switch the viewed region. A region with no drives or whose
 // numbers cannot be read is shown with that state, never with zeros.
 import 'dart:async';
+import 'dart:collection';
 
 import 'package:flutter/material.dart';
 
 import '../../core/region_lookup.dart';
+import '../../core/region_search.dart';
 import '../../core/region_stats_api.dart';
 import '../../core/units.dart';
 import '../app.dart';
@@ -68,26 +70,74 @@ List<RegionFigures> sortFigures(List<RegionFigures> rows, RegionSort by, {bool a
 Future<void> showRegionsScreen(BuildContext context) =>
     Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const RegionsScreen()));
 
+/// How many regions' figures are read at once, and how long a lane waits between two reads. 559 regions each have their
+/// own host and the public reads are limited per IP (300/min); only the rows on screen are read, newest first.
+const int regionFigureLanes = 3;
+const Duration regionFigureGap = Duration(milliseconds: 450);
+
+/// A pause after a 429 before the next read.
+const Duration regionFigurePause = Duration(seconds: 45);
+
+/// The compare table lists at most this many regions (the biggest by the chosen column, among those read so far).
+const int regionCompareRows = 25;
+
 class RegionsScreen extends StatefulWidget {
   /// Test seams.
   final List<RegionIndexEntry>? regions;
   final Future<HubRegions> Function()? loadGroups;
   final String? viewingCode;
   final void Function(RegionIndexEntry)? onPick;
-  const RegionsScreen({super.key, this.regions, this.loadGroups, this.viewingCode, this.onPick});
+  final int lanes;
+  final Duration gap;
+  final Duration pause;
+  const RegionsScreen({
+    super.key,
+    this.regions,
+    this.loadGroups,
+    this.viewingCode,
+    this.onPick,
+    this.lanes = regionFigureLanes,
+    this.gap = regionFigureGap,
+    this.pause = regionFigurePause,
+  });
 
   @override
   State<RegionsScreen> createState() => _RegionsScreenState();
 }
 
+sealed class _Item {
+  const _Item();
+}
+
+class _Header extends _Item {
+  final String key, label;
+  const _Header(this.key, this.label);
+}
+
+class _Tile extends _Item {
+  final RegionIndexEntry region;
+  const _Tile(this.region);
+}
+
 class _RegionsScreenState extends State<RegionsScreen> {
-  Map<String, RegionFigures> _figures = {};
+  final Map<String, RegionFigures> _figures = {};
+  final Set<String> _asked = {};
+  final LinkedHashSet<RegionIndexEntry> _queue = LinkedHashSet<RegionIndexEntry>();
   HubRegions _hub = const HubRegions();
-  bool _loading = true;
   RegionSort _sort = RegionSort.km;
   bool _asc = false;
   int _gen = 0;
+  int _lanesBusy = 0;
+  DateTime? _pausedUntil;
   bool _started = false;
+  bool _paused = false;
+  String _query = '';
+  final TextEditingController _search = TextEditingController();
+
+  List<RegionIndexEntry>? _itemsFor;
+  HubRegions? _itemsHub;
+  String _itemsQuery = '';
+  List<_Item> _items = const [];
 
   List<RegionIndexEntry> _regions(BuildContext context) => widget.regions ?? AppScope.read(context).regionIndex;
 
@@ -96,33 +146,42 @@ class _RegionsScreenState extends State<RegionsScreen> {
     super.didChangeDependencies();
     if (_started) return;
     _started = true;
-    unawaited(_load(_regions(context)));
+    unawaited(_loadGroups());
   }
 
-  Future<void> _load(List<RegionIndexEntry> regions) async {
-    final gen = ++_gen;
-    setState(() => _loading = true);
-    final hubF = (widget.loadGroups ?? _defaultGroups)().catchError((_) => const HubRegions());
-    final figs = await Future.wait([
-      for (final r in regions)
-        () async {
-          final api = regionStatsApiFactory(r.url);
-          try {
-            return RegionFigures(r, await api.stats());
-          } catch (_) {
-            return RegionFigures(r, null);
-          } finally {
-            api.close();
-          }
-        }(),
-    ]);
-    final hub = await hubF;
-    if (!mounted || gen != _gen) return;
-    setState(() {
-      _figures = {for (final f in figs) f.region.code: f};
-      _hub = hub;
-      _loading = false;
+  final Set<Timer> _timers = {};
+
+  void _later(Duration d, void Function() f) {
+    late final Timer t;
+    t = Timer(d, () {
+      _timers.remove(t);
+      f();
     });
+    _timers.add(t);
+  }
+
+  @override
+  void dispose() {
+    _gen++;
+    for (final t in _timers) {
+      t.cancel();
+    }
+    _timers.clear();
+    _queue.clear();
+    _search.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadGroups() async {
+    final gen = _gen;
+    HubRegions hub;
+    try {
+      hub = await (widget.loadGroups ?? _defaultGroups)();
+    } catch (_) {
+      hub = const HubRegions();
+    }
+    if (!mounted || gen != _gen) return;
+    setState(() => _hub = hub);
   }
 
   Future<HubRegions> _defaultGroups() async {
@@ -133,6 +192,91 @@ class _RegionsScreenState extends State<RegionsScreen> {
       api.close();
     }
   }
+
+  // ---- figures: only the rows on screen, a few at a time, politely ----
+
+  /// A tile came on screen: read its figures once.
+  void _want(RegionIndexEntry r) {
+    if (_asked.contains(r.code)) return;
+    _queue.remove(r);
+    _queue.add(r);
+    _pump();
+  }
+
+  /// A tile left the screen before its read started: drop it.
+  void _unwant(RegionIndexEntry r) => _queue.remove(r);
+
+  void _pump() {
+    final gen = _gen;
+    while (_lanesBusy < widget.lanes && _queue.isNotEmpty && _pausedUntil == null) {
+      final r = _queue.last; // newest first: what the person is looking at now
+      _queue.remove(r);
+      _asked.add(r.code);
+      _lanesBusy++;
+      unawaited(_read(r, gen));
+    }
+  }
+
+  Future<void> _read(RegionIndexEntry r, int gen) async {
+    final api = regionStatsApiFactory(r.url);
+    RegionFigures result;
+    var rateLimited = false;
+    try {
+      result = RegionFigures(r, await api.stats());
+    } on RegionStatsException catch (e) {
+      rateLimited = e.status == 429;
+      result = RegionFigures(r, null);
+    } catch (_) {
+      result = RegionFigures(r, null);
+    } finally {
+      api.close();
+    }
+    if (!mounted || gen != _gen) return;
+    setState(() {
+      _lanesBusy--;
+      if (rateLimited) {
+        _asked.remove(r.code); // read again after the pause
+        _queue.add(r);
+        _paused = true;
+        _pausedUntil = DateTime.now().add(widget.pause);
+      } else {
+        _figures[r.code] = result;
+      }
+    });
+    if (rateLimited) {
+      _later(widget.pause, () {
+        if (!mounted || gen != _gen) return;
+        setState(() {
+          _pausedUntil = null;
+          _paused = false;
+        });
+        _pump();
+      });
+      return;
+    }
+    _later(widget.gap, () {
+      if (mounted && gen == _gen) _pump();
+    });
+  }
+
+  void _refresh() {
+    for (final t in _timers) {
+      t.cancel();
+    }
+    _timers.clear();
+    setState(() {
+      _gen++;
+      _figures.clear();
+      _asked.clear();
+      _queue.clear();
+      _lanesBusy = 0;
+      _pausedUntil = null;
+      _paused = false;
+    });
+    unawaited(_loadGroups());
+  }
+
+  bool get _busy => _lanesBusy > 0 || _queue.isNotEmpty;
 
   void _open(RegionIndexEntry r) {
     if (widget.onPick != null) {
@@ -148,78 +292,147 @@ class _RegionsScreenState extends State<RegionsScreen> {
   Widget build(BuildContext context) {
     final regions = _regions(context);
     final viewing = widget.regions != null ? widget.viewingCode : AppScope.read(context).viewingRegion?.code;
+    final items = _itemsOf(context, regions);
+    final compare = _compareRows(regions);
     return Scaffold(
       appBar: AppBar(
         title: const Text('All regions'),
-        actions: [IconButton(tooltip: 'Refresh', onPressed: _loading ? null : () => unawaited(_load(regions)), icon: const Icon(Icons.refresh))],
+        actions: [IconButton(tooltip: 'Refresh', onPressed: _busy ? null : _refresh, icon: const Icon(Icons.refresh))],
       ),
       body: regions.isEmpty
           ? const EmptyState(icon: Icons.map_outlined, title: 'No regions loaded yet', body: 'Connect to the internet once and they are remembered.')
-          : ListView(
-              key: const Key('regions-screen'),
-              padding: const EdgeInsets.all(12),
-              children: [
-                if (_loading) const LinearProgressIndicator(key: Key('regions-loading')),
-                ..._groupedList(context, regions, viewing),
-                if (!_loading && regions.length > 1) ..._compare(context, regions, viewing),
-              ],
-            ),
+          : Column(children: [
+              if (regions.length > 8)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                  child: TextField(
+                    key: const Key('regions-search'),
+                    controller: _search,
+                    textInputAction: TextInputAction.search,
+                    decoration: InputDecoration(
+                      prefixIcon: const Icon(Icons.search),
+                      hintText: 'Search ${regions.length} regions',
+                      suffixIcon: _query.isEmpty
+                          ? null
+                          : IconButton(
+                              key: const Key('regions-search-clear'),
+                              tooltip: 'Clear',
+                              icon: const Icon(Icons.close),
+                              onPressed: () => setState(() {
+                                    _search.clear();
+                                    _query = '';
+                                  })),
+                    ),
+                    onChanged: (v) => setState(() => _query = v),
+                  ),
+                ),
+              if (_busy) const LinearProgressIndicator(key: Key('regions-loading')),
+              if (_paused)
+                const Padding(
+                  key: Key('regions-paused'),
+                  padding: EdgeInsets.fromLTRB(16, 4, 16, 4),
+                  child: Text('The server asked for a pause (too many requests). Numbers continue in a minute.'),
+                ),
+              Expanded(
+                child: ListView.builder(
+                  key: const Key('regions-screen'),
+                  padding: const EdgeInsets.all(12),
+                  itemCount: (compare == null ? 0 : 1) + items.length + (items.isEmpty ? 1 : 0),
+                  itemBuilder: (context, i) {
+                    if (compare != null) {
+                      if (i == 0) return compare;
+                      i--;
+                    }
+                    if (items.isEmpty) {
+                      return Padding(
+                        key: const Key('regions-no-match'),
+                        padding: const EdgeInsets.all(Gap.xl),
+                        child: Text('No region matches "$_query".'),
+                      );
+                    }
+                    return switch (items[i]) {
+                      _Header(:final key, :final label) => Padding(
+                          padding: const EdgeInsets.fromLTRB(4, Gap.m, 4, Gap.xs),
+                          child: Text(label, key: Key(key), style: Theme.of(context).textTheme.titleMedium),
+                        ),
+                      _Tile(:final region) => _FigureTile(
+                          key: ValueKey('regions-row-${region.code}'),
+                          region: region,
+                          viewing: region.code == viewing,
+                          figures: _figures[region.code],
+                          asked: _asked.contains(region.code),
+                          onWant: _want,
+                          onUnwant: _unwant,
+                          onTap: _open,
+                        ),
+                    };
+                  },
+                ),
+              ),
+            ]),
     );
   }
 
-  List<Widget> _groupedList(BuildContext context, List<RegionIndexEntry> regions, String? viewing) {
-    final t = Theme.of(context);
-    final sorted = [...regions]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
-    final out = <Widget>[];
-    // Group headers first (in group order), then regions that belong to no group.
-    for (final g in _hub.groups) {
-      final members = [for (final r in sorted) if (_hub.groupOf[r.code] == g.code) r];
-      if (members.isEmpty) continue;
-      out.add(Padding(
-        padding: const EdgeInsets.fromLTRB(4, Gap.m, 4, Gap.xs),
-        child: Text(g.name, key: Key('regions-group-${g.code}'), style: t.textTheme.titleMedium),
-      ));
-      out.addAll([for (final r in members) _tile(context, r, viewing)]);
-    }
-    final loose = [for (final r in sorted) if (!_hub.groupOf.containsKey(r.code)) r];
-    if (loose.isNotEmpty) {
-      if (_hub.groups.isNotEmpty) {
-        out.add(Padding(padding: const EdgeInsets.fromLTRB(4, Gap.m, 4, Gap.xs), child: Text('Other regions', style: t.textTheme.titleMedium)));
+  /// The flat list the builder walks: hub group headers then their regions, then countries; or ranked search results.
+  List<_Item> _itemsOf(BuildContext context, List<RegionIndexEntry> regions) {
+    if (identical(_itemsFor, regions) && identical(_itemsHub, _hub) && _itemsQuery == _query) return _items;
+    final out = <_Item>[];
+    if (_query.trim().isNotEmpty) {
+      for (final r in RegionSearchIndex.of(regions).search(_query)) {
+        out.add(_Tile(r));
       }
-      out.addAll([for (final r in loose) _tile(context, r, viewing)]);
+    } else {
+      final sorted = [...regions]..sort((a, b) => foldForSearch(a.name).compareTo(foldForSearch(b.name)));
+      // Hub groups first (in group order), then every other region by country.
+      for (final g in _hub.groups) {
+        final members = [for (final r in sorted) if (_hub.groupOf[r.code] == g.code) r];
+        if (members.isEmpty) continue;
+        out.add(_Header('regions-group-${g.code}', g.name));
+        out.addAll([for (final r in members) _Tile(r)]);
+      }
+      final loose = [for (final r in sorted) if (!_hub.groupOf.containsKey(r.code)) r];
+      final byCountry = groupByCountry(loose);
+      for (final c in byCountry) {
+        final label = c.code == null ? (_hub.groups.isNotEmpty ? 'Other regions' : 'Regions') : c.label;
+        // One country with no group above it needs no heading of its own when it is the only thing listed.
+        if (c.code == null && byCountry.length == 1 && _hub.groups.isEmpty) {
+          out.addAll([for (final r in c.regions) _Tile(r)]);
+          continue;
+        }
+        out.add(_Header('regions-country-${c.code ?? 'other'}', '$label (${c.regions.length})'));
+        out.addAll([for (final r in c.regions) _Tile(r)]);
+      }
     }
+    _itemsFor = regions;
+    _itemsHub = _hub;
+    _itemsQuery = _query;
+    _items = out;
     return out;
   }
 
-  String _figureLine(RegionFigures? f, Units units) {
-    if (_loading && f == null) return 'Loading numbers…';
-    if (f == null || f.stats == null) return 'Numbers unavailable right now';
-    final s = f.stats!;
-    if (s.isEmpty) return 'No drives yet';
-    return '${s.km == null ? '—' : units.total(s.km! * 1000, groupInt)} · ${s.drives == null ? '—' : groupInt(s.drives!)} drives · '
-        '${s.drivers == null ? '—' : groupInt(s.drivers!)} drivers · ${s.repeatersHeard == null ? '—' : groupInt(s.repeatersHeard!)} repeaters heard';
-  }
-
-  Widget _tile(BuildContext context, RegionIndexEntry r, String? viewing) {
-    final isViewing = r.code == viewing;
-    return Card(
-      child: ListTile(
-        key: Key('regions-tile-${r.code}'),
-        title: Text(r.name),
-        subtitle: Text('${r.code} · ${_figureLine(_figures[r.code], AppScope.unitsOf(context))}'),
-        trailing: isViewing ? const Chip(label: Text('Viewing')) : const Icon(Icons.chevron_right),
-        onTap: () => _open(r),
-      ),
-    );
-  }
-
-  List<Widget> _compare(BuildContext context, List<RegionIndexEntry> regions, String? viewing) {
+  /// The comparison table over the regions whose figures have been read and hold drives (at most [regionCompareRows]),
+  /// or null when there are none. It says how many regions it covers: it is never "all regions" unless it is.
+  Widget? _compareRows(List<RegionIndexEntry> regions) {
+    final loaded = [for (final f in _figures.values) if (f.hasData) f];
+    if (loaded.isEmpty) return null;
     final t = Theme.of(context);
-    final rows = sortFigures([for (final r in regions) _figures[r.code] ?? RegionFigures(r, null)], _sort, ascending: _asc);
+    final sorted = sortFigures(loaded, _sort, ascending: _asc);
+    final rows = sorted.take(regionCompareRows).toList();
     String n(num? v) => v == null ? '—' : groupInt(v.round());
     String p(double? v) => v == null ? '—' : '${v.toStringAsFixed(1)}%';
-    return [
-      Padding(padding: const EdgeInsets.fromLTRB(4, Gap.l, 4, Gap.xs), child: Text('Compare regions', style: t.textTheme.titleMedium)),
+    final viewing = widget.regions != null ? widget.viewingCode : AppScope.read(context).viewingRegion?.code;
+    return Card(
+      child: ExpansionTile(
+        key: const Key('regions-compare-tile'),
+        title: const Text('Compare regions'),
+        subtitle: Text(
+          'Among the ${loaded.length} of ${regions.length} regions read so far that have drives'
+          '${loaded.length > rows.length ? ' (top ${rows.length})' : ''}. Scroll the list to read more.',
+          key: const Key('regions-compare-scope'),
+          style: t.textTheme.bodySmall,
+        ),
+        childrenPadding: const EdgeInsets.fromLTRB(8, 0, 8, Gap.s),
+        children: [
       Wrap(spacing: Gap.xs, children: [
         for (final s in RegionSort.values)
           ChoiceChip(
@@ -256,26 +469,87 @@ class _RegionsScreenState extends State<RegionsScreen> {
               DataRow(
                 selected: f.region.code == viewing,
                 onSelectChanged: (_) => _open(f.region),
-                cells: f.hasData
-                    ? [
-                        DataCell(Text(f.region.name)),
-                        DataCell(Text(n(f.stats!.km))),
-                        DataCell(Text(n(f.stats!.drives))),
-                        DataCell(Text(n(f.stats!.drivers))),
-                        DataCell(Text(n(f.stats!.pings))),
-                        DataCell(Text(p(f.stats!.heardPct))),
-                        DataCell(Text(p(f.stats!.cellsHeardPct))),
-                        DataCell(Text(n(f.stats!.repeatersHeard))),
-                      ]
-                    : [
-                        DataCell(Text(f.region.name)),
-                        DataCell(Text(f.stats == null ? 'unavailable' : 'no drives yet')),
-                        for (var i = 0; i < 6; i++) const DataCell(Text('')),
-                      ],
+                cells: [
+                  DataCell(Text(f.region.name)),
+                  DataCell(Text(n(f.stats!.km))),
+                  DataCell(Text(n(f.stats!.drives))),
+                  DataCell(Text(n(f.stats!.drivers))),
+                  DataCell(Text(n(f.stats!.pings))),
+                  DataCell(Text(p(f.stats!.heardPct))),
+                  DataCell(Text(p(f.stats!.cellsHeardPct))),
+                  DataCell(Text(n(f.stats!.repeatersHeard))),
+                ],
               ),
           ],
         ),
       ),
-    ];
+        ],
+      ),
+    );
+  }
+}
+
+/// One region row. It asks for its figures when it is built (on screen) and withdraws the ask when it leaves.
+class _FigureTile extends StatefulWidget {
+  final RegionIndexEntry region;
+  final bool viewing;
+  final RegionFigures? figures;
+  final bool asked;
+  final void Function(RegionIndexEntry) onWant;
+  final void Function(RegionIndexEntry) onUnwant;
+  final void Function(RegionIndexEntry) onTap;
+  const _FigureTile({
+    super.key,
+    required this.region,
+    required this.viewing,
+    required this.figures,
+    required this.asked,
+    required this.onWant,
+    required this.onUnwant,
+    required this.onTap,
+  });
+
+  @override
+  State<_FigureTile> createState() => _FigureTileState();
+}
+
+class _FigureTileState extends State<_FigureTile> {
+  @override
+  void initState() {
+    super.initState();
+    // After this frame: the ask may call setState on the screen.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.onWant(widget.region);
+    });
+  }
+
+  @override
+  void dispose() {
+    widget.onUnwant(widget.region);
+    super.dispose();
+  }
+
+  String _line(Units units) {
+    final f = widget.figures;
+    if (f == null) return widget.asked ? 'Loading numbers…' : 'Numbers load when this row is on screen';
+    final s = f.stats;
+    if (s == null) return 'Numbers unavailable right now';
+    if (s.isEmpty) return 'No drives yet';
+    return '${s.km == null ? '—' : units.total(s.km! * 1000, groupInt)} · ${s.drives == null ? '—' : groupInt(s.drives!)} drives · '
+        '${s.drivers == null ? '—' : groupInt(s.drivers!)} drivers · ${s.repeatersHeard == null ? '—' : groupInt(s.repeatersHeard!)} repeaters heard';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final r = widget.region;
+    return Card(
+      child: ListTile(
+        key: Key('regions-tile-${r.code}'),
+        title: Text(r.name),
+        subtitle: Text('${r.code} · ${_line(AppScope.unitsOf(context))}'),
+        trailing: widget.viewing ? const Chip(label: Text('Viewing')) : const Icon(Icons.chevron_right),
+        onTap: () => widget.onTap(r),
+      ),
+    );
   }
 }

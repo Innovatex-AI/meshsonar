@@ -140,7 +140,7 @@ class HttpCmatClient implements CmatClient, TelemetryTransport {
       final err = decoded is Map && decoded['error'] is String ? decoded['error'] as String : null;
       final word = decoded is Map && decoded['status'] is String && (decoded['status'] as String).length <= 24 ? decoded['status'] as String : null;
       throw CmatException(err ?? 'server answered ${res.statusCode}${res.reasonPhrase == null ? '' : ' ${res.reasonPhrase}'}',
-          status: res.statusCode, serverStatus: word);
+          status: res.statusCode, serverStatus: word, retryAfterSec: int.tryParse(res.headers['retry-after'] ?? ''));
     }
     if (decoded is! Map) throw CmatException('server sent an unreadable answer', status: res.statusCode);
     return decoded.cast<String, dynamic>();
@@ -371,7 +371,13 @@ class HttpCmatClient implements CmatClient, TelemetryTransport {
       throw const CmatException('server sent a malformed radio preset');
     }
 
-    return SiteConfig(region: regionInfo, radioPreset: preset, capabilities: parseCapabilities(j['capabilities']),
+    final tz = j['timezone'];
+    return SiteConfig(
+        region: regionInfo,
+        radioPreset: preset,
+        radioPresetNone: preset == null ? PresetNone.tryParse(j['radioPresetNone']) : null,
+        timezone: tz is String && tz.isNotEmpty ? tz : null,
+        capabilities: parseCapabilities(j['capabilities']),
         driveFormats: parseCapabilityList(j['capabilities'], 'driveFormats'),
         telemetryFormats: parseCapabilityList(j['capabilities'], 'telemetryFormats'));
   }
@@ -431,17 +437,33 @@ class HttpCmatClient implements CmatClient, TelemetryTransport {
   }
 
   @override
-  Future<List<RegionIndexEntry>> regionsIndex() async {
-    // Public endpoint: no x-driver-key.
-    final j = await _send('GET', 'regions-index');
-    final raw = j['regions'];
-    if (raw is! List) throw const CmatException('server sent a regions-index answer without regions');
-    if (j['asOf'] is! String) throw const CmatException('server sent a regions-index answer without asOf');
-    final regions = <RegionIndexEntry>[];
-    for (final r in raw) {
-      final parsed = RegionIndexEntry.tryParse(r);
-      if (parsed != null) regions.add(parsed); // skip a malformed region rather than lose the whole index
+  Future<List<RegionIndexEntry>> regionsIndex({List<String>? slugs}) async {
+    // Public endpoint: no x-driver-key. The whole index is 3.4 MB at 559 regions, so it is read as text and parsed off
+    // the main isolate; a 429 keeps its Retry-After so the caller can back off.
+    final ep = endpoint('regions-index');
+    final q = slugs == null || slugs.isEmpty ? null : {'slug': slugs.join(',')};
+    final req = http.Request('GET', q == null ? ep : ep.replace(queryParameters: q));
+    req.headers['accept'] = 'application/json';
+    final http.Response res;
+    try {
+      res = await _http.send(req).then(http.Response.fromStream).timeout(slugs == null ? uploadTimeout : timeout);
+    } on TimeoutException {
+      throw CmatException('timed out talking to ${baseUrl.host}');
+    } on SocketException catch (e) {
+      throw CmatException('network error: ${e.message}');
+    } on http.ClientException catch (e) {
+      throw CmatException('network error: ${e.message}');
+    } on HandshakeException catch (e) {
+      throw CmatException('secure connection failed: ${e.message}');
     }
-    return regions;
+    if (res.statusCode != 200) {
+      throw CmatException('server answered ${res.statusCode}${res.reasonPhrase == null ? '' : ' ${res.reasonPhrase}'}',
+          status: res.statusCode, retryAfterSec: int.tryParse(res.headers['retry-after'] ?? ''));
+    }
+    try {
+      return await parseRegionsIndexBodyOffMain(utf8.decode(res.bodyBytes));
+    } on FormatException catch (e) {
+      throw CmatException(e.message, status: 200);
+    }
   }
 }

@@ -7,19 +7,23 @@
 //   {"regions": [{"code","slug","name","url","bbox":[west,south,east,north]|null,
 //                 "boundary":{"type":"Polygon"|"MultiPolygon","coordinates":[...]}|null}], "asOf": "..."}
 //
-// Scope cut, deliberate: matching this pass is bbox-only (point-in-rectangle). `boundary` is parsed and cached
-// (useful later, e.g. a proper point-in-polygon pass) but never evaluated here — point-in-polygon-with-holes
-// against real-world region boundaries was genuine algorithmic risk to take on today. Where more than one
-// region's bbox contains a fix (regions can legitimately overlap near a shared border), the region whose bbox
-// centroid is nearest the fix wins: simple and defensible, not a geometric guarantee — a judgment call for this
-// pass.
+// Matching is bbox first, then the real `boundary` (point-in-polygon with holes, lib/core/region_pick.dart on typed
+// arrays from lib/core/region_geometry.dart). Where more than one region holds a fix (shared borders, nested zones)
+// the smallest wins; the server decides a ping's real region.
+//
+// At 559 regions the index is 3.4 MB / 1.1 MB gzip / ~180k vertices: it is parsed off the main isolate, written to the
+// cache only when it changed, and answered from the ETag cache (304) otherwise.
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:math' as math;
+
+import 'api.dart' show CmatException;
 
 /// One region from `regions-index`. [bbox] is `[west, south, east, north]` degrees, or null if the server
 /// hasn't set one up for this region yet (never matches). [boundary] is the raw GeoJSON `Polygon` or
-/// `MultiPolygon` geometry — kept for later, not evaluated by [regionAt] (see file header).
+/// `MultiPolygon` geometry. [regionAt] (bbox only) ignores it; `regionContaining` / `regionsContaining` in region_pick.dart
+/// evaluate it.
 class RegionIndexEntry {
   final String code;
   final String slug;
@@ -102,6 +106,88 @@ RegionIndexEntry? regionAt(List<RegionIndexEntry> index, double lat, double lon)
   return best;
 }
 
+/// Bodies bigger than this are parsed on a background isolate (a 3.4 MB regions-index takes ~20 ms on a laptop and
+/// several times that on a phone: a visible stutter on the main isolate). Small ones stay inline (tests, custom servers).
+const int regionsIndexIsolateThreshold = 256 * 1024;
+
+/// Parses a `regions-index` body: `{"regions":[...],"asOf":"..."}`. A malformed region is skipped, not fatal. Throws
+/// [FormatException] when the body is not that shape.
+List<RegionIndexEntry> parseRegionsIndexBody(String body) {
+  final j = jsonDecode(body);
+  if (j is! Map) throw const FormatException('server sent an unreadable regions-index answer');
+  final raw = j['regions'];
+  if (raw is! List) throw const FormatException('server sent a regions-index answer without regions');
+  if (j['asOf'] is! String) throw const FormatException('server sent a regions-index answer without asOf');
+  return _entriesOf(raw);
+}
+
+List<RegionIndexEntry> _entriesOf(List<dynamic> raw) {
+  final out = <RegionIndexEntry>[];
+  for (final r in raw) {
+    final parsed = RegionIndexEntry.tryParse(r);
+    if (parsed != null) out.add(parsed);
+  }
+  return out;
+}
+
+/// [parseRegionsIndexBody], on a background isolate when the body is big. The result moves back without a copy.
+Future<List<RegionIndexEntry>> parseRegionsIndexBodyOffMain(String body) async {
+  if (body.length < regionsIndexIsolateThreshold) return parseRegionsIndexBody(body);
+  final r = await Isolate.run(() {
+    final list = parseRegionsIndexBody(body);
+    return (list, _computeFingerprint(list));
+  });
+  _knownFingerprint[r.$1] = r.$2;
+  return r.$1;
+}
+
+final Expando<int> _knownFingerprint = Expando('regionsFingerprint');
+
+/// An order-sensitive digest of an index: codes, names, URLs, bboxes and every boundary coordinate. Two indexes with the
+/// same digest are treated as the same (so a 304 answer, or a 200 with identical content, neither rewrites the 3.4 MB
+/// cache file nor makes the app re-evaluate the region). A list that came out of [parseRegionsIndexBodyOffMain] or the
+/// file cache already knows its digest (worked out on the background isolate); any other list is walked once.
+int regionsFingerprint(List<RegionIndexEntry> index) => _knownFingerprint[index] ??= _computeFingerprint(index);
+
+int _computeFingerprint(List<RegionIndexEntry> index) {
+  var h = 0xcbf29ce484222325 & 0x7fffffffffffffff;
+  void mix(int v) => h = ((h ^ (v & 0x7fffffffffffffff)) * 0x100000001b3) & 0x7fffffffffffffff;
+  void mixD(double d) => mix((d * 1e6).round());
+  void walk(Object? o) {
+    if (o is List) {
+      if (o.length >= 2 && o[0] is num && o[1] is num) {
+        mixD((o[0] as num).toDouble());
+        mixD((o[1] as num).toDouble());
+      } else {
+        mix(o.length);
+        for (final x in o) {
+          walk(x);
+        }
+      }
+    }
+  }
+
+  for (final r in index) {
+    mix(r.code.hashCode);
+    mix(r.slug.hashCode);
+    mix(r.name.hashCode);
+    mix(r.url.hashCode);
+    final b = r.bbox;
+    if (b != null) b.forEach(mixD);
+    final bd = r.boundary;
+    if (bd != null) {
+      mix((bd['type'] as String).hashCode);
+      walk(bd['coordinates']);
+    }
+  }
+  return h;
+}
+
+List<RegionIndexEntry> _parseCached(String text) {
+  final raw = jsonDecode(text);
+  return raw is List ? _entriesOf(raw) : const [];
+}
+
 /// Local cache of the last-fetched regions-index, same shape as `FileRepeaterCache`/`MemoryRepeaterCache` in
 /// `lib/app/services.dart`: one small JSON file, written atomically (temp file + rename); never throws — a
 /// damaged or missing cache only costs region awareness, never blocks the app.
@@ -118,14 +204,14 @@ class FileRegionIndexCache implements RegionIndexCache {
   Future<List<RegionIndexEntry>> load() async {
     try {
       if (!await file.exists()) return const [];
-      final raw = jsonDecode(await file.readAsString());
-      if (raw is! List) return const [];
-      final out = <RegionIndexEntry>[];
-      for (final r in raw) {
-        final parsed = RegionIndexEntry.tryParse(r);
-        if (parsed != null) out.add(parsed);
-      }
-      return out;
+      final text = await file.readAsString();
+      if (text.length < regionsIndexIsolateThreshold) return _parseCached(text);
+      final r = await Isolate.run(() {
+        final list = _parseCached(text);
+        return (list, _computeFingerprint(list));
+      });
+      _knownFingerprint[r.$1] = r.$2;
+      return r.$1;
     } catch (_) {
       return const [];
     }
@@ -158,16 +244,30 @@ class MemoryRegionIndexCache implements RegionIndexCache {
 /// falls back to whatever was last cached, so the phone can still answer "which region am I in" after a
 /// connectivity drop. [fetch] is injected (the real app wires `CmatClient.regionsIndex`) so this class never
 /// imports `http` — same separation RepeaterDirectory uses for its own fetch.
+///
+/// At 559 regions every refresh matters: an answer that is the same index keeps the SAME list object (so everything
+/// keyed on it stays warm) and writes nothing; a failing server is not hammered (429 honours Retry-After, other
+/// failures back off); a refresh is only due again after [maxAge].
 class RegionIndexService {
   final Future<List<RegionIndexEntry>> Function() fetch;
   final RegionIndexCache cache;
-  RegionIndexService({required this.fetch, required this.cache});
+
+  /// Fetches the full-detail outline of some regions (`regions-index?slug=a,b`). Null = the server cannot.
+  final Future<List<RegionIndexEntry>> Function(List<String> slugs)? fetchDetail;
+  final DateTime Function() clock;
+
+  /// How long a fetched index is current before [due] says it is time to ask again (the server sends max-age 300 and an
+  /// ETag, so asking is a 304 most of the time; 6 h keeps even that rare).
+  final Duration maxAge;
+  RegionIndexService({required this.fetch, required this.cache, this.fetchDetail, DateTime Function()? clock, this.maxAge = const Duration(hours: 6)})
+      : clock = clock ?? DateTime.now;
 
   List<RegionIndexEntry> _regions = const [];
+  int _fingerprint = 0;
 
   /// The best index available right now: the on-disk cache before the first fetch answers, then whatever the
-  /// most recent successful fetch returned. Empty only when neither has ever produced anything (first run,
-  /// never been online).
+  /// most recent successful fetch returned (with full-detail outlines swapped in where [refine] fetched them). Empty
+  /// only when neither has ever produced anything (first run, never been online).
   List<RegionIndexEntry> get regions => _regions;
 
   /// True once [regions] has ever held something (cache or a live fetch). False only before that first success.
@@ -177,6 +277,24 @@ class RegionIndexService {
   /// last successful fetch) is still served either way — a failure here means "possibly-stale", not "nothing".
   String? lastError;
 
+  /// HTTP status of the last failure (429 = rate limited), null when it had none (offline) or after a success.
+  int? lastErrorStatus;
+
+  /// When the last live answer arrived (null until one has this run).
+  DateTime? lastSuccessAt;
+
+  /// While set and in the future, [refresh] without `force` does not ask the server (429 / repeated failures).
+  DateTime? backoffUntil;
+  int _failures = 0;
+
+  /// True when a refresh makes sense now: never fetched this run, or older than [maxAge], and not backing off.
+  bool get due {
+    final now = clock();
+    if (backoffUntil != null && now.isBefore(backoffUntil!)) return false;
+    final at = lastSuccessAt;
+    return at == null || now.difference(at) >= maxAge;
+  }
+
   Future<List<RegionIndexEntry>>? _inFlight;
 
   /// Loads whatever is on disk into [regions], without touching the network. Call once at startup, before the
@@ -185,6 +303,9 @@ class RegionIndexService {
     final cached = await cache.load();
     if (cached.isNotEmpty) {
       _regions = cached;
+      _fingerprint = regionsFingerprint(cached);
+      _refined.clear();
+        _refineTried.clear();
       everLoaded = true;
     }
     return _regions;
@@ -192,19 +313,74 @@ class RegionIndexService {
 
   /// Fetches the live index and caches it. On failure, [regions] is left exactly as it was — a network hiccup
   /// never blanks region awareness, it just means the cache (if any) is now possibly stale ([lastError] is set
-  /// accordingly). Concurrent calls share one fetch.
+  /// accordingly). Concurrent calls share one fetch. Always asks (launch, a server change, a person's retry);
+  /// [refreshIfDue] is the polite one.
   Future<List<RegionIndexEntry>> refresh() => _inFlight ??= _refresh().whenComplete(() => _inFlight = null);
+
+  /// Refreshes only when [due]: not while a failure or a 429 is backing off, and not more than every [maxAge].
+  Future<List<RegionIndexEntry>> refreshIfDue() => due ? refresh() : Future.value(_regions);
 
   Future<List<RegionIndexEntry>> _refresh() async {
     try {
       final r = await fetch();
-      _regions = r;
-      everLoaded = true;
+      final fp = regionsFingerprint(r);
       lastError = null;
-      await cache.save(r);
+      lastErrorStatus = null;
+      lastSuccessAt = clock();
+      backoffUntil = null;
+      _failures = 0;
+      if (!everLoaded || fp != _fingerprint) {
+        _regions = r;
+        _fingerprint = fp;
+        _refined.clear();
+        _refineTried.clear();
+        everLoaded = true;
+        await cache.save(r);
+      } // else: the same index as the one held (or cached): nothing to rewrite, and the list object stays.
     } catch (e) {
       lastError = e.toString();
+      final status = e is CmatException ? e.status : null;
+      lastErrorStatus = status;
+      _failures++;
+      final retry = e is CmatException ? e.retryAfterSec : null;
+      final wait = status == 429
+          ? Duration(seconds: (retry ?? 60).clamp(5, 900))
+          : Duration(seconds: (30 * (1 << (_failures - 1).clamp(0, 4))).clamp(30, 600));
+      backoffUntil = clock().add(wait);
     }
     return _regions;
+  }
+
+  final Map<String, RegionIndexEntry> _refined = {};
+  final Set<String> _refineTried = {};
+
+  /// The codes whose full-detail outline is already in [regions].
+  Set<String> get refinedCodes => _refined.keys.toSet();
+
+  /// Swaps in the full-detail outline of the regions with these [codes] (the hub index is thinned to ~300 m, which is
+  /// coarser than a GPS fix; near an edge the exact outline decides). Returns true when [regions] changed. In memory
+  /// only: the next full refresh brings the thinned index back and the next edge visit refines again. A failure, or a
+  /// server that cannot, leaves [regions] as it is.
+  Future<bool> refine(List<String> codes) async {
+    final f = fetchDetail;
+    if (f == null) return false;
+    final want = [
+      for (final c in codes)
+        if (!_refineTried.contains(c)) for (final r in _regions) if (r.code == c) r,
+    ];
+    if (want.isEmpty) return false;
+    final before = _regions;
+    try {
+      final got = await f([for (final r in want) r.slug]);
+      if (!identical(before, _regions)) return false; // the index was replaced while this was in flight
+      _refineTried.addAll([for (final r in want) r.code]); // asked once: a region the server does not return is not asked again
+      final byCode = {for (final r in got) if (r.boundary != null) r.code: r};
+      if (byCode.isEmpty) return false;
+      _refined.addAll(byCode);
+      _regions = [for (final r in _regions) byCode[r.code] ?? r];
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 }

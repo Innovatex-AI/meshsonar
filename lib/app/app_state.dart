@@ -30,6 +30,7 @@ import '../core/region_cache.dart';
 import '../core/region_lookup.dart';
 import '../core/region_pick.dart';
 import '../core/region_preset.dart';
+import '../core/region_stats_api.dart' show HubRegions, RegionCatalogEntry;
 import '../core/region_tracker.dart';
 import '../core/repeater_directory.dart';
 import '../core/repeater_sync.dart';
@@ -353,13 +354,8 @@ class AppState extends ChangeNotifier {
   RegionIndexEntry? get viewingRegion {
     final idx = regionIndex;
     if (idx.isEmpty) return null;
-    RegionIndexEntry? byCode(String? c) {
-      if (c == null) return null;
-      for (final r in idx) {
-        if (r.code == c) return r;
-      }
-      return null;
-    }
+    final codes = _codeMap(idx);
+    RegionIndexEntry? byCode(String? c) => c == null ? null : codes[c];
 
     final manual = byCode(_settings.regionManual);
     if (manual != null) return manual;
@@ -368,18 +364,104 @@ class AppState extends ChangeNotifier {
     if (_currentRegion != null) return _currentRegion;
     final f = _lastRegionFix;
     if (f != null) {
-      final n = nearestRegion(idx, f.lat, f.lon);
+      final n = _nearestMemo(idx, f);
       if (n != null) return n;
     }
     return byCode(_settings.regionLast) ?? idx.first;
   }
 
+  // At 559 regions `viewingRegion` runs on every notification (each GPS fix, each state change): its lookups are
+  // remembered per index and per fix instead of rescanning 559 outlines every time.
+  List<RegionIndexEntry>? _codeMapFor;
+  Map<String, RegionIndexEntry> _codeMapOf = const {};
+  Map<String, RegionIndexEntry> _codeMap(List<RegionIndexEntry> idx) {
+    if (!identical(_codeMapFor, idx)) {
+      _codeMapOf = {for (final r in idx) r.code: r};
+      _codeMapFor = idx;
+    }
+    return _codeMapOf;
+  }
+
+  List<RegionIndexEntry>? _nearestFor;
+  GeoFix? _nearestFix;
+  RegionIndexEntry? _nearestResult;
+  RegionIndexEntry? _nearestMemo(List<RegionIndexEntry> idx, GeoFix f) {
+    if (!identical(_nearestFor, idx) || !identical(_nearestFix, f)) {
+      _nearestResult = nearestRegion(idx, f.lat, f.lon);
+      _nearestFor = idx;
+      _nearestFix = f;
+    }
+    return _nearestResult;
+  }
+
+  // ---------- region catalogue (/v1/regions: radio presets with provenance, groups) ----------
+  HubRegions? _catalog;
+
+  /// The hub's catalogue of regions, or null until it has been read (or offline with nothing stored).
+  HubRegions? get regionCatalog => _catalog;
+
+  /// The catalogue row of [code], or null.
+  RegionCatalogEntry? catalogFor(String? code) => code == null ? null : _catalog?.byCode[code];
+
+  /// Reads the catalogue once per call; a failure keeps what is held (offline: the ETag cache answers). Never throws.
+  Future<void> refreshRegionCatalog() async {
+    final f = services.regionCatalogFetch;
+    if (f == null) return;
+    final server = _settings.serverUrl;
+    try {
+      final c = await f(server);
+      if (_settings.serverUrl != server) return;
+      _catalog = c;
+      notifyListeners();
+    } catch (e) {
+      _logError('Fetching the region catalogue failed', e);
+    }
+  }
+
+  /// True when [siteConfig] belongs to the viewed region. On the MeshSonar hub it is fetched per region, so for a moment
+  /// after a switch it is still the previous region's: nothing about a preset may be shown from it then.
+  bool get siteConfigIsForViewing {
+    final sc = _siteConfig, v = viewingRegion;
+    if (sc == null) return false;
+    if (v == null || !isSameServer(_settings.serverUrl, defaultServerUrl)) return true;
+    return sc.region.slug == v.slug;
+  }
+
+  /// The viewed region's radio preset, with its provenance from the catalogue; null when none is on file (see
+  /// [viewingPresetNone]) or while the site config is not the viewed region's yet. Never another region's, never a default.
+  RadioPreset? get viewingPreset {
+    if (!siteConfigIsForViewing) return null;
+    return _siteConfig!.radioPreset?.withProvenance(catalogFor(viewingRegion?.code)?.preset);
+  }
+
+  /// The stored reason the viewed region has no preset, when the server sends it (site-config first, then the catalogue).
+  PresetNone? get viewingPresetNone {
+    if (!siteConfigIsForViewing || _siteConfig!.radioPreset != null) return null;
+    return _siteConfig!.radioPresetNone ?? catalogFor(viewingRegion?.code)?.presetNone;
+  }
+
+  /// The viewed region's IANA time zone when the server sends it (site-config first, then the catalogue).
+  String? get viewingTimezone => (siteConfigIsForViewing ? _siteConfig!.timezone : null) ?? catalogFor(viewingRegion?.code)?.timezone;
+
   /// True when the person picked the region (not following GPS).
   bool get viewingIsManual => _settings.regionManual != null && viewingRegion?.code == _settings.regionManual;
 
   /// Every region for the switcher: GPS region first, then nearest.
-  List<RegionIndexEntry> get switcherRegions =>
-      regionsForSwitcher(regionIndex, gpsRegion: _currentRegion, lat: _lastRegionFix?.lat, lon: _lastRegionFix?.lon);
+  List<RegionIndexEntry> get switcherRegions {
+    final idx = regionIndex, f = _lastRegionFix, gps = _currentRegion?.code;
+    if (!identical(_switcherFor, idx) || !identical(_switcherFix, f) || _switcherGps != gps) {
+      _switcherList = regionsForSwitcher(idx, gpsRegion: _currentRegion, lat: f?.lat, lon: f?.lon);
+      _switcherFor = idx;
+      _switcherFix = f;
+      _switcherGps = gps;
+    }
+    return _switcherList;
+  }
+
+  List<RegionIndexEntry>? _switcherFor;
+  GeoFix? _switcherFix;
+  String? _switcherGps;
+  List<RegionIndexEntry> _switcherList = const [];
 
   /// Picks [code] to view, or null to follow the phone's GPS region again.
   Future<void> setViewingRegion(String? code) =>
@@ -414,11 +496,13 @@ class AppState extends ChangeNotifier {
   // ---------- region awareness (live, local; GET /api/cmh/regions-index) ----------
   // The server already tags every ping's true region correctly at upload time regardless of connectivity — this
   // is purely live, in-app feedback: "which region is the phone physically in right now", for a badge on the
-  // Drive screen and a one-shot notice on a border crossing mid-drive. bbox-only this pass (lib/core/
-  // region_lookup.dart's regionAt).
+  // Drive screen and a one-shot notice on a border crossing mid-drive. Boundary-exact (lib/core/region_pick.dart
+  // regionsContaining, lib/core/region_tracker.dart); see docs/REGIONS_AT_SCALE.md.
   late final RegionIndexService _regionIndexService = RegionIndexService(
     fetch: () => client.regionsIndex(),
+    fetchDetail: (slugs) => client.regionsIndex(slugs: slugs),
     cache: services.regionIndexCache ?? MemoryRegionIndexCache(),
+    clock: () => services.clock(),
   );
 
   /// Every region `regions-index` knows about: the on-disk cache before the first fetch answers, then whatever
@@ -436,7 +520,7 @@ class AppState extends ChangeNotifier {
 
   RegionIndexEntry? _currentRegion;
 
-  /// Which MeshSonar region the phone is physically in right now (bbox-only match against [regionIndex]). Null
+  /// Which MeshSonar region the phone is physically in right now (outline match against [regionIndex]). Null
   /// with no GPS fix yet, or with a fix outside every known region's bbox — both real, expected states, not
   /// errors.
   RegionIndexEntry? get currentRegion => _currentRegion;
@@ -470,7 +554,9 @@ class AppState extends ChangeNotifier {
     _lastRegionFix = fix;
     final u = _tracker.update(regionIndex, fix.lat, fix.lon, fix.at);
     _regionNearEdge = u.nearEdge;
+    _regionAlsoIn = u.alsoIn;
     _currentRegion = u.current;
+    if (u.nearEdge || u.alsoIn.isNotEmpty || (u.current == null && regionIndex.isNotEmpty)) unawaited(_refineOutlines(fix));
     if (_loaded) _refreshSyncedNames();
     if (u.changed) {
       _viewHoldCode = null;
@@ -482,6 +568,37 @@ class AppState extends ChangeNotifier {
 
   final RegionTracker _tracker = RegionTracker();
   bool _regionNearEdge = false;
+  List<RegionIndexEntry> _regionAlsoIn = const [];
+
+  /// The other regions that also hold the phone's position (a shared border or a nested zone), most specific first.
+  /// Empty almost everywhere. The server lists nodes in each of them and tags a ping with one.
+  List<RegionIndexEntry> get regionAlsoIn => _regionAlsoIn;
+
+  bool _refining = false;
+
+  /// Near an edge (or between two outlines) the hub's 300 m-thinned outlines are coarser than a GPS fix: ask the server
+  /// for the exact outline of the regions around the phone, once per region per index.
+  Future<void> _refineOutlines(GeoFix fix) async {
+    if (_refining) return;
+    final near = <String>[];
+    for (final r in regionIndex) {
+      final b = r.bbox;
+      if (b == null) continue;
+      const pad = 0.02; // ~2 km
+      if (fix.lon >= b[0] - pad && fix.lon <= b[2] + pad && fix.lat >= b[1] - pad && fix.lat <= b[3] + pad) near.add(r.code);
+      if (near.length >= 6) break;
+    }
+    if (near.isEmpty) return;
+    _refining = true;
+    try {
+      if (await _regionIndexService.refine(near)) {
+        final best = _lastRegionFix;
+        if (best != null) _updateRegion(best, live: false);
+      }
+    } finally {
+      _refining = false;
+    }
+  }
 
   /// True when the last fix was within a few hundred metres of the current region's edge (the badge can hint
   /// "near the border"; the tracker already refuses to flap there).
@@ -520,7 +637,9 @@ class AppState extends ChangeNotifier {
     final manual = _settings.regionManual != null;
     final differs = radio != null && preset != null && !presetMatchesRadio(preset, radio);
     if (!differs) {
-      _say(manual ? 'Entered ${next.name}. Still viewing your chosen region.' : 'Entered ${next.name}. Now showing ${next.code}.');
+      // No preset on file for the region we entered: say so, never imply the radio is right for it.
+      final none = sc != null && preset == null ? ' It has no radio preset on file; check your radio with your local community.' : '';
+      _say(manual ? 'Entered ${next.name}. Still viewing your chosen region.$none' : 'Entered ${next.name}. Now showing ${next.code}.$none');
     } else {
       if (!manual) _viewHoldCode = prev.code;
       _presetPrompt = RegionPresetPrompt(from: prev, to: next, preset: preset, radio: radio);
@@ -550,6 +669,7 @@ class AppState extends ChangeNotifier {
       }
       locating = _locateFresh();
     }
+    unawaited(refreshRegionCatalog());
     await _regionIndexService.refresh();
     final regionErr = _regionIndexService.lastError;
     if (regionErr != null) diagnostics.add('Fetching regions-index failed: $regionErr');
@@ -755,6 +875,22 @@ class AppState extends ChangeNotifier {
     if (!fg) return;
     unawaited(refreshLocationAccess());
     unawaited(syncRepeaterLists(SyncTrigger.resume));
+    unawaited(_refreshRegionIndexIfDue());
+  }
+
+  /// Back in front after a long time: ask for the region list again (a 304 most of the time), but never while a failure
+  /// or a 429 is still backing off, and not more than every few hours.
+  Future<void> _refreshRegionIndexIfDue() async {
+    if (!_regionIndexService.due) return;
+    final before = regionIndex;
+    await _regionIndexService.refreshIfDue();
+    final err = _regionIndexService.lastError;
+    if (err != null) diagnostics.add('Fetching regions-index failed: $err');
+    if (!identical(before, regionIndex)) {
+      final best = _phoneFix?.fix ?? _lastRegionFix;
+      if (best != null) _updateRegion(best, live: false);
+    }
+    notifyListeners();
   }
 
   List<RosterRecord> _lookupRosterSrc = const [];

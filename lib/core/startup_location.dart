@@ -247,10 +247,4 @@ MapStart mapStartFor({
   return MapStart.world;
 }
 
-bool _holds(RegionIndexEntry r, double lat, double lon) {
-  final b = r.bbox;
-  if (b == null || b.length < 4) return false;
-  if (lon < b[0] || lon > b[2] || lat < b[1] || lat > b[3]) return false;
-  final bd = r.boundary;
-  return bd == null || pointInBoundary(bd, lat, lon);
-}
+bool _holds(RegionIndexEntry r, double lat, double lon) => regionHolds(r, lat, lon);

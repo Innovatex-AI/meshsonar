@@ -13,6 +13,7 @@ import '../core/idle_region_watcher.dart';
 import '../core/position_filter.dart';
 import '../core/region_cache.dart';
 import '../core/region_lookup.dart';
+import '../core/region_stats_api.dart';
 import '../core/repeater_directory.dart';
 import '../core/repeater_sync.dart';
 import '../core/report_draft_store.dart';
@@ -94,6 +95,14 @@ Future<AppServices> buildRealServices() async {
     directory: RepeaterDirectory(
         cacheFile: File('${root.path}${Platform.pathSeparator}node_directory.json'), ttl: const Duration(days: 7)),
     regionIndexCache: FileRegionIndexCache(File('${root.path}${Platform.pathSeparator}regions_index.json')),
+    regionCatalogFetch: (url) async {
+      final api = RegionStatsApi(url);
+      try {
+        return await api.hubRegions();
+      } finally {
+        api.close();
+      }
+    },
     idleLocation: GeolocatorIdleLocationSource(),
     lastKnownStore: LastKnownStore(File('${root.path}${Platform.pathSeparator}last_known_fix.json')),
     locationAccess: GeolocatorLocationAccess(),

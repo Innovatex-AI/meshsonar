@@ -450,6 +450,15 @@ it."); `test/ui/settings_no_dead_end_test.dart` enforces it.
 The first-run disclosure sheet lists every registry category with exactly what is shared and never shared, where it
 goes, and "Change your mind any time in Settings, under Privacy & data sharing"; both choices stay pinned on screen.
 
+## Regions at 559 (0.20.1)
+
+Design, numbers and the asks for the server: [REGIONS_AT_SCALE.md](REGIONS_AT_SCALE.md).
+
+- **Picker**: lazily built, search (accents, name, code, country), Near you, countries as headings, "you are also here (shared border)".
+- **All regions**: figures for the rows on screen only (3 at a time, 429 pause), collapsed comparison card.
+- **Detection**: holes and MultiPolygon, most specific region first, seams within 300 m, exact outline near an edge.
+- **Index**: parsed off the main isolate, written only when changed, re-asked after 6 h in the foreground, 429 back-off.
+
 ## Region data, telemetry and timeline (0.19)
 
 - **ETag cache** (`lib/core/etag_client.dart`, `region_cache.dart`): region reads send `If-None-Match`; a 304 reuses the stored body. With no network the Region tab shows the stored data labelled "Offline - as of <time>".

@@ -92,6 +92,23 @@ final List<ScreenStep> screens = [
     await pumpFor(t, const Duration(seconds: 3));
     await shot(t, 'region');
   }, optional: true),
+  // The region picker over the real 559-region index (live, read-only): the sheet, then a search with an accent.
+  ScreenStep('region-picker', (t) async {
+    await openTab(t, 'Region');
+    final chip = find.byKey(const Key('region-switch-chip'));
+    if (!await waitFor(t, chip)) throw const _Skip();
+    await t.tap(chip);
+    await pumpFor(t, const Duration(seconds: 1));
+    await shot(t, 'region-picker');
+    final search = find.byKey(const Key('region-search'));
+    if (search.evaluate().isNotEmpty) {
+      await t.enterText(search, 'dusseldorf');
+      await pumpFor(t, const Duration(seconds: 1));
+      await shot(t, 'region-picker-search');
+    }
+    await t.tapAt(const Offset(20, 40)); // the scrim above the sheet closes it
+    await pumpFor(t, const Duration(seconds: 1));
+  }, optional: true),
 ];
 
 class _Skip implements Exception {

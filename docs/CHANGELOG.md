@@ -5,6 +5,20 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+## [0.20.1] — 2026-10-28 — 559 regions
+
+The platform went from about 5 to 559 active regions. Design, measurements and the asks for the server: [REGIONS_AT_SCALE.md](REGIONS_AT_SCALE.md). Not installed anywhere (the app is on hold).
+
+- Region index: parsed on a background isolate, written to the cache only when it changed (a 304 no longer rewrites the 3.4 MB file or re-encodes it), re-asked after 6 h in the foreground (not while a 429 or a failure is backing off, `Retry-After` honoured), the same list object kept when the answer is the same. Launch no longer parses (40 ms) and re-encodes (150 ms) the 3.4 MB index on the main isolate (laptop figures; a phone is slower).
+- Region detection: typed-array point-in-polygon (holes, MultiPolygon), a position held by several regions names the most specific (smallest real area) and reports the others ("you are also here (shared border)", "also CODE"); a seam between two thinned outlines (300 m) resolves to the nearest outline instead of "outside coverage"; near an edge the exact outline is fetched once (`regions-index?slug=`); "outside every region" picks the nearest by true edge distance (the old box-only pick was wrong for L-shaped zones).
+- Region picker: lazily built list with search (accent-insensitive; name, code, slug, country), "Near you", countries as headings; nearest first now ranks by centre distance inside a big box; short lists unchanged.
+- All regions screen: figures are read only for rows on screen, three at a time, politely (it used to fire 559 reads at once); a 429 pauses the reads and says so; countries as headings; the comparison table is a collapsed card at the top covering the regions read so far (at most 25) and says so.
+- Radio preset: a region with no preset says so, shows the server's stored reason and evidence when sent (`radioPresetNone` / `preset_none`, forward compatible) and otherwise "The server has not said why"; never the US preset or another region's; provenance (published / community-observed, note) shown from the region catalogue (`/v1/regions`); the previous region's site-config is never shown after a switch; entering a region with no preset says so in the notice. Time zone shown when the server sends it.
+- Brand-new region (no observers, no drives, no preset) checked against the real UKK answers: every panel says what is missing.
+- The viewed region and the switcher order are computed once per index / fix, not on every notification. `CmatException.retryAfterSec`, `RegionStatsException.status`.
+- Tests: new tests over a 559-region stand-in (`test/support/regions_559.dart`): geometry (agrees with the old ray cast on 20,000 points), border slivers, nested zones, seams, switcher order, search and accents, index service (fingerprint, back-off, refine, off-isolate parse, big file round trip, 304 on a 3.4 MB body), the picker sheet and All regions screen at 559 (built rows, reads in flight, 429 pause), preset states, crossing into a no-preset region, the foreground cadence, the empty new region.
+- Tooling: `tool/bench_regions.dart`, `tool/bench_regions_new.dart` (AOT benchmarks over a real `regions-index` body); `scripts/verify_sim.sh` flow gains a region picker screenshot step.
+
 ## [0.20.0] — 2026-10-25 — Driver insights, RF windows, weather in reports
 
 - Your progress shows your whole account's history from the server (`driver-summary`, capability `driverSummary`): totals, weekly charts (UTC Monday weeks), recent server drives and a comparison with this phone, with a stored offline copy and explicit error states. The Chart/Table switch moves under the title at large text sizes.
