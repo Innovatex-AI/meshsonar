@@ -63,7 +63,7 @@ run_flow() {
 FAIL=0
 IFS='|' read -ra LIST <<< "$DEVICES"
 for NAME in "${LIST[@]}"; do
-  UDID="$(pick_udid "$NAME")"
+  UDID="$(pick_udid "$NAME" || true)" # no match must reach the message below, not kill the script under set -e/pipefail
   [ -n "$UDID" ] || { echo "!! no simulator matching '$NAME'"; FAIL=1; continue; }
   SLUG="$(echo "$NAME" | tr ' ' '-' | tr -cd 'A-Za-z0-9-')"
   D="$OUT/$SLUG"; mkdir -p "$D"

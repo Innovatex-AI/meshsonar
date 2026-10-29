@@ -7,6 +7,7 @@ import '../../core/radio_presets.dart';
 import '../../radio/radio_api.dart';
 import '../app.dart';
 import '../connect_screen.dart';
+import '../region/preset_info.dart';
 
 class RadioScreen extends StatefulWidget {
   /// Injected in tests; the app uses the community list at api.meshcore.nz.
@@ -140,7 +141,9 @@ class _RadioScreenState extends State<RadioScreen> {
     final c = t.colorScheme;
     final region = s.viewingRegion;
     final site = s.siteConfig;
-    final preset = site?.radioPreset;
+    final forView = s.siteConfigIsForViewing;
+    final preset = s.viewingPreset;
+    final provenance = preset == null ? null : presetProvenanceText(preset);
     final heading = region == null ? 'Region preset' : 'Region preset: ${region.name}';
     return Column(
       key: const Key('radio-region-preset'),
@@ -148,12 +151,15 @@ class _RadioScreenState extends State<RadioScreen> {
       children: [
         Text(heading, style: t.textTheme.titleLarge),
         const SizedBox(height: Gap.s),
-        if (site == null)
+        if (site == null || !forView)
           Text('The region preset has not loaded yet.', style: t.textTheme.bodyMedium?.copyWith(color: c.onSurfaceVariant))
-        else if (preset == null)
-          Text('This region has no suggested preset.', style: t.textTheme.bodyMedium?.copyWith(color: c.onSurfaceVariant))
-        else ...[
+        else if (preset == null) ...[
+          Text('This region has no suggested preset.', style: t.textTheme.bodyMedium?.copyWith(color: c.onSurfaceVariant)),
+          const SizedBox(height: Gap.s),
+          NoPresetNote(regionName: region?.name ?? 'This region', none: s.viewingPresetNone),
+        ] else ...[
           Text(preset.name, style: t.textTheme.bodyMedium?.copyWith(color: c.onSurfaceVariant)),
+          if (provenance != null) Text(provenance, key: const Key('radio-region-provenance'), style: t.textTheme.bodySmall?.copyWith(color: c.onSurfaceVariant)),
           const SizedBox(height: Gap.s),
           ComparisonTable(key: const Key('radio-region-compare'), comparison: compareRegionPreset(radio, preset), hasRadio: radio != null),
         ],

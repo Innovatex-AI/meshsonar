@@ -5,6 +5,7 @@ import 'package:flutter/material.dart' hide Radio;
 import '../../core/api.dart';
 import '../../core/model.dart' show Radio;
 import '../app.dart';
+import '../region/preset_info.dart';
 import '../region/region_switcher.dart';
 import 'settings_kit.dart';
 
@@ -40,6 +41,7 @@ class RegionTile extends StatelessWidget {
       subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(host),
         const Text('The region your server answers for. Change it with Server URL.'),
+        if (s.viewingTimezone != null) Text('Time zone of ${s.viewingRegion?.name ?? 'this region'}: ${s.viewingTimezone}', key: const Key('site-region-timezone')),
       ]),
     );
   }
@@ -57,16 +59,30 @@ class RadioPresetTile extends StatelessWidget {
     final s = AppScope.of(context);
     final t = Theme.of(context);
     final c = t.colorScheme;
-    final preset = s.siteConfig!.radioPreset;
+    final preset = s.viewingPreset;
 
-    if (preset == null) {
+    if (!s.siteConfigIsForViewing) {
       return const ListTile(
         key: Key('site-radio-preset'),
         leading: Icon(Icons.settings_input_antenna_outlined),
         title: Text('Radio preset'),
-        subtitle: Text('This region has no suggested preset.'),
+        subtitle: Text('Loading this region\'s preset.'),
       );
     }
+    if (preset == null) {
+      final name = s.viewingRegion?.name ?? 'This region';
+      return ListTile(
+        key: const Key('site-radio-preset'),
+        leading: const Icon(Icons.settings_input_antenna_outlined),
+        title: const Text('Radio preset'),
+        subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('This region has no suggested preset.'),
+          const SizedBox(height: 6),
+          NoPresetNote(regionName: name, none: s.viewingPresetNone),
+        ]),
+      );
+    }
+    final provenance = presetProvenanceText(preset);
 
     final radio = s.selfInfo?.radio; // the connected radio's own live RF parameters, or null if none is connected
     return Padding(
@@ -87,6 +103,7 @@ class RadioPresetTile extends StatelessWidget {
                   children: [
                     Text('${preset.name} (this region)', style: t.textTheme.bodySmall?.copyWith(color: c.onSurfaceVariant)),
                     Text(_formatPreset(preset), style: numberStyle(context, size: 16, color: c.primary)),
+                    if (provenance != null) Text(provenance, key: const Key('site-radio-preset-provenance'), style: t.textTheme.bodySmall?.copyWith(color: c.onSurfaceVariant)),
                     const SizedBox(height: 6),
                     Text('No radio connected to compare.', style: t.textTheme.bodySmall?.copyWith(color: c.onSurfaceVariant)),
                   ],
@@ -100,6 +117,7 @@ class RadioPresetTile extends StatelessWidget {
                     const SizedBox(height: 8),
                     Text('${preset.name} (this region)', style: t.textTheme.bodySmall?.copyWith(color: c.onSurfaceVariant)),
                     Text(_formatPreset(preset), style: numberStyle(context, size: 16, color: c.primary)),
+                    if (provenance != null) Text(provenance, key: const Key('site-radio-preset-provenance'), style: t.textTheme.bodySmall?.copyWith(color: c.onSurfaceVariant)),
                   ],
                 ),
         ),

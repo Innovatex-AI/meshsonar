@@ -394,6 +394,13 @@ names.
 | `ui/region/growth_panel.dart` | ui | Region Growth tab. |
 | `ui/region/region_dataset_view.dart` | ui | Shared shell of the RF/Growth tabs (states, status, offline label); `DatasetCard`, `FigureStrip`. |
 | `ui/region/region_report_export_sheet.dart` | ui | Export region report sheet (text, PDF, JSON, all tables, one table). |
+| `core/region_geometry.dart` | core | `PreparedBoundary`: a GeoJSON outline on `Float64List`s with a box per ring (point-in-polygon with holes, edge distance, area), built once per boundary object; `distanceToBoundaryM`. |
+| `core/region_search.dart` | core | `foldForSearch` (accents, dashes), `countryCodeOf` / `countryLabel`, `RegionSearchIndex` (ranked, per list), `groupByCountry`. |
+| `core/region_pick.dart` | core | `regionsContaining` / `regionContaining` (most specific first, optional seam tolerance), `regionHolds`, `nearestRegion` (true edge distance), `regionsForSwitcher`. |
+| `core/region_lookup.dart` | core | `RegionIndexEntry`, `parseRegionsIndexBody` (+ off-isolate), `regionsFingerprint`, `RegionIndexService` (cache, back-off, due, refine), the index cache. |
+| `ui/region/region_switcher.dart` | ui | The picker sheet: lazily built, search, Near you, countries; the Region chip. |
+| `ui/region/regions_screen.dart` | ui | All regions: grouped list with figures read for rows on screen (three lanes, 429 pause), collapsed comparison card. |
+| `ui/region/preset_info.dart` | ui | Radio preset provenance text and the honest "no preset on file" note. |
 | `ui/settings_screen.dart` | ui | Settings sections, driver key request/status, sliders (`SliderTile`, stop lists), upload status, About/intro links. |
 | `ui/about_screen.dart` | ui | About: version, MIT text, short third-party notices, licence page. |
 | `ui/onboarding/first_run_gate.dart` | ui | Shows the intro once, then routes to Connect / Simulator / Settings. |

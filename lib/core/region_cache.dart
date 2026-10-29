@@ -41,14 +41,21 @@ class RegionCache implements StorageSized {
   File _file(String key) => File('${dir.path}${Platform.pathSeparator}rc_${_safe(key)}.json');
   static String _safe(String key) => key.replaceAll(RegExp(r'[^A-Za-z0-9_.-]'), '_');
 
+  /// Bodies at least this big are not rewritten just to say "still current" (a 304 on the 3.4 MB regions-index): the
+  /// file's modified time moves (its LRU position) and the new "as of" is kept in memory for this run.
+  static const int bigBody = 256 * 1024;
+  final Map<String, DateTime> _touched = {};
+
   Future<CachedBody?> read(String key, {bool offline = false}) async {
     try {
       final f = _file(key);
       if (!await f.exists()) return null;
       final j = jsonDecode(await f.readAsString());
       if (j is! Map || j['body'] is! String || j['at'] is! String) return null;
-      final at = DateTime.tryParse(j['at'] as String);
+      var at = DateTime.tryParse(j['at'] as String);
       if (at == null) return null;
+      final t = _touched[key];
+      if (t != null && t.isAfter(at)) at = t;
       return CachedBody(body: j['body'] as String, etag: j['etag'] as String?, fetchedAt: at, offline: offline);
     } catch (_) {
       return null;
@@ -93,7 +100,7 @@ class RegionCache implements StorageSized {
       final now = clock();
       if (r.notModified) {
         if (cached == null) return null;
-        await _write(key, cached.body, cached.etag, now); // touch: refreshes "as of" and LRU position
+        await touch(key, cached.body, etag: cached.etag); // refreshes "as of" and LRU position
         return CachedBody(body: cached.body, etag: cached.etag, fetchedAt: now, offline: false);
       }
       await _write(key, r.body!, r.etag, now);
@@ -130,7 +137,21 @@ class RegionCache implements StorageSized {
   }
 
   /// Stores [body] under [key] (fetched now) without going through [fetch].
-  Future<void> put(String key, String body, {String? etag}) => _write(key, body, etag, clock());
+  Future<void> put(String key, String body, {String? etag}) {
+    _touched.remove(key);
+    return _write(key, body, etag, clock());
+  }
+
+  /// "The server confirmed this copy is current" (a 304): refreshes the "as of" time and the LRU position. A small body
+  /// is rewritten as before; a big one only has its file touched (see [bigBody]).
+  Future<void> touch(String key, String body, {String? etag}) async {
+    if (body.length < bigBody) return _write(key, body, etag, clock());
+    final now = clock();
+    _touched[key] = now;
+    try {
+      await _file(key).setLastModified(DateTime.now()); // file times are the file system's, not the injected clock's
+    } catch (_) {}
+  }
 }
 
 /// "Offline - as of 2h ago" / "As of 5m ago". Pure so it is testable and the UI just prints it.
@@ -154,6 +175,8 @@ String asOfLabel(DateTime fetchedAt, DateTime now, {required bool offline}) {
 
 String siteConfigToJson(SiteConfig c) => jsonEncode({
       'region': {'slug': c.region.slug, 'url': c.region.url},
+      if (c.radioPresetNone != null) 'presetNone': {'reason': c.radioPresetNone!.reason, 'source': c.radioPresetNone!.source},
+      if (c.timezone != null) 'tz': c.timezone,
       'preset': c.radioPreset == null
           ? null
           : {'name': c.radioPreset!.name, 'f': c.radioPreset!.freqMhz, 'bw': c.radioPreset!.bwKhz, 'sf': c.radioPreset!.sf, 'cr': c.radioPreset!.cr},
@@ -176,6 +199,8 @@ SiteConfig? siteConfigFromJson(String s) {
           ? RadioPreset(
               name: p['name'] as String, freqMhz: (p['f'] as num).toDouble(), bwKhz: (p['bw'] as num).toDouble(), sf: (p['sf'] as num).toInt(), cr: (p['cr'] as num).toInt())
           : null,
+      radioPresetNone: p is Map ? null : PresetNone.tryParse(j['presetNone']),
+      timezone: j['tz'] is String ? j['tz'] as String : null,
       capabilities: parseCapabilities(j['caps']),
       driveFormats: parseCapabilityList(j['caps'], 'driveFormats'),
       telemetryFormats: parseCapabilityList(j['caps'], 'telemetryFormats'),

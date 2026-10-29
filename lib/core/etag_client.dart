@@ -101,7 +101,7 @@ class EtagClient extends http.BaseClient {
 
     if (live != null && live.statusCode == 304 && cached != null) {
       offlineSince = null;
-      unawaited(_cache.put(key, cached.body, etag: cached.etag)); // touch: "as of" and LRU position
+      unawaited(_cache.touch(key, cached.body, etag: cached.etag)); // touch: "as of" and LRU position
       return _respond(200, utf8.encode(cached.body), live.headers, etag: cached.etag, from: '304');
     }
     if (live != null && live.statusCode == 200) {

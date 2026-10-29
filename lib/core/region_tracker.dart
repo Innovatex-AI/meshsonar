@@ -10,57 +10,11 @@
 //  5. Inside another region B but outside the committed one: hold while the fix is within [edgeMarginM] of the
 //     committed region's boundary (near-edge: GPS error can put you on the wrong side), otherwise B must win
 //     [confirmFixes] consecutive fixes before it is committed.
-import 'dart:math' as math;
-
+import 'region_geometry.dart';
 import 'region_lookup.dart';
 import 'region_pick.dart';
 
-/// Metres from a point to the nearest edge of a GeoJSON Polygon/MultiPolygon [boundary] (any ring, so holes count).
-/// Infinity for a malformed boundary. Local equirectangular projection: accurate to well under a metre at region
-/// scale, which is far finer than GPS.
-double distanceToBoundaryM(Map<String, dynamic> boundary, double lat, double lon) {
-  final cosLat = math.cos(lat * math.pi / 180);
-  const mPerDeg = 111320.0;
-  var best = double.infinity;
-  double segDist(double ax, double ay, double bx, double by) {
-    // Coordinates in metres relative to the query point (which is the origin).
-    final dx = bx - ax, dy = by - ay;
-    final len2 = dx * dx + dy * dy;
-    var t = len2 == 0 ? 0.0 : (-(ax * dx + ay * dy) / len2);
-    t = t.clamp(0.0, 1.0);
-    final px = ax + t * dx, py = ay + t * dy;
-    return math.sqrt(px * px + py * py);
-  }
-
-  void ring(List<dynamic> pts) {
-    for (var i = 1; i < pts.length; i++) {
-      final a = pts[i - 1], b = pts[i];
-      if (a is! List || b is! List || a.length < 2 || b.length < 2) continue;
-      final d = segDist(((a[0] as num) - lon) * mPerDeg * cosLat, ((a[1] as num) - lat) * mPerDeg,
-          ((b[0] as num) - lon) * mPerDeg * cosLat, ((b[1] as num) - lat) * mPerDeg);
-      if (d < best) best = d;
-    }
-  }
-
-  try {
-    final c = boundary['coordinates'];
-    if (c is! List) return double.infinity;
-    void poly(List<dynamic> rings) {
-      for (final r in rings) {
-        if (r is List) ring(r);
-      }
-    }
-
-    if (boundary['type'] == 'Polygon') {
-      poly(c);
-    } else if (boundary['type'] == 'MultiPolygon') {
-      for (final p in c) {
-        if (p is List) poly(p);
-      }
-    }
-  } catch (_) {}
-  return best;
-}
+export 'region_geometry.dart' show distanceToBoundaryM;
 
 /// What one fix did to the tracker.
 class RegionTrackUpdate {
@@ -72,7 +26,12 @@ class RegionTrackUpdate {
 
   /// The fix is within [RegionTracker.nearEdgeM] of the committed region's boundary.
   final bool nearEdge;
-  const RegionTrackUpdate({required this.current, required this.previous, required this.changed, required this.nearEdge});
+
+  /// Every OTHER region that also holds the fix (a shared border, a nested zone): the server lists a node in each of
+  /// them and gives a ping to one, so the phone says "also in ..." instead of pretending the border is a line.
+  final List<RegionIndexEntry> alsoIn;
+  const RegionTrackUpdate(
+      {required this.current, required this.previous, required this.changed, required this.nearEdge, this.alsoIn = const []});
 }
 
 class RegionTracker {
@@ -80,11 +39,16 @@ class RegionTracker {
   final double edgeMarginM;
   final double nearEdgeM;
   final Duration outsideGrace;
+
+  /// The hub index is thinned to about 300 m, so two neighbours no longer share an exact edge and a fix on the seam can
+  /// fall in neither outline: within this many metres of an outline counts as inside it (the exact rule is 0).
+  final double seamM;
   RegionTracker({
     this.confirmFixes = 3,
     this.edgeMarginM = 100,
     this.nearEdgeM = 300,
     this.outsideGrace = const Duration(seconds: 60),
+    this.seamM = 300,
   });
 
   RegionIndexEntry? _current;
@@ -112,7 +76,8 @@ class RegionTracker {
       }
       _current = cur; // dropped from the index -> treated as outside
     }
-    final raw = regionContaining(index, lat, lon);
+    final here = regionsContaining(index, lat, lon);
+    final raw = here.isNotEmpty ? here.first : regionContaining(index, lat, lon, seamM: seamM);
 
     void commit(RegionIndexEntry? to) {
       _current = to;
@@ -154,14 +119,13 @@ class RegionTracker {
     final now = _current;
     var near = false;
     if (now?.boundary != null) near = distanceToBoundaryM(now!.boundary!, lat, lon) <= nearEdgeM;
-    return RegionTrackUpdate(current: now, previous: prev, changed: now?.code != prev?.code, nearEdge: near);
+    return RegionTrackUpdate(
+        current: now,
+        previous: prev,
+        changed: now?.code != prev?.code,
+        nearEdge: near,
+        alsoIn: [for (final r in here) if (r.code != now?.code) r]);
   }
 
-  bool _stillInside(RegionIndexEntry r, double lat, double lon) {
-    final b = r.bbox;
-    if (b == null) return false;
-    if (lon < b[0] || lon > b[2] || lat < b[1] || lat > b[3]) return false;
-    final bd = r.boundary;
-    return bd == null || pointInBoundary(bd, lat, lon);
-  }
+  bool _stillInside(RegionIndexEntry r, double lat, double lon) => regionHolds(r, lat, lon);
 }

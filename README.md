@@ -47,6 +47,7 @@ Start with [AGENTS.md](AGENTS.md) (rules) and the platform handoff in [meshsonar
 | [docs/PORTING.md](docs/PORTING.md) | Reusable code, platform seams, per-platform checklists (Android, web, desktop), non-Flutter rewrite guide, BLE licence |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Mac set-up, free Apple ID signing and install, running every kind of test, Linux/Xvfb checks, versions, release checklist |
 | [docs/TESTING.md](docs/TESTING.md) | What each test file covers, how to run subsets, mutation-check results |
+| [docs/REGIONS_AT_SCALE.md](docs/REGIONS_AT_SCALE.md) | The app with 559 regions: index payload and cadence, detection on borders and seams, the picker, radio presets without a fallback, measurements, asks for the server |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | v0.1.0 (MVP) and v0.2.0 (field-test fixes) |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Known gaps and next steps, prioritised |
 | [docs/CONTRACTS.md](docs/CONTRACTS.md) | The original build contracts: shared types, class names, folder ownership |

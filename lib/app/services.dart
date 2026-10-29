@@ -10,6 +10,7 @@ import '../core/phone_sensors.dart';
 import '../core/idle_region_watcher.dart';
 import '../core/region_cache.dart';
 import '../core/region_lookup.dart';
+import '../core/region_stats_api.dart' show HubRegions;
 import '../core/repeater_directory.dart';
 import '../core/repeater_sync.dart';
 import '../core/startup_location.dart';
@@ -110,6 +111,10 @@ class AppServices {
   /// (tests; AppState falls back to a [MemoryRegionIndexCache]).
   final RegionIndexCache? regionIndexCache;
 
+  /// Reads the hub's region catalogue (`/v1/regions`: groups, each region's radio preset with its provenance, and the
+  /// reason when there is none). Null = not fetched (tests).
+  final Future<HubRegions> Function(String serverUrl)? regionCatalogFetch;
+
   /// Disk cache (ETag/LRU) for per-region site-config and coverage, with offline/as-of labels. Null = no caching.
   final RegionCache? regionCache;
 
@@ -155,6 +160,7 @@ class AppServices {
     this.directory,
     this.reportDraftStore,
     this.regionIndexCache,
+    this.regionCatalogFetch,
     this.regionCache,
     this.idleLocation,
     this.lastKnownStore,

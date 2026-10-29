@@ -105,7 +105,10 @@ class CmatException implements Exception {
 
   /// The `status` word of a 403 body (`rejected`, `revoked`, `banned`, ...), when the server sent one.
   final String? serverStatus;
-  const CmatException(this.message, {this.status, this.serverStatus});
+
+  /// The `Retry-After` of a 429 / 503, in seconds, when the server sent one.
+  final int? retryAfterSec;
+  const CmatException(this.message, {this.status, this.serverStatus, this.retryAfterSec});
   @override
   String toString() => 'CmatException($status): $message';
 }
@@ -127,7 +130,39 @@ class RadioPreset {
   final double bwKhz;
   final int sf;
   final int cr;
-  const RadioPreset({required this.name, required this.freqMhz, required this.bwKhz, required this.sf, required this.cr});
+
+  /// Where the numbers come from, when the server says (`published` = MeshCore's own list, `community-observed` =
+  /// measured from observers on the open analyzers). Null = the server did not say.
+  final String? basis;
+
+  /// The evidence link for [basis], and a free-text note (e.g. which band, how many observers). Both optional.
+  final String? source;
+  final String? note;
+  const RadioPreset(
+      {required this.name, required this.freqMhz, required this.bwKhz, required this.sf, required this.cr, this.basis, this.source, this.note});
+
+  /// Same numbers, with the provenance of [other] when this one has none (site-config carries the numbers, `/v1/regions`
+  /// the provenance).
+  RadioPreset withProvenance(RadioPreset? other) => other == null || other.freqMhz != freqMhz || other.sf != sf
+      ? this
+      : RadioPreset(
+          name: name, freqMhz: freqMhz, bwKhz: bwKhz, sf: sf, cr: cr, basis: basis ?? other.basis, source: source ?? other.source, note: note ?? other.note);
+}
+
+/// Why a region has no radio preset on file, as the server stores it (`regions.settings.radio_preset_none`): a
+/// researched country where a published frequency would be a guess or may be illegal. Shown as written.
+class PresetNone {
+  final String reason;
+  final String? source;
+  const PresetNone({required this.reason, this.source});
+
+  static PresetNone? tryParse(Object? j) {
+    if (j is! Map) return null;
+    final reason = j['reason'];
+    if (reason is! String || reason.trim().isEmpty) return null;
+    final src = j['source'];
+    return PresetNone(reason: reason.trim(), source: src is String && src.isNotEmpty ? src : null);
+  }
 }
 
 /// `GET /api/cmh/site-config`'s region and radio-preset fields. (The endpoint also carries viewerGate,
@@ -137,6 +172,13 @@ class SiteConfig {
 
   /// Null when the region has no suggested preset configured — a real, expected state, not an error.
   final RadioPreset? radioPreset;
+
+  /// Why there is no preset (`radioPresetNone`), when the server says. Only meaningful with a null [radioPreset].
+  final PresetNone? radioPresetNone;
+
+  /// The region's IANA time zone (`timezone`, e.g. `America/New_York`), when the server sends it. The server buckets a
+  /// region's days in this zone.
+  final String? timezone;
 
   /// What this server accepts beyond the basics (`site-config.capabilities`). Absent key = feature absent (an older
   /// server sends none). Only boolean `true` flags are kept here; the format lists are in [driveFormats] and
@@ -152,6 +194,8 @@ class SiteConfig {
   const SiteConfig({
     required this.region,
     this.radioPreset,
+    this.radioPresetNone,
+    this.timezone,
     this.capabilities = const {},
     this.driveFormats = const [],
     this.telemetryFormats = const [],
@@ -284,7 +328,10 @@ abstract class CmatClient {
   /// name, URL, bbox and boundary — used entirely on-device for live, local region awareness (lib/core/
   /// region_lookup.dart), never to decide a ping's region (the server already does that at upload time
   /// regardless of connectivity). Public: no driver key needed.
-  Future<List<RegionIndexEntry>> regionsIndex();
+  ///
+  /// [slugs] asks for just those regions at full outline detail (`?slug=a,b`); without it the whole list comes back with
+  /// outlines thinned to about 300 m.
+  Future<List<RegionIndexEntry>> regionsIndex({List<String>? slugs});
 
   /// `DELETE /api/cmh/drive-context?category=<id>` (`capabilities.driveContextErase`): erases the server's copy of one
   /// drive-context category (or `all`) for every drive of this driver. Idempotent. Throws [CmatException].

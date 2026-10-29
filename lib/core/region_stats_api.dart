@@ -7,6 +7,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'api.dart' show PresetNone, RadioPreset;
 import 'etag_client.dart';
 
 int? _int(Object? v) => v is num ? v.toInt() : null;
@@ -38,6 +39,33 @@ class RegionPublicStats {
         lastDriveAt: _time(j['lastDriveAt']),
         offlineAsOf: offlineAsOf,
       );
+}
+
+/// `GET /api/cmh/regions-figures`: the figures of every active region in ONE answer (the hub's cached numbers, the same
+/// aggregates each region's own `public-stats` serves). A region whose numbers cannot be computed right now maps to
+/// null ("unavailable"); one with no drives maps to a [RegionPublicStats] that [RegionPublicStats.isEmpty]. A region the
+/// answer does not mention is absent from [byCode] (the caller decides what that means; it is never a zero).
+class RegionsFigures {
+  final Map<String, RegionPublicStats?> byCode;
+  final DateTime? asOf;
+  const RegionsFigures(this.byCode, {this.asOf});
+
+  static RegionsFigures? tryParse(Object? j) {
+    if (j is! Map || j['regions'] is! List) return null;
+    final by = <String, RegionPublicStats?>{};
+    for (final e in j['regions'] as List) {
+      if (e is! Map || e['code'] is! String) continue;
+      final state = e['state'];
+      if (state == 'ok') {
+        by[e['code'] as String] = RegionPublicStats.fromJson(e.cast<String, dynamic>());
+      } else if (state == 'empty') {
+        by[e['code'] as String] = const RegionPublicStats(drives: 0);
+      } else {
+        by[e['code'] as String] = null; // "unavailable", or a state this app does not know: say so, show nothing
+      }
+    }
+    return RegionsFigures(by, asOf: _time(j['asOf']));
+  }
 }
 
 class LeaderRow {
@@ -104,11 +132,50 @@ class RegionGroupInfo {
   const RegionGroupInfo({required this.code, required this.name, required this.members});
 }
 
-/// `/v1/regions`: region code -> group code, and the groups.
+/// One region's row of `/v1/regions`: the numbers the app needs about a region that `regions-index` does not carry.
+class RegionCatalogEntry {
+  final String code;
+  final String? group;
+
+  /// `default_preset` with its provenance (`basis`, `source`, `note`); null when the region has none on file.
+  final RadioPreset? preset;
+
+  /// Why there is none, when the server says (`preset_none`); see [PresetNone].
+  final PresetNone? presetNone;
+
+  /// IANA time zone, when the server sends it.
+  final String? timezone;
+  const RegionCatalogEntry({required this.code, this.group, this.preset, this.presetNone, this.timezone});
+
+  static RegionCatalogEntry? tryParse(Object? e) {
+    if (e is! Map || e['code'] is! String) return null;
+    RadioPreset? preset;
+    final p = e['default_preset'];
+    if (p is Map) {
+      final f = p['freq_mhz'], bw = p['bw_khz'], sf = p['sf'], cr = p['cr'], name = p['name'];
+      if (name is String && f is num && bw is num && sf is num && cr is num) {
+        String? str(Object? v) => v is String && v.trim().isNotEmpty ? v.trim() : null;
+        preset = RadioPreset(
+            name: name, freqMhz: f.toDouble(), bwKhz: bw.toDouble(), sf: sf.toInt(), cr: cr.toInt(), basis: str(p['basis']), source: str(p['source']), note: str(p['note']));
+      }
+    }
+    final tz = e['timezone'];
+    return RegionCatalogEntry(
+      code: e['code'] as String,
+      group: e['group'] is String ? e['group'] as String : null,
+      preset: preset,
+      presetNone: preset == null ? PresetNone.tryParse(e['preset_none']) : null,
+      timezone: tz is String && tz.isNotEmpty ? tz : null,
+    );
+  }
+}
+
+/// `/v1/regions`: region code -> group code, the groups, and each region's catalogue row.
 class HubRegions {
   final Map<String, String> groupOf;
   final List<RegionGroupInfo> groups;
-  const HubRegions({this.groupOf = const {}, this.groups = const []});
+  final Map<String, RegionCatalogEntry> byCode;
+  const HubRegions({this.groupOf = const {}, this.groups = const [], this.byCode = const {}});
 
   factory HubRegions.fromJson(Map<String, dynamic> j) {
     final groups = <RegionGroupInfo>[];
@@ -124,7 +191,15 @@ class HubRegions {
         }
       }
     }
-    return HubRegions(groupOf: groupOf, groups: groups);
+    final byCode = <String, RegionCatalogEntry>{};
+    final r = j['regions'];
+    if (r is List) {
+      for (final e in r) {
+        final c = RegionCatalogEntry.tryParse(e);
+        if (c != null) byCode[c.code] = c;
+      }
+    }
+    return HubRegions(groupOf: groupOf, groups: groups, byCode: byCode);
   }
 }
 
@@ -133,7 +208,10 @@ class RegionStatsException implements Exception {
 
   /// True when the server could not be reached at all (no connection, timeout), not an error answer.
   final bool offline;
-  const RegionStatsException(this.message, {this.offline = false});
+
+  /// The HTTP status of an error answer (429 = the server asked for a pause), null when there was no answer.
+  final int? status;
+  const RegionStatsException(this.message, {this.offline = false, this.status});
   @override
   String toString() => message;
 }
@@ -163,6 +241,14 @@ class RegionStatsApi {
   Future<RegionLive> live() async => RegionLive.fromJson(await _get(_uri('/api/cmh/public-live')));
   Future<HubRegions> hubRegions() async => HubRegions.fromJson(await _get(_uri('/v1/regions')));
 
+  /// Every active region's figures in one read (server cache 5 minutes, ETag). Throws [RegionStatsException]: status 404 =
+  /// an older server without it, 429 = back off; the caller falls back to per-region reads only for the former.
+  Future<RegionsFigures> regionsFigures() async {
+    final f = RegionsFigures.tryParse(await _get(_uri('/api/cmh/regions-figures')));
+    if (f == null) throw const RegionStatsException('The server sent something unreadable.');
+    return f;
+  }
+
   Future<Map<String, dynamic>> _get(Uri u) async => (await _getWithAsOf(u)).$1;
 
   /// The decoded body and, when it is the stored copy served offline, its fetch time.
@@ -175,7 +261,7 @@ class RegionStatsApi {
     } catch (_) {
       throw const RegionStatsException('Could not reach the server. Check your connection.', offline: true);
     }
-    if (res.statusCode != 200) throw RegionStatsException('The server answered ${res.statusCode}.');
+    if (res.statusCode != 200) throw RegionStatsException('The server answered ${res.statusCode}.', status: res.statusCode);
     try {
       final b = jsonDecode(utf8.decode(res.bodyBytes));
       if (b is Map<String, dynamic>) return (b, offlineAsOfOf(res));
