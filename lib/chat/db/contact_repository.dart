@@ -96,6 +96,9 @@ ON CONFLICT(radio_id, pubkey) DO UPDATE SET type=excluded.type, name=excluded.na
   void setForceFlood(String radioId, String key, bool v) =>
       db.raw.execute('UPDATE contacts SET force_flood = ? WHERE radio_id = ? AND pubkey = ?', [v ? 1 : 0, radioId, key.toLowerCase()]);
 
+  void setRadioFlags(String radioId, String key, int flags) =>
+      db.raw.execute('UPDATE contacts SET radio_flags = ? WHERE radio_id = ? AND pubkey = ?', [flags, radioId, key.toLowerCase()]);
+
   void setOnRadio(String radioId, String key, bool v) =>
       db.raw.execute('UPDATE contacts SET on_radio = ? WHERE radio_id = ? AND pubkey = ?', [v ? 1 : 0, radioId, key.toLowerCase()]);
 

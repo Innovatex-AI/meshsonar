@@ -981,7 +981,24 @@ class SimulatedRadioScanner implements RadioScanner {
   /// See [SimulatedTransport.injectDirectMessage].
   bool injectDirectMessage(String from, String text) => lastTransport?.injectDirectMessage(from, text) ?? false;
 
-  SimulatedRadioScanner({this.location, this.seed, this.timeScale = 1.0, this.clock, this.firmwareVersion = 'v1.18.0-sim'});
+  /// Contact table of the simulated radio: its size (DEVICE_INFO), how many extra made-up contacts it starts with, whether it
+  /// has the auto-add config commands, and the pause between CONTACT frames (ms before [timeScale]).
+  final int maxContacts;
+  final int extraContacts;
+  final bool autoAddSupported;
+  final int contactFramePaceMs;
+
+  SimulatedRadioScanner({
+    this.location,
+    this.seed,
+    this.timeScale = 1.0,
+    this.clock,
+    this.firmwareVersion = 'v1.18.0-sim',
+    this.maxContacts = 100,
+    this.extraContacts = 0,
+    this.autoAddSupported = true,
+    this.contactFramePaceMs = 10,
+  });
 
   @override
   Stream<List<RadioDevice>> scan({Duration timeout = const Duration(seconds: 8)}) async* {
@@ -993,7 +1010,15 @@ class SimulatedRadioScanner implements RadioScanner {
   Future<ByteTransport> connect(RadioDevice device) async {
     if (device.id != SimulatedRadioScanner.device.id) throw StateError('unknown simulated device ${device.id}');
     final t = SimulatedTransport(
-        location: location, seed: seed, timeScale: timeScale, clock: clock, firmwareVersion: firmwareVersion);
+        location: location,
+        seed: seed,
+        timeScale: timeScale,
+        clock: clock,
+        firmwareVersion: firmwareVersion,
+        maxContacts: maxContacts,
+        extraContacts: extraContacts,
+        autoAddSupported: autoAddSupported,
+        contactFramePaceMs: contactFramePaceMs);
     lastTransport = t;
     return t;
   }

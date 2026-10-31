@@ -279,22 +279,26 @@ class ContactManager {
       _changed();
     }
 
-    final d = await p.download(
-        // a contact whose lastmod equals the cursor may have changed again in the same second: ask from one earlier
-        since: since > 0 ? since - 1 : 0,
-        onContact: (c, received, total) {
-          if (!isHex(c.publicKey, 64)) return;
-          final key = c.publicKey.toLowerCase();
-          seen.add(key);
-          if (removed.contains(key)) {
-            stale.add(key);
-          } else {
-            batch.add(c.copyWith(onRadio: true));
-          }
-          if (batch.length >= 25) flush();
-          if (received % 10 == 0 || received == total) _set(_state.copyWith(received: received, total: total));
-        });
-    flush();
+    final ContactDownload d;
+    try {
+      d = await p.download(
+          // a contact whose lastmod equals the cursor may have changed again in the same second: ask from one earlier
+          since: since > 0 ? since - 1 : 0,
+          onContact: (c, received, total) {
+            if (!isHex(c.publicKey, 64)) return;
+            final key = c.publicKey.toLowerCase();
+            seen.add(key);
+            if (removed.contains(key)) {
+              stale.add(key);
+            } else {
+              batch.add(c.copyWith(onRadio: true));
+            }
+            if (batch.length >= 25) flush();
+            if (received % 10 == 0 || received == total) _set(_state.copyWith(received: received, total: total));
+          });
+    } finally {
+      flush(); // whatever arrived before a failure is kept: the next try starts from the same cursor and merges idempotently
+    }
     // A full list is the whole truth about the radio's table.
     if (since == 0) store.contacts.clearOnRadioExcept(id, seen);
     for (final k in stale) {
@@ -354,7 +358,7 @@ class ContactManager {
       if (((c.radioFlags & 1) != 0) == c.favourite) continue;
       try {
         await p.upload(_forRadio(c));
-        store.contacts.upsert(c.copyWith(radioFlags: _flagsFor(c)));
+        store.contacts.setRadioFlags(id, c.publicKey, _flagsFor(c)); // targeted: the user may have edited the contact meanwhile
       } on ContactTableFull {
         return;
       }
@@ -393,7 +397,8 @@ class ContactManager {
       }
       try {
         await p.upload(_forRadio(c));
-        store.contacts.upsert(c.copyWith(onRadio: true, radioFlags: _flagsFor(c)));
+        store.contacts.setOnRadio(id, c.publicKey, true);
+        store.contacts.setRadioFlags(id, c.publicKey, _flagsFor(c));
         used++;
       } on ContactTableFull {
         _set(_state.copyWith(tableFull: true));
@@ -426,7 +431,9 @@ class ContactManager {
     if (c.onRadio && !force) return;
     final there = await p.fetch(key);
     if (there != null) {
-      store.contacts.upsert(c.copyWith(onRadio: true, outPath: there.outPath, outPathLen: there.outPathLen, radioFlags: there.radioFlags, lastMod: there.lastMod));
+      store.contacts.setOnRadio(id, key, true);
+      store.contacts.setPath(id, key, there.hasPath ? there.outPath : null, there.hasPath ? there.outPathLen : -1);
+      store.contacts.setRadioFlags(id, key, there.radioFlags);
       _changed();
       return;
     }
@@ -436,7 +443,8 @@ class ContactManager {
   Future<void> _uploadWithRoom(ContactRadioPort p, String id, Contact c) async {
     Future<void> put() async {
       await p.upload(_forRadio(c));
-      store.contacts.upsert(c.copyWith(onRadio: true, radioFlags: _flagsFor(c)));
+      store.contacts.setOnRadio(id, c.publicKey, true);
+      store.contacts.setRadioFlags(id, c.publicKey, _flagsFor(c));
       final n = _state.radioCount;
       _set(_state.copyWith(radioCount: n == null ? null : n + 1));
     }
@@ -483,7 +491,12 @@ class ContactManager {
         }
         return;
       }
+      final was = store.contacts.get(id, key)?.onRadio ?? false;
       _mergeFromRadio(id, rc.copyWith(onRadio: true));
+      if (!was) {
+        final n = _state.radioCount;
+        if (n != null) _set(_state.copyWith(radioCount: n + 1));
+      }
       _refreshedMs[key] = nowMs();
       _changed();
     } catch (_) {
@@ -527,7 +540,7 @@ class ContactManager {
 
   /// PUSH_CONTACTS_FULL: a node was heard and there was no room.
   void radioFull() {
-    _set(_state.copyWith(tableFull: true));
+    _set(_state.copyWith(tableFull: true, radioCount: _state.capacity ?? _state.radioCount));
     _changed();
   }
 
@@ -680,7 +693,7 @@ class ContactManager {
     final c = store.contacts.get(id, publicKey);
     final p = _port;
     if (c != null && c.onRadio && p != null && p.isConnected) {
-      unawaited(p.upload(_forRadio(c)).then((_) => store.contacts.upsert(c.copyWith(radioFlags: _flagsFor(c)))).catchError((Object _) {}));
+      unawaited(p.upload(_forRadio(c)).then((_) => store.contacts.setRadioFlags(id, c.publicKey, _flagsFor(c))).catchError((Object _) {}));
     }
   }
 
@@ -747,16 +760,15 @@ class ContactManager {
     final id = radioId;
     if (id == null) return;
     final key = publicKey.toLowerCase();
-    final c = store.contacts.get(id, key);
     store.contacts.delete(id, key);
     _changed();
-    if (c == null || !c.onRadio) return;
+    // Even a contact the phone believes is not on the radio may be (the radio can add nodes by itself): always ask the radio.
     final p = _port;
     if (p != null && p.isConnected) {
       try {
-        await p.remove(key);
+        final had = await p.remove(key);
         final n = _state.radioCount;
-        _set(_state.copyWith(radioCount: n == null ? null : (n - 1).clamp(0, 1 << 20), tableFull: false));
+        if (had) _set(_state.copyWith(radioCount: n == null ? null : (n - 1).clamp(0, 1 << 20), tableFull: false));
         return;
       } catch (_) {}
     }
