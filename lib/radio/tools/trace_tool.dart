@@ -216,6 +216,24 @@ class FileTraceStore extends TraceStore {
   final File file;
   FileTraceStore(this.file, {super.max, super.initial});
 
+  /// Synchronous load for the app's start (a small file); a damaged file only costs the saved traces.
+  static FileTraceStore openSync(File file, {int max = 40}) {
+    final items = <TraceResult>[];
+    try {
+      if (file.existsSync()) {
+        final raw = jsonDecode(file.readAsStringSync());
+        if (raw is List) {
+          for (final e in raw) {
+            try {
+              items.add(TraceResult.fromJson((e as Map).cast<String, dynamic>()));
+            } catch (_) {}
+          }
+        }
+      }
+    } catch (_) {}
+    return FileTraceStore(file, max: max, initial: items);
+  }
+
   /// Loads the file; a damaged file only costs the saved traces.
   static Future<FileTraceStore> open(File file, {int max = 40}) async {
     final items = <TraceResult>[];
