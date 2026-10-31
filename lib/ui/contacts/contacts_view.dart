@@ -154,27 +154,25 @@ class _ContactsViewState extends State<ContactsView> {
           ),
         ]),
         const SizedBox(height: Gap.s),
-        SizedBox(
-          height: 48,
-          child: ListView(
-            key: const Key('contacts-filters'),
-            scrollDirection: Axis.horizontal,
-            children: [
-              for (final f in ContactFilter.values)
-                Padding(
-                  padding: const EdgeInsets.only(right: Gap.s),
-                  child: Center(
-                    child: ChoiceChip(
-                      key: Key('filter-${f.name}'),
-                      materialTapTargetSize: MaterialTapTargetSize.padded,
-                      label: Text(f.label),
-                      selected: _c.filter == f,
-                      onSelected: (_) => _c.setFilter(f),
-                    ),
+        SingleChildScrollView(
+          key: const Key('contacts-filters'),
+          scrollDirection: Axis.horizontal,
+          child: Row(children: [
+            for (final f in ContactFilter.values)
+              Padding(
+                padding: const EdgeInsets.only(right: Gap.s),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 48),
+                  child: ChoiceChip(
+                    key: Key('filter-${f.name}'),
+                    materialTapTargetSize: MaterialTapTargetSize.padded,
+                    label: Text(f.label),
+                    selected: _c.filter == f,
+                    onSelected: (_) => _c.setFilter(f),
                   ),
                 ),
-            ],
-          ),
+              ),
+          ]),
         ),
         if (_m.connected && s.radioCount != null && s.capacity != null)
           Align(
