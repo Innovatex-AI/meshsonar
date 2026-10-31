@@ -37,7 +37,14 @@ class RemoteLogin {
   /// The repeater says this login may run CLI commands (its ACL role is admin).
   final bool isAdmin;
   final int? firmwareLevel;
-  const RemoteLogin({required this.isAdmin, this.firmwareLevel});
+
+  /// The permission byte the repeater / room stored for this login (low two bits: 0 guest, 1 read only, 2 read and write,
+  /// 3 admin); null on old firmware that does not send it. A room needs read and write to accept posts.
+  final int? aclPermissions;
+  const RemoteLogin({required this.isAdmin, this.firmwareLevel, this.aclPermissions});
+
+  /// This login may post to a room (read and write, or admin).
+  bool get canPost => isAdmin || ((aclPermissions ?? 0) & 3) >= 2;
 }
 
 abstract class ClaimRadio {

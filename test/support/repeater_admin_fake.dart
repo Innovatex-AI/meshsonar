@@ -123,6 +123,8 @@ class FakeAdminRepeater {
     'mqtt6.diag': '> not configured',
   };
 
+  /// Room posts: (author key hex, 4-byte prefix) and text. Room servers push them to every client that logs in.
+  final List<({String authorHex, String text, int ts})> roomPosts = [];
   final Map<String, int> _lastTs = {};
   final Set<String> sessions = {}; // client keys with a login
 
@@ -218,6 +220,19 @@ class FakeAdminRepeater {
       acl[clientKeyHex] = 3;
       sessions.add(clientKeyHex);
       return 3;
+    }
+    if (role == 'room') {
+      // MyMesh.cpp (room server): the room password gives read and write; allow.read.only lets anyone in as a guest
+      if (password == guestPassword) {
+        sessions.add(clientKeyHex);
+        acl[clientKeyHex] = 2;
+        return 2;
+      }
+      if (prefs['allow.read.only'] == 'on') {
+        sessions.add(clientKeyHex);
+        return 0;
+      }
+      return null;
     }
     if (guestPassword.isNotEmpty ? password == guestPassword : password.isEmpty) {
       sessions.add(clientKeyHex);
@@ -735,6 +750,13 @@ class AdminFakeTransport implements ByteTransport {
     if (perm == null) return;
     r._lastTs[keyHex] = _radioNow;
     _emit(encodeLoginSuccess(r.key, isAdmin: perm == 3, aclPermissions: perm));
+    if (r.role == 'room') {
+      // a room pushes what the client has not seen (sync_since = 0 here), signed-plain, after the login answer
+      for (final p in r.roomPosts) {
+        _queue.add(encodeContactText(r.key, p.text, txtType: 2, timestamp: p.ts, signer4: fromHex(p.authorHex).take(4).toList()));
+      }
+      if (r.roomPosts.isNotEmpty) _emit(encodeMsgWaiting());
+    }
   }
 
   void _binary(Uint8List f, {required bool anon}) {
@@ -796,6 +818,20 @@ class AdminFakeTransport implements ByteTransport {
     final r = _byPrefix(f.sublist(7, 13));
     if (r == null || !contacts.contains(r.keyHex)) {
       _emit(encodeErr(ErrCode.notFound));
+      return;
+    }
+    if (f[1] == 0 && r.role == 'room') {
+      // a post: plain text to the room. Guests (perm 0) get nothing; others are posted and echoed to everyone, signed.
+      _emit(encodeSent(tag: ++_tag, estTimeoutMs: 400));
+      final perm = (r.acl[keyHex] ?? 0) & 3;
+      if (!r.inRange || !r.sessions.contains(keyHex) || perm < 2 && r.guestPassword != '') {
+        if (perm < 2) return;
+      }
+      final text = utf8.decode(f.sublist(13));
+      final ts = ByteData.sublistView(f).getUint32(3, Endian.little);
+      r.roomPosts.add((authorHex: keyHex, text: text, ts: ts));
+      _queue.add(encodeContactText(r.key, text, txtType: 2, timestamp: ts, signer4: publicKey.take(4).toList()));
+      _emit(encodeMsgWaiting());
       return;
     }
     if (f[1] != txtTypeCliData) {

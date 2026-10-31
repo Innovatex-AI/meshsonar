@@ -826,7 +826,7 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
         _lastCliTs.remove(pubkeyHex.toLowerCase());
         final seed = await _cliTimestamp(pubkeyHex.toLowerCase());
         _lastCliTs[pubkeyHex.toLowerCase()] = seed;
-        return RemoteLogin(isAdmin: f.isAdmin, firmwareLevel: f.firmwareLevel);
+        return RemoteLogin(isAdmin: f.isAdmin, firmwareLevel: f.firmwareLevel, aclPermissions: f.aclPermissions);
       }
       throw const ClaimRadioException(ClaimRadioError.radio, 'the repeater refused the login');
     } finally {
