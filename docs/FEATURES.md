@@ -663,8 +663,12 @@ meshsonar-infra planning `stream-7-data-collection.md`.
 - **Weather** (the switch plus the drive report block below): the Weather switch is the `session.enrich.weather` flag of a v1.2 upload (live in the switch's status when the upload server says `driveEnv` and accepts v1.2); the server looks up Open-Meteo for an uploaded drive
   (about a 5 km cell, UTC hour) and the app shows its answer; the phone contacts no weather service and shows no
   coordinate.
-- **Drive report, Weather**: shown only when `site-config.capabilities.driveEnv` is true, the driver key is approved,
-  the Weather category is on and the drive has been uploaded (otherwise the block is absent, nothing invented). Asked
+- **Drive report, Weather**: always present, never silent. The server is only asked when `driveEnv` is true (upload
+  server first, then the viewed region), the driver key is approved, the Weather category is on and the drive has
+  uploaded; otherwise the block says which of these is missing (`AppState.driveWeatherGate`) or, for a drive not yet
+  uploaded, that weather is added after upload (the server waits until the drive has been quiet for 2 hours, then
+  runs every 30 minutes: expect 2 to 3 hours after the drive ends). The weather choice is also re-sent for drives the
+  server holds with the other choice (uploaded as plain v1, or Weather switched on or off since; drives under 60 days). Asked
   once when the block scrolls into view (`GET drive-env`, `lib/core/drive_env_cache.dart`): a `ready` answer is kept
   on disk for 1 hour (and is dropped when the server's weather is erased or the Weather switch goes off), `pending` / `disabled` / `unavailable` are asked again only after 5 minutes, at most 50 asks a
   minute, and a failed ask shows the stored copy as "Offline - as of ...". Content: summary tiles (temperature, dew

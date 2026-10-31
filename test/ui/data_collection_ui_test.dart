@@ -319,6 +319,18 @@ void main() {
       await tester.scrollUntilVisible(find.byKey(const Key('report-context-none')), 300, scrollable: list());
       expect(find.byKey(const Key('report-context-none')), findsOneWidget);
     });
+
+    testWidgets('a drive without context names the categories that are off', (tester) async {
+      final h = Harness();
+      h.settings.saved = h.settings.saved.withCollection('barometer', false).withCollection('motion', false);
+      h.store.seed(DriveSession(id: 'old', startedAt: t0, endedAt: t0.add(const Duration(minutes: 1))),
+          [DrivePing(id: 'x', ts: t0, lat: 40.1, lon: -82.9)]);
+      await openReport(tester, h, 'old');
+      await tester.scrollUntilVisible(find.byKey(const Key('report-context-none')), 300, scrollable: list());
+      final t = tester.widget<Text>(find.byKey(const Key('report-context-none'))).data!;
+      expect(t, contains('Off right now:'));
+      expect(t, contains('Motion and altitude'));
+    });
   });
 
   test('disclosure heading constants', () {

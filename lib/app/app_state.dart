@@ -64,6 +64,9 @@ class ProblemReportOutcome {
   const ProblemReportOutcome({required this.sent, required this.message, this.rejected = false});
 }
 
+/// Whether a drive report can ask the server for weather (see [AppState.driveWeatherGate]).
+enum DriveWeatherGate { ok, switchedOff, noApprovedKey, serverDoesNot }
+
 class AppState extends ChangeNotifier {
   final AppServices services;
   AppState(this.services);
@@ -131,7 +134,18 @@ class AppState extends ChangeNotifier {
   }
 
   /// The server looks up weather for uploaded drives, this driver key is approved and the weather category is on.
-  bool get driveWeatherEnabled => (siteConfig?.driveEnv ?? false) && keyApproved && collectionOn('weather');
+  bool get driveWeatherEnabled => driveWeatherGate == DriveWeatherGate.ok;
+
+  /// Why the drive report can or cannot show weather, so it can say so instead of staying silent. The server check
+  /// reads the upload server's capabilities first (that is the server the drive goes to), then the viewed region's;
+  /// when neither is known the ask is made and its own answer or error is shown.
+  DriveWeatherGate get driveWeatherGate {
+    if (!collectionOn('weather')) return DriveWeatherGate.switchedOff;
+    if (!keyApproved) return DriveWeatherGate.noApprovedKey;
+    final caps = uploadSiteConfig ?? siteConfig;
+    if (caps != null && !caps.driveEnv) return DriveWeatherGate.serverDoesNot;
+    return DriveWeatherGate.ok;
+  }
 
   /// Server weather for the uploaded drive [sessionId], from the on-disk cache while fresh. Throws [CmatException].
   Future<DriveEnvResult> driveWeather(String sessionId) {
@@ -1180,6 +1194,20 @@ class AppState extends ChangeNotifier {
     return uploadSiteConfig;
   }
 
+  /// The Weather switch changed: send the new choice (`session.enrich.weather`) for drives the server already holds.
+  Future<void> _weatherChoiceChanged() async {
+    try {
+      if (!(serverAcceptsDriveContext && keyApproved && _settings.autoSync)) return;
+      final s = _syncService;
+      if (s is DefaultSyncService) {
+        _logSync('Weather choice', await s.syncContextOnly());
+        await refreshSessions();
+      }
+    } catch (e) {
+      _logError('Sending the weather choice failed', e);
+    }
+  }
+
   /// Once the upload server's capabilities are known: finish erase requests that could not go through, and (once per
   /// run and server) deliver the context of drives that were uploaded before the server accepted it.
   Future<void> _afterUploadCaps(String server) async {
@@ -1188,7 +1216,10 @@ class AppState extends ChangeNotifier {
       if (serverAcceptsDriveContext && keyApproved && _settings.autoSync && _contextCatchUp.add(server)) {
         final s = _syncService;
         if (s is DefaultSyncService) {
-          _logSync('Drive context catch-up', await s.syncContextOnly());
+          final r = await s.syncContextOnly();
+          _logSync('Drive context catch-up', r);
+          // Offline or rate limited: the catch-up is tried again with the next capabilities refresh, not skipped for the run.
+          if (r.error != null) _contextCatchUp.remove(server);
           await refreshSessions();
         }
       }
@@ -2369,12 +2400,15 @@ class AppState extends ChangeNotifier {
       _tracker.reset();
     }
     if (_settings.telemetryEnabled && !s.telemetryEnabled) _telemetry?.discard(); // the opt-out takes effect at once
+    final prevWeather = _settings.collectionOn(CategoryId.weather);
     final switchedOff = [
       for (final c in dataCategories)
         if (c.id != CategoryId.packetHeaders && _settings.collectionOn(c.id) && !s.collectionOn(c.id)) c.id,
     ];
     _settings = s;
     if (switchedOff.isNotEmpty) unawaited(_contextCategoriesOff(switchedOff)); // unsent context is stripped, weather erased
+    // Weather switched on or off: drives the server holds with the other choice get the new one (one small request each).
+    if (s.collectionOn(CategoryId.weather) != prevWeather) unawaited(_weatherChoiceChanged());
     heard.holdPings = s.heardHoldPings; // the heard list's live/stale rule follows the slider at once, even mid-drive
     _scheduleDriveSync(); // in-drive upload follows the toggles, the period and the key status
     _applyPingCadence(s);

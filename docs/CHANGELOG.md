@@ -5,6 +5,17 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- **Weather and drive-data logging fixes (test drive: "weather not being logged").** Root causes: (1) a drive that
+  went up as plain v1 (site-config not answered in time, or Weather switched on after the upload) never told the server
+  `enrich.weather=true`, and nothing sent it later, so the server never looked the drive up; (2) the drive report hid
+  the whole Weather block (silence) when the viewed region's site-config had not loaded, the key was not approved, the
+  switch was off or the drive had not uploaded; (3) the "pending" text promised 30 minutes while the server also waits
+  2 hours after the last upload (real delay 2 to 3 hours); (4) the launch catch-up was marked done for the run even when
+  it failed offline. Fixed: the weather choice is part of the session fingerprint, so a drive the server holds with the
+  other choice gets one small ping-less v1.2 upload (also when Weather is switched on or off, and on the next launch);
+  drives older than 60 days are left alone. The report block always shows (switch off, no approved key, server does no
+  weather, not uploaded yet with the real delay, pending, unavailable with the privacy-trim reason) and "no context
+  recorded" names the categories that are off.
 - **The Simulator is out of release builds.** `simulatorAvailable` (`lib/app/build_flags.dart`) is `kDebugMode ||
   --dart-define=MESHSONAR_SIMULATOR=true`: the Connect screen entry, the onboarding button and the simulator's code are
   gone from the App Store / TestFlight app (checked by `scripts/verify_release_no_sim.sh`). Debug builds and tests keep
