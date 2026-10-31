@@ -169,8 +169,10 @@ holding, each with a distance label), **repeater markers** (amber diamonds that 
 while holding and grey out when stale; the CMAT list plus heard repeaters found in the public directory, plus the
 simulator's repeaters in Simulator mode), **ping dots**, and the current **position**.
 
-- Ping colours: **red** = heard nothing. Heard pings are coloured by best SNR on a **−10 → +10 dB** scale (blue → teal
-  → green), or plain green in "Heard / not" mode. Unknown SNR shows mid teal. The newest dot pulses once.
+- Ping colours (standard palette; see [Map legend and colour palettes](#map-legend-and-colour-palettes)): **grey** = heard
+  nothing, **purple** = heard but no signal reading, and heard pings are coloured by best SNR on a **−10 → +10 dB** scale
+  (blue → teal → green), or plain green in "Heard / not" mode. Strength colours are only ever used for a measured SNR.
+  The newest dot pulses once.
 - **Follow mode** keeps the position centred. Dragging turns it off and shows **Recenter** (`map-recenter`).
 - **Link lines**: tap a repeater and a line runs to every cell it was heard in; tap a coverage cell and a line runs to every repeater heard there, coloured and labelled by best SNR (strongest 24 labelled, 250 max), with a Fit / Clear chip. Needs an approved key and the server's `cellLinks` (cells) or `reachDriverKey` (repeaters) capability; public drives only.
 - **Repeater names** are written beside every repeater marker (layers sheet > Network > Repeater names, on by default and
@@ -236,6 +238,57 @@ Building blocks behind the layers above (stream-1-maps.md), in `ui/map/layers/` 
 compact **Stop / Ping now** buttons (bottom-right half in landscape). **Two-finger rotate** is enabled, and a compass
 returns to north-up. It respects safe areas. It shares the `DriveMapModel` with the Drive screen, so the selection,
 layers and GPS stream are shared.
+
+## Map legend and colour palettes
+
+**Legend & Info** (`ui/map/legend_sheet.dart`, `legend-sheet`). A bottom sheet that explains every colour and symbol on the
+maps in plain words with the real swatches (they are drawn by the same functions as the map, so they cannot disagree):
+**Your pings** (the SNR scale with its -10 / 0 / +10 dB samples, grey = nothing heard, purple = heard but no signal
+reading; in "Heard / not" mode the single heard colour and grey), **Network coverage cells** (the steps of the map's
+current Colour by mode with their dB / % / dBm ranges, "mapped, nothing heard" grey, "heard, signal unknown" purple, and
+the faded look of a cell with fewer than 3 pings; chips switch the mode inside the sheet only), **Repeaters** (amber tower
+for repeaters this drive heard; advert age 24 h / 7 d / 30 d / older; room-server ring), **Link lines** (orange and solid in
+the standard palette, dashed and achromatic in the other two; the label is the best SNR), **Observers** (filled = online,
+hollow grey = offline), **The heard box** (bright / dimmer / faint bars), **Owned by you** (the real chip), and **Why**
+(what a hexagon is, why a cell can be grey, what SNR means, why colours fade; expandable). Opened from the info icon in
+the Map layers sheet header (`layers-legend`, so from the Drive map and the full-screen map) and from Settings > About >
+**Map legend** (`map-legend`). Rows are one spoken item each (VoiceOver says what the colour means), at least 48 px tall,
+and wrap at the largest Dynamic Type.
+
+**Colour palette** (Settings > Units & display > Colour palette, `colour-palette`; setting `colour_palette` in settings.json,
+default `standard`, an unknown or missing value reads as standard). One choice recolours every strength colour at once:
+your hexes and ping dots, network coverage cells and repeater age dots, link-line labels, heard-box SNR, ping log and
+ping sheets, drive report charts and the legend. Every call site reads the colours from `MeshSonarColors` (a theme
+extension rebuilt when the setting changes: `levelStrong/Good/Fair/Weak`, `snrStops`, `silent`, `heardUnknown`,
+`linkLine`); no screen hardcodes a strength hex. The meaning never changes: grey = mapped, nothing heard; purple = heard,
+signal unknown; strength colours only for a measured SNR; cells with fewer than 3 pings are fainter (`cellAlphas`).
+
+Link lines: the standard palette keeps orange `#FF6D00`, solid, with a dark casing. Colour-blind safe and High contrast use
+orange and yellow for strength, so their link lines are **achromatic and dashed** (9 on, 5 off, 3 px, with a contrasting
+casing): near-white on the dark map, near-black on the light map, at least 12:1 against the tiles.
+
+Exact values (sRGB; the website copies these, also in `meshsonar-infra/docs/planning/colour-palettes-2026-10-31.md`). Order
+is strong, good, fair, weak (network steps: SNR >= +5, 0 to +5, -5 to 0, below -5 dB), then grey, purple. Ping scale stops
+run evenly from -10 to +10 dB.
+
+| palette / theme | strong | good | fair | weak | grey | purple | ping scale stops | link line |
+|---|---|---|---|---|---|---|---|---|
+| standard dark | `79BE69` | `6AAEE0` | `E2B04A` | `F07B6B` | `8D99A6` | `B59AE0` | `3B8FD6 3EE0CF 8CF58A` | `FF6D00` solid |
+| standard light | `2F7A3B` | `2A6B9C` | `B07D16` | `B23B2E` | `8795A1` | `8A63C9` | `2468B8 00897B 2E9E3A` | `FF6D00` solid |
+| colour-blind dark | `2B8CE0` | `8EDBFF` | `EDDD55` | `D25637` | `8D99A6` | `B356A4` | `D25637 EDDD55 8EDBFF 2B8CE0` | `F4F7F9` dashed, casing `0D1B26` 85% |
+| colour-blind light | `0A4FA0` | `1E88C8` | `9C7F06` | `762608` | `8795A1` | `8E5A8A` | `762608 9C7F06 004E66 0A4FA0` | `0C1E28` dashed, casing `FFFFFF` 85% |
+| high contrast dark | `86CAFE` | `BDE8F2` | `FEE405` | `FE831A` | `A3AEBA` | `D68BD0` | `FE831A FEE405 BDE8F2 86CAFE` | as colour-blind dark |
+| high contrast light | `001365` | `0A58C4` | `8B640C` | `7F2606` | `5F6C78` | `6E5C91` | `7F2606 8B640C 004E66 001365` | as colour-blind light |
+
+Validation (`test/ui/palette_test.dart`, `test/support/colour_science.dart`, run on every `flutter test`): each colour goes
+sRGB to linear RGB, through the Machado, Oliveira and Fernandes (2009) severity-1.0 matrices for protanopia, deuteranopia and
+tritanopia, to CIE Lab (D65), and pairs are compared with CIEDE2000. Asserted: all pairs among the six colours >= 10 under
+normal vision (all palettes); >= 10 under each deficiency for Colour-blind safe and >= 8 for High contrast (standard is
+reported, not guaranteed: its worst pair is 1.3 under deuteranopia, which is why the other palettes exist); the blended
+ping scale never comes within 8 of grey or purple in the two accessible palettes; strength colours reach 3:1 against the
+map tiles (7:1 dark / 4.5:1 light for High contrast). The accessible palettes' light-mode ping scale runs brown, gold,
+dark teal, blue because a light-blue middle would blend to grey. Repeater roster status colours (active, quiet, new, stale)
+are activity states, not signal strength, and are not part of the palette.
 
 ## Connect a radio
 
@@ -430,6 +483,7 @@ it."); `test/ui/settings_no_dead_end_test.dart` enforces it.
 | | **Connected to** (`site-region`), **Radio preset** (`site-radio-preset`) | From `GET /api/cmh/site-config`, shown only once it has answered. The preset row compares the region's suggested preset with the connected radio's own ("Yours"); states: no preset, preset with no radio, both. Information only: the app never writes to the radio. |
 | Units & display (`display`) | **Units** | Auto / Metric / Imperial with the explanation of what Auto resolves to on this phone ("Auto follows your phone's region: imperial in the US, Liberia and Myanmar, metric elsewhere. Showing imperial (ft, mi, mph)."). Stored data never changes. With any per-quantity unit set it says which ("Own choice below: speed in mph") and offers **Make every quantity follow Units** (Undo in the snackbar). |
 | | **Distance**, **Speed**, **Height and altitude**, **Temperature**, **Air pressure** (`unit-*`) | Each "Follows Units" by default; tap for a picker: Follow / Metric / Imperial (temperature °C / °F; pressure hPa / inHg / mmHg). Applies everywhere numbers are shown (all formatting goes through `core/units.dart`; reports say e.g. "Units: metric, with speed in mph"). Saved as `unit_overrides` in settings.json. |
+| | **Colour palette** | Standard, Colour-blind safe, High contrast, each with a strip of its real colours; applies everywhere at once (see [Map legend and colour palettes](#map-legend-and-colour-palettes)). |
 | | **Heard list hold** | 1–10 pings (default 3). |
 | Map & offline maps (`maps`) | **Offline maps** | Opens the offline map packs screen (download, update, delete per region). |
 | Privacy & data sharing (`privacy`) | **One switch per data category** | From the registry in `ui/settings/data_sharing.dart`; today only **Share packet headers** (`telemetry-toggle`). On by default (opt-out). The row shows its state: off, on but waiting for a key, or N headers waiting on the phone. Turning it **on** asks first and lists exactly what is shared and never shared. Turning it **off** stops collection at once and deletes the unsent queue; with a key it then offers to erase the server copy (`DELETE /api/cmh/telemetry`). |
@@ -452,7 +506,7 @@ it."); `test/ui/settings_no_dead_end_test.dart` enforces it.
 | | **Unsent problem report** | Only when one is saved; **Discard** (asks). |
 | Diagnostics (`diagnostics`) | **Diagnostic log** | Memory-only log since the app started. View (shown redacted), **Copy** (app line + settings snapshot + log, through `core/redact.dart`: keys/tokens/passwords replaced, coordinates rounded to 3 decimals; the snackbar says how many were hidden/rounded), **Clear** (asks). |
 | | **Report a problem** (`report-problem`) | See [Report a problem](#report-a-problem). |
-| About (`about-section`) | **About MeshSonar**, **Show the welcome tour** | Version and licences; reopens the intro. |
+| About (`about-section`) | **About MeshSonar**, **Map legend**, **Show the welcome tour** | Version and licences; the Legend & Info sheet; reopens the intro. |
 
 The first-run disclosure sheet lists every registry category with exactly what is shared and never shared, where it
 goes, and "Change your mind any time in Settings, under Privacy & data sharing"; both choices stay pinned on screen.

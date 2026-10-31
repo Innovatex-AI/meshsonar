@@ -18,6 +18,14 @@ enum CoverageColorBy { snr, heard, noise }
 /// means something WAS heard but no signal strength was measured: its own colour, never green.
 enum CoverageLevel { none, unknown, weak, fair, good, strong }
 
+/// A cell with fewer pings than this is a thin sample and is drawn fainter than a properly measured one.
+const int kMinCellPings = 3;
+
+/// How strongly a network cell is drawn: (fill alpha, outline alpha). Nothing heard is the faintest of all, then a thin
+/// sample ([pings] below [kMinCellPings]), then a measured cell. The map and the legend both use this.
+(double, double) cellAlphas(CoverageLevel level, int pings) =>
+    level == CoverageLevel.none ? (0.16, 0.45) : (pings < kMinCellPings ? (0.17, 0.5) : (0.34, 0.8));
+
 /// One drawable network-coverage cell: a boundary (square or hexagon corners) and the bucket it falls in.
 class NetworkCell {
   /// H3 hex id, or a synthetic `lat,lon` id for a square cell.

@@ -5,6 +5,19 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- **Map legend (Legend & Info).** One sheet explains every colour and symbol on the maps, with the real swatches in your
+  colour palette and the map's current Colour by mode: your pings (grey = nothing heard, purple = heard but no signal
+  reading), network cells (SNR steps with dB ranges, share heard, noise, grey, purple, faded under 3 pings), repeaters (advert
+  age), link lines, observers, the heard box, "Owned by you", and short why lines. Info icon in the Map layers sheet, and
+  Settings > About > Map legend.
+- **Colour palette (Settings > Units & display).** Standard, Colour-blind safe (blue to yellow to orange, never red against
+  green; tested against simulated protanopia, deuteranopia and tritanopia with CIEDE2000) and High contrast. Recolours hexes,
+  ping dots, network cells, SNR pills, charts and the legend together. In the two accessible palettes link lines turn
+  achromatic and dashed so they never blur into orange strength colours. Grey and purple stay distinct in all three. The
+  setting is stored as `colour_palette` (older settings files read as standard).
+- A repeater in the heard box with no SNR reading is now purple (heard, signal unknown) instead of teal, and the drive report's
+  floor marks for pings heard without a reading use the same purple.
+
 ## [0.24.1] — 2026-11-01 — repeater claim: commands get answered
 
 - **Claim a repeater no longer fails with "could not read the repeater's name".** A repeater ignores any command whose timestamp is not strictly newer than the one on your login, and your radio stamps the login with ITS clock, which the firmware refuses to move backwards (so it can be ahead of the phone). The app stamped commands with the phone's clock, so a radio even a few seconds ahead had every command silently dropped. Commands are now stamped from the radio's own clock (re-read after each login) and strictly increase per repeater. Regression tests run the whole claim against fake radios up to 400 days ahead, with the fake repeater enforcing the firmware's replay rule.

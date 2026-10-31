@@ -222,7 +222,7 @@ class _Row extends StatelessWidget {
     final fresh = h.phase == HeardPhase.fresh;
     final stale = h.phase == HeardPhase.stale;
     final grey = t.colorScheme.outline;
-    final signal = h.snrDb == null ? mc.snrMid : mc.forPing(heard: true, snr: h.snrDb);
+    final signal = mc.forPing(heard: true, snr: h.snrDb); // no SNR reading: purple (heard, signal unknown), never a strength colour
     final accent = fresh ? signal : (stale ? grey.withValues(alpha: 0.5) : Color.lerp(signal, grey, 0.55)!);
 
     final ref = h.ref;

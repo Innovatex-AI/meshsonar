@@ -136,27 +136,12 @@ Color pingColor(MeshSonarColors c, DrivePing p, [PingColorMode mode = PingColorM
     ? (p.heardNothing ? c.silent : c.snrStrong)
     : c.forPing(heard: !p.heardNothing, snr: bestSnr(p));
 
-/// Colour for a network-coverage [CoverageLevel]: the website's own discrete `/coverage` legend steps (strong
-/// green, likely blue, possible amber, stretch red; same hex values as its light/dark CSS tokens), not this
-/// drive's continuous SNR gradient — the two data sets are deliberately told apart at a glance. [none] (no data
-/// for the chosen dimension) is a neutral outline colour, never one of the four steps.
-Color networkLevelColor(BuildContext context, CoverageLevel level) {
-  final dark = Theme.of(context).brightness == Brightness.dark;
-  switch (level) {
-    case CoverageLevel.strong:
-      return dark ? const Color(0xFF79BE69) : const Color(0xFF2F7A3B);
-    case CoverageLevel.good:
-      return dark ? const Color(0xFF6AAEE0) : const Color(0xFF2A6B9C);
-    case CoverageLevel.fair:
-      return dark ? const Color(0xFFE2B04A) : const Color(0xFFB07D16);
-    case CoverageLevel.weak:
-      return dark ? const Color(0xFFF07B6B) : const Color(0xFFB23B2E);
-    case CoverageLevel.unknown:
-      return MeshSonarColors.of(context).heardUnknown;
-    case CoverageLevel.none:
-      return MeshSonarColors.of(context).silent;
-  }
-}
+/// Colour for a network-coverage [CoverageLevel]: the website's own discrete `/coverage` legend steps (standard palette:
+/// strong green, likely blue, possible amber, stretch red), not this drive's continuous SNR gradient — the two data sets
+/// are deliberately told apart at a glance. The hex values come from the chosen colour palette
+/// ([MeshSonarColors.levelColor]). [CoverageLevel.none] (nothing heard) is grey and [CoverageLevel.unknown] (heard,
+/// signal unknown) is purple in every palette.
+Color networkLevelColor(BuildContext context, CoverageLevel level) => MeshSonarColors.of(context).levelColor(level);
 
 class CoverageMap extends StatefulWidget {
   /// Pings to draw. Order doesn't matter; the newest (by timestamp) gets the links and the pulse.
@@ -1041,8 +1026,8 @@ class _CoverageMapState extends State<CoverageMap> {
                     Polygon(
                       points: [for (final b in n.boundary) LatLng(b.lat, b.lon)],
                       // One or two pings are a thin sample: drawn fainter than a cell the network measured properly.
-                      color: networkLevelColor(context, n.level).withValues(alpha: n.level == CoverageLevel.none ? 0.16 : ((n.cell?.pings ?? 3) < 3 ? 0.17 : 0.34)),
-                      borderColor: networkLevelColor(context, n.level).withValues(alpha: n.level == CoverageLevel.none ? 0.45 : ((n.cell?.pings ?? 3) < 3 ? 0.5 : 0.8)),
+                      color: networkLevelColor(context, n.level).withValues(alpha: cellAlphas(n.level, n.cell?.pings ?? kMinCellPings).$1),
+                      borderColor: networkLevelColor(context, n.level).withValues(alpha: cellAlphas(n.level, n.cell?.pings ?? kMinCellPings).$2),
                       borderStrokeWidth: 1,
                     ),
                 ],

@@ -67,7 +67,7 @@ class _MapInfoPanelState extends State<MapInfoPanel> {
                   else
                     Padding(
                       padding: const EdgeInsets.only(right: 8),
-                      child: Icon(Icons.share_location_rounded, size: 18, color: linkLineColor),
+                      child: Icon(Icons.share_location_rounded, size: 18, color: MeshSonarColors.of(context).linkLine),
                     ),
                   Expanded(
                     child: Padding(
@@ -221,7 +221,3 @@ class CellRepeaterList extends StatelessWidget {
     );
   }
 }
-
-/// The colour of every link line and its start ring: orange, not the SNR scale, so lines stand out from the
-/// SNR-coloured cells they cross. The SNR is in each label and in the panel.
-const Color linkLineColor = Color(0xFFFF6D00);

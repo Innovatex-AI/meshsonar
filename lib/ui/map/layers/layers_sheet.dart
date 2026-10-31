@@ -18,6 +18,7 @@ import '../../drive/drive_map_model.dart';
 import '../../theme.dart';
 import '../coverage_layer_controls.dart';
 import '../coverage_map.dart' show networkLevelColor;
+import '../legend_sheet.dart' show showMapLegend;
 import '../map_layers.dart' show PingColorMode;
 import '../region_repeater_layer.dart' show regionRepeaterColor;
 import '../sheets/repeater_sheet.dart' show rosterStatusText;
@@ -89,8 +90,19 @@ class MapLayersSheet extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(Gap.m, 0, Gap.m, Gap.xs),
-                  child: Text('Map layers', style: t.textTheme.titleLarge),
+                  padding: const EdgeInsets.fromLTRB(Gap.m, 0, Gap.xs, Gap.xs),
+                  child: Row(
+                    children: [
+                      Expanded(child: Semantics(header: true, child: Text('Map layers', style: t.textTheme.titleLarge))),
+                      IconButton(
+                        key: const Key('layers-legend'),
+                        tooltip: 'Map legend',
+                        icon: const Icon(Icons.info_outline_rounded),
+                        constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                        onPressed: () => showMapLegend(context, colorBy: model.colorBy, pingColors: model.layers.pingColors),
+                      ),
+                    ],
+                  ),
                 ),
                 for (final g in LayerGroup.values)
                   if (groups[g]!.any((l) => kDrawnLayerIds.contains(l.id))) ...[
