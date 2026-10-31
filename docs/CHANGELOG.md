@@ -5,6 +5,8 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- Stream 7 finish: stats-parser edge-case tests (truncation, trailing bytes, extremes), PROTOCOL.md verification table marking which radio frame layouts are still unverified against real hardware, privacy manifest / App Store mapping documented in FEATURES.md. The drive hook, disclosure v2, per-category switches, phone sensors and v1.2 context upload were already on this branch.
+
 ## [0.20.1] — 2026-10-28 — 559 regions
 
 The platform went from about 5 to 559 active regions. Design, measurements and the asks for the server: [REGIONS_AT_SCALE.md](REGIONS_AT_SCALE.md). Not installed anywhere (the app is on hold).

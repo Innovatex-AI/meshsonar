@@ -621,6 +621,14 @@ meshsonar-infra planning `stream-7-data-collection.md`.
   nRF52 boards; others send none). Read once a minute with the other radio stats (`mcu_temp_c`); everything else in
   that answer (environment sensors, the board's GPS position) is skipped and never stored. The drive report charts it
   (°C / °F) and shows noise floor and SNR by 5-degree band.
+- **Privacy manifest and App Store answers** (`ios/Runner/PrivacyInfo.xcprivacy`, `Info.plist`): the manifest lists
+  exactly what the categories collect and nothing else. Precise Location = drive positions plus altitude and course
+  (motion); Other Data = packet headers and barometer pressure; Performance Data = phone battery; Other Diagnostic Data =
+  phone/app details, radio health, radio settings, problem reports; User ID / Name / Email = driver key and key requests;
+  Other User Content = problem-report text. All linked to the driver key, none for tracking, no tracking domains. The
+  only Info.plist string the sensors need is `NSMotionUsageDescription` (barometer; battery and device model need no
+  permission). Android needs no permission for any of them. Change a category and this paragraph, the manifest and the
+  App Store answers together.
 - **Storage**: `samples.jsonl` (no coordinates), `ctx.jsonl`, `context.json` beside the drive, plus the sent-ledger
   (`ctx_sent.txt`, `samples_sent.txt`, `context_sent.txt`: what the server already has). The upload to a server without
   v1.2 is byte-identical to before. The drive's Export file adds a `context` object (format

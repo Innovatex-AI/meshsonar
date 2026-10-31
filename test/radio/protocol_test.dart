@@ -219,6 +219,36 @@ void main() {
       expect(() => decodeFrame(b([0x0C, 0x48])), throwsA(isA<ProtocolException>()));
     });
 
+    // Edge cases for the stats parsers. Still UNVERIFIED against a real radio: every vector here is built from the
+    // documented byte layout (docs/PROTOCOL.md 6.1a "Verification status"), not captured from hardware.
+    test('stats parsers: truncation, trailing bytes, signed and extreme values (documented layouts, unverified)', () {
+      // radio: 14 B needed; 13 throws, extra trailing bytes (newer firmware) are ignored.
+      final radio = b([0x18, 0x01, 0x90, 0xFF, 0xB5, 0x2D, 0x10, 0, 0, 0, 0x20, 0, 0, 0]);
+      expect(() => decodeFrame(radio.sublist(0, 13)), throwsA(isA<ProtocolException>()));
+      final longer = decodeFrame(b([...radio, 0xAA, 0xBB])) as RadioStatsFrame;
+      expect(longer.noiseFloorDbm, -112);
+      expect(longer.rxAirSecs, 32);
+      // negative SNR (i8 / 4) and the most negative values
+      final neg = decodeFrame(encodeRadioStats(noiseFloorDbm: -32768, lastRssiDbm: -128, lastSnrDb: -32)) as RadioStatsFrame;
+      expect([neg.noiseFloorDbm, neg.lastRssiDbm, neg.lastSnrDb], [-32768, -128, -32.0]);
+      // core: 11 B needed, trailing bytes ignored, u32 uptime above 2^31 stays positive, u16 flags keep high bits
+      final core = encodeCoreStats(batteryMv: 65535, uptimeSecs: 0xFFFFFFFF, errFlags: 0x8001, queueLen: 255);
+      final c = decodeFrame(b([...core, 9, 9])) as CoreStatsFrame;
+      expect([c.batteryMv, c.uptimeSecs, c.errFlags, c.queueLen], [65535, 0xFFFFFFFF, 0x8001, 255]);
+      expect(() => decodeFrame(core.sublist(0, 10)), throwsA(isA<ProtocolException>()));
+      // packets: 27 to 29 bytes is neither the 26 B nor the 30 B form; the 26 B prefix still decodes, recv_errors absent
+      final p30 = encodePacketStats(recv: 1, sent: 2, floodTx: 3, directTx: 4, floodRx: 5, directRx: 6, recvErrors: 7);
+      final p28 = decodeFrame(p30.sublist(0, 28)) as PacketStatsFrame;
+      expect(p28.directRx, 6);
+      expect(p28.recvErrors, isNull);
+      // battery and storage: 4 to 10 bytes keeps the battery and drops the storage rather than guessing
+      final bs = encodeBattAndStorage(batteryMv: 4200, usedKb: 1, totalKb: 2);
+      final part = decodeFrame(bs.sublist(0, 7)) as BattAndStorageFrame;
+      expect(part.batteryMv, 4200);
+      expect(part.storageTotalKb, isNull);
+      expect(part.storageUsedKb, isNull);
+    });
+
     test('LOG_RX_DATA push (logRxRaw line 291): [88][snr*4 i8][rssi i8][raw...]', () {
       final p = decodeFrame(b([0x88, 0xE6, 0xA6, 0x15, 0x01, 0xDF, 0xAA])) as LogRxDataPush;
       expect(p.snrDb, -6.5);
