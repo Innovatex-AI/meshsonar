@@ -5,6 +5,8 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+## [0.23.0] — 2026-10-31 — map link lines
+
 - **Map link lines (like MeshMapper).** Tap a repeater: a line runs to every coverage cell it was heard in. Tap a coverage
   cell: a line runs to every repeater heard there. Lines are coloured by best SNR (the map's own scale), the 24 with most
   pings carry an SNR label ("+6.5 dB"), at most 250 are drawn, and a chip under the map says "Alpha heard in 14 cells" /

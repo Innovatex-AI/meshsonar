@@ -10,3 +10,4 @@ for needle in "MeshSonar Simulator" "Simulator (no radio)" "Try the Simulator" "
   if strings "$BIN" | grep -q -F "$needle"; then echo "FAIL: release build contains: $needle"; exit 1; fi
 done
 echo "OK: release build has no Simulator strings"
+echo "NOTE: this left an UNSIGNED build in build/ios/iphoneos. Run flutter build ios --release (signed) again before devicectl install."
