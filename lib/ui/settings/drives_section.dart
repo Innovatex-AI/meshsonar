@@ -77,7 +77,7 @@ class LastUpload extends StatelessWidget {
             : s.lastUploadAt != null
                 ? (Icons.cloud_done, m.snrStrong, 'Last upload ${formatTime(s.lastUploadAt!)} · OK')
                 : (Icons.cloud_queue, t.colorScheme.onSurfaceVariant,
-                    s.keyApproved ? 'No uploads yet.' : 'No uploads yet. Uploads start once the server accepts your key.');
+                    s.keyApproved ? 'No uploads yet.' : 'No uploads yet. Uploads start once your key is ready.');
     return Padding(
       key: const Key('last-upload'),
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),

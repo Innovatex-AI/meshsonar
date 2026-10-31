@@ -140,7 +140,7 @@ class KeyStatusBadge extends StatelessWidget {
 
 String keyStatusLabel(DriverKeyStatus s) => switch (s) {
       DriverKeyStatus.none => 'No key',
-      DriverKeyStatus.pending => 'Waiting for the server',
+      DriverKeyStatus.pending => 'Not confirmed yet',
       DriverKeyStatus.approved => 'Ready to upload',
       DriverKeyStatus.rejected => 'Turned down',
       DriverKeyStatus.revoked => 'Switched off',
@@ -150,7 +150,7 @@ String keyStatusLabel(DriverKeyStatus s) => switch (s) {
 String keyStatusHelp(DriverKeyStatus s) => switch (s) {
       DriverKeyStatus.none => 'No key yet. Tap Create my key to upload your drives.',
       DriverKeyStatus.pending =>
-        'This server checks new keys before they can upload. You can drive now; your drives upload as soon as it accepts yours. Tap Refresh to check.',
+        'This server has not confirmed your key yet. You can drive now; your drives upload as soon as it does. Tap Refresh to check.',
       DriverKeyStatus.approved => 'Your drives can upload.',
       DriverKeyStatus.rejected => 'The server turned this key down. Remove it and create a new one, or contact whoever runs the server.',
       DriverKeyStatus.revoked => 'This key was switched off. Remove it and create a new one, or contact whoever runs the server.',

@@ -2040,7 +2040,7 @@ class AppState extends ChangeNotifier {
     if (_settings.autoSync && keyApproved) {
       await syncSession(session.id, quietIfNothing: true);
     } else if (_settings.autoSync && hasKey && !keyApproved) {
-      _say('Drive saved. It will upload once the server accepts your driver key.');
+      _say('Drive saved. It will upload once your driver key is ready.');
     } else {
       _say('Drive saved on this phone.');
     }

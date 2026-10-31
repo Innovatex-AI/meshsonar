@@ -129,7 +129,7 @@ void main() {
     await tester.tap(find.byKey(const Key('key-request')));
     await tester.pumpAndSettle();
     expect(h.client.lastRequest, {'name': 'Andy', 'callsign': 'KD8XYZ', 'email': null});
-    expect(find.text('Waiting for the server'), findsOneWidget);
+    expect(find.text('Not confirmed yet'), findsOneWidget);
     expect(h.settings.saved.driverKey, 'secretkey-abcdef-1234');
     expect(h.settings.saved.keyStatus, DriverKeyStatus.pending);
     expect(find.textContaining('secretkey'), findsNothing);
