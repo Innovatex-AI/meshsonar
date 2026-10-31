@@ -121,6 +121,11 @@ class RadioTargetMissing extends OutboundFailure {
   const RadioTargetMissing([super.message = 'target not on the radio']);
 }
 
+/// The radio's contact table is full and nothing could be taken off it to make room for the recipient.
+class RadioContactsFull extends OutboundFailure {
+  const RadioContactsFull([super.message = 'the radio\'s contact list is full']);
+}
+
 /// A batch of contacts read from the radio (GET_CONTACTS), mapped to chat [Contact]s. The phone is the master copy: chat
 /// merges the radio's fields in and keeps its own favourite / blocked / custom name / notes.
 class InboundContactSnapshot extends InboundEvent {

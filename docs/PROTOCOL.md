@@ -455,3 +455,77 @@ A channel's `region_scope` (from a `meshcore://channel/add?...&region_scope=` li
 with every flood of that channel through `ScopeGuard` (`SET_FLOOD_SCOPE_KEY` right before the send, cleared before the next ping).
 The 16-byte key is derived from the region name like a hashtag key: `sha256("#" + lower-case name)[0..16]`. **Assumption, not yet
 verified on a real radio against a region configured on a repeater**; no scope is set by default (whole mesh).
+
+receivers dedupe on (conversation, timestamp, text). The last DM attempt floods: the adapter sends `RESET_PATH` first (section 11). DM frames of text type 1 (CLI data) are not chat and are ignored.
+
+## 11. Contacts: management frames, auto-add and the phone-is-master sync (M2, Nov 2026)
+
+Layouts are from MeshCore `examples/companion_radio/MyMesh.cpp` and `src/helpers/BaseChatMesh.cpp` at 81dbae5 (MIT). Byte
+fixtures written from the firmware, not through our encoders: `test/radio/contact_frames_test.dart`. "Hardware" is what has been
+exercised on a real radio; everything else is **firmware-only** until Andy runs the checklist at the end of this section.
+
+| Frame | Layout and behaviour | Firmware | Hardware |
+|---|---|---|---|
+| `GET_CONTACT_BY_KEY` (30) | `[30][pub x32]` -> `CONTACT` or ERR(NOT_FOUND) | MyMesh 1371 | verified (claims, Oct 31) |
+| `ADD_UPDATE_CONTACT` (9) | adds if absent (ERR(TABLE_FULL) when the table is full), else updates; the radio re-stamps `lastmod` itself | 1328-1348 | verified for a new contact (claims); update / TABLE_FULL firmware-only |
+| `EXPORT_CONTACT` (17) no key | the radio's own advert packet | 1379-1393 | verified (claims) |
+| `EXPORT_CONTACT` (17) + key | `[17][pub x32]` -> `[11][advert packet]` or ERR(NOT_FOUND). The packet exists only if the RADIO heard that advert itself (`putBlobByKey`, BaseChatMesh 189-190): a contact written by `ADD_UPDATE_CONTACT` has none | 1394-1408 | firmware-only |
+| `REMOVE_CONTACT` (15) | `[15][pub x32]` -> OK / ERR(NOT_FOUND); frees the slot | 1349-1358 | firmware-only |
+| `RESET_PATH` (13) | `[13][pub x32]` -> OK / ERR(NOT_FOUND); `out_path_len` becomes 0xFF so the next message floods | 1317-1327 | firmware-only |
+| `SHARE_CONTACT` (16) | `[16][pub x32]` -> OK after a zero-hop send of the stored advert packet, ERR(TABLE_FULL) when there is none | 1359-1370, BaseChatMesh 570-582 | firmware-only |
+| `IMPORT_CONTACT` (18) | `[18][advert packet]` (> 98 bytes) -> OK, ERR(ILLEGAL_ARG) when it is not an advert. The packet is looped back **as if heard**: signature checked, the auto-add rules below apply | 1409-1415, BaseChatMesh 588-601 | firmware-only |
+| `SET_OTHER_PARAMS` (38) | `[38][manual_add][telemetry][advert_loc_policy][multi_acks]`; **overwrites all of them**, so the app sends back what `SELF_INFO` reported for the three it does not change | 1488-1503 | firmware-only |
+| `SELF_INFO` bytes 44-47 | `multi_acks, advert_loc_policy, telemetry_modes, manual_add` (before freq/bw); `manual_add` bit 0 = "ask before adding" | 1100-1104 | position verified (freq and bandwidth after them parse correctly on a real radio); the four values themselves firmware-only |
+| `SET_AUTOADD_CONFIG` (58) | `[58][config][max_hops optional]` -> OK; max_hops clamps to 64 | 2023-2029 | firmware-only |
+| `GET_AUTOADD_CONFIG` (59) | `[59]` -> `[25][config][max_hops]`; an older firmware answers ERR(UNSUPPORTED_CMD) and the app hides the per-type switches | 2030-2036 | firmware-only |
+
+**Auto-add rules** (BaseChatMesh.cpp 156-186, MyMesh.cpp 304-340). A node heard advertising that the radio does not have:
+
+- `manual_add` bit 0 **clear** (factory): the radio adds it to its table, whatever the type or hop count, and pushes plain `ADVERT` (0x80) with the
+  key only (`is_new` is false once it is added), so the phone must read the contact back with `GET_CONTACT_BY_KEY`.
+- `manual_add` bit 0 **set** ("ask before adding"): the radio adds it only if `autoadd_config` has the bit for its type
+  (`0x02` chat, `0x04` repeater, `0x08` room, `0x10` sensor; default 0 = none) and the hop limit allows; otherwise it pushes
+  `NEW_ADVERT` (0x8A, a full contact frame) and adds nothing. This is what "New nodes nearby" shows.
+- The table is full: `NEW_ADVERT` then `CONTACTS_FULL` (0x90), unless `autoadd_config` bit 0 (overwrite oldest) is set, in which
+  case the oldest **non-favourite** contact (`flags` bit 0) is replaced and `CONTACT_DELETED` (0x8F) tells the phone.
+- Pushes only reach the phone while it is connected: adverts heard while the app was away are not remembered by the radio.
+- A contact's `last_advert` must be the advert's **own** timestamp: the radio ignores an advert whose time is not newer than the
+  stored one (replay check, BaseChatMesh 133). The app therefore stores the advert time with each node it offers and never
+  writes the phone's clock there.
+
+**Sync** (`lib/chat/contact_manager.dart`): the phone is the master copy of the contact list; the radio's table (DEVICE_INFO says
+how big, 100 by default) is a cache of what it needs to send and receive DMs.
+
+1. `GET_CONTACTS since <cursor - 1>`; a contact is merged into SQLite as its frame arrives (batches of 25), so a link that drops half way keeps what came. The cursor
+   (`END_OF_CONTACTS` value) is stored only when a list ends properly; the `- 1` covers a contact that changed again in the same
+   second as the cursor (the radio filters with `lastmod > since`).
+2. `CONTACTS_START` carries the **total** on the radio. If it differs from the number the phone believes are on the radio, the
+   phone reads everything (`since 0`) and marks the rest "not on radio" (never deletes them).
+3. Then, in order: removals the user made while the radio was away; the favourite flag (`flags` bit 0) pushed for favourites; contacts the user added by hand, favourites and
+   anyone with a conversation uploaded with `ADD_UPDATE_CONTACT` while there is room (a reserve of 5 slots is kept free for the radio's own use,
+   except for contacts the user added on purpose).
+4. Before every DM the adapter makes sure the radio holds the recipient (`GET_CONTACT_BY_KEY`, then `ADD_UPDATE_CONTACT`); a full table frees ONE slot
+   by removing the least useful non-favourite contact with no conversation from the radio only, and the user is told.
+5. A flood retry uses `RESET_PATH` instead of rewriting the contact; `PATH_UPDATED` reads that one contact back (`GET_CONTACT_BY_KEY`).
+6. The download blocks the radio's command queue for its whole length (about 16 frames a second on BLE, so 350 contacts take about
+   22 s). While a drive is running the automatic sync is held back (`ContactManager.shouldDefer`); a button press is not.
+
+**Hardware checklist for Andy** (each step names what it proves; nothing here can hurt the radio's identity or keys):
+
+1. Connect, open Chat > Contacts. The count under the search box ("On your radio: N of M") must match the official app's contact list. Note how long the
+   first list takes (GET_CONTACTS pace). Proves GET_CONTACTS, DEVICE_INFO limits.
+2. Pull down to refresh: it must finish at once with no change (incremental `since`).
+3. Contact settings > turn on "Ask me before adding new nodes". Proves SET_OTHER_PARAMS keeps your other radio settings: check radio name, position policy, telemetry in the official app are unchanged.
+4. Make a node the radio does not know advertise (a second radio, or `advert` on a repeater you manage). It must appear under New nodes
+   nearby with the right name and type, and the radio's count must not grow. Proves NEW_ADVERT and the manual-add rule.
+5. Add it: the count grows by one and you can message it. Ignore another: it disappears and does not come back.
+6. Contact settings > "Still add automatically: Repeaters" on, then advertise another repeater: it is added by the radio. Proves SET_AUTOADD_CONFIG
+   (if the switches are hidden, the firmware is older and answered UNSUPPORTED_CMD).
+7. Message a person: the first message shows "flood", then "Delivered in N s"; open their details: a route with hops appears. The second message goes "direct". Proves
+   SEND_TXT_MSG, SEND_CONFIRMED, PATH_UPDATED.
+8. Switch the other radio off and send: three tries, then "Not delivered" with the reason in words.
+9. Contact details > Reset route, then send: it floods again. Proves RESET_PATH.
+10. Remove a contact you added: it must also be gone from the official app's list. Proves REMOVE_CONTACT.
+11. Contact details > Send to radios nearby, with a second radio in range: it should offer the contact. Proves SHARE_CONTACT (needs a contact this radio heard itself).
+12. Scan a contact QR from the official app, and show yours to it. Proves the `meshcore://contact/add` round trip.
+

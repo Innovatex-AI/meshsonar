@@ -15,6 +15,13 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
   unless "I'm a passenger"; new messages show as an in-app banner; Map has a Messages button that opens a half-height sheet.
   Chat never leaves the phone. New dependencies: `mobile_scanner` (QR camera, BSD-3, iOS camera string added) and `qr`.
 
+- **Contacts and direct messages, foundation (M2, no screens yet).** The phone is the master copy of your contacts; the radio's table is
+  a cache. `ContactManager` (`ChatService.contacts`) syncs incrementally and resumably, offers nodes it hears as "New nodes nearby"
+  instead of letting the radio fill itself, keeps the radio's table from silently overflowing, puts a contact back on the radio before a
+  DM to it, and floods a DM's last try with RESET_PATH. New radio frames (remove, reset path, export / import / share, ask-before-adding,
+  per-type auto-add) with firmware byte fixtures; the simulator models the contact table, auto-add rules and CONTACTS_FULL.
+  Database schema is now v2 (contact radio state, advert time, ignored nodes). Hardware checklist: PROTOCOL.md section 11.
+
 - **New app shell (wave 1C).** Five tabs: Chat, Map, Analyze, Plan, More (rail on iPad and landscape). The old Drive tab is
   Map (Drive is a mode of it), Region and Drives are Analyze, Radio and Settings are in More. Plan lists the website tools
   with working links; Chat shows an honest first-run state until chat arrives. The last tab is remembered.

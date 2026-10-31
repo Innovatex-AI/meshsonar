@@ -206,6 +206,13 @@ class KeyedFloodScope extends FloodScope {
   }
 }
 
+/// ADD_UPDATE_CONTACT answered ERR_CODE_TABLE_FULL (MyMesh.cpp 1346): the radio's contact table has no free slot.
+class RadioTableFull implements Exception {
+  const RadioTableFull();
+  @override
+  String toString() => 'the radio\'s contact table is full';
+}
+
 /// A contact as the radio stores it (RESP_CODE_CONTACT, writeContactRespFrame MyMesh.cpp 171-193, 148 bytes).
 class RadioContact {
   /// 64 lower-case hex characters.
@@ -258,6 +265,75 @@ class ContactListing {
   /// Pass this as `since` next time to get only what changed (END_OF_CONTACTS payload; 0 when nothing was sent).
   final int mostRecentLastMod;
   const ContactListing({required this.totalOnRadio, required this.contacts, required this.mostRecentLastMod});
+}
+
+/// What the radio does with a node it hears advertise (SELF_INFO manual_add + AUTOADD_CONFIG, MyMesh.cpp 304-340,
+/// BaseChatMesh.cpp 156-182).
+///  - [askBeforeAdding] false: the radio adds EVERY new node it hears to its contact table (the factory behaviour). The
+///    table fills up with strangers' repeaters, and a full table drops new ones.
+///  - [askBeforeAdding] true: the radio adds nothing by itself except the node types switched on below, and pushes
+///    NEW_ADVERT for the rest, which the app offers to the user as "New nodes nearby".
+class ContactPolicy {
+  final bool askBeforeAdding;
+
+  /// False on a firmware without the auto-add config commands: only [askBeforeAdding] can be changed then.
+  final bool autoAddSupported;
+  final bool autoAddChat;
+  final bool autoAddRepeaters;
+  final bool autoAddRooms;
+  final bool autoAddSensors;
+
+  /// When the table is full, replace the oldest contact that is not a favourite (the radio tells the phone with
+  /// CONTACT_DELETED). The phone keeps its own copy either way.
+  final bool overwriteOldest;
+
+  /// 0 = no limit, 1 = direct only, N = up to N-1 hops.
+  final int maxHops;
+
+  const ContactPolicy({
+    required this.askBeforeAdding,
+    this.autoAddSupported = true,
+    this.autoAddChat = false,
+    this.autoAddRepeaters = false,
+    this.autoAddRooms = false,
+    this.autoAddSensors = false,
+    this.overwriteOldest = false,
+    this.maxHops = 0,
+  });
+
+  ContactPolicy copyWith({
+    bool? askBeforeAdding,
+    bool? autoAddChat,
+    bool? autoAddRepeaters,
+    bool? autoAddRooms,
+    bool? autoAddSensors,
+    bool? overwriteOldest,
+    int? maxHops,
+  }) =>
+      ContactPolicy(
+        askBeforeAdding: askBeforeAdding ?? this.askBeforeAdding,
+        autoAddSupported: autoAddSupported,
+        autoAddChat: autoAddChat ?? this.autoAddChat,
+        autoAddRepeaters: autoAddRepeaters ?? this.autoAddRepeaters,
+        autoAddRooms: autoAddRooms ?? this.autoAddRooms,
+        autoAddSensors: autoAddSensors ?? this.autoAddSensors,
+        overwriteOldest: overwriteOldest ?? this.overwriteOldest,
+        maxHops: maxHops ?? this.maxHops,
+      );
+
+  @override
+  bool operator ==(Object other) =>
+      other is ContactPolicy &&
+      other.askBeforeAdding == askBeforeAdding &&
+      other.autoAddSupported == autoAddSupported &&
+      other.autoAddChat == autoAddChat &&
+      other.autoAddRepeaters == autoAddRepeaters &&
+      other.autoAddRooms == autoAddRooms &&
+      other.autoAddSensors == autoAddSensors &&
+      other.overwriteOldest == overwriteOldest &&
+      other.maxHops == maxHops;
+  @override
+  int get hashCode => Object.hash(askBeforeAdding, autoAddSupported, autoAddChat, autoAddRepeaters, autoAddRooms, autoAddSensors, overwriteOldest, maxHops);
 }
 
 /// One channel slot on the radio.

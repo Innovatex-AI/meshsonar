@@ -84,6 +84,7 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
   DeviceInfoFrame? _deviceInfo;
   int? _maxTxDbm;
   SelfInfo? _self;
+  SelfInfoFrame? _selfFrame;
   final Map<int, Uint8List> _secrets = {};
   int _lastSentTs = 0;
   int _lastAttemptTs = 0;
@@ -266,6 +267,7 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
   Future<SelfInfo> start() async {
     final si = await _command(encodeAppStart(appName));
     if (si is! SelfInfoFrame) _fail('app start', si);
+    _selfFrame = si;
     _maxTxDbm = si.maxTxPowerDbm > 0 ? si.maxTxPowerDbm : null;
 
     String? firmware;
@@ -519,7 +521,10 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
 
   /// GET_CONTACTS (MyMesh.cpp 1238-1258, 2385-2410): CONTACTS_START, N x CONTACT, END_OF_CONTACTS. Each frame must arrive
   /// within [timeout] of the last (the radio sends them at the BLE pace, about 16 a second).
-  Future<ContactListing> getContacts({int since = 0}) {
+  ///
+  /// [onContact] is called for every contact as its frame arrives (with the count so far and the total the radio announced),
+  /// so a caller can save progress while a long list is still coming and keep it if the link drops half way.
+  Future<ContactListing> getContacts({int since = 0, void Function(RadioContact contact, int received, int total)? onContact}) {
     return _commands.run(() async {
       if (!isConnected) throw StateError('radio not connected');
       final done = Completer<void>();
@@ -540,7 +545,9 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
           case ContactsStartFrame():
             total = f.count;
           case ContactFrame():
-            found.add(radioContactOf(f));
+            final rc = radioContactOf(f);
+            found.add(rc);
+            if (onContact != null) onContact(rc, found.length, total);
           case EndOfContactsFrame():
             cursor = f.mostRecentLastMod;
             if (!done.isCompleted) done.complete();
@@ -575,7 +582,107 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
             lat: c.lat ?? 0,
             lon: c.lon ?? 0),
         priority: CommandPriority.admin);
+    if (f is ErrFrame && f.code == ErrCode.tableFull) throw const RadioTableFull();
     if (f is! OkFrame) _fail('add contact', f);
+  }
+
+  /// The radio's own copy of one contact; null when it does not have it (ERR NOT_FOUND).
+  Future<RadioContact?> getContactByKey(String publicKeyHex) async {
+    final f = await _command(encodeGetContactByKey(fromHex(publicKeyHex)), priority: CommandPriority.admin);
+    if (f is ContactFrame) return radioContactOf(f);
+    if (f is ErrFrame && f.code == ErrCode.notFound) return null;
+    _fail('get contact', f);
+  }
+
+  /// REMOVE_CONTACT. False when the radio did not have it (already gone), true when it removed it.
+  Future<bool> removeContact(String publicKeyHex) async {
+    final f = await _command(encodeRemoveContact(fromHex(publicKeyHex)), priority: CommandPriority.admin);
+    if (f is OkFrame) return true;
+    if (f is ErrFrame && f.code == ErrCode.notFound) return false;
+    _fail('remove contact', f);
+  }
+
+  /// RESET_PATH: the next message to this contact floods. False when the radio does not have the contact.
+  Future<bool> resetContactPath(String publicKeyHex) async {
+    final f = await _command(encodeResetPath(fromHex(publicKeyHex)), priority: CommandPriority.admin);
+    if (f is OkFrame) return true;
+    if (f is ErrFrame && f.code == ErrCode.notFound) return false;
+    _fail('reset path', f);
+  }
+
+  /// The last advert packet the radio heard from this contact (null when it holds none: see [encodeExportContact]).
+  Future<Uint8List?> exportContactAdvert(String publicKeyHex) async {
+    final f = await _command(encodeExportContact(fromHex(publicKeyHex)), priority: CommandPriority.admin);
+    if (f is ExportContactFrame) return f.packet;
+    if (f is ErrFrame && f.code == ErrCode.notFound) return null;
+    _fail('export contact', f);
+  }
+
+  /// IMPORT_CONTACT: hands the radio an advert packet to treat as heard. Throws [CompanionException] (ILLEGAL_ARG) when it
+  /// is not a valid advert packet.
+  Future<void> importContactAdvert(Uint8List packet) async {
+    final f = await _command(encodeImportContact(packet), priority: CommandPriority.admin);
+    if (f is! OkFrame) _fail('import contact', f);
+  }
+
+  /// SHARE_CONTACT (zero-hop). False when the radio has no stored advert packet for it or no free packet.
+  Future<bool> shareContactZeroHop(String publicKeyHex) async {
+    final f = await _command(encodeShareContact(fromHex(publicKeyHex)), priority: CommandPriority.admin);
+    if (f is OkFrame) return true;
+    if (f is ErrFrame && (f.code == ErrCode.tableFull || f.code == ErrCode.notFound)) return false;
+    _fail('share contact', f);
+  }
+
+  /// What the radio does with a node it hears: from SELF_INFO (manual_add) and AUTOADD_CONFIG. [autoAddSupported] is false
+  /// on a firmware without CMD_GET_AUTOADD_CONFIG (the per-type switches then do nothing).
+  Future<ContactPolicy> getContactPolicy() async {
+    final si = _selfFrame;
+    if (si == null) throw StateError('radio not started');
+    var cfg = 0; // NodePrefs.h:38 default; also what a firmware without the command does in "ask" mode
+    var hops = 0;
+    var supported = false;
+    final f = await _command(encodeGetAutoAddConfig(), priority: CommandPriority.admin);
+    if (f is AutoAddConfigFrame) {
+      cfg = f.config;
+      hops = f.maxHops;
+      supported = true;
+    } else if (!(f is ErrFrame && f.code == ErrCode.unsupportedCmd)) {
+      _fail('get auto-add config', f);
+    }
+    return ContactPolicy(
+      askBeforeAdding: si.asksBeforeAdding,
+      autoAddSupported: supported,
+      autoAddChat: (cfg & AutoAddFlags.chat) != 0,
+      autoAddRepeaters: (cfg & AutoAddFlags.repeater) != 0,
+      autoAddRooms: (cfg & AutoAddFlags.room) != 0,
+      autoAddSensors: (cfg & AutoAddFlags.sensor) != 0,
+      overwriteOldest: (cfg & AutoAddFlags.overwriteOldest) != 0,
+      maxHops: hops,
+    );
+  }
+
+  /// Writes [policy]. SET_OTHER_PARAMS carries the radio's other settings too, so they are sent back as SELF_INFO gave them.
+  Future<void> setContactPolicy(ContactPolicy policy) async {
+    final si = _selfFrame;
+    if (si == null) throw StateError('radio not started');
+    final manual = policy.askBeforeAdding ? (si.manualAdd | 1) : (si.manualAdd & ~1);
+    final f = await _command(
+        encodeSetOtherParams(manualAdd: manual, telemetryModes: si.telemetryModes, advertLocPolicy: si.advertLocPolicy, multiAcks: si.multiAcks),
+        priority: CommandPriority.admin);
+    if (f is! OkFrame) _fail('set contact policy', f);
+    _selfFrame = SelfInfoFrame(
+        advType: si.advType, txPowerDbm: si.txPowerDbm, maxTxPowerDbm: si.maxTxPowerDbm, publicKey: si.publicKey, advLat: si.advLat, advLon: si.advLon,
+        freqKhz: si.freqKhz, bwHz: si.bwHz, sf: si.sf, cr: si.cr, name: si.name, multiAcks: si.multiAcks, advertLocPolicy: si.advertLocPolicy,
+        telemetryModes: si.telemetryModes, manualAdd: manual);
+    if (policy.autoAddSupported) {
+      final cfg = (policy.overwriteOldest ? AutoAddFlags.overwriteOldest : 0) |
+          (policy.autoAddChat ? AutoAddFlags.chat : 0) |
+          (policy.autoAddRepeaters ? AutoAddFlags.repeater : 0) |
+          (policy.autoAddRooms ? AutoAddFlags.room : 0) |
+          (policy.autoAddSensors ? AutoAddFlags.sensor : 0);
+      final g = await _command(encodeSetAutoAddConfig(cfg, maxHops: policy.maxHops), priority: CommandPriority.admin);
+      if (g is! OkFrame) _fail('set auto-add config', g);
+    }
   }
 
   /// A radio-side contact frame as the plain type the chat layer uses.

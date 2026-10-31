@@ -249,12 +249,15 @@ class LinkRadioSession implements RadioSession, RadioStatsSource {
   }
 
   @override
-  Future<ContactListing> getContacts({int since = 0}) async {
+  Future<ContactListing> getContacts({int since = 0}) => downloadContacts(since: since);
+
+  @override
+  Future<ContactListing> downloadContacts({int since = 0, void Function(RadioContact contact, int received, int total)? onContact}) async {
     final mc = _need();
     // An iteration that a timed-out call left running makes the firmware answer BAD_STATE until it ends.
     for (var attempt = 0;; attempt++) {
       try {
-        return await mc.getContacts(since: since);
+        return await mc.getContacts(since: since, onContact: onContact);
       } on CompanionException catch (e) {
         if (e.errCode != ErrCode.badState || attempt >= 3) rethrow;
         await Future<void>.delayed(const Duration(milliseconds: 1500));
@@ -264,6 +267,30 @@ class LinkRadioSession implements RadioSession, RadioStatsSource {
 
   @override
   Future<void> addOrUpdateContact(RadioContact contact) => _need().addOrUpdateContact(contact);
+
+  @override
+  Future<RadioContact?> getContact(String publicKeyHex) => _need().getContactByKey(publicKeyHex);
+
+  @override
+  Future<bool> removeContact(String publicKeyHex) => _need().removeContact(publicKeyHex);
+
+  @override
+  Future<bool> resetContactPath(String publicKeyHex) => _need().resetContactPath(publicKeyHex);
+
+  @override
+  Future<Uint8List?> exportContactAdvert(String publicKeyHex) => _need().exportContactAdvert(publicKeyHex);
+
+  @override
+  Future<void> importContactAdvert(Uint8List packet) => _need().importContactAdvert(packet);
+
+  @override
+  Future<bool> shareContactZeroHop(String publicKeyHex) => _need().shareContactZeroHop(publicKeyHex);
+
+  @override
+  Future<ContactPolicy> getContactPolicy() => _need().getContactPolicy();
+
+  @override
+  Future<void> setContactPolicy(ContactPolicy policy) => _need().setContactPolicy(policy);
 
   @override
   Future<List<RadioChannel>> listChannels() => _need().listChannels();

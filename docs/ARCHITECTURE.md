@@ -110,7 +110,7 @@ nothing outside `lib/radio` constructs a `MeshCoreCompanionLink` except `wiring.
 1. **`lib/core` and `lib/radio` (except `ble_transport.dart`) never import Flutter.** They run under plain `dart test`
    and can be lifted into any Dart program (CLI, server, another UI). Checked: the only `package:flutter` import in
    these two folders is in `ble_transport.dart`.
-1a. **`lib/chat` never imports Flutter** and imports `lib/radio` in exactly one file (`session_adapter.dart`). Chat state lives in its own SQLite file; it shares nothing with the drive store and never reaches the network.
+1a. **`lib/chat` never imports Flutter** and imports `lib/radio` in one file (`session_adapter.dart`) plus two pure value imports: `ContactPolicy` (`contact_port.dart`) and the advert packet parser (`contact_manager.dart`). Chat state lives in its own SQLite file; it shares nothing with the drive store and never reaches the network.
 2. **Contracts live in three files:** `lib/core/model.dart` (records, Drive Format v1), `lib/core/api.dart` (store,
    client, sync, settings interfaces) and `lib/radio/radio_api.dart` (transport, scanner, link, location, engine
    interfaces). Implementations depend on contracts, not on each other where avoidable.
@@ -319,7 +319,9 @@ through `ChatTabHost.provider` (a `ChatTabProvider`); the shell never imports `l
 | `chat/chat_service.dart` | chat | `ChatService`: the one API the UI uses. Inbound (persist, then notify; idempotent), send, unread/mute/pin/drafts, search, retention, delete, system-channel stats, link import. |
 | `chat/outbox.dart` | chat | `Outbox` + `RetryPolicy`: queued sends, DM retries (flood/direct), ACK matching, give-up reasons, restart recovery. No timers inside; `ChatService` pumps it. |
 | `chat/radio_bridge.dart` | chat | `InboundMessageSource` / `OutboundMessageSink` and the event + failure types chat codes against. |
-| `chat/session_adapter.dart` | chat | The small adapter from `RadioSession` (lib/radio) to the bridge; the only chat file that imports lib/radio. |
+| `chat/session_adapter.dart` | chat | The small adapter from `RadioSession` (lib/radio) to the bridge and to `ContactRadioPort`; the chat file that talks to lib/radio. |
+| `chat/contact_manager.dart`, `chat/contact_port.dart` | chat | `ContactManager` (`ChatService.contacts`): the phone-is-master contact book, incremental resumable sync, New nodes nearby, table-full handling, `ensureOnRadio` before a DM, add by link / key / nearby, removal that survives an absent radio, the ask-before-adding policy. `ContactRadioPort` is the radio as it needs it. |
+| `chat/delivery_text.dart` | chat | The words for a DM's delivery state, failure reason and route. |
 | `chat/store.dart`, `chat/db/*` | chat | `ChatStore` and the repositories over `package:sqlite3`; `migrations.dart` is the versioned schema. |
 | `chat/backup.dart`, `chat/backup_crypto.dart` | chat | `ChatBackup` export/import (JSON, zip, passphrase-encrypted) of the user's own chat data. |
 | `chat/mesh_links.dart`, `chat/channel_secret.dart` | chat | `meshcore://` channel/contact/advert links; Public and hashtag channel keys. |

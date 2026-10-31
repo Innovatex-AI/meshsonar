@@ -11,6 +11,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'channel_secret.dart';
+import 'contact_manager.dart';
 import 'db/message_repository.dart';
 import 'events.dart';
 import 'mesh_links.dart';
@@ -73,6 +74,9 @@ class ChatService {
   /// System (wardrive) channel traffic kept per channel.
   final int systemTrafficCap;
 
+  /// The phone's contact book and its sync with the radio (M2). One per service; the UI reads and drives it from here.
+  late final ContactManager contacts;
+
   final StreamController<ChatEvent> _events = StreamController<ChatEvent>.broadcast();
   StreamSubscription<InboundEvent>? _sub;
   Timer? _timer;
@@ -93,11 +97,15 @@ class ChatService {
     Random? random,
     this.systemTrafficCap = 500,
     this.autoTimer = true,
+    ContactManager? contactManager,
+    bool Function()? deferContactSync,
   })  : nowMs = nowMs ?? (() => DateTime.now().millisecondsSinceEpoch),
         selfName = selfName ?? (() => null),
         newId = newId ?? _randomId,
         // ignore: prefer_initializing_formals
-        _random = random;
+        _random = random {
+    contacts = contactManager ?? ContactManager(store: store, nowMs: this.nowMs, onChanged: () => _emit(const ChatEvent.contacts()), shouldDefer: deferContactSync);
+  }
 
   static final Random _rng = Random.secure();
   static String _randomId() {
@@ -127,6 +135,7 @@ class ChatService {
 
   Future<void> dispose() async {
     _disposed = true;
+    contacts.dispose();
     _timer?.cancel();
     await _sub?.cancel();
     await _events.close();
@@ -267,6 +276,7 @@ class ChatService {
       author = a?.displayName ?? e.signerPrefix;
     }
     final blocked = contact?.blocked ?? false;
+    if (contact != null) store.contacts.touchHeard(e.radioId, contact.publicKey, now);
     final m = ChatMessage(
       id: newId(),
       radioId: e.radioId,
@@ -338,20 +348,21 @@ class ChatService {
     final key = e.publicKey.toLowerCase();
     if (!isHex(key, 64)) return;
     store.adverts.record(AdvertSeen(
-        radioId: e.radioId, publicKey: key, type: e.type, name: e.name, lat: e.lat, lon: e.lon, firstTsMs: now, lastTsMs: now, pathLen: e.pathLen, snr: e.snr));
+        radioId: e.radioId, publicKey: key, type: e.type, name: e.name, lat: e.lat, lon: e.lon, firstTsMs: now, lastTsMs: now, pathLen: e.pathLen, snr: e.snr, advertTs: e.advertTimestamp));
     final existing = store.contacts.get(e.radioId, key);
-    if (existing != null || e.isContact) {
-      final base = existing ??
-          Contact(radioId: e.radioId, publicKey: key, type: e.type ?? ContactType.companion, name: e.name, source: ContactSource.radio);
-      store.contacts.upsert(base.copyWith(
-        name: e.name.isEmpty ? base.name : e.name,
-        type: e.type ?? base.type,
-        lat: e.lat ?? base.lat,
-        lon: e.lon ?? base.lon,
-        lastAdvertTs: e.advertTimestamp ?? base.lastAdvertTs,
+    if (existing != null) {
+      store.contacts.upsert(existing.copyWith(
+        name: e.name.isEmpty ? existing.name : e.name,
+        type: e.type ?? existing.type,
+        lat: e.lat ?? existing.lat,
+        lon: e.lon ?? existing.lon,
+        lastAdvertTs: e.advertTimestamp ?? existing.lastAdvertTs,
+        lastHeardMs: now,
       ));
-      _emit(const ChatEvent.contacts());
     }
+    // A key-only ADVERT (the radio added the node by itself, or a contact advertised again) is read back from the radio by
+    // ContactManager.advertHeard; a NEW_ADVERT (e.isContact false) stays in "New nodes nearby" until the user decides.
+    _emit(const ChatEvent.contacts());
   }
 
   // ------------------------------------------------------------------ sending

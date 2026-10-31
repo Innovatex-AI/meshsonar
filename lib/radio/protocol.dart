@@ -24,7 +24,14 @@ abstract final class Cmd {
   static const setDeviceTime = 6;
   static const addUpdateContact = 9;
   static const syncNextMessage = 10;
+  static const resetPath = 13; // MyMesh.cpp 1317
+  static const removeContact = 15; // MyMesh.cpp 1349
+  static const shareContact = 16; // MyMesh.cpp 1359
   static const exportContact = 17;
+  static const importContact = 18; // MyMesh.cpp 1409
+  static const setOtherParams = 38; // MyMesh.cpp 1488
+  static const setAutoAddConfig = 58; // MyMesh.cpp 2023
+  static const getAutoAddConfig = 59; // MyMesh.cpp 2030
   static const deviceQuery = 22;
   static const sendLogin = 26;
   static const sendStatusReq = 27;
@@ -58,6 +65,7 @@ abstract final class Resp {
   static const deviceInfo = 13;
   static const disabled = 15;
   static const contactMsgRecvV3 = 16;
+  static const autoAddConfig = 25; // [25][config][max_hops] (MyMesh.cpp 2030-2036)
   static const channelMsgRecvV3 = 17;
   static const channelInfo = 18;
   static const signStart = 19;
@@ -316,6 +324,54 @@ Uint8List encodeSignFinish() => Uint8List.fromList([Cmd.signFinish]);
 /// CMD_EXPORT_CONTACT with no key: the radio's own advert packet -> RESP_CODE_EXPORT_CONTACT [11][packet...].
 Uint8List encodeExportSelfContact() => Uint8List.fromList([Cmd.exportContact]);
 
+// ------------------------------------------------------------------ contact management (MyMesh.cpp at 81dbae5)
+
+/// CMD_EXPORT_CONTACT with a key: [17][pub_key x32] -> RESP_CODE_EXPORT_CONTACT [11][the last raw advert packet heard from
+/// that contact] or ERR(NOT_FOUND). The packet is only stored when the radio HEARD the advert itself (BaseChatMesh.cpp
+/// 189-190, putBlobByKey): a contact written with ADD_UPDATE_CONTACT has none, and the reply is NOT_FOUND (line 1406).
+Uint8List encodeExportContact(List<int> pubKey32) => Uint8List.fromList([Cmd.exportContact, ..._pub32(pubKey32)]);
+
+/// CMD_IMPORT_CONTACT: [18][advert packet...] (needs more than 2 + 32 + 64 bytes, line 1409). The radio loops the packet
+/// back as if heard over the air, so the normal auto-add rules apply (BaseChatMesh.cpp 588-601): with "ask before adding"
+/// on it answers OK and then pushes NEW_ADVERT instead of adding. ERR(ILLEGAL_ARG) when it is not an advert packet.
+Uint8List encodeImportContact(List<int> advertPacket) => Uint8List.fromList([Cmd.importContact, ...advertPacket]);
+
+/// CMD_REMOVE_CONTACT: [15][pub_key x32] -> OK, or ERR(NOT_FOUND) (MyMesh.cpp 1349-1358).
+Uint8List encodeRemoveContact(List<int> pubKey32) => Uint8List.fromList([Cmd.removeContact, ..._pub32(pubKey32)]);
+
+/// CMD_RESET_PATH: [13][pub_key x32] -> OK: out_path_len becomes 0xFF, so the next message to it floods (MyMesh.cpp
+/// 1317-1327), ERR(NOT_FOUND) for an unknown contact.
+Uint8List encodeResetPath(List<int> pubKey32) => Uint8List.fromList([Cmd.resetPath, ..._pub32(pubKey32)]);
+
+/// CMD_SHARE_CONTACT: [16][pub_key x32] -> OK after the radio sent the stored advert packet of that contact zero-hop (to
+/// radios in direct range only, transport codes {0,0}), ERR(TABLE_FULL) when it has no stored packet or no free packet
+/// (MyMesh.cpp 1359-1370, BaseChatMesh.cpp 570-582).
+Uint8List encodeShareContact(List<int> pubKey32) => Uint8List.fromList([Cmd.shareContact, ..._pub32(pubKey32)]);
+
+/// CMD_SET_OTHER_PARAMS: [38][manual_add][telemetry_modes][advert_loc_policy][multi_acks] (MyMesh.cpp 1488-1503). It
+/// OVERWRITES every field it carries, so always pass the values SELF_INFO reported for the ones you do not mean to change.
+Uint8List encodeSetOtherParams({required int manualAdd, required int telemetryModes, required int advertLocPolicy, required int multiAcks}) =>
+    Uint8List.fromList([Cmd.setOtherParams, manualAdd & 0xff, telemetryModes & 0xff, advertLocPolicy & 0xff, multiAcks & 0xff]);
+
+/// Bits of the auto-add config byte (MyMesh.cpp 147-151). They only matter while "ask before adding" (SELF_INFO manual_add
+/// bit 0) is on: then a heard node of a type whose bit is set is still added by the radio, the rest are pushed as NEW_ADVERT.
+abstract final class AutoAddFlags {
+  static const overwriteOldest = 1 << 0; // when full, replace the oldest NON-favourite contact (push CONTACT_DELETED)
+  static const chat = 1 << 1;
+  static const repeater = 1 << 2;
+  static const room = 1 << 3;
+  static const sensor = 1 << 4;
+  static const allTypes = chat | repeater | room | sensor;
+}
+
+/// CMD_SET_AUTOADD_CONFIG: [58][config][max_hops optional] -> OK (MyMesh.cpp 2023-2029). max_hops is clamped to 64; 0 = no limit,
+/// 1 = direct only, N = up to N-1 hops (BaseChatMesh.h 109). A firmware without it answers ERR(UNSUPPORTED_CMD).
+Uint8List encodeSetAutoAddConfig(int config, {int? maxHops}) =>
+    Uint8List.fromList([Cmd.setAutoAddConfig, config & 0xff, if (maxHops != null) maxHops.clamp(0, 64)]);
+
+/// CMD_GET_AUTOADD_CONFIG: [59] -> RESP_CODE_AUTOADD_CONFIG [25][config][max_hops] (MyMesh.cpp 2030-2036).
+Uint8List encodeGetAutoAddConfig() => Uint8List.fromList([Cmd.getAutoAddConfig]);
+
 // ------------------------------------------------------------------ decoded frames
 
 sealed class Frame {
@@ -351,6 +407,14 @@ class SelfInfoFrame extends Frame {
   final int sf;
   final int cr;
   final String name;
+
+  /// Bytes 44-47 of the frame (MyMesh.cpp 1100-1104). [manualAdd] bit 0 = 1: the radio does NOT add heard nodes to its
+  /// contact table by itself (see [AutoAddFlags]); the other bits are reserved. [telemetryModes] and [advertLocPolicy] and
+  /// [multiAcks] must be sent back unchanged by SET_OTHER_PARAMS, which overwrites all of them.
+  final int multiAcks;
+  final int advertLocPolicy;
+  final int telemetryModes;
+  final int manualAdd;
   const SelfInfoFrame({
     required this.advType,
     required this.txPowerDbm,
@@ -363,9 +427,21 @@ class SelfInfoFrame extends Frame {
     required this.sf,
     required this.cr,
     required this.name,
+    this.multiAcks = 0,
+    this.advertLocPolicy = 0,
+    this.telemetryModes = 0,
+    this.manualAdd = 0,
   });
+  bool get asksBeforeAdding => (manualAdd & 1) != 0;
   double get freqMhz => freqKhz / 1000.0;
   double get bwKhz => bwHz / 1000.0;
+}
+
+/// RESP_CODE_AUTOADD_CONFIG: [25][config][max_hops]; see [AutoAddFlags].
+class AutoAddConfigFrame extends Frame {
+  final int config;
+  final int maxHops;
+  const AutoAddConfigFrame(this.config, this.maxHops);
 }
 
 /// RESP_CODE_DEVICE_INFO (MyMesh.cpp ~1059): [13][fw_ver_code][max_contacts/2][max_channels][ble_pin u32]
@@ -841,6 +917,10 @@ Frame decodeFrame(Uint8List f) {
         bwHz: bd.getUint32(52, Endian.little),
         sf: f[56],
         cr: f[57],
+        multiAcks: f[44],
+        advertLocPolicy: f[45],
+        telemetryModes: f[46],
+        manualAdd: f[47],
         name: utf8.decode(f.sublist(58).takeWhile((b) => b != 0).toList(), allowMalformed: true),
       );
     case Resp.deviceInfo:
@@ -854,6 +934,9 @@ Frame decodeFrame(Uint8List f) {
         firmwareVersion: f.length >= 80 ? _cString(f, 60, 20) : null,
         pathHashMode: f.length >= 82 ? f[81] : null,
       );
+    case Resp.autoAddConfig:
+      need(2, 'AUTOADD_CONFIG');
+      return AutoAddConfigFrame(f[1], f.length > 2 ? f[2] : 0);
     case Resp.channelInfo:
       need(50, 'CHANNEL_INFO');
       return ChannelInfoFrame(f[1], _cString(f, 2, 32), Uint8List.fromList(f.sublist(34, 50)));
@@ -1015,6 +1098,10 @@ Uint8List encodeSelfInfo({
   required int sf,
   required int cr,
   required String name,
+  int manualAdd = 0,
+  int telemetryModes = 0,
+  int advertLocPolicy = 0,
+  int multiAcks = 0,
 }) {
   final b = BytesBuilder();
   b.add([Resp.selfInfo, advType, txPowerDbm & 0xff, maxTxPowerDbm & 0xff]);
@@ -1023,7 +1110,7 @@ Uint8List encodeSelfInfo({
     ..setInt32(0, (advLat * 1e6).round(), Endian.little)
     ..setInt32(4, (advLon * 1e6).round(), Endian.little);
   b.add(ll.buffer.asUint8List());
-  b.add([0, 0, 0, 0]); // multi_acks, advert_loc_policy, telemetry modes, manual_add_contacts
+  b.add([multiAcks, advertLocPolicy, telemetryModes, manualAdd]);
   b.add(_u32(freqKhz));
   b.add(_u32(bwHz));
   b.add([sf, cr]);
@@ -1248,6 +1335,8 @@ Uint8List encodePathUpdated(List<int> pubKey32) => Uint8List.fromList([Push.path
 Uint8List encodeAdvertPush(List<int> pubKey32) => Uint8List.fromList([Push.advert, ..._pub32(pubKey32)]);
 Uint8List encodeContactDeleted(List<int> pubKey32) => Uint8List.fromList([Push.contactDeleted, ..._pub32(pubKey32)]);
 Uint8List encodeContactsFull() => Uint8List.fromList([Push.contactsFull]);
+Uint8List encodeAutoAddConfig(int config, int maxHops) => Uint8List.fromList([Resp.autoAddConfig, config, maxHops]);
+Uint8List encodeExportContactResp(List<int> packet) => Uint8List.fromList([Resp.exportContact, ...packet]);
 
 /// A queued channel message as the radio hands it out (onChannelMessageRecv, MyMesh.cpp 558-585): V3 unless [v3] is false.
 /// [text] is the whole text including the sender's "name: " prefix, as the radio delivers it.
