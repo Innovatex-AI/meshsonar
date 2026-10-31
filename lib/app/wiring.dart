@@ -80,7 +80,7 @@ Future<AppServices> buildRealServices() async {
     syncServiceFactory: (client) =>
         DefaultSyncService(store: store, client: client, settings: settingsStore, app: app),
     bluetoothScanner: BleRadioScanner(),
-    simulatorScanner: simLocation == null ? const NoRadioScanner() : SimulatedRadioScanner(location: simLocation),
+    simulatorScanner: simLocation == null ? const NoRadioScanner() : SimulatedRadioScanner(location: simLocation, ambientTraffic: true),
     linkFactory: (transport) => MeshCoreCompanionLink(transport),
     // Real GPS, cleaned: parked jitter is held still, poor fixes dropped (lib/core/position_filter.dart).
     location: realLocation,
