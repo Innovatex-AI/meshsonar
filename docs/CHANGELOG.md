@@ -5,6 +5,12 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+## [0.23.1] — 2026-10-31 — link lines you can see, and an info panel that leaves the map alone
+
+- **Link lines are orange** (one colour, dark casing) so they stand out from the SNR-coloured cells; the SNR stays in each label and in the panel.
+- **Tapping a cell or a repeater opens a collapsed info panel** (one line: what you tapped and what the lines found; tap to expand) instead of a modal sheet that covered the map. It holds Fit all links and Close; a tap on empty map closes it.
+- **Repeater info with the calculated figures** (from `repeater-reach` totals): cells heard in, pings heard, drives and drivers, best and median SNR, farthest heard, last heard, above the existing repeater details. A repeater no MeshSonar drive has heard says so ("No MeshSonar drive has heard it yet") instead of drawing nothing silently. The cell panel lists the repeaters heard there with pings and SNR.
+
 ## [0.23.0] — 2026-10-31 — map link lines
 
 - **Map link lines (like MeshMapper).** Tap a repeater: a line runs to every coverage cell it was heard in. Tap a coverage

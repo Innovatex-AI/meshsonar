@@ -284,8 +284,12 @@ void main() {
 
       await t.tapAt(screenOf(const LatLng(40.1265, -82.9305)));
       await t.pumpAndSettle();
+      expect(find.byKey(const Key('info-panel-header')), findsOneWidget);
+      expect(find.byKey(const Key('repeater-sheet')), findsNothing, reason: 'the panel opens collapsed: the map stays the focus');
+      await t.tap(find.byKey(const Key('info-panel-header')));
+      await t.pumpAndSettle();
       expect(find.byKey(const Key('repeater-sheet')), findsOneWidget);
-      expect(find.text('Alpha'), findsOneWidget);
+      expect(find.text('Alpha'), findsWidgets);
       expect(find.descendant(of: find.byKey(const Key('repeater-sheet')), matching: find.text('Data: MeshCore Map (map.meshcore.io)')), findsOneWidget);
       expect(find.byKey(const Key('repeater-sheet-status')), findsNothing, reason: 'not in the roster');
     });
@@ -326,8 +330,10 @@ void main() {
       final painter = t.widget<CustomPaint>(paint).painter! as ClusteredPointsPainter;
       await t.tapAt(t.getTopLeft(paint) + painter.camera.latLngToScreenOffset(const LatLng(40.13, -82.92)));
       await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('info-panel-header'))); // the panel opens collapsed
+      await t.pumpAndSettle();
       expect(find.byKey(const Key('repeater-sheet')), findsOneWidget);
-      expect(find.text('Roster-C'), findsOneWidget);
+      expect(find.text('Roster-C'), findsWidgets);
       expect(find.text('Active'), findsOneWidget);
       expect(find.text('+4.5 dB'), findsOneWidget);
       expect(find.textContaining('MeshSonar region roster (Columbus, US)'), findsOneWidget);

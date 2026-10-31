@@ -58,6 +58,7 @@ import '../../core/coverage_query.dart' show coverageResForZoom;
 import '../../core/api.dart' show CmatException;
 import '../../core/hex_cells.dart';
 import '../../core/map_links.dart';
+import '../../core/repeater_reach.dart' show ReachTotals;
 import '../../core/model.dart';
 import '../../core/region_overview_api.dart' show RegionObserver;
 import '../../core/region_repeaters_api.dart' show RegionRepeater;
@@ -75,11 +76,12 @@ import 'layers/observer_layer.dart';
 import 'layers/repeater_cluster_layer.dart';
 import 'layers/repeater_map_source.dart';
 import 'layers/repeater_name_labels.dart';
+import 'map_info_panel.dart';
 import 'map_layers.dart';
 import 'offline_basemap.dart';
 import 'sheets/map_hit_sheet.dart';
 import 'sheets/observer_sheet.dart' show ObserverSheetContext;
-import 'sheets/repeater_sheet.dart' show RepeaterSheetContext;
+import 'sheets/repeater_sheet.dart' show RepeaterSheet, RepeaterSheetContext;
 
 /// A line from a ping to a repeater it heard.
 class PingLink {
@@ -342,7 +344,6 @@ class _CoverageMapState extends State<CoverageMap> {
 
   // ---------- link lines: tap a repeater -> a line to every cell it was heard in; tap a cell -> a line to every repeater ----------
   String? _linkId;
-  String _linkTitle = '';
   bool _linkBusy = false;
   String? _linkError;
   int _linkGen = 0;
@@ -350,6 +351,9 @@ class _CoverageMapState extends State<CoverageMap> {
   LinkSet Function(int res)? _linkBuild;
   LinkSet? _linkSet;
   int _linkSetRes = -1;
+  NetworkCell? _panelCell;
+  RepeaterPoint? _panelPoint;
+  ReachTotals? _reachTotals;
 
   AppState? _appOrNull() {
     final w = context.getElementForInheritedWidgetOfExactType<AppScope>()?.widget;
@@ -369,7 +373,7 @@ class _CoverageMapState extends State<CoverageMap> {
   }
 
   void _clearLinks() {
-    if (_linkId == null) return;
+    if (_linkId == null && _panelCell == null && _panelPoint == null) return;
     _linkGen++;
     setState(() {
       _linkId = null;
@@ -378,6 +382,9 @@ class _CoverageMapState extends State<CoverageMap> {
       _linkBusy = false;
       _linkError = null;
       _linkUnplaced = 0;
+      _panelCell = null;
+      _panelPoint = null;
+      _reachTotals = null;
     });
   }
 
@@ -385,7 +392,6 @@ class _CoverageMapState extends State<CoverageMap> {
     _linkGen++;
     setState(() {
       _linkId = id;
-      _linkTitle = title;
       _linkBusy = true;
       _linkError = null;
       _linkBuild = null;
@@ -401,14 +407,24 @@ class _CoverageMapState extends State<CoverageMap> {
   Future<void> _showRepeaterLinks(RepeaterPoint p) async {
     final app = _appOrNull();
     final h3 = CoverageMap.hexEngine;
-    if (app == null || h3 == null || !app.reachEnabled) return;
+    if (app == null || h3 == null || !app.reachEnabled) {
+      _clearLinks();
+      setState(() => _panelPoint = p); // the panel still opens with what the sheet knows
+      return;
+    }
     _beginLinks('repeater:${p.key}', p.name);
+    setState(() {
+      _panelPoint = p;
+      _panelCell = null;
+      _reachTotals = null;
+    });
     final gen = _linkGen;
     try {
       final r = await app.repeaterReach(p.key, lat: p.lat, lon: p.lon);
       if (!mounted || gen != _linkGen) return;
       setState(() {
         _linkBusy = false;
+        _reachTotals = r.reach.totals;
         _linkBuild = (res) => LinkSet(id: 'repeater:${p.key}', lat: p.lat, lon: p.lon, title: p.name, ends: reachEnds(r.reach, h3, res));
       });
     } catch (e) {
@@ -444,8 +460,16 @@ class _CoverageMapState extends State<CoverageMap> {
   Future<void> _showCellLinks(NetworkCell n) async {
     final c = n.cell, id = c?.h3;
     final app = _appOrNull();
-    if (c == null || id == null || app == null || !app.cellLinksEnabled) return;
+    if (c == null || id == null || app == null || !app.cellLinksEnabled) {
+      _clearLinks();
+      setState(() => _panelCell = n);
+      return;
+    }
     _beginLinks('cell:$id', 'This cell');
+    setState(() {
+      _panelCell = n;
+      _panelPoint = null;
+    });
     final gen = _linkGen;
     try {
       final got = await app.cellLinks(id);
@@ -465,6 +489,68 @@ class _CoverageMapState extends State<CoverageMap> {
     }
   }
 
+  String _panelSummary() {
+    if (_linkBusy) return 'Finding links…';
+    if (_linkError != null) return _linkError!;
+    final set = _currentLinks();
+    final n = set?.ends.length ?? 0;
+    if (_panelPoint != null) {
+      if (set == null) return roleLine(_panelPoint!);
+      return n == 0 ? 'No MeshSonar drive has heard it yet' : 'Heard in $n ${n == 1 ? 'cell' : 'cells'}  ·  tap to expand';
+    }
+    final c = _panelCell?.cell;
+    if (set == null) return c == null ? 'Coverage cell' : '${c.heard} of ${c.pings} pings heard';
+    final base = n == 0 ? 'No mapped repeater heard here' : '$n ${n == 1 ? 'repeater' : 'repeaters'} heard here';
+    return _linkUnplaced > 0 ? '$base (+$_linkUnplaced not on the map)' : base;
+  }
+
+  static String roleLine(RepeaterPoint p) => p.isRoom ? 'Room server' : 'Repeater';
+
+  Widget? _panel(BuildContext context) {
+    final p = _panelPoint, cell = _panelCell;
+    if (p == null && cell == null) return null;
+    final set = _currentLinks();
+    final canFit = !_linkBusy && _linkError == null && (set?.ends.isNotEmpty ?? false);
+    final here = widget.position ?? (_latest == null ? null : LatLng(_latest!.lat, _latest!.lon));
+    final units = AppScope.unitsOf(context);
+    final Widget body;
+    if (p != null) {
+      body = Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_linkId != null && !_linkBusy)
+            RepeaterReachStats(totals: _reachTotals, cells: set?.ends.length ?? 0, distance: (km) => units.distance(km * 1000)),
+          Flexible(
+            child: RepeaterSheet(
+              point: p,
+              dismissOnOpen: false,
+              ctx: RepeaterSheetContext(position: here, openRegionPage: widget.openRepeaterPage, units: units),
+            ),
+          ),
+        ],
+      );
+    } else {
+      body = SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CellSheet(cell: cell!),
+            if (_linkId != null && !_linkBusy && _linkError == null) CellRepeaterList(ends: set?.ends ?? const []),
+          ],
+        ),
+      );
+    }
+    return MapInfoPanel(
+      key: ValueKey('info-panel-${p?.key ?? cell!.id}'),
+      title: p?.name ?? 'Coverage cell',
+      summary: _panelSummary(),
+      busy: _linkBusy,
+      body: body,
+      onFit: canFit ? _fitLinks : null,
+      onClose: _clearLinks,
+    );
+  }
+
   void _fitLinks() {
     final s = _currentLinks();
     if (s == null || s.ends.isEmpty) return;
@@ -481,8 +567,11 @@ class _CoverageMapState extends State<CoverageMap> {
     final here = widget.position ?? (_latest == null ? null : LatLng(_latest!.lat, _latest!.lon));
     if (hit is RepeaterHit) {
       _showRepeaterLinks(hit.point);
-    } else if (hit is ClusterHit && hit.colocated.length == 1) {
+      return;
+    }
+    if (hit is ClusterHit && hit.colocated.length == 1) {
       _showRepeaterLinks(hit.colocated.single);
+      return;
     }
     showMapHitSheet(
       context,
@@ -796,7 +885,6 @@ class _CoverageMapState extends State<CoverageMap> {
                 return;
               }
               _showCellLinks(hit);
-              showMapHitSheet(context, CellHit(hit));
             },
             onPositionChanged: (camera, hasGesture) {
               if (tiles && _pack.update(camera.center.latitude, camera.center.longitude)) setState(() {});
@@ -1099,20 +1187,7 @@ class _CoverageMapState extends State<CoverageMap> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (_linkId != null) ...[
-                _LinkChip(
-                  key: const Key('link-chip'),
-                  title: _linkTitle,
-                  isRepeater: _linkId!.startsWith('repeater:'),
-                  busy: _linkBusy,
-                  error: _linkError,
-                  set: _currentLinks(),
-                  unplaced: _linkUnplaced,
-                  onFit: _fitLinks,
-                  onClear: _clearLinks,
-                ),
-                const SizedBox(height: Gap.xs),
-              ],
+              if (_panel(context) case final panel?) ...[panel, const SizedBox(height: Gap.xs)],
               if (widget.simulated) ...[
                 const SimulatedTag(key: Key('map-simulated')),
                 const SizedBox(height: Gap.xs),
@@ -1337,81 +1412,6 @@ class _MapTag extends StatelessWidget {
             color: strong ? t.colorScheme.onSurface : t.colorScheme.onSurfaceVariant,
           ),
         ),
-      ),
-    );
-  }
-}
-
-/// "Heard in 14 cells" / "12 repeaters heard here" under the map, with Fit and Clear for the link lines.
-class _LinkChip extends StatelessWidget {
-  final String title;
-  final bool isRepeater, busy;
-  final String? error;
-  final LinkSet? set;
-  final int unplaced;
-  final VoidCallback onFit, onClear;
-  const _LinkChip({
-    super.key,
-    required this.title,
-    required this.isRepeater,
-    required this.busy,
-    required this.error,
-    required this.set,
-    required this.unplaced,
-    required this.onFit,
-    required this.onClear,
-  });
-
-  String _text() {
-    if (busy) return 'Finding links for $title…';
-    if (error != null) return error!;
-    final n = set?.ends.length ?? 0;
-    if (isRepeater) {
-      return n == 0 ? 'No drive has heard $title yet' : '$title heard in $n ${n == 1 ? 'cell' : 'cells'}';
-    }
-    final base = n == 0 ? 'No mapped repeater heard here' : '$n ${n == 1 ? 'repeater' : 'repeaters'} heard here';
-    return unplaced > 0 ? '$base (+$unplaced not on the map)' : base;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    final canFit = !busy && error == null && (set?.ends.isNotEmpty ?? false);
-    return _Pill(
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (busy)
-            const Padding(
-              padding: EdgeInsets.only(right: 6),
-              child: SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2)),
-            )
-          else
-            Padding(
-              padding: const EdgeInsets.only(right: 6),
-              child: Icon(Icons.share_location_rounded, size: 14, color: t.colorScheme.primary),
-            ),
-          Flexible(
-            child: Text(_text(), overflow: TextOverflow.ellipsis, maxLines: 2, style: t.textTheme.labelMedium),
-          ),
-          if (canFit)
-            IconButton(
-              key: const Key('link-fit'),
-              tooltip: 'Show all links',
-              visualDensity: VisualDensity.compact,
-              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-              icon: const Icon(Icons.fit_screen_rounded, size: 18),
-              onPressed: onFit,
-            ),
-          IconButton(
-            key: const Key('link-clear'),
-            tooltip: 'Clear links',
-            visualDensity: VisualDensity.compact,
-            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-            icon: const Icon(Icons.close_rounded, size: 18),
-            onPressed: onClear,
-          ),
-        ],
       ),
     );
   }

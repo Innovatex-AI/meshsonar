@@ -81,7 +81,10 @@ Color _dotColor(BuildContext context, RepeaterPoint p) {
 class RepeaterSheet extends StatelessWidget {
   final RepeaterPoint point;
   final RepeaterSheetContext ctx;
-  const RepeaterSheet({super.key, required this.point, this.ctx = const RepeaterSheetContext()});
+
+  /// False when the sheet is embedded in the map's info panel (there is no route of its own to pop).
+  final bool dismissOnOpen;
+  const RepeaterSheet({super.key, required this.point, this.ctx = const RepeaterSheetContext(), this.dismissOnOpen = true});
 
   @override
   Widget build(BuildContext context) {
@@ -165,7 +168,7 @@ class RepeaterSheet extends StatelessWidget {
               FilledButton.icon(
                 key: const Key('repeater-sheet-open'),
                 onPressed: () {
-                  Navigator.of(context).pop();
+                  if (dismissOnOpen) Navigator.of(context).pop();
                   open(context, p);
                 },
                 icon: const Icon(Icons.open_in_new),
