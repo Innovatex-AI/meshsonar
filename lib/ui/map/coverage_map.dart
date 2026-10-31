@@ -54,6 +54,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:h3_flutter/h3_flutter.dart' show H3;
 
 import '../../core/heard.dart' show haversineM;
+import '../../core/coverage_query.dart' show coverageResForZoom;
 import '../../core/hex_cells.dart';
 import '../../core/model.dart';
 import '../../core/region_overview_api.dart' show RegionObserver;
@@ -69,6 +70,7 @@ import 'layers/map_layers_adapter.dart';
 import 'layers/observer_layer.dart';
 import 'layers/repeater_cluster_layer.dart';
 import 'layers/repeater_map_source.dart';
+import 'layers/repeater_name_labels.dart';
 import 'map_layers.dart';
 import 'offline_basemap.dart';
 import 'sheets/map_hit_sheet.dart';
@@ -229,6 +231,15 @@ class CoverageMap extends StatefulWidget {
   /// Reports the map zoom as it changes (the coverage layer picks its H3 resolution from it).
   final ValueChanged<double>? onZoomChanged;
 
+  /// H3 resolution (7..11) for the drive's own hexagons when the person pinned one in the coverage options; null =
+  /// automatic, the resolution for the map's current zoom ([coverageResForZoom], the same table the network layer uses),
+  /// so the drive's cells rescale as you zoom.
+  final int? hexRes;
+
+  /// Overlays the parent draws over this map (heard box, button column), found by key at paint time: repeater names are
+  /// never placed under them.
+  final List<GlobalKey> labelAvoidKeys;
+
   const CoverageMap({
     super.key,
     required this.pings,
@@ -257,6 +268,8 @@ class CoverageMap extends StatefulWidget {
     this.onSelectRepeater,
     this.simulated = false,
     this.onZoomChanged,
+    this.hexRes,
+    this.labelAvoidKeys = const [],
   });
 
   /// True unless running under `flutter test`.
@@ -267,6 +280,10 @@ class CoverageMap extends StatefulWidget {
       return true;
     }
   }();
+
+  /// The H3 engine; tests swap in one loaded by path.
+  @visibleForTesting
+  static H3? hexEngine = loadHexEngine();
 
   static const String tileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
   static const String userAgentPackageName = 'com.meshsonar.app';
@@ -285,6 +302,9 @@ class _CoverageMapState extends State<CoverageMap> {
   int _tileErrors = 0;
   double _rotation = 0;
   double? _lastZoom;
+
+  /// The camera zoom as last seen (before the first camera event: the zoom the map opened at).
+  double? _zoomNow;
 
   // Memoised on input identity (see the header comment).
   List<DrivePing>? _sortedSrc;
@@ -330,19 +350,29 @@ class _CoverageMapState extends State<CoverageMap> {
   }
 
   // Hexagons: the H3 library is loaded once; the roll-up reruns only when the ping list changes.
-  static final H3? _h3 = loadHexEngine();
   List<DrivePing>? _hexSrc;
   int _hexSrcLen = -1;
+  int _hexSrcRes = -1;
   List<HexCell> _hexCells = const [];
 
+  /// The resolution the drive's hexagons are drawn at: the pinned one, else the one for the current zoom.
+  /// Small captions on the map (ring distances, link distances, heard names) are drawn from this zoom; zoomed out to a
+  /// whole region they only pile on top of the repeater bubbles.
+  static const double captionMinZoom = 10;
+  bool get _captions => (_zoomNow ?? _initialZoom) >= captionMinZoom;
+
+  int get hexResolution => (widget.hexRes ?? coverageResForZoom(_zoomNow ?? _initialZoom)).clamp(7, 11);
+
   List<HexCell> _ensureHexes() {
-    final h3 = _h3;
+    final h3 = CoverageMap.hexEngine;
     if (h3 == null) return const [];
-    if (identical(_hexSrc, widget.pings) && _hexSrcLen == widget.pings.length) return _hexCells;
+    final res = hexResolution;
+    if (identical(_hexSrc, widget.pings) && _hexSrcLen == widget.pings.length && _hexSrcRes == res) return _hexCells;
     _hexSrc = widget.pings;
     _hexSrcLen = widget.pings.length;
+    _hexSrcRes = res;
     try {
-      _hexCells = buildHexCells(widget.pings, h3);
+      _hexCells = buildHexCells(widget.pings, h3, res: res);
     } catch (_) {
       _hexCells = const [];
     }
@@ -559,7 +589,7 @@ class _CoverageMapState extends State<CoverageMap> {
     final pos = widget.position;
     final heardMode = widget.heard != null;
     final showLinks = widget.showLinks && layers.links;
-    final layerState = widget.layerState ?? layers.toLayerState();
+    final layerState = widget.layerState ?? layers.toLayerState().toggle(kLabelsLayerId, true);
     final networkSource = widget.repeaterSource;
     final rosterSource = layerState.isOn(kRosterLayerId) ? _rosterSource() : null;
     final showNetwork = networkSource != null && layerState.isOn(kNetworkLayerId);
@@ -599,6 +629,16 @@ class _CoverageMapState extends State<CoverageMap> {
             ),
             onMapReady: () {
               _ready = true;
+              final z = _controller.camera.zoom;
+              if (z != _lastZoom) {
+                _lastZoom = z;
+                widget.onZoomChanged?.call(z); // the host's resolution starts right, not at its res-9 default
+              }
+              if (z != _zoomNow) {
+                final before = hexResolution, captionsBefore = _captions;
+                _zoomNow = z;
+                if (before != hexResolution || captionsBefore != _captions) WidgetsBinding.instance.addPostFrameCallback((_) => mounted ? setState(() {}) : null);
+              }
               if (_selectedRepeater != null && widget.highlightKey == _selectedRepeater) {
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   if (mounted) _focusRepeater(_selectedRepeater!);
@@ -615,6 +655,13 @@ class _CoverageMapState extends State<CoverageMap> {
               if (camera.zoom != _lastZoom) {
                 _lastZoom = camera.zoom;
                 widget.onZoomChanged?.call(camera.zoom);
+              }
+              // The drive's hexagons follow the zoom: a new resolution band redraws them at once (a pinch crosses
+              // a band boundary mid-gesture; the cells must not wait for the network fetch).
+              if (_zoomNow != camera.zoom) {
+                final before = hexResolution, captionsBefore = _captions;
+                _zoomNow = camera.zoom;
+                if (before != hexResolution || captionsBefore != _captions) setState(() {});
               }
               final rot = camera.rotation;
               final rotChanged = widget.rotatable && (rot - _rotation).abs() > 0.5;
@@ -654,7 +701,7 @@ class _CoverageMapState extends State<CoverageMap> {
                 ],
               ),
             if (widget.showRings && layers.rings && pos != null) _RangeRings(center: pos, color: t.colorScheme.primary, ringMetres: AppScope.unitsOf(context).rangeRingMetres),
-            if (widget.showRings && layers.rings && pos != null)
+            if (widget.showRings && layers.rings && pos != null && _captions)
               MarkerLayer(
                 markers: [
                   for (final (i, ringM) in AppScope.unitsOf(context).rangeRingMetres.indexed)
@@ -713,16 +760,20 @@ class _CoverageMapState extends State<CoverageMap> {
                 ],
               ),
             if (layers.hexes)
-              PolygonLayer(
-                polygons: [
-                  for (final h in _ensureHexes())
-                    Polygon(
-                      points: [for (final b in h.boundary) LatLng(b.lat, b.lon)],
-                      color: (h.wasHeard ? mc.forPing(heard: true, snr: h.bestSnrDb) : mc.silent).withValues(alpha: h.wasHeard ? 0.34 : 0.22),
-                      borderColor: (h.wasHeard ? mc.forPing(heard: true, snr: h.bestSnrDb) : mc.silent).withValues(alpha: 0.75),
-                      borderStrokeWidth: 1.2,
-                    ),
-                ],
+              KeyedSubtree(
+                // The resolution is in the key so a test (and a screenshot) can see which band is on screen.
+                key: ValueKey('drive-hexes-res-$hexResolution'),
+                child: PolygonLayer(
+                  polygons: [
+                    for (final h in _ensureHexes())
+                      Polygon(
+                        points: [for (final b in h.boundary) LatLng(b.lat, b.lon)],
+                        color: (h.wasHeard ? mc.forPing(heard: true, snr: h.bestSnrDb) : mc.silent).withValues(alpha: h.wasHeard ? 0.34 : 0.22),
+                        borderColor: (h.wasHeard ? mc.forPing(heard: true, snr: h.bestSnrDb) : mc.silent).withValues(alpha: 0.75),
+                        borderStrokeWidth: 1.2,
+                      ),
+                  ],
+                ),
               ),
             if (showNetwork)
               RepeaterClusterLayer(source: networkSource, layerId: kNetworkLayerId, selectedKey: _selectedRepeater, onHit: _onHit),
@@ -741,6 +792,7 @@ class _CoverageMapState extends State<CoverageMap> {
                       child: _RepeaterMarker(
                         key: ValueKey('map-repeater-${r.key}'),
                         repeaterKey: r.key,
+                        name: r.name,
                         color: mc.beacon,
                         onColor: mc.onBeacon,
                         greyColor: t.colorScheme.outline,
@@ -771,7 +823,7 @@ class _CoverageMapState extends State<CoverageMap> {
                     ),
                 ],
               ),
-            if (liveLinks.isNotEmpty)
+            if (liveLinks.isNotEmpty && _captions)
               MarkerLayer(
                 markers: [
                   for (final h in liveLinks)
@@ -794,7 +846,7 @@ class _CoverageMapState extends State<CoverageMap> {
                     ),
                 ],
               ),
-            if (layers.repeaters && heardMode)
+            if (layers.repeaters && heardMode && _captions)
               MarkerLayer(
                 markers: [
                   for (final h in widget.heard!)
@@ -834,6 +886,34 @@ class _CoverageMapState extends State<CoverageMap> {
                   ),
                 ],
               ),
+            if (layerState.isOn(kLabelsLayerId))
+              RepeaterNameLabels(
+                markers: [
+                  if (layers.repeaters)
+                    for (final r in _markerRepeaters)
+                      MarkerLabelInput(
+                        key: r.key,
+                        name: _plainName(r),
+                        point: LatLng(r.lat, r.lon),
+                        heard: _heardByKey.containsKey(r.key),
+                        // A live heard repeater already carries its name + SNR tag.
+                        ownTag: _captions && heardMode && (_heardByKey[r.key]?.live ?? false),
+                      ),
+                ],
+                clustered: [
+                  if (rosterSource != null) (rosterSource, kRosterLayerId),
+                  if (showNetwork) (networkSource, kNetworkLayerId),
+                ],
+                selectedKey: _selectedRepeater,
+                origin: origin,
+                blockers: [
+                  for (final h in liveLinks) LatLng((origin!.latitude + h.ref!.lat) / 2, (origin.longitude + h.ref!.lon) / 2),
+                  if (widget.showRings && layers.rings && pos != null)
+                    for (final m in AppScope.unitsOf(context).rangeRingMetres) _offsetNorth(pos, -m),
+                ],
+                inset: widget.overlayPadding + const EdgeInsets.only(bottom: 30),
+                avoid: (size) => _overlayRects(),
+              ),
             if (selected != null)
               MarkerLayer(
                 markers: [
@@ -866,6 +946,7 @@ class _CoverageMapState extends State<CoverageMap> {
           bottom: Gap.s + widget.overlayPadding.bottom,
           right: 72 + widget.overlayPadding.right,
           child: Column(
+            key: _stackKey,
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -929,6 +1010,7 @@ class _CoverageMapState extends State<CoverageMap> {
           right: Gap.m + widget.overlayPadding.right,
           bottom: Gap.m + widget.overlayPadding.bottom,
           child: Column(
+            key: _buttonsKey,
             mainAxisSize: MainAxisSize.min,
             children: [
               if (widget.rotatable) ...[
@@ -949,6 +1031,34 @@ class _CoverageMapState extends State<CoverageMap> {
       ],
     );
   }
+
+  final GlobalKey _stackKey = GlobalKey(debugLabel: 'map-credit-stack');
+  final GlobalKey _buttonsKey = GlobalKey(debugLabel: 'map-buttons');
+
+  /// Where the overlays sit, in this map's own coordinates (the credit stack, the recenter/compass buttons and the
+  /// parent's [CoverageMap.labelAvoidKeys]), a little inflated. Read at paint time, so one frame behind a layout change.
+  List<Rect> _overlayRects() {
+    if (!mounted) return const [];
+    try {
+      final mapBox = context.findRenderObject();
+      if (mapBox is! RenderBox || !mapBox.hasSize) return const [];
+      final out = <Rect>[];
+      for (final k in [_stackKey, _buttonsKey, ...widget.labelAvoidKeys]) {
+        final c = k.currentContext;
+        if (c == null || !c.mounted) continue;
+        final o = c.findRenderObject();
+        if (o is! RenderBox || !o.hasSize || !o.attached) continue;
+        out.add(MatrixUtils.transformRect(o.getTransformTo(mapBox), Offset.zero & o.size).inflate(4));
+      }
+      return out;
+    } catch (_) {
+      return const []; // a route is being replaced: no overlays this frame
+    }
+  }
+
+  /// The name for a map label: no directory lookups for the hundreds of markers in view.
+  String _plainName(RepeaterRef r) =>
+      r.name.isNotEmpty ? r.name : (_heardByKey[r.key]?.label ?? r.key.substring(0, math.min(8, r.key.length)));
 
   String _nameFor(RepeaterRef r) {
     if (r.name.isNotEmpty) return r.name;
@@ -1160,6 +1270,9 @@ class _PositionMarker extends StatelessWidget {
 /// no glow; stale = greyed out. [heardAt] changes every time it's heard again, which replays the pop-up.
 class _RepeaterMarker extends StatelessWidget {
   final String repeaterKey;
+
+  /// Spoken by VoiceOver (the written name is on the map as a label).
+  final String name;
   final Color color;
   final Color onColor;
   final Color greyColor;
@@ -1170,6 +1283,7 @@ class _RepeaterMarker extends StatelessWidget {
   const _RepeaterMarker({
     super.key,
     required this.repeaterKey,
+    required this.name,
     required this.color,
     required this.onColor,
     required this.greyColor,
@@ -1240,7 +1354,7 @@ class _RepeaterMarker extends StatelessWidget {
     }
     return Semantics(
       button: true,
-      label: 'Repeater ${repeaterKey.substring(0, math.min(4, repeaterKey.length))}',
+      label: name.isEmpty ? 'Repeater ${repeaterKey.substring(0, math.min(4, repeaterKey.length))}' : 'Repeater $name',
       hint: 'Shows repeater details',
       excludeSemantics: true,
       onTap: onTap,

@@ -29,14 +29,26 @@ enum CoverageSource {
 const int coverageMinRes = 7;
 const int coverageMaxRes = 11;
 
-/// Hexagon resolution for a map zoom, picked so a cell stays roughly 10-40 px across at mid latitudes
-/// (res 7 ~1.2 km edge ... res 11 ~25 m edge).
+/// The zoom -> H3 resolution table, one place for every hexagon the map draws (the network coverage layer AND the live
+/// drive's own cells). Each row is (first zoom of the band, resolution). A cell is about 2 x edge wide: res 7 1.2 km edge,
+/// 8 461 m, 9 174 m, 10 66 m, 11 25 m. At mid latitudes this keeps a cell between roughly 17 and 60 px across over the
+/// whole zoom range (a band is entered at its smallest and left at its biggest), never sub-pixel and never a blob.
+const List<(double fromZoom, int res)> kCoverageResBands = [
+  (0, 7),
+  (11.5, 8),
+  (12.5, 9),
+  (14, 10),
+  (15.5, 11),
+];
+
+/// Hexagon resolution for a map zoom (see [kCoverageResBands]); zoom is clamped, NaN gives the middle band.
 int coverageResForZoom(double zoom) {
-  if (zoom < 11.5) return 7;
-  if (zoom < 12.5) return 8;
-  if (zoom < 14) return 9;
-  if (zoom < 15.5) return 10;
-  return 11;
+  if (zoom.isNaN) return 9;
+  var res = kCoverageResBands.first.$2;
+  for (final b in kCoverageResBands) {
+    if (zoom >= b.$1) res = b.$2;
+  }
+  return res;
 }
 
 @immutable

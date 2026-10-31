@@ -27,7 +27,7 @@ import 'repeater_map_source.dart';
 
 /// Layers this build draws. `neighbours` is in the registry (website parity, WP-M4) but has no renderer yet, so the
 /// sheet does not offer a switch that would do nothing.
-const Set<String> kDrawnLayerIds = {'measured', 'hexes', kNetworkLayerId, kRosterLayerId, 'observers', 'links', 'heard', 'pings', 'rings'};
+const Set<String> kDrawnLayerIds = {'measured', 'hexes', kNetworkLayerId, kRosterLayerId, 'observers', 'links', 'heard', 'pings', 'rings', kLabelsLayerId};
 
 /// The widget key of a layer's switch. Pre-registry keys stay for one release (tests and muscle memory).
 Key layerSwitchKey(String id) => Key(switch (id) {
@@ -46,6 +46,7 @@ Key layerSwitchKey(String id) => Key(switch (id) {
   'observers' => (icon: Icons.change_history_rounded, title: 'Observers', description: "The region's observers that share their position"),
   'links' => (icon: Icons.timeline_rounded, title: 'Links to heard repeaters', description: 'With distance'),
   'heard' => (icon: Icons.cell_tower_rounded, title: 'Repeaters', description: 'Repeaters this drive heard'),
+  kLabelsLayerId => (icon: Icons.label_outline_rounded, title: 'Repeater names', description: 'Name beside each repeater; fewer as you zoom out'),
   'pings' => (icon: Icons.scatter_plot_rounded, title: 'Pings', description: null),
   'rings' => (
     icon: Icons.radar_rounded,

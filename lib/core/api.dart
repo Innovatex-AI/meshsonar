@@ -517,6 +517,10 @@ class Settings {
   /// this is the opt-out. See lib/core/telemetry.dart.
   final bool telemetryEnabled;
 
+  /// Map: write each repeater's name next to its marker (the "Repeater names" map layer). On by default; the layers
+  /// sheet switch persists here.
+  final bool mapRepeaterLabels;
+
   /// Drive-context categories (lib/core/data_categories.dart ids) the person switched off. Every category is on by
   /// default (opt-out, Andy Oct 2026), so only the off ones are stored, under `collection_off`; ids this version does
   /// not know are kept as they are (a newer app's choice survives a downgrade). Packet headers stay on
@@ -561,6 +565,7 @@ class Settings {
     this.units = UnitsPreference.auto,
     this.unitOverrides = const UnitOverrides(),
     this.telemetryEnabled = true,
+    this.mapRepeaterLabels = true,
     this.collectionOff = const {},
     this.contextErasePending = const {},
   });
@@ -586,6 +591,7 @@ class Settings {
     UnitsPreference? units,
     UnitOverrides? unitOverrides,
     bool? telemetryEnabled,
+    bool? mapRepeaterLabels,
     Set<String>? collectionOff,
     Set<String>? contextErasePending,
     bool clearKey = false,
@@ -611,6 +617,7 @@ class Settings {
         units: units ?? this.units,
         unitOverrides: unitOverrides ?? this.unitOverrides,
         telemetryEnabled: telemetryEnabled ?? this.telemetryEnabled,
+        mapRepeaterLabels: mapRepeaterLabels ?? this.mapRepeaterLabels,
         collectionOff: collectionOff ?? this.collectionOff,
         contextErasePending: contextErasePending ?? this.contextErasePending,
       );
@@ -636,6 +643,7 @@ class Settings {
         if (units != UnitsPreference.auto) 'units': units.name,
         if (!unitOverrides.isEmpty) 'unit_overrides': unitOverrides.toJson(),
         if (!telemetryEnabled) 'telemetry_enabled': false,
+        if (!mapRepeaterLabels) 'map_repeater_labels': false,
         if (collectionOff.isNotEmpty) 'collection_off': collectionOff.toList()..sort(),
         if (contextErasePending.isNotEmpty) 'context_erase_pending': contextErasePending.toList()..sort(),
       };
@@ -661,6 +669,7 @@ class Settings {
         units: UnitsPreference.parse(j['units']),
         unitOverrides: UnitOverrides.fromJson(j['unit_overrides']),
         telemetryEnabled: j['telemetry_enabled'] is bool ? j['telemetry_enabled'] as bool : true,
+        mapRepeaterLabels: j['map_repeater_labels'] is bool ? j['map_repeater_labels'] as bool : true,
         collectionOff: {
           if (j['collection_off'] case final List l)
             for (final v in l)

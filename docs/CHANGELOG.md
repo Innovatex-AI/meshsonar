@@ -16,6 +16,29 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
   drives older than 60 days are left alone. The report block always shows (switch off, no approved key, server does no
   weather, not uploaded yet with the real delay, pending, unavailable with the privacy-trim reason) and "no context
   recorded" names the categories that are off.
+- **Map: repeater names, and the grid now follows the zoom** (Andy's test drive: "I have to click a repeater to see the
+  name; the grid did not match the zoom"). Branch `fix/map-labels-grid`.
+  - **Repeater name labels** on the Drive map, the full-screen map and the drive report map, beside every repeater the map
+    draws (known/heard diamonds, region roster dots, global network dots). One painter (`ui/map/layers/repeater_name_labels.dart`)
+    so labels never overlap each other, a marker, a cluster bubble, the link/ring captions, the heard box, the button
+    column or the credit stack; right of the marker, else left, above, below, else dropped. Zoom-dependent: nothing below zoom
+    9, heard-this-drive repeaters from 9, everyone else from 11, with a per-zoom budget (8, 14, 24, 36, 60 labels); heard
+    first, then nearest to you (or the map centre). Halo in the surface colour for light and dark, Dynamic Type up to 1.6x,
+    ellipsis at 150 px. Markers now speak their name to VoiceOver ("Repeater Westerville Water Tower").
+  - **New layer "Repeater names"** in the layers sheet (Network section), default on, **saved** (`Settings.mapRepeaterLabels`,
+    JSON `map_repeater_labels`, written only when off). Showing repeaters at all was already switchable (Repeaters, Region
+    repeaters, All MeshCore repeaters).
+  - **Grid vs zoom.** The drive's own hexagons were always H3 res 9 while the network layer used the zoom table, so at street
+    zoom the drive's cells were about 5x bigger than the network's. Both now use one table (`kCoverageResBands`,
+    `coverageResForZoom`): res 7 below zoom 11.5, 8 to 12.5, 9 to 14, 10 to 15.5, 11 above. The drive hexagons re-roll
+    (`cellToParent(geoToCell(res 11))`, never a direct lookup) the moment a pinch crosses a band; the map also reports its opening
+    zoom so the network fetch starts at the right resolution; the fetch debounce is 250 ms (was 500). A resolution pinned in
+    Coverage options pins both layers. Tests: `test/core/coverage_res_table_test.dart`, `test/ui/map/hex_zoom_test.dart`.
+  - **Other map fixes found in a simulated drive on iPhone 17 Pro and iPad Pro 11-inch:** the result flash and the report card
+    covered the SIMULATED tag and the repeater-age legend (they now sit above the credit stack,
+    `DriveMapModel.attributionStackHeight`); ring and link-distance captions and heard-repeater tags piled onto the cluster
+    bubbles when zoomed out to a region (now drawn from zoom 10); labels were hidden under the heard box in full screen.
+
 - **The Simulator is out of release builds.** `simulatorAvailable` (`lib/app/build_flags.dart`) is `kDebugMode ||
   --dart-define=MESHSONAR_SIMULATOR=true`: the Connect screen entry, the onboarding button and the simulator's code are
   gone from the App Store / TestFlight app (checked by `scripts/verify_release_no_sim.sh`). Debug builds and tests keep

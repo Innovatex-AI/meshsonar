@@ -26,7 +26,7 @@ import 'dart:convert' show Utf8Codec;
 const List<String> kWebsiteShowKeys = ['measured', 'repeaters', 'observers', 'model', 'reach', 'network'];
 
 /// Layer keys only the app draws (its own drive layers). Written in `meshsonar://` links, never in https links.
-const List<String> kAppOnlyShowKeys = ['hexes', 'links', 'neighbours', 'heard', 'pings', 'rings'];
+const List<String> kAppOnlyShowKeys = ['hexes', 'links', 'neighbours', 'heard', 'pings', 'rings', 'labels'];
 
 const Set<String> kColorKeys = {'snr', 'heard', 'noise'};
 const Set<String> kSinceKeys = {'7d', '24h', '1h'};

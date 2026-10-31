@@ -21,7 +21,7 @@ enum PingColorMode {
 class MapLayers {
   final bool pings;
 
-  /// The drive's pings rolled up onto the website's H3 hexagons (resolution 9).
+  /// The drive's pings rolled up onto the website's H3 hexagons (resolution follows the zoom).
   final bool hexes;
   final PingColorMode pingColors;
   final bool repeaters;

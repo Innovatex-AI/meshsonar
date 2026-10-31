@@ -32,13 +32,13 @@ void main() {
     });
 
     test('defaults: the drive layers, measured and the global repeater layer on (D3, Andy Oct 24); roster/observers off', () {
-      expect(kDefaultLayerState.on, {'measured', 'hexes', 'links', 'heard', 'pings', 'rings', 'network'});
+      expect(kDefaultLayerState.on, {'measured', 'hexes', 'links', 'heard', 'pings', 'rings', 'network', 'labels'});
       // MapLayers has no field for `network`: its defaults are the registry defaults minus the global layer.
-      expect(kDefaultLayerState.toggle('network', false), const MapLayers().toLayerState(mode: const {'measured': 'snr'}));
+      expect(kDefaultLayerState.toggle('network', false).toggle('labels', false), const MapLayers().toLayerState(mode: const {'measured': 'snr'}));
       expect(layerSpec('network')!.label, 'All MeshCore repeaters');
       expect(layerSpec('nope'), isNull);
       final groups = layersByGroup();
-      expect(groups[LayerGroup.network]!.map((l) => l.id), ['network', 'repeaters', 'observers', 'neighbours']);
+      expect(groups[LayerGroup.network]!.map((l) => l.id), ['network', 'repeaters', 'observers', 'neighbours', 'labels']);
       expect(LayerGroup.values.map((g) => g.label).toSet(), hasLength(4));
     });
   });
@@ -64,11 +64,11 @@ void main() {
     test('fromShow: null = defaults; website link keeps the drive layers; app link sets them', () {
       expect(MapLayerState.fromShow(null, defaults: kDefaultLayerState, known: kMapLayerIds), kDefaultLayerState);
       final web = MapLayerState.fromShow(const ['repeaters', 'network'], defaults: kDefaultLayerState, known: kMapLayerIds);
-      expect(web.on, {'repeaters', 'network', 'hexes', 'links', 'heard', 'pings', 'rings'}, reason: 'measured off: not listed');
+      expect(web.on, {'repeaters', 'network', 'hexes', 'links', 'heard', 'pings', 'rings', 'labels'}, reason: 'measured off: not listed');
       final app = MapLayerState.fromShow(const ['measured', 'pings'], defaults: kDefaultLayerState, known: kMapLayerIds, appLink: true);
       expect(app.on, {'measured', 'pings'});
       final none = MapLayerState.fromShow(const [], defaults: kDefaultLayerState, known: kMapLayerIds);
-      expect(none.on, {'hexes', 'links', 'heard', 'pings', 'rings'});
+      expect(none.on, {'hexes', 'links', 'heard', 'pings', 'rings', 'labels'});
     });
 
     test('layerStateForLink applies show and color from a parsed link', () {
@@ -130,7 +130,7 @@ void main() {
     test('neighbours need a selected repeater; drive layers are always ready', () {
       expect(layerStatus('neighbours', const MapLayerInputs()).enabled, isFalse);
       expect(layerStatus('neighbours', const MapLayerInputs(repeaterSelected: true)).enabled, isTrue);
-      for (final id in ['hexes', 'links', 'heard', 'pings', 'rings']) {
+      for (final id in ['hexes', 'links', 'heard', 'pings', 'rings', 'labels']) {
         expect(layerStatus(id, const MapLayerInputs()), const LayerStatus(LayerAvailability.ready), reason: id);
       }
       expect(layerStatus('network', const MapLayerInputs()).availability, LayerAvailability.loading, reason: 'no source yet');

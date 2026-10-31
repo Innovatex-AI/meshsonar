@@ -258,6 +258,8 @@ class _MapPane extends StatelessWidget {
                 onSelectRepeater: model.select,
                 simulated: model.simulated,
                 onZoomChanged: model.onMapZoom,
+                hexRes: model.coverageQuery.res,
+                labelAvoidKeys: model.driveOverlayKeys,
                 fallbackCenter: viewedRegionCenter(s),
               ),
             ),
@@ -279,7 +281,9 @@ class _MapPane extends StatelessWidget {
               Positioned(
                 left: Gap.s,
                 top: Gap.s,
-                child: HeardBox(
+                child: KeyedSubtree(
+                  key: model.driveOverlayKeys[0],
+                  child: HeardBox(
                   heard: model.heard,
                   holdPings: s.settings.heardHoldPings,
                   here: model.position,
@@ -288,12 +292,14 @@ class _MapPane extends StatelessWidget {
                   driving: s.driving,
                   maxRows: rows,
                   width: boxWidth,
+                  ),
                 ),
               ),
             Positioned(
               right: Gap.s,
               top: Gap.s,
               child: Column(
+                key: model.driveOverlayKeys[1],
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   // Region awareness lives in this corner, above the icon buttons, so it never competes with
@@ -330,10 +336,10 @@ class _MapPane extends StatelessWidget {
               ),
             ),
             if (report != null)
-              Positioned(left: Gap.s, right: Gap.s, bottom: model.simulated ? 68 : 44, child: report!),
+              Positioned(left: Gap.s, right: Gap.s, bottom: model.attributionStackHeight + 12, child: report!),
             if (pings.isNotEmpty && s.driving)
               Positioned(
-                bottom: model.simulated ? 58 : 40,
+                bottom: model.attributionStackHeight + 8,
                 left: Gap.l,
                 right: Gap.l,
                 child: Center(child: PingResultFlash(ping: pings.first, label: model.labelFor)),
