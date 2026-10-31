@@ -198,7 +198,7 @@ String contextDestinationLine(AppState s) {
   if (!c.acceptsDriveV12) return 'Saved on this phone only: this server does not accept it yet.';
   return s.keyApproved
       ? 'Uploaded with your drive.'
-      : 'Uploaded with your drive once the server accepts your driver key; until then it is saved on this phone only.';
+      : 'Uploaded with your drive once your driver key is ready; until then it is saved on this phone only.';
 }
 
 String ownDriveDestinationNow(AppState s) {

@@ -190,7 +190,7 @@ void main() {
     await settle(tester);
     expect(h.sync.syncedSessions, isEmpty);
     expect(h.store.pingsBySession.values.single.length, 1);
-    expect(find.textContaining('once the server accepts your driver key'), findsOneWidget);
+    expect(find.textContaining('once your driver key is ready'), findsOneWidget);
     await drain(tester);
   });
 

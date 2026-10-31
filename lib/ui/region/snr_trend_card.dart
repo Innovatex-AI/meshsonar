@@ -58,7 +58,7 @@ class SnrTrendCard extends StatelessWidget {
           height: 170,
           startWithTable: pts.length < 2,
           caption: 'What MeshSonar\'s own observers hear: this repeater\'s adverts received directly (no relay), averaged per UTC day '
-              'from trusted observers only. A day without a reading is a gap, not a zero. Days are UTC dates.',
+              'from observers placed in this region. A day without a reading is a gap, not a zero. Days are UTC dates.',
           table: ChartTable(head: const ['Day (UTC)', 'Mean SNR (dB)', 'Adverts'], rows: [
             for (final d in daily) [_day(d.day), d.meanDb == null ? 'no reading' : d.meanDb!.toStringAsFixed(1), '${d.n}'],
           ]),

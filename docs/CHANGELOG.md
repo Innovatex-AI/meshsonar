@@ -5,6 +5,10 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+## [0.24.0] — 2026-11-01 — claim your radios; no approval anywhere
+
+- **No approval wording**: the server no longer holds new keys or drives back (website 0096), so the app says "Not confirmed yet" for an old server's pending key and "once your key is ready" instead of "once the server accepts". The SNR trend says "observers placed in this region", not "trusted observers".
+
 - **Claims follow the server's final contract.** A `409 {owner: "you"}` from `claim-start` means "already yours": the app shows the
   existing claim, touches nothing on the repeater and asks for no password (the claim screen also says so up front for a
   repeater you own). My radios keeps ended claims (last 90 days) in a collapsed "Past radios" list with the reason

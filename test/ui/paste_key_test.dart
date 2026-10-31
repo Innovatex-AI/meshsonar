@@ -61,7 +61,7 @@ void main() {
     await tester.tap(find.byKey(const Key('key-use')));
     await tester.pumpAndSettle();
     expect(h.settings.saved.keyStatus, DriverKeyStatus.pending);
-    expect(find.text('Waiting for the server'), findsOneWidget);
+    expect(find.text('Not confirmed yet'), findsOneWidget);
   });
 
   testWidgets('an empty paste asks for the key and calls nothing', (tester) async {

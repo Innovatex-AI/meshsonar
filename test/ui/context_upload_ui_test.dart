@@ -101,7 +101,7 @@ void main() {
     testWidgets('without an approved key the upload is conditional, said plainly', (tester) async {
       await open(tester, caps: _v12, key: false);
       await showSetting(tester, 'collect-device-toggle');
-      expect(inTile('collect-device-toggle', 'Uploaded with your drive once the server accepts your driver key'), findsOneWidget);
+      expect(inTile('collect-device-toggle', 'Uploaded with your drive once your driver key is ready'), findsOneWidget);
     });
 
     testWidgets('weather is live only when the server looks it up and accepts v1.2', (tester) async {
