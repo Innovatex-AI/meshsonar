@@ -30,6 +30,7 @@ import 'drive_context_wire.dart';
 import 'driver_summary.dart';
 import 'model.dart';
 import 'region_lookup.dart';
+import 'map_links.dart';
 import 'repeater_reach.dart';
 import 'report_body.dart' show problemReportMaxBytes;
 import 'telemetry_uploader.dart';
@@ -315,6 +316,16 @@ class HttpCmatClient implements CmatClient, TelemetryTransport {
       return RepeaterReach.parse(j);
     } on FormatException {
       throw CmatException('server sent an unreadable answer', status: 200);
+    }
+  }
+
+  @override
+  Future<CellLinks> cellLinks(String driverKey, String h3) async {
+    final j = await _send('GET', 'cell-links', driverKey: driverKey, query: {'h3': h3.trim().toLowerCase()});
+    try {
+      return CellLinks.parse(j);
+    } on FormatException {
+      throw const CmatException('server sent an unreadable answer', status: 200);
     }
   }
 

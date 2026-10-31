@@ -3,6 +3,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/app/services.dart';
 import 'package:meshsonar/core/api.dart';
+import 'package:meshsonar/core/map_links.dart';
 import 'package:meshsonar/core/repeater_reach.dart';
 import 'package:meshsonar/core/drive_context_wire.dart';
 import 'package:meshsonar/core/driver_summary.dart';
@@ -209,6 +210,8 @@ void main() {
 class RecordingClient implements CmatClient {
   @override
   Future<RepeaterReach> repeaterReach(String driverKey, String repeaterKey, {double? lat, double? lon}) => throw UnimplementedError();
+  @override
+  Future<CellLinks> cellLinks(String driverKey, String h3) => throw UnimplementedError();
   @override
   final Uri baseUrl = Uri.parse('https://example.org');
   final List<DriveBatch> uploads;

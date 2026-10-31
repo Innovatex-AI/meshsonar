@@ -5,6 +5,17 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- **Map link lines (like MeshMapper).** Tap a repeater: a line runs to every coverage cell it was heard in. Tap a coverage
+  cell: a line runs to every repeater heard there. Lines are coloured by best SNR (the map's own scale), the 24 with most
+  pings carry an SNR label ("+6.5 dB"), at most 250 are drawn, and a chip under the map says "Alpha heard in 14 cells" /
+  "12 repeaters heard here (+2 not on the map)" with Fit (frame all links) and Clear; a tap on empty map clears too.
+  A repeater's cells come from `repeater-reach` (`reachDriverKey`), re-bucketed onto the hexagons drawn at the current
+  zoom (pings add up, best SNR kept) and redone when the zoom crosses a band. A cell's repeaters come from the new
+  `GET cell-links?h3=` (`capabilities.cellLinks`, approved key; meshcore-insights migration and handler). Only public
+  drives, trimmed, as in repeater-reach. Failures say so in the chip; no key or no capability = no lines. Website
+  counterpart: the same lines on the coverage and mesh maps (meshcore-insights). Code: `lib/core/map_links.dart`,
+  `lib/ui/map/layers/link_lines_layer.dart`; tests `test/core/map_links_test.dart`, `test/ui/map/link_lines_test.dart`.
+
 ## [0.22.0] — 2026-10-31 — first field-test fixes
 
 - Layers sheet: the MeshCore Map credit and its age are one line ("Data: MeshCore Map (map.meshcore.io), as of ..."), not two.

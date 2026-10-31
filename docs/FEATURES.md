@@ -172,6 +172,7 @@ simulator's repeaters in Simulator mode), **ping dots**, and the current **posit
 - Ping colours: **red** = heard nothing. Heard pings are coloured by best SNR on a **−10 → +10 dB** scale (blue → teal
   → green), or plain green in "Heard / not" mode. Unknown SNR shows mid teal. The newest dot pulses once.
 - **Follow mode** keeps the position centred. Dragging turns it off and shows **Recenter** (`map-recenter`).
+- **Link lines**: tap a repeater and a line runs to every cell it was heard in; tap a coverage cell and a line runs to every repeater heard there, coloured and labelled by best SNR (strongest 24 labelled, 250 max), with a Fit / Clear chip. Needs an approved key and the server's `cellLinks` (cells) or `reachDriverKey` (repeaters) capability; public drives only.
 - **Repeater names** are written beside every repeater marker (layers sheet > Network > Repeater names, on by default and
   remembered): collision-avoided, zoom-dependent (none below zoom 9; heard-this-drive from 9; the rest from 11; at most 8/14/24/36/60
   labels by zoom), heard first then nearest, with a halo for contrast. Names also appear on the drive report map.

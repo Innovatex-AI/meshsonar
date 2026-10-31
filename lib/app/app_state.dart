@@ -20,6 +20,7 @@ import '../core/drive_context.dart' show ContextSyncLedger, stripContextCategori
 import '../core/drive_context_session.dart';
 import '../core/drive_env_cache.dart';
 import '../core/driver_summary.dart';
+import '../core/map_links.dart';
 import '../core/repeater_reach.dart';
 import '../core/drive_store.dart' show ChunkedExport, closeOrphanedSessions;
 import '../core/heard.dart';
@@ -217,6 +218,25 @@ class AppState extends ChangeNotifier {
     final withPos = lat != null && lon != null;
     return cache.get(client.baseUrl.host, repeaterKey,
         withPosition: withPos, fetch: () => client.repeaterReach(key, repeaterKey, lat: lat, lon: lon));
+  }
+
+  // ---------- link lines on the map (lib/core/map_links.dart) ----------
+  final Map<String, ({DateTime at, CellLinks links})> _cellLinksMem = {};
+
+  /// The server answers `cell-links` for an approved driver key (`capabilities.cellLinks`).
+  bool get cellLinksEnabled => uploadSiteConfig?.cellLinks == true && keyApproved;
+
+  /// The repeaters heard in H3 cell [h3], from memory for 10 minutes. Throws [CmatException] (401/403/429, offline).
+  Future<CellLinks> cellLinks(String h3) async {
+    final key = _settings.driverKey;
+    if (key == null || key.isEmpty) throw const CmatException('no driver key', status: 401);
+    final id = h3.toLowerCase();
+    final hit = _cellLinksMem[id];
+    if (hit != null && services.clock().difference(hit.at) < const Duration(minutes: 10)) return hit.links;
+    final fresh = await client.cellLinks(key, id);
+    if (_cellLinksMem.length >= 60) _cellLinksMem.remove(_cellLinksMem.keys.first);
+    _cellLinksMem[id] = (at: services.clock(), links: fresh);
+    return fresh;
   }
 
   // ---------- region data disk cache (offline / as-of labels) ----------
