@@ -84,6 +84,7 @@ class _ContactsSettingsSheetState extends State<ContactsSettingsSheet> {
                 ),
                 const SizedBox(height: Gap.s),
                 DropdownButtonFormField<int>(
+                  isExpanded: true,
                   key: const Key('set-hops'),
                   initialValue: hops,
                   decoration: const InputDecoration(labelText: 'Only add nodes within'),
