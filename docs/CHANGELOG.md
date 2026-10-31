@@ -5,6 +5,11 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+## [0.23.3] — 2026-11-01 — repeater lines at the finest cell size
+
+- **Repeater -> cells lines use the server's finest cells** (H3 resolution 11, `capabilities.reachH3`, `repeater-reach?res=11`) instead of the old 270 m x 200 m squares, then roll up to the hexagons drawn at the current zoom. Older servers keep the square shape. Cached answers are kept apart by shape.
+- **Thin cells are fainter**: a cell with 1 or 2 pings is drawn at half strength, so one lucky ping is not painted like a measured area.
+
 ## [0.23.2] — 2026-10-31 — taps that work, and a map that tells the truth
 
 - **Repeater taps work everywhere.** The amber repeater markers of your own drive only toggled a label (no panel, no lines); they now open the info panel and draw the lines to every cell the repeater was heard in. A tap on a repeater drawn on top of a coverage cell no longer risks opening the cell underneath. (The panel's repeater taps in the network layer already worked.)

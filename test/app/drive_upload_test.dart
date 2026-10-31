@@ -209,7 +209,7 @@ void main() {
 
 class RecordingClient implements CmatClient {
   @override
-  Future<RepeaterReach> repeaterReach(String driverKey, String repeaterKey, {double? lat, double? lon}) => throw UnimplementedError();
+  Future<RepeaterReach> repeaterReach(String driverKey, String repeaterKey, {double? lat, double? lon, bool h3 = false}) => throw UnimplementedError();
   @override
   Future<CellLinks> cellLinks(String driverKey, String h3) => throw UnimplementedError();
   @override

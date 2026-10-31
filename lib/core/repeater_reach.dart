@@ -6,11 +6,27 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:h3_flutter/h3_flutter.dart' show H3;
+
 import 'api.dart' show CmatException;
 
 num? _num(Object? v) => v is num && v.isFinite ? v : null;
 double? _d(Object? v) => _num(v)?.toDouble();
 int? _i(Object? v) => _num(v)?.round();
+/// A cell's centre: its own lat/lon, or the centre of its H3 id.
+(double, double)? _centre(Map c, H3? engine) {
+  final lat = _d(c['lat']), lon = _d(c['lon']);
+  if (lat != null && lon != null) return (lat, lon);
+  final id = c['h3'];
+  if (id is! String || engine == null) return null;
+  try {
+    final g = engine.cellToGeo(BigInt.parse(id, radix: 16));
+    return g.lat.isFinite && g.lon.isFinite ? (g.lat, g.lon) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 DateTime? _t(Object? v) => v is String ? DateTime.tryParse(v)?.toUtc() : null;
 
 /// One cell where drivers heard the repeater directly.
@@ -81,16 +97,19 @@ class RepeaterReach {
   bool get isEmpty => totals.heardPings == 0 && cells.isEmpty;
 
   /// Throws [FormatException] when the body is not a reach answer at all.
-  static RepeaterReach parse(Map<String, dynamic> j) {
+  ///
+  /// The hexagon shape (`reachH3`: cells carry an `h3` id and no lat/lon) needs [engine] to place each cell at its centre;
+  /// without one those cells are skipped rather than guessed at.
+  static RepeaterReach parse(Map<String, dynamic> j, {H3? engine}) {
     final cellsRaw = j['cells'];
     final totalsRaw = j['totals'];
     if (cellsRaw is! List || totalsRaw is! Map) throw const FormatException('not a repeater-reach answer');
     final cells = <ReachCell>[
       for (final c in cellsRaw)
-        if (c is Map && _d(c['lat']) != null && _d(c['lon']) != null && _i(c['pings']) != null)
+        if (c is Map && _i(c['pings']) != null && _centre(c, engine) != null)
           ReachCell(
-            lat: _d(c['lat'])!,
-            lon: _d(c['lon'])!,
+            lat: _centre(c, engine)!.$1,
+            lon: _centre(c, engine)!.$2,
             pings: _i(c['pings'])!,
             bestSnr: _d(c['bestSnr']),
             medianSnr: _d(c['medianSnr']),
@@ -155,14 +174,15 @@ class RepeaterReachCache {
 
   static final _safeKey = RegExp(r'^[0-9a-f]{8,64}$');
 
-  String _name(String host, String key, bool withPos) => 'rr_${host.toLowerCase().replaceAll(RegExp(r'[^a-z0-9.-]'), '_')}_${key}_${withPos ? 'p' : 'n'}';
+  String _name(String host, String key, bool withPos, bool h3) =>
+      'rr_${host.toLowerCase().replaceAll(RegExp(r'[^a-z0-9.-]'), '_')}_${key}_${withPos ? 'p' : 'n'}${h3 ? 'h' : ''}';
 
   /// The reach of [key] on [host]. Several callers at once share one ask. Throws what [fetch] throws when there is
   /// nothing stored to fall back on (or the failure must not fall back).
-  Future<ReachResult> get(String host, String key, {required bool withPosition, required Future<RepeaterReach> Function() fetch}) {
+  Future<ReachResult> get(String host, String key, {required bool withPosition, bool h3 = false, required Future<RepeaterReach> Function() fetch}) {
     final k = key.toLowerCase();
     if (!_safeKey.hasMatch(k)) return Future.error(const CmatException('not a repeater key'));
-    final id = _name(host, k, withPosition);
+    final id = _name(host, k, withPosition, h3);
     final running = _inflight[id];
     if (running != null) return running;
     final f = _get(id, fetch).whenComplete(() {

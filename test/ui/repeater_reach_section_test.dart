@@ -39,7 +39,7 @@ class ReachClient extends FakeCmatClient {
   Future<RepeaterReach> Function(String key, double? lat, double? lon)? handler;
   final calls = <(String, String, double?, double?)>[];
   @override
-  Future<RepeaterReach> repeaterReach(String driverKey, String repeaterKey, {double? lat, double? lon}) {
+  Future<RepeaterReach> repeaterReach(String driverKey, String repeaterKey, {double? lat, double? lon, bool h3 = false}) {
     calls.add((driverKey, repeaterKey, lat, lon));
     return handler!(repeaterKey, lat, lon);
   }

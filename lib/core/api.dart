@@ -221,6 +221,8 @@ class SiteConfig {
   bool get reachDriverKey => capabilities.contains('reachDriverKey');
   /// `cell-links` accepts `x-driver-key` (`capabilities.cellLinks`): the repeaters heard in one cell.
   bool get cellLinks => capabilities.contains('cellLinks');
+  /// `repeater-reach` can answer in H3 cells (`res=7..11`): the finest cells the server stores, one per hexagon.
+  bool get reachH3 => capabilities.contains('reachH3');
   bool get rfWindow => capabilities.contains('rfWindow');
   bool get snrDaily => capabilities.contains('snrDaily');
 }
@@ -356,7 +358,8 @@ abstract class CmatClient {
   /// `GET /api/cmh/repeater-reach?key=&lat=&lon=` with an approved driver key (`capabilities.reachDriverKey`): where
   /// all MeshSonar drivers (public drives, trimmed) heard one repeater. [lat]/[lon] are the REPEATER's position (never
   /// the phone's). Throws [CmatException] (401 unknown key, 403 not approved, 429 limit). Default: not supported.
-  Future<RepeaterReach> repeaterReach(String driverKey, String repeaterKey, {double? lat, double? lon}) =>
+  /// [h3] asks for the hexagon shape (`capabilities.reachH3`) at the finest resolution.
+  Future<RepeaterReach> repeaterReach(String driverKey, String repeaterKey, {double? lat, double? lon, bool h3 = false}) =>
       throw const CmatException('not supported by this client');
 
   /// `GET /api/cmh/cell-links?h3=<id>` with an approved driver key (`capabilities.cellLinks`): the repeaters heard in

@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:h3_ffi/h3_ffi.dart';
+import 'package:meshsonar/core/hex_cells.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:meshsonar/core/api.dart';
@@ -90,6 +92,15 @@ void main() {
       }));
       await c.repeaterReach('k', _key);
       expect(seen.queryParameters.keys, ['key']);
+    });
+    test('h3: true asks for the finest hexagons (res=11); the default shape is unchanged', () async {
+      late Uri seen;
+      final c = HttpCmatClient(Uri.parse('https://x.org'), client: MockClient((req) async {
+        seen = req.url;
+        return http.Response(jsonEncode(body(bands: false)), 200);
+      }));
+      await c.repeaterReach('k', _key, h3: true);
+      expect(seen.queryParameters, {'key': _key, 'res': '11'});
     });
     test('401, 403, 429 and an unreadable body become CmatException with the status', () async {
       for (final s in [401, 403, 429, 500]) {
@@ -181,6 +192,40 @@ void main() {
       await expectLater(b.get('x.org', '../etc', withPosition: false, fetch: ok), throwsA(isA<CmatException>()));
       expect(b.serverAsks, 1);
       await b.clear();
+    });
+  });
+
+  group('hexagon answer (reachH3)', () {
+    H3? engine() {
+      for (final path in const ['/opt/homebrew/lib/libh3.dylib', '/usr/local/lib/libh3.dylib', 'libh3.so']) {
+        if (path.startsWith('/') && !File(path).existsSync()) continue;
+        try {
+          return const H3FfiFactory().byPath(path);
+        } catch (_) {}
+      }
+      return null;
+    }
+
+    final h3 = engine();
+    test('cells with an h3 id and no lat/lon are placed at the hexagon centre; without an engine they are skipped', () {
+      if (h3 == null) return;
+      final id = hexId(hexCellOf(h3, 40.0, -83.0, res: 11));
+      final b = {
+        'key': _key,
+        'res': 11,
+        'cells': [
+          {'h3': id, 'pings': 3, 'bestSnr': 4.5, 'medianSnr': 2, 'lastAt': '2026-10-31T14:00:00Z'},
+          {'h3': 'nonsense', 'pings': 1},
+        ],
+        'totals': {'heardPings': 3, 'drives': 1, 'drivers': 1},
+        'snrByDistance': [],
+      };
+      final r = RepeaterReach.parse(b, engine: h3);
+      expect(r.cells, hasLength(1));
+      expect(r.cells.single.pings, 3);
+      expect(r.cells.single.lat, closeTo(40.0, 0.001));
+      expect(r.cells.single.lon, closeTo(-83.0, 0.001));
+      expect(RepeaterReach.parse(b).cells, isEmpty, reason: 'no engine: no guess');
     });
   });
 }

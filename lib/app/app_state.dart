@@ -210,6 +210,7 @@ class AppState extends ChangeNotifier {
   /// Reach of [repeaterKey] (full key, hex) from the on-disk cache while fresh. [lat]/[lon] are the REPEATER's position.
   /// Throws [CmatException] (401/403/429, no connection with nothing stored).
   Future<ReachResult> repeaterReach(String repeaterKey, {double? lat, double? lon}) {
+    final h3 = uploadSiteConfig?.reachH3 == true; // finest cells (res 11) when the server has them
     final key = _settings.driverKey;
     if (key == null || key.isEmpty) return Future.error(const CmatException('no driver key', status: 401));
     final rc = services.regionCache?.dir;
@@ -217,7 +218,7 @@ class AppState extends ChangeNotifier {
         dir: rc == null ? null : Directory('${rc.parent.path}${Platform.pathSeparator}repeater_reach'), clock: services.clock);
     final withPos = lat != null && lon != null;
     return cache.get(client.baseUrl.host, repeaterKey,
-        withPosition: withPos, fetch: () => client.repeaterReach(key, repeaterKey, lat: lat, lon: lon));
+        withPosition: withPos, h3: h3, fetch: () => client.repeaterReach(key, repeaterKey, lat: lat, lon: lon, h3: h3));
   }
 
   // ---------- link lines on the map (lib/core/map_links.dart) ----------

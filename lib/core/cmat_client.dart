@@ -30,6 +30,7 @@ import 'drive_context_wire.dart';
 import 'driver_summary.dart';
 import 'model.dart';
 import 'region_lookup.dart';
+import 'hex_cells.dart' show loadHexEngine;
 import 'map_links.dart';
 import 'repeater_reach.dart';
 import 'report_body.dart' show problemReportMaxBytes;
@@ -305,15 +306,15 @@ class HttpCmatClient implements CmatClient, TelemetryTransport {
   }
 
   @override
-  Future<RepeaterReach> repeaterReach(String driverKey, String repeaterKey, {double? lat, double? lon}) async {
-    final q = <String, String>{'key': repeaterKey.trim().toLowerCase()};
+  Future<RepeaterReach> repeaterReach(String driverKey, String repeaterKey, {double? lat, double? lon, bool h3 = false}) async {
+    final q = <String, String>{'key': repeaterKey.trim().toLowerCase(), if (h3) 'res': '11'};
     if (lat != null && lon != null && lat.isFinite && lon.isFinite) {
       q['lat'] = lat.toStringAsFixed(5);
       q['lon'] = lon.toStringAsFixed(5);
     }
     final j = await _send('GET', 'repeater-reach', driverKey: driverKey, query: q);
     try {
-      return RepeaterReach.parse(j);
+      return RepeaterReach.parse(j, engine: h3 ? loadHexEngine() : null);
     } on FormatException {
       throw CmatException('server sent an unreadable answer', status: 200);
     }

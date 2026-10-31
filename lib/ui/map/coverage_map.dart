@@ -1038,8 +1038,9 @@ class _CoverageMapState extends State<CoverageMap> {
                   for (final n in widget.networkCells)
                     Polygon(
                       points: [for (final b in n.boundary) LatLng(b.lat, b.lon)],
-                      color: networkLevelColor(context, n.level).withValues(alpha: n.level == CoverageLevel.none ? 0.16 : 0.34),
-                      borderColor: networkLevelColor(context, n.level).withValues(alpha: n.level == CoverageLevel.none ? 0.45 : 0.8),
+                      // One or two pings are a thin sample: drawn fainter than a cell the network measured properly.
+                      color: networkLevelColor(context, n.level).withValues(alpha: n.level == CoverageLevel.none ? 0.16 : ((n.cell?.pings ?? 3) < 3 ? 0.17 : 0.34)),
+                      borderColor: networkLevelColor(context, n.level).withValues(alpha: n.level == CoverageLevel.none ? 0.45 : ((n.cell?.pings ?? 3) < 3 ? 0.5 : 0.8)),
                       borderStrokeWidth: 1,
                     ),
                 ],
