@@ -148,6 +148,7 @@ Future<void> forEachLook(
     (d: Device.iphoneSmall, scale: 2.5, b: Brightness.light),
     (d: Device.ipad, scale: 1.0, b: Brightness.dark),
   ]) {
+    await tester.pumpWidget(const SizedBox()); // a fresh screen per look: no scroll position or state carried over
     await pumpTool(tester, open(), hostFor(), device: look.d, textScale: look.scale, brightness: look.b);
     await body(tester);
     expect(tester.takeException(), isNull, reason: 'overflow at ${look.d.name} x${look.scale} ${look.b.name}');

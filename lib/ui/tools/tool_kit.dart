@@ -342,7 +342,7 @@ class ToolHeading extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.only(top: Gap.l, bottom: Gap.s),
-        child: Semantics(header: true, child: Text(text, style: Theme.of(context).textTheme.titleMedium)),
+        child: Semantics(container: true, header: true, child: Text(text, style: Theme.of(context).textTheme.titleMedium)),
       );
 }
 

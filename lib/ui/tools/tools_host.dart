@@ -111,7 +111,7 @@ class AppStateToolsHost implements ToolsHost {
   }
 
   @override
-  LinkState get linkState => s.radioSessions.state;
+  LinkState get linkState => s.connected ? LinkState.connected : s.radioSessions.state;
   @override
   String? get radioName => s.selfInfo?.name;
   @override
