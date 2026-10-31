@@ -1,3 +1,5 @@
+import 'dart:async';
+
 // Add-a-channel flows: join Public, join a #hashtag channel, scan a QR code, paste a link or secret, create a private
 // channel; plus what happens when a meshcore:// link is tapped in a message. Every failure is a plain sentence that says
 // what to do (ChannelAdminException.message).
@@ -9,6 +11,7 @@ import '../../chat/channel_secret.dart';
 import '../../chat/chat_service.dart';
 import '../../chat/mesh_links.dart';
 import '../../chat/models.dart';
+import '../alerts/permission_prompt.dart';
 import '../theme.dart';
 import 'channel_detail_screen.dart';
 import 'conversation_screen.dart';
@@ -81,6 +84,8 @@ Future<void> _form(BuildContext context, ChatController controller, _FormMode mo
 }
 
 void _announce(BuildContext context, ChatController controller, ChannelJoin join) {
+  // First channel joined: the right moment to explain alerts (once; never at launch).
+  if (join.created) unawaited(offerAlertsAfterFirstAction(context));
   final m = ScaffoldMessenger.maybeOf(context);
   if (m == null) return;
   m

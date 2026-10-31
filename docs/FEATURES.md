@@ -24,6 +24,38 @@ flowchart LR
   SETTINGS --> FIRST
 ```
 
+## Alerts: notifications, banners, reconnect (M3, wave 2C)
+
+Files: `alerts/*`, `platform/local_notifications*.dart`, `ui/settings/notifications_section.dart`, `ui/alerts/*`. All local: the app
+builds an alert from a message its radio handed over; no server, no remote push, nothing leaves the phone.
+
+* **What alerts:** an incoming message that `ChatService` marked `notify` (so: not a blocked contact, not muted, not "mentions only"
+  without a mention). The wardrive (system) channel never alerts. Own messages never alert.
+* **In front:** a banner at the top of the app (tap opens that conversation), no OS notification, none for the conversation on screen.
+  **Not in front:** an OS notification per conversation (one slot per conversation, so a new message replaces the old banner and says
+  "3 new messages"; iOS groups by thread). Tapping it opens the Chat tab with that conversation. The app icon badge is the number of
+  conversations with unread messages. Reading a conversation removes its notification.
+* **Privacy default:** the text is hidden ("New message" under the conversation name) because a lock screen is public; Settings >
+  Notifications > Show message text in alerts turns it on.
+* **Permission:** never asked at launch. Our own explanation comes first ("Get an alert when a message arrives?"), then the system
+  prompt, at the first message sent / first channel joined (the chat UI calls `offerAlertsAfterFirstAction`) or from the Settings switch.
+  "Not now" is remembered and not repeated on every send.
+* **Settings > Notifications:** master switch, sound, vibrate (Android), message text, quiet hours (alerts keep arriving, silently),
+  per-conversation mode (all / only when mentioned / mute 1 h, 8 h, 24 h, until turned back on), a test notification, and honest states:
+  not allowed yet, blocked in iOS Settings (with a button there), restricted, "You will not get messages while your radio is not
+  connected", and "iOS can pause MeshSonar when it is not in front, so alerts are not guaranteed". Never time-sensitive: Focus and Do Not
+  Disturb apply as the person set them.
+* **After the app was closed:** the radio that was in use is remembered (erased when you disconnect or hand it over on purpose) and
+  reconnected within about a second of a start or of coming back to the front, with a strip "Reconnecting to <radio>…" and a Reconnect
+  button if it gave up after about two minutes.
+* **Radio queue warning:** the radio keeps about 16 waiting messages. A drain that finds 12 or more shows a warning on every tab; at 16 it
+  says some may have been dropped.
+* **What is NOT claimed:** delivery while MeshSonar is in the background or closed. Whether iOS keeps the link is the open spike S1
+  (`docs/BACKGROUND_BLE_SPIKE.md`); experiments (wake keeper, other Bluetooth engine) sit in Settings > Diagnostics > Background Bluetooth
+  test with a log that survives the app being closed.
+* **Android:** foreground service of type connectedDevice with a quiet "Connected to <radio>" notification while a radio is connected.
+  Written but not compiled (no Android toolchain on the build Mac).
+
 ## App shell: five tabs
 
 Files: `ui/shell/*`. Tabs `Chat | Map | Analyze | Plan | More`: a bottom bar on phones, a navigation rail from 700 dp wide

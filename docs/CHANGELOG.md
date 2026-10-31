@@ -11,6 +11,21 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
   DM to it, and floods a DM's last try with RESET_PATH. New radio frames (remove, reset path, export / import / share, ask-before-adding,
   per-type auto-add) with firmware byte fixtures; the simulator models the contact table, auto-add rules and CONTACTS_FULL.
   Database schema is now v2 (contact radio state, advert time, ignored nodes). Hardware checklist: PROTOCOL.md section 11.
+- **Alerts (wave 2C, M3).** Alerts start when the chat UI wires `ChatService` in (`AlertsRuntime.bindChat`); the settings, reconnect and
+  diagnostics below are live now. Local notifications behind an interface
+  (`flutter_local_notifications`), per-conversation threads, badge from unread conversations, in-app banners while the app is in
+  front, quiet hours, privacy default "New message" on the lock screen, Settings > Notifications with honest states (not allowed,
+  blocked, restricted, radio not connected, iOS may pause the app), a test notification, per-conversation mute and mentions. The
+  system permission prompt is never shown at launch: our explanation first, at the first send / join / the Settings switch.
+- **Reconnect on launch:** the radio in use is remembered and reconnected within about a second of a start or of returning to the front
+  ("Reconnecting to <radio>…", Reconnect button after about two minutes); cleared by a deliberate disconnect.
+- **Radio queue warning** when a drain finds 12 or more of the radio's 16 waiting messages.
+- **Spike S1 harness:** Settings > Diagnostics > Background Bluetooth test (log that survives the app being closed, notes, copy),
+  `docs/BACKGROUND_BLE_SPIKE.md` with the source facts and the manual test script. Two experiments, both off by default: an iOS
+  "wake keeper" (native, ios/Runner/BleWakeKeeper.swift) and a second Bluetooth engine on `universal_ble` (BSD-3, has iOS state
+  restoration; `flutter_reactive_ble` has none). Background delivery is NOT claimed: no device result exists yet.
+- Android: foreground service for the radio link and notification permissions declared; not compiled (no Android toolchain here).
+- New dependencies: `flutter_local_notifications` 22.3.3, `universal_ble` 3.1.0 (adds about 2 MB to the iOS app).
 
 - **New app shell (wave 1C).** Five tabs: Chat, Map, Analyze, Plan, More (rail on iPad and landscape). The old Drive tab is
   Map (Drive is a mode of it), Region and Drives are Analyze, Radio and Settings are in More. Plan lists the website tools

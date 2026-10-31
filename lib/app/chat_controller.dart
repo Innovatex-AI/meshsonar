@@ -110,7 +110,11 @@ class ChatController extends ChangeNotifier {
   String? get activeConversation => _activeConv;
   void setActiveConversation(String? convKey) {
     _activeConv = convKey;
+    onActiveConversationChanged?.call(convKey);
   }
+
+  /// Told whenever the conversation on screen changes (the alerts layer uses it to not banner what is already visible).
+  void Function(String? convKey)? onActiveConversationChanged;
 
   /// Name of the connected radio as other people see it (the prefix of channel messages).
   String? get selfName => _session?.selfInfo?.name;

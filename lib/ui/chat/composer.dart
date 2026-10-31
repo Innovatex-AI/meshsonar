@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../app/chat_controller.dart';
+import '../alerts/permission_prompt.dart';
 import '../theme.dart';
 import 'message_format.dart';
 
@@ -75,6 +76,8 @@ class _ComposerState extends State<Composer> {
       _text.clear();
       setState(() => _error = null);
       widget.onSent?.call();
+      // First message sent: the right moment to explain alerts (once; never at launch).
+      unawaited(offerAlertsAfterFirstAction(context));
     } else {
       setState(() => _error = res.error);
     }

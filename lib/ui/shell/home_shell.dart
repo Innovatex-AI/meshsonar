@@ -7,7 +7,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../alerts/alerts_runtime.dart';
 import '../../app/app_state.dart';
+import '../alerts/alerts_status_strip.dart';
+import '../alerts/in_app_banner.dart';
 import '../always_location_screen.dart';
 import '../antenna_sheet.dart';
 import '../app.dart';
@@ -56,6 +59,10 @@ class _HomeShellState extends State<HomeShell> {
     _shell = ShellController(initial: widget.initialTab ?? AppTab.map)..visited.add(AppTab.map);
     _shell.visited.add(_shell.tab);
     _shell.addListener(_onShell);
+    // A tap on a message notification or in-app banner: go to the Chat tab and open that conversation
+    // (ChatTabHost.openConversation, set by the chat wiring).
+    AlertsHost.runtime.addListener(_bindAlerts);
+    _bindAlerts();
     // iOS only (no-op elsewhere): explain, then ask for "Always" location once.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) maybeAskAlwaysLocation(context);
@@ -83,6 +90,24 @@ class _HomeShellState extends State<HomeShell> {
       _lastTab = _shell.tab;
       _lastAnalyze = _shell.analyzeView;
     }
+  }
+
+  AlertsRuntime? _alerts;
+  void _bindAlerts() {
+    final rt = AlertsHost.runtime.value;
+    if (identical(rt, _alerts)) return;
+    _alerts?.coordinator.pendingOpen.removeListener(_onPendingOpen);
+    _alerts = rt;
+    rt?.coordinator.pendingOpen.addListener(_onPendingOpen);
+    if (rt?.coordinator.pendingOpen.value != null) WidgetsBinding.instance.addPostFrameCallback((_) => _onPendingOpen());
+  }
+
+  void _onPendingOpen() {
+    if (!mounted || _alerts?.coordinator.pendingOpen.value == null) return;
+    _shell.select(AppTab.chat);
+    final key = _alerts!.coordinator.takePendingOpen();
+    final open = ChatTabHost.openConversation;
+    if (key != null && open != null) open(context, key);
   }
 
   void _onShell() {
@@ -140,6 +165,8 @@ class _HomeShellState extends State<HomeShell> {
   void dispose() {
     _state?.removeListener(_onState);
     _shell.removeListener(_onShell);
+    AlertsHost.runtime.removeListener(_bindAlerts);
+    _alerts?.coordinator.pendingOpen.removeListener(_onPendingOpen);
     _shell.dispose();
     super.dispose();
   }
@@ -184,7 +211,9 @@ class _HomeShellState extends State<HomeShell> {
           );
           // The Map tab already is the drive screen, so the bar is for every other tab.
           final bar = tab == AppTab.map ? const SizedBox.shrink() : MiniDriveBar(onOpen: _shell.openDrive);
-          final content = Column(key: _contentKey, children: [Expanded(child: pages), bar]);
+          final content = InAppBannerHost(
+            child: Column(key: _contentKey, children: [Expanded(child: pages), const AlertsStatusStrip(), bar]),
+          );
           return ScaffoldMessenger(
             key: _messengerKey,
             child: Scaffold(
