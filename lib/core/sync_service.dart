@@ -59,6 +59,9 @@ class DefaultSyncService implements SyncService {
   /// been told about); without it the saved settings decide.
   bool Function(String categoryId)? categoryOn;
 
+  /// Now (tests set it).
+  DateTime Function() clock = DateTime.now;
+
   /// Used when [store] doesn't implement [SyncLedger] (e.g. a fake store in tests); lasts for this object's lifetime.
   final _MemoryLedger _memLedger = _MemoryLedger();
   Future<void> _last = Future<void>.value();
@@ -113,6 +116,7 @@ class DefaultSyncService implements SyncService {
       sent: sent,
       off: {for (final c in dataCategories) if (c.id != CategoryId.packetHeaders && !on(c.id)) c.id},
       weatherOn: on(CategoryId.weather),
+      now: clock,
     );
   }
 
@@ -209,7 +213,7 @@ class DefaultSyncService implements SyncService {
       final endUntold = session.endedAt != null && (told == null || !told.isAtSameMomentAs(session.endedAt!));
       if (contextOnly && (pending.isNotEmpty || endUntold || resendToken != null)) return r;
 
-      final sc = run.v12 && !_plainOnly.contains(sessionId) ? await _loadContext(run, sessionId) : null;
+      final sc = run.v12 && !_plainOnly.contains(sessionId) ? await _loadContext(run, session) : null;
       final queue = <List<DrivePing>>[
         for (var i = 0; i < pending.length; i += chunkSize)
           pending.sublist(i, i + chunkSize > pending.length ? pending.length : i + chunkSize),
@@ -263,7 +267,8 @@ class DefaultSyncService implements SyncService {
   // ------------------------------------------------------------------ drive context
 
   /// What of this session's context the server does not have yet, minus every category that is off.
-  Future<_SessionCtx?> _loadContext(_Run run, String sessionId) async {
+  Future<_SessionCtx?> _loadContext(_Run run, DriveSession drive) async {
+    final sessionId = drive.id;
     final ctx = run.ctx, sent = run.sent;
     if (ctx == null || sent == null) return _SessionCtx();
     try {
@@ -286,19 +291,29 @@ class DefaultSyncService implements SyncService {
       final session = (await ctx.sessionContext(sessionId))?.without(run.off);
       sc.device = session?.device;
       sc.companion = session?.companionExt;
-      final mark = _sessionMark(sc.device, sc.companion);
+      // The weather choice rides in the session part (`session.enrich.weather`), so a drive the server holds with the
+      // wrong choice (uploaded as v1 before the capabilities were known, or Weather switched on / off since) is
+      // corrected by one ping-less upload. Drives the server no longer enriches (older than 60 days) are left alone.
+      final recent = run.now().difference(drive.startedAt) < weatherMaxAge;
+      final stored = await sent.sessionContextMark(sessionId);
+      final mark = _sessionMark(sc.device, sc.companion, weather: recent ? run.weatherOn : null, hadMark: stored != null);
       sc.sessionMark = mark;
-      sc.sessionUnsent = mark != null && mark != await sent.sessionContextMark(sessionId);
+      sc.sessionUnsent = mark != null && mark != stored;
       return sc;
     } catch (_) {
       return _SessionCtx(); // unreadable context never blocks the drive itself (the weather flag still goes)
     }
   }
 
-  String? _sessionMark(DeviceDetails? d, CompanionDetails? c) {
+  /// The server stops enriching a drive after this long, so a weather choice for an older drive is not worth a request.
+  static const Duration weatherMaxAge = Duration(days: 60);
+
+  /// Fingerprint of the session part. [weather] null = not part of it (old drive). A drive with nothing to say and
+  /// Weather off has no mark unless one was stored before (then the off must reach the server).
+  String? _sessionMark(DeviceDetails? d, CompanionDetails? c, {bool? weather, required bool hadMark}) {
     final dj = wireDevice(d), cj = wireCompanionExt(c);
-    if (dj == null && cj == null) return null;
-    return jsonEncode({'device': dj, 'companion': cj});
+    if (dj == null && cj == null && weather != true && !(hadMark && weather != null)) return null;
+    return jsonEncode({'device': dj, 'companion': cj, 'weather': ?weather});
   }
 
   /// The context part of one request, or null when the body should be the plain drive (nothing to say).
@@ -315,7 +330,7 @@ class DefaultSyncService implements SyncService {
       },
       samples: samples,
     );
-    return (cu.hasContext || run.weatherOn) ? cu : null;
+    return (cu.hasContext || run.weatherOn || sc.sessionUnsent) ? cu : null;
   }
 
   /// Posts one drive-upload body. A v1.2 body answered 400 as a whole is repeated once as the plain drive for this
@@ -368,7 +383,7 @@ class DefaultSyncService implements SyncService {
       final (res, withContext) = await _post(key, session, toSend, cu, r, sc);
       r.uploaded = true;
       if (withContext && sc != null) {
-        await _afterContext(session.id, run, sc, res, slice, r, hadSession: sc.device != null || sc.companion != null);
+        await _afterContext(session.id, run, sc, res, slice, r, hadSession: sc.sessionMark != null);
       }
       if (firstRound) {
         r.stored += res.stored;
@@ -451,7 +466,7 @@ class DefaultSyncService implements SyncService {
       r.uploaded = true;
       any = true;
       if (withContext && sc != null) {
-        await _afterContext(session.id, run, sc, res, slice, r, hadSession: sc.device != null || sc.companion != null);
+        await _afterContext(session.id, run, sc, res, slice, r, hadSession: sc.sessionMark != null);
       } else if (!withContext) {
         return any; // fell back (or nothing contextual to send): the plain drive went up, context waits for next time
       }
@@ -497,7 +512,9 @@ class _Run {
   final ContextSyncLedger? sent;
   final Set<String> off;
   final bool weatherOn;
-  const _Run({required this.v12, required this.ctx, required this.sent, required this.off, required this.weatherOn});
+  final DateTime Function() now;
+  const _Run(
+      {required this.v12, required this.ctx, required this.sent, required this.off, required this.weatherOn, required this.now});
 }
 
 /// One session's context that the server does not have yet.

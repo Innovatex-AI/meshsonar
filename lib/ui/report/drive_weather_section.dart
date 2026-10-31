@@ -6,6 +6,7 @@
 // values. All quantities go through Units; the phone barometer is compared with the model's station pressure.
 import 'package:flutter/material.dart';
 
+import '../../app/app_state.dart' show DriveWeatherGate;
 import '../../app/drive_context_hook.dart' show contextLedgerOf;
 import '../../core/api.dart';
 import '../../core/drive_context_report.dart' show TimeValue;
@@ -81,9 +82,18 @@ class _DriveWeatherSectionState extends State<DriveWeatherSection> {
   @override
   Widget build(BuildContext context) {
     final s = AppScope.of(context);
-    if (!s.driveWeatherEnabled) return const SizedBox.shrink();
+    final gate = s.driveWeatherGate;
+    if (gate != DriveWeatherGate.ok) {
+      return _Frame(
+        key: const Key('report-weather'),
+        child: Text(
+          weatherGateText(gate),
+          key: Key('weather-gate-${gate.name}'),
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+      );
+    }
     _load ??= _run();
-    final t = Theme.of(context);
     return FutureBuilder<_Loaded?>(
       future: _load,
       builder: (context, snap) {
@@ -101,47 +111,75 @@ class _DriveWeatherSectionState extends State<DriveWeatherSection> {
         } else if (snap.hasError) {
           body = _Failure(error: snap.error!, onRetry: _retry);
         } else if (snap.data == null) {
-          return const SizedBox.shrink(); // not uploaded: no block at all
+          body = Text(
+            weatherNotUploadedText,
+            key: const Key('weather-not-uploaded'),
+            style: Theme.of(context).textTheme.bodyMedium,
+          );
         } else {
           body = _WeatherBody(loaded: snap.data!);
         }
-        return Column(
-          key: const Key('report-weather'),
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(6, 22, 6, 8),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.cloud_outlined,
-                    size: 18,
-                    color: t.colorScheme.primary,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'WEATHER',
-                    style: t.textTheme.labelLarge?.copyWith(
-                      color: t.colorScheme.primary,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: t.colorScheme.surface,
-                borderRadius: BorderRadius.circular(Corners.card),
-                border: Border.all(color: t.colorScheme.outlineVariant),
-              ),
-              child: body,
-            ),
-          ],
-        );
+        return _Frame(key: const Key('report-weather'), child: body);
       },
+    );
+  }
+}
+
+/// Why the block has no values when the report cannot ask the server at all.
+String weatherGateText(DriveWeatherGate gate) => switch (gate) {
+      DriveWeatherGate.ok => '',
+      DriveWeatherGate.switchedOff =>
+        'Weather is off, so nothing is looked up for this drive. Turn it on under Settings > Privacy & data sharing; '
+            'it then applies to recent drives on the next upload.',
+      DriveWeatherGate.noApprovedKey =>
+        'Weather is added by the server after a drive uploads, which needs an approved driver key. Request or check '
+            'your key in Settings.',
+      DriveWeatherGate.serverDoesNot =>
+        'The server this drive goes to does not add weather, so there is none for this drive.',
+    };
+
+/// A drive with nothing confirmed by the server yet.
+const String weatherNotUploadedText = 'Weather is added after the drive uploads. The server waits until the drive '
+    'has been quiet for 2 hours, then checks every 30 minutes, so expect it within about 2 to 3 hours of the end of '
+    'the drive. This drive has not uploaded yet (it uploads when you have signal).';
+
+class _Frame extends StatelessWidget {
+  final Widget child;
+  const _Frame({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(6, 22, 6, 8),
+          child: Row(
+            children: [
+              Icon(Icons.cloud_outlined, size: 18, color: t.colorScheme.primary),
+              const SizedBox(width: 8),
+              Text(
+                'WEATHER',
+                style: t.textTheme.labelLarge?.copyWith(
+                  color: t.colorScheme.primary,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.8,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: t.colorScheme.surface,
+            borderRadius: BorderRadius.circular(Corners.card),
+            border: Border.all(color: t.colorScheme.outlineVariant),
+          ),
+          child: child,
+        ),
+      ],
     );
   }
 }
@@ -229,13 +267,15 @@ class _WeatherBody extends StatelessWidget {
     final parts = <Widget>[];
     final String? note = switch (env.status) {
       DriveEnvStatus.disabled =>
-        'Weather is off for this drive, so the server did not look it up.',
+        'The server is not looking up weather for this drive: the weather choice was off, or it was not sent when '
+            'this drive uploaded. If Weather is on in Settings, the choice is sent again with the next upload.',
       DriveEnvStatus.unavailable =>
         'No weather for this drive. Either nothing was publicly visible to look up (the start and end of a drive are '
             'trimmed for privacy, so a short drive can end up with nothing) or the drive is older than 60 days.',
       DriveEnvStatus.pending =>
         snaps.isEmpty
-            ? 'Not looked up yet. The server checks every 30 minutes after a drive has been quiet for 2 hours.'
+            ? 'Added after upload: not looked up yet. The server waits until the drive has been quiet for 2 hours, then '
+                  'checks every 30 minutes, so expect it within about 2 to 3 hours of the end of the drive.'
             : 'Only part of this drive has been looked up so far. The server checks every 30 minutes after a drive has '
                   'been quiet for 2 hours, so more hours may follow.',
       DriveEnvStatus.ready =>

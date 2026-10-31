@@ -3,6 +3,7 @@
 // directly under any values and links out; the phone barometer is compared honestly; no coordinate is ever shown.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/app/app_state.dart' show DriveWeatherGate;
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/drive_context.dart';
 import 'package:meshsonar/core/model.dart';
@@ -270,7 +271,7 @@ void main() {
       await open(tester, script: (_, _) async => noSnaps(DriveEnvStatus.pending));
       await toWeather(tester);
       expect(text(tester, 'weather-pending'),
-          'Not looked up yet. The server checks every 30 minutes after a drive has been quiet for 2 hours.');
+          'Added after upload: not looked up yet. The server waits until the drive has been quiet for 2 hours, then checks every 30 minutes, so expect it within about 2 to 3 hours of the end of the drive.');
       expect(find.byKey(const Key('weather-asof')), findsOneWidget);
       expect(find.byKey(const Key('weather-credit')), findsNothing);
     });
@@ -287,7 +288,7 @@ void main() {
     testWidgets('disabled: weather is off for this drive', (tester) async {
       await open(tester, script: (_, _) async => noSnaps(DriveEnvStatus.disabled));
       await toWeather(tester);
-      expect(text(tester, 'weather-disabled'), 'Weather is off for this drive, so the server did not look it up.');
+      expect(text(tester, 'weather-disabled'), contains('not looking up weather for this drive'));
       expect(find.byKey(const Key('weather-credit')), findsNothing);
     });
 
@@ -378,36 +379,46 @@ void main() {
     });
   });
 
-  group('hidden, nothing invented, nothing asked', () {
-    Future<void> hidden(WidgetTester tester, WeatherHarness h) async {
-      await tester.drag(_list, const Offset(0, -6000));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('report-weather')), findsNothing);
+  group('explained, nothing invented, nothing asked', () {
+    Future<void> explained(WidgetTester tester, WeatherHarness h, String key, {String? has}) async {
+      await toWeather(tester);
+      expect(find.text('WEATHER'), findsOneWidget);
+      expect(find.byKey(Key(key)), findsOneWidget);
+      if (has != null) expect(text(tester, key), contains(has));
       expect(find.byKey(const Key('weather-credit')), findsNothing);
-      expect(find.text('WEATHER'), findsNothing);
       expect(h.weather.askedSessions, isEmpty);
     }
 
-    testWidgets('an old server (no driveEnv capability)', (tester) async {
-      await hidden(tester, await open(tester, capability: false));
+    testWidgets('a server that says it does no weather', (tester) async {
+      await explained(tester, await open(tester, capability: false), 'weather-gate-serverDoesNot', has: 'does not add weather');
     });
 
     testWidgets('a key that is not approved', (tester) async {
-      await hidden(tester, await open(tester, approved: false));
+      await explained(tester, await open(tester, approved: false), 'weather-gate-noApprovedKey', has: 'approved driver key');
     });
 
     testWidgets('a pending key', (tester) async {
-      await hidden(tester, await open(tester, setup: (h) {
-        h.settings.saved = h.settings.saved.copyWith(driverKey: 'k-pending-1234', keyStatus: DriverKeyStatus.pending);
-      }));
+      await explained(
+          tester,
+          await open(tester, setup: (h) {
+            h.settings.saved = h.settings.saved.copyWith(driverKey: 'k-pending-1234', keyStatus: DriverKeyStatus.pending);
+          }),
+          'weather-gate-noApprovedKey');
     });
 
-    testWidgets('the weather category switched off', (tester) async {
-      await hidden(tester, await open(tester, categoryOn: false));
+    testWidgets('the weather category switched off says where to turn it on', (tester) async {
+      await explained(tester, await open(tester, categoryOn: false), 'weather-gate-switchedOff', has: 'Privacy & data sharing');
     });
 
-    testWidgets('a drive that never reached the server', (tester) async {
-      await hidden(tester, await open(tester, synced: 0));
+    testWidgets('a drive that never reached the server says weather is added after upload, with the real delay', (tester) async {
+      final h = await open(tester, synced: 0);
+      await explained(tester, h, 'weather-not-uploaded', has: '2 to 3 hours');
+    });
+
+    testWidgets('the gate follows the server capabilities', (tester) async {
+      final h = await open(tester, capability: false);
+      expect(h.state.driveWeatherGate, DriveWeatherGate.serverDoesNot);
+      expect(h.state.driveWeatherEnabled, isFalse);
     });
   });
 

@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/drive_context_hook.dart' show contextLedgerOf;
+import '../../core/data_categories.dart' show CategoryId, dataCategories;
 import '../../core/drive_context.dart';
 import '../../core/drive_context_report.dart';
 import '../../core/drive_stats.dart' show formatDuration;
@@ -71,9 +72,15 @@ class _DriveContextSectionState extends State<DriveContextSection> {
           body = const Padding(
               padding: EdgeInsets.all(8), child: Center(child: SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2))));
         } else if (snap.data == null || snap.data!.isEmpty) {
+          final app = AppScope.read(context);
+          final off = [
+            for (final c in dataCategories)
+              if (c.id != CategoryId.packetHeaders && c.id != CategoryId.weather && !app.collectionOn(c.id)) c.title,
+          ];
           body = Text(
               'No phone or radio context was recorded with this drive. It is recorded during a drive while its '
-              'categories are on in Settings > Privacy & data sharing.',
+              'categories are on in Settings > Privacy & data sharing.'
+              '${off.isEmpty ? '' : ' Off right now: ${off.join(', ')}.'}',
               key: const Key('report-context-none'),
               style: t.textTheme.bodyMedium);
         } else {

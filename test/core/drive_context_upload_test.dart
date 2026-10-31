@@ -386,6 +386,52 @@ void main() {
       expect(server.lateUploads, hasLength(1));
     });
 
+    test('weather: a drive uploaded as plain v1 (capabilities unknown) gets enrich.weather=true later, once', () async {
+      caps = null; // cold start, no connection to the site-config
+      final s = await drive(4);
+      await sync.syncSession(s.id);
+      expect(server.sessions[s.id]!.enrichWeather, isFalse, reason: 'a v1 upload never enables server weather');
+      caps = _v12caps;
+      await sync.syncContextOnly();
+      expect(server.sessions[s.id]!.enrichWeather, isTrue);
+      expect(server.uploads.last['pings'], isEmpty);
+      final n = server.uploads.length;
+      await sync.syncContextOnly();
+      await sync.syncSession(s.id);
+      expect(server.uploads.length, n, reason: 'the weather choice is sent once');
+    });
+
+    test('weather: switching it off after it was sent tells the server once; a drive that never said yes stays silent', () async {
+      final s = await drive(3);
+      await sync.syncSession(s.id);
+      expect(server.sessions[s.id]!.enrichWeather, isTrue);
+      await saveSettings(off: {'weather'});
+      await sync.syncContextOnly();
+      expect(server.sessions[s.id]!.enrichWeather, isFalse);
+      final n = server.uploads.length;
+      await sync.syncContextOnly();
+      expect(server.uploads.length, n);
+
+      final fresh = await drive(2); // weather off from the start, plain drive
+      await sync.syncSession(fresh.id);
+      final m = server.uploads.length;
+      await sync.syncContextOnly();
+      expect(server.uploads.length, m);
+    });
+
+    test('weather: a drive older than the server enriches (60 days) is left alone', () async {
+      caps = _v1caps;
+      final old = makeSession(startedAt: DateTime.now().toUtc().subtract(const Duration(days: 90)), endedAt: null);
+      await store.startSession(old);
+      await store.appendPing(old.id, makePing(0));
+      await store.endSession(old.id, DateTime.now().toUtc().subtract(const Duration(days: 89)));
+      await sync.syncSession(old.id);
+      caps = _v12caps;
+      final n = server.uploads.length;
+      await sync.syncContextOnly();
+      expect(server.uploads.length, n);
+    });
+
     test('syncContextOnly leaves drives with pings still to send to the normal sync', () async {
       final s = await drive(3);
       await addContext(s);
