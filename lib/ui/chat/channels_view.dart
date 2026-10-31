@@ -8,6 +8,7 @@ import '../theme.dart';
 import '../widgets.dart' show EmptyState, SectionLabel;
 import 'channel_detail_screen.dart';
 import 'channel_flows.dart';
+import 'chat_row.dart';
 import 'conversation_screen.dart';
 import 'message_bubble.dart';
 import 'message_format.dart';
@@ -154,28 +155,17 @@ class _ChannelRow extends StatelessWidget {
       label: semantics.toString(),
       button: true,
       child: ExcludeSemantics(
-        child: ListTile(
+        child: ChatRow(
           key: Key('channel-row-${channel.id}'),
-          minTileHeight: 64,
           leading: CircleAvatar(backgroundColor: t.colorScheme.secondaryContainer, child: Icon(icon, color: t.colorScheme.onSecondaryContainer)),
           title: Row(children: [
-            Flexible(child: Text(channel.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: unread > 0 ? const TextStyle(fontWeight: FontWeight.w700) : null)),
+            Flexible(child: Text(channel.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: unread > 0 ? const TextStyle(fontWeight: FontWeight.w700) : null)),
             if (s?.pinned ?? false) const Padding(padding: EdgeInsets.only(left: 4), child: Icon(Icons.push_pin_rounded, size: 14)),
             if (muted) const Padding(padding: EdgeInsets.only(left: 4), child: Icon(Icons.notifications_off_outlined, size: 14)),
           ]),
-          subtitle: Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: offRadio ? TextStyle(color: t.colorScheme.error) : null),
-          trailing: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(stamp, style: t.textTheme.labelSmall),
-              if (unread > 0)
-                Padding(
-                  padding: const EdgeInsets.only(top: 2),
-                  child: Badge(key: Key('unread-${channel.id}'), label: Text(unread > 99 ? '99+' : '$unread'), backgroundColor: muted ? t.colorScheme.outline : t.colorScheme.primary),
-                ),
-            ],
-          ),
+          subtitle: Text(sub, maxLines: 2, overflow: TextOverflow.ellipsis, style: offRadio ? TextStyle(color: t.colorScheme.error) : null),
+          stamp: stamp,
+          badge: unread > 0 ? Badge(key: Key('unread-${channel.id}'), label: Text(unread > 99 ? '99+' : '$unread'), backgroundColor: muted ? t.colorScheme.outline : t.colorScheme.primary) : null,
           onTap: () => ConversationScreen.open(context, controller: controller, convKey: channel.convKey, title: channel.name),
           onLongPress: () => ChannelDetailScreen.open(context, controller: controller, channelId: channel.id!),
         ),
@@ -199,12 +189,11 @@ class _SystemSection extends StatelessWidget {
       children: [
         const SectionLabel('System'),
         if (systems.isEmpty)
-          ListTile(
-            key: const Key('system-empty'),
-            minTileHeight: 64,
-            leading: const CircleAvatar(child: Icon(Icons.sensors_rounded)),
-            title: const Text('Wardrive channel'),
-            subtitle: const Text('Appears after your first drive: the channel your pings are sent on. It is never mixed into your chats.'),
+          const ChatRow(
+            key: Key('system-empty'),
+            leading: CircleAvatar(child: Icon(Icons.sensors_rounded)),
+            title: Text('Wardrive channel'),
+            subtitle: Text('Appears after your first drive: the channel your pings are sent on. It is never mixed into your chats.'),
           )
         else
           for (final s in systems) _systemTile(context, t, s),
@@ -219,23 +208,21 @@ class _SystemSection extends StatelessWidget {
       container: true,
       label: 'System. ${s.channel.name}. ${s.pingsSent} pings sent, $last.${paused ? ' Pings paused by the airtime budget.' : ''}',
       child: ExcludeSemantics(
-        child: ListTile(
+        child: ChatRow(
           key: Key('system-row-${s.channel.id}'),
-          minTileHeight: 72,
-          isThreeLine: paused,
           leading: CircleAvatar(backgroundColor: t.colorScheme.tertiaryContainer, child: Icon(Icons.sensors_rounded, color: t.colorScheme.onTertiaryContainer)),
           title: Text(s.channel.name),
-          subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('${s.pingsSent} ${s.pingsSent == 1 ? 'ping' : 'pings'} sent, $last'),
+          subtitle: Text('${s.pingsSent} ${s.pingsSent == 1 ? 'ping' : 'pings'} sent, $last'),
+          below: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             if (paused)
               Text('Paused by the airtime budget: pings resume by themselves.', key: const Key('system-paused'), style: TextStyle(color: t.colorScheme.error, fontWeight: FontWeight.w600)),
+            TextButton(
+              key: const Key('view-traffic'),
+              style: TextButton.styleFrom(minimumSize: const Size(48, 48), padding: EdgeInsets.zero),
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => SystemTrafficScreen(controller: controller, channel: s.channel))),
+              child: const Text('View traffic'),
+            ),
           ]),
-          trailing: TextButton(
-            key: const Key('view-traffic'),
-            style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
-            onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => SystemTrafficScreen(controller: controller, channel: s.channel))),
-            child: const Text('View traffic'),
-          ),
         ),
       ),
     );

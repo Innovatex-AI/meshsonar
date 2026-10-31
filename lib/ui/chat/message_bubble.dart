@@ -102,7 +102,7 @@ class _MessageBubbleState extends State<MessageBubble> {
     if (del != null) semantic.write('. ${del.detail}');
 
     final bubble = Container(
-      constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.82),
+      constraints: BoxConstraints(maxWidth: (MediaQuery.sizeOf(context).width * 0.82).clamp(0.0, 560.0)),
       padding: const EdgeInsets.symmetric(horizontal: Gap.m, vertical: Gap.s),
       decoration: BoxDecoration(
         color: bg,

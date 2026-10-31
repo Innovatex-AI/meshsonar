@@ -133,7 +133,11 @@ class ChatService {
   }
 
   /// The radio linked up (or came back): try everything that was waiting.
-  void notifyRadioReady() => _kick();
+  void notifyRadioReady() {
+    // Whatever waited for the radio (parked with a recheck timer, or backing off from a busy radio) goes now.
+    if (!_disposed && !store.db.isClosed) store.outbox.releaseWaiting(nowMs());
+    _kick();
+  }
 
   /// Starts a pump without waiting for it. Off when [autoTimer] is false (tests drive [pump] by hand).
   void _kick() {

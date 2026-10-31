@@ -7,6 +7,7 @@ import '../../app/chat_controller.dart';
 import '../../chat/models.dart';
 import '../theme.dart';
 import '../widgets.dart' show EmptyState;
+import 'chat_row.dart';
 import 'conversation_screen.dart';
 import 'message_format.dart';
 
@@ -97,16 +98,13 @@ class _ContactsViewState extends State<ContactsView> {
                             button: true,
                             label: '${x.displayName}${x.type == ContactType.room ? ', room' : ''}${unread > 0 ? ', $unread unread' : ''}. ${s?.lastPreview ?? 'No messages yet'}',
                             child: ExcludeSemantics(
-                              child: ListTile(
+                              child: ChatRow(
                                 key: Key('contact-row-${x.prefix}'),
-                                minTileHeight: 64,
                                 leading: CircleAvatar(child: Icon(x.type == ContactType.room ? Icons.forum_outlined : Icons.person_outline_rounded)),
-                                title: Text(x.displayName, maxLines: 1, overflow: TextOverflow.ellipsis, style: unread > 0 ? const TextStyle(fontWeight: FontWeight.w700) : null),
-                                subtitle: Text(s?.lastPreview ?? 'No messages yet', maxLines: 1, overflow: TextOverflow.ellipsis),
-                                trailing: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
-                                  Text(listStamp(context, s?.lastTsMs, now: c.now()), style: Theme.of(context).textTheme.labelSmall),
-                                  if (unread > 0) Padding(padding: const EdgeInsets.only(top: 2), child: Badge(label: Text(unread > 99 ? '99+' : '$unread'))),
-                                ]),
+                                title: Text(x.displayName, maxLines: 2, overflow: TextOverflow.ellipsis, style: unread > 0 ? const TextStyle(fontWeight: FontWeight.w700) : null),
+                                subtitle: Text(s?.lastPreview ?? 'No messages yet', maxLines: 2, overflow: TextOverflow.ellipsis),
+                                stamp: listStamp(context, s?.lastTsMs, now: c.now()),
+                                badge: unread > 0 ? Badge(label: Text(unread > 99 ? '99+' : '$unread')) : null,
                                 onTap: () => ConversationScreen.open(context, controller: c, convKey: _convKeyFor(x), title: x.displayName),
                               ),
                             ),

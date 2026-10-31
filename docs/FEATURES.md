@@ -52,6 +52,34 @@ get one sentence ("Drive in progress. 12 pings · 8 heard. Next ping 14 s. Last 
 Shared states: `ui/state_widgets.dart` has `LoadingState` (a spinner that gives up after a timeout and becomes an
 `ErrorState` with Try again) and `ErrorState`; `EmptyState` is in `ui/widgets.dart`.
 
+## Chat (Chat tab, unreleased)
+
+Files: `ui/chat/*`, `app/chat_controller.dart`, `app/chat_wiring.dart`, `chat/channel_admin.dart`. Chat uses only the radio and the
+on-phone database: no key, no server, no website counterpart. Secrets stay in the Keychain.
+
+- **Channels**: rows show last message, time, unread, pin, mute, and "Not on your radio right now" for a channel another app
+  removed (channel info offers "Put it back on the radio"). Pull down to read the radio again. Without a radio you can still read
+  what is saved.
+- **System section** (pinned): the wardrive channel with pings sent, last ping, "Paused by the airtime budget" when the arbiter
+  is holding pings back, and read-only View traffic (others' pings). It never counts as unread and never notifies.
+- **Add a channel**: Join Public; Join a # channel (name lower-cased, letters, numbers and dashes); Scan a QR code (camera only
+  on that screen); Paste a link or a name + secret; Create a private channel (random secret, then straight to the share screen).
+  Errors say what to do: radio away, no free slot (all slots used), firmware without channels, bad link or secret, duplicate name.
+- **Channel info**: QR + `meshcore://channel/add` link + copy, secret on request (private only), notifications All / Mentions /
+  Muted (stored now; notifications plug in later), pin, **Region** (limits how far messages are repeated; empty = whole mesh, the
+  default; the key is derived from the name like a # key), rename (private only), clear messages, delete (empties the radio slot).
+- **Conversation** (channels, DMs, rooms): newest at the bottom, day headers, "N new messages" marker, sender name once per run,
+  delivery under your own messages: Waiting for the radio / Queued, sending in N s / Sending / Sent / Heard by N repeaters /
+  Delivered / Not sent (Retry, Delete). Composer: live byte counter against the real limit, drafts saved per conversation,
+  mention button. Long press: copy, open link, retry, cancel, details (time, sender clock, SNR, hops, route), delete.
+- **Safety while driving**: a drive is running and GPS speed above 8 km/h (unlocks below 6): the composer is replaced by
+  "Typing is off while the car is moving" with **I'm a passenger** (lasts for that drive). Reading and incoming banners work.
+  A stale or missing speed never locks.
+- **Chat in Drive**: the Messages button next to Ping now opens a half-height sheet: unread conversations, then a conversation
+  with the same composer and the same lock. Pings are never blocked by it.
+- **Contacts segment**: until the contacts screens ship it is a real read-only list (people and rooms from the chat database,
+  last message, search); tapping opens the conversation.
+
 ## First-run intro (onboarding)
 
 Files: `ui/onboarding/*`. The intro has four pages and is shown once. `ui_prefs.json` `onboarding_seen` is set when

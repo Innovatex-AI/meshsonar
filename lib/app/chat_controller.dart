@@ -154,7 +154,8 @@ class ChatController extends ChangeNotifier {
   }
 
   Future<void> _unbind() async {
-    await _linkSub?.cancel();
+    // Not awaited: cancelling a stream subscription never completes under fake async (same reason as RadioSessionImpl.close).
+    unawaited(_linkSub?.cancel());
     _linkSub = null;
     final a = _adapter;
     _adapter = null;
@@ -210,12 +211,12 @@ class ChatController extends ChangeNotifier {
 
   /// Queues [text] in [convKey]. Never throws; the composer shows [SendAttempt.error].
   SendAttempt send(String convKey, String text) {
+    if (composerLocked) {
+      return const SendAttempt.failed('Sending is off while the car is moving. Tap "I\'m a passenger" if someone else is typing.');
+    }
     final id = _radioId;
     if (id == null) {
       return const SendAttempt.failed('Connect your radio once so MeshSonar knows which radio these messages belong to.');
-    }
-    if (composerLocked) {
-      return const SendAttempt.failed('Sending is off while the car is moving. Tap "I\'m a passenger" if someone else is typing.');
     }
     try {
       return SendAttempt.ok(service.send(radioId: id, convKey: convKey, text: text));
@@ -233,6 +234,13 @@ class ChatController extends ChangeNotifier {
   }
 
   // ------------------------------------------------------------------ events
+
+  /// Demo and screenshot tooling only: pretend this radio is the current one.
+  @visibleForTesting
+  void debugUseRadio(String id) {
+    _radioId = id;
+    _changed();
+  }
 
   /// Tells listeners to rebuild (after a change made outside the controller, such as an imported contact).
   void refresh() => _changed();
