@@ -246,7 +246,9 @@ radio at a time".
   driving.
 - Connect timeouts: transport 25 s, `start()` 20 s → "The radio didn't answer…".
 
-## Simulator
+## Simulator (debug builds only)
+
+Release and TestFlight builds do not contain the Simulator (`lib/app/build_flags.dart`); the description below applies to debug builds and tests.
 
 (`lib/radio/simulator.dart`) With no hardware, the simulator plays the radio *and* the GPS:
 

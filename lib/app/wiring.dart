@@ -28,7 +28,9 @@ import '../platform/phone_sensors_plus.dart';
 import '../platform/share.dart';
 import '../radio/ble_transport.dart';
 import '../radio/companion_link.dart';
+import '../radio/radio_api.dart' show NoRadioScanner;
 import '../radio/simulator.dart';
+import 'build_flags.dart';
 import '../radio/wardrive_engine.dart';
 import 'services.dart';
 
@@ -62,7 +64,9 @@ Future<AppServices> buildRealServices() async {
   installSharedEtagClient(Directory('${root.path}${Platform.pathSeparator}etag_cache'));
   const uuid = Uuid();
   // One simulated car: the simulated radio decides which repeaters hear it from the same position the engine records.
-  final simLocation = SimulatedLocationSource();
+  // Only in builds with the Simulator on (lib/app/build_flags.dart); release builds carry none of it.
+  final simLocation = simulatorAvailable ? SimulatedLocationSource() : null;
+  final realLocation = FilteredLocationSource(GeolocatorLocationSource());
 
   return AppServices(
     store: store,
@@ -71,11 +75,11 @@ Future<AppServices> buildRealServices() async {
     syncServiceFactory: (client) =>
         DefaultSyncService(store: store, client: client, settings: settingsStore, app: app),
     bluetoothScanner: BleRadioScanner(),
-    simulatorScanner: SimulatedRadioScanner(location: simLocation),
+    simulatorScanner: simLocation == null ? const NoRadioScanner() : SimulatedRadioScanner(location: simLocation),
     linkFactory: (transport) => MeshCoreCompanionLink(transport),
     // Real GPS, cleaned: parked jitter is held still, poor fixes dropped (lib/core/position_filter.dart).
-    location: FilteredLocationSource(GeolocatorLocationSource()),
-    simulatedLocation: simLocation,
+    location: realLocation,
+    simulatedLocation: simLocation ?? realLocation,
     engineFactory: (link, location) => DefaultWardriveEngine(link: link, location: location),
     repeaterCache: FileRepeaterCache(File('${root.path}${Platform.pathSeparator}repeaters.json')),
     exportDir: () async {

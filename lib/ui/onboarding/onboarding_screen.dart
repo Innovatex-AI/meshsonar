@@ -1,6 +1,7 @@
 // First-run intro: three short pages, skippable, shown once.
 import 'package:flutter/material.dart';
 
+import '../../app/build_flags.dart';
 import 'illustrations.dart';
 
 /// What the person chose on the last pages, so the app can take them there.
@@ -81,8 +82,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         key: const Key('onboarding-page-2'),
                         art: const RadioLinkIllustration(),
                         title: 'Connect your radio',
-                        body: 'Pair your MeshCore companion radio over Bluetooth. No radio with you? '
-                            'The Simulator drives a loop around Westerville so you can try everything first; it never uploads anything.',
+                        body: 'Pair your MeshCore companion radio over Bluetooth. MeshSonar needs a radio to send pings and hear '
+                            'repeaters echo them.',
                         actions: [
                           FilledButton.icon(
                             key: const Key('onboarding-connect'),
@@ -90,6 +91,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             icon: const Icon(Icons.bluetooth_searching),
                             label: const Text('Connect radio'),
                           ),
+                          if (simulatorAvailable)
                           OutlinedButton.icon(
                             key: const Key('onboarding-simulator'),
                             style: OutlinedButton.styleFrom(

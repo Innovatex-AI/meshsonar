@@ -1,10 +1,11 @@
-// Pick a radio: scan Bluetooth for MeshCore companions, or use the Simulator.
+// Pick a radio: scan Bluetooth for MeshCore companions (and, in debug builds only, the Simulator).
 // Sections: current radio, nearby radios (signal bars, a spinner on the one being connected), the Simulator, a tip.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 
 import '../app/app_state.dart';
+import '../app/build_flags.dart';
 import '../radio/radio_api.dart';
 import 'app.dart';
 import 'widgets.dart';
@@ -101,9 +102,9 @@ class _ConnectScreenState extends State<ConnectScreen> {
       return 'MeshSonar needs Bluetooth permission to find your radio. Allow Bluetooth (and Nearby devices on Android) in your phone\'s settings.';
     }
     if (l.contains('off') || l.contains('unavailable') || l.contains('not supported') || l.contains('adapter')) {
-      return 'Bluetooth looks off or unavailable. Turn it on and scan again, or use the Simulator.';
+      return 'Bluetooth looks off or unavailable. Turn it on and scan again.';
     }
-    return 'Bluetooth scan didn\'t work. Turn Bluetooth on and try again, or use the Simulator.';
+    return 'Bluetooth scan didn\'t work. Turn Bluetooth on and try again.';
   }
 
   @override
@@ -210,23 +211,25 @@ class _ConnectScreenState extends State<ConnectScreen> {
                 enabled: !busy,
                 onTap: () => _connect(d, RadioKind.bluetooth),
               ),
-            const SectionLabel('No radio?'),
-            Card(
-              child: ListTile(
-                key: const Key('simulator'),
-                minTileHeight: 72,
-                contentPadding: const EdgeInsets.symmetric(horizontal: Gap.l, vertical: Gap.xs),
-                leading: _IconBadge(icon: Icons.science_rounded, color: MeshSonarColors.of(context).beacon),
-                title: const Text('Simulator (no radio)'),
-                subtitle: const Text('A pretend radio and drive around Westerville, for trying the app out. Simulated drives stay on this phone and are never uploaded.'),
-                trailing: _connectingId == 'simulator' && s.connecting
-                    ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2.5))
-                    : const Icon(Icons.chevron_right_rounded),
-                enabled: !busy,
-                onTap: () =>
-                    _connect(const RadioDevice(id: 'simulator', name: 'MeshSonar Simulator'), RadioKind.simulator),
-              ),
-            ),
+            if (simulatorAvailable) ...[
+                const SectionLabel('No radio?'),
+                Card(
+                  child: ListTile(
+                    key: const Key('simulator'),
+                    minTileHeight: 72,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: Gap.l, vertical: Gap.xs),
+                    leading: _IconBadge(icon: Icons.science_rounded, color: MeshSonarColors.of(context).beacon),
+                    title: const Text('Simulator (no radio)'),
+                    subtitle: const Text('A pretend radio and drive around Westerville, for trying the app out. Simulated drives stay on this phone and are never uploaded.'),
+                    trailing: _connectingId == 'simulator' && s.connecting
+                        ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2.5))
+                        : const Icon(Icons.chevron_right_rounded),
+                    enabled: !busy,
+                    onTap: () =>
+                        _connect(const RadioDevice(id: 'simulator', name: 'MeshSonar Simulator'), RadioKind.simulator),
+                  ),
+                ),
+            ],
             const SizedBox(height: Gap.l),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,

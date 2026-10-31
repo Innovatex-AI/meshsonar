@@ -5,6 +5,11 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- **The Simulator is out of release builds.** `simulatorAvailable` (`lib/app/build_flags.dart`) is `kDebugMode ||
+  --dart-define=MESHSONAR_SIMULATOR=true`: the Connect screen entry, the onboarding button and the simulator's code are
+  gone from the App Store / TestFlight app (checked by `scripts/verify_release_no_sim.sh`). Debug builds and tests keep
+  it. Onboarding and the Drive hint no longer mention it. App Review notes now rely on a demo video (docs/APP_STORE.md).
+
 ## [0.21.0] — 2026-10-30 — production readiness (TestFlight candidate)
 
 - **Bluetooth now runs on `flutter_reactive_ble` (BSD-3-Clause)**, replacing `flutter_blue_plus`, whose licence needs a

@@ -156,7 +156,8 @@ void main() {
     await h.pumpApp(tester);
     expect(find.byKey(const Key('drive-map')), findsOneWidget);
     expect(find.byKey(const Key('map-hint')), findsOneWidget);
-    expect(find.textContaining('try the Simulator'), findsOneWidget);
+    expect(find.textContaining('Tap Connect radio'), findsOneWidget);
+    expect(find.textContaining('Simulator'), findsNothing, reason: 'the hint never mentions a simulator');
     // Start/Stop sits below the map (thumb reach).
     final mapBottom = tester.getBottomLeft(find.byKey(const Key('drive-map'))).dy;
     expect(tester.getTopLeft(find.byKey(const Key('start-stop'))).dy, greaterThan(mapBottom));

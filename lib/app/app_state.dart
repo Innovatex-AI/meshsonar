@@ -42,6 +42,7 @@ import '../core/telemetry.dart';
 import '../core/telemetry_uploader.dart';
 import '../core/phone_sensors.dart';
 import '../core/units.dart';
+import 'build_flags.dart';
 import '../platform/app_lifecycle_bridge.dart';
 import '../radio/radio_api.dart';
 import 'context_upload_hook.dart';
@@ -1342,6 +1343,7 @@ class AppState extends ChangeNotifier {
 
   /// Connects to the simulator's single device.
   Future<bool> connectSimulator() async {
+    if (!simulatorAvailable) return false;
     try {
       final lists = await services.simulatorScanner.scan(timeout: const Duration(seconds: 2)).toList();
       final all = lists.expand((l) => l).toList();

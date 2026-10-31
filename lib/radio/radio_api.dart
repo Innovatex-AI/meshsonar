@@ -28,6 +28,15 @@ abstract class RadioScanner {
   Future<ByteTransport> connect(RadioDevice device);
 }
 
+/// A scanner that finds nothing: stands in for the Simulator in builds that leave it out.
+class NoRadioScanner implements RadioScanner {
+  const NoRadioScanner();
+  @override
+  Stream<List<RadioDevice>> scan({Duration timeout = const Duration(seconds: 8)}) => const Stream.empty();
+  @override
+  Future<ByteTransport> connect(RadioDevice device) => throw StateError('No such radio');
+}
+
 /// What the radio says about itself after app start.
 class SelfInfo {
   final String publicKey; // hex, lower case

@@ -16,8 +16,8 @@ pins the plist, manifest and icon facts this document relies on.
 | PrivacyInfo.xcprivacy | Tracking false, no tracking domains, 8 collected types (section 5), required-reason API: file timestamps `C617.1` (own cache files: region cache, repeater reach, drive env cache). No other required-reason API in app code (no UserDefaults, disk space, boot time, active keyboard). Verified in the release build: 9 plugin bundles (share_plus, sensors_plus, device_info_plus, connectivity_plus, url_launcher_ios, wakelock_plus, geolocator_apple, battery_plus, package_info_plus) and Flutter.framework ship their own manifests (all tracking false, no tracking domains); flutter_blue_plus, path_provider and h3 ship none and use no required-reason API. Re-check in the Xcode Privacy Report on the archive (section 9). |
 | Icons / launch | All sizes in `AppIcon.appiconset` present, every file opaque RGB (no alpha, 1024 marketing icon included). Launch storyboard is a branded dark teal with the logo, no placeholder. |
 | Licences | Bluetooth is `flutter_reactive_ble` (BSD-3-Clause, free for commercial use); it replaced the paid-for-profit `flutter_blue_plus`. The in-app About list and THIRD_PARTY_NOTICES.md say so. "All package licences" opens Flutter's full licence page. |
-| Simulator | Kept, clearly labelled everywhere ("SIMULATED GPS & RADIO" chip/map tag). Fixed: simulated drives are **never uploaded** and the simulator's packets are never shared (previously a keyed phone would have sent made-up Westerville drives to the community map). It is the reviewer path (section 7). |
-| Permission denial | Location denied or off: the drive does not start and says how to fix it; Bluetooth denied/off: scan says so with a Settings pointer and offers the Simulator; Motion denied: reported, never nagged. Nothing crashes (existing tests `drive_flow_test`, `connect` flows). |
+| Simulator | REMOVED from release builds (Oct 30, `lib/app/build_flags.dart`, verified by `scripts/verify_release_no_sim.sh`); debug builds keep it for tests and screenshots. Was: clearly labelled everywhere ("SIMULATED GPS & RADIO" chip/map tag). Fixed: simulated drives are **never uploaded** and the simulator's packets are never shared (previously a keyed phone would have sent made-up Westerville drives to the community map). It is the reviewer path (section 7). |
+| Permission denial | Location denied or off: the drive does not start and says how to fix it; Bluetooth denied/off: scan says so with a Settings pointer and explains what to do; Motion denied: reported, never nagged. Nothing crashes (existing tests `drive_flow_test`, `connect` flows). |
 | iPad / Dynamic Type / dark mode / VoiceOver | All screens use `SafeArea`/lists, portrait and landscape on iPad (all four orientations enabled), dark theme (system), IconButtons all carry tooltips, map repeater and observer markers now carry VoiceOver labels (they had none). New test lays out the delete screen at 2x text on 1024x1366, 1366x1024, 507x1024 and 375x667 windows. Real-device VoiceOver/multitasking pass is still to do on the iPad (section 9). |
 | Placeholder / debug UI | None found: no debug banners, no lorem text, no TODO screens reachable. |
 
@@ -42,7 +42,7 @@ pins the plist, manifest and icon facts this document relies on.
   - Export any drive as a file or a PDF report. Delete your data any time from Settings.
   - Works with iPhone and iPad. Dark mode, large text and VoiceOver supported.
 
-  MeshSonar needs a MeshCore companion radio to record a drive. No radio? Try the built-in Simulator.
+  MeshSonar needs a MeshCore companion radio to record a drive. Browse live community coverage on the Region tab without one.
 
   Open source (MIT). Not affiliated with MeshCore.
 - **Keywords (max 100, comma separated, no spaces):** `meshcore,wardriving,mesh,lora,repeater,coverage,radio,ham,gps,drive test,off-grid,signal` (98)
@@ -88,12 +88,12 @@ The app works fully on "While Using" (drives need the screen on or the app visib
 
 ## 7. App Review notes (paste into "Notes")
 
-> MeshSonar is a companion app for MeshCore LoRa mesh radios (a small battery-powered radio the user pairs over Bluetooth). It records radio coverage while driving. A physical MeshCore radio is not required to review the app: it has a built-in **Simulator** that plays a pretend radio and GPS, labelled "SIMULATED GPS & RADIO" everywhere. Simulator drives are stored on the device only and are never uploaded.
+> MeshSonar is a companion app for MeshCore LoRa mesh radios (a small battery-powered radio the user pairs over Bluetooth). It records radio coverage while driving. Recording a drive needs that radio, so a **demo video** of a full drive with a real radio is attached under App Review Information (record one before submitting: connect, antenna sheet, Start drive, pings and echoes on the map, Stop, report). Everything that does not need the radio can be reviewed in the app without one: the Region tab (live community data), Drives, Settings, the privacy disclosure and the account and data deletion flow. There is no demo mode in the shipped app.
 >
-> To see it work without hardware:
-> 1. Launch the app and swipe through the intro. On the third page ("Connect your radio") tap **Try the Simulator**. (Later: Radio tab > Connect > Simulator (no radio).)
+> Without hardware, reviewers can open every screen except an active drive:
+> 1. Launch the app and swipe through the intro (the third page says the driver key is created automatically).
 > 2. If a privacy disclosure sheet appears, tap **Continue**.
-> 3. A "How is this radio's antenna set up?" sheet appears. Type any gain (for example 3) and height (for example 1.5), tap **Save antenna**.
+> 3. (Needs a radio; shown in the demo video.) A "How is this radio's antenna set up?" sheet appears. Type any gain (for example 3) and height (for example 1.5), tap **Save antenna**.
 > 4. On the Drive tab tap **Start drive**. Allow location "While Using". An explanation screen about "Always" location appears once; **Continue** (asks iOS for Always) or **Not now** both work. The simulated car drives a loop around Westerville, Ohio; pings, repeater echoes and the live map update every second. Tap **Stop drive**; open the Drives tab for the report.
 > 5. Settings > Privacy & data sharing shows every data switch, the privacy policy link, and **Delete my data and account** (account deletion and data erasure).
 >
@@ -105,7 +105,7 @@ The app works fully on "While Using" (drives need the screen on or the app visib
 
 Demo account: none needed. Contact: Andy (KE4BFI), alamb@innovatexit.com, phone number in App Store Connect.
 
-## 8. Screenshots (required: 6.9-inch iPhone 1320x2868 or 6.5-inch 1284x2778, and 13-inch iPad 2064x2752; capture from the Simulator/iPad Pro with the app's Simulator mode, dark and light)
+## 8. Screenshots (required: 6.9-inch iPhone 1320x2868 or 6.5-inch 1284x2778, and 13-inch iPad 2064x2752; capture from a debug build, which has the Simulator, on the iPhone and iPad simulators, dark and light)
 
 1. Drive tab mid-drive, map with ping dots and repeaters (Simulator, "SIMULATED" tag visible).
 2. Heard-box / repeater detail sheet.
