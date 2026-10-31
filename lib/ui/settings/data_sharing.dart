@@ -419,9 +419,10 @@ const List<({String head, String body})> locationPoints = [
   ),
   (
     head: 'What it is NOT used for',
-    body: 'Nothing is recorded or sent when you are not driving: between drives a coarse, low-power position only keeps '
-        'the region right, on this phone. Position is never put in the on-air ping, and drive data goes only to the '
-        'server you chose, under your driver key.',
+    body: 'Only while you are recording a drive. With the app closed or between drives MeshSonar does not use your '
+        'position in the background; while the app is open a coarse position only keeps the region right, on this '
+        'phone. Position is never put in the on-air ping, and drive data goes only to the server you chose, under '
+        'your driver key.',
   ),
   (
     head: 'You stay in control',

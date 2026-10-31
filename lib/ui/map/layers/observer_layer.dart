@@ -42,7 +42,12 @@ class ObserverLayer extends StatelessWidget {
               point: LatLng(o.lat!, o.lon!),
               width: 40,
               height: 40,
-              child: GestureDetector(
+              child: Semantics(
+                button: onHit != null,
+                label: 'Observer, ${o.online ? 'online' : 'offline'}',
+                excludeSemantics: true,
+                onTap: onHit == null ? null : () => onHit!(ObserverHit(o, regionName: regionName)),
+                child: GestureDetector(
                 key: ValueKey('map-observer-${o.key}'),
                 behavior: HitTestBehavior.opaque,
                 onTap: onHit == null ? null : () => onHit!(ObserverHit(o, regionName: regionName)),
@@ -57,6 +62,7 @@ class ObserverLayer extends StatelessWidget {
                     ),
                   ),
                 ),
+              ),
               ),
             ),
       ],

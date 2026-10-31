@@ -1037,7 +1037,8 @@ class AppState extends ChangeNotifier {
   TelemetryUploader? _telemetry;
   TelemetryUploader get _tele => _telemetry ??= TelemetryUploader(
         // Nothing is collected before the person has seen the first-run disclosure (the sheet in lib/ui/telemetry_sheet.dart).
-        enabled: () => _settings.telemetryEnabled && _telemetryDisclosed(),
+        // The Simulator's packets are made up: never shared.
+        enabled: () => _radioKind != RadioKind.simulator && _settings.telemetryEnabled && _telemetryDisclosed(),
         driverKey: () => _settings.driverKey,
         keyApproved: () => keyApproved,
         transport: () {

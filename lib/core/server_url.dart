@@ -7,6 +7,10 @@
 /// The MeshSonar server new installs use.
 const String defaultServerUrl = 'https://meshsonar.com';
 
+/// The privacy policy (App Store Connect "Privacy Policy URL"; linked in the app). Fixed to the apex site, not the
+/// server the person configured: it is the publisher's policy for this app.
+const String privacyPolicyUrl = 'https://meshsonar.com/privacy';
+
 /// Hosts that serve the same MeshSonar server (same API and database). Moving between two of these keeps the driver
 /// key; any other server change removes it. Deliberately an explicit list (not "any *.meshsonar.com"): a key only
 /// works on the database that issued it.

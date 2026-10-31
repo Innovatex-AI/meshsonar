@@ -181,6 +181,8 @@ class DefaultSyncService implements SyncService {
       r.error = 'no such drive: $sessionId';
       return r;
     }
+    // A Simulator drive is made-up data: it must never reach the community map.
+    if (session.isSimulated) return r;
     final ledger = _ledger;
     // Read before the uploads, so a rename made while they run stays marked for the next sync.
     final resendToken = await ledger.sessionResendToken(sessionId);

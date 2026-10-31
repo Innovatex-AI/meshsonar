@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/api.dart' show openMeteoCredit;
+import '../core/server_url.dart' show privacyPolicyUrl;
 import 'app.dart';
 
 const String mitLicenseText = '''MIT License
@@ -76,6 +77,16 @@ class AboutScreen extends StatelessWidget {
               'can be exported as files, and upload to any server that speaks the MeshSonar Drive Format.',
             ),
             const SizedBox(height: 16),
+            ListTile(
+              key: const Key('about-privacy-policy'),
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.policy_outlined),
+              title: const Text('Privacy policy'),
+              subtitle: const Text(privacyPolicyUrl),
+              trailing: const Icon(Icons.open_in_new, size: 18),
+              onTap: () => s.services.openUrl(Uri.parse(privacyPolicyUrl)),
+            ),
+            const SizedBox(height: 8),
             Text('Licence', style: t.textTheme.titleMedium),
             const SizedBox(height: 4),
             Text(mitLicenseText, key: const Key('mit-license'), style: t.textTheme.bodySmall?.copyWith(fontFamily: 'monospace')),

@@ -4,7 +4,8 @@
 //
 // Battery rules: coarse accuracy and a big distance filter (the source's job), at most one fix per [minGap] reaches the
 // app, and the stream is cancelled whenever it cannot matter: during a drive (the engine's own stream feeds the
-// tracker then) and while the app is in the background, unless "Always" location is granted.
+// tracker then) and while the app is in the background (never a background stream between drives, even with
+// "Always" location granted: Always is for recording drives).
 // It never touches the radio: a different radio preset is only ever a prompt (AppState._onRegionChanged).
 import 'dart:async';
 import 'dart:convert';
@@ -100,20 +101,15 @@ class IdleRegionWatcher {
   Future<void> _reconcile() async {
     final gen = ++_gen;
     if (!_started || _driving) return _cancel();
-    // Foreground: always fine. Background: only with Always (checked each time so a changed permission is honoured).
-    var always = false;
-    if (!_foreground) {
-      always = await _safe(source.hasAlways);
-      if (gen != _gen) return;
-      if (!always) return _cancel();
-    }
+    // App Review (2.5.4 / 5.1.1): background location is for recording a drive only. Between drives this stream
+    // runs in the foreground and nowhere else, whatever permission is granted; the app re-reads the position when it
+    // comes back to the front.
+    if (!_foreground) return _cancel();
     if (_sub != null) return;
     final ok = await _safe(source.permitted);
-    if (gen != _gen) return;
-    if (!ok) return;
-    if (!always) always = await _safe(source.hasAlways);
     if (gen != _gen || _sub != null) return;
-    _sub = source.fixes(background: always).listen(_handle, onError: (_) {});
+    if (!ok) return;
+    _sub = source.fixes(background: false).listen(_handle, onError: (_) {});
   }
 
   Future<void> _cancel() async {

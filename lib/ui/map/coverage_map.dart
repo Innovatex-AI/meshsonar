@@ -1238,7 +1238,14 @@ class _RepeaterMarker extends StatelessWidget {
         child: diamond,
       );
     }
-    return GestureDetector(behavior: HitTestBehavior.opaque, onTap: onTap, child: child);
+    return Semantics(
+      button: true,
+      label: 'Repeater ${repeaterKey.substring(0, math.min(4, repeaterKey.length))}',
+      hint: 'Shows repeater details',
+      excludeSemantics: true,
+      onTap: onTap,
+      child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: onTap, child: child),
+    );
   }
 }
 
@@ -1274,7 +1281,14 @@ class _RepeaterLabel extends StatelessWidget {
         ],
       ),
     );
-    return GestureDetector(onTap: onTap, child: box);
+    return Semantics(
+      button: true,
+      label: detail == null ? name : '$name, $detail',
+      hint: 'Shows repeater details',
+      excludeSemantics: true,
+      onTap: onTap,
+      child: GestureDetector(onTap: onTap, child: box),
+    );
   }
 }
 
