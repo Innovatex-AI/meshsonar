@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../radio/repeater_admin.dart';
 import '../../../radio/repeater_health.dart';
+import '../../app.dart' show AppScope;
 import '../../claims/claim_widgets.dart' show ClaimRepeaterAction;
 import '../../theme.dart';
 import 'admin_common.dart';
@@ -102,7 +103,7 @@ class AdminOverviewView extends StatelessWidget {
       icon: Icons.monitor_heart_outlined,
       child: Column(children: [
         KeyValueRow('Battery', '${volts.toStringAsFixed(2)} V', valueKey: const Key('v-battery')),
-        if (s.telemetry?.temperatureC != null) KeyValueRow('Chip temperature', '${s.telemetry!.temperatureC!.toStringAsFixed(1)} °C'),
+        if (s.telemetry?.temperatureC != null) KeyValueRow('Chip temperature', AppScope.unitsOf(context).temperature(s.telemetry!.temperatureC!)),
         KeyValueRow('Up for', uptimeText(st.upTimeSecs), valueKey: const Key('v-uptime')),
         KeyValueRow('Noise floor', '${st.noiseFloorDbm} dBm', valueKey: const Key('v-noise')),
         KeyValueRow('Time on air (sending)', '${secondsText(st.airTimeSecs)} (${airPct.toStringAsFixed(2)}% of its uptime)'),

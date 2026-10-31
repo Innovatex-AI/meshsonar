@@ -47,7 +47,7 @@ void main() {
       await shot(t, 'admin-health-$d');
       await tapTab(t, 'settings');
       await waitFor(t, find.byKey(const Key('setting-name')));
-      await pumpFor(t, const Duration(seconds: 40));
+      await pumpFor(t, const Duration(seconds: 6));
       await shot(t, 'admin-settings-$d');
       await t.ensureVisible(find.byKey(const Key('setting-name')));
       await t.tap(find.byKey(const Key('setting-name')));

@@ -408,7 +408,7 @@ class RepeaterAdminSession {
     return _exclusive(() async {
       _note(AdminLogKind.sent, 'login');
       try {
-        await _ensureContact();
+        await _ensureContactNow();
         final r = await radio.login(keyHex, password, timeout: timeout);
         _loggedIn = true;
         _isAdmin = r.isAdmin;
@@ -442,7 +442,9 @@ class RepeaterAdminSession {
   bool _contactReady = false;
 
   /// The radio must hold the repeater as a contact before any request (anonymous requests need no login, but do need this).
-  Future<void> _ensureContact() async {
+  Future<void> _ensureContact() => _contactReady ? Future<void>.value() : _exclusive(_ensureContactNow);
+
+  Future<void> _ensureContactNow() async {
     if (_contactReady) return;
     try {
       await radio.ensureContact(keyHex, nodeType: nodeType, name: contactName);

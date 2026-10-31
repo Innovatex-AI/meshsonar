@@ -3,6 +3,8 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/radio/claim_radio.dart';
 import 'package:meshsonar/radio/companion_link.dart';
+import 'package:meshsonar/radio/inbound.dart';
+import 'package:meshsonar/radio/radio_session_impl.dart';
 import 'package:meshsonar/radio/repeater_admin.dart';
 import 'package:meshsonar/radio/repeater_settings.dart';
 import 'package:meshsonar/radio/repeater_wire.dart';
@@ -684,6 +686,20 @@ void main() {
       await expectLater(r.session.readStatus(), throwsA(isA<AdminException>().having((e) => e.kind, 'kind', AdminErrorKind.radioLost)));
       await r.close();
     });
+  });
+
+  test('CLI replies never reach the chat inbound (a repeater\'s answer is not a DM)', () async {
+    final r = await rig();
+    final session = LinkRadioSession(r.link);
+    final seen = <InboundMessage>[];
+    final sub = session.inbound.listen(seen.add);
+    await r.session.readSetting(r.def('name'));
+    await r.session.readSetting(r.def('tx'));
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    expect(seen, isEmpty);
+    expect(r.rep.sentReplies, isNotEmpty);
+    await sub.cancel();
+    await r.close();
   });
 
   test('fake repeater mimics the blank-password re-admit finding (so the app must never send a blank one)', () {
