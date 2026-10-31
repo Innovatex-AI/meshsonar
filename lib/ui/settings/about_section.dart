@@ -43,7 +43,7 @@ List<Widget> aboutSectionRows(BuildContext context) {
         trailing: const Icon(Icons.chevron_right),
         onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
           fullscreenDialog: true,
-          builder: (ctx) => OnboardingScreen(onFinish: (_) => Navigator.of(ctx).pop()),
+          builder: (ctx) => OnboardingScreen(replay: true, onFinish: (_) => Navigator.of(ctx).pop()),
         )),
       ),
     ),

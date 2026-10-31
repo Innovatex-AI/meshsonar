@@ -30,7 +30,7 @@ void main() {
     useTallScreen(tester);
     final h = Harness();
     await h.pumpApp(tester);
-    await tester.tap(find.text('Drives'));
+    await openDrivesTab(tester);
     await tester.pumpAndSettle();
     expect(find.text('No drives yet'), findsOneWidget);
   });
@@ -48,7 +48,7 @@ void main() {
       silentPing('n4'),
     ], syncedFirst: 1);
     await h.pumpApp(tester);
-    await tester.tap(find.text('Drives'));
+    await openDrivesTab(tester);
     await tester.pumpAndSettle();
 
     final newY = tester.getTopLeft(find.byKey(const ValueKey('session-new'))).dy;
@@ -95,7 +95,7 @@ void main() {
     final h = Harness();
     h.store.seed(sess('s', DateTime.utc(2026, 10, 15)), [silentPing('a'), silentPing('b')]);
     await h.pumpApp(tester);
-    await tester.tap(find.text('Drives'));
+    await openDrivesTab(tester);
     await tester.pumpAndSettle();
     await tapDelete(tester, 's');
     expect(find.textContaining('2 of 2 pings have NOT been uploaded'), findsOneWidget);
@@ -106,7 +106,7 @@ void main() {
     final h = Harness();
     h.store.seed(sess('s', DateTime.utc(2026, 10, 15)), [silentPing('a')]);
     await h.pumpApp(tester);
-    await tester.tap(find.text('Drives'));
+    await openDrivesTab(tester);
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('sync-s')));
     await tester.pumpAndSettle();
@@ -119,7 +119,7 @@ void main() {
     useTallScreen(tester);
     final h = Harness();
     await h.pumpApp(tester);
-    await tester.tap(find.text('Settings'));
+    await openSettingsTab(tester);
     await tester.pumpAndSettle();
 
     // The name is optional: left blank, the generic one goes out.
@@ -154,7 +154,7 @@ void main() {
     final h = Harness();
     await h.pumpApp(tester);
     h.client.requestError = const CmatException('', status: 503);
-    await tester.tap(find.text('Settings'));
+    await openSettingsTab(tester);
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('key-name')), 'Andy');
     await tester.tap(find.byKey(const Key('key-request')));
@@ -167,7 +167,7 @@ void main() {
     useTallScreen(tester);
     final h = Harness();
     await h.pumpApp(tester);
-    await tester.tap(find.text('Settings'));
+    await openSettingsTab(tester);
     await tester.pumpAndSettle();
     expect(find.text('https://meshsonar.com'), findsOneWidget);
     // The list builds lazily; scroll the channel row in rather than assuming it fits on the first screen.
@@ -243,7 +243,7 @@ void main() {
     useTallScreen(tester);
     final h = Harness();
     await h.pumpApp(tester);
-    await tester.tap(find.text('Settings'));
+    await openSettingsTab(tester);
     await tester.pumpAndSettle();
     // About is the last section; the list grew (Privacy, Data & storage, Diagnostics), so scroll to it, not a fixed drag.
     await tester.scrollUntilVisible(find.byKey(const Key('about')), 300, scrollable: settingsScroll);

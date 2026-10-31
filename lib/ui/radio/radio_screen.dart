@@ -64,7 +64,7 @@ class _RadioScreenState extends State<RadioScreen> {
             _communitySection(context, info?.radio),
             const SizedBox(height: Gap.l),
             Text(
-              'This tab only reads your radio. MeshSonar never changes its settings.',
+              'This screen only reads your radio. MeshSonar never changes its settings.',
               key: const Key('radio-readonly-note'),
               style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
             ),

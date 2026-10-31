@@ -290,6 +290,14 @@ names.
 **Startup failure.** If `buildRealServices()` throws (for example, storage can't be opened), `main.dart` shows
 `StartupErrorApp` instead of the app.
 
+### App shell (`lib/ui/shell/`)
+
+`HomeShell` owns a `ShellController` (selected `AppTab`, Analyze view, pending More row), exposed by `ShellScope`. Tabs are
+kept alive in an `IndexedStack` (Map always, others built on first visit) under one `GlobalKey`d content column so rotating
+between bar and rail keeps every tab's state. The More tab has its own `Navigator` (and corrects `MediaQuery.size` for it).
+`MiniDriveBar` reads `AppState` (status, pingCount, heardCount, recentPings, `pingsPaused`) and nothing else. Chat plugs in
+through `ChatTabHost.provider` (a `ChatTabProvider`); the shell never imports `lib/chat`.
+
 ## 6. Every file in `lib/`
 
 | File | Layer | Role |

@@ -19,7 +19,7 @@ void main() {
 
     if (await waitFor(t, find.text('Skip'), timeout: const Duration(seconds: 10))) {
       await shot(t, 'onboarding-1');
-      for (var i = 2; i <= 3; i++) {
+      for (var i = 2; i <= 4; i++) {
         await t.tap(find.byKey(const Key('onboarding-next')));
         await pumpFor(t, const Duration(seconds: 1));
         await shot(t, 'onboarding-$i');
@@ -27,7 +27,7 @@ void main() {
       await t.tap(find.byKey(const Key('onboarding-next')));
       await pumpFor(t, const Duration(seconds: 1));
     }
-    expect(await waitFor(t, find.text('Drive')), isTrue, reason: 'home shell');
+    expect(await waitFor(t, find.byWidgetPredicate((w) => w.key == const Key('shell-tabs') || w.key == const Key('shell-rail'))), isTrue, reason: 'home shell');
 
     for (final s in screens) {
       try {

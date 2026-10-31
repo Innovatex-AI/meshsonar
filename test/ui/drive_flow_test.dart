@@ -152,7 +152,7 @@ void main() {
     expect(tester.widget<Text>(find.byKey(const Key('stat-synced'))).data, '0');
 
     // Drives tab shows the unsynced count and the error banner.
-    await tester.tap(find.text('Drives'));
+    await openDrivesTab(tester);
     await tester.pumpAndSettle();
     expect(find.text('2 not synced'), findsOneWidget);
     expect(find.byKey(const Key('sync-error')), findsOneWidget);

@@ -15,6 +15,9 @@ class UiPrefs extends ChangeNotifier {
   bool _onboardingSeen;
   bool _telemetryDisclosed;
 
+  /// The shell tab last open (AppTab.name), so the app comes back where the person left it. Null = never chosen.
+  String? _lastTab;
+
   /// The collection disclosure version last seen (0 = never; 1 = the packet-header-only sheet of <= 0.19).
   int _disclosedVersion;
   final Map<String, String> _labels;
@@ -37,6 +40,15 @@ class UiPrefs extends ChangeNotifier {
         _loaded = false;
 
   bool get loaded => _loaded;
+
+  /// The shell tab last open (an AppTab name), or null.
+  String? get lastTab => _lastTab;
+
+  Future<void> setLastTab(String name) async {
+    if (_lastTab == name) return;
+    _lastTab = name;
+    await persist();
+  }
   bool get onboardingSeen => _onboardingSeen;
 
   /// True once the person has seen the CURRENT disclosure sheet (whatever they chose). Since stream 7 that is the
@@ -98,6 +110,7 @@ class UiPrefs extends ChangeNotifier {
   Map<String, dynamic> toJson() => {
         'onboarding_seen': _onboardingSeen,
         'telemetry_disclosed': _telemetryDisclosed,
+        if (_lastTab != null) 'last_tab': _lastTab,
         if (_disclosedVersion > 0) collectionDisclosedKey: _disclosedVersion,
         'labels': _labels,
       };
@@ -119,6 +132,8 @@ class FileUiPrefs extends UiPrefs {
         if (j is Map) {
           _onboardingSeen = j['onboarding_seen'] == true;
           _telemetryDisclosed = j['telemetry_disclosed'] == true;
+          final lt = j['last_tab'];
+          _lastTab = lt is String ? lt : null;
           final v = j[collectionDisclosedKey];
           _disclosedVersion = v is num ? v.toInt() : (_telemetryDisclosed ? 1 : 0);
           final l = j['labels'];

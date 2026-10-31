@@ -295,7 +295,7 @@ void main() {
       useTallScreen(tester);
       final h = Harness();
       await h.pumpApp(tester);
-      await tester.tap(find.text('Settings'));
+      await openSettingsTab(tester);
       await tester.pumpAndSettle();
       final list = find.descendant(of: find.byKey(const Key('settings-list')), matching: find.byType(Scrollable)).first;
       await tester.scrollUntilVisible(find.byKey(const Key('map-legend')), 200, scrollable: list);

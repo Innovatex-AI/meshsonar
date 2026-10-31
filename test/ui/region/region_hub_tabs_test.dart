@@ -16,7 +16,7 @@ void main() {
     h.client.regionsIndexResult = const [cmh];
     await h.pumpApp(tester);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Region'));
+    await openRegionTab(tester);
     await tester.pumpAndSettle();
     final labels = tester.widgetList<Tab>(find.byType(Tab)).map((t) => t.text).toList();
     expect(labels, ['Overview', 'Repeaters', 'Observers', 'Packets', 'Analysis', 'RF', 'Growth', 'Reports', 'Stats', 'Live']);

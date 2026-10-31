@@ -20,7 +20,7 @@ Future<Harness> openSettings(WidgetTester tester, {SiteConfig? siteConfig}) asyn
   if (siteConfig != null) h.client.siteConfigResult = siteConfig;
   await h.pumpApp(tester);
   await tester.pumpAndSettle(); // let init()'s unawaited refreshSiteConfig() resolve
-  await tester.tap(find.text('Settings'));
+  await openSettingsTab(tester);
   await tester.pumpAndSettle();
   return h;
 }

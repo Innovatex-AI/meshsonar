@@ -54,7 +54,7 @@ void main() {
       ],
     );
     await h.pumpApp(tester);
-    await tester.tap(find.text('Drives'));
+    await openDrivesTab(tester);
     await tester.pumpAndSettle();
 
     expect(find.text('2 pings'), findsOneWidget);
@@ -81,7 +81,7 @@ void main() {
         [at('q1', 40, -82.9, 0, const [])],
         syncedFirst: 1);
     await h.pumpApp(tester);
-    await tester.tap(find.text('Drives'));
+    await openDrivesTab(tester);
     await tester.pumpAndSettle();
 
     expect(find.text('Polaris loop'), findsOneWidget);
@@ -106,7 +106,7 @@ void main() {
     h.sync.failWith = 'network error';
     h.store.seed(DriveSession(id: 'd1', startedAt: DateTime.utc(2026, 10, 15, 14)), [at('p', 40, -82, 0, const [])]);
     await h.pumpApp(tester);
-    await tester.tap(find.text('Drives'));
+    await openDrivesTab(tester);
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('sync-d1')));
     await tester.pumpAndSettle();
@@ -119,7 +119,7 @@ void main() {
     final h = Harness();
     h.store.seed(DriveSession(id: 'd1', startedAt: DateTime.utc(2026, 10, 15, 14)), [at('p', 40, -82, 0, const [])]);
     await h.pumpApp(tester);
-    await tester.tap(find.text('Drives'));
+    await openDrivesTab(tester);
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const ValueKey('menu-d1')));
@@ -152,7 +152,7 @@ void main() {
     useTallScreen(tester);
     final h = Harness();
     await h.pumpApp(tester);
-    await tester.tap(find.text('Drives'));
+    await openDrivesTab(tester);
     await tester.pumpAndSettle();
     expect(find.text('No drives yet'), findsOneWidget);
     h.store.seed(DriveSession(id: 'late', startedAt: DateTime.utc(2026, 10, 15)), [at('p', 40, -82, 0, const [])]);

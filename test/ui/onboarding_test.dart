@@ -15,8 +15,14 @@ void main() {
     attachUiPrefs(h.state, prefs);
     await h.pumpApp(tester);
     expect(find.byKey(const Key('onboarding')), findsOneWidget);
-    expect(find.text('Map your mesh by driving it'), findsOneWidget);
+    expect(find.text('Your MeshCore radio, in one app'), findsOneWidget);
 
+    await tester.tap(find.byKey(const Key('onboarding-next')));
+    await tester.pumpAndSettle();
+    expect(find.text('Find your way around'), findsOneWidget);
+    for (final tab in ['Chat', 'Map', 'Analyze', 'Plan', 'More']) {
+      expect(find.text(tab), findsWidgets);
+    }
     await tester.tap(find.byKey(const Key('onboarding-next')));
     await tester.pumpAndSettle();
     expect(find.text('Connect your radio'), findsOneWidget);
@@ -27,7 +33,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('onboarding')), findsNothing);
     expect(prefs.onboardingSeen, isTrue);
-    expect(find.text('Drive'), findsWidgets);
+    expect(find.text('Map'), findsWidgets);
 
     // A fresh app with the same prefs goes straight in.
     final h2 = Harness();
@@ -53,6 +59,8 @@ void main() {
     final h = Harness();
     attachUiPrefs(h.state, UiPrefs());
     await h.pumpApp(tester);
+    await tester.tap(find.byKey(const Key('onboarding-next')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('onboarding-next')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('onboarding-simulator')));

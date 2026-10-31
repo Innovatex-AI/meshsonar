@@ -23,12 +23,12 @@ DriveSession ended(String id, {String? label}) => DriveSession(
 );
 
 Future<void> openDrives(WidgetTester tester) async {
-  await tester.tap(find.text('Drives'));
+  await openDrivesTab(tester);
   await tester.pumpAndSettle();
 }
 
 Future<void> openSettings(WidgetTester tester) async {
-  await tester.tap(find.text('Settings'));
+  await openSettingsTab(tester);
   await tester.pumpAndSettle();
 }
 

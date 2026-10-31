@@ -114,7 +114,7 @@ class _ProgressScreenState extends State<ProgressScreen> {
               key: Key('progress-empty'),
               icon: Icons.insights,
               title: 'No drives yet',
-              body: 'From drives stored on this phone. Start a drive on the Drive tab and your progress shows here.',
+              body: 'From drives stored on this phone. Start a drive on the Map tab and your progress shows here.',
             );
           }
           return _ProgressBody(progress: p, unreadable: local.unreadable);

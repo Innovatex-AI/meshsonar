@@ -15,7 +15,7 @@ void main() {
     useTallScreen(tester);
     final h = Harness();
     await h.pumpApp(tester);
-    await tester.tap(find.text('Settings'));
+    await openSettingsTab(tester);
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.byKey(const Key('key-have')), 100, scrollable: settingsScroll);
     await tester.ensureVisible(find.byKey(const Key('key-have')));

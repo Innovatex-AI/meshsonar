@@ -141,7 +141,7 @@ void main() {
       expect(find.textContaining('Allow location so the map opens where you are.'), findsOneWidget);
       expect(probe.requests, 0);
 
-      await tester.tap(find.text('Region'));
+      await openRegionTab(tester);
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('location-note')), findsOneWidget);
       expect(find.byKey(const Key('location-note-pick-region')), findsOneWidget);

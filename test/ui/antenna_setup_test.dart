@@ -255,7 +255,7 @@ void main() {
     await h.state.connect(h.bt.devices.first, RadioKind.bluetooth);
     await tester.pumpAndSettle();
     expect(sheet, findsNothing);
-    await tester.tap(find.text('Settings'));
+    await openSettingsTab(tester);
     await tester.pumpAndSettle();
     final row = find.byKey(const ValueKey('antenna-profile-abcdef0123'));
     await scrollSettingsTo(tester, row, step: 150);
@@ -290,7 +290,7 @@ void main() {
     }
     expect(h.settings.saved.antennaProfiles.keys, ['ffee000111']);
     await h.state.disconnect();
-    await tester.tap(find.text('Drive'));
+    await openDriveTab(tester);
     await tester.pumpAndSettle();
     await connectUi(tester);
     expect(sheet, findsOneWidget);

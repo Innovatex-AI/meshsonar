@@ -177,7 +177,7 @@ class _ClaimRepeaterScreenState extends State<ClaimRepeaterScreen> {
           color: t.colorScheme.errorContainer,
           child: Padding(
             padding: const EdgeInsets.all(Gap.m),
-            child: Text('Connect your radio first (Radio tab). It talks to the repeater for you, so it has to be within reach of the repeater.',
+            child: Text('Connect your radio first (More > Radio). It talks to the repeater for you, so it has to be within reach of the repeater.',
                 style: TextStyle(color: t.colorScheme.onErrorContainer)),
           ),
         ),

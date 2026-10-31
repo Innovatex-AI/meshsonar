@@ -17,7 +17,7 @@ String? _whyNot(BuildContext context, {bool needsRadio = false}) {
   if (!s.hasKey) return 'Needs a driver key. Add one under Account & driver key.';
   if (s.uploadSiteConfig?.nodeClaims != true) return 'This server does not offer radio claims yet.';
   if (!s.keyApproved) return 'Needs a driver key the server accepts.';
-  if (needsRadio && !s.connected) return 'Connect your radio first (Radio tab).';
+  if (needsRadio && !s.connected) return 'Connect your radio first (More > Radio).';
   return null;
 }
 
