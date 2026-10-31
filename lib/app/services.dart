@@ -92,6 +92,9 @@ class AppServices {
   /// Opens the platform share sheet for a file.
   final Future<void> Function(File file) shareFile;
 
+  /// Opens the share sheet once for several files (a long drive exported in parts). Null = [shareFile] for each.
+  final Future<void> Function(List<File> files)? shareFiles;
+
   /// Opens a web page in the browser (url_launcher in the real app). Returns false if nothing could open it.
   final Future<bool> Function(Uri url) openUrl;
 
@@ -151,6 +154,7 @@ class AppServices {
     required this.repeaterCache,
     required this.exportDir,
     required this.shareFile,
+    this.shareFiles,
     required this.newId,
     required this.clock,
     this.openUrl = _noBrowser,

@@ -20,3 +20,13 @@ Future<void> shareDriveFile(File file) async {
     text: 'MeshSonar drive (Drive Format v1)',
   ));
 }
+
+/// A long drive exported in parts (the server takes at most 5,000 pings per upload): one share sheet, all parts.
+Future<void> shareDriveFiles(List<File> files) async {
+  if (files.length == 1) return shareDriveFile(files.single);
+  await SharePlus.instance.share(ShareParams(
+    files: [for (final f in files) XFile(f.path, mimeType: 'application/json')],
+    subject: 'MeshSonar drive (${files.length} parts)',
+    text: 'MeshSonar drive (Drive Format v1), ${files.length} files: each is a complete upload of up to 5,000 pings.',
+  ));
+}

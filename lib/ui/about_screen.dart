@@ -28,6 +28,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.''';
 
 /// Short credits for projects MeshSonar builds on. Full texts: THIRD_PARTY_NOTICES.md in the source.
+/// The licence file is hard-wrapped at about 75 columns; on a phone those line breaks leave ragged short lines. Joins
+/// the lines of each paragraph and keeps the blank lines between paragraphs.
+String unwrapParagraphs(String text) =>
+    text.split(RegExp(r'\n\s*\n')).map((p) => p.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).join(' ')).join('\n\n');
+
 const List<({String name, String license, String note})> thirdPartyNotices = [
   (
     name: 'MeshCore Open',
@@ -89,7 +94,7 @@ class AboutScreen extends StatelessWidget {
             const SizedBox(height: 8),
             Text('Licence', style: t.textTheme.titleMedium),
             const SizedBox(height: 4),
-            Text(mitLicenseText, key: const Key('mit-license'), style: t.textTheme.bodySmall?.copyWith(fontFamily: 'monospace')),
+            Text(unwrapParagraphs(mitLicenseText), key: const Key('mit-license'), style: t.textTheme.bodySmall?.copyWith(fontFamily: 'monospace')),
             const SizedBox(height: 16),
             Text('Third-party notices', style: t.textTheme.titleMedium),
             for (final n in thirdPartyNotices)

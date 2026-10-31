@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 import 'helpers.dart';
 
 void main() {
+  group('long drives', longDriveTests);
   late Directory tmp;
   late JsonlDriveStore store;
 
@@ -306,5 +307,121 @@ void main() {
     expect((await store.session(done.id))!.endedAt, done.endedAt);
     expect((await store.session(live.id))!.endedAt, isNull);
     expect(await closeOrphanedSessions(store, except: {live.id}), isEmpty);
+  });
+}
+
+// Long drives (ROADMAP P2 "Exports aren't chunked"): the server takes at most 5,000 pings per upload body.
+void longDriveTests() {
+  late Directory tmp;
+  late JsonlDriveStore store;
+  setUp(() async {
+    tmp = await Directory.systemTemp.createTemp('meshsonar_long_');
+    store = await JsonlDriveStore.open(tmp);
+  });
+  tearDown(() async {
+    if (await tmp.exists()) await tmp.delete(recursive: true);
+  });
+
+  Future<DriveSession> seed(int n) async {
+    final s = makeSession(id: '3f2a9c1e-1111-4222-8333-944445555666', startedAt: DateTime.utc(2026, 10, 15, 21, 7, 33));
+    await store.startSession(s);
+    final lines = StringBuffer();
+    final base = DateTime.utc(2026, 10, 15, 21, 8);
+    for (var i = 0; i < n; i++) {
+      lines.writeln(jsonEncode(makePing(i, ts: base.add(Duration(seconds: i))).toJson()));
+    }
+    await File(p.join(tmp.path, 'sessions', s.id, 'pings.jsonl')).writeAsString(lines.toString());
+    await store.endSession(s.id, DateTime.utc(2026, 10, 16));
+    return s;
+  }
+
+  const app = AppInfo(name: 'MeshSonar', version: '0.1.0', platform: 'linux');
+
+  test('12,001 pings export as 3 files of at most 5,000, each a valid upload, every ping exactly once', () async {
+    final s = await seed(12001);
+    final out = Directory(p.join(tmp.path, 'exports'));
+    final files = await store.exportSessionParts(s.id, app, out);
+    expect(files.map((f) => p.basename(f.path)), [
+      'meshsonar-20261015-2107-3f2a9c1e-part1of3.json',
+      'meshsonar-20261015-2107-3f2a9c1e-part2of3.json',
+      'meshsonar-20261015-2107-3f2a9c1e-part3of3.json',
+    ]);
+    final ids = <String>[];
+    for (final f in files) {
+      final body = jsonDecode(await f.readAsString()) as Map<String, dynamic>;
+      expect(shapeProblems(body), isEmpty);
+      final pings = (body['pings'] as List).cast<Map<String, dynamic>>();
+      expect(pings.length, lessThanOrEqualTo(5000));
+      expect(body['session']['id'], s.id);
+      expect(body['session']['ended_at'], '2026-10-16T00:00:00.000Z');
+      ids.addAll(pings.map((e) => e['id'] as String));
+    }
+    expect(ids, hasLength(12001));
+    expect(ids.toSet(), hasLength(12001));
+    expect(ids, (await store.pings(s.id)).map((e) => e.id).toList(), reason: 'file order is drive order');
+  });
+
+  test('exactly 5,000 pings stay one file with the usual name; 5,001 make two', () async {
+    final s = await seed(5000);
+    var files = await store.exportSessionParts(s.id, app, Directory(p.join(tmp.path, 'a')));
+    expect(files.map((f) => p.basename(f.path)), ['meshsonar-20261015-2107-3f2a9c1e.json']);
+    expect(await files.single.readAsString(),
+        await (await store.exportSession(s.id, app, Directory(p.join(tmp.path, 'b')))).readAsString(),
+        reason: 'a drive that fits is byte-identical to the plain export');
+    await store.appendPing(s.id, makePing(5000));
+    files = await store.exportSessionParts(s.id, app, Directory(p.join(tmp.path, 'c')));
+    expect(files, hasLength(2));
+  });
+
+  test('a drive with no pings still exports one file', () async {
+    final s = await seed(0);
+    final files = await store.exportSessionParts(s.id, app, Directory(p.join(tmp.path, 'e')));
+    expect(files, hasLength(1));
+    expect((jsonDecode(await files.single.readAsString())['pings'] as List), isEmpty);
+  });
+
+  test('sessions() of a 6,000-ping drive is parsed once; a change to the files refreshes the summary', () async {
+    final s = await seed(6000);
+    final sw = Stopwatch()..start();
+    final first = (await store.sessions()).single;
+    final firstMs = sw.elapsedMilliseconds;
+    sw
+      ..reset()
+      ..start();
+    for (var i = 0; i < 20; i++) {
+      await store.sessions();
+    }
+    final repeatMs = sw.elapsedMilliseconds;
+    expect(first.pingCount, 6000);
+    expect(repeatMs, lessThan(firstMs * 20 + 1), reason: 'cached reads are far cheaper than parsing (first $firstMs ms, 20 more $repeatMs ms)');
+    await store.markSynced(s.id, (await store.pings(s.id)).take(100).map((e) => e.id));
+    expect((await store.sessions()).single.syncedCount, 100, reason: 'a changed ledger invalidates the cache');
+    await store.appendPing(s.id, makePing(6000));
+    expect((await store.sessions()).single.pingCount, 6001);
+    await store.renameSession(s.id, 'new name');
+    final renamed = (await store.sessions()).single;
+    expect(renamed.session.label, 'new name');
+    expect(renamed.sessionResendPending, isTrue);
+    await store.deleteSession(s.id);
+    expect(await store.sessions(), isEmpty);
+  });
+
+  test('a long drive survives an app kill: orphan is closed at its last ping with every ping intact', () async {
+    final s = makeSession(id: 'orphan-long', startedAt: DateTime.utc(2026, 10, 15, 21));
+    await store.startSession(s);
+    final lines = StringBuffer();
+    for (var i = 0; i < 5200; i++) {
+      lines.writeln(jsonEncode(makePing(i, ts: DateTime.utc(2026, 10, 15, 21, 1).add(Duration(seconds: i))).toJson()));
+    }
+    // The kill cut the last line in half.
+    final half = jsonEncode(makePing(5200, ts: DateTime.utc(2026, 10, 16)).toJson());
+    await File(p.join(tmp.path, 'sessions', s.id, 'pings.jsonl')).writeAsString(lines.toString() + half.substring(0, half.length ~/ 2));
+    final closed = await closeOrphanedSessions(store);
+    expect(closed, [s.id]);
+    expect((await store.pings(s.id)), hasLength(5200));
+    expect((await store.session(s.id))!.endedAt, DateTime.utc(2026, 10, 15, 21, 1).add(const Duration(seconds: 5199)));
+    // A ping recorded afterwards is not glued onto the broken line.
+    await store.appendPing(s.id, makePing(9));
+    expect(await store.pings(s.id), hasLength(5201));
   });
 }

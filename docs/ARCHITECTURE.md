@@ -202,6 +202,9 @@ flags:
 | Cadence timer (`Timer.periodic(tick = 1 s)`) + GPS fix subscription | `DefaultWardriveEngine._startAuto` | Re-checks "interval AND distance" on every fix and every second. |
 | Listen window (`Timer(window)`) + 250 ms disconnect poll | `DefaultWardriveEngine._listen` | Collects echoes; ends early if the radio goes away. |
 | 5 s retry back-off (`_retryAfter`) | engine | After a failed auto ping, the engine waits before trying again. |
+| Reconnect loop (`_reconnectRadio`) + `WardriveEngine.resumeOnLink` | `AppState` / engine | A radio that drops mid-drive is reconnected with growing waits; the engine rejoins the channel on the new link and keeps `_lastPingTime`, so the cadence and the drive session are unchanged. Ends when the drive stops. |
+| Sync back-off (`_syncBackoffUntil`) + pending-upload retry (`_retryPendingUploads`) | `AppState` | A 429 / 503 pauses automatic uploads for `Retry-After` (default 60 s); finished drives that never uploaded are retried at launch and on resume, at most every 2 minutes. |
+| Summary cache (`_summaries`, keyed by file sizes and times) | `JsonlDriveStore.sessions` | A 5,000+ ping drive is parsed once, not on every list refresh. |
 | Per-session lock map (`_locks`) | `JsonlDriveStore._locked` | Writes and reads of one session never interleave. |
 | Save chain (`_writeChain`) | `AppState._enqueueWrite` | Pings are appended in order; earlier failures are retried first. |
 | Sync serialiser (`_last`) | `DefaultSyncService._serial` | Overlapping sync calls run one after another, so the same pings are never uploaded twice. |

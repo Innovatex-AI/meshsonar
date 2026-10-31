@@ -9,7 +9,6 @@ affects correctness or polish, **P3** is housekeeping. Items fixed since are lis
 |---|---|---|
 | P1 | **Background operation on iOS: device check** | Code state (verified in the App Store audit): drives ask "While Using" and then the one-time "Always" upgrade after an explainer (`lib/ui/always_location_screen.dart`); `UIBackgroundModes` location + bluetooth-central, `allowBackgroundLocationUpdates` and the blue indicator are on during a drive only; between drives nothing runs in the background. Still unverified on a real device: auto-pings, BLE and the 1 s tick with the phone locked or navigation in front, and behaviour when the person keeps "While Using". |
 | P1 | **Android device testing** | Untested. Check runtime BLE permissions, **`POST_NOTIFICATIONS` (never requested; the foreground-service notification may be hidden on Android 13+)**, screen-off pinging through the geolocator foreground service, and the BLE scan on Android ≤ 11. See [PORTING.md](PORTING.md#android). |
-| P1 | **Radio drop mid-drive** | The engine goes to `error` ("Radio disconnected") and stays there. The user has to Stop, reconnect and start a new drive. Add auto-reconnect and resume within the same session. |
 | P2 | **BLE edge cases not exercised on hardware** | PIN pairing/bonding (`ble_pin` in DEVICE_INFO); a radio already connected to the MeshCore app; small MTUs (SELF_INFO is 58 B + name; DEVICE_INFO is 82 B); write-without-response backpressure; several radios in range; iOS `remoteId` changes; Windows (`flutter_blue_plus_winrt` 0.0.22). On Linux with no system D-Bus, a scan logged an **unhandled** `SocketException` from the BlueZ client instead of a stream error. |
 | P2 | **Tile provider** | Maps use `tile.openstreetmap.org` directly. OSM's tile usage policy doesn't allow heavy app traffic. Before wider distribution, switch to a provider with an API key or self-hosted tiles, and consider offline tile caching for rural drives. |
 | P2 | **Store distribution** | iOS needs a paid Apple Developer account (TestFlight/App Store); free signing expires after 7 days. Android needs a real release keystore (currently the debug key) and a Play listing. |
@@ -19,14 +18,12 @@ affects correctness or polish, **P3** is housekeeping. Items fixed since are lis
 
 | P | Item | Detail |
 |---|---|---|
-| P2 | **Exports aren't chunked** | A drive with more than 5,000 pings exports as one file that a server rejects as a single upload. Document or split it. |
 | P3 | **Neighbour discovery** | Implemented (`discoverNeighbors`) but there's no setting or wiring for it. CMAT counts "heard" from echoes only, while the app counts a neighbour too. Align the two before exposing it. |
 
 ## Protocol and compatibility
 
 | P | Item | Detail |
 |---|---|---|
-| P2 | **Power suffix outside MeshMapper's set** | The ping text uses the radio's real TX power (22 dBm → `0.2w`). MeshMapper only offers `0.3w`/`0.6w`/`1.0w`/`2.0w`. Check whether community parsers care, and snap to the nearest label if they do. |
 | P2 | **Channel setting forces `#`** | The UI always prefixes `#`, so `Public` or a private channel already on the radio can't be chosen, even though `ensureChannel` supports both. |
 | P3 | **Serial/USB companions** | Only BLE (and the simulator). A USB-serial or TCP `ByteTransport` would need the serial framing. |
 | P3 | **Report vs CMAT cell SNR** | The drive report's cell best SNR uses all echoes; CMAT uses direct echoes only (`hops` 1/null). The heard % and grid match. Consider matching SNR too. |
@@ -36,9 +33,6 @@ affects correctness or polish, **P3** is housekeeping. Items fixed since are lis
 
 | P | Item | Detail |
 |---|---|---|
-| P2 | **About screen licence error** | `lib/ui/about_screen.dart` lists `flutter_blue_plus` as "BSD-3-Clause". It's under the FlutterBluePlus License (commercial use needs a licence). The list also omits the MeshCore firmware credit that `THIRD_PARTY_NOTICES.md` has. |
-| P2 | **Test gaps from mutation checks** | Echo de-dup preferring fewer hops, and nulling out-of-range RSSI, have no failing test when broken. See [TESTING.md](TESTING.md#mutation-check-notes). |
-| P3 | **Hard-coded paths in tests** | `/home/claude/meshcore-insights` (contract test, end-to-end test, fixture import) and `/root/.bun/bin/bun` (end-to-end test only; the contract test searches `$BUN`/`PATH`). Make both configurable with env vars. |
 | P3 | **Duplicate helpers** | Three haversine implementations with two Earth radii (`core/heard.dart` and `ui/drive_stats.dart` use 6,371,008.8 m; `wardrive_engine.dart`, `position_filter.dart` and `simulator.dart` use 6,371,000 m); two `formatDistance` (`ui/drive_stats.dart` "850 m" vs `ui/map/map_layers.dart` rounds to 10 m); two `formatSnrShort` (with and without " dB"). `PingTile`/`ResultDot` in `widgets.dart` are unused. |
 | P3 | **Stale comments** | README says "Windows builds too" (not verified). (`Settings.intervalSec`'s "0 = manual only" comment was fixed in 0.3.0.) |
 | P3 | **Layering** | `ui/drive_stats.dart` and `ui/report/drive_report.dart` are pure Dart and belong in `core`. `drive_map_model.dart` imports the simulator for its repeater list. |
@@ -59,6 +53,19 @@ of a full drive, sync and report.
 - **Web build** with an IndexedDB store, Web Bluetooth, and CORS on CMAT. Checklist in [PORTING.md](PORTING.md#web).
 - Offline map tiles for the drive area (see Tile provider above).
 - Import of a Drive Format v1 file (the inverse of Export), e.g. to move drives between phones.
+
+## Fixed in the field-robustness pass (Unreleased)
+
+Each has a test; details in [CHANGELOG.md](CHANGELOG.md#unreleased).
+
+| Was | Item | Fix |
+|---|---|---|
+| P1 | **Radio drop mid-drive** | `AppState._reconnectRadio` reconnects to the same radio with growing waits and `WardriveEngine.resumeOnLink` rejoins the channel; same drive, same cadence. |
+| P2 | **Exports aren't chunked** | `ChunkedExport.exportSessionParts`: files of at most 5,000 pings, each a complete upload body. |
+| P2 | **Test gaps from mutation checks** | Echo de-dup prefers fewer hops; out-of-range SNR/RSSI become null (`wardrive_resilience_test`). |
+| P2 | **Power suffix outside MeshMapper's set** | No longer applies: the on-air ping text is `MS:` plus a random tag and carries no power. |
+| P2 | **About screen licence error** | Already fixed (flutter_blue_plus is listed under the FlutterBluePlus License). |
+| P3 | **Hard-coded paths in tests** | Already fixed (`CMAT_DIR`, `BUN`; the contract test skips without them). |
 
 ## Fixed in 0.3.0
 

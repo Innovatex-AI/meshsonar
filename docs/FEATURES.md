@@ -761,9 +761,31 @@ it was.
 
 ## Export & share
 
-The drive card and drive detail write one Drive Format v1 JSON file (see [DATA_MODEL.md §3](DATA_MODEL.md#3-export-file--drive-format-v1))
-to the temp folder and open the platform share sheet (`share_plus`). The drive report shares a `.txt` file and its
-text.
+The drive card and drive detail write a Drive Format v1 JSON file (see [DATA_MODEL.md §3](DATA_MODEL.md#3-export-file--drive-format-v1))
+to the temp folder and open the platform share sheet (`share_plus`). The server takes at most 5,000 pings per upload,
+so a drive with more is written as several files (`...-part1of3.json`, ...), each a complete upload body for the same
+session, shared in one sheet; the recorded drive context rides in part 1 only. A drive of 5,000 pings or fewer is the
+single file it always was. The drive report shares a `.txt` file and its text.
+
+## When the phone, the radio or the server misbehaves
+
+- **Radio drops mid-drive** (walked away, Bluetooth switched off, radio rebooted): the drive stays open and the status
+  row reads "Radio disconnected. Reconnecting (try N)…" (or "Bluetooth is off. Turn it on and MeshSonar reconnects by
+  itself."). The app reconnects to the same radio (1 s, then 4, 6, … up to 20 s apart, until it answers or you press
+  Stop), rejoins the channel and carries on in the same drive with the same ping cadence. A different radio answering
+  at that address is refused.
+- **No GPS** (Location turned off, permission taken away): pings wait; after 20 s the status says "No GPS fix. Check
+  that Location is on and allowed for MeshSonar." and the drive resumes by itself when GPS is back. A remembered
+  position older than 30 s is never used for a ping.
+- **Wrong phone clock**: when GPS time and the phone clock differ by more than 5 minutes on three fixes in a row the
+  app says so once per drive (the server refuses a ping stamped more than a day ahead).
+- **App killed or phone died mid-drive**: every ping is on disk before anything else happens; at the next launch the
+  open drive is closed at its last ping and uploaded.
+- **Uploads that could not go out** (no signal, server down, rate limit) are tried again at launch and each time the
+  app comes back to the front (at most every 2 minutes, never while driving, never during a server-requested wait).
+  429 and 503 (with `Retry-After`) pause automatic uploads; 5xx and no network stop the run after the first failure;
+  413 halves the request until the server takes it; 401/403 stop the run and refresh the key status. Nothing is
+  marked uploaded before a 200.
 
 ## Messages
 

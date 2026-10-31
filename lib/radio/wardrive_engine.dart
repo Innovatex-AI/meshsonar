@@ -89,11 +89,15 @@ class _Ctl {
 /// How often a passive (listen-only) batch flushes, at most, even standing still.
 const Duration passiveFlushInterval = Duration(seconds: 30);
 
+/// After this long without any GPS fix the status tells the driver where to look (Location off, permission taken away).
+const Duration noGpsHintAfter = Duration(seconds: 20);
+
 /// How far the phone must move since the last flush to force an early one.
 const double passiveFlushDistanceM = 25;
 
 class DefaultWardriveEngine implements WardriveEngine {
-  final CompanionLink link;
+  /// The radio session. Replaced by [resumeOnLink] when the radio drops mid-drive and the app reconnects.
+  CompanionLink link;
   final LocationSource location;
   final DateTime Function() _clock;
   final String Function() _newId;
@@ -122,6 +126,10 @@ class DefaultWardriveEngine implements WardriveEngine {
   DateTime? _lastPingTime; // when the last ping (auto or manual) was sent
   DateTime? _retryAfter; // after a failed auto ping, don't retry before this
   bool _evaluating = false;
+  DateTime? _noFixSince; // since when there has been no GPS fix at all (permission off, Location Services off, no sky)
+  Duration? _clockSkew; // see EngineStatus.clockSkew
+  int _skewRun = 0;
+  Duration? _skewLast;
   PingWait? _waitingFor;
   double? _metresToGo;
   bool _running = false;
@@ -168,6 +176,7 @@ class DefaultWardriveEngine implements WardriveEngine {
       nextPingAt: auto ? _nextPingAt : null,
       waitingFor: auto ? _waitingFor : null,
       metresToGo: auto ? _metresToGo : null,
+      clockSkew: _clockSkew,
     );
     if (!_status.isClosed) _status.add(_current);
   }
@@ -204,23 +213,14 @@ class DefaultWardriveEngine implements WardriveEngine {
     _waitingFor = null;
     _metresToGo = null;
     _nextPingAt = null;
+    _noFixSince = null;
+    _clockSkew = null;
+    _skewRun = 0;
+    _skewLast = null;
     _stopping = false;
     _setStatus(EngineState.starting, 'Joining ${config.channel}');
     try {
-      if (!link.isConnected) throw StateError('Radio not connected');
-      final idx = await link.ensureChannel(config.channel);
-      Uint8List? secret;
-      final l = link;
-      if (l is MeshCoreCompanionLink) secret = l.channelSecret(idx);
-      secret ??= wellKnownChannelSecret(config.channel);
-      if (secret == null) {
-        // Without the key we can't tell our echoes apart, and every ping would look like "heard nothing".
-        throw StateError('Cannot recognise echoes on ${config.channel}: channel key unknown');
-      }
-      _channelIndex = idx;
-      _secret = secret;
-      await _rxSub?.cancel();
-      _rxSub = link.rxPackets.listen((rx) => _collector?.call(rx), onDone: _onRadioLost);
+      await _bindLink();
     } catch (e) {
       _setStatus(EngineState.error, _describe(e));
       rethrow;
@@ -231,6 +231,57 @@ class DefaultWardriveEngine implements WardriveEngine {
       _startPassive();
     } else {
       _setStatus(EngineState.driving, config.intervalSec > 0 ? 'Driving' : 'Ready (manual pings)');
+      _startAuto();
+    }
+  }
+
+  /// Joins the channel on the current [link], learns its key and starts listening to what the radio hears.
+  Future<void> _bindLink() async {
+    if (!link.isConnected) throw StateError('Radio not connected');
+    final idx = await link.ensureChannel(_config.channel);
+    Uint8List? secret;
+    final l = link;
+    if (l is MeshCoreCompanionLink) secret = l.channelSecret(idx);
+    secret ??= wellKnownChannelSecret(_config.channel);
+    if (secret == null) {
+      // Without the key we can't tell our echoes apart, and every ping would look like "heard nothing".
+      throw StateError('Cannot recognise echoes on ${_config.channel}: channel key unknown');
+    }
+    _channelIndex = idx;
+    _secret = secret;
+    await _rxSub?.cancel();
+    final bound = l;
+    _rxSub = l.rxPackets.listen((rx) => _collector?.call(rx), onDone: () {
+      if (identical(link, bound)) _onRadioLost(); // a late "done" from a link we already replaced is not a new drop
+    });
+  }
+
+  @override
+  Future<void> resumeOnLink(CompanionLink newLink) async {
+    if (_stopping) throw StateError('The drive is stopping');
+    if (_running && identical(link, newLink) && newLink.isConnected) return;
+    if (_current.state != EngineState.error && !_running) throw StateError('Not driving: start() first');
+    if (_running) _onRadioLost(); // the old radio is being replaced: wind it down the same way as a drop
+    // A ping that was on the air ends at once (its listen window sees the radio gone); wait for it.
+    final inflight = _inFlight;
+    if (inflight != null) await inflight;
+    link = newLink;
+    _setStatus(EngineState.starting, 'Rejoining ${_config.channel}');
+    try {
+      await _bindLink();
+    } catch (e) {
+      _setStatus(EngineState.error, _describe(e));
+      rethrow;
+    }
+    if (_stopping) return;
+    _retryAfter = null;
+    _running = true;
+    // _lastPingTime / _lastPingAt are kept: the cadence carries on as if the radio had never dropped.
+    if (_config.listenOnly) {
+      _setStatus(EngineState.driving, 'Listening');
+      _startPassive();
+    } else {
+      _setStatus(EngineState.driving, _config.intervalSec > 0 ? 'Driving' : 'Ready (manual pings)');
       _startAuto();
     }
   }
@@ -261,6 +312,13 @@ class DefaultWardriveEngine implements WardriveEngine {
     _setStatus(EngineState.error, 'Radio disconnected');
   }
 
+  /// True (and the drop handled) when the radio has gone away without any stream telling us.
+  bool _radioGone() {
+    if (!_running || link.isConnected) return false;
+    _onRadioLost();
+    return true;
+  }
+
   // ------------------------------------------------------------------ passive (listen-only) pipeline
 
   void _startPassive() {
@@ -269,6 +327,7 @@ class DefaultWardriveEngine implements WardriveEngine {
     _passiveFlushDeadline = _clock().add(passiveFlushInterval);
     _collector = _onPassiveHeard;
     _passiveTimer = Timer.periodic(tick, (_) {
+      if (_radioGone()) return;
       final deadline = _passiveFlushDeadline;
       if (deadline != null && !_clock().isBefore(deadline)) _flushPassive();
     });
@@ -373,6 +432,7 @@ class DefaultWardriveEngine implements WardriveEngine {
       try {
         _fixSub = location.fixes.listen((f) {
           _lastFix = f;
+          _watchClock(f);
           _evaluate();
         }, onError: (Object _) {});
       } catch (_) {
@@ -380,6 +440,27 @@ class DefaultWardriveEngine implements WardriveEngine {
       }
     }
     scheduleMicrotask(_evaluate);
+  }
+
+  /// Compares a fresh GPS fix with the phone clock. A cached fix is late by an ever-changing amount, a wrong clock is
+  /// off by the same amount every time, so only a steady difference over three fixes counts.
+  void _watchClock(GeoFix f) {
+    final skew = f.at.difference(_clock());
+    final last = _skewLast;
+    _skewLast = skew;
+    if (skew.abs() <= clockSkewWarnAfter) {
+      _skewRun = 0;
+      if (_clockSkew != null) {
+        _clockSkew = null;
+        if (_running) _setStatus(_current.state, _current.message);
+      }
+      return;
+    }
+    _skewRun = last != null && (skew - last).abs() < const Duration(seconds: 30) ? _skewRun + 1 : 1;
+    if (_skewRun >= 3 && _clockSkew == null && _running) {
+      _clockSkew = skew;
+      _setStatus(_current.state, _current.message);
+    }
   }
 
   void _stopAuto() {
@@ -420,6 +501,7 @@ class DefaultWardriveEngine implements WardriveEngine {
   /// One cadence check: pings now if both the interval and the distance are met.
   Future<void> _evaluate() async {
     if (!_running || _stopping || _busy || _evaluating || _config.intervalSec <= 0) return;
+    if (_radioGone()) return;
     final now = _clock();
     final lastTime = _lastPingTime;
     final due = lastTime == null ? now : lastTime.add(_minGap);
@@ -435,9 +517,15 @@ class DefaultWardriveEngine implements WardriveEngine {
       final fix = await _fix();
       if (!_running || _stopping || _busy || _config.intervalSec <= 0) return;
       if (fix == null) {
-        _wait(PingWait.gps, null, message: 'No GPS fix: waiting to ping');
+        _noFixSince ??= now;
+        final long = _clock().difference(_noFixSince!) >= noGpsHintAfter;
+        _wait(PingWait.gps, null,
+            message: long
+                ? 'No GPS fix. Check that Location is on and allowed for MeshSonar.'
+                : 'No GPS fix: waiting to ping');
         return;
       }
+      _noFixSince = null;
       final togo = _metresLeft(fix)!;
       if (togo > 0) {
         _wait(PingWait.distance, togo, message: 'Move ${math.max(1, togo.round())} m more to ping');
@@ -619,7 +707,14 @@ class DefaultWardriveEngine implements WardriveEngine {
     return c.future.whenComplete(poll.cancel);
   }
 
-  List<Echo> _buildEchoes(List<_Heard> heard, Uint8List secret, String text, int? sentTs, DateTime sentAt) {
+  /// The echo-building step on its own, for tests: [heard] are the packets the radio reported (with arrival times).
+  static List<Echo> echoesFor(List<(RxPacket, DateTime)> heard, Uint8List secret, String text, int? sentTs, DateTime sentAt) =>
+      _buildEchoes([for (final h in heard) _Heard(h.$1, h.$2)], secret, text, sentTs, sentAt);
+
+  /// For tests.
+  static double? inRangeForTest(double? v, double lo, double hi) => _inRange(v, lo, hi);
+
+  static List<Echo> _buildEchoes(List<_Heard> heard, Uint8List secret, String text, int? sentTs, DateTime sentAt) {
     final best = <String, ({Echo echo, int hops, double snr})>{};
     final order = <String>[];
     for (final h in heard) {
