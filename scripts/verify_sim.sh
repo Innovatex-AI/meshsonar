@@ -2,6 +2,7 @@
 # Verify an app build end to end on iOS simulators before hand-off.
 #   scripts/verify_sim.sh <path-to-checkout-or-worktree> [out-dir]
 # Env: DEVICES="iPad Pro 11-inch|iPhone 17 Pro" (| separated name prefixes), MODE=debug|release (default debug),
+#      FLOW_TEST=integration_test/contacts_visual_test.dart runs that flow instead of the all-screens tour (Contacts and DMs).
 #      OFFLINE_MAPS=1 also runs integration_test/offline_maps_test.dart (in-app download of the real CMH pack, then
 #      z10/z14 light/dark shots of the offline map).
 # For each device: boot, `flutter build ios --simulator`, install + launch com.meshsonar.app, then run
@@ -87,7 +88,7 @@ for NAME in "${LIST[@]}"; do
   xcrun simctl uninstall "$UDID" "$BUNDLE" 2>/dev/null || true
 
   N=0
-  run_flow integration_test/verify_screens_test.dart "$D/test.log" || FAIL=1
+  run_flow "${FLOW_TEST:-integration_test/verify_screens_test.dart}" "$D/test.log" || FAIL=1
   grep -o 'APP_VERSION [^ ]*' "$D/test.log" | tail -1 > "$D/version.txt" || true
   if [ "${OFFLINE_MAPS:-0}" = 1 ]; then
     # Downloads the real CMH pack in-app (53 MB from tiles.meshsonar.com) and shows it at z10/z14 light/dark.

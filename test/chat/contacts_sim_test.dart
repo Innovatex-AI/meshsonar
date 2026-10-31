@@ -15,7 +15,6 @@ import 'package:meshsonar/chat/store.dart';
 import 'package:meshsonar/radio/companion_link.dart';
 import 'package:meshsonar/radio/inbound.dart';
 import 'package:meshsonar/radio/packet.dart';
-import 'package:meshsonar/radio/session.dart';
 import 'package:meshsonar/radio/crypto.dart' as c;
 import 'package:meshsonar/radio/protocol.dart';
 import 'package:meshsonar/radio/radio_session_impl.dart';

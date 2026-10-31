@@ -36,6 +36,9 @@ class _ContactsViewState extends State<ContactsView> {
   StreamSubscription<ContactNotice>? _notices;
   bool _allNearby = false;
 
+  /// How many new nodes show before "See all": two rows keep the person's own contacts on the first screen.
+  static const int _nearbyFirst = 2;
+
   ContactsController get _c => widget.controller;
   ContactManager get _m => _c.manager;
 
@@ -186,7 +189,11 @@ class _ContactsViewState extends State<ContactsView> {
               key: const Key('contacts-usage'),
               style: TextButton.styleFrom(minimumSize: const Size(48, 48), padding: EdgeInsets.zero),
               onPressed: () => showRadioListSheet(context, _c),
-              child: Text('On your radio: ${s.radioCount} of ${s.capacity} contacts', style: t.textTheme.bodyMedium),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Flexible(child: Text('On your radio: ${s.radioCount} of ${s.capacity} contacts', style: t.textTheme.bodyMedium)),
+                const SizedBox(width: Gap.xs),
+                const Icon(Icons.chevron_right_rounded, size: 20),
+              ]),
             ),
           ),
       ]),
@@ -282,14 +289,14 @@ class _ContactsViewState extends State<ContactsView> {
 
   List<Widget> _nearbySection(BuildContext context, List<AdvertSeen> nearby) {
     final t = Theme.of(context);
-    final shown = _allNearby ? nearby : nearby.take(3).toList();
+    final shown = _allNearby ? nearby : nearby.take(_nearbyFirst).toList();
     return [
       Padding(
         padding: const EdgeInsets.fromLTRB(Gap.l, Gap.l, Gap.l, Gap.xs),
         child: Semantics(header: true, child: Text('New nodes nearby', key: const Key('nearby-title'), style: t.textTheme.titleMedium)),
       ),
       for (final a in shown) _NearbyRow(key: Key('nearby-${a.publicKey.substring(0, 8)}'), advert: a, controller: _c),
-      if (nearby.length > 3)
+      if (nearby.length > _nearbyFirst)
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: Gap.l),
           child: Align(
@@ -460,40 +467,51 @@ class _NearbyRow extends StatelessWidget {
     final type = a.type ?? ContactType.companion;
     final hops = (a.pathLen == null || a.pathLen == 0xFF) ? null : a.pathLen! & 63;
     final detail = '${heardText(a.lastTsMs, controller.nowMs()).replaceFirst('Heard ', 'heard ')}${hops == null ? '' : ', $hops ${hops == 1 ? 'hop' : 'hops'}'}';
+    final add = TextButton(
+      key: Key('nearby-add-${a.publicKey.substring(0, 8)}'),
+      style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+      onPressed: () async {
+        final r = await controller.manager.addNearby(a);
+        if (!context.mounted) return;
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
+            content: Text(r.ok ? 'Added ${a.name}.${r.note == null ? '' : ' ${r.note}'}' : (r.error ?? 'That could not be added.'))));
+      },
+      child: const Text('Add'),
+    );
+    final ignore = TextButton(
+      key: Key('nearby-ignore-${a.publicKey.substring(0, 8)}'),
+      style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+      onPressed: () => controller.manager.ignoreNearby(a.publicKey),
+      child: const Text('Ignore'),
+    );
+    final text = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(a.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: t.textTheme.titleSmall),
+      Text('${contactTypeLabel(type)}, $detail', style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+    ]);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: Gap.l, vertical: Gap.xs),
       child: Semantics(
         container: true,
         label: 'New node ${a.name}, ${contactTypeLabel(type)}, $detail',
-        child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-          ExcludeSemantics(child: CircleAvatar(radius: 20, child: Icon(contactTypeIcon(type), size: 20))),
-          const SizedBox(width: Gap.m),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(a.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: t.textTheme.titleSmall),
-              Text('${contactTypeLabel(type)}, $detail', style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
-              Wrap(spacing: Gap.s, children: [
-                TextButton(
-                  key: Key('nearby-add-${a.publicKey.substring(0, 8)}'),
-                  style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
-                  onPressed: () async {
-                    final r = await controller.manager.addNearby(a);
-                    if (!context.mounted) return;
-                    ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
-                        content: Text(r.ok ? 'Added ${a.name}.${r.note == null ? '' : ' ${r.note}'}' : (r.error ?? 'That could not be added.'))));
-                  },
-                  child: const Text('Add'),
-                ),
-                TextButton(
-                  key: Key('nearby-ignore-${a.publicKey.substring(0, 8)}'),
-                  style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
-                  onPressed: () => controller.manager.ignoreNearby(a.publicKey),
-                  child: const Text('Ignore'),
-                ),
-              ]),
-            ]),
-          ),
-        ]),
+        child: LayoutBuilder(builder: (context, box) {
+          // Buttons beside the name while there is room; under it at the largest text sizes and on narrow screens.
+          final inline = box.maxWidth >= 340 && MediaQuery.textScalerOf(context).scale(14) <= 14 * 1.3;
+          final avatar = ExcludeSemantics(child: CircleAvatar(radius: 20, child: Icon(contactTypeIcon(type), size: 20)));
+          if (inline) {
+            return Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+              avatar,
+              const SizedBox(width: Gap.m),
+              Expanded(child: text),
+              add,
+              ignore,
+            ]);
+          }
+          return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            avatar,
+            const SizedBox(width: Gap.m),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [text, Wrap(spacing: Gap.s, children: [add, ignore])])),
+          ]);
+        }),
       ),
     );
   }
