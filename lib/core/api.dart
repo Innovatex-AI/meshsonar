@@ -8,6 +8,7 @@ import 'drive_context_wire.dart' show ContextUploadResult, DriveContextBatch;
 import 'driver_summary.dart' show DriverSummary;
 import 'model.dart';
 import 'map_links.dart';
+import 'node_claim.dart';
 import 'repeater_reach.dart';
 import 'region_lookup.dart';
 import 'server_url.dart';
@@ -221,6 +222,10 @@ class SiteConfig {
   bool get reachDriverKey => capabilities.contains('reachDriverKey');
   /// `cell-links` accepts `x-driver-key` (`capabilities.cellLinks`): the repeaters heard in one cell.
   bool get cellLinks => capabilities.contains('cellLinks');
+
+  /// Radio claims (`capabilities.nodeClaims`): `claim-start`, `claim-complete`, `claim-status`, `my-radios`, `claim`.
+  /// A claim only manages a radio; it never decides whether its data counts.
+  bool get nodeClaims => capabilities.contains('nodeClaims');
   /// `repeater-reach` can answer in H3 cells (`res=7..11`): the finest cells the server stores, one per hexagon.
   bool get reachH3 => capabilities.contains('reachH3');
   bool get rfWindow => capabilities.contains('rfWindow');
@@ -366,6 +371,32 @@ abstract class CmatClient {
   /// one coverage cell (public drives, trimmed), with pings and SNR. Throws [CmatException] (401, 403, 429).
   /// Default: not supported.
   Future<CellLinks> cellLinks(String driverKey, String h3) => throw const CmatException('not supported by this client');
+
+  /// `POST /api/cmh/claim-start` (`capabilities.nodeClaims`): asks for a challenge to claim [pubkey] (64 hex, lower
+  /// case). kind sign: bytes for the radio to sign (2 min); kind advert: a short code for the repeater's name (15 min).
+  /// Throws [CmatException] (409 someone else's pending claim, 400, 401, 403, 429). Default: not supported.
+  Future<ClaimChallenge> claimStart(String driverKey, String pubkey, ClaimKind kind) =>
+      throw const CmatException('not supported by this client');
+
+  /// `POST /api/cmh/claim-complete` (sign challenges): the 128-hex Ed25519 signature. Throws [CmatException]
+  /// (400 malformed, 410 expired or used, 422 signature does not match).
+  Future<NodeClaim> claimComplete(String driverKey, String challengeId, String signatureHex) =>
+      throw const CmatException('not supported by this client');
+
+  /// `GET /api/cmh/claim-status?challengeId=`: whether the server has seen the code in an advert.
+  Future<ClaimStatus> claimStatus(String driverKey, String challengeId) =>
+      throw const CmatException('not supported by this client');
+
+  /// `GET /api/cmh/my-radios`: the radios this driver key has claimed.
+  Future<List<NodeClaim>> myRadios(String driverKey) => throw const CmatException('not supported by this client');
+
+  /// `DELETE /api/cmh/claim?pubkey=`: gives the radio up (its data stays and keeps counting).
+  Future<void> releaseClaim(String driverKey, String pubkey) => throw const CmatException('not supported by this client');
+
+  /// `PATCH /api/cmh/claim`: changes only the keys in [changes] (`displayName`, `positionPublic`, `notes`); a null
+  /// value clears that field. Returns the updated claim.
+  Future<NodeClaim> updateClaim(String driverKey, String pubkey, Map<String, Object?> changes) =>
+      throw const CmatException('not supported by this client');
 }
 
 /// The server's answer to a drive-context erase.

@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../core/api.dart';
+import '../core/claim_flow.dart' show ClaimRestoreStore;
 import '../core/model.dart';
 import '../core/phone_sensors.dart';
 import '../core/idle_region_watcher.dart';
@@ -110,6 +111,9 @@ class AppServices {
   /// Where the unsent telemetry headers wait (lib/core/telemetry_uploader.dart). Null = memory only.
   final File? telemetryQueueFile;
 
+  /// Repeaters whose name still has to be put back after a claim (names only, never a password). Null = memory only.
+  final ClaimRestoreStore? claimRestoreStore;
+
   /// Local cache of the last-fetched regions-index (live region awareness). Null = in-memory only for this run
   /// (tests; AppState falls back to a [MemoryRegionIndexCache]).
   final RegionIndexCache? regionIndexCache;
@@ -161,6 +165,7 @@ class AppServices {
     this.appInfo = const AppInfo(name: 'MeshSonar'),
     this.uiPrefsFile,
     this.telemetryQueueFile,
+    this.claimRestoreStore,
     this.directory,
     this.reportDraftStore,
     this.regionIndexCache,

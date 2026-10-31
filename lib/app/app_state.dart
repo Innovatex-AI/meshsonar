@@ -13,6 +13,7 @@ import 'package:flutter/foundation.dart';
 
 import '../core/antenna_profile.dart';
 import '../core/api.dart';
+import '../core/claim_flow.dart';
 import '../core/coverage_query.dart';
 import '../core/diagnostics.dart';
 import '../core/data_categories.dart' show CategoryId, dataCategories;
@@ -45,7 +46,9 @@ import '../core/phone_sensors.dart';
 import '../core/units.dart';
 import 'build_flags.dart';
 import '../platform/app_lifecycle_bridge.dart';
+import '../radio/claim_radio.dart';
 import '../radio/radio_api.dart';
+import 'claims.dart';
 import 'context_upload_hook.dart';
 import 'drive_context_hook.dart';
 import 'messages.dart';
@@ -226,6 +229,36 @@ class AppState extends ChangeNotifier {
 
   /// The server answers `cell-links` for an approved driver key (`capabilities.cellLinks`).
   bool get cellLinksEnabled => uploadSiteConfig?.cellLinks == true && keyApproved;
+
+  /// The server takes radio claims (`capabilities.nodeClaims`) and this phone's key is approved. A claim only manages a
+  /// radio; recording, uploading and counting never depend on it.
+  bool get nodeClaimsEnabled => uploadSiteConfig?.nodeClaims == true && keyApproved;
+
+  ClaimController? _claims;
+
+  /// Waits and hold times of the claim flows; tests shorten them before the first use of [claims].
+  @visibleForTesting
+  ClaimTiming claimTiming = const ClaimTiming();
+  @visibleForTesting
+  Future<void> Function(Duration d)? claimWait;
+
+  /// My radios, the running claim flow and the name restores still owed (lib/app/claims.dart).
+  ClaimController get claims => _claims ??= ClaimController(
+        client: () => client,
+        driverKey: () => _settings.driverKey,
+        radio: () {
+          final Object? l = _link;
+          return l is ClaimRadio && l.isConnected ? l : null;
+        },
+        enabled: () => nodeClaimsEnabled,
+        store: services.claimRestoreStore ?? MemoryClaimRestoreStore(),
+        clock: services.clock,
+        timing: claimTiming,
+        wait: claimWait,
+      )..addListener(notifyListeners);
+
+  /// This driver key has claimed the radio [pubkey] (false until the list has loaded, or without claims support).
+  bool ownsRadio(String pubkey) => _claims?.owns(pubkey) ?? false;
 
   /// The repeaters heard in H3 cell [h3], from memory for 10 minutes. Throws [CmatException] (401/403/429, offline).
   Future<CellLinks> cellLinks(String h3) async {
@@ -912,6 +945,7 @@ class AppState extends ChangeNotifier {
 
   void _onForeground(bool fg) {
     if (!fg) return;
+    _claims?.appResumed();
     unawaited(refreshLocationAccess());
     unawaited(ensureKey());
     unawaited(_retryPendingUploads());
@@ -1204,6 +1238,7 @@ class AppState extends ChangeNotifier {
       _uploadCapsAt = (r.meta?.offline ?? false) ? null : services.clock();
       notifyListeners();
       unawaited(_afterUploadCaps(server));
+      if (nodeClaimsEnabled) unawaited(claims.refresh());
     } catch (e) {
       _logError('Fetching the upload server\'s site-config failed', e);
     }
@@ -1370,6 +1405,7 @@ class AppState extends ChangeNotifier {
       unawaited(_telemetrySub?.cancel());
       _telemetrySub = link.rxPackets.listen(_onTelemetryRx, onError: (Object _) {});
       _connecting = false;
+      _claims?.radioChanged();
       // A radio used for the first time is asked once how its antenna is set up (the UI opens the sheet).
       _antennaPrompt = antennaProfile == null;
       diagnostics.add('Connected to ${kind == RadioKind.simulator ? 'the simulator' : 'radio "${info.name}"'}, '
@@ -1458,6 +1494,7 @@ class AppState extends ChangeNotifier {
           final old = _link;
           _link = link;
           _selfInfo = info;
+          _claims?.radioChanged();
           unawaited(_telemetrySub?.cancel());
           _telemetrySub = link.rxPackets.listen(_onTelemetryRx, onError: (Object _) {});
           unawaited(old?.close().catchError((Object _) {}));

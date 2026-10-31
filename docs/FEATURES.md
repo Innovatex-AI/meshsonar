@@ -457,6 +457,31 @@ it."); `test/ui/settings_no_dead_end_test.dart` enforces it.
 The first-run disclosure sheet lists every registry category with exactly what is shared and never shared, where it
 goes, and "Change your mind any time in Settings, under Privacy & data sharing"; both choices stay pinned on screen.
 
+## My radios and claims (unreleased)
+
+Needs a server that lists `nodeClaims` in its site-config capabilities and an approved driver key; otherwise the three rows
+under Settings > My radios say why they cannot be used. **A claim only manages a radio** (its name, whether its position is
+public, notes, giving it up). Recording, uploading and counting never check it: every radio and every driver keeps feeding data.
+
+- **Settings > My radios** lists the radios this key manages (from `my-radios`): type, how it was verified (radio signature, or an
+  observer hearing the code), position public / hidden / server default, a short key. Edit sends only the changed fields
+  (`PATCH claim`); Give up asks first and says the data keeps counting (`DELETE claim`). A link opens the website's `/me/radios`.
+- **Claim my radio** (needs a connected radio): `claim-start(sign)` with the radio's own public key, the radio signs the
+  message (Ed25519, CMD_SIGN_*), `claim-complete`. No password.
+- **Claim a repeater** (needs a connected radio within reach of the repeater): `claim-start(advert)` gives a code; the radio logs
+  in with the admin password, `get name`, `set name <name cut to 16 bytes> <code>`, `advert`, polls `claim-status` every 5 s,
+  then ALWAYS `set name <original>`, `advert`, `get name` to confirm (four tries). The code stays on the name for at most 90 s
+  (one extra advert halfway); after the name is back the app keeps listening until the code expires, because an observer's
+  report can arrive late. The screen cannot be left while the name is at risk. If the name cannot be confirmed, the two
+  commands are shown with copy buttons and a reminder (name only, never the password) stays in My radios with a
+  "Put the name back" button.
+- Said on the screen: "Your repeater's name will show a short code for about a minute; we restore it automatically; we never
+  see or store your admin password; claiming only lets you manage this radio, it never affects whether its data counts."
+- **Where else**: the repeater sheet (and the map's collapsed repeater panel body) has "Claim this repeater", or an
+  "Owned by you" chip once claimed (the chip is also in the collapsed panel header). Room servers have no claim button.
+- Accessibility: every control is at least 48 px, steps and chips have screen-reader labels, progress is a live region, large
+  text and dark mode are covered by tests.
+
 ## Regions at 559 (0.20.1)
 
 Design, numbers and the asks for the server: [REGIONS_AT_SCALE.md](REGIONS_AT_SCALE.md).

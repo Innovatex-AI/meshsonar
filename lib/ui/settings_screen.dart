@@ -14,6 +14,7 @@ import 'settings/diagnostics_section.dart';
 import 'settings/display_section.dart';
 import 'settings/drives_section.dart';
 import 'settings/maps_section.dart';
+import 'settings/my_radios_section.dart';
 import 'settings/privacy_section.dart';
 import 'settings/radio_section.dart';
 import 'settings/region_section.dart';
@@ -37,6 +38,7 @@ List<Widget> settingsSectionRows(BuildContext context, String id) => switch (id)
       'maps' => mapsSectionRows(context),
       'privacy' => privacySectionRows(context),
       'radio' => radioSectionRows(context),
+      'my-radios-section' => myRadiosSectionRows(context),
       'drives' => drivesSectionRows(context),
       'storage' => storageSectionRows(context),
       'diagnostics' => diagnosticsSectionRows(context),
@@ -50,6 +52,7 @@ String? settingsSectionHelp(String id) => switch (id) {
       'maps' => mapsHelp,
       'privacy' => privacyHelp,
       'radio' => radioHelp,
+      'my-radios-section' => myRadiosHelp,
       'drives' => drivesHelp,
       'storage' => storageHelp,
       'diagnostics' => diagnosticsHelp,

@@ -11,6 +11,7 @@ import 'dart:typed_data';
 
 import '../core/drive_context.dart';
 import '../core/model.dart';
+import 'claim_radio.dart';
 import 'crypto.dart';
 import 'protocol.dart';
 import 'radio_api.dart';
@@ -34,15 +35,22 @@ class ControlPacket {
   const ControlPacket(this.at, this.snrDb, this.rssiDbm, this.pathLen, this.payload);
 }
 
-class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource {
+class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRadio {
   final ByteTransport _transport;
   final Duration timeout;
   final DateTime Function() _clock;
   final String appName;
 
+  /// How long login / CLI / status wait for the repeater's answer after the radio took the command. Null = what the
+  /// radio estimates for the trip, doubled, between 15 s and 60 s. Tests set a short one.
+  final Duration? claimReplyTimeout;
+
   final _rx = StreamController<RxPacket>.broadcast();
   final _control = StreamController<ControlPacket>.broadcast();
   final _channelMessages = StreamController<ChannelMsgFrame>.broadcast();
+
+  /// Login/status pushes and contact texts (a repeater's CLI replies), for the claim calls below.
+  final _claimEvents = StreamController<Frame>.broadcast();
   StreamSubscription<Uint8List>? _sub;
 
   Future<void> _queue = Future.value();
@@ -63,7 +71,7 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource {
   int _lastSentTs = 0;
 
   MeshCoreCompanionLink(this._transport,
-      {this.timeout = const Duration(seconds: 5), DateTime Function()? clock, this.appName = 'MeshSonar'})
+      {this.timeout = const Duration(seconds: 5), DateTime Function()? clock, this.appName = 'MeshSonar', this.claimReplyTimeout})
       : _clock = clock ?? DateTime.now {
     _sub = _transport.incoming.listen(_onFrame, onDone: _onTransportDone, onError: (Object _) {});
   }
@@ -143,6 +151,8 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource {
         if (!_rx.isClosed) _rx.add(RxPacket(at: now, raw: f.raw, snrDb: f.snrDb, rssiDbm: f.rssiDbm.toDouble()));
       case ControlDataPush():
         if (!_control.isClosed) _control.add(ControlPacket(now, f.snrDb, f.rssiDbm, f.pathLen, f.payload));
+      case LoginSuccessPush() || LoginFailPush() || StatusResponsePush():
+        if (!_claimEvents.isClosed) _claimEvents.add(f);
       case MsgWaitingPush():
         // Drain the radio's offline queue so it never fills (MyMesh.cpp addToOfflineQueue ~224).
         unawaited(_drainMessages());
@@ -164,6 +174,7 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource {
     _rx.close();
     _control.close();
     _channelMessages.close();
+    _claimEvents.close();
   }
 
   /// Sends one command and waits for its reply. Commands are strictly serialised.
@@ -291,7 +302,7 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource {
     if (ts <= _lastSentTs) ts = _lastSentTs + 1;
     final f = await _command(encodeSendChannelText(channelIndex, ts, text));
     // Firmware replies RESP_CODE_OK (MyMesh.cpp ~1196); accept RESP_CODE_SENT too, as the docs describe.
-    if (f is OkFrame || (f is UnknownFrame && f.code == Resp.sent)) {
+    if (f is OkFrame || f is SentFrame || (f is UnknownFrame && f.code == Resp.sent)) {
       _lastSentTs = ts;
       return;
     }
@@ -408,8 +419,24 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource {
   }
 
   Future<void> _drainMessages() async {
-    if (_syncing) return;
+    if (_syncing) {
+      _drainAgain = true; // a message was queued while we were finishing: go round once more
+      return;
+    }
     _syncing = true;
+    try {
+      do {
+        _drainAgain = false;
+        await _drainOnce();
+      } while (_drainAgain && isConnected);
+    } finally {
+      _syncing = false;
+    }
+  }
+
+  bool _drainAgain = false;
+
+  Future<void> _drainOnce() async {
     try {
       for (var n = 0; n < 256 && isConnected; n++) {
         final f = await _command(encodeSyncNextMessage());
@@ -417,13 +444,151 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource {
           if (!_channelMessages.isClosed) _channelMessages.add(f);
           continue;
         }
+        if (f is ContactTextFrame) {
+          if (!_claimEvents.isClosed) _claimEvents.add(f);
+          continue;
+        }
         if (f is ContactMsgFrame) continue;
         break; // NO_MORE_MESSAGES, error, or anything else
       }
     } catch (_) {
       // best effort
+    }
+  }
+
+
+  // ---------------------------------------------------------------- ClaimRadio (login, CLI, status, sign)
+  // Frame layouts verified against MeshCore companion_radio/MyMesh.cpp at main (Oct 31 2026); see protocol.dart.
+
+  @override
+  String? get selfPublicKey => _self?.publicKey.toLowerCase();
+
+  /// Waits for the first claim event that [test] accepts. Subscribe BEFORE sending the command that causes it.
+  _EventWaiter<T> _waitFor<T extends Frame>(bool Function(T f) test) =>
+      _EventWaiter<T>(_claimEvents.stream, test, () => const ClaimRadioException(ClaimRadioError.notConnected, 'radio disconnected'));
+
+  void _requireLink() {
+    if (!isConnected) throw const ClaimRadioException(ClaimRadioError.notConnected, 'radio not connected');
+  }
+
+  /// One command, with radio-side failures mapped to [ClaimRadioException].
+  Future<Frame> _claimCommand(Uint8List frame, String what) async {
+    _requireLink();
+    try {
+      return await _command(frame);
+    } on TimeoutException {
+      throw ClaimRadioException(ClaimRadioError.silent, 'the radio did not answer ($what)');
+    } on StateError {
+      throw const ClaimRadioException(ClaimRadioError.notConnected, 'radio disconnected');
+    } on CompanionException catch (e) {
+      throw ClaimRadioException(ClaimRadioError.radio, e.message, e.errCode);
+    }
+  }
+
+  static ClaimRadioException _sendFailure(Frame f, String what) {
+    if (f is ErrFrame) {
+      return switch (f.code) {
+        ErrCode.notFound => ClaimRadioException(ClaimRadioError.noContact, '$what: the radio does not know this repeater', f.code),
+        ErrCode.tableFull => ClaimRadioException(ClaimRadioError.noContact, '$what: the radio\'s contact list is full', f.code),
+        ErrCode.unsupportedCmd => ClaimRadioException(ClaimRadioError.unsupported, '$what: this firmware does not support it', f.code),
+        _ => ClaimRadioException(ClaimRadioError.radio, '$what failed', f.code),
+      };
+    }
+    return ClaimRadioException(ClaimRadioError.radio, '$what: unexpected reply ${f.runtimeType}');
+  }
+
+  @override
+  Future<Uint8List> sign(Uint8List data) async {
+    final start = await _claimCommand(encodeSignStart(), 'sign start');
+    if (start is! SignStartFrame) throw _sendFailure(start, 'sign start');
+    if (data.length > start.maxLen) {
+      throw ClaimRadioException(ClaimRadioError.radio, 'the message is longer than the radio signs (${start.maxLen} bytes)');
+    }
+    for (var at = 0; at < data.length; at += _signChunk) {
+      final end = at + _signChunk < data.length ? at + _signChunk : data.length;
+      final f = await _claimCommand(encodeSignData(data.sublist(at, end)), 'sign data');
+      if (f is! OkFrame) throw _sendFailure(f, 'sign data');
+    }
+    final fin = await _claimCommand(encodeSignFinish(), 'sign finish');
+    if (fin is! SignatureFrame) throw _sendFailure(fin, 'sign finish');
+    return fin.signature;
+  }
+
+  static const _signChunk = 120;
+
+  /// The radio's own advert packet (CMD_EXPORT_CONTACT with no key).
+  Future<Uint8List> exportSelfAdvert() async {
+    final f = await _claimCommand(encodeExportSelfContact(), 'export contact');
+    if (f is! ExportContactFrame) throw _sendFailure(f, 'export contact');
+    return f.packet;
+  }
+
+  @override
+  Future<void> ensureContact(String pubkeyHex, {required int nodeType, String name = ''}) async {
+    final key = fromHex(pubkeyHex);
+    final have = await _claimCommand(encodeGetContactByKey(key), 'get contact');
+    if (have is ContactFrame) return;
+    if (have is! ErrFrame || have.code != ErrCode.notFound) throw _sendFailure(have, 'get contact');
+    final add = await _claimCommand(encodeAddUpdateContact(key, type: nodeType, name: name), 'add contact');
+    if (add is! OkFrame) throw _sendFailure(add, 'add contact');
+  }
+
+  Duration _waitFromSent(SentFrame sent, Duration? override) {
+    if (override != null) return override;
+    if (claimReplyTimeout != null) return claimReplyTimeout!;
+    final ms = sent.estTimeoutMs * 2;
+    return Duration(milliseconds: ms.clamp(15000, 60000));
+  }
+
+  @override
+  Future<RemoteLogin> login(String pubkeyHex, String password, {Duration? timeout}) async {
+    final prefix = pubkeyHex.substring(0, 12).toLowerCase();
+    final waiter = _waitFor<Frame>((f) => (f is LoginSuccessPush && f.prefixHex == prefix) || (f is LoginFailPush && f.prefixHex == prefix));
+    try {
+      final sent = await _claimCommand(encodeSendLogin(fromHex(pubkeyHex), password), 'login');
+      if (sent is! SentFrame) throw _sendFailure(sent, 'login');
+      final f = await waiter.wait(_waitFromSent(sent, timeout), 'the repeater did not answer the login');
+      if (f is LoginSuccessPush) return RemoteLogin(isAdmin: f.isAdmin, firmwareLevel: f.firmwareLevel);
+      throw const ClaimRadioException(ClaimRadioError.radio, 'the repeater refused the login');
     } finally {
-      _syncing = false;
+      waiter.cancel();
+    }
+  }
+
+  @override
+  Future<void> logout(String pubkeyHex) async {
+    try {
+      await _claimCommand(encodeLogout(fromHex(pubkeyHex)), 'logout');
+    } catch (_) {}
+  }
+
+  @override
+  Future<String> runCli(String pubkeyHex, String command, {Duration? timeout}) async {
+    final prefix = pubkeyHex.substring(0, 12).toLowerCase();
+    final waiter = _waitFor<ContactTextFrame>((f) => f.prefixHex == prefix && (f.txtType == txtTypeCliData || f.txtType == txtTypeCliCommand));
+    try {
+      final ts = _clock().toUtc().millisecondsSinceEpoch ~/ 1000;
+      final sent = await _claimCommand(encodeSendTxt(txtTypeCliCommand, 0, ts, fromHex(pubkeyHex), command), 'cli');
+      if (sent is! SentFrame) throw _sendFailure(sent, 'cli');
+      final reply = await waiter.wait(_waitFromSent(sent, timeout), 'the repeater did not reply to "${command.split(' ').first}"');
+      return reply.text.trim();
+    } finally {
+      waiter.cancel();
+    }
+  }
+
+  @override
+  Future<RepeaterStatus?> status(String pubkeyHex, {Duration? timeout}) async {
+    final prefix = pubkeyHex.substring(0, 12).toLowerCase();
+    final waiter = _waitFor<StatusResponsePush>((f) => f.prefixHex == prefix);
+    try {
+      final sent = await _claimCommand(encodeSendStatusReq(fromHex(pubkeyHex)), 'status');
+      if (sent is! SentFrame) return null;
+      return (await waiter.wait(_waitFromSent(sent, timeout), 'no status')).status;
+    } on ClaimRadioException {
+      return null;
+    } finally {
+      waiter.cancel();
     }
   }
 
@@ -443,5 +608,36 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource {
       if (a[i] != b[i]) return false;
     }
     return true;
+  }
+}
+
+
+/// One-shot wait for a claim event; the timer only starts in [wait], so the subscription can be made before the
+/// command goes out.
+class _EventWaiter<T extends Frame> {
+  final Completer<T> _done = Completer<T>();
+  late final StreamSubscription<Frame> _sub;
+  Timer? _timer;
+
+  _EventWaiter(Stream<Frame> events, bool Function(T f) test, ClaimRadioException Function() onClosed) {
+    _sub = events.listen((f) {
+      if (f is T && !_done.isCompleted && test(f)) _done.complete(f);
+    }, onDone: () {
+      if (!_done.isCompleted) _done.completeError(onClosed());
+    });
+    // a waiter nobody awaited (command failed first) must not report an unhandled error
+    _done.future.then<void>((_) {}, onError: (_) {});
+  }
+
+  Future<T> wait(Duration timeout, String silentMessage) {
+    _timer = Timer(timeout, () {
+      if (!_done.isCompleted) _done.completeError(ClaimRadioException(ClaimRadioError.silent, silentMessage));
+    });
+    return _done.future;
+  }
+
+  void cancel() {
+    _timer?.cancel();
+    _sub.cancel();
   }
 }

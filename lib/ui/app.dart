@@ -24,6 +24,9 @@ class AppScope extends InheritedNotifier<AppState> {
   static AppState of(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<AppScope>()!.notifier!;
 
+  /// The state when there is an AppScope above (rebuilds on change), else null (isolated widget tests).
+  static AppState? maybeOf(BuildContext context) => context.dependOnInheritedWidgetOfExactType<AppScope>()?.notifier;
+
   /// The Units for the current Settings (rebuilds on change); metric when there is no AppScope (isolated widget tests).
   static Units unitsOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<AppScope>()?.notifier?.units ?? Units.metric;

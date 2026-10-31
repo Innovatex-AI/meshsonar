@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/app/services.dart';
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/map_links.dart';
+import 'package:meshsonar/core/node_claim.dart';
 import 'package:meshsonar/core/repeater_reach.dart';
 import 'package:meshsonar/core/drive_context_wire.dart';
 import 'package:meshsonar/core/driver_summary.dart';
@@ -212,6 +213,18 @@ class RecordingClient implements CmatClient {
   Future<RepeaterReach> repeaterReach(String driverKey, String repeaterKey, {double? lat, double? lon, bool h3 = false}) => throw UnimplementedError();
   @override
   Future<CellLinks> cellLinks(String driverKey, String h3) => throw UnimplementedError();
+  @override
+  Future<ClaimChallenge> claimStart(String driverKey, String pubkey, ClaimKind kind) => throw UnimplementedError();
+  @override
+  Future<NodeClaim> claimComplete(String driverKey, String challengeId, String signatureHex) => throw UnimplementedError();
+  @override
+  Future<ClaimStatus> claimStatus(String driverKey, String challengeId) => throw UnimplementedError();
+  @override
+  Future<List<NodeClaim>> myRadios(String driverKey) => throw UnimplementedError();
+  @override
+  Future<void> releaseClaim(String driverKey, String pubkey) => throw UnimplementedError();
+  @override
+  Future<NodeClaim> updateClaim(String driverKey, String pubkey, Map<String, Object?> changes) => throw UnimplementedError();
   @override
   final Uri baseUrl = Uri.parse('https://example.org');
   final List<DriveBatch> uploads;

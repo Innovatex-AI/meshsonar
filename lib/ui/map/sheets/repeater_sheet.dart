@@ -15,6 +15,7 @@ import '../../theme.dart';
 import '../layers/repeater_cluster_layer.dart' show networkBandColors, rosterBandColors;
 import '../layers/repeater_map_source.dart';
 import '../map_layers.dart' show formatSnrShort;
+import '../../claims/claim_widgets.dart' show ClaimRepeaterAction;
 
 /// What the sheet needs from the host besides the point.
 class RepeaterSheetContext {
@@ -175,6 +176,7 @@ class RepeaterSheet extends StatelessWidget {
                 label: const Text('Open repeater page'),
               ),
             ],
+            ClaimRepeaterAction(keyHex: p.key, name: p.name, isRoom: p.isRoom),
           ],
         ),
       ),

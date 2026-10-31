@@ -18,6 +18,9 @@ class MapInfoPanel extends StatefulWidget {
   final Widget body;
   final VoidCallback? onFit;
   final VoidCallback onClose;
+
+  /// A small marker next to the title (the "Owned by you" chip), shown even while the panel is collapsed.
+  final Widget? badge;
   const MapInfoPanel({
     super.key,
     required this.title,
@@ -26,6 +29,7 @@ class MapInfoPanel extends StatefulWidget {
     required this.body,
     required this.onClose,
     this.onFit,
+    this.badge,
   });
 
   @override
@@ -71,12 +75,17 @@ class _MapInfoPanelState extends State<MapInfoPanel> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            widget.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: t.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-                          ),
+                          Row(children: [
+                            Flexible(
+                              child: Text(
+                                widget.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: t.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                            if (widget.badge != null) ...[const SizedBox(width: 6), widget.badge!],
+                          ]),
                           Text(
                             widget.summary,
                             key: const Key('info-panel-summary'),
