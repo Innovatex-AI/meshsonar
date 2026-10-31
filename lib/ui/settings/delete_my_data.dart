@@ -6,8 +6,11 @@
 // Every state is said in words: no driver key, a server that cannot erase context, a key the server does not know
 // (401/403), the hourly limit (429, "try again in an hour"), no connection (remembered and retried), and the server's
 // own counts when it worked.
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
+import '../../app/account_delete_hook.dart';
 import '../../app/app_state.dart';
 import '../../app/context_upload_hook.dart';
 import '../app.dart';
@@ -21,8 +24,17 @@ const String deleteMyDataLead = 'This deletes what MeshSonar collected alongside
     'it heard) are not touched here: delete a drive from its own screen. Collection continues as the switches in '
     'Privacy & data sharing say; turn a switch off to stop it.';
 
-/// Account deletion (App Store guideline 5.1.1(v)): the account lives on the website, signed in by emailed link, and
-/// "Delete my account" there removes the account, every drive and ping and the driver keys. The button opens that page.
+/// Account deletion (App Store guideline 5.1.1(v)), in the app: the account IS the driver key this phone made, and the
+/// server can delete it with everything uploaded under it (`DELETE driver-delete`, `capabilities.driverDelete`).
+const String deleteAccountInAppText = 'Your MeshSonar account is the driver key this phone made. "Delete my account" deletes that key '
+    'and everything uploaded with it from the MeshSonar server: all your drives and their pings, the phone and radio '
+    'details and packet headers you shared, and your problem reports. This cannot be undone and needs an internet '
+    'connection. Drives saved on this phone stay unless you choose to delete them too. You can create a new anonymous '
+    'key later in Settings, Account & driver key.';
+
+/// Account deletion on a server that cannot do it from the app (App Store guideline 5.1.1(v)): the account lives on
+/// the website, signed in by emailed link, and "Delete my account" there removes the account, every drive and ping and
+/// the driver keys. The button opens that page.
 const String deleteAccountText = 'Your MeshSonar account is on the website. "Delete my account" opens the page where '
     'you sign in with your email and delete it: that removes your account, all your drives and their pings, and '
     'revokes your driver keys. Without an account (only a requested key), contact the server admin to have the key '
@@ -43,6 +55,76 @@ class _DeleteMyDataScreenState extends State<DeleteMyDataScreen> {
   String? _localResult;
   bool _drivesBusy = false;
   String? _drivesResult;
+  bool _accountBusy = false;
+  AccountDeleteOutcome? _accountResult;
+  bool _askedCaps = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_askedCaps) return;
+    _askedCaps = true;
+    // The capability decides which "Delete my account" this screen shows; ask the upload server (cached 30 minutes).
+    unawaited(AppScope.of(context).refreshUploadSiteConfig());
+  }
+
+  Future<void> _deleteAccount(AppState s) async {
+    final recording = s.currentSession?.id;
+    final local = s.sessions.where((x) => x.session.id != recording).length;
+    var alsoLocal = false;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        final c = Theme.of(ctx).colorScheme;
+        return StatefulBuilder(
+          builder: (ctx, setLocal) => AlertDialog(
+            key: const Key('delete-account-dialog'),
+            title: const Text('Delete my account?'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('This permanently deletes your driver key and all your uploaded drives and shared data from the '
+                      'MeshSonar server. This cannot be undone. The key is removed from this phone, and no new one is created '
+                      'until you ask for it in Settings.'),
+                  if (local > 0)
+                    CheckboxListTile(
+                      key: const Key('delete-account-local-drives'),
+                      contentPadding: EdgeInsets.zero,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      value: alsoLocal,
+                      onChanged: (v) => setLocal(() => alsoLocal = v ?? false),
+                      title: Text('Also delete the $local drive${local == 1 ? '' : 's'} saved on this phone'),
+                    ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(key: const Key('delete-account-dialog-cancel'), onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+              FilledButton(
+                key: const Key('delete-account-dialog-confirm'),
+                style: FilledButton.styleFrom(backgroundColor: c.error, foregroundColor: c.onError),
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Delete my account'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (ok != true || !mounted) return;
+    setState(() {
+      _accountBusy = true;
+      _accountResult = null;
+    });
+    final r = await s.deleteAccountOnServer(alsoDeleteLocalDrives: alsoLocal);
+    if (!mounted) return;
+    setState(() {
+      _accountBusy = false;
+      _accountResult = r;
+    });
+  }
 
   Future<void> _deleteOnServer(AppState s) async {
     final ok = await confirmSettingsChange(
@@ -145,6 +227,83 @@ class _DeleteMyDataScreenState extends State<DeleteMyDataScreen> {
     await s.forgetKey();
   }
 
+  /// In the app when the server can delete the key itself; otherwise the website hand-off (no capability, an old
+  /// server, or a server that answered 404/405).
+  List<Widget> _accountSection(AppState s, ThemeData t) {
+    final refused = _accountResult?.status == AccountDeleteStatus.unavailable;
+    final inApp = s.serverCanDeleteAccount && !refused;
+    final res = _accountResult;
+    Widget website(String text, {bool primary = true}) {
+      final style = FilledButton.styleFrom(backgroundColor: t.colorScheme.error, foregroundColor: t.colorScheme.onError);
+      void open() => s.openWebPage('/me/privacy');
+      return primary
+          ? FilledButton.icon(
+              key: const Key('delete-account-website'),
+              style: style,
+              onPressed: open,
+              icon: const Icon(Icons.manage_accounts_outlined),
+              label: Text(text),
+            )
+          : OutlinedButton.icon(
+              key: const Key('delete-account-website'),
+              onPressed: open,
+              icon: const Icon(Icons.open_in_new),
+              label: Text(text),
+            );
+    }
+
+    if (!inApp) {
+      return [
+        const Text(deleteAccountText, key: Key('delete-account-text')),
+        const SizedBox(height: 8),
+        website('Delete my account'),
+        if (res != null) _accountResultView(res, t),
+      ];
+    }
+    return [
+      const Text(deleteAccountInAppText, key: Key('delete-account-text')),
+      const SizedBox(height: 8),
+      if (!s.hasKey && res == null)
+        const Text('This phone has no driver key, so there is no MeshSonar account on it to delete.', key: Key('delete-account-nokey'))
+      else if (s.hasKey)
+        FilledButton.icon(
+          key: const Key('delete-account-in-app'),
+          style: FilledButton.styleFrom(backgroundColor: t.colorScheme.error, foregroundColor: t.colorScheme.onError),
+          onPressed: _accountBusy ? null : () => _deleteAccount(s),
+          icon: _accountBusy
+              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.manage_accounts_outlined),
+          label: const Text('Delete my account'),
+        ),
+      if (res != null) _accountResultView(res, t),
+      const SizedBox(height: 8),
+      const Text('If you also signed in on the website with your email, that sign-in is separate: you can delete it there.'),
+      const SizedBox(height: 4),
+      website('Open the website account page', primary: false),
+    ];
+  }
+
+  Widget _accountResultView(AccountDeleteOutcome r, ThemeData t) => Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: Semantics(
+          liveRegion: true,
+          child: Column(
+            key: const Key('delete-account-result'),
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(r.removed ? 'Done' : 'Not finished', style: t.textTheme.titleSmall),
+              Padding(padding: const EdgeInsets.only(top: 2), child: Text(r.message)),
+              if (r.removed)
+                const Padding(
+                  padding: EdgeInsets.only(top: 2),
+                  child: Text('This phone removed the key and will not create a new one by itself. To start again, tap Create my key '
+                      'in Settings, Account & driver key.'),
+                ),
+            ],
+          ),
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     final s = AppScope.of(context);
@@ -212,15 +371,7 @@ class _DeleteMyDataScreenState extends State<DeleteMyDataScreen> {
                 child: Semantics(liveRegion: true, child: Text(_localResult!, key: const Key('delete-local-result'))),
               ),
             head('Your account and drives'),
-            const Text(deleteAccountText, key: Key('delete-account-text')),
-            const SizedBox(height: 8),
-            FilledButton.icon(
-              key: const Key('delete-account-website'),
-              style: FilledButton.styleFrom(backgroundColor: t.colorScheme.error, foregroundColor: t.colorScheme.onError),
-              onPressed: () => s.openWebPage('/me/privacy'),
-              icon: const Icon(Icons.manage_accounts_outlined),
-              label: const Text('Delete my account'),
-            ),
+            ..._accountSection(s, t),
             const SizedBox(height: 8),
             OutlinedButton.icon(
               key: const Key('delete-all-drives'),

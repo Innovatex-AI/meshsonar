@@ -245,6 +245,9 @@ class RecordingClient implements CmatClient {
   Future<ContextEraseResult> deleteDriveContext(String driverKey, String category) => throw UnimplementedError();
 
   @override
+  Future<DriverDeleteResult> deleteDriver(String driverKey) => throw UnimplementedError();
+
+  @override
   Future<DriveEnv> driveEnv(String driverKey, String sessionId) => throw UnimplementedError();
 
   /// Late drive context (POST drive-context): recorded, like [uploads].

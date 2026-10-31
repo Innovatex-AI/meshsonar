@@ -30,6 +30,7 @@ Map<String, dynamic> _site(Object? caps) => {
     };
 
 void main() {
+  driverDeleteClientTests();
   test('siteConfig parses the live capabilities: flags and format lists', () async {
     final c = HttpCmatClient(Uri.parse('https://x.org'), client: MockClient((_) async => _json(_site(_liveCaps))));
     final s = await c.siteConfig();
@@ -116,5 +117,47 @@ void main() {
     expect((await c.driveEnv('k', 's')).status, DriveEnvStatus.unavailable);
     final n = HttpCmatClient(Uri.parse('https://x.org'), client: MockClient((_) async => _json({'error': 'no such session'}, 404)));
     await expectLater(n.driveEnv('k', 's'), throwsA(isA<CmatException>().having((e) => e.status, 'status', 404)));
+  });
+}
+
+void driverDeleteClientTests() {
+  group('deleteDriver (DELETE driver-delete)', () {
+    test('DELETE with the key and no body; parses the counts', () async {
+      late http.Request seen;
+      final c = HttpCmatClient(Uri.parse('https://x.org'), client: MockClient((req) async {
+        seen = req;
+        return _json({'deleted': {'sessions': 2, 'pings': 30, 'samples': 7, 'telemetry': 4, 'weather': 1, 'reports': 3}});
+      }));
+      final r = await c.deleteDriver('ms_key');
+      expect(seen.method, 'DELETE');
+      expect(seen.url.path, '/api/cmh/driver-delete');
+      expect(seen.headers['x-driver-key'], 'ms_key');
+      expect(seen.bodyBytes, isEmpty);
+      expect((r.sessions, r.pings, r.samples, r.telemetry, r.weather, r.reports), (2, 30, 7, 4, 1, 3));
+    });
+
+    test('401 (key already gone), 404, 429 and 500 throw CmatException with their status', () async {
+      for (final code in [401, 404, 429, 500]) {
+        final c = HttpCmatClient(Uri.parse('https://x.org'), client: MockClient((_) async => _json({'error': 'no'}, code)));
+        await expectLater(c.deleteDriver('k'), throwsA(isA<CmatException>().having((e) => e.status, 'status', code)), reason: '$code');
+      }
+    });
+
+    test('a 200 without a deleted object is an error, never a success', () async {
+      final c = HttpCmatClient(Uri.parse('https://x.org'), client: MockClient((_) async => _json({'ok': true})));
+      await expectLater(c.deleteDriver('k'), throwsA(isA<CmatException>()));
+    });
+
+    test('a network failure throws CmatException with no status (offline)', () async {
+      final c = HttpCmatClient(Uri.parse('https://x.org'), client: MockClient((_) async => throw http.ClientException('offline')));
+      await expectLater(c.deleteDriver('k'), throwsA(isA<CmatException>().having((e) => e.status, 'status', isNull)));
+    });
+
+    test('site-config: driverDelete is a capability flag; absent means false', () async {
+      final yes = HttpCmatClient(Uri.parse('https://x.org'), client: MockClient((_) async => _json(_site({'driverDelete': true}))));
+      expect((await yes.siteConfig()).driverDelete, isTrue);
+      final no = HttpCmatClient(Uri.parse('https://x.org'), client: MockClient((_) async => _json(_site(_liveCaps))));
+      expect((await no.siteConfig()).driverDelete, isFalse);
+    });
   });
 }
