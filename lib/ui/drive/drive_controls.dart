@@ -646,7 +646,7 @@ class MapHint extends StatelessWidget {
         ? 'Each ping lands on the map when its listen window closes.'
         : s.connected
         ? 'Press Start drive. Every ping is saved on this phone right away.'
-        : 'Tap Connect radio to pick your MeshCore companion radio, or try the Simulator.';
+        : 'Tap Connect radio to pick your MeshCore companion radio.';
     return Center(
       child: Container(
         key: const Key('map-hint'),
