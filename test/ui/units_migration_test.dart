@@ -37,7 +37,7 @@ void main() {
       ],
     );
     await h.pumpApp(tester);
-    await tester.tap(find.text('Drives'));
+    await openDrivesTab(tester);
     await tester.pumpAndSettle();
     expect(find.text('2.1 mi'), findsOneWidget);
     expect(find.textContaining(' km'), findsNothing);

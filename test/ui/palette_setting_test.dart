@@ -44,7 +44,7 @@ void main() {
     final before = cell();
     expect(theme().palette, ColourPalette.standard);
 
-    await tester.tap(find.text('Settings'));
+    await openSettingsTab(tester);
     await tester.pumpAndSettle();
     final list = find.descendant(of: find.byKey(const Key('settings-list')), matching: find.byType(Scrollable)).first;
     await tester.scrollUntilVisible(find.byKey(const Key('colour-palette-colour_blind')), 150, scrollable: list);
@@ -57,7 +57,7 @@ void main() {
     expect(theme().palette, ColourPalette.colourBlind);
     expect(tester.widget<ListTile>(find.byKey(const Key('colour-palette-colour_blind'))).selected, isTrue);
     // Back on the Drive tab the same cell is drawn in the new strength colour.
-    await tester.tap(find.text('Drive'));
+    await openDriveTab(tester);
     await tester.pumpAndSettle();
     expect(cell(), isNot(before));
     expect(cell().withValues(alpha: 1), theme().levelStrong);

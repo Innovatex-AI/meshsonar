@@ -17,7 +17,7 @@ Future<Harness> openSettings(WidgetTester tester, {Settings? settings}) async {
   final h = Harness();
   if (settings != null) h.settings.saved = settings;
   await h.pumpApp(tester);
-  await tester.tap(find.text('Settings'));
+  await openSettingsTab(tester);
   await tester.pumpAndSettle();
   return h;
 }

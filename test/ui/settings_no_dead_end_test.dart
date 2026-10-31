@@ -201,7 +201,10 @@ void main() {
       // Back to Settings.
       var guard = 0;
       while (list.hitTestable().evaluate().isEmpty && guard++ < 4) {
-        await tester.state<NavigatorState>(find.byType(Navigator, skipOffstage: false).first).maybePop();
+        // The root Navigator first (dialogs, pushed screens sit above), then the More tab's own Navigator.
+        for (final e in find.byType(Navigator, skipOffstage: false).evaluate().toList()) {
+          if (await (tester.state(find.byElementPredicate((x) => x == e)) as NavigatorState).maybePop()) break;
+        }
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 600));
       }
@@ -352,6 +355,9 @@ void main() {
             await tester.pumpAndSettle();
             await tester.scrollUntilVisible(find.byKey(const Key('jump-about-section')), 200,
                 scrollable: find.descendant(of: find.byKey(const Key('settings-section-index')), matching: find.byType(Scrollable)));
+            // The sheet is now only as tall as the tab area: nudge the list so the last row is fully inside.
+            await tester.drag(find.byKey(const Key('settings-section-index')), const Offset(0, -150));
+            await tester.pumpAndSettle();
             await tester.tap(find.byKey(const Key('jump-about-section')));
             await tester.pumpAndSettle();
             expect(tester.takeException(), isNull);

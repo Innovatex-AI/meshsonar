@@ -158,7 +158,7 @@ void main() {
       h.client.regionsIndexResult = const [derived];
       await h.pumpApp(tester);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Region'));
+      await openRegionTab(tester);
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('region-machine-derived-note')), findsOneWidget);
       expect(find.textContaining('Machine-derived outline'), findsOneWidget);
@@ -171,7 +171,7 @@ void main() {
       h.client.regionsIndexResult = const [reviewed];
       await h.pumpApp(tester);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Region'));
+      await openRegionTab(tester);
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('region-machine-derived-note')), findsNothing);
     });

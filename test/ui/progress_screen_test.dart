@@ -44,7 +44,7 @@ Harness seeded({UnitsPreference units = UnitsPreference.metric, bool radio = tru
 Future<void> openFromDrivesTab(WidgetTester tester, Harness h) async {
   useTallScreen(tester);
   await h.pumpApp(tester);
-  await tester.tap(find.text('Drives'));
+  await openDrivesTab(tester);
   await tester.pumpAndSettle();
 }
 

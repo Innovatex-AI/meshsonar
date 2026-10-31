@@ -1840,6 +1840,7 @@ class AppState extends ChangeNotifier {
       _txCount = 0;
       _heardCount = 0;
       _syncedCount = 0;
+      _pingsPaused = false;
 
       final engine = services.engineFactory(link, location);
       _engine = engine;
@@ -2027,6 +2028,7 @@ class AppState extends ChangeNotifier {
       _lastFinishedSessionId = session.id;
       diagnostics.add('Drive stopped after $_pingCount ping${_pingCount == 1 ? '' : 's'}');
       _session = null;
+      _pingsPaused = false;
       unawaited(_idle?.setDriving(false));
       _status = const EngineStatus(EngineState.idle);
     } finally {
@@ -2058,6 +2060,7 @@ class AppState extends ChangeNotifier {
   String get statusLine {
     final st = _status;
     if (_reconnecting && driving) return _reconnectProblem ?? 'Radio disconnected. Reconnecting (try $_reconnectAttempt)…';
+    if (pingsPaused && st.state != EngineState.error) return 'Auto-pings paused. Resume to keep mapping.';
     if (st.message != null && st.message!.isNotEmpty) return st.message!;
     switch (st.state) {
       case EngineState.idle:
@@ -2487,6 +2490,19 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  /// Auto-pings are paused for this drive (the mini drive bar's Pause pings): the engine runs with interval 0 (manual
+  /// pings only) until resumed. Never saved; a new drive always starts unpaused.
+  bool _pingsPaused = false;
+  bool get pingsPaused => _pingsPaused && driving;
+
+  /// Pause or resume the automatic pings of the running drive. Position and saved pings are untouched.
+  void setPingsPaused(bool paused) {
+    if (!driving || _pingsPaused == paused) return;
+    _pingsPaused = paused;
+    _applyPingCadence(_settings);
+    notifyListeners();
+  }
+
   /// Auto-ping interval/distance changed mid-drive: the running engine picks them up at once.
   void _applyPingCadence(Settings s) {
     final engine = _engine;
@@ -2494,7 +2510,7 @@ class AppState extends ChangeNotifier {
     final txDbm = _selfInfo?.radio.txDbm;
     engine.updateConfig(WardriveConfig(
       channel: s.channel,
-      intervalSec: s.intervalSec,
+      intervalSec: _pingsPaused ? 0 : s.intervalSec,
       minDistanceM: s.minDistanceM,
       txPowerW: txDbm == null ? null : _dbmToWatts(txDbm),
       txDbm: txDbm,

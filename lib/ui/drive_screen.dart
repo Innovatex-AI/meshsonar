@@ -110,7 +110,26 @@ class _DriveScreenState extends State<DriveScreen> {
             const SizedBox(width: Gap.s),
             // At the largest text sizes the logo alone leaves the connection chip room to say its state.
             if (MediaQuery.textScalerOf(context).scale(16) <= 22)
-              const Flexible(child: Text('MeshSonar', maxLines: 1, overflow: TextOverflow.fade, softWrap: false)),
+              Flexible(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Map', maxLines: 1, overflow: TextOverflow.fade, softWrap: false),
+                    // Drive is a mode of the Map tab: say which one this is.
+                    Text(
+                      s.driving ? 'Drive mode' : 'Not driving',
+                      key: const Key('map-mode'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: t.textTheme.labelSmall?.copyWith(
+                        color: s.driving ? t.colorScheme.primary : t.colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
           ],
         ),
         actions: [
@@ -178,14 +197,19 @@ class _DriveScreenState extends State<DriveScreen> {
                 ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(Gap.m, Gap.s, Gap.m, 0),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Align(alignment: Alignment.centerLeft, child: AntennaChip(state: s)),
-                    ),
-                    const SizedBox(width: Gap.s),
-                    LogButton(state: s),
-                  ],
+                // A Wrap, not a Row: at the largest text sizes the two stack instead of overflowing.
+                child: SizedBox(
+                  width: double.infinity,
+                  child: Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: Gap.s,
+                    runSpacing: Gap.s,
+                    children: [
+                      AntennaChip(state: s),
+                      LogButton(state: s),
+                    ],
+                  ),
                 ),
               ),
             ];

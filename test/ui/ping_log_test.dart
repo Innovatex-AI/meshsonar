@@ -94,7 +94,7 @@ void main() {
         ],
       );
       await h.pumpApp(tester);
-      await tester.tap(find.text('Drives'));
+      await openDrivesTab(tester);
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('open-d1')));
       await tester.pumpAndSettle();

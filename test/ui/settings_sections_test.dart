@@ -9,7 +9,7 @@ void main() {
     useTallScreen(tester);
     final h = Harness();
     await h.pumpApp(tester);
-    await tester.tap(find.text('Settings'));
+    await openSettingsTab(tester);
     await tester.pumpAndSettle();
     final scroll = find.descendant(of: find.byKey(const Key('settings-list')), matching: find.byType(Scrollable)).first;
     // Stream 6 restructure: Wardriving + Antenna became Radio, Upload became Drives & uploads, the heard-list hold moved
@@ -70,7 +70,7 @@ void main() {
     useTallScreen(tester);
     final h = Harness()..approveKey();
     await h.pumpApp(tester);
-    await tester.tap(find.text('Settings'));
+    await openSettingsTab(tester);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('key-badge')), findsOneWidget);
     final approved = tester.widget<Text>(find.byKey(const Key('key-status'))).style!.color;
@@ -88,7 +88,7 @@ void main() {
     useTallScreen(tester);
     final h = Harness();
     await h.pumpApp(tester);
-    await tester.tap(find.text('Settings'));
+    await openSettingsTab(tester);
     await tester.pumpAndSettle();
     final scroll = find.descendant(of: find.byKey(const Key('settings-list')), matching: find.byType(Scrollable)).first;
     await tester.scrollUntilVisible(find.byKey(const Key('show-intro')), 300, scrollable: scroll);

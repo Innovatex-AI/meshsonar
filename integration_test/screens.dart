@@ -29,11 +29,54 @@ Future<void> shot(WidgetTester t, String name) async {
   await pumpFor(t, const Duration(seconds: 3));
 }
 
-Future<void> openTab(WidgetTester t, String label) async {
-  final f = find.text(label);
+/// Taps a shell destination (bottom bar on phones, rail on iPad) by its label.
+Future<void> openShellTab(WidgetTester t, String label) async {
+  final bar = find.byKey(const Key('shell-tabs')).evaluate().isNotEmpty
+      ? find.byKey(const Key('shell-tabs'))
+      : find.byKey(const Key('shell-rail'));
+  final f = find.descendant(of: bar, matching: find.text(label));
   expect(await waitFor(t, f), isTrue, reason: '$label tab');
-  await t.tap(f.last);
+  await t.tap(f);
   await pumpFor(t, const Duration(seconds: 1));
+}
+
+Future<void> _openMoreRow(WidgetTester t, String key) async {
+  await openShellTab(t, 'More');
+  // The More tab keeps its own stack: tapping it again goes back to its list.
+  if (find.byKey(const Key('more-list')).hitTestable().evaluate().isEmpty) await openShellTab(t, 'More');
+  final row = find.byKey(Key(key));
+  if (row.evaluate().isEmpty) {
+    await t.scrollUntilVisible(row, 150,
+        scrollable: find.descendant(of: find.byKey(const Key('more-list')), matching: find.byType(Scrollable)).first);
+  }
+  await t.ensureVisible(row);
+  await t.tap(row);
+  await pumpFor(t, const Duration(seconds: 1));
+}
+
+Future<void> _analyze(WidgetTester t, String segment) async {
+  await openShellTab(t, 'Analyze');
+  await t.tap(find.descendant(of: find.byKey(const Key('analyze-segments')), matching: find.text(segment)));
+  await pumpFor(t, const Duration(seconds: 1));
+}
+
+/// Opens a screen by its pre-0.25 tab name (Drive, Region, Drives, Radio, Settings) or by a shell tab name (Chat, Map,
+/// Analyze, Plan, More). The old names now live inside the five tabs.
+Future<void> openTab(WidgetTester t, String label) async {
+  switch (label) {
+    case 'Drive':
+      await openShellTab(t, 'Map');
+    case 'Region':
+      await _analyze(t, 'Region');
+    case 'Drives':
+      await _analyze(t, 'Drives');
+    case 'Radio':
+      await _openMoreRow(t, 'more-radio');
+    case 'Settings':
+      await _openMoreRow(t, 'more-settings');
+    default:
+      await openShellTab(t, label);
+  }
 }
 
 /// Scrolls the first vertical scrollable top to bottom in ~85% viewport steps, shooting each stop.
@@ -121,11 +164,43 @@ final List<ScreenStep> screens = [
     await openTab(t, 'Drive');
     await shot(t, 'drive-ready');
   }),
+  // The five tabs, with a radio connected and no drive running.
+  ScreenStep('tabs', (t) async {
+    await openTab(t, 'Chat');
+    await shot(t, 'tab-chat');
+    await openTab(t, 'Region');
+    await shot(t, 'tab-analyze-region');
+    await openTab(t, 'Drives');
+    await shot(t, 'tab-analyze-drives');
+    await openTab(t, 'Plan');
+    await shot(t, 'tab-plan');
+    await openShellTab(t, 'More');
+    await shot(t, 'tab-more');
+    await openTab(t, 'Drive');
+  }),
   ScreenStep('drive-live', (t) async {
     final go = find.byKey(const Key('start-stop'));
     await t.tap(go);
     await pumpFor(t, const Duration(seconds: 30));
     await shot(t, 'drive-live');
+    // The mini drive bar on every other tab, then paused, then back to the Map from the bar.
+    for (final tab in ['Chat', 'Plan', 'More']) {
+      await openShellTab(t, tab);
+      await shot(t, 'minibar-${tab.toLowerCase()}');
+    }
+    await openTab(t, 'Region');
+    await shot(t, 'minibar-analyze');
+    final pause = find.byKey(const Key('mini-bar-pause'));
+    if (pause.evaluate().isNotEmpty) {
+      await t.tap(pause);
+      await pumpFor(t, const Duration(seconds: 1));
+      await shot(t, 'minibar-paused');
+      await t.tap(pause);
+      await pumpFor(t, const Duration(seconds: 1));
+    }
+    await t.tap(find.byKey(const Key('mini-bar-open')));
+    await pumpFor(t, const Duration(seconds: 1));
+    await shot(t, 'minibar-opened-map');
     await t.tap(go);
     await pumpFor(t, const Duration(milliseconds: 600));
     await shot(t, 'stop-confirm');

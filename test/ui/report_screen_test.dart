@@ -34,7 +34,7 @@ void main() {
     useTallScreen(tester);
     final h = seeded();
     await h.pumpApp(tester);
-    await tester.tap(find.text('Drives'));
+    await openDrivesTab(tester);
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('session-new')));
     await tester.pumpAndSettle();
@@ -91,7 +91,7 @@ void main() {
       at('b', 30, 40.1001, -82.9311),
     ]);
     await h.pumpApp(tester);
-    await tester.tap(find.text('Drives'));
+    await openDrivesTab(tester);
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('menu-only')));
     await tester.pumpAndSettle();

@@ -23,11 +23,6 @@ Future<void> showSetting(WidgetTester tester, String key, {double step = 200}) a
   await tester.pumpAndSettle();
 }
 
-Future<void> openSettingsTab(WidgetTester tester) async {
-  await tester.tap(find.text('Settings'));
-  await tester.pumpAndSettle();
-}
-
 /// Lets real file I/O (temp folders) finish, then settles the UI. Each awaited file call needs the real event loop
 /// once and then a pump to deliver its result, so this alternates the two a number of times.
 Future<void> settleIo(WidgetTester tester, {int rounds = 25, bool Function()? until}) async {

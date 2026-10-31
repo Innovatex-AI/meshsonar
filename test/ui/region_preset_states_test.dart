@@ -30,7 +30,7 @@ Future<Harness> openSettings(WidgetTester tester, SiteConfig sc, {List<RegionInd
   if (settings != null) h.settings.saved = settings;
   await h.pumpApp(tester);
   await tester.pumpAndSettle();
-  await tester.tap(find.text('Settings'));
+  await openSettingsTab(tester);
   await tester.pumpAndSettle();
   await tester.scrollUntilVisible(find.byKey(const Key('site-radio-preset')), 100, scrollable: settingsScroll);
   return h;
@@ -143,7 +143,7 @@ void main() {
       h.client.regionsIndexResult = [reg('UKK', 'East Kazakhstan, KZ')];
       await h.pumpApp(tester);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Settings'));
+      await openSettingsTab(tester);
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(find.byKey(const Key('site-radio-preset')), 100, scrollable: settingsScroll);
       expect(find.text('From the catalogue.'), findsOneWidget);
@@ -164,7 +164,7 @@ void main() {
       h.client.regionsIndexResult = [reg('AAH', 'Aachen, DE')];
       await h.pumpApp(tester);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Settings'));
+      await openSettingsTab(tester);
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(find.byKey(const Key('site-radio-preset')), 100, scrollable: settingsScroll);
       expect(find.text('869.618 MHz · 62.5 kHz · SF8 · CR8'), findsOneWidget);

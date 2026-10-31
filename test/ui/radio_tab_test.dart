@@ -21,7 +21,7 @@ void main() {
     useTallScreen(tester);
     final h = Harness();
     await h.pumpApp(tester);
-    await tester.tap(find.text('Radio').last);
+    await openRadioTab(tester);
     await tester.pumpAndSettle();
     expect(find.text('Radio not connected'), findsOneWidget);
     expect(find.byKey(const Key('radio-readonly-note')), findsOneWidget);
@@ -56,7 +56,7 @@ void main() {
     useTallScreen(tester);
     final h = Harness();
     await h.pumpApp(tester);
-    await tester.tap(find.text('Settings'));
+    await openSettingsTab(tester);
     await tester.pumpAndSettle();
     final toggle = find.byKey(const Key('telemetry-toggle'));
     await tester.scrollUntilVisible(toggle, 200, scrollable: find.descendant(of: find.byKey(const Key('settings-list')), matching: find.byType(Scrollable)).first);

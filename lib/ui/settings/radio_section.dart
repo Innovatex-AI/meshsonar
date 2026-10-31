@@ -27,7 +27,7 @@ List<Widget> radioSectionRows(BuildContext context) {
         title: Text(settingsEntry('radio-tab').title),
         subtitle: Text(s.connected
             ? 'Firmware, frequency and the region preset compared field by field. Read-only.'
-            : 'No radio connected. The Radio tab connects one and then shows what it reports.'),
+            : 'No radio connected. More > Radio connects one and then shows what it reports.'),
         trailing: const Icon(Icons.chevron_right),
         onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const RadioScreen())),
       ),

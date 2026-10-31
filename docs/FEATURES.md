@@ -24,16 +24,45 @@ flowchart LR
   SETTINGS --> FIRST
 ```
 
+## App shell: five tabs
+
+Files: `ui/shell/*`. Tabs `Chat | Map | Analyze | Plan | More`: a bottom bar on phones, a navigation rail from 700 dp wide
+(iPad, phones in landscape). The last open tab is remembered (`ui_prefs.json` `last_tab`, by name; a fresh install opens
+on Map). Tapping the open More tab again returns it to its list.
+
+| Tab | Holds |
+|---|---|
+| Chat | Contacts \| Channels through the `ChatTabHost` seam. Until chat services plug in: "Messages arrive here once you connect a radio" with Connect radio; connected: "Chat is coming to this tab" with Open the map. Unread badge on the tab icon. |
+| Map | The coverage map and the drive controls (the old Drive tab). Drive is a mode of this tab: the title says "Drive mode" while recording, "Not driving" otherwise; Start drive is the big button. |
+| Analyze | Segmented Region (the Region hub) \| Drives (drive list, reports, progress). |
+| Plan | Website tools for the viewed region, each opening the real page in the browser (planner, site explorer, point-to-point link, coverage painter, airtime, radio presets, coverage check). In-app tools that do not exist yet are listed once as "Coming next", with no button. |
+| More | Radio, My radios and claims, Settings, Colour legend, How it works (replays the tour), Privacy and data sharing, Report a problem, About, Privacy policy. Opens inside the tab (own Navigator), so the bars stay. |
+
+Old tab names: Drive = Map; Region and Drives = Analyze; Radio and Settings = More. `HomeShell(legacyTab: n)` maps the old
+indexes 0..4 (`LegacyTab.fromIndex`).
+
+**Mini drive bar** (`ui/shell/mini_drive_bar.dart`): while a drive runs, a 48 dp bar above the tab bar on every tab except
+Map (which is the drive screen). Live dot, "N pings · M heard", what the next ping waits for (Next ping 14 s, Move 40 m,
+Waiting for GPS, Listening for echoes, Pings paused, Radio problem or reconnecting), last SNR (strength colour only for a
+measured SNR; "none" in grey), **Pause pings** / **Resume pings** (engine runs at interval 0 = manual pings only; never
+saved; a new drive starts unpaused; hidden in listen-only discovery) and **Stop** (same confirm as the Stop drive button).
+Tapping the summary opens the Map tab. The bar's text stops growing at 1.6x so it never swallows the screen; screen readers
+get one sentence ("Drive in progress. 12 pings · 8 heard. Next ping 14 s. Last SNR 6.5 decibels.").
+
+Shared states: `ui/state_widgets.dart` has `LoadingState` (a spinner that gives up after a timeout and becomes an
+`ErrorState` with Try again) and `ErrorState`; `EmptyState` is in `ui/widgets.dart`.
+
 ## First-run intro (onboarding)
 
-Files: `ui/onboarding/*`. The intro has three pages and is shown once. `ui_prefs.json` `onboarding_seen` is set when
-it's finished or skipped.
+Files: `ui/onboarding/*`. The intro has four pages and is shown once. `ui_prefs.json` `onboarding_seen` is set when
+it's finished or skipped. More > How it works replays it (no connect buttons).
 
 | Page | Content | Buttons |
 |---|---|---|
-| 1 "Map your mesh by driving it" | What MeshSonar does; heard-nothing pings count | Next |
-| 2 "Connect your radio" | BLE pairing; Simulator | **Connect radio** → Drive tab + Connect screen; **Try the Simulator** → connects the simulator |
-| 3 "Nothing to sign up for" | The driver key is created automatically; drives are saved locally and upload on their own | **Get started** → Drive tab |
+| 1 "Your MeshCore radio, in one app" | Map, plan and check your mesh with one radio | Next |
+| 2 "Find your way around" | The five tabs in one line each | Next |
+| 3 "Connect your radio" | BLE pairing; Simulator (debug builds) | **Connect radio** → Connect screen; **Try the Simulator** → connects the simulator |
+| 4 "Nothing to sign up for" | The driver key is created automatically; drives are saved locally and upload on their own | **Get started** → Map tab |
 
 **Skip** is always available. Settings → "Show the welcome tour" reopens the intro. When there's no prefs file (tests),
 the intro counts as already seen.

@@ -216,7 +216,7 @@ const List<SettingsEntry> settingsEntries = [
   SettingsEntry('map-legend', 'about-section', 'Map legend',
       'What every colour and symbol on the maps means, with real swatches in your colour palette.',
       keywords: ['legend', 'colours', 'colors', 'key', 'hexagon', 'snr', 'grey', 'purple', 'link lines', 'help', 'info']),
-  SettingsEntry('show-intro', 'about-section', 'Show the welcome tour', 'The three intro pages from first launch.',
+  SettingsEntry('show-intro', 'about-section', 'Show the welcome tour', 'The four intro pages from first launch.',
       keywords: ['intro', 'onboarding', 'tour', 'welcome', 'help']),
 ];
 

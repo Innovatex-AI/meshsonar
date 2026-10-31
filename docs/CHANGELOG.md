@@ -5,6 +5,16 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- **New app shell (wave 1C).** Five tabs: Chat, Map, Analyze, Plan, More (rail on iPad and landscape). The old Drive tab is
+  Map (Drive is a mode of it), Region and Drives are Analyze, Radio and Settings are in More. Plan lists the website tools
+  with working links; Chat shows an honest first-run state until chat arrives. The last tab is remembered.
+- **Mini drive bar** on every tab but Map while a drive runs: pings sent / heard, next-ping countdown or what it is waiting
+  for, last SNR, Pause pings, Stop (with confirm); tap to open the Map. Pause pings is new: automatic pings stop, Ping now
+  still works, resume restores the interval.
+- First-run intro gains a "Find your way around" page; More > How it works replays it. Shared `LoadingState` / `ErrorState`.
+- Drive screen: the antenna chip and Log button wrap instead of overflowing at the largest text size. Copy that said
+  "Drive tab" / "Radio tab" now says Map / More > Radio.
+
 ## [0.24.2] — 2026-11-01 — repeater claim: the real fix; map legend and colour palettes
 
 - Same as 0.24.1 below, now fixed at the root (the text type). Verified end to end against a real radio and repeater with a Bluetooth probe before shipping.

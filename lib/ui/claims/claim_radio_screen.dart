@@ -68,7 +68,7 @@ class _ClaimRadioScreenState extends State<ClaimRadioScreen> {
             color: t.colorScheme.errorContainer,
             child: Padding(
               padding: const EdgeInsets.all(Gap.m),
-              child: Text('Connect your radio first (Radio tab). This claims the radio that is connected.',
+              child: Text('Connect your radio first (More > Radio). This claims the radio that is connected.',
                   style: TextStyle(color: t.colorScheme.onErrorContainer)),
             ),
           ),

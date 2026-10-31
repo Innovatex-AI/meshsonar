@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/build_flags.dart';
+import '../shell/shell_controller.dart' show AppTab;
 import 'illustrations.dart';
 
 /// What the person chose on the last pages, so the app can take them there.
@@ -9,7 +10,10 @@ enum OnboardingExit { done, connectRadio, simulator }
 
 class OnboardingScreen extends StatefulWidget {
   final ValueChanged<OnboardingExit> onFinish;
-  const OnboardingScreen({super.key, required this.onFinish});
+
+  /// Reopened from More > How it works: skip/finish just closes it, and the connect and simulator buttons are left out.
+  final bool replay;
+  const OnboardingScreen({super.key, required this.onFinish, this.replay = false});
   @override
   State<OnboardingScreen> createState() => _OnboardingScreenState();
 }
@@ -17,7 +21,7 @@ class OnboardingScreen extends StatefulWidget {
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final _pages = PageController();
   int _page = 0;
-  static const _count = 3;
+  static const _count = 4;
 
   @override
   void dispose() {
@@ -73,10 +77,20 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       _Page(
                         key: const Key('onboarding-page-1'),
                         art: const SonarIllustration(),
-                        title: 'Map your mesh by driving it',
-                        body: 'MeshSonar pings your MeshCore channel as you drive and listens for the repeaters '
-                            'that echo it. Every ping is saved with GPS, including the ones nobody heard, '
-                            'so your community can see where coverage really is.',
+                        title: 'Your MeshCore radio, in one app',
+                        body: 'Use one radio to map where your mesh really reaches, plan where to build next, and '
+                            'check what you built. MeshSonar pings your channel as you drive and listens for the '
+                            'repeaters that echo it. Every ping is saved with GPS, including the ones nobody heard.',
+                      ),
+                      _Page(
+                        key: const Key('onboarding-page-tabs'),
+                        art: const _TabsArt(),
+                        title: 'Find your way around',
+                        body: 'Chat: contacts and channels, once your radio is connected.\n'
+                            'Map: the coverage map. Start a drive here.\n'
+                            'Analyze: your region and your drives.\n'
+                            'Plan: tools for deciding where to build.\n'
+                            'More: your radio, settings, privacy and this tour.',
                       ),
                       _Page(
                         key: const Key('onboarding-page-2'),
@@ -84,7 +98,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         title: 'Connect your radio',
                         body: 'Pair your MeshCore companion radio over Bluetooth. MeshSonar needs a radio to send pings and hear '
                             'repeaters echo them. Your phone asks for Bluetooth permission the first time.',
-                        actions: [
+                        actions: widget.replay
+                            ? const []
+                            : [
                           FilledButton.icon(
                             key: const Key('onboarding-connect'),
                             onPressed: () => widget.onFinish(OnboardingExit.connectRadio),
@@ -151,6 +167,31 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       ),
     );
   }
+}
+
+/// The five tab icons in a row: art for the "find your way around" page.
+class _TabsArt extends StatelessWidget {
+  const _TabsArt();
+  @override
+  Widget build(BuildContext context) => Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          for (final t in AppTab.values)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 7),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(16)),
+                  child: Icon(t.selectedIcon, color: Brand.glow, size: 26),
+                ),
+                const SizedBox(height: 6),
+                Text(t.label, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+              ]),
+            ),
+        ],
+      );
 }
 
 class _Page extends StatelessWidget {

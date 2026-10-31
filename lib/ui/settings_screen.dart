@@ -60,7 +60,9 @@ String? settingsSectionHelp(String id) => switch (id) {
     };
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  /// Opens with this section (an id from settings_index.dart) scrolled into view, e.g. 'privacy' from More > Privacy.
+  final String? initialSection;
+  const SettingsScreen({super.key, this.initialSection});
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
@@ -74,6 +76,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _query = '';
   String _selected = settingsSections.first.id;
   String? _highlight;
+
+  @override
+  void initState() {
+    super.initState();
+    final id = widget.initialSection;
+    if (id != null && settingsSections.any((x) => x.id == id)) {
+      _selected = id;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _jumpTo('section-$id', id, '${sectionInfo(id).title} section', tint: false);
+      });
+    }
+  }
 
   @override
   void dispose() {

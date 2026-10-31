@@ -932,3 +932,61 @@ class FakeDeviceDetails implements DeviceDetailsSource {
     return details;
   }
 }
+
+// ---- shell navigation (five tabs: Chat, Map, Analyze, Plan, More). Old tab names map to where the screen lives now.
+
+/// Taps a bottom-bar / rail destination by its label.
+Future<void> tapShellTab(WidgetTester tester, String label) async {
+  // A sheet the app opened by itself (antenna setup after a connect) covers the tab bar: dismiss it first.
+  for (var i = 0; i < 3 && find.byType(BottomSheet).evaluate().isNotEmpty; i++) {
+    await tester.tapAt(const Offset(2, 2));
+    await tester.pumpAndSettle();
+  }
+  final bar = find.byKey(const Key('shell-tabs')).evaluate().isNotEmpty
+      ? find.byKey(const Key('shell-tabs'))
+      : find.byKey(const Key('shell-rail'));
+  await tester.tap(find.descendant(of: bar, matching: find.text(label)));
+  await tester.pumpAndSettle();
+}
+
+/// Old "Drive" tab.
+Future<void> openDriveTab(WidgetTester tester) => tapShellTab(tester, 'Map');
+
+/// Old "Region" tab: Analyze, Region view.
+Future<void> openRegionTab(WidgetTester tester) async {
+  await tapShellTab(tester, 'Analyze');
+  await tester.tap(find.descendant(of: find.byKey(const Key('analyze-segments')), matching: find.text('Region')));
+  await tester.pumpAndSettle();
+}
+
+/// Old "Drives" tab: Analyze, Drives view.
+Future<void> openDrivesTab(WidgetTester tester) async {
+  await tapShellTab(tester, 'Analyze');
+  await tester.tap(find.descendant(of: find.byKey(const Key('analyze-segments')), matching: find.text('Drives')));
+  await tester.pumpAndSettle();
+}
+
+/// Old "Radio" tab: More, Radio.
+Future<void> openRadioTab(WidgetTester tester) async {
+  await _openMoreRow(tester, 'more-radio');
+}
+
+/// Old "Settings" tab: More, Settings.
+Future<void> openSettingsTab(WidgetTester tester) async {
+  await _openMoreRow(tester, 'more-settings');
+}
+
+/// Opens a row of the More list (scrolling to it first: at large text sizes it is below the fold).
+Future<void> _openMoreRow(WidgetTester tester, String key) async {
+  await tapShellTab(tester, 'More');
+  for (var i = 0; i < 3 && find.byType(BottomSheet).evaluate().isNotEmpty; i++) {
+    await tester.tapAt(const Offset(2, 2));
+    await tester.pumpAndSettle();
+  }
+  final row = find.byKey(Key(key));
+  final scrollable = find.descendant(of: find.byKey(const Key('more-list')), matching: find.byType(Scrollable)).first;
+  await tester.scrollUntilVisible(row, 120, scrollable: scrollable);
+  await tester.pumpAndSettle();
+  await tester.tap(row);
+  await tester.pumpAndSettle();
+}

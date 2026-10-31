@@ -145,7 +145,7 @@ Finder settingsScrollable() =>
     find.descendant(of: find.byKey(const Key('settings-list')), matching: find.byType(Scrollable)).first;
 
 Future<void> openSettings(WidgetTester tester) async {
-  await tester.tap(find.text('Settings'));
+  await openSettingsTab(tester);
   await tester.pumpAndSettle();
 }
 
