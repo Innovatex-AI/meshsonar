@@ -214,6 +214,10 @@ class RecordingClient implements CmatClient {
   @override
   Future<CellLinks> cellLinks(String driverKey, String h3) => throw UnimplementedError();
   @override
+  Future<NodeClaim> claimCompleteLogin(String driverKey, String challengeId,
+          {required bool isAdmin, int? firmwareLevel, required DateTime loginAt, required String radioPubKey}) =>
+      throw UnimplementedError();
+  @override
   Future<ClaimChallenge> claimStart(String driverKey, String pubkey, ClaimKind kind) => throw UnimplementedError();
   @override
   Future<NodeClaim> claimComplete(String driverKey, String challengeId, String signatureHex) => throw UnimplementedError();

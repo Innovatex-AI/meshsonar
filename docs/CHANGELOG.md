@@ -19,6 +19,20 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 - The simulator gained chat traffic (channel messages and DMs injected from tests or a debug screen, ACKs, contacts, a 16-deep
   offline queue with the firmware's eviction rule). Still excluded from release builds.
 
+## [0.24.3] — 2026-11-01 — claim a repeater by logging in (nothing on the repeater is touched)
+
+- **Claim a repeater = log in.** The old flow renamed your repeater, sent an advert and waited for an observer. It no longer touches the repeater at all: no rename, no advert, no command. A successful ADMIN login from your own radio is the proof, and the app tells the server (`claim-start kind=login`, `claim-complete` with an attestation; no password is ever sent). The button shows only on servers that support it (`nodeClaimsLogin`); until then it says so. Leftover name-restore reminders from older builds can still be finished.
+- Chat data layer (SQLite store, outbox, search, backup) is in the app but has no screens yet.
+
+- **Chat data layer (no UI yet, no version bump).** `lib/chat/`, pure Dart, on-device only: SQLite (`package:sqlite3`, FTS5
+  search that matches any script and folds accents) with versioned migrations; contacts, channels (secrets in the Keychain/Keystore
+  through `SecretStore`, never in SQLite), messages with delivery states, drafts, unread counts, mute modes, retention and delete
+  history; `ChatService` persists every inbound message before announcing it and ignores replayed frames; an outbox that survives
+  restarts with DM retries (flood, then direct once a path is known, last attempt floods), ACK matching and clear give-up reasons;
+  the wardrive channel is a hidden system channel that never counts as unread chat; `ChatBackup` export/import (JSON or zip,
+  secrets only if you opt in, optional passphrase encryption); `meshcore://` channel/contact links and QR payloads. See
+  `docs/DATA_MODEL.md` section 7 and `docs/PROTOCOL.md` sections 9-10.
+
 ## [0.24.2] — 2026-11-01 — repeater claim: the real fix; map legend and colour palettes
 
 - Same as 0.24.1 below, now fixed at the root (the text type). Verified end to end against a real radio and repeater with a Bluetooth probe before shipping.

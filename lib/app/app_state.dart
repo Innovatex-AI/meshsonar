@@ -236,6 +236,10 @@ class AppState extends ChangeNotifier {
   /// radio; recording, uploading and counting never depend on it.
   bool get nodeClaimsEnabled => uploadSiteConfig?.nodeClaims == true && keyApproved;
 
+  /// Claiming a REPEATER by logging in needs the server's login attestation (`nodeClaimsLogin`); older servers only had the
+  /// rename-and-wait-for-an-observer proof, which the app no longer does.
+  bool get repeaterClaimEnabled => nodeClaimsEnabled && uploadSiteConfig?.nodeClaimsLogin == true;
+
   ClaimController? _claims;
 
   /// Waits and hold times of the claim flows; tests shorten them before the first use of [claims].

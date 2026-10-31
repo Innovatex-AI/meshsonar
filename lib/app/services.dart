@@ -16,6 +16,7 @@ import '../core/repeater_directory.dart';
 import '../core/repeater_sync.dart';
 import '../core/startup_location.dart';
 import '../core/report_draft_store.dart';
+import '../chat/store.dart';
 import '../radio/radio_api.dart';
 
 /// Local cache of CMAT's repeater list, so names show with no signal.
@@ -141,6 +142,10 @@ class AppServices {
   final PhoneBatterySource? phoneBattery;
   final DeviceDetailsSource? deviceDetails;
 
+  /// Opens the chat database (lib/chat; on-device only, never uploaded). Lazy: nothing is created until chat is first used,
+  /// so a person who only drives never gets a chat file. Returns the same store on every call. Null = no chat (tests).
+  final Future<ChatStore> Function()? openChatStore;
+
   final DateTime Function() clock;
   final String Function() newId;
 
@@ -178,6 +183,7 @@ class AppServices {
     this.barometer,
     this.phoneBattery,
     this.deviceDetails,
+    this.openChatStore,
   });
 
   /// Public node directory (map.meshcore.io) for names/positions CMAT doesn't know. Null = not used (tests).

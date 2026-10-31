@@ -322,6 +322,10 @@ class FakeClaimClient implements CmatClient {
       _challenges[id] = _Ch(id, pubkey, kind, now.add(signTtl), message: Uint8List.fromList(utf8.encode(msg)));
       return ClaimChallenge(id: id, kind: kind, message: _challenges[id]!.message, expiresAt: now.add(signTtl));
     }
+    if (kind == ClaimKind.login) {
+      _challenges[id] = _Ch(id, pubkey, kind, now.add(const Duration(minutes: 10)));
+      return ClaimChallenge(id: id, kind: kind, expiresAt: now.add(const Duration(minutes: 10)), instructions: 'x');
+    }
     final code = 'MS7K${10 + _n}';
     _challenges[id] = _Ch(id, pubkey, kind, now.add(codeTtl), code: code);
     return ClaimChallenge(id: id, kind: kind, code: code, expiresAt: now.add(codeTtl), instructions: 'x');
@@ -337,6 +341,26 @@ class FakeClaimClient implements CmatClient {
     final ok = await _ed.verify(c.message!, signature: cr.Signature(fromHex(signatureHex), publicKey: cr.SimplePublicKey(fromHex(c.pubkey), type: cr.KeyPairType.ed25519)));
     if (!ok) throw const CmatException('bad signature', status: 422);
     final claim = NodeClaim(pubkey: c.pubkey, nodeType: ClaimNodeType.companion, method: ClaimMethod.signature, verifiedAt: clock());
+    claims
+      ..removeWhere((x) => x.pubkey == c.pubkey)
+      ..add(claim);
+    return claim;
+  }
+
+  /// What the last login attestation carried (the app attests; the server cannot see the login).
+  Map<String, Object?>? lastAttest;
+
+  @override
+  Future<NodeClaim> claimCompleteLogin(String driverKey, String challengeId,
+      {required bool isAdmin, int? firmwareLevel, required DateTime loginAt, required String radioPubKey}) async {
+    wire.add('claim-complete-login $driverKey $challengeId isAdmin=$isAdmin fw=$firmwareLevel radio=$radioPubKey');
+    if (completeError != null) throw completeError!;
+    final c = _challenges[challengeId];
+    if (c == null || c.used || clock().isAfter(c.expiresAt) || c.kind != ClaimKind.login) throw const CmatException('gone', status: 410);
+    if (!isAdmin) throw const CmatException('not admin', status: 422);
+    c.used = true;
+    lastAttest = {'isAdmin': isAdmin, 'firmwareLevel': firmwareLevel, 'loginAt': loginAt, 'radioPubKey': radioPubKey};
+    final claim = NodeClaim(pubkey: c.pubkey, nodeType: ClaimNodeType.repeater, method: ClaimMethod.login, verifiedAt: clock());
     claims
       ..removeWhere((x) => x.pubkey == c.pubkey)
       ..add(claim);
