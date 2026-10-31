@@ -15,7 +15,7 @@ import '../theme.dart';
 import 'contact_map.dart';
 import 'contact_widgets.dart';
 import 'contacts_controller.dart';
-import 'qr_view.dart';
+import '../chat/qr_widgets.dart' show QrView;
 
 typedef ShareText = Future<void> Function(String text, {String? subject});
 typedef ClaimBuilder = Widget Function(BuildContext context, Contact contact);
@@ -122,7 +122,8 @@ class _ContactDetailScreenState extends State<ContactDetailScreen> {
     final t = Theme.of(context);
     final now = _c.nowMs();
     final connected = _m.connected;
-    final canMessage = _c.openConversation != null && (c.type == ContactType.companion || c.type == ContactType.room);
+    // Rooms need a login before the server takes a post (M4, room login); until it exists there is no button to a conversation that cannot work.
+    final canMessage = _c.openConversation != null && c.type == ContactType.companion;
     final canAdmin = _c.openAdmin != null && (c.type == ContactType.repeater || c.type == ContactType.room);
     final canClaim = c.type == ContactType.repeater;
     return Scaffold(
@@ -161,7 +162,7 @@ class _ContactDetailScreenState extends State<ContactDetailScreen> {
                         key: const Key('contact-message'),
                         style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
                         icon: Icon(c.type == ContactType.room ? Icons.forum_rounded : Icons.chat_bubble_rounded),
-                        label: Text(c.type == ContactType.room ? 'Open room' : 'Message'),
+                        label: const Text('Message'),
                         onPressed: () => _c.openConversation!(context, c),
                       ),
                     if (canAdmin)

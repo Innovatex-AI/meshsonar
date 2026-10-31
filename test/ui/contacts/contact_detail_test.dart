@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/chat/models.dart';
 import 'package:meshsonar/ui/contacts/contact_detail_screen.dart';
 import 'package:meshsonar/ui/contacts/contacts_controller.dart';
-import 'package:meshsonar/ui/contacts/qr_view.dart';
+import 'package:meshsonar/ui/chat/qr_widgets.dart' show QrView;
 
 import '../../chat/contact_support.dart';
 import '../../chat/support.dart';
@@ -123,13 +123,12 @@ void main() {
       expect(find.byKey(const Key('contact-admin')), findsNothing);
     });
 
-    tw('room: "Open room" opens the conversation', (tester) async {
+    tw('room: no Message button until room login exists (a post to a room you have not logged in to goes nowhere)', (tester) async {
       setScreen(tester);
       await rig.withContacts(7);
       await pumpDetail(tester, rig, keyN(7));
-      expect(find.text('Open room'), findsOneWidget);
-      await tester.tap(find.byKey(const Key('contact-message')));
-      expect(rig.opened.single.publicKey, keyN(7));
+      expect(find.byKey(const Key('contact-message')), findsNothing);
+      expect(find.byKey(const Key('contact-admin')), findsOneWidget, reason: 'admin is wired in this rig');
     });
 
     tw('sensor: no Message button, nothing dead', (tester) async {

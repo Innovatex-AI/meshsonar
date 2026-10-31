@@ -9,7 +9,7 @@ import '../../chat/models.dart';
 import '../theme.dart';
 import 'contacts_controller.dart';
 import 'qr_scan_screen.dart';
-import 'qr_view.dart';
+import '../chat/qr_widgets.dart' show QrView;
 
 class AddContactScreen extends StatefulWidget {
   final ContactsController controller;

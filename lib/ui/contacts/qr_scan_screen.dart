@@ -10,13 +10,17 @@ import '../theme.dart';
 typedef ScannerBuilder = Widget Function(BuildContext context, void Function(String code) onCode);
 
 class QrScanScreen extends StatefulWidget {
-  /// Called once with the first MeshCore code seen. The screen pops itself afterwards.
-  final void Function(String code) onCode;
+  /// Called once with the first MeshCore code seen. The screen pops itself first, and also returns the code from the route.
+  final void Function(String code)? onCode;
   final ScannerBuilder? scannerBuilder;
 
   /// "Paste instead": the screen pops and the caller shows its paste field.
   final VoidCallback? onPaste;
-  const QrScanScreen({super.key, required this.onCode, this.scannerBuilder, this.onPaste});
+  const QrScanScreen({super.key, this.onCode, this.scannerBuilder, this.onPaste});
+
+  /// Opens the scanner and returns the `meshcore://` text it read, or null when the person cancelled.
+  static Future<String?> scan(BuildContext context, {ScannerBuilder? scannerBuilder, VoidCallback? onPaste}) =>
+      Navigator.of(context).push<String>(MaterialPageRoute(builder: (_) => QrScanScreen(scannerBuilder: scannerBuilder, onPaste: onPaste)));
 
   @override
   State<QrScanScreen> createState() => _QrScanScreenState();
@@ -47,8 +51,8 @@ class _QrScanScreenState extends State<QrScanScreen> {
       return;
     }
     _done = true;
-    Navigator.of(context).pop();
-    widget.onCode(c);
+    Navigator.of(context).pop(c);
+    widget.onCode?.call(c);
   }
 
   @override
