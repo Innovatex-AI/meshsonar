@@ -43,7 +43,25 @@ int migrateDatabase(Database db, List<Migration> migrations) {
 /// Shipped migrations.
 final List<Migration> chatMigrations = [
   Migration(1, 'initial chat schema', _v1),
+  Migration(2, 'contacts: radio cache state, flags, last heard, route choice; adverts: ignore + advert time', _v2),
 ];
+
+/// M2 (contacts and DMs). The phone is the master copy of the contact list; the radio's table is a cache of what is needed,
+/// so each contact remembers whether it is on the radio right now (`on_radio`), the radio's own flag byte (bit 0 =
+/// favourite, which the radio's "replace oldest" skips), when this phone last heard from it, and whether DMs to it should
+/// always flood. A node heard but not added (adverts_seen) keeps the advert's own timestamp (needed to add it to the radio
+/// without tripping the radio's replay check) and an "ignored" mark.
+void _v2(Database db) {
+  db.execute('''
+ALTER TABLE contacts ADD COLUMN on_radio INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE contacts ADD COLUMN radio_flags INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE contacts ADD COLUMN last_heard_ms INTEGER;
+ALTER TABLE contacts ADD COLUMN force_flood INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE adverts_seen ADD COLUMN advert_ts INTEGER;
+ALTER TABLE adverts_seen ADD COLUMN ignored INTEGER NOT NULL DEFAULT 0;
+CREATE INDEX contacts_on_radio ON contacts (radio_id, on_radio);
+''');
+}
 
 void _v1(Database db) {
   db.execute('''

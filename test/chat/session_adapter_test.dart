@@ -29,6 +29,11 @@ class FakeSession implements r.RadioSession {
   r.ContactListing listing = const r.ContactListing(totalOnRadio: 0, contacts: [], mostRecentLastMod: 0);
   int getContactsCalls = 0;
   int? lastSince;
+  @override
+  r.DeviceLimits? limits = const r.DeviceLimits(maxContacts: 100);
+  final onRadio = <String, r.RadioContact>{};
+  final resets = <String>[];
+  final fetched = <String>[];
 
   @override
   Stream<r.RadioEvent> get events => eventsC.stream;
@@ -47,13 +52,36 @@ class FakeSession implements r.RadioSession {
   }
 
   @override
-  Future<void> addOrUpdateContact(r.RadioContact contact) async => updated.add(contact);
+  Future<void> addOrUpdateContact(r.RadioContact contact) async {
+    updated.add(contact);
+    onRadio[contact.publicKeyHex] = contact;
+  }
+
   @override
-  Future<r.ContactListing> getContacts({int since = 0}) async {
+  Future<r.ContactListing> downloadContacts({int since = 0, void Function(r.RadioContact contact, int received, int total)? onContact}) async {
     getContactsCalls++;
     lastSince = since;
+    var i = 0;
+    for (final c in listing.contacts) {
+      onContact?.call(c, ++i, listing.totalOnRadio);
+    }
     return listing;
   }
+
+  @override
+  Future<r.RadioContact?> getContact(String publicKeyHex) async {
+    fetched.add(publicKeyHex);
+    return onRadio[publicKeyHex];
+  }
+
+  @override
+  Future<bool> resetContactPath(String publicKeyHex) async {
+    resets.add(publicKeyHex);
+    return true;
+  }
+
+  @override
+  Future<r.ContactPolicy> getContactPolicy() async => const r.ContactPolicy(askBeforeAdding: false);
 
   @override
   dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError('${invocation.memberName}');
@@ -138,7 +166,7 @@ void main() {
     final ok = await a.sendDirect(radioId: radioA, contactPublicKey: bobKey, text: 'x', timestamp: 55, attempt: 1, forceFlood: false);
     expect((ok.expectedAck, ok.estTimeoutMs, ok.flood), (77, 4200, true));
     expect(s.sentContacts.single, (bobKey, 'x', 1, 55));
-    expect(s.updated, isEmpty);
+    expect(s.updated.map((c) => c.publicKeyHex), [bobKey], reason: 'the radio did not have Bob: the phone (master) put him back first');
 
     s.nextSend = const r.SendResult.queued(55);
     await expectLater(a.sendDirect(radioId: radioA, contactPublicKey: bobKey, text: 'x', timestamp: 55, attempt: 0, forceFlood: false), throwsA(isA<RadioBusy>()));
@@ -156,11 +184,10 @@ void main() {
     }
   });
 
-  test('forceFlood clears the stored path on the radio first', () async {
+  test('forceFlood resets the stored path on the radio first (RESET_PATH, not a rewrite of the contact)', () async {
     await a.sendDirect(radioId: radioA, contactPublicKey: bobKey, text: 'x', timestamp: 55, attempt: 4, forceFlood: true);
-    expect(s.updated.single.outPathLen, 0xFF);
-    expect(s.updated.single.publicKeyHex, bobKey);
-    expect(s.updated.single.name, 'Bob');
+    expect(s.resets, [bobKey]);
+    expect(s.sentContacts, hasLength(1));
   });
 
   test('sendChannel adopts the timestamp the session used', () async {
@@ -196,13 +223,17 @@ void main() {
     expect(c.notes, 'tall');
     expect(c.outPath, [7]);
     expect(c.lat, 39.1);
+    expect(c.onRadio, isTrue);
     await a.syncContacts();
-    expect(s.lastSince, 500, reason: 'incremental');
-    // a path update push triggers a sync
+    expect(s.lastSince, 499, reason: 'incremental, from one second before the cursor (a change in the same second must not be missed)');
+    // a path update push reads that one contact back, not the whole list
     final before = s.getContactsCalls;
+    s.onRadio[bobKey] = r.RadioContact(publicKeyHex: bobKey, type: 2, name: 'Bob Repeater', outPath: Uint8List.fromList([7, 8]), outPathLen: 2, lastMod: 600);
     s.eventsC.add(r.PathUpdatedEvent(DateTime.now(), bobKey));
     await Future<void>.delayed(Duration.zero);
-    expect(s.getContactsCalls, before + 1);
+    await Future<void>.delayed(Duration.zero);
+    expect(s.getContactsCalls, before);
+    expect(h.store.contacts.get(radioA, bobKey)!.outPathLen, 2);
   });
 
   test('adverts: known contacts update, unknown ones only land in the Discover list', () async {

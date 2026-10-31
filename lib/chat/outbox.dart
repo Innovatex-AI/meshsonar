@@ -178,7 +178,7 @@ class Outbox {
     final contact = contactKey == null ? null : store.contacts.get(m.radioId, contactKey);
     // Direct if a path is known, except the last attempt which floods (the path may have gone stale).
     final hasPath = contact?.hasPath ?? false;
-    final forceFlood = !hasPath || (attemptNo >= e.maxAttempts && e.maxAttempts > 1 && attemptNo > 1);
+    final forceFlood = !hasPath || (contact?.forceFlood ?? false) || (attemptNo >= e.maxAttempts && e.maxAttempts > 1 && attemptNo > 1);
     store.messages.update(m.id, state: MessageState.sending, attempt: attemptNo);
     notify(ChatEvent.updated(m.convKey, m.id));
     _lastSendMs = now;
@@ -212,6 +212,8 @@ class Outbox {
         store.messages.update(m.id, state: m.attempt > 0 ? MessageState.retrying : MessageState.queued, attempt: m.attempt);
         store.outbox.reschedule(m.id, now + policy.busyDelayMs(n), busyRetries: n);
       }
+    } on RadioContactsFull {
+      _fail(m, FailReason.contactListFull);
     } on RadioTargetMissing {
       _fail(m, m.convKind == ConvKind.channel ? FailReason.unknownChannel : FailReason.unknownContact);
     } on RadioRejected {

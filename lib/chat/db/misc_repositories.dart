@@ -1,3 +1,5 @@
+import 'package:sqlite3/sqlite3.dart';
+
 import '../models.dart';
 import 'chat_database.dart';
 
@@ -33,27 +35,55 @@ class AdvertRepository {
 
   void record(AdvertSeen a) {
     db.raw.execute('''
-INSERT INTO adverts_seen(radio_id, pubkey, type, name, lat, lon, first_ts_ms, last_ts_ms, count, path_len, snr) VALUES (?,?,?,?,?,?,?,?,1,?,?)
+INSERT INTO adverts_seen(radio_id, pubkey, type, name, lat, lon, first_ts_ms, last_ts_ms, count, path_len, snr, advert_ts) VALUES (?,?,?,?,?,?,?,?,1,?,?,?)
 ON CONFLICT(radio_id, pubkey) DO UPDATE SET type = coalesce(excluded.type, type), name = CASE WHEN excluded.name = '' THEN name ELSE excluded.name END, lat = coalesce(excluded.lat, lat),
-  lon = coalesce(excluded.lon, lon), last_ts_ms = max(last_ts_ms, excluded.last_ts_ms), count = count + 1, path_len = excluded.path_len, snr = excluded.snr
-''', [a.radioId, a.publicKey.toLowerCase(), a.type?.code, a.name, a.lat, a.lon, a.firstTsMs, a.lastTsMs, a.pathLen, a.snr]);
+  lon = coalesce(excluded.lon, lon), last_ts_ms = max(last_ts_ms, excluded.last_ts_ms), count = count + 1, path_len = excluded.path_len, snr = excluded.snr,
+  advert_ts = coalesce(excluded.advert_ts, advert_ts)
+''', [a.radioId, a.publicKey.toLowerCase(), a.type?.code, a.name, a.lat, a.lon, a.firstTsMs, a.lastTsMs, a.pathLen, a.snr, a.advertTs]);
   }
 
-  List<AdvertSeen> list(String radioId, {int limit = 500}) => db.raw
-      .select('SELECT * FROM adverts_seen WHERE radio_id = ? ORDER BY last_ts_ms DESC LIMIT ?', [radioId, limit])
-      .map((r) => AdvertSeen(
-          radioId: r['radio_id'] as String,
-          publicKey: r['pubkey'] as String,
-          type: ContactType.fromCode(r['type'] as int?),
-          name: r['name'] as String,
-          lat: (r['lat'] as num?)?.toDouble(),
-          lon: (r['lon'] as num?)?.toDouble(),
-          firstTsMs: r['first_ts_ms'] as int,
-          lastTsMs: r['last_ts_ms'] as int,
-          count: r['count'] as int,
-          pathLen: r['path_len'] as int?,
-          snr: (r['snr'] as num?)?.toDouble()))
+  static AdvertSeen _row(Row r) => AdvertSeen(
+      radioId: r['radio_id'] as String,
+      publicKey: r['pubkey'] as String,
+      type: ContactType.fromCode(r['type'] as int?),
+      name: r['name'] as String,
+      lat: (r['lat'] as num?)?.toDouble(),
+      lon: (r['lon'] as num?)?.toDouble(),
+      firstTsMs: r['first_ts_ms'] as int,
+      lastTsMs: r['last_ts_ms'] as int,
+      count: r['count'] as int,
+      pathLen: r['path_len'] as int?,
+      snr: (r['snr'] as num?)?.toDouble(),
+      advertTs: r['advert_ts'] as int?,
+      ignored: (r['ignored'] as int) != 0);
+
+  AdvertSeen? get(String radioId, String key) {
+    final r = db.raw.select('SELECT * FROM adverts_seen WHERE radio_id = ? AND pubkey = ?', [radioId, key.toLowerCase()]);
+    return r.isEmpty ? null : _row(r.first);
+  }
+
+  /// "New nodes nearby": heard, named, not a contact yet, not ignored. Newest first.
+  List<AdvertSeen> nearby(String radioId, {int limit = 200}) => db.raw
+      .select('''
+SELECT a.* FROM adverts_seen a
+WHERE a.radio_id = ? AND a.ignored = 0 AND a.name <> ''
+  AND NOT EXISTS (SELECT 1 FROM contacts c WHERE c.radio_id = a.radio_id AND c.pubkey = a.pubkey)
+ORDER BY a.last_ts_ms DESC LIMIT ?''', [radioId, limit])
+      .map(_row)
       .toList();
+
+  List<AdvertSeen> ignoredList(String radioId) => db.raw
+      .select('SELECT * FROM adverts_seen WHERE radio_id = ? AND ignored = 1 ORDER BY last_ts_ms DESC', [radioId])
+      .map(_row)
+      .toList();
+
+  void setIgnored(String radioId, String key, bool v) =>
+      db.raw.execute('UPDATE adverts_seen SET ignored = ? WHERE radio_id = ? AND pubkey = ?', [v ? 1 : 0, radioId, key.toLowerCase()]);
+
+  void remove(String radioId, String key) => db.raw.execute('DELETE FROM adverts_seen WHERE radio_id = ? AND pubkey = ?', [radioId, key.toLowerCase()]);
+
+  List<AdvertSeen> list(String radioId, {int limit = 500}) =>
+      db.raw.select('SELECT * FROM adverts_seen WHERE radio_id = ? ORDER BY last_ts_ms DESC LIMIT ?', [radioId, limit]).map(_row).toList();
 
   /// Keeps the newest [keep] entries.
   void prune(int keep) => db.raw.execute(

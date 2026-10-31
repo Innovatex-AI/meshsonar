@@ -232,3 +232,90 @@ EchoMatch? matchEcho(MeshPacket pkt, List<int> secret16, String pingText, {int? 
   final hex = pkt.pathHex;
   return EchoMatch(hex.first, pkt.hopCount, hex);
 }
+
+
+/// The parts of an ADVERT packet the app shows (src/Mesh.cpp onRecvPacket 252-290, src/helpers/AdvertDataHelpers.cpp):
+/// payload = [pub_key x32][timestamp u32][signature x64][app_data], app_data = [flags][lat i32 lon i32 if 0x10][feat1 u16
+/// if 0x20][feat2 u16 if 0x40][name, to the end, if 0x80]; flags & 0x0F is the node type (1 chat, 2 repeater, 3 room, 4 sensor).
+///
+/// This does NOT check the signature (the app has no Ed25519): the radio verifies it when the packet is imported
+/// (IMPORT_CONTACT) and ignores a forged one. Never trust these fields for anything but showing them before the import.
+class AdvertPacketInfo {
+  final Uint8List publicKey;
+  final int timestamp;
+  final int type;
+  final String name;
+  final double? lat;
+  final double? lon;
+  const AdvertPacketInfo({required this.publicKey, required this.timestamp, required this.type, required this.name, this.lat, this.lon});
+}
+
+/// Parses an advert packet as exported by the radio (EXPORT_CONTACT) or carried in a `meshcore://<hex>` link. Null for
+/// anything that is not an advert or is cut short.
+AdvertPacketInfo? decodeAdvertPacket(List<int> raw) {
+  final p = MeshPacket.tryParse(raw);
+  if (p == null || p.payloadType != PayloadType.advert) return null;
+  final pl = p.payload;
+  const head = 32 + 4 + 64;
+  if (pl.length < head + 1) return null;
+  final bd = ByteData.sublistView(pl);
+  final app = pl.sublist(head);
+  final flags = app[0];
+  var i = 1;
+  double? lat, lon;
+  if ((flags & 0x10) != 0) {
+    if (app.length < i + 8) return null;
+    final abd = ByteData.sublistView(Uint8List.fromList(app));
+    final la = abd.getInt32(i, Endian.little), lo = abd.getInt32(i + 4, Endian.little);
+    i += 8;
+    if (la != 0 || lo != 0) {
+      lat = la / 1e6;
+      lon = lo / 1e6;
+      if (lat.abs() > 90 || lon.abs() > 180) {
+        lat = null;
+        lon = null;
+      }
+    }
+  }
+  if ((flags & 0x20) != 0) i += 2;
+  if ((flags & 0x40) != 0) i += 2;
+  if (i > app.length) return null;
+  var name = '';
+  if ((flags & 0x80) != 0 && app.length > i) {
+    name = utf8.decode(app.sublist(i).takeWhile((b) => b != 0).toList(), allowMalformed: true);
+  }
+  return AdvertPacketInfo(
+    publicKey: Uint8List.fromList(pl.sublist(0, 32)),
+    timestamp: bd.getUint32(32, Endian.little),
+    type: flags & 0x0F,
+    name: name,
+    lat: lat,
+    lon: lon,
+  );
+}
+
+/// Builds a flood ADVERT packet with a ZERO signature, for the simulator and tests (a real radio rejects it).
+Uint8List buildUnsignedAdvertPacket(List<int> publicKey32, {required int type, required String name, int timestamp = 0, double? lat, double? lon}) {
+  final app = BytesBuilder();
+  var flags = type & 0x0F;
+  final body = BytesBuilder();
+  if (lat != null && lon != null) {
+    flags |= 0x10;
+    final ll = ByteData(8)
+      ..setInt32(0, (lat * 1e6).round(), Endian.little)
+      ..setInt32(4, (lon * 1e6).round(), Endian.little);
+    body.add(ll.buffer.asUint8List());
+  }
+  if (name.isNotEmpty) {
+    flags |= 0x80;
+    body.add(utf8.encode(name));
+  }
+  app.addByte(flags);
+  app.add(body.toBytes());
+  final payload = BytesBuilder()
+    ..add(publicKey32)
+    ..add((ByteData(4)..setUint32(0, timestamp, Endian.little)).buffer.asUint8List())
+    ..add(Uint8List(64))
+    ..add(app.toBytes());
+  return MeshPacket(header: makeHeader(RouteType.flood, PayloadType.advert), pathLenByte: 0, path: const [], payload: payload.toBytes()).toBytes();
+}

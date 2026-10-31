@@ -37,11 +37,12 @@ void main() {
     var db = ChatDatabase.open(sqlite3.open(p));
     db.raw.execute("INSERT INTO drafts(conv_key, text, updated_ms) VALUES ('d:aaaaaaaaaaaa', 'keep me', 1)");
     db.close();
-    final v2 = Migration(2, 'test: add a column', (d) {
+    final next = chatMigrations.last.version + 1;
+    final v2 = Migration(next, 'test: add a column', (d) {
       d.execute('ALTER TABLE drafts ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0');
     });
     db = ChatDatabase.open(sqlite3.open(p), migrations: [...chatMigrations, v2]);
-    expect(db.schemaVersion, 2);
+    expect(db.schemaVersion, next);
     final r = db.raw.select('SELECT text, pinned FROM drafts').first;
     expect(r['text'], 'keep me');
     expect(r['pinned'], 0);
@@ -53,13 +54,13 @@ void main() {
     addTearDown(() => dir.deleteSync(recursive: true));
     final p = '${dir.path}/c.db';
     ChatDatabase.open(sqlite3.open(p)).close();
-    final bad = Migration(2, 'half applied', (d) {
+    final bad = Migration(chatMigrations.last.version + 1, 'half applied', (d) {
       d.execute('CREATE TABLE half(x)');
       d.execute('THIS IS NOT SQL');
     });
     expect(() => ChatDatabase.open(sqlite3.open(p), migrations: [...chatMigrations, bad]), throwsA(isA<SqliteException>()));
     final raw = sqlite3.open(p);
-    expect(raw.select('PRAGMA user_version').first.values.first, 1);
+    expect(raw.select('PRAGMA user_version').first.values.first, chatMigrations.last.version);
     expect(tables(raw), isNot(contains('half')));
     raw.close();
   });
