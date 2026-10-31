@@ -2,7 +2,6 @@
 // review/confirm/read-back/undo, neighbours, regions, access, console; guest mode; large text, dark, phone and tablet sizes,
 // semantics and tap targets.
 import 'package:flutter/material.dart';
-import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/radio/repeater_admin.dart';
 import 'package:meshsonar/ui/radios/repeater_admin/admin_controller.dart';
@@ -511,7 +510,7 @@ void main() {
       await tester.pump();
       expect(find.bySemanticsLabel(RegExp('Name: INNO-OB-2')), findsOneWidget);
       final node = tester.getSemantics(find.byKey(const Key('setting-name')));
-      expect(node.hasFlag(SemanticsFlag.isButton), isTrue);
+      expect(node.flagsCollection.isButton, isTrue);
       handle.dispose();
     });
   });

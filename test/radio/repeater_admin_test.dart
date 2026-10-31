@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -109,7 +108,7 @@ void main() {
     });
 
     test('access list (admin) shows roles by key prefix', () async {
-      final r = await rig(setup: (rep) => rep.acl['a9b1acd3a408' + '00' * 26] = 3);
+      final r = await rig(setup: (rep) => rep.acl['a9b1acd3a408${'00' * 26}'] = 3);
       final acl = await r.session.readAcl();
       expect(acl.map((e) => e.prefixHex), contains('a9b1acd3a408'));
       expect(acl.map((e) => e.prefixHex), contains(r.radio.keyHex.substring(0, 12)));
@@ -591,7 +590,7 @@ void main() {
   });
 
   group('access list', () {
-    final other = 'a9b1acd3a408' + '11' * 26;
+    final other = 'a9b1acd3a408${'11' * 26}';
     test('remove another entry: verified; setperm always carries the permission', () async {
       final r = await rig(setup: (rep) => rep.acl[other] = 3);
       final done = await r.session.removeAclEntry(other.substring(0, 12), confirmation: Confirmation.yes);

@@ -11,12 +11,11 @@ import 'package:meshsonar/radio/companion_link.dart';
 import 'package:meshsonar/radio/radio_api.dart';
 import 'package:meshsonar/ui/app.dart';
 import 'package:meshsonar/ui/radios/admin_launcher.dart';
-import 'package:meshsonar/ui/radios/repeaters_screen.dart';
 import 'package:meshsonar/ui/radios/rooms/room_join_header.dart';
 
 import '../../support/repeater_admin_fake.dart';
 import '../fakes.dart';
-import 'admin_rig.dart' show frames, pumpUntil, pumpUntilFound, repKey;
+import 'admin_rig.dart' show frames, pumpUntilFound, repKey;
 
 class _Scanner implements RadioScanner {
   final AdminFakeTransport t;

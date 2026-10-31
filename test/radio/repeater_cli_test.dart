@@ -26,7 +26,7 @@ void main() {
     });
 
     test('dangerous commands are blocked with a reason, whatever follows', () {
-      for (final c in ['poweroff', 'shutdown', 'clkreboot', 'erase', 'start ota', 'stop ota', 'ota update', 'log erase', 'log start', 'tempradio 910,62.5,7,5,10', 'time 1', 'password abc', 'setperm ab 3', 'region load', 'region put x', 'region denyf *', 'set prv.key ' + 'ab' * 32, 'set freq 910', 'sensor set x 1', 'clear stats', 'neighbor.remove ab', 'room.post hi', 'gps on']) {
+      for (final c in ['poweroff', 'shutdown', 'clkreboot', 'erase', 'start ota', 'stop ota', 'ota update', 'log erase', 'log start', 'tempradio 910,62.5,7,5,10', 'time 1', 'password abc', 'setperm ab 3', 'region load', 'region put x', 'region denyf *', 'set prv.key ${'ab' * 32}', 'set freq 910', 'sensor set x 1', 'clear stats', 'neighbor.remove ab', 'room.post hi', 'gps on']) {
         final v = classifyCommand(c);
         expect(v.kind, CliKind.blocked, reason: c);
         expect(v.reason, isNotEmpty);

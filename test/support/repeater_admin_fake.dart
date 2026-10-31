@@ -438,7 +438,7 @@ class FakeAdminRepeater {
     }
     if (c.startsWith('get ')) return _get(c.substring(4));
     if (c.startsWith('set ')) return _set(c.substring(4));
-    if (c.startsWith('ver')) return '$firmware';
+    if (c.startsWith('ver')) return firmware;
     if (c.startsWith('board')) return board;
     if (c.startsWith('memory')) return isObserver ? 'Free: 134020, Min: 114636' : 'Unknown command';
     if (c.startsWith('region')) return _region(c);

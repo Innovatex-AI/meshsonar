@@ -1,6 +1,5 @@
 // Shared by the repeater admin widget tests: a real companion link over the fake radio and repeater, a real admin session,
 // and the controller the screens use.
-import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
