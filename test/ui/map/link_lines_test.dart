@@ -174,6 +174,21 @@ void main() {
     expect(find.text('2 repeaters heard here (+1 not on the map)'), findsOneWidget);
   }, skip: skip);
 
+  testWidgets('a short stored id (key prefix) is placed when exactly one repeater starts with it', (tester) async {
+    final h = await pump(tester);
+    h.lc.onCell = (id) async => CellLinks(
+      h3: id,
+      links: [
+        CellLink(key: 'aaaa', pings: 9, bestSnr: 6.5), // Alpha only
+        CellLink(key: 'abab', pings: 2, bestSnr: 1), // nobody
+      ],
+    );
+    await tester.tapAt(screenOf(tester, centre.lat, centre.lon));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('+6.5 dB'), findsOneWidget);
+    expect(find.text('1 repeater heard here (+1 not on the map)'), findsOneWidget);
+  }, skip: skip);
+
   testWidgets('clear puts the lines away; a tap on empty map does too', (tester) async {
     final h = await pump(tester);
     await tester.tapAt(screenOf(tester, centre.lat, centre.lon));
