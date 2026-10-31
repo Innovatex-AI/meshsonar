@@ -50,6 +50,20 @@ class Contact {
   final String notes;
   final ContactSource source;
 
+  /// True while the radio's contact table holds this contact (the radio is a cache; see ContactSync). Only meaningful for
+  /// the radio that is connected now.
+  final bool onRadio;
+
+  /// The radio's own flag byte for this contact (bit 0 = favourite; the other bits are the radio's telemetry permissions and
+  /// are carried through untouched).
+  final int radioFlags;
+
+  /// Local time (ms) this phone last heard the contact: an advert, a message or an acknowledgement.
+  final int? lastHeardMs;
+
+  /// Send every DM to this contact by flood, never along a saved path.
+  final bool forceFlood;
+
   const Contact({
     required this.radioId,
     required this.publicKey,
@@ -66,6 +80,10 @@ class Contact {
     this.outPathLen = -1,
     this.notes = '',
     this.source = ContactSource.radio,
+    this.onRadio = false,
+    this.radioFlags = 0,
+    this.lastHeardMs,
+    this.forceFlood = false,
   });
 
   /// First 6 bytes of the key as 12 hex characters: what DM frames carry.
@@ -88,6 +106,10 @@ class Contact {
     int? outPathLen,
     String? notes,
     ContactSource? source,
+    bool? onRadio,
+    int? radioFlags,
+    Object? lastHeardMs = _keep,
+    bool? forceFlood,
   }) =>
       Contact(
         radioId: radioId,
@@ -105,7 +127,25 @@ class Contact {
         outPathLen: outPathLen ?? this.outPathLen,
         notes: notes ?? this.notes,
         source: source ?? this.source,
+        onRadio: onRadio ?? this.onRadio,
+        radioFlags: radioFlags ?? this.radioFlags,
+        lastHeardMs: identical(lastHeardMs, _keep) ? this.lastHeardMs : lastHeardMs as int?,
+        forceFlood: forceFlood ?? this.forceFlood,
       );
+
+  /// Hops of the saved route (low 6 bits of the path byte), or null when none is saved.
+  int? get pathHops => hasPath ? outPathLen & 63 : null;
+
+  /// Bytes per hop id in the saved route (1-3; the top two bits of the path byte hold size - 1).
+  int get pathHashBytes => hasPath ? (outPathLen >> 6) + 1 : 1;
+
+  /// The saved route as one hex id per hop, first repeater first; empty when none is saved or the contact is a neighbour.
+  List<String> get routeIds {
+    final p = outPath;
+    if (!hasPath || p == null || p.isEmpty) return const [];
+    final size = pathHashBytes;
+    return [for (var i = 0; i + size <= p.length; i += size) toHex(p.sublist(i, i + size))];
+  }
 }
 
 const Object _keep = Object();
@@ -209,6 +249,7 @@ enum FailReason {
   textTooLong,
   unknownContact,
   unknownChannel,
+  contactListFull,
   cancelled;
 
   String describe() => switch (this) {
@@ -220,6 +261,7 @@ enum FailReason {
         FailReason.textTooLong => 'The message is too long for one packet.',
         FailReason.unknownContact => 'This contact is no longer known.',
         FailReason.unknownChannel => 'This channel is no longer on the radio.',
+        FailReason.contactListFull => 'The radio\'s contact list is full, so it could not take this contact. Free a slot in Contacts and try again.',
         FailReason.cancelled => 'Cancelled.',
       };
 }
@@ -344,6 +386,13 @@ class AdvertSeen {
   final int count;
   final int? pathLen;
   final double? snr;
+
+  /// The advert's own timestamp (sender clock, epoch seconds). Adding the node to the radio must carry exactly this, or the
+  /// radio's replay check (BaseChatMesh.cpp 133) would refuse the node's next real advert.
+  final int? advertTs;
+
+  /// The user said "not interested": hidden from New nodes nearby until restored.
+  final bool ignored;
   const AdvertSeen({
     required this.radioId,
     required this.publicKey,
@@ -356,6 +405,8 @@ class AdvertSeen {
     this.count = 1,
     this.pathLen,
     this.snr,
+    this.advertTs,
+    this.ignored = false,
   });
 }
 

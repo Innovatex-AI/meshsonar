@@ -257,6 +257,7 @@ void main() {
     test('NEW_ADVERT and ADVERT-style pushes arrive as events', () async {
       final events = <RadioEvent>[];
       session.events.listen(events.add);
+      radio.manualAddContacts = 1; // "ask before adding": the radio pushes NEW_ADVERT and adds nothing
       radio.injectNewAdvert('Dave K8DAV');
       await until(() => events.isNotEmpty);
       final e = events.single as AdvertHeardEvent;

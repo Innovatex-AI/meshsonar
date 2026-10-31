@@ -248,6 +248,27 @@ class SimulatedTransport implements ByteTransport {
   int _appTargetVer = 3;
   bool _contactIterating = false;
 
+  /// The contact table size DEVICE_INFO reports (as MAX_CONTACTS / 2 in a byte, so at most 510).
+  final int maxContacts;
+
+  /// False: CMD_SET/GET_AUTOADD_CONFIG answer ERR UNSUPPORTED_CMD, like an older firmware.
+  final bool autoAddSupported;
+
+  /// Milliseconds between two CONTACT frames of GET_CONTACTS (before [timeScale]).
+  final int contactFramePaceMs;
+
+  // SELF_INFO bytes 44-47 and the auto-add config (MyMesh.cpp 1100-1104, 2023-2036). Default = the factory behaviour.
+  int manualAddContacts = 0;
+  int autoAddConfig = 0; // NodePrefs.h:38 default: with "ask before adding" on, nothing is added by itself
+  int autoAddMaxHops = 0;
+  int _multiAcks = 0, _advertLocPolicy = 0, _telemetryModes = 0;
+
+  /// Test knob: the link drops after this many CONTACT frames of the next GET_CONTACTS (null = never).
+  int? dropAfterContactFrames;
+
+  /// Contact packets each CMD (counted): removes, path resets, imports, shares, for assertions.
+  final List<String> contactCommandLog = [];
+
   /// Test knobs: drop the PUSH_MSG_WAITING tickle (the real BLE queue is lossy), withhold DM ACKs, and the radio's
   /// outbound packet queue length that GET_STATS core reports.
   bool dropMsgWaiting = false;
@@ -304,6 +325,10 @@ class SimulatedTransport implements ByteTransport {
     int maxChannels = 8,
     this.offlineQueueSize = 16,
     List<SimulatedContact>? contacts,
+    this.maxContacts = 100,
+    this.autoAddSupported = true,
+    int extraContacts = 0,
+    this.contactFramePaceMs = 10,
   })  : location = location ?? SimulatedLocationSource(timeScale: timeScale, clock: clock),
         repeaters = repeaters ?? defaultSimulatedRepeaters(),
         _rng = math.Random(seed),
@@ -319,6 +344,13 @@ class SimulatedTransport implements ByteTransport {
       _contacts.add(_SimContact(r.publicKey, AdvType.repeater, r.name, _modClock++)
         ..lat = r.lat
         ..lon = r.lon);
+    }
+    for (var i = 0; i < extraContacts; i++) {
+      final key = sha256(utf8.encode('meshsonar-sim-extra:$i'));
+      _contacts.add(_SimContact(key, i % 5 == 0 ? AdvType.repeater : AdvType.chat, 'Extra ${i.toString().padLeft(3, '0')}', _modClock++)
+        ..lastAdvert = _clockSecs
+        ..lat = 39.7 + (i % 40) * 0.01
+        ..lon = -84.2 + (i % 35) * 0.01);
     }
   }
 
@@ -346,17 +378,101 @@ class SimulatedTransport implements ByteTransport {
     return true;
   }
 
-  /// A new node advertising: pushes NEW_ADVERT (0x8A) and adds it to the table.
-  void injectNewAdvert(String name, {int type = AdvType.chat, double lat = 0, double lon = 0}) {
-    if (!_connected) return;
+  /// A node advertising that the radio did not know (BaseChatMesh.cpp onAdvertRecv 156-186). With "ask before adding" on and
+  /// the type's auto-add switch off, or when the table is full, or past the hop limit: NEW_ADVERT only, nothing is added
+  /// (full also pushes CONTACTS_FULL). Otherwise the radio adds it and pushes ADVERT. Returns true when it was added.
+  bool injectNewAdvert(String name, {int type = AdvType.chat, double lat = 0, double lon = 0, int hops = 0}) {
     final key = sha256(utf8.encode('meshsonar-sim-advert:$name'));
-    final c = _SimContact(key, type, name, _modClock++)
+    return injectAdvertFrom(key, name, type: type, lat: lat, lon: lon, hops: hops);
+  }
+
+  /// Like [injectNewAdvert] for a node with a given 32-byte key.
+  bool injectAdvertFrom(List<int> key32, String name, {int type = AdvType.chat, double lat = 0, double lon = 0, int hops = 0}) {
+    if (!_connected) return false;
+    final key = Uint8List.fromList(key32);
+    final adv = _clock().toUtc().millisecondsSinceEpoch ~/ 1000;
+    final raw = buildUnsignedAdvertPacket(key, type: type, name: name, timestamp: adv, lat: lat == 0 && lon == 0 ? null : lat, lon: lat == 0 && lon == 0 ? null : lon);
+    return _hearAdvert(key, name, type, lat, lon, hops, adv, raw);
+  }
+
+  /// IMPORT_CONTACT loops the packet back as if heard (BaseChatMesh.cpp 588-601).
+  void _importedAdvert(AdvertPacketInfo a, Uint8List raw) {
+    final adv = a.timestamp == 0 ? _clock().toUtc().millisecondsSinceEpoch ~/ 1000 : a.timestamp;
+    _hearAdvert(a.publicKey, a.name, a.type, a.lat ?? 0, a.lon ?? 0, 0, adv, raw, delay: const Duration(milliseconds: 80));
+  }
+
+  final Map<String, Uint8List> _heardAdverts = {};
+
+  bool _hearAdvert(Uint8List key, String name, int type, double lat, double lon, int hops, int adv, Uint8List raw, {Duration delay = Duration.zero}) {
+    final known = _contactByPrefix(key, 32);
+    if (known != null) {
+      known
+        ..lastAdvert = adv
+        ..lastMod = _modClock++;
+      if (name.isNotEmpty) known.name = name;
+      _heardAdverts[toHex(key)] = raw;
+      _emit(encodeAdvertPush(key), delay);
+      return false;
+    }
+    void announce() => _emit(
+        encodeContactFrame(key, type: type, name: name, lastAdvert: adv, lat: lat, lon: lon, lastMod: _modClock, code: Push.newAdvert), delay);
+    if (!_shouldAutoAdd(type) || (autoAddMaxHops > 0 && hops >= autoAddMaxHops)) {
+      announce();
+      return false;
+    }
+    if (_contacts.length >= maxContacts) {
+      if ((autoAddConfig & AutoAddFlags.overwriteOldest) != 0) {
+        final candidates = _contacts.where((c) => (c.flags & 1) == 0).toList()..sort((a, b) => a.lastMod.compareTo(b.lastMod));
+        if (candidates.isNotEmpty) {
+          _contacts.remove(candidates.first);
+          _emit(encodeContactDeleted(candidates.first.key), delay);
+        }
+      }
+      if (_contacts.length >= maxContacts) {
+        announce();
+        _emit(encodeContactsFull(), delay);
+        return false;
+      }
+    }
+    _contacts.add(_SimContact(key, type, name, _modClock++)
       ..lat = lat
       ..lon = lon
-      ..lastAdvert = _clock().toUtc().millisecondsSinceEpoch ~/ 1000;
-    _contacts.add(c);
-    _emit(encodeContactFrame(key,
-        type: type, name: name, lastAdvert: c.lastAdvert, lat: lat, lon: lon, lastMod: c.lastMod, code: Push.newAdvert));
+      ..lastAdvert = adv);
+    _heardAdverts[toHex(key)] = raw;
+    _emit(encodeAdvertPush(key), delay);
+    return true;
+  }
+
+  bool _shouldAutoAdd(int type) {
+    if ((manualAddContacts & 1) == 0) return true;
+    final bit = switch (type) {
+      AdvType.chat => AutoAddFlags.chat,
+      AdvType.repeater => AutoAddFlags.repeater,
+      AdvType.room => AutoAddFlags.room,
+      AdvType.sensor => AutoAddFlags.sensor,
+      _ => 0,
+    };
+    return (autoAddConfig & bit) != 0;
+  }
+
+  /// The radio's own table size right now.
+  int get contactCount => _contacts.length;
+
+  /// Forgets the contact on the radio without telling anyone (a table that changed while the phone was away).
+  bool dropContactSilently(String keyHex) {
+    final c = _contactByPrefix(fromHex(keyHex), 32);
+    return c != null && _contacts.remove(c);
+  }
+
+  /// Drops the link now (tests: the radio goes away mid-sync).
+  void dropLink() {
+    _connected = false;
+    for (final t in _timers) {
+      t.cancel();
+    }
+    _timers.clear();
+    _contactIterating = false;
+    if (!_out.isClosed) _out.close();
   }
 
   /// Messages waiting in the radio's offline queue.
@@ -439,12 +555,16 @@ class SimulatedTransport implements ByteTransport {
           sf: 7,
           cr: 5,
           name: nodeName,
+          manualAdd: manualAddContacts,
+          telemetryModes: _telemetryModes,
+          advertLocPolicy: _advertLocPolicy,
+          multiAcks: _multiAcks,
         ));
       case Cmd.deviceQuery:
         if (frame.length >= 2) _appTargetVer = frame[1];
         _emit(encodeDeviceInfo(
           firmwareVerCode: 9,
-          maxContactsHalf: 50,
+          maxContactsHalf: (maxContacts ~/ 2).clamp(1, 255),
           maxChannels: _slots.length,
           buildDate: '1 Oct 2026',
           manufacturer: 'MeshSonar Simulator',
@@ -498,8 +618,62 @@ class SimulatedTransport implements ByteTransport {
         _emit(c == null ? encodeErr(ErrCode.notFound) : _contactFrame(c));
       case Cmd.addUpdateContact:
         if (frame.length < 1 + 32 + 3 + 64 + 32 + 4) return _emit(encodeErr(ErrCode.illegalArg));
+        if (_contactByPrefix(frame.sublist(1, 33), 32) == null && _contacts.length >= maxContacts) {
+          return _emit(encodeErr(ErrCode.tableFull));
+        }
         _addUpdateContact(frame);
         _emit(encodeOk());
+      case Cmd.removeContact:
+        if (frame.length < 33) return _emit(encodeErr(ErrCode.illegalArg));
+        final rc = _contactByPrefix(frame.sublist(1, 33), 32);
+        contactCommandLog.add('remove ${toHex(frame.sublist(1, 33))}');
+        if (rc == null) return _emit(encodeErr(ErrCode.notFound));
+        _contacts.remove(rc);
+        _emit(encodeOk());
+      case Cmd.resetPath:
+        if (frame.length < 33) return _emit(encodeErr(ErrCode.illegalArg));
+        final pc = _contactByPrefix(frame.sublist(1, 33), 32);
+        contactCommandLog.add('reset ${toHex(frame.sublist(1, 33))}');
+        if (pc == null) return _emit(encodeErr(ErrCode.notFound));
+        pc
+          ..outPathLen = 0xFF
+          ..outPath = Uint8List(0);
+        _emit(encodeOk());
+      case Cmd.exportContact:
+        if (frame.length < 33) return _emit(encodeErr(ErrCode.tableFull));
+        final ec = _contactByPrefix(frame.sublist(1, 33), 32);
+        final raw = ec == null ? null : _heardAdverts[toHex(ec.key)];
+        contactCommandLog.add('export ${toHex(frame.sublist(1, 33))}');
+        _emit(raw == null ? encodeErr(ErrCode.notFound) : encodeExportContactResp(raw));
+      case Cmd.shareContact:
+        if (frame.length < 33) return _emit(encodeErr(ErrCode.illegalArg));
+        final sc = _contactByPrefix(frame.sublist(1, 33), 32);
+        contactCommandLog.add('share ${toHex(frame.sublist(1, 33))}');
+        if (sc == null) return _emit(encodeErr(ErrCode.notFound));
+        _emit(_heardAdverts.containsKey(toHex(sc.key)) ? encodeOk() : encodeErr(ErrCode.tableFull));
+      case Cmd.importContact:
+        contactCommandLog.add('import ${frame.length - 1}');
+        if (frame.length <= 2 + 32 + 64) return _emit(encodeErr(ErrCode.unsupportedCmd));
+        final adv = decodeAdvertPacket(frame.sublist(1));
+        if (adv == null) return _emit(encodeErr(ErrCode.illegalArg));
+        _emit(encodeOk());
+        _importedAdvert(adv, frame.sublist(1));
+      case Cmd.setOtherParams:
+        if (frame.length < 2) return _emit(encodeErr(ErrCode.illegalArg));
+        manualAddContacts = frame[1];
+        if (frame.length >= 3) _telemetryModes = frame[2];
+        if (frame.length >= 4) _advertLocPolicy = frame[3];
+        if (frame.length >= 5) _multiAcks = frame[4];
+        _emit(encodeOk());
+      case Cmd.setAutoAddConfig:
+        if (!autoAddSupported) return _emit(encodeErr(ErrCode.unsupportedCmd));
+        if (frame.length < 2) return _emit(encodeErr(ErrCode.illegalArg));
+        autoAddConfig = frame[1];
+        if (frame.length >= 3) autoAddMaxHops = frame[2].clamp(0, 64);
+        _emit(encodeOk());
+      case Cmd.getAutoAddConfig:
+        if (!autoAddSupported) return _emit(encodeErr(ErrCode.unsupportedCmd));
+        _emit(encodeAutoAddConfig(autoAddConfig, autoAddMaxHops));
       case Cmd.sendTxtMsg:
         _onSendTxt(frame);
       case Cmd.setFloodScopeKey:
@@ -576,16 +750,29 @@ class SimulatedTransport implements ByteTransport {
     _contactIterating = true;
     _emit(encodeContactsStart(_contacts.length));
     var most = 0;
-    var delay = 10;
+    var delay = contactFramePaceMs;
+    var sent = 0;
+    final dropAt = dropAfterContactFrames;
     for (final c in List.of(_contacts)) {
       if (c.lastMod <= since) continue;
       if (c.lastMod > most) most = c.lastMod;
+      if (dropAt != null && sent >= dropAt) {
+        dropAfterContactFrames = null;
+        late Timer d;
+        d = Timer(_scaled(Duration(milliseconds: delay)), () {
+          _timers.remove(d);
+          dropLink();
+        });
+        _timers.add(d);
+        return;
+      }
       _emit(_contactFrame(c), Duration(milliseconds: delay));
-      delay += 10;
+      delay += contactFramePaceMs;
+      sent++;
     }
-    _emit(encodeEndOfContacts(most), Duration(milliseconds: delay + 10));
+    _emit(encodeEndOfContacts(most), Duration(milliseconds: delay + contactFramePaceMs));
     late Timer t;
-    t = Timer(_scaled(Duration(milliseconds: delay + 20)), () {
+    t = Timer(_scaled(Duration(milliseconds: delay + 2 * contactFramePaceMs)), () {
       _timers.remove(t);
       _contactIterating = false;
     });
@@ -794,7 +981,24 @@ class SimulatedRadioScanner implements RadioScanner {
   /// See [SimulatedTransport.injectDirectMessage].
   bool injectDirectMessage(String from, String text) => lastTransport?.injectDirectMessage(from, text) ?? false;
 
-  SimulatedRadioScanner({this.location, this.seed, this.timeScale = 1.0, this.clock, this.firmwareVersion = 'v1.18.0-sim'});
+  /// Contact table of the simulated radio: its size (DEVICE_INFO), how many extra made-up contacts it starts with, whether it
+  /// has the auto-add config commands, and the pause between CONTACT frames (ms before [timeScale]).
+  final int maxContacts;
+  final int extraContacts;
+  final bool autoAddSupported;
+  final int contactFramePaceMs;
+
+  SimulatedRadioScanner({
+    this.location,
+    this.seed,
+    this.timeScale = 1.0,
+    this.clock,
+    this.firmwareVersion = 'v1.18.0-sim',
+    this.maxContacts = 100,
+    this.extraContacts = 0,
+    this.autoAddSupported = true,
+    this.contactFramePaceMs = 10,
+  });
 
   @override
   Stream<List<RadioDevice>> scan({Duration timeout = const Duration(seconds: 8)}) async* {
@@ -806,7 +1010,15 @@ class SimulatedRadioScanner implements RadioScanner {
   Future<ByteTransport> connect(RadioDevice device) async {
     if (device.id != SimulatedRadioScanner.device.id) throw StateError('unknown simulated device ${device.id}');
     final t = SimulatedTransport(
-        location: location, seed: seed, timeScale: timeScale, clock: clock, firmwareVersion: firmwareVersion);
+        location: location,
+        seed: seed,
+        timeScale: timeScale,
+        clock: clock,
+        firmwareVersion: firmwareVersion,
+        maxContacts: maxContacts,
+        extraContacts: extraContacts,
+        autoAddSupported: autoAddSupported,
+        contactFramePaceMs: contactFramePaceMs);
     lastTransport = t;
     return t;
   }

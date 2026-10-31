@@ -90,6 +90,33 @@ abstract class RadioSession implements ClaimRadio {
   /// ERR_BAD_STATE to an overlapping iteration, so the session serialises them).
   Future<ContactListing> getContacts({int since = 0});
 
+  /// [getContacts] that reports each contact as its frame arrives ([onContact]: the contact, the count so far, the total the
+  /// radio announced), so a caller can save progress during a long list and keep it if the link drops half way.
+  Future<ContactListing> downloadContacts({int since = 0, void Function(RadioContact contact, int received, int total)? onContact});
+
+  /// The radio's own copy of one contact (GET_CONTACT_BY_KEY); null when it does not have it.
+  Future<RadioContact?> getContact(String publicKeyHex);
+
+  /// REMOVE_CONTACT: frees a slot in the radio's table. False when the radio no longer had it. Never touches the phone's copy.
+  Future<bool> removeContact(String publicKeyHex);
+
+  /// RESET_PATH: the next message to the contact floods. False when the radio does not have the contact.
+  Future<bool> resetContactPath(String publicKeyHex);
+
+  /// The advert packet the radio last HEARD from the contact (EXPORT_CONTACT), or null (a contact written by the phone has none).
+  Future<Uint8List?> exportContactAdvert(String publicKeyHex);
+
+  /// IMPORT_CONTACT: lets the radio process an advert packet as if heard. With "ask before adding" on, the radio does not add
+  /// it but pushes NEW_ADVERT ([AdvertHeardEvent] with isNew).
+  Future<void> importContactAdvert(Uint8List packet);
+
+  /// SHARE_CONTACT: the radio broadcasts the contact's stored advert zero-hop. False when it cannot.
+  Future<bool> shareContactZeroHop(String publicKeyHex);
+
+  /// What the radio does with nodes it hears (see [ContactPolicy]).
+  Future<ContactPolicy> getContactPolicy();
+  Future<void> setContactPolicy(ContactPolicy policy);
+
   /// Adds the contact to the radio or updates it (ADD_UPDATE_CONTACT with every field).
   Future<void> addOrUpdateContact(RadioContact contact);
 
