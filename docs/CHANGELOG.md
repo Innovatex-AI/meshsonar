@@ -5,7 +5,15 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
-- **Contacts and direct messages, foundation (M2, no screens yet).** The phone is the master copy of your contacts; the radio's table is
+- **Contacts and direct messages (M2).** Chat > Contacts is real: search, filters, favourites, New nodes nearby (Add / Ignore),
+  contact details (route, position on a map, QR, share, notes, block, remove), add by QR / link / key, the radio's list with
+  "On your radio: 45 of 100" and a way to free space, and Contact settings (ask before adding, per-type auto-add, replace the
+  oldest when full, hop limit). A direct message is written in the shared conversation screen with a route strip on top; delivery
+  says Sending / Sent / Delivered in 2.4 s / Not delivered with the reason; long-press > Details lists every try. Every state (no
+  radio, syncing with progress, failed with Try again, radio full) is explained in plain words. The conversation's empty state scrolls
+  at the largest text size and its message field is 48 dp tall. Rooms stay read-only until room login exists. One camera screen
+  (`QrScanScreen`) now serves channels and contacts.
+- **Contacts and direct messages, foundation.** The phone is the master copy of your contacts; the radio's table is
   a cache. `ContactManager` (`ChatService.contacts`) syncs incrementally and resumably, offers nodes it hears as "New nodes nearby"
   instead of letting the radio fill itself, keeps the radio's table from silently overflowing, puts a contact back on the radio before a
   DM to it, and floods a DM's last try with RESET_PATH. New radio frames (remove, reset path, export / import / share, ask-before-adding,

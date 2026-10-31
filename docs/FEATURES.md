@@ -32,7 +32,7 @@ on Map). Tapping the open More tab again returns it to its list.
 
 | Tab | Holds |
 |---|---|
-| Chat | Contacts \| Channels through the `ChatTabHost` seam. Until chat services plug in: "Messages arrive here once you connect a radio" with Connect radio; connected: "Chat is coming to this tab" with Open the map. Unread badge on the tab icon. |
+| Chat | Contacts \| Channels through the `ChatTabHost` seam (see Contacts and direct messages, below). Without a chat store: "Messages arrive here once you connect a radio". Unread badge on the tab icon. |
 | Map | The coverage map and the drive controls (the old Drive tab). Drive is a mode of this tab: the title says "Drive mode" while recording, "Not driving" otherwise; Start drive is the big button. |
 | Analyze | Segmented Region (the Region hub) \| Drives (drive list, reports, progress). |
 | Plan | Website tools for the viewed region, each opening the real page in the browser (planner, site explorer, point-to-point link, coverage painter, airtime, radio presets, coverage check). In-app tools that do not exist yet are listed once as "Coming next", with no button. |
@@ -539,6 +539,56 @@ it."); `test/ui/settings_no_dead_end_test.dart` enforces it.
 
 The first-run disclosure sheet lists every registry category with exactly what is shared and never shared, where it
 goes, and "Change your mind any time in Settings, under Privacy & data sharing"; both choices stay pinned on screen.
+
+## Contacts and direct messages (unreleased)
+
+Files: `ui/contacts/*` (screens), `app/chat_wiring.dart` (builds `ContactsTab` for the Chat tab), `chat/contact_manager.dart` (the
+book and its sync), `chat/delivery_text.dart` (the words). Nothing here is ever uploaded: contacts, messages and notes live in
+the app's own database on this phone.
+
+**The idea.** Your phone keeps every contact you have. Your radio keeps a copy of the ones it needs (its list holds 100 by
+default). Taking a contact off the radio never deletes it from the phone, and the app puts one back on the radio before you message it.
+
+**Chat > Contacts.** Search; filter chips All, Favourites, Recent, People, Repeaters, Rooms, Sensors; sections New nodes nearby,
+Favourites, All. Tap a person to open the conversation (a quiet info button opens their details); tap a repeater, room or sensor to
+open its details. Pull down to read the radio's list again. "Add contact" and a settings button sit under the search box.
+
+| State | What you see |
+|---|---|
+| No radio ever connected | "Your contacts appear here", what will happen, Connect radio |
+| Connected, nobody yet | "No contacts yet": nodes the radio hears appear under New nodes nearby; add one by QR, link or key |
+| Radio away, book saved | Banner "Radio not connected. Showing the contacts saved on this phone." and Connect radio; messages wait |
+| List coming from the radio | A progress line "Loading contacts from your radio: 120 of 350"; the list stays usable |
+| Reading the list failed | The reason in words ("What arrived is saved") and Try again |
+| Radio list full | "Your radio's contact list is full (N of M)" and Free up space |
+| Radio adds every node it hears | One-time card: "Ask me before adding?" with Ask me first / Keep automatic |
+| Search finds nothing | "No contact matches ..." and Clear |
+
+**New nodes nearby.** With the radio on "ask before adding" (Contact settings), a node it hears is shown here, never added behind
+your back. Add puts it on the radio with the advert's own time; Ignore hides it (Contact settings lists ignored nodes with Restore).
+Per-type switches keep the radio adding repeaters, people, rooms or sensors by itself if you want, plus "replace the oldest when
+full (never a favourite)" and a hop limit. Older firmware without the per-type commands shows only the ask-first switch.
+
+**Radio list** (tap "On your radio: 45 of 100"): who could be taken off the radio to make room (never a favourite, anyone you have
+talked to, or a message in flight), with the reason ("Last heard 40 days ago"). Adding a contact to a full radio frees one slot by
+itself and tells you.
+
+**Add a contact.** Scan a QR code (camera only on that screen), paste a `meshcore://` link or a 64-character key (with an optional
+name), or show your own contact QR to someone else. Wrong input is explained under the field in plain words; a channel link says
+"Open Channels to join it". With the radio away the contact is saved and goes onto the radio when it connects.
+
+**Contact details.** Name (rename, reset), type, key with Copy and QR, "on your radio" status, position on a small map with the time of
+their last advert, route (hops, the repeaters on it, last heard), "Always send by flood", Reset route, notes, favourite, Share
+contact (link, QR, or "Send to radios nearby"), Block, Remove (says what it does; optionally deletes the messages), Message,
+Claim (repeaters) and Admin (repeaters, when the remote-admin screen exists). Rooms show details only: posting to a room needs a
+login that arrives with room support.
+
+**Direct messages.** Written in the shared conversation screen; a strip on top says how the next message travels ("Direct, 2 hops via
+a1b2 then c3d4", or "No saved route yet. The first message floods..."). A new contact is reached by flood; the radio learns the
+route from the reply and later messages go direct. Delivery under each message: Waiting to send, Sending, Sent waiting for the
+reply, Delivered in 2.4 s, Not delivered. Tries: 3 by flood, 5 along a saved route (the last one floods and the saved route is
+cleared). A message that gets no acknowledgement says why ("No acknowledgement after 3 tries ... The repeater path to them may have
+changed") and offers Retry. Long-press a message > Details shows each try, the route, hops, signal, and the explanation.
 
 ## My radios and claims (unreleased)
 
