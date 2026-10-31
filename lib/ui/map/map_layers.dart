@@ -9,10 +9,10 @@ import '../../core/model.dart';
 
 /// How ping dots are coloured.
 enum PingColorMode {
-  /// Heard by a repeater (green) or heard nothing (red): the "did it reach the mesh" view.
+  /// Heard by a repeater (green) or heard nothing (grey): the "did it reach the mesh" view.
   result,
 
-  /// Heard pings by their best SNR (blue → teal → green); heard nothing stays red.
+  /// Heard pings by their best SNR (blue → teal → green); heard nothing stays grey.
   snr,
 }
 

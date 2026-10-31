@@ -5,6 +5,12 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+## [0.23.2] — 2026-10-31 — taps that work, and a map that tells the truth
+
+- **Repeater taps work everywhere.** The amber repeater markers of your own drive only toggled a label (no panel, no lines); they now open the info panel and draw the lines to every cell the repeater was heard in. A tap on a repeater drawn on top of a coverage cell no longer risks opening the cell underneath. (The panel's repeater taps in the network layer already worked.)
+- **Ping dots are tappable** (they were ignoring touches, so the dots "showed nothing"): tap a dot for lines to the repeaters that heard it with their SNR, and its full details in the collapsed panel. A ping that heard nothing says "mapped, no signal".
+- **Colours follow one rule.** Green and the other strength colours mean measured coverage. A ping or cell that was mapped but heard nothing is GREY (it was red). A ping or cell that was heard but has no signal reading is its own purple "heard, signal unknown" (it was teal, which read as good). Share-heard colouring no longer paints 0% heard in the red "weak" step. Legends say so, and the report's "red ticks" are "grey ticks".
+
 ## [0.23.1] — 2026-10-31 — link lines you can see, and an info panel that leaves the map alone
 
 - **Link lines are orange** (one colour, dark casing) so they stand out from the SNR-coloured cells; the SNR stays in each label and in the panel.

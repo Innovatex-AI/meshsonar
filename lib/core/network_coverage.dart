@@ -13,9 +13,10 @@ import 'hex_cells.dart' show HexPoint;
 /// Which dimension buckets a cell's colour (the layer's colour-by picker: best SNR / share heard / noise floor).
 enum CoverageColorBy { snr, heard, noise }
 
-/// A cell's bucket on its [CoverageColorBy] legend, weakest to strongest. [none] means "nothing to show" (no
-/// pings yet, heard nothing, or no reading for the chosen dimension) and is drawn as neutral, not a colour step.
-enum CoverageLevel { none, weak, fair, good, strong }
+/// A cell's bucket on its [CoverageColorBy] legend, weakest to strongest. [none] means the cell was mapped but nothing
+/// was heard there (or there is no reading for the noise dimension): drawn GREY, never a coverage colour. [unknown]
+/// means something WAS heard but no signal strength was measured: its own colour, never green.
+enum CoverageLevel { none, unknown, weak, fair, good, strong }
 
 /// One drawable network-coverage cell: a boundary (square or hexagon corners) and the bucket it falls in.
 class NetworkCell {
@@ -38,13 +39,13 @@ CoverageLevel levelFor(CoverageCell c, CoverageColorBy by) {
     case CoverageColorBy.snr:
       if (c.heard <= 0) return CoverageLevel.none;
       final s = c.bestSnr;
-      if (s == null) return CoverageLevel.none;
+      if (s == null) return CoverageLevel.unknown;
       if (s >= 5) return CoverageLevel.strong;
       if (s >= 0) return CoverageLevel.good;
       if (s >= -5) return CoverageLevel.fair;
       return CoverageLevel.weak;
     case CoverageColorBy.heard:
-      if (c.pings <= 0) return CoverageLevel.none;
+      if (c.pings <= 0 || c.heard <= 0) return CoverageLevel.none; // nothing heard is grey, not the 'weak' colour
       final pct = 100 * c.heard / c.pings;
       if (pct >= 75) return CoverageLevel.strong;
       if (pct >= 50) return CoverageLevel.good;

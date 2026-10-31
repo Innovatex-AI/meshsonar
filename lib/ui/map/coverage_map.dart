@@ -44,6 +44,7 @@
 // 'map-network-attribution',
 // 'map-heard-label-<key>', 'map-link-distance-<key>', 'map-position', 'map-recenter', 'map-compass', 'map-offline',
 // 'map-attribution', 'map-simulated'.
+import 'dart:async' show Timer;
 import 'dart:io' show Platform;
 import 'dart:math' as math;
 
@@ -53,7 +54,7 @@ import 'package:latlong2/latlong.dart';
 
 import 'package:h3_flutter/h3_flutter.dart' show H3;
 
-import '../../core/heard.dart' show haversineM;
+import '../../core/heard.dart' show RepeaterLookup, haversineM;
 import '../../core/coverage_query.dart' show coverageResForZoom;
 import '../../core/api.dart' show CmatException;
 import '../../core/hex_cells.dart';
@@ -80,6 +81,7 @@ import 'map_info_panel.dart';
 import 'map_layers.dart';
 import 'offline_basemap.dart';
 import 'sheets/map_hit_sheet.dart';
+import '../ping_detail_sheet.dart' show PingDetailSheet;
 import 'sheets/observer_sheet.dart' show ObserverSheetContext;
 import 'sheets/repeater_sheet.dart' show RepeaterSheet, RepeaterSheetContext;
 
@@ -148,8 +150,10 @@ Color networkLevelColor(BuildContext context, CoverageLevel level) {
       return dark ? const Color(0xFFE2B04A) : const Color(0xFFB07D16);
     case CoverageLevel.weak:
       return dark ? const Color(0xFFF07B6B) : const Color(0xFFB23B2E);
+    case CoverageLevel.unknown:
+      return MeshSonarColors.of(context).heardUnknown;
     case CoverageLevel.none:
-      return Theme.of(context).colorScheme.outlineVariant;
+      return MeshSonarColors.of(context).silent;
   }
 }
 
@@ -352,6 +356,10 @@ class _CoverageMapState extends State<CoverageMap> {
   LinkSet? _linkSet;
   int _linkSetRes = -1;
   NetworkCell? _panelCell;
+  DrivePing? _panelPing;
+  final ScrollController _pingScroll = ScrollController();
+  DateTime? _hitAt; // when a repeater/observer/cluster was last tapped
+  Timer? _mapTapTimer;
   RepeaterPoint? _panelPoint;
   ReachTotals? _reachTotals;
 
@@ -373,7 +381,7 @@ class _CoverageMapState extends State<CoverageMap> {
   }
 
   void _clearLinks() {
-    if (_linkId == null && _panelCell == null && _panelPoint == null) return;
+    if (_linkId == null && _panelCell == null && _panelPoint == null && _panelPing == null) return;
     _linkGen++;
     setState(() {
       _linkId = null;
@@ -384,6 +392,7 @@ class _CoverageMapState extends State<CoverageMap> {
       _linkUnplaced = 0;
       _panelCell = null;
       _panelPoint = null;
+      _panelPing = null;
       _reachTotals = null;
     });
   }
@@ -416,6 +425,7 @@ class _CoverageMapState extends State<CoverageMap> {
     setState(() {
       _panelPoint = p;
       _panelCell = null;
+      _panelPing = null;
       _reachTotals = null;
     });
     final gen = _linkGen;
@@ -453,8 +463,21 @@ class _CoverageMapState extends State<CoverageMap> {
         if (i >= 0) return (lat: pts.lat[i], lon: pts.lon[i], name: pts.name[i]);
       }
     }
-    final r = _refFor(key);
+    final r = _refFor(key) ?? _refForPrefix(key);
     return r == null ? null : (lat: r.lat, lon: r.lon, name: _nameFor(r));
+  }
+
+  /// The drive's own repeater whose key starts with [id] (echo ids are short prefixes), only when exactly one does.
+  RepeaterRef? _refForPrefix(String id) {
+    if (id.length < 2) return null;
+    _ensureMarkers();
+    RepeaterRef? hit;
+    for (final r in _markerRepeaters) {
+      if (!r.key.startsWith(id.toLowerCase())) continue;
+      if (hit != null) return null;
+      hit = r;
+    }
+    return hit;
   }
 
   Future<void> _showCellLinks(NetworkCell n) async {
@@ -469,6 +492,7 @@ class _CoverageMapState extends State<CoverageMap> {
     setState(() {
       _panelCell = n;
       _panelPoint = null;
+      _panelPing = null;
     });
     final gen = _linkGen;
     try {
@@ -507,8 +531,28 @@ class _CoverageMapState extends State<CoverageMap> {
   static String roleLine(RepeaterPoint p) => p.isRoom ? 'Room server' : 'Repeater';
 
   Widget? _panel(BuildContext context) {
-    final p = _panelPoint, cell = _panelCell;
-    if (p == null && cell == null) return null;
+    final p = _panelPoint, cell = _panelCell, ping = _panelPing;
+    if (p == null && cell == null && ping == null) return null;
+    if (ping != null) {
+      final set = _currentLinks();
+      final lookup = _appOrNull()?.lookup ?? RepeaterLookup.empty;
+      final n = set?.ends.length ?? 0;
+      final best = bestSnr(ping);
+      final summary = ping.kind == PingKind.rx
+          ? 'Heard a packet'
+          : ping.heardNothing
+          ? 'Heard nothing  ·  mapped, no signal'
+          : 'Heard ${ping.echoes.length} repeater${ping.echoes.length == 1 ? '' : 's'}${best == null ? '' : '  ·  best ${formatSnrShort(best)} dB'}${_linkUnplaced > 0 ? '  ·  $_linkUnplaced not on the map' : ''}';
+      return MapInfoPanel(
+        key: ValueKey('info-panel-ping-${ping.id}'),
+        title: 'Ping at ${ping.ts.toLocal().hour.toString().padLeft(2, '0')}:${ping.ts.toLocal().minute.toString().padLeft(2, '0')}',
+        summary: summary,
+        busy: false,
+        body: PingDetailSheet(ping: ping, lookup: lookup, scrollController: _pingScroll),
+        onFit: n > 0 ? _fitLinks : null,
+        onClose: _clearLinks,
+      );
+    }
     final set = _currentLinks();
     final canFit = !_linkBusy && _linkError == null && (set?.ends.isNotEmpty ?? false);
     final here = widget.position ?? (_latest == null ? null : LatLng(_latest!.lat, _latest!.lon));
@@ -551,6 +595,58 @@ class _CoverageMapState extends State<CoverageMap> {
     );
   }
 
+  /// A repeater from the drive's own list (the amber markers) as the point the panel works with: the network or
+  /// roster row when one has it, else what the marker knows.
+  RepeaterPoint _pointForRef(RepeaterRef r) {
+    for (final src in [_rosterSource(), widget.repeaterSource]) {
+      if (src == null) continue;
+      for (final layer in [kRosterLayerId, kNetworkLayerId]) {
+        final i = src.pointsOf(layer).indexOf(r.key);
+        if (i >= 0) return src.pointAt(layer, i);
+      }
+    }
+    return RepeaterPoint(
+      layerId: kNetworkLayerId,
+      source: RepeaterPointSource.global,
+      key: r.key,
+      name: _nameFor(r),
+      isRoom: false,
+      lat: r.lat,
+      lon: r.lon,
+      band: 0,
+    );
+  }
+
+  /// Tap a ping dot: a line to every repeater that heard it, labelled with its SNR, and the ping's own details.
+  void _showPingLinks(DrivePing p) {
+    final app = _appOrNull();
+    final lookup = app?.lookup;
+    final ends = <LinkEnd>[];
+    var unplaced = 0;
+    for (final e in p.echoes) {
+      final ref = lookup?.resolve(e.repeater).ref;
+      final placed = ref != null ? (lat: ref.lat, lon: ref.lon, name: _nameFor(ref)) : _placeRepeater(e.repeater);
+      if (placed == null) {
+        unplaced++;
+        continue;
+      }
+      ends.add(LinkEnd(lat: placed.lat, lon: placed.lon, id: e.repeater, name: placed.name, pings: 1, snr: e.snrDb));
+    }
+    _linkGen++;
+    setState(() {
+      _linkId = 'ping:${p.id}';
+      _linkBusy = false;
+      _linkError = null;
+      _linkUnplaced = unplaced;
+      _panelPing = p;
+      _panelPoint = null;
+      _panelCell = null;
+      _reachTotals = null;
+      _linkSet = null;
+      _linkBuild = (_) => LinkSet(id: 'ping:${p.id}', lat: p.lat, lon: p.lon, title: 'Ping', ends: ends, unplaced: unplaced);
+    });
+  }
+
   void _fitLinks() {
     final s = _currentLinks();
     if (s == null || s.ends.isEmpty) return;
@@ -563,6 +659,8 @@ class _CoverageMapState extends State<CoverageMap> {
 
   /// A tap on a clustered repeater layer or an observer (cells come through [MapOptions.onTap]).
   void _onHit(MapHit hit) {
+    _hitAt = DateTime.now();
+    _mapTapTimer?.cancel(); // the same tap also reaches the map: it must not open the cell underneath
     if (hit is ClusterHit && hit.colocated.length <= 1) setState(() => _follow = false); // the camera moves to it
     final here = widget.position ?? (_latest == null ? null : LatLng(_latest!.lat, _latest!.lon));
     if (hit is RepeaterHit) {
@@ -801,6 +899,8 @@ class _CoverageMapState extends State<CoverageMap> {
 
   @override
   void dispose() {
+    _mapTapTimer?.cancel();
+    _pingScroll.dispose();
     _pack.basemap.removeListener(_onPacksChanged);
     _ownSource?.dispose();
     _ownFeed?.dispose();
@@ -879,12 +979,20 @@ class _CoverageMapState extends State<CoverageMap> {
               }
             },
             onTap: (_, point) {
-              final hit = widget.layers.networkCoverage ? networkCellAt(widget.networkCells, point) : null;
-              if (hit == null) {
-                _clearLinks(); // a tap on nothing puts the lines away
-                return;
-              }
-              _showCellLinks(hit);
+              // A repeater (or observer, or cluster) drawn on top of a cell gets the same tap as the cell under it. Give the
+              // layer a moment to say it took the tap; the cell only opens when nothing else did.
+              _mapTapTimer?.cancel();
+              _mapTapTimer = Timer(const Duration(milliseconds: 90), () {
+                if (!mounted) return;
+                final at = _hitAt;
+                if (at != null && DateTime.now().difference(at) < const Duration(milliseconds: 600)) return;
+                final hit = widget.layers.networkCoverage ? networkCellAt(widget.networkCells, point) : null;
+                if (hit == null) {
+                  _clearLinks(); // a tap on nothing puts the lines away
+                  return;
+                }
+                _showCellLinks(hit);
+              });
             },
             onPositionChanged: (camera, hasGesture) {
               if (tiles && _pack.update(camera.center.latitude, camera.center.longitude)) setState(() {});
@@ -930,8 +1038,8 @@ class _CoverageMapState extends State<CoverageMap> {
                   for (final n in widget.networkCells)
                     Polygon(
                       points: [for (final b in n.boundary) LatLng(b.lat, b.lon)],
-                      color: networkLevelColor(context, n.level).withValues(alpha: n.level == CoverageLevel.none ? 0.10 : 0.34),
-                      borderColor: networkLevelColor(context, n.level).withValues(alpha: n.level == CoverageLevel.none ? 0.25 : 0.8),
+                      color: networkLevelColor(context, n.level).withValues(alpha: n.level == CoverageLevel.none ? 0.16 : 0.34),
+                      borderColor: networkLevelColor(context, n.level).withValues(alpha: n.level == CoverageLevel.none ? 0.45 : 0.8),
                       borderStrokeWidth: 1,
                     ),
                 ],
@@ -1036,7 +1144,15 @@ class _CoverageMapState extends State<CoverageMap> {
                         phase: heardMode ? _heardByKey[r.key]?.phase : (legacyLit.contains(r.key) ? HeardPhase.fresh : null),
                         heardAt: _heardByKey[r.key]?.lastPingIndex,
                         selected: r.key == _selectedRepeater,
-                        onTap: () => _select(_selectedRepeater == r.key ? null : r.key),
+                        onTap: () {
+                          final on = _selectedRepeater != r.key;
+                          _select(on ? r.key : null);
+                          if (on) {
+                            _showRepeaterLinks(_pointForRef(r));
+                          } else {
+                            _clearLinks();
+                          }
+                        },
                       ),
                     ),
                 ],
@@ -1049,7 +1165,10 @@ class _CoverageMapState extends State<CoverageMap> {
                       point: LatLng(p.lat, p.lon),
                       width: 40,
                       height: 40,
-                      child: IgnorePointer(
+                      child: GestureDetector(
+                        key: ValueKey('map-ping-tap-${p.id}'),
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => _showPingLinks(p),
                         child: _PingDot(
                           dotKey: ValueKey('map-ping-${p.id}'),
                           color: pingColor(mc, p, layers.pingColors),
@@ -1187,7 +1306,7 @@ class _CoverageMapState extends State<CoverageMap> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (_panel(context) case final panel?) ...[panel, const SizedBox(height: Gap.xs)],
+              if (_panel(context) case final panel?) ...[SizedBox(width: double.infinity, child: panel), const SizedBox(height: Gap.xs)],
               if (widget.simulated) ...[
                 const SimulatedTag(key: Key('map-simulated')),
                 const SizedBox(height: Gap.xs),

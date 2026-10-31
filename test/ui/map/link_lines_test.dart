@@ -69,7 +69,7 @@ void main() {
   final cellId = h3 == null ? '' : hexId(hexCellOf(h3, 40.0, -83.0));
   final centre = h3 == null ? const GeoCoord(lon: 0, lat: 0) : h3.cellToGeo(BigInt.parse(cellId, radix: 16));
 
-  Future<_H> pump(WidgetTester tester, {bool approved = true}) async {
+  Future<_H> pump(WidgetTester tester, {bool approved = true, bool charlieInCell = false}) async {
     useTallScreen(tester);
     final h = _H();
     if (approved) h.approveKey();
@@ -106,6 +106,7 @@ void main() {
             lastSeen: h.clockNow,
           ),
           MapRepeaterRow(key: k('b'), name: 'Bravo', lat: centre.lat, lon: centre.lon + 0.02, lastSeen: h.clockNow),
+          if (charlieInCell) MapRepeaterRow(key: k('c'), name: 'Charlie', lat: centre.lat, lon: centre.lon, lastSeen: h.clockNow),
         ],
         state: MapFeedState.ready,
       ),
@@ -161,11 +162,23 @@ void main() {
     return cam.latLngToScreenOffset(LatLng(lat, lon));
   }
 
+  testWidgets('tap a repeater that sits INSIDE a coverage cell: the repeater panel and its lines win, not the cell', (tester) async {
+    final h = await pump(tester, charlieInCell: true);
+    await tester.tapAt(screenOf(tester, centre.lat, centre.lon));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(h.lc.reachCalls, [k('c')]);
+    expect(h.lc.cellCalls, isEmpty, reason: 'the cell under the repeater must not take the tap');
+    expect(find.text('Charlie'), findsOneWidget);
+    expect(find.text('No MeshSonar drive has heard it yet'), findsNothing);
+    expect(find.text('Heard in 2 cells  ·  tap to expand'), findsOneWidget);
+  }, skip: skip);
+
   testWidgets('tap a cell: lines to the repeaters heard there, SNR labels, a chip, and the sheet', (tester) async {
     final h = await pump(tester);
-    await tester.tapAt(screenOf(tester, centre.lat, centre.lon));
+    await tester.tapAt(screenOf(tester, centre.lat, centre.lon)); // inside the cell, away from Charlie
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(milliseconds: 50));
     expect(h.lc.cellCalls, [cellId]);
     expect(find.byKey(const Key('info-panel-header')), findsOneWidget);
     expect(find.byKey(const Key('cell-sheet')), findsNothing, reason: 'collapsed: the map stays the focus');
@@ -191,6 +204,7 @@ void main() {
     );
     await tester.tapAt(screenOf(tester, centre.lat, centre.lon));
     await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(milliseconds: 50));
     expect(find.text('+6.5 dB'), findsOneWidget);
     expect(find.text('1 repeater heard here (+1 not on the map)'), findsOneWidget);
   }, skip: skip);
@@ -199,6 +213,7 @@ void main() {
     final h = await pump(tester);
     await tester.tapAt(screenOf(tester, centre.lat, centre.lon));
     await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(milliseconds: 50));
     expect(find.byKey(const Key('info-panel-header')), findsOneWidget);
     await tester.tap(find.byKey(const Key('link-clear')));
     await tester.pump();
@@ -212,6 +227,7 @@ void main() {
     await tester.tapAt(screenOf(tester, centre.lat + 0.01, centre.lon));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(milliseconds: 50));
     expect(h.lc.reachCalls, [k('a')]);
     expect(find.byKey(const Key('link-lines')), findsOneWidget);
     expect(find.text('Heard in 2 cells  ·  tap to expand'), findsOneWidget);
@@ -235,6 +251,7 @@ void main() {
     );
     await tester.tapAt(screenOf(tester, centre.lat + 0.01, centre.lon));
     await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(milliseconds: 50));
     expect(find.text('No MeshSonar drive has heard it yet'), findsOneWidget);
     expect(find.byKey(const Key('link-lines')), findsNothing);
     await tester.tap(find.byKey(const Key('info-panel-header')));
@@ -252,6 +269,7 @@ void main() {
     );
     await tester.tapAt(screenOf(tester, centre.lat, centre.lon + 0.02)); // Bravo: the first answer for Alpha is cached
     await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(milliseconds: 50));
     final lines = tester.widget<PolylineLayer>(find.byKey(const Key('link-lines')));
     expect(lines.polylines.map((p) => p.color).toSet(), {const Color(0xFFFF6D00)});
   }, skip: skip);
@@ -260,6 +278,7 @@ void main() {
     final h = await pump(tester, approved: false);
     await tester.tapAt(screenOf(tester, centre.lat, centre.lon));
     await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(milliseconds: 50));
     expect(h.lc.cellCalls, isEmpty);
     expect(find.byKey(const Key('link-lines')), findsNothing);
   }, skip: skip);
@@ -269,6 +288,7 @@ void main() {
     h.lc.onCell = (_) => Future.error(const CmatException('offline'));
     await tester.tapAt(screenOf(tester, centre.lat, centre.lon));
     await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(milliseconds: 50));
     expect(find.textContaining('Couldn\'t load the links'), findsOneWidget);
     expect(find.byKey(const Key('link-lines')), findsNothing);
   }, skip: skip);

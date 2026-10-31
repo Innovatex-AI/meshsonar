@@ -62,7 +62,7 @@ class TimeLineChart extends StatelessWidget {
 
   final String Function(DateTime t) xFormat;
 
-  /// Text in the middle under the axis ("red ticks = heard nothing").
+  /// Text in the middle under the axis ("grey ticks = heard nothing").
   final String? footer;
 
   /// Draw a legend line of series names (multi-series charts).
