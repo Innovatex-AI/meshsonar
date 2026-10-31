@@ -129,12 +129,17 @@ class _ContactDetailScreenState extends State<ContactDetailScreen> {
       appBar: AppBar(
         title: Text(c.displayName, overflow: TextOverflow.ellipsis),
         actions: [
-          IconButton(
-            key: const Key('contact-favourite'),
-            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-            tooltip: c.favourite ? 'Remove favourite' : 'Favourite',
-            icon: Icon(c.favourite ? Icons.star_rounded : Icons.star_outline_rounded, color: c.favourite ? Colors.amber.shade700 : null),
-            onPressed: () => _m.setFavourite(c.publicKey, !c.favourite),
+          Semantics(
+            label: c.favourite ? 'Remove favourite' : 'Favourite',
+            button: true,
+            excludeSemantics: true,
+            child: IconButton(
+              key: const Key('contact-favourite'),
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+              tooltip: c.favourite ? 'Remove favourite' : 'Favourite',
+              icon: Icon(c.favourite ? Icons.star_rounded : Icons.star_outline_rounded, color: c.favourite ? Colors.amber.shade700 : null),
+              onPressed: () => _m.setFavourite(c.publicKey, !c.favourite),
+            ),
           ),
         ],
       ),
@@ -233,14 +238,17 @@ class _ContactDetailScreenState extends State<ContactDetailScreen> {
     final t = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: Gap.l),
-      child: Container(
-        padding: const EdgeInsets.all(Gap.l),
-        decoration: BoxDecoration(color: t.colorScheme.surfaceContainerHigh, borderRadius: BorderRadius.circular(Corners.card)),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Semantics(header: true, child: Text(title, style: t.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700))),
-          const SizedBox(height: Gap.s),
-          ...children,
-        ]),
+      child: Material(
+        color: t.colorScheme.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(Corners.card),
+        child: Padding(
+          padding: const EdgeInsets.all(Gap.l),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Semantics(header: true, child: Text(title, style: t.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700))),
+            const SizedBox(height: Gap.s),
+            ...children,
+          ]),
+        ),
       ),
     );
   }
@@ -353,37 +361,11 @@ class _ContactDetailScreenState extends State<ContactDetailScreen> {
   }
 
   Future<void> _rename(Contact c) async {
-    final ctl = TextEditingController(text: c.customName ?? c.name);
     final hasCustom = c.customName != null && c.customName!.trim().isNotEmpty;
     final res = await showDialog<String?>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Rename contact'),
-        content: TextField(
-          key: const Key('rename-field'),
-          controller: ctl,
-          autofocus: true,
-          maxLength: 31,
-          decoration: InputDecoration(helperText: 'Only changes the name on this phone. They still advertise as ${c.name}.'),
-          onSubmitted: (v) => Navigator.pop(ctx, v),
-        ),
-        actions: [
-          TextButton(style: TextButton.styleFrom(minimumSize: const Size(48, 48)), onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          if (hasCustom)
-            TextButton(
-                key: const Key('rename-reset'),
-                style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
-                onPressed: () => Navigator.pop(ctx, ''),
-                child: const Text('Reset name')),
-          FilledButton(
-              key: const Key('rename-save'),
-              style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
-              onPressed: () => Navigator.pop(ctx, ctl.text),
-              child: const Text('Save')),
-        ],
-      ),
+      builder: (ctx) => _RenameDialog(initial: c.customName ?? c.name, advertisedAs: c.name, hasCustom: hasCustom),
     );
-    ctl.dispose();
     if (res != null) _m.rename(c.publicKey, res);
   }
 
@@ -580,5 +562,55 @@ class _ContactDetailScreenState extends State<ContactDetailScreen> {
     final nav = Navigator.of(context);
     unawaited(_m.remove(c.publicKey));
     if (nav.canPop()) nav.pop();
+  }
+}
+
+
+class _RenameDialog extends StatefulWidget {
+  final String initial;
+  final String advertisedAs;
+  final bool hasCustom;
+  const _RenameDialog({required this.initial, required this.advertisedAs, required this.hasCustom});
+
+  @override
+  State<_RenameDialog> createState() => _RenameDialogState();
+}
+
+class _RenameDialogState extends State<_RenameDialog> {
+  late final TextEditingController _ctl = TextEditingController(text: widget.initial);
+
+  @override
+  void dispose() {
+    _ctl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Rename contact'),
+      content: TextField(
+        key: const Key('rename-field'),
+        controller: _ctl,
+        autofocus: true,
+        maxLength: 31,
+        decoration: InputDecoration(helperText: 'Only changes the name on this phone. They still advertise as ${widget.advertisedAs}.'),
+        onSubmitted: (v) => Navigator.pop(context, v),
+      ),
+      actions: [
+        TextButton(style: TextButton.styleFrom(minimumSize: const Size(48, 48)), onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        if (widget.hasCustom)
+          TextButton(
+              key: const Key('rename-reset'),
+              style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+              onPressed: () => Navigator.pop(context, ''),
+              child: const Text('Reset name')),
+        FilledButton(
+            key: const Key('rename-save'),
+            style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+            onPressed: () => Navigator.pop(context, _ctl.text),
+            child: const Text('Save')),
+      ],
+    );
   }
 }

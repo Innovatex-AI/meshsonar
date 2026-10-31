@@ -2,7 +2,7 @@
 // milliseconds. Agent 2A's conversation screen calls [showMessageDetails] from a message's long-press menu ("Details").
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Route;
 import 'package:flutter/services.dart';
 
 import '../../chat/chat_service.dart';
