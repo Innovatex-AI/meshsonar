@@ -261,7 +261,7 @@ class SimulatedTransport implements ByteTransport {
   int manualAddContacts = 0;
   int autoAddConfig = 0; // NodePrefs.h:38 default: with "ask before adding" on, nothing is added by itself
   int autoAddMaxHops = 0;
-  int _multiAcks = 0, _advertLocPolicy = 0, _telemetryModes = 0;
+  int multiAcks = 0, advertLocPolicy = 0, telemetryModes = 0;
 
   /// Test knob: the link drops after this many CONTACT frames of the next GET_CONTACTS (null = never).
   int? dropAfterContactFrames;
@@ -556,9 +556,9 @@ class SimulatedTransport implements ByteTransport {
           cr: 5,
           name: nodeName,
           manualAdd: manualAddContacts,
-          telemetryModes: _telemetryModes,
-          advertLocPolicy: _advertLocPolicy,
-          multiAcks: _multiAcks,
+          telemetryModes: telemetryModes,
+          advertLocPolicy: advertLocPolicy,
+          multiAcks: multiAcks,
         ));
       case Cmd.deviceQuery:
         if (frame.length >= 2) _appTargetVer = frame[1];
@@ -661,9 +661,9 @@ class SimulatedTransport implements ByteTransport {
       case Cmd.setOtherParams:
         if (frame.length < 2) return _emit(encodeErr(ErrCode.illegalArg));
         manualAddContacts = frame[1];
-        if (frame.length >= 3) _telemetryModes = frame[2];
-        if (frame.length >= 4) _advertLocPolicy = frame[3];
-        if (frame.length >= 5) _multiAcks = frame[4];
+        if (frame.length >= 3) telemetryModes = frame[2];
+        if (frame.length >= 4) advertLocPolicy = frame[3];
+        if (frame.length >= 5) multiAcks = frame[4];
         _emit(encodeOk());
       case Cmd.setAutoAddConfig:
         if (!autoAddSupported) return _emit(encodeErr(ErrCode.unsupportedCmd));

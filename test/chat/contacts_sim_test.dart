@@ -203,10 +203,17 @@ void main() {
     test('changing the policy hands the radio\'s other settings back unchanged (SET_OTHER_PARAMS overwrites all four)', () async {
       final rig = Rig();
       await rig.connect(bindAdapter: false);
+      // another screen (radio setup) changed these after the app started: they must survive our write
+      rig.radio
+        ..telemetryModes = 0x2a
+        ..advertLocPolicy = 2
+        ..multiAcks = 1;
       await rig.session.setContactPolicy((await rig.session.getContactPolicy()).copyWith(askBeforeAdding: true));
       final f = rig.radio.sentFrames.lastWhere((f) => f[0] == Cmd.setOtherParams);
       expect(f.length, 5);
       expect(f[1] & 1, 1);
+      expect([f[2], f[3], f[4]], [0x2a, 2, 1], reason: 'read fresh from the radio, not from the copy taken at start');
+      expect((rig.radio.telemetryModes, rig.radio.advertLocPolicy, rig.radio.multiAcks), (0x2a, 2, 1));
       await rig.close();
     });
   });
