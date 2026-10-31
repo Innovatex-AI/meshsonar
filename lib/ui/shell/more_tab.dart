@@ -8,6 +8,7 @@ import '../app.dart';
 import '../map/legend_sheet.dart' show showMapLegend;
 import '../onboarding/onboarding_screen.dart';
 import '../radio/radio_screen.dart';
+import '../radios/repeaters_screen.dart';
 import '../report_problem_screen.dart' show openReportProblem;
 import '../settings_screen.dart';
 
@@ -46,6 +47,7 @@ class _MoreTabState extends State<MoreTab> {
 
   Widget _screenFor(MoreItem item) => switch (item) {
         MoreItem.radio => const RadioScreen(),
+        MoreItem.repeaters => const RepeatersScreen(),
         MoreItem.myRadios => const SettingsScreen(initialSection: 'my-radios-section'),
         MoreItem.settings => const SettingsScreen(),
         MoreItem.about => const AboutScreen(),
@@ -125,6 +127,9 @@ class MoreList extends StatelessWidget {
                 s.connected ? 'What your radio reports, compared with this region' : 'Not connected. Connect and see its settings'),
             row(MoreItem.myRadios, Icons.verified_user_outlined, 'My radios and claims',
                 'Radios and repeaters you manage'),
+            header('Radios and tools'),
+            row(MoreItem.repeaters, Icons.cell_tower, 'Repeaters and rooms',
+                s.connected ? 'Administer a repeater, read and post in a room' : 'Needs your radio. Free repeater administration'),
             header('App'),
             row(MoreItem.settings, Icons.settings, 'Settings', 'Units, maps, uploads, storage, your driver key'),
             row(MoreItem.legend, Icons.palette_outlined, 'Colour legend', 'What the map colours mean'),

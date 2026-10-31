@@ -16,6 +16,7 @@ import '../layers/repeater_cluster_layer.dart' show networkBandColors, rosterBan
 import '../layers/repeater_map_source.dart';
 import '../map_layers.dart' show formatSnrShort;
 import '../../claims/claim_widgets.dart' show ClaimRepeaterAction;
+import '../../radios/admin_launcher.dart' show AdminRepeaterButton;
 
 /// What the sheet needs from the host besides the point.
 class RepeaterSheetContext {
@@ -177,6 +178,7 @@ class RepeaterSheet extends StatelessWidget {
               ),
             ],
             ClaimRepeaterAction(keyHex: p.key, name: p.name, isRoom: p.isRoom),
+            AdminRepeaterButton(keyHex: p.key, name: p.name, isRoom: p.isRoom),
           ],
         ),
       ),
