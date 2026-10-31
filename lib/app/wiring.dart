@@ -26,6 +26,9 @@ import '../platform/geolocator_location.dart';
 import '../platform/location_access.dart';
 import '../platform/open_url.dart';
 import '../platform/phone_sensors_plus.dart';
+import '../chat/store.dart';
+import '../platform/chat_database.dart' as chat_db;
+import '../platform/secure_storage.dart';
 import '../platform/share.dart';
 import '../radio/ble_transport.dart';
 import '../radio/companion_link.dart';
@@ -57,6 +60,7 @@ Future<Directory> _dataRoot() async {
 
 Future<AppServices> buildRealServices() async {
   final root = await _dataRoot();
+  Future<ChatStore>? chatStore;
 
   final store = await JsonlDriveStore.open(root);
   final settingsStore = FileSettingsStore(File('${root.path}${Platform.pathSeparator}settings.json'));
@@ -120,6 +124,8 @@ Future<AppServices> buildRealServices() async {
     barometer: (Platform.isIOS || Platform.isAndroid) ? SensorsPlusBarometer() : null,
     phoneBattery: (Platform.isIOS || Platform.isAndroid) ? BatteryPlusSource() : null,
     deviceDetails: DeviceInfoPlusDetails(appBuild: app.build),
+    // Chat: Keychain for channel secrets, SQLite file under Application Support; opened on first use.
+    openChatStore: () => chatStore ??= chat_db.openChatStore(KeychainSecretStore()),
     clock: DateTime.now,
     newId: () => uuid.v4(),
   );

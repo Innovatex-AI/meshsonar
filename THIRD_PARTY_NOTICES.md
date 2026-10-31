@@ -35,6 +35,15 @@ lib/radio/ble_transport.dart uses the `flutter_reactive_ble` package (5.4.x, © 
 free for commercial use). It replaced `flutter_blue_plus` (FlutterBluePlus License, paid for for-profit use) in
 0.21.0. No flutter_reactive_ble code is copied into MeshSonar; it is a pub dependency.
 
+## Chat (lib/chat/)
+
+Link and QR formats (`meshcore://channel/add`, `meshcore://contact/add`, legacy advert hex) follow MeshCore `docs/qr_codes.md` and
+MeshCore Open `lib/utils/contact_qr.dart` (both MIT, see above); re-implemented, no code copied. Used in: lib/chat/mesh_links.dart.
+
+### Dependency note: chat packages
+`sqlite3` (MIT, Simon Binder; bundles SQLite, public domain), `flutter_secure_storage` (BSD-3-Clause, Julian Steenbakker),
+`archive` (MIT), `cryptography` (Apache-2.0, Gohilla; pure Dart AES-GCM and PBKDF2). All are pub dependencies; no code is copied.
+
 ### MIT License (applies to each of the above)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated

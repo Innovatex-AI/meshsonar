@@ -284,3 +284,70 @@ Not part of the app, but useful when reading coverage numbers. CMAT's community 
 sums **tx** pings into ~220 m cells (0.002° lat × 0.0025° lon). A cell counts as heard when the ping has
 `echoes.length > 0`. Best SNR and the cell's repeaters use only direct echoes (`hops` 1 or null). Public views trim
 500 m at each end of a drive. The app's drive report uses the same cell grid ([FEATURES.md §Report](FEATURES.md#drive-report)).
+
+## 7. Chat database (on-device only)
+
+Chat is **app only**: nothing in this section is ever uploaded, and chat never touches the driver key, the account or the
+drive store (HANDOFF §71, D5). Code: `lib/chat/` (pure Dart), opened by `lib/platform/chat_database.dart`
+(`<application support>/chat/chat.db`, WAL). Design: `meshsonar-infra/docs/planning/meshsonar-one-app-one-radio-design-2026-10-31.md` §2.
+
+**Storage choice: SQLite through `package:sqlite3` directly (not drift).** Reasons, measured: sqlite3 3.x bundles SQLite 3.54
+with FTS5 through a build hook on iOS, Android, macOS, Linux and Windows (checked: `ENABLE_FTS5` is on in `flutter test`), so
+there is no `sqlite3_flutter_libs` (end-of-life) and no pod. drift would add `drift_dev` + `build_runner` and a generated
+file for no gain here: `ChatService` already emits its own change events and the SQL is small and hand-checked, and FTS5
+virtual tables and triggers are plainer in SQL than in drift's table DSL. The repositories take an open `Database`, so tests
+use `sqlite3.openInMemory()`.
+
+**Secrets are never in SQLite.** A channel row has `secret_ref` (a key in the `SecretStore`) and `hash_byte` (SHA-256(secret)[0],
+the one byte that is on every packet anyway). `lib/platform/secure_storage.dart` is the Keychain/Keystore implementation
+(`kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`, no iCloud sync). A test greps the database file for the secret bytes.
+
+### Tables (schema v1, `lib/chat/db/migrations.dart`)
+
+| Table | Key | What |
+|---|---|---|
+| `contacts` | `(radio_id, pubkey)` | type 1..4, name, custom_name, lat/lon, last_advert_ts, lastmod, out_path + out_path_len (-1 = flood), favourite, blocked, notes, source. The phone is the master copy; the radio's table is a cache |
+| `channels` | `id`, unique `(radio_id, slot)` | slot (null = phone only), name, `kind` public / hashtag / private / system, secret_ref, hash_byte, region_scope, sort_order |
+| `messages` | `seq` (autoincrement), `id` unique, unique `(radio_id, dedupe_key)` | conversation, direction, sender, `ts_sender` (sender clock, s), `ts_local_ms` (orders the conversation), text, snr, path_len, route, state, attempt, expected_ack, ack_ms, repeats_heard, fail_reason, read, txt_type |
+| `conversations` | `conv_key` | denormalised: last message, preview, unread count, notify_mode, muted_until, retention_days, pinned. Updated in the same transaction as every message write; `rebuildAllConversations()` repairs drift |
+| `delivery_attempts` | `id` | one row per send attempt with its expected ack code (an ACK for an earlier attempt still matches) |
+| `outbox` | `message_id` | due time, attempts allowed, busy retries; survives restarts |
+| `drafts` | `conv_key` | one per conversation |
+| `adverts_seen` | `(radio_id, pubkey)` | Discover list: first/last time, count, path_len, snr |
+| `system_stats` | `channel_id` | wardrive channel counters: pings sent, heard from others |
+| `settings` | `key` | `retention_default_days` |
+| `fts_messages` | rowid = `messages.seq` | FTS5 external-content index over text and sender, **trigram** tokenizer with `remove_diacritics 1`; triggers keep it in step |
+
+Conversation keys: `d:<12 hex>` (DM, first 6 bytes of the contact key), `r:<12 hex>` (room server), `c:<channel id>` (channel,
+by the local id so a slot change does not orphan history). Paging is keyset on `(ts_local_ms, seq)`: cost does not grow with depth.
+
+**Dedupe.** MeshCore has no message id. The key is the first 16 bytes of SHA-256 over `conv_key NUL ts_sender NUL text` (for
+channel messages the text includes the `name: ` prefix exactly as delivered). A retried DM (same timestamp and text) and a frame
+replayed after a reconnect both land on the existing row. Two identical texts sent in the same second by the user get
+different timestamps (`send` bumps by one second), because receivers dedupe the same way.
+
+**Message states.** Outgoing: `queued -> sending -> sent -> acked` (DM, on `SEND_CONFIRMED`) or `-> heard` (channel, once a
+repeat of it is heard; `repeats_heard` counts them) or `-> failed` with a `FailReason` (`noAck`, `radioRejected`, `radioBusy`,
+`notConnected`, `expired`, `textTooLong`, `unknownContact`, `unknownChannel`, `cancelled`); `retrying` = a previous attempt got
+no ack and the next one is waiting (radio busy or disconnected). Incoming: `received`.
+
+**Outbox retry policy** (`RetryPolicy`): DMs 3 attempts by flood, 5 with a known path (direct first, the last attempt floods
+and clears the stale path); ack wait = radio's `est_timeout` x 1.25 + 0.8 s + jitter (3 s..90 s); busy back-off 2 s doubling to
+30 s, 8 tries; not connected = recheck every 10 s without using attempts; give up after 6 h; at least 1 s between sends. Channel
+messages are sent once (no ACK exists). A restart requeues anything left in `sending` with its original timestamp.
+
+**The wardrive channel (`kind = system`)** is stored like any channel but is never chat: its inbound traffic is saved read,
+counted in `system_stats`, capped at 500 rows, announced only as `ChatEventKind.systemChanged`, excluded from the conversation
+list, the unread badge, notifications and search. `ChatService.systemChannels()` gives the System section's rows and
+`systemTraffic()` the read-only "View traffic". The user cannot send to it from chat.
+
+**Retention.** Default keep everything (`setDefaultRetentionDays`); per-conversation override; `applyRetention()` deletes older
+messages (never pending sends); `deleteHistory(convKey)`; `wipeAll()` clears everything including Keychain secrets.
+
+**Backup (`ChatBackup`).** JSON `{format: "meshsonar-chat-backup", version: 1, ...}`, optionally zipped (`.zip` with one entry),
+optionally encrypted: PBKDF2-HMAC-SHA256 (600,000 iterations, random 16-byte salt, stored in the header) -> AES-256-GCM
+(random nonce, header bound as AAD). Contains contacts, channel metadata, conversation settings, messages, drafts. **Channel
+secrets are excluded unless `includeSecrets` is set.** Import merges: messages by dedupe key (restoring twice adds nothing),
+channels matched by name + hash, private channels restored without a key are listed as needing one, public/hashtag secrets are
+re-derived, queued messages come back as failed(cancelled) so a restore never resends an old queue. Limits: 256 MB file, 128 MB
+JSON, 1,000,000 messages, 100,000 contacts, 5,000 channels; a bad entry is skipped and counted, never trusted.
