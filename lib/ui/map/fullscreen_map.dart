@@ -100,7 +100,8 @@ class FullscreenMapScreen extends StatelessWidget {
                 top: safe.top + Gap.m,
                 child: ConstrainedBox(
                   constraints: BoxConstraints(
-                    maxHeight: mq.size.height - safe.top - safe.bottom - (landscape ? 2 * Gap.m : panelHeight + 2 * Gap.m),
+                    // Never negative: with the keyboard up over a short window the sum goes below zero and layout throws.
+                    maxHeight: (mq.size.height - safe.top - safe.bottom - (landscape ? 2 * Gap.m : panelHeight + 2 * Gap.m)).clamp(0.0, double.infinity),
                   ),
                   child: SingleChildScrollView(
                     key: model.fullscreenOverlayKeys[0],

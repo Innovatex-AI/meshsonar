@@ -21,6 +21,7 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
   - Radio layer: login, logout, status, remote CLI, contacts, signing and export-contact frames, verified against the
     MeshCore firmware source (docs/PROTOCOL.md 2.5); a wrong repeater password gets no reply at all, so the app says "out of
     range or wrong password".
+- **Fullscreen map**: the Heard box's maximum height can no longer go negative (soft keyboard over a short window threw "non-normalized height constraints" and left a blank sheet).
 
 ## [0.23.3] — 2026-11-01 — repeater lines at the finest cell size
 
