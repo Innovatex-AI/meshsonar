@@ -1926,6 +1926,9 @@ class AppState extends ChangeNotifier {
   @visibleForTesting
   void debugOnPing(DrivePing ping) => _onPing(ping);
 
+  /// Called for every ping this phone transmitted (the chat layer counts them for the System channel row). Not for heard-only pings.
+  void Function(DrivePing ping)? onTxPing;
+
   void _onPing(DrivePing ping) {
     if (!_seenPingIds.add(ping.id)) return;
     // Our own transmission (and so its echoes) is never telemetry.
@@ -1935,6 +1938,7 @@ class AppState extends ChangeNotifier {
     _pingCount++;
     if (ping.kind == PingKind.tx) {
       _txCount++;
+      onTxPing?.call(ping);
       if (!ping.heardNothing) _heardCount++;
     }
     _recent.insert(0, ping);

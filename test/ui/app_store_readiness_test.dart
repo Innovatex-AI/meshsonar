@@ -158,12 +158,18 @@ void main() {
 
     test('no unused permission strings: no peripheral role, only the prompts the app triggers', () {
       expect(plist, isNot(contains('NSBluetoothPeripheralUsageDescription')));
-      for (final k in ['NSBluetoothAlwaysUsageDescription', 'NSLocationWhenInUseUsageDescription', 'NSLocationAlwaysAndWhenInUseUsageDescription', 'NSMotionUsageDescription']) {
+      for (final k in ['NSBluetoothAlwaysUsageDescription', 'NSLocationWhenInUseUsageDescription', 'NSLocationAlwaysAndWhenInUseUsageDescription', 'NSMotionUsageDescription', 'NSCameraUsageDescription']) {
         expect(plist, contains(k));
       }
-      for (final k in ['NSCameraUsageDescription', 'NSMicrophoneUsageDescription', 'NSContactsUsageDescription', 'NSPhotoLibraryUsageDescription', 'NSUserTrackingUsageDescription', 'NSLocalNetworkUsageDescription']) {
+      for (final k in ['NSMicrophoneUsageDescription', 'NSContactsUsageDescription', 'NSPhotoLibraryUsageDescription', 'NSUserTrackingUsageDescription', 'NSLocalNetworkUsageDescription']) {
         expect(plist, isNot(contains(k)), reason: k);
       }
+    });
+
+    test('the camera string says it is used only for Scan QR code and nothing is recorded (channel and contact QR codes)', () {
+      final m = RegExp(r'NSCameraUsageDescription</key>\s*<string>(.*?)</string>', dotAll: true).firstMatch(plist)!.group(1)!;
+      expect(m, contains('Scan QR code'));
+      expect(m, contains('Nothing is recorded'));
     });
 
     test('the Always string says background use is for recording a drive, not "never when not driving" nor region tracking', () {

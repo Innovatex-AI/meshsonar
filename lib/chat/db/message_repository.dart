@@ -269,6 +269,16 @@ WHERE cv.unread > 0
         return n;
       });
 
+  /// Deletes one message (and its outbox entry and attempts). Returns false if it did not exist.
+  bool deleteMessage(String id) => db.transaction(() {
+        final m = get(id);
+        if (m == null) return false;
+        _dropOutboxFor('id = ?', [id]);
+        db.raw.execute('DELETE FROM messages WHERE id = ?', [id]);
+        rebuildConversation(m.convKey);
+        return true;
+      });
+
   /// Deletes the conversation completely: messages, draft and settings.
   int deleteConversation(String convKey) => db.transaction(() {
         final n = deleteHistory(convKey);

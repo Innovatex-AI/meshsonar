@@ -33,6 +33,7 @@ class _ChatTabState extends State<ChatTab> {
             titleSpacing: Gap.l,
             title: const Text('Chat'),
             actions: [
+              if (p != null) ...p.appBarActions(context),
               Padding(
                 padding: const EdgeInsets.only(right: Gap.m),
                 child: ConstrainedBox(

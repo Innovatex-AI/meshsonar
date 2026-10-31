@@ -491,6 +491,15 @@ class ChatService {
     return total;
   }
 
+  /// Removes one message from this phone (it is not recalled from anyone else). A message still waiting to be sent is dropped.
+  bool deleteMessage(String messageId) {
+    final m = store.messages.get(messageId);
+    if (m == null) return false;
+    final ok = store.messages.deleteMessage(messageId);
+    if (ok) _emit(ChatEvent.deleted(m.convKey));
+    return ok;
+  }
+
   int deleteHistory(String convKey) {
     final n = store.messages.deleteHistory(convKey);
     _emit(ChatEvent.deleted(convKey));

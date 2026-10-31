@@ -59,6 +59,8 @@ dependencies:
   flutter_secure_storage: ^11.2.0
   archive: ^4.5.2
   cryptography: ^2.9.0
+  qr: ^3.0.3
+  mobile_scanner: ^7.4.3
 dev_dependencies:
   integration_test:
     sdk: flutter

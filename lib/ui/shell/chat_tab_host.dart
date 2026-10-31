@@ -26,6 +26,9 @@ abstract class ChatTabProvider {
 
   /// True when there are no conversations at all (the host then shows its own first-run empty state).
   bool get isEmpty;
+
+  /// Extra app-bar buttons for the Chat tab (global search).
+  List<Widget> appBarActions(BuildContext context) => const [];
 }
 
 /// Which half of the Chat tab is showing.
@@ -51,6 +54,8 @@ class DebugFixtureChat implements ChatTabProvider {
   int get unreadConversations => 2;
   @override
   bool get isEmpty => false;
+  @override
+  List<Widget> appBarActions(BuildContext context) => const [];
 
   Widget _list(List<(String, String, String)> rows) => ListView(
         children: [

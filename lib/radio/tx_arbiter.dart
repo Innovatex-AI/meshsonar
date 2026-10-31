@@ -199,7 +199,25 @@ class TxArbiter implements PingGate {
         Map.unmodifiable(_skipped), _pings, _users);
   }
 
+  PingSkipReason? _lastSkip;
+  DateTime? _lastSkipAt;
+
+  /// The most recent reason a ping was refused, until a ping goes out again (null if none since). For the System
+  /// channel row: "paused by the airtime budget".
+  PingSkipReason? get lastSkipReason => _lastSkip;
+  DateTime? get lastSkipAt => _lastSkipAt;
+
+  /// True while the airtime budget (not a busy radio) is what is holding pings back: the last decision was a budget or
+  /// cap skip within [within] and no ping has gone out since.
+  bool pausedByBudget({Duration within = const Duration(minutes: 2)}) {
+    final r = _lastSkip, at = _lastSkipAt;
+    if (r == null || at == null) return false;
+    return (r == PingSkipReason.pingBudget || r == PingSkipReason.hourlyCap) && _clock().difference(at) <= within;
+  }
+
   PingDecision _skip(PingSkipReason r, String message) {
+    _lastSkip = r;
+    _lastSkipAt = _clock();
     _skipped[r] = (_skipped[r] ?? 0) + 1;
     return PingDecision.skip(r, message);
   }
@@ -247,6 +265,8 @@ class TxArbiter implements PingGate {
   @override
   void pingSent({int? airtimeMs}) {
     _pings++;
+    _lastSkip = null;
+    _lastSkipAt = null;
     recordTx(TxPriority.ping, airtimeMs?.toDouble() ?? estimatePingMs());
   }
 }
