@@ -370,3 +370,31 @@ round, so a reply queued at that moment is not missed.
 The simulator (`lib/radio/simulator.dart`) is a second, executable reference. It answers every command above with
 firmware-shaped frames and emits real encrypted GRP_TXT floods (1- and 2-hop, any `pathHashSize`), plus background
 Public-channel traffic that must *not* match.
+
+## 9. `meshcore://` links and QR payloads (chat)
+
+Used to share a channel or a contact (a QR code carries exactly the link text). Source: MeshCore `docs/qr_codes.md` and MeshCore
+Open `lib/utils/contact_qr.dart` (both MIT), re-implemented in `lib/chat/mesh_links.dart`; verified against the documented
+examples in `test/chat/links_test.dart`.
+
+| Link | Parameters |
+|---|---|
+| `meshcore://channel/add?name=<name>&secret=<32 hex>[&region_scope=<scope>]` | `secret` is the 16-byte channel key (the Public channel is `8b3387e9c5cdea6ac9e5edbaa115cd72`, base64 `izOH6cXN6mrJ5e26oRXNcg==`); `region_scope` needs MeshCore app 1.47+ |
+| `meshcore://contact/add?name=<name>&public_key=<64 hex>&type=<1..4>` | type 1 companion, 2 repeater, 3 room server, 4 sensor |
+| `meshcore://<hex>` (legacy) | a raw advert packet, 98..171 bytes, imported with `CMD_IMPORT_CONTACT` |
+
+Names are URL-encoded (`+` or `%20` for a space on input; we emit `+`). Input is untrusted (camera, clipboard), so the parser
+never throws and rejects with a reason: more than 2,048 characters; a name that is empty, over 31 UTF-8 bytes, or contains a
+control, bidi-override or zero-width-no-break character; a secret or key that is not exactly 32 / 64 hex characters; an advert
+outside 98..171 bytes. An out-of-range `type` is tolerated as unknown (like MeshCore Open). Hashtag channel secrets are the first 16 bytes of SHA-256
+of the lower-cased name including `#` (§4); importing a link whose secret equals that derivation marks the channel `hashtag`,
+one equal to the Public key marks it `public`, anything else `private`.
+
+## 10. Chat on the radio link (what `lib/chat` expects from the radio layer)
+
+Chat is decoupled from frames by two interfaces in `lib/chat/radio_bridge.dart`; `lib/chat/session_adapter.dart` adapts
+`RadioSession` (lib/radio/session.dart) to them. Inbound texts arrive through `RadioSession.setInboundPersister`, so a message is
+in SQLite before the radio's destructive queue is asked for the next one. `SEND_CONFIRMED` becomes an ACK match on any attempt of
+a waiting DM. A `queued` send result (no answer from the radio in time) is retried with the SAME timestamp, which is safe because
+receivers dedupe on (conversation, timestamp, text). The last DM attempt floods: the adapter writes the contact back with an
+unknown path (`ADD_UPDATE_CONTACT`, out_path_len 0xFF) first. DM frames of text type 1 (CLI data) are not chat and are ignored.
