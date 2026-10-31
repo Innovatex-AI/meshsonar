@@ -4,6 +4,8 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/app/account_delete_hook.dart';
+import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/core/server_url.dart';
 import 'package:meshsonar/radio/simulator.dart';
@@ -20,10 +22,15 @@ void main() {
   setUp(() => tmp = Directory.systemTemp.createTempSync('ms_store_ui_'));
   tearDown(() => tmp.deleteSync(recursive: true));
 
-  Future<DiskHarness> open(WidgetTester tester, {bool key = true}) async {
+  const region = RegionInfo(slug: 'cmh', url: 'https://cmh.meshsonar.com');
+  const canDelete = SiteConfig(region: region, capabilities: {'driverDelete'});
+
+  Future<DiskHarness> open(WidgetTester tester, {bool key = true, SiteConfig? caps, bool autoKey = false}) async {
     useTallScreen(tester);
     final h = DiskHarness(tmp);
     if (key) h.approveKey();
+    h.tele.siteConfigResult = caps;
+    h.settings.autoKeyOn = autoKey;
     await h.pumpDiskApp(tester);
     await openSettingsTab(tester);
     return h;
@@ -85,6 +92,138 @@ void main() {
       expect(h.openedUrls.single.path, '/me/privacy');
     });
 
+    group('in-app account deletion (server advertises driverDelete)', () {
+      Future<DiskHarness> openIn(WidgetTester tester, {bool key = true, bool drives = false}) async {
+        final h = await open(tester, key: key, caps: canDelete, autoKey: key);
+        if (drives) {
+          for (final id in ['d1', 'd2']) {
+            h.store.seed(DriveSession(id: id, startedAt: t0, endedAt: t0.add(const Duration(minutes: 5))),
+                [DrivePing(id: '$id-p1', ts: t0, lat: 40.1, lon: -82.9)]);
+          }
+          await h.state.refreshSessions();
+        }
+        await openScreen(tester);
+        await settleIo(tester, until: () => h.state.serverCanDeleteAccount);
+        return h;
+      }
+
+      Future<void> confirmAccountDelete(WidgetTester tester) async {
+        await tester.tap(find.byKey(const Key('delete-account-dialog-confirm')));
+        await tester.pumpAndSettle();
+        // the key is forgotten, then the caches and (optionally) the drives go: real file IO outside the fake clock
+        await settleIo(tester, until: () => find.byKey(const Key('delete-account-result')).evaluate().isNotEmpty);
+      }
+
+      testWidgets('the button deletes in the app: confirm dialog in destructive words, then the key is gone and not re-created', (tester) async {
+        final h = await openIn(tester);
+        await see(tester, 'delete-account-in-app');
+        expect(find.text(deleteAccountInAppText), findsOneWidget);
+        await see(tester, 'delete-account-website');
+        expect(find.byKey(const Key('delete-account-website')), findsOneWidget, reason: 'only the secondary website link');
+        await see(tester, 'delete-account-in-app');
+        await tester.tap(find.byKey(const Key('delete-account-in-app')));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('delete-account-dialog')), findsOneWidget);
+        expect(find.textContaining('permanently deletes your driver key and all your uploaded drives and shared data'), findsOneWidget);
+        expect(find.textContaining('cannot be undone'), findsWidgets);
+        expect(h.tele.deletedDrivers, isEmpty, reason: 'nothing is sent before the person confirms');
+        await confirmAccountDelete(tester);
+        expect(h.tele.deletedDrivers, ['secretkey-abcdef-1234']);
+        expect(h.state.hasKey, isFalse);
+        expect(h.state.settings.autoKey, isFalse);
+        await see(tester, 'delete-account-result');
+        expect(find.textContaining('The server deleted your driver key'), findsOneWidget);
+        expect(find.textContaining('Create my key'), findsWidgets);
+        expect(find.byKey(const Key('delete-account-in-app')), findsNothing, reason: 'there is no account left to delete');
+        expect(await h.state.ensureKey(), isFalse);
+        expect(h.tele.requestCalls, 0);
+      });
+
+      testWidgets('cancel deletes nothing', (tester) async {
+        final h = await openIn(tester);
+        await see(tester, 'delete-account-in-app');
+        await tester.tap(find.byKey(const Key('delete-account-in-app')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('delete-account-dialog-cancel')));
+        await tester.pumpAndSettle();
+        expect(h.tele.deletedDrivers, isEmpty);
+        expect(h.state.hasKey, isTrue);
+      });
+
+      testWidgets('local drives stay by default', (tester) async {
+        final h = await openIn(tester, drives: true);
+        await see(tester, 'delete-account-in-app');
+        await tester.tap(find.byKey(const Key('delete-account-in-app')));
+        await tester.pumpAndSettle();
+        expect(find.text('Also delete the 2 drives saved on this phone'), findsOneWidget);
+        await confirmAccountDelete(tester);
+        expect(h.state.hasKey, isFalse);
+        expect(h.store.sessionsById.keys, unorderedEquals(['d1', 'd2']));
+      });
+
+      testWidgets('the checkbox deletes the drives on this phone too', (tester) async {
+        final h = await openIn(tester, drives: true);
+        await see(tester, 'delete-account-in-app');
+        await tester.tap(find.byKey(const Key('delete-account-in-app')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('delete-account-local-drives')));
+        await tester.pumpAndSettle();
+        await confirmAccountDelete(tester);
+        expect(h.state.hasKey, isFalse);
+        expect(h.store.sessionsById, isEmpty);
+      });
+
+      testWidgets('offline: a plain message, the key and everything stay, nothing is queued; the retry then works', (tester) async {
+        final h = await openIn(tester);
+        h.tele.driverDeleteError = const CmatException('network error: offline');
+        await see(tester, 'delete-account-in-app');
+        await tester.tap(find.byKey(const Key('delete-account-in-app')));
+        await tester.pumpAndSettle();
+        await confirmAccountDelete(tester);
+        await see(tester, 'delete-account-result');
+        expect(find.text(accountDeleteOfflineText), findsOneWidget);
+        expect(find.text('Not finished'), findsWidgets);
+        expect(h.state.hasKey, isTrue);
+        expect(h.state.settings.autoKey, isTrue);
+        h.tele.driverDeleteError = null;
+        await see(tester, 'delete-account-in-app');
+        await tester.tap(find.byKey(const Key('delete-account-in-app')));
+        await tester.pumpAndSettle();
+        await confirmAccountDelete(tester);
+        expect(h.state.hasKey, isFalse);
+        expect(h.tele.deletedDrivers, hasLength(1));
+      });
+
+      testWidgets('a server error keeps everything and shows it; the button is usable again', (tester) async {
+        final h = await openIn(tester);
+        h.tele.driverDeleteError = const CmatException('database down', status: 503);
+        await see(tester, 'delete-account-in-app');
+        await tester.tap(find.byKey(const Key('delete-account-in-app')));
+        await tester.pumpAndSettle();
+        await confirmAccountDelete(tester);
+        await see(tester, 'delete-account-result');
+        expect(find.textContaining('Nothing was deleted'), findsOneWidget);
+        expect(h.state.hasKey, isTrue);
+        final btn = tester.widget<FilledButton>(find.byKey(const Key('delete-account-in-app')));
+        expect(btn.onPressed, isNotNull);
+      });
+
+      testWidgets('no driver key: says there is no account here and offers no delete button', (tester) async {
+        await openIn(tester, key: false);
+        await see(tester, 'delete-account-nokey');
+        expect(find.byKey(const Key('delete-account-in-app')), findsNothing);
+      });
+    });
+
+    testWidgets('a server without the capability keeps the website hand-off (no in-app delete button)', (tester) async {
+      final h = await open(tester, caps: const SiteConfig(region: region, capabilities: {'driveContextErase'}));
+      await openScreen(tester);
+      await settleIo(tester, until: () => h.state.uploadSiteConfig != null);
+      await see(tester, 'delete-account-website');
+      expect(find.byKey(const Key('delete-account-in-app')), findsNothing);
+      expect(h.state.serverCanDeleteAccount, isFalse);
+    });
+
     testWidgets('delete all drives asks first, then removes every drive on the phone', (tester) async {
       final h = await open(tester);
       for (final id in ['d1', 'd2']) {
@@ -115,6 +254,30 @@ void main() {
       await tester.pumpAndSettle();
       expect(h.state.hasKey, isFalse);
       expect(find.byKey(const Key('delete-remove-key')), findsNothing);
+    });
+
+    testWidgets('large text and small windows: the in-app delete section lays out without overflow', (tester) async {
+      final h = await open(tester, caps: canDelete);
+      await openScreen(tester);
+      await settleIo(tester, until: () => h.state.serverCanDeleteAccount);
+      tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      addTearDown(tester.view.reset);
+      for (final size in const [Size(1024, 1366), Size(375, 667)]) {
+        tester.view.devicePixelRatio = 2;
+        tester.view.physicalSize = size * 2;
+        await tester.pumpAndSettle();
+        await see(tester, 'delete-account-in-app');
+        expect(tester.takeException(), isNull, reason: '$size');
+        await tester.ensureVisible(find.byKey(const Key('delete-account-in-app')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('delete-account-in-app')));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('delete-account-dialog')), findsOneWidget);
+        expect(tester.takeException(), isNull, reason: 'dialog at $size');
+        await tester.tap(find.byKey(const Key('delete-account-dialog-cancel')));
+        await tester.pumpAndSettle();
+      }
     });
 
     testWidgets('large text, portrait and landscape iPad windows: the screen lays out without overflow', (tester) async {

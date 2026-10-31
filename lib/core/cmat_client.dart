@@ -262,6 +262,16 @@ class HttpCmatClient implements CmatClient, TelemetryTransport {
   }
 
   @override
+  Future<DriverDeleteResult> deleteDriver(String driverKey) async {
+    final j = await _send('DELETE', 'driver-delete', driverKey: driverKey);
+    final d = j['deleted'];
+    if (d is! Map) throw const CmatException('server sent an unreadable answer', status: 200);
+    int n(Object? v) => v is num ? v.toInt() : 0;
+    return DriverDeleteResult(
+        sessions: n(d['sessions']), pings: n(d['pings']), samples: n(d['samples']), telemetry: n(d['telemetry']), weather: n(d['weather']), reports: n(d['reports']));
+  }
+
+  @override
   Future<DriveEnv> driveEnv(String driverKey, String sessionId) async {
     final j = await _send('GET', 'drive-env', driverKey: driverKey, query: {'session': sessionId});
     final status = switch (j['status']) {

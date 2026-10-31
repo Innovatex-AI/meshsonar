@@ -299,6 +299,22 @@ class FakeCmatClient implements CmatClient {
     return ContextEraseResult(category: category, sessions: eraseCounts.sessions, pings: eraseCounts.pings, samples: eraseCounts.samples);
   }
 
+  /// `DELETE driver-delete`: the keys asked to delete, what the server answers, or the error thrown. A second call
+  /// with the same key answers 401 like the real server (the key is gone).
+  final List<String> deletedDrivers = [];
+  DriverDeleteResult driverDeleteCounts = const DriverDeleteResult(sessions: 3, pings: 120, samples: 340, telemetry: 12, weather: 2, reports: 1);
+  Object? driverDeleteError;
+  Completer<void>? driverDeleteGate;
+
+  @override
+  Future<DriverDeleteResult> deleteDriver(String driverKey) async {
+    if (driverDeleteGate != null) await driverDeleteGate!.future;
+    if (driverDeleteError != null) throw driverDeleteError!;
+    if (deletedDrivers.contains(driverKey)) throw const CmatException('x-driver-key required', status: 401);
+    deletedDrivers.add(driverKey);
+    return driverDeleteCounts;
+  }
+
   /// `POST drive-context`: nothing is stored, the batches are kept for assertions.
   final List<DriveContextBatch> lateBatches = [];
 
