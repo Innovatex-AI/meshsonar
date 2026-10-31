@@ -1,6 +1,8 @@
 // Screenshots of the repeater admin and room screens on a simulator, driven by the fake repeater (measured behaviours).
 // Not part of the release: run with `flutter test integration_test/repeater_admin_shots.dart -d <simulator udid>` and grab a
 // screenshot at every "SCREEN <name>" line (the script in HANDOFF does this).
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -33,9 +35,7 @@ void main() {
       await pumpFor(t, const Duration(milliseconds: 500));
       final d = dark ? 'dark' : 'light';
       await shot(t, 'admin-login-$d');
-      await t.enterText(find.byKey(const Key('admin-password')), 'secret');
-      await t.pump();
-      await t.tap(find.byKey(const Key('admin-login-go')));
+      unawaited(rig.controller.login('secret'));
       await waitFor(t, find.byKey(const Key('card-status')));
       await pumpFor(t, const Duration(seconds: 1));
       await shot(t, 'admin-overview-$d');
