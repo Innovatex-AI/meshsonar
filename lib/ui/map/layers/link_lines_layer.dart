@@ -5,15 +5,15 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../../core/map_links.dart';
-import '../../theme.dart';
+import '../map_info_panel.dart' show linkLineColor;
 
 /// The map layers for [set]: lines, a ring on the start, and SNR labels. Empty when there is nothing to draw.
 List<Widget> linkLineLayers(BuildContext context, LinkSet set, {required bool labels}) {
   if (set.ends.isEmpty) return const [];
-  final mc = MeshSonarColors.of(context);
   final t = Theme.of(context);
   final from = LatLng(set.lat, set.lon);
-  Color colorOf(LinkEnd e) => e.snr == null ? mc.silent : mc.forPing(heard: true, snr: e.snr);
+  const lineColor = linkLineColor;
+  Color colorOf(LinkEnd e) => lineColor;
   // Weakest first so the strongest lines end up on top.
   final order = [...set.ends]..sort((a, b) => (a.snr ?? -99).compareTo(b.snr ?? -99));
   final labelled = <LinkEnd>[];
@@ -31,16 +31,16 @@ List<Widget> linkLineLayers(BuildContext context, LinkSet set, {required bool la
         for (final e in order)
           Polyline(
             points: [from, LatLng(e.lat, e.lon)],
-            strokeWidth: 2.4,
-            color: colorOf(e).withValues(alpha: 0.9),
-            borderStrokeWidth: 1,
-            borderColor: Colors.black.withValues(alpha: 0.35),
+            strokeWidth: 3,
+            color: lineColor,
+            borderStrokeWidth: 1.5,
+            borderColor: Colors.black.withValues(alpha: 0.55),
           ),
       ],
     ),
     CircleLayer(
       circles: [
-        CircleMarker(point: from, radius: 9, color: Colors.transparent, borderColor: mc.beacon, borderStrokeWidth: 3),
+        CircleMarker(point: from, radius: 9, color: Colors.transparent, borderColor: lineColor, borderStrokeWidth: 4),
         for (final e in set.ends)
           CircleMarker(
             point: LatLng(e.lat, e.lon),

@@ -167,11 +167,17 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     expect(h.lc.cellCalls, [cellId]);
-    expect(find.byKey(const Key('cell-sheet')), findsOneWidget);
+    expect(find.byKey(const Key('info-panel-header')), findsOneWidget);
+    expect(find.byKey(const Key('cell-sheet')), findsNothing, reason: 'collapsed: the map stays the focus');
     expect(find.byKey(const Key('link-lines')), findsOneWidget);
     expect(find.text('+6.5 dB'), findsOneWidget);
     expect(find.text('-3.0 dB'), findsOneWidget);
     expect(find.text('2 repeaters heard here (+1 not on the map)'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('info-panel-header')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('cell-sheet')), findsOneWidget);
+    expect(find.byKey(const Key('cell-repeater-list')), findsOneWidget);
+    expect(find.text('Alpha Tower'), findsOneWidget);
   }, skip: skip);
 
   testWidgets('a short stored id (key prefix) is placed when exactly one repeater starts with it', (tester) async {
@@ -193,12 +199,10 @@ void main() {
     final h = await pump(tester);
     await tester.tapAt(screenOf(tester, centre.lat, centre.lon));
     await tester.pump(const Duration(milliseconds: 400));
-    await tester.tapAt(const Offset(10, 10)); // close the sheet's barrier
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('link-chip')), findsOneWidget);
+    expect(find.byKey(const Key('info-panel-header')), findsOneWidget);
     await tester.tap(find.byKey(const Key('link-clear')));
     await tester.pump();
-    expect(find.byKey(const Key('link-chip')), findsNothing);
+    expect(find.byKey(const Key('info-panel-header')), findsNothing);
     expect(find.byKey(const Key('link-lines')), findsNothing);
     expect(h.lc.cellCalls, hasLength(1));
   }, skip: skip);
@@ -210,9 +214,46 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     expect(h.lc.reachCalls, [k('a')]);
     expect(find.byKey(const Key('link-lines')), findsOneWidget);
-    expect(find.text('Alpha Tower heard in 2 cells'), findsOneWidget);
+    expect(find.text('Heard in 2 cells  ·  tap to expand'), findsOneWidget);
     expect(find.text('+2.5 dB'), findsOneWidget);
     expect(find.text('-6.0 dB'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('info-panel-header')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('reach-stats')), findsOneWidget);
+    expect(find.text('Pings heard'), findsOneWidget);
+    expect(find.byKey(const Key('repeater-sheet')), findsOneWidget);
+  }, skip: skip);
+
+  testWidgets('a repeater no drive has heard says so in the panel, and the lines are orange', (tester) async {
+    final h = await pump(tester);
+    h.lc.onReach = (key) async => RepeaterReach(
+      key: key,
+      cellDeg: 0.0025,
+      cells: const [],
+      totals: const ReachTotals(heardPings: 0, drives: 0, drivers: 0),
+      snrByDistance: const [],
+    );
+    await tester.tapAt(screenOf(tester, centre.lat + 0.01, centre.lon));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('No MeshSonar drive has heard it yet'), findsOneWidget);
+    expect(find.byKey(const Key('link-lines')), findsNothing);
+    await tester.tap(find.byKey(const Key('info-panel-header')));
+    await tester.pumpAndSettle();
+    expect(find.text('No MeshSonar drive has heard this repeater yet.'), findsOneWidget);
+    // a repeater with data: every line is the one orange, whatever its SNR
+    await tester.tap(find.byKey(const Key('link-clear')));
+    await tester.pump();
+    h.lc.onReach = (key) async => RepeaterReach(
+      key: key,
+      cellDeg: 0.0025,
+      cells: [ReachCell(lat: centre.lat, lon: centre.lon, pings: 5, bestSnr: 2.5), ReachCell(lat: centre.lat + 0.03, lon: centre.lon, pings: 2, bestSnr: -6)],
+      totals: const ReachTotals(heardPings: 7, drives: 1, drivers: 1),
+      snrByDistance: const [],
+    );
+    await tester.tapAt(screenOf(tester, centre.lat, centre.lon + 0.02)); // Bravo: the first answer for Alpha is cached
+    await tester.pump(const Duration(milliseconds: 400));
+    final lines = tester.widget<PolylineLayer>(find.byKey(const Key('link-lines')));
+    expect(lines.polylines.map((p) => p.color).toSet(), {const Color(0xFFFF6D00)});
   }, skip: skip);
 
   testWidgets('no approved key: nothing is asked and no chip shows', (tester) async {
@@ -220,7 +261,7 @@ void main() {
     await tester.tapAt(screenOf(tester, centre.lat, centre.lon));
     await tester.pump(const Duration(milliseconds: 400));
     expect(h.lc.cellCalls, isEmpty);
-    expect(find.byKey(const Key('link-chip')), findsNothing);
+    expect(find.byKey(const Key('link-lines')), findsNothing);
   }, skip: skip);
 
   testWidgets('a failed ask says so instead of drawing nothing silently', (tester) async {

@@ -59,8 +59,10 @@ void main() {
     // The map is centred on 40, -83 (the 'aa' repeater): tap the middle of the 400 x 400 map.
     await t.tapAt(const Offset(200, 200));
     await t.pumpAndSettle();
+    await t.tap(find.byKey(const Key('info-panel-header'))); // the panel opens collapsed
+    await t.pumpAndSettle();
     expect(find.byKey(const Key('repeater-sheet')), findsOneWidget);
-    expect(find.text('Raa'), findsOneWidget);
+    expect(find.text('Raa'), findsWidgets);
     expect(find.text('AA'), findsOneWidget, reason: 'hash prefix, as the old tooltip showed');
     expect(find.byKey(const Key('repeater-sheet-status')), findsOneWidget);
     expect(find.byKey(const Key('repeater-sheet-open')), findsNothing, reason: 'no host link given');
