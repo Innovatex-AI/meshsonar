@@ -45,6 +45,7 @@ import '../core/units.dart';
 import 'build_flags.dart';
 import '../platform/app_lifecycle_bridge.dart';
 import '../radio/radio_api.dart';
+import 'account_delete_hook.dart';
 import 'context_upload_hook.dart';
 import 'drive_context_hook.dart';
 import 'messages.dart';
@@ -1144,6 +1145,10 @@ class AppState extends ChangeNotifier {
   /// "no": the erase is tried and an old server's 404 says so.
   bool get serverCanEraseContext => uploadSiteConfig?.driveContextErase == true;
 
+  /// The upload server can delete a driver key with all its data (`DELETE driver-delete`). Unknown (site-config never
+  /// answered) counts as no: the website hand-off is offered until the capability is seen.
+  bool get serverCanDeleteAccount => uploadSiteConfig?.driverDelete == true;
+
   /// The server looks up weather for uploaded drives (`capabilities.driveEnv`).
   bool get serverDoesWeather => (uploadSiteConfig ?? _siteConfig)?.driveEnv == true;
 
@@ -1277,6 +1282,45 @@ class AppState extends ChangeNotifier {
     final ctx = await eraseServerContext('all');
     final headers = hasKey ? await eraseTelemetry() : null;
     return (context: ctx, headers: headers);
+  }
+
+  /// "Delete my account" (App Store 5.1.1(v)): `DELETE driver-delete` removes the driver key and everything uploaded with
+  /// it from the server. Only after the server confirmed (or said it no longer knows the key) does this phone forget the
+  /// key, turn [Settings.autoKey] off (so a new anonymous key is not created at once; Settings offers "Create my key"),
+  /// and drop what belonged to the old key: the cached account summary, weather cache, queued packet headers and any
+  /// remembered erase request. Any failure changes nothing and queues nothing. Drives on this phone stay unless
+  /// [alsoDeleteLocalDrives] (never the one being recorded).
+  Future<AccountDeleteOutcome> deleteAccountOnServer({bool alsoDeleteLocalDrives = false}) async {
+    final key = _settings.driverKey;
+    if (key == null || key.isEmpty) return AccountDeleteOutcome.noKey;
+    final AccountDeleteOutcome o;
+    try {
+      o = AccountDeleteOutcome.fromResult(await client.deleteDriver(key));
+    } catch (e) {
+      final failed = AccountDeleteOutcome.fromError(e);
+      if (!failed.removed) {
+        _logError('Deleting the account on the server failed', e);
+        return failed;
+      }
+      await _forgetDeletedAccount(alsoDeleteLocalDrives);
+      return failed;
+    }
+    await _forgetDeletedAccount(alsoDeleteLocalDrives);
+    return o;
+  }
+
+  Future<void> _forgetDeletedAccount(bool alsoDeleteLocalDrives) async {
+    await updateSettings(_settings.copyWith(clearKey: true, autoKey: false, contextErasePending: const <String>{}));
+    await clearDriverSummaryCache();
+    await clearDriveWeatherCache();
+    await _tele.forgetServerAccount();
+    diagnostics.add('Driver key and its server data deleted at the person\'s request');
+    if (alsoDeleteLocalDrives) {
+      final recording = currentSession?.id;
+      for (final x in List.of(sessions)) {
+        if (x.session.id != recording) await deleteSession(x.session.id, quiet: true);
+      }
+    }
   }
 
   /// Deletes the recorded drive context of every category from every drive on this phone. Returns the drives changed.

@@ -660,6 +660,15 @@ meshsonar-infra planning `stream-7-data-collection.md`.
   `category=all`, and the packet headers), with the server's counts; the hourly limit (429: "try again in an
   hour"), an unknown key, no key, no connection and an older server (button disabled, with the reason) are all said in
   words. A separate action, never the default, deletes the context saved on this phone. The drives stay.
+- **Delete my account** (same screen; App Store 5.1.1(v)): when the upload server advertises `capabilities.driverDelete`,
+  the button calls `DELETE driver-delete` with the driver key after a destructive confirm ("permanently deletes your
+  driver key and all your uploaded drives and shared data from the MeshSonar server"). Only after the server confirms
+  (or answers 401, the key is already gone) does the phone forget the key, switch the automatic key off (Settings >
+  Account & driver key then offers **Create my key**), and drop the key's cached summary, weather cache, queued packet
+  headers and remembered erase requests. The drives saved on the phone stay unless the confirm's checkbox "Also delete
+  the N drives saved on this phone" is ticked. No connection, 429 or any server error: nothing changes, nothing is queued,
+  the message says so and the button works again. A server without the capability keeps the website hand-off
+  (`/me/privacy`).
 - **Weather** (the switch plus the drive report block below): the Weather switch is the `session.enrich.weather` flag of a v1.2 upload (live in the switch's status when the upload server says `driveEnv` and accepts v1.2); the server looks up Open-Meteo for an uploaded drive
   (about a 5 km cell, UTC hour) and the app shows its answer; the phone contacts no weather service and shows no
   coordinate.

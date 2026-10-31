@@ -10,6 +10,18 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
   gone from the App Store / TestFlight app (checked by `scripts/verify_release_no_sim.sh`). Debug builds and tests keep
   it. Onboarding and the Drive hint no longer mention it. App Review notes now rely on a demo video (docs/APP_STORE.md).
 
+- **Delete my account works inside the app** (App Store guideline 5.1.1(v)): since the app makes an anonymous driver
+  key on first launch, Settings > Privacy & data sharing > Delete my data and account > **Delete my account** now calls
+  the server's new `DELETE /api/cmh/driver-delete` (when `site-config.capabilities.driverDelete` is true) after a
+  destructive confirm that says it removes the key, all uploaded drives and the shared data from the server. On success
+  the phone forgets the key, turns the automatic key off (a new anonymous key is made only when the person taps
+  **Create my key**), clears the account summary cache, weather cache, queued packet headers and remembered erase
+  requests, and keeps the drives saved on the phone unless "Also delete the N drives saved on this phone" is ticked.
+  Offline, rate limited or any server error: nothing changes, nothing is queued, a plain message says so and the person
+  can retry. A server without the capability keeps the website hand-off. Needs the website change (meshcore-insights
+  migration 0093) deployed first. Tests: `test/app/account_delete_test.dart`, `test/ui/app_store_readiness_test.dart`,
+  `test/core/cmat_client_wave2_test.dart`, `test/core/telemetry_uploader_test.dart`.
+
 ## [0.21.0] — 2026-10-30 — production readiness (TestFlight candidate)
 
 - **Bluetooth now runs on `flutter_reactive_ble` (BSD-3-Clause)**, replacing `flutter_blue_plus`, whose licence needs a

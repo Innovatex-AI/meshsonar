@@ -236,6 +236,16 @@ class TelemetryUploader {
     unawaited(_save());
   }
 
+  /// The driver key and its server data were deleted (account deletion): nothing is left to send or to erase, so the
+  /// queue and the remembered erase request go too (the request could never succeed without the key).
+  Future<void> forgetServerAccount() async {
+    _queue.clear();
+    _seen.clear();
+    _pendingErase = false;
+    _dirty = true;
+    await _save();
+  }
+
   /// Asks the server to erase everything this driver sent. Remembered across restarts until it succeeds. Returns the
   /// server's count, or null if it could not be done yet (it will be retried by [flush]).
   Future<int?> eraseServerData() async {

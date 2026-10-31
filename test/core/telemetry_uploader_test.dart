@@ -337,6 +337,27 @@ void main() {
     expect(qf!.existsSync(), isFalse);
   });
 
+  test('account deleted: the queue and a remembered erase are dropped (the erase could never succeed without the key)', () async {
+    final u = make();
+    u.add(rec());
+    tx.deleteResult = const TelemetryHttpResult(500);
+    expect(await u.eraseServerData(), isNull);
+    expect(u.pendingErase, isTrue);
+    expect(u.queued, 1);
+    await u.forgetServerAccount();
+    expect(u.pendingErase, isFalse);
+    expect(u.queued, 0);
+    // a restart finds nothing to send or erase
+    final u2 = make();
+    await u2.load();
+    expect(u2.pendingErase, isFalse);
+    expect(u2.queued, 0);
+    key = null;
+    await u2.flush();
+    expect(tx.posts, isEmpty);
+    expect(tx.deletes, hasLength(1), reason: 'only the first, failed attempt');
+  });
+
   test('body builder omits invalid app/region claims', () {
     final j = jsonDecode(buildTelemetryBody([rec()], region: 'cmh', appVersion: 'bad version!', platform: 'macOS')) as Map;
     expect(j.containsKey('region'), isFalse);

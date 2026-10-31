@@ -207,6 +207,10 @@ class SiteConfig {
   /// `DELETE /api/cmh/drive-context` exists (`capabilities.driveContextErase`).
   bool get driveContextErase => capabilities.contains('driveContextErase');
 
+  /// `DELETE /api/cmh/driver-delete` exists (`capabilities.driverDelete`): the app can delete the driver key and all
+  /// its server data itself (App Store guideline 5.1.1(v)). Absent = send the person to the website instead.
+  bool get driverDelete => capabilities.contains('driverDelete');
+
   /// The server accepts Drive Format v1.2 (drive context: sensors, radio health, device).
   bool get acceptsDriveV12 => driveFormats.contains(driveFormatV12);
 
@@ -337,6 +341,10 @@ abstract class CmatClient {
   /// drive-context category (or `all`) for every drive of this driver. Idempotent. Throws [CmatException].
   Future<ContextEraseResult> deleteDriveContext(String driverKey, String category);
 
+  /// `DELETE /api/cmh/driver-delete` (`capabilities.driverDelete`): permanently deletes this driver key and everything
+  /// uploaded with it. A second call answers 401 (the key is gone). Throws [CmatException].
+  Future<DriverDeleteResult> deleteDriver(String driverKey);
+
   /// `GET /api/cmh/drive-env?session=<uuid>` (`capabilities.driveEnv`): server-side weather for the driver's own
   /// drive. Throws [CmatException] (404 = the server does not know that drive).
   Future<DriveEnv> driveEnv(String driverKey, String sessionId);
@@ -364,6 +372,17 @@ class ContextEraseResult {
   final int pings;
   final int samples;
   const ContextEraseResult({required this.category, this.sessions = 0, this.pings = 0, this.samples = 0});
+}
+
+/// What `DELETE driver-delete` removed on the server (exact counts).
+class DriverDeleteResult {
+  final int sessions;
+  final int pings;
+  final int samples;
+  final int telemetry;
+  final int weather;
+  final int reports;
+  const DriverDeleteResult({this.sessions = 0, this.pings = 0, this.samples = 0, this.telemetry = 0, this.weather = 0, this.reports = 0});
 }
 
 enum DriveEnvStatus { ready, pending, disabled, unavailable }
