@@ -214,7 +214,7 @@ void main() {
       expect(sw(t, 'layer-network').value, isTrue);
       expect(statusText(t, 'network'), '3 repeaters in and around Columbus, US · 4 hidden by their owners · Data: MeshCore Map (map.meshcore.io)');
       expect(find.byKey(const Key('network-legend')), findsOneWidget);
-      expect(find.textContaining('MeshCore Map data as of '), findsOneWidget);
+      expect(find.textContaining(', as of '), findsOneWidget, reason: 'one credit line: source and age together');
       for (final l in ['24 h', '7 d', '30 d', 'Older']) {
         expect(find.descendant(of: find.byKey(const Key('network-legend')), matching: find.text(l)), findsOneWidget);
       }
