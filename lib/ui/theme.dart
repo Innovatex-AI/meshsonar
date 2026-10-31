@@ -10,6 +10,9 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 
+import '../core/colour_palette.dart';
+import '../core/network_coverage.dart' show CoverageLevel;
+
 /// Spacing scale (logical px). Use these instead of ad-hoc numbers.
 abstract final class Gap {
   static const double xs = 4;
@@ -36,7 +39,6 @@ class _Palette {
   final Color accent, onAccent, accentContainer, onAccentContainer;
   final Color danger, onDanger, dangerContainer, onDangerContainer;
   final Color beacon, onBeacon;
-  final Color snrWeak, snrMid, snrStrong, silent, heardUnknown;
   final Color mapBg, mapGrid;
   final List<double> tileMatrix;
   const _Palette({
@@ -58,11 +60,6 @@ class _Palette {
     required this.onDangerContainer,
     required this.beacon,
     required this.onBeacon,
-    required this.snrWeak,
-    required this.snrMid,
-    required this.snrStrong,
-    required this.silent,
-    required this.heardUnknown,
     required this.mapBg,
     required this.mapGrid,
     required this.tileMatrix,
@@ -103,11 +100,6 @@ const _dark = _Palette(
   onDangerContainer: Color(0xFFFFDAD3),
   beacon: Color(0xFFFFB547),
   onBeacon: Color(0xFF2A1700),
-  snrWeak: Color(0xFF3B8FD6),
-  snrMid: Color(0xFF3EE0CF),
-  snrStrong: Color(0xFF8CF58A),
-  silent: Color(0xFF8D99A6), // mapped, nothing heard: grey, never a coverage colour
-  heardUnknown: Color(0xFFB59AE0), // heard, signal strength unknown: its own colour, never green
   mapBg: Color(0xFF0D1B26),
   mapGrid: Color(0xFF3EE0CF),
   tileMatrix: _darkTiles,
@@ -132,31 +124,152 @@ const _light = _Palette(
   onDangerContainer: Color(0xFF410001),
   beacon: Color(0xFFB86E00),
   onBeacon: Color(0xFFFFFFFF),
-  snrWeak: Color(0xFF2468B8),
-  snrMid: Color(0xFF00897B),
-  snrStrong: Color(0xFF2E9E3A),
-  silent: Color(0xFF8795A1),
-  heardUnknown: Color(0xFF8A63C9),
   mapBg: Color(0xFFE9EFF1),
   mapGrid: Color(0xFF00796E),
   tileMatrix: _lightTiles,
 );
 
-/// Colours beyond the Material scheme: signal quality, repeaters, and the map.
+// ------------------------------------------------------- strength palettes
+// The colours that mean "how strong was the signal", per ColourPalette and brightness. Hex values are copied to the
+// website from docs/FEATURES.md ("Colour palettes") and meshsonar-infra/docs/planning/colour-palettes-2026-10-31.md;
+// test/ui/palette_test.dart pins them and checks colour-blind separation. Grey (silent) and purple (heardUnknown) are
+// part of each set so they stay distinguishable from the steps.
+class _Strength {
+  /// Network coverage steps (CoverageLevel.strong/good/fair/weak).
+  final Color strong, good, fair, weak;
+
+  /// Your pings' SNR gradient: equally spaced stops from -10 dB to +10 dB.
+  final List<Color> stops;
+  final Color silent, heardUnknown;
+
+  /// Link lines and their casing; [linkDashed] false = solid.
+  final Color link, linkCasing;
+  final bool linkDashed;
+  const _Strength({
+    required this.strong,
+    required this.good,
+    required this.fair,
+    required this.weak,
+    required this.stops,
+    required this.silent,
+    required this.heardUnknown,
+    required this.link,
+    required this.linkCasing,
+    required this.linkDashed,
+  });
+}
+
+const _linkOrange = Color(0xFFFF6D00);
+
+const _standardDark = _Strength(
+  strong: Color(0xFF79BE69),
+  good: Color(0xFF6AAEE0),
+  fair: Color(0xFFE2B04A),
+  weak: Color(0xFFF07B6B),
+  stops: [Color(0xFF3B8FD6), Color(0xFF3EE0CF), Color(0xFF8CF58A)],
+  silent: Color(0xFF8D99A6),
+  heardUnknown: Color(0xFFB59AE0),
+  link: _linkOrange,
+  linkCasing: Color(0x8C000000),
+  linkDashed: false,
+);
+const _standardLight = _Strength(
+  strong: Color(0xFF2F7A3B),
+  good: Color(0xFF2A6B9C),
+  fair: Color(0xFFB07D16),
+  weak: Color(0xFFB23B2E),
+  stops: [Color(0xFF2468B8), Color(0xFF00897B), Color(0xFF2E9E3A)],
+  silent: Color(0xFF8795A1),
+  heardUnknown: Color(0xFF8A63C9),
+  link: _linkOrange,
+  linkCasing: Color(0x8C000000),
+  linkDashed: false,
+);
+const _colourBlindDark = _Strength(
+  strong: Color(0xFF2B8CE0),
+  good: Color(0xFF8EDBFF),
+  fair: Color(0xFFEDDD55),
+  weak: Color(0xFFD25637),
+  stops: [Color(0xFFD25637), Color(0xFFEDDD55), Color(0xFF8EDBFF), Color(0xFF2B8CE0)],
+  silent: Color(0xFF8D99A6),
+  heardUnknown: Color(0xFFB356A4),
+  link: Color(0xFFF4F7F9),
+  linkCasing: Color(0xD90D1B26),
+  linkDashed: true,
+);
+const _colourBlindLight = _Strength(
+  strong: Color(0xFF0A4FA0),
+  good: Color(0xFF1E88C8),
+  fair: Color(0xFF9C7F06),
+  weak: Color(0xFF762608),
+  stops: [Color(0xFF762608), Color(0xFF9C7F06), Color(0xFF004E66), Color(0xFF0A4FA0)],
+  silent: Color(0xFF8795A1),
+  heardUnknown: Color(0xFF8E5A8A),
+  link: Color(0xFF0C1E28),
+  linkCasing: Color(0xD9FFFFFF),
+  linkDashed: true,
+);
+const _highContrastDark = _Strength(
+  strong: Color(0xFF86CAFE),
+  good: Color(0xFFBDE8F2),
+  fair: Color(0xFFFEE405),
+  weak: Color(0xFFFE831A),
+  stops: [Color(0xFFFE831A), Color(0xFFFEE405), Color(0xFFBDE8F2), Color(0xFF86CAFE)],
+  silent: Color(0xFFA3AEBA),
+  heardUnknown: Color(0xFFD68BD0),
+  link: Color(0xFFF4F7F9),
+  linkCasing: Color(0xD90D1B26),
+  linkDashed: true,
+);
+const _highContrastLight = _Strength(
+  strong: Color(0xFF001365),
+  good: Color(0xFF0A58C4),
+  fair: Color(0xFF8B640C),
+  weak: Color(0xFF7F2606),
+  stops: [Color(0xFF7F2606), Color(0xFF8B640C), Color(0xFF004E66), Color(0xFF001365)],
+  silent: Color(0xFF5F6C78),
+  heardUnknown: Color(0xFF6E5C91),
+  link: Color(0xFF0C1E28),
+  linkCasing: Color(0xD9FFFFFF),
+  linkDashed: true,
+);
+
+_Strength _strengthFor(ColourPalette p, Brightness b) {
+  final dark = b == Brightness.dark;
+  return switch (p) {
+    ColourPalette.standard => dark ? _standardDark : _standardLight,
+    ColourPalette.colourBlind => dark ? _colourBlindDark : _colourBlindLight,
+    ColourPalette.highContrast => dark ? _highContrastDark : _highContrastLight,
+  };
+}
+
+/// Colours beyond the Material scheme: signal quality, repeaters, and the map. The strength colours follow the chosen
+/// [ColourPalette] (Settings > Units & display > Colour palette); call sites read them from here and never hardcode a hex.
 @immutable
 class MeshSonarColors extends ThemeExtension<MeshSonarColors> {
+  /// Which palette these strength colours belong to.
+  final ColourPalette palette;
+
   /// Repeaters ("beacons") everywhere in the app.
   final Color beacon;
   final Color onBeacon;
 
-  /// SNR scale for pings that were heard: weak (≤ -10 dB) → mid (0 dB) → strong (≥ +10 dB).
-  final Color snrWeak, snrMid, snrStrong;
+  /// Your pings' SNR scale for pings that were heard: equally spaced stops from -10 dB (first) to +10 dB (last).
+  final List<Color> snrStops;
+
+  /// Network coverage steps (CoverageLevel.strong/good/fair/weak): SNR >= +5, 0 to +5, -5 to 0, below -5 dB.
+  final Color levelStrong, levelGood, levelFair, levelWeak;
 
   /// A ping that heard nothing: grey (mapped, no signal).
   final Color silent;
 
   /// A ping that was heard but whose signal strength is unknown.
   final Color heardUnknown;
+
+  /// Link lines (a tapped repeater or cell), their casing, and whether they are dashed. Orange and solid in the standard
+  /// palette; achromatic and dashed in the accessible palettes so they never blur into orange/yellow strength colours.
+  final Color linkLine, linkLineCasing;
+  final bool linkLineDashed;
 
   /// Map canvas under the tiles (what you see offline).
   final Color mapBackground;
@@ -171,57 +284,100 @@ class MeshSonarColors extends ThemeExtension<MeshSonarColors> {
   final Color textMuted;
 
   const MeshSonarColors({
+    this.palette = ColourPalette.standard,
     required this.beacon,
     required this.onBeacon,
-    required this.snrWeak,
-    required this.snrMid,
-    required this.snrStrong,
+    required this.snrStops,
+    required this.levelStrong,
+    required this.levelGood,
+    required this.levelFair,
+    required this.levelWeak,
     required this.silent,
     required this.heardUnknown,
+    required this.linkLine,
+    required this.linkLineCasing,
+    required this.linkLineDashed,
     required this.mapBackground,
     required this.mapGrid,
     required this.tileMatrix,
     required this.textMuted,
   });
 
+  /// Weakest, a middle and strongest anchor of the SNR scale (charts and gradients that want three colours).
+  Color get snrWeak => snrStops.first;
+  Color get snrMid => snrStops[1];
+  Color get snrStrong => snrStops.last;
+
   static MeshSonarColors of(BuildContext context) =>
       Theme.of(context).extension<MeshSonarColors>() ??
       (Theme.of(context).brightness == Brightness.dark ? dark : light);
 
-  static final MeshSonarColors dark = _fromPalette(_dark);
-  static final MeshSonarColors light = _fromPalette(_light);
+  static final MeshSonarColors dark = forPalette(ColourPalette.standard, Brightness.dark);
+  static final MeshSonarColors light = forPalette(ColourPalette.standard, Brightness.light);
 
-  static MeshSonarColors _fromPalette(_Palette p) => MeshSonarColors(
+  /// The colours for [palette] on the dark or light theme.
+  static MeshSonarColors forPalette(ColourPalette palette, Brightness b) =>
+      _fromPalette(b == Brightness.dark ? _dark : _light, _strengthFor(palette, b), palette);
+
+  static MeshSonarColors _fromPalette(_Palette p, _Strength st, ColourPalette palette) => MeshSonarColors(
+    palette: palette,
     beacon: p.beacon,
     onBeacon: p.onBeacon,
-    snrWeak: p.snrWeak,
-    snrMid: p.snrMid,
-    snrStrong: p.snrStrong,
-    silent: p.silent,
-    heardUnknown: p.heardUnknown,
+    snrStops: st.stops,
+    levelStrong: st.strong,
+    levelGood: st.good,
+    levelFair: st.fair,
+    levelWeak: st.weak,
+    silent: st.silent,
+    heardUnknown: st.heardUnknown,
+    linkLine: st.link,
+    linkLineCasing: st.linkCasing,
+    linkLineDashed: st.linkDashed,
     mapBackground: p.mapBg,
     mapGrid: p.mapGrid,
     tileMatrix: p.tileMatrix,
     textMuted: p.textMuted,
   );
 
+  /// The colour of a network coverage step; [CoverageLevel.none] is [silent] and [CoverageLevel.unknown] is [heardUnknown].
+  Color levelColor(CoverageLevel level) => switch (level) {
+    CoverageLevel.strong => levelStrong,
+    CoverageLevel.good => levelGood,
+    CoverageLevel.fair => levelFair,
+    CoverageLevel.weak => levelWeak,
+    CoverageLevel.unknown => heardUnknown,
+    CoverageLevel.none => silent,
+  };
+
+  /// The SNR scale at [t] (0 = -10 dB or weaker, 1 = +10 dB or stronger).
+  Color snrAt(double t) {
+    final x = t.clamp(0.0, 1.0) * (snrStops.length - 1);
+    final i = x.floor().clamp(0, snrStops.length - 2);
+    return Color.lerp(snrStops[i], snrStops[i + 1], x - i)!;
+  }
+
   /// Colour for a ping result: [heard] false → [silent] (grey); heard with unknown SNR → [heardUnknown]; else the SNR scale.
   Color forPing({required bool heard, double? snr}) {
     if (!heard) return silent;
     if (snr == null) return heardUnknown;
-    final t = ((snr.clamp(-10.0, 10.0)) + 10) / 20; // 0..1
-    return t < 0.5 ? Color.lerp(snrWeak, snrMid, t * 2)! : Color.lerp(snrMid, snrStrong, (t - 0.5) * 2)!;
+    return snrAt((snr.clamp(-10.0, 10.0) + 10) / 20);
   }
 
   @override
   MeshSonarColors copyWith({Color? beacon, Color? silent}) => MeshSonarColors(
+    palette: palette,
     beacon: beacon ?? this.beacon,
     onBeacon: onBeacon,
-    snrWeak: snrWeak,
-    snrMid: snrMid,
-    snrStrong: snrStrong,
+    snrStops: snrStops,
+    levelStrong: levelStrong,
+    levelGood: levelGood,
+    levelFair: levelFair,
+    levelWeak: levelWeak,
     silent: silent ?? this.silent,
     heardUnknown: heardUnknown,
+    linkLine: linkLine,
+    linkLineCasing: linkLineCasing,
+    linkLineDashed: linkLineDashed,
     mapBackground: mapBackground,
     mapGrid: mapGrid,
     tileMatrix: tileMatrix,
@@ -232,14 +388,25 @@ class MeshSonarColors extends ThemeExtension<MeshSonarColors> {
   MeshSonarColors lerp(MeshSonarColors? other, double t) {
     if (other == null) return this;
     Color l(Color a, Color b) => Color.lerp(a, b, t)!;
+    final n = t < 0.5 ? snrStops.length : other.snrStops.length;
+    List<Color> stops() {
+      Color at(List<Color> c, int i) => c[(i * (c.length - 1) / (n - 1)).round()];
+      return [for (var i = 0; i < n; i++) l(at(snrStops, i), at(other.snrStops, i))];
+    }
     return MeshSonarColors(
+      palette: t < 0.5 ? palette : other.palette,
       beacon: l(beacon, other.beacon),
       onBeacon: l(onBeacon, other.onBeacon),
-      snrWeak: l(snrWeak, other.snrWeak),
-      snrMid: l(snrMid, other.snrMid),
-      snrStrong: l(snrStrong, other.snrStrong),
+      snrStops: stops(),
+      levelStrong: l(levelStrong, other.levelStrong),
+      levelGood: l(levelGood, other.levelGood),
+      levelFair: l(levelFair, other.levelFair),
+      levelWeak: l(levelWeak, other.levelWeak),
       silent: l(silent, other.silent),
       heardUnknown: l(heardUnknown, other.heardUnknown),
+      linkLine: l(linkLine, other.linkLine),
+      linkLineCasing: l(linkLineCasing, other.linkLineCasing),
+      linkLineDashed: t < 0.5 ? linkLineDashed : other.linkLineDashed,
       mapBackground: l(mapBackground, other.mapBackground),
       mapGrid: l(mapGrid, other.mapGrid),
       tileMatrix: t < 0.5 ? tileMatrix : other.tileMatrix,
@@ -259,8 +426,9 @@ TextStyle numberStyle(BuildContext context, {double size = 30, Color? color, Fon
       fontFeatures: const [FontFeature.tabularFigures()],
     );
 
-ThemeData meshSonarTheme(Brightness b) {
+ThemeData meshSonarTheme(Brightness b, {ColourPalette palette = ColourPalette.standard}) {
   final p = b == Brightness.dark ? _dark : _light;
+  final mc = MeshSonarColors.forPalette(palette, b);
   final scheme = ColorScheme(
     brightness: b,
     primary: p.accent,
@@ -271,7 +439,7 @@ ThemeData meshSonarTheme(Brightness b) {
     onSecondary: p.onBeacon,
     secondaryContainer: Color.alphaBlend(p.beacon.withValues(alpha: 0.22), p.surface),
     onSecondaryContainer: p.text,
-    tertiary: p.snrWeak,
+    tertiary: mc.snrWeak,
     onTertiary: p.bg,
     error: p.danger,
     onError: p.onDanger,
@@ -328,7 +496,7 @@ ThemeData meshSonarTheme(Brightness b) {
     canvasColor: p.bg,
     textTheme: text,
     visualDensity: VisualDensity.standard,
-    extensions: [b == Brightness.dark ? MeshSonarColors.dark : MeshSonarColors.light],
+    extensions: [mc],
     appBarTheme: AppBarTheme(
       backgroundColor: p.bg,
       foregroundColor: p.text,

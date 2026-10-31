@@ -5,14 +5,15 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../../core/map_links.dart';
-import '../map_info_panel.dart' show linkLineColor;
+import '../../theme.dart';
 
 /// The map layers for [set]: lines, a ring on the start, and SNR labels. Empty when there is nothing to draw.
 List<Widget> linkLineLayers(BuildContext context, LinkSet set, {required bool labels}) {
   if (set.ends.isEmpty) return const [];
   final t = Theme.of(context);
   final from = LatLng(set.lat, set.lon);
-  const lineColor = linkLineColor;
+  final mc = MeshSonarColors.of(context);
+  final lineColor = mc.linkLine;
   Color colorOf(LinkEnd e) => lineColor;
   // Weakest first so the strongest lines end up on top.
   final order = [...set.ends]..sort((a, b) => (a.snr ?? -99).compareTo(b.snr ?? -99));
@@ -33,8 +34,9 @@ List<Widget> linkLineLayers(BuildContext context, LinkSet set, {required bool la
             points: [from, LatLng(e.lat, e.lon)],
             strokeWidth: 3,
             color: lineColor,
+            pattern: mc.linkLineDashed ? StrokePattern.dashed(segments: const [9, 5]) : const StrokePattern.solid(),
             borderStrokeWidth: 1.5,
-            borderColor: Colors.black.withValues(alpha: 0.55),
+            borderColor: mc.linkLineCasing,
           ),
       ],
     ),

@@ -489,7 +489,7 @@ class _Highlights extends StatelessWidget {
 Color heardColor(MeshSonarColors m, ReportCell c) {
   if (c.heard == 0) return m.silent;
   final f = c.heardFraction;
-  return f < 0.5 ? Color.lerp(m.snrWeak, m.snrMid, f * 2)! : Color.lerp(m.snrMid, m.snrStrong, (f - 0.5) * 2)!;
+  return m.snrAt(f);
 }
 
 class _CellMap extends StatelessWidget {
@@ -608,7 +608,7 @@ class _CellMap extends StatelessWidget {
               height: 12,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(3),
-                gradient: LinearGradient(colors: [m.snrWeak, m.snrMid, m.snrStrong]),
+                gradient: LinearGradient(colors: m.snrStops),
               ),
             ),
           ),

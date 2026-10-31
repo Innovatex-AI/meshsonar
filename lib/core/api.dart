@@ -4,6 +4,7 @@
 import 'dart:io';
 
 import 'antenna_profile.dart';
+import 'colour_palette.dart';
 import 'drive_context_wire.dart' show ContextUploadResult, DriveContextBatch;
 import 'driver_summary.dart' show DriverSummary;
 import 'model.dart';
@@ -569,6 +570,10 @@ class Settings {
   /// sheet switch persists here.
   final bool mapRepeaterLabels;
 
+  /// Which colour set signal strength is drawn in (standard / colour-blind safe / high contrast). Default standard;
+  /// written to settings.json only when changed, so an older file reads as standard.
+  final ColourPalette colourPalette;
+
   /// Drive-context categories (lib/core/data_categories.dart ids) the person switched off. Every category is on by
   /// default (opt-out, Andy Oct 2026), so only the off ones are stored, under `collection_off`; ids this version does
   /// not know are kept as they are (a newer app's choice survives a downgrade). Packet headers stay on
@@ -614,6 +619,7 @@ class Settings {
     this.unitOverrides = const UnitOverrides(),
     this.telemetryEnabled = true,
     this.mapRepeaterLabels = true,
+    this.colourPalette = ColourPalette.standard,
     this.collectionOff = const {},
     this.contextErasePending = const {},
   });
@@ -640,6 +646,7 @@ class Settings {
     UnitOverrides? unitOverrides,
     bool? telemetryEnabled,
     bool? mapRepeaterLabels,
+    ColourPalette? colourPalette,
     Set<String>? collectionOff,
     Set<String>? contextErasePending,
     bool clearKey = false,
@@ -666,6 +673,7 @@ class Settings {
         unitOverrides: unitOverrides ?? this.unitOverrides,
         telemetryEnabled: telemetryEnabled ?? this.telemetryEnabled,
         mapRepeaterLabels: mapRepeaterLabels ?? this.mapRepeaterLabels,
+        colourPalette: colourPalette ?? this.colourPalette,
         collectionOff: collectionOff ?? this.collectionOff,
         contextErasePending: contextErasePending ?? this.contextErasePending,
       );
@@ -692,6 +700,7 @@ class Settings {
         if (!unitOverrides.isEmpty) 'unit_overrides': unitOverrides.toJson(),
         if (!telemetryEnabled) 'telemetry_enabled': false,
         if (!mapRepeaterLabels) 'map_repeater_labels': false,
+        if (colourPalette != ColourPalette.standard) 'colour_palette': colourPalette.id,
         if (collectionOff.isNotEmpty) 'collection_off': collectionOff.toList()..sort(),
         if (contextErasePending.isNotEmpty) 'context_erase_pending': contextErasePending.toList()..sort(),
       };
@@ -718,6 +727,7 @@ class Settings {
         unitOverrides: UnitOverrides.fromJson(j['unit_overrides']),
         telemetryEnabled: j['telemetry_enabled'] is bool ? j['telemetry_enabled'] as bool : true,
         mapRepeaterLabels: j['map_repeater_labels'] is bool ? j['map_repeater_labels'] as bool : true,
+        colourPalette: ColourPalette.parse(j['colour_palette']),
         collectionOff: {
           if (j['collection_off'] case final List l)
             for (final v in l)

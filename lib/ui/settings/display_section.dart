@@ -3,6 +3,8 @@
 // bright in the heard list. Every number on screen goes through lib/core/units.dart, so a change here applies everywhere.
 import 'package:flutter/material.dart';
 
+import '../../core/colour_palette.dart';
+import '../../core/network_coverage.dart' show CoverageLevel;
 import '../../core/units.dart';
 import '../app.dart';
 import 'settings_index.dart';
@@ -110,6 +112,7 @@ List<Widget> displaySectionRows(BuildContext context) {
   return [
     const SettingsAnchor(id: 'units-tile', child: UnitsTile()),
     for (final q in unitQuantities) SettingsAnchor(id: q.id, child: UnitOverrideTile(quantity: q)),
+    const SettingsAnchor(id: 'colour-palette', child: ColourPaletteTile()),
     SettingsAnchor(
       id: 'heard-hold',
       child: SliderTile(
@@ -253,4 +256,93 @@ Future<String?> pickUnit(BuildContext context, UnitQuantity q) {
       ],
     ),
   );
+}
+
+/// What each palette is for, in one line (the only wording for it).
+String paletteSummary(ColourPalette p) => switch (p) {
+  ColourPalette.standard => 'Blue, teal and green for your pings; green, blue, amber and red for network coverage.',
+  ColourPalette.colourBlind => 'Blue to yellow to orange. Safe for red-green and blue-yellow colour blindness. Link lines turn dashed.',
+  ColourPalette.highContrast => 'Brighter on the dark map and deeper on the light map, for strong separation from the map. Link lines turn dashed.',
+};
+
+/// The strength colours of [p] as a strip: strongest to weakest, then "nothing heard" (grey) and "heard, signal unknown"
+/// (purple). Shown beside each choice so the person sees the palette before picking it.
+class PaletteStrip extends StatelessWidget {
+  final ColourPalette palette;
+  const PaletteStrip({super.key, required this.palette});
+
+  @override
+  Widget build(BuildContext context) {
+    final mc = MeshSonarColors.forPalette(palette, Theme.of(context).brightness);
+    final colours = [
+      for (final l in [CoverageLevel.strong, CoverageLevel.good, CoverageLevel.fair, CoverageLevel.weak, CoverageLevel.none, CoverageLevel.unknown])
+        mc.levelColor(l),
+    ];
+    return ExcludeSemantics(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final c in colours)
+            Container(
+              width: 22,
+              height: 14,
+              margin: const EdgeInsets.only(right: 3),
+              decoration: BoxDecoration(color: c, borderRadius: BorderRadius.circular(3)),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Settings > Units & display > Colour palette: Standard, Colour-blind safe, High contrast. Applies to every strength
+/// colour at once (hexes, ping dots, network cells, SNR pills, link lines, charts, the legend).
+class ColourPaletteTile extends StatelessWidget {
+  const ColourPaletteTile({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final s = AppScope.of(context);
+    final t = Theme.of(context);
+    final cur = s.settings.colourPalette;
+    final e = settingsEntry('colour-palette');
+    return Column(
+      key: const Key('colour-palette'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ListTile(
+          leading: const Icon(Icons.palette_outlined),
+          title: Text(e.title),
+          subtitle: Text(
+            'How signal strength is coloured on every map and chart. Grey (nothing heard) and purple (heard, signal unknown) '
+            'stay distinct in all three.',
+            key: const Key('colour-palette-explanation'),
+          ),
+        ),
+        for (final p in ColourPalette.values)
+          Semantics(
+            inMutuallyExclusiveGroup: true,
+            checked: p == cur,
+            child: ListTile(
+              key: Key('colour-palette-${p.id}'),
+              minTileHeight: 56,
+              leading: Icon(p == cur ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                  color: p == cur ? t.colorScheme.primary : t.colorScheme.onSurfaceVariant),
+              title: Text(p.label),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(paletteSummary(p)),
+                  const SizedBox(height: 6),
+                  PaletteStrip(palette: p),
+                ],
+              ),
+              selected: p == cur,
+              onTap: () => s.updateSettings(s.settings.copyWith(colourPalette: p)),
+            ),
+          ),
+        const SizedBox(height: Gap.xs),
+      ],
+    );
+  }
 }

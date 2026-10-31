@@ -92,6 +92,9 @@ const List<SettingsEntry> settingsEntries = [
       keywords: ['temperature', 'celsius', 'fahrenheit', 'c', 'f', 'degrees', 'units']),
   SettingsEntry('unit-pressure', 'display', 'Air pressure', 'Barometer readings: hPa, inHg or mmHg.',
       keywords: ['pressure', 'barometer', 'hpa', 'inhg', 'mmhg', 'millibar', 'mbar', 'units']),
+  SettingsEntry('colour-palette', 'display', 'Colour palette',
+      'The colours for signal strength on every map and chart: Standard, Colour-blind safe or High contrast.',
+      keywords: ['colour', 'color', 'colorblind', 'color blind', 'colour blind', 'deuteranopia', 'protanopia', 'tritanopia', 'contrast', 'accessibility', 'palette', 'theme', 'red green']),
   SettingsEntry('heard-hold', 'display', 'Heard list hold',
       'How long a repeater stays bright in the heard list after it was last heard.',
       keywords: ['heard', 'repeaters', 'list', 'grey', 'stale', 'pings']),
@@ -210,6 +213,9 @@ const List<SettingsEntry> settingsEntries = [
   // About
   SettingsEntry('about', 'about-section', 'About MeshSonar', 'Version, licence and third-party notices.',
       keywords: ['version', 'licence', 'license', 'mit', 'credits', 'open source', 'open-meteo', 'attribution']),
+  SettingsEntry('map-legend', 'about-section', 'Map legend',
+      'What every colour and symbol on the maps means, with real swatches in your colour palette.',
+      keywords: ['legend', 'colours', 'colors', 'key', 'hexagon', 'snr', 'grey', 'purple', 'link lines', 'help', 'info']),
   SettingsEntry('show-intro', 'about-section', 'Show the welcome tour', 'The three intro pages from first launch.',
       keywords: ['intro', 'onboarding', 'tour', 'welcome', 'help']),
 ];
