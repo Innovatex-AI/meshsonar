@@ -31,7 +31,7 @@ class _C extends FakeCmatClient {
   _C(super.u);
   final reachCalls = <String>[];
   @override
-  Future<RepeaterReach> repeaterReach(String driverKey, String repeaterKey, {double? lat, double? lon}) async {
+  Future<RepeaterReach> repeaterReach(String driverKey, String repeaterKey, {double? lat, double? lon, bool h3 = false}) async {
     reachCalls.add(repeaterKey);
     return RepeaterReach(
       key: repeaterKey,

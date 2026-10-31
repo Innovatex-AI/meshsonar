@@ -50,7 +50,7 @@ class _LinksClient extends FakeCmatClient {
   }
 
   @override
-  Future<RepeaterReach> repeaterReach(String driverKey, String repeaterKey, {double? lat, double? lon}) {
+  Future<RepeaterReach> repeaterReach(String driverKey, String repeaterKey, {double? lat, double? lon, bool h3 = false}) {
     reachCalls.add(repeaterKey);
     return onReach(repeaterKey);
   }
