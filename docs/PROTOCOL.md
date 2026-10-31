@@ -341,11 +341,50 @@ It's off because it adds airtime on every ping and repeaters rate-limit discover
 
 ### 6.3 Offline queue drain
 
-After `start()`, and on every `PUSH_CODE_MSG_WAITING`, the link sends `SYNC_NEXT_MESSAGE` (up to 256 times) until
-`NO_MORE_MESSAGES`, an error, or an unexpected frame. Channel messages go to `channelMessages` (nobody listens to it
-today). This mostly exists so the radio's queue never fills; contact messages (a repeater's CLI replies, §2.5) are
-handed to the claim call waiting for them. A `MSG_WAITING` that arrives while a drain is finishing starts one more
-round, so a reply queued at that moment is not missed.
+Now `MessageSync` (`lib/radio/message_sync.dart`). After `start()`, on every `PUSH_CODE_MSG_WAITING`, and (once something listens
+to the session's `inbound` stream) every 5 s as a safety poll, the link sends `SYNC_NEXT_MESSAGE` until `NO_MORE_MESSAGES`, an
+error or an unexpected frame (cap 512 per drain; the radio holds 16 or 256). Why the poll: `MSG_WAITING` is a one-byte push through
+the radio's BLE queue, which is 4 frames deep on ESP32 and DROPS frames when full (`SerialBLEInterface`), so it can be lost.
+Why persist-first: `SYNC_NEXT_MESSAGE` is destructive; each frame goes through the persister (awaited) before the next
+command and before the typed message is emitted. Channel and contact text frames become `InboundMessage`s; CLI replies
+(txt_type 1) go only to the claim call waiting for them; `CHANNEL_DATA_RECV` (27) datagrams share the queue and are stepped
+over. A message with the same conversation, sender timestamp and text as one already seen is dropped (the radio gives no
+message id; a retried DM arrives again as a new frame). A `MSG_WAITING` that arrives while a drain is finishing starts one
+more round.
+
+### 6.4 Chat frames (Nov 2026)
+
+Layouts below are from MeshCore `examples/companion_radio/MyMesh.cpp` at 81dbae5 (MIT), re-read line by line; byte fixtures
+are in `test/radio/chat_frames_test.dart` (written from the firmware, not through our encoders).
+
+| Frame | Layout | Firmware |
+|---|---|---|
+| `GET_CONTACTS` (4) | `[4]` or `[4][since u32]` | 1238-1258. Only contacts with `lastmod > since`. A second one while it runs gets ERR(BAD_STATE=4): the session serialises them |
+| `CONTACTS_START` (2) | `[2][total u32]`, the TOTAL on the radio, not the filtered count | 1252-1256 |
+| `CONTACT` (3) | `[3][pub x32][type][flags][out_path_len][out_path x64][name x32][last_advert u32][lat i32 1e-6][lon i32 1e-6][lastmod u32]` = 148 B | `writeContactRespFrame` 171-193 |
+| `END_OF_CONTACTS` (4) | `[4][most recent lastmod u32]`, the next `since` | 2404-2408 |
+| `ADD_UPDATE_CONTACT` (9) | the CONTACT layout; the firmware reads lat/lon only if len >= 144 and lastmod only if len >= 148 | `updateContactFromFrame` 195-217 |
+| `SEND_TXT_MSG` (2) | `[2][txt_type][attempt][ts u32][pub prefix x6][text]` -> `SENT` `[6][flood][expected_ack u32][est_timeout u32]`; unknown recipient ERR(NOT_FOUND), bad type ERR(UNSUPPORTED), no pool ERR(TABLE_FULL); plain text expects an ACK, CLI types do not (`expected_ack` 0) | 1132-1177 |
+| `SEND_CONFIRMED` (0x82) | `[0x82][ack u32][trip ms u32]` | `processAck` 417-436. The ack table holds 8; the entry is cleared after the first match |
+| `PATH_UPDATED` (0x81), `ADVERT` (0x80) | `[code][pub x32]` | 409-415, 358-407 |
+| `NEW_ADVERT` (0x8A) | a full contact frame under code 0x8A | 358-407 |
+| `CONTACT_DELETED` (0x8F), `CONTACTS_FULL` (0x90) | `[0x8F][pub x32]`, `[0x90]` | |
+| `CONTACT_MSG_RECV_V3` (16) | `[16][snr i8 x4][0][0][sender prefix x6][path_len][txt_type][ts u32]([signer x4] if txt_type 2)[text]` | `queueMessage` 441-469 |
+| `CHANNEL_MSG_RECV_V3` (17) | `[17][snr i8 x4][0][0][ch][path_len][txt_type][ts u32][text]`; the text is `"sender name: body"` (no sender key) | 558-585 |
+| `CHANNEL_DATA_RECV` (27) | `[27][snr][0][0][ch][path_len][data_type u16][len u8][data]` | `onChannelDataRecv` |
+| `DEVICE_INFO` (13) | byte 2 = MAX_CONTACTS / 2 (doubled by us), byte 3 = MAX_GROUP_CHANNELS | 1056-1075 |
+| `SET_FLOOD_SCOPE_KEY` (54) | `[54][0][key x16]` per-connection override, `[54][0]` clear, `[54][1]` unscoped (ver 12+) | 1978-1992 |
+
+`path_len` (also a contact's `out_path_len`): low 6 bits = hop count, top 2 bits = hash size - 1 (`src/Packet.h` 79-83), so a path is
+`hops x hash size` bytes (`pathByteLength`); 0xFF in a message frame means it came over a direct route, in a contact it
+means the path is unknown (OUT_PATH_UNKNOWN: the next DM floods and the radio learns the path).
+
+Sending (priority P0, `LinkRadioSession`): channel text is cut off at `160 - len("name: ")` bytes, a DM at 160. A channel send
+answers only OK, never an ack. ERR(NOT_FOUND) is the firmware's answer both for a bad slot and for a full packet pool
+(1190-1195): for a slot that exists the session retries once after 300 ms, then reports `noSuchChannel`. A command that gets no
+answer within 5 s is reported as `queued` ("may still send"), never as failed. The flood scope (`ScopeGuard`) is set inside the
+same queue slot, right before the send; a ping that follows a scoped chat message first clears the override, so a scope can
+not leak into the wardrive channel (the override is global radio state, 491-525).
 
 ## 7. Known discrepancies and choices
 
@@ -364,6 +403,9 @@ round, so a reply queued at that moment is not missed.
 | 11 | Echo timestamp check | Only applies with `MeshCoreCompanionLink` (it exposes `lastSentTimestamp`). Other `CompanionLink`s match on text only. |
 | 12 | Repeater login failure | `PUSH_CODE_LOGIN_FAIL` exists but a repeater never sends it for a wrong password; the app treats silence as "out of range or wrong password" (§2.5). |
 | 13 | Companion CLI vs remote CLI | `CMD_RUN_CLI_COMMAND` (66, v14+) runs a CLI command on the COMPANION itself. Claims need the REMOTE repeater's CLI, which is `SEND_TXT_MSG` with txt_type 1 (CLI_DATA) after a login. |
+
+| 14 | Message dedupe | The radio gives messages no id. The key is conversation + sender timestamp + delivered text (`InboundMessage.contentKey`), so a retried DM is one message. Two different messages with identical text in the same second from the same sender merge. |
+| 15 | Ping airtime | Estimated with the Semtech formula from SELF_INFO's SF/BW/CR (`airtime.dart`; uses MeshCore's `preambleLengthForSF`: 32 symbols at SF8 and below, 16 above; a 37-byte ping is 386 ms at SF8/BW62.5 and 213 ms at SF7/BW62.5). Unknown radio settings: 500 ms. |
 
 ## 8. Test vectors
 

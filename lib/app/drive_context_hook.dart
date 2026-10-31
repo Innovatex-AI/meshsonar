@@ -8,8 +8,7 @@ import '../core/drive_context.dart';
 import '../core/drive_context_recorder.dart';
 import '../core/drive_context_session.dart';
 import '../radio/companion_link.dart';
-import '../radio/radio_api.dart';
-import '../radio/radio_health.dart';
+import '../radio/radio_session_impl.dart';
 import 'services.dart';
 
 /// The disclosure version that lists every collection category (stream 7 section 4.6). Every existing user sees it
@@ -40,7 +39,7 @@ DriveContextLedger? contextLedgerOf(AppServices services) {
 DriveContextSession? newDriveContext({
   required AppServices services,
   required String sessionId,
-  required CompanionLink link,
+  required LinkRadioSession session,
   required bool Function(String categoryId) isOn,
   required bool Function() pingBusy,
   void Function()? onStatus,
@@ -51,11 +50,11 @@ DriveContextSession? newDriveContext({
   return DriveContextSession(
     recorder: DriveContextRecorder(ledger: ledger, sessionId: sessionId, isOn: isOn),
     pingBusy: pingBusy,
-    radio: link is RadioStatsSource ? link as RadioStatsSource : null,
+    radio: session.hasStats ? session : null,
     barometer: services.barometer,
     battery: services.phoneBattery,
     deviceDetails: details?.read,
-    companion: link is MeshCoreCompanionLink ? () => link.companionDetails : null,
+    companion: session.link is MeshCoreCompanionLink ? () => session.companionDetails : null,
     clock: services.clock,
     onStatus: onStatus,
   );

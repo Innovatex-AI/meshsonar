@@ -192,6 +192,31 @@ class _Slot {
   _Slot(this.name, this.secret);
 }
 
+/// A contact in the simulated radio's table.
+class _SimContact {
+  final Uint8List key;
+  int type;
+  int flags = 0;
+  int outPathLen = 0xFF;
+  Uint8List outPath = Uint8List(0);
+  String name;
+  int lastAdvert = 0;
+  double lat = 0, lon = 0;
+  int lastMod;
+  _SimContact(this.key, this.type, this.name, this.lastMod);
+}
+
+/// A chat contact the simulated radio knows from the start (made-up names and keys).
+class SimulatedContact {
+  final String name;
+  final Uint8List publicKey;
+  SimulatedContact(this.name) : publicKey = sha256(utf8.encode('meshsonar-sim-contact:$name'));
+  String get keyHex => toHex(publicKey);
+}
+
+/// People the simulated radio can chat with. Tests and demos inject messages "from" them.
+List<SimulatedContact> defaultSimulatedContacts() => [SimulatedContact('Ann KE8ANN'), SimulatedContact('Bob W8BOB')];
+
 /// A simulated MeshCore companion radio.
 class SimulatedTransport implements ByteTransport {
   final SimulatedLocationSource location;
@@ -213,6 +238,34 @@ class SimulatedTransport implements ByteTransport {
   final List<Timer> _timers = [];
   final List<_Slot> _slots;
   int _clockSecs = 0;
+
+  // ---- chat traffic (all of it simulated; the real radio's queue behaviour is MyMesh.cpp addToOfflineQueue 224-244)
+  /// The radio's offline message queue: RAM only, destructive, [offlineQueueSize] deep (16 is the firmware default).
+  final List<Uint8List> _offline = [];
+  final int offlineQueueSize;
+  final List<_SimContact> _contacts = [];
+  int _modClock = 1000;
+  int _appTargetVer = 3;
+  bool _contactIterating = false;
+
+  /// Test knobs: drop the PUSH_MSG_WAITING tickle (the real BLE queue is lossy), withhold DM ACKs, and the radio's
+  /// outbound packet queue length that GET_STATS core reports.
+  bool dropMsgWaiting = false;
+  bool dropAcks = false;
+  int outboundQueueLen = 0;
+
+  /// The next N channel sends are answered with ERR NOT_FOUND although the slot exists: what the firmware does when its
+  /// packet pool is full (MyMesh.cpp 1190-1195).
+  int busyChannelSends = 0;
+
+  /// Every SET_FLOOD_SCOPE_KEY the radio got, in order: `null` = clear, `'unscoped'`, or the key as hex.
+  final List<String?> floodScopeLog = [];
+
+  /// Direct messages the app sent to contacts: (contact key hex, attempt, timestamp, text).
+  final List<({String contact, int attempt, int timestamp, String text})> sentDirect = [];
+
+  /// Channel messages the app sent: (slot, text).
+  final List<({int slot, String text})> sentChannel = [];
 
   // Radio health counters, answered to GET_STATS core/packets and GET_BATT_AND_STORAGE (firmware layouts in
   // protocol.dart). Plausible, deterministic numbers that follow what the simulation actually did; not a model of
@@ -249,6 +302,8 @@ class SimulatedTransport implements ByteTransport {
     this.nodeName = 'MeshSonar Sim',
     this.firmwareVersion = 'v1.18.0-sim',
     int maxChannels = 8,
+    this.offlineQueueSize = 16,
+    List<SimulatedContact>? contacts,
   })  : location = location ?? SimulatedLocationSource(timeScale: timeScale, clock: clock),
         repeaters = repeaters ?? defaultSimulatedRepeaters(),
         _rng = math.Random(seed),
@@ -257,6 +312,70 @@ class SimulatedTransport implements ByteTransport {
         _slots = List.generate(maxChannels, (i) => _Slot('', Uint8List(16))) {
     _slots[0] = _Slot('Public', Uint8List.fromList(publicChannelSecret));
     _bootAt = _clock();
+    for (final c in contacts ?? defaultSimulatedContacts()) {
+      _contacts.add(_SimContact(c.publicKey, AdvType.chat, c.name, _modClock++)..lastAdvert = _clockSecs);
+    }
+    for (final r in this.repeaters) {
+      _contacts.add(_SimContact(r.publicKey, AdvType.repeater, r.name, _modClock++)
+        ..lat = r.lat
+        ..lon = r.lon);
+    }
+  }
+
+  /// A message "from the mesh" on channel slot [channelIdx]: queued in the radio's offline queue like a real one, with the
+  /// PUSH_MSG_WAITING tickle (unless [dropMsgWaiting]). [sender] becomes the "name: " text prefix. Returns false when the
+  /// slot does not exist.
+  bool injectChannelMessage(int channelIdx, String sender, String text,
+      {int? timestamp, int pathLen = 1, double snrDb = 6.5}) {
+    if (!_connected || channelIdx < 0 || channelIdx >= _slots.length) return false;
+    final ts = timestamp ?? _clock().toUtc().millisecondsSinceEpoch ~/ 1000;
+    _enqueueOffline(encodeChannelMsg(channelIdx, '$sender: $text', timestamp: ts, pathLen: pathLen, snrDb: snrDb, v3: _appTargetVer >= 3), isChannel: true);
+    return true;
+  }
+
+  /// A direct message from the contact [fromKeyHex] (or a name from [defaultSimulatedContacts]). Returns false for an
+  /// unknown contact (a real radio would have dropped a DM from a stranger it cannot decrypt).
+  bool injectDirectMessage(String from, String text, {int? timestamp, int pathLen = 0xFF, double snrDb = 5.0, int txtType = txtTypePlain}) {
+    if (!_connected) return false;
+    final c = _contacts.where((c) => toHex(c.key) == from.toLowerCase() || c.name == from).firstOrNull;
+    if (c == null) return false;
+    final ts = timestamp ?? _clock().toUtc().millisecondsSinceEpoch ~/ 1000;
+    _enqueueOffline(
+        encodeContactText(c.key, text, txtType: txtType, timestamp: ts, pathLen: pathLen, snrDb: snrDb, v3: _appTargetVer >= 3),
+        isChannel: false);
+    return true;
+  }
+
+  /// A new node advertising: pushes NEW_ADVERT (0x8A) and adds it to the table.
+  void injectNewAdvert(String name, {int type = AdvType.chat, double lat = 0, double lon = 0}) {
+    if (!_connected) return;
+    final key = sha256(utf8.encode('meshsonar-sim-advert:$name'));
+    final c = _SimContact(key, type, name, _modClock++)
+      ..lat = lat
+      ..lon = lon
+      ..lastAdvert = _clock().toUtc().millisecondsSinceEpoch ~/ 1000;
+    _contacts.add(c);
+    _emit(encodeContactFrame(key,
+        type: type, name: name, lastAdvert: c.lastAdvert, lat: lat, lon: lon, lastMod: c.lastMod, code: Push.newAdvert));
+  }
+
+  /// Messages waiting in the radio's offline queue.
+  int get offlineQueueLength => _offline.length;
+
+  /// Public keys of the contacts in the table, hex.
+  List<String> get contactKeys => [for (final c in _contacts) toHex(c.key)];
+
+  // MyMesh.cpp addToOfflineQueue 224-244: when full, the OLDEST CHANNEL message is replaced; with none queued the new frame
+  // is dropped. Then the one-byte PUSH_MSG_WAITING.
+  void _enqueueOffline(Uint8List frame, {required bool isChannel}) {
+    if (_offline.length >= offlineQueueSize) {
+      final i = _offline.indexWhere((f) => f[0] == Resp.channelMsgRecv || f[0] == Resp.channelMsgRecvV3 || f[0] == Resp.channelDataRecv);
+      if (i < 0) return;
+      _offline.removeAt(i);
+    }
+    _offline.add(frame);
+    _recv++;
+    if (!dropMsgWaiting) _emit(encodeMsgWaiting());
   }
 
   /// Simulated seconds since this radio "booted" (scaled like the drive).
@@ -322,8 +441,10 @@ class SimulatedTransport implements ByteTransport {
           name: nodeName,
         ));
       case Cmd.deviceQuery:
+        if (frame.length >= 2) _appTargetVer = frame[1];
         _emit(encodeDeviceInfo(
           firmwareVerCode: 9,
+          maxContactsHalf: 50,
           maxChannels: _slots.length,
           buildDate: '1 Oct 2026',
           manufacturer: 'MeshSonar Simulator',
@@ -355,14 +476,36 @@ class SimulatedTransport implements ByteTransport {
         if (frame.length < 7 || frame[1] != txtTypePlain) return _emit(encodeErr(ErrCode.unsupportedCmd));
         final i = frame[2];
         if (i >= _slots.length) return _emit(encodeErr(ErrCode.notFound));
+        if (busyChannelSends > 0) {
+          busyChannelSends--;
+          return _emit(encodeErr(ErrCode.notFound));
+        }
         final ts = bd.getUint32(3, Endian.little);
         final text = utf8.decode(frame.sublist(7), allowMalformed: true);
         _emit(encodeOk());
         _sent++;
         _txAirMs += _airMsPerPacket;
+        sentChannel.add((slot: i, text: text));
         _simulateFlood(_slots[i].secret, ts, text);
       case Cmd.syncNextMessage:
-        _emit(encodeNoMoreMessages());
+        _emit(_offline.isEmpty ? encodeNoMoreMessages() : _offline.removeAt(0));
+      case Cmd.getContacts:
+        if (_contactIterating) return _emit(encodeErr(ErrCode.badState));
+        _sendContacts(frame.length >= 5 ? bd.getUint32(1, Endian.little) : 0);
+      case Cmd.getContactByKey:
+        if (frame.length < 33) return _emit(encodeErr(ErrCode.illegalArg));
+        final c = _contactByPrefix(frame.sublist(1, 33), 32);
+        _emit(c == null ? encodeErr(ErrCode.notFound) : _contactFrame(c));
+      case Cmd.addUpdateContact:
+        if (frame.length < 1 + 32 + 3 + 64 + 32 + 4) return _emit(encodeErr(ErrCode.illegalArg));
+        _addUpdateContact(frame);
+        _emit(encodeOk());
+      case Cmd.sendTxtMsg:
+        _onSendTxt(frame);
+      case Cmd.setFloodScopeKey:
+        if (frame.length < 2) return _emit(encodeErr(ErrCode.illegalArg));
+        floodScopeLog.add(frame[1] == 1 ? 'unscoped' : (frame.length >= 18 ? toHex(frame.sublist(2, 18)) : null));
+        _emit(encodeOk());
       case Cmd.getStats:
         final nf = noiseFloorDbm;
         if (nf == null) return _emit(encodeErr(ErrCode.unsupportedCmd));
@@ -377,7 +520,7 @@ class SimulatedTransport implements ByteTransport {
               rxAirSecs: _rxAirMs ~/ 1000,
             ));
           case StatsType.core:
-            _emit(encodeCoreStats(batteryMv: _batteryMv, uptimeSecs: _uptimeSecs));
+            _emit(encodeCoreStats(batteryMv: _batteryMv, uptimeSecs: _uptimeSecs, queueLen: outboundQueueLen));
           case StatsType.packets:
             _emit(encodePacketStats(
                 recv: _recv, sent: _sent, floodTx: _sent, directTx: 0, floodRx: _recv, directRx: 0, recvErrors: 0));
@@ -396,6 +539,112 @@ class SimulatedTransport implements ByteTransport {
         _simulateDiscover(frame.sublist(1));
       default:
         _emit(encodeErr(ErrCode.unsupportedCmd));
+    }
+  }
+
+  // ---------------------------------------------------------------- contacts and direct messages
+
+  _SimContact? _contactByPrefix(List<int> prefix, int n) {
+    for (final c in _contacts) {
+      var same = true;
+      for (var i = 0; i < n && i < prefix.length; i++) {
+        if (c.key[i] != prefix[i]) {
+          same = false;
+          break;
+        }
+      }
+      if (same) return c;
+    }
+    return null;
+  }
+
+  Uint8List _contactFrame(_SimContact c, {int code = Resp.contact}) => encodeContactFrame(c.key,
+      type: c.type,
+      name: c.name,
+      outPathLen: c.outPathLen,
+      outPath: c.outPath,
+      flags: c.flags,
+      lastAdvert: c.lastAdvert,
+      lat: c.lat,
+      lon: c.lon,
+      lastMod: c.lastMod,
+      code: code);
+
+  // GET_CONTACTS (MyMesh.cpp 1238-1258, 2385-2410): CONTACTS_START with the TOTAL, then one CONTACT per entry newer than
+  // `since`, paced like the BLE writes, then END_OF_CONTACTS with the most recent lastmod.
+  void _sendContacts(int since) {
+    _contactIterating = true;
+    _emit(encodeContactsStart(_contacts.length));
+    var most = 0;
+    var delay = 10;
+    for (final c in List.of(_contacts)) {
+      if (c.lastMod <= since) continue;
+      if (c.lastMod > most) most = c.lastMod;
+      _emit(_contactFrame(c), Duration(milliseconds: delay));
+      delay += 10;
+    }
+    _emit(encodeEndOfContacts(most), Duration(milliseconds: delay + 10));
+    late Timer t;
+    t = Timer(_scaled(Duration(milliseconds: delay + 20)), () {
+      _timers.remove(t);
+      _contactIterating = false;
+    });
+    _timers.add(t);
+  }
+
+  void _addUpdateContact(Uint8List f) {
+    final key = Uint8List.fromList(f.sublist(1, 33));
+    final bd = ByteData.sublistView(f);
+    var c = _contactByPrefix(key, 32);
+    if (c == null) {
+      c = _SimContact(key, f[33], '', _modClock++);
+      _contacts.add(c);
+    }
+    c
+      ..type = f[33]
+      ..flags = f[34]
+      ..outPathLen = f[35]
+      ..outPath = Uint8List.fromList(f.sublist(36, 36 + pathByteLength(f[35]).clamp(0, 64)))
+      ..name = utf8.decode(f.sublist(100, 132).takeWhile((b) => b != 0).toList(), allowMalformed: true)
+      ..lastAdvert = bd.getUint32(132, Endian.little);
+    if (f.length >= 144) {
+      c
+        ..lat = bd.getInt32(136, Endian.little) / 1e6
+        ..lon = bd.getInt32(140, Endian.little) / 1e6;
+    }
+    c.lastMod = _modClock++;
+  }
+
+  // CMD_SEND_TXT_MSG (MyMesh.cpp 1132-1177): plain text expects an ACK; CLI types expect none.
+  void _onSendTxt(Uint8List f) {
+    if (f.length < 14) return _emit(encodeErr(ErrCode.illegalArg));
+    final txt = f[1], attempt = f[2];
+    final ts = ByteData.sublistView(f).getUint32(3, Endian.little);
+    final c = _contactByPrefix(f.sublist(7, 13), 6);
+    if (c == null) return _emit(encodeErr(ErrCode.notFound));
+    if (txt != txtTypePlain && txt != txtTypeCliData && txt != txtTypeCliCommand) return _emit(encodeErr(ErrCode.unsupportedCmd));
+    final text = utf8.decode(f.sublist(13), allowMalformed: true);
+    final flood = c.outPathLen == 0xFF;
+    var ack = 0;
+    if (txt == txtTypePlain) {
+      // The tag only has to be stable per (timestamp, attempt & 3, text, sender): attempts N and N+4 collide, like the real hash.
+      final h = sha256([...f.sublist(3, 7), attempt & 3, ...utf8.encode(text), ...publicKey]);
+      ack = ByteData.sublistView(h).getUint32(0, Endian.little);
+      sentDirect.add((contact: toHex(c.key), attempt: attempt & 3, timestamp: ts, text: text));
+    }
+    _sent++;
+    _txAirMs += _airMsPerPacket;
+    _emit(encodeSent(flood: flood, tag: ack, estTimeoutMs: flood ? 2500 : 1200));
+    if (ack != 0 && !dropAcks && c.type == AdvType.chat) {
+      _emit(encodeSendConfirmed(ack, 400 + _rng.nextInt(800)), Duration(milliseconds: 600 + _rng.nextInt(800)));
+      if (flood) {
+        // The radio learns a path from the exchange (MyMesh.cpp 409-415).
+        c
+          ..outPathLen = 1
+          ..outPath = Uint8List.fromList([repeaters.isEmpty ? 0x11 : repeaters.first.publicKey[0]])
+          ..lastMod = _modClock++;
+        _emit(encodePathUpdated(c.key), const Duration(milliseconds: 1500));
+      }
     }
   }
 
@@ -536,6 +785,14 @@ class SimulatedRadioScanner implements RadioScanner {
 
   /// The transport handed out by the last [connect], for tests and demos.
   SimulatedTransport? lastTransport;
+
+  /// Chat traffic into the connected simulated radio (see [SimulatedTransport.injectChannelMessage]); false when none is
+  /// connected. For debug screens and UI tests.
+  bool injectChannelMessage(int channelIdx, String sender, String text) =>
+      lastTransport?.injectChannelMessage(channelIdx, sender, text) ?? false;
+
+  /// See [SimulatedTransport.injectDirectMessage].
+  bool injectDirectMessage(String from, String text) => lastTransport?.injectDirectMessage(from, text) ?? false;
 
   SimulatedRadioScanner({this.location, this.seed, this.timeScale = 1.0, this.clock, this.firmwareVersion = 'v1.18.0-sim'});
 

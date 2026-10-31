@@ -14,6 +14,19 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 - First-run intro gains a "Find your way around" page; More > How it works replays it. Shared `LoadingState` / `ErrorState`.
 - Drive screen: the antenna chip and Log button wrap instead of overflowing at the largest text size. Copy that said
   "Drive tab" / "Radio tab" now says Map / More > Radio.
+- **RadioSession foundation (internal, no visible change).** One owner for the radio link: `RadioSessionManager` +
+  `LinkRadioSession` (`lib/radio/session*.dart`). AppState keeps the drive UX and hands link ownership, connect, reconnect
+  and health sampling to it; claims run through it at priority P1. The command queue is its own class with priorities
+  (user message > ack/admin > advert > ping > discovery), the offline-queue drain is `MessageSync` (persist-first,
+  idempotent, polls every 5 s once something listens because the radio's BLE queue is lossy), and a `TxArbiter` gates pings:
+  skipped (never queued late) while the radio's outbound queue is not empty, within 2 s of a user message, over 2% ping airtime
+  in 10 minutes, or over the hourly transmit cap (unknown region 1%). With nobody chatting the arbiter is idle and pings behave
+  exactly as before. `ScopeGuard` sets the flood scope right before a flood send.
+- New protocol pieces for chat, each with a byte fixture written from the firmware source (`test/radio/chat_frames_test.dart`):
+  GET_CONTACTS (incremental `since`), full CONTACT / ADD_UPDATE_CONTACT, SEND_TXT_MSG with ack tracking (SEND_CONFIRMED),
+  PATH_UPDATED, ADVERT / NEW_ADVERT, CONTACT_DELETED / CONTACTS_FULL, CHANNEL_DATA_RECV, DEVICE_INFO limits, SET_FLOOD_SCOPE_KEY.
+- The simulator gained chat traffic (channel messages and DMs injected from tests or a debug screen, ACKs, contacts, a 16-deep
+  offline queue with the firmware's eviction rule). Still excluded from release builds.
 
 ## [0.24.3] — 2026-11-01 — claim a repeater by logging in (nothing on the repeater is touched)
 

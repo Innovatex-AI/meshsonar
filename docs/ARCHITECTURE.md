@@ -29,7 +29,8 @@ flowchart TB
   end
   subgraph radio["lib/radio (pure Dart except ble_transport)"]
     RAPI[radio_api.dart — contracts]
-    LINK[MeshCoreCompanionLink]
+    SESS[RadioSessionManager / LinkRadioSession<br/>TxArbiter, ScopeGuard]
+    LINK[MeshCoreCompanionLink<br/>CommandQueue, MessageSync]
     ENGINE[DefaultWardriveEngine]
     PROTO[protocol / packet / crypto]
     SIM[Simulator]
@@ -49,6 +50,8 @@ flowchart TB
   WIRING --> SERVICES
   WIRING --> STORE & SYNC & CLIENT & SET & FILTER & DIR & LINK & ENGINE & SIM & BLE & GEO & SHARE
   STATE --> MODEL & RAPI & HEARD
+  STATE --> SESS --> LINK
+  ENGINE -. ping gate .-> SESS
   ENGINE --> LINK --> PROTO
   LINK --> RAPI
   SIM --> PROTO
@@ -64,6 +67,43 @@ flowchart TB
 | **app** | `lib/app/` | `foundation` only (ChangeNotifier) | `AppState` (all runtime state), `AppServices` (dependency container), `wiring.dart` (real services), user-facing error text |
 | **ui** | `lib/ui/` | Yes | Screens, bottom sheets, map, report, onboarding, theme |
 | **platform** | `lib/platform/` (+ `ble_transport.dart`, `device_feedback.dart`) | Yes (plugins) | GPS, share sheet, BLE, wake lock, haptics |
+
+### 1.1 The radio session (Nov 2026, "one app, one radio")
+
+`RadioSession` (`lib/radio/session.dart`) is the single owner of a radio link; design in
+`meshsonar-infra/docs/planning/meshsonar-one-app-one-radio-design-2026-10-31.md` section 3. `AppState` no longer holds the
+link: it holds a `RadioSessionManager` (`AppState.radioSessions`) and keeps only the drive UX (reconnect banner, resuming the
+engine). Everything below is pure Dart.
+
+| Piece | File | Job |
+|---|---|---|
+| `RadioSessionManager` | `session_manager.dart` | connect, disconnect, hand-over (nothing reconnects until the user connects again), reconnect loop with backoff and a "same radio" key check, the link state stream (`LinkState`), one `TxArbiter` for all its sessions so the airtime ledger survives a reconnect |
+| `LinkRadioSession` | `radio_session_impl.dart` | one session over one `CompanionLink`: typed inbound stream, `sendChannelMessage` / `sendContactMessage` (result mapping), contacts and channels, events, `ClaimRadio` (claims run at P1 and are counted in the ledger), `RadioStatsSource` (health sampling reads through the session so a reconnect does not rebuild it) |
+| `CommandQueue` | `command_queue.dart` | one command in flight, next one picked by priority (P0 user ... P4 discovery), FIFO inside a class; extracted from `companion_link.dart` |
+| `TxArbiter` | `tx_arbiter.dart` | the ping gate and the airtime ledger (below) |
+| `MessageSync` | `message_sync.dart` | persist-first, idempotent drain of the radio's offline message queue; poll fallback |
+| `ScopeGuard` | `scope_guard.dart` | puts the flood scope on the radio inside the send's queue slot |
+| `airtime.dart` | | Semtech LoRa time on air; packet sizes of a channel / direct text |
+| `inbound.dart`, `ping_gate.dart` | | the plain types other layers use (`InboundMessage`, `SendResult`, `RadioContact`, `RadioEvent`, `PingGate`) |
+
+**Priorities.** P0 user message, P1 maintenance/ack/login/status/trace/sync, P2 advert, P3 ping and its health reads, P4
+discovery. A command nobody marks gets P3 (the wardrive engine does not know about priorities), so an unmarked caller can
+never jump ahead of a user message. A running command is never interrupted.
+
+**The ping gate.** `DefaultWardriveEngine.pingGate` (a `PingGate`) is asked before every ping. `AppState` sets it to the
+session's `TxArbiter` for the default engine. The arbiter says go, or skip with a reason (`PingSkipReason`): radio outbound
+queue not empty (GET_STATS core `queue_len`), a user message in the last 2 s, ping airtime over 2% of the last 10 minutes,
+own transmit time over the region cap (unknown region 1%) in the last hour. A skipped ping is never queued for later: the
+engine's cadence check asks again after `pingSkipRetry` (2 s) at the then-current position. A manual ping skips with a
+`PingSkippedException` and is not held by the two budgets (the driver chose it), only by a busy radio and a just-sent message.
+User messages are never refused or delayed by any of this; over the cap the caller is only told.
+
+**"Arbiter idle" = wardrive behaviour of before.** The queue probe and the two budgets run only while `chatActive` is true
+(the first user send sets it; the chat layer sets it when chat is in use). With it off, every ping is a go: the cadence tests
+are unchanged. The 2 s rule has nothing to act on without user sends.
+
+**Dependency rule added:** `lib/chat` (pure Dart, Wave 1B) and `AppState` talk to the radio only through `RadioSession`;
+nothing outside `lib/radio` constructs a `MeshCoreCompanionLink` except `wiring.dart`'s `linkFactory`.
 
 ### Dependency rules (as implemented)
 
@@ -313,7 +353,17 @@ through `ChatTabHost.provider` (a `ChatTabProvider`); the shell never imports `l
 | `radio/protocol.dart` | radio | Companion protocol codes, command encoders, frame decoders, plus the radio-side encoders the simulator uses. |
 | `radio/packet.dart` | radio | Over-the-air packet parser/serialiser, path-hash decoding, GRP_TXT build/decrypt, `matchEcho`. |
 | `radio/crypto.dart` | radio | Pure-Dart SHA-256, HMAC-SHA256, AES-128; channel secrets and hash; MeshCore encrypt-then-MAC. |
-| `radio/companion_link.dart` | radio | `MeshCoreCompanionLink`: serialised commands, push handling, `ensureChannel`, `sendChannelText`, `noiseFloor`, radio health reads (`coreStats`, `radioStats`, `packetStats`, `batteryAndStorage`; unsupported asked once), discovery request, offline-queue drain. |
+| `radio/companion_link.dart` | radio | `MeshCoreCompanionLink`: commands through the `CommandQueue`, push handling (unsolicited pushes to the session), message sync, contacts (`getContacts`), DM and scoped channel sends, `ensureChannel`, `sendChannelText`, `noiseFloor`, radio health reads (`coreStats`, `radioStats`, `packetStats`, `batteryAndStorage`; unsupported asked once), discovery request, offline-queue drain. |
+| `radio/session.dart` | radio (contract) | `RadioSession` interface the chat layer codes against, `LinkState`. |
+| `radio/session_manager.dart` | radio | `RadioSessionManager`: connect, hand-over, reconnect, link state, the shared `TxArbiter`. |
+| `radio/radio_session_impl.dart` | radio | `LinkRadioSession`: a `RadioSession` over a `CompanionLink`; result mapping, events, claims at P1, health reads. |
+| `radio/command_queue.dart` | radio | `CommandQueue` (one in flight, priorities), `CommandPriority`. |
+| `radio/tx_arbiter.dart` | radio | `TxArbiter` (ping gate + airtime ledger), `TxPolicy`, `TxPriority`, `RadioAirParams`. |
+| `radio/message_sync.dart` | radio | `MessageSync`: persist-first idempotent drain of the offline queue, polling fallback. |
+| `radio/scope_guard.dart` | radio | `ScopeGuard`, `encodeSetFloodScope`. |
+| `radio/airtime.dart` | radio | `loraAirtimeMs`, `groupTextPacketBytes`, `directTextPacketBytes`. |
+| `radio/inbound.dart` | radio | `InboundMessage`, `SendResult`, `FloodScope`, `RadioContact`, `ContactListing`, `RadioChannel`, `DeviceLimits`, `RadioEvent` subclasses. |
+| `radio/ping_gate.dart` | radio | `PingGate`, `PingDecision`, `PingSkipReason`, `PingSkippedException`, `AlwaysGoPingGate`. |
 | `radio/claim_radio.dart` | radio | `ClaimRadio` (what a claim needs from a radio: sign, ensureContact, login, runCli, status), `ClaimRadioException`, `RemoteLogin`. |
 | `core/node_claim.dart` | core | `NodeClaim`, `ClaimChallenge`, `ClaimStatus`, public-key helpers; the claim wire contract. |
 | `core/claim_flow.dart` | core | `OwnRadioClaimFlow` (sign) and `RepeaterClaimFlow` (login, name + code, advert, poll, ALWAYS restore), `composeClaimName`, `ClaimRestoreStore` (pending name restores on disk, never a password). |
