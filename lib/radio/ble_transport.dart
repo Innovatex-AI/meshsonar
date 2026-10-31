@@ -1,120 +1,185 @@
-// BLE transport to a MeshCore companion radio using flutter_blue_plus. The only Flutter-dependent radio file.
+// BLE transport to a MeshCore companion radio using flutter_reactive_ble (BSD-3-Clause). The only Flutter-dependent
+// radio file.
 //
 // Mirrors MeshCore Open (MIT, © 2025 zjs81), lib/connector/meshcore_connector.dart + meshcore_uuids.dart:
-// scan filtered on the Nordic-UART-style MeshCore service UUID, connect, request MTU 185 where the platform supports it
-// (not web/Linux), discover services, subscribe to TX notifications, write frames to RX (without response when the
-// characteristic allows it). UUIDs also in MeshCore firmware docs/companion_protocol.md "BLE Connection".
+// scan filtered on the Nordic-UART-style MeshCore service UUID, connect, request MTU 185 where the platform supports it,
+// discover services, subscribe to TX notifications, write frames to RX (without response when the characteristic
+// allows it). UUIDs also in MeshCore firmware docs/companion_protocol.md "BLE Connection".
 // One BLE write = one companion frame; one notification = one frame.
 import 'dart:async';
 import 'dart:io' show Platform;
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
 
 import 'radio_api.dart';
 
 abstract final class MeshCoreBleUuids {
   static const service = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
-  static const rx = '6e400002-b5a3-f393-e0a9-e50e24dcca9e'; // app → radio (write)
-  static const tx = '6e400003-b5a3-f393-e0a9-e50e24dcca9e'; // radio → app (notify)
+  static const rx =
+      '6e400002-b5a3-f393-e0a9-e50e24dcca9e'; // app → radio (write)
+  static const tx =
+      '6e400003-b5a3-f393-e0a9-e50e24dcca9e'; // radio → app (notify)
 }
 
 class BleRadioScanner implements RadioScanner {
-  final Map<String, BluetoothDevice> _seen = {};
+  final FlutterReactiveBle _ble;
 
-  BleRadioScanner();
+  BleRadioScanner([FlutterReactiveBle? ble])
+    : _ble = ble ?? FlutterReactiveBle();
+
+  /// The phone's Bluetooth state, or throws a message the Connect screen understands (permission / off / unsupported).
+  Future<void> _requireReady() async {
+    final st = await _ble.statusStream
+        .firstWhere((s) => s != BleStatus.unknown)
+        .timeout(const Duration(seconds: 3), onTimeout: () => BleStatus.ready);
+    switch (st) {
+      case BleStatus.unauthorized:
+        throw StateError('Bluetooth permission denied');
+      case BleStatus.poweredOff:
+        throw StateError('Bluetooth is off');
+      case BleStatus.unsupported:
+        throw StateError('Bluetooth is not supported on this device');
+      case BleStatus.locationServicesDisabled:
+        throw StateError(
+          'Location services are off (Android needs them to scan for Bluetooth devices)',
+        );
+      case BleStatus.ready:
+      case BleStatus.unknown:
+        return;
+    }
+  }
 
   @override
-  Stream<List<RadioDevice>> scan({Duration timeout = const Duration(seconds: 8)}) async* {
-    if (FlutterBluePlus.isScanningNow) await FlutterBluePlus.stopScan();
+  Stream<List<RadioDevice>> scan({
+    Duration timeout = const Duration(seconds: 8),
+  }) async* {
+    await _requireReady();
     final found = <String, RadioDevice>{};
-    final out = StreamController<List<RadioDevice>>();
-    final sub = FlutterBluePlus.onScanResults.listen((results) {
-      for (final r in results) {
-        final id = r.device.remoteId.str;
-        _seen[id] = r.device;
-        final name = r.advertisementData.advName.isNotEmpty
-            ? r.advertisementData.advName
-            : (r.device.platformName.isNotEmpty ? r.device.platformName : id);
-        found[id] = RadioDevice(id: id, name: name, rssi: r.rssi);
-      }
-      if (!out.isClosed) out.add(found.values.toList());
-    }, onError: (Object e) {
-      if (!out.isClosed) out.addError(e);
-    });
-    try {
-      await FlutterBluePlus.startScan(withServices: [Guid(MeshCoreBleUuids.service)], timeout: timeout);
-    } catch (e) {
-      await sub.cancel();
-      rethrow;
+    late final StreamController<List<RadioDevice>> out;
+    StreamSubscription<DiscoveredDevice>? sub;
+    Timer? stop;
+    Future<void> finish() async {
+      stop?.cancel();
+      await sub?.cancel();
+      if (!out.isClosed) await out.close();
     }
-    // startScan completes immediately; the scan stops itself after [timeout].
-    unawaited(Future<void>.delayed(timeout + const Duration(milliseconds: 200)).then((_) async {
-      await sub.cancel();
-      await out.close();
-    }));
+
+    out = StreamController<List<RadioDevice>>(onCancel: finish);
+    sub = _ble
+        .scanForDevices(
+          withServices: [Uuid.parse(MeshCoreBleUuids.service)],
+          scanMode: ScanMode.lowLatency,
+        )
+        .listen(
+          (d) {
+            found[d.id] = RadioDevice(
+              id: d.id,
+              name: d.name.isNotEmpty ? d.name : d.id,
+              rssi: d.rssi,
+            );
+            if (!out.isClosed) out.add(found.values.toList());
+          },
+          onError: (Object e) {
+            if (!out.isClosed) out.addError(e);
+          },
+        );
+    // The scan runs until cancelled; it stops itself after [timeout].
+    stop = Timer(timeout, finish);
     yield* out.stream;
   }
 
   @override
   Future<ByteTransport> connect(RadioDevice device) async {
-    final d = _seen[device.id] ?? BluetoothDevice.fromId(device.id);
-    if (FlutterBluePlus.isScanningNow) await FlutterBluePlus.stopScan();
-    // flutter_blue_plus 2.x is NOT MIT: it is under the FlutterBluePlus License (free for personal / nonprofit /
-    // educational use; any for-profit use needs a paid licence; it may send build-time licence telemetry). `nonprofit`
-    // matches MeshCore Open. Whoever ships MeshSonar must confirm this is the right choice — see THIRD_PARTY_NOTICES.md.
-    await d.connect(license: License.nonprofit, timeout: const Duration(seconds: 15), mtu: null);
+    await _requireReady();
+    final connected = Completer<void>();
+    final state =
+        StreamController<bool>.broadcast(); // true = connected, false = gone
+    final sub = _ble
+        .connectToDevice(
+          id: device.id,
+          connectionTimeout: const Duration(seconds: 15),
+        )
+        .listen(
+          (u) {
+            switch (u.connectionState) {
+              case DeviceConnectionState.connected:
+                if (!connected.isCompleted) connected.complete();
+                state.add(true);
+              case DeviceConnectionState.disconnected:
+                if (!connected.isCompleted) {
+                  connected.completeError(StateError('Could not connect to ${device.name}'));
+                }
+                state.add(false);
+              case DeviceConnectionState.connecting:
+              case DeviceConnectionState.disconnecting:
+                break;
+            }
+          },
+          onError: (Object e) {
+            if (!connected.isCompleted) connected.completeError(e);
+            state.add(false);
+          },
+        );
+    Future<void> abort() async {
+      await sub.cancel(); // cancelling the connection stream is how reactive_ble disconnects
+      await state.close();
+    }
+
     try {
-      if (!kIsWeb && !Platform.isLinux) {
+      await connected.future.timeout(const Duration(seconds: 20));
+      if (Platform.isAndroid) {
         try {
-          await d.requestMtu(185);
+          await _ble.requestMtu(
+            deviceId: device.id,
+            mtu: 185,
+          ); // iOS negotiates its own MTU
         } catch (_) {
           // keep the default MTU
         }
       }
-      final services = await d.discoverServices();
-      BluetoothCharacteristic? rx, tx;
+      await _ble.discoverAllServices(device.id);
+      final services = await _ble.getDiscoveredServices(device.id);
+      Characteristic? rx, tx;
       for (final s in services) {
-        if (s.uuid.str128.toLowerCase() != MeshCoreBleUuids.service) continue;
+        if (s.id.toString().toLowerCase() != MeshCoreBleUuids.service) continue;
         for (final c in s.characteristics) {
-          final u = c.uuid.str128.toLowerCase();
+          final u = c.id.toString().toLowerCase();
           if (u == MeshCoreBleUuids.rx) rx = c;
           if (u == MeshCoreBleUuids.tx) tx = c;
         }
       }
-      if (rx == null || tx == null) throw StateError('Not a MeshCore companion (UART service not found)');
-      final t = _BleTransport(d, rx, tx);
-      await t._init();
+      if (rx == null || tx == null) {
+        throw StateError('Not a MeshCore companion (UART service not found)');
+      }
+      final t = _BleTransport(rx, tx, sub, state);
+      t._init();
       return t;
     } catch (_) {
-      try {
-        await d.disconnect();
-      } catch (_) {}
+      await abort();
       rethrow;
     }
   }
 }
 
 class _BleTransport implements ByteTransport {
-  final BluetoothDevice _device;
-  final BluetoothCharacteristic _rx;
-  final BluetoothCharacteristic _tx;
+  final Characteristic _rx;
+  final Characteristic _tx;
+  final StreamSubscription<ConnectionStateUpdate> _connection;
+  final StreamController<bool> _state;
   final _incoming = StreamController<Uint8List>.broadcast();
   StreamSubscription<List<int>>? _notifySub;
-  StreamSubscription<BluetoothConnectionState>? _stateSub;
+  StreamSubscription<bool>? _stateSub;
   bool _connected = true;
 
-  _BleTransport(this._device, this._rx, this._tx);
+  _BleTransport(this._rx, this._tx, this._connection, this._state);
 
-  Future<void> _init() async {
-    _notifySub = _tx.onValueReceived.listen((v) {
+  void _init() {
+    _notifySub = _tx.subscribe().listen((v) {
       if (v.isNotEmpty && !_incoming.isClosed) _incoming.add(Uint8List.fromList(v));
-    });
-    _device.cancelWhenDisconnected(_notifySub!);
-    await _tx.setNotifyValue(true);
-    _stateSub = _device.connectionState.listen((s) {
-      if (s == BluetoothConnectionState.disconnected) _closed();
+    }, onError: (Object _) => _closed());
+    _stateSub = _state.stream.listen((up) {
+      if (!up) _closed();
     });
   }
 
@@ -135,15 +200,15 @@ class _BleTransport implements ByteTransport {
   @override
   Future<void> send(Uint8List frame) async {
     if (!_connected) throw StateError('radio disconnected');
-    final noResp = _rx.properties.writeWithoutResponse;
-    await _rx.write(frame, withoutResponse: noResp);
+    await _rx.write(frame, withResponse: !_rx.isWritableWithoutResponse);
   }
 
   @override
   Future<void> disconnect() async {
     _closed();
     try {
-      await _device.disconnect();
+      await _connection.cancel();
+      await _state.close();
     } catch (_) {}
   }
 }

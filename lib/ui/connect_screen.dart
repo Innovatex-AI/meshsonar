@@ -218,7 +218,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
                 contentPadding: const EdgeInsets.symmetric(horizontal: Gap.l, vertical: Gap.xs),
                 leading: _IconBadge(icon: Icons.science_rounded, color: MeshSonarColors.of(context).beacon),
                 title: const Text('Simulator (no radio)'),
-                subtitle: const Text('A pretend radio and drive around Westerville, for trying the app out.'),
+                subtitle: const Text('A pretend radio and drive around Westerville, for trying the app out. Simulated drives stay on this phone and are never uploaded.'),
                 trailing: _connectingId == 'simulator' && s.connecting
                     ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2.5))
                     : const Icon(Icons.chevron_right_rounded),

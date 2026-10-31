@@ -217,8 +217,7 @@ Then add a section to [CHANGELOG.md](CHANGELOG.md).
 - [ ] Field check on a real radio: connect, join `#wardriving`, auto-pings and Ping now, echoes from a known repeater,
       heard box hold, Stop → upload → drive report.
 - [ ] Version bumped in **both** places (§6); CHANGELOG updated; README version line updated.
-- [ ] `THIRD_PARTY_NOTICES.md` up to date for any newly ported code. flutter_blue_plus licence category confirmed
-      ([PORTING.md §4](PORTING.md#4-flutter_blue_plus-licence)).
+- [ ] `THIRD_PARTY_NOTICES.md` up to date for any newly ported code. Bluetooth package licence still permissive (flutter_reactive_ble, BSD-3-Clause).
 - [ ] No personal data committed: no `DEVELOPMENT_TEAM`, driver keys, or local bundle-id changes.
 - [ ] iOS: `flutter build ios --release` and install (§2.3). Remember the 7-day expiry for free-team builds.
 - [ ] Tag and push (the maintainer commits; agents working on this repo don't run git).

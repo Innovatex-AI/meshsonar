@@ -25,6 +25,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:path/path.dart' as p;
 
@@ -52,6 +53,19 @@ abstract class SyncLedger {
   Future<void> clearSessionResend(String sessionId, String token);
 }
 
+/// A store that can write an export as several Drive Format files when the drive has more pings than one upload may
+/// carry (the server refuses more than [maxPingsPerExport] pings in one body).
+abstract class ChunkedExport {
+  /// One file per [maxPings] pings (at least one file, even for a drive with no pings). Each file is a complete,
+  /// valid upload body for the same session, so each can be sent on its own and the server stores every ping once.
+  /// A drive that fits in one file produces exactly the file `exportSession` writes. The recorded drive context
+  /// (the driver's own copy, never uploaded) rides in the first file only.
+  Future<List<File>> exportSessionParts(String sessionId, AppInfo app, Directory outDir, {int maxPings = maxPingsPerExport});
+}
+
+/// The server's limit per upload (MESHSONAR_DRIVE_FORMAT.md: "0 to 5,000 per request").
+const int maxPingsPerExport = 5000;
+
 /// Closes drives left open by a crash or an app kill (ended_at null), using the last ping's time, or the start time
 /// for a drive with no pings. [except] are sessions still recording. Returns the ids closed. Never throws for one bad
 /// drive; it's skipped and tried again next launch.
@@ -72,7 +86,7 @@ Future<List<String>> closeOrphanedSessions(DriveStore store, {Set<String> except
   return closed;
 }
 
-class JsonlDriveStore implements DriveStore, SyncLedger, StorageSized, DriveContextLedger, ContextSyncLedger {
+class JsonlDriveStore implements DriveStore, SyncLedger, StorageSized, DriveContextLedger, ContextSyncLedger, ChunkedExport {
   final Directory root;
   final Directory _sessionsDir;
   final Map<String, Future<void>> _locks = {};
@@ -246,6 +260,7 @@ class JsonlDriveStore implements DriveStore, SyncLedger, StorageSized, DriveCont
         final dir = _dir(sessionId);
         if (await dir.exists()) await dir.delete(recursive: true);
         _repaired.remove(sessionId);
+        _summaries.remove(sessionId);
         _repairedFiles.removeWhere((k) => k.startsWith('$sessionId/'));
       });
 
@@ -530,22 +545,41 @@ class JsonlDriveStore implements DriveStore, SyncLedger, StorageSized, DriveCont
         }
       });
 
+  /// Summaries by drive id, reused while the drive's files are unchanged (size and time of session.json, pings.jsonl,
+  /// synced.txt, rejected.txt, resend.txt). A drive of 5,000+ pings is parsed once, not on every list refresh (the
+  /// in-drive upload timer, every Stop, every app resume).
+  final Map<String, ({String sig, SessionSummary summary})> _summaries = {};
+
+  Future<String> _signature(String id) async {
+    final parts = <String>[];
+    for (final name in ['session.json', 'pings.jsonl', 'synced.txt', 'rejected.txt', 'resend.txt']) {
+      final st = await _file(id, name).stat();
+      parts.add(st.type == FileSystemEntityType.notFound ? '-' : '${st.size}@${st.modified.microsecondsSinceEpoch}');
+    }
+    return parts.join('|');
+  }
+
   @override
   Future<List<SessionSummary>> sessions() async {
     final out = <SessionSummary>[];
     if (!await _sessionsDir.exists()) return out;
+    final live = <String>{};
     await for (final e in _sessionsDir.list()) {
       if (e is! Directory) continue;
       final id = p.basename(e.path);
       if (!_safeId.hasMatch(id)) continue;
+      live.add(id);
       final summary = await _locked(id, () async {
+        final sig = await _signature(id);
+        final cached = _summaries[id];
+        if (cached != null && cached.sig == sig) return cached.summary;
         final s = await _readSession(id);
         if (s == null) return null;
         final pings = await _readPings(id);
         final synced = await _readIds(id, 'synced.txt');
         final rejected = await _readIds(id, 'rejected.txt');
         final txPings = pings.where((p) => p.kind == PingKind.tx);
-        return SessionSummary(
+        final fresh = SessionSummary(
           session: s,
           pingCount: pings.length,
           txCount: txPings.length,
@@ -554,9 +588,12 @@ class JsonlDriveStore implements DriveStore, SyncLedger, StorageSized, DriveCont
           rejectedCount: pings.where((p) => rejected.contains(p.id) && !synced.contains(p.id)).length,
           sessionResendPending: await _readResend(id) != null,
         );
+        _summaries[id] = (sig: sig, summary: fresh);
+        return fresh;
       });
       if (summary != null) out.add(summary);
     }
+    _summaries.removeWhere((id, _) => !live.contains(id));
     out.sort((a, b) => b.session.startedAt.compareTo(a.session.startedAt));
     return out;
   }
@@ -568,6 +605,37 @@ class JsonlDriveStore implements DriveStore, SyncLedger, StorageSized, DriveCont
     final stamp = '${t.year.toString().padLeft(4, '0')}${two(t.month)}${two(t.day)}-${two(t.hour)}${two(t.minute)}';
     final short = s.id.length > 8 ? s.id.substring(0, 8) : s.id;
     return 'meshsonar-$stamp-$short.json';
+  }
+
+  @override
+  Future<List<File>> exportSessionParts(String sessionId, AppInfo app, Directory outDir,
+      {int maxPings = maxPingsPerExport}) async {
+    if (maxPings < 1) throw ArgumentError.value(maxPings, 'maxPings', 'must be at least 1');
+    final (s, pings, ctx) = await _locked(
+        sessionId,
+        () async => (
+              await _readSession(sessionId),
+              await _readPings(sessionId),
+              exportContextJson(
+                samples: await _readSamples(sessionId),
+                pingContexts: await _readPingContexts(sessionId),
+                session: await _readSessionContext(sessionId),
+              ),
+            ));
+    if (s == null) throw StateError('no such session: $sessionId');
+    await outDir.create(recursive: true);
+    final n = pings.isEmpty ? 1 : (pings.length + maxPings - 1) ~/ maxPings;
+    final base = exportFileName(s);
+    final files = <File>[];
+    for (var i = 0; i < n; i++) {
+      final slice = pings.sublist(i * maxPings, math.min(pings.length, (i + 1) * maxPings));
+      final name = n == 1 ? base : base.replaceFirst(RegExp(r'\.json$'), '-part${i + 1}of$n.json');
+      final f = File(p.join(outDir.path, name));
+      await _writeAtomic(
+          f, jsonEncode({...DriveBatch(app: app, session: s, pings: slice).toJson(), if (i == 0) 'context': ?ctx}));
+      files.add(f);
+    }
+    return files;
   }
 
   @override

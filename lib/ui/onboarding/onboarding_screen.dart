@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'illustrations.dart';
 
 /// What the person chose on the last pages, so the app can take them there.
-enum OnboardingExit { done, connectRadio, simulator, driverKey }
+enum OnboardingExit { done, connectRadio, simulator }
 
 class OnboardingScreen extends StatefulWidget {
   final ValueChanged<OnboardingExit> onFinish;
@@ -82,7 +82,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         art: const RadioLinkIllustration(),
                         title: 'Connect your radio',
                         body: 'Pair your MeshCore companion radio over Bluetooth. No radio with you? '
-                            'The Simulator drives a loop around Westerville so you can try everything first.',
+                            'The Simulator drives a loop around Westerville so you can try everything first; it never uploads anything.',
                         actions: [
                           FilledButton.icon(
                             key: const Key('onboarding-connect'),
@@ -103,17 +103,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       _Page(
                         key: const Key('onboarding-page-3'),
                         art: const KeyCloudIllustration(),
-                        title: 'Get a driver key',
-                        body: 'Drives are always saved on this phone. To add them to the MeshSonar coverage map, request a '
-                            'driver key — an admin approves it, then your drives upload automatically.',
-                        actions: [
-                          FilledButton.icon(
-                            key: const Key('onboarding-key'),
-                            onPressed: () => widget.onFinish(OnboardingExit.driverKey),
-                            icon: const Icon(Icons.vpn_key),
-                            label: const Text('Request a driver key'),
-                          ),
-                        ],
+                        title: 'Nothing to sign up for',
+                        body: 'MeshSonar sets up your driver key by itself. Drives are always saved on this phone and '
+                            'upload to the MeshSonar coverage map automatically. Add a callsign any time in Settings.',
                       ),
                     ],
                   ),

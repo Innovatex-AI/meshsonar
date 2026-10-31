@@ -63,6 +63,8 @@ class FastEngine implements WardriveEngine {
   Future<DrivePing> pingNow() => inner.pingNow();
   @override
   Future<void> stop() => inner.stop();
+  @override
+  Future<void> resumeOnLink(CompanionLink link) => inner.resumeOnLink(link);
 }
 
 void main() {
@@ -113,7 +115,8 @@ void main() {
         cmatClientFactory: (u) => HttpCmatClient(u, client: recorder),
         syncServiceFactory: (c) => DefaultSyncService(store: store, client: c, settings: settingsStore, app: app),
         bluetoothScanner: SimulatedRadioScanner(location: simLoc, seed: 3, timeScale: 20),
-        simulatorScanner: SimulatedRadioScanner(location: simLoc, seed: 3, timeScale: 20),
+        // A real-looking radio: a '-sim' firmware drive is never uploaded, and this test audits the upload's hosts.
+        simulatorScanner: SimulatedRadioScanner(location: simLoc, seed: 3, timeScale: 20, firmwareVersion: 'v1.18.0'),
         linkFactory: (t) => MeshCoreCompanionLink(t),
         location: simLoc,
         simulatedLocation: simLoc,

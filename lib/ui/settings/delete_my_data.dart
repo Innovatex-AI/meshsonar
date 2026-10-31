@@ -21,6 +21,13 @@ const String deleteMyDataLead = 'This deletes what MeshSonar collected alongside
     'it heard) are not touched here: delete a drive from its own screen. Collection continues as the switches in '
     'Privacy & data sharing say; turn a switch off to stop it.';
 
+/// Account deletion (App Store guideline 5.1.1(v)): the account lives on the website, signed in by emailed link, and
+/// "Delete my account" there removes the account, every drive and ping and the driver keys. The button opens that page.
+const String deleteAccountText = 'Your MeshSonar account is on the website. "Delete my account" opens the page where '
+    'you sign in with your email and delete it: that removes your account, all your drives and their pings, and '
+    'revokes your driver keys. Without an account (only a requested key), contact the server admin to have the key '
+    'and its drives removed. The buttons below clear this phone.';
+
 class DeleteMyDataScreen extends StatefulWidget {
   const DeleteMyDataScreen({super.key});
 
@@ -34,6 +41,8 @@ class _DeleteMyDataScreenState extends State<DeleteMyDataScreen> {
   List<String>? _serverResult;
   bool _serverFailed = false;
   String? _localResult;
+  bool _drivesBusy = false;
+  String? _drivesResult;
 
   Future<void> _deleteOnServer(AppState s) async {
     final ok = await confirmSettingsChange(
@@ -88,6 +97,52 @@ class _DeleteMyDataScreenState extends State<DeleteMyDataScreen> {
           ? 'Nothing of it was saved on this phone.'
           : 'Deleted the saved context from $n drive${n == 1 ? '' : 's'} on this phone.';
     });
+  }
+
+  /// Every drive on this phone, including ones not uploaded yet (the person is told so first). The drive being
+  /// recorded is never touched.
+  Future<void> _deleteAllDrives(AppState s) async {
+    final ids = [for (final x in s.sessions) x.session.id];
+    final recording = s.currentSession?.id;
+    final n = ids.where((id) => id != recording).length;
+    final ok = await confirmSettingsChange(
+      context,
+      dialogKey: 'delete-drives-dialog',
+      title: 'Delete all drives on this phone?',
+      body: n == 0
+          ? 'There are no drives on this phone.'
+          : 'Deletes $n drive${n == 1 ? '' : 's'} from this phone, including any that have not uploaded yet (those '
+              'are lost: export them first if you want a copy). Drives already on the server stay there until you '
+              'delete your account. This cannot be undone.',
+      confirmLabel: 'Delete drives',
+      destructive: true,
+    );
+    if (!ok || !mounted || n == 0) return;
+    setState(() => _drivesBusy = true);
+    var done = 0;
+    for (final id in ids) {
+      if (id == recording) continue;
+      if (await s.deleteSession(id, quiet: true)) done++;
+    }
+    if (!mounted) return;
+    setState(() {
+      _drivesBusy = false;
+      _drivesResult = 'Deleted $done drive${done == 1 ? '' : 's'} from this phone.';
+    });
+  }
+
+  Future<void> _removeKey(AppState s) async {
+    final ok = await confirmSettingsChange(
+      context,
+      dialogKey: 'delete-key-dialog',
+      title: 'Remove the driver key from this phone?',
+      body: 'This phone forgets the key and stops uploading. The key and your account stay on the server until you '
+          'delete your account on the website. The app keeps no copy of the key.',
+      confirmLabel: 'Remove key',
+      destructive: true,
+    );
+    if (!ok || !mounted) return;
+    await s.forgetKey();
   }
 
   @override
@@ -156,6 +211,37 @@ class _DeleteMyDataScreenState extends State<DeleteMyDataScreen> {
                 padding: const EdgeInsets.only(top: 12),
                 child: Semantics(liveRegion: true, child: Text(_localResult!, key: const Key('delete-local-result'))),
               ),
+            head('Your account and drives'),
+            const Text(deleteAccountText, key: Key('delete-account-text')),
+            const SizedBox(height: 8),
+            FilledButton.icon(
+              key: const Key('delete-account-website'),
+              style: FilledButton.styleFrom(backgroundColor: t.colorScheme.error, foregroundColor: t.colorScheme.onError),
+              onPressed: () => s.openWebPage('/me/privacy'),
+              icon: const Icon(Icons.manage_accounts_outlined),
+              label: const Text('Delete my account'),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              key: const Key('delete-all-drives'),
+              onPressed: _drivesBusy ? null : () => _deleteAllDrives(s),
+              icon: const Icon(Icons.route_outlined),
+              label: const Text('Delete all drives on this phone'),
+            ),
+            if (_drivesResult != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Semantics(liveRegion: true, child: Text(_drivesResult!, key: const Key('delete-drives-result'))),
+              ),
+            if (s.hasKey) ...[
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                key: const Key('delete-remove-key'),
+                onPressed: () => _removeKey(s),
+                icon: const Icon(Icons.key_off_outlined),
+                label: const Text('Remove the driver key from this phone'),
+              ),
+            ],
           ],
         ),
       ),

@@ -228,6 +228,10 @@ class SimulatedTransport implements ByteTransport {
   /// About what one short GRP_TXT costs on air at SF7 / 62.5 kHz.
   static const int _airMsPerPacket = 110;
 
+  /// The firmware string reported. Ending in `-sim` marks every drive recorded with it as a Simulator drive (never
+  /// uploaded: Companion.simulatorFirmwareSuffix). Tests that stand in for a real radio pass another string.
+  final String firmwareVersion;
+
   /// Received commands, for tests.
   final List<Uint8List> sentFrames = [];
 
@@ -243,6 +247,7 @@ class SimulatedTransport implements ByteTransport {
     this.pathHashSize = 1,
     this.noiseFloorDbm = -112,
     this.nodeName = 'MeshSonar Sim',
+    this.firmwareVersion = 'v1.18.0-sim',
     int maxChannels = 8,
   })  : location = location ?? SimulatedLocationSource(timeScale: timeScale, clock: clock),
         repeaters = repeaters ?? defaultSimulatedRepeaters(),
@@ -322,7 +327,7 @@ class SimulatedTransport implements ByteTransport {
           maxChannels: _slots.length,
           buildDate: '1 Oct 2026',
           manufacturer: 'MeshSonar Simulator',
-          firmwareVersion: 'v1.18.0-sim',
+          firmwareVersion: firmwareVersion,
           pathHashMode: pathHashSize - 1,
         ));
       case Cmd.setDeviceTime:
@@ -527,11 +532,12 @@ class SimulatedRadioScanner implements RadioScanner {
   final int? seed;
   final double timeScale;
   final DateTime Function()? clock;
+  final String firmwareVersion;
 
   /// The transport handed out by the last [connect], for tests and demos.
   SimulatedTransport? lastTransport;
 
-  SimulatedRadioScanner({this.location, this.seed, this.timeScale = 1.0, this.clock});
+  SimulatedRadioScanner({this.location, this.seed, this.timeScale = 1.0, this.clock, this.firmwareVersion = 'v1.18.0-sim'});
 
   @override
   Stream<List<RadioDevice>> scan({Duration timeout = const Duration(seconds: 8)}) async* {
@@ -542,7 +548,8 @@ class SimulatedRadioScanner implements RadioScanner {
   @override
   Future<ByteTransport> connect(RadioDevice device) async {
     if (device.id != SimulatedRadioScanner.device.id) throw StateError('unknown simulated device ${device.id}');
-    final t = SimulatedTransport(location: location, seed: seed, timeScale: timeScale, clock: clock);
+    final t = SimulatedTransport(
+        location: location, seed: seed, timeScale: timeScale, clock: clock, firmwareVersion: firmwareVersion);
     lastTransport = t;
     return t;
   }

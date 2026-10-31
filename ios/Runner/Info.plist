@@ -24,8 +24,16 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>arm64</string>
+		<string>bluetooth-le</string>
+		<string>location-services</string>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -68,12 +76,10 @@
 	</array>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>MeshSonar connects to your MeshCore companion radio over Bluetooth to send wardriving pings and hear repeater echoes.</string>
-	<key>NSBluetoothPeripheralUsageDescription</key>
-	<string>MeshSonar connects to your MeshCore companion radio over Bluetooth.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>MeshSonar records where each ping was sent so your drive can be mapped.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>MeshSonar keeps recording ping locations during a drive while the screen is off or another app (like navigation) is in front, and uses the same position to tell which MeshSonar region you are in. It is never used when you are not driving, and never put in the on-air ping.</string>
+	<string>While you record a drive, MeshSonar keeps placing each ping on the map when the screen is off or another app (like navigation) is in front. iOS shows a blue indicator while it does. Your position is not used in the background when you are not recording a drive, and is never put in the on-air ping.</string>
 	<key>NSMotionUsageDescription</key>
 	<string>MeshSonar reads air pressure from your phone's barometer during a drive, to explain changes in radio range. It is saved with your drive. You can turn it off in Settings &gt; Privacy &amp; data sharing.</string>
 	<key>UIBackgroundModes</key>

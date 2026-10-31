@@ -33,7 +33,7 @@ it's finished or skipped.
 |---|---|---|
 | 1 "Map your mesh by driving it" | What MeshSonar does; heard-nothing pings count | Next |
 | 2 "Connect your radio" | BLE pairing; Simulator | **Connect radio** → Drive tab + Connect screen; **Try the Simulator** → connects the simulator |
-| 3 "Get a driver key" | Drives are saved locally; key needed to upload | **Request a driver key** → Settings tab; **Get started** → Drive tab |
+| 3 "Nothing to sign up for" | The driver key is created automatically; drives are saved locally and upload on their own | **Get started** → Drive tab |
 
 **Skip** is always available. Settings → "Show the welcome tour" reopens the intro. When there's no prefs file (tests),
 the intro counts as already seen.
@@ -417,7 +417,7 @@ it."); `test/ui/settings_no_dead_end_test.dart` enforces it.
 
 | Section | Item | Behaviour |
 |---|---|---|
-| Account & driver key (`driver`) | **Driver key** | Without a key: a request form (name required, callsign and email optional) → `driver-request`, or paste a key from the website. With a key: a status badge (No key / Pending approval / Approved / Rejected / Revoked / Not recognised by this server), the public display name, the masked key (tap to reveal for 30 s, copy), **Refresh** (`driver-status`) and **Remove key** (asks; says drives stay on the phone and headers stop). Approval also downloads repeater names. "Manage your drives at `<server>/me`" and **Get a key on the website**. |
+| Account & driver key (`driver`) | **Driver key** | Without a key (the app normally creates one by itself at launch, `AppState.ensureKey`; not after the person removed theirs): **Create my key** (name, callsign and email optional) → `driver-request`, or paste a key from the website. With a key: a status badge (No key / Pending approval / Approved / Rejected / Revoked / Not recognised by this server), the public display name, the masked key (tap to reveal for 30 s, copy), **Refresh** (`driver-status`) and **Remove key** (asks; says drives stay on the phone and headers stop). Approval also downloads repeater names. "Manage your drives at `<server>/me`" and **Get a key on the website**. |
 | | **Server URL** | Must be http(s) with a host. Keys are per server: with a key saved, moving to another server asks "Change server and remove your key?", then removes the key. Another address of the same server keeps it. Unsent drives stay on the phone. |
 | Region (`region`) | **Region** | Which region the app shows (follows your location unless you pick one; opens the switcher). |
 | | **Connected to** (`site-region`), **Radio preset** (`site-radio-preset`) | From `GET /api/cmh/site-config`, shown only once it has answered. The preset row compares the region's suggested preset with the connected radio's own ("Yours"); states: no preset, preset with no radio, both. Information only: the app never writes to the radio. |
@@ -463,7 +463,7 @@ Design, numbers and the asks for the server: [REGIONS_AT_SCALE.md](REGIONS_AT_SC
 ## Region data, telemetry and timeline (0.19)
 
 - **ETag cache** (`lib/core/etag_client.dart`, `region_cache.dart`): region reads send `If-None-Match`; a 304 reuses the stored body. With no network the Region tab shows the stored data labelled "Offline - as of <time>".
-- **Idle region detection** (`lib/core/idle_region_watcher.dart`): when not driving, a coarse, distance-filtered location stream (at most one fix per 20 s) feeds the region tracker so the Region tab follows the phone. It is cancelled during a drive and in the background unless "Always" location is granted. The last fix is kept in `last_known_fix.json` so the next launch shows the right region before the first GPS fix. The radio preset is never changed silently: same preset notifies and switches, a different preset prompts.
+- **Idle region detection** (`lib/core/idle_region_watcher.dart`): when not driving, a coarse, distance-filtered location stream (at most one fix per 20 s) feeds the region tracker so the Region tab follows the phone. It is cancelled during a drive and whenever the app is in the background, even with "Always" location granted (background location is for recording a drive only). The last fix is kept in `last_known_fix.json` so the next launch shows the right region before the first GPS fix. The radio preset is never changed silently: same preset notifies and switches, a different preset prompts.
 - **Telemetry uploader** (`lib/core/telemetry_uploader.dart`, `telemetry.dart`): on by default with a first-run disclosure and a visible opt-out in Settings. Sends packet headers and metadata only (type, route, path hashes, SNR/RSSI, time, packet hash) to `POST /api/cmh/telemetry` with the driver key. Never payloads, coordinates, your own pings or private message types. Turning it off clears the queue and offers `DELETE` to erase what was already shared.
 - **Coverage timeline**: Map layers > Network coverage > Coverage options > "Coverage growth (as of)" slider with play/pause and a Live reset. Built from windowed `public-coverage?until=` calls; the first-data day comes from `region-timeline` (days only).
 
@@ -621,6 +621,14 @@ meshsonar-infra planning `stream-7-data-collection.md`.
   nRF52 boards; others send none). Read once a minute with the other radio stats (`mcu_temp_c`); everything else in
   that answer (environment sensors, the board's GPS position) is skipped and never stored. The drive report charts it
   (°C / °F) and shows noise floor and SNR by 5-degree band.
+- **Privacy manifest and App Store answers** (`ios/Runner/PrivacyInfo.xcprivacy`, `Info.plist`): the manifest lists
+  exactly what the categories collect and nothing else. Precise Location = drive positions plus altitude and course
+  (motion); Other Data = packet headers and barometer pressure; Performance Data = phone battery; Other Diagnostic Data =
+  phone/app details, radio health, radio settings, problem reports; User ID / Name / Email = driver key and key requests;
+  Other User Content = problem-report text. All linked to the driver key, none for tracking, no tracking domains. The
+  only Info.plist string the sensors need is `NSMotionUsageDescription` (barometer; battery and device model need no
+  permission). Android needs no permission for any of them. Change a category and this paragraph, the manifest and the
+  App Store answers together.
 - **Storage**: `samples.jsonl` (no coordinates), `ctx.jsonl`, `context.json` beside the drive, plus the sent-ledger
   (`ctx_sent.txt`, `samples_sent.txt`, `context_sent.txt`: what the server already has). The upload to a server without
   v1.2 is byte-identical to before. The drive's Export file adds a `context` object (format
@@ -753,9 +761,31 @@ it was.
 
 ## Export & share
 
-The drive card and drive detail write one Drive Format v1 JSON file (see [DATA_MODEL.md §3](DATA_MODEL.md#3-export-file--drive-format-v1))
-to the temp folder and open the platform share sheet (`share_plus`). The drive report shares a `.txt` file and its
-text.
+The drive card and drive detail write a Drive Format v1 JSON file (see [DATA_MODEL.md §3](DATA_MODEL.md#3-export-file--drive-format-v1))
+to the temp folder and open the platform share sheet (`share_plus`). The server takes at most 5,000 pings per upload,
+so a drive with more is written as several files (`...-part1of3.json`, ...), each a complete upload body for the same
+session, shared in one sheet; the recorded drive context rides in part 1 only. A drive of 5,000 pings or fewer is the
+single file it always was. The drive report shares a `.txt` file and its text.
+
+## When the phone, the radio or the server misbehaves
+
+- **Radio drops mid-drive** (walked away, Bluetooth switched off, radio rebooted): the drive stays open and the status
+  row reads "Radio disconnected. Reconnecting (try N)…" (or "Bluetooth is off. Turn it on and MeshSonar reconnects by
+  itself."). The app reconnects to the same radio (1 s, then 4, 6, … up to 20 s apart, until it answers or you press
+  Stop), rejoins the channel and carries on in the same drive with the same ping cadence. A different radio answering
+  at that address is refused.
+- **No GPS** (Location turned off, permission taken away): pings wait; after 20 s the status says "No GPS fix. Check
+  that Location is on and allowed for MeshSonar." and the drive resumes by itself when GPS is back. A remembered
+  position older than 30 s is never used for a ping.
+- **Wrong phone clock**: when GPS time and the phone clock differ by more than 5 minutes on three fixes in a row the
+  app says so once per drive (the server refuses a ping stamped more than a day ahead).
+- **App killed or phone died mid-drive**: every ping is on disk before anything else happens; at the next launch the
+  open drive is closed at its last ping and uploaded.
+- **Uploads that could not go out** (no signal, server down, rate limit) are tried again at launch and each time the
+  app comes back to the front (at most every 2 minutes, never while driving, never during a server-requested wait).
+  429 and 503 (with `Retry-After`) pause automatic uploads; 5xx and no network stop the run after the first failure;
+  413 halves the request until the server takes it; 401/403 stop the run and refresh the key status. Nothing is
+  marked uploaded before a 200.
 
 ## Messages
 

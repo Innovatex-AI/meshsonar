@@ -8,6 +8,15 @@
 // - A drive with nothing left to send but an ended_at the server hasn't heard yet, or whose details changed (a
 //   rename), gets one upload with no pings, so the server learns the end time and the new name.
 // - 403 = key not approved: nothing is changed locally. Network errors stop that session and keep everything.
+// - Server answers other than 200 (Drive Format "Status codes", PLATFORM_CONTRACT rate limits):
+//     401 / 403  key problem: the whole run stops (every other drive would fail the same way);
+//     413        the body was too big for the server (a proxy limit below the 5,000-ping cap): the chunk is halved and
+//                sent again, down to single pings; nothing is lost;
+//     429        rate limit (240 requests a minute per driver key, shared with every keyed read): the run stops at once
+//                instead of hammering, and [SyncReport.retryAfterSec] says how long to wait (Retry-After, else 60 s);
+//     5xx / 408 / no network   the server or the network is down: the run stops (no waiting out a 120 s timeout once
+//                per queued drive), everything stays on the phone and goes up next time.
+//   A ping is marked synced only after a 200, so every one of these is safe to repeat.
 //
 // Drive context (stream 7 WP5). Only when the server's site-config lists `meshsonar.drive.v1.2` (the injected
 // [capabilities] provider; unknown = plain v1) AND there is something to say, the body is Drive Format v1.2: the
@@ -56,6 +65,9 @@ class DefaultSyncService implements SyncService {
 
   /// Sessions whose v1.2 upload was refused as a whole this run; they go up as the plain drive until the app restarts.
   final Set<String> _plainOnly = {};
+
+  /// Seconds to wait when the server gives no `Retry-After` with a 429 / 503.
+  static const int defaultRetryAfterSec = 60;
 
   DefaultSyncService({
     required this.store,
@@ -122,7 +134,7 @@ class DefaultSyncService implements SyncService {
         for (final s in list.reversed) {
           final r = await _syncOne(key, s.session.id, run!);
           results.add(r);
-          if (r.fatal) break; // key problem: every other session would fail the same way
+          if (r.fatal || r.abort) break; // key / server / network problem: every other session would fail the same way
         }
         return _report(results);
       });
@@ -138,7 +150,7 @@ class DefaultSyncService implements SyncService {
         for (final s in (await store.sessions()).reversed) {
           final r = await _syncOne(key, s.session.id, run, contextOnly: true);
           results.add(r);
-          if (r.fatal) break;
+          if (r.fatal || r.abort) break;
         }
         return _report(results);
       });
@@ -146,7 +158,9 @@ class DefaultSyncService implements SyncService {
   SyncReport _report(List<_SessionResult> rs) {
     var up = 0, stored = 0, dup = 0, rej = 0, ss = 0, sd = 0, sr = 0, cu = 0, cr = 0, cf = 0;
     String? firstError;
+    int? retryAfter;
     for (final r in rs) {
+      retryAfter ??= r.retryAfterSec;
       if (r.uploaded) up++;
       stored += r.stored;
       dup += r.duplicate;
@@ -171,6 +185,7 @@ class DefaultSyncService implements SyncService {
       contextPingsUpdated: cu,
       contextRejected: cr,
       contextFallbacks: cf,
+      retryAfterSec: retryAfter,
     );
   }
 
@@ -181,6 +196,8 @@ class DefaultSyncService implements SyncService {
       r.error = 'no such drive: $sessionId';
       return r;
     }
+    // A Simulator drive is made-up data: it must never reach the community map.
+    if (session.isSimulated) return r;
     final ledger = _ledger;
     // Read before the uploads, so a rename made while they run stays marked for the next sync.
     final resendToken = await ledger.sessionResendToken(sessionId);
@@ -193,9 +210,23 @@ class DefaultSyncService implements SyncService {
       if (contextOnly && (pending.isNotEmpty || endUntold || resendToken != null)) return r;
 
       final sc = run.v12 && !_plainOnly.contains(sessionId) ? await _loadContext(run, sessionId) : null;
-      for (var i = 0; i < pending.length; i += chunkSize) {
-        final chunk = pending.sublist(i, i + chunkSize > pending.length ? pending.length : i + chunkSize);
-        await _uploadChunk(key, session, chunk, r, run, sc);
+      final queue = <List<DrivePing>>[
+        for (var i = 0; i < pending.length; i += chunkSize)
+          pending.sublist(i, i + chunkSize > pending.length ? pending.length : i + chunkSize),
+      ];
+      while (queue.isNotEmpty) {
+        final chunk = queue.removeAt(0);
+        try {
+          await _uploadChunk(key, session, chunk, r, run, sc);
+        } on CmatException catch (e) {
+          // 413: too big for the server (or a proxy in front of it). Nothing of this chunk was confirmed, so split it.
+          if (e.status == 413 && chunk.length > 1) {
+            final mid = chunk.length ~/ 2;
+            queue.insertAll(0, [chunk.sublist(0, mid), chunk.sublist(mid)]);
+            continue;
+          }
+          rethrow;
+        }
       }
       final forced = pending.isEmpty && (endUntold || resendToken != null);
       // Samples beyond the first request, a changed device / radio part, or the end time / rename: ping-less uploads.
@@ -212,12 +243,19 @@ class DefaultSyncService implements SyncService {
       if (resendToken != null) await ledger.clearSessionResend(sessionId, resendToken);
       await _uploadLate(key, session, run, sc, r);
     } on CmatException catch (e) {
-      r.error = switch (e.status) {
+      final st = e.status;
+      r.error = switch (st) {
         403 => 'key not approved',
         401 => 'driver key not recognised by the server',
+        429 => 'HTTP 429: the server asked us to slow down',
+        413 => 'HTTP 413: the server refused a single ping as too large',
+        _ when st != null && st >= 500 => 'HTTP $st: the server had a problem',
         _ => e.message,
       };
-      r.fatal = e.status == 401 || e.status == 403;
+      r.fatal = st == 401 || st == 403;
+      // Network down / timeout (no status), rate limit, server trouble: the next drive would fail the same way.
+      r.abort = st == null || st == 408 || st == 429 || st >= 500;
+      if (st == 429 || st == 503) r.retryAfterSec = e.retryAfterSec ?? defaultRetryAfterSec;
     }
     return r;
   }
@@ -488,6 +526,10 @@ class _SessionResult {
   bool fellBack = false;
   String? error;
   bool fatal = false;
+
+  /// Stop the whole run (rate limit, server down, no network), without it being a key problem.
+  bool abort = false;
+  int? retryAfterSec;
 }
 
 class _MemoryLedger implements SyncLedger {

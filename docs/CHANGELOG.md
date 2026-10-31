@@ -5,6 +5,43 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+## [0.21.0] — 2026-10-30 — production readiness (TestFlight candidate)
+
+- **Bluetooth now runs on `flutter_reactive_ble` (BSD-3-Clause)**, replacing `flutter_blue_plus`, whose licence needs a
+  paid commercial licence for for-profit use. Same behaviour behind `RadioScanner` / `ByteTransport`: scan filtered on
+  the MeshCore UART service, MTU 185 on Android, TX notifications, write without response when allowed. Bluetooth off,
+  unauthorised or unsupported is reported before scanning or connecting. **Not yet exercised against a real radio.**
+
+- **One-tap onboarding: the driver key creates itself.** A phone with no key asks the server for one at launch, on
+  returning to the app, and when the server changes (`AppState.ensureKey`): no form, no approval wait on a server
+  with open registration (production). The registration name is the generic "MeshSonar driver" (the public handle is
+  "Driver N" until a callsign is set). Failures (offline, 429) are quiet and retried with a growing pause. Removing
+  the key turns `Settings.autoKey` off so it never comes back unasked; Settings > Driver key then offers **Create my
+  key** (name, callsign and email optional), which turns it back on. Onboarding page 3 now says nothing needs signing
+  up. New setting key `auto_key` (default true). Tests: `test/app/auto_key_test.dart`.
+
+App Store readiness audit (PR `fix/app-store-readiness`; details and App Store Connect answers in [APP_STORE.md](APP_STORE.md)).
+
+- Privacy policy: linked in the app (Settings > Privacy & data sharing, About, and the driver-key request form) to `https://meshsonar.com/privacy`.
+- Account and data deletion (guideline 5.1.1(v)): "Delete my collected data" is now "Delete my data and account": it adds Delete my account (opens the website page that deletes the account, drives and keys), Delete all drives on this phone, and Remove the driver key from this phone.
+- Simulator drives are never uploaded and the Simulator's packets are never shared (a drive recorded with the simulated radio is made-up data and used to go to the community map when a key was present). The Simulator rows say so.
+- Background location is for recording a drive only: the idle region watcher no longer keeps a low-power background stream with "Always" granted (it runs in the foreground only). The "Always" and "While Using" permission strings and the in-app explainer now describe exactly that.
+- Info.plist: `ITSAppUsesNonExemptEncryption` = false, `UIRequiredDeviceCapabilities` (arm64, bluetooth-le, location-services), removed the unused `NSBluetoothPeripheralUsageDescription`.
+- Tests: `test/ui/app_store_readiness_test.dart` (policy links, deletion screen, large text on iPad windows, plist and icon invariants), Simulator upload guard, idle watcher.
+
+- Stream 7 finish: stats-parser edge-case tests (truncation, trailing bytes, extremes), PROTOCOL.md verification table marking which radio frame layouts are still unverified against real hardware, privacy manifest / App Store mapping documented in FEATURES.md. The drive hook, disclosure v2, per-category switches, phone sensors and v1.2 context upload were already on this branch.
+Field-robustness pass (branch `fix/field-robustness`): the drive path audited end to end before real-device tests and App Review.
+
+- **Radio drop mid-drive now reconnects and resumes in the same drive** (ROADMAP P1, was "stays in error"). `AppState` reconnects to the same radio with growing waits, `WardriveEngine.resumeOnLink` rejoins the channel on the new link and keeps the cadence; the radio-health sampler follows the new link. Plain reasons while it tries ("Bluetooth is off...", "radio isn't answering"). Stop ends the loop. The engine also notices a dead link between pings and in listen-only mode.
+- **Exports are chunked** (ROADMAP P2, was "document or split"): a drive over 5,000 pings exports as `-partNofM.json` files that are each a valid upload body, shared in one sheet (`ChunkedExport`, `services.shareFiles`). A drive that fits is byte-identical to before.
+- **Sync status codes**: 429 stops the run and pauses automatic uploads for `Retry-After` (default 60 s); 5xx, 408 and no network stop the run after the first failure (it used to wait out a 120 s timeout per queued drive); 413 halves the request until accepted; every one keeps all pings. New plain-language texts for 429, 413, 5xx.
+- **Offline queue**: finished drives that never uploaded are retried at launch and on every resume (quietly, at most every 2 minutes, never while driving).
+- **GPS gone mid-drive**: after 20 s the status says to check Location and permission; a remembered GPS fix older than 30 s is never used for a ping.
+- **Phone clock off from GPS time** by more than 5 minutes (steady over three fixes): one warning per drive.
+- **Drive list speed**: `JsonlDriveStore.sessions()` reuses a drive's summary while its files are unchanged (a 6,000-ping drive was fully re-parsed on every refresh, including each in-drive upload tick).
+- Simulator pass (iPhone 17 Pro, iPad Pro 11-inch): the Drive map's "No pings yet" hint no longer sits under the region chip on a phone; the About licence text is unwrapped from its 75-column hard breaks.
+- Tests added for each (`radio_reconnect_test`, `sync_status_codes_test`, `offline_queue_test`, `long_drive_test`, `wardrive_resilience_test`, long-drive cases in `drive_store_test`), including the two mutation-check gaps in TESTING.md (echo de-dup prefers fewer hops; out-of-range SNR/RSSI become null).
+
 ## [0.20.1] — 2026-10-28 — 559 regions
 
 The platform went from about 5 to 559 active regions. Design, measurements and the asks for the server: [REGIONS_AT_SCALE.md](REGIONS_AT_SCALE.md). Not installed anywhere (the app is on hold).

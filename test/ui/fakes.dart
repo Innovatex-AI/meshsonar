@@ -324,11 +324,14 @@ class FakeSyncService implements SyncService {
   String? failWith;
   Object? throwError;
 
+  /// With [failWith]: the wait the server asked for (HTTP 429 / 503).
+  int? failRetryAfterSec;
+
   @override
   Future<SyncReport> syncSession(String sessionId) async {
     syncedSessions.add(sessionId);
     if (throwError != null) throw throwError!;
-    if (failWith != null) return SyncReport(sessions: 1, error: failWith);
+    if (failWith != null) return SyncReport(sessions: 1, error: failWith, retryAfterSec: failRetryAfterSec);
     final un = await store.unsyncedPings(sessionId);
     await store.markSynced(sessionId, un.map((p) => p.id));
     store.resend.remove(sessionId);
@@ -362,12 +365,17 @@ class FakeSettingsStore implements SettingsStore {
   /// before and after 0.4.0). Off for tests about the antenna setup itself.
   final bool seedAntennaProfile;
   FakeSettingsStore([this.saved = const Settings(), this.seedAntennaProfile = false]);
+
+  /// The app creates a driver key by itself on a phone with none. Off here so a test about a no-key phone stays one;
+  /// tests about the automatic key set it (or keep `autoKey` in the saved settings and set this true).
+  bool autoKeyOn = false;
   @override
   Future<Settings> load() async {
-    if (!seedAntennaProfile) return saved;
-    final j = saved.toJson();
+    final base = autoKeyOn ? saved : saved.copyWith(autoKey: false);
+    if (!seedAntennaProfile) return base;
+    final j = base.toJson();
     final existing = j['antenna_profiles'];
-    if (existing is Map && existing.isNotEmpty) return saved;
+    if (existing is Map && existing.isNotEmpty) return base;
     return Settings.fromJson({...j, 'antenna_profiles': testAntennaProfiles});
   }
   /// When set, [save] throws it (and keeps [saved] as it was).
@@ -430,6 +438,9 @@ class FakeLink implements CompanionLink {
   Future<void> close() async => _open = false;
   @override
   bool get isConnected => _open;
+
+  /// The radio went away (Bluetooth off, out of range): [isConnected] turns false without [close].
+  void drop() => _open = false;
 }
 
 class FakeLocation implements LocationSource {
@@ -554,6 +565,16 @@ class FakeEngine implements WardriveEngine {
     return p;
   }
 
+  /// Links the app handed back after a radio drop; [resumeError] makes the next resume fail.
+  final List<CompanionLink> resumedOn = [];
+  Object? resumeError;
+  @override
+  Future<void> resumeOnLink(CompanionLink link) async {
+    if (resumeError != null) throw resumeError!;
+    resumedOn.add(link);
+    setStatus(const EngineStatus(EngineState.driving, message: 'Driving. Listening on #wardriving.'));
+  }
+
   @override
   Future<void> stop() async {
     stopped = true;
@@ -593,6 +614,9 @@ class Harness {
   Future<HubRegions> Function(String serverUrl)? regionCatalogFetch;
   final List<FakeCmatClient> clients = [];
   final List<FakeEngine> engines = [];
+
+  /// Every link the app opened, oldest first.
+  final List<FakeLink> links = [];
   final List<File> shared = [];
   LocationSource? engineLocation;
   int _id = 0;
@@ -663,7 +687,11 @@ class Harness {
     syncServiceFactory: (_) => sync,
     bluetoothScanner: bt,
     simulatorScanner: sim,
-    linkFactory: (_) => FakeLink(selfInfo),
+    linkFactory: (_) {
+      final l = FakeLink(selfInfo);
+      links.add(l);
+      return l;
+    },
     location: location,
     simulatedLocation: simLocation,
     engineFactory: makeEngine,
@@ -684,7 +712,7 @@ class Harness {
     uiPrefsFile: uiPrefsFile,
   );
 
-  late final AppState state = AppState(services);
+  late final AppState state = AppState(services)..retryPendingAtLaunch = false;
 
   Future<void> pumpApp(WidgetTester tester) async {
     await state.init();

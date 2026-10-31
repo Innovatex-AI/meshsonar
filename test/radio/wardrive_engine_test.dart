@@ -43,6 +43,7 @@ class Rig {
 WardriveConfig manual() => const WardriveConfig(intervalSec: 0, minDistanceM: 100, listenWindow: window, txPowerW: 1.0);
 
 void main() {
+  resumeTests();
   test('ping text is "MS:" plus a random 10-character tag, nothing else', () {
     expect(formatPingText('m3jnr7dan5'), 'MS:m3jnr7dan5');
     final seen = <String>{};
@@ -245,6 +246,49 @@ void main() {
     expect(p.pktHash,
         groupTextPacketHashHex(hashtagChannelSecret('#wardriving'), ts, 'MeshSonar Sim', String.fromCharCodes(sent.sublist(7))));
     expect(p.txDbm, isNull);
+    await rig.engine.stop();
+  });
+}
+
+void resumeTests() {
+  test('radio drop mid-drive: resumeOnLink rejoins the channel and the SAME engine carries on pinging', () async {
+    final rig = Rig(speedMps: 13, gpsScale: 20);
+    await rig.open();
+    await rig.engine.start(const WardriveConfig(intervalSec: 10, minDistanceM: 15, listenWindow: window));
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    rig.radio.simulateDisconnect();
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+    expect(rig.engine.current.state, EngineState.error);
+    final before = rig.pings.length;
+
+    // A new connection to the same radio.
+    final radio2 = SimulatedTransport(location: rig.gps, seed: 7, timeScale: 40);
+    final link2 = MeshCoreCompanionLink(radio2, timeout: const Duration(seconds: 2));
+    await link2.start();
+    await rig.engine.resumeOnLink(link2);
+    expect(rig.engine.current.state, anyOf(EngineState.driving, EngineState.pinging));
+    final p = await rig.engine.pingNow();
+    expect(rig.pings.length, greaterThan(before), reason: 'the drive carries on on the new link');
+    expect(p.kind, PingKind.tx);
+    expect(radio2.sentFrames.where((f) => f[0] == 3), isNotEmpty, reason: 'the pings go out on the new radio');
+    await rig.engine.stop();
+    expect(rig.engine.current.state, EngineState.idle);
+  });
+
+  test('resumeOnLink on a drive that was never started is refused', () async {
+    final rig = Rig(speedMps: 0);
+    await rig.open();
+    await expectLater(rig.engine.resumeOnLink(rig.link), throwsA(isA<StateError>()));
+  });
+
+  test('resumeOnLink with a link that is already dead stays in error', () async {
+    final rig = Rig(speedMps: 13, gpsScale: 20);
+    await rig.open();
+    await rig.engine.start(const WardriveConfig(intervalSec: 10, minDistanceM: 15, listenWindow: window));
+    rig.radio.simulateDisconnect();
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    await expectLater(rig.engine.resumeOnLink(rig.link), throwsA(isA<StateError>()));
+    expect(rig.engine.current.state, EngineState.error);
     await rig.engine.stop();
   });
 }

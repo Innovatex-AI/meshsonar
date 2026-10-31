@@ -87,6 +87,26 @@ void main() {
     return (await store.session(s.id))!;
   }
 
+  test('a Simulator drive is never uploaded (made-up data stays off the community map)', () async {
+    final base = makeSession();
+    final s = DriveSession(
+        id: base.id,
+        startedAt: base.startedAt,
+        radio: base.radio,
+        antenna: base.antenna,
+        companion: const Companion(firmware: 'v1.18.0-sim', name: 'MeshSonar Sim'));
+    expect(s.isSimulated, isTrue);
+    await store.startSession(s);
+    await store.appendPing(s.id, makePing(0, ts: DateTime.now().toUtc()));
+    final r = await sync.syncSession(s.id);
+    expect(r.error, isNull);
+    expect(r.stored, 0);
+    final all = await sync.syncAll();
+    expect(all.error, isNull);
+    expect(server.uploads, isEmpty);
+    expect(await store.unsyncedPings(s.id), hasLength(1), reason: 'kept on the phone');
+  });
+
   test('no key → error, nothing uploaded', () async {
     await settings.save(const Settings());
     final s = await drive(3);

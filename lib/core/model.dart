@@ -71,6 +71,11 @@ class Companion {
   final String? name;
   final String? firmware;
   const Companion({this.publicKey, this.name, this.firmware});
+
+  /// The built-in Simulator's firmware string ends with this (lib/radio/simulator.dart). A drive recorded with the
+  /// Simulator is made-up data: it is kept on the phone and never uploaded.
+  static const String simulatorFirmwareSuffix = '-sim';
+  bool get isSimulated => firmware?.endsWith(simulatorFirmwareSuffix) == true;
   Map<String, dynamic> toJson() => {'public_key': publicKey, 'name': name, 'firmware': firmware};
   factory Companion.fromJson(Map<String, dynamic> j) =>
       Companion(publicKey: j['public_key'] as String?, name: j['name'] as String?, firmware: j['firmware'] as String?);
@@ -85,6 +90,10 @@ class DriveSession {
   final Radio radio;
   final Antenna antenna;
   final Companion companion;
+
+  /// Recorded with the Simulator (pretend radio and GPS): never uploaded, never shared.
+  bool get isSimulated => companion.isSimulated;
+
   const DriveSession({
     required this.id,
     required this.startedAt,

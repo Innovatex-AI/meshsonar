@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/api.dart' show openMeteoCredit;
+import '../core/server_url.dart' show privacyPolicyUrl;
 import 'app.dart';
 
 const String mitLicenseText = '''MIT License
@@ -27,6 +28,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.''';
 
 /// Short credits for projects MeshSonar builds on. Full texts: THIRD_PARTY_NOTICES.md in the source.
+/// The licence file is hard-wrapped at about 75 columns; on a phone those line breaks leave ragged short lines. Joins
+/// the lines of each paragraph and keeps the blank lines between paragraphs.
+String unwrapParagraphs(String text) =>
+    text.split(RegExp(r'\n\s*\n')).map((p) => p.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).join(' ')).join('\n\n');
+
 const List<({String name, String license, String note})> thirdPartyNotices = [
   (
     name: 'MeshCore Open',
@@ -39,7 +45,7 @@ const List<({String name, String license, String note})> thirdPartyNotices = [
     note: 'Where MeshSonar adapts code from this project, the source file says so.',
   ),
   (name: 'Flutter', license: 'BSD-3-Clause, © The Flutter Authors', note: 'App framework.'),
-  (name: 'flutter_blue_plus', license: 'FlutterBluePlus License (free for personal, nonprofit and educational use; for-profit use needs a paid licence)', note: 'Bluetooth LE. MeshSonar is a noncommercial community project.'),
+  (name: 'flutter_reactive_ble', license: 'BSD-3-Clause, © Philips Hue / Signify', note: 'Bluetooth LE.'),
   (name: 'MeshCore firmware', license: 'MIT, © Scott Powell / rippleradios.com', note: 'Companion protocol and packet formats, re-implemented in Dart.'),
   (name: 'geolocator', license: 'MIT, © Baseflow', note: 'GPS.'),
   (name: 'share_plus, path_provider', license: 'BSD-3-Clause, © Flutter Community / The Flutter Authors', note: 'Sharing and file locations.'),
@@ -76,9 +82,19 @@ class AboutScreen extends StatelessWidget {
               'can be exported as files, and upload to any server that speaks the MeshSonar Drive Format.',
             ),
             const SizedBox(height: 16),
+            ListTile(
+              key: const Key('about-privacy-policy'),
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.policy_outlined),
+              title: const Text('Privacy policy'),
+              subtitle: const Text(privacyPolicyUrl),
+              trailing: const Icon(Icons.open_in_new, size: 18),
+              onTap: () => s.services.openUrl(Uri.parse(privacyPolicyUrl)),
+            ),
+            const SizedBox(height: 8),
             Text('Licence', style: t.textTheme.titleMedium),
             const SizedBox(height: 4),
-            Text(mitLicenseText, key: const Key('mit-license'), style: t.textTheme.bodySmall?.copyWith(fontFamily: 'monospace')),
+            Text(unwrapParagraphs(mitLicenseText), key: const Key('mit-license'), style: t.textTheme.bodySmall?.copyWith(fontFamily: 'monospace')),
             const SizedBox(height: 16),
             Text('Third-party notices', style: t.textTheme.titleMedium),
             for (final n in thirdPartyNotices)

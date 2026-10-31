@@ -25,7 +25,7 @@ The line numbers are the ones cited in the code comments. They refer to the firm
 | TX characteristic (radio → app, notify) | `6e400003-b5a3-f393-e0a9-e50e24dcca9e` |
 | Framing | **One BLE write = one companion frame; one notification = one frame.** No length prefix. |
 | Scan | Filtered on the service UUID; 8 s timeout (`RadioScanner.scan`). Name = advertised name, else platform name, else device id. |
-| Connect | 15 s timeout, `mtu: null`, `license: License.nonprofit` (see [PORTING.md §Licence](PORTING.md#4-flutter_blue_plus-licence)). Then `requestMtu(185)` except on web and Linux (failures ignored). Then service discovery, `setNotifyValue(true)` on TX. |
+| Connect | 15 s connection timeout. Then `requestMtu(185)` on Android only (iOS negotiates its own; failures ignored). Then service discovery, subscribe to TX notifications. |
 | Writes | `write(withoutResponse: rx.properties.writeWithoutResponse)` |
 | Disconnect | Detected from `connectionState == disconnected`; the incoming stream closes, so the link fails its pending command and closes. |
 
@@ -245,9 +245,25 @@ battery 0 mV (board without battery sense), noise floor 0, last RSSI 0 (nothing 
 too), storage total 0. `RadioHealthPoller` (`lib/radio/radio_health.dart`) asks radio, core, packets every 60 s
 (battery+storage every 15 min, or every poll when core stats are missing), and checks before **each** command that
 no ping is in flight (engine state `pinging`, which spans the noise-floor read, the send and the listen window); it
-waits up to half the interval, then skips. The layouts were re-read from MeshCore `main` b204f9a (FIRMWARE_VER_CODE
-14); the 26 B packets form and the 3 B battery form come from the radio plan doc only. No real-radio capture of these
-three frames exists yet. Not wired into a drive yet (AppState hook, stream 7 WP2).
+waits up to half the interval, then skips. The layouts were re-read from MeshCore `main` b204f9a (FIRMWARE_VER_CODE 14). Wired into drives by
+`lib/app/drive_context_hook.dart` / `lib/core/drive_context_session.dart` (every 60 s while a drive runs and the
+`radio_health` category is on).
+
+**Verification status (no real-radio capture of any of these frames exists yet; every test vector is built from the
+documented byte layout, `test/radio/protocol_test.dart`):**
+
+| Frame | Layout | Source | Verified on hardware |
+|---|---|---|---|
+| STATS radio `[18][01]` 14 B | noise i16, rssi i8, snr i8/4, tx/rx air u32 | firmware `MyMesh.cpp` memcpy order | No (noise floor read by GET_STATS is older code, used since 0.5) |
+| STATS core `[18][00]` 11 B | battery u16, uptime u32, err_flags u16, queue u8 | firmware `MyMesh.cpp` | No |
+| STATS packets `[18][02]` 30 B | 7 x u32 | firmware `MyMesh.cpp` | No |
+| STATS packets 26 B form (no recv_errors) | 6 x u32 | radio plan doc only, no firmware source | No, and unconfirmed to exist |
+| BATT_AND_STORAGE `[0C]` 11 B | mv u16, used_kb u32, total_kb u32 | firmware `MyMesh.cpp` | No |
+| BATT_AND_STORAGE 3 B form | mv u16 only | firmware comment only | No |
+
+To close the gap, capture the raw frames from a real companion radio (diagnostics log) and add them to the test file as
+literal byte vectors. Until then, a layout mismatch would show as nonsense health values, not a crash: decoders throw
+`ProtocolException` on short frames and the poller records null for that read.
 
 ### 6.2 Neighbour discovery (off by default)
 

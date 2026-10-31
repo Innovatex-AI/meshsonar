@@ -17,6 +17,9 @@ void main() {
     await h.pumpApp(tester);
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.byKey(const Key('key-have')), 100, scrollable: settingsScroll);
+    await tester.ensureVisible(find.byKey(const Key('key-have')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('key-have')));
     await tester.pumpAndSettle();
     // The privacy-zones link added below "Get a key on the website" (0.8.0) pushes the paste field and its button

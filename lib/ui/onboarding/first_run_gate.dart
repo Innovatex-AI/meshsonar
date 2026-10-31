@@ -21,7 +21,7 @@ class _FirstRunGateState extends State<FirstRunGate> {
   Future<void> _finish(OnboardingExit exit) async {
     final s = AppScope.read(context);
     final prefs = uiPrefsFor(s);
-    setState(() => _tab = exit == OnboardingExit.driverKey ? 4 : 0);
+    setState(() => _tab = 0);
     await prefs.markOnboardingSeen();
     if (!mounted) return;
     switch (exit) {
@@ -33,7 +33,6 @@ class _FirstRunGateState extends State<FirstRunGate> {
       case OnboardingExit.simulator:
         await s.connectSimulator();
       case OnboardingExit.done:
-      case OnboardingExit.driverKey:
         break;
     }
   }

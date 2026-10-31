@@ -431,6 +431,9 @@ class SyncReport {
   final int contextPingsUpdated;
   final int contextRejected;
   final int contextFallbacks;
+
+  /// Set when the server asked the app to slow down (HTTP 429 / 503): seconds to wait, from `Retry-After` or a default.
+  final int? retryAfterSec;
   const SyncReport({
     this.sessions = 0,
     this.stored = 0,
@@ -443,6 +446,7 @@ class SyncReport {
     this.contextPingsUpdated = 0,
     this.contextRejected = 0,
     this.contextFallbacks = 0,
+    this.retryAfterSec,
   });
 
   /// True when anything about the drive context happened or went wrong in this sync.
@@ -480,6 +484,10 @@ class Settings {
 
   /// Upload the drive when it ends (if the key is approved).
   final bool autoSync;
+
+  /// Create a driver key by itself when this phone has none and the server issues keys openly. Turned off when the
+  /// person removes their key, so it never comes back unasked; the request form turns it on again.
+  final bool autoKey;
 
   /// Also upload during a drive, every [syncEveryMin] minutes (needs [autoSync]).
   final bool syncDuringDrive;
@@ -543,6 +551,7 @@ class Settings {
     this.antenna = const Antenna(type: 'internal'),
     this.antennaProfiles = const {},
     this.autoSync = true,
+    this.autoKey = true,
     this.syncDuringDrive = true,
     this.syncEveryMin = 5,
     this.heardHoldPings = 3,
@@ -566,6 +575,7 @@ class Settings {
     int? minDistanceM,
     Map<String, AntennaProfile>? antennaProfiles,
     bool? autoSync,
+    bool? autoKey,
     bool? syncDuringDrive,
     int? syncEveryMin,
     int? heardHoldPings,
@@ -591,6 +601,7 @@ class Settings {
         antenna: antenna, // the 0.3.x setting is read-only: always kept as loaded
         antennaProfiles: antennaProfiles ?? this.antennaProfiles,
         autoSync: autoSync ?? this.autoSync,
+        autoKey: autoKey ?? this.autoKey,
         syncDuringDrive: syncDuringDrive ?? this.syncDuringDrive,
         syncEveryMin: syncEveryMin ?? this.syncEveryMin,
         heardHoldPings: heardHoldPings ?? this.heardHoldPings,
@@ -615,6 +626,7 @@ class Settings {
         'antenna': antenna.toJson(),
         'antenna_profiles': {for (final e in antennaProfiles.entries) e.key: e.value.toJson()},
         'auto_sync': autoSync,
+        'auto_key': autoKey,
         'sync_during_drive': syncDuringDrive,
         'sync_every_min': syncEveryMin,
         'heard_hold_pings': heardHoldPings,
@@ -639,6 +651,7 @@ class Settings {
         antenna: _antennaFrom(j['antenna']),
         antennaProfiles: _profilesFrom(j['antenna_profiles']),
         autoSync: j['auto_sync'] is bool ? j['auto_sync'] as bool : true,
+        autoKey: j['auto_key'] is bool ? j['auto_key'] as bool : true,
         syncDuringDrive: j['sync_during_drive'] is bool ? j['sync_during_drive'] as bool : true,
         syncEveryMin: (_int(j['sync_every_min']) ?? 5).clamp(minSyncEveryMin, maxSyncEveryMin),
         heardHoldPings: (_int(j['heard_hold_pings']) ?? 3).clamp(1, 20),

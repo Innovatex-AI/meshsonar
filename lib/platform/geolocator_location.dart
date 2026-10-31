@@ -8,6 +8,15 @@ import 'package:geolocator/geolocator.dart';
 
 import '../radio/radio_api.dart';
 
+/// A remembered position is only good for a ping when it is this fresh: a fix from an hour ago is where the car WAS.
+const Duration lastKnownMaxAge = Duration(seconds: 30);
+
+/// Whether a remembered fix taken at [at] may still stand in for a live one at [now].
+bool lastKnownIsFresh(DateTime at, DateTime now, {Duration maxAge = lastKnownMaxAge}) {
+  final age = now.difference(at);
+  return age <= maxAge && age >= -maxAge;
+}
+
 class GeolocatorLocationSource implements LocationSource {
   /// Shown in the Android foreground-service notification so GPS keeps running with the screen off.
   final bool androidForegroundNotification;
@@ -78,7 +87,8 @@ class GeolocatorLocationSource implements LocationSource {
     } catch (_) {
       try {
         final last = await Geolocator.getLastKnownPosition();
-        return last == null ? null : _toFix(last);
+        // Never a stale one: the ping would be placed where the car was long ago.
+        return last == null || !lastKnownIsFresh(last.timestamp, DateTime.now()) ? null : _toFix(last);
       } catch (_) {
         return null;
       }

@@ -73,17 +73,18 @@ void main() {
     expect(w.listening, isTrue);
   });
 
-  test('backgrounded with Always: keeps running, and a stream opened in the background asks for background updates', () async {
+  test('backgrounded with Always: still paused, and never asks for background updates (Always is for drives only)', () async {
     src.always = true;
     await w.start();
-    expect(src.subscribedBackground, [true]);
+    expect(src.subscribedBackground, [false]);
     await w.setForeground(false);
-    expect(w.listening, isTrue);
+    expect(w.listening, isFalse);
     await w.stop();
-    await w.setForeground(false);
     await w.start();
+    expect(w.listening, isFalse, reason: 'started while backgrounded: no stream');
+    await w.setForeground(true);
     expect(w.listening, isTrue);
-    expect(src.subscribedBackground.last, isTrue);
+    expect(src.subscribedBackground.every((b) => !b), isTrue);
   });
 
   test('no location permission: never subscribes (it never prompts)', () async {
