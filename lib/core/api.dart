@@ -7,6 +7,7 @@ import 'antenna_profile.dart';
 import 'drive_context_wire.dart' show ContextUploadResult, DriveContextBatch;
 import 'driver_summary.dart' show DriverSummary;
 import 'model.dart';
+import 'map_links.dart';
 import 'repeater_reach.dart';
 import 'region_lookup.dart';
 import 'server_url.dart';
@@ -218,6 +219,8 @@ class SiteConfig {
 
   /// `repeater-reach` accepts `x-driver-key` (`capabilities.reachDriverKey`).
   bool get reachDriverKey => capabilities.contains('reachDriverKey');
+  /// `cell-links` accepts `x-driver-key` (`capabilities.cellLinks`): the repeaters heard in one cell.
+  bool get cellLinks => capabilities.contains('cellLinks');
   bool get rfWindow => capabilities.contains('rfWindow');
   bool get snrDaily => capabilities.contains('snrDaily');
 }
@@ -355,6 +358,11 @@ abstract class CmatClient {
   /// the phone's). Throws [CmatException] (401 unknown key, 403 not approved, 429 limit). Default: not supported.
   Future<RepeaterReach> repeaterReach(String driverKey, String repeaterKey, {double? lat, double? lon}) =>
       throw const CmatException('not supported by this client');
+
+  /// `GET /api/cmh/cell-links?h3=<id>` with an approved driver key (`capabilities.cellLinks`): the repeaters heard in
+  /// one coverage cell (public drives, trimmed), with pings and SNR. Throws [CmatException] (401, 403, 429).
+  /// Default: not supported.
+  Future<CellLinks> cellLinks(String driverKey, String h3) => throw const CmatException('not supported by this client');
 }
 
 /// The server's answer to a drive-context erase.

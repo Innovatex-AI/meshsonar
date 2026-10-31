@@ -55,7 +55,9 @@ import 'package:h3_flutter/h3_flutter.dart' show H3;
 
 import '../../core/heard.dart' show haversineM;
 import '../../core/coverage_query.dart' show coverageResForZoom;
+import '../../core/api.dart' show CmatException;
 import '../../core/hex_cells.dart';
+import '../../core/map_links.dart';
 import '../../core/model.dart';
 import '../../core/region_overview_api.dart' show RegionObserver;
 import '../../core/region_repeaters_api.dart' show RegionRepeater;
@@ -63,8 +65,10 @@ import '../../core/network_coverage.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import 'cell_sheet.dart';
+import '../../app/app_state.dart' show AppState;
 import '../app.dart' show AppScope;
 import 'layers/layers_sheet.dart' show NetworkAgeLegend;
+import 'layers/link_lines_layer.dart';
 import 'layers/map_layer.dart';
 import 'layers/map_layers_adapter.dart';
 import 'layers/observer_layer.dart';
@@ -336,10 +340,142 @@ class _CoverageMapState extends State<CoverageMap> {
     return _ownSource;
   }
 
+  // ---------- link lines: tap a repeater -> a line to every cell it was heard in; tap a cell -> a line to every repeater ----------
+  String? _linkId;
+  String _linkTitle = '';
+  bool _linkBusy = false;
+  String? _linkError;
+  int _linkGen = 0;
+  int _linkUnplaced = 0;
+  LinkSet Function(int res)? _linkBuild;
+  LinkSet? _linkSet;
+  int _linkSetRes = -1;
+
+  AppState? _appOrNull() {
+    final w = context.getElementForInheritedWidgetOfExactType<AppScope>()?.widget;
+    return w is AppScope ? w.notifier : null;
+  }
+
+  /// The lines at the resolution drawn now (a repeater's reach is re-bucketed when the zoom crosses a band).
+  LinkSet? _currentLinks() {
+    final build = _linkBuild;
+    if (build == null) return null;
+    final res = hexResolution;
+    if (_linkSet == null || _linkSetRes != res) {
+      _linkSet = build(res);
+      _linkSetRes = res;
+    }
+    return _linkSet;
+  }
+
+  void _clearLinks() {
+    if (_linkId == null) return;
+    _linkGen++;
+    setState(() {
+      _linkId = null;
+      _linkBuild = null;
+      _linkSet = null;
+      _linkBusy = false;
+      _linkError = null;
+      _linkUnplaced = 0;
+    });
+  }
+
+  void _beginLinks(String id, String title) {
+    _linkGen++;
+    setState(() {
+      _linkId = id;
+      _linkTitle = title;
+      _linkBusy = true;
+      _linkError = null;
+      _linkBuild = null;
+      _linkSet = null;
+      _linkUnplaced = 0;
+    });
+  }
+
+  String _linkFailure(Object e) => e is CmatException && (e.status == 429)
+      ? 'Too many requests. Try again in a minute.'
+      : 'Couldn\'t load the links. Check your connection.';
+
+  Future<void> _showRepeaterLinks(RepeaterPoint p) async {
+    final app = _appOrNull();
+    final h3 = CoverageMap.hexEngine;
+    if (app == null || h3 == null || !app.reachEnabled) return;
+    _beginLinks('repeater:${p.key}', p.name);
+    final gen = _linkGen;
+    try {
+      final r = await app.repeaterReach(p.key, lat: p.lat, lon: p.lon);
+      if (!mounted || gen != _linkGen) return;
+      setState(() {
+        _linkBusy = false;
+        _linkBuild = (res) => LinkSet(id: 'repeater:${p.key}', lat: p.lat, lon: p.lon, title: p.name, ends: reachEnds(r.reach, h3, res));
+      });
+    } catch (e) {
+      if (!mounted || gen != _linkGen) return;
+      setState(() {
+        _linkBusy = false;
+        _linkError = _linkFailure(e);
+      });
+    }
+  }
+
+  ({double lat, double lon, String name})? _placeRepeater(String key) {
+    for (final src in [_rosterSource(), widget.repeaterSource]) {
+      if (src == null) continue;
+      for (final layer in [kRosterLayerId, kNetworkLayerId]) {
+        final pts = src.pointsOf(layer);
+        final i = pts.indexOf(key);
+        if (i >= 0) return (lat: pts.lat[i], lon: pts.lon[i], name: pts.name[i]);
+      }
+    }
+    final r = _refFor(key);
+    return r == null ? null : (lat: r.lat, lon: r.lon, name: _nameFor(r));
+  }
+
+  Future<void> _showCellLinks(NetworkCell n) async {
+    final c = n.cell, id = c?.h3;
+    final app = _appOrNull();
+    if (c == null || id == null || app == null || !app.cellLinksEnabled) return;
+    _beginLinks('cell:$id', 'This cell');
+    final gen = _linkGen;
+    try {
+      final got = await app.cellLinks(id);
+      if (!mounted || gen != _linkGen) return;
+      final placed = cellEnds(got, _placeRepeater);
+      setState(() {
+        _linkBusy = false;
+        _linkUnplaced = placed.unplaced;
+        _linkBuild = (_) => LinkSet(id: 'cell:$id', lat: c.lat, lon: c.lon, title: 'This cell', ends: placed.ends, unplaced: placed.unplaced);
+      });
+    } catch (e) {
+      if (!mounted || gen != _linkGen) return;
+      setState(() {
+        _linkBusy = false;
+        _linkError = _linkFailure(e);
+      });
+    }
+  }
+
+  void _fitLinks() {
+    final s = _currentLinks();
+    if (s == null || s.ends.isEmpty) return;
+    _controller.fitCamera(CameraFit.coordinates(
+      coordinates: [LatLng(s.lat, s.lon), for (final e in s.ends) LatLng(e.lat, e.lon)],
+      padding: widget.overlayPadding + const EdgeInsets.all(56),
+      maxZoom: 15,
+    ));
+  }
+
   /// A tap on a clustered repeater layer or an observer (cells come through [MapOptions.onTap]).
   void _onHit(MapHit hit) {
     if (hit is ClusterHit && hit.colocated.length <= 1) setState(() => _follow = false); // the camera moves to it
     final here = widget.position ?? (_latest == null ? null : LatLng(_latest!.lat, _latest!.lon));
+    if (hit is RepeaterHit) {
+      _showRepeaterLinks(hit.point);
+    } else if (hit is ClusterHit && hit.colocated.length == 1) {
+      _showRepeaterLinks(hit.colocated.single);
+    }
     showMapHitSheet(
       context,
       hit,
@@ -646,9 +782,13 @@ class _CoverageMapState extends State<CoverageMap> {
               }
             },
             onTap: (_, point) {
-              if (!widget.layers.networkCoverage) return;
-              final hit = networkCellAt(widget.networkCells, point);
-              if (hit != null) showMapHitSheet(context, CellHit(hit));
+              final hit = widget.layers.networkCoverage ? networkCellAt(widget.networkCells, point) : null;
+              if (hit == null) {
+                _clearLinks(); // a tap on nothing puts the lines away
+                return;
+              }
+              _showCellLinks(hit);
+              showMapHitSheet(context, CellHit(hit));
             },
             onPositionChanged: (camera, hasGesture) {
               if (tiles && _pack.update(camera.center.latitude, camera.center.longitude)) setState(() {});
@@ -775,6 +915,7 @@ class _CoverageMapState extends State<CoverageMap> {
                   ],
                 ),
               ),
+            if (_currentLinks() case final ls?) ...linkLineLayers(context, ls, labels: _captions || hexResolution >= 9),
             if (showNetwork)
               RepeaterClusterLayer(source: networkSource, layerId: kNetworkLayerId, selectedKey: _selectedRepeater, onHit: _onHit),
             if (rosterSource != null)
@@ -950,6 +1091,20 @@ class _CoverageMapState extends State<CoverageMap> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (_linkId != null) ...[
+                _LinkChip(
+                  key: const Key('link-chip'),
+                  title: _linkTitle,
+                  isRepeater: _linkId!.startsWith('repeater:'),
+                  busy: _linkBusy,
+                  error: _linkError,
+                  set: _currentLinks(),
+                  unplaced: _linkUnplaced,
+                  onFit: _fitLinks,
+                  onClear: _clearLinks,
+                ),
+                const SizedBox(height: Gap.xs),
+              ],
               if (widget.simulated) ...[
                 const SimulatedTag(key: Key('map-simulated')),
                 const SizedBox(height: Gap.xs),
@@ -1174,6 +1329,81 @@ class _MapTag extends StatelessWidget {
             color: strong ? t.colorScheme.onSurface : t.colorScheme.onSurfaceVariant,
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// "Heard in 14 cells" / "12 repeaters heard here" under the map, with Fit and Clear for the link lines.
+class _LinkChip extends StatelessWidget {
+  final String title;
+  final bool isRepeater, busy;
+  final String? error;
+  final LinkSet? set;
+  final int unplaced;
+  final VoidCallback onFit, onClear;
+  const _LinkChip({
+    super.key,
+    required this.title,
+    required this.isRepeater,
+    required this.busy,
+    required this.error,
+    required this.set,
+    required this.unplaced,
+    required this.onFit,
+    required this.onClear,
+  });
+
+  String _text() {
+    if (busy) return 'Finding links for $title…';
+    if (error != null) return error!;
+    final n = set?.ends.length ?? 0;
+    if (isRepeater) {
+      return n == 0 ? 'No drive has heard $title yet' : '$title heard in $n ${n == 1 ? 'cell' : 'cells'}';
+    }
+    final base = n == 0 ? 'No mapped repeater heard here' : '$n ${n == 1 ? 'repeater' : 'repeaters'} heard here';
+    return unplaced > 0 ? '$base (+$unplaced not on the map)' : base;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final canFit = !busy && error == null && (set?.ends.isNotEmpty ?? false);
+    return _Pill(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (busy)
+            const Padding(
+              padding: EdgeInsets.only(right: 6),
+              child: SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2)),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: Icon(Icons.share_location_rounded, size: 14, color: t.colorScheme.primary),
+            ),
+          Flexible(
+            child: Text(_text(), overflow: TextOverflow.ellipsis, maxLines: 2, style: t.textTheme.labelMedium),
+          ),
+          if (canFit)
+            IconButton(
+              key: const Key('link-fit'),
+              tooltip: 'Show all links',
+              visualDensity: VisualDensity.compact,
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+              icon: const Icon(Icons.fit_screen_rounded, size: 18),
+              onPressed: onFit,
+            ),
+          IconButton(
+            key: const Key('link-clear'),
+            tooltip: 'Clear links',
+            visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+            icon: const Icon(Icons.close_rounded, size: 18),
+            onPressed: onClear,
+          ),
+        ],
       ),
     );
   }
