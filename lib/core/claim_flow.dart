@@ -3,12 +3,10 @@
 //
 //   A) [OwnRadioClaimFlow]: "Claim my radio". claim-start(sign) with the connected companion's own public key, the radio
 //      signs the server's message with its identity key (CMD_SIGN_*), claim-complete. No radio traffic, no password.
-//   B) [RepeaterClaimFlow]: "Claim a repeater". claim-start(advert) gives a code `MSxxxx`; the app logs in to the
-//      repeater over the user's own companion (admin password stays in memory only), reads the repeater's name
-//      (`get name`), sets `<name> <code>` (`set name`), sends an `advert`, and polls claim-status until an observer
-//      has heard the code. The name is ALWAYS put back (`set name <original>`, `advert`, then `get name` to confirm),
-//      with retries; if that cannot be confirmed the exact commands to type are shown and the pending restore is kept on
-//      disk so it can be finished later. The repeater's name carries the code only for [ClaimTiming.nameHold].
+//   B) [RepeaterClaimFlow]: "Claim a repeater". claim-start(login), the app logs in to the repeater over the user's own
+//      companion (admin password stays in memory only, never sent anywhere), and a successful ADMIN login is the proof:
+//      claim-complete carries the attestation. NOTHING on the repeater is changed. ([runRestoreOnly] only finishes a name
+//      restore left over from builds before 0.25, which put a code in the name.)
 //
 // Firmware facts these flows rely on (MeshCore main, Oct 31 2026; see docs/PROTOCOL.md):
 //  - a WRONG repeater password gets no reply, so "silent" means out of range OR wrong password;
@@ -264,7 +262,7 @@ abstract class _FlowBase {
   ClaimFlowState _state = const ClaimFlowState();
   final Completer<ClaimFlowState> _done = Completer<ClaimFlowState>();
   final Completer<void> _cancelled = Completer<void>();
-  Completer<void> _wake = Completer<void>();
+  final Completer<void> _wake = Completer<void>();
 
   Stream<ClaimFlowState> get states => _states.stream;
   ClaimFlowState get state => _state;
@@ -291,10 +289,6 @@ abstract class _FlowBase {
     if (!_states.isClosed) _states.add(s);
   }
 
-  void _checkCancel() {
-    if (isCancelled) throw const _Cancelled();
-  }
-
   /// Runs [f]; a cancel while it is pending throws [_Cancelled] (the call itself still finishes in the background).
   Future<T> _cancellable<T>(Future<T> f) {
     if (isCancelled) {
@@ -302,12 +296,6 @@ abstract class _FlowBase {
       return Future<T>.error(const _Cancelled());
     }
     return Future.any<T>([f, _cancelled.future.then<T>((_) => throw const _Cancelled())]);
-  }
-
-  /// Sleeps [d], or until woken by [appResumed] / [cancel].
-  Future<void> _sleep(Duration d) async {
-    if (_wake.isCompleted) _wake = Completer<void>();
-    await Future.any<void>([wait(d), _wake.future]);
   }
 
   void _finish(ClaimFlowState s) {
@@ -502,187 +490,57 @@ class RepeaterClaimFlow extends _FlowBase {
     _finish(_s(ClaimStep.done, m, outcome: o, claim: claim, status: status));
   }
 
+  /// Login-only claim: claim-start(login), log in to the repeater as ADMIN over the user's own radio, then tell the server.
+  /// NOTHING on the repeater is changed: no name, no advert, no CLI command at all. (The old flow put a code in the name and
+  /// waited for an observer; Andy: "if a login works that's enough".)
   Future<void> _run() async {
     final key = _pubkey!;
-    ClaimOutcome? outcome;
-    String message = '';
-    NodeClaim? claim;
     var loggedIn = false;
     try {
       if (!isPublicKeyHex(key)) return _end(ClaimOutcome.serverRefused, 'That is not a repeater key (64 hex characters).');
       if (!radio.isConnected) return _end(ClaimOutcome.noRadio, 'Connect your radio first. It talks to the repeater for you.');
-      // 1. the code
-      _emit(_s(ClaimStep.starting, 'Asking the server for a claim code…'));
+      final self = radio.selfPublicKey;
+      if (self == null) return _end(ClaimOutcome.noRadio, 'Connect your radio first. It talks to the repeater for you.');
+
+      _emit(_s(ClaimStep.starting, 'Asking the server…'));
       final ClaimChallenge ch;
       try {
-        ch = await _cancellable(client.claimStart(driverKey, key, ClaimKind.advert));
+        ch = await _cancellable(client.claimStart(driverKey, key, ClaimKind.login));
       } on ClaimAlreadyYours catch (a) {
         return _end(ClaimOutcome.alreadyYours, 'This repeater is already yours. Nothing was changed on it and no password was needed.', claim: a.claim);
       } on CmatException catch (e) {
         return _end(_refusal(e), _FlowBase.serverMessage(e), status: e.status);
       }
-      _code = ch.code;
       _expires = ch.expiresAt;
 
-      // 2. log in over the mesh
       _emit(_s(ClaimStep.loggingIn, 'Logging in to the repeater over the mesh. This can take up to a minute…'));
+      final RemoteLogin login;
       try {
         await _cancellable(radio.ensureContact(key, nodeType: AdvType.repeater, name: _nodeName));
-        final login = await _cancellable(radio.login(key, _password!));
+        login = await _cancellable(radio.login(key, _password!));
         loggedIn = true;
-        if (!login.isAdmin) {
-          await radio.logout(key);
-          return _end(ClaimOutcome.notAdmin,
-              'The repeater let you in as a guest, not as admin. Claiming needs the ADMIN password (the guest password cannot change the name).');
-        }
       } on ClaimRadioException catch (e) {
         return _end(_loginOutcome(e), _loginMessage(e));
       }
+      final loginAt = now().toUtc();
+      if (!login.isAdmin) {
+        return _end(ClaimOutcome.notAdmin,
+            'The repeater let you in as a guest, not as admin. Claiming needs the ADMIN password. Nothing was changed.');
+      }
 
-      // 3. read the current name
-      _emit(_s(ClaimStep.readingName, 'Reading the repeater\'s current name…'));
-      final pending = (await store.load()).where((p) => p.pubkey == key).firstOrNull;
-      String? current;
+      _emit(_s(ClaimStep.completing, 'Telling the server you control this repeater…'));
+      final NodeClaim claim;
       try {
-        current = await _readName(key);
-      } on ClaimRadioException catch (e) {
-        return _end(e.kind == ClaimRadioError.notConnected ? ClaimOutcome.radioLost : ClaimOutcome.nameUnreadable,
-            e.kind == ClaimRadioError.notConnected
-                ? 'The radio disconnected before anything was changed. Reconnect and try again.'
-                : 'The repeater did not tell us its name, so nothing was changed. Move closer and try again.');
+        claim = await _cancellable(client.claimCompleteLogin(driverKey, ch.id,
+            isAdmin: true, firmwareLevel: login.firmwareLevel, loginAt: loginAt, radioPubKey: self));
+      } on CmatException catch (e) {
+        return _end(_refusal(e), _FlowBase.serverMessage(e), status: e.status);
       }
-      if (current == null) {
-        return _end(ClaimOutcome.nameUnreadable, 'The repeater did not tell us its name, so nothing was changed. Move closer and try again.');
-      }
-      // A name left over from an earlier attempt that never got restored: keep the ORIGINAL we saved then.
-      _original = pending != null && current != pending.originalName && current.contains(RegExp(r' ?MS[0-9A-Z]{4}$')) ? pending.originalName : current;
-      _temp = composeClaimName(_original!, ch.code!);
-
-      // 4. from here on the name is at risk: remember how to put it back BEFORE touching it
-      await store.put(PendingRestore(pubkey: key, originalName: _original!, since: now().toUtc()));
-      _restore = RestoreState.inProgress;
-      _emit(_s(ClaimStep.settingName, 'Adding the code ${ch.code} to the repeater\'s name for a short while…'));
-
-      var verified = false;
-      var expired = false;
-      var lost = false;
-      try {
-        _checkCancel();
-        final ok = await _setName(key, _temp!);
-        if (!ok) {
-          outcome = ClaimOutcome.setNameFailed;
-          message = 'The repeater did not accept the new name.';
-        } else {
-          _emit(_s(ClaimStep.advertising, 'Announcing the repeater so an observer can hear the code…'));
-          await _sendAdvert(key);
-          final codeSetAt = now();
-          var readvertised = false;
-          _emit(_s(ClaimStep.waitingForObserver, 'Waiting for an observer to hear ${ch.code}…'));
-          while (true) {
-            _checkCancel();
-            if (!radio.isConnected) {
-              lost = true;
-              outcome = ClaimOutcome.radioLost;
-              message = 'The radio disconnected.';
-              break;
-            }
-            try {
-              final st = await _cancellable(client.claimStatus(driverKey, ch.id));
-              if (st.state == ClaimState.verified) {
-                verified = true;
-                claim = st.claim;
-                break;
-              }
-              if (st.state == ClaimState.expired) {
-                expired = true;
-                break;
-              }
-            } on CmatException {
-              // a blip while polling is not a failed claim; the name is restored below either way
-            }
-            final held = now().difference(codeSetAt);
-            if (held >= timing.nameHold || now().isAfter(ch.expiresAt)) break;
-            if (!readvertised && held >= timing.nameHold ~/ 2) {
-              readvertised = true;
-              await _sendAdvert(key); // one more shout in case the first was missed
-            }
-            await _sleep(timing.poll);
-          }
-        }
-      } on _Cancelled {
-        outcome = ClaimOutcome.cancelled;
-        message = 'Cancelled.';
-      } on ClaimRadioException catch (e) {
-        lost = e.kind == ClaimRadioError.notConnected;
-        outcome = lost ? ClaimOutcome.radioLost : ClaimOutcome.setNameFailed;
-        message = lost ? 'The radio disconnected.' : 'The repeater stopped answering.';
-      }
-
-      // 5. ALWAYS put the name back (cancel included), whatever happened
-      await _restoreName(key);
-
-      if (verified) {
-        outcome = ClaimOutcome.verified;
-        message = _restore == RestoreState.confirmed
-            ? 'The repeater is yours. Its name is back to normal.'
-            : 'The repeater is yours, BUT its name still needs to be put back: type the commands below.';
-      } else if (expired) {
-        outcome = ClaimOutcome.expired;
-        message = 'The code ran out before an observer reported it. Try again closer to an observer, or use the website steps.';
-      } else if (outcome == null) {
-        // nobody heard it in the hold time: the name is back; keep listening for a late report until the code expires
-        if (_restore == RestoreState.confirmed) {
-          _emit(_s(ClaimStep.checkingLater, 'The name is back to normal. Still waiting for an observer\'s report of ${ch.code}…'));
-          while (!isCancelled && now().isBefore(ch.expiresAt)) {
-            await _sleep(timing.latePoll);
-            if (isCancelled) break;
-            try {
-              final st = await _cancellable(client.claimStatus(driverKey, ch.id));
-              if (st.state == ClaimState.verified) {
-                verified = true;
-                claim = st.claim;
-                break;
-              }
-              if (st.state == ClaimState.expired) break;
-            } on CmatException {
-              // keep trying until the code expires
-            } on _Cancelled {
-              break;
-            }
-          }
-        }
-        if (verified) {
-          outcome = ClaimOutcome.verified;
-          message = 'The repeater is yours. Its name is back to normal.';
-        } else {
-          outcome = isCancelled ? ClaimOutcome.cancelled : ClaimOutcome.expired;
-          message = isCancelled
-              ? 'Cancelled. The repeater\'s name is back to normal.'
-              : 'No observer reported the code in time. The name is back to normal. Try again closer to an observer, or use the website steps.';
-        }
-      }
-      if (verified && claim == null) {
-        try {
-          claim = (await client.myRadios(driverKey)).where((c) => c.pubkey == key).firstOrNull;
-        } on CmatException {
-          // the claim exists on the server; the list will show it
-        }
-      }
-      if (lost && _restore != RestoreState.confirmed) {
-        // wait here for the radio to come back (attachRadio / appResumed) so the restore can finish
-        _emit(_s(ClaimStep.restoring, 'Waiting for the radio to reconnect to put the repeater\'s name back…'));
-        await _waitForReconnectAndRestore(key);
-        if (_restore == RestoreState.confirmed && outcome == ClaimOutcome.radioLost) {
-          message = 'The radio disconnected. The repeater\'s name is back to normal now.';
-        }
-      }
-      _end(outcome, message, claim: claim);
+      _end(ClaimOutcome.verified, 'The repeater is yours. Nothing on it was changed.', claim: claim);
     } on _Cancelled {
       _end(ClaimOutcome.cancelled, 'Cancelled. Nothing was changed.');
     } catch (e) {
-      // anything unexpected AFTER the name was touched still gets the restore
-      if (_restore == RestoreState.inProgress) await _restoreName(key);
-      _end(ClaimOutcome.serverUnavailable, 'Something went wrong ($e).${_restore == RestoreState.confirmed ? ' The repeater\'s name is back to normal.' : ''}');
+      _end(ClaimOutcome.serverUnavailable, 'Something went wrong ($e). Nothing on the repeater was changed.');
     } finally {
       if (loggedIn) {
         try {
@@ -739,47 +597,6 @@ class RepeaterClaimFlow extends _FlowBase {
         _ => 'The repeater refused the login. Nothing was changed.',
       };
 
-  /// `get name` -> `> The Name`. One retry; null when the reply is not a name.
-  Future<String?> _readName(String key) async {
-    for (var i = 0; i < 2; i++) {
-      final r = await _cancellable(radio.runCli(key, 'get name'));
-      if (r.startsWith('>')) return r.substring(1).trimLeft();
-    }
-    return null;
-  }
-
-  /// `set name X` -> `OK`. A lost reply is checked by reading the name back; retried once.
-  Future<bool> _setName(String key, String name) async {
-    for (var i = 0; i < 2; i++) {
-      try {
-        final r = await _cancellable(radio.runCli(key, 'set name $name'));
-        if (r.startsWith('OK')) return true;
-        if (r.toLowerCase().startsWith('error')) return false;
-      } on ClaimRadioException catch (e) {
-        if (e.kind == ClaimRadioError.notConnected) rethrow;
-      }
-      // reply lost or odd: did it take?
-      try {
-        final now = await _cancellable(radio.runCli(key, 'get name'));
-        if (now.startsWith('>') && now.substring(1).trimLeft() == name) return true;
-      } on ClaimRadioException catch (e) {
-        if (e.kind == ClaimRadioError.notConnected) rethrow;
-      }
-    }
-    return false;
-  }
-
-  Future<void> _sendAdvert(String key) async {
-    for (var i = 0; i < 2; i++) {
-      try {
-        final r = await _cancellable(radio.runCli(key, 'advert'));
-        if (r.startsWith('OK')) return;
-      } on ClaimRadioException catch (e) {
-        if (e.kind == ClaimRadioError.notConnected) rethrow;
-      }
-    }
-  }
-
   /// Puts [_original] back with retries and reads it back to confirm. Not cancellable. Leaves [_restore] confirmed or
   /// failed; on failure the pending-restore record stays on disk. Never throws.
   Future<void> _restoreName(String key) async {
@@ -809,24 +626,5 @@ class RepeaterClaimFlow extends _FlowBase {
     }
     _restore = RestoreState.failed;
     _emit(_s(ClaimStep.restoring, 'Could not confirm the repeater\'s name is back. Type the commands below.'));
-  }
-
-  /// After a radio drop: wait (up to the code's expiry plus a margin) for [attachRadio] / the radio coming back, then
-  /// restore. The person can stop waiting with [cancel]; the pending record stays on disk.
-  Future<void> _waitForReconnectAndRestore(String key) async {
-    final give = (_expires ?? now()).add(const Duration(minutes: 10));
-    while (_restore != RestoreState.confirmed && !isCancelled && now().isBefore(give)) {
-      if (radio.isConnected) {
-        try {
-          await radio.ensureContact(key, nodeType: AdvType.repeater, name: _nodeName);
-          await radio.login(key, _password ?? '');
-        } catch (_) {
-          // the keep-alive may still be valid; try the restore anyway
-        }
-        await _restoreName(key);
-        if (_restore == RestoreState.confirmed) return;
-      }
-      await _sleep(timing.latePoll);
-    }
   }
 }

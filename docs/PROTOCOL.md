@@ -134,8 +134,7 @@ sequenceDiagram
 Used only by "Claim my radio" and "Claim a repeater" (`lib/radio/claim_radio.dart`, implemented by
 `MeshCoreCompanionLink`; flows in `lib/core/claim_flow.dart`). **Verified Oct 31 2026 against the MeshCore firmware
 source on `main`** (`examples/companion_radio/MyMesh.cpp` FIRMWARE_VER_CODE 14, `examples/simple_repeater/MyMesh.cpp`,
-`src/helpers/CommonCLI.cpp`, `BaseChatMesh.cpp`, `AdvertDataHelpers.cpp`, `TxtDataHelpers.h`). Not yet exercised against
-a physical radio (the fake radio in `test/support/claim_fakes.dart` speaks these exact layouts).
+`src/helpers/CommonCLI.cpp`, `BaseChatMesh.cpp`, `AdvertDataHelpers.cpp`, `TxtDataHelpers.h`). **Exercised against a physical radio on Oct 31 2026** (companion Seeed Wio Tracker L1, `v1.17.1`, FIRMWARE_VER_CODE 13, to a Heltec V4.3 observer repeater `v1.17.1.5-observer-7403067`); see the verified notes after the table. The fake radio in `test/support/claim_fakes.dart` speaks these exact layouts.
 
 App to radio:
 
@@ -175,6 +174,15 @@ Firmware facts the flows depend on (all read from source):
    **23 bytes**. The claim code goes at the END of the name, so the app cuts the ORIGINAL part to 16 bytes
    (`<original> MSxxxx`, 23 bytes) while the code is on; the full original is restored afterwards.
 6. The Ed25519 signature is over exactly the bytes the server sent (the hex in `message` decoded), not over the hex text.
+
+Verified on hardware (Oct 31 2026, `meshsonar-infra/docs/planning/repeater-observer-live-research-2026-11-01.md`):
+
+- Companion code 13 refuses `txt_type 3` and `CMD_RUN_CLI_COMMAND` (66) with `ERR 1`; type 1 works. The companion ignores the app's CLI timestamp (types 1 and 3 use its own clock; a 1970 stamp was accepted). A plain type 0 command uses the app's clock and is silently dropped by the repeater when older than the last accepted one.
+- CLI round trip: `SENT` (tag 0), `0x83` about 1.1 s later (median, 0.97 to 3.5 s), about 3% of replies never arrive. A leading `NN|` on the command text is reflected on the reply (use it to match replies).
+- Command text of 160 characters passed; 165 was dropped silently by the companion. Replies are capped near 160 characters.
+- A **blank** password re-admits a key already in the repeater's ACL as its stored role (`0x85` is_admin 1); a wrong non-blank password from the same key gets no answer. A successful login proves the password only if it was non-blank.
+- Responses to requests (`0x87`, `0x8B`, `0x8C`) carry zero padding to a 16-byte block (status struct arrives as 60 bytes: 56 + 4). Telemetry is Cayenne LPP, big endian.
+- `0x85` is 14 bytes as documented; `STATS` core 11 B, radio 14 B, packets 30 B and `BATT_AND_STORAGE` 11 B match section 6.1a.
 
 Not supported: claiming a **room server** (its login frame carries an extra `sync_since` field and the radio treats the
 contact type differently); the claim button is hidden for rooms.
@@ -370,3 +378,31 @@ round, so a reply queued at that moment is not missed.
 The simulator (`lib/radio/simulator.dart`) is a second, executable reference. It answers every command above with
 firmware-shaped frames and emits real encrypted GRP_TXT floods (1- and 2-hop, any `pathHashSize`), plus background
 Public-channel traffic that must *not* match.
+
+## 9. `meshcore://` links and QR payloads (chat)
+
+Used to share a channel or a contact (a QR code carries exactly the link text). Source: MeshCore `docs/qr_codes.md` and MeshCore
+Open `lib/utils/contact_qr.dart` (both MIT), re-implemented in `lib/chat/mesh_links.dart`; verified against the documented
+examples in `test/chat/links_test.dart`.
+
+| Link | Parameters |
+|---|---|
+| `meshcore://channel/add?name=<name>&secret=<32 hex>[&region_scope=<scope>]` | `secret` is the 16-byte channel key (the Public channel is `8b3387e9c5cdea6ac9e5edbaa115cd72`, base64 `izOH6cXN6mrJ5e26oRXNcg==`); `region_scope` needs MeshCore app 1.47+ |
+| `meshcore://contact/add?name=<name>&public_key=<64 hex>&type=<1..4>` | type 1 companion, 2 repeater, 3 room server, 4 sensor |
+| `meshcore://<hex>` (legacy) | a raw advert packet, 98..171 bytes, imported with `CMD_IMPORT_CONTACT` |
+
+Names are URL-encoded (`+` or `%20` for a space on input; we emit `+`). Input is untrusted (camera, clipboard), so the parser
+never throws and rejects with a reason: more than 2,048 characters; a name that is empty, over 31 UTF-8 bytes, or contains a
+control, bidi-override or zero-width-no-break character; a secret or key that is not exactly 32 / 64 hex characters; an advert
+outside 98..171 bytes. An out-of-range `type` is tolerated as unknown (like MeshCore Open). Hashtag channel secrets are the first 16 bytes of SHA-256
+of the lower-cased name including `#` (§4); importing a link whose secret equals that derivation marks the channel `hashtag`,
+one equal to the Public key marks it `public`, anything else `private`.
+
+## 10. Chat on the radio link (what `lib/chat` expects from the radio layer)
+
+Chat is decoupled from frames by two interfaces in `lib/chat/radio_bridge.dart`; `lib/chat/session_adapter.dart` adapts
+`RadioSession` (lib/radio/session.dart) to them. Inbound texts arrive through `RadioSession.setInboundPersister`, so a message is
+in SQLite before the radio's destructive queue is asked for the next one. `SEND_CONFIRMED` becomes an ACK match on any attempt of
+a waiting DM. A `queued` send result (no answer from the radio in time) is retried with the SAME timestamp, which is safe because
+receivers dedupe on (conversation, timestamp, text). The last DM attempt floods: the adapter writes the contact back with an
+unknown path (`ADD_UPDATE_CONTACT`, out_path_len 0xFF) first. DM frames of text type 1 (CLI data) are not chat and are ignored.

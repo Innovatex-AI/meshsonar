@@ -1,6 +1,6 @@
 // "Claim a repeater": prove a repeater is yours with its admin password, through your own radio, over the mesh.
-// The password stays in memory on this phone; the server only ever sees a short claim code that an observer hears in
-// the repeater's advert. The flow itself is lib/core/claim_flow.dart; this screen only shows it.
+// The password stays in memory on this phone and goes only to the radio; a successful ADMIN login is the proof, and
+// nothing on the repeater is changed. The flow itself is lib/core/claim_flow.dart; this screen only shows it.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -24,8 +24,8 @@ String claimOutcomeTitle(ClaimOutcome o) => switch (o) {
       ClaimOutcome.loginRefused => 'Login refused',
       ClaimOutcome.noContact => 'Your radio could not add the repeater',
       ClaimOutcome.nameUnreadable => 'Could not read the repeater\'s name',
-      ClaimOutcome.setNameFailed => 'The repeater would not take the code',
-      ClaimOutcome.expired => 'The code ran out',
+      ClaimOutcome.setNameFailed => 'Could not set the repeater\'s name',
+      ClaimOutcome.expired => 'The claim ran out',
       ClaimOutcome.serverRefused => 'The server said no',
       ClaimOutcome.serverUnavailable => 'Could not finish',
       ClaimOutcome.signFailed => 'The radio could not sign',
@@ -33,25 +33,18 @@ String claimOutcomeTitle(ClaimOutcome o) => switch (o) {
       ClaimOutcome.none => '',
     };
 
-const _stepTitles = [
-  'Log in to the repeater over the mesh',
-  'Read its current name',
-  'Add the code to its name',
-  'Announce the repeater',
-  'Wait for an observer to hear the code',
-  'Put the name back',
-];
+const _claimSteps = ['Log in to the repeater over the mesh', 'Tell the server it is yours'];
+const _restoreSteps = ['Log in to the repeater over the mesh', 'Put the name back'];
 
-int _stepIndex(ClaimStep s) => switch (s) {
-      ClaimStep.idle || ClaimStep.starting || ClaimStep.loggingIn => 0,
-      ClaimStep.readingName => 1,
-      ClaimStep.settingName => 2,
-      ClaimStep.advertising => 3,
-      ClaimStep.waitingForObserver => 4,
-      ClaimStep.restoring || ClaimStep.checkingLater => 5,
-      ClaimStep.signing || ClaimStep.completing => 0,
-      ClaimStep.done => _stepTitles.length,
-    };
+int _stepIndex(ClaimStep s, {required bool restore}) {
+  final total = (restore ? _restoreSteps : _claimSteps).length;
+  return switch (s) {
+    ClaimStep.idle || ClaimStep.starting || ClaimStep.loggingIn || ClaimStep.signing => 0,
+    ClaimStep.completing || ClaimStep.restoring => 1,
+    ClaimStep.done => total,
+    _ => 1,
+  };
+}
 
 class ClaimRepeaterScreen extends StatefulWidget {
   /// A repeater already chosen (from the map, its sheet or a list). Null: the person picks or pastes one.
@@ -148,8 +141,7 @@ class _ClaimRepeaterScreenState extends State<ClaimRepeaterScreen> {
       canPop: !_busy,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop && _busy) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text('A claim is running. Press "Cancel and put the name back" first: the repeater\'s name must be restored.')));
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('A claim is running. Press Cancel first.')));
         }
       },
       child: Scaffold(
@@ -177,7 +169,7 @@ class _ClaimRepeaterScreenState extends State<ClaimRepeaterScreen> {
     return [
       Text(restoring
           ? 'An earlier claim could not confirm this repeater\'s name was put back. Log in again and it will be restored.'
-          : 'Prove a repeater is yours. Your radio logs in to it over the mesh with its admin password, and the repeater\'s name carries a short code for about a minute so an observer can hear it.'),
+          : 'Prove a repeater is yours. Your radio logs in to it over the mesh with its admin password. That is all: nothing on the repeater is changed.'),
       const SizedBox(height: Gap.m),
       if (!connected)
         Card(
@@ -301,34 +293,18 @@ class _ClaimRepeaterScreenState extends State<ClaimRepeaterScreen> {
   // ------------------------------------------------------------ progress
 
   List<Widget> _progress(BuildContext context, ThemeData t) {
-    final at = _stepIndex(_st.step);
-    final restoringNow = _st.step == ClaimStep.restoring;
+    final restoreMode = widget.restore != null;
+    final steps = restoreMode ? _restoreSteps : _claimSteps;
+    final at = _stepIndex(_st.step, restore: restoreMode);
+    final restoringNow = restoreMode && _st.step == ClaimStep.restoring;
     return [
       Semantics(
         liveRegion: true,
         child: Text(_st.message, key: const Key('claim-message'), style: t.textTheme.titleMedium),
       ),
       const SizedBox(height: Gap.m),
-      if (_st.code != null)
-        Card(
-          key: const Key('claim-code-card'),
-          child: Padding(
-            padding: const EdgeInsets.all(Gap.m),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Code on the repeater\'s name for a short while', style: t.textTheme.labelLarge),
-              const SizedBox(height: Gap.xs),
-              Text(_st.code!, key: const Key('claim-code'), style: t.textTheme.headlineMedium?.copyWith(fontFamily: 'monospace', fontWeight: FontWeight.w800)),
-              if (_st.originalName != null) ...[
-                const SizedBox(height: Gap.xs),
-                Text('Original name: ${_st.originalName}', style: t.textTheme.bodySmall),
-              ],
-            ]),
-          ),
-        ),
       const SizedBox(height: Gap.m),
-      for (var i = 0; i < _stepTitles.length; i++) _StepRow(title: _stepTitles[i], state: i < at ? _StepState.done : (i == at ? _StepState.now : _StepState.waiting)),
-      if (_st.step == ClaimStep.checkingLater)
-        const _StepRow(title: 'Keep listening for an observer\'s report', state: _StepState.now),
+      for (var i = 0; i < steps.length; i++) _StepRow(title: steps[i], state: i < at ? _StepState.done : (i == at ? _StepState.now : _StepState.waiting)),
       const SizedBox(height: Gap.l),
       const _DisclosureCard(),
       const SizedBox(height: Gap.l),
@@ -336,7 +312,7 @@ class _ClaimRepeaterScreenState extends State<ClaimRepeaterScreen> {
         key: const Key('claim-cancel'),
         style: OutlinedButton.styleFrom(minimumSize: const Size(48, 52)),
         icon: const Icon(Icons.close),
-        label: Text(restoringNow ? 'Putting the name back…' : (_st.step == ClaimStep.checkingLater ? 'Stop waiting' : 'Cancel and put the name back')),
+        label: Text(restoringNow ? 'Putting the name back…' : 'Cancel'),
         onPressed: restoringNow || _flow!.isCancelled ? null : _flow!.cancel,
       ),
     ];

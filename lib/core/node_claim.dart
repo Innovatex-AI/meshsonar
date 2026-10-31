@@ -35,11 +35,12 @@ ClaimNodeType parseClaimNodeType(Object? v) => switch (v) {
     };
 
 /// How the claim was proven. `other` is any method a newer server adds (shown as "verified").
-enum ClaimMethod { signature, advert, other }
+enum ClaimMethod { signature, advert, login, other }
 
 ClaimMethod parseClaimMethod(Object? v) => switch (v) {
       'signature' => ClaimMethod.signature,
       'advert' => ClaimMethod.advert,
+      'login' => ClaimMethod.login,
       _ => ClaimMethod.other,
     };
 
@@ -136,7 +137,7 @@ class NodeClaim {
   }
 }
 
-enum ClaimKind { sign, advert }
+enum ClaimKind { sign, advert, login }
 
 /// The server's answer to claim-start.
 class ClaimChallenge {
@@ -156,7 +157,7 @@ class ClaimChallenge {
   static ClaimChallenge parse(Map<String, dynamic> j, {required ClaimKind asked}) {
     final id = j['challengeId'];
     if (id is! String || id.isEmpty) throw const FormatException('no challenge id');
-    final kind = j['kind'] == 'advert' ? ClaimKind.advert : (j['kind'] == 'sign' ? ClaimKind.sign : null);
+    final kind = switch (j['kind']) { 'advert' => ClaimKind.advert, 'sign' => ClaimKind.sign, 'login' => ClaimKind.login, _ => null };
     if (kind == null || kind != asked) throw const FormatException('wrong challenge kind');
     final exp = j['expiresAt'] is String ? DateTime.tryParse(j['expiresAt'] as String)?.toUtc() : null;
     if (exp == null) throw const FormatException('no expiry');
@@ -167,6 +168,7 @@ class ClaimChallenge {
       }
       return ClaimChallenge(id: id, kind: kind, message: fromHex(m), expiresAt: exp);
     }
+    if (kind == ClaimKind.login) return ClaimChallenge(id: id, kind: kind, expiresAt: exp, instructions: j['instructions'] is String ? j['instructions'] as String : null);
     final code = j['code'];
     if (code is! String || !RegExp(r'^MS[0-9A-Z]{4}$').hasMatch(code)) throw const FormatException('bad claim code');
     return ClaimChallenge(

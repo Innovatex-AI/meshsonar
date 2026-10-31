@@ -26,7 +26,7 @@ List<Widget> myRadiosSectionRows(BuildContext context) {
   final n = s.claims.active.length;
   final listWhy = _whyNot(context);
   final ownWhy = _whyNot(context, needsRadio: true);
-  final repWhy = _whyNot(context);
+  final repWhy = _whyNot(context) ?? (s.uploadSiteConfig?.nodeClaimsLogin == true ? null : 'The server is being updated for repeater claims.');
   void open(Widget screen) => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => screen));
   return [
     SettingsAnchor(

@@ -9,8 +9,8 @@ import 'claim_repeater_screen.dart';
 import 'my_radios_screen.dart';
 
 /// The wording of the promise every claim screen repeats, in one place so the screens and the tests agree.
-const String claimDisclosure = 'Your repeater\'s name will show a short code for about a minute; we restore it automatically; '
-    'we never see or store your admin password; claiming only lets you manage this radio, it never affects whether its data counts.';
+const String claimDisclosure = 'Nothing on your repeater is changed: your radio just logs in with the admin password. '
+    'We never see or store your admin password; claiming only lets you manage this radio, it never affects whether its data counts.';
 
 /// A claim never decides whether data counts. Said on every claim screen.
 const String claimNeverGates = 'Claiming only lets you manage a radio (its name, whether its position is public, giving it up). '
@@ -54,6 +54,7 @@ class ClaimRepeaterAction extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = AppScope.maybeOf(context);
     if (s == null || !s.nodeClaimsEnabled || isRoom || keyHex.length != 64) return const SizedBox.shrink();
+    if (!s.ownsRadio(keyHex) && !s.repeaterClaimEnabled) return const SizedBox.shrink();
     if (s.ownsRadio(keyHex)) {
       return Padding(
         padding: const EdgeInsets.only(top: Gap.s),
