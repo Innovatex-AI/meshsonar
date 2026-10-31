@@ -140,6 +140,9 @@ enum ClaimOutcome {
   /// Still running.
   none,
   verified,
+
+  /// claim-start said this key already owns the radio: nothing was started or changed.
+  alreadyYours,
   cancelled,
 
   /// Not connected to a radio (or it dropped before anything was changed).
@@ -328,14 +331,26 @@ abstract class _FlowBase {
       serverStatus: status);
 
   /// Words a server refusal in plain language.
-  static String serverMessage(CmatException e) {
-    switch (e.status) {
+  static String serverMessage(CmatException e) => claimServerMessage(e);
+}
+
+/// Words a server refusal in plain language (machine `code` first, then the status).
+String claimServerMessage(CmatException e) {
+  switch (e.code) {
+    case 'no_such_challenge':
+      return 'The server no longer knows that claim attempt. Start again.';
+    case 'not_owner':
+      return 'This radio is not yours to change.';
+    case 'no_such_claim':
+      return 'That claim no longer exists.';
+  }
+  switch (e.status) {
       case 401:
         return 'The server does not know this phone\'s driver key.';
       case 403:
         return 'The server will not take claims from this key yet.';
       case 409:
-        return 'This radio has a claim in progress or is claimed by someone else. ${e.message}';
+        return 'The server could not start that claim. ${e.message}';
       case 410:
         return 'That claim code ran out of time. Start again.';
       case 422:
@@ -348,7 +363,6 @@ abstract class _FlowBase {
     }
     return e.status == null ? 'Could not reach the server (${e.message}).' : e.message;
   }
-}
 
 // ------------------------------------------------------------------ A) claim my own radio
 
@@ -372,6 +386,9 @@ class OwnRadioClaimFlow extends _FlowBase {
       final ClaimChallenge ch;
       try {
         ch = await _cancellable(client.claimStart(driverKey, key, ClaimKind.sign));
+      } on ClaimAlreadyYours catch (a) {
+        return _finish(ClaimFlowState(
+            step: ClaimStep.done, outcome: ClaimOutcome.alreadyYours, claim: a.claim, message: 'This radio is already yours. Nothing was changed.'));
       } on CmatException catch (e) {
         return _finish(_FlowBase._failed(state, _refusal(e), _FlowBase.serverMessage(e), status: e.status));
       }
@@ -499,6 +516,8 @@ class RepeaterClaimFlow extends _FlowBase {
       final ClaimChallenge ch;
       try {
         ch = await _cancellable(client.claimStart(driverKey, key, ClaimKind.advert));
+      } on ClaimAlreadyYours catch (a) {
+        return _end(ClaimOutcome.alreadyYours, 'This repeater is already yours. Nothing was changed on it and no password was needed.', claim: a.claim);
       } on CmatException catch (e) {
         return _end(_refusal(e), _FlowBase.serverMessage(e), status: e.status);
       }

@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:meshsonar/core/api.dart';
+import 'package:meshsonar/core/claim_flow.dart' show claimServerMessage;
 import 'package:meshsonar/core/cmat_client.dart';
 import 'package:meshsonar/core/node_claim.dart';
 
@@ -181,6 +182,73 @@ void main() {
     test('network failure is a CmatException without a status', () async {
       final c = HttpCmatClient(Uri.parse('https://x.invalid'), client: MockClient((r) async => throw http.ClientException('down')));
       await expectLater(c.myRadios('k'), throwsA(isA<CmatException>().having((e) => e.status, 'status', isNull)));
+    });
+  });
+
+  group('contract v2 (server PR #185)', () {
+    test('409 {owner: you, claim}: already yours, not a failure, with the existing claim', () async {
+      final t = make((r) => json(409, {'error': 'already yours', 'owner': 'you', 'claim': claimJson()}));
+      await expectLater(
+          t.client.claimStart('k', _key, ClaimKind.advert),
+          throwsA(isA<ClaimAlreadyYours>().having((e) => e.claim?.pubkey, 'claim', _key)));
+      // an unreadable claim still means "yours"
+      final u = make((r) => json(409, {'error': 'x', 'owner': 'you'}));
+      await expectLater(u.client.claimStart('k', _key, ClaimKind.sign), throwsA(isA<ClaimAlreadyYours>().having((e) => e.claim, 'claim', isNull)));
+      // any other 409 stays an error
+      final o = make((r) => json(409, {'error': 'busy'}));
+      await expectLater(o.client.claimStart('k', _key, ClaimKind.sign), throwsA(isA<CmatException>()));
+    });
+
+    test('machine codes on 404/410 bodies are kept and worded', () async {
+      for (final c in ['no_such_challenge', 'not_owner', 'no_such_claim']) {
+        final t = make((r) => json(404, {'error': 'boomtext', 'code': c}));
+        try {
+          await t.client.releaseClaim('k', _key);
+          fail('should throw');
+        } on CmatException catch (e) {
+          expect(e.code, c);
+          expect(claimServerMessage(e), isNot(contains('boomtext')));
+          expect(claimServerMessage(e).length, greaterThan(10));
+        }
+      }
+    });
+
+    test('ended claims parse: status, releasedAt, releasedReason (tolerant of unknown reasons)', () {
+      final a = NodeClaim.parse({...claimJson(), 'status': 'released', 'releasedAt': '2026-10-30T10:00:00Z', 'releasedReason': 'replaced'});
+      expect(a.ended, isTrue);
+      expect(a.endReason, ClaimEndReason.replaced);
+      expect(a.releasedAt, DateTime.utc(2026, 10, 30, 10));
+      expect(claimEndText(a.endReason!), 'Another owner proved control');
+      expect(claimEndText(ClaimEndReason.released), 'You released it');
+      expect(claimEndText(ClaimEndReason.moderator), 'Removed by a moderator');
+      expect(NodeClaim.parse({...claimJson(), 'status': 'released', 'releasedReason': 'brand-new'}).endReason, ClaimEndReason.unknown);
+      final active = NodeClaim.parse({...claimJson(), 'status': 'active'});
+      expect(active.ended, isFalse);
+      expect(NodeClaim.parse(claimJson()).ended, isFalse, reason: 'older servers send none of the new fields');
+    });
+
+    test('no claim request body ever contains a password-like field', () async {
+      final t = make((r) {
+        if (r.url.path.endsWith('claim-start')) return json(201, {'challengeId': 'c', 'kind': 'sign', 'message': '61', 'expiresAt': '2026-10-31T12:02:00Z'});
+        if (r.url.path.endsWith('claim-complete') || r.method == 'PATCH') return json(200, {'claim': claimJson()});
+        if (r.url.path.endsWith('my-radios')) return json(200, {'claims': []});
+        if (r.url.path.endsWith('claim-status')) return json(200, {'state': 'pending'});
+        return json(200, {'released': true});
+      });
+      await t.client.claimStart('k', _key, ClaimKind.sign);
+      await t.client.claimComplete('k', 'c', 'ab' * 64);
+      await t.client.claimStatus('k', 'c');
+      await t.client.myRadios('k');
+      await t.client.updateClaim('k', _key, {'displayName': 'x', 'notes': null, 'positionPublic': true});
+      await t.client.releaseClaim('k', _key);
+      final bad = RegExp(r'pass|pw|secret|admin', caseSensitive: false);
+      for (final r in t.seen) {
+        final keys = r.body.isEmpty ? <String>[] : (jsonDecode(r.body) as Map).keys.cast<String>().toList();
+        for (final k in [...keys, ...r.url.queryParameters.keys]) {
+          expect(bad.hasMatch(k), isFalse, reason: '${r.method} ${r.url.path} sends "$k"');
+        }
+      }
+      expect(t.seen.length, 6);
     });
   });
 }

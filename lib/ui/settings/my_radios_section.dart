@@ -23,7 +23,7 @@ String? _whyNot(BuildContext context, {bool needsRadio = false}) {
 
 List<Widget> myRadiosSectionRows(BuildContext context) {
   final s = AppScope.of(context);
-  final n = s.claims.claims.length;
+  final n = s.claims.active.length;
   final listWhy = _whyNot(context);
   final ownWhy = _whyNot(context, needsRadio: true);
   final repWhy = _whyNot(context);

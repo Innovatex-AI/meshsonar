@@ -110,7 +110,13 @@ class CmatException implements Exception {
 
   /// The `Retry-After` of a 429 / 503, in seconds, when the server sent one.
   final int? retryAfterSec;
-  const CmatException(this.message, {this.status, this.serverStatus, this.retryAfterSec});
+
+  /// The machine `code` of an error body (`no_such_challenge`, `not_owner`, `no_such_claim` ...), when the server sent one.
+  final String? code;
+
+  /// The decoded error body, when it was a JSON object.
+  final Map<String, dynamic>? body;
+  const CmatException(this.message, {this.status, this.serverStatus, this.retryAfterSec, this.code, this.body});
   @override
   String toString() => 'CmatException($status): $message';
 }

@@ -263,6 +263,40 @@ void main() {
       expect(find.text('Position hidden'), findsOneWidget);
     });
 
+    testWidgets('ended claims sit in a collapsed Past radios section with the reason; they are not "owned"', (tester) async {
+      final h = await open(tester);
+      h.claims.claims.addAll([
+        NodeClaim(pubkey: k('b'), nodeType: ClaimNodeType.repeater, method: ClaimMethod.advert, displayName: 'Hilltop'),
+        NodeClaim(pubkey: k('c'), displayName: 'Old one', ended: true, endReason: ClaimEndReason.replaced, releasedAt: DateTime.utc(2026, 10, 20)),
+        NodeClaim(pubkey: k('d'), displayName: 'Dropped', ended: true, endReason: ClaimEndReason.released),
+        NodeClaim(pubkey: k('e'), displayName: 'Pulled', ended: true, endReason: ClaimEndReason.moderator),
+      ]);
+      await openScreen(tester, const MyRadiosScreen());
+      await pumpUntil(tester, () => find.byKey(const Key('past-radios')).evaluate().isNotEmpty);
+      expect(find.text('Hilltop'), findsOneWidget);
+      expect(find.text('Old one'), findsNothing, reason: 'collapsed');
+      expect(find.text('Past radios (3)'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('past-radios')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Another owner proved control'), findsOneWidget);
+      expect(find.text('You released it'), findsOneWidget);
+      expect(find.text('Removed by a moderator'), findsOneWidget);
+      expect(find.byKey(ValueKey('release-${k('c')}')), findsNothing);
+      expect(h.state.ownsRadio(k('c')), isFalse);
+      expect(h.state.ownsRadio(k('b')), isTrue);
+    });
+
+    testWidgets('a repeater you already own: the claim screen says so and asks for no password', (tester) async {
+      final h = await open(tester);
+      h.claims.claims.add(NodeClaim(pubkey: k('b'), nodeType: ClaimNodeType.repeater, method: ClaimMethod.advert));
+      await h.state.claims.refresh();
+      await openScreen(tester, ClaimRepeaterScreen(initialKey: k('b'), initialName: 'Hilltop'));
+      await tester.enterText(find.byKey(const Key('claim-password')), 'x');
+      await tester.pump();
+      expect(find.byKey(const Key('claim-already-yours')), findsOneWidget);
+      expect(tester.widget<FilledButton>(find.byKey(const Key('claim-start'))).onPressed, isNull);
+    });
+
     testWidgets('give up: asks first, says the data keeps counting, then removes the radio', (tester) async {
       final h = await open(tester);
       h.claims.claims.add(NodeClaim(pubkey: k('b'), nodeType: ClaimNodeType.repeater, method: ClaimMethod.advert, displayName: 'Hilltop'));

@@ -43,6 +43,32 @@ ClaimMethod parseClaimMethod(Object? v) => switch (v) {
       _ => ClaimMethod.other,
     };
 
+/// Why a claim ended (`releasedReason`): you gave it up, another owner proved control, or a moderator removed it.
+enum ClaimEndReason { released, replaced, moderator, unknown }
+
+ClaimEndReason parseEndReason(Object? v) => switch (v) {
+      'released' => ClaimEndReason.released,
+      'replaced' => ClaimEndReason.replaced,
+      'moderator' => ClaimEndReason.moderator,
+      _ => ClaimEndReason.unknown,
+    };
+
+String claimEndText(ClaimEndReason r) => switch (r) {
+      ClaimEndReason.released => 'You released it',
+      ClaimEndReason.replaced => 'Another owner proved control',
+      ClaimEndReason.moderator => 'Removed by a moderator',
+      ClaimEndReason.unknown => 'No longer yours',
+    };
+
+/// claim-start answered 409 `owner: "you"`: this key already owns the radio. Not an error: nothing is started, nothing on
+/// the repeater is touched and no password is needed. [claim] is the existing claim when the server sent a readable one.
+class ClaimAlreadyYours implements Exception {
+  final NodeClaim? claim;
+  const ClaimAlreadyYours(this.claim);
+  @override
+  String toString() => 'ClaimAlreadyYours';
+}
+
 class NodeClaim {
   /// Lower-case hex public key.
   final String pubkey;
@@ -57,6 +83,11 @@ class NodeClaim {
 
   /// The name the node advertises, when the server knows it.
   final String? nodeName;
+
+  /// An ended claim (my-radios lists those of the last 90 days after the active ones).
+  final bool ended;
+  final DateTime? releasedAt;
+  final ClaimEndReason? endReason;
   const NodeClaim({
     required this.pubkey,
     this.nodeType = ClaimNodeType.unknown,
@@ -66,6 +97,9 @@ class NodeClaim {
     this.positionPublic,
     this.notes,
     this.nodeName,
+    this.ended = false,
+    this.releasedAt,
+    this.endReason,
   });
 
   /// What to call this radio: the owner's name for it, else the name it advertises, else a short key.
@@ -84,6 +118,8 @@ class NodeClaim {
     if (k == null) throw const FormatException('claim without a public key');
     String? s(Object? v) => v is String && v.isNotEmpty ? v : null;
     final at = j['verifiedAt'];
+    final rel = j['releasedAt'] is String ? DateTime.tryParse(j['releasedAt'] as String)?.toUtc() : null;
+    final ended = j['status'] == 'released' || rel != null || j['releasedReason'] != null;
     return NodeClaim(
       pubkey: k,
       nodeType: parseClaimNodeType(j['nodeType']),
@@ -93,6 +129,9 @@ class NodeClaim {
       positionPublic: j['positionPublic'] is bool ? j['positionPublic'] as bool : null,
       notes: s(j['notes']),
       nodeName: s(j['nodeName']),
+      ended: ended,
+      releasedAt: rel,
+      endReason: ended ? parseEndReason(j['releasedReason']) : null,
     );
   }
 }

@@ -116,6 +116,13 @@ void main() {
       expect(r.outcome, ClaimOutcome.serverUnavailable);
     });
 
+    test('own radio already yours: shown as such, nothing signed', () async {
+      server.startError = ClaimAlreadyYours(NodeClaim(pubkey: radio.keyHex));
+      final r = await flow().run();
+      expect(r.outcome, ClaimOutcome.alreadyYours);
+      expect(radio.sentFrames.where((f) => f[0] == Cmd.signStart), isEmpty);
+    });
+
     test('firmware cannot sign', () async {
       radio.signUnsupported = true;
       final r = await flow().run();
@@ -262,6 +269,21 @@ void main() {
       final res = await r.claim();
       expect(res.outcome, ClaimOutcome.serverRefused);
       expect(r.radio.sentFrames.where((f) => f[0] == Cmd.sendLogin), isEmpty);
+    });
+
+    test('claim-start says 409 owner "you": already yours, no login, no password prompt, the name is untouched', () async {
+      final r = await _Rig.make();
+      addTearDown(r.close);
+      final existing = NodeClaim(pubkey: r.rep.keyHex, nodeType: ClaimNodeType.repeater, method: ClaimMethod.advert);
+      r.server.startError = ClaimAlreadyYours(existing);
+      final res = await r.claim();
+      expect(res.outcome, ClaimOutcome.alreadyYours);
+      expect(res.claim!.pubkey, r.rep.keyHex);
+      expect(res.restore, RestoreState.notNeeded);
+      expect(r.radio.sentFrames.where((f) => f[0] == Cmd.sendLogin || f[0] == Cmd.sendTxtMsg), isEmpty);
+      expect(r.rep.cliLog, isEmpty);
+      expect(r.rep.name, 'Hilltop');
+      expect(await r.store.load(), isEmpty);
     });
 
     test('no radio / bad key', () async {

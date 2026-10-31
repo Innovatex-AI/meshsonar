@@ -15,6 +15,7 @@ import 'claim_widgets.dart';
 
 String claimOutcomeTitle(ClaimOutcome o) => switch (o) {
       ClaimOutcome.verified => 'The repeater is yours',
+      ClaimOutcome.alreadyYours => 'Already yours',
       ClaimOutcome.cancelled => 'Cancelled',
       ClaimOutcome.noRadio => 'Connect your radio',
       ClaimOutcome.radioLost => 'The radio disconnected',
@@ -171,7 +172,8 @@ class _ClaimRepeaterScreenState extends State<ClaimRepeaterScreen> {
     final restoring = widget.restore != null;
     final picked = _key != null;
     final matches = _matches(s);
-    final canStart = connected && picked && _password.text.isNotEmpty;
+    final owned = picked && s.ownsRadio(_key!) && !restoring;
+    final canStart = connected && picked && !owned && _password.text.isNotEmpty;
     return [
       Text(restoring
           ? 'An earlier claim could not confirm this repeater\'s name was put back. Log in again and it will be restored.'
@@ -247,6 +249,11 @@ class _ClaimRepeaterScreenState extends State<ClaimRepeaterScreen> {
           },
         ),
       ],
+      if (owned)
+        const Padding(
+          padding: EdgeInsets.only(top: Gap.s),
+          child: Row(children: [OwnedByYouChip(), SizedBox(width: Gap.s), Expanded(child: Text('Already yours. Nothing to prove, no password needed.', key: Key('claim-already-yours')))]),
+        ),
       const SizedBox(height: Gap.l),
       TextField(
         key: const Key('claim-password'),
@@ -276,7 +283,7 @@ class _ClaimRepeaterScreenState extends State<ClaimRepeaterScreen> {
         Padding(
           padding: const EdgeInsets.only(top: Gap.s),
           child: Text(
-            !connected ? 'Needs a connected radio.' : (!picked ? 'Pick or paste a repeater.' : 'Enter the admin password.'),
+            !connected ? 'Needs a connected radio.' : (!picked ? 'Pick or paste a repeater.' : (owned ? 'This repeater is already yours.' : 'Enter the admin password.')),
             key: const Key('claim-why-not'),
             style: t.textTheme.bodySmall,
           ),
@@ -338,7 +345,7 @@ class _ClaimRepeaterScreenState extends State<ClaimRepeaterScreen> {
   // ------------------------------------------------------------ result
 
   List<Widget> _result(BuildContext context, ThemeData t) {
-    final ok = _st.verified;
+    final ok = _st.verified || _st.outcome == ClaimOutcome.alreadyYours;
     final risky = _st.restore == RestoreState.failed;
     return [
       Row(children: [
