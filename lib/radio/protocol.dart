@@ -174,6 +174,8 @@ Uint8List encodeDeviceQuery([int appVersion = appTargetVersion]) => Uint8List.fr
 
 /// CMD_SET_DEVICE_TIME: [0x06][epoch_secs u32]. Firmware answers ERR(ILLEGAL_ARG) if this would move the clock
 /// backwards (MyMesh.cpp ~1287).
+Uint8List encodeGetDeviceTime() => Uint8List.fromList([Cmd.getDeviceTime]);
+Uint8List encodeCurrTime(int epochSecs) => Uint8List.fromList([Resp.currTime, ..._u32(epochSecs)]);
 Uint8List encodeSetDeviceTime(int epochSecs) => Uint8List.fromList([Cmd.setDeviceTime, ..._u32(epochSecs)]);
 
 /// CMD_GET_CHANNEL: [0x1F][idx] (MyMesh.cpp ~1752).
