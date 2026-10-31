@@ -5,6 +5,8 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart' as c;
 
+import 'models.dart' show ChannelKind;
+
 /// The well-known Public channel key (base64 izOH6cXN6mrJ5e26oRXNcg==, hex 8b3387e9c5cdea6ac9e5edbaa115cd72).
 final Uint8List publicChannelSecret16 = Uint8List.fromList(
     [0x8b, 0x33, 0x87, 0xe9, 0xc5, 0xcd, 0xea, 0x6a, 0xc9, 0xe5, 0xed, 0xba, 0xa1, 0x15, 0xcd, 0x72]);
@@ -18,3 +20,19 @@ Uint8List hashtagSecret16(String name) {
 
 /// One-byte on-air channel hash: SHA-256(secret)[0].
 int channelHashByte(List<int> secret16) => c.sha256.convert(secret16.sublist(0, 16)).bytes[0];
+
+/// What kind of channel a (name, secret) pair is: the well-known Public key, a hashtag channel (key derived from the
+/// name) or a private one.
+ChannelKind classifyChannel(String name, List<int> secret) {
+  bool same(List<int> a, List<int> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
+  if (same(secret, publicChannelSecret16)) return ChannelKind.public;
+  if (name.startsWith('#') && same(secret, hashtagSecret16(name))) return ChannelKind.hashtag;
+  return ChannelKind.private;
+}

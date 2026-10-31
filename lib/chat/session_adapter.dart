@@ -7,6 +7,8 @@ import 'dart:typed_data';
 
 import '../radio/inbound.dart' as r;
 import '../radio/session.dart' as r;
+import 'channel_admin.dart';
+import 'channel_secret.dart';
 import 'chat_service.dart';
 import 'models.dart';
 import 'radio_bridge.dart';
@@ -16,12 +18,16 @@ class RadioSessionChatAdapter implements OutboundMessageSink {
 
   /// Chat's own copy of a contact, to rebuild the radio record when a path has to be cleared (phone is master).
   final Contact? Function(String publicKeyHex) lookupContact;
+
+  /// The region (flood scope) the channel in [slot] is limited to, or null for none. The key is derived from the name
+  /// like a hashtag key; the session sets it on the radio right before the flood and clears it afterwards (ScopeGuard).
+  final String? Function(int slot)? regionScopeForSlot;
   StreamSubscription<r.RadioEvent>? _sub;
   ChatService? _chat;
   int _contactCursor = 0;
   bool _syncing = false;
 
-  RadioSessionChatAdapter(this.session, {required this.lookupContact});
+  RadioSessionChatAdapter(this.session, {required this.lookupContact, this.regionScopeForSlot});
 
   String? get radioId => session.selfPublicKey;
 
@@ -153,7 +159,9 @@ class RadioSessionChatAdapter implements OutboundMessageSink {
 
   @override
   Future<int> sendChannel({required String radioId, required int slot, required String text, required int timestamp}) async {
-    final res = await session.sendChannelMessage(slot, text);
+    final region = regionScopeForSlot?.call(slot);
+    final scope = (region == null || region.trim().isEmpty) ? null : r.FloodScope.key(hashtagSecret16(region));
+    final res = await session.sendChannelMessage(slot, text, scope: scope);
     if (res.status == r.SendStatus.failed) _throw(res);
     if (res.status == r.SendStatus.queued) throw RadioBusy(res.detail ?? 'no answer from the radio');
     return res.timestamp == 0 ? timestamp : res.timestamp;
@@ -179,4 +187,22 @@ class RadioSessionChatAdapter implements OutboundMessageSink {
       // sending still works, just by the old route
     }
   }
+}
+
+/// The channel slots of a [r.RadioSession] as chat's [ChannelRadio].
+class SessionChannelRadio implements ChannelRadio {
+  final r.RadioSession session;
+  SessionChannelRadio(this.session);
+
+  @override
+  int? get maxChannels => session.limits?.maxChannels;
+
+  @override
+  Future<List<RadioSlot>> slots() async => [for (final c in await session.listChannels()) RadioSlot(c.index, c.name, c.secret)];
+
+  @override
+  Future<void> write(int slot, String name, Uint8List secret16) => session.setChannel(slot, name, secret16);
+
+  @override
+  Future<void> clear(int slot) => session.deleteChannel(slot);
 }
