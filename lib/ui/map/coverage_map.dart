@@ -425,7 +425,15 @@ class _CoverageMapState extends State<CoverageMap> {
       if (src == null) continue;
       for (final layer in [kRosterLayerId, kNetworkLayerId]) {
         final pts = src.pointsOf(layer);
-        final i = pts.indexOf(key);
+        var i = pts.indexOf(key);
+        // cell-links ids can be a prefix (2 bytes or more) of the repeater's key: take it only when exactly one matches.
+        if (i < 0 && key.length >= 4) {
+          for (var j = 0; j < pts.length; j++) {
+            if (!pts.key[j].startsWith(key)) continue;
+            if (i >= 0) return null; // ambiguous: not placed rather than guessed
+            i = j;
+          }
+        }
         if (i >= 0) return (lat: pts.lat[i], lon: pts.lon[i], name: pts.name[i]);
       }
     }
