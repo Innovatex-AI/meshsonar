@@ -46,6 +46,7 @@ class _MyRadiosScreenState extends State<MyRadiosScreen> {
   String _how(ClaimMethod m) => switch (m) {
         ClaimMethod.signature => 'Verified by the radio\'s signature',
         ClaimMethod.advert => 'Verified by an observer hearing the code',
+        ClaimMethod.login => 'Logged in as admin from your app',
         ClaimMethod.other => 'Verified',
       };
 
@@ -116,9 +117,17 @@ class _MyRadiosScreenState extends State<MyRadiosScreen> {
                     style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
                     icon: const Icon(Icons.cell_tower),
                     label: const Text('Claim a repeater'),
-                    onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const ClaimRepeaterScreen())),
+                    onPressed: s.repeaterClaimEnabled
+                        ? () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const ClaimRepeaterScreen()))
+                        : null,
                   ),
                 ]),
+                if (!s.repeaterClaimEnabled)
+                  Padding(
+                    padding: const EdgeInsets.only(top: Gap.s),
+                    child: Text('Claiming a repeater needs a newer server (it is being updated). Claiming your own radio works now.',
+                        key: const Key('my-radios-repeater-soon'), style: t.textTheme.bodySmall),
+                  ),
                 const SizedBox(height: Gap.l),
                 for (final p in c.pending) _PendingRestoreCard(pending: p),
                 Text('Your radios', style: t.textTheme.titleMedium),

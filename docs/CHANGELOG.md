@@ -5,6 +5,11 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+## [0.24.3] — 2026-11-01 — claim a repeater by logging in (nothing on the repeater is touched)
+
+- **Claim a repeater = log in.** The old flow renamed your repeater, sent an advert and waited for an observer. It no longer touches the repeater at all: no rename, no advert, no command. A successful ADMIN login from your own radio is the proof, and the app tells the server (`claim-start kind=login`, `claim-complete` with an attestation; no password is ever sent). The button shows only on servers that support it (`nodeClaimsLogin`); until then it says so. Leftover name-restore reminders from older builds can still be finished.
+- Chat data layer (SQLite store, outbox, search, backup) is in the app but has no screens yet.
+
 - **Chat data layer (no UI yet, no version bump).** `lib/chat/`, pure Dart, on-device only: SQLite (`package:sqlite3`, FTS5
   search that matches any script and folds accents) with versioned migrations; contacts, channels (secrets in the Keychain/Keystore
   through `SecretStore`, never in SQLite), messages with delivery states, drafts, unread counts, mute modes, retention and delete

@@ -373,6 +373,25 @@ class HttpCmatClient implements CmatClient, TelemetryTransport {
   }
 
   @override
+  Future<NodeClaim> claimCompleteLogin(String driverKey, String challengeId,
+      {required bool isAdmin, int? firmwareLevel, required DateTime loginAt, required String radioPubKey}) async {
+    final j = await _send('POST', 'claim-complete', driverKey: driverKey, body: {
+      'challengeId': challengeId,
+      'attest': {
+        'isAdmin': isAdmin,
+        'firmwareLevel': firmwareLevel,
+        'loginAt': loginAt.toUtc().toIso8601String(),
+        'radioPubKey': radioPubKey.toLowerCase(),
+      },
+    });
+    try {
+      return NodeClaim.parse(j['claim']);
+    } on FormatException {
+      throw const CmatException('server sent an unreadable answer', status: 200);
+    }
+  }
+
+  @override
   Future<ClaimStatus> claimStatus(String driverKey, String challengeId) async {
     final j = await _send('GET', 'claim-status', driverKey: driverKey, query: {'challengeId': challengeId});
     try {

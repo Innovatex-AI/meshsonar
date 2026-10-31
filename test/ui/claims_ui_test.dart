@@ -25,7 +25,7 @@ import 'settings_test_kit.dart';
 
 String k(String c) => c * 64;
 const _region = RegionInfo(slug: 'cmh', url: 'https://cmh.meshsonar.com');
-const _caps = SiteConfig(region: _region, capabilities: {'nodeClaims'});
+const _caps = SiteConfig(region: _region, capabilities: {'nodeClaims', 'nodeClaimsLogin'});
 
 class ClaimsClient extends FakeCmatClient {
   ClaimsClient(super.baseUrl);
@@ -43,9 +43,19 @@ class ClaimsClient extends FakeCmatClient {
     if (startError != null) throw startError!;
     lastKey = pubkey;
     final exp = DateTime.utc(2026, 10, 16, 18, 15);
-    return kind == ClaimKind.sign
-        ? ClaimChallenge(id: 'c1', kind: kind, message: Uint8List.fromList([1, 2, 3]), expiresAt: exp)
-        : ClaimChallenge(id: 'c2', kind: kind, code: 'MS7K12', expiresAt: exp);
+    return switch (kind) {
+      ClaimKind.sign => ClaimChallenge(id: 'c1', kind: kind, message: Uint8List.fromList([1, 2, 3]), expiresAt: exp),
+      ClaimKind.login => ClaimChallenge(id: 'c3', kind: kind, expiresAt: exp),
+      ClaimKind.advert => ClaimChallenge(id: 'c2', kind: kind, code: 'MS7K12', expiresAt: exp),
+    };
+  }
+
+  @override
+  Future<NodeClaim> claimCompleteLogin(String driverKey, String challengeId,
+      {required bool isAdmin, int? firmwareLevel, required DateTime loginAt, required String radioPubKey}) async {
+    final c = NodeClaim(pubkey: lastKey, nodeType: ClaimNodeType.repeater, method: ClaimMethod.login);
+    claims.add(c);
+    return c;
   }
 
   @override
@@ -366,8 +376,8 @@ void main() {
       await open(tester, radio: false, repeaters: repeaters);
       await openScreen(tester, const ClaimRepeaterScreen());
       expect(find.byKey(const Key('claim-needs-radio')), findsOneWidget);
-      expect(find.textContaining('name will show a short code for about a minute'), findsOneWidget);
-      expect(find.textContaining('we never see or store your admin password'), findsOneWidget);
+      expect(find.textContaining('Nothing on your repeater is changed'), findsWidgets);
+      expect(find.textContaining('We never see or store your admin password'), findsOneWidget);
       expect(find.textContaining('it never affects whether its data counts'), findsOneWidget);
       final pw = tester.widget<TextField>(find.byKey(const Key('claim-password')));
       expect(pw.obscureText, isTrue);
@@ -397,7 +407,7 @@ void main() {
       expect(find.text(k('c')), findsOneWidget);
     });
 
-    testWidgets('full claim from the sheet: progress with the code, then "The repeater is yours", name restored, password gone', (tester) async {
+    testWidgets('full claim from the sheet: log in, "The repeater is yours", NOTHING sent to the repeater, password gone', (tester) async {
       final h = await open(tester, repeaters: repeaters);
       await openScreen(tester, ClaimRepeaterScreen(initialKey: k('b'), initialName: 'Hilltop'));
       await tester.enterText(find.byKey(const Key('claim-password')), 'hunter2-admin');
@@ -407,7 +417,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('The repeater is yours'), findsOneWidget);
       expect(h.link!.name, 'Hilltop');
-      expect(h.link!.log, ['login:hunter2-admin', 'get name', 'set name Hilltop MS7K12', 'advert', 'set name Hilltop', 'advert', 'get name']);
+      expect(h.link!.log, ['login:hunter2-admin'], reason: 'only a login: no get/set name, no advert');
       expect(h.state.ownsRadio(k('b')), isTrue);
       expect(find.text('hunter2-admin'), findsNothing);
       await tester.tap(find.byKey(const Key('claim-done')));
@@ -441,22 +451,6 @@ void main() {
       expect(find.textContaining('out of range'), findsOneWidget);
     });
 
-    testWidgets('restore cannot be confirmed: the exact commands are shown with copy buttons', (tester) async {
-      final h = await open(tester, repeaters: repeaters);
-      h.link!.goQuietAfterAdvert = true;
-      await openScreen(tester, ClaimRepeaterScreen(initialKey: k('b'), initialName: 'Hilltop'));
-      await tester.enterText(find.byKey(const Key('claim-password')), 'x');
-      await tester.pump();
-      await tester.tap(find.byKey(const Key('claim-start')));
-      await pumpUntil(tester, () => find.byKey(const Key('claim-result-title')).evaluate().isNotEmpty);
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('claim-restore-commands')), findsOneWidget);
-      expect(find.text('set name Hilltop'), findsOneWidget);
-      expect(find.text('advert'), findsOneWidget);
-      expect(find.byTooltip('Copy "set name Hilltop"'), findsOneWidget);
-      expect(tester.getSize(find.byTooltip('Copy "advert"')).height, greaterThanOrEqualTo(48));
-      expect((await h.state.claims.store.load()).single.originalName, 'Hilltop');
-    });
   });
 
   group('repeater sheet', () {
@@ -530,9 +524,8 @@ void main() {
     }
 
     test('the disclosure says everything the lead asked for', () {
-      expect(claimDisclosure, contains('name will show a short code for about a minute'));
-      expect(claimDisclosure, contains('we restore it automatically'));
-      expect(claimDisclosure, contains('we never see or store your admin password'));
+      expect(claimDisclosure, contains('Nothing on your repeater is changed'));
+      expect(claimDisclosure, contains('We never see or store your admin password'));
       expect(claimDisclosure, contains('only lets you manage this radio'));
       expect(claimDisclosure, contains('never affects whether its data counts'));
     });
