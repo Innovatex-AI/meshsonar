@@ -22,6 +22,7 @@ import 'package:uuid/uuid.dart';
 import '../core/api.dart' show Settings;
 import '../core/model.dart';
 import 'companion_link.dart';
+import 'ping_gate.dart';
 import 'crypto.dart';
 import 'packet.dart';
 import 'protocol.dart';
@@ -108,6 +109,17 @@ class DefaultWardriveEngine implements WardriveEngine {
   /// (examples/simple_repeater/MyMesh.cpp discover_limiter). Only used with a [MeshCoreCompanionLink].
   bool discoverNeighbors = false;
 
+  /// Asked before every ping (the session's TxArbiter). The default always says go: the engine's own interval and
+  /// distance rule alone decide, as before sessions existed. A skipped ping is not retried late: the cadence check simply
+  /// asks again after [pingSkipRetry].
+  PingGate pingGate = const AlwaysGoPingGate();
+
+  /// How long after a skipped ping the engine waits before asking the gate again.
+  Duration pingSkipRetry = const Duration(seconds: 2);
+
+  /// Pings the gate refused during this drive, by reason.
+  final Map<PingSkipReason, int> skippedPings = {};
+
   final _pings = StreamController<DrivePing>.broadcast();
   final _status = StreamController<EngineStatus>.broadcast();
   EngineStatus _current = const EngineStatus(EngineState.idle);
@@ -131,6 +143,7 @@ class DefaultWardriveEngine implements WardriveEngine {
   int _skewRun = 0;
   Duration? _skewLast;
   PingWait? _waitingFor;
+  PingDecision? _lastSkip;
   double? _metresToGo;
   bool _running = false;
   bool _stopping = false;
@@ -562,7 +575,10 @@ class DefaultWardriveEngine implements WardriveEngine {
         _note('No GPS fix: can\'t ping');
         throw StateError('No GPS fix');
       }
-      final p = await _ping(fix);
+      _lastSkip = null;
+      final p = await _ping(fix, manual: true);
+      final skip = _lastSkip;
+      if (p == null && skip != null) throw PingSkippedException(skip);
       if (p == null) throw StateError('Ping did not complete');
       return p;
     });
@@ -591,7 +607,7 @@ class DefaultWardriveEngine implements WardriveEngine {
 
   /// Sends one ping at [fix], listens, emits it. Returns null if the ping couldn't be sent or was cut short with
   /// nothing heard (a truncated listen is not evidence of "heard nothing").
-  Future<DrivePing?> _ping(GeoFix fix) async {
+  Future<DrivePing?> _ping(GeoFix fix, {bool manual = false}) async {
     _busy = true;
     final idx = _channelIndex!;
     final secret = _secret!;
@@ -604,6 +620,16 @@ class DefaultWardriveEngine implements WardriveEngine {
     DateTime? sentAt;
     var cutShort = false;
     try {
+      final asked = pingGate.requestPing(manual: manual);
+      final decision = asked is Future<PingDecision> ? await asked : asked;
+      if (!decision.go) {
+        // Skipped, never queued late: the cadence check asks again in a moment, at the then-current position.
+        _lastSkip = decision;
+        skippedPings[decision.reason!] = (skippedPings[decision.reason!] ?? 0) + 1;
+        _retryAfter = _clock().add(pingSkipRetry);
+        if (_running && !_stopping) _setStatus(EngineState.driving, decision.message);
+        return null;
+      }
       _setStatus(EngineState.pinging, 'Pinging');
       double? noise;
       try {
@@ -616,6 +642,7 @@ class DefaultWardriveEngine implements WardriveEngine {
       _collector = (rx) => heard.add(_Heard(rx, _clock()));
       sentAt = _clock();
       await link.sendChannelText(idx, text);
+      pingGate.pingSent();
       _lastPingAt = (lat: fix.lat, lon: fix.lon);
       _lastPingTime = sentAt;
       _retryAfter = null;

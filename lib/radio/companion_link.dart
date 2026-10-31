@@ -13,10 +13,14 @@ import 'dart:typed_data';
 import '../core/drive_context.dart';
 import '../core/model.dart';
 import 'claim_radio.dart';
+import 'command_queue.dart';
 import 'crypto.dart';
+import 'inbound.dart';
+import 'message_sync.dart';
 import 'protocol.dart';
 import 'radio_api.dart';
 import 'radio_health.dart';
+import 'scope_guard.dart';
 
 class CompanionException implements Exception {
   final String message;
@@ -36,7 +40,7 @@ class ControlPacket {
   const ControlPacket(this.at, this.snrDb, this.rssiDbm, this.pathLen, this.payload);
 }
 
-class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRadio {
+class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRadio, MessageSource {
   final ByteTransport _transport;
   final Duration timeout;
   final DateTime Function() _clock;
@@ -48,17 +52,29 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
 
   final _rx = StreamController<RxPacket>.broadcast();
   final _control = StreamController<ControlPacket>.broadcast();
-  final _channelMessages = StreamController<ChannelMsgFrame>.broadcast();
+
+  /// Pushes that are not replies and not rx log / control / claim traffic: DM confirmations, path updates, adverts,
+  /// contact table notices. The session turns them into [RadioEvent]s.
+  final _unsolicited = StreamController<Frame>.broadcast();
 
   /// Login/status pushes and contact texts (a repeater's CLI replies), for the claim calls below.
   final _claimEvents = StreamController<Frame>.broadcast();
   StreamSubscription<Uint8List>? _sub;
 
-  Future<void> _queue = Future.value();
+  final CommandQueue _commands = CommandQueue();
   Completer<Frame>? _pending;
+
+  /// While a multi-frame command (GET_CONTACTS) runs, every non-push frame goes here instead of to [_pending].
+  void Function(Frame f)? _multi;
   bool _closed = false;
-  bool _syncing = false;
   bool _statsUnsupported = false;
+
+  /// Drains the radio's offline message queue (see message_sync.dart). The link feeds it PUSH_MSG_WAITING and starts it
+  /// after [start]; the session sets its persister and listens to its messages.
+  late final MessageSync sync;
+
+  /// Sets the flood scope right before a flood send (scope_guard.dart).
+  final ScopeGuard scopeGuard = ScopeGuard();
 
   /// GET_STATS sub-types (and -1 = GET_BATT_AND_STORAGE) this radio said it does not support; never asked again.
   final Set<int> _unsupported = {};
@@ -70,18 +86,37 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
   SelfInfo? _self;
   final Map<int, Uint8List> _secrets = {};
   int _lastSentTs = 0;
+  int _lastAttemptTs = 0;
 
   MeshCoreCompanionLink(this._transport,
-      {this.timeout = const Duration(seconds: 5), DateTime Function()? clock, this.appName = 'MeshSonar', this.claimReplyTimeout})
+      {this.timeout = const Duration(seconds: 5),
+      DateTime Function()? clock,
+      this.appName = 'MeshSonar',
+      this.claimReplyTimeout,
+      Duration messagePollInterval = const Duration(seconds: 5)})
       : _clock = clock ?? DateTime.now {
+    sync = MessageSync(this, clock: _clock, pollInterval: messagePollInterval)..onContactText = _onContactText;
     _sub = _transport.incoming.listen(_onFrame, onDone: _onTransportDone, onError: (Object _) {});
   }
 
+  void _onContactText(ContactTextFrame f) {
+    if (!_claimEvents.isClosed) _claimEvents.add(f);
+  }
+
+  /// Unsolicited pushes for the session (see [_unsolicited]).
+  Stream<Frame> get unsolicited => _unsolicited.stream;
+
+  /// Text messages drained from the radio, after the persister (if any) saved them.
+  Stream<InboundMessage> get inboundMessages => sync.messages;
+
+  /// DEVICE_INFO as read by [start]; null before, or on firmware too old to answer.
+  DeviceInfoFrame? get deviceInfo => _deviceInfo;
+
+  /// Commands waiting behind the one in flight.
+  int get commandsPending => _commands.pending;
+
   /// Frames from the companion that aren't a reply to a command.
   Stream<ControlPacket> get controlPackets => _control.stream;
-
-  /// Channel messages drained from the radio's offline queue (after PUSH_CODE_MSG_WAITING).
-  Stream<ChannelMsgFrame> get channelMessages => _channelMessages.stream;
 
   SelfInfo? get selfInfo => _self;
 
@@ -110,6 +145,9 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
   /// payload, so echoes of that exact send can be told apart from earlier ones.
   int get lastSentTimestamp => _lastSentTs;
 
+  /// Timestamp of the most recent channel or contact send ATTEMPT, accepted or not (a timeout leaves the outcome unknown).
+  int get lastAttemptTimestamp => _lastAttemptTs;
+
   @override
   bool get isConnected => !_closed && _transport.isConnected;
 
@@ -137,6 +175,11 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
       _onPush(f);
       return;
     }
+    final multi = _multi;
+    if (multi != null) {
+      multi(f);
+      return;
+    }
     final p = _pending;
     if (p != null && !p.isCompleted) {
       _pending = null;
@@ -156,7 +199,14 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
         if (!_claimEvents.isClosed) _claimEvents.add(f);
       case MsgWaitingPush():
         // Drain the radio's offline queue so it never fills (MyMesh.cpp addToOfflineQueue ~224).
-        unawaited(_drainMessages());
+        sync.requestDrain();
+      case SendConfirmedPush() ||
+            PathUpdatedPush() ||
+            AdvertPush() ||
+            NewAdvertPush() ||
+            ContactDeletedPush() ||
+            ContactsFullPush():
+        if (!_unsolicited.isClosed) _unsolicited.add(f);
       default:
         break;
     }
@@ -172,18 +222,20 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
     final p = _pending;
     _pending = null;
     if (p != null && !p.isCompleted) p.completeError(reason);
+    final m = _multi;
+    _multi = null;
+    if (m != null) m(const ErrFrame(null)); // fails a running GET_CONTACTS at once
+    sync.dispose();
     _rx.close();
     _control.close();
-    _channelMessages.close();
+    _unsolicited.close();
     _claimEvents.close();
   }
 
-  /// Sends one command and waits for its reply. Commands are strictly serialised.
-  Future<Frame> _command(Uint8List frame) {
-    final result = _queue.then((_) => _send(frame));
-    _queue = result.then((_) {}, onError: (_) {});
-    return result;
-  }
+  /// Sends one command and waits for its reply. Commands are strictly serialised; a waiting command with a lower
+  /// [priority] number goes first ([CommandPriority]).
+  Future<Frame> _command(Uint8List frame, {int priority = CommandPriority.normal}) =>
+      _commands.run(() => _send(frame), priority: priority);
 
   Future<Frame> _send(Uint8List frame) async {
     if (!isConnected) throw StateError('radio not connected');
@@ -247,7 +299,10 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
       firmware: firmware,
     );
     _self = self;
-    unawaited(_drainMessages());
+    scopeGuard
+      ..reset()
+      ..firmwareVerCode = _firmwareVerCode;
+    sync.requestDrain();
     return self;
   }
 
@@ -297,17 +352,56 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
   }
 
   @override
-  Future<void> sendChannelText(int channelIndex, String text) async {
-    var ts = _clock().toUtc().millisecondsSinceEpoch ~/ 1000;
-    // Keep timestamps strictly increasing so every send has its own (encrypted) fingerprint.
-    if (ts <= _lastSentTs) ts = _lastSentTs + 1;
-    final f = await _command(encodeSendChannelText(channelIndex, ts, text));
+  Future<void> sendChannelText(int channelIndex, String text, {int priority = CommandPriority.normal, FloodScope? scope}) async {
+    final f = await sendChannelFrame(channelIndex, text, priority: priority, scope: scope);
     // Firmware replies RESP_CODE_OK (MyMesh.cpp ~1196); accept RESP_CODE_SENT too, as the docs describe.
-    if (f is OkFrame || f is SentFrame || (f is UnknownFrame && f.code == Resp.sent)) {
-      _lastSentTs = ts;
-      return;
-    }
+    if (f is OkFrame || f is SentFrame || (f is UnknownFrame && f.code == Resp.sent)) return;
     _fail('send channel text', f);
+  }
+
+  /// CMD_SEND_CHANNEL_TXT_MSG with the radio's answer returned as it came (OK, or ERR with the code). [scope] is put on the
+  /// radio first, in the same command-queue slot, when the scope guard says the radio holds another one; null = leave it
+  /// (and clear a scope an earlier send left behind). Timestamps are strictly increasing so every send has its own
+  /// (encrypted) fingerprint.
+  Future<Frame> sendChannelFrame(int channelIndex, String text, {int priority = CommandPriority.normal, FloodScope? scope}) {
+    return _commands.run(() async {
+      await _applyScope(scope);
+      var ts = _clock().toUtc().millisecondsSinceEpoch ~/ 1000;
+      if (ts <= _lastSentTs) ts = _lastSentTs + 1;
+      _lastAttemptTs = ts;
+      final f = await _send(encodeSendChannelText(channelIndex, ts, text));
+      if (f is OkFrame || f is SentFrame || (f is UnknownFrame && f.code == Resp.sent)) _lastSentTs = ts;
+      return f;
+    }, priority: priority);
+  }
+
+  /// CMD_SEND_TXT_MSG to a contact. Returns the radio's answer: SENT (flood flag, expected ack, estimated timeout) or ERR.
+  /// [timestamp] null = now (strictly increasing); a retry passes the first try's timestamp. Returns the timestamp used.
+  Future<(Frame, int)> sendContactFrame(String pubkeyHex, String text,
+      {int attempt = 0, int? timestamp, int priority = CommandPriority.user, FloodScope? scope}) {
+    return _commands.run(() async {
+      await _applyScope(scope);
+      var ts = timestamp ?? _clock().toUtc().millisecondsSinceEpoch ~/ 1000;
+      if (timestamp == null) {
+        if (ts <= _lastSentTs) ts = _lastSentTs + 1;
+        _lastSentTs = ts;
+      }
+      _lastAttemptTs = ts;
+      final f = await _send(encodeSendTxt(txtTypePlain, attempt, ts, fromHex(pubkeyHex), text));
+      return (f, ts);
+    }, priority: priority);
+  }
+
+  /// Puts the flood scope a send wants on the radio, inside the send's queue slot (see scope_guard.dart).
+  Future<void> _applyScope(FloodScope? wanted) async {
+    final step = scopeGuard.commandFor(wanted);
+    if (step == null) return;
+    final f = await _send(step.cmd);
+    if (f is OkFrame) {
+      scopeGuard.applied(step.target);
+    } else if (f is ErrFrame && (f.code == ErrCode.unsupportedCmd || f.code == ErrCode.illegalArg)) {
+      scopeGuard.disable(); // this firmware does not know the command: stop asking
+    }
   }
 
   @override
@@ -388,7 +482,7 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
   @override
   Future<SelfTelemetry?> selfTelemetry() async {
     if (!isConnected || _unsupported.contains(_telemetryKey)) return null;
-    final result = _queue.then((_) async {
+    return _commands.run(() async {
       if (!isConnected) return null;
       final reply = Completer<Frame>();
       final push = Completer<SelfTelemetry>();
@@ -409,52 +503,113 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
         if (identical(_telemetryWaiter, push)) _telemetryWaiter = null;
       }
     });
-    _queue = result.then((_) {}, onError: (_) {});
-    return result;
   }
 
   /// Sends a zero-hop NODE_DISCOVER_REQ for repeaters (firmware v8+). Answers arrive on [controlPackets].
   Future<void> sendDiscoverRequest(int tag) async {
-    final f = await _command(encodeSendControlData(encodeDiscoverRequestPayload(tag)));
+    final f = await _command(encodeSendControlData(encodeDiscoverRequestPayload(tag)), priority: CommandPriority.discovery);
     if (f is! OkFrame) _fail('discover request', f);
   }
 
-  Future<void> _drainMessages() async {
-    if (_syncing) {
-      _drainAgain = true; // a message was queued while we were finishing: go round once more
-      return;
-    }
-    _syncing = true;
-    try {
-      do {
-        _drainAgain = false;
-        await _drainOnce();
-      } while (_drainAgain && isConnected);
-    } finally {
-      _syncing = false;
-    }
+  // ---------------------------------------------------------------- messages, contacts, channels (for the session)
+
+  /// MessageSource: one SYNC_NEXT_MESSAGE, at admin priority so waiting pings never delay a message off the radio.
+  @override
+  Future<Frame> syncNextMessage() => _command(encodeSyncNextMessage(), priority: CommandPriority.admin);
+
+  /// GET_CONTACTS (MyMesh.cpp 1238-1258, 2385-2410): CONTACTS_START, N x CONTACT, END_OF_CONTACTS. Each frame must arrive
+  /// within [timeout] of the last (the radio sends them at the BLE pace, about 16 a second).
+  Future<ContactListing> getContacts({int since = 0}) {
+    return _commands.run(() async {
+      if (!isConnected) throw StateError('radio not connected');
+      final done = Completer<void>();
+      final found = <RadioContact>[];
+      var total = 0;
+      var cursor = 0;
+      Timer? idle;
+      void arm() {
+        idle?.cancel();
+        idle = Timer(timeout, () {
+          if (!done.isCompleted) done.completeError(TimeoutException('radio stopped sending contacts', timeout));
+        });
+      }
+
+      _multi = (Frame f) {
+        arm();
+        switch (f) {
+          case ContactsStartFrame():
+            total = f.count;
+          case ContactFrame():
+            found.add(radioContactOf(f));
+          case EndOfContactsFrame():
+            cursor = f.mostRecentLastMod;
+            if (!done.isCompleted) done.complete();
+          case ErrFrame():
+            if (!done.isCompleted) done.completeError(CompanionException('get contacts failed', f.code));
+          default:
+            break;
+        }
+      };
+      arm();
+      try {
+        await _transport.send(encodeGetContacts(since: since));
+        await done.future;
+      } finally {
+        idle?.cancel();
+        _multi = null;
+      }
+      return ContactListing(totalOnRadio: total, contacts: found, mostRecentLastMod: cursor);
+    }, priority: CommandPriority.admin);
   }
 
-  bool _drainAgain = false;
+  /// ADD_UPDATE_CONTACT with every field.
+  Future<void> addOrUpdateContact(RadioContact c) async {
+    final f = await _command(
+        encodeAddUpdateContact(fromHex(c.publicKeyHex),
+            type: c.type,
+            name: c.name,
+            flags: c.flags,
+            outPathLen: c.outPathLen,
+            outPath: c.outPath,
+            lastAdvert: c.lastAdvert,
+            lat: c.lat ?? 0,
+            lon: c.lon ?? 0),
+        priority: CommandPriority.admin);
+    if (f is! OkFrame) _fail('add contact', f);
+  }
 
-  Future<void> _drainOnce() async {
-    try {
-      for (var n = 0; n < 256 && isConnected; n++) {
-        final f = await _command(encodeSyncNextMessage());
-        if (f is ChannelMsgFrame) {
-          if (!_channelMessages.isClosed) _channelMessages.add(f);
-          continue;
-        }
-        if (f is ContactTextFrame) {
-          if (!_claimEvents.isClosed) _claimEvents.add(f);
-          continue;
-        }
-        if (f is ContactMsgFrame) continue;
-        break; // NO_MORE_MESSAGES, error, or anything else
-      }
-    } catch (_) {
-      // best effort
+  /// A radio-side contact frame as the plain type the chat layer uses.
+  static RadioContact radioContactOf(ContactFrame f) => RadioContact(
+        publicKeyHex: toHex(f.publicKey),
+        type: f.type,
+        flags: f.flags,
+        outPathLen: f.outPathLen,
+        outPath: f.outPath,
+        name: f.name,
+        lastAdvert: f.lastAdvert,
+        lat: f.lat == 0 && f.lon == 0 ? null : f.lat,
+        lon: f.lat == 0 && f.lon == 0 ? null : f.lon,
+        lastMod: f.lastMod,
+      );
+
+  /// All channel slots that exist, empty ones included.
+  Future<List<RadioChannel>> listChannels() async {
+    final out = <RadioChannel>[];
+    final limit = _maxChannels ?? 64;
+    for (var i = 0; i < limit; i++) {
+      final ch = await _channelSlot(i);
+      if (ch == null) break;
+      _secrets[i] = ch.secret;
+      out.add(RadioChannel(i, ch.name, ch.secret));
     }
+    return out;
+  }
+
+  Future<ChannelInfoFrame?> _channelSlot(int i) async {
+    final f = await _command(encodeGetChannel(i), priority: CommandPriority.admin);
+    if (f is ChannelInfoFrame) return f;
+    if (f is ErrFrame && f.code == ErrCode.notFound) return null;
+    _fail('get channel $i', f);
   }
 
 
@@ -476,7 +631,7 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
   Future<Frame> _claimCommand(Uint8List frame, String what) async {
     _requireLink();
     try {
-      return await _command(frame);
+      return await _command(frame, priority: CommandPriority.admin);
     } on TimeoutException {
       throw ClaimRadioException(ClaimRadioError.silent, 'the radio did not answer ($what)');
     } on StateError {

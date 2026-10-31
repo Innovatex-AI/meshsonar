@@ -18,6 +18,7 @@ abstract final class Cmd {
   static const appStart = 1;
   static const sendTxtMsg = 2;
   static const sendChannelTxtMsg = 3;
+  static const getContacts = 4; // optional `since` u32 (MyMesh.cpp 1238-1258)
   static const getDeviceTime = 5;
   static const getBattAndStorage = 20; // was CMD_GET_BATTERY_VOLTAGE
   static const setDeviceTime = 6;
@@ -34,6 +35,7 @@ abstract final class Cmd {
   static const signStart = 33;
   static const signData = 34;
   static const signFinish = 35;
+  static const setFloodScopeKey = 54; // v8+ (sub 1 = unscoped: ver 12+)
   static const sendControlData = 55; // v8+
   static const getStats = 56; // v8+
   static const sendTelemetryReq = 39; // with exactly 3 reserved bytes = the companion's own ('self') telemetry
@@ -42,7 +44,9 @@ abstract final class Cmd {
 abstract final class Resp {
   static const ok = 0;
   static const err = 1;
+  static const contactsStart = 2; // first reply to GET_CONTACTS: [2][total count u32]
   static const contact = 3;
+  static const endOfContacts = 4; // last reply to GET_CONTACTS: [4][most recent lastmod u32]
   static const selfInfo = 5;
   static const sent = 6;
   static const contactMsgRecv = 7;
@@ -59,6 +63,7 @@ abstract final class Resp {
   static const signStart = 19;
   static const signature = 20;
   static const stats = 24;
+  static const channelDataRecv = 27; // binary channel datagram in the offline queue (drained like a message)
 }
 
 abstract final class Push {
@@ -75,6 +80,8 @@ abstract final class Push {
   static const newAdvert = 0x8A;
   static const controlData = 0x8E; // v8+
   static const telemetryResponse = 0x8B;
+  static const contactDeleted = 0x8F; // [0x8F][pub_key x32]: the radio overwrote its oldest contact
+  static const contactsFull = 0x90; // [0x90]
 }
 
 abstract final class ErrCode {
@@ -202,6 +209,12 @@ Uint8List encodeSetChannel(int idx, String name, List<int> secret16) {
 Uint8List encodeSendChannelText(int channelIdx, int epochSecs, String text) =>
     Uint8List.fromList([Cmd.sendChannelTxtMsg, txtTypePlain, channelIdx, ..._u32(epochSecs), ...utf8.encode(text)]);
 
+/// CMD_GET_CONTACTS: [0x04] or [0x04][since u32] (MyMesh.cpp 1238-1258). Only contacts whose lastmod is NEWER than `since`
+/// are sent. Replies: CONTACTS_START, N x CONTACT, END_OF_CONTACTS. A second GET_CONTACTS while one runs gets
+/// ERR(BAD_STATE).
+Uint8List encodeGetContacts({int since = 0}) =>
+    since == 0 ? Uint8List.fromList([Cmd.getContacts]) : Uint8List.fromList([Cmd.getContacts, ..._u32(since)]);
+
 /// CMD_SYNC_NEXT_MESSAGE: [0x0A] (MyMesh.cpp ~1415).
 Uint8List encodeSyncNextMessage() => Uint8List.fromList([Cmd.syncNextMessage]);
 
@@ -250,17 +263,36 @@ Uint8List encodeSendStatusReq(List<int> pubKey32) => Uint8List.fromList([Cmd.sen
 Uint8List encodeGetContactByKey(List<int> pubKey32) => Uint8List.fromList([Cmd.getContactByKey, ..._pub32(pubKey32)]);
 
 /// CMD_ADD_UPDATE_CONTACT: [9][pub_key x32][type][flags][out_path_len][out_path x64][name x32][last_advert u32]
-/// [lat i32][lon i32] (updateContactFromFrame, MyMesh.cpp ~196). out_path_len 0xFF = OUT_PATH_UNKNOWN: the first
-/// message floods and the radio learns the path. Adds the contact if the radio does not have it, else updates it.
-Uint8List encodeAddUpdateContact(List<int> pubKey32, {required int type, required String name, int flags = 0}) {
-  final out = Uint8List(1 + 32 + 3 + 64 + 32 + 4 + 8);
+/// [lat i32][lon i32][lastmod u32 optional] (updateContactFromFrame, MyMesh.cpp 195-217). out_path_len 0xFF =
+/// OUT_PATH_UNKNOWN: the first message floods and the radio learns the path. Adds the contact if the radio does not have
+/// it, else updates it. [lastMod] null leaves the frame at 144 bytes (the radio stamps it).
+Uint8List encodeAddUpdateContact(
+  List<int> pubKey32, {
+  required int type,
+  required String name,
+  int flags = 0,
+  int outPathLen = 0xFF,
+  List<int> outPath = const [],
+  int lastAdvert = 0,
+  double lat = 0,
+  double lon = 0,
+  int? lastMod,
+}) {
+  final out = Uint8List(1 + 32 + 3 + 64 + 32 + 4 + 8 + (lastMod == null ? 0 : 4));
   out[0] = Cmd.addUpdateContact;
   out.setRange(1, 33, _pub32(pubKey32));
   out[33] = type;
   out[34] = flags;
-  out[35] = 0xFF;
+  out[35] = outPathLen;
+  final path = outPath.length > 64 ? outPath.sublist(0, 64) : outPath;
+  out.setRange(36, 36 + path.length, path);
   final nb = utf8Truncate(name, 31);
   out.setRange(36 + 64, 36 + 64 + nb.length, nb);
+  final bd = ByteData.sublistView(out);
+  bd.setUint32(132, lastAdvert & 0xffffffff, Endian.little);
+  bd.setInt32(136, (lat * 1e6).round(), Endian.little);
+  bd.setInt32(140, (lon * 1e6).round(), Endian.little);
+  if (lastMod != null) bd.setUint32(144, lastMod & 0xffffffff, Endian.little);
   return out;
 }
 
@@ -341,6 +373,9 @@ class SelfInfoFrame extends Frame {
 /// Very old firmware sends a shorter frame; fields that aren't present are null.
 class DeviceInfoFrame extends Frame {
   final int firmwareVerCode;
+
+  /// MAX_CONTACTS / 2 as sent, already doubled here (MyMesh.cpp 1061-1063).
+  final int? maxContacts;
   final int? maxChannels;
   final String? buildDate;
   final String? manufacturer;
@@ -348,6 +383,7 @@ class DeviceInfoFrame extends Frame {
   final int? pathHashMode;
   const DeviceInfoFrame({
     required this.firmwareVerCode,
+    this.maxContacts,
     this.maxChannels,
     this.buildDate,
     this.manufacturer,
@@ -452,13 +488,17 @@ class ChannelMsgFrame extends Frame {
   final int txtType;
   final int timestamp;
   final String text;
+
+  /// The whole frame as received (code byte included).
+  final Uint8List? raw;
   const ChannelMsgFrame(
       {this.snrDb,
       required this.channelIndex,
       required this.pathLen,
       required this.txtType,
       required this.timestamp,
-      required this.text});
+      required this.text,
+      this.raw});
 }
 
 /// Contact (direct) messages; not used by MeshSonar beyond recognising them.
@@ -477,8 +517,17 @@ class ContactTextFrame extends ContactMsgFrame {
   final int txtType;
   final int timestamp;
   final String text;
+
+  /// TXT_TYPE_SIGNED_PLAIN (2): the 4-byte signer prefix that precedes the text, 8 hex characters; null otherwise.
+  final String? signerPrefixHex;
   const ContactTextFrame(super.data,
-      {this.snrDb, required this.prefixHex, required this.pathLen, required this.txtType, required this.timestamp, required this.text});
+      {this.snrDb,
+      required this.prefixHex,
+      required this.pathLen,
+      required this.txtType,
+      required this.timestamp,
+      required this.text,
+      this.signerPrefixHex});
 }
 
 /// RESP_CODE_SENT (MyMesh.cpp ~1150): [6][is_flood][tag / expected ack u32][est_timeout_ms u32].
@@ -489,14 +538,92 @@ class SentFrame extends Frame {
   const SentFrame({required this.flood, required this.tag, required this.estTimeoutMs});
 }
 
-/// RESP_CODE_CONTACT (writeContactRespFrame, MyMesh.cpp ~171): [3][pub_key x32][type][flags][out_path_len]
-/// [out_path x64][name x32][last_advert u32][lat i32][lon i32][lastmod u32].
+/// RESP_CODE_CONTACT (writeContactRespFrame, MyMesh.cpp 171-193): [3][pub_key x32][type][flags][out_path_len]
+/// [out_path x64][name x32][last_advert u32][lat i32 x1e-6][lon i32 x1e-6][lastmod u32] = 148 bytes. PUSH_CODE_NEW_ADVERT
+/// (0x8A) carries the same layout under its own code. Fields past the name are 0 when a short (older) frame omits them.
 class ContactFrame extends Frame {
   final Uint8List publicKey;
   final int type;
+  final int flags;
   final int outPathLen;
+  final Uint8List outPath;
   final String name;
-  const ContactFrame({required this.publicKey, required this.type, required this.outPathLen, required this.name});
+  final int lastAdvert;
+  final double lat;
+  final double lon;
+  final int lastMod;
+  const ContactFrame({
+    required this.publicKey,
+    required this.type,
+    required this.outPathLen,
+    required this.name,
+    this.flags = 0,
+    required this.outPath,
+    this.lastAdvert = 0,
+    this.lat = 0,
+    this.lon = 0,
+    this.lastMod = 0,
+  });
+}
+
+/// RESP_CODE_CONTACTS_START (MyMesh.cpp 1252-1256): [2][count u32], the TOTAL number of contacts on the radio (not the
+/// number the `since` filter lets through).
+class ContactsStartFrame extends Frame {
+  final int count;
+  const ContactsStartFrame(this.count);
+}
+
+/// RESP_CODE_END_OF_CONTACTS (MyMesh.cpp 2404-2408): [4][most recent lastmod u32], the cursor for the next `since`.
+class EndOfContactsFrame extends Frame {
+  final int mostRecentLastMod;
+  const EndOfContactsFrame(this.mostRecentLastMod);
+}
+
+/// PUSH_CODE_NEW_ADVERT (0x8A): a contact the radio did not have, as a full contact frame (onDiscoveredContact, MyMesh.cpp
+/// 358-407).
+class NewAdvertPush extends Frame {
+  final ContactFrame contact;
+  const NewAdvertPush(this.contact);
+}
+
+/// PUSH_CODE_ADVERT (0x80): [0x80][pub_key x32], a known contact advertised again.
+class AdvertPush extends Frame {
+  final Uint8List publicKey;
+  const AdvertPush(this.publicKey);
+}
+
+/// PUSH_CODE_PATH_UPDATED (0x81, onContactPathUpdated MyMesh.cpp 409-415): [0x81][pub_key x32].
+class PathUpdatedPush extends Frame {
+  final Uint8List publicKey;
+  const PathUpdatedPush(this.publicKey);
+}
+
+/// PUSH_CODE_SEND_CONFIRMED (0x82, processAck MyMesh.cpp 417-436): [0x82][ack u32][trip time ms u32] = 9 bytes.
+class SendConfirmedPush extends Frame {
+  final int ack;
+  final int tripMs;
+  const SendConfirmedPush(this.ack, this.tripMs);
+}
+
+/// PUSH_CODE_CONTACT_DELETED (0x8F): [0x8F][pub_key x32].
+class ContactDeletedPush extends Frame {
+  final Uint8List publicKey;
+  const ContactDeletedPush(this.publicKey);
+}
+
+/// PUSH_CODE_CONTACTS_FULL (0x90): [0x90].
+class ContactsFullPush extends Frame {
+  const ContactsFullPush();
+}
+
+/// RESP_CODE_CHANNEL_DATA_RECV (27, onChannelDataRecv MyMesh.cpp ~601-632): [27][snr i8 x4][0][0][channel_idx][path_len]
+/// [data_type u16][data_len u8][data...]. A binary datagram: it shares the offline queue with messages, so the drain has
+/// to step over it; MeshSonar does not use it yet.
+class ChannelDataFrame extends Frame {
+  final int channelIndex;
+  final int dataType;
+  final Uint8List data;
+  const ChannelDataFrame(this.channelIndex, this.dataType, this.data);
 }
 
 /// PUSH_CODE_LOGIN_SUCCESS (onContactResponse, MyMesh.cpp ~700): [0x85][is_admin][pub_key_prefix x6][server time u32]
@@ -629,7 +756,11 @@ Frame _decodeContactText(Uint8List f) {
   final txtType = f[start + 7];
   final ts = bd.getUint32(start + 8, Endian.little);
   var textAt = start + 12;
-  if (txtType == 2 /* TXT_TYPE_SIGNED_PLAIN carries a 4-byte signer prefix first */) textAt += 4;
+  String? signer;
+  if (txtType == 2 /* TXT_TYPE_SIGNED_PLAIN carries a 4-byte signer prefix first */) {
+    signer = _hex(f, textAt, 4);
+    textAt += 4;
+  }
   if (textAt > f.length) textAt = f.length;
   return ContactTextFrame(f,
       snrDb: v3 ? bd.getInt8(1) / 4.0 : null,
@@ -637,7 +768,32 @@ Frame _decodeContactText(Uint8List f) {
       pathLen: pathLen,
       txtType: txtType,
       timestamp: ts,
-      text: utf8.decode(f.sublist(textAt), allowMalformed: true));
+      text: utf8.decode(f.sublist(textAt), allowMalformed: true),
+      signerPrefixHex: signer);
+}
+
+/// Bytes of path a packet's `path_len` byte stands for: the low 6 bits are the hop count, the top 2 bits the hash size
+/// minus one (src/Packet.h 79-83). 0xFF (OUT_PATH_UNKNOWN) = no path.
+int pathByteLength(int pathLen) => pathLen == 0xFF ? 0 : (pathLen & 63) * ((pathLen >> 6) + 1);
+
+ContactFrame _decodeContact(Uint8List f) {
+  if (f.length < 1 + 32 + 3 + 64 + 32) throw ProtocolException('CONTACT frame too short (${f.length})');
+  final bd = ByteData.sublistView(f);
+  int u32(int at) => f.length >= at + 4 ? bd.getUint32(at, Endian.little) : 0;
+  double deg(int at) => f.length >= at + 4 ? bd.getInt32(at, Endian.little) / 1e6 : 0;
+  final pathLen = f[35];
+  return ContactFrame(
+    publicKey: Uint8List.fromList(f.sublist(1, 33)),
+    type: f[33],
+    flags: f[34],
+    outPathLen: pathLen,
+    outPath: Uint8List.fromList(f.sublist(36, 36 + pathByteLength(pathLen).clamp(0, 64))),
+    name: _cString(f, 100, 32),
+    lastAdvert: u32(132),
+    lat: deg(136),
+    lon: deg(140),
+    lastMod: u32(144),
+  );
 }
 
 RepeaterStatus _decodeRepeaterStatus(Uint8List f, int at) {
@@ -691,6 +847,7 @@ Frame decodeFrame(Uint8List f) {
       need(2, 'DEVICE_INFO');
       return DeviceInfoFrame(
         firmwareVerCode: f[1],
+        maxContacts: f.length > 2 ? f[2] * 2 : null,
         maxChannels: f.length > 3 ? f[3] : null,
         buildDate: f.length >= 20 ? _cString(f, 8, 12) : null,
         manufacturer: f.length >= 60 ? _cString(f, 20, 40) : null,
@@ -757,6 +914,7 @@ Frame decodeFrame(Uint8List f) {
         txtType: f[6],
         timestamp: bd.getUint32(7, Endian.little),
         text: utf8.decode(f.sublist(11), allowMalformed: true),
+        raw: Uint8List.fromList(f),
       );
     case Resp.channelMsgRecv:
       need(8, 'CHANNEL_MSG_RECV');
@@ -766,6 +924,7 @@ Frame decodeFrame(Uint8List f) {
         txtType: f[3],
         timestamp: bd.getUint32(4, Endian.little),
         text: utf8.decode(f.sublist(8), allowMalformed: true),
+        raw: Uint8List.fromList(f),
       );
     case Resp.contactMsgRecv:
     case Resp.contactMsgRecvV3:
@@ -773,14 +932,34 @@ Frame decodeFrame(Uint8List f) {
     case Resp.sent:
       need(10, 'SENT');
       return SentFrame(flood: f[1] != 0, tag: bd.getUint32(2, Endian.little), estTimeoutMs: bd.getUint32(6, Endian.little));
+    case Resp.contactsStart:
+      need(5, 'CONTACTS_START');
+      return ContactsStartFrame(bd.getUint32(1, Endian.little));
+    case Resp.endOfContacts:
+      return EndOfContactsFrame(f.length >= 5 ? bd.getUint32(1, Endian.little) : 0);
     case Resp.contact:
-      need(1 + 32 + 3 + 64 + 32, 'CONTACT');
-      return ContactFrame(
-        publicKey: Uint8List.fromList(f.sublist(1, 33)),
-        type: f[33],
-        outPathLen: f[35],
-        name: _cString(f, 100, 32),
-      );
+      return _decodeContact(f);
+    case Push.newAdvert:
+      return NewAdvertPush(_decodeContact(f));
+    case Push.advert:
+      need(33, 'ADVERT');
+      return AdvertPush(Uint8List.fromList(f.sublist(1, 33)));
+    case Push.pathUpdated:
+      need(33, 'PATH_UPDATED');
+      return PathUpdatedPush(Uint8List.fromList(f.sublist(1, 33)));
+    case Push.sendConfirmed:
+      need(9, 'SEND_CONFIRMED');
+      return SendConfirmedPush(bd.getUint32(1, Endian.little), bd.getUint32(5, Endian.little));
+    case Push.contactDeleted:
+      need(33, 'CONTACT_DELETED');
+      return ContactDeletedPush(Uint8List.fromList(f.sublist(1, 33)));
+    case Push.contactsFull:
+      return const ContactsFullPush();
+    case Resp.channelDataRecv:
+      need(9, 'CHANNEL_DATA_RECV');
+      final dlen = f[8];
+      final end = (9 + dlen) > f.length ? f.length : 9 + dlen;
+      return ChannelDataFrame(f[4], f[6] | (f[7] << 8), Uint8List.fromList(f.sublist(9, end)));
     case Push.loginSuccess:
       need(8, 'LOGIN_SUCCESS');
       final legacy = f.length < 14;
@@ -1031,16 +1210,62 @@ Uint8List encodeSelfTelemetryPush({required List<int> prefix6, double? voltageV,
 Uint8List encodeSent({bool flood = false, int tag = 0, int estTimeoutMs = 2000}) =>
     Uint8List.fromList([Resp.sent, flood ? 1 : 0, ..._u32(tag), ..._u32(estTimeoutMs)]);
 
-Uint8List encodeContactFrame(List<int> pubKey32, {required int type, required String name, int outPathLen = 0xFF}) {
+Uint8List encodeContactFrame(
+  List<int> pubKey32, {
+  required int type,
+  required String name,
+  int outPathLen = 0xFF,
+  List<int> outPath = const [],
+  int flags = 0,
+  int lastAdvert = 0,
+  double lat = 0,
+  double lon = 0,
+  int lastMod = 0,
+  int code = Resp.contact,
+}) {
   final out = Uint8List(1 + 32 + 3 + 64 + 32 + 4 + 8 + 4);
-  out[0] = Resp.contact;
+  out[0] = code;
   out.setRange(1, 33, _pub32(pubKey32));
   out[33] = type;
+  out[34] = flags;
   out[35] = outPathLen;
+  final path = outPath.length > 64 ? outPath.sublist(0, 64) : outPath;
+  out.setRange(36, 36 + path.length, path);
   final nb = utf8Truncate(name, 31);
   out.setRange(100, 100 + nb.length, nb);
+  final bd = ByteData.sublistView(out);
+  bd.setUint32(132, lastAdvert, Endian.little);
+  bd.setInt32(136, (lat * 1e6).round(), Endian.little);
+  bd.setInt32(140, (lon * 1e6).round(), Endian.little);
+  bd.setUint32(144, lastMod, Endian.little);
   return out;
 }
+
+Uint8List encodeContactsStart(int count) => Uint8List.fromList([Resp.contactsStart, ..._u32(count)]);
+Uint8List encodeEndOfContacts(int mostRecentLastMod) => Uint8List.fromList([Resp.endOfContacts, ..._u32(mostRecentLastMod)]);
+Uint8List encodeSendConfirmed(int ack, int tripMs) => Uint8List.fromList([Push.sendConfirmed, ..._u32(ack), ..._u32(tripMs)]);
+Uint8List encodePathUpdated(List<int> pubKey32) => Uint8List.fromList([Push.pathUpdated, ..._pub32(pubKey32)]);
+Uint8List encodeAdvertPush(List<int> pubKey32) => Uint8List.fromList([Push.advert, ..._pub32(pubKey32)]);
+Uint8List encodeContactDeleted(List<int> pubKey32) => Uint8List.fromList([Push.contactDeleted, ..._pub32(pubKey32)]);
+Uint8List encodeContactsFull() => Uint8List.fromList([Push.contactsFull]);
+
+/// A queued channel message as the radio hands it out (onChannelMessageRecv, MyMesh.cpp 558-585): V3 unless [v3] is false.
+/// [text] is the whole text including the sender's "name: " prefix, as the radio delivers it.
+Uint8List encodeChannelMsg(int channelIdx, String text, {int timestamp = 0, int pathLen = 0xFF, double snrDb = 0, bool v3 = true}) {
+  final b = BytesBuilder();
+  if (v3) {
+    b.add([Resp.channelMsgRecvV3, _i8(snrDb * 4), 0, 0]);
+  } else {
+    b.addByte(Resp.channelMsgRecv);
+  }
+  b.add([channelIdx, pathLen, txtTypePlain, ..._u32(timestamp)]);
+  b.add(utf8.encode(text));
+  return b.toBytes();
+}
+
+/// A binary channel datagram in the offline queue (onChannelDataRecv).
+Uint8List encodeChannelDataRecv(int channelIdx, int dataType, List<int> data, {int pathLen = 0xFF, double snrDb = 0}) =>
+    Uint8List.fromList([Resp.channelDataRecv, _i8(snrDb * 4), 0, 0, channelIdx, pathLen, dataType & 0xff, dataType >> 8, data.length, ...data]);
 
 /// [legacy] writes the 8-byte pre-v7 form.
 Uint8List encodeLoginSuccess(List<int> pubKey32, {required bool isAdmin, int tag = 0, int aclPermissions = 3, int firmwareLevel = 2, bool legacy = false}) =>
@@ -1076,7 +1301,7 @@ Uint8List encodeSignatureResponse(List<int> signature64) {
 
 /// A queued contact message as the radio hands it out (V3 form unless [v3] is false).
 Uint8List encodeContactText(List<int> senderKey, String text,
-    {int txtType = txtTypeCliData, int timestamp = 0, int pathLen = 0xFF, double snrDb = 0, bool v3 = true}) {
+    {int txtType = txtTypeCliData, int timestamp = 0, int pathLen = 0xFF, double snrDb = 0, bool v3 = true, List<int> signer4 = const [0, 0, 0, 0]}) {
   final b = BytesBuilder();
   if (v3) {
     b.add([Resp.contactMsgRecvV3, _i8(snrDb * 4), 0, 0]);
@@ -1085,7 +1310,7 @@ Uint8List encodeContactText(List<int> senderKey, String text,
   }
   b.add(senderKey.take(6).toList());
   b.add([pathLen, txtType, ..._u32(timestamp)]);
-  if (txtType == 2) b.add([0, 0, 0, 0]);
+  if (txtType == 2) b.add(signer4.take(4).toList());
   b.add(utf8.encode(text));
   return b.toBytes();
 }

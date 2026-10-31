@@ -48,3 +48,11 @@ class AlwaysGoPingGate implements PingGate {
   @override
   void pingSent({int? airtimeMs}) {}
 }
+
+/// Thrown by a manual ping the gate refused (the driver pressed Ping while the radio was busy sending a message).
+class PingSkippedException implements Exception {
+  final PingDecision decision;
+  PingSkippedException(this.decision);
+  @override
+  String toString() => decision.message;
+}

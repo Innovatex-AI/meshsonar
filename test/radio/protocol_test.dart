@@ -288,7 +288,7 @@ void main() {
     test('MSG_WAITING, NO_MORE_MESSAGES, unknown, empty', () {
       expect(decodeFrame(b([0x83])), isA<MsgWaitingPush>());
       expect(decodeFrame(b([0x0A])), isA<NoMoreMessagesFrame>());
-      expect(decodeFrame(b([0x80, 1])), isA<UnknownFrame>());
+      expect(decodeFrame(b([0x95, 1])), isA<UnknownFrame>());
       expect(() => decodeFrame(b([])), throwsA(isA<ProtocolException>()));
       expect(isPushCode(0x88), isTrue);
       expect(isPushCode(0x18), isFalse);
