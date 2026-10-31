@@ -32,6 +32,7 @@ Field-robustness pass (branch `fix/field-robustness`): the drive path audited en
 - **GPS gone mid-drive**: after 20 s the status says to check Location and permission; a remembered GPS fix older than 30 s is never used for a ping.
 - **Phone clock off from GPS time** by more than 5 minutes (steady over three fixes): one warning per drive.
 - **Drive list speed**: `JsonlDriveStore.sessions()` reuses a drive's summary while its files are unchanged (a 6,000-ping drive was fully re-parsed on every refresh, including each in-drive upload tick).
+- Simulator pass (iPhone 17 Pro, iPad Pro 11-inch): the Drive map's "No pings yet" hint no longer sits under the region chip on a phone; the About licence text is unwrapped from its 75-column hard breaks.
 - Tests added for each (`radio_reconnect_test`, `sync_status_codes_test`, `offline_queue_test`, `long_drive_test`, `wardrive_resilience_test`, long-drive cases in `drive_store_test`), including the two mutation-check gaps in TESTING.md (echo de-dup prefers fewer hops; out-of-range SNR/RSSI become null).
 
 ## [0.20.1] — 2026-10-28 — 559 regions
