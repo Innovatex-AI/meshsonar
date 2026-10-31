@@ -46,6 +46,8 @@ abstract final class Cmd {
   static const sendControlData = 55; // v8+
   static const getStats = 56; // v8+
   static const sendTelemetryReq = 39; // with exactly 3 reserved bytes = the companion's own ('self') telemetry
+  static const sendBinaryReq = 50; // [50][pub_key x32][request bytes]: neighbours, ACL, owner (repeater_wire.dart)
+  static const sendAnonReq = 57; // [57][pub_key x32][request bytes]: clock, regions, owner without a login
 }
 
 abstract final class Resp {
@@ -88,6 +90,7 @@ abstract final class Push {
   static const newAdvert = 0x8A;
   static const controlData = 0x8E; // v8+
   static const telemetryResponse = 0x8B;
+  static const binaryResponse = 0x8C; // [0x8C][0][tag u32][data...] (answers 50 and 57; research packet section B)
   static const contactDeleted = 0x8F; // [0x8F][pub_key x32]: the radio overwrote its oldest contact
   static const contactsFull = 0x90; // [0x90]
 }
@@ -749,7 +752,25 @@ class RepeaterStatus {
 class StatusResponsePush extends Frame {
   final String prefixHex;
   final RepeaterStatus status;
-  const StatusResponsePush(this.prefixHex, this.status);
+
+  /// The whole statistics block as received (56 bytes + zero padding), for the admin screens (repeater_wire.dart).
+  final Uint8List? statsBytes;
+  const StatusResponsePush(this.prefixHex, this.status, {this.statsBytes});
+}
+
+/// PUSH_CODE_TELEMETRY_RESPONSE (0x8B) from a REMOTE node: [0x8B][0][pub_key_prefix x6][CayenneLPP, big endian, zero padded].
+class TelemetryResponsePush extends Frame {
+  final String prefixHex;
+  final Uint8List lpp;
+  const TelemetryResponsePush(this.prefixHex, this.lpp);
+}
+
+/// PUSH_CODE_BINARY_RESPONSE (0x8C): [0x8C][0][tag u32][data...]. The tag is the one in the SENT frame of the request.
+/// The data is zero padded to the cipher block size: trust the counts inside it, not its length.
+class BinaryResponsePush extends Frame {
+  final int tag;
+  final Uint8List data;
+  const BinaryResponsePush(this.tag, this.data);
 }
 
 /// RESP_CODE_SIGN_START (MyMesh.cpp ~1781): [19][reserved][max_len u32].
@@ -1057,7 +1078,13 @@ Frame decodeFrame(Uint8List f) {
       return LoginFailPush(_hex(f, 2, 6));
     case Push.statusResponse:
       need(8 + 20, 'STATUS_RESPONSE');
-      return StatusResponsePush(_hex(f, 2, 6), _decodeRepeaterStatus(f, 8));
+      return StatusResponsePush(_hex(f, 2, 6), _decodeRepeaterStatus(f, 8), statsBytes: Uint8List.fromList(f.sublist(8)));
+    case Push.telemetryResponse:
+      need(8, 'TELEMETRY_RESPONSE');
+      return TelemetryResponsePush(_hex(f, 2, 6), Uint8List.fromList(f.sublist(8)));
+    case Push.binaryResponse:
+      need(6, 'BINARY_RESPONSE');
+      return BinaryResponsePush(bd.getUint32(2, Endian.little), Uint8List.fromList(f.sublist(6)));
     case Resp.signStart:
       need(6, 'SIGN_START');
       return SignStartFrame(bd.getUint32(2, Endian.little));
