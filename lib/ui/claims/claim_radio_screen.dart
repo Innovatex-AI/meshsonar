@@ -99,12 +99,12 @@ class _ClaimRadioScreenState extends State<ClaimRadioScreen> {
         ),
       ];
     } else {
-      final ok = _st.verified;
+      final ok = _st.verified || _st.outcome == ClaimOutcome.alreadyYours;
       body = [
         Row(children: [
           Icon(ok ? Icons.check_circle : Icons.info_outline, size: 32, color: ok ? t.colorScheme.primary : t.colorScheme.error),
           const SizedBox(width: Gap.m),
-          Expanded(child: Text(ok ? 'This radio is yours' : claimOutcomeTitle(_st.outcome), key: const Key('claim-result-title'), style: t.textTheme.titleLarge)),
+          Expanded(child: Text(_st.verified ? 'This radio is yours' : claimOutcomeTitle(_st.outcome), key: const Key('claim-result-title'), style: t.textTheme.titleLarge)),
         ]),
         const SizedBox(height: Gap.m),
         Semantics(liveRegion: true, child: Text(_st.message, key: const Key('claim-message'))),

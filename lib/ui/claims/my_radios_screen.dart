@@ -129,9 +129,9 @@ class _MyRadiosScreenState extends State<MyRadiosScreen> {
                     padding: const EdgeInsets.only(bottom: Gap.s),
                     child: Text(c.error!, key: const Key('my-radios-error'), style: TextStyle(color: t.colorScheme.error)),
                   ),
-                if (c.loadedOnce && c.claims.isEmpty && c.error == null)
+                if (c.loadedOnce && c.active.isEmpty && c.past.isEmpty && c.error == null)
                   Text('You have not claimed a radio yet. Claim your own radio, or a repeater you run.', key: const Key('my-radios-empty'), style: t.textTheme.bodyMedium),
-                for (final claim in c.claims)
+                for (final claim in c.active)
                   Card(
                     key: ValueKey('radio-${claim.pubkey}'),
                     child: Padding(
@@ -171,6 +171,24 @@ class _MyRadiosScreenState extends State<MyRadiosScreen> {
                         ]),
                       ]),
                     ),
+                  ),
+                if (c.past.isNotEmpty)
+                  ExpansionTile(
+                    key: const Key('past-radios'),
+                    tilePadding: EdgeInsets.zero,
+                    title: Text('Past radios (${c.past.length})', style: t.textTheme.titleMedium),
+                    children: [
+                      for (final p in c.past)
+                        ListTile(
+                          key: ValueKey('past-${p.pubkey}'),
+                          contentPadding: EdgeInsets.zero,
+                          minVerticalPadding: Gap.s,
+                          leading: const Icon(Icons.history),
+                          title: Text(p.label),
+                          subtitle: Text(claimEndText(p.endReason ?? ClaimEndReason.unknown) +
+                              (p.releasedAt == null ? '' : ' · ${p.releasedAt!.toIso8601String().substring(0, 10)}')),
+                        ),
+                    ],
                   ),
                 const SizedBox(height: Gap.l),
                 ListTile(

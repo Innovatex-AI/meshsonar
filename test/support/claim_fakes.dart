@@ -283,7 +283,7 @@ class FakeClaimClient implements CmatClient {
   Duration signTtl = const Duration(minutes: 2);
   Duration codeTtl = const Duration(minutes: 15);
 
-  CmatException? startError;
+  Object? startError;
   CmatException? completeError;
   int statusErrorsLeft = 0;
   int statusCalls = 0;

@@ -37,6 +37,12 @@ class ClaimController extends ChangeNotifier {
 
   List<NodeClaim> _claims = const [];
   List<NodeClaim> get claims => _claims;
+
+  /// Radios this key manages now.
+  List<NodeClaim> get active => [for (final c in _claims) if (!c.ended) c];
+
+  /// Claims that ended in the last 90 days (released, replaced by another owner, removed by a moderator).
+  List<NodeClaim> get past => [for (final c in _claims) if (c.ended) c];
   bool _loading = false;
   bool get loading => _loading;
   bool _loadedOnce = false;
@@ -49,13 +55,13 @@ class ClaimController extends ChangeNotifier {
   /// Whether this driver key has claimed [pubkey] (64 hex, any case). False until the list is known.
   bool owns(String pubkey) {
     final k = pubkey.toLowerCase();
-    return _claims.any((c) => c.pubkey == k);
+    return _claims.any((c) => c.pubkey == k && !c.ended);
   }
 
   NodeClaim? claimFor(String pubkey) {
     final k = pubkey.toLowerCase();
     for (final c in _claims) {
-      if (c.pubkey == k) return c;
+      if (c.pubkey == k && !c.ended) return c;
     }
     return null;
   }
@@ -90,7 +96,7 @@ class ClaimController extends ChangeNotifier {
     final key = driverKey();
     if (key == null) throw const CmatException('no driver key');
     await client().releaseClaim(key, pubkey);
-    _claims = [for (final c in _claims) if (c.pubkey != pubkey.toLowerCase()) c];
+    _claims = [for (final c in _claims) if (c.ended || c.pubkey != pubkey.toLowerCase()) c];
     notifyListeners();
   }
 

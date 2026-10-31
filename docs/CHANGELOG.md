@@ -5,6 +5,12 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- **Claims follow the server's final contract.** A `409 {owner: "you"}` from `claim-start` means "already yours": the app shows the
+  existing claim, touches nothing on the repeater and asks for no password (the claim screen also says so up front for a
+  repeater you own). My radios keeps ended claims (last 90 days) in a collapsed "Past radios" list with the reason
+  ("Another owner proved control", "You released it", "Removed by a moderator"). Error `code`s (`no_such_challenge`,
+  `not_owner`, `no_such_claim`) get plain messages. A contract test asserts no claim request carries a password-like field.
+
 - **Claim a radio or a repeater (needs a server with `capabilities.nodeClaims`).** Settings > My radios lists the radios your
   driver key manages and lets you rename one, choose whether its position is public, add notes, or give it up; the website
   (`/me/radios`) has the full multi-radio view. **A claim only manages a radio: it never decides whether its data is

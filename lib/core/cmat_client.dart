@@ -143,7 +143,11 @@ class HttpCmatClient implements CmatClient, TelemetryTransport {
       final err = decoded is Map && decoded['error'] is String ? decoded['error'] as String : null;
       final word = decoded is Map && decoded['status'] is String && (decoded['status'] as String).length <= 24 ? decoded['status'] as String : null;
       throw CmatException(err ?? 'server answered ${res.statusCode}${res.reasonPhrase == null ? '' : ' ${res.reasonPhrase}'}',
-          status: res.statusCode, serverStatus: word, retryAfterSec: int.tryParse(res.headers['retry-after'] ?? ''));
+          status: res.statusCode,
+          serverStatus: word,
+          retryAfterSec: int.tryParse(res.headers['retry-after'] ?? ''),
+          code: decoded is Map && decoded['code'] is String && (decoded['code'] as String).length <= 40 ? decoded['code'] as String : null,
+          body: decoded is Map ? decoded.cast<String, dynamic>() : null);
     }
     if (decoded is! Map) throw CmatException('server sent an unreadable answer', status: res.statusCode);
     return decoded.cast<String, dynamic>();
@@ -333,8 +337,23 @@ class HttpCmatClient implements CmatClient, TelemetryTransport {
 
   @override
   Future<ClaimChallenge> claimStart(String driverKey, String pubkey, ClaimKind kind) async {
-    final j = await _send('POST', 'claim-start',
-        driverKey: driverKey, body: {'pubkey': pubkey.trim().toLowerCase(), 'kind': kind.name}, ok: const {200, 201});
+    final Map<String, dynamic> j;
+    try {
+      j = await _send('POST', 'claim-start',
+          driverKey: driverKey, body: {'pubkey': pubkey.trim().toLowerCase(), 'kind': kind.name}, ok: const {200, 201});
+    } on CmatException catch (e) {
+      // 409 {owner: "you", claim}: the caller already owns this key. Not a failure: show the existing claim.
+      if (e.status == 409 && e.body?['owner'] == 'you') {
+        NodeClaim? c;
+        try {
+          c = NodeClaim.parse(e.body?['claim']);
+        } on FormatException {
+          c = null;
+        }
+        throw ClaimAlreadyYours(c);
+      }
+      rethrow;
+    }
     try {
       return ClaimChallenge.parse(j, asked: kind);
     } on FormatException {
