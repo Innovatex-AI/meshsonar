@@ -223,8 +223,8 @@ void main() {
       await tester.tap(mount(firstMounts.first));
       await tester.pumpAndSettle();
       await save(tester);
-      final after = h.settings.saved.toJson()..remove('antenna_profiles');
-      final want = before.toJson()..remove('antenna_profiles');
+      final after = h.settings.saved.toJson()..remove('antenna_profiles')..remove('auto_key'); // the fake store loads with auto key off
+      final want = before.toJson()..remove('antenna_profiles')..remove('auto_key');
       expect(after, want, reason: 'the old antenna key is kept (read-only) and nothing else changed');
       expect(h.settings.saved.antennaProfiles['abcdef0123']!.gainDbi, 5.8);
       expect(h.settings.saved.antennaProfiles['abcdef0123']!.heightM, 1.8);

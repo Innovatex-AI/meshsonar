@@ -22,7 +22,7 @@ void main() {
     expect(find.text('Connect your radio'), findsOneWidget);
     await tester.tap(find.byKey(const Key('onboarding-next')));
     await tester.pumpAndSettle();
-    expect(find.text('Get a driver key'), findsOneWidget);
+    expect(find.text('Nothing to sign up for'), findsOneWidget);
     await tester.tap(find.byKey(const Key('onboarding-next')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('onboarding')), findsNothing);
@@ -59,20 +59,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(h.state.radioKind, RadioKind.simulator);
     expect(h.state.connected, isTrue);
-  });
-
-  testWidgets('"Request a key" lands on Settings', (tester) async {
-    useTallScreen(tester);
-    final h = Harness();
-    attachUiPrefs(h.state, UiPrefs());
-    await h.pumpApp(tester);
-    await tester.tap(find.byKey(const Key('onboarding-next')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('onboarding-next')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('onboarding-key')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('key-request')), findsOneWidget);
   });
 
   test('file prefs persist the seen flag and drive names; damaged file = first run', () async {

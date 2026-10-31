@@ -197,8 +197,8 @@ void main() {
       for (final k in old.keys) {
         expect(saved[k], old[k], reason: '$k must be unchanged by the 0.4.0 upgrade');
       }
-      // 0.11.0 adds discoveryMode alongside the 0.4.0 antennaProfiles upgrade.
-      expect(saved.keys.toSet().difference(old.keys.toSet()), {'antenna_profiles', 'discovery_mode'});
+      // auto_key (automatic driver key) is new too; 0.11.0 adds discoveryMode alongside the 0.4.0 antennaProfiles upgrade.
+      expect(saved.keys.toSet().difference(old.keys.toSet()), {'antenna_profiles', 'discovery_mode', 'auto_key'});
     });
   });
 }

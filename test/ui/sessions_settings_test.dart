@@ -122,11 +122,7 @@ void main() {
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
 
-    // Validation: name required.
-    await tester.tap(find.byKey(const Key('key-request')));
-    await tester.pumpAndSettle();
-    expect(find.text('Enter your name'), findsOneWidget);
-    expect(h.client.requestCalls, 0);
+    // The name is optional: left blank, the generic one goes out.
 
     await tester.enterText(find.byKey(const Key('key-name')), 'Andy');
     await tester.enterText(find.byKey(const Key('key-callsign')), 'KD8XYZ');

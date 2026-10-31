@@ -381,17 +381,19 @@ class _DriverKeySectionState extends State<DriverKeySection> {
                 ]),
                 const SizedBox(height: 6),
                 Text(
-                  'To upload drives, ask the server for a driver key. Your callsign (or "Driver N") is shown publicly; '
-                  'your name and email are only seen by the server admin.',
+                  s.keyBusy
+                      ? 'Setting up your driver key…'
+                      : 'MeshSonar sets up a driver key for you on its own. If that did not happen (you may have been '
+                          'offline), tap Create my key. Your callsign (or "Driver N") is shown publicly; your name and '
+                          'email are optional and only seen by the server admin.',
                   style: t.textTheme.bodySmall,
                 ),
                 const SizedBox(height: 8),
                 TextFormField(
                   key: const Key('key-name'),
                   controller: _name,
-                  decoration: const InputDecoration(labelText: 'Name (required)'),
+                  decoration: const InputDecoration(labelText: 'Name (optional)'),
                   textInputAction: TextInputAction.next,
-                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter your name' : null,
                 ),
                 const SizedBox(height: 10),
                 TextFormField(
@@ -423,7 +425,7 @@ class _DriverKeySectionState extends State<DriverKeySection> {
                   icon: s.keyBusy
                       ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                       : const Icon(Icons.vpn_key),
-                  label: const Text('Request key'),
+                  label: const Text('Create my key'),
                 ),
                 const SizedBox(height: 12),
                 const AccountLinks(),

@@ -33,7 +33,7 @@ it's finished or skipped.
 |---|---|---|
 | 1 "Map your mesh by driving it" | What MeshSonar does; heard-nothing pings count | Next |
 | 2 "Connect your radio" | BLE pairing; Simulator | **Connect radio** → Drive tab + Connect screen; **Try the Simulator** → connects the simulator |
-| 3 "Get a driver key" | Drives are saved locally; key needed to upload | **Request a driver key** → Settings tab; **Get started** → Drive tab |
+| 3 "Nothing to sign up for" | The driver key is created automatically; drives are saved locally and upload on their own | **Get started** → Drive tab |
 
 **Skip** is always available. Settings → "Show the welcome tour" reopens the intro. When there's no prefs file (tests),
 the intro counts as already seen.
@@ -417,7 +417,7 @@ it."); `test/ui/settings_no_dead_end_test.dart` enforces it.
 
 | Section | Item | Behaviour |
 |---|---|---|
-| Account & driver key (`driver`) | **Driver key** | Without a key: a request form (name required, callsign and email optional) → `driver-request`, or paste a key from the website. With a key: a status badge (No key / Pending approval / Approved / Rejected / Revoked / Not recognised by this server), the public display name, the masked key (tap to reveal for 30 s, copy), **Refresh** (`driver-status`) and **Remove key** (asks; says drives stay on the phone and headers stop). Approval also downloads repeater names. "Manage your drives at `<server>/me`" and **Get a key on the website**. |
+| Account & driver key (`driver`) | **Driver key** | Without a key (the app normally creates one by itself at launch, `AppState.ensureKey`; not after the person removed theirs): **Create my key** (name, callsign and email optional) → `driver-request`, or paste a key from the website. With a key: a status badge (No key / Pending approval / Approved / Rejected / Revoked / Not recognised by this server), the public display name, the masked key (tap to reveal for 30 s, copy), **Refresh** (`driver-status`) and **Remove key** (asks; says drives stay on the phone and headers stop). Approval also downloads repeater names. "Manage your drives at `<server>/me`" and **Get a key on the website**. |
 | | **Server URL** | Must be http(s) with a host. Keys are per server: with a key saved, moving to another server asks "Change server and remove your key?", then removes the key. Another address of the same server keeps it. Unsent drives stay on the phone. |
 | Region (`region`) | **Region** | Which region the app shows (follows your location unless you pick one; opens the switcher). |
 | | **Connected to** (`site-region`), **Radio preset** (`site-radio-preset`) | From `GET /api/cmh/site-config`, shown only once it has answered. The preset row compares the region's suggested preset with the connected radio's own ("Yours"); states: no preset, preset with no radio, both. Information only: the app never writes to the radio. |

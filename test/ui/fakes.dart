@@ -362,12 +362,17 @@ class FakeSettingsStore implements SettingsStore {
   /// before and after 0.4.0). Off for tests about the antenna setup itself.
   final bool seedAntennaProfile;
   FakeSettingsStore([this.saved = const Settings(), this.seedAntennaProfile = false]);
+
+  /// The app creates a driver key by itself on a phone with none. Off here so a test about a no-key phone stays one;
+  /// tests about the automatic key set it (or keep `autoKey` in the saved settings and set this true).
+  bool autoKeyOn = false;
   @override
   Future<Settings> load() async {
-    if (!seedAntennaProfile) return saved;
-    final j = saved.toJson();
+    final base = autoKeyOn ? saved : saved.copyWith(autoKey: false);
+    if (!seedAntennaProfile) return base;
+    final j = base.toJson();
     final existing = j['antenna_profiles'];
-    if (existing is Map && existing.isNotEmpty) return saved;
+    if (existing is Map && existing.isNotEmpty) return base;
     return Settings.fromJson({...j, 'antenna_profiles': testAntennaProfiles});
   }
   /// When set, [save] throws it (and keeps [saved] as it was).

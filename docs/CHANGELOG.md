@@ -5,6 +5,14 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- **One-tap onboarding: the driver key creates itself.** A phone with no key asks the server for one at launch, on
+  returning to the app, and when the server changes (`AppState.ensureKey`): no form, no approval wait on a server
+  with open registration (production). The registration name is the generic "MeshSonar driver" (the public handle is
+  "Driver N" until a callsign is set). Failures (offline, 429) are quiet and retried with a growing pause. Removing
+  the key turns `Settings.autoKey` off so it never comes back unasked; Settings > Driver key then offers **Create my
+  key** (name, callsign and email optional), which turns it back on. Onboarding page 3 now says nothing needs signing
+  up. New setting key `auto_key` (default true). Tests: `test/app/auto_key_test.dart`.
+
 ## [0.20.1] — 2026-10-28 — 559 regions
 
 The platform went from about 5 to 559 active regions. Design, measurements and the asks for the server: [REGIONS_AT_SCALE.md](REGIONS_AT_SCALE.md). Not installed anywhere (the app is on hold).

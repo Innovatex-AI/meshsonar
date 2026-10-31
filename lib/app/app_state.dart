@@ -874,6 +874,7 @@ class AppState extends ChangeNotifier {
   void _onForeground(bool fg) {
     if (!fg) return;
     unawaited(refreshLocationAccess());
+    unawaited(ensureKey());
     unawaited(syncRepeaterLists(SyncTrigger.resume));
     unawaited(_refreshRegionIndexIfDue());
   }
@@ -1909,7 +1910,10 @@ class AppState extends ChangeNotifier {
 
   bool _canSync() {
     if (!hasKey) {
-      _say('Request a driver key in Settings before syncing. Your drives are saved on this phone.');
+      unawaited(ensureKey()); // normally already done at launch; this catches a phone that was offline then
+      _say(_settings.autoKey
+          ? 'Setting up your driver key. Your drives are saved on this phone; try Sync again in a moment.'
+          : 'Request a driver key in Settings before syncing. Your drives are saved on this phone.');
       return false;
     }
     if (_settings.keyStatus != DriverKeyStatus.approved) {
@@ -2126,6 +2130,9 @@ class AppState extends ChangeNotifier {
       unawaited(_tele.flush());
     }
     if (keyApproved) unawaited(refreshRepeaters(quiet: true));
+    unawaited(ensureKey().then((ok) {
+      if (ok && _settings.autoSync && keyApproved && orphans.isNotEmpty) unawaited(_syncClosedQuietly(orphans));
+    }));
     if (orphans.isNotEmpty && _settings.autoSync && keyApproved) unawaited(_syncClosedQuietly(orphans));
   }
 
@@ -2180,6 +2187,8 @@ class AppState extends ChangeNotifier {
     _ctx?.refresh(); // a drive-context category switched off stops at once, one switched on starts now
     notifyListeners();
     if (serverChanged) unawaited(refreshSiteConfig());
+    if (serverChanged) _autoKeyNotBefore = null;
+    if (serverChanged && !hasKey) unawaited(ensureKey());
     if (serverChanged) unawaited(refreshNetworkCoverage());
     // Not cleared immediately like siteConfig/networkCoverage: the phone's physical region hasn't changed just
     // because the server did, and the old index is a defensible stale guess until the new one answers.
@@ -2211,6 +2220,36 @@ class AppState extends ChangeNotifier {
   String? _keyError;
   String? get keyError => _keyError;
 
+  DateTime? _autoKeyNotBefore;
+  int _autoKeyFails = 0;
+
+  /// One-tap onboarding: a phone with no driver key asks the server for one by itself (no form). The server issues
+  /// keys at once when registration is open; the name is generic, a callsign or email can be added on the website.
+  /// Quiet on failure (offline, rate-limited) and retried with a growing pause; never runs after the person removed
+  /// their key ([Settings.autoKey]) or while a request is already in flight.
+  Future<bool> ensureKey() async {
+    if (!_loaded || hasKey || !_settings.autoKey || _keyBusy) return hasKey;
+    final now = DateTime.now();
+    if (_autoKeyNotBefore != null && now.isBefore(_autoKeyNotBefore!)) return false;
+    final ok = await requestKey(name: autoKeyName);
+    if (ok) {
+      _autoKeyFails = 0;
+      _autoKeyNotBefore = null;
+      diagnostics.add('Driver key created automatically (${_settings.keyStatus.name})');
+    } else {
+      _autoKeyFails++;
+      final secs = (30 * (1 << (_autoKeyFails - 1).clamp(0, 6))).clamp(30, 1800);
+      _autoKeyNotBefore = now.add(Duration(seconds: secs));
+      diagnostics.add('Automatic driver key failed (attempt $_autoKeyFails), next try in ${secs}s: $_keyError');
+      _keyError = null; // an unasked failure is not an error banner; Settings still offers the form
+      notifyListeners();
+    }
+    return ok;
+  }
+
+  /// The generic registration name. The server shows drivers as "Driver N" unless a callsign is set.
+  static const autoKeyName = 'MeshSonar driver';
+
   Future<bool> requestKey({required String name, String? callsign, String? email}) async {
     _keyBusy = true;
     _keyError = null;
@@ -2218,7 +2257,7 @@ class AppState extends ChangeNotifier {
     final server = _settings.serverUrl;
     try {
       final r = await client.requestKey(
-        name: name.trim(),
+        name: name.trim().length < 2 ? autoKeyName : name.trim(), // the server wants 2-60 characters
         callsign: _blankToNull(callsign),
         email: _blankToNull(email),
       );
@@ -2226,7 +2265,7 @@ class AppState extends ChangeNotifier {
         _keyError = 'The server changed while the key was being requested. Request it again.';
         return false;
       }
-      await updateSettings(_settings.copyWith(driverKey: r.key, keyStatus: r.status, display: r.display));
+      await updateSettings(_settings.copyWith(driverKey: r.key, keyStatus: r.status, display: r.display, autoKey: true));
       if (r.status == DriverKeyStatus.approved) unawaited(refreshRepeaters(quiet: true));
       return true;
     } catch (e) {
@@ -2322,7 +2361,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> forgetKey() async {
-    await updateSettings(_settings.copyWith(clearKey: true));
+    await updateSettings(_settings.copyWith(clearKey: true, autoKey: false)); // removed on purpose: never re-created unasked
     await clearDriverSummaryCache(); // the account's drive list must not outlive its key on this phone
   }
 
