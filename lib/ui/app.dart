@@ -44,18 +44,22 @@ class MeshSonarApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return AppScope(
       state: state,
-      child: MaterialApp(
-        // Screens pushed for one AppState (a report form, its review) belong to it. Without this key, giving the app
-        // a new AppState (a restart in the same engine, as widget tests do) would keep the old screen stack and Navigator
-        // over the new state.
-        key: ObjectKey(state),
-        title: 'MeshSonar',
-        debugShowCheckedModeBanner: false,
-        theme: meshSonarTheme(Brightness.light),
-        darkTheme: meshSonarTheme(Brightness.dark),
-        themeMode: meshSonarThemeMode(),
-        home: FirstRunGate(builder: (tab) => HomeShell(key: ValueKey('shell-$tab'), initialTab: tab)),
-      ),
+      // Builder so the theme follows Settings > Colour palette (the strength colours live in the theme extension).
+      child: Builder(builder: (context) {
+        final palette = AppScope.of(context).settings.colourPalette;
+        return MaterialApp(
+          // Screens pushed for one AppState (a report form, its review) belong to it. Without this key, giving the app
+          // a new AppState (a restart in the same engine, as widget tests do) would keep the old screen stack and Navigator
+          // over the new state.
+          key: ObjectKey(state),
+          title: 'MeshSonar',
+          debugShowCheckedModeBanner: false,
+          theme: meshSonarTheme(Brightness.light, palette: palette),
+          darkTheme: meshSonarTheme(Brightness.dark, palette: palette),
+          themeMode: meshSonarThemeMode(),
+          home: FirstRunGate(builder: (tab) => HomeShell(key: ValueKey('shell-$tab'), initialTab: tab)),
+        );
+      }),
     );
   }
 }

@@ -65,7 +65,7 @@ class SnrSection extends StatelessWidget {
           fill: true,
           dotColor: (v) => m.forPing(heard: true, snr: v),
           dotRadius: pts.length > 400 ? 1.6 : 3.0,
-          floorMarks: [for (final p in pts) if (p.snr == null) (p.ts, p.heard ? m.snrMid : m.silent)],
+          floorMarks: [for (final p in pts) if (p.snr == null) (p.ts, p.heard ? m.heardUnknown : m.silent)],
           xFormat: _hm,
           footer: 'grey ticks = heard nothing',
         ),

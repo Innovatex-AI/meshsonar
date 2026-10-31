@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../about_screen.dart';
 import '../app.dart';
+import '../map/legend_sheet.dart' show showMapLegend;
 import '../onboarding/onboarding_screen.dart';
 import 'settings_index.dart';
 import 'settings_kit.dart';
@@ -19,6 +20,17 @@ List<Widget> aboutSectionRows(BuildContext context) {
         subtitle: Text('${s.services.appInfo.version == null ? 'Version unknown' : 'Version ${s.services.appInfo.version}'} · MIT licence, third-party notices'),
         trailing: const Icon(Icons.chevron_right),
         onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const AboutScreen())),
+      ),
+    ),
+    SettingsAnchor(
+      id: 'map-legend',
+      child: ListTile(
+        key: const Key('map-legend'),
+        leading: const Icon(Icons.legend_toggle_rounded),
+        title: Text(settingsEntry('map-legend').title),
+        subtitle: const Text('What every colour and symbol on the maps means, in your colour palette.'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => showMapLegend(context),
       ),
     ),
     SettingsAnchor(

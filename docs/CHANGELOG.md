@@ -5,9 +5,21 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
-## [0.24.2] — 2026-11-01 — repeater claim: the real fix
+## [0.24.2] — 2026-11-01 — repeater claim: the real fix; map legend and colour palettes
 
 - Same as 0.24.1 below, now fixed at the root (the text type). Verified end to end against a real radio and repeater with a Bluetooth probe before shipping.
+- **Map legend (Legend & Info).** One sheet explains every colour and symbol on the maps, with the real swatches in your
+  colour palette and the map's current Colour by mode: your pings (grey = nothing heard, purple = heard but no signal
+  reading), network cells (SNR steps with dB ranges, share heard, noise, grey, purple, faded under 3 pings), repeaters (advert
+  age), link lines, observers, the heard box, "Owned by you", and short why lines. Info icon in the Map layers sheet, and
+  Settings > About > Map legend.
+- **Colour palette (Settings > Units & display).** Standard, Colour-blind safe (blue to yellow to orange, never red against
+  green; tested against simulated protanopia, deuteranopia and tritanopia with CIEDE2000) and High contrast. Recolours hexes,
+  ping dots, network cells, SNR pills, charts and the legend together. In the two accessible palettes link lines turn
+  achromatic and dashed so they never blur into orange strength colours. Grey and purple stay distinct in all three. The
+  setting is stored as `colour_palette` (older settings files read as standard).
+- A repeater in the heard box with no SNR reading is now purple (heard, signal unknown) instead of teal, and the drive report's
+  floor marks for pings heard without a reading use the same purple.
 
 ## [0.24.1] — 2026-11-01 — repeater claim: commands get answered
 
