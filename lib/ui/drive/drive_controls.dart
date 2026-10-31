@@ -29,6 +29,33 @@ void openDriveReport(BuildContext context, String sessionId) {
   Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => DriveReportScreen(sessionId: sessionId)));
 }
 
+/// "Stop this drive?" so a bump in the car can't end a drive. Keep driving is the default; returns true to stop.
+Future<bool> confirmStopDrive(BuildContext context) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      key: const Key('stop-drive-dialog'),
+      title: const Text('Stop this drive?'),
+      content: const Text('Pings stop and the drive is saved on this phone. Start drive begins a new one.'),
+      actions: [
+        FilledButton(
+          key: const Key('stop-drive-keep'),
+          style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Keep driving'),
+        ),
+        TextButton(
+          key: const Key('stop-drive-confirm'),
+          style: TextButton.styleFrom(minimumSize: const Size(0, 48), foregroundColor: Theme.of(ctx).colorScheme.error),
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('Stop drive'),
+        ),
+      ],
+    ),
+  );
+  return ok == true;
+}
+
 // ------------------------------------------------------------------------------------------------ stats
 
 class DriveStatsStrip extends StatelessWidget {
@@ -456,10 +483,10 @@ class LogButton extends StatelessWidget {
     final t = Theme.of(context);
     final n = state.pingCount;
     return SizedBox(
-      height: 40,
+      height: 48,
       child: OutlinedButton.icon(
         style: OutlinedButton.styleFrom(
-          minimumSize: const Size(0, 40),
+          minimumSize: const Size(0, 48),
           padding: const EdgeInsets.symmetric(horizontal: 12),
           visualDensity: VisualDensity.compact,
           side: BorderSide(color: t.colorScheme.outlineVariant, width: 1.5),
@@ -503,7 +530,7 @@ class DriveReportCard extends StatelessWidget {
                   children: [
                     Text('View drive report', style: t.textTheme.titleMedium?.copyWith(color: t.colorScheme.onPrimaryContainer)),
                     Text(
-                      'Coverage, repeaters heard and the best spots.',
+                      'Coverage and repeaters heard.',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: t.textTheme.labelMedium?.copyWith(color: t.colorScheme.onPrimaryContainer.withValues(alpha: 0.8)),
@@ -515,7 +542,7 @@ class DriveReportCard extends StatelessWidget {
               IconButton(
                 key: const Key('dismiss-report'),
                 tooltip: 'Dismiss',
-                visualDensity: VisualDensity.compact,
+                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                 onPressed: onDismiss,
                 icon: Icon(Icons.close_rounded, size: 20, color: t.colorScheme.onPrimaryContainer.withValues(alpha: 0.7)),
               ),
@@ -570,9 +597,9 @@ class DriveActionButtons extends StatelessWidget {
                 // A radio not set up yet waits for its antenna (the hint above opens the setup).
                 onPressed: s.busy || (!driving && s.needsAntennaSetup)
                     ? null
-                    : () {
+                    : () async {
                         if (driving) {
-                          s.stopDrive();
+                          if (await confirmStopDrive(context)) unawaited(s.stopDrive());
                         } else if (!s.connected) {
                           openConnect(context);
                         } else {

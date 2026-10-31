@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../app/app_state.dart';
 import '../app/build_flags.dart';
 import '../radio/radio_api.dart';
+import '../platform/open_url.dart' show openAppSettingsPage;
 import 'app.dart';
 import 'widgets.dart';
 
@@ -130,9 +131,8 @@ class _ConnectScreenState extends State<ConnectScreen> {
   }
 
   String _rssiLabel(int? rssi) {
-    if (rssi == null) return 'Signal —';
-    final q = rssi >= -60 ? 'strong' : (rssi >= -80 ? 'good' : 'weak');
-    return '$rssi dBm ($q)';
+    if (rssi == null) return 'Signal unknown';
+    return rssi >= -60 ? 'Strong signal, very close' : (rssi >= -80 ? 'Good signal' : 'Weak signal, move closer');
   }
 
   @override
@@ -178,7 +178,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
             ),
             if (_scanError != null) ...[
               ErrorBanner(_scanError!),
-              if (_permissionProblem)
+              if (_permissionProblem) ...[
                 Padding(
                   padding: const EdgeInsets.only(top: Gap.xs, left: Gap.xs),
                   child: Text(
@@ -186,6 +186,16 @@ class _ConnectScreenState extends State<ConnectScreen> {
                     style: t.textTheme.bodySmall,
                   ),
                 ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    key: const Key('open-app-settings'),
+                    onPressed: () => unawaited(openAppSettingsPage()),
+                    icon: const Icon(Icons.settings_outlined),
+                    label: const Text('Open Settings'),
+                  ),
+                ),
+              ],
             ],
             if (_found.isEmpty && !_scanning && _scannedOnce && _scanError == null)
               _InfoCard(

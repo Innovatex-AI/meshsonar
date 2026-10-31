@@ -141,7 +141,7 @@ void main() {
   testWidgets('errors in words: 401, 403, 429, 500, no connection; Retry asks again and succeeds', (tester) async {
     final cases = <int?, String>{
       401: "doesn't recognise your driver key",
-      403: "isn't approved",
+      403: "hasn't accepted your driver key",
       429: 'asked for a pause',
       500: 'error (500)',
       null: 'No connection',

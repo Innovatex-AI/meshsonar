@@ -8,9 +8,9 @@ String friendlyError(Object e, {String action = 'That'}) {
   if (e is CmatException) {
     switch (e.status) {
       case 401:
-        return 'The server doesn\'t recognise this driver key. Request a new key in Settings.';
+        return 'The server doesn\'t recognise this driver key. Create a new one in Settings.';
       case 403:
-        return 'Your driver key isn\'t approved yet. Your pings are saved on this phone; check the key in Settings.';
+        return 'The server hasn\'t accepted your driver key yet. Your pings are saved on this phone; check the key in Settings.';
       case 413:
         return 'The server said the upload was too large. Your pings are saved; try again.';
       case 429:
@@ -70,10 +70,10 @@ String friendlyReportError(Object e) {
 String friendlySyncError(String error) {
   final l = error.toLowerCase();
   if (l.contains('no driver key')) {
-    return 'Request a driver key in Settings to upload. Pings are kept on this phone.';
+    return 'This phone has no driver key, so nothing uploads yet. Create one in Settings. Pings are kept on this phone.';
   }
   if (l.contains('403') || l.contains('not approved') || l.contains('forbidden')) {
-    return 'Upload refused: your driver key isn\'t approved. Pings are kept on this phone.';
+    return 'Upload refused: the server hasn\'t accepted your driver key. Pings are kept on this phone.';
   }
   if (l.contains('401') || l.contains('not recognised') || l.contains('not recognized')) {
     return 'Upload refused: the server doesn\'t know this driver key. Pings are kept on this phone.';

@@ -36,7 +36,7 @@ List<Widget> diagnosticsSectionRows(BuildContext context) {
         key: const Key('report-problem'),
         leading: const Icon(Icons.bug_report_outlined),
         title: const Text('Report a problem'),
-        subtitle: const Text('Goes to the server admin with your driver key. You see exactly what is sent first.'),
+        subtitle: const Text('Goes to your server\'s operators with your driver key. You see exactly what is sent first.'),
         trailing: const Icon(Icons.chevron_right),
         onTap: () => openReportProblem(context),
       ),

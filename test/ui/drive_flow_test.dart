@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/app/app_state.dart';
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/model.dart';
+import 'package:meshsonar/core/startup_location.dart';
 
 import 'fakes.dart';
 
@@ -97,6 +98,8 @@ void main() {
     expect(tester.widget<Text>(find.byKey(const Key('stat-pings'))).data, '3');
 
     await tester.tap(find.byKey(const Key('start-stop')));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.byKey(const Key('stop-drive-confirm')));
     await settle(tester);
     expect(e.stopped, isTrue);
     expect(h.store.calls.last, isNot('start'));
@@ -137,6 +140,8 @@ void main() {
     await settle(tester);
 
     await tester.tap(find.byKey(const Key('start-stop')));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.byKey(const Key('stop-drive-confirm')));
     await settle(tester);
     expect(h.sync.syncedSessions.length, 1);
     final sid = h.store.sessionsById.keys.single;
@@ -166,7 +171,7 @@ void main() {
     await h.state.stopDrive();
     await settle(tester);
     expect(h.store.pingsBySession.values.single.length, 1);
-    expect(h.state.lastSyncMessage, contains('isn\'t approved'));
+    expect(h.state.lastSyncMessage, contains('hasn\'t accepted'));
     await drain(tester);
   });
 
@@ -180,10 +185,12 @@ void main() {
     h.engines.single.emit(silentPing('p1'));
     await settle(tester);
     await tester.tap(find.byKey(const Key('start-stop')));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.byKey(const Key('stop-drive-confirm')));
     await settle(tester);
     expect(h.sync.syncedSessions, isEmpty);
     expect(h.store.pingsBySession.values.single.length, 1);
-    expect(find.textContaining('once your driver key is approved'), findsOneWidget);
+    expect(find.textContaining('once the server accepts your driver key'), findsOneWidget);
     await drain(tester);
   });
 
@@ -241,7 +248,7 @@ void main() {
     await tester.tap(find.byKey(const Key('connection-chip')));
     await tester.pumpAndSettle();
     expect(find.text('MeshCore-Truck'), findsOneWidget);
-    expect(find.text('-62 dBm (good)'), findsOneWidget);
+    expect(find.text('Good signal'), findsOneWidget);
     await tester.tap(find.text('MeshCore-Truck'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Couldn\'t connect to MeshCore-Truck'), findsOneWidget);
@@ -253,4 +260,88 @@ void main() {
     expect(find.textContaining('needs Bluetooth permission'), findsOneWidget);
     await drain(tester);
   });
+
+  testWidgets('Stop asks first; Keep driving leaves the drive running, Stop drive ends it', (tester) async {
+    useTallScreen(tester);
+    final h = Harness()..approveKey();
+    await h.pumpApp(tester);
+    await h.state.connect(h.bt.devices.first, RadioKind.bluetooth);
+    await h.state.startDrive();
+    await settle(tester);
+    expect(h.state.driving, isTrue);
+
+    await tester.tap(find.byKey(const Key('start-stop')));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byKey(const Key('stop-drive-dialog')), findsOneWidget);
+    expect(find.text('Stop this drive?'), findsOneWidget);
+    final keep = tester.getSize(find.byKey(const Key('stop-drive-keep')));
+    final stop = tester.getSize(find.byKey(const Key('stop-drive-confirm')));
+    expect(keep.height, greaterThanOrEqualTo(44));
+    expect(stop.height, greaterThanOrEqualTo(44));
+    await tester.tap(find.byKey(const Key('stop-drive-keep')));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byKey(const Key('stop-drive-dialog')), findsNothing);
+    expect(h.state.driving, isTrue, reason: 'Keep driving changes nothing');
+
+    await tester.tap(find.byKey(const Key('start-stop')));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.byKey(const Key('stop-drive-confirm')));
+    await settle(tester);
+    expect(h.state.driving, isFalse);
+    await drain(tester);
+  });
+
+  testWidgets('the Log button and the report card dismiss are at least 44 px tall', (tester) async {
+    useTallScreen(tester);
+    final h = Harness();
+    await h.pumpApp(tester);
+    expect(tester.getSize(find.byKey(const Key('open-log'))).height, greaterThanOrEqualTo(44));
+    await drain(tester);
+  });
+
+  testWidgets('stat tiles read as one thing to VoiceOver ("Pings: 0")', (tester) async {
+    useTallScreen(tester);
+    final h = Harness();
+    await h.pumpApp(tester);
+    final handle = tester.ensureSemantics();
+    expect(find.bySemanticsLabel('Pings: 0'), findsOneWidget);
+    handle.dispose();
+    await drain(tester);
+  });
+
+  testWidgets('Bluetooth permission refused: the plain message and an Open Settings button', (tester) async {
+    useTallScreen(tester);
+    final h = Harness();
+    h.bt.scanError = Exception('Bluetooth permission denied');
+    await h.pumpApp(tester);
+    await tester.tap(find.byKey(const Key('connection-chip')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('needs Bluetooth permission'), findsOneWidget);
+    expect(find.byKey(const Key('open-app-settings')), findsOneWidget);
+    expect(tester.getSize(find.byKey(const Key('open-app-settings'))).height, greaterThanOrEqualTo(44));
+    await drain(tester);
+  });
+
+  for (final scale in [2.0, 3.1]) {
+    testWidgets('Drive tab at ${scale}x text: no overflow, Start and Ping now stay on screen and tappable', (tester) async {
+      tester.view.physicalSize = const Size(1179, 2556); // iPhone 17 Pro
+      tester.view.devicePixelRatio = 3.0;
+      tester.platformDispatcher.textScaleFactorTestValue = scale;
+      addTearDown(tester.view.reset);
+      addTearDown(tester.platformDispatcher.clearAllTestValues);
+      // The worst case: not connected, with the "Allow location" banner above the status line.
+      final h = Harness()..locationAccess = FakeLocationAccess(LocationAccess.notAsked);
+      await h.pumpApp(tester);
+      await settle(tester);
+      expect(find.byKey(const Key('location-note')), findsOneWidget);
+      final screen = tester.view.physicalSize / tester.view.devicePixelRatio;
+      for (final k in ['start-stop', 'ping-now']) {
+        final r = tester.getRect(find.byKey(Key(k)));
+        expect(r.bottom, lessThanOrEqualTo(screen.height), reason: '$k is on screen');
+        expect(r.height, greaterThanOrEqualTo(44));
+      }
+      expect(tester.takeException(), isNull, reason: 'no layout overflow');
+      await drain(tester);
+    });
+  }
 }

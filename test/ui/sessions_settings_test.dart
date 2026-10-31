@@ -111,7 +111,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('sync-s')));
     await tester.pumpAndSettle();
     expect(h.sync.syncedSessions, isEmpty);
-    expect(find.textContaining('Request a driver key in Settings'), findsOneWidget);
+    expect(find.textContaining('Create one in Settings'), findsOneWidget);
     await drain(tester);
   });
 
@@ -129,7 +129,7 @@ void main() {
     await tester.tap(find.byKey(const Key('key-request')));
     await tester.pumpAndSettle();
     expect(h.client.lastRequest, {'name': 'Andy', 'callsign': 'KD8XYZ', 'email': null});
-    expect(find.text('Pending approval'), findsOneWidget);
+    expect(find.text('Waiting for the server'), findsOneWidget);
     expect(h.settings.saved.driverKey, 'secretkey-abcdef-1234');
     expect(h.settings.saved.keyStatus, DriverKeyStatus.pending);
     expect(find.textContaining('secretkey'), findsNothing);
@@ -138,14 +138,14 @@ void main() {
     h.client.statusResult = (status: DriverKeyStatus.approved, display: 'KD8XYZ');
     await tester.tap(find.byKey(const Key('key-refresh')));
     await tester.pumpAndSettle();
-    expect(find.text('Approved'), findsOneWidget);
+    expect(find.text('Ready to upload'), findsOneWidget);
     expect(h.settings.saved.keyStatus, DriverKeyStatus.approved);
 
     for (final st in [DriverKeyStatus.rejected, DriverKeyStatus.revoked]) {
       h.client.statusResult = (status: st, display: 'KD8XYZ');
       await tester.tap(find.byKey(const Key('key-refresh')));
       await tester.pumpAndSettle();
-      expect(find.text(st == DriverKeyStatus.rejected ? 'Rejected' : 'Revoked'), findsOneWidget);
+      expect(find.text(st == DriverKeyStatus.rejected ? 'Turned down' : 'Switched off'), findsOneWidget);
     }
   });
 

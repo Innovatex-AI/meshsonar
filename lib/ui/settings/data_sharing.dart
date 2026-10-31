@@ -165,7 +165,7 @@ const DataCategory telemetryCategory = DataCategory(
     'Your own pings and their echoes',
   ],
   destination: 'Collected only while this phone has a driver key, and sent only to your server '
-      '(the Server URL in Settings) once the key is approved.',
+      '(the Server URL in Settings) once the server has accepted the key.',
   offEffect: 'Turning it off stops collection at once and deletes the headers still waiting on this phone.',
   keepLabel: 'Share headers',
   offLabel: 'Turn off',
@@ -198,7 +198,7 @@ String contextDestinationLine(AppState s) {
   if (!c.acceptsDriveV12) return 'Saved on this phone only: this server does not accept it yet.';
   return s.keyApproved
       ? 'Uploaded with your drive.'
-      : 'Uploaded with your drive once your driver key is approved; until then it is saved on this phone only.';
+      : 'Uploaded with your drive once the server accepts your driver key; until then it is saved on this phone only.';
 }
 
 String ownDriveDestinationNow(AppState s) {

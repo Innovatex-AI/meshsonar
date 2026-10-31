@@ -140,21 +140,21 @@ class KeyStatusBadge extends StatelessWidget {
 
 String keyStatusLabel(DriverKeyStatus s) => switch (s) {
       DriverKeyStatus.none => 'No key',
-      DriverKeyStatus.pending => 'Pending approval',
-      DriverKeyStatus.approved => 'Approved',
-      DriverKeyStatus.rejected => 'Rejected',
-      DriverKeyStatus.revoked => 'Revoked',
+      DriverKeyStatus.pending => 'Waiting for the server',
+      DriverKeyStatus.approved => 'Ready to upload',
+      DriverKeyStatus.rejected => 'Turned down',
+      DriverKeyStatus.revoked => 'Switched off',
       DriverKeyStatus.unknown => 'Not recognised by this server',
     };
 
 String keyStatusHelp(DriverKeyStatus s) => switch (s) {
-      DriverKeyStatus.none => 'Request a key to upload your drives.',
+      DriverKeyStatus.none => 'No key yet. Tap Create my key to upload your drives.',
       DriverKeyStatus.pending =>
-        'An admin needs to approve your key. You can drive now; your drives upload once it\'s approved. Tap Refresh to check.',
+        'This server checks new keys before they can upload. You can drive now; your drives upload as soon as it accepts yours. Tap Refresh to check.',
       DriverKeyStatus.approved => 'Your drives can upload.',
-      DriverKeyStatus.rejected => 'This key was rejected. Contact the server admin, or request a new key.',
-      DriverKeyStatus.revoked => 'This key was revoked. Contact the server admin, or request a new key.',
-      DriverKeyStatus.unknown => 'The server doesn\'t know this key (maybe a different server). Request a new key.',
+      DriverKeyStatus.rejected => 'The server turned this key down. Remove it and create a new one, or contact whoever runs the server.',
+      DriverKeyStatus.revoked => 'This key was switched off. Remove it and create a new one, or contact whoever runs the server.',
+      DriverKeyStatus.unknown => 'The server doesn\'t know this key (maybe a different server). Remove it and create a new one.',
     };
 
 /// Asks before switching servers when this phone has a driver key: keys only work on the server that issued them,
@@ -166,7 +166,7 @@ Future<bool> confirmServerChange(BuildContext context, String newUrl) async {
       key: const Key('server-change-dialog'),
       title: const Text('Change server and remove your key?'),
       content: Text('A driver key only works on the server that issued it, so your current key will be removed. '
-          'Request a new key from $newUrl afterwards.\n\n'
+          'MeshSonar will create a new key for $newUrl afterwards.\n\n'
           'Drives already uploaded stay on the old server. Drives not yet uploaded stay on this phone and will upload '
           'to the new server once you have a key there.'),
       actions: [
@@ -385,7 +385,7 @@ class _DriverKeySectionState extends State<DriverKeySection> {
                       ? 'Setting up your driver key…'
                       : 'MeshSonar sets up a driver key for you on its own. If that did not happen (you may have been '
                           'offline), tap Create my key. Your callsign (or "Driver N") is shown publicly; your name and '
-                          'email are optional and only seen by the server admin.',
+                          'email are optional and only seen by whoever runs the server.',
                   style: t.textTheme.bodySmall,
                 ),
                 const SizedBox(height: 8),

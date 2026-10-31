@@ -61,7 +61,7 @@ const List<SettingsEntry> settingsEntries = [
   // Account & driver key
   SettingsEntry('driver-key', 'driver', 'Driver key',
       'Lets this phone upload drives to the coverage map. Without one, drives stay on this phone.',
-      keywords: ['key', 'account', 'request', 'approve', 'paste', 'callsign', 'email', 'remove key', 'login', 'sign in']),
+      keywords: ['key', 'account', 'create', 'paste', 'callsign', 'email', 'remove key', 'login', 'sign in']),
   SettingsEntry('server-url', 'driver', 'Server URL',
       'Where drives upload. Keys belong to the server that issued them, so moving to another server removes yours.',
       keywords: ['server', 'url', 'address', 'host', 'website']),
@@ -194,7 +194,7 @@ const List<SettingsEntry> settingsEntries = [
       'Recent app events to help explain a problem. Secrets hidden, positions rounded when copied.',
       keywords: ['log', 'debug', 'copy', 'events', 'support', 'troubleshoot']),
   SettingsEntry('report-problem', 'diagnostics', 'Report a problem',
-      'Send a report to the server admin. You see exactly what is sent first.',
+      'Send a report to your server\'s operators. You see exactly what is sent first.',
       keywords: ['bug', 'feedback', 'support', 'issue', 'help', 'contact']),
   // About
   SettingsEntry('about', 'about-section', 'About MeshSonar', 'Version, licence and third-party notices.',

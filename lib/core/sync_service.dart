@@ -94,7 +94,7 @@ class DefaultSyncService implements SyncService {
   Future<(String?, String?, _Run?)> _prepare() async {
     final s = await settings.load();
     final key = s.driverKey;
-    if (key == null || key.isEmpty) return (null, 'no driver key; request one in Settings', null);
+    if (key == null || key.isEmpty) return (null, 'no driver key; create one in Settings', null);
     if (s.keyStatus != DriverKeyStatus.approved) return (null, 'key not approved', null);
     return (key, null, await _run(s));
   }

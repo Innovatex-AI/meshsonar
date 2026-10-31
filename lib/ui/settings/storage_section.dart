@@ -167,7 +167,7 @@ class _StorageRowsState extends State<StorageRows> {
       context,
       dialogKey: 'storage-repeaters-dialog',
       title: 'Forget saved repeater names?',
-      body: 'Repeaters show as short codes until the names download again with Refresh, which needs an approved '
+      body: 'Repeaters show as short codes until the names download again with Refresh, which needs a working '
           'driver key and signal. Drives keep what they recorded.',
       confirmLabel: 'Forget',
       destructive: true,
@@ -326,9 +326,9 @@ class _StorageRowsState extends State<StorageRows> {
           title: Text(settingsEntry('refresh-repeaters').title),
           subtitle: !s.hasKey
               ? SettingsWhyNot('${repeaterCount == 0 ? 'None saved yet.' : '$repeaterCount saved for offline use.'} '
-                  'Downloading names needs a driver key: request one in Account & driver key at the top.')
+                  'Downloading names needs a driver key: create one in Account & driver key at the top.')
               : Text(repeaterCount == 0
-                  ? 'None saved yet. Tap to download them; this needs an approved key and signal.'
+                  ? 'None saved yet. Tap to download them; this needs a working key and signal.'
                   : '$repeaterCount saved for offline use. Tap to download them again.'),
           trailing: const Icon(Icons.refresh),
           onTap: s.hasKey ? () => s.refreshRepeaters() : null,

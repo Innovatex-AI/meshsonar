@@ -108,7 +108,9 @@ class _DriveScreenState extends State<DriveScreen> {
           children: [
             Icon(Icons.radar, color: t.colorScheme.primary, size: 26),
             const SizedBox(width: Gap.s),
-            const Flexible(child: Text('MeshSonar', maxLines: 1, overflow: TextOverflow.fade, softWrap: false)),
+            // At the largest text sizes the logo alone leaves the connection chip room to say its state.
+            if (MediaQuery.textScalerOf(context).scale(16) <= 22)
+              const Flexible(child: Text('MeshSonar', maxLines: 1, overflow: TextOverflow.fade, softWrap: false)),
           ],
         ),
         actions: [
@@ -126,7 +128,11 @@ class _DriveScreenState extends State<DriveScreen> {
         top: false,
         child: LayoutBuilder(
           builder: (context, box) {
-            final map = ClipRRect(
+            // The overlays on the map (heard box, region chip, hint) are glanceable extras on a map of fixed size; they
+            // stop growing past 1.3x so they never swallow it. Everything under the map follows the system size.
+            final map = MediaQuery(
+              data: MediaQuery.of(context).copyWith(textScaler: MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.3)),
+              child: ClipRRect(
               borderRadius: BorderRadius.circular(Corners.card),
               child: AnimatedBuilder(
                 animation: model,
@@ -142,7 +148,7 @@ class _DriveScreenState extends State<DriveScreen> {
                       : null,
                 ),
               ),
-            );
+            ));
             final controls = <Widget>[
               // Location off / not asked / approximate: say so with the one action (the map still opens on the region).
               if (s.locationNote != null && !s.driving)
@@ -182,8 +188,8 @@ class _DriveScreenState extends State<DriveScreen> {
                   ],
                 ),
               ),
-              DriveActionButtons(state: s),
             ];
+            final actions = DriveActionButtons(state: s);
             // Landscape (phone on a dash mount, tablet): map on the left, controls on the right.
             if (box.maxWidth > box.maxHeight && box.maxWidth >= 640) {
               return Row(
@@ -195,9 +201,34 @@ class _DriveScreenState extends State<DriveScreen> {
                   SizedBox(
                     width: (box.maxWidth * 0.42).clamp(340.0, 440.0),
                     child: SingleChildScrollView(
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: controls),
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [...controls, actions]),
                     ),
                   ),
+                ],
+              );
+            }
+            // Large Dynamic Type: the status, stats and chips no longer fit under the map. The map keeps a fixed
+            // height and scrolls away with them; Start/Stop and Ping now stay pinned at the bottom.
+            if (MediaQuery.textScalerOf(context).scale(16) > 22) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: SingleChildScrollView(
+                      key: const Key('drive-large-text-scroll'),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: Gap.m),
+                            child: SizedBox(height: (box.maxHeight * 0.4).clamp(200.0, 360.0), child: map),
+                          ),
+                          ...controls,
+                        ],
+                      ),
+                    ),
+                  ),
+                  actions,
                 ],
               );
             }
@@ -208,6 +239,7 @@ class _DriveScreenState extends State<DriveScreen> {
                   child: Padding(padding: const EdgeInsets.symmetric(horizontal: Gap.m), child: map),
                 ),
                 ...controls,
+                actions,
               ],
             );
           },
@@ -363,10 +395,14 @@ class ConnectionChip extends StatelessWidget {
     final t = Theme.of(context);
     final mc = MeshSonarColors.of(context);
     final sim = s.connected && s.radioKind == RadioKind.simulator;
-    final Color dot = s.connecting ? mc.beacon : (sim ? mc.beacon : (s.connected ? t.colorScheme.primary : mc.silent));
-    return ActionChip(
+    final retrying = s.connecting || (s.reconnecting && s.driving);
+    final Color dot = retrying ? mc.beacon : (sim ? mc.beacon : (s.connected ? t.colorScheme.primary : mc.silent));
+    // In the app bar the chip keeps a fixed height, so it stops growing at 1.5x (the label is two lines by then).
+    return MediaQuery(
+      data: MediaQuery.of(context).copyWith(textScaler: MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.5)),
+      child: ActionChip(
       onPressed: onPressed,
-      avatar: s.connecting
+      avatar: retrying
           ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: dot))
           : Icon(
               s.connected
@@ -386,9 +422,10 @@ class ConnectionChip extends StatelessWidget {
                 const SimulatedTag(key: Key('chip-simulated'), dense: true),
               ],
             )
-          : Text(s.connectionLabel, maxLines: 1, overflow: TextOverflow.ellipsis),
+          : Text(s.connectionLabel,
+              maxLines: 1, overflow: TextOverflow.ellipsis),
       side: BorderSide(color: dot.withValues(alpha: 0.6)),
       backgroundColor: dot.withValues(alpha: 0.10),
-    );
+    ));
   }
 }

@@ -41,6 +41,22 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
     `DriveMapModel.attributionStackHeight`); ring and link-distance captions and heard-repeater tags piled onto the cluster
     bubbles when zoomed out to a region (now drawn from zoom 10); labels were hidden under the heard box in full screen.
 
+- **First-time-user and field-use UX pass (non-map screens).** Stop drive asks "Stop this drive?" first (Keep driving is the default). The
+  connection chip says "Reconnecting…" instead of "Not connected" while a dropped radio reconnects. Log button and report-card dismiss
+  are 48 px tall; the onboarding Skip is 48 px; every stat tile reads to VoiceOver as one thing ("Pings: 3"); the onboarding page dots and
+  illustrations have proper semantics. Bluetooth permission refused: an **Open Settings** button next to the message. Radio signal in
+  plain words ("Good signal") instead of dBm. Onboarding now says the phone will ask for Bluetooth and Location. Every user-visible string
+  that contradicted the automatic key ("Pending approval", "Request a key", "An admin needs to approve", "approved key", "server admin")
+  is reworded (key badge: Waiting for the server / Ready to upload / Turned down / Switched off); `test/ui/copy_consistency_test.dart`
+  keeps them out. "Connect a radio (or the simulator) first." no longer appears in release builds. About no longer points at a file that
+  is not in the app. The drive report card subtitle no longer truncates; the report map credit no longer says "flutter_map |".
+  Largest Dynamic Type: the Drive tab used to overflow by 78 px with Start drive off screen (at 2.3x and up); it now scrolls
+  the status, stats and chips under a fixed-height map and pins Start/Stop and Ping now at the bottom (test at 2x and 3.1x),
+  the map overlays and the connection chip stop growing past 1.3x / 1.5x, stat labels shrink to fit, and a section label with an
+  action ("Nearby radios" + "Scan again") stacks instead of breaking one letter per line.
+  `integration_test/screens.dart` now also walks onboarding, the disclosure sheet, Connect (scan and Bluetooth-off), the antenna sheet, a
+  live simulated drive, the Stop confirmation, the drive report, Drives, Radio and Region.
+
 - **The Simulator is out of release builds.** `simulatorAvailable` (`lib/app/build_flags.dart`) is `kDebugMode ||
   --dart-define=MESHSONAR_SIMULATOR=true`: the Connect screen entry, the onboarding button and the simulator's code are
   gone from the App Store / TestFlight app (checked by `scripts/verify_release_no_sim.sh`). Debug builds and tests keep
