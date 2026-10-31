@@ -96,8 +96,8 @@ int notificationIdFor(String convKey) {
 /// Reserved ids (below 10): the Android foreground-service notification.
 const int foregroundServiceNotificationId = 1;
 
-/// Does nothing: the default where no real notifications exist (widget tests, platforms without a plugin). Permission
-/// reads as never asked and the request is refused, so the Settings screen shows its honest "not allowed" states.
+/// Does nothing: the default where no real notifications exist (widget tests, platforms without a plugin, or the plugin failed
+/// to start). Permission reads as restricted, so nothing offers the explanation or the system prompt.
 class UnavailableLocalNotifications implements LocalNotifications {
   const UnavailableLocalNotifications();
   @override
@@ -105,9 +105,9 @@ class UnavailableLocalNotifications implements LocalNotifications {
   @override
   Future<String?> launchPayload() async => null;
   @override
-  Future<NotificationPermission> permission() async => NotificationPermission.notDetermined;
+  Future<NotificationPermission> permission() async => NotificationPermission.restricted;
   @override
-  Future<NotificationPermission> requestPermission() async => NotificationPermission.denied;
+  Future<NotificationPermission> requestPermission() async => NotificationPermission.restricted;
   @override
   Future<void> show(AlertNotification n) async {}
   @override

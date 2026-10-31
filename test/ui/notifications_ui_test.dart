@@ -19,6 +19,7 @@ import 'package:meshsonar/ui/alerts/permission_prompt.dart';
 import 'package:meshsonar/ui/app.dart';
 import 'package:meshsonar/ui/settings/ble_diagnostics_screen.dart';
 import 'package:meshsonar/ui/settings/notifications_section.dart';
+import 'package:meshsonar/ui/shell/chat_tab_host.dart';
 
 import '../alerts/fakes.dart';
 import '../chat/support.dart' as chat;
@@ -290,16 +291,29 @@ void main() {
       expect(find.byKey(const Key('in-app-banner')), findsNothing);
     });
 
-    testWidgets('a notification tap switches the shell to the Chat tab', (tester) async {
+    testWidgets('a notification tap switches the shell to the Chat tab and opens that conversation', (tester) async {
       final s = await install(tester);
       final h = Harness();
       await h.pumpApp(tester);
-      expect(find.byKey(const Key('chat-empty')), findsNothing);
+      String? opened;
+      ChatTabHost.openConversation = (context, key) => opened = key;
+      addTearDown(() => ChatTabHost.openConversation = null);
       s.coordinator.pendingOpen.value = 'c:1';
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('chat-empty')), findsOneWidget, reason: 'Chat tab is showing');
-      expect(s.coordinator.pendingOpen.value, 'c:1', reason: 'left for the Chat UI to take');
+      expect(opened, 'c:1');
+      expect(s.coordinator.pendingOpen.value, isNull, reason: 'consumed');
       expect(ShellScope.maybeOf(tester.element(find.byKey(const Key('chat-empty'))))?.tab, AppTab.chat);
+    });
+
+    testWidgets('before chat is up a tap still brings the Chat tab forward and does not crash', (tester) async {
+      final s = await install(tester);
+      final h = Harness();
+      await h.pumpApp(tester);
+      expect(ChatTabHost.openConversation, isNull);
+      s.coordinator.pendingOpen.value = 'c:1';
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('chat-empty')), findsOneWidget);
     });
   });
 
@@ -368,7 +382,9 @@ void main() {
 
   group('Background Bluetooth test screen', () {
     testWidgets('notes land in the log with fg/bg and time; Copy puts header and lines on the clipboard; Clear empties', (tester) async {
-      useTallScreen(tester);
+      tester.view.physicalSize = const Size(1080, 5000);
+      tester.view.devicePixelRatio = 2.5;
+      addTearDown(tester.view.reset);
       final s = await install(tester);
       s.runtime.log.add('launch', 'process started');
       s.runtime.log.setForeground(false);
