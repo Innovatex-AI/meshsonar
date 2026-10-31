@@ -581,7 +581,10 @@ class _CellMap extends StatelessWidget {
                   ],
                 ),
               if (tiles)
-                const SimpleAttributionWidget(source: Text('OpenStreetMap contributors')),
+                const RichAttributionWidget(
+                  showFlutterMapAttribution: false,
+                  attributions: [TextSourceAttribution('OpenStreetMap contributors')],
+                ),
             ],
           ),
         ),

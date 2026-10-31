@@ -1,5 +1,6 @@
 // Driven by scripts/verify_sim.sh. Visits every screen in screens.dart on the real app and prints
 // "APP_VERSION x+y" and "SCREEN <name>" lines for the script to screenshot.
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:meshsonar/main.dart' as app;
@@ -17,7 +18,13 @@ void main() {
     print('APP_VERSION ${info.version}+${info.buildNumber}');
 
     if (await waitFor(t, find.text('Skip'), timeout: const Duration(seconds: 10))) {
-      await t.tap(find.text('Skip'));
+      await shot(t, 'onboarding-1');
+      for (var i = 2; i <= 3; i++) {
+        await t.tap(find.byKey(const Key('onboarding-next')));
+        await pumpFor(t, const Duration(seconds: 1));
+        await shot(t, 'onboarding-$i');
+      }
+      await t.tap(find.byKey(const Key('onboarding-next')));
       await pumpFor(t, const Duration(seconds: 1));
     }
     expect(await waitFor(t, find.text('Drive')), isTrue, reason: 'home shell');

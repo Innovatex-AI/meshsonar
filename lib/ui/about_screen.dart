@@ -114,7 +114,7 @@ class AboutScreen extends StatelessWidget {
                 context: context,
                 applicationName: 'MeshSonar',
                 applicationVersion: s.services.appInfo.version,
-                applicationLegalese: 'MIT License. See THIRD_PARTY_NOTICES.md for adapted code.',
+                applicationLegalese: 'MIT License. Adapted code is credited under Third-party notices.',
               ),
               icon: const Icon(Icons.description),
               label: const Text('All package licences'),

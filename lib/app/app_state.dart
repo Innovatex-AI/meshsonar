@@ -1035,6 +1035,7 @@ class AppState extends ChangeNotifier {
 
   String get connectionLabel {
     if (_connecting) return 'Connecting…';
+    if (_reconnecting && driving) return 'Reconnecting…';
     if (!connected) return 'Not connected';
     if (_radioKind == RadioKind.simulator) return 'Simulator';
     return _selfInfo?.name ?? _device?.name ?? 'Radio';
@@ -1732,7 +1733,7 @@ class AppState extends ChangeNotifier {
     if (driving || _busy) return;
     final link = _link;
     if (link == null || !link.isConnected) {
-      _say('Connect a radio (or the simulator) first.');
+      _say('Connect a radio first.');
       return;
     }
     // Every drive records how its radio's antenna is set up (the simulator's too, like a real radio).
@@ -1981,7 +1982,7 @@ class AppState extends ChangeNotifier {
     if (_settings.autoSync && keyApproved) {
       await syncSession(session.id, quietIfNothing: true);
     } else if (_settings.autoSync && hasKey && !keyApproved) {
-      _say('Drive saved. It will upload once your driver key is approved.');
+      _say('Drive saved. It will upload once the server accepts your driver key.');
     } else {
       _say('Drive saved on this phone.');
     }
@@ -2121,11 +2122,11 @@ class AppState extends ChangeNotifier {
       unawaited(ensureKey()); // normally already done at launch; this catches a phone that was offline then
       _say(_settings.autoKey
           ? 'Setting up your driver key. Your drives are saved on this phone; try Sync again in a moment.'
-          : 'Request a driver key in Settings before syncing. Your drives are saved on this phone.');
+          : 'This phone has no driver key. Create one in Settings before syncing. Your drives are saved on this phone.');
       return false;
     }
     if (_settings.keyStatus != DriverKeyStatus.approved) {
-      _say('Your driver key is ${_settings.keyStatus.name}. Drives upload once it\'s approved; tap Refresh in Settings.');
+      _say('The server hasn\'t accepted your driver key yet Drives upload once it does; tap Refresh in Settings.');
       return false;
     }
     return true;
@@ -2625,7 +2626,7 @@ class AppState extends ChangeNotifier {
     if (!quiet) unawaited(refreshDirectory(force: true)); // a manual refresh also refetches the public node map
     final key = _settings.driverKey;
     if (key == null || key.isEmpty) {
-      if (!quiet) _say('Request a driver key first.');
+      if (!quiet) _say('Create a driver key first, in Settings.');
       return;
     }
     try {

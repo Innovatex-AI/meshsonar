@@ -79,7 +79,7 @@ and ≥ 640 px) the map sits on the left and the controls on the right.
   enter the height, and a gain or Don't know" under it, until all three are valid. The simulator follows the same
   rule.
 - **Log** button (`open-log`): "Log · N". Opens the live ping log.
-- **Start drive / Stop drive** (`start-stop`). It reads "Connect radio" when nothing is connected. Next to it is **Ping
+- **Start drive / Stop drive** (`start-stop`). Stop asks first ("Stop this drive?", `stop-drive-dialog`: Keep driving is the default, Stop drive ends it) so a bump in the car cannot end a drive. While the radio drops and reconnects mid-drive the connection chip says "Reconnecting…" with a spinner. It reads "Connect radio" when nothing is connected. Next to it is **Ping
   now** (`ping-now`), enabled only while driving and not already pinging.
 - **Failed start:** if the engine can't start (e.g. the channel can't be joined), "Couldn't start the drive. …" is
   shown. A drive that recorded no pings is deleted, so no empty 0-ping drive is left in the list; one that already
@@ -423,7 +423,7 @@ it."); `test/ui/settings_no_dead_end_test.dart` enforces it.
 
 | Section | Item | Behaviour |
 |---|---|---|
-| Account & driver key (`driver`) | **Driver key** | Without a key (the app normally creates one by itself at launch, `AppState.ensureKey`; not after the person removed theirs): **Create my key** (name, callsign and email optional) → `driver-request`, or paste a key from the website. With a key: a status badge (No key / Pending approval / Approved / Rejected / Revoked / Not recognised by this server), the public display name, the masked key (tap to reveal for 30 s, copy), **Refresh** (`driver-status`) and **Remove key** (asks; says drives stay on the phone and headers stop). Approval also downloads repeater names. "Manage your drives at `<server>/me`" and **Get a key on the website**. |
+| Account & driver key (`driver`) | **Driver key** | Without a key (the app normally creates one by itself at launch, `AppState.ensureKey`; not after the person removed theirs): **Create my key** (name, callsign and email optional) → `driver-request`, or paste a key from the website. With a key: a status badge (No key / Waiting for the server / Ready to upload / Turned down / Switched off / Not recognised by this server), the public display name, the masked key (tap to reveal for 30 s, copy), **Refresh** (`driver-status`) and **Remove key** (asks; says drives stay on the phone and headers stop). Approval also downloads repeater names. "Manage your drives at `<server>/me`" and **Get a key on the website**. |
 | | **Server URL** | Must be http(s) with a host. Keys are per server: with a key saved, moving to another server asks "Change server and remove your key?", then removes the key. Another address of the same server keeps it. Unsent drives stay on the phone. |
 | Region (`region`) | **Region** | Which region the app shows (follows your location unless you pick one; opens the switcher). |
 | | **Connected to** (`site-region`), **Radio preset** (`site-radio-preset`) | From `GET /api/cmh/site-config`, shown only once it has answered. The preset row compares the region's suggested preset with the connected radio's own ("Yours"); states: no preset, preset with no radio, both. Information only: the app never writes to the radio. |
@@ -704,7 +704,7 @@ meshsonar-infra planning `stream-7-data-collection.md`.
   key-status refresh.
 - **At Stop:** after the drive is closed and any in-flight upload finishes, the drive is synced if *Upload at end of
   drive* is on and the key is approved. The user then sees "Uploaded N new pings…", or "Drive saved. Nothing new to
-  upload." If the key isn't approved yet: "Drive saved. It will upload once your driver key is approved." Otherwise:
+  upload." If the key isn't approved yet: "Drive saved. It will upload once the server accepts your driver key." Otherwise:
   "Drive saved on this phone."
 - **Manual:** Sync on a drive card or in drive detail, and Sync all. Without an approved key these explain what to do.
   Sync is enabled when pings are waiting or a renamed drive's new name hasn't been sent; rejected pings never enable it.

@@ -74,13 +74,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('key-badge')), findsOneWidget);
     final approved = tester.widget<Text>(find.byKey(const Key('key-status'))).style!.color;
-    expect(find.text('Approved'), findsOneWidget);
+    expect(find.text('Ready to upload'), findsOneWidget);
 
     h.client.statusResult = (status: DriverKeyStatus.revoked, display: 'KD8XYZ');
     await tester.tap(find.byKey(const Key('key-refresh')));
     await tester.pumpAndSettle();
     final revoked = tester.widget<Text>(find.byKey(const Key('key-status'))).style!.color;
-    expect(find.text('Revoked'), findsOneWidget);
+    expect(find.text('Switched off'), findsOneWidget);
     expect(revoked, isNot(approved));
   });
 

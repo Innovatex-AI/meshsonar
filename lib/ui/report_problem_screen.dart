@@ -9,7 +9,7 @@ import '../core/api.dart';
 import '../core/report_body.dart';
 import 'app.dart';
 import 'onboarding/ui_prefs.dart';
-import 'settings_screen.dart' show DriverKeyScreen;
+import 'settings_screen.dart' show DriverKeyScreen, keyStatusLabel;
 import 'widgets.dart';
 
 /// Opens the report form; [driveId] pre-selects that drive to attach.
@@ -259,9 +259,9 @@ class _NeedsKey extends StatelessWidget {
     final why = switch (status) {
       DriverKeyStatus.none =>
         'Problem reports are sent with your driver key, and this phone doesn\'t have one yet. '
-            'Request a key, or paste one from the website, in Settings.',
+            'Create a key, or paste one from the website, in Settings.',
       DriverKeyStatus.rejected || DriverKeyStatus.revoked =>
-        'Your driver key was ${status.name}, so the server won\'t take reports from it. Check the key in Settings.',
+        'The server won\'t take reports from your driver key (${keyStatusLabel(status).toLowerCase()}). Check the key in Settings.',
       _ =>
         'The server doesn\'t recognise this driver key, so it won\'t take reports from it. Check the key in Settings.',
     };

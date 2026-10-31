@@ -59,6 +59,7 @@ void main() {
     expect(h.state.reconnectAttempt, greaterThan(1));
     expect(h.state.reconnectProblem, contains('Bluetooth is off'));
     expect(h.state.statusLine, contains('Bluetooth is off'));
+    expect(h.state.connectionLabel, 'Reconnecting…', reason: 'the chip says it is retrying, not "Not connected"');
     expect(h.state.driving, isTrue, reason: 'the drive stays open while the radio is away');
     h.sim.connectError = null; // Bluetooth is back on
     await settle(30);

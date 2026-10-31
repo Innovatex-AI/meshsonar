@@ -48,7 +48,7 @@ void main() {
     // current viewport and (being a lazily-built sliver list) isn't built at all right now.
     await tester.scrollUntilVisible(find.byKey(const Key('key-badge')), -100, scrollable: settingsScroll);
     await tester.pumpAndSettle();
-    expect(find.text('Approved'), findsOneWidget);
+    expect(find.text('Ready to upload'), findsOneWidget);
     expect(find.text('Driver key: ••••9876'), findsOneWidget);
     expect(find.textContaining('websiteKey'), findsNothing, reason: 'the full key is never shown');
     expect(h.client.requestCalls, 0);
@@ -61,7 +61,7 @@ void main() {
     await tester.tap(find.byKey(const Key('key-use')));
     await tester.pumpAndSettle();
     expect(h.settings.saved.keyStatus, DriverKeyStatus.pending);
-    expect(find.text('Pending approval'), findsOneWidget);
+    expect(find.text('Waiting for the server'), findsOneWidget);
   });
 
   testWidgets('an empty paste asks for the key and calls nothing', (tester) async {

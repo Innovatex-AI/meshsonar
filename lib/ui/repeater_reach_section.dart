@@ -39,7 +39,7 @@ String reachBandLabel(ReachBandRow b, Units u) {
   if (error is CmatException) {
     return switch (error.status) {
       401 => (text: 'The server doesn\'t recognise your driver key, so the network-wide numbers can\'t load. Check the key in Settings.', retry: true),
-      403 => (text: 'Your driver key isn\'t approved on this server, so the network-wide numbers can\'t load.', retry: true),
+      403 => (text: 'The server hasn\'t accepted your driver key yet, so the network-wide numbers can\'t load.', retry: true),
       429 => (text: 'The server asked for a pause (too many requests). Try again in a minute.', retry: true),
       404 => (text: 'The server has no reach figures for this repeater.', retry: false),
       null => (text: 'No connection, and nothing is saved for this repeater yet. Retry when you are online.', retry: true),
@@ -96,7 +96,7 @@ class _RepeaterReachSectionState extends State<RepeaterReachSection> {
     Widget body;
     if (!s.keyApproved) {
       body = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('Sign in with an approved driver key in Settings to see where all MeshSonar drivers heard this repeater.',
+        Text('Once your driver key is ready (Settings), you can see where all MeshSonar drivers heard this repeater.',
             key: const Key('reach-needs-key'), style: t.textTheme.bodyMedium),
         TextButton.icon(
           key: const Key('reach-open-key-settings'),

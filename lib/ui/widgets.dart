@@ -62,7 +62,11 @@ class StatTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = Theme.of(context);
     return Expanded(
-      child: Padding(
+      child: Semantics(
+        container: true,
+        label: '$label: $value',
+        excludeSemantics: true,
+        child: Padding(
         padding: const EdgeInsets.symmetric(vertical: Gap.s, horizontal: Gap.xs),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -75,9 +79,13 @@ class StatTile extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 4),
-            Text(label, key: labelKey, style: t.textTheme.labelMedium, textAlign: TextAlign.center, maxLines: 1),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(label, key: labelKey, style: t.textTheme.labelMedium, textAlign: TextAlign.center, maxLines: 1),
+            ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -188,16 +196,15 @@ class SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
+    final label = Text(text, style: t.textTheme.titleMedium?.copyWith(color: t.colorScheme.onSurfaceVariant));
+    // With the largest Dynamic Type sizes the title and the action cannot share a line (the title used to wrap one
+    // letter per line), so the action drops below the title.
+    final stacked = trailing != null && MediaQuery.textScalerOf(context).scale(16) > 22;
     return Padding(
       padding: const EdgeInsets.fromLTRB(Gap.xs, Gap.l, Gap.xs, Gap.s),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(text, style: t.textTheme.titleMedium?.copyWith(color: t.colorScheme.onSurfaceVariant)),
-          ),
-          ?trailing,
-        ],
-      ),
+      child: stacked
+          ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [label, trailing!])
+          : Row(children: [Expanded(child: label), ?trailing]),
     );
   }
 }

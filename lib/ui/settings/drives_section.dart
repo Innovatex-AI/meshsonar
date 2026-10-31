@@ -6,7 +6,7 @@ import '../app.dart';
 import '../widgets.dart';
 import 'settings_kit.dart';
 
-const String drivesHelp = 'Drives are always saved on this phone first. Uploads need an approved driver key, are safe to '
+const String drivesHelp = 'Drives are always saved on this phone first. Uploads need a driver key the server accepts, are safe to '
     'retry, and never send a ping twice.';
 
 List<Widget> drivesSectionRows(BuildContext context) {
@@ -77,7 +77,7 @@ class LastUpload extends StatelessWidget {
             : s.lastUploadAt != null
                 ? (Icons.cloud_done, m.snrStrong, 'Last upload ${formatTime(s.lastUploadAt!)} · OK')
                 : (Icons.cloud_queue, t.colorScheme.onSurfaceVariant,
-                    s.keyApproved ? 'No uploads yet.' : 'No uploads yet. Uploads start once your key is approved.');
+                    s.keyApproved ? 'No uploads yet.' : 'No uploads yet. Uploads start once the server accepts your key.');
     return Padding(
       key: const Key('last-upload'),
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),

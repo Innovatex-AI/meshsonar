@@ -61,7 +61,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   child: TextButton(
                     key: const Key('onboarding-skip'),
                     onPressed: () => widget.onFinish(OnboardingExit.done),
-                    style: TextButton.styleFrom(foregroundColor: Colors.white70),
+                    style: TextButton.styleFrom(foregroundColor: Colors.white70, minimumSize: const Size(64, 48)),
                     child: const Text('Skip', style: TextStyle(fontSize: 16)),
                   ),
                 ),
@@ -75,7 +75,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         art: const SonarIllustration(),
                         title: 'Map your mesh by driving it',
                         body: 'MeshSonar pings your MeshCore channel as you drive and listens for the repeaters '
-                            'that echo it. Every ping is saved with GPS — including the ones nobody heard — '
+                            'that echo it. Every ping is saved with GPS, including the ones nobody heard, '
                             'so your community can see where coverage really is.',
                       ),
                       _Page(
@@ -83,7 +83,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         art: const RadioLinkIllustration(),
                         title: 'Connect your radio',
                         body: 'Pair your MeshCore companion radio over Bluetooth. MeshSonar needs a radio to send pings and hear '
-                            'repeaters echo them.',
+                            'repeaters echo them. Your phone asks for Bluetooth permission the first time.',
                         actions: [
                           FilledButton.icon(
                             key: const Key('onboarding-connect'),
@@ -107,7 +107,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         art: const KeyCloudIllustration(),
                         title: 'Nothing to sign up for',
                         body: 'MeshSonar sets up your driver key by itself. Drives are always saved on this phone and '
-                            'upload to the MeshSonar coverage map automatically. Add a callsign any time in Settings.',
+                            'upload to the MeshSonar coverage map automatically. When you start a drive your phone asks for Location, '
+                            'so each ping can be placed on the map. Add a callsign any time in Settings.',
                       ),
                     ],
                   ),
@@ -117,7 +118,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   child: Row(
                     children: [
                       for (var i = 0; i < _count; i++)
-                        AnimatedContainer(
+                        Semantics(
+                          label: 'Page ${i + 1} of $_count${i == _page ? ', current' : ''}',
+                          child: AnimatedContainer(
                           duration: const Duration(milliseconds: 250),
                           margin: const EdgeInsets.only(right: 8),
                           width: i == _page ? 26 : 9,
@@ -126,7 +129,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             color: i == _page ? Brand.glow : Colors.white24,
                             borderRadius: BorderRadius.circular(5),
                           ),
-                        ),
+                        )),
                       const Spacer(),
                       FilledButton(
                         key: const Key('onboarding-next'),
@@ -171,7 +174,7 @@ class _Page extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  SizedBox(height: 210, child: Center(child: art)),
+                  SizedBox(height: 210, child: ExcludeSemantics(child: Center(child: art))),
                   const SizedBox(height: 28),
                   Text(title,
                       textAlign: TextAlign.center,

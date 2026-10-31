@@ -62,14 +62,111 @@ class ScreenStep {
 /// Extend here. Steps run in order and share one app instance; each starts wherever the previous left off,
 /// so navigate explicitly with openTab.
 final List<ScreenStep> screens = [
+  // First launch: the disclosure sheet sits over the Drive tab until the person answers it.
+  ScreenStep('disclosure', (t) async {
+    final keep = find.byKey(const Key('telemetry-keep'));
+    if (!await waitFor(t, keep, timeout: const Duration(seconds: 6))) throw const _Skip();
+    await shot(t, 'disclosure');
+    await t.tap(keep);
+    await pumpFor(t, const Duration(seconds: 1));
+  }, optional: true),
   ScreenStep('drive', (t) async {
     await openTab(t, 'Drive');
     await shot(t, 'drive');
+  }),
+  // Connect screen: scanning / nothing found (the simulator has no Bluetooth radios), then the debug-only Simulator.
+  ScreenStep('connect', (t) async {
+    final chip = find.byKey(const Key('connection-chip'));
+    if (!await waitFor(t, chip)) throw const _Skip();
+    await t.tap(chip);
+    await pumpFor(t, const Duration(seconds: 2));
+    await shot(t, 'connect-scanning');
+    await pumpFor(t, const Duration(seconds: 14));
+    await shot(t, 'connect-result');
+    final sim = find.byKey(const Key('simulator'));
+    if (sim.evaluate().isEmpty) {
+      // Largest Dynamic Type: the row is below the fold of the lazily built list.
+      try {
+        await t.scrollUntilVisible(sim, 300, scrollable: find.byType(Scrollable).first);
+      } catch (_) {}
+    }
+    if (sim.evaluate().isEmpty) {
+      await t.pageBack();
+      await pumpFor(t, const Duration(seconds: 1));
+      throw const _Skip();
+    }
+    await t.ensureVisible(sim);
+    // At the largest text the tile is taller than the screen: tap near its top edge, not its centre.
+    await t.tapAt(t.getTopLeft(sim) + const Offset(60, 40));
+    await pumpFor(t, const Duration(seconds: 4));
+    await shot(t, 'connect-after-simulator');
+  }, optional: true),
+  ScreenStep('antenna', (t) async {
+    final sheet = find.byKey(const Key('antenna-sheet'));
+    if (!await waitFor(t, sheet, timeout: const Duration(seconds: 6))) throw const _Skip();
+    await shot(t, 'antenna-sheet');
+    final mount = find.byWidgetPredicate((w) => w.key is ValueKey && '${(w.key as ValueKey).value}'.startsWith('mount-'));
+    if (mount.evaluate().isNotEmpty) await t.tap(mount.first);
+    await pumpFor(t, const Duration(milliseconds: 500));
+    await t.tap(find.byKey(const Key('antenna-gain-unknown')));
+    await pumpFor(t, const Duration(milliseconds: 300));
+    await t.enterText(find.byKey(const Key('antenna-height-field')), '5');
+    await pumpFor(t, const Duration(milliseconds: 500));
+    final save = find.byKey(const Key('antenna-save'));
+    await t.ensureVisible(save);
+    await t.tap(save);
+    await pumpFor(t, const Duration(seconds: 2));
+  }, optional: true),
+  ScreenStep('drive-ready', (t) async {
+    await openTab(t, 'Drive');
+    await shot(t, 'drive-ready');
+  }),
+  ScreenStep('drive-live', (t) async {
+    final go = find.byKey(const Key('start-stop'));
+    await t.tap(go);
+    await pumpFor(t, const Duration(seconds: 30));
+    await shot(t, 'drive-live');
+    await t.tap(go);
+    await pumpFor(t, const Duration(milliseconds: 600));
+    await shot(t, 'stop-confirm');
+    final confirm = find.byKey(const Key('stop-drive-confirm'));
+    if (confirm.evaluate().isEmpty) throw const _Skip();
+    await t.tap(confirm);
+    await pumpFor(t, const Duration(seconds: 3));
+    await shot(t, 'drive-stopped');
+  }, optional: true),
+  ScreenStep('drive-report', (t) async {
+    final card = find.byKey(const Key('view-report'));
+    if (card.evaluate().isEmpty) throw const _Skip();
+    await t.tap(card);
+    await pumpFor(t, const Duration(seconds: 3));
+    await shot(t, 'report');
+    try {
+      await shootFullScroll(t, 'report-scroll');
+    } catch (_) {}
+    await t.pageBack();
+    await pumpFor(t, const Duration(seconds: 1));
+  }, optional: true),
+  ScreenStep('radio', (t) async {
+    await openTab(t, 'Radio');
+    await shot(t, 'radio');
   }),
   ScreenStep('drives', (t) async {
     await openTab(t, 'Drives');
     await shot(t, 'drives');
   }),
+  ScreenStep('drive-detail', (t) async {
+    final open = find.byWidgetPredicate((w) => w.key is ValueKey && '${(w.key as ValueKey).value}'.startsWith('open-') && '${(w.key as ValueKey).value}' != 'open-progress');
+    if (open.evaluate().isEmpty) throw const _Skip();
+    await t.tap(open.first);
+    await pumpFor(t, const Duration(seconds: 3));
+    await shot(t, 'detail');
+    try {
+      await shootFullScroll(t, 'detail-scroll');
+    } catch (_) {} // nothing to scroll on a big screen
+    await t.pageBack();
+    await pumpFor(t, const Duration(seconds: 1));
+  }, optional: true),
   ScreenStep('settings', (t) async {
     await openTab(t, 'Settings');
     await shootFullScroll(t, 'settings');
@@ -84,14 +181,10 @@ final List<ScreenStep> screens = [
     await t.pageBack();
     await pumpFor(t, const Duration(seconds: 1));
   }),
-  // Region hub / panels: only on checkouts that have lib/ui/region. Adjust the label when that screen lands.
   ScreenStep('region', (t) async {
-    final f = find.textContaining(RegExp(r'Region|Coverage'));
-    if (f.evaluate().isEmpty) throw const _Skip();
-    await t.tap(f.first);
-    await pumpFor(t, const Duration(seconds: 3));
+    await openTab(t, 'Region');
     await shot(t, 'region');
-  }, optional: true),
+  }),
   // The region picker over the real 559-region index (live, read-only): the sheet, then a search with an accent.
   ScreenStep('region-picker', (t) async {
     await openTab(t, 'Region');

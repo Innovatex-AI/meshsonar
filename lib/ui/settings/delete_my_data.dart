@@ -25,7 +25,7 @@ const String deleteMyDataLead = 'This deletes what MeshSonar collected alongside
 /// "Delete my account" there removes the account, every drive and ping and the driver keys. The button opens that page.
 const String deleteAccountText = 'Your MeshSonar account is on the website. "Delete my account" opens the page where '
     'you sign in with your email and delete it: that removes your account, all your drives and their pings, and '
-    'revokes your driver keys. Without an account (only a requested key), contact the server admin to have the key '
+    'revokes your driver keys. Without an account (only a driver key), contact whoever runs the server to have the key '
     'and its drives removed. The buttons below clear this phone.';
 
 class DeleteMyDataScreen extends StatefulWidget {
