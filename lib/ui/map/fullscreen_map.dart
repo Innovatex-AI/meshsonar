@@ -80,6 +80,8 @@ class FullscreenMapScreen extends StatelessWidget {
                   onSelectRepeater: model.select,
                   simulated: model.simulated,
                   onZoomChanged: model.onMapZoom,
+                  hexRes: model.coverageQuery.res,
+                  labelAvoidKeys: model.fullscreenOverlayKeys,
                   fallbackCenter: viewedRegionCenter(s),
                   rotatable: true,
                   // Keep map buttons, attribution and framed repeaters clear of the control panel (bottom in
@@ -101,6 +103,7 @@ class FullscreenMapScreen extends StatelessWidget {
                     maxHeight: mq.size.height - safe.top - safe.bottom - (landscape ? 2 * Gap.m : panelHeight + 2 * Gap.m),
                   ),
                   child: SingleChildScrollView(
+                    key: model.fullscreenOverlayKeys[0],
                     child: HeardBox(
                       heard: model.heard,
                       holdPings: s.settings.heardHoldPings,
@@ -123,6 +126,7 @@ class FullscreenMapScreen extends StatelessWidget {
                 right: safe.right + Gap.m,
                 top: safe.top + Gap.m,
                 child: Column(
+                  key: model.fullscreenOverlayKeys[1],
                   children: [
                     MapIconButton(
                       key: const Key('fullscreen-close'),
@@ -144,7 +148,7 @@ class FullscreenMapScreen extends StatelessWidget {
                 Positioned(
                   left: 0,
                   right: landscape ? panelWidth : 0,
-                  bottom: safe.bottom + (landscape ? 0 : panelHeight) + 64,
+                  bottom: safe.bottom + (landscape ? 0 : panelHeight) + Gap.s + model.attributionStackHeight + 8,
                   child: Center(child: PingResultFlash(ping: latest, label: model.labelFor)),
                 ),
               // Bottom: status + Ping now / Stop.

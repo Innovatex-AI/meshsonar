@@ -7,6 +7,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart' show GlobalKey;
 import 'package:h3_flutter/h3_flutter.dart' show H3;
 import 'package:latlong2/latlong.dart';
 
@@ -37,6 +38,8 @@ import '../region/region_common.dart' show regionApiFactory;
 class DriveMapModel extends ChangeNotifier {
   final AppState state;
   DriveMapModel(this.state, {int repeaterIsolateThreshold = 2000}) {
+    // The one persisted layer choice: repeater names on/off (Settings.mapRepeaterLabels, default on).
+    _layerState = kDefaultLayerState.toggle(kLabelsLayerId, state.settings.mapRepeaterLabels);
     repeaterFeed = AppStateRepeaterFeed(state, fallbackRoster: _fallbackRoster);
     repeaterSource = RepeaterMapSource(repeaterFeed, clock: state.services.clock, isolateThreshold: repeaterIsolateThreshold)
       ..dedupeAgainstRoster = _layerState.isOn(kRosterLayerId);
@@ -92,6 +95,9 @@ class DriveMapModel extends ChangeNotifier {
     _layersView = null;
     repeaterSource.dedupeAgainstRoster = n.isOn(kRosterLayerId);
     notifyListeners();
+    if (n.isOn(kLabelsLayerId) != was.isOn(kLabelsLayerId) && n.isOn(kLabelsLayerId) != state.settings.mapRepeaterLabels) {
+      unawaited(state.updateSettings(state.settings.copyWith(mapRepeaterLabels: n.isOn(kLabelsLayerId))));
+    }
     bool turnedOn(String id) => n.isOn(id) && !was.isOn(id);
     if (turnedOn(kRosterLayerId) || turnedOn(kNetworkLayerId)) repeaterSource.refreshAges();
     if (turnedOn(kRosterLayerId) && _regionRepeaters.isEmpty && repeaterFeed.region.rows.isEmpty) unawaited(loadRegionRepeaters());
@@ -264,6 +270,17 @@ class DriveMapModel extends ChangeNotifier {
   List<NetworkCell> get networkCells => _networkCells;
 
   bool get simulated => state.radioKind == RadioKind.simulator;
+
+  /// Overlays the Drive screen and the full-screen map draw over their maps (heard box, button column): the map keeps
+  /// repeater names out from under them. Separate sets because both screens can be alive at once.
+  final List<GlobalKey> driveOverlayKeys = [GlobalKey(debugLabel: 'drive-heard'), GlobalKey(debugLabel: 'drive-controls')];
+  final List<GlobalKey> fullscreenOverlayKeys = [GlobalKey(debugLabel: 'full-heard'), GlobalKey(debugLabel: 'full-controls')];
+
+  /// Height of the credit stack the map draws bottom-left (OpenStreetMap credit, the SIMULATED tag, the repeater age
+  /// legend with MeshCore Map's credit), so overlays that sit above it (the result flash, the report card) clear it
+  /// instead of covering it.
+  double get attributionStackHeight =>
+      32 + (simulated ? 28 : 0) + (layerState.isOn(kNetworkLayerId) && repeaterSource.globalPoints.length > 0 ? 64 : 0);
 
   /// The simulator's own (made-up) repeaters, so a Simulator drive shows where they are like a real one would.
   static final List<RepeaterRef> simulatorRepeaters = [
@@ -475,7 +492,7 @@ class DriveMapModel extends ChangeNotifier {
     if (immediate) {
       go();
     } else {
-      _fetchTimer = Timer(const Duration(milliseconds: 500), go);
+      _fetchTimer = Timer(const Duration(milliseconds: 250), go);
     }
   }
 

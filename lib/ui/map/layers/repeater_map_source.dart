@@ -22,6 +22,9 @@ const String kNetworkLayerId = 'network';
 /// Layer id of the viewed region's roster layer (the website's `?show=repeaters`).
 const String kRosterLayerId = 'repeaters';
 
+/// Layer id of the app-only "Repeater names" switch (labels beside every drawn repeater).
+const String kLabelsLayerId = 'labels';
+
 /// Load state of one list, as the feed reports it.
 enum MapFeedState {
   /// Nothing stored and nothing asked yet.

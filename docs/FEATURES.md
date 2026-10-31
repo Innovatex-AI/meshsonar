@@ -172,17 +172,21 @@ simulator's repeaters in Simulator mode), **ping dots**, and the current **posit
 - Ping colours: **red** = heard nothing. Heard pings are coloured by best SNR on a **−10 → +10 dB** scale (blue → teal
   → green), or plain green in "Heard / not" mode. Unknown SNR shows mid teal. The newest dot pulses once.
 - **Follow mode** keeps the position centred. Dragging turns it off and shows **Recenter** (`map-recenter`).
+- **Repeater names** are written beside every repeater marker (layers sheet > Network > Repeater names, on by default and
+  remembered): collision-avoided, zoom-dependent (none below zoom 9; heard-this-drive from 9; the rest from 11; at most 8/14/24/36/60
+  labels by zoom), heard first then nearest, with a halo for contrast. Names also appear on the drive report map.
+- **Grid resolution follows the zoom** for both the drive's hexagons and the network layer: res 7 (zoom < 11.5), 8 (< 12.5), 9 (< 14),
+  10 (< 15.5), 11. A resolution pinned in Coverage options applies to both.
 - Tap a repeater to see its name, a short key, "Heard N pings ago", SNR and distance.
 - **Layers sheet** (`layers-sheet`), generated from the layer registry, in four sections: **This drive** (Hex
   coverage, Links to heard repeaters, Repeaters heard, Pings with colour by SNR / heard-not), **Coverage** (Network
-  coverage with its colour-by / detail / since / source controls), **Network** (All MeshCore repeaters, Region
-  repeaters, Observers) and **Around you** (Range rings). Drive layers, Network coverage and All MeshCore repeaters are on by
+  coverage with its colour-by / detail / since / source controls), **Network** (All MeshCore repeaters, Region repeaters, Observers, Repeater names) and **Around you** (Range rings). Drive layers, Network coverage, All MeshCore repeaters and Repeater names are on by
   default; Region repeaters and Observers are off. A default-on layer the server cannot offer shows off and disabled. Every server-fed layer says where it stands under its switch: a count and source ("3
   repeaters · 4 hidden by their owners · Data: MeshCore Map (map.meshcore.io)", "1 observer with a public position",
   "753 cells measured"), "Loading…", "Couldn't load. Check the connection and retry." with **Retry**, "… · Offline - as
   of 2h ago" for a stored copy (with Retry), or a reason with the switch disabled: "Not available on this server yet"
   (the server answers 404), "No repeaters reported yet", "Pick a region to see its observers". A layer that is on can
-  always be switched off. The choices are shared between the Drive and full-screen maps but not saved. Network coverage
+  always be switched off. The choices are shared between the Drive and full-screen maps but not saved (except Repeater names). Network coverage
   fetches once at startup (and again if the server URL changes); a fetch failure keeps showing whatever was already
   drawn rather than clearing it.
 - **All MeshCore repeaters** (`network`, on by default): every repeater and room server with a public position, from

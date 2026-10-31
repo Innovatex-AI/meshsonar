@@ -20,6 +20,8 @@ const List<MapLayerSpec> kMapLayers = [
   MapLayerSpec(id: 'neighbours', label: 'Neighbours of the selected repeater', group: LayerGroup.network, z: 55, defaultOn: false, onWebsite: false, serverFed: true),
   MapLayerSpec(id: 'heard', label: 'Repeaters heard', group: LayerGroup.drive, z: 60, defaultOn: true, onWebsite: false, serverFed: false),
   MapLayerSpec(id: 'pings', label: 'Pings', group: LayerGroup.drive, z: 70, defaultOn: true, onWebsite: false, serverFed: false),
+  // Repeater names beside the markers (Andy, Oct 30 2026): app-only, on by default, persisted in Settings.mapRepeaterLabels.
+  MapLayerSpec(id: kLabelsLayerId, label: 'Repeater names', group: LayerGroup.network, z: 75, defaultOn: true, onWebsite: false, serverFed: false),
   MapLayerSpec(id: 'rings', label: 'Range rings', group: LayerGroup.context, z: 80, defaultOn: true, onWebsite: false, serverFed: false),
 ];
 

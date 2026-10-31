@@ -20,6 +20,7 @@ import '../../core/drive_stats.dart' show formatDuration;
 import '../../core/model.dart';
 import '../app.dart';
 import '../map/coverage_map.dart' show CoverageMap;
+import '../map/layers/repeater_name_labels.dart' show MarkerLabelInput, RepeaterNameLabels;
 import '../onboarding/ui_prefs.dart' show driveLabel;
 import '../widgets.dart';
 import 'drive_context_section.dart';
@@ -564,6 +565,21 @@ class _CellMap extends StatelessWidget {
                     ),
                   ),
               ]),
+              // Names beside the repeaters (the "Repeater names" map setting), so none needs a tap to be identified.
+              if (s.settings.mapRepeaterLabels)
+                RepeaterNameLabels(
+                  inset: const EdgeInsets.only(bottom: 20),
+                  clustered: const [],
+                  markers: [
+                    for (final x in reps)
+                      MarkerLabelInput(
+                        key: x.match.ref!.key,
+                        name: s.repeaterName(x.id) ?? x.label,
+                        point: LatLng(x.match.ref!.lat, x.match.ref!.lon),
+                        heard: true,
+                      ),
+                  ],
+                ),
               if (tiles)
                 const SimpleAttributionWidget(source: Text('OpenStreetMap contributors')),
             ],
