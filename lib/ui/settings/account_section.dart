@@ -191,7 +191,7 @@ class AccountLinks extends StatelessWidget {
     final t = Theme.of(context);
     return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
       Text(
-        'Manage your drives and privacy at ${s.webPage('/me')} — sign in with the same email you registered with',
+        'Manage your drives and privacy at ${s.webPage('/me')}. Sign in there to see and manage them.',
         key: const Key('account-hint'),
         style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
       ),
@@ -202,7 +202,7 @@ class AccountLinks extends StatelessWidget {
           style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 0)),
           onPressed: () => s.openWebPage('/me/devices'),
           icon: const Icon(Icons.open_in_new, size: 18),
-          label: const Text('Get a key on the website'),
+          label: const Text('Open my devices on the website'),
         ),
       ),
     ]);

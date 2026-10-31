@@ -264,14 +264,14 @@ void main() {
           .data!;
       expect(
         hint,
-        'Manage your drives and privacy at https://mesh.example.org/me — sign in with the same email you registered with',
+        'Manage your drives and privacy at https://mesh.example.org/me. Sign in there to see and manage them.',
       );
       await tester.scrollUntilVisible(
         find.byKey(const Key('key-website')),
         100,
         scrollable: settingsScroll,
       );
-      expect(find.text('Get a key on the website'), findsOneWidget);
+      expect(find.text('Open my devices on the website'), findsOneWidget);
       await tester.tap(find.byKey(const Key('key-website')));
       await tester.pumpAndSettle();
       expect(h.openedUrls, [Uri.parse('https://mesh.example.org/me/devices')]);
