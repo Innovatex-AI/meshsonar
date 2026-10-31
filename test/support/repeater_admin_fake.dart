@@ -682,6 +682,16 @@ class AdminFakeTransport implements ByteTransport {
         _emit(encodeCurrTime(_radioNow));
       case Cmd.setDeviceTime:
         _emit(encodeOk());
+      case Cmd.getContacts:
+        final frames = <Uint8List>[
+          for (final r in repeaters.values)
+            encodeContactFrame(r.key, type: r.role == 'room' ? AdvType.room : AdvType.repeater, name: r.name, lastAdvert: r.nowSecs - 600, lastMod: 1),
+        ];
+        _emit(encodeContactsStart(frames.length));
+        for (final fr in frames) {
+          _emit(fr);
+        }
+        _emit(encodeEndOfContacts(1));
       case Cmd.syncNextMessage:
         _emit(_queue.isEmpty ? encodeNoMoreMessages() : _queue.removeAt(0));
       case Cmd.getContactByKey:
