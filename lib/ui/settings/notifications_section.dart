@@ -38,14 +38,14 @@ AlertsStatus describeAlertsStatus({
   required bool radioConnected,
   required bool ios,
 }) {
-  final system = ios ? 'iOS Settings' : 'Android settings';
+  final where = ios ? 'iOS Settings' : 'Android settings';
   if (!enabled) {
     return const AlertsStatus('Alerts are off', 'New messages are still saved and counted in the app, but no alert is shown.',
         Icons.notifications_off_outlined, AlertsStatusAction.none);
   }
   switch (permission) {
     case NotificationPermission.denied:
-      return AlertsStatus('Notifications are blocked in $system',
+      return AlertsStatus('Notifications are blocked in $where',
           'MeshSonar cannot show alerts until you allow them there. In the app you still see new messages and banners.',
           Icons.block, AlertsStatusAction.openSystemSettings);
     case NotificationPermission.restricted:

@@ -196,17 +196,22 @@ class AlertCoordinator extends ChangeNotifier {
       body = unread > 1 ? '$unread new messages' : 'New message';
     }
     final quiet = prefs.quiet.contains(_clock());
-    await notifications.show(AlertNotification(
-      id: notificationIdFor(m.convKey),
-      threadId: m.convKey,
-      title: title,
-      body: body,
-      payload: m.convKey,
-      silent: !prefs.sound || quiet,
-      vibrate: prefs.vibrate,
-      badge: chat.unreadBadge(),
-    ));
-    shown++;
+    try {
+      await notifications.show(AlertNotification(
+        id: notificationIdFor(m.convKey),
+        threadId: m.convKey,
+        title: title,
+        body: body,
+        payload: m.convKey,
+        silent: !prefs.sound || quiet,
+        vibrate: prefs.vibrate,
+        badge: chat.unreadBadge(),
+      ));
+      shown++;
+    } catch (_) {
+      // The message is already stored; a notification the OS refused must never become an unhandled error during a wake.
+      suppressed++;
+    }
   }
 
   Future<void> _onConversationChanged(String? convKey) async {
@@ -233,15 +238,19 @@ class AlertCoordinator extends ChangeNotifier {
   Future<String?> sendTest() async {
     await refreshPermission();
     if (_permission != NotificationPermission.granted) return 'Notifications are not allowed yet.';
-    await notifications.show(AlertNotification(
-      id: notificationIdFor('test'),
-      threadId: 'test',
-      title: 'MeshSonar',
-      body: prefs.showText ? 'This is a test notification.' : 'New message',
-      payload: '',
-      silent: !prefs.sound,
-      vibrate: prefs.vibrate,
-    ));
+    try {
+      await notifications.show(AlertNotification(
+        id: notificationIdFor('test'),
+        threadId: 'test',
+        title: 'MeshSonar',
+        body: prefs.showText ? 'This is a test notification.' : 'New message',
+        payload: '',
+        silent: !prefs.sound,
+        vibrate: prefs.vibrate,
+      ));
+    } catch (e) {
+      return 'The system would not show it ($e).';
+    }
     return null;
   }
 
