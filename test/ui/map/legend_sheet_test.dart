@@ -153,8 +153,8 @@ void main() {
       await pumpLegend(tester);
       expect(find.text('Filled triangle: observer online'), findsOneWidget);
       expect(find.text('Hollow grey triangle: offline'), findsOneWidget);
-      final icons = tester.widgetList<Icon>(find.descendant(of: find.byKey(const Key('legend-section-observers')), matching: find.byType(Icon))).toList();
-      expect(icons.any((i) => i.color == colours(tester).silent), isTrue);
+      final tri = tester.widgetList<CustomPaint>(find.descendant(of: find.byKey(const Key('legend-section-observers')), matching: find.byType(CustomPaint))).map((c) => c.painter.runtimeType.toString());
+      expect(tri.where((n) => n == '_TriPainter'), hasLength(2));
     });
 
     testWidgets('heard box: bright, dimmer and faint bars', (tester) async {

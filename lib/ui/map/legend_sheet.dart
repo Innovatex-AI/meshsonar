@@ -240,7 +240,6 @@ class _MapLegendSheetState extends State<MapLegendSheet> {
   }
 
   List<Widget> _cells(BuildContext context, MeshSonarColors mc) {
-    final t = Theme.of(context);
     final steps = coverageLegend(_by);
     return [
       _note(context, 'Hexagons show what everyone has measured, not just this drive.'),
@@ -281,10 +280,6 @@ class _MapLegendSheetState extends State<MapLegendSheet> {
             key: const Key('legend-noise-note'))
       else
         const SizedBox.shrink(),
-      Text(
-        'Showing the ${colorByLabel(_by).toLowerCase()} colouring.',
-        style: t.textTheme.labelSmall,
-      ),
     ];
   }
 
@@ -349,13 +344,13 @@ class _MapLegendSheetState extends State<MapLegendSheet> {
     return [
       LegendRow(
         id: 'observer-online',
-        swatch: ExcludeSemantics(child: Icon(Icons.change_history_rounded, size: 28, color: t.colorScheme.primary)),
+        swatch: ExcludeSemantics(child: _Triangle(color: t.colorScheme.primary, filled: true, halo: t.colorScheme.surface)),
         title: 'Filled triangle: observer online',
         detail: 'A listening station that shares its position and is reporting now.',
       ),
       LegendRow(
         id: 'observer-offline',
-        swatch: ExcludeSemantics(child: Icon(Icons.change_history_outlined, size: 28, color: mc.silent)),
+        swatch: ExcludeSemantics(child: _Triangle(color: mc.silent, filled: false, halo: t.colorScheme.surface)),
         title: 'Hollow grey triangle: offline',
       ),
     ];
@@ -503,4 +498,39 @@ class LinkSamplePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(LinkSamplePainter o) => o.line != line || o.casing != casing || o.dashed != dashed;
+}
+
+/// The observer marker as the map draws it: a filled triangle when online, an outline when offline.
+class _Triangle extends StatelessWidget {
+  final Color color, halo;
+  final bool filled;
+  const _Triangle({required this.color, required this.filled, required this.halo});
+  @override
+  Widget build(BuildContext context) => CustomPaint(size: const Size(24, 22), painter: _TriPainter(color, filled, halo));
+}
+
+class _TriPainter extends CustomPainter {
+  final Color color, halo;
+  final bool filled;
+  _TriPainter(this.color, this.filled, this.halo);
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = Path()
+      ..moveTo(size.width / 2, 2)
+      ..lineTo(size.width - 2, size.height - 2)
+      ..lineTo(2, size.height - 2)
+      ..close();
+    if (filled) canvas.drawPath(path, Paint()..color = color);
+    canvas.drawPath(
+      path,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.2
+        ..strokeJoin = StrokeJoin.round
+        ..color = filled ? halo : color,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_TriPainter o) => o.color != color || o.filled != filled || o.halo != halo;
 }
