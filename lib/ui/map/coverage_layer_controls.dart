@@ -26,12 +26,15 @@ List<(CoverageLevel, String)> coverageLegend(CoverageColorBy by) =>
         (CoverageLevel.good, '0 to +5'),
         (CoverageLevel.fair, '-5 to 0'),
         (CoverageLevel.weak, 'below -5'),
+        (CoverageLevel.unknown, 'heard, signal unknown'),
+        (CoverageLevel.none, 'mapped, nothing heard'),
       ],
       CoverageColorBy.heard => const [
         (CoverageLevel.strong, '75%+ heard'),
         (CoverageLevel.good, '50-75%'),
         (CoverageLevel.fair, '25-50%'),
         (CoverageLevel.weak, 'under 25%'),
+        (CoverageLevel.none, 'mapped, nothing heard'),
       ],
       CoverageColorBy.noise => const [
         (CoverageLevel.strong, 'quiet, under -125 dBm'),

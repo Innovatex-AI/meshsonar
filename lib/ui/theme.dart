@@ -36,7 +36,7 @@ class _Palette {
   final Color accent, onAccent, accentContainer, onAccentContainer;
   final Color danger, onDanger, dangerContainer, onDangerContainer;
   final Color beacon, onBeacon;
-  final Color snrWeak, snrMid, snrStrong, silent;
+  final Color snrWeak, snrMid, snrStrong, silent, heardUnknown;
   final Color mapBg, mapGrid;
   final List<double> tileMatrix;
   const _Palette({
@@ -62,6 +62,7 @@ class _Palette {
     required this.snrMid,
     required this.snrStrong,
     required this.silent,
+    required this.heardUnknown,
     required this.mapBg,
     required this.mapGrid,
     required this.tileMatrix,
@@ -105,7 +106,8 @@ const _dark = _Palette(
   snrWeak: Color(0xFF3B8FD6),
   snrMid: Color(0xFF3EE0CF),
   snrStrong: Color(0xFF8CF58A),
-  silent: Color(0xFFFF6B5B),
+  silent: Color(0xFF8D99A6), // mapped, nothing heard: grey, never a coverage colour
+  heardUnknown: Color(0xFFB59AE0), // heard, signal strength unknown: its own colour, never green
   mapBg: Color(0xFF0D1B26),
   mapGrid: Color(0xFF3EE0CF),
   tileMatrix: _darkTiles,
@@ -133,7 +135,8 @@ const _light = _Palette(
   snrWeak: Color(0xFF2468B8),
   snrMid: Color(0xFF00897B),
   snrStrong: Color(0xFF2E9E3A),
-  silent: Color(0xFFD63A2C),
+  silent: Color(0xFF8795A1),
+  heardUnknown: Color(0xFF8A63C9),
   mapBg: Color(0xFFE9EFF1),
   mapGrid: Color(0xFF00796E),
   tileMatrix: _lightTiles,
@@ -149,8 +152,11 @@ class MeshSonarColors extends ThemeExtension<MeshSonarColors> {
   /// SNR scale for pings that were heard: weak (≤ -10 dB) → mid (0 dB) → strong (≥ +10 dB).
   final Color snrWeak, snrMid, snrStrong;
 
-  /// A ping that heard nothing.
+  /// A ping that heard nothing: grey (mapped, no signal).
   final Color silent;
+
+  /// A ping that was heard but whose signal strength is unknown.
+  final Color heardUnknown;
 
   /// Map canvas under the tiles (what you see offline).
   final Color mapBackground;
@@ -171,6 +177,7 @@ class MeshSonarColors extends ThemeExtension<MeshSonarColors> {
     required this.snrMid,
     required this.snrStrong,
     required this.silent,
+    required this.heardUnknown,
     required this.mapBackground,
     required this.mapGrid,
     required this.tileMatrix,
@@ -191,16 +198,17 @@ class MeshSonarColors extends ThemeExtension<MeshSonarColors> {
     snrMid: p.snrMid,
     snrStrong: p.snrStrong,
     silent: p.silent,
+    heardUnknown: p.heardUnknown,
     mapBackground: p.mapBg,
     mapGrid: p.mapGrid,
     tileMatrix: p.tileMatrix,
     textMuted: p.textMuted,
   );
 
-  /// Colour for a ping result: [heard] false → [silent]; heard with unknown SNR → mid; else the SNR scale.
+  /// Colour for a ping result: [heard] false → [silent] (grey); heard with unknown SNR → [heardUnknown]; else the SNR scale.
   Color forPing({required bool heard, double? snr}) {
     if (!heard) return silent;
-    if (snr == null) return snrMid;
+    if (snr == null) return heardUnknown;
     final t = ((snr.clamp(-10.0, 10.0)) + 10) / 20; // 0..1
     return t < 0.5 ? Color.lerp(snrWeak, snrMid, t * 2)! : Color.lerp(snrMid, snrStrong, (t - 0.5) * 2)!;
   }
@@ -213,6 +221,7 @@ class MeshSonarColors extends ThemeExtension<MeshSonarColors> {
     snrMid: snrMid,
     snrStrong: snrStrong,
     silent: silent ?? this.silent,
+    heardUnknown: heardUnknown,
     mapBackground: mapBackground,
     mapGrid: mapGrid,
     tileMatrix: tileMatrix,
@@ -230,6 +239,7 @@ class MeshSonarColors extends ThemeExtension<MeshSonarColors> {
       snrMid: l(snrMid, other.snrMid),
       snrStrong: l(snrStrong, other.snrStrong),
       silent: l(silent, other.silent),
+      heardUnknown: l(heardUnknown, other.heardUnknown),
       mapBackground: l(mapBackground, other.mapBackground),
       mapGrid: l(mapGrid, other.mapGrid),
       tileMatrix: t < 0.5 ? tileMatrix : other.tileMatrix,

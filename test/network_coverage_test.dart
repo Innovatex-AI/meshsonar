@@ -53,8 +53,8 @@ void main() {
     test('nothing heard is none, regardless of other fields', () {
       expect(levelFor(_cell(heard: 0, bestSnr: 9), CoverageColorBy.snr), CoverageLevel.none);
     });
-    test('heard but no SNR reading is none, not a guess', () {
-      expect(levelFor(_cell(heard: 3, bestSnr: null), CoverageColorBy.snr), CoverageLevel.none);
+    test('heard but no SNR reading is unknown (its own colour), never a strength guess', () {
+      expect(levelFor(_cell(heard: 3, bestSnr: null), CoverageColorBy.snr), CoverageLevel.unknown);
     });
     test('boundaries: >=5 strong, [0,5) good, [-5,0) fair, <-5 weak', () {
       expect(levelFor(_cell(bestSnr: 5.0), CoverageColorBy.snr), CoverageLevel.strong);
@@ -78,7 +78,7 @@ void main() {
       expect(levelFor(_cell(pings: 4, heard: 2), CoverageColorBy.heard), CoverageLevel.good); // 50%
       expect(levelFor(_cell(pings: 4, heard: 1), CoverageColorBy.heard), CoverageLevel.fair); // 25%
       expect(levelFor(_cell(pings: 100, heard: 24), CoverageColorBy.heard), CoverageLevel.weak);
-      expect(levelFor(_cell(pings: 10, heard: 0), CoverageColorBy.heard), CoverageLevel.weak);
+      expect(levelFor(_cell(pings: 10, heard: 0), CoverageColorBy.heard), CoverageLevel.none); // nothing heard is grey, not red
     });
   });
 

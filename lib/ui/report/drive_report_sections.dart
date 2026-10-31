@@ -23,7 +23,7 @@ String _db(double v) => v.toStringAsFixed(1);
 /// Readings needed before a line is worth drawing.
 const minLinePoints = 3;
 
-/// SNR (best reply per ping) over time; pings that heard nothing are red ticks on the floor. Plus the heard strip.
+/// SNR (best reply per ping) over time; pings that heard nothing are grey ticks on the floor. Plus the heard strip.
 class SnrSection extends StatelessWidget {
   final DriveReport report;
   const SnrSection({super.key, required this.report});
@@ -67,7 +67,7 @@ class SnrSection extends StatelessWidget {
           dotRadius: pts.length > 400 ? 1.6 : 3.0,
           floorMarks: [for (final p in pts) if (p.snr == null) (p.ts, p.heard ? m.snrMid : m.silent)],
           xFormat: _hm,
-          footer: 'red ticks = heard nothing',
+          footer: 'grey ticks = heard nothing',
         ),
       ),
       const SizedBox(height: 14),

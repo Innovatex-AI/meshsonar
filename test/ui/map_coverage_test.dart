@@ -27,10 +27,10 @@ const tower = RepeaterRef(key: 'a1b2c3d4e5', name: 'Westerville Water Tower', la
 const hill = RepeaterRef(key: 'ff09aa', name: 'Otterbein Hill', lat: 40.12, lon: -82.937);
 
 void main() {
-  test('ping colours: silent is red, SNR runs weak -> mid -> strong, unknown SNR is mid', () {
+  test('ping colours: silent is grey, SNR runs weak -> mid -> strong, unknown SNR is its own colour', () {
     final c = MeshSonarColors.dark;
     expect(c.forPing(heard: false), c.silent);
-    expect(c.forPing(heard: true), c.snrMid);
+    expect(c.forPing(heard: true), c.heardUnknown);
     expect(c.forPing(heard: true, snr: -20), c.snrWeak);
     expect(c.forPing(heard: true, snr: 0), c.snrMid);
     expect(c.forPing(heard: true, snr: 15), c.snrStrong);
@@ -77,7 +77,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('map-repeater-a1b2c3d4e5')));
     await tester.pump();
     expect(find.byKey(const Key('map-repeater-label')), findsOneWidget);
-    expect(find.text('Westerville Water Tower'), findsOneWidget);
+    expect(find.text('Westerville Water Tower'), findsWidgets); // the label and the panel title
   });
 
   testWidgets('attribution shows when tiles are on; dragging stops follow and offers Recenter', (tester) async {
