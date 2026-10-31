@@ -431,6 +431,9 @@ class SyncReport {
   final int contextPingsUpdated;
   final int contextRejected;
   final int contextFallbacks;
+
+  /// Set when the server asked the app to slow down (HTTP 429 / 503): seconds to wait, from `Retry-After` or a default.
+  final int? retryAfterSec;
   const SyncReport({
     this.sessions = 0,
     this.stored = 0,
@@ -443,6 +446,7 @@ class SyncReport {
     this.contextPingsUpdated = 0,
     this.contextRejected = 0,
     this.contextFallbacks = 0,
+    this.retryAfterSec,
   });
 
   /// True when anything about the drive context happened or went wrong in this sync.

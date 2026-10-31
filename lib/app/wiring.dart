@@ -85,6 +85,7 @@ Future<AppServices> buildRealServices() async {
       return out;
     },
     shareFile: shareDriveFile,
+    shareFiles: shareDriveFiles,
     openUrl: openExternalUrl,
     appInfo: app,
     uiPrefsFile: File('${root.path}${Platform.pathSeparator}ui_prefs.json'),

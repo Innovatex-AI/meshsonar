@@ -128,6 +128,9 @@ class WardriveConfig {
   });
 }
 
+/// A phone clock this far from GPS time is reported ([EngineStatus.clockSkew]).
+const Duration clockSkewWarnAfter = Duration(minutes: 5);
+
 enum EngineState { idle, starting, driving, pinging, stopping, error }
 
 /// What the next auto-ping is waiting for (both the interval AND the distance must be met).
@@ -156,7 +159,13 @@ class EngineStatus {
 
   /// Metres still to move before the distance rule is met (0 when met); null when unknown or not auto-pinging.
   final double? metresToGo;
-  const EngineStatus(this.state, {this.message, this.lastFix, this.nextPingAt, this.waitingFor, this.metresToGo});
+
+  /// How far the phone's clock is from GPS time (GPS minus phone), when it has been off by more than
+  /// [clockSkewWarnAfter] on several fixes in a row; null while the clocks agree. Pings are stamped with the phone
+  /// clock, and the server refuses a ping stamped more than a day ahead.
+  final Duration? clockSkew;
+  const EngineStatus(this.state,
+      {this.message, this.lastFix, this.nextPingAt, this.waitingFor, this.metresToGo, this.clockSkew});
 }
 
 /// Runs a drive: pings on the channel on a timer/distance schedule, collects echoes for each ping,
@@ -174,4 +183,9 @@ abstract class WardriveEngine {
   /// Pings immediately (also allowed while auto-pinging). Completes with the finished ping.
   Future<DrivePing> pingNow();
   Future<void> stop();
+
+  /// The radio dropped mid-drive (status `error`, "Radio disconnected") and the app has reconnected it as [link]:
+  /// rejoin the channel on it and carry on in the SAME drive, with the ping cadence unchanged. Throws if the channel
+  /// can't be rejoined (the engine then stays in `error` and the caller may try again) or the drive is stopping.
+  Future<void> resumeOnLink(CompanionLink link);
 }

@@ -63,6 +63,8 @@ class FastEngine implements WardriveEngine {
   Future<DrivePing> pingNow() => inner.pingNow();
   @override
   Future<void> stop() => inner.stop();
+  @override
+  Future<void> resumeOnLink(CompanionLink link) => inner.resumeOnLink(link);
 }
 
 void main() {

@@ -78,6 +78,15 @@ String friendlySyncError(String error) {
   if (l.contains('401') || l.contains('not recognised') || l.contains('not recognized')) {
     return 'Upload refused: the server doesn\'t know this driver key. Pings are kept on this phone.';
   }
+  if (l.contains('429') || l.contains('slow down')) {
+    return 'The server asked MeshSonar to slow down. Pings are kept on this phone and will upload shortly.';
+  }
+  if (l.contains('413')) {
+    return 'The server refused a ping as too large. Pings are kept on this phone; export the drive to look at it.';
+  }
+  if (RegExp(r'\b5\d\d\b').hasMatch(l) || l.contains('server had a problem')) {
+    return 'The server had a problem. Pings are kept on this phone and will upload next time.';
+  }
   if (l.contains('socket') ||
       l.contains('network') ||
       l.contains('connection') ||

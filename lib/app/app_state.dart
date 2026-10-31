@@ -21,7 +21,7 @@ import '../core/drive_context_session.dart';
 import '../core/drive_env_cache.dart';
 import '../core/driver_summary.dart';
 import '../core/repeater_reach.dart';
-import '../core/drive_store.dart' show closeOrphanedSessions;
+import '../core/drive_store.dart' show ChunkedExport, closeOrphanedSessions;
 import '../core/heard.dart';
 import '../core/model.dart';
 import '../core/etag_client.dart';
@@ -871,10 +871,14 @@ class AppState extends ChangeNotifier {
   }
 
   /// Back in front: permission may have changed in Settings, and the lists may be due (rate limits apply).
+  @visibleForTesting
+  void debugOnForeground() => _onForeground(true);
+
   void _onForeground(bool fg) {
     if (!fg) return;
     unawaited(refreshLocationAccess());
     unawaited(ensureKey());
+    unawaited(_retryPendingUploads());
     unawaited(syncRepeaterLists(SyncTrigger.resume));
     unawaited(_refreshRegionIndexIfDue());
   }
@@ -1350,6 +1354,111 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  // ---------- radio dropped mid-drive: reconnect and resume in the same session ----------
+  bool _skewSaid = false; // the clock warning is shown once per drive
+  bool _reconnecting = false;
+  int _reconnectAttempt = 0;
+  String? _reconnectProblem;
+
+  /// The radio dropped during a drive and the app is trying to get it back (the drive stays open).
+  bool get reconnecting => _reconnecting;
+
+  /// Which try this is (1-based) while [reconnecting].
+  int get reconnectAttempt => _reconnectAttempt;
+
+  /// Why the last reconnect try failed ("Bluetooth is off", ...); null when none failed since the drop.
+  String? get reconnectProblem => _reconnectProblem;
+
+  /// Wait before reconnect try [attempt] (1-based): quick at first, then up to 20 s. Tests shorten it.
+  @visibleForTesting
+  Duration Function(int attempt) reconnectDelay = (n) => Duration(seconds: n <= 1 ? 1 : math.min(20, 2 * n));
+
+  Future<void> _reconnectRadio() async {
+    final device = _device, kind = _radioKind, engine = _engine, sid = _session?.id, expectedKey = _radioKey;
+    if (device == null || engine == null || sid == null || kind == RadioKind.none) return;
+    bool same() => _session?.id == sid && identical(_engine, engine);
+    _reconnecting = true;
+    _reconnectAttempt = 0;
+    _reconnectProblem = null;
+    diagnostics.add('Radio dropped during the drive; reconnecting');
+    notifyListeners();
+    try {
+      while (same()) {
+        _reconnectAttempt++;
+        notifyListeners();
+        await Future<void>.delayed(reconnectDelay(_reconnectAttempt));
+        if (!same()) break;
+        ByteTransport? transport;
+        try {
+          transport = await scannerFor(kind).connect(device).timeout(const Duration(seconds: 25));
+          final link = services.linkFactory(transport);
+          final info = await link.start().timeout(const Duration(seconds: 20));
+          if (expectedKey != null && info.publicKey.toLowerCase() != expectedKey) {
+            throw StateError('A different radio answered at this address');
+          }
+          if (!same()) {
+            await link.close();
+            break;
+          }
+          final old = _link;
+          _link = link;
+          _selfInfo = info;
+          unawaited(_telemetrySub?.cancel());
+          _telemetrySub = link.rxPackets.listen(_onTelemetryRx, onError: (Object _) {});
+          unawaited(old?.close().catchError((Object _) {}));
+          await engine.resumeOnLink(link);
+          // Radio-health sampling follows the new link (the old one is gone).
+          _stopDriveContext();
+          _ctx = newDriveContext(
+              services: services,
+              sessionId: sid,
+              link: link,
+              isOn: collectionOn,
+              pingBusy: () => _pinging || engine.current.state == EngineState.pinging,
+              onStatus: notifyListeners);
+          unawaited(_ctx?.start());
+          _reconnectProblem = null;
+          diagnostics.add('Radio reconnected after $_reconnectAttempt ${_reconnectAttempt == 1 ? 'try' : 'tries'}; drive continues');
+          _say('Radio reconnected. The drive carries on.');
+          return;
+        } catch (e) {
+          try {
+            await transport?.disconnect();
+          } catch (_) {}
+          _reconnectProblem = reconnectProblemText(e);
+          diagnostics.add('Reconnect try $_reconnectAttempt failed: ${e.runtimeType}');
+          notifyListeners();
+        }
+      }
+    } finally {
+      _reconnecting = false;
+      notifyListeners();
+    }
+  }
+
+  /// "3 min ahead of", "2 h behind", "5 days ahead of" ... for a clock-skew warning.
+  @visibleForTesting
+  static String describeClockSkew(Duration gpsMinusPhone) {
+    final ahead = gpsMinusPhone.isNegative; // the phone shows a later time than GPS
+    final d = gpsMinusPhone.abs();
+    final n = d.inDays >= 2 ? '${d.inDays} days' : d.inHours >= 2 ? '${d.inHours} h' : '${math.max(1, d.inMinutes)} min';
+    return '$n ${ahead ? 'ahead of' : 'behind'}';
+  }
+
+  /// One plain sentence for why a reconnect try failed.
+  @visibleForTesting
+  static String reconnectProblemText(Object e) {
+    final m = e.toString().toLowerCase();
+    if (m.contains('turned on') || m.contains('adapter') || m.contains('powered off') || m.contains('bluetooth is off')) {
+      return 'Bluetooth is off. Turn it on and MeshSonar reconnects by itself.';
+    }
+    if (m.contains('permission') || m.contains('unauthorized') || m.contains('not authorized')) {
+      return 'Bluetooth permission was turned off for MeshSonar. Allow it in your phone\'s Settings.';
+    }
+    if (e is TimeoutException) return 'The radio isn\'t answering. Is it on and nearby?';
+    return 'Couldn\'t reach the radio yet. Trying again.';
+  }
+
   Future<void> disconnect({bool quiet = false}) async {
     if (driving) await stopDrive();
     final link = _link;
@@ -1552,7 +1661,7 @@ class AppState extends ChangeNotifier {
   /// One in-drive upload of the current drive's saved pings. Never overlaps another; failures are quiet (status
   /// line only) and retried on the next tick.
   void _driveSyncTick() {
-    if (_driveSyncInFlight != null || _busy || !_wantDriveSync) return;
+    if (_driveSyncInFlight != null || _busy || !_wantDriveSync || _syncBackingOff) return;
     final sid = _session?.id;
     if (sid == null) return;
     _driveSyncInFlight = _uploadQuietly(sid).whenComplete(() => _driveSyncInFlight = null);
@@ -1565,6 +1674,7 @@ class AppState extends ChangeNotifier {
       await _writeChain; // only pings already saved on the phone are sent
       final r = await _syncService.syncSession(sessionId);
       _logSync('Upload during the drive', r);
+      _noteSyncBackoff(r);
       if (r.error != null) {
         _lastUploadError = friendlySyncError(r.error!);
         final l = r.error!.toLowerCase();
@@ -1633,6 +1743,7 @@ class AppState extends ChangeNotifier {
         ..holdPings = s.heardHoldPings
         ..reset();
       _seenPingIds.clear();
+      _skewSaid = false;
       _pingCount = 0;
       _txCount = 0;
       _heardCount = 0;
@@ -1644,6 +1755,14 @@ class AppState extends ChangeNotifier {
       _pingSub = engine.pings.listen(_onPing, onError: (Object e) => _say(friendlyError(e, action: 'A ping')));
       _statusSub = engine.status.listen((st) {
         _status = st;
+        // The radio dropped mid-drive: get it back and carry on in this same drive (never a new session).
+        final skew = st.clockSkew;
+        if (skew != null && !_skewSaid && _radioKind != RadioKind.simulator) {
+          _skewSaid = true;
+          _say('Your phone\'s clock is ${describeClockSkew(skew)} GPS time. Set Date & Time to Automatic, '
+              'or this drive\'s pings carry the wrong times and the server may refuse them.');
+        }
+        if (st.state == EngineState.error && !_reconnecting && _link?.isConnected == false) unawaited(_reconnectRadio());
         // Rides the engine's own GPS stream (already gated to active drives only) rather than opening a second,
         // always-on Geolocator subscription just for region awareness.
         if (st.lastFix != null) _updateRegion(st.lastFix);
@@ -1846,6 +1965,7 @@ class AppState extends ChangeNotifier {
 
   String get statusLine {
     final st = _status;
+    if (_reconnecting && driving) return _reconnectProblem ?? 'Radio disconnected. Reconnecting (try $_reconnectAttempt)…';
     if (st.message != null && st.message!.isNotEmpty) return st.message!;
     switch (st.state) {
       case EngineState.idle:
@@ -1909,6 +2029,60 @@ class AppState extends ChangeNotifier {
   bool _lastSyncFailed = false;
   bool get lastSyncFailed => _lastSyncFailed;
 
+  // The server said "slow down" (429 / 503): no automatic upload until this time. A person pressing Sync still can.
+  DateTime? _syncBackoffUntil;
+  bool get _syncBackingOff => _syncBackoffUntil != null && services.clock().isBefore(_syncBackoffUntil!);
+
+  void _noteSyncBackoff(SyncReport r) {
+    final sec = r.retryAfterSec;
+    if (sec == null) {
+      if (r.error == null) _syncBackoffUntil = null;
+      return;
+    }
+    _syncBackoffUntil = services.clock().add(Duration(seconds: sec.clamp(1, 900)));
+  }
+
+  /// Retry waiting uploads right after launch (always on in the app; tests that look at an un-uploaded drive turn it off).
+  @visibleForTesting
+  bool retryPendingAtLaunch = true;
+
+  DateTime? _lastPendingRetry;
+  bool _retryingPending = false;
+
+  /// Drives finished or recovered earlier but never fully uploaded (offline in the field, server down, rate limit):
+  /// tried again when the app starts and each time it comes back to the front, quietly, at most every 2 minutes.
+  /// Nothing here shows an error: the drives list already says "not synced".
+  Future<void> _retryPendingUploads() async {
+    if (_retryingPending || driving || !_settings.autoSync || !keyApproved || _syncBackingOff || anySyncing) return;
+    final now = services.clock();
+    final last = _lastPendingRetry;
+    if (last != null && now.difference(last) < const Duration(minutes: 2)) return;
+    final waiting = _sessions.any((x) => x.session.endedAt != null && x.hasSomethingToSync);
+    if (!waiting) return;
+    _retryingPending = true;
+    _lastPendingRetry = now;
+    try {
+      final r = await _syncService.syncAll();
+      _logSync('Retry of waiting uploads', r);
+      _noteSyncBackoff(r);
+      if (r.error == null) {
+        _lastUploadAt = services.clock();
+        _lastUploadError = null;
+        if (r.stored > 0) _say('Uploaded ${r.stored} waiting ping${r.stored == 1 ? '' : 's'}.');
+      } else {
+        final l = r.error!.toLowerCase();
+        if (l.contains('403') || l.contains('not approved') || l.contains('not recognised')) {
+          unawaited(refreshKeyStatus(quiet: true));
+        }
+      }
+    } catch (e) {
+      _logError('Retry of waiting uploads failed', e);
+    } finally {
+      _retryingPending = false;
+      await refreshSessions();
+    }
+  }
+
   bool _canSync() {
     if (!hasKey) {
       unawaited(ensureKey()); // normally already done at launch; this catches a phone that was offline then
@@ -1971,6 +2145,7 @@ class AppState extends ChangeNotifier {
           '${contextReportParts(r).map((p) => '; $p').join()}');
 
   void _handleReport(SyncReport r, {bool quietIfNothing = false}) {
+    _noteSyncBackoff(r);
     if (r.error != null) {
       _syncFailed(friendlySyncError(r.error!), null);
       final l = r.error!.toLowerCase();
@@ -2037,8 +2212,20 @@ class AppState extends ChangeNotifier {
   Future<void> exportAndShare(String sessionId) async {
     try {
       final dir = await services.exportDir();
-      final file = await services.store.exportSession(sessionId, services.appInfo, dir);
-      await services.shareFile(file);
+      final st = services.store;
+      // More than 5,000 pings can't go up as one body (the server refuses it), so a long drive is split in files that
+      // are each a complete upload.
+      final files = st is ChunkedExport
+          ? await (st as ChunkedExport).exportSessionParts(sessionId, services.appInfo, dir)
+          : [await st.exportSession(sessionId, services.appInfo, dir)];
+      final many = services.shareFiles;
+      if (files.length > 1 && many != null) {
+        await many(files);
+      } else {
+        for (final f in files) {
+          await services.shareFile(f);
+        }
+      }
     } catch (e) {
       _say(friendlyError(e, action: 'Export'));
     }
@@ -2134,7 +2321,11 @@ class AppState extends ChangeNotifier {
     unawaited(ensureKey().then((ok) {
       if (ok && _settings.autoSync && keyApproved && orphans.isNotEmpty) unawaited(_syncClosedQuietly(orphans));
     }));
-    if (orphans.isNotEmpty && _settings.autoSync && keyApproved) unawaited(_syncClosedQuietly(orphans));
+    if (orphans.isNotEmpty && _settings.autoSync && keyApproved) {
+      unawaited(_syncClosedQuietly(orphans).then((_) => retryPendingAtLaunch ? _retryPendingUploads() : null));
+    } else if (retryPendingAtLaunch) {
+      unawaited(_retryPendingUploads());
+    }
   }
 
   /// Background upload of drives closed at startup (their remaining pings and ended_at). Failures stay quiet; the
