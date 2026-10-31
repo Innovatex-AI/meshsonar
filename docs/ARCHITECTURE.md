@@ -292,6 +292,11 @@ names.
 | `radio/packet.dart` | radio | Over-the-air packet parser/serialiser, path-hash decoding, GRP_TXT build/decrypt, `matchEcho`. |
 | `radio/crypto.dart` | radio | Pure-Dart SHA-256, HMAC-SHA256, AES-128; channel secrets and hash; MeshCore encrypt-then-MAC. |
 | `radio/companion_link.dart` | radio | `MeshCoreCompanionLink`: serialised commands, push handling, `ensureChannel`, `sendChannelText`, `noiseFloor`, radio health reads (`coreStats`, `radioStats`, `packetStats`, `batteryAndStorage`; unsupported asked once), discovery request, offline-queue drain. |
+| `radio/claim_radio.dart` | radio | `ClaimRadio` (what a claim needs from a radio: sign, ensureContact, login, runCli, status), `ClaimRadioException`, `RemoteLogin`. |
+| `core/node_claim.dart` | core | `NodeClaim`, `ClaimChallenge`, `ClaimStatus`, public-key helpers; the claim wire contract. |
+| `core/claim_flow.dart` | core | `OwnRadioClaimFlow` (sign) and `RepeaterClaimFlow` (login, name + code, advert, poll, ALWAYS restore), `composeClaimName`, `ClaimRestoreStore` (pending name restores on disk, never a password). |
+| `app/claims.dart` | app | `ClaimController`: My radios list, the running flow, pending restores; `AppState.claims`. |
+| `ui/claims/*.dart` | ui | My radios, Claim my radio, Claim a repeater screens; "Claim this repeater" / "Owned by you" widgets. |
 | `radio/radio_health.dart` | radio | `RadioStatsSource`, `radioSampleFrom` (frames to a `DriveSample`, unmeasured = null), `RadioHealthPoller` (every 60 s, never while a ping is in flight; injectable clock + timer). |
 | `radio/wardrive_engine.dart` | radio | `DefaultWardriveEngine`: cadence, one ping at a time, listen window, echo building, optional neighbour discovery; `formatPingText`. |
 | `radio/simulator.dart` | radio | `SimulatedLocationSource` (Westerville loop), `SimulatedTransport` (speaks real frames and real encrypted packets), `SimulatedRadioScanner`, simulated repeaters. |

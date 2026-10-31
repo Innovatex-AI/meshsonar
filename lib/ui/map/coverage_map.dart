@@ -84,6 +84,7 @@ import 'sheets/map_hit_sheet.dart';
 import '../ping_detail_sheet.dart' show PingDetailSheet;
 import 'sheets/observer_sheet.dart' show ObserverSheetContext;
 import 'sheets/repeater_sheet.dart' show RepeaterSheet, RepeaterSheetContext;
+import '../claims/claim_widgets.dart' show OwnedByYouChip;
 
 /// A line from a ping to a repeater it heard.
 class PingLink {
@@ -587,6 +588,7 @@ class _CoverageMapState extends State<CoverageMap> {
     return MapInfoPanel(
       key: ValueKey('info-panel-${p?.key ?? cell!.id}'),
       title: p?.name ?? 'Coverage cell',
+      badge: p != null && (_appOrNull()?.ownsRadio(p.key) ?? false) ? const OwnedByYouChip() : null,
       summary: _panelSummary(),
       busy: _linkBusy,
       body: body,

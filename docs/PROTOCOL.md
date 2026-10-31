@@ -129,6 +129,56 @@ sequenceDiagram
 0 become `null`. `freq_mhz = freq/1000`, `bw_khz = bw/1000`, `tx_dbm = tx_power_dbm`. `firmware` is the DEVICE_INFO
 `fw_version` string, else `"ver <code>"`.
 
+### 2.5 Claim frames: login, CLI, status, sign (0.24, unreleased)
+
+Used only by "Claim my radio" and "Claim a repeater" (`lib/radio/claim_radio.dart`, implemented by
+`MeshCoreCompanionLink`; flows in `lib/core/claim_flow.dart`). **Verified Oct 31 2026 against the MeshCore firmware
+source on `main`** (`examples/companion_radio/MyMesh.cpp` FIRMWARE_VER_CODE 14, `examples/simple_repeater/MyMesh.cpp`,
+`src/helpers/CommonCLI.cpp`, `BaseChatMesh.cpp`, `AdvertDataHelpers.cpp`, `TxtDataHelpers.h`). Not yet exercised against
+a physical radio (the fake radio in `test/support/claim_fakes.dart` speaks these exact layouts).
+
+App to radio:
+
+| Command | Bytes | Reply |
+|---|---|---|
+| GET_CONTACT_BY_KEY (30) | `[30][pub_key ×32]` | `CONTACT` (3) or `ERR(NOT_FOUND)` |
+| ADD_UPDATE_CONTACT (9) | `[9][pub_key ×32][type][flags][out_path_len=0xFF][out_path ×64][name ×32][last_advert u32][lat i32][lon i32]` (144 B); type 2 = repeater | `OK`, or `ERR(TABLE_FULL)` |
+| SEND_LOGIN (26) | `[26][pub_key ×32][password UTF-8, NUL]`; the radio keeps at most **15 bytes** of password (`sendLogin`) | `SENT` (6): `[6][is_flood][tag u32][est_timeout_ms u32]`; `ERR(NOT_FOUND)` if the repeater is not a contact |
+| SEND_TXT_MSG (2) as CLI | `[2][txt_type=3 CLI_COMMAND][attempt][timestamp u32][pub_key_prefix ×6][text]`; the radio replaces the timestamp with its own clock; no ack | `SENT` (6) |
+| SEND_STATUS_REQ (27) | `[27][pub_key ×32]` | `SENT`, later push `0x87` |
+| LOGOUT (29) | `[29][pub_key ×32]` | `OK` (local only, nothing goes over the air) |
+| SIGN_START (33) | `[33]` | `SIGN_START` (19): `[19][reserved][max_len u32 = 8192]` |
+| SIGN_DATA (34) | `[34][chunk…]` (we send 120-byte chunks) | `OK`; `ERR(BAD_STATE)` without a start; `ERR(TABLE_FULL)` past 8 KB |
+| SIGN_FINISH (35) | `[35]` | `SIGNATURE` (20): `[20][Ed25519 signature ×64]` by the radio's own identity key |
+| EXPORT_CONTACT (17) | `[17]` (no key = the radio's own advert) | `EXPORT_CONTACT` (11): `[11][advert packet…]` |
+
+Radio to app (pushes arrive at any time, not as the reply to a command):
+
+| Frame | Layout |
+|---|---|
+| LOGIN_SUCCESS push `0x85` | `[0x85][is_admin][pub_key_prefix ×6][server time u32][acl permissions][firmware level]` (14 B). The pre-v7 form is `[0x85][0][prefix ×6]` (8 B) and always reads as **not admin**. A **guest** password also succeeds, with `is_admin` 0. |
+| LOGIN_FAIL push `0x86` | `[0x86][reserved][pub_key_prefix ×6]` |
+| STATUS_RESPONSE push `0x87` | `[0x87][reserved][prefix ×6]` then the repeater's `RepeaterStats` (little endian, 56 B): batt_mv u16, tx_queue u16, noise_floor i16, last_rssi i16, recv u32, sent u32, air_secs u32, up_secs u32, flood_tx u32, direct_tx u32, flood_rx u32, direct_rx u32, err_events u16, last_snr i16 (÷4), direct_dups u16, flood_dups u16, rx_air_secs u32, recv_errors u32. Older builds send a prefix of it. |
+| CONTACT_MSG_RECV_V3 (a repeater's CLI reply) | `[0x10][snr i8 ×4][r][r][prefix ×6][path_len][txt_type=1 CLI_DATA][timestamp u32]([signer prefix ×4] when txt_type = 2)[text]`; legacy `[0x07][prefix ×6][path_len][txt_type][timestamp u32][text]`. Queued in the radio and fetched by SYNC_NEXT_MESSAGE after `MSG_WAITING` (§6.3); the link hands CLI replies to the claim call that is waiting. |
+
+Firmware facts the flows depend on (all read from source):
+
+1. **A wrong repeater password gets no reply at all** (`simple_repeater` `handleLogin` returns 0), so LOGIN_FAIL is
+   not what a wrong password looks like. "No answer" means out of range **or** wrong password; the app says both.
+2. The repeater runs CLI text only for an **admin** (`client->isAdmin()`); a guest login cannot rename it.
+3. The radio must have the repeater as a **contact** before SEND_LOGIN / SEND_TXT_MSG (`lookupContactByPubKey`), so the
+   app does GET_CONTACT_BY_KEY and, if missing, ADD_UPDATE_CONTACT first.
+4. CLI: `get name` replies `> <name>`; `set name <x>` replies `OK` (or `Error, bad chars`: `[ ] \ : , ? *` are refused);
+   `advert` replies `OK - Advert sent` and floods the advert about 1.5 s later.
+5. **Name limits.** `node_name` is `char[32]`: at most 31 bytes. An ADVERT carries `MAX_ADVERT_DATA_SIZE` 32 bytes =
+   1 flag byte + 8 bytes of position (when the repeater has one) + the name, so the name in an advert is cut to
+   **23 bytes**. The claim code goes at the END of the name, so the app cuts the ORIGINAL part to 16 bytes
+   (`<original> MSxxxx`, 23 bytes) while the code is on; the full original is restored afterwards.
+6. The Ed25519 signature is over exactly the bytes the server sent (the hex in `message` decoded), not over the hex text.
+
+Not supported: claiming a **room server** (its login frame carries an extra `sync_since` field and the radio treats the
+contact type differently); the claim button is hidden for rooms.
+
 ## 3. Over-the-air packet (inside LOG_RX_DATA)
 
 ```
@@ -285,7 +335,9 @@ It's off because it adds airtime on every ping and repeaters rate-limit discover
 
 After `start()`, and on every `PUSH_CODE_MSG_WAITING`, the link sends `SYNC_NEXT_MESSAGE` (up to 256 times) until
 `NO_MORE_MESSAGES`, an error, or an unexpected frame. Channel messages go to `channelMessages` (nobody listens to it
-today). This only exists so the radio's queue never fills.
+today). This mostly exists so the radio's queue never fills; contact messages (a repeater's CLI replies, §2.5) are
+handed to the claim call waiting for them. A `MSG_WAITING` that arrives while a drain is finishing starts one more
+round, so a reply queued at that moment is not missed.
 
 ## 7. Known discrepancies and choices
 
@@ -302,6 +354,8 @@ today). This only exists so the radio's queue never fills.
 | 9 | "Heard" with a neighbour | In the app, a ping with no echoes but a `neighbor` counts as heard (`DrivePing.heardNothing`). CMAT's `drive-read` counts heard as `echoes.length > 0`. This only matters if discovery is turned on. |
 | 10 | Echo SNR on multi-hop | SNR/RSSI belong to the last transmitter, but are stored on the echo keyed by `path[0]`. Consumers should use `hops == 1` echoes for link quality (CMAT does: `hops` 1 or null). |
 | 11 | Echo timestamp check | Only applies with `MeshCoreCompanionLink` (it exposes `lastSentTimestamp`). Other `CompanionLink`s match on text only. |
+| 12 | Repeater login failure | `PUSH_CODE_LOGIN_FAIL` exists but a repeater never sends it for a wrong password; the app treats silence as "out of range or wrong password" (§2.5). |
+| 13 | Companion CLI vs remote CLI | `CMD_RUN_CLI_COMMAND` (66, v14+) runs a CLI command on the COMPANION itself. Claims need the REMOTE repeater's CLI, which is `SEND_TXT_MSG` with txt_type 3 after a login. |
 
 ## 8. Test vectors
 

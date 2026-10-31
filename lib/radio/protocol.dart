@@ -16,14 +16,24 @@ import 'dart:typed_data';
 
 abstract final class Cmd {
   static const appStart = 1;
+  static const sendTxtMsg = 2;
   static const sendChannelTxtMsg = 3;
   static const getDeviceTime = 5;
   static const getBattAndStorage = 20; // was CMD_GET_BATTERY_VOLTAGE
   static const setDeviceTime = 6;
+  static const addUpdateContact = 9;
   static const syncNextMessage = 10;
+  static const exportContact = 17;
   static const deviceQuery = 22;
+  static const sendLogin = 26;
+  static const sendStatusReq = 27;
+  static const logout = 29;
+  static const getContactByKey = 30;
   static const getChannel = 31;
   static const setChannel = 32;
+  static const signStart = 33;
+  static const signData = 34;
+  static const signFinish = 35;
   static const sendControlData = 55; // v8+
   static const getStats = 56; // v8+
   static const sendTelemetryReq = 39; // with exactly 3 reserved bytes = the companion's own ('self') telemetry
@@ -32,18 +42,22 @@ abstract final class Cmd {
 abstract final class Resp {
   static const ok = 0;
   static const err = 1;
+  static const contact = 3;
   static const selfInfo = 5;
   static const sent = 6;
   static const contactMsgRecv = 7;
   static const channelMsgRecv = 8;
   static const currTime = 9;
   static const noMoreMessages = 10;
+  static const exportContact = 11;
   static const battAndStorage = 12;
   static const deviceInfo = 13;
   static const disabled = 15;
   static const contactMsgRecvV3 = 16;
   static const channelMsgRecvV3 = 17;
   static const channelInfo = 18;
+  static const signStart = 19;
+  static const signature = 20;
   static const stats = 24;
 }
 
@@ -53,6 +67,9 @@ abstract final class Push {
   static const sendConfirmed = 0x82;
   static const msgWaiting = 0x83;
   static const rawData = 0x84;
+  static const loginSuccess = 0x85;
+  static const loginFail = 0x86;
+  static const statusResponse = 0x87;
   static const logRxData = 0x88;
   static const traceData = 0x89;
   static const newAdvert = 0x8A;
@@ -77,6 +94,34 @@ abstract final class StatsType {
 
 /// TXT_TYPE_PLAIN (src/helpers/TxtDataHelpers.h line 6).
 const int txtTypePlain = 0;
+
+/// TXT_TYPE_CLI_DATA (a CLI command or its reply) and TXT_TYPE_CLI_COMMAND (a CLI command, explicitly)
+/// (src/helpers/TxtDataHelpers.h lines 7 and 9). Repeaters answer both; replies come back as CLI_DATA.
+const int txtTypeCliData = 1;
+const int txtTypeCliCommand = 3;
+
+/// MeshCore advert/contact node types (src/helpers/AdvertDataHelpers.h lines 7-11).
+abstract final class AdvType {
+  static const none = 0;
+  static const chat = 1;
+  static const repeater = 2;
+  static const room = 3;
+  static const sensor = 4;
+}
+
+/// A repeater/room admin password is cut to 15 bytes by BaseChatMesh::sendLogin (line ~612, "max 15 chars currently").
+const int maxLoginPasswordBytes = 15;
+
+/// A node name is stored in `char node_name[32]` and copied with StrHelper::strncpy: 31 bytes at most
+/// (src/helpers/CommonCLI.h line 29, CommonCLI.cpp `set name`).
+const int maxNodeNameBytes = 31;
+
+/// Longest name an ADVERT can carry: MAX_ADVERT_DATA_SIZE is 32 bytes for flags(1) + optional lat/lon(8) + name
+/// (AdvertDataBuilder::encodeTo cuts the name to what is left). With a position that leaves 23 bytes.
+const int maxAdvertNameBytesWithPosition = 23;
+
+/// Characters `set name` refuses (CommonCLI.cpp isValidName).
+const String invalidNodeNameChars = r'[]\:,?*';
 
 /// Protocol version we tell the radio we understand in CMD_DEVICE_QUERY. ≥3 selects the *_V3 message formats
 /// (MyMesh.cpp line ~562). MeshCore Open sends 4; the firmware only branches on ≥3.
@@ -172,6 +217,68 @@ Uint8List encodeSendControlData(List<int> payload) {
 /// [0x80 | prefix_only][type_filter][tag u32][since u32]. Filter bit (1 << ADV_TYPE_REPEATER=2) asks repeaters.
 Uint8List encodeDiscoverRequestPayload(int tag, {int typeFilter = 1 << 2, bool prefixOnly = false, int since = 0}) =>
     Uint8List.fromList([0x80 | (prefixOnly ? 1 : 0), typeFilter, ..._u32(tag), ..._u32(since)]);
+
+// ------------------------------------------------------------------ claim commands: login, CLI, status, sign
+// Verified against MeshCore examples/companion_radio/MyMesh.cpp at main (Oct 31 2026, FIRMWARE_VER_CODE 14): handlers
+// at ~1132 (SEND_TXT_MSG), ~1328 (ADD_UPDATE_CONTACT), ~1371 (GET_CONTACT_BY_KEY), ~1379 (EXPORT_CONTACT), ~1577
+// (SEND_LOGIN), ~1630 (SEND_STATUS_REQ), ~1748 (LOGOUT), ~1781-1810 (SIGN_START/DATA/FINISH); pushes in
+// onContactResponse() ~690 and queueMessage() ~440.
+
+List<int> _pub32(List<int> key) {
+  if (key.length != 32) throw ArgumentError('a MeshCore public key is 32 bytes');
+  return key;
+}
+
+/// CMD_SEND_LOGIN: [26][pub_key x32][password, NUL-terminated]. The firmware cuts the password to 15 bytes and needs the
+/// repeater to be a CONTACT of this radio, else ERR(NOT_FOUND) (see [encodeAddUpdateContact]). Reply RESP_CODE_SENT
+/// ([SentFrame]); the answer is a later PUSH_CODE_LOGIN_SUCCESS. A WRONG password gets no answer at all: the repeater's
+/// handleLogin() returns 0 (examples/simple_repeater/MyMesh.cpp ~100), so the push never comes.
+Uint8List encodeSendLogin(List<int> pubKey32, String password) =>
+    Uint8List.fromList([Cmd.sendLogin, ..._pub32(pubKey32), ...utf8Truncate(password, maxLoginPasswordBytes), 0]);
+
+/// CMD_LOGOUT: [29][pub_key x32] -> OK (stops the keep-alive connection; nothing is sent to the repeater).
+Uint8List encodeLogout(List<int> pubKey32) => Uint8List.fromList([Cmd.logout, ..._pub32(pubKey32)]);
+
+/// CMD_SEND_STATUS_REQ: [27][pub_key x32] -> SENT, later PUSH_CODE_STATUS_RESPONSE.
+Uint8List encodeSendStatusReq(List<int> pubKey32) => Uint8List.fromList([Cmd.sendStatusReq, ..._pub32(pubKey32)]);
+
+/// CMD_GET_CONTACT_BY_KEY: [30][pub_key x32] -> RESP_CODE_CONTACT or ERR(NOT_FOUND).
+Uint8List encodeGetContactByKey(List<int> pubKey32) => Uint8List.fromList([Cmd.getContactByKey, ..._pub32(pubKey32)]);
+
+/// CMD_ADD_UPDATE_CONTACT: [9][pub_key x32][type][flags][out_path_len][out_path x64][name x32][last_advert u32]
+/// [lat i32][lon i32] (updateContactFromFrame, MyMesh.cpp ~196). out_path_len 0xFF = OUT_PATH_UNKNOWN: the first
+/// message floods and the radio learns the path. Adds the contact if the radio does not have it, else updates it.
+Uint8List encodeAddUpdateContact(List<int> pubKey32, {required int type, required String name, int flags = 0}) {
+  final out = Uint8List(1 + 32 + 3 + 64 + 32 + 4 + 8);
+  out[0] = Cmd.addUpdateContact;
+  out.setRange(1, 33, _pub32(pubKey32));
+  out[33] = type;
+  out[34] = flags;
+  out[35] = 0xFF;
+  final nb = utf8Truncate(name, 31);
+  out.setRange(36 + 64, 36 + 64 + nb.length, nb);
+  return out;
+}
+
+/// CMD_SEND_TXT_MSG: [2][txt_type][attempt][timestamp u32][pub_key_prefix x6][text...] (MyMesh.cpp ~1132). With
+/// [txtTypeCliCommand] the radio replaces the timestamp with its own clock and expects no ack; reply RESP_CODE_SENT.
+Uint8List encodeSendTxt(int txtType, int attempt, int epochSecs, List<int> prefix6, String text) {
+  if (prefix6.length < 6) throw ArgumentError('prefix must be 6 bytes');
+  return Uint8List.fromList([Cmd.sendTxtMsg, txtType, attempt & 3, ..._u32(epochSecs), ...prefix6.take(6), ...utf8.encode(text)]);
+}
+
+/// CMD_SIGN_START: [33] -> RESP_CODE_SIGN_START [19][reserved][max_len u32 = 8192].
+Uint8List encodeSignStart() => Uint8List.fromList([Cmd.signStart]);
+
+/// CMD_SIGN_DATA: [34][chunk...] -> OK (ERR(BAD_STATE) without a start, ERR(TABLE_FULL) past the 8 KB limit).
+Uint8List encodeSignData(List<int> chunk) => Uint8List.fromList([Cmd.signData, ...chunk]);
+
+/// CMD_SIGN_FINISH: [35] -> RESP_CODE_SIGNATURE [20][ed25519 signature x64] over everything sent in SIGN_DATA, by the
+/// radio's own identity key.
+Uint8List encodeSignFinish() => Uint8List.fromList([Cmd.signFinish]);
+
+/// CMD_EXPORT_CONTACT with no key: the radio's own advert packet -> RESP_CODE_EXPORT_CONTACT [11][packet...].
+Uint8List encodeExportSelfContact() => Uint8List.fromList([Cmd.exportContact]);
 
 // ------------------------------------------------------------------ decoded frames
 
@@ -356,6 +463,106 @@ class ContactMsgFrame extends Frame {
   const ContactMsgFrame(this.data);
 }
 
+/// A contact (direct) message the radio queued, e.g. a repeater's CLI reply. V3 (queueMessage, MyMesh.cpp ~440):
+/// [16][snr i8·4][r][r][prefix x6][path_len][txt_type][timestamp u32]([signer prefix x4] when txt_type is SIGNED)[text];
+/// pre-V3: [7][prefix x6][path_len][txt_type][timestamp u32][text]. [prefixHex] is 12 hex characters.
+class ContactTextFrame extends ContactMsgFrame {
+  final double? snrDb;
+  final String prefixHex;
+  final int pathLen;
+  final int txtType;
+  final int timestamp;
+  final String text;
+  const ContactTextFrame(super.data,
+      {this.snrDb, required this.prefixHex, required this.pathLen, required this.txtType, required this.timestamp, required this.text});
+}
+
+/// RESP_CODE_SENT (MyMesh.cpp ~1150): [6][is_flood][tag / expected ack u32][est_timeout_ms u32].
+class SentFrame extends Frame {
+  final bool flood;
+  final int tag;
+  final int estTimeoutMs;
+  const SentFrame({required this.flood, required this.tag, required this.estTimeoutMs});
+}
+
+/// RESP_CODE_CONTACT (writeContactRespFrame, MyMesh.cpp ~171): [3][pub_key x32][type][flags][out_path_len]
+/// [out_path x64][name x32][last_advert u32][lat i32][lon i32][lastmod u32].
+class ContactFrame extends Frame {
+  final Uint8List publicKey;
+  final int type;
+  final int outPathLen;
+  final String name;
+  const ContactFrame({required this.publicKey, required this.type, required this.outPathLen, required this.name});
+}
+
+/// PUSH_CODE_LOGIN_SUCCESS (onContactResponse, MyMesh.cpp ~700): [0x85][is_admin][pub_key_prefix x6][server time u32]
+/// [acl permissions][firmware level]. The pre-v7 form is only [0x85][0][prefix x6] and always reads as not admin
+/// (the firmware says so: "legacy: is_admin = false"). A GUEST login also succeeds, with is_admin 0.
+class LoginSuccessPush extends Frame {
+  final bool isAdmin;
+  final String prefixHex;
+  final int? aclPermissions;
+  final int? firmwareLevel;
+  const LoginSuccessPush({required this.isAdmin, required this.prefixHex, this.aclPermissions, this.firmwareLevel});
+}
+
+/// PUSH_CODE_LOGIN_FAIL: [0x86][reserved][pub_key_prefix x6]. Only sent for a reply the radio could not read; a wrong
+/// password on a repeater produces NO reply, so expect silence, not this frame.
+class LoginFailPush extends Frame {
+  final String prefixHex;
+  const LoginFailPush(this.prefixHex);
+}
+
+/// What a repeater reports about itself (examples/simple_repeater/MyMesh.h `RepeaterStats`, little endian, 56 bytes on
+/// current firmware; older builds send a prefix of it, so every later field can be null).
+class RepeaterStatus {
+  final int battMilliVolts;
+  final int txQueueLen;
+  final int noiseFloorDbm;
+  final int lastRssiDbm;
+  final int packetsRecv;
+  final int packetsSent;
+  final int airTimeSecs;
+  final int upTimeSecs;
+  final double? lastSnrDb;
+  const RepeaterStatus({
+    required this.battMilliVolts,
+    required this.txQueueLen,
+    required this.noiseFloorDbm,
+    required this.lastRssiDbm,
+    required this.packetsRecv,
+    required this.packetsSent,
+    required this.airTimeSecs,
+    required this.upTimeSecs,
+    this.lastSnrDb,
+  });
+}
+
+/// PUSH_CODE_STATUS_RESPONSE (MyMesh.cpp ~732): [0x87][reserved][pub_key_prefix x6][RepeaterStats...].
+class StatusResponsePush extends Frame {
+  final String prefixHex;
+  final RepeaterStatus status;
+  const StatusResponsePush(this.prefixHex, this.status);
+}
+
+/// RESP_CODE_SIGN_START (MyMesh.cpp ~1781): [19][reserved][max_len u32].
+class SignStartFrame extends Frame {
+  final int maxLen;
+  const SignStartFrame(this.maxLen);
+}
+
+/// RESP_CODE_SIGNATURE: [20][signature x64].
+class SignatureFrame extends Frame {
+  final Uint8List signature;
+  const SignatureFrame(this.signature);
+}
+
+/// RESP_CODE_EXPORT_CONTACT: [11][advert packet...].
+class ExportContactFrame extends Frame {
+  final Uint8List packet;
+  const ExportContactFrame(this.packet);
+}
+
 class MsgWaitingPush extends Frame {
   const MsgWaitingPush();
 }
@@ -399,6 +606,51 @@ class UnknownFrame extends Frame {
   final int code;
   final Uint8List data;
   const UnknownFrame(this.code, this.data);
+}
+
+String _hex(Uint8List b, int start, int n) {
+  final sb = StringBuffer();
+  for (var i = start; i < start + n && i < b.length; i++) {
+    sb.write(b[i].toRadixString(16).padLeft(2, '0'));
+  }
+  return sb.toString();
+}
+
+Frame _decodeContactText(Uint8List f) {
+  final v3 = f[0] == Resp.contactMsgRecvV3;
+  final start = v3 ? 4 : 1; // prefix
+  if (f.length < start + 6 + 1 + 1 + 4) return ContactMsgFrame(f);
+  final bd = ByteData.sublistView(f);
+  final pathLen = f[start + 6];
+  final txtType = f[start + 7];
+  final ts = bd.getUint32(start + 8, Endian.little);
+  var textAt = start + 12;
+  if (txtType == 2 /* TXT_TYPE_SIGNED_PLAIN carries a 4-byte signer prefix first */) textAt += 4;
+  if (textAt > f.length) textAt = f.length;
+  return ContactTextFrame(f,
+      snrDb: v3 ? bd.getInt8(1) / 4.0 : null,
+      prefixHex: _hex(f, start, 6),
+      pathLen: pathLen,
+      txtType: txtType,
+      timestamp: ts,
+      text: utf8.decode(f.sublist(textAt), allowMalformed: true));
+}
+
+RepeaterStatus _decodeRepeaterStatus(Uint8List f, int at) {
+  final bd = ByteData.sublistView(f, at);
+  final n = bd.lengthInBytes;
+  int u32(int o) => n >= o + 4 ? bd.getUint32(o, Endian.little) : 0;
+  return RepeaterStatus(
+    battMilliVolts: bd.getUint16(0, Endian.little),
+    txQueueLen: bd.getUint16(2, Endian.little),
+    noiseFloorDbm: bd.getInt16(4, Endian.little),
+    lastRssiDbm: bd.getInt16(6, Endian.little),
+    packetsRecv: u32(8),
+    packetsSent: u32(12),
+    airTimeSecs: u32(16),
+    upTimeSecs: u32(20),
+    lastSnrDb: n >= 44 ? bd.getInt16(42, Endian.little) / 4.0 : null,
+  );
 }
 
 /// Decodes one frame from the radio. Throws [ProtocolException] for an empty or truncated known frame.
@@ -513,7 +765,41 @@ Frame decodeFrame(Uint8List f) {
       );
     case Resp.contactMsgRecv:
     case Resp.contactMsgRecvV3:
-      return ContactMsgFrame(Uint8List.fromList(f));
+      return _decodeContactText(Uint8List.fromList(f));
+    case Resp.sent:
+      need(10, 'SENT');
+      return SentFrame(flood: f[1] != 0, tag: bd.getUint32(2, Endian.little), estTimeoutMs: bd.getUint32(6, Endian.little));
+    case Resp.contact:
+      need(1 + 32 + 3 + 64 + 32, 'CONTACT');
+      return ContactFrame(
+        publicKey: Uint8List.fromList(f.sublist(1, 33)),
+        type: f[33],
+        outPathLen: f[35],
+        name: _cString(f, 100, 32),
+      );
+    case Push.loginSuccess:
+      need(8, 'LOGIN_SUCCESS');
+      final legacy = f.length < 14;
+      return LoginSuccessPush(
+        isAdmin: !legacy && (f[1] & 1) != 0,
+        prefixHex: _hex(f, 2, 6),
+        aclPermissions: legacy ? null : f[12],
+        firmwareLevel: legacy ? null : f[13],
+      );
+    case Push.loginFail:
+      need(8, 'LOGIN_FAIL');
+      return LoginFailPush(_hex(f, 2, 6));
+    case Push.statusResponse:
+      need(8 + 20, 'STATUS_RESPONSE');
+      return StatusResponsePush(_hex(f, 2, 6), _decodeRepeaterStatus(f, 8));
+    case Resp.signStart:
+      need(6, 'SIGN_START');
+      return SignStartFrame(bd.getUint32(2, Endian.little));
+    case Resp.signature:
+      need(65, 'SIGNATURE');
+      return SignatureFrame(Uint8List.fromList(f.sublist(1, 65)));
+    case Resp.exportContact:
+      return ExportContactFrame(Uint8List.fromList(f.sublist(1)));
     case Push.msgWaiting:
       return const MsgWaitingPush();
     case Push.logRxData:
@@ -731,5 +1017,71 @@ Uint8List encodeSelfTelemetryPush({required List<int> prefix6, double? voltageV,
     b.add([1, 103, (t >> 8) & 0xff, t & 0xff]);
   }
   b.add(extraLpp);
+  return b.toBytes();
+}
+
+
+// ------------------------------------------------------------------ radio-side encoders for the claim frames
+// (the fake radio in tests plays these; layouts as documented on the decoded classes)
+
+Uint8List encodeSent({bool flood = false, int tag = 0, int estTimeoutMs = 2000}) =>
+    Uint8List.fromList([Resp.sent, flood ? 1 : 0, ..._u32(tag), ..._u32(estTimeoutMs)]);
+
+Uint8List encodeContactFrame(List<int> pubKey32, {required int type, required String name, int outPathLen = 0xFF}) {
+  final out = Uint8List(1 + 32 + 3 + 64 + 32 + 4 + 8 + 4);
+  out[0] = Resp.contact;
+  out.setRange(1, 33, _pub32(pubKey32));
+  out[33] = type;
+  out[35] = outPathLen;
+  final nb = utf8Truncate(name, 31);
+  out.setRange(100, 100 + nb.length, nb);
+  return out;
+}
+
+/// [legacy] writes the 8-byte pre-v7 form.
+Uint8List encodeLoginSuccess(List<int> pubKey32, {required bool isAdmin, int tag = 0, int aclPermissions = 3, int firmwareLevel = 2, bool legacy = false}) =>
+    Uint8List.fromList([
+      Push.loginSuccess,
+      legacy ? 0 : (isAdmin ? 1 : 0),
+      ..._pub32(pubKey32).take(6),
+      if (!legacy) ...[..._u32(tag), aclPermissions, firmwareLevel],
+    ]);
+
+Uint8List encodeLoginFail(List<int> pubKey32) => Uint8List.fromList([Push.loginFail, 0, ..._pub32(pubKey32).take(6)]);
+
+Uint8List encodeStatusResponse(List<int> pubKey32, RepeaterStatus s) {
+  final bd = ByteData(56)
+    ..setUint16(0, s.battMilliVolts, Endian.little)
+    ..setUint16(2, s.txQueueLen, Endian.little)
+    ..setInt16(4, s.noiseFloorDbm, Endian.little)
+    ..setInt16(6, s.lastRssiDbm, Endian.little)
+    ..setUint32(8, s.packetsRecv, Endian.little)
+    ..setUint32(12, s.packetsSent, Endian.little)
+    ..setUint32(16, s.airTimeSecs, Endian.little)
+    ..setUint32(20, s.upTimeSecs, Endian.little)
+    ..setInt16(42, ((s.lastSnrDb ?? 0) * 4).round(), Endian.little);
+  return Uint8List.fromList([Push.statusResponse, 0, ..._pub32(pubKey32).take(6), ...bd.buffer.asUint8List()]);
+}
+
+Uint8List encodeSignStartResponse(int maxLen) => Uint8List.fromList([Resp.signStart, 0, ..._u32(maxLen)]);
+
+Uint8List encodeSignatureResponse(List<int> signature64) {
+  if (signature64.length != 64) throw ArgumentError('an ed25519 signature is 64 bytes');
+  return Uint8List.fromList([Resp.signature, ...signature64]);
+}
+
+/// A queued contact message as the radio hands it out (V3 form unless [v3] is false).
+Uint8List encodeContactText(List<int> senderKey, String text,
+    {int txtType = txtTypeCliData, int timestamp = 0, int pathLen = 0xFF, double snrDb = 0, bool v3 = true}) {
+  final b = BytesBuilder();
+  if (v3) {
+    b.add([Resp.contactMsgRecvV3, _i8(snrDb * 4), 0, 0]);
+  } else {
+    b.addByte(Resp.contactMsgRecv);
+  }
+  b.add(senderKey.take(6).toList());
+  b.add([pathLen, txtType, ..._u32(timestamp)]);
+  if (txtType == 2) b.add([0, 0, 0, 0]);
+  b.add(utf8.encode(text));
   return b.toBytes();
 }

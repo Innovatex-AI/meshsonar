@@ -5,6 +5,23 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- **Claim a radio or a repeater (needs a server with `capabilities.nodeClaims`).** Settings > My radios lists the radios your
+  driver key manages and lets you rename one, choose whether its position is public, add notes, or give it up; the website
+  (`/me/radios`) has the full multi-radio view. **A claim only manages a radio: it never decides whether its data is
+  recorded, uploaded or counted.**
+  - **Claim my radio**: the connected companion signs a server message with its own Ed25519 key (CMD_SIGN_START/DATA/FINISH).
+    No password, nothing over the air.
+  - **Claim a repeater**: pick it (map panel or repeater sheet "Claim this repeater", your repeaters, or paste its key), enter
+    its admin password (kept in memory only, never sent to MeshSonar, 15 characters at most as the firmware reads), and your
+    radio logs in over the mesh, reads the name, adds a short code (`MSxxxx`) to it, sends an advert so an observer hears the
+    code, then ALWAYS puts the name back and reads it back to confirm. Handles: guest login (not admin), no answer (out of
+    range or wrong password), cancel, app backgrounded, radio dropped (restored when it reconnects), restore not confirmed
+    (the exact commands to type are shown, and a reminder stays in My radios until done). "Owned by you" shows on claimed
+    repeaters. Room servers are not claimable yet.
+  - Radio layer: login, logout, status, remote CLI, contacts, signing and export-contact frames, verified against the
+    MeshCore firmware source (docs/PROTOCOL.md 2.5); a wrong repeater password gets no reply at all, so the app says "out of
+    range or wrong password".
+
 ## [0.23.3] — 2026-11-01 — repeater lines at the finest cell size
 
 - **Repeater -> cells lines use the server's finest cells** (H3 resolution 11, `capabilities.reachH3`, `repeater-reach?res=11`) instead of the old 270 m x 200 m squares, then roll up to the hexagons drawn at the current zoom. Older servers keep the square shape. Cached answers are kept apart by shape.

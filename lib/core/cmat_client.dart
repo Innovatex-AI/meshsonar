@@ -32,6 +32,7 @@ import 'model.dart';
 import 'region_lookup.dart';
 import 'hex_cells.dart' show loadHexEngine;
 import 'map_links.dart';
+import 'node_claim.dart';
 import 'repeater_reach.dart';
 import 'report_body.dart' show problemReportMaxBytes;
 import 'telemetry_uploader.dart';
@@ -325,6 +326,68 @@ class HttpCmatClient implements CmatClient, TelemetryTransport {
     final j = await _send('GET', 'cell-links', driverKey: driverKey, query: {'h3': h3.trim().toLowerCase()});
     try {
       return CellLinks.parse(j);
+    } on FormatException {
+      throw const CmatException('server sent an unreadable answer', status: 200);
+    }
+  }
+
+  @override
+  Future<ClaimChallenge> claimStart(String driverKey, String pubkey, ClaimKind kind) async {
+    final j = await _send('POST', 'claim-start',
+        driverKey: driverKey, body: {'pubkey': pubkey.trim().toLowerCase(), 'kind': kind.name}, ok: const {200, 201});
+    try {
+      return ClaimChallenge.parse(j, asked: kind);
+    } on FormatException {
+      throw const CmatException('server sent an unreadable answer', status: 201);
+    }
+  }
+
+  @override
+  Future<NodeClaim> claimComplete(String driverKey, String challengeId, String signatureHex) async {
+    final j = await _send('POST', 'claim-complete',
+        driverKey: driverKey, body: {'challengeId': challengeId, 'signature': signatureHex.toLowerCase()});
+    try {
+      return NodeClaim.parse(j['claim']);
+    } on FormatException {
+      throw const CmatException('server sent an unreadable answer', status: 200);
+    }
+  }
+
+  @override
+  Future<ClaimStatus> claimStatus(String driverKey, String challengeId) async {
+    final j = await _send('GET', 'claim-status', driverKey: driverKey, query: {'challengeId': challengeId});
+    try {
+      return ClaimStatus.parse(j);
+    } on FormatException {
+      throw const CmatException('server sent an unreadable answer', status: 200);
+    }
+  }
+
+  @override
+  Future<List<NodeClaim>> myRadios(String driverKey) async {
+    final j = await _send('GET', 'my-radios', driverKey: driverKey);
+    final out = <NodeClaim>[];
+    for (final c in (j['claims'] as List?) ?? const []) {
+      try {
+        out.add(NodeClaim.parse(c));
+      } on FormatException {
+        // skip a row we cannot read
+      }
+    }
+    return out;
+  }
+
+  @override
+  Future<void> releaseClaim(String driverKey, String pubkey) async {
+    await _send('DELETE', 'claim', driverKey: driverKey, query: {'pubkey': pubkey.trim().toLowerCase()});
+  }
+
+  @override
+  Future<NodeClaim> updateClaim(String driverKey, String pubkey, Map<String, Object?> changes) async {
+    final j = await _send('PATCH', 'claim',
+        driverKey: driverKey, body: {'pubkey': pubkey.trim().toLowerCase(), ...changes});
+    try {
+      return NodeClaim.parse(j['claim']);
     } on FormatException {
       throw const CmatException('server sent an unreadable answer', status: 200);
     }

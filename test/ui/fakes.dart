@@ -617,6 +617,9 @@ class Harness {
 
   /// Every link the app opened, oldest first.
   final List<FakeLink> links = [];
+
+  /// Builds the link instead of a plain [FakeLink] (claim tests use one that can log in and sign).
+  FakeLink Function(SelfInfo info)? linkMaker;
   final List<File> shared = [];
   LocationSource? engineLocation;
   int _id = 0;
@@ -688,7 +691,7 @@ class Harness {
     bluetoothScanner: bt,
     simulatorScanner: sim,
     linkFactory: (_) {
-      final l = FakeLink(selfInfo);
+      final l = linkMaker?.call(selfInfo) ?? FakeLink(selfInfo);
       links.add(l);
       return l;
     },
