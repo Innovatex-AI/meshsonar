@@ -46,6 +46,7 @@ class FakeRepeater {
   final List<String> adverts = [];
   final List<String> cliLog = [];
   final Set<String> _admins = {}; // companion keys with an admin session
+  final Map<String, int> _lastTs = {}; // per client: the timestamp of its login / last command (real repeaters drop anything not newer)
 
   FakeRepeater({required this.key, required this.name, this.adminPassword = 'secret', this.guestPassword});
 
@@ -63,6 +64,11 @@ class ClaimFakeTransport implements ByteTransport {
   final BytesBuilder _signData = BytesBuilder();
   bool _signing = false;
   bool _connected = true;
+
+  /// The radio's clock runs this many seconds ahead of the phone (the firmware refuses to set its clock backwards, so a
+  /// radio that is ahead stays ahead). Its login and the repeater's replay check use THIS clock.
+  int radioAheadSecs = 0;
+  int get _radioNow => DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000 + radioAheadSecs;
 
   /// The radio has no more room for contacts.
   bool contactsFull = false;
@@ -124,8 +130,11 @@ class ClaimFakeTransport implements ByteTransport {
         _emit(encodeSelfInfo(txPowerDbm: 20, maxTxPowerDbm: 22, publicKey: publicKey, freqKhz: 910525, bwHz: 62500, sf: 7, cr: 5, name: 'My Companion'));
       case Cmd.deviceQuery:
         _emit(encodeDeviceInfo(firmwareVerCode: 14, maxChannels: 8, buildDate: '31 Oct 2026', manufacturer: 'FakeBoard', firmwareVersion: 'v1.99'));
+      case Cmd.getDeviceTime:
+        _emit(encodeCurrTime(_radioNow));
       case Cmd.setDeviceTime:
-        _emit(encodeOk());
+        final want = ByteData.sublistView(f).getUint32(1, Endian.little);
+        _emit(want >= _radioNow ? encodeOk() : encodeErr(ErrCode.illegalArg));
       case Cmd.syncNextMessage:
         _emit(_queue.isEmpty ? encodeNoMoreMessages() : _queue.removeAt(0));
       case Cmd.getContactByKey:
@@ -209,6 +218,7 @@ class ClaimFakeTransport implements ByteTransport {
     if (r == null || !r.inRange) return; // nobody answers
     if (pw == r.adminPassword) {
       r._admins.add(keyHex);
+      r._lastTs[keyHex] = _radioNow;
       _emit(encodeLoginSuccess(r.key, isAdmin: true));
     } else if (r.guestPassword != null && pw == r.guestPassword) {
       _emit(encodeLoginSuccess(r.key, isAdmin: false));
@@ -232,6 +242,10 @@ class ClaimFakeTransport implements ByteTransport {
     final cmd = utf8.decode(f.sublist(13));
     _emit(encodeSent(flood: true, tag: 0, estTimeoutMs: 500));
     if (!r.inRange || !r._admins.contains(keyHex)) return; // out of range, or not an admin: no reply at all
+    final ts = ByteData.sublistView(f).getUint32(3, Endian.little);
+    final last = r._lastTs[keyHex] ?? 0;
+    if (ts <= last) return; // replay (older) or retry (equal): the repeater answers nothing and runs nothing
+    r._lastTs[keyHex] = ts;
     r.cliLog.add(cmd);
     String reply;
     if (cmd == 'get name') {

@@ -24,9 +24,10 @@ class _Rig {
   final MemoryClaimRestoreStore store;
   _Rig(this.rep, this.radio, this.link, this.server, this.clock, this.store);
 
-  static Future<_Rig> make({String name = 'Hilltop', String? guest}) async {
+  static Future<_Rig> make({String name = 'Hilltop', String? guest, int radioAheadSecs = 0}) async {
     final rep = FakeRepeater(key: keyBytes(5), name: name, adminPassword: _password, guestPassword: guest);
     final radio = await ClaimFakeTransport.create(repeaters: [rep]);
+    radio.radioAheadSecs = radioAheadSecs;
     final link = MeshCoreCompanionLink(radio, timeout: const Duration(seconds: 2), claimReplyTimeout: const Duration(milliseconds: 300));
     await link.start();
     final clock = FakeClock();
@@ -154,6 +155,30 @@ void main() {
   });
 
   group('claim a repeater (advert code + name restore)', () {
+    test('a radio whose clock is AHEAD of the phone still gets answers: commands are stamped from the radio clock (real-radio bug: "could not read the repeater\'s name")', () async {
+      for (final ahead in [0, 5, 3600, 86400 * 400]) {
+        final r = await _Rig.make(radioAheadSecs: ahead);
+        final res = await r.claim();
+        expect(res.outcome, ClaimOutcome.verified, reason: 'radio ${ahead}s ahead');
+        expect(r.rep.name, 'Hilltop');
+        expect(r.rep.cliLog.first, 'get name', reason: 'the very first command was answered');
+        await r.close();
+      }
+    });
+
+    test('every command to a repeater carries a strictly newer timestamp than the one before (equal = retry, older = replay: both ignored)', () async {
+      final r = await _Rig.make(radioAheadSecs: 60);
+      addTearDown(r.close);
+      await r.claim();
+      final ts = r.radio.sentFrames.where((f) => f[0] == Cmd.sendTxtMsg).map((f) => ByteData.sublistView(f).getUint32(3, Endian.little)).toList();
+      expect(ts.length, greaterThanOrEqualTo(6));
+      for (var i = 1; i < ts.length; i++) {
+        expect(ts[i], greaterThan(ts[i - 1]), reason: 'command $i');
+      }
+      final phoneNow = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
+      expect(ts.first, greaterThanOrEqualTo(phoneNow + 55), reason: 'stamped from the radio clock, not the phone clock');
+    });
+
     test('happy path: logs in as admin, name gets the code, advert, observer hears it, name is restored and confirmed', () async {
       final r = await _Rig.make();
       addTearDown(r.close);

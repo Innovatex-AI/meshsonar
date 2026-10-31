@@ -5,6 +5,10 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+## [0.24.1] — 2026-11-01 — repeater claim: commands get answered
+
+- **Claim a repeater no longer fails with "could not read the repeater's name".** A repeater ignores any command whose timestamp is not strictly newer than the one on your login, and your radio stamps the login with ITS clock, which the firmware refuses to move backwards (so it can be ahead of the phone). The app stamped commands with the phone's clock, so a radio even a few seconds ahead had every command silently dropped. Commands are now stamped from the radio's own clock (re-read after each login) and strictly increase per repeater. Regression tests run the whole claim against fake radios up to 400 days ahead, with the fake repeater enforcing the firmware's replay rule.
+
 ## [0.24.0] — 2026-11-01 — claim your radios; no approval anywhere
 
 - **No approval wording**: the server no longer holds new keys or drives back (website 0096), so the app says "Not confirmed yet" for an old server's pending key and "once your key is ready" instead of "once the server accepts". The SNR trend says "observers placed in this region", not "trusted observers".

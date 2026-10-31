@@ -7,6 +7,7 @@
 // first empty slot with the hashtag-derived secret. Noise floor comes from CMD_GET_STATS/STATS_TYPE_RADIO as
 // MeshMapper's getRadioStats() does.
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import '../core/drive_context.dart';
@@ -548,7 +549,15 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
       final sent = await _claimCommand(encodeSendLogin(fromHex(pubkeyHex), password), 'login');
       if (sent is! SentFrame) throw _sendFailure(sent, 'login');
       final f = await waiter.wait(_waitFromSent(sent, timeout), 'the repeater did not answer the login');
-      if (f is LoginSuccessPush) return RemoteLogin(isAdmin: f.isAdmin, firmwareLevel: f.firmwareLevel);
+      if (f is LoginSuccessPush) {
+        // The repeater now holds the radio's login timestamp and ignores any command that is not strictly newer. Re-read the
+        // radio's clock (it is at least that late) and start this repeater's command counter from it.
+        _radioClockOffsetSecs = null;
+        _lastCliTs.remove(pubkeyHex.toLowerCase());
+        final seed = await _cliTimestamp(pubkeyHex.toLowerCase());
+        _lastCliTs[pubkeyHex.toLowerCase()] = seed;
+        return RemoteLogin(isAdmin: f.isAdmin, firmwareLevel: f.firmwareLevel);
+      }
       throw const ClaimRadioException(ClaimRadioError.radio, 'the repeater refused the login');
     } finally {
       waiter.cancel();
@@ -562,12 +571,36 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
     } catch (_) {}
   }
 
+  // A repeater keeps the timestamp of the last thing a client sent (its login, stamped by the RADIO's clock) and ignores any
+  // command that is not strictly newer (equal = "retry": no reply; older = "replay": dropped, no reply either). The radio
+  // refuses to set its clock backwards, so it can be ahead of the phone and a command stamped by the phone's clock is
+  // silently ignored. Commands are therefore stamped from the radio's own clock and always increase.
+  int? _radioClockOffsetSecs;
+  final Map<String, int> _lastCliTs = {};
+
+  Future<int> _cliTimestamp(String pubkeyHex) async {
+    final phoneNow = _clock().toUtc().millisecondsSinceEpoch ~/ 1000;
+    if (_radioClockOffsetSecs == null) {
+      try {
+        final f = await _claimCommand(encodeGetDeviceTime(), 'radio clock');
+        _radioClockOffsetSecs = f is CurrTimeFrame ? f.epochSecs - phoneNow : 0;
+      } on ClaimRadioException catch (e) {
+        if (e.kind == ClaimRadioError.notConnected) rethrow;
+        _radioClockOffsetSecs = 0; // an old firmware without GET_DEVICE_TIME: the phone's clock is the best guess
+      }
+    }
+    final last = _lastCliTs[pubkeyHex] ?? 0;
+    final ts = math.max(phoneNow + _radioClockOffsetSecs!, last + 1);
+    _lastCliTs[pubkeyHex] = ts;
+    return ts;
+  }
+
   @override
   Future<String> runCli(String pubkeyHex, String command, {Duration? timeout}) async {
     final prefix = pubkeyHex.substring(0, 12).toLowerCase();
     final waiter = _waitFor<ContactTextFrame>((f) => f.prefixHex == prefix && (f.txtType == txtTypeCliData || f.txtType == txtTypeCliCommand));
     try {
-      final ts = _clock().toUtc().millisecondsSinceEpoch ~/ 1000;
+      final ts = await _cliTimestamp(pubkeyHex.toLowerCase());
       final sent = await _claimCommand(encodeSendTxt(txtTypeCliCommand, 0, ts, fromHex(pubkeyHex), command), 'cli');
       if (sent is! SentFrame) throw _sendFailure(sent, 'cli');
       final reply = await waiter.wait(_waitFromSent(sent, timeout), 'the repeater did not reply to "${command.split(' ').first}"');
