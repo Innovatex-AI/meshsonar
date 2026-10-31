@@ -8,6 +8,7 @@ import '../../chat/models.dart';
 import '../theme.dart';
 import '../widgets.dart' show EmptyState;
 import 'conversation_screen.dart';
+import '../radios/rooms/room_join_header.dart';
 import 'message_format.dart';
 
 class ContactsView extends StatefulWidget {
@@ -107,7 +108,12 @@ class _ContactsViewState extends State<ContactsView> {
                                   Text(listStamp(context, s?.lastTsMs, now: c.now()), style: Theme.of(context).textTheme.labelSmall),
                                   if (unread > 0) Padding(padding: const EdgeInsets.only(top: 2), child: Badge(label: Text(unread > 99 ? '99+' : '$unread'))),
                                 ]),
-                                onTap: () => ConversationScreen.open(context, controller: c, convKey: _convKeyFor(x), title: x.displayName),
+                                onTap: () => ConversationScreen.open(context,
+                                    controller: c,
+                                    convKey: _convKeyFor(x),
+                                    title: x.displayName,
+                                    // A room only pushes its posts to radios that joined it (lib/ui/radios/rooms).
+                                    header: x.type == ContactType.room ? RoomJoinHeader(keyHex: x.publicKey, name: x.displayName) : null),
                               ),
                             ),
                           );
