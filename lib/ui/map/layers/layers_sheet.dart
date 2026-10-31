@@ -240,8 +240,12 @@ class NetworkAgeLegend extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         row,
-        if (asOf != null) Text('MeshCore Map data as of ${_stamp(asOf)}', key: const Key('network-legend-asof'), style: style),
-        if (set.attribution != null) Text(set.attribution!, key: const Key('network-legend-attribution'), style: style),
+        // One credit line, not two: the source credit and its age together ("Data: MeshCore Map (...), as of ...").
+        if (set.attribution != null)
+          Text(asOf != null ? '${set.attribution!}, as of ${_stamp(asOf)}' : set.attribution!,
+              key: const Key('network-legend-attribution'), style: style)
+        else if (asOf != null)
+          Text('MeshCore Map data as of ${_stamp(asOf)}', key: const Key('network-legend-asof'), style: style),
       ],
     );
   }

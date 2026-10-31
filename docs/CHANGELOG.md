@@ -5,6 +5,8 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- Layers sheet: the MeshCore Map credit and its age are one line ("Data: MeshCore Map (map.meshcore.io), as of ..."), not two.
+
 - **Weather and drive-data logging fixes (test drive: "weather not being logged").** Root causes: (1) a drive that
   went up as plain v1 (site-config not answered in time, or Weather switched on after the upload) never told the server
   `enrich.weather=true`, and nothing sent it later, so the server never looked the drive up; (2) the drive report hid
