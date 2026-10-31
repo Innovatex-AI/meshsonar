@@ -293,10 +293,10 @@ class ContactPolicy {
   const ContactPolicy({
     required this.askBeforeAdding,
     this.autoAddSupported = true,
-    this.autoAddChat = true,
-    this.autoAddRepeaters = true,
-    this.autoAddRooms = true,
-    this.autoAddSensors = true,
+    this.autoAddChat = false,
+    this.autoAddRepeaters = false,
+    this.autoAddRooms = false,
+    this.autoAddSensors = false,
     this.overwriteOldest = false,
     this.maxHops = 0,
   });
