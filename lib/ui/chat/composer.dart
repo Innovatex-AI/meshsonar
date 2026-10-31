@@ -155,6 +155,7 @@ class _ComposerState extends State<Composer> {
                         hintText: widget.hint,
                         isDense: true,
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(Corners.card)),
+                        constraints: const BoxConstraints(minHeight: 48),
                         contentPadding: const EdgeInsets.symmetric(horizontal: Gap.m, vertical: Gap.m),
                       ),
                     ),

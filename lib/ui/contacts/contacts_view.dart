@@ -58,8 +58,13 @@ class _ContactsViewState extends State<ContactsView> {
 
   void _add() => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AddContactScreen(controller: _c, scannerBuilder: widget.scannerBuilder)));
 
-  void _open(Contact c) =>
+  void _details(Contact c) =>
       Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ContactDetailScreen(controller: _c, publicKey: c.publicKey)));
+
+  /// A person opens their conversation (the thing you came here to do); everything else, and anyone when no conversation
+  /// screen is wired, opens the details. People get an info button for the details.
+  bool _converses(Contact c) => _c.openConversation != null && c.type == ContactType.companion;
+  void _open(Contact c) => _converses(c) ? _c.openConversation!(context, c) : _details(c);
 
   @override
   Widget build(BuildContext context) {
@@ -362,7 +367,12 @@ class _ContactsViewState extends State<ContactsView> {
     ];
   }
 
-  Widget _tile(ContactRow r) => ContactTile(key: Key('contact-${r.contact.publicKey.substring(0, 8)}'), row: r, nowMs: _c.nowMs(), onTap: () => _open(r.contact));
+  Widget _tile(ContactRow r) => ContactTile(
+      key: Key('contact-${r.contact.publicKey.substring(0, 8)}'),
+      row: r,
+      nowMs: _c.nowMs(),
+      onTap: () => _open(r.contact),
+      onDetails: _converses(r.contact) ? () => _details(r.contact) : null);
 }
 
 /// One contact in the list.
@@ -370,7 +380,10 @@ class ContactTile extends StatelessWidget {
   final ContactRow row;
   final int nowMs;
   final VoidCallback onTap;
-  const ContactTile({super.key, required this.row, required this.nowMs, required this.onTap});
+
+  /// Shown as an info button after the row when tapping the row does something other than open the details.
+  final VoidCallback? onDetails;
+  const ContactTile({super.key, required this.row, required this.nowMs, required this.onTap, this.onDetails});
 
   @override
   Widget build(BuildContext context) {
@@ -381,7 +394,7 @@ class ContactTile extends StatelessWidget {
     final unread = row.unread;
     final label = '${c.displayName}, ${contactTypeLabel(c.type)}, $status${unread > 0 ? ', $unread unread' : ''}';
     final small = MediaQuery.textScalerOf(context).scale(14) < 14 * 1.6;
-    return Semantics(
+    final main = Semantics(
       button: true,
       label: label,
       excludeSemantics: true,
@@ -391,7 +404,7 @@ class ContactTile extends StatelessWidget {
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 64),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: Gap.l, vertical: Gap.s),
+            padding: EdgeInsets.fromLTRB(Gap.l, Gap.s, onDetails == null ? Gap.l : Gap.xs, Gap.s),
             child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
               ContactAvatar(c),
               const SizedBox(width: Gap.m),
@@ -420,6 +433,18 @@ class ContactTile extends StatelessWidget {
         ),
       ),
     );
+    if (onDetails == null) return main;
+    return Row(children: [
+      Expanded(child: main),
+      IconButton(
+        key: Key('contact-details-${c.publicKey.substring(0, 8)}'),
+        tooltip: 'Details of ${c.displayName}',
+        constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+        icon: const Icon(Icons.info_outline_rounded),
+        onPressed: onDetails,
+      ),
+      const SizedBox(width: Gap.xs),
+    ]);
   }
 }
 

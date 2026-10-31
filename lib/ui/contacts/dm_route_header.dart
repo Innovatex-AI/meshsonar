@@ -53,7 +53,16 @@ class DmRouteHeader extends StatelessWidget {
                   children: [
                     Icon(icon, size: 18, color: t.colorScheme.onSurfaceVariant),
                     const SizedBox(width: Gap.s),
-                    Expanded(child: ExcludeSemantics(child: Text(line, style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)))),
+                    // Capped like the mini drive bar: at the largest text sizes the conversation below keeps its room; the
+                    // full sentence is in the screen reader label and in the contact's details.
+                    Expanded(
+                      child: ExcludeSemantics(
+                        child: MediaQuery.withClampedTextScaling(
+                          maxScaleFactor: 1.3,
+                          child: Text(line, maxLines: 2, overflow: TextOverflow.ellipsis, style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+                        ),
+                      ),
+                    ),
                     Icon(Icons.chevron_right_rounded, color: t.colorScheme.onSurfaceVariant),
                   ],
                 ),

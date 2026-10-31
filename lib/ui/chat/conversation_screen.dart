@@ -379,7 +379,12 @@ class _ConversationScreenState extends State<ConversationScreen> {
         }),
       );
     }
-    if (_msgs.isEmpty) return _empty(context);
+    if (_msgs.isEmpty) {
+      // Scrollable: at the largest text size the explanation is taller than the room above the composer.
+      return LayoutBuilder(
+        builder: (context, box) => SingleChildScrollView(child: ConstrainedBox(constraints: BoxConstraints(minHeight: box.maxHeight), child: _empty(context))),
+      );
+    }
 
     final items = <Widget>[];
     final me = c.selfName;

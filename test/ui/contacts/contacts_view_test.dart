@@ -255,12 +255,26 @@ void main() {
       expect(find.byKey(Key('contact-${keyN(2).substring(0, 8)}')), findsNothing);
     });
 
-    testWidgets('tapping a contact opens its detail screen', (tester) async {
-      await pumpView(tester, contacts: 3);
+    testWidgets('tapping a person opens the conversation; the info button opens the details', (tester) async {
+      final rig = await pumpView(tester, contacts: 3);
       await tester.tap(find.byKey(Key('contact-${keyN(2).substring(0, 8)}')));
+      await tester.pumpAndSettle();
+      expect(rig.opened.single.publicKey, keyN(2));
+      expect(find.byKey(const Key('contacts-search')), findsOneWidget, reason: 'the hook was called, nothing was pushed');
+      await tester.tap(find.byKey(Key('contact-details-${keyN(2).substring(0, 8)}')));
       await tester.pumpAndSettle();
       expect(find.text('Node 2'), findsWidgets);
       expect(find.byKey(const Key('contacts-search')), findsNothing);
+    });
+
+    testWidgets('a repeater has no conversation: tapping it opens the details', (tester) async {
+      final rig = await pumpView(tester, contacts: 5);
+      await tester.dragUntilVisible(find.byKey(Key('contact-${keyN(5).substring(0, 8)}')), find.byKey(const Key('contacts-list')), const Offset(0, -120));
+      await tester.tap(find.byKey(Key('contact-${keyN(5).substring(0, 8)}')));
+      await tester.pumpAndSettle();
+      expect(rig.opened, isEmpty);
+      expect(find.byKey(const Key('contacts-search')), findsNothing);
+      expect(find.byKey(Key('contact-details-${keyN(5).substring(0, 8)}')), findsNothing);
     });
 
     testWidgets('pull to refresh does a full read of the radio', (tester) async {
