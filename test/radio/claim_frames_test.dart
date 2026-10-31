@@ -47,8 +47,8 @@ void main() {
     });
 
     test('CMD_SEND_TXT_MSG: txt_type, attempt, timestamp, 6-byte prefix, text', () {
-      final f = encodeSendTxt(txtTypeCliCommand, 0, 0x01020304, key, 'get name');
-      expect(f.sublist(0, 3), [2, 3, 0]);
+      final f = encodeSendTxt(txtTypeCliData, 0, 0x01020304, key, 'get name');
+      expect(f.sublist(0, 3), [2, 1, 0]);
       expect(f.sublist(3, 7), [4, 3, 2, 1]);
       expect(f.sublist(7, 13), key.sublist(0, 6));
       expect(String.fromCharCodes(f.sublist(13)), 'get name');
@@ -198,7 +198,7 @@ void main() {
       expect(await link.runCli(keyHex, 'advert'), 'OK - Advert sent');
       expect(rep.adverts, ['Hilltop MS7K12']);
       final cli = radio.sentFrames.where((f) => f[0] == Cmd.sendTxtMsg).first;
-      expect(cli[1], txtTypeCliCommand);
+      expect(cli[1], txtTypeCliData, reason: 'a real companion radio answers type 3 with ERR 1 and only passes CLI_DATA on');
     });
 
     test('CLI without an admin session or out of range gets no reply: silent', () async {

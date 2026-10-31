@@ -95,8 +95,10 @@ abstract final class StatsType {
 /// TXT_TYPE_PLAIN (src/helpers/TxtDataHelpers.h line 6).
 const int txtTypePlain = 0;
 
-/// TXT_TYPE_CLI_DATA (a CLI command or its reply) and TXT_TYPE_CLI_COMMAND (a CLI command, explicitly)
-/// (src/helpers/TxtDataHelpers.h lines 7 and 9). Repeaters answer both; replies come back as CLI_DATA.
+/// TXT_TYPE_CLI_DATA (a CLI command or its reply) and TXT_TYPE_CLI_COMMAND (src/helpers/TxtDataHelpers.h lines 7 and 9).
+/// A repeater would accept both, but the COMPANION radio's CMD_SEND_TXT_MSG only passes type CLI_DATA (1) on: type 3 gets
+/// ERR(1) at once (measured on a real radio, Oct 31 2026: type 3 -> ERR 1, type 1 -> SENT, MSG_WAITING, "> INNO-OB-2").
+/// Always SEND commands as [txtTypeCliData]; replies also come back as CLI_DATA.
 const int txtTypeCliData = 1;
 const int txtTypeCliCommand = 3;
 
@@ -263,7 +265,7 @@ Uint8List encodeAddUpdateContact(List<int> pubKey32, {required int type, require
 }
 
 /// CMD_SEND_TXT_MSG: [2][txt_type][attempt][timestamp u32][pub_key_prefix x6][text...] (MyMesh.cpp ~1132). With
-/// [txtTypeCliCommand] the radio replaces the timestamp with its own clock and expects no ack; reply RESP_CODE_SENT.
+/// [txtTypeCliData] the radio expects no ack; reply RESP_CODE_SENT (type CLI_COMMAND gets ERR on a real companion).
 Uint8List encodeSendTxt(int txtType, int attempt, int epochSecs, List<int> prefix6, String text) {
   if (prefix6.length < 6) throw ArgumentError('prefix must be 6 bytes');
   return Uint8List.fromList([Cmd.sendTxtMsg, txtType, attempt & 3, ..._u32(epochSecs), ...prefix6.take(6), ...utf8.encode(text)]);

@@ -571,10 +571,10 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
     } catch (_) {}
   }
 
-  // A repeater keeps the timestamp of the last thing a client sent (its login, stamped by the RADIO's clock) and ignores any
-  // command that is not strictly newer (equal = "retry": no reply; older = "replay": dropped, no reply either). The radio
-  // refuses to set its clock backwards, so it can be ahead of the phone and a command stamped by the phone's clock is
-  // silently ignored. Commands are therefore stamped from the radio's own clock and always increase.
+  // Defence in depth: a repeater keeps the timestamp of the last thing a client sent (its login, stamped by the RADIO's clock)
+  // and ignores any command that is not strictly newer. The radio refuses to set its clock backwards, so it can be ahead of
+  // the phone. Commands are therefore stamped from the radio's own clock and always increase. (The real bug behind "could not
+  // read the repeater's name" was the text type: see txtTypeCliData.)
   int? _radioClockOffsetSecs;
   final Map<String, int> _lastCliTs = {};
 
@@ -601,7 +601,7 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
     final waiter = _waitFor<ContactTextFrame>((f) => f.prefixHex == prefix && (f.txtType == txtTypeCliData || f.txtType == txtTypeCliCommand));
     try {
       final ts = await _cliTimestamp(pubkeyHex.toLowerCase());
-      final sent = await _claimCommand(encodeSendTxt(txtTypeCliCommand, 0, ts, fromHex(pubkeyHex), command), 'cli');
+      final sent = await _claimCommand(encodeSendTxt(txtTypeCliData, 0, ts, fromHex(pubkeyHex), command), 'cli');
       if (sent is! SentFrame) throw _sendFailure(sent, 'cli');
       final reply = await waiter.wait(_waitFromSent(sent, timeout), 'the repeater did not reply to "${command.split(' ').first}"');
       return reply.text.trim();
