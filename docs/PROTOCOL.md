@@ -134,8 +134,7 @@ sequenceDiagram
 Used only by "Claim my radio" and "Claim a repeater" (`lib/radio/claim_radio.dart`, implemented by
 `MeshCoreCompanionLink`; flows in `lib/core/claim_flow.dart`). **Verified Oct 31 2026 against the MeshCore firmware
 source on `main`** (`examples/companion_radio/MyMesh.cpp` FIRMWARE_VER_CODE 14, `examples/simple_repeater/MyMesh.cpp`,
-`src/helpers/CommonCLI.cpp`, `BaseChatMesh.cpp`, `AdvertDataHelpers.cpp`, `TxtDataHelpers.h`). Not yet exercised against
-a physical radio (the fake radio in `test/support/claim_fakes.dart` speaks these exact layouts).
+`src/helpers/CommonCLI.cpp`, `BaseChatMesh.cpp`, `AdvertDataHelpers.cpp`, `TxtDataHelpers.h`). **Exercised against a physical radio on Oct 31 2026** (companion Seeed Wio Tracker L1, `v1.17.1`, FIRMWARE_VER_CODE 13, to a Heltec V4.3 observer repeater `v1.17.1.5-observer-7403067`); see the verified notes after the table. The fake radio in `test/support/claim_fakes.dart` speaks these exact layouts.
 
 App to radio:
 
@@ -175,6 +174,15 @@ Firmware facts the flows depend on (all read from source):
    **23 bytes**. The claim code goes at the END of the name, so the app cuts the ORIGINAL part to 16 bytes
    (`<original> MSxxxx`, 23 bytes) while the code is on; the full original is restored afterwards.
 6. The Ed25519 signature is over exactly the bytes the server sent (the hex in `message` decoded), not over the hex text.
+
+Verified on hardware (Oct 31 2026, `meshsonar-infra/docs/planning/repeater-observer-live-research-2026-11-01.md`):
+
+- Companion code 13 refuses `txt_type 3` and `CMD_RUN_CLI_COMMAND` (66) with `ERR 1`; type 1 works. The companion ignores the app's CLI timestamp (types 1 and 3 use its own clock; a 1970 stamp was accepted). A plain type 0 command uses the app's clock and is silently dropped by the repeater when older than the last accepted one.
+- CLI round trip: `SENT` (tag 0), `0x83` about 1.1 s later (median, 0.97 to 3.5 s), about 3% of replies never arrive. A leading `NN|` on the command text is reflected on the reply (use it to match replies).
+- Command text of 160 characters passed; 165 was dropped silently by the companion. Replies are capped near 160 characters.
+- A **blank** password re-admits a key already in the repeater's ACL as its stored role (`0x85` is_admin 1); a wrong non-blank password from the same key gets no answer. A successful login proves the password only if it was non-blank.
+- Responses to requests (`0x87`, `0x8B`, `0x8C`) carry zero padding to a 16-byte block (status struct arrives as 60 bytes: 56 + 4). Telemetry is Cayenne LPP, big endian.
+- `0x85` is 14 bytes as documented; `STATS` core 11 B, radio 14 B, packets 30 B and `BATT_AND_STORAGE` 11 B match section 6.1a.
 
 Not supported: claiming a **room server** (its login frame carries an extra `sync_since` field and the radio treats the
 contact type differently); the claim button is hidden for rooms.
