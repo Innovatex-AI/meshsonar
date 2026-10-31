@@ -1,5 +1,5 @@
 // Contracts for the radio side: talking to a MeshCore companion radio and running a wardrive.
-// Pure Dart. Bluetooth (flutter_blue_plus) and GPS (geolocator) implementations wrap these;
+// Pure Dart. Bluetooth (flutter_reactive_ble) and GPS (geolocator) implementations wrap these;
 // the simulator implements them too, so the app and tests run with no hardware.
 import 'dart:async';
 import 'dart:typed_data';

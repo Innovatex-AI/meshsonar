@@ -196,10 +196,10 @@ void main() {
       }
     });
 
-    test('flutter_blue_plus is described as the paid-for-profit licence it is', () {
-      final n = thirdPartyNotices.firstWhere((n) => n.name == 'flutter_blue_plus');
-      expect(n.license, contains('for-profit'));
-      expect(n.license.toLowerCase(), contains('paid'));
+    test('the Bluetooth package is the BSD-licensed flutter_reactive_ble, not the paid-for-profit flutter_blue_plus', () {
+      expect(thirdPartyNotices.any((n) => n.name == 'flutter_blue_plus'), isFalse);
+      final n = thirdPartyNotices.firstWhere((n) => n.name == 'flutter_reactive_ble');
+      expect(n.license, contains('BSD-3-Clause'));
     });
   });
 }

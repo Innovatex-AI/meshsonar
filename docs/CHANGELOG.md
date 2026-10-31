@@ -5,6 +5,13 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+## [0.21.0] — 2026-10-30 — production readiness (TestFlight candidate)
+
+- **Bluetooth now runs on `flutter_reactive_ble` (BSD-3-Clause)**, replacing `flutter_blue_plus`, whose licence needs a
+  paid commercial licence for for-profit use. Same behaviour behind `RadioScanner` / `ByteTransport`: scan filtered on
+  the MeshCore UART service, MTU 185 on Android, TX notifications, write without response when allowed. Bluetooth off,
+  unauthorised or unsupported is reported before scanning or connecting. **Not yet exercised against a real radio.**
+
 - **One-tap onboarding: the driver key creates itself.** A phone with no key asks the server for one at launch, on
   returning to the app, and when the server changes (`AppState.ensureKey`): no form, no approval wait on a server
   with open registration (production). The registration name is the generic "MeshSonar driver" (the public handle is

@@ -3,20 +3,38 @@ PODS:
   - h3_flutter (0.7.0):
     - Flutter
     - FlutterMacOS
+  - Protobuf (3.29.6)
+  - reactive_ble_mobile (0.0.1):
+    - Flutter
+    - FlutterMacOS
+    - Protobuf (~> 3.5)
+    - SwiftProtobuf (~> 1.0)
+  - SwiftProtobuf (1.39.0)
 
 DEPENDENCIES:
   - Flutter (from `Flutter`)
   - h3_flutter (from `.symlinks/plugins/h3_flutter/darwin`)
+  - reactive_ble_mobile (from `.symlinks/plugins/reactive_ble_mobile/darwin`)
+
+SPEC REPOS:
+  trunk:
+    - Protobuf
+    - SwiftProtobuf
 
 EXTERNAL SOURCES:
   Flutter:
     :path: Flutter
   h3_flutter:
     :path: ".symlinks/plugins/h3_flutter/darwin"
+  reactive_ble_mobile:
+    :path: ".symlinks/plugins/reactive_ble_mobile/darwin"
 
 SPEC CHECKSUMS:
   Flutter: 71a624a5bc0c04062bf19101d501e466baf2fb47
   h3_flutter: a7af78474210b8d5e59ff9e4539ecfc1ea143706
+  Protobuf: 8d5596f7468be5400861a6bbfb2dfe9d0d1cde34
+  reactive_ble_mobile: ea97709e18fa6f0b0592909725d7ae7e1c595b64
+  SwiftProtobuf: eb2c3c26d43afb22247593e60e3163cdab2a0b4a
 
 PODFILE CHECKSUM: 3ba3a73b1b12adcf321a227a745625fe0888cc82
 

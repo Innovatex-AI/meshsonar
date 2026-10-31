@@ -144,7 +144,7 @@ const List<DataCategory> dataCategories = [
   DataCategory(
     id: CategoryId.radioHealth,
     title: 'Radio health',
-    // BLE signal phone<->radio (sample.ble_rssi) is a stored key but is NOT read yet (needs a flutter_blue_plus
+    // BLE signal phone<->radio (sample.ble_rssi) is a stored key but is NOT read yet (needs a flutter_reactive_ble
     // readRssi seam), so the disclosure does not claim it. Add "signal to your phone" here when it is wired.
     disclosure: 'Radio health: radio battery, uptime, error flags and packet counters, airtime, storage and the '
         "radio chip's temperature (when the board reports it), read from your radio once a minute during a drive. "

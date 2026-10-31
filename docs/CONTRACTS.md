@@ -35,7 +35,7 @@ Agent A (`lib/core/`):
 Agent B (`lib/radio/`):
 - `MeshCoreCompanionLink` implements `CompanionLink` — `MeshCoreCompanionLink(ByteTransport transport)` (`lib/radio/companion_link.dart`)
 - `DefaultWardriveEngine` implements `WardriveEngine` — `DefaultWardriveEngine({required CompanionLink link, required LocationSource location, DateTime Function()? clock, String Function()? newId})` (`lib/radio/wardrive_engine.dart`)
-- `BleRadioScanner` implements `RadioScanner` — `BleRadioScanner()` (flutter_blue_plus; `lib/radio/ble_transport.dart`; the only Flutter-dependent radio file)
+- `BleRadioScanner` implements `RadioScanner` — `BleRadioScanner()` (flutter_reactive_ble; `lib/radio/ble_transport.dart`; the only Flutter-dependent radio file)
 - Simulator (no hardware; used by the app's "Simulator" mode, by UI tests and by demos), `lib/radio/simulator.dart`:
   - `SimulatedRadioScanner` implements `RadioScanner` (lists one device "MeshSonar Simulator"; connect returns a `SimulatedTransport`)
   - `SimulatedTransport` implements `ByteTransport` — speaks the real companion protocol frames, so `MeshCoreCompanionLink` runs unchanged on it

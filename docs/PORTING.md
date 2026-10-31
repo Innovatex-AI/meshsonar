@@ -135,25 +135,11 @@ has no web implementation, so the app opens on the "couldn't start" screen. Chec
   and in `ble_transport.dart`. `messages.dart` and `cmat_client.dart` only use `dart:io` exception types in `is`/`on`
   checks.
 
-## 4. flutter_blue_plus licence
+## 4. Bluetooth package licence
 
-`flutter_blue_plus` 2.x is **not MIT/BSD**. It's under the **FlutterBluePlus License v1.6** (© 2026 Chip
-Weinberger):
-
-- It's free for personal use, registered nonprofits and educational institutions.
-- **Any use by or for a for-profit organisation needs a paid commercial licence**, including development and testing.
-- It may not be relicensed, and it may send build-time licence telemetry (package name, app name and version, FBP
-  version, date).
-
-MeshSonar connects with `license: License.nonprofit` (in `ble_transport.dart`, matching MeshCore Open). **Whoever
-ships MeshSonar must confirm that's the right category for them.** `THIRD_PARTY_NOTICES.md` says the same. (The
-in-app About screen still lists flutter_blue_plus as BSD-3-Clause, which is wrong; see ROADMAP.)
-
-Alternatives if the licence doesn't fit: replace `ble_transport.dart` (≈150 lines) with another Flutter BLE plugin
-that offers scan-by-service, connect, MTU request, notify and write-without-response, such as
-`flutter_reactive_ble`, `universal_ble`, `bluetooth_low_energy` or `quick_blue`. Check each one's licence and
-platform matrix on pub.dev before switching. Only `BleRadioScanner`/`_BleTransport` change. Everything above
-`ByteTransport` stays the same.
+MeshSonar uses `flutter_reactive_ble` (BSD-3-Clause). It replaced `flutter_blue_plus` 2.x, whose FlutterBluePlus
+License requires a paid commercial licence for any for-profit use. Keep the BLE code in `ble_transport.dart` behind
+`RadioScanner` / `ByteTransport` so a package can be swapped again.
 
 ## 5. Rewriting without Flutter
 

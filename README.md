@@ -62,6 +62,4 @@ Start with [AGENTS.md](AGENTS.md) (rules) and the platform handoff in [meshsonar
 MIT — see [LICENSE](LICENSE). Ported and adapted code from the MeshCore firmware, MeshMapper web client and
 MeshCore Open is credited in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-**Note:** the Bluetooth library, `flutter_blue_plus`, is not MIT. It's free for personal, nonprofit and educational
-use; for-profit use requires a paid licence from its author. See THIRD_PARTY_NOTICES.md and
-[docs/PORTING.md](docs/PORTING.md#4-flutter_blue_plus-licence).
+**Note:** Bluetooth uses `flutter_reactive_ble` (BSD-3-Clause), so there is no paid licence to carry. See THIRD_PARTY_NOTICES.md.

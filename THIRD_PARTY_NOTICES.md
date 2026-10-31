@@ -30,12 +30,10 @@ BLE service/characteristic UUIDs and connection sequence (scan filtered on servi
 notify on TX, write-without-response to RX), path_len hash-size decoding and frame-builder conventions.
 Used in: lib/radio/ble_transport.dart, lib/radio/packet.dart, lib/radio/protocol.dart.
 
-### Dependency licence note: flutter_blue_plus (not MIT)
-lib/radio/ble_transport.dart depends on the `flutter_blue_plus` package (2.x), which is distributed under the
-**FlutterBluePlus License v1.6**, Copyright (c) 2026 Chip Weinberger — not MIT/BSD. Free for personal users, registered
-nonprofits and educational institutions; any use by or for a for-profit organisation (including development and
-testing) requires a commercial licence; it prohibits relicensing and may send build-time licence telemetry. No
-flutter_blue_plus code is copied into MeshSonar; it is a pub dependency. See its LICENSE in the pub cache.
+### Dependency note: flutter_reactive_ble (BSD-3-Clause)
+lib/radio/ble_transport.dart uses the `flutter_reactive_ble` package (5.4.x, © Philips Hue / Signify, BSD-3-Clause,
+free for commercial use). It replaced `flutter_blue_plus` (FlutterBluePlus License, paid for for-profit use) in
+0.21.0. No flutter_reactive_ble code is copied into MeshSonar; it is a pub dependency.
 
 ### MIT License (applies to each of the above)
 

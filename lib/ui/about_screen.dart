@@ -45,7 +45,7 @@ const List<({String name, String license, String note})> thirdPartyNotices = [
     note: 'Where MeshSonar adapts code from this project, the source file says so.',
   ),
   (name: 'Flutter', license: 'BSD-3-Clause, © The Flutter Authors', note: 'App framework.'),
-  (name: 'flutter_blue_plus', license: 'FlutterBluePlus License (free for personal, nonprofit and educational use; for-profit use needs a paid licence)', note: 'Bluetooth LE. MeshSonar is a noncommercial community project.'),
+  (name: 'flutter_reactive_ble', license: 'BSD-3-Clause, © Philips Hue / Signify', note: 'Bluetooth LE.'),
   (name: 'MeshCore firmware', license: 'MIT, © Scott Powell / rippleradios.com', note: 'Companion protocol and packet formats, re-implemented in Dart.'),
   (name: 'geolocator', license: 'MIT, © Baseflow', note: 'GPS.'),
   (name: 'share_plus, path_provider', license: 'BSD-3-Clause, © Flutter Community / The Flutter Authors', note: 'Sharing and file locations.'),

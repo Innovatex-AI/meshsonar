@@ -64,7 +64,7 @@ Each has a test; details in [CHANGELOG.md](CHANGELOG.md#unreleased).
 | P2 | **Exports aren't chunked** | `ChunkedExport.exportSessionParts`: files of at most 5,000 pings, each a complete upload body. |
 | P2 | **Test gaps from mutation checks** | Echo de-dup prefers fewer hops; out-of-range SNR/RSSI become null (`wardrive_resilience_test`). |
 | P2 | **Power suffix outside MeshMapper's set** | No longer applies: the on-air ping text is `MS:` plus a random tag and carries no power. |
-| P2 | **About screen licence error** | Already fixed (flutter_blue_plus is listed under the FlutterBluePlus License). |
+| P2 | **About screen licence error** | Already fixed (Bluetooth is flutter_reactive_ble, BSD-3-Clause). |
 | P3 | **Hard-coded paths in tests** | Already fixed (`CMAT_DIR`, `BUN`; the contract test skips without them). |
 
 ## Fixed in 0.3.0

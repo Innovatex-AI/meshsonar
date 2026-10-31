@@ -16,7 +16,7 @@ flowchart TB
   subgraph platform["lib/platform + plugins (Flutter-only)"]
     GEO[GeolocatorLocationSource<br/>geolocator]
     SHARE[shareDriveFile<br/>share_plus]
-    BLE[BleRadioScanner / _BleTransport<br/>flutter_blue_plus — lib/radio/ble_transport.dart]
+    BLE[BleRadioScanner / _BleTransport<br/>flutter_reactive_ble — lib/radio/ble_transport.dart]
     FEED[DeviceFeedback<br/>wakelock_plus + haptics — lib/ui/device_feedback.dart]
   end
   subgraph ui["lib/ui (Flutter widgets)"]
@@ -295,7 +295,7 @@ names.
 | `radio/radio_health.dart` | radio | `RadioStatsSource`, `radioSampleFrom` (frames to a `DriveSample`, unmeasured = null), `RadioHealthPoller` (every 60 s, never while a ping is in flight; injectable clock + timer). |
 | `radio/wardrive_engine.dart` | radio | `DefaultWardriveEngine`: cadence, one ping at a time, listen window, echo building, optional neighbour discovery; `formatPingText`. |
 | `radio/simulator.dart` | radio | `SimulatedLocationSource` (Westerville loop), `SimulatedTransport` (speaks real frames and real encrypted packets), `SimulatedRadioScanner`, simulated repeaters. |
-| `radio/ble_transport.dart` | platform | `BleRadioScanner` / `_BleTransport` over flutter_blue_plus (Nordic-UART-style service). |
+| `radio/ble_transport.dart` | platform | `BleRadioScanner` / `_BleTransport` over flutter_reactive_ble (Nordic-UART-style service). |
 | `platform/phone_sensors_plus.dart` | platform | `SensorsPlusBarometer` (sensors_plus), `BatteryPlusSource` (battery_plus), `DeviceInfoPlusDetails` (device_info_plus; hardware model id, never the device name). |
 | `platform/geolocator_location.dart` | platform | `GeolocatorLocationSource`: per-OS location settings (Android foreground notification, iOS background updates), permission. |
 | `platform/location_access.dart` | platform | `GeolocatorLocationAccess`: reads permission without prompting (not asked / denied / forever / restricted / approximate / services off), asks only on tap, opens Settings. |

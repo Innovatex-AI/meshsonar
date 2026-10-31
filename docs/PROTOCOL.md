@@ -25,7 +25,7 @@ The line numbers are the ones cited in the code comments. They refer to the firm
 | TX characteristic (radio → app, notify) | `6e400003-b5a3-f393-e0a9-e50e24dcca9e` |
 | Framing | **One BLE write = one companion frame; one notification = one frame.** No length prefix. |
 | Scan | Filtered on the service UUID; 8 s timeout (`RadioScanner.scan`). Name = advertised name, else platform name, else device id. |
-| Connect | 15 s timeout, `mtu: null`, `license: License.nonprofit` (see [PORTING.md §Licence](PORTING.md#4-flutter_blue_plus-licence)). Then `requestMtu(185)` except on web and Linux (failures ignored). Then service discovery, `setNotifyValue(true)` on TX. |
+| Connect | 15 s connection timeout. Then `requestMtu(185)` on Android only (iOS negotiates its own; failures ignored). Then service discovery, subscribe to TX notifications. |
 | Writes | `write(withoutResponse: rx.properties.writeWithoutResponse)` |
 | Disconnect | Detected from `connectionState == disconnected`; the incoming stream closes, so the link fails its pending command and closes. |
 
