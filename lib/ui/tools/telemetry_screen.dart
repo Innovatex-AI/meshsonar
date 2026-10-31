@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../core/heard.dart' show haversineM;
+import '../../core/units.dart' show formatTemperatureC;
 import '../../radio/inbound.dart';
 import '../../radio/protocol.dart' show AdvType;
 import '../../radio/tools/lpp.dart';
@@ -13,8 +14,7 @@ import 'tool_kit.dart';
 import 'tools_host.dart';
 
 /// "45.0 °C" or "113.0 °F".
-String formatTemperature(double celsius, {required bool imperial}) =>
-    imperial ? '${(celsius * 9 / 5 + 32).toStringAsFixed(1)} °F' : '${celsius.toStringAsFixed(1)} °C';
+String formatTemperature(double celsius, {required bool imperial}) => formatTemperatureC(celsius, imperial: imperial);
 
 String _typeWord(int t) => switch (t) { AdvType.chat => 'Chat', AdvType.repeater => 'Repeater', AdvType.room => 'Room', AdvType.sensor => 'Sensor', _ => 'Node' };
 

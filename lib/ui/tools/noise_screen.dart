@@ -77,19 +77,18 @@ class _NoiseBody extends StatelessWidget {
         Text('Sampling only while this screen is open. Reads cost a few bytes on Bluetooth and nothing on air.',
             key: const Key('noise-sampling-note'), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
         const SizedBox(height: Gap.m),
-        Row(children: [
-          Text('Every', style: t.textTheme.bodyMedium),
-          const SizedBox(width: Gap.s),
-          Expanded(
-            child: SegmentedButton<int>(
-              key: const Key('noise-interval'),
-              showSelectedIcon: false,
-              style: const ButtonStyle(tapTargetSize: MaterialTapTargetSize.padded, minimumSize: WidgetStatePropertyAll(Size(kToolTarget, kToolTarget))),
-              segments: [for (final s in _intervals) ButtonSegment(value: s, label: Text('$s s'), tooltip: 'Read every $s seconds')],
-              selected: {n.interval.inSeconds},
-              onSelectionChanged: (s) => n.setInterval(Duration(seconds: s.first)),
+        Semantics(container: true, header: true, child: Text('Read every', style: t.textTheme.titleSmall)),
+        const SizedBox(height: Gap.xs),
+        Wrap(key: const Key('noise-interval'), spacing: Gap.s, children: [
+          for (final s in _intervals)
+            ChoiceChip(
+              key: Key('noise-interval-$s'),
+              materialTapTargetSize: MaterialTapTargetSize.padded,
+              label: Text('$s s'),
+              tooltip: 'Read every $s seconds',
+              selected: n.interval.inSeconds == s,
+              onSelected: (_) => n.setInterval(Duration(seconds: s)),
             ),
-          ),
         ]),
         const SizedBox(height: Gap.m),
         if (n.unsupported)

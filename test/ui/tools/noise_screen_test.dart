@@ -197,8 +197,7 @@ void main() {
       await t.pump(const Duration(milliseconds: 300));
       expect(find.byKey(const Key('noise-list')), findsOneWidget);
       targets(t);
-      await t.drag(find.byKey(const Key('noise-list')), const Offset(0, -4000));
-      await t.pump();
+      await t.scrollUntilVisible(find.byKey(const Key('noise-clear')), 400, scrollable: find.descendant(of: find.byKey(const Key('noise-list')), matching: find.byType(Scrollable)).first);
       expect(find.byKey(const Key('noise-clear')), findsOneWidget);
       targets(t);
     });
