@@ -1,5 +1,5 @@
 // LoRa time on air, from the Semtech SX127x datasheet formula (section 4.1.1.7 "Time on air") that RadioLib's
-// getTimeOnAir implements and MeshCore uses (RadioLibWrappers.cpp ~162). Explicit header, CRC on, 8 preamble symbols.
+// getTimeOnAir implements and MeshCore uses (RadioLibWrappers.cpp ~162). Explicit header, CRC on, MeshCore preamble (32 symbols at SF8 and below, 16 above).
 // Low data rate optimisation is on when one symbol lasts more than 16 ms (what RadioLib does).
 //
 // Pure Dart, no state: the TxArbiter's ledger and the Drive settings readout use it.

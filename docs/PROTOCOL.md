@@ -397,7 +397,7 @@ not leak into the wardrive channel (the override is global radio state, 491-525)
 | 13 | Companion CLI vs remote CLI | `CMD_RUN_CLI_COMMAND` (66, v14+) runs a CLI command on the COMPANION itself. Claims need the REMOTE repeater's CLI, which is `SEND_TXT_MSG` with txt_type 1 (CLI_DATA) after a login. |
 
 | 14 | Message dedupe | The radio gives messages no id. The key is conversation + sender timestamp + delivered text (`InboundMessage.contentKey`), so a retried DM is one message. Two different messages with identical text in the same second from the same sender merge. |
-| 15 | Ping airtime | Estimated with the Semtech formula from SELF_INFO's SF/BW/CR (`airtime.dart`; matches the design doc B table to the millisecond for 14 cases). Unknown radio settings: 500 ms. |
+| 15 | Ping airtime | Estimated with the Semtech formula from SELF_INFO's SF/BW/CR (`airtime.dart`; uses MeshCore's `preambleLengthForSF`: 32 symbols at SF8 and below, 16 above; a 37-byte ping is 386 ms at SF8/BW62.5 and 213 ms at SF7/BW62.5). Unknown radio settings: 500 ms. |
 
 ## 8. Test vectors
 

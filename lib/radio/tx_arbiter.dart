@@ -134,8 +134,8 @@ class TxArbiter implements PingGate {
   /// "MS:" + 10 characters (wardrive_engine.dart formatPingText).
   static const int pingTextBytes = 13;
 
-  /// Estimated time on air of one ping, ms. Without known radio settings: 500 ms, above SF8/BW62.5 (288 ms) and below
-  /// SF11/BW250 (453 ms)... rounded up so an unknown radio is budgeted cautiously.
+  /// Estimated time on air of one ping, ms. Without known radio settings: 500 ms, above SF8/BW62.5 (386 ms with MeshCore's
+  /// 32-symbol preamble) and below SF11/BW250, rounded up so an unknown radio is budgeted cautiously.
   double estimatePingMs() {
     final p = airParams?.call();
     if (p == null) return 500;
