@@ -60,6 +60,7 @@ flowchart TB
 |---|---|---|---|
 | **core** | `lib/core/` | No (pure Dart; `dart:io` and `package:http` only) | Data model and wire format, server contract, on-device store, sync, settings, CMAT client, GPS filter, "who did we hear" tracker, public node directory |
 | **radio** | `lib/radio/` | No, except `ble_transport.dart` | MeshCore companion protocol codec, over-the-air packet parsing, crypto, companion link, wardrive engine, simulator, BLE transport |
+| **chat** | `lib/chat/` | No (pure Dart; `package:sqlite3`, `crypto`, `cryptography`, `archive`) | On-device chat: models, SQLite store, `ChatService`, outbox/retries, backup, `meshcore://` links. App only, never uploaded |
 | **app** | `lib/app/` | `foundation` only (ChangeNotifier) | `AppState` (all runtime state), `AppServices` (dependency container), `wiring.dart` (real services), user-facing error text |
 | **ui** | `lib/ui/` | Yes | Screens, bottom sheets, map, report, onboarding, theme |
 | **platform** | `lib/platform/` (+ `ble_transport.dart`, `device_feedback.dart`) | Yes (plugins) | GPS, share sheet, BLE, wake lock, haptics |
@@ -69,6 +70,7 @@ flowchart TB
 1. **`lib/core` and `lib/radio` (except `ble_transport.dart`) never import Flutter.** They run under plain `dart test`
    and can be lifted into any Dart program (CLI, server, another UI). Checked: the only `package:flutter` import in
    these two folders is in `ble_transport.dart`.
+1a. **`lib/chat` never imports Flutter** and imports `lib/radio` in exactly one file (`session_adapter.dart`). Chat state lives in its own SQLite file; it shares nothing with the drive store and never reaches the network.
 2. **Contracts live in three files:** `lib/core/model.dart` (records, Drive Format v1), `lib/core/api.dart` (store,
    client, sync, settings interfaces) and `lib/radio/radio_api.dart` (transport, scanner, link, location, engine
    interfaces). Implementations depend on contracts, not on each other where avoidable.
@@ -258,6 +260,18 @@ names.
 | `app/services.dart` | app | `AppServices` dependency container (incl. `openUrl` for web pages and `appInfo`); `RepeaterCache` + `FileRepeaterCache` / `MemoryRepeaterCache`. |
 | `app/wiring.dart` | app | `buildRealServices()`: data root, concrete store/client/sync/settings, BLE + simulator scanners, filtered GPS, engine factory, export dir, share, browser, directory (7-day TTL); app version via `loadAppInfo` (package_info_plus). |
 | `app/messages.dart` | app | `friendlyError` / `friendlySyncError`: exceptions → short plain-language messages. |
+| `chat/models.dart` | chat (pure Dart) | `Contact`, `Channel` (`ChannelKind` public/hashtag/private/system), `ChatMessage` + `MessageState` + `FailReason`, `ConversationSummary`, `ConvKey`, `dedupeKeyFor`, hex helpers. |
+| `chat/chat_service.dart` | chat | `ChatService`: the one API the UI uses. Inbound (persist, then notify; idempotent), send, unread/mute/pin/drafts, search, retention, delete, system-channel stats, link import. |
+| `chat/outbox.dart` | chat | `Outbox` + `RetryPolicy`: queued sends, DM retries (flood/direct), ACK matching, give-up reasons, restart recovery. No timers inside; `ChatService` pumps it. |
+| `chat/radio_bridge.dart` | chat | `InboundMessageSource` / `OutboundMessageSink` and the event + failure types chat codes against. |
+| `chat/session_adapter.dart` | chat | The small adapter from `RadioSession` (lib/radio) to the bridge; the only chat file that imports lib/radio. |
+| `chat/store.dart`, `chat/db/*` | chat | `ChatStore` and the repositories over `package:sqlite3`; `migrations.dart` is the versioned schema. |
+| `chat/backup.dart`, `chat/backup_crypto.dart` | chat | `ChatBackup` export/import (JSON, zip, passphrase-encrypted) of the user's own chat data. |
+| `chat/mesh_links.dart`, `chat/channel_secret.dart` | chat | `meshcore://` channel/contact/advert links; Public and hashtag channel keys. |
+| `chat/secret_store.dart` | chat | `SecretStore` contract + `InMemorySecretStore` (tests). Secrets never go to SQLite. |
+| `chat/fixtures/demo_seed.dart` | chat (dev) | `seedDemoChat`: deterministic, idempotent realistic conversations for UI work; unused in release (tree-shaken). |
+| `platform/secure_storage.dart` | platform | `KeychainSecretStore` (flutter_secure_storage). |
+| `platform/chat_database.dart` | platform | Opens `chat.db` under Application Support (WAL) as a `ChatStore`. |
 | `core/model.dart` | core (contract) | Drive Format v1 records: `AppInfo`, `Radio`, `Antenna`, `Companion`, `DriveSession`, `Echo`, `Neighbor`, `DrivePing`, `DriveBatch`, `RepeaterRef`. |
 | `core/api.dart` | core (contract) | `DriveStore`, `CmatClient`, `SyncService`, `SettingsStore` interfaces; `Settings`, `SessionSummary`, `DriverKeyStatus`, `UploadResult`, `SyncReport`, `CmatException`, `RegionInfo`, `RadioPreset`, `SiteConfig`, `CoverageCell`, `CoverageGrid`, `PublicCoverage`. |
 | `core/drive_store.dart` | core | `JsonlDriveStore` (one folder per drive, JSONL pings, sync ledgers, rename + re-send mark, and the drive-context files `samples.jsonl` / `ctx.jsonl` / `context.json` via `DriveContextLedger`), the `SyncLedger` extension interface, and `closeOrphanedSessions` (closes crashed drives at launch). |
