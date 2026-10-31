@@ -5,6 +5,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -49,7 +50,15 @@ Future<OfflineBasemap> basemapWith(Directory root, Map<String, List<double>> pac
 
 void main() {
   late Directory tmp;
-  setUp(() => tmp = Directory.systemTemp.createTempSync('basemap'));
+  setUp(() {
+    tmp = Directory.systemTemp.createTempSync('basemap');
+    // flutter_map's built-in tile cache asks path_provider for a cache dir; unmocked, the late MissingPluginException
+    // lands in whichever test is running (flaky full-suite failure).
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('plugins.flutter.io/path_provider'),
+      (call) async => tmp.path,
+    );
+  });
   tearDown(() {
     OfflineBasemap.debugInstance = null;
     OfflineBasemapLayer.debugBuilder = null;
