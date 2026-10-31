@@ -235,7 +235,8 @@ class ClaimFakeTransport implements ByteTransport {
       return;
     }
     final txtType = f[1];
-    if (txtType != txtTypeCliCommand && txtType != txtTypeCliData) {
+    // A real companion radio (measured Oct 31 2026): CLI_COMMAND (3) and every type but CLI_DATA (1) for CLI is refused at once with ERR 1.
+    if (txtType != txtTypeCliData) {
       _emit(encodeErr(ErrCode.unsupportedCmd));
       return;
     }

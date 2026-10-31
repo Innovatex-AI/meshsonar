@@ -144,7 +144,7 @@ App to radio:
 | GET_CONTACT_BY_KEY (30) | `[30][pub_key ×32]` | `CONTACT` (3) or `ERR(NOT_FOUND)` |
 | ADD_UPDATE_CONTACT (9) | `[9][pub_key ×32][type][flags][out_path_len=0xFF][out_path ×64][name ×32][last_advert u32][lat i32][lon i32]` (144 B); type 2 = repeater | `OK`, or `ERR(TABLE_FULL)` |
 | SEND_LOGIN (26) | `[26][pub_key ×32][password UTF-8, NUL]`; the radio keeps at most **15 bytes** of password (`sendLogin`) | `SENT` (6): `[6][is_flood][tag u32][est_timeout_ms u32]`; `ERR(NOT_FOUND)` if the repeater is not a contact |
-| SEND_TXT_MSG (2) as CLI | `[2][txt_type=3 CLI_COMMAND][attempt][timestamp u32][pub_key_prefix ×6][text]`; the radio replaces the timestamp with its own clock; no ack | `SENT` (6) |
+| SEND_TXT_MSG (2) as CLI | `[2][txt_type=1 CLI_DATA][attempt][timestamp u32][pub_key_prefix ×6][text]`; no ack. **Verified on a real radio (Oct 31 2026): type 3 (CLI_COMMAND) is refused at once with `ERR 1`; type 1 works** | `SENT` (6), then `PUSH_MSG_WAITING` ~1 s later and a queued `CONTACT_MSG_RECV_V3` with the reply |
 | SEND_STATUS_REQ (27) | `[27][pub_key ×32]` | `SENT`, later push `0x87` |
 | LOGOUT (29) | `[29][pub_key ×32]` | `OK` (local only, nothing goes over the air) |
 | SIGN_START (33) | `[33]` | `SIGN_START` (19): `[19][reserved][max_len u32 = 8192]` |
@@ -355,7 +355,7 @@ round, so a reply queued at that moment is not missed.
 | 10 | Echo SNR on multi-hop | SNR/RSSI belong to the last transmitter, but are stored on the echo keyed by `path[0]`. Consumers should use `hops == 1` echoes for link quality (CMAT does: `hops` 1 or null). |
 | 11 | Echo timestamp check | Only applies with `MeshCoreCompanionLink` (it exposes `lastSentTimestamp`). Other `CompanionLink`s match on text only. |
 | 12 | Repeater login failure | `PUSH_CODE_LOGIN_FAIL` exists but a repeater never sends it for a wrong password; the app treats silence as "out of range or wrong password" (§2.5). |
-| 13 | Companion CLI vs remote CLI | `CMD_RUN_CLI_COMMAND` (66, v14+) runs a CLI command on the COMPANION itself. Claims need the REMOTE repeater's CLI, which is `SEND_TXT_MSG` with txt_type 3 after a login. |
+| 13 | Companion CLI vs remote CLI | `CMD_RUN_CLI_COMMAND` (66, v14+) runs a CLI command on the COMPANION itself. Claims need the REMOTE repeater's CLI, which is `SEND_TXT_MSG` with txt_type 1 (CLI_DATA) after a login. |
 
 ## 8. Test vectors
 

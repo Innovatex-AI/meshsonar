@@ -5,6 +5,9 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+## [0.24.2] — 2026-11-01 — repeater claim: the real fix; map legend and colour palettes
+
+- Same as 0.24.1 below, now fixed at the root (the text type). Verified end to end against a real radio and repeater with a Bluetooth probe before shipping.
 - **Map legend (Legend & Info).** One sheet explains every colour and symbol on the maps, with the real swatches in your
   colour palette and the map's current Colour by mode: your pings (grey = nothing heard, purple = heard but no signal
   reading), network cells (SNR steps with dB ranges, share heard, noise, grey, purple, faded under 3 pings), repeaters (advert
@@ -20,7 +23,7 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [0.24.1] — 2026-11-01 — repeater claim: commands get answered
 
-- **Claim a repeater no longer fails with "could not read the repeater's name".** A repeater ignores any command whose timestamp is not strictly newer than the one on your login, and your radio stamps the login with ITS clock, which the firmware refuses to move backwards (so it can be ahead of the phone). The app stamped commands with the phone's clock, so a radio even a few seconds ahead had every command silently dropped. Commands are now stamped from the radio's own clock (re-read after each login) and strictly increase per repeater. Regression tests run the whole claim against fake radios up to 400 days ahead, with the fake repeater enforcing the firmware's replay rule.
+- **Claim a repeater no longer fails with "could not read the repeater's name".** Measured on a real radio against a real repeater (INNO-OB-2) with a Bluetooth probe: login worked, but the companion radio refuses a repeater command sent as text type 3 (CLI_COMMAND) with ERR 1 at once, and only passes type 1 (CLI_DATA) on; with type 1 the reply (`> INNO-OB-2`) arrives about a second later as a queued message. Commands are now sent as CLI_DATA. Also kept as defence in depth: commands are stamped from the radio's own clock and strictly increase (a repeater ignores a command not newer than the login). The fake radio and repeater in the tests now behave like the measured hardware (type 3 refused, replay rule enforced).
 
 ## [0.24.0] — 2026-11-01 — claim your radios; no approval anywhere
 
