@@ -5,6 +5,8 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+## [0.22.0] — 2026-10-31 — first field-test fixes
+
 - Layers sheet: the MeshCore Map credit and its age are one line ("Data: MeshCore Map (map.meshcore.io), as of ..."), not two.
 
 - **Weather and drive-data logging fixes (test drive: "weather not being logged").** Root causes: (1) a drive that
