@@ -230,6 +230,10 @@ class SiteConfig {
   /// `cell-links` accepts `x-driver-key` (`capabilities.cellLinks`): the repeaters heard in one cell.
   bool get cellLinks => capabilities.contains('cellLinks');
 
+  /// `claim-start kind=login` / `claim-complete attest`: claiming a repeater with a successful admin login alone (nothing on
+  /// the repeater is changed).
+  bool get nodeClaimsLogin => capabilities.contains('nodeClaimsLogin');
+
   /// Radio claims (`capabilities.nodeClaims`): `claim-start`, `claim-complete`, `claim-status`, `my-radios`, `claim`.
   /// A claim only manages a radio; it never decides whether its data counts.
   bool get nodeClaims => capabilities.contains('nodeClaims');
@@ -388,6 +392,13 @@ abstract class CmatClient {
   /// `POST /api/cmh/claim-complete` (sign challenges): the 128-hex Ed25519 signature. Throws [CmatException]
   /// (400 malformed, 410 expired or used, 422 signature does not match).
   Future<NodeClaim> claimComplete(String driverKey, String challengeId, String signatureHex) =>
+      throw const CmatException('not supported by this client');
+
+  /// `POST /api/cmh/claim-complete` for a login challenge (`capabilities.nodeClaimsLogin`): the app attests that this
+  /// phone's radio logged in to the repeater as ADMIN. Nothing about the password is sent. 422 {code: not_admin} when
+  /// [isAdmin] is false. Throws [CmatException].
+  Future<NodeClaim> claimCompleteLogin(String driverKey, String challengeId,
+          {required bool isAdmin, int? firmwareLevel, required DateTime loginAt, required String radioPubKey}) =>
       throw const CmatException('not supported by this client');
 
   /// `GET /api/cmh/claim-status?challengeId=`: whether the server has seen the code in an advert.
