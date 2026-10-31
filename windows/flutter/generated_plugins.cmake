@@ -5,7 +5,6 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   battery_plus
   connectivity_plus
-  flutter_blue_plus_winrt
   geolocator_windows
   share_plus
   url_launcher_windows

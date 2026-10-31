@@ -38,7 +38,7 @@ dependencies:
   uuid: ^4.6.0
   path: ^1.9.1
   path_provider: ^2.1.6
-  flutter_blue_plus: ^2.3.14
+  flutter_reactive_ble: ^5.4.1
   geolocator: ^14.1.1
   share_plus: ^13.3.1
   flutter_map: ^8.3.2
