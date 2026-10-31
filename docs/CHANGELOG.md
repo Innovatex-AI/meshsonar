@@ -5,6 +5,15 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+App Store readiness audit (PR `fix/app-store-readiness`; details and App Store Connect answers in [APP_STORE.md](APP_STORE.md)).
+
+- Privacy policy: linked in the app (Settings > Privacy & data sharing, About, and the driver-key request form) to `https://meshsonar.com/privacy`.
+- Account and data deletion (guideline 5.1.1(v)): "Delete my collected data" is now "Delete my data and account": it adds Delete my account (opens the website page that deletes the account, drives and keys), Delete all drives on this phone, and Remove the driver key from this phone.
+- Simulator drives are never uploaded and the Simulator's packets are never shared (a drive recorded with the simulated radio is made-up data and used to go to the community map when a key was present). The Simulator rows say so.
+- Background location is for recording a drive only: the idle region watcher no longer keeps a low-power background stream with "Always" granted (it runs in the foreground only). The "Always" and "While Using" permission strings and the in-app explainer now describe exactly that.
+- Info.plist: `ITSAppUsesNonExemptEncryption` = false, `UIRequiredDeviceCapabilities` (arm64, bluetooth-le, location-services), removed the unused `NSBluetoothPeripheralUsageDescription`.
+- Tests: `test/ui/app_store_readiness_test.dart` (policy links, deletion screen, large text on iPad windows, plist and icon invariants), Simulator upload guard, idle watcher.
+
 ## [0.20.1] — 2026-10-28 — 559 regions
 
 The platform went from about 5 to 559 active regions. Design, measurements and the asks for the server: [REGIONS_AT_SCALE.md](REGIONS_AT_SCALE.md). Not installed anywhere (the app is on hold).

@@ -82,7 +82,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         art: const RadioLinkIllustration(),
                         title: 'Connect your radio',
                         body: 'Pair your MeshCore companion radio over Bluetooth. No radio with you? '
-                            'The Simulator drives a loop around Westerville so you can try everything first.',
+                            'The Simulator drives a loop around Westerville so you can try everything first; it never uploads anything.',
                         actions: [
                           FilledButton.icon(
                             key: const Key('onboarding-connect'),

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../app/app_state.dart';
 import '../../app/context_upload_hook.dart' show serverCannotEraseText;
 import '../../core/data_categories.dart' show CategoryId;
+import '../../core/server_url.dart' show privacyPolicyUrl;
 import '../../core/phone_sensors.dart' show phoneTemperatureNote;
 import '../always_location_screen.dart';
 import '../app.dart';
@@ -70,6 +71,17 @@ List<Widget> privacySectionRows(BuildContext context) {
         trailing: const Icon(Icons.chevron_right),
         onTap: () => Navigator.of(context)
             .push(MaterialPageRoute<void>(builder: (_) => const AlwaysLocationScreen(explainOnly: true))),
+      ),
+    ),
+    SettingsAnchor(
+      id: 'privacy-policy',
+      child: ListTile(
+        key: const Key('privacy-policy'),
+        leading: const Icon(Icons.policy_outlined),
+        title: Text(settingsEntry('privacy-policy').title),
+        subtitle: Text(settingsEntry('privacy-policy').summary),
+        trailing: const Icon(Icons.open_in_new, size: 18),
+        onTap: () => s.services.openUrl(Uri.parse(privacyPolicyUrl)),
       ),
     ),
     SettingsAnchor(

@@ -466,6 +466,16 @@ class _DriverKeySectionState extends State<DriverKeySection> {
                     label: const Text('Use this key'),
                   ),
                 ],
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    key: const Key('key-privacy-policy'),
+                    style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 0)),
+                    onPressed: () => s.services.openUrl(Uri.parse(privacyPolicyUrl)),
+                    icon: const Icon(Icons.policy_outlined, size: 18),
+                    label: const Text('Privacy policy'),
+                  ),
+                ),
               ],
             ),
           ),
