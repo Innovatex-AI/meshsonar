@@ -46,8 +46,10 @@ import '../core/phone_sensors.dart';
 import '../core/units.dart';
 import 'build_flags.dart';
 import '../platform/app_lifecycle_bridge.dart';
-import '../radio/claim_radio.dart';
 import '../radio/radio_api.dart';
+import '../radio/radio_session_impl.dart';
+import '../radio/session_manager.dart';
+import '../radio/wardrive_engine.dart' show DefaultWardriveEngine;
 import 'claims.dart';
 import 'context_upload_hook.dart';
 import 'drive_context_hook.dart';
@@ -247,8 +249,8 @@ class AppState extends ChangeNotifier {
         client: () => client,
         driverKey: () => _settings.driverKey,
         radio: () {
-          final Object? l = _link;
-          return l is ClaimRadio && l.isConnected ? l : null;
+          final s = radioSessions.session;
+          return s != null && s.isConnected && s.supportsClaims ? s : null;
         },
         enabled: () => nodeClaimsEnabled,
         store: services.claimRestoreStore ?? MemoryClaimRestoreStore(),
@@ -1079,7 +1081,13 @@ class AppState extends ChangeNotifier {
   RadioKind get radioKind => _radioKind;
   RadioDevice? _device;
   RadioDevice? get device => _device;
-  CompanionLink? _link;
+  /// The one owner of the radio link: connect, hand-over, reconnect, link state, the TX arbiter (lib/radio/session_manager.dart).
+  late final RadioSessionManager radioSessions = RadioSessionManager(linkFactory: services.linkFactory, clock: services.clock);
+
+  /// The live radio session (the chat layer talks to this), or null without a connected radio.
+  LinkRadioSession? get radioSession => radioSessions.session;
+
+  CompanionLink? get _link => radioSessions.link;
   SelfInfo? _selfInfo;
   SelfInfo? get selfInfo => _selfInfo;
   bool _connecting = false;
@@ -1395,12 +1403,10 @@ class AppState extends ChangeNotifier {
     _device = device;
     _radioKind = kind;
     notifyListeners();
-    ByteTransport? transport;
     try {
-      transport = await scannerFor(kind).connect(device).timeout(const Duration(seconds: 25));
-      final link = services.linkFactory(transport);
-      final info = await link.start().timeout(const Duration(seconds: 20));
-      _link = link;
+      final session = await radioSessions.connect(scannerFor(kind), device);
+      final link = session.link;
+      final info = session.selfInfo!;
       _selfInfo = info;
       unawaited(_telemetrySub?.cancel());
       _telemetrySub = link.rxPackets.listen(_onTelemetryRx, onError: (Object _) {});
@@ -1413,11 +1419,7 @@ class AppState extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
-      try {
-        await transport?.disconnect();
-      } catch (_) {}
       _connecting = false;
-      _link = null;
       _selfInfo = null;
       _device = null;
       _radioKind = RadioKind.none;
@@ -1474,58 +1476,57 @@ class AppState extends ChangeNotifier {
     diagnostics.add('Radio dropped during the drive; reconnecting');
     notifyListeners();
     try {
-      while (same()) {
-        _reconnectAttempt++;
-        notifyListeners();
-        await Future<void>.delayed(reconnectDelay(_reconnectAttempt));
-        if (!same()) break;
-        ByteTransport? transport;
-        try {
-          transport = await scannerFor(kind).connect(device).timeout(const Duration(seconds: 25));
-          final link = services.linkFactory(transport);
-          final info = await link.start().timeout(const Duration(seconds: 20));
-          if (expectedKey != null && info.publicKey.toLowerCase() != expectedKey) {
-            throw StateError('A different radio answered at this address');
-          }
-          if (!same()) {
-            await link.close();
-            break;
-          }
-          final old = _link;
-          _link = link;
-          _selfInfo = info;
+      final session = await radioSessions.reconnect(
+        scannerFor(kind),
+        device,
+        keepGoing: same,
+        delay: reconnectDelay,
+        onConnected: (session) async {
+          final link = session.link;
+          _selfInfo = session.selfInfo;
           _claims?.radioChanged();
           unawaited(_telemetrySub?.cancel());
           _telemetrySub = link.rxPackets.listen(_onTelemetryRx, onError: (Object _) {});
-          unawaited(old?.close().catchError((Object _) {}));
+          _attachGate(engine);
           await engine.resumeOnLink(link);
           // Radio-health sampling follows the new link (the old one is gone).
           _stopDriveContext();
           _ctx = newDriveContext(
               services: services,
               sessionId: sid,
-              link: link,
+              session: session,
               isOn: collectionOn,
               pingBusy: () => _pinging || engine.current.state == EngineState.pinging,
               onStatus: notifyListeners);
           unawaited(_ctx?.start());
-          _reconnectProblem = null;
-          diagnostics.add('Radio reconnected after $_reconnectAttempt ${_reconnectAttempt == 1 ? 'try' : 'tries'}; drive continues');
-          _say('Radio reconnected. The drive carries on.');
-          return;
-        } catch (e) {
-          try {
-            await transport?.disconnect();
-          } catch (_) {}
+        },
+        expectedKeyHex: expectedKey,
+        onAttempt: (n) {
+          _reconnectAttempt = n;
+          notifyListeners();
+        },
+        onFailure: (e) {
           _reconnectProblem = reconnectProblemText(e);
           diagnostics.add('Reconnect try $_reconnectAttempt failed: ${e.runtimeType}');
           notifyListeners();
-        }
+        },
+      );
+      if (session != null) {
+        _reconnectProblem = null;
+        diagnostics.add('Radio reconnected after $_reconnectAttempt ${_reconnectAttempt == 1 ? 'try' : 'tries'}; drive continues');
+        _say('Radio reconnected. The drive carries on.');
       }
     } finally {
       _reconnecting = false;
       notifyListeners();
     }
+  }
+
+  /// Pings go through the session's TX arbiter (lib/radio/tx_arbiter.dart). Engines that are not the default one (test
+  /// fakes) have no gate and ping as before.
+  void _attachGate(WardriveEngine engine) {
+    final session = radioSessions.session;
+    if (session != null && engine is DefaultWardriveEngine) engine.pingGate = session.pingGate;
   }
 
   /// "3 min ahead of", "2 h behind", "5 days ahead of" ... for a clock-skew warning.
@@ -1553,18 +1554,17 @@ class AppState extends ChangeNotifier {
 
   Future<void> disconnect({bool quiet = false}) async {
     if (driving) await stopDrive();
-    final link = _link;
-    _link = null;
+    final hadRadio = radioSessions.session != null;
     unawaited(_telemetrySub?.cancel());
     _telemetrySub = null;
     _selfInfo = null;
     _device = null;
     _radioKind = RadioKind.none;
     _antennaPrompt = false;
-    if (link != null) {
+    if (hadRadio) {
       diagnostics.add('Radio disconnected');
       try {
-        await link.close();
+        await radioSessions.disconnect();
       } catch (_) {}
     }
     if (!quiet) notifyListeners();
@@ -1843,6 +1843,7 @@ class AppState extends ChangeNotifier {
 
       final engine = services.engineFactory(link, location);
       _engine = engine;
+      _attachGate(engine);
       _status = engine.current;
       _pingSub = engine.pings.listen(_onPing, onError: (Object e) => _say(friendlyError(e, action: 'A ping')));
       _statusSub = engine.status.listen((st) {
@@ -1873,7 +1874,7 @@ class AppState extends ChangeNotifier {
       _ctx = newDriveContext(
           services: services,
           sessionId: session.id,
-          link: link,
+          session: radioSessions.session!,
           isOn: collectionOn,
           pingBusy: () => _pinging || engine.current.state == EngineState.pinging,
           onStatus: notifyListeners);

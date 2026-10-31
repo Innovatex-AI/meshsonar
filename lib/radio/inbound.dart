@@ -47,7 +47,7 @@ class InboundMessage {
   /// SNR (dB) at which the radio heard the packet; null for legacy frames that carry none.
   final double? snrDb;
 
-  /// Hops the packet travelled when flooded, or 0xFF when it came over a direct route.
+  /// The packet's path_len byte when flooded (hop count in the low 6 bits), or 0xFF when it came over a direct route.
   final int pathLen;
 
   /// The whole frame as received (code byte included).
@@ -71,8 +71,9 @@ class InboundMessage {
 
   bool get wasDirect => pathLen == 0xFF;
 
-  /// Hops of a flooded packet; null when it came direct.
-  int? get hops => wasDirect ? null : pathLen;
+  /// Hops of a flooded packet (the low 6 bits of path_len; the top 2 are the hash size, src/Packet.h 79-83); null when it
+  /// came direct.
+  int? get hops => wasDirect ? null : pathLen & 63;
 
   /// "ch:3" or "dm:aabbccddeeff": which conversation this belongs to, stable across app runs.
   String get conversationKey => kind == InboundKind.channel ? 'ch:$channelIndex' : 'dm:$senderPrefixHex';
