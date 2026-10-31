@@ -5,6 +5,8 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- **Fullscreen map**: the Heard box's maximum height can no longer go negative (soft keyboard over a short window threw "non-normalized height constraints" and left a blank sheet).
+
 ## [0.23.3] — 2026-11-01 — repeater lines at the finest cell size
 
 - **Repeater -> cells lines use the server's finest cells** (H3 resolution 11, `capabilities.reachH3`, `repeater-reach?res=11`) instead of the old 270 m x 200 m squares, then roll up to the hexagons drawn at the current zoom. Older servers keep the square shape. Cached answers are kept apart by shape.
