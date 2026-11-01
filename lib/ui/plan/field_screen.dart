@@ -28,7 +28,7 @@ class FieldScreen extends StatelessWidget {
             ('Driven cells', '${driven.length}'),
             ('Cells where a repeater answered', driven.isEmpty ? '-' : '$heard (${(100 * heard / driven.length).round()} %)'),
             ('Pings measured', '${driven.fold<int>(0, (a, c) => a + c.pings)}'),
-            ('Data as of', cov.asOf),
+            ('Data as of', _asOfText(cov.asOf)),
             if (mine > 0) ('Pings in your current drive', '$mine'),
           ]),
       ]),
@@ -63,4 +63,12 @@ class FieldScreen extends StatelessWidget {
       shell?.select(tab);
     }
   }
+}
+
+/// "2026-11-01 16:35 UTC" from the server's ISO stamp; anything unparseable is shown as sent.
+String _asOfText(String iso) {
+  final d = DateTime.tryParse(iso)?.toUtc();
+  if (d == null) return iso;
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${d.year}-${two(d.month)}-${two(d.day)} ${two(d.hour)}:${two(d.minute)} UTC';
 }

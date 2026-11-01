@@ -115,6 +115,19 @@ void main() {
   });
 
   group('Planner', () {
+    testWidgets('mount height and link tier are plain segments, no check mark that squeezes the label (it broke "Likely+" mid-word on a phone)', (t) async {
+      t.view.physicalSize = const Size(360, 3200);
+      t.view.devicePixelRatio = 1;
+      addTearDown(t.view.reset);
+      final s = Server();
+      await t.pumpWidget(wrap(PlannerScreen(api: s.api)));
+      await t.pumpAndSettle();
+      for (final k in ['planner-height', 'planner-tier']) {
+        expect(find.descendant(of: find.byKey(Key(k)), matching: find.byIcon(Icons.check)), findsNothing, reason: k);
+      }
+      expect(t.takeException(), isNull);
+    });
+
     testWidgets('asks the engine with the chosen settings and lists the steps', (t) async {
       tall(t);
       final s = Server();

@@ -126,32 +126,29 @@ class _PlannerScreenState extends State<PlannerScreen> {
               label: '${q.maxSites}',
               onChanged: (v) => _set(q.copyWith(maxSites: v.round())),
             ),
-            Row(children: [
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('Mount height', style: t.textTheme.labelLarge),
-                  const SizedBox(height: 4),
-                  SegmentedButton<int>(
-                    key: const Key('planner-height'),
-                    segments: [ButtonSegment(value: 20, label: Text(mountName(20))), ButtonSegment(value: 33, label: Text(mountName(33)))],
-                    selected: {q.height},
-                    onSelectionChanged: (s) => _set(q.copyWith(height: s.first)),
-                  ),
-                ]),
-              ),
-              const SizedBox(width: Gap.m),
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('Link tier', style: t.textTheme.labelLarge),
-                  const SizedBox(height: 4),
-                  SegmentedButton<String>(
-                    key: const Key('planner-tier'),
-                    segments: const [ButtonSegment(value: 'likely', label: Text('Likely+')), ButtonSegment(value: 'possible', label: Text('Possible+'))],
-                    selected: {q.tier},
-                    onSelectionChanged: (s) => _set(q.copyWith(tier: s.first)),
-                  ),
-                ]),
-              ),
+            Wrap(spacing: Gap.m, runSpacing: Gap.s, children: [
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Mount height', style: t.textTheme.labelLarge),
+                const SizedBox(height: 4),
+                SegmentedButton<int>(
+                  key: const Key('planner-height'),
+                  showSelectedIcon: false,
+                  segments: [ButtonSegment(value: 20, label: Text(mountName(20))), ButtonSegment(value: 33, label: Text(mountName(33)))],
+                  selected: {q.height},
+                  onSelectionChanged: (s) => _set(q.copyWith(height: s.first)),
+                ),
+              ]),
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Link tier', style: t.textTheme.labelLarge),
+                const SizedBox(height: 4),
+                SegmentedButton<String>(
+                  key: const Key('planner-tier'),
+                  showSelectedIcon: false,
+                  segments: const [ButtonSegment(value: 'likely', label: Text('Likely+')), ButtonSegment(value: 'possible', label: Text('Possible+'))],
+                  selected: {q.tier},
+                  onSelectionChanged: (s) => _set(q.copyWith(tier: s.first)),
+                ),
+              ]),
             ]),
             const SizedBox(height: Gap.m),
             Text('Kinds of place', style: t.textTheme.labelLarge),

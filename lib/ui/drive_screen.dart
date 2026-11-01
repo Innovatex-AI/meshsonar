@@ -337,13 +337,14 @@ class _MapPane extends StatelessWidget {
               ),
             ),
             // GPS trouble (waiting, weak, lost, Precise Location off) as one line over the map's top edge, with the one button that fixes it.
-            Positioned(left: 0, right: 0, top: 0, child: GpsHealthBanner(state: s, showWhenGood: false)),
-            Positioned(left: Gap.s, bottom: 44, child: CoverageAsOfBadge(model: model)),
-            Positioned(left: Gap.s, right: 60, bottom: 84, child: Align(alignment: Alignment.bottomLeft, child: MapHealthOverlay(model: model))),
+            Positioned(left: 0, right: 0, top: 0, child: GpsBannerSlot(state: s, height: model.gpsBannerHeight, compact: box.maxHeight < kCompactMapHeight)),
+            // Above the map's own credit stack (source chip, attribution, legend), which grows with what the map draws.
+            Positioned(left: Gap.s, bottom: model.attributionStackHeight + 14, child: CoverageAsOfBadge(model: model)),
+            Positioned(left: Gap.s, right: 60, bottom: model.attributionStackHeight + 54, child: Align(alignment: Alignment.bottomLeft, child: MapHealthOverlay(model: model))),
             if (s.regionDataOfflineLabel != null)
               Positioned(
                 left: Gap.s,
-                bottom: Gap.s,
+                bottom: model.attributionStackHeight + 14,
                 child: Chip(
                   key: const Key('region-offline-label'),
                   avatar: const Icon(Icons.cloud_off, size: 16),
@@ -355,9 +356,9 @@ class _MapPane extends StatelessWidget {
             // which stack taller than a fixed offset can clear (the chips used to cover the hint's title).
             if (pings.isEmpty) Positioned(left: 0, right: 0, bottom: model.attributionStackHeight + 12, child: IgnorePointer(child: MapHint(state: s))),
             if (showHeard)
-              Positioned(
+              _BelowBanner(
+                height: model.gpsBannerHeight,
                 left: Gap.s,
-                top: Gap.s,
                 child: KeyedSubtree(
                   key: model.driveOverlayKeys[0],
                   child: HeardBox(
@@ -372,12 +373,12 @@ class _MapPane extends StatelessWidget {
                   ),
                 ),
               ),
-            Positioned(
+            _BelowBanner(
+              height: model.gpsBannerHeight,
               right: Gap.s,
-              top: Gap.s,
               // Scales the column down on a short map pane instead of overflowing (the tool buttons add to its height).
               child: ConstrainedBox(
-                constraints: BoxConstraints(maxHeight: (box.maxHeight - 2 * Gap.s).clamp(0.0, double.infinity)),
+                constraints: BoxConstraints(maxHeight: (box.maxHeight - 2 * Gap.s - model.gpsBannerHeight.value).clamp(0.0, double.infinity)),
                 child: FittedBox(
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.topRight,
@@ -490,4 +491,18 @@ class ConnectionChip extends StatelessWidget {
       backgroundColor: dot.withValues(alpha: 0.10),
     ));
   }
+}
+
+/// A Stack child pinned [Gap.s] under the GPS health banner (or the map's top edge while there is none).
+class _BelowBanner extends StatelessWidget {
+  final ValueNotifier<double> height;
+  final double? left, right;
+  final Widget child;
+  const _BelowBanner({required this.height, this.left, this.right, required this.child});
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<double>(
+        valueListenable: height,
+        builder: (context, h, _) => Positioned(left: left, right: right, top: Gap.s + h, child: child),
+      );
 }

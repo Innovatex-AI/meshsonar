@@ -94,7 +94,10 @@ class RegionStatusChip extends StatelessWidget {
 /// Status chip plus the server's own reason text (shown verbatim, never softened).
 class RegionStatusBlock extends StatelessWidget {
   final RegionDataStatus status;
-  const RegionStatusBlock(this.status, {super.key});
+
+  /// When the status reason is this exact text it is left out (the screen already says it below).
+  final String? hideReasonIf;
+  const RegionStatusBlock(this.status, {super.key, this.hideReasonIf});
 
   @override
   Widget build(BuildContext context) {
@@ -117,7 +120,7 @@ class RegionStatusBlock extends StatelessWidget {
               ),
           ],
         ),
-        if (status.reason != null) ...[
+        if (status.reason != null && status.reason!.trim() != hideReasonIf?.trim()) ...[
           const SizedBox(height: 6),
           Text(
             status.reason!,

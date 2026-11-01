@@ -168,6 +168,9 @@ Color networkLevelColor(BuildContext context, CoverageLevel level, {CoverageColo
 List<double>? tileMatrixFor(BaseMapStyle style, List<double> themeMatrix) =>
     style.ungraded ? null : (style.forcesDark ? kDarkTileMatrix : themeMatrix);
 
+/// Below this pane height the map's compass / heading / recenter buttons move left of the tool column.
+const double kCompactMapHeight = 380;
+
 class CoverageMap extends StatefulWidget {
   /// Pings to draw. Order doesn't matter; the newest (by timestamp) gets the links and the pulse.
   final List<DrivePing> pings;
@@ -1259,6 +1262,11 @@ class _CoverageMapState extends State<CoverageMap> {
     RepeaterRef? selected;
     if (_selectedRepeater != null) selected = _refFor(_selectedRepeater!);
 
+    return LayoutBuilder(builder: (context, box) {
+    // A short pane (a phone's drive map) has no room for the compass / heading / recenter buttons under the tool column, so
+    // they sit to its left instead of under it.
+    final compact = box.maxHeight < kCompactMapHeight;
+    final sideShift = compact && widget.interactive ? 52.0 : 0.0;
     return Stack(
       children: [
         FlutterMap(
@@ -1642,7 +1650,7 @@ class _CoverageMapState extends State<CoverageMap> {
         Positioned(
           left: Gap.s + widget.overlayPadding.left,
           bottom: Gap.s + widget.overlayPadding.bottom,
-          right: 72 + widget.overlayPadding.right,
+          right: 72 + sideShift + widget.overlayPadding.right,
           child: Column(
             key: _stackKey,
             mainAxisSize: MainAxisSize.min,
@@ -1714,7 +1722,7 @@ class _CoverageMapState extends State<CoverageMap> {
           ),
         ),
         Positioned(
-          right: Gap.m + widget.overlayPadding.right,
+          right: Gap.m + sideShift + widget.overlayPadding.right,
           bottom: Gap.m + widget.overlayPadding.bottom,
           child: Column(
             key: _buttonsKey,
@@ -1750,6 +1758,7 @@ class _CoverageMapState extends State<CoverageMap> {
         ),
       ],
     );
+    });
   }
 
   final GlobalKey _stackKey = GlobalKey(debugLabel: 'map-credit-stack');

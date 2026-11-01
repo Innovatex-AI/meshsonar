@@ -14,7 +14,8 @@ import '../theme.dart';
 class GpsHealthBanner extends StatelessWidget {
   final AppState state;
   final bool showWhenGood;
-  const GpsHealthBanner({super.key = const Key('gps-health'), required this.state, this.showWhenGood = true});
+  final bool compact;
+  const GpsHealthBanner({super.key = const Key('gps-health'), required this.state, this.showWhenGood = true, this.compact = false});
 
   @override
   Widget build(BuildContext context) {
@@ -23,6 +24,7 @@ class GpsHealthBanner extends StatelessWidget {
       builder: (context, h, _) => GpsHealthView(
         health: h,
         showWhenGood: showWhenGood,
+        compact: compact,
         onAction: h.action == GpsHealthAction.none ? null : () => unawaited(state.openGpsSettings(h.action)),
       ),
     );
@@ -34,7 +36,10 @@ class GpsHealthView extends StatelessWidget {
   final GpsHealth health;
   final bool showWhenGood;
   final VoidCallback? onAction;
-  const GpsHealthView({super.key, required this.health, this.showWhenGood = true, this.onAction});
+
+  /// On a short map pane: the line and the button only. The advice would take a third of the map; Open Settings is the fix.
+  final bool compact;
+  const GpsHealthView({super.key, required this.health, this.showWhenGood = true, this.onAction, this.compact = false});
 
   @override
   Widget build(BuildContext context) {
@@ -56,7 +61,12 @@ class GpsHealthView extends StatelessWidget {
       liveRegion: h.needsAttention,
       label: 'GPS. ${h.line}${h.advice == null ? '' : ' ${h.advice}'}',
       child: ExcludeSemantics(
-        child: Padding(
+        // Opaque: over a map the words would otherwise run into the tiles and whatever sits under them.
+        child: Container(
+          decoration: BoxDecoration(
+            color: t.colorScheme.surface.withValues(alpha: 0.97),
+            border: Border(bottom: BorderSide(color: t.colorScheme.outlineVariant)),
+          ),
           padding: const EdgeInsets.symmetric(horizontal: Gap.m, vertical: Gap.xs),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -68,7 +78,7 @@ class GpsHealthView extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(h.line, key: const Key('gps-health-line'), style: t.textTheme.bodyMedium?.copyWith(color: color, fontWeight: FontWeight.w600)),
-                    if (h.advice != null)
+                    if (h.advice != null && !compact)
                       Text(h.advice!, key: const Key('gps-health-advice'), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
                   ],
                 ),
@@ -84,6 +94,59 @@ class GpsHealthView extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Places the GPS health banner over the top of a map and reports its height to [height], so the overlays under it can start below.
+class GpsBannerSlot extends StatelessWidget {
+  final AppState state;
+  final ValueNotifier<double> height;
+  final bool compact;
+  const GpsBannerSlot({super.key, required this.state, required this.height, this.compact = false});
+
+  @override
+  Widget build(BuildContext context) => GpsBannerHeightProbe(height: height, child: GpsHealthBanner(state: state, showWhenGood: false, compact: compact));
+}
+
+/// Measures [child] and publishes its height to [height] whenever it changes (0 when it draws nothing).
+class GpsBannerHeightProbe extends StatefulWidget {
+  final ValueNotifier<double> height;
+  final Widget child;
+  const GpsBannerHeightProbe({super.key, required this.height, required this.child});
+
+  @override
+  State<GpsBannerHeightProbe> createState() => _GpsBannerHeightProbeState();
+}
+
+class _GpsBannerHeightProbeState extends State<GpsBannerHeightProbe> {
+  void _measure() {
+    if (!mounted) return;
+    final h = (context.findRenderObject() as RenderBox?)?.size.height ?? 0;
+    if (widget.height.value != h) widget.height.value = h;
+  }
+
+  @override
+  void dispose() {
+    // The notifier belongs to the map model, which can outlive this widget: leave no stale inset behind.
+    final n = widget.height;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        n.value = 0;
+      } catch (_) {} // already disposed with its model
+    });
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
+    return NotificationListener<SizeChangedLayoutNotification>(
+      onNotification: (_) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
+        return false;
+      },
+      child: SizeChangedLayoutNotifier(child: widget.child),
     );
   }
 }
