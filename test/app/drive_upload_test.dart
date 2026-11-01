@@ -2,6 +2,7 @@
 // ignore_for_file: overridden_fields
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/app/services.dart';
+import 'package:meshsonar/core/driver_account.dart';
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/map_links.dart';
 import 'package:meshsonar/core/node_claim.dart';
@@ -234,6 +235,24 @@ class RecordingClient implements CmatClient {
   final Uri baseUrl = Uri.parse('https://example.org');
   final List<DriveBatch> uploads;
   RecordingClient(this.uploads);
+  @override
+  Future<DriverDevices> driverDevices(String driverKey) => throw UnimplementedError();
+  @override
+  Future<RevealedKey> revealKey(String driverKey, {required String kind, required String id}) => throw UnimplementedError();
+  @override
+  Future<String> rotateKey(String driverKey, String newKey) => throw UnimplementedError();
+  @override
+  Future<ServerDriveDetail> driverDrive(String driverKey, String sessionId) => throw UnimplementedError();
+  @override
+  Future<void> updateServerDrive(String driverKey, String sessionId, {String? label, bool clearLabel = false, bool? hidden}) => throw UnimplementedError();
+  @override
+  Future<void> deleteServerDrive(String driverKey, String sessionId) => throw UnimplementedError();
+  @override
+  Future<List<ReportRow>> driverReports(String driverKey) => throw UnimplementedError();
+  @override
+  Future<List<int>> exportAccount(String driverKey) => throw UnimplementedError();
+  @override
+  Future<DriverDeleteCounts> deleteDriver(String driverKey) => throw UnimplementedError();
   @override
   Future<DriverSummary> driverSummary(String driverKey) => throw UnimplementedError();
 

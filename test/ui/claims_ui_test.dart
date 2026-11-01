@@ -255,6 +255,21 @@ void main() {
       expect(h.openedUrls.single.path, '/me/radios');
     });
 
+    testWidgets('an observer claim shows its health and battery (deaf, low)', (tester) async {
+      final h = await open(tester);
+      h.claims.claims.add(NodeClaim(
+        pubkey: k('d'),
+        nodeType: ClaimNodeType.observer,
+        method: ClaimMethod.signature,
+        displayName: 'Roof observer',
+        health: const ObserverHealth(state: 'deaf', batteryMv: 3300, batteryLow: true, batteryTrend: 'falling'),
+      ));
+      await openScreen(tester, const MyRadiosScreen());
+      await pumpUntil(tester, () => find.byKey(ValueKey('radio-${k('d')}')).evaluate().isNotEmpty);
+      expect(find.textContaining('Deaf: reporting'), findsOneWidget);
+      expect(find.text('Battery 3.30 V (low), falling'), findsOneWidget);
+    });
+
     testWidgets('edit: only the changed fields are sent; null clears', (tester) async {
       final h = await open(tester);
       h.claims.claims.add(NodeClaim(pubkey: k('b'), nodeType: ClaimNodeType.repeater, method: ClaimMethod.advert, displayName: 'Hilltop', notes: 'old'));

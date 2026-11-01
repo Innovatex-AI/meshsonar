@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../account/devices_screen.dart';
 import '../../app/app_state.dart';
 import '../../core/api.dart';
 import '../../core/server_url.dart';
@@ -191,7 +192,7 @@ class AccountLinks extends StatelessWidget {
     final t = Theme.of(context);
     return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
       Text(
-        'Manage your drives and privacy at ${s.webPage('/me')}. Sign in there to see and manage them.',
+        'Your keys, drives and reports are all in the app. The same pages are on the website at ${s.webPage('/me')} if you sign in there.',
         key: const Key('account-hint'),
         style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
       ),
@@ -200,9 +201,9 @@ class AccountLinks extends StatelessWidget {
         child: TextButton.icon(
           key: const Key('key-website'),
           style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 0)),
-          onPressed: () => s.openWebPage('/me/devices'),
-          icon: const Icon(Icons.open_in_new, size: 18),
-          label: const Text('Open my devices on the website'),
+          onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const DevicesScreen())),
+          icon: const Icon(Icons.devices_outlined, size: 18),
+          label: const Text('Devices and keys'),
         ),
       ),
     ]);

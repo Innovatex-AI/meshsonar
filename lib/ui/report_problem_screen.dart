@@ -4,6 +4,8 @@
 // screen.
 import 'package:flutter/material.dart';
 
+import 'account/reports_history_screen.dart';
+
 import '../app/app_state.dart';
 import '../core/api.dart';
 import '../core/report_body.dart';
@@ -110,6 +112,16 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              if (s.accountAvailable)
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    key: const Key('report-history'),
+                    onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const ReportsHistoryScreen())),
+                    icon: const Icon(Icons.history),
+                    label: const Text('My reports'),
+                  ),
+                ),
               if (saved != null) _SavedReport(onSend: () => _openPreview(saved.report, saved.form)),
               if (!s.canReport) _NeedsKey(status: s.hasKey ? s.settings.keyStatus : DriverKeyStatus.none),
               Text('What kind of problem?', style: t.textTheme.titleMedium),

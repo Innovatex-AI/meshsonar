@@ -16,6 +16,7 @@ import '../charts/bar_chart.dart';
 import '../charts/chart_frame.dart';
 import '../region/region_common.dart' show groupInt;
 import '../widgets.dart';
+import '../account/server_drive_screen.dart' show openServerDrive;
 import 'drive_report_screen.dart' show openDriveReport;
 import 'progress_screen.dart' show ProgressTile, chartWeeks;
 
@@ -341,7 +342,9 @@ class _DriveRow extends StatelessWidget {
       ].where((e) => e.isNotEmpty).join('\n')),
       isThreeLine: false,
       trailing: Icon(here ? Icons.chevron_right : Icons.info_outline, color: t.colorScheme.onSurfaceVariant),
-      onTap: () => here ? openDriveReport(context, x.id) : _sheet(context, x, units),
+      onTap: () => here
+          ? openDriveReport(context, x.id)
+          : (AppScope.read(context).accountAvailable ? openServerDrive(context, x) : _sheet(context, x, units)),
     );
   }
 }

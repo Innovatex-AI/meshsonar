@@ -6,6 +6,7 @@ import 'dart:io';
 import 'antenna_profile.dart';
 import 'colour_palette.dart';
 import 'drive_context_wire.dart' show ContextUploadResult, DriveContextBatch;
+import 'driver_account.dart';
 import 'driver_summary.dart' show DriverSummary;
 import 'model.dart';
 import 'map_links.dart';
@@ -232,6 +233,16 @@ class SiteConfig {
   /// `GET driver-summary` (`capabilities.driverSummary`).
   bool get driverSummary => capabilities.contains('driverSummary');
 
+  /// The account pages by driver key (`capabilities.driverAccount`): `driver-devices`, `driver-key-reveal`, `driver-key-rotate`,
+  /// `driver-drive`, `driver-drive-update`, `driver-drive-delete`, `driver-reports`, `driver-export`.
+  bool get driverAccount => capabilities.contains('driverAccount');
+
+  /// `DELETE driver-delete` (`capabilities.driverDelete`): the driver deletes their own key and everything tied to it.
+  bool get driverDelete => capabilities.contains('driverDelete');
+
+  /// `GET network-leaderboard` (`capabilities.networkLeaderboard`): the all-regions leaderboard.
+  bool get networkLeaderboard => capabilities.contains('networkLeaderboard');
+
   /// `repeater-reach` accepts `x-driver-key` (`capabilities.reachDriverKey`).
   bool get reachDriverKey => capabilities.contains('reachDriverKey');
   /// `cell-links` accepts `x-driver-key` (`capabilities.cellLinks`): the repeaters heard in one cell.
@@ -424,6 +435,39 @@ abstract class CmatClient {
   /// Throws [CmatException] (401 unknown key, 403 not allowed with [CmatException.serverStatus], 429 pause).
   Future<DriverSummary> driverSummary(String driverKey) => throw const CmatException('not supported by this client');
 
+  /// `GET driver-devices` (`capabilities.driverAccount`): this key's record, the account's other phones and MeshMapper
+  /// forward keys (never a key). Throws [CmatException] (401, 403, 429).
+  Future<DriverDevices> driverDevices(String driverKey) => throw const CmatException('not supported by this client');
+
+  /// `POST driver-key-reveal`: the key itself (kind `driver` or `mm`) when the server holds a viewable copy. Rate limited
+  /// (10 an hour). Throws [CmatException] (404 not one of this account's live keys, 429).
+  Future<RevealedKey> revealKey(String driverKey, {required String kind, required String id}) =>
+      throw const CmatException('not supported by this client');
+
+  /// `POST driver-key-rotate`: replaces THIS key by [newKey] (made on the phone, see [newDriverKey]); the old key stops
+  /// working at once, the drives stay. Returns the hint (last four characters). Throws [CmatException] (400, 409, 429).
+  Future<String> rotateKey(String driverKey, String newKey) => throw const CmatException('not supported by this client');
+
+  /// `GET driver-drive?id=`: a drive of this account with every ping the server holds (owner view, untrimmed).
+  Future<ServerDriveDetail> driverDrive(String driverKey, String sessionId) => throw const CmatException('not supported by this client');
+
+  /// `POST driver-drive-update`: rename ([label], empty clears it) and/or hide from the public maps ([hidden]).
+  Future<void> updateServerDrive(String driverKey, String sessionId, {String? label, bool clearLabel = false, bool? hidden}) =>
+      throw const CmatException('not supported by this client');
+
+  /// `POST driver-drive-delete`: removes the drive and its pings from the server (not from this phone).
+  Future<void> deleteServerDrive(String driverKey, String sessionId) => throw const CmatException('not supported by this client');
+
+  /// `GET driver-reports`: the problem reports this account filed in the last 90 days, newest first.
+  Future<List<ReportRow>> driverReports(String driverKey) => throw const CmatException('not supported by this client');
+
+  /// `GET driver-export`: everything the server holds for this account, as the JSON file the server sends.
+  Future<List<int>> exportAccount(String driverKey) => throw const CmatException('not supported by this client');
+
+  /// `DELETE driver-delete` (`capabilities.driverDelete`): deletes this driver's key and all its data on the server. A key
+  /// the server no longer knows (401) means it is already gone. Throws [CmatException] (401, 429).
+  Future<DriverDeleteCounts> deleteDriver(String driverKey) => throw const CmatException('not supported by this client');
+
   /// `GET /api/cmh/repeater-reach?key=&lat=&lon=` with an approved driver key (`capabilities.reachDriverKey`): where
   /// all MeshSonar drivers (public drives, trimmed) heard one repeater. [lat]/[lon] are the REPEATER's position (never
   /// the phone's). Throws [CmatException] (401 unknown key, 403 not approved, 429 limit). Default: not supported.
@@ -577,6 +621,10 @@ abstract class SyncService {
 class Settings {
   final String serverUrl;
   final String? driverKey;
+
+  /// A replacement key the phone made for `driver-key-rotate` and has not yet confirmed: kept so a lost answer cannot lock
+  /// the phone out. Resolved at the next key check (the server knows exactly one of the two keys). Null normally.
+  final String? pendingDriverKey;
   final DriverKeyStatus keyStatus;
   final String? display;
   final String channel;
@@ -680,6 +728,7 @@ class Settings {
   const Settings({
     this.serverUrl = defaultServerUrl,
     this.driverKey,
+    this.pendingDriverKey,
     this.keyStatus = DriverKeyStatus.none,
     this.display,
     this.channel = '#wardriving',
@@ -711,6 +760,8 @@ class Settings {
   Settings copyWith({
     String? serverUrl,
     String? driverKey,
+    String? pendingDriverKey,
+    bool clearPendingKey = false,
     DriverKeyStatus? keyStatus,
     String? display,
     String? channel,
@@ -742,6 +793,7 @@ class Settings {
       Settings(
         serverUrl: serverUrl ?? this.serverUrl,
         driverKey: clearKey ? null : (driverKey ?? this.driverKey),
+        pendingDriverKey: clearKey || clearPendingKey ? null : (pendingDriverKey ?? this.pendingDriverKey),
         keyStatus: clearKey ? DriverKeyStatus.none : (keyStatus ?? this.keyStatus),
         display: clearKey ? null : (display ?? this.display),
         channel: channel ?? this.channel,
@@ -773,6 +825,7 @@ class Settings {
   Map<String, dynamic> toJson() => {
         'server_url': serverUrl,
         'driver_key': driverKey,
+        if (pendingDriverKey != null) 'pending_driver_key': pendingDriverKey,
         'key_status': keyStatus.name,
         'display': display,
         'channel': channel,
@@ -803,6 +856,7 @@ class Settings {
   factory Settings.fromJson(Map<String, dynamic> j) => Settings(
         serverUrl: _str(j['server_url']) ?? defaultServerUrl,
         driverKey: _str(j['driver_key']),
+        pendingDriverKey: _str(j['pending_driver_key']),
         keyStatus: DriverKeyStatus.values.firstWhere((s) => s.name == j['key_status'], orElse: () => DriverKeyStatus.none),
         display: _str(j['display']),
         channel: _str(j['channel']) ?? '#wardriving',
