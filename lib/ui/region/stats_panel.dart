@@ -231,7 +231,10 @@ class _Tile extends StatelessWidget {
 
 class LeaderboardView extends StatelessWidget {
   final Leaderboard board;
-  const LeaderboardView(this.board, {super.key});
+
+  /// A lower-case callsign to mark as "you" (the name this phone shows), or null.
+  final String? highlight;
+  const LeaderboardView(this.board, {super.key, this.highlight});
 
   @override
   Widget build(BuildContext context) {
@@ -248,8 +251,9 @@ class LeaderboardView extends StatelessWidget {
         for (final r in board.rows)
           ListTile(
             dense: true,
+            selected: highlight != null && r.callsign.toLowerCase() == highlight,
             leading: CircleAvatar(radius: 14, child: Text('${r.rank}')),
-            title: Text(r.callsign),
+            title: Text(highlight != null && r.callsign.toLowerCase() == highlight ? '${r.callsign} (you)' : r.callsign),
             subtitle: Text('${r.drives} drives · ${r.cells} squares · ${r.repeatersHeard} repeaters'),
             trailing: Text(AppScope.unitsOf(context).distance(r.km * 1000)),
           ),

@@ -70,6 +70,44 @@ class ClaimAlreadyYours implements Exception {
   String toString() => 'ClaimAlreadyYours';
 }
 
+/// The deaf-radio / low-battery check of an observer claim (`my-radios`, owner only; website `src/lib/observers/health.ts`).
+/// State words: ok, quiet, deaf, offline. Absent from servers before observer health.
+class ObserverHealth {
+  final String state;
+  final DateTime? lastStatusAt, flatSince;
+  final int? flatMinutes, batteryMv;
+  final bool batteryLow;
+
+  /// falling, steady, rising or unknown.
+  final String? batteryTrend;
+  const ObserverHealth({required this.state, this.lastStatusAt, this.flatSince, this.flatMinutes, this.batteryMv, this.batteryLow = false, this.batteryTrend});
+
+  static ObserverHealth? tryParse(Object? j) {
+    if (j is! Map || j['state'] is! String) return null;
+    final st = j['state'] as String;
+    if (!const {'ok', 'quiet', 'deaf', 'offline'}.contains(st)) return null;
+    DateTime? t(Object? v) => v is String ? DateTime.tryParse(v)?.toUtc() : null;
+    final b = j['battery'];
+    return ObserverHealth(
+      state: st,
+      lastStatusAt: t(j['lastStatusAt']),
+      flatSince: t(j['flatSince']),
+      flatMinutes: j['flatMinutes'] is num ? (j['flatMinutes'] as num).round() : null,
+      batteryMv: b is Map && b['mv'] is num ? (b['mv'] as num).round() : null,
+      batteryLow: b is Map && b['low'] == true,
+      batteryTrend: b is Map && b['trend'] is String ? b['trend'] as String : null,
+    );
+  }
+
+  /// One plain sentence for the state.
+  String get words => switch (state) {
+        'ok' => 'Hearing packets',
+        'quiet' => 'Quiet: not hearing much${flatMinutes == null ? '' : ' (nothing new for ${flatMinutes! ~/ 60 > 0 ? '${flatMinutes! ~/ 60} h ' : ''}${flatMinutes! % 60} min)'}',
+        'deaf' => 'Deaf: reporting, but its receiver has heard nothing for a while while other observers did',
+        _ => 'Offline: no status report for over 15 minutes',
+      };
+}
+
 class NodeClaim {
   /// Lower-case hex public key.
   final String pubkey;
@@ -89,6 +127,9 @@ class NodeClaim {
   final bool ended;
   final DateTime? releasedAt;
   final ClaimEndReason? endReason;
+
+  /// Observer claims only, when the server sends it.
+  final ObserverHealth? health;
   const NodeClaim({
     required this.pubkey,
     this.nodeType = ClaimNodeType.unknown,
@@ -101,6 +142,7 @@ class NodeClaim {
     this.ended = false,
     this.releasedAt,
     this.endReason,
+    this.health,
   });
 
   /// What to call this radio: the owner's name for it, else the name it advertises, else a short key.
@@ -133,6 +175,7 @@ class NodeClaim {
       ended: ended,
       releasedAt: rel,
       endReason: ended ? parseEndReason(j['releasedReason']) : null,
+      health: ObserverHealth.tryParse(j['health']),
     );
   }
 }

@@ -17,6 +17,7 @@ import '../drive/drive_controls.dart' show MapIconButton;
 import '../drive/drive_map_model.dart';
 import '../region/stats_panel.dart' show LeaderboardView, regionStatsApiFactory;
 import '../report/local_drives.dart';
+import '../account/leaderboard_screen.dart' show openLeaderboard;
 import '../report/progress_screen.dart' show openProgress;
 
 IconData baseStyleIcon(BaseMapStyle s) => switch (s) {
@@ -342,7 +343,19 @@ class _MapLeadersSheetState extends State<MapLeadersSheet> {
           const Divider(),
           Text('Leaderboard${s.viewingRegion == null ? '' : ' · ${s.viewingRegion!.name}'}', style: t.textTheme.titleLarge),
           Text('Last 30 days. Only drivers who opted in appear.', style: t.textTheme.bodySmall),
-          const SizedBox(height: Gap.s),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              key: const Key('leaders-full'),
+              onPressed: () {
+                final nav = Navigator.of(context);
+                nav.pop();
+                openLeaderboard(nav.context);
+              },
+              icon: const Icon(Icons.emoji_events_outlined),
+              label: const Text('Full leaderboard'),
+            ),
+          ),
           FutureBuilder<Leaderboard>(
             future: _board,
             builder: (context, snap) {

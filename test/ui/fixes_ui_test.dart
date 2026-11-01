@@ -250,7 +250,7 @@ void main() {
   });
 
   testWidgets(
-    'driver key: account hint names <server>/me and the website button opens <server>/me/devices',
+    'driver key: account hint names <server>/me and the Devices and keys button opens the native screen',
     (tester) async {
       useTallScreen(tester);
       final h = Harness()
@@ -264,17 +264,20 @@ void main() {
           .data!;
       expect(
         hint,
-        'Manage your drives and privacy at https://mesh.example.org/me. Sign in there to see and manage them.',
+        'Your keys, drives and reports are all in the app. The same pages are on the website at https://mesh.example.org/me if you sign in there.',
       );
       await tester.scrollUntilVisible(
         find.byKey(const Key('key-website')),
         100,
         scrollable: settingsScroll,
       );
-      expect(find.text('Open my devices on the website'), findsOneWidget);
+      expect(find.text('Devices and keys'), findsOneWidget);
       await tester.tap(find.byKey(const Key('key-website')));
       await tester.pumpAndSettle();
-      expect(h.openedUrls, [Uri.parse('https://mesh.example.org/me/devices')]);
+      expect(find.byKey(const Key('devices-screen')), findsOneWidget, reason: 'native, not a browser hop');
+      expect(h.openedUrls, isEmpty);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
 
       // Also shown once a key is saved.
       h.settings.saved = const Settings(

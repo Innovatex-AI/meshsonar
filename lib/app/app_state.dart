@@ -6,7 +6,7 @@
 // and the user is told. Sync failures never touch stored pings.
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show Directory, Platform;
+import 'dart:io' show Directory, File, Platform;
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -20,6 +20,7 @@ import '../core/data_categories.dart' show CategoryId, dataCategories;
 import '../core/drive_context.dart' show ContextSyncLedger, stripContextCategories, stripUnsentContextCategories;
 import '../core/drive_context_session.dart';
 import '../core/drive_env_cache.dart';
+import '../core/driver_account.dart';
 import '../core/driver_summary.dart';
 import '../core/map_links.dart';
 import '../core/repeater_reach.dart';
@@ -205,6 +206,133 @@ class AppState extends ChangeNotifier {
     try {
       await _summaryCache().clear();
     } catch (_) {}
+  }
+
+  // ---------- the account pages by driver key (lib/core/driver_account.dart; server capability `driverAccount`) ----------
+  /// The upload server answers the account endpoints and this key may use them (approved; a pending key is refused).
+  bool get accountAvailable => (uploadSiteConfig?.driverAccount ?? false) && keyApproved;
+
+  /// `DELETE driver-delete` is on the upload server and a key exists (any state may delete itself).
+  bool get serverCanDeleteDriver => (uploadSiteConfig?.driverDelete ?? false) && hasKey;
+
+  String _requireKey() {
+    final key = _settings.driverKey;
+    if (key == null || key.isEmpty) throw const CmatException('no driver key', status: 401);
+    return key;
+  }
+
+  Future<DriverDevices> loadDriverDevices() => client.driverDevices(_requireKey());
+
+  /// The key itself from the server's sealed copy (`kind` driver or mm). Not stored anywhere; the caller shows it for 30 s.
+  Future<RevealedKey> revealKeyOnServer(String kind, String id) => client.revealKey(_requireKey(), kind: kind, id: id);
+
+  Future<ServerDriveDetail> loadServerDrive(String sessionId) => client.driverDrive(_requireKey(), sessionId);
+
+  Future<void> updateServerDrive(String sessionId, {String? label, bool clearLabel = false, bool? hidden}) async {
+    await client.updateServerDrive(_requireKey(), sessionId, label: label, clearLabel: clearLabel, hidden: hidden);
+    await clearDriverSummaryCache(); // the list shows the new name / state on the next read
+  }
+
+  Future<void> deleteServerDrive(String sessionId) async {
+    await client.deleteServerDrive(_requireKey(), sessionId);
+    await clearDriverSummaryCache();
+  }
+
+  Future<List<ReportRow>> loadServerReports() => client.driverReports(_requireKey());
+
+  /// Downloads everything the server holds for this account and opens the share sheet with it. Returns the file.
+  Future<File> exportAccountData() async {
+    final bytes = await client.exportAccount(_requireKey());
+    final dir = await services.exportDir();
+    final d = services.clock().toUtc();
+    final name = 'meshsonar-account-export-${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}.json';
+    final file = File('${dir.path}${Platform.pathSeparator}$name');
+    await file.writeAsBytes(bytes, flush: true);
+    await services.shareFile(file);
+    return file;
+  }
+
+  /// Replaces this phone's driver key by a new one made here (`driver-key-rotate`): the old key stops working at once, the
+  /// drives stay. The new key is written to [Settings.pendingDriverKey] BEFORE the call, so a lost answer is settled by
+  /// [settlePendingKey] and never locks the phone out. Returns null when done, else a sentence for the person.
+  Future<String?> rotateDriverKey() async {
+    if (_keyBusy) return null;
+    final old = _requireKey();
+    final next = newDriverKey();
+    _keyBusy = true;
+    notifyListeners();
+    try {
+      await updateSettings(_settings.copyWith(pendingDriverKey: next));
+      try {
+        await client.rotateKey(old, next);
+      } on CmatException catch (e) {
+        if (e.status == null) {
+          // No answer: the server may or may not have switched. Keep the pending key; the next key check settles it.
+          unawaited(settlePendingKey());
+          return 'No answer from the server. The new key is kept safe on this phone and the app will check which key is live.';
+        }
+        await updateSettings(_settings.copyWith(clearPendingKey: true));
+        return friendlyError(e, action: 'Making a new key');
+      }
+      await updateSettings(_settings.copyWith(driverKey: next, clearPendingKey: true));
+      await clearDriverSummaryCache();
+      return null;
+    } finally {
+      _keyBusy = false;
+      notifyListeners();
+    }
+  }
+
+  /// A rotation whose answer was lost: asks the server which of the two keys it knows. The new one live = adopt it; the old
+  /// one still live = drop the pending one. Anything else (no connection) leaves both keys alone for the next try.
+  Future<void> settlePendingKey() async {
+    final pending = _settings.pendingDriverKey;
+    if (pending == null) return;
+    try {
+      final r = await client.status(pending);
+      if (_settings.pendingDriverKey != pending) return;
+      if (r.status == DriverKeyStatus.approved || r.status == DriverKeyStatus.pending) {
+        await updateSettings(_settings.copyWith(driverKey: pending, keyStatus: r.status, display: r.display, clearPendingKey: true));
+        await clearDriverSummaryCache();
+        notifyListeners();
+        return;
+      }
+    } on CmatException catch (e) {
+      if (e.status != 401) return; // no connection or a server hiccup: try again later
+    }
+    final old = _settings.driverKey;
+    if (old == null || _settings.pendingDriverKey != pending) return;
+    try {
+      await client.status(old);
+      await updateSettings(_settings.copyWith(clearPendingKey: true)); // the old key is still live: the rotation never happened
+    } on CmatException catch (e) {
+      if (e.status == 401) await updateSettings(_settings.copyWith(clearPendingKey: true)); // neither key is known: nothing to keep
+    }
+    notifyListeners();
+  }
+
+  /// "Delete my account": `DELETE driver-delete` removes the key and every drive, ping, sample, telemetry row, weather link and
+  /// report the server holds for it. On success (or 401: already gone) the phone forgets the key and never makes a new one by
+  /// itself ([Settings.autoKey] off; "Create my key" is the way back); drives on this phone stay unless [alsoOnPhone].
+  /// Returns what the server counted (null when the key was already gone). Throws [CmatException] (offline, 429, 5xx: nothing
+  /// changed on the phone).
+  Future<DriverDeleteCounts?> deleteAccountOnServer({bool alsoOnPhone = false}) async {
+    final key = _requireKey();
+    DriverDeleteCounts? counts;
+    try {
+      counts = await client.deleteDriver(key);
+    } on CmatException catch (e) {
+      if (e.status != 401) rethrow;
+    }
+    await updateSettings(_settings.copyWith(clearKey: true, autoKey: false));
+    await clearDriverSummaryCache();
+    if (alsoOnPhone) {
+      final recording = _session?.id;
+      for (final x in await services.store.sessions()) {
+        if (x.session.id != recording) await deleteSession(x.session.id, quiet: true);
+      }
+    }
+    return counts;
   }
 
   // ---------- where all MeshSonar drivers heard a repeater (lib/core/repeater_reach.dart, lib/ui/repeater_reach_section.dart) ----------
@@ -2782,6 +2910,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> refreshKeyStatus({bool quiet = false}) async {
+    await settlePendingKey();
     final key = _settings.driverKey;
     if (key == null || key.isEmpty) return;
     _keyBusy = true;

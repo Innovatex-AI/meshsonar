@@ -29,6 +29,7 @@ import 'package:http/http.dart' as http;
 
 import 'api.dart';
 import 'drive_context_wire.dart';
+import 'driver_account.dart';
 import 'driver_summary.dart';
 import 'model.dart';
 import 'region_lookup.dart';
@@ -323,6 +324,77 @@ class HttpCmatClient implements CmatClient, TelemetryTransport {
     if (list is! List) throw const CmatException('server sent an unreadable answer', status: 200);
     return [for (final e in list) ?PingObservation.tryParse(e)];
   }
+
+  @override
+  Future<DriverDevices> driverDevices(String driverKey) async {
+    final j = await _send('GET', 'driver-devices', driverKey: driverKey);
+    return DriverDevices.tryParse(j) ?? (throw const CmatException('server sent an unreadable answer', status: 200));
+  }
+
+  @override
+  Future<RevealedKey> revealKey(String driverKey, {required String kind, required String id}) async {
+    final j = await _send('POST', 'driver-key-reveal', driverKey: driverKey, body: {'kind': kind, 'id': id});
+    final key = j['key'];
+    if (j['revealable'] != true || key is! String || key.isEmpty) return const RevealedKey();
+    final link = j['configLink'];
+    return RevealedKey(key: key, configLink: link is String && link.isNotEmpty ? link : null);
+  }
+
+  @override
+  Future<String> rotateKey(String driverKey, String newKey) async {
+    final j = await _send('POST', 'driver-key-rotate', driverKey: driverKey, body: {'newKey': newKey});
+    return j['keyHint'] is String ? j['keyHint'] as String : newKey.substring(newKey.length - 4);
+  }
+
+  @override
+  Future<ServerDriveDetail> driverDrive(String driverKey, String sessionId) async {
+    final j = await _send('GET', 'driver-drive', driverKey: driverKey, query: {'id': sessionId}, timeout: const Duration(seconds: 90));
+    return ServerDriveDetail.tryParse(j) ?? (throw const CmatException('server sent an unreadable answer', status: 200));
+  }
+
+  @override
+  Future<void> updateServerDrive(String driverKey, String sessionId, {String? label, bool clearLabel = false, bool? hidden}) async {
+    await _send('POST', 'driver-drive-update',
+        driverKey: driverKey, body: {'id': sessionId, if (label != null || clearLabel) 'label': clearLabel ? null : label, 'hidden': ?hidden});
+  }
+
+  @override
+  Future<void> deleteServerDrive(String driverKey, String sessionId) async {
+    await _send('POST', 'driver-drive-delete', driverKey: driverKey, body: {'id': sessionId});
+  }
+
+  @override
+  Future<List<ReportRow>> driverReports(String driverKey) async => ReportRow.parseList(await _send('GET', 'driver-reports', driverKey: driverKey));
+
+  @override
+  Future<List<int>> exportAccount(String driverKey) async {
+    final req = http.Request('GET', endpoint('driver-export'))
+      ..headers['accept'] = 'application/json'
+      ..headers['x-driver-key'] = driverKey;
+    http.Response res;
+    try {
+      res = await _http.send(req).then(http.Response.fromStream).timeout(const Duration(minutes: 5));
+    } on TimeoutException {
+      throw CmatException('timed out talking to ${baseUrl.host}');
+    } on SocketException catch (e) {
+      throw CmatException('network error: ${e.message}');
+    } on http.ClientException catch (e) {
+      throw CmatException('network error: ${e.message}');
+    }
+    if (res.statusCode != 200) {
+      Object? d;
+      try {
+        d = jsonDecode(res.body);
+      } catch (_) {}
+      throw CmatException(d is Map && d['error'] is String ? d['error'] as String : 'server answered ${res.statusCode}',
+          status: res.statusCode, retryAfterSec: int.tryParse(res.headers['retry-after'] ?? ''));
+    }
+    return res.bodyBytes;
+  }
+
+  @override
+  Future<DriverDeleteCounts> deleteDriver(String driverKey) async =>
+      DriverDeleteCounts.parse(await _send('DELETE', 'driver-delete', driverKey: driverKey));
 
   @override
   Future<DriverSummary> driverSummary(String driverKey) async {

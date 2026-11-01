@@ -102,7 +102,7 @@ List<Widget> privacySectionRows(BuildContext context) {
         key: const Key('privacy-zones-website'),
         leading: const Icon(Icons.open_in_new),
         title: Text(settingsEntry('privacy-zones-website').title),
-        subtitle: Text('The same zones, plus your account settings, on ${s.webPage('/me/privacy')}.'),
+        subtitle: Text('Optional: the same page on ${s.webPage('/me/privacy')}. Everything on it is also in the app.'),
         onTap: () => s.openWebPage('/me/privacy'),
       ),
     ),

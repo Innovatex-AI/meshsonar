@@ -15,6 +15,9 @@ import '../radios/radio_setup/radio_setup_screen.dart';
 import '../settings_screen.dart';
 import '../tools/adverts_screen.dart';
 import '../tools/discover_screen.dart';
+import '../account/devices_screen.dart';
+import '../account/leaderboard_screen.dart';
+import '../account/reports_history_screen.dart';
 import '../tools/noise_screen.dart';
 import '../tools/rx_log_screen.dart';
 import '../tools/telemetry_screen.dart';
@@ -70,6 +73,9 @@ class _MoreTabState extends State<MoreTab> {
         MoreItem.telemetry => const TelemetryScreen(),
         MoreItem.radioSetup => const RadioSetupScreen(),
         MoreItem.observerJoin => const ObserverJoinScreen(),
+        MoreItem.devices => const DevicesScreen(),
+        MoreItem.myReports => const ReportsHistoryScreen(),
+        MoreItem.leaderboard => const LeaderboardScreen(),
         MoreItem.legend || MoreItem.howItWorks => const SizedBox.shrink(),
       };
 
@@ -145,6 +151,9 @@ class MoreList extends StatelessWidget {
                 s.connected ? 'What your radio reports, compared with this region' : 'Not connected. Connect and see its settings'),
             row(MoreItem.myRadios, Icons.verified_user_outlined, 'My radios and claims',
                 'Radios and repeaters you manage'),
+            row(MoreItem.devices, Icons.key_outlined, 'Devices and keys', 'Your driver key, other phones, MeshMapper forwarding'),
+            row(MoreItem.leaderboard, Icons.emoji_events_outlined, 'Leaderboard', 'Drivers who opted in, this region or every region'),
+            row(MoreItem.myReports, Icons.report_gmailerrorred_outlined, 'My reports', 'Problem reports you sent and where they stand'),
             header('Radios and tools'),
             row(MoreItem.repeaters, Icons.cell_tower, 'Repeaters and rooms',
                 s.connected ? 'Administer a repeater, read and post in a room' : 'Needs your radio. Free repeater administration'),
