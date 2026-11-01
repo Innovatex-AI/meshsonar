@@ -260,7 +260,10 @@ void main() {
         expect(find.descendant(of: tile, matching: find.byIcon(Icons.open_in_new)), findsNothing, reason: t.id);
         await tester.tap(tile);
         await tester.pumpAndSettle();
-        expect(find.byKey(Key('plan-page-${t.id}')), findsOneWidget, reason: t.id);
+        expect(find.byKey(const Key('plan-list')), findsNothing, reason: '${t.id} opened a screen over the Plan tab');
+        if (const ['link', 'painter', 'airtime', 'presets', 'check', 'field'].contains(t.id)) {
+          expect(find.byKey(Key('plan-page-${t.id}')), findsOneWidget, reason: t.id);
+        }
         await tester.pageBack();
         await tester.pumpAndSettle();
       }
