@@ -24,7 +24,7 @@ Future<void> tapTab(WidgetTester t, String name) async {
 /// Lists are lazy: scroll the widget into the built range, then into view.
 Future<void> reveal(WidgetTester t, Finder f) async {
   if (f.evaluate().isEmpty) {
-    await t.scrollUntilVisible(f, 200, scrollable: find.byType(Scrollable).first, maxScrolls: 60);
+    await t.scrollUntilVisible(f, 200, scrollable: find.byWidgetPredicate((w) => w is Scrollable && w.axis == Axis.vertical).first, maxScrolls: 60);
   }
   await t.ensureVisible(f);
   await pumpFor(t, const Duration(milliseconds: 400));

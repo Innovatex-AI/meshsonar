@@ -46,8 +46,10 @@ void main() {
     await pumpFor(t, const Duration(seconds: 6));
     await shot1(t, 'puck-lines-faded');
     // Pan away: the re-centre button appears.
-    await t.drag(find.byKey(const Key('drive-map')), const Offset(120, 40));
-    await pumpFor(t, const Duration(seconds: 1));
+    for (var i = 0; i < 3 && find.byKey(const Key('map-recenter')).evaluate().isEmpty; i++) {
+      await t.drag(find.byKey(const Key('drive-map')), const Offset(160, 60), warnIfMissed: false);
+      await pumpFor(t, const Duration(seconds: 1));
+    }
     await shot1(t, 'puck-panned');
     await t.tap(find.byKey(const Key('map-recenter')));
     await pumpFor(t, const Duration(seconds: 1));
@@ -60,6 +62,7 @@ void main() {
     await pumpFor(t, const Duration(seconds: 1));
     // Settings moved into More: the Wardriving settings are the screen this flow is about.
     await openShellTab(t, 'More');
+    await t.scrollUntilVisible(find.byKey(const Key('more-wardriving')), 200, scrollable: find.descendant(of: find.byKey(const Key('more-list')), matching: find.byType(Scrollable)).first);
     await t.tap(find.byKey(const Key('more-wardriving')));
     await pumpFor(t, const Duration(seconds: 2));
     await shot1(t, 'wardriving-settings');
