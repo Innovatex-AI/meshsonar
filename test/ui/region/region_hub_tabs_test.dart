@@ -19,7 +19,7 @@ void main() {
     await openRegionTab(tester);
     await tester.pumpAndSettle();
     final labels = tester.widgetList<Tab>(find.byType(Tab)).map((t) => t.text).toList();
-    expect(labels, ['Overview', 'Repeaters', 'Observers', 'Packets', 'Analysis', 'RF', 'Growth', 'Reports', 'Stats', 'Live']);
+    expect(labels, ['Overview', 'Repeaters', 'Observers', 'Packets', 'Analysis', 'RF', 'Growth', 'Reports', 'Stats', 'Live', 'Hops', 'Silent', 'Wardrive']);
     await tester.tap(find.byKey(const Key('region-report-export')));
     await tester.pump();
     expect(find.byType(RegionReportExportSheet), findsOneWidget);

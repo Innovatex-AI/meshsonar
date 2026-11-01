@@ -5,6 +5,8 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- **Region analytics, native (Analyze > Region: Hops, Silent, Wardrive tabs).** Hop and route histogram (flood / direct, all packets or group text, 6/24/48 h), silent repeaters (advertising in 24 h, never a relay hop, with a what-to-check list; repeaters you claimed are marked), and the group-text share of transmissions and modelled airtime. Same data as the website's /analysis tabs (`region-hop-route`, `region-silent-repeaters`, `region-airtime-share`, website migration 0106). Every tab shows its window, the age of the newest packet and the sample size. The source holds no packet text, so wardrive pings cannot be told from other group text; the Wardrive tab says so and reports the group-text share as the ceiling. Airtime maths: `lib/core/airtime_share.dart`, pinned to the website's numbers by `test/core/airtime_share_test.dart`.
+
 ## [0.25.2] — 2026-11-01 — map quick wins (base maps, coverage modes, filters, coverage %, leaderboard, ping feedback), dead-area warning, observer wizard
 
 - **Map tab quick wins.** Base-map cycler under the layers button (Chart, Street, Dark, Topo; offline packs still used except for Topo). Two new coverage colour modes in Coverage options: Ping age and Noise vs typical (own colour ramps; grey and purple keep their meaning, strength colours stay for signal). Filter drawer (result, age, repeater, my pings only). "In view: N% of M cells heard" pill. Trophy button: the region leaderboard plus your totals. Settings > Wardriving > Ping feedback: haptic tap on/off and an optional sound (off by default), different for heard and heard nothing.
