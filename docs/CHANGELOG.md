@@ -5,6 +5,8 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+## [0.25.1] — 2026-11-01 — integration pass, privacy-zone editor, region switching, Drive Format v1.3, Plan "Where to drive next"
+
 - **Drive Format v1.3: ping-by-ping comparison with MeshMapper (website PR 194, migration 0099).** When the server lists `meshsonar.drive.v1.3` in `driveFormats`, uploads are v1.3 and each tx ping carries `outcome` (`echo` | `no_reply`) and `window_ms` (the listen window actually used, kept on the ping on disk). Older servers get the old body unchanged. Contract-tested against the website validator (`test/core/cmat_contract_test.dart`), wire shape in `test/core/drive_v13_wire_test.dart`.
 ### Integration pass (contacts, rooms, banners, Plan)
 - Contacts: repeaters and rooms get an Admin button in their details (remote administration through your radio); rooms open as a conversation with the room-login header on top.
