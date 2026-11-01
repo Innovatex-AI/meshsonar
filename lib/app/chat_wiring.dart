@@ -13,9 +13,11 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../alerts/alerts_runtime.dart';
 import '../chat/chat_service.dart';
 import '../core/model.dart' show PingKind;
 import '../ui/chat/chat_tab_provider.dart';
+import '../ui/chat/conversation_screen.dart';
 import '../ui/contacts/contacts_tab.dart';
 import '../ui/shell/chat_tab_host.dart';
 import 'app_state.dart';
@@ -80,6 +82,15 @@ class ChatWiring {
     _sessions = app.radioSessions.sessions.listen((s) => unawaited(ctl.onSession(s, arbiter: app.radioSessions.arbiter)));
     if (app.radioSession != null) unawaited(ctl.onSession(app.radioSession, arbiter: app.radioSessions.arbiter));
 
+    // Alerts (M3): notifications and banners come from this service's events; a tap opens the conversation.
+    final alerts = AlertsHost.runtime.value;
+    if (alerts != null) {
+      alerts.bindChat(service);
+      ctl.onActiveConversationChanged = alerts.coordinator.setVisibleConversation;
+    }
+    ChatTabHost.openConversation = (context, convKey) => ConversationScreen.open(context,
+        controller: ctl, convKey: convKey, title: service.conversation(convKey)?.title);
+
     controller.value = ctl;
     ChatTabProviderImpl.contactsBuilder = (context, c) => ContactsTab(chat: c);
     ChatTabHost.provider.value = ChatTabProviderImpl(ctl);
@@ -96,6 +107,7 @@ class ChatWiring {
     _app?.onTxPing = null;
     _app = null;
     ChatTabHost.provider.value = null;
+    ChatTabHost.openConversation = null;
     ChatTabProviderImpl.contactsBuilder = null;
     final c = controller.value;
     controller.value = null;

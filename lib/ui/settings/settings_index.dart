@@ -2,6 +2,7 @@
 // it. Section widgets take their titles from here, so a result always names the row exactly as it is shown.
 // Adding a row to Settings = add a [SettingsEntry] here and wrap the row in a SettingsAnchor with the same id
 // (test/ui/settings_search_test.dart fails for an entry without a row).
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 
 import '../../app/app_state.dart';
@@ -20,6 +21,7 @@ const List<SettingsSectionInfo> settingsSections = [
   SettingsSectionInfo('display', 'Units & display', Icons.straighten),
   SettingsSectionInfo('maps', 'Map & offline maps', Icons.map_outlined),
   SettingsSectionInfo('privacy', 'Privacy & data sharing', Icons.privacy_tip_outlined),
+  SettingsSectionInfo('notifications', 'Notifications', Icons.notifications_outlined),
   SettingsSectionInfo('wardriving', 'Wardriving', Icons.radar),
   SettingsSectionInfo('radio', 'Radio', Icons.settings_input_antenna),
   SettingsSectionInfo('my-radios-section', 'My radios', Icons.verified_user_outlined),
@@ -54,6 +56,7 @@ class SettingsEntry {
   bool isAvailable(AppState s) => available?.call(s) ?? true;
 }
 
+bool _isAndroid(AppState s) => defaultTargetPlatform == TargetPlatform.android;
 bool _hasSiteConfig(AppState s) => s.siteConfig != null;
 bool _hasKey(AppState s) => s.hasKey;
 bool _hasDirectory(AppState s) => s.services.directory != null;
@@ -207,10 +210,33 @@ const List<SettingsEntry> settingsEntries = [
   SettingsEntry('storage-report-draft', 'storage', 'Unsent problem report',
       'A problem report that was not sent yet, kept so nothing you wrote is lost.',
       keywords: ['report', 'draft', 'discard'], available: _hasSavedReport),
+  // Notifications
+  SettingsEntry('notif-enabled', 'notifications', 'Message alerts',
+      'The master switch for notifications and in-app banners. Messages are still saved when it is off.',
+      keywords: ['notifications', 'alerts', 'push', 'badge', 'turn off']),
+  SettingsEntry('notif-sound', 'notifications', 'Sound', 'Play the system sound with an alert.',
+      keywords: ['notification sound', 'silent', 'beep', 'ding']),
+  SettingsEntry('notif-vibrate', 'notifications', 'Vibrate', 'Vibrate with an alert (Android).',
+      keywords: ['haptic', 'vibration', 'buzz'], available: _isAndroid),
+  SettingsEntry('notif-previews', 'notifications', 'Show message text in alerts',
+      'Off by default: alerts say "New message" so a locked screen does not show your chats.',
+      keywords: ['preview', 'lock screen', 'privacy', 'hide text', 'content']),
+  SettingsEntry('notif-quiet', 'notifications', 'Quiet hours',
+      'Between the hours you pick, alerts arrive without sound.',
+      keywords: ['night', 'sleep', 'do not disturb', 'dnd', 'silent', 'schedule', 'focus']),
+  SettingsEntry('notif-conversations', 'notifications', 'Alerts per conversation',
+      'Mute a conversation for a while or for good, or hear only when you are mentioned.',
+      keywords: ['mute', 'mentions', 'channel', 'contact', 'unmute']),
+  SettingsEntry('notif-test', 'notifications', 'Send a test notification',
+      'Shows one alert in 3 seconds so you can check sound and what the lock screen shows.',
+      keywords: ['test', 'try', 'check']),
   // Diagnostics
   SettingsEntry('diagnostics-log', 'diagnostics', 'Diagnostic log',
       'Recent app events to help explain a problem. Secrets hidden, positions rounded when copied.',
       keywords: ['log', 'debug', 'copy', 'events', 'support', 'troubleshoot']),
+  SettingsEntry('diagnostics-ble', 'diagnostics', 'Background Bluetooth test',
+      'A log of the radio link while the app is in the background, closed or restarted, for testing alerts.',
+      keywords: ['bluetooth', 'background', 'alerts', 'notifications', 'test', 'restore', 'suspend', 'log']),
   SettingsEntry('report-problem', 'diagnostics', 'Report a problem',
       'Send a report to your server\'s operators. You see exactly what is sent first.',
       keywords: ['bug', 'feedback', 'support', 'issue', 'help', 'contact']),

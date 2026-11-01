@@ -49,6 +49,11 @@ class MessageSync {
   /// Called when persisting a message failed after the retries (it is still emitted; the radio no longer has it).
   void Function(InboundMessage message, Object error)? onPersistError;
 
+  /// Called when a drain finishes (the radio said "no more", or the link went) with how many message frames it took out
+  /// of the radio's queue. A drain that finds many frames waiting means the app was away or slow while the radio's small
+  /// queue (16 by default) filled, so the oldest may already be gone: the alerts layer warns on it (RadioQueueWatch).
+  void Function(int frames)? onDrained;
+
   final _out = StreamController<InboundMessage>.broadcast();
   final LinkedHashSet<String> _seen = LinkedHashSet<String>();
   static const int _seenMax = 512;
@@ -103,6 +108,7 @@ class MessageSync {
     }
     drains++;
     return _run = () async {
+      _runFrames = 0;
       try {
         do {
           _again = false;
@@ -110,16 +116,23 @@ class MessageSync {
         } while (_again && source.isConnected && !_disposed);
       } finally {
         _run = null;
+        lastDrainFrames = _runFrames;
+        if (_runFrames > 0) onDrained?.call(_runFrames);
       }
     }();
   }
 
   Future<void>? _run;
+  int _runFrames = 0;
+
+  /// Message frames taken by the most recent drain (0 when the queue was empty).
+  int lastDrainFrames = 0;
 
   Future<void> _drainOnce() async {
     try {
       for (var n = 0; n < maxPerDrain && source.isConnected && !_disposed; n++) {
         final f = await source.syncNextMessage();
+        if (f is ChannelMsgFrame || f is ContactTextFrame || f is ContactMsgFrame || f is ChannelDataFrame) _runFrames++;
         if (f is ChannelMsgFrame) {
           await _deliver(_fromChannel(f));
           continue;

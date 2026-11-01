@@ -40,6 +40,10 @@ class ChatTabHost {
   /// Set by the chat wiring when lib/chat is available; null means "chat not built into this app yet".
   static final ValueNotifier<ChatTabProvider?> provider = ValueNotifier<ChatTabProvider?>(null);
 
+  /// Opens one conversation full screen from anywhere (a tapped notification or banner). Set by the chat wiring; null before
+  /// chat is up, when a tap only brings the Chat tab to the front.
+  static void Function(BuildContext context, String convKey)? openConversation;
+
   /// Debug builds only: show fixture conversations so the structure can be reviewed without a radio.
   static final ValueNotifier<bool> debugFixtures = ValueNotifier<bool>(false);
 

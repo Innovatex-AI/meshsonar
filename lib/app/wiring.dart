@@ -31,6 +31,7 @@ import '../platform/chat_database.dart' as chat_db;
 import '../platform/secure_storage.dart';
 import '../platform/share.dart';
 import '../radio/ble_transport.dart';
+import '../radio/ble_transport_universal.dart';
 import '../radio/companion_link.dart';
 import '../radio/radio_api.dart' show NoRadioScanner;
 import '../radio/simulator.dart';
@@ -62,6 +63,7 @@ Future<AppServices> buildRealServices() async {
   final root = await _dataRoot();
   Future<ChatStore>? chatStore;
 
+  await BleEngineChoice.load(File('${root.path}${Platform.pathSeparator}ble_engine.txt'));
   final store = await JsonlDriveStore.open(root);
   final settingsStore = FileSettingsStore(File('${root.path}${Platform.pathSeparator}settings.json'));
   // Version comes from the build (pubspec.yaml's `version:`), never a constant here.
@@ -79,7 +81,9 @@ Future<AppServices> buildRealServices() async {
     cmatClientFactory: (url) => HttpCmatClient(url, client: newCmatWireClient()),
     syncServiceFactory: (client) =>
         DefaultSyncService(store: store, client: client, settings: settingsStore, app: app),
-    bluetoothScanner: BleRadioScanner(),
+    // The proven engine unless Settings > Diagnostics > Background Bluetooth test switches the experiment on (S1).
+    bluetoothScanner: SwitchableRadioScanner(
+        reactive: BleRadioScanner(), universal: UniversalBleRadioScanner(), useUniversal: () => BleEngineChoice.universal),
     simulatorScanner: simLocation == null ? const NoRadioScanner() : SimulatedRadioScanner(location: simLocation, ambientTraffic: true),
     linkFactory: (transport) => MeshCoreCompanionLink(transport),
     // Real GPS, cleaned: parked jitter is held still, poor fixes dropped (lib/core/position_filter.dart).

@@ -1396,6 +1396,11 @@ class AppState extends ChangeNotifier {
     _ctx = null;
   }
 
+  /// Alerts layer hooks (lib/alerts): a radio just connected / the person disconnected on purpose. Plain callbacks so
+  /// AppState does not import lib/alerts. Null in tests.
+  void Function(RadioDevice device, RadioKind kind, SelfInfo info)? onRadioConnected;
+  void Function()? onRadioReleased;
+
   Future<bool> connect(RadioDevice device, RadioKind kind) async {
     if (driving) {
       _say('Stop the drive before switching radios.');
@@ -1421,6 +1426,7 @@ class AppState extends ChangeNotifier {
       diagnostics.add('Connected to ${kind == RadioKind.simulator ? 'the simulator' : 'radio "${info.name}"'}, '
           'firmware ${info.firmware ?? 'unknown'}');
       notifyListeners();
+      onRadioConnected?.call(device, kind, info);
       return true;
     } catch (e) {
       _connecting = false;
@@ -1571,7 +1577,10 @@ class AppState extends ChangeNotifier {
         await radioSessions.disconnect();
       } catch (_) {}
     }
-    if (!quiet) notifyListeners();
+    if (!quiet) {
+      if (hadRadio) onRadioReleased?.call();
+      notifyListeners();
+    }
   }
 
   // ---------- drive ----------

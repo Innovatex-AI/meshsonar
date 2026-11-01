@@ -384,6 +384,14 @@ over. A message with the same conversation, sender timestamp and text as one alr
 message id; a retried DM arrives again as a new frame). A `MSG_WAITING` that arrives while a drain is finishing starts one
 more round.
 
+**Queue depth and alerts (wave 2C).** The radio does not report how many messages wait (no command, no field), so depth is only
+known after the fact: `MessageSync.onDrained(n)` / `lastDrainFrames` count the message frames one drain took (messages, contact
+text, undecodable contact messages, channel datagrams). `RadioQueueWatch` warns from 12 of 16 (75%) and says "may have been dropped"
+from 16, because eviction (oldest channel message, or the new DM) is silent. `DeviceLimits.assumedOfflineQueue` is the capacity used (16).
+`PUSH_MSG_WAITING` is one byte through the lossy BLE queue, so a background wake can be missed; the next drain (connect, return to the
+front, 5 s poll while connected) is the recovery. What iOS does with the BLE link in the background is spike S1, not protocol:
+`docs/BACKGROUND_BLE_SPIKE.md`.
+
 ### 6.4 Chat frames (Nov 2026)
 
 Layouts below are from MeshCore `examples/companion_radio/MyMesh.cpp` at 81dbae5 (MIT), re-read line by line; byte fixtures

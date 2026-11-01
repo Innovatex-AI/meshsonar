@@ -216,7 +216,7 @@ void main() {
   group('app bar: Search and Sections', () {
     testWidgets('Sections lists every section; picking one opens it (even when folded) and scrolls to it',
         (tester) async {
-      tester.view.physicalSize = const Size(1170, 2532); // 390 dp phone
+      tester.view.physicalSize = const Size(1170, 3000); // 390 dp wide, tall enough that the index sheet lists all 12 sections
       tester.view.devicePixelRatio = 3.0;
       addTearDown(tester.view.reset);
       final handle = tester.ensureSemantics();

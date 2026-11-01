@@ -135,6 +135,13 @@ class LinkRadioSession implements RadioSession, RepeaterAdminRadio, RadioStatsSo
   @override
   Future<void> syncMessagesNow() async => _mc?.sync.drain();
 
+  /// Called after each drain that took messages out of the radio's offline queue, with how many (the alerts layer warns
+  /// when that is close to the queue's size). No-op over a link without message sync.
+  set onQueueDrained(void Function(int frames)? cb) => _mc?.sync.onDrained = cb;
+
+  /// The radio's offline queue size to plan for (16 unless the firmware says otherwise; not readable from the radio).
+  int get assumedOfflineQueue => (limits ?? const DeviceLimits()).assumedOfflineQueue;
+
   void _onPush(Frame f) {
     final now = _clock();
     RadioEvent? e;

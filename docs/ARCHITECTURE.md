@@ -334,6 +334,22 @@ between bar and rail keeps every tab's state. The More tab has its own `Navigato
 `MiniDriveBar` reads `AppState` (status, pingCount, heardCount, recentPings, `pingsPaused`) and nothing else. Chat plugs in
 through `ChatTabHost.provider` (a `ChatTabProvider`); the shell never imports `lib/chat`.
 
+### Alerts (`lib/alerts/`, `lib/platform/local_notifications*.dart`, wave 2C)
+
+`AlertsHost.runtime` holds one `AlertsRuntime` (an inert memory-only one until `main.dart` swaps in the real one). It owns:
+`AlertCoordinator` (listens to `ChatService.events`; `messageAdded` + `notify` + incoming becomes an OS notification via the
+`LocalNotifications` interface, an in-app banner while in front, or nothing; rules and order in the file header), `AlertPrefs` (JSON
+file), `RadioQueueWatch` (fed by `MessageSync.onDrained` through `LinkRadioSession.onQueueDrained`), `LastRadioStore` +
+`LaunchReconnect` (retry loop through `AppState.connect`), `BleLifecycleLog` (file-backed, survives a kill), and optional
+`IosWakeKeeper` / `BackgroundLinkService`. `AppState` has two plain callbacks (`onRadioConnected`, `onRadioReleased`); `lib/alerts`
+imports `AppState`, never the other way. Persist-first is unchanged and is what makes a short background wake safe: `MessageSync`
+awaits the persister (`RadioSessionChatAdapter.bind` installs `ChatService.handleInbound`, which commits to SQLite) before the next
+`SYNC_NEXT_MESSAGE`, and `ChatService` emits only after the commit, so a notification is always built from a stored row.
+Chat wiring (the code that builds `ChatService`) calls `AlertsHost.runtime.value?.bindChat(chatService)`; the Chat UI consumes taps with
+`coordinator.takePendingOpen()` and reports the open conversation with `setVisibleConversation`. `HomeShell` switches to the Chat tab on a
+tap and hosts `InAppBannerHost` and `AlertsStatusStrip`. Native: `ios/Runner/BleWakeKeeper.swift` (experiment), badge + settings channel
+`app.meshsonar/alerts`. BLE engine: `SwitchableRadioScanner` (wiring) picks `flutter_reactive_ble` or the experimental `universal_ble`
+scanner at each connect (`BleEngineChoice`, file `ble_engine.txt`).
 ### Repeater administration (`lib/radio/repeater_*.dart`, `lib/ui/radios/`)
 
 `RepeaterAdminSession` (`repeater_admin.dart`) administers one repeater or room over a `RepeaterAdminRadio` (`repeater_radio.dart`), which
@@ -381,6 +397,12 @@ behaviour: silence, the replay rule, loss, caps, prefix matching, the blank-pass
 | `chat/secret_store.dart` | chat | `SecretStore` contract + `InMemorySecretStore` (tests). Secrets never go to SQLite. |
 | `chat/fixtures/demo_seed.dart` | chat (dev) | `seedDemoChat`: deterministic, idempotent realistic conversations for UI work; unused in release (tree-shaken). |
 | `platform/secure_storage.dart` | platform | `KeychainSecretStore` (flutter_secure_storage). |
+| `platform/local_notifications.dart` | platform | `LocalNotifications` interface, `AlertNotification`, `NotificationPermission`, `notificationIdFor`, `UnavailableLocalNotifications`. |
+| `platform/local_notifications_plugin.dart` | platform | `flutter_local_notifications` implementation (no prompt at init; threads; badge via the `app.meshsonar/alerts` channel). |
+| `platform/background_link_service.dart` | platform | Android foreground service for the radio link (not compiled here); no-op elsewhere. |
+| `platform/ios_wake_keeper.dart` | platform | Dart side of the iOS wake-keeper experiment (S1). |
+| `alerts/*` | alerts | Coordinator, prefs, queue watch, launch reconnect, last radio store, BLE lifecycle log, runtime. |
+| `radio/ble_transport_universal.dart` | radio | Experimental `universal_ble` engine + `SwitchableRadioScanner` + `BleEngineChoice`. |
 | `platform/chat_database.dart` | platform | Opens `chat.db` under Application Support (WAL) as a `ChatStore`. |
 | `core/model.dart` | core (contract) | Drive Format v1 records: `AppInfo`, `Radio`, `Antenna`, `Companion`, `DriveSession`, `Echo`, `Neighbor`, `DrivePing`, `DriveBatch`, `RepeaterRef`. |
 | `core/api.dart` | core (contract) | `DriveStore`, `CmatClient`, `SyncService`, `SettingsStore` interfaces; `Settings`, `SessionSummary`, `DriverKeyStatus`, `UploadResult`, `SyncReport`, `CmatException`, `RegionInfo`, `RadioPreset`, `SiteConfig`, `CoverageCell`, `CoverageGrid`, `PublicCoverage`. |

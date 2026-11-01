@@ -9,6 +9,7 @@ import '../../core/diagnostics.dart';
 import '../../core/redact.dart';
 import '../app.dart';
 import '../report_problem_screen.dart';
+import 'ble_diagnostics_screen.dart';
 import 'settings_index.dart';
 import 'settings_kit.dart';
 
@@ -30,6 +31,7 @@ List<Widget> diagnosticsSectionRows(BuildContext context) {
         onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const DiagnosticsLogScreen())),
       ),
     ),
+    SettingsAnchor(id: 'diagnostics-ble', child: bleDiagnosticsRows(context).first),
     SettingsAnchor(
       id: 'report-problem',
       child: ListTile(
