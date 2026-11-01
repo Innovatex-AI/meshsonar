@@ -131,6 +131,17 @@ void main() {
       expect(find.byKey(const Key('contact-admin')), findsOneWidget, reason: 'admin is wired in this rig');
     });
 
+    tw('room with room support switched on: "Open room" opens the conversation', (tester) async {
+      setScreen(tester);
+      final withRooms = ContactsRig(canOpenRooms: true);
+      addTearDown(withRooms.dispose);
+      await withRooms.withContacts(7);
+      await pumpDetail(tester, withRooms, keyN(7));
+      expect(find.text('Open room'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('contact-message')));
+      expect(withRooms.opened.single.publicKey, keyN(7));
+    });
+
     tw('sensor: no Message button, nothing dead', (tester) async {
       setScreen(tester);
       rig.port.radioAdd(radioContact(9, type: ContactType.sensor));

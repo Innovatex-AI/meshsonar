@@ -27,14 +27,16 @@ class _ContactsTabState extends State<ContactsTab> {
     chat: widget.chat.service,
     openConversation: _openConversation,
     openAdmin: widget.openAdmin,
+    canOpenRooms: false, // flips to true when the room login header exists (Wave 2D)
   );
 
   void _openConversation(BuildContext context, Contact c) {
-    if (c.type != ContactType.companion) return;
+    if (c.type != ContactType.companion && c.type != ContactType.room) return;
+    final room = c.type == ContactType.room;
     ConversationScreen.open(
       context,
       controller: widget.chat,
-      convKey: ConvKey.dm(c.prefix),
+      convKey: room ? ConvKey.room(c.prefix) : ConvKey.dm(c.prefix),
       title: c.displayName,
       actions: [
         IconButton(
@@ -45,7 +47,7 @@ class _ContactsTabState extends State<ContactsTab> {
           onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ContactDetailScreen(controller: _c, publicKey: c.publicKey))),
         ),
       ],
-      header: DmRouteHeader(controller: _c, publicKey: c.publicKey),
+      header: room ? null : DmRouteHeader(controller: _c, publicKey: c.publicKey),
     );
   }
 

@@ -23,7 +23,7 @@ class ContactsRig {
   final List<Contact> opened = [];
   final List<Contact> adminOpened = [];
 
-  ContactsRig({bool admin = true}) {
+  ContactsRig({bool admin = true, bool canOpenRooms = false}) {
     chat = ChatService(
         store: store, sink: sink, nowMs: clock.call, selfName: () => 'Me', policy: const RetryPolicy(jitterMs: 0, minGapMs: 0), autoTimer: false);
     controller = ContactsController(
@@ -31,6 +31,7 @@ class ContactsRig {
       nowMs: clock.call,
       openConversation: (context, c) => opened.add(c),
       openAdmin: admin ? (context, c) => adminOpened.add(c) : null,
+      canOpenRooms: canOpenRooms,
     );
   }
 

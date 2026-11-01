@@ -123,7 +123,7 @@ class _ContactDetailScreenState extends State<ContactDetailScreen> {
     final now = _c.nowMs();
     final connected = _m.connected;
     // Rooms need a login before the server takes a post (M4, room login); until it exists there is no button to a conversation that cannot work.
-    final canMessage = _c.openConversation != null && c.type == ContactType.companion;
+    final canMessage = _c.openConversation != null && (c.type == ContactType.companion || (c.type == ContactType.room && _c.canOpenRooms));
     final canAdmin = _c.openAdmin != null && (c.type == ContactType.repeater || c.type == ContactType.room);
     final canClaim = c.type == ContactType.repeater;
     return Scaffold(
@@ -162,7 +162,7 @@ class _ContactDetailScreenState extends State<ContactDetailScreen> {
                         key: const Key('contact-message'),
                         style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
                         icon: Icon(c.type == ContactType.room ? Icons.forum_rounded : Icons.chat_bubble_rounded),
-                        label: const Text('Message'),
+                        label: Text(c.type == ContactType.room ? 'Open room' : 'Message'),
                         onPressed: () => _c.openConversation!(context, c),
                       ),
                     if (canAdmin)
