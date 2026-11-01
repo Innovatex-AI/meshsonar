@@ -6,6 +6,7 @@ import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/radio/radio_api.dart';
 import 'package:meshsonar/ui/app.dart';
 import 'package:meshsonar/ui/onboarding/ui_prefs.dart';
+import 'package:meshsonar/ui/plan/native_screens.dart';
 import 'package:meshsonar/ui/shell/chat_tab_host.dart';
 import 'package:meshsonar/ui/shell/mini_drive_bar.dart';
 import 'package:meshsonar/ui/shell/plan_tab.dart';
@@ -230,19 +231,23 @@ void main() {
   });
 
   group('Plan tab', () {
-    testWidgets('every tool opens the website page for the region; planned in-app tools have no button', (tester) async {
+    testWidgets('every tool not yet native opens the website page for the region; planned in-app tools have no button', (tester) async {
       phone(tester);
       final h = Harness();
       await h.pumpApp(tester);
       await tapShellTab(tester, 'Plan');
       final list = find.descendant(of: find.byKey(const Key('plan-list')), matching: find.byType(Scrollable)).first;
-      for (final t in planTools) {
+      // Native tools (lib/ui/plan, test/ui/plan) open a screen in the app, never the browser.
+      final web = planTools.where((t) => !nativePlanScreens.containsKey(t.id)).toList();
+      for (final t in web) {
         await tester.scrollUntilVisible(find.byKey(Key('plan-${t.id}')), 120, scrollable: list);
+        await tester.ensureVisible(find.byKey(Key('plan-${t.id}')));
+        await tester.pump();
         await tester.tap(find.byKey(Key('plan-${t.id}')));
         await tester.pump();
         expect(h.openedUrls.last.path, t.path, reason: t.id);
       }
-      expect(h.openedUrls.length, planTools.length);
+      expect(h.openedUrls.length, web.length);
       await tester.scrollUntilVisible(find.text('Coming next, inside the app'), 120, scrollable: list);
       for (final p in plannedInApp) {
         expect(tester.widget<ListTile>(find.widgetWithText(ListTile, p.$1)).enabled, isFalse);

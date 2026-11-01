@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 
 import '../app.dart';
+import '../plan/native_screens.dart';
 import 'drive_next_card.dart';
 
 class PlanTool {
@@ -23,6 +24,8 @@ const List<PlanTool> planTools = [
   PlanTool('recommended', 'Recommended build', 'The engine\'s recommended build, phase by phase, with the budget and the risks.',
       Icons.checklist_rtl, '/plan/recommended'),
   PlanTool('sites', 'Site explorer', 'Candidate sites and the links between them.', Icons.place_outlined, '/sites'),
+  PlanTool('scenarios', 'Scenarios', 'Toggle sites, heights and link tiers and see what the mesh would become.', Icons.tune, '/plan/scenarios'),
+  PlanTool('tracker', 'Build tracker', 'Who is installing what, and where each site stands.', Icons.view_kanban_outlined, '/plan/tracker'),
   PlanTool('link', 'Point-to-point link',
       'A terrain check between any two points: line of sight, clearance and the odds the link works.', Icons.timeline, '/tools/link'),
   PlanTool('painter', 'Coverage painter',
@@ -69,11 +72,11 @@ class PlanTab extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(Gap.l, Gap.s, Gap.l, Gap.xl),
           children: [
             const DriveNextCard(),
-            Semantics(header: true, child: Text('Plan on the website', style: t.textTheme.titleSmall)),
+            Semantics(header: true, child: Text('Plan', style: t.textTheme.titleSmall)),
             const SizedBox(height: Gap.xs),
             Text(
-              'Plan where the next repeater should go. These tools open on the website${region == null ? '' : ' for ${region.name}'}, '
-              'in your browser. No account needed.',
+              'Plan where the next repeater should go${region == null ? '' : ' in ${region.name}'}. No account needed. '
+              'Tools marked with an arrow run in the app; the others open the website.',
               style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant),
             ),
             const SizedBox(height: Gap.m),
@@ -86,8 +89,15 @@ class PlanTab extends StatelessWidget {
                   leading: Icon(tool.icon, color: t.colorScheme.primary),
                   title: Text(tool.title),
                   subtitle: Text(tool.lead),
-                  trailing: const Icon(Icons.open_in_new, size: 18, semanticLabel: 'Opens in your browser'),
+                  trailing: nativePlanScreens.containsKey(tool.id)
+                      ? const Icon(Icons.chevron_right)
+                      : const Icon(Icons.open_in_new, size: 18, semanticLabel: 'Opens in your browser'),
                   onTap: () async {
+                    final native = nativePlanScreens[tool.id];
+                    if (native != null) {
+                      await Navigator.of(context).push(MaterialPageRoute<void>(builder: native));
+                      return;
+                    }
                     final ok = await s.services.openUrl(planToolUri(base, tool.path));
                     if (!ok && context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(

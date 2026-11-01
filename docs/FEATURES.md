@@ -67,7 +67,7 @@ on Map). Tapping the open More tab again returns it to its list.
 | Chat | Contacts \| Channels through the `ChatTabHost` seam (see Contacts and direct messages, below). Without a chat store: "Messages arrive here once you connect a radio". Unread badge on the tab icon. |
 | Map | The coverage map and the drive controls (the old Drive tab). Drive is a mode of this tab: the title says "Drive mode" while recording, "Not driving" otherwise; Start drive is the big button. |
 | Analyze | Segmented Region (the Region hub) \| Drives (drive list, reports, progress). |
-| Plan | Website tools for the viewed region, each opening the real page in the browser (planner, site explorer, point-to-point link, coverage painter, airtime, radio presets, coverage check). In-app tools that do not exist yet are listed once as "Coming next", with no button. |
+| Plan | Planner, Recommended build, Site explorer (dossier, link profile, compare), Scenarios and Build tracker run in the app on the website's planning engine (`plan-native`), with the last results cached for offline. The other tools (point-to-point link, coverage painter, airtime, radio presets, coverage check) open the real page in the browser until they are converted. In-app tools that do not exist yet are listed once as "Coming next", with no button. |
 | More | Radio, My radios and claims, Settings, Colour legend, How it works (replays the tour), Privacy and data sharing, Report a problem, About, Privacy policy. Opens inside the tab (own Navigator), so the bars stay. |
 
 Old tab names: Drive = Map; Region and Drives = Analyze; Radio and Settings = More. `HomeShell(legacyTab: n)` maps the old
