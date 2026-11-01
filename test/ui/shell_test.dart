@@ -173,10 +173,16 @@ void main() {
       await tester.tapAt(const Offset(2, 2));
       await tester.pumpAndSettle();
       await row('more-howItWorks');
+      expect(find.byKey(const Key('howitworks-list')), findsOneWidget);
+      await tester.scrollUntilVisible(find.byKey(const Key('howitworks-tour')), 200);
+      await tester.tap(find.byKey(const Key('howitworks-tour')));
+      await tester.pumpAndSettle();
       expect(find.byKey(const Key('onboarding')), findsOneWidget);
       expect(find.byKey(const Key('onboarding-connect')), findsNothing, reason: 'replay has no connect button');
       await tester.tap(find.byKey(const Key('onboarding-skip')));
       await tester.pumpAndSettle();
+      expect(find.byKey(const Key('howitworks-list')), findsOneWidget);
+      await tapShellTab(tester, 'More'); // re-tap pops to the list
       expect(find.byKey(const Key('more-list')), findsOneWidget);
       await row('more-privacy');
       expect(find.byKey(const Key('settings-list')), findsOneWidget);

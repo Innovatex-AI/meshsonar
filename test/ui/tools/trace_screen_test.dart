@@ -214,26 +214,28 @@ void main() {
     final k = key('df01', 1);
     final second = key('ab02', 2);
 
-    testWidgets('saved list, open one, website link-out with the region address, delete', (tester) async {
+    testWidgets('saved list, open one, native network routes screen, delete', (tester) async {
       final (tools, _) = fakeTools(store: [saved('02', 'Hill', k, 2.0, 1.0, lat: 40.13, lon: -82.97), saved('01', 'Hill', k, 4.0, 3.0)]);
       final host = FakeToolsHost()..toolsValue = tools;
       await pumpTool(tester, const TraceScreen(), host);
       await settleReal(tester, real: const Duration(milliseconds: 50));
       expect(find.byKey(const Key('trace-saved-02')), findsOneWidget);
       expect(find.textContaining('Worked'), findsWidgets);
-      expect(find.byKey(const Key('trace-website')), findsNothing, reason: 'no result on screen yet');
       await tester.ensureVisible(find.byKey(const Key('trace-saved-02-open')));
       await tester.tap(find.byKey(const Key('trace-saved-02-open')));
       await tester.pump();
       expect(find.byKey(const Key('trace-result')), findsOneWidget);
       expect(find.byKey(const Key('tool-map')), findsOneWidget, reason: 'hop with a position and an origin');
       expect(find.byKey(const Key('trace-saved-note')), findsOneWidget);
-      await tester.ensureVisible(find.byKey(const Key('trace-website')));
-      await tapKey(tester, 'trace-website');
-      expect(host.openedUrls, [Uri.parse('https://cmh.meshsonar.com/tools/routes')]);
-      host.regionSite = null;
-      await tapKey(tester, 'trace-website');
-      expect(host.openedUrls.last, Uri.parse('https://meshsonar.com/tools/routes'));
+      await tester.ensureVisible(find.byKey(const Key('trace-network-routes')));
+      await tapKey(tester, 'trace-network-routes');
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(host.openedUrls, isEmpty, reason: 'native, not a browser hop');
+      expect(find.byKey(const Key('routes-list')), findsOneWidget);
+      await tester.pageBack();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
 
       await tester.ensureVisible(find.byKey(const Key('trace-saved-02-delete')));
       await tester.tap(find.byKey(const Key('trace-saved-02-delete')));

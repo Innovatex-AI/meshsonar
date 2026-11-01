@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../core/server_url.dart' show privacyPolicyUrl;
 import '../about_screen.dart';
 import '../app.dart';
+import '../info/method_screens.dart';
 import '../map/legend_sheet.dart' show showMapLegend;
 import '../onboarding/onboarding_screen.dart';
 import '../radio/radio_screen.dart';
@@ -70,6 +71,7 @@ class _MoreTabState extends State<MoreTab> {
         MoreItem.telemetry => const TelemetryScreen(),
         MoreItem.radioSetup => const RadioSetupScreen(),
         MoreItem.observerJoin => const ObserverJoinScreen(),
+        MoreItem.method => const MethodScreen(),
         MoreItem.legend || MoreItem.howItWorks => const SizedBox.shrink(),
       };
 
@@ -81,7 +83,11 @@ class _MoreTabState extends State<MoreTab> {
         showMapLegend(nav.context);
       case MoreItem.howItWorks:
         nav.push(MaterialPageRoute<void>(
-          builder: (ctx) => OnboardingScreen(replay: true, onFinish: (_) => Navigator.of(ctx).pop()),
+          builder: (ctx) => HowItWorksScreen(
+            onReplayTour: () => Navigator.of(ctx).push(MaterialPageRoute<void>(
+              builder: (c2) => OnboardingScreen(replay: true, onFinish: (_) => Navigator.of(c2).pop()),
+            )),
+          ),
         ));
       default:
         nav.popUntil((r) => r.isFirst);
@@ -164,7 +170,8 @@ class MoreList extends StatelessWidget {
                 'Message alerts, previews, quiet hours, per-conversation mute'),
             row(MoreItem.settings, Icons.settings, 'Settings', 'Units, maps, uploads, storage, diagnostics, your driver key'),
             row(MoreItem.legend, Icons.palette_outlined, 'Colour legend', 'What the map colours mean'),
-            row(MoreItem.howItWorks, Icons.explore_outlined, 'How it works', 'A short tour of the tabs'),
+            row(MoreItem.howItWorks, Icons.explore_outlined, 'How it works', 'From a ping to a square on the map, and a tour of the tabs'),
+            row(MoreItem.method, Icons.menu_book_outlined, 'Method', 'How the figures are made, and what they cannot say'),
             header('About'),
             row(MoreItem.privacy, Icons.privacy_tip_outlined, 'Privacy and data sharing', 'What is shared, and how to stop it'),
             ListTile(

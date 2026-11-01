@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/region_packets_api.dart';
 import '../theme.dart';
+import 'packet_detail_screen.dart';
 import 'region_common.dart';
 
 enum PacketsLoad { loading, ready, error }
@@ -319,7 +320,11 @@ class _PacketsPanelState extends State<PacketsPanel> with WidgetsBindingObserver
           if (i == 0) return _banner(c, note, Icons.info_outline);
           i--;
         }
-        return PacketTile(row: _rows[i], now: (widget.clock ?? DateTime.now)().toUtc());
+        return PacketTile(
+          row: _rows[i],
+          now: (widget.clock ?? DateTime.now)().toUtc(),
+          onTap: () => openPacketDetail(context, baseUrl: widget.baseUrl.toString(), regionSlug: widget.regionSlug, hash: _rows[i].hash),
+        );
       },
     );
   }
@@ -338,7 +343,8 @@ String packetAge(DateTime at, DateTime now) {
 class PacketTile extends StatelessWidget {
   final PacketRow row;
   final DateTime now;
-  const PacketTile({super.key, required this.row, required this.now});
+  final VoidCallback? onTap;
+  const PacketTile({super.key, required this.row, required this.now, this.onTap});
 
   Color _snrColor(BuildContext context, double snr) {
     final c = MeshSonarColors.of(context);
@@ -361,6 +367,7 @@ class PacketTile extends StatelessWidget {
     final snr = row.bestSnrDb;
     return ListTile(
       dense: true,
+      onTap: onTap,
       title: Text(row.originName == null ? packetTypeName(row.type) : '${packetTypeName(row.type)} · ${row.originName}',
           maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
