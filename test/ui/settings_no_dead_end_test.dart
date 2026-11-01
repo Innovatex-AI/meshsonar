@@ -125,7 +125,7 @@ void main() {
       h.store.seed(_ended('waiting'), [silentPing('w1'), silentPing('w2')], syncedFirst: 1);
       await _open(tester, h, site: true);
       expect(_deadEnds(tester, h.state), isEmpty);
-      expect(find.textContaining('Turn Discovery (listen-only) off to use it'), findsNWidgets(3)); // interval, distance, listen window
+      expect(find.textContaining('Turn on "Send pings to the mesh" to use it'), findsNWidgets(3));
       expect(find.textContaining('Turn that on first'), findsOneWidget);
       expect(find.textContaining('Turn them on first'), findsOneWidget);
     });
@@ -149,7 +149,7 @@ void main() {
       expect(h.state.driving, isTrue);
       await openSettingsTab(tester);
       expect(_deadEnds(tester, h.state), isEmpty);
-      expect(find.textContaining('Locked while driving: stop the drive to change it.'), findsOneWidget);
+      expect(find.textContaining('Locked while driving: stop the drive to change it.'), findsNWidgets(2), reason: 'channel and Send pings');
       expect(find.textContaining('Locked while this radio is on a drive'), findsOneWidget);
       await h.state.stopDrive();
       await tester.pumpAndSettle();
@@ -164,7 +164,7 @@ void main() {
     });
 
     test('information rows are only the read-only status rows', () {
-      expect(settingsEntries.where((e) => e.info).map((e) => e.id), unorderedEquals(['site-region', 'site-radio-preset', 'last-upload']));
+      expect(settingsEntries.where((e) => e.info).map((e) => e.id), unorderedEquals(['site-region', 'site-radio-preset', 'last-upload', 'ping-message', 'ping-airtime', 'wardrive-counters']));
     });
   });
 
@@ -233,6 +233,7 @@ void main() {
         await tester.scrollUntilVisible(find.byKey(Key('jump-${s.id}')), 100, scrollable: find.byType(Scrollable).last);
         expect(find.byKey(Key('jump-${s.id}')), findsOneWidget, reason: s.id);
       }
+      await tester.scrollUntilVisible(find.text('Folded; opens when you jump to it'), -80, scrollable: find.descendant(of: find.byKey(const Key('settings-section-index')), matching: find.byType(Scrollable)).first);
       expect(find.text('Folded; opens when you jump to it'), findsOneWidget);
       await tester.tap(find.byKey(const Key('jump-storage')));
       await tester.pumpAndSettle();

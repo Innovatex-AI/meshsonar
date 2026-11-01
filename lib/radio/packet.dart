@@ -216,22 +216,52 @@ class EchoMatch {
   const EchoMatch(this.repeater, this.hops, this.path);
 }
 
+/// Why a heard packet did or did not count as a repeat of our ping. Stored in the per-ping trace
+/// (`trace.jsonl` beside the drive) so a field drive can be diagnosed frame by frame.
+enum EchoVerdict {
+  /// A repeat of this ping.
+  echo,
+
+  /// Not a flood group text (an advert, an ack, a direct packet, ...).
+  notGroupText,
+
+  /// A flood group text with no repeater in its path: our own transmission heard back, not a repeat.
+  emptyPath,
+
+  /// A group text for another channel (channel hash differs) or one that fails the MAC: not ours.
+  otherChannel,
+
+  /// On our channel but another timestamp: an earlier ping of ours, or someone else's message.
+  otherTimestamp,
+
+  /// On our channel, our timestamp, other text: someone else's ping that shares the second.
+  otherText,
+
+  /// Could not be parsed as a MeshCore packet at all.
+  unparsed,
+}
+
+/// The reason a heard packet is or is not a repeat of the ping, and the match when it is.
+({EchoVerdict verdict, EchoMatch? match}) classifyEcho(MeshPacket? pkt, List<int> secret16, String pingText, {int? timestamp}) {
+  if (pkt == null) return (verdict: EchoVerdict.unparsed, match: null);
+  if (pkt.payloadType != PayloadType.grpTxt || !pkt.isFlood) return (verdict: EchoVerdict.notGroupText, match: null);
+  final gt = decryptGroupText(secret16, pkt.payload);
+  if (gt == null) return (verdict: EchoVerdict.otherChannel, match: null);
+  if (pkt.path.isEmpty) return (verdict: EchoVerdict.emptyPath, match: null);
+  if (timestamp != null && gt.timestamp != timestamp) return (verdict: EchoVerdict.otherTimestamp, match: null);
+  // Text is "<sender name>: <ping text>" (BaseChatMesh::sendGroupMessage).
+  if (!(gt.text == pingText || gt.text.endsWith(': $pingText'))) return (verdict: EchoVerdict.otherText, match: null);
+  final hex = pkt.pathHex;
+  return (verdict: EchoVerdict.echo, match: EchoMatch(hex.first, pkt.hopCount, hex));
+}
+
 /// Recognises a heard packet as a repeat of the ping we sent.
 ///
 /// [secret16] is the channel secret, [pingText] the exact text passed to CMD_SEND_CHANNEL_TXT_MSG, and
 /// [timestamp] the timestamp we put in that command (null = don't check). Returns null if it's anything else,
 /// including our own transmission heard with an empty path (not a repeat).
-EchoMatch? matchEcho(MeshPacket pkt, List<int> secret16, String pingText, {int? timestamp}) {
-  if (pkt.payloadType != PayloadType.grpTxt || !pkt.isFlood) return null;
-  if (pkt.path.isEmpty) return null;
-  final gt = decryptGroupText(secret16, pkt.payload);
-  if (gt == null) return null;
-  if (timestamp != null && gt.timestamp != timestamp) return null;
-  // Text is "<sender name>: <ping text>" (BaseChatMesh::sendGroupMessage).
-  if (!(gt.text == pingText || gt.text.endsWith(': $pingText'))) return null;
-  final hex = pkt.pathHex;
-  return EchoMatch(hex.first, pkt.hopCount, hex);
-}
+EchoMatch? matchEcho(MeshPacket pkt, List<int> secret16, String pingText, {int? timestamp}) =>
+    classifyEcho(pkt, secret16, pingText, timestamp: timestamp).match;
 
 
 /// The parts of an ADVERT packet the app shows (src/Mesh.cpp onRecvPacket 252-290, src/helpers/AdvertDataHelpers.cpp):

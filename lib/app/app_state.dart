@@ -23,7 +23,7 @@ import '../core/drive_env_cache.dart';
 import '../core/driver_summary.dart';
 import '../core/map_links.dart';
 import '../core/repeater_reach.dart';
-import '../core/drive_store.dart' show ChunkedExport, closeOrphanedSessions;
+import '../core/drive_store.dart' show ChunkedExport, TraceStore, closeOrphanedSessions;
 import '../core/heard.dart';
 import '../core/model.dart';
 import '../core/etag_client.dart';
@@ -54,6 +54,7 @@ import 'claims.dart';
 import 'context_upload_hook.dart';
 import 'drive_context_hook.dart';
 import 'messages.dart';
+import 'ping_feedback.dart';
 import 'services.dart';
 
 enum RadioKind { none, bluetooth, simulator }
@@ -1704,6 +1705,57 @@ class AppState extends ChangeNotifier {
   /// drive rather than a successful listen session.
   int? get heardPercent => _txCount == 0 ? null : (100 * _heardCount / _txCount).round();
 
+  /// What the repeaters and the network's observers made of this drive's pings (see ping_feedback.dart).
+  final PingFeedback pingFeedback = PingFeedback();
+  Timer? _observerTimer;
+  static const Duration observerPollPeriod = Duration(seconds: 45);
+
+  /// Repeater hearings this drive: the sum, over transmitted pings, of repeaters that repeated each one.
+  int get echoCount => _drivePings.where((p) => p.kind == PingKind.tx).fold(0, (a, p) => a + p.echoes.length);
+
+  /// Transmitted pings of this drive.
+  int get txPingCount => _txCount;
+
+  /// Pings the engine did not send because the arbiter held them back, by reason (empty for a plain drive).
+  Map<String, int> get skippedPingCounts {
+    final e = _engine;
+    if (e is! DefaultWardriveEngine) return const {};
+    return {for (final x in e.skippedPings.entries) x.key.name: x.value};
+  }
+
+  void _startObserverPolling() {
+    pingFeedback.reset();
+    _observerTimer?.cancel();
+    _observerTimer = null;
+    if (!hasKey) {
+      pingFeedback.markNoKey(); // nothing is uploaded without a key, so there is nothing to ask the server about
+      return;
+    }
+    _observerTimer = Timer.periodic(observerPollPeriod, (_) => unawaited(pollObservers()));
+  }
+
+  void _stopObserverPolling({bool finalPoll = false}) {
+    _observerTimer?.cancel();
+    _observerTimer = null;
+    // The drive's last pings were just uploaded; observers have usually reported by the time the person looks again, and the
+    // Wardriving settings page asks once more on open ([pollObservers]). No timer outlives the drive.
+    if (finalPoll) unawaited(pollObservers(sessionId: _lastFinishedSessionId));
+  }
+
+  /// Asks the server how many observers heard this drive's uploaded pings. Quiet: failures never reach the driver.
+  Future<void> pollObservers({String? sessionId}) async {
+    final sid = sessionId ?? _session?.id ?? _lastFinishedSessionId;
+    if (sid == null) return;
+    if (!hasKey) {
+      pingFeedback.markNoKey();
+      notifyListeners();
+      return;
+    }
+    if (!keyApproved) return;
+    final changed = await pingFeedback.poll(client, _settings.driverKey!, sid, services.clock());
+    if (changed) notifyListeners();
+  }
+
   final Set<String> _seenPingIds = {};
   final List<DrivePing> _unsaved = [];
   int get unsavedCount => _unsaved.length;
@@ -1863,6 +1915,13 @@ class AppState extends ChangeNotifier {
       unawaited(_driveFixKeepAlive?.cancel());
       _driveFixKeepAlive = location.fixes.listen((_) {}, onError: (Object _) {});
       _attachGate(engine);
+      final storeForTrace = services.store;
+      if (engine is DefaultWardriveEngine && storeForTrace is TraceStore) {
+        final sidForTrace = session.id;
+        final TraceStore sink = storeForTrace as TraceStore;
+        engine.onTrace = (r) => unawaited(sink.appendTrace(sidForTrace, r).catchError((Object _) {}));
+      }
+      _startObserverPolling();
       _status = engine.current;
       _pingSub = engine.pings.listen(_onPing, onError: (Object e) => _say(friendlyError(e, action: 'A ping')));
       _statusSub = engine.status.listen((st) {
@@ -2070,6 +2129,7 @@ class AppState extends ChangeNotifier {
     } else {
       _say('Drive saved on this phone.');
     }
+    _stopObserverPolling(finalPoll: true);
   }
 
   StreamSubscription<GeoFix>? _driveFixKeepAlive;
@@ -2351,6 +2411,24 @@ class AppState extends ChangeNotifier {
       }
     } catch (e) {
       _say(friendlyError(e, action: 'Export'));
+    }
+  }
+
+  /// Shares the drive's per-ping trace (`trace.jsonl`, see docs/PROTOCOL.md 5.6) as `<drive>-ping-trace.jsonl`. Says so when
+  /// the drive has none (drives recorded before the trace existed).
+  Future<void> shareTrace(String sessionId) async {
+    try {
+      final st = services.store;
+      final f = st is TraceStore ? await (st as TraceStore).traceFile(sessionId) : null;
+      if (f == null) {
+        _say('This drive has no ping trace. Drives recorded from this version on keep one.');
+        return;
+      }
+      final dir = await services.exportDir();
+      final out = await f.copy('${dir.path}/meshsonar-ping-trace-${sessionId.length > 8 ? sessionId.substring(0, 8) : sessionId}.jsonl');
+      await services.shareFile(out);
+    } catch (e) {
+      _say(friendlyError(e, action: 'Sharing the ping trace'));
     }
   }
 
@@ -2933,6 +3011,7 @@ class AppState extends ChangeNotifier {
     services.repeaterSync?.removeListener(_onRepeaterSync);
     unawaited(_idle?.dispose());
     _cancelDriveSync();
+    _observerTimer?.cancel();
     _pingSub?.cancel();
     _statusSub?.cancel();
     _telemetrySub?.cancel();

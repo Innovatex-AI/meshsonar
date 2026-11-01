@@ -6,6 +6,7 @@
 //                                                                          samplesStored, samplesDuplicate, samplesRejected,
 //                                                                          sampleRejections[]}      (Drive Format v1.2)
 //   <base>/api/cmh/drive-context    DELETE ?category=<id>|all           -> {category, sessions, pings, samples}
+//   <base>/api/cmh/drive-status     GET  ?session= x-driver-key         -> {pings[{id,status,settled,observers,lowConfidence,via[]}]}
 //   <base>/api/cmh/driver-summary   GET  x-driver-key                   -> {v:1, asOf, stats, weeks[], drives[]}  (lib/core/driver_summary.dart)
 //   <base>/api/cmh/drive-repeaters  GET  x-driver-key                   -> {repeaters[{key,name,lat,lon}], at}
 //   <base>/api/cmh/problem-report   POST x-driver-key, report body      -> 201 {id, status, receivedAt, redacted}
@@ -298,6 +299,14 @@ class HttpCmatClient implements CmatClient, TelemetryTransport {
     snaps.sort((a, b) => a.at.compareTo(b.at));
     // The licence needs this exact line wherever the values are shown; never display a server-edited one in its place.
     return DriveEnv(session: j['session'] as String? ?? sessionId, status: status, attribution: openMeteoCredit, snapshots: snaps);
+  }
+
+  @override
+  Future<List<PingObservation>> driveStatus(String driverKey, String sessionId) async {
+    final j = await _send('GET', 'drive-status', driverKey: driverKey, query: {'session': sessionId});
+    final list = j['pings'];
+    if (list is! List) throw const CmatException('server sent an unreadable answer', status: 200);
+    return [for (final e in list) ?PingObservation.tryParse(e)];
   }
 
   @override

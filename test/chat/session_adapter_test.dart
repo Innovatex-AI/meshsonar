@@ -114,8 +114,8 @@ void main() {
     await Future<void>.delayed(Duration.zero);
   });
 
-  test('bind turns chat on and installs a persister that stores before returning', () async {
-    expect(s.chatActive, isTrue);
+  test('bind installs a persister that stores before returning, and does NOT make pings count as chatting', () async {
+    expect(s.chatActive, isFalse, reason: 'binding the chat layer is not chatting: the ping budgets stay off (Oct 31 field report)');
     await s.persister!(chanMsg(100, 'Ann: hi all'));
     final ch = h.store.channels.bySlot(radioA, 1)!;
     expect(h.store.messages.page(ch.convKey).messages.single.text, 'hi all');
@@ -124,7 +124,6 @@ void main() {
     expect(h.store.messages.count(), 1);
     await a.dispose();
     expect(s.persister, isNull);
-    expect(s.chatActive, isFalse);
   });
 
   test('direct (0xFF) path becomes "no hops"; DM frames map prefix, signer and cli type', () async {
