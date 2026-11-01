@@ -51,6 +51,10 @@ class PositionFilterConfig {
   /// Smallest hold radius around the parked position.
   final double minAnchorRadiusM;
 
+  /// Largest hold radius. A 300 m-accurate fix (cell towers, no GPS yet) must not make a 600 m "parked" bubble that
+  /// freezes the dot and the ping distance for the next kilometre of driving.
+  final double maxAnchorRadiusM;
+
   /// Fixes in a row beyond the radius (moving consistently away) needed to leave the hold without speed.
   final int exitFixes;
 
@@ -66,6 +70,7 @@ class PositionFilterConfig {
     this.movingSpeedMps = 2.0,
     this.fastSpeedMps = 5.0,
     this.minAnchorRadiusM = 15,
+    this.maxAnchorRadiusM = 40,
     this.exitFixes = 3,
     this.unknownSpeedExitM = 50,
   });
@@ -113,7 +118,7 @@ class PositionFilter {
     return (a == null || a.isNaN || a <= 0) ? config.defaultAccuracyM : a;
   }
 
-  double _radius(double acc) => math.max(2 * acc, config.minAnchorRadiusM);
+  double _radius(double acc) => math.min(math.max(2 * acc, config.minAnchorRadiusM), config.maxAnchorRadiusM);
 
   GeoFix? add(GeoFix raw) {
     if (raw.lat.isNaN || raw.lon.isNaN) return null;
@@ -156,7 +161,7 @@ class PositionFilter {
     // 3. Stationary hold.
     if (_last == null) {
       // First fix: parked unless the phone says we're moving.
-      if (speed == null || speed < config.stationarySpeedMps) _enterHold();
+      if ((speed == null || speed < config.stationarySpeedMps) && acc <= config.maxAccuracyM) _enterHold();
     } else if (_stationary) {
       final d = _distM(_aLat!, _aLon!, raw.lat, raw.lon);
       _fastRun = (speed != null && speed >= config.movingSpeedMps) ? _fastRun + 1 : 0;
@@ -183,11 +188,11 @@ class PositionFilter {
     } else {
       if (speed != null) {
         _slowRun = speed < config.stationarySpeedMps ? _slowRun + 1 : 0;
-        if (_slowRun >= 2) _enterHold();
+        if (_slowRun >= 2 && acc <= config.maxAccuracyM) _enterHold();
       } else if (_recent.length >= 3) {
         final cLat = _recent.map((f) => f.lat).reduce((a, b) => a + b) / _recent.length;
         final cLon = _recent.map((f) => f.lon).reduce((a, b) => a + b) / _recent.length;
-        if (_recent.every((f) => _distM(cLat, cLon, f.lat, f.lon) <= radius)) _enterHold();
+        if (acc <= config.maxAccuracyM && _recent.every((f) => _distM(cLat, cLon, f.lat, f.lon) <= radius)) _enterHold();
       }
     }
 

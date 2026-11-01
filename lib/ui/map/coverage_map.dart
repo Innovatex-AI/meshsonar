@@ -78,6 +78,7 @@ import 'layers/repeater_cluster_layer.dart';
 import 'layers/repeater_map_source.dart';
 import 'layers/repeater_name_labels.dart';
 import 'map_info_panel.dart';
+import 'live_puck.dart';
 import 'map_layers.dart';
 import 'offline_basemap.dart';
 import 'sheets/map_hit_sheet.dart';
@@ -150,8 +151,13 @@ class CoverageMap extends StatefulWidget {
   /// Known repeaters (from the CMAT repeater cache).
   final List<RepeaterRef> repeaters;
 
-  /// Current position, if known.
+  /// Current position, if known. With a [puck] this is the slow position (it refreshes every ~20 m or 2 s, enough for
+  /// labels and the first zoom-in); the dot, the rings and the camera follow the puck itself, frame by frame.
   final LatLng? position;
+
+  /// The live puck (lib/ui/map/live_puck.dart): when set, the dot, range rings, heading cone, ping rings and the lines
+  /// to the repeaters that heard the latest ping are drawn from it without rebuilding the map on each GPS fix.
+  final PuckController? puck;
 
   /// Keep [position] centred (until the user drags the map).
   final bool follow;
@@ -242,6 +248,7 @@ class CoverageMap extends StatefulWidget {
     this.repeaters = const [],
     this.position,
     this.follow = true,
+    this.puck,
     this.fitToPings = false,
     this.showLinks = true,
     this.showRings = true,
@@ -818,7 +825,7 @@ class _CoverageMapState extends State<CoverageMap> {
     if (_follow && _ready && firstFix) {
       final target = pos ?? LatLng(_latest!.lat, _latest!.lon);
       _controller.move(target, math.max(_controller.camera.zoom, 13.6));
-    } else if (_follow && _ready && pos != null && pos != old.position) {
+    } else if (_follow && _ready && pos != null && pos != old.position && widget.puck?.pose == null) {
       _controller.move(pos, _controller.camera.zoom);
     } else if (_follow && _ready && pos == null) {
       final l = _latest;
@@ -857,9 +864,19 @@ class _CoverageMapState extends State<CoverageMap> {
     }
   }
 
+  /// The dot moved (every frame while driving): keep it in the middle until the person drags the map.
+  void _onPuckMoved(LatLng at) {
+    if (_follow && _ready) _controller.move(at, _controller.camera.zoom);
+  }
+
+  LatLng? get _livePosition {
+    final p = widget.puck?.pose;
+    return p == null ? widget.position : LatLng(p.lat, p.lon);
+  }
+
   void _recenter() {
     setState(() => _follow = true);
-    final target = widget.position ?? (_latest == null ? null : LatLng(_latest!.lat, _latest!.lon));
+    final target = _livePosition ?? (_latest == null ? null : LatLng(_latest!.lat, _latest!.lon));
     if (target != null && _ready) {
       _controller.move(target, math.max(_controller.camera.zoom, 14));
     }
@@ -1032,7 +1049,21 @@ class _CoverageMapState extends State<CoverageMap> {
                     ),
                 ],
               ),
-            if (widget.showRings && layers.rings && pos != null) _RangeRings(center: pos, color: t.colorScheme.primary, ringMetres: AppScope.unitsOf(context).rangeRingMetres),
+            if (widget.showRings && layers.rings && pos != null)
+              if (widget.puck case final puck?)
+                ListenableBuilder(
+                  listenable: puck,
+                  builder: (context, _) {
+                    final p = puck.pose;
+                    return _RangeRings(
+                      center: p == null ? pos : LatLng(p.lat, p.lon),
+                      color: t.colorScheme.primary,
+                      ringMetres: AppScope.unitsOf(context).rangeRingMetres,
+                    );
+                  },
+                )
+              else
+                _RangeRings(center: pos, color: t.colorScheme.primary, ringMetres: AppScope.unitsOf(context).rangeRingMetres),
             if (widget.showRings && layers.rings && pos != null && _captions)
               MarkerLayer(
                 markers: [
@@ -1074,7 +1105,9 @@ class _CoverageMapState extends State<CoverageMap> {
                   ],
                 ),
               ),
-            if (liveLinks.isNotEmpty)
+            if (widget.puck case final puck? when heardMode && showLinks)
+              PuckLinksLayer(puck: puck, heard: widget.heard!, fallback: origin)
+            else if (liveLinks.isNotEmpty)
               PolylineLayer(
                 polylines: [
                   for (final h in liveLinks)
@@ -1213,7 +1246,9 @@ class _CoverageMapState extends State<CoverageMap> {
                       ),
                 ],
               ),
-            if (pos != null)
+            if (widget.puck case final puck?)
+              PuckLayer(puck: puck, fallback: pos, onMoved: _onPuckMoved)
+            else if (pos != null)
               MarkerLayer(
                 markers: [
                   Marker(

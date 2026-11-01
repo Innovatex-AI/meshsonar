@@ -290,6 +290,15 @@ names.
 **Startup failure.** If `buildRealServices()` throws (for example, storage can't be opened), `main.dart` shows
 `StartupErrorApp` instead of the app.
 
+### The live dot (`lib/ui/map/live_puck.dart`)
+
+GPS -> `FilteredLocationSource` (parked hold, accuracy gate; this is the fix pings use) -> `DriveMapModel._onFix` -> `PuckController.onFix`
+-> `PuckMotion` (display-only gate, push-ahead, ease). The model calls `notifyListeners` only when the phone moved 20 m or 2 s
+passed; the map is rebuilt by that, not by each fix. `PuckLayer` ticks at 30 fps while something moves and sleeps otherwise; its
+`onMoved` lets `CoverageMap` move the camera while following. Engine state `pinging` -> `pingSent` (rings); a saved ping ->
+`pingResolved(heard)` (answer ring, lines from `heard`). Under `flutter test` a live drive keeps a frame scheduled, so tests
+use `settleLive` instead of `pumpAndSettle` on a drive screen.
+
 ### App shell (`lib/ui/shell/`)
 
 `HomeShell` owns a `ShellController` (selected `AppTab`, Analyze view, pending More row), exposed by `ShellScope`. Tabs are
@@ -361,6 +370,7 @@ behaviour: silence, the replay rule, loss, caps, prefix matching, the blank-pass
 | `core/network_coverage.dart` | core | `buildNetworkCells`/`levelFor`: turns a `PublicCoverage` answer into drawable `NetworkCell`s (square bbox or H3 hexagon boundary) bucketed by `CoverageColorBy` — the Drive map's network-wide background layer. |
 | `core/sync_service.dart` | core | `DefaultSyncService`: chunked, serialised, retry-safe uploads; rejection discovery; end-time reporting. For a server that accepts Drive Format v1.2 (injected `capabilities` provider and `categoryOn` gate, both wired by AppState from the upload server's own site-config) it adds the drive context to the upload, the late-context path (`POST drive-context`), the one-time plain-drive fallback on a 400 and `syncContextOnly`. |
 | `core/settings_store.dart` | core | `FileSettingsStore`: atomic JSON settings; missing/corrupt → defaults. |
+| `core/puck_motion.dart` | core | `PuckMotion`: display-only motion of the live dot (outlier/teleport gate, push-ahead along course, ease). Never feeds a recorded ping. |
 | `core/position_filter.dart` | core | `PositionFilter` (accuracy gate, Kalman smoothing, stationary hold) and `FilteredLocationSource` wrapper. |
 | `core/heard.dart` | core | `haversineM`, `bearingDeg`, `compass`; `RepeaterLookup` (prefix → repeater, CMAT first); `HeardTracker` (live/stale per repeater). |
 | `core/units.dart` | core | The only place numbers get units: `Units` (Auto/Metric/Imperial resolved, plus `UnitOverrides` per quantity: distance, speed, height, temperature, pressure hPa/inHg/mmHg), all distance/speed/height/temperature/pressure formatting and parsing; `description` for report labels. `test/core/no_raw_units_test.dart` forbids unit literals and conversions elsewhere. |
@@ -424,6 +434,8 @@ behaviour: silence, the replay rule, loss, caps, prefix matching, the blank-pass
 | `ui/drive/drive_map_model.dart` | ui | `DriveMapModel` shared by the Drive screen and full-screen map: pings, heard, selection, `layerState` (registry ids; `layers` is the old bool view), the `RepeaterMapSource` over `AppStateRepeaterFeed`, observers fetch, `statusOf`/`retry` per layer, coverage query/timeline. |
 | `ui/drive/drive_live_stats.dart` | ui | `DriveLiveStats`: live new-vs-repeat grid-cell tally for the mid-drive stats strip. |
 | `ui/drive/heard_box.dart` | ui | `HeardBox`: live / holding / stale repeaters over the map. |
+| `ui/map/live_puck.dart` | ui | `PuckController` (owned by `DriveMapModel`, fed every GPS fix and ping event), `PuckLayer` (dot, accuracy disc, heading cone, ping rings; owns the 30 fps ticker, which sleeps when settled; calls back so the camera follows) and `PuckLinksLayer` (lines from the moving dot to the heard repeaters). They repaint on their own, so a GPS fix never rebuilds `CoverageMap`. |
+| `ui/drive/ping_settings_sheet.dart` | ui | The Map tab's "Ping 30 s / 100 m" chip and quick sheet (the same cadence sliders as Settings > Wardriving). |
 | `ui/map/coverage_map.dart` | ui | `CoverageMap` (flutter_map): grid, OSM tiles, rings, links, the clustered `network` / `repeaters` layers (from a host `RepeaterMapSource`, or its own built from `regionRepeaters`), observers, heard repeaters, ping dots, position, compass, recenter, attribution (+ the network layer's legend and credit); taps routed through `showMapHitSheet`; `SimulatedTag`. |
 | `ui/map/fullscreen_map.dart` | ui | Full-screen live map; `showMapLayersSheet` (opens the generated sheet). |
 | `ui/map/repeater_page_link.dart` | ui | `openRepeaterPageFromMap`: "Open repeater page" from a map repeater sheet. |

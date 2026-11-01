@@ -460,8 +460,10 @@ class FakeLocation implements LocationSource {
   int currentCalls = 0;
   FakeLocation({this.permission = true, GeoFix? Function()? currentFix, this.currentError, this.currentDelay = Duration.zero})
       : currentFix = currentFix ?? (() => GeoFix(lat: 40.126, lon: -82.93, at: DateTime.utc(2026, 10, 16)));
+  /// Push live GPS fixes here (the stream the engine, the live map and the puck all listen to).
+  final fixController = StreamController<GeoFix>.broadcast();
   @override
-  Stream<GeoFix> get fixes => const Stream.empty();
+  Stream<GeoFix> get fixes => fixController.stream;
   @override
   Future<GeoFix?> current() async {
     currentCalls++;
@@ -946,7 +948,17 @@ Future<void> tapShellTab(WidgetTester tester, String label) async {
       ? find.byKey(const Key('shell-tabs'))
       : find.byKey(const Key('shell-rail'));
   await tester.tap(find.descendant(of: bar, matching: find.text(label)));
-  await tester.pumpAndSettle();
+  await settleLive(tester);
+}
+
+/// pumpAndSettle for a screen that may be on a live drive. The sonar dot (lib/ui/map/live_puck.dart) animates for as
+/// long as GPS fixes keep arriving, so the tree is never fully idle; this pumps until quiet or [limit], then carries on.
+Future<void> settleLive(WidgetTester tester, {Duration limit = const Duration(seconds: 3)}) async {
+  try {
+    await tester.pumpAndSettle(const Duration(milliseconds: 100), EnginePhase.sendSemanticsUpdate, limit);
+  } on FlutterError {
+    // Still animating: expected on a live drive.
+  }
 }
 
 /// Old "Drive" tab.

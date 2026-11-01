@@ -17,6 +17,7 @@ import 'map/region_center.dart';
 import 'drive/drive_controls.dart';
 import 'drive/drive_live_stats.dart';
 import 'drive/drive_map_model.dart';
+import 'drive/ping_settings_sheet.dart';
 import 'drive/heard_box.dart';
 import 'map/coverage_map.dart';
 import 'map/fullscreen_map.dart';
@@ -207,6 +208,7 @@ class _DriveScreenState extends State<DriveScreen> {
                     runSpacing: Gap.s,
                     children: [
                       AntennaChip(state: s),
+                      PingSettingsChip(state: s),
                       LogButton(state: s),
                     ],
                   ),
@@ -299,6 +301,7 @@ class _MapPane extends StatelessWidget {
                 repeaters: model.repeaters,
                 // Not driving: the phone's position (last-known at once, then the fresh fix) so the map opens on it.
                 position: model.position ?? (model.pings.isEmpty ? idleMapPosition(s) : null),
+                puck: model.puck,
                 showRings: s.driving,
                 repeaterLabel: s.repeaterLabel,
                 heard: model.heard,
