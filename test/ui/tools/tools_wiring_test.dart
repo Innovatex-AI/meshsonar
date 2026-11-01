@@ -15,6 +15,13 @@ Future<void> openMore(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+Future<void> showRow(WidgetTester tester, String key) async {
+  final f = find.byKey(Key(key));
+  if (f.evaluate().isEmpty) await tester.dragUntilVisible(f, find.byKey(const Key('more-list')), const Offset(0, -150));
+  await tester.ensureVisible(f);
+  await tester.pump();
+}
+
 void main() {
   testWidgets('More has a "Radios and tools" group with every tool, in order', (tester) async {
     useTallScreen(tester);
@@ -22,12 +29,18 @@ void main() {
     await h.pumpApp(tester);
     await openMore(tester);
     expect(find.text('Radios and tools'), findsOneWidget);
-    for (final k in ['trace', 'discover', 'adverts', 'rxLog', 'noiseFloor', 'telemetry', 'radioSetup']) {
+    final keys = ['trace', 'discover', 'adverts', 'rxLog', 'noiseFloor', 'telemetry', 'radioSetup'];
+    // The list is lazy: scroll to each row, and check the order by the row's place in the list's scroll space.
+    final list = find.byKey(const Key('more-list'));
+    final top = tester.getTopLeft(list).dy;
+    final order = <double>[];
+    final scrollable = tester.state<ScrollableState>(find.descendant(of: list, matching: find.byType(Scrollable)).first);
+    for (final k in keys) {
+      await showRow(tester, 'more-$k');
       expect(find.byKey(Key('more-$k')), findsOneWidget, reason: k);
+      order.add(scrollable.position.pixels + tester.getTopLeft(find.byKey(Key('more-$k'))).dy - top);
     }
-    final y = [for (final k in ['trace', 'discover', 'adverts', 'rxLog', 'noiseFloor', 'telemetry', 'radioSetup']) tester.getTopLeft(find.byKey(Key('more-$k'))).dy];
-    expect([...y]..sort(), y);
-    expect(tester.getTopLeft(find.byKey(const Key('more-myRadios'))).dy, lessThan(y.first), reason: 'after the radio rows, before the app rows');
+    expect([...order]..sort(), order);
   });
 
   for (final (item, id, title) in [
@@ -44,7 +57,7 @@ void main() {
       final h = Harness();
       await h.pumpApp(tester);
       await openMore(tester);
-      await tester.ensureVisible(find.byKey(Key('more-$item')));
+      await showRow(tester, 'more-$item');
       await tester.tap(find.byKey(Key('more-$item')));
       await tester.pumpAndSettle();
       expect(find.byKey(Key('tool-$id')), findsOneWidget);
