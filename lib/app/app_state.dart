@@ -2902,6 +2902,7 @@ class AppState extends ChangeNotifier {
   /// their key ([Settings.autoKey]) or while a request is already in flight.
   Future<bool> ensureKey() async {
     if (!_loaded || hasKey || !_settings.autoKey || _keyBusy) return hasKey;
+    if (!services.mayAutoCreateKey(_settings.serverUrl)) return false; // a dev build never makes a driver on production
     final now = DateTime.now();
     if (_autoKeyNotBefore != null && now.isBefore(_autoKeyNotBefore!)) return false;
     final ok = await requestKey(name: autoKeyName);

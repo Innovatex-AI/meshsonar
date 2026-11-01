@@ -5,6 +5,8 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- **Development builds no longer create drivers on production.** A debug build (or a release build with the simulator switched on) skips the automatic driver key when the server is meshsonar.com or a subdomain, so simulator QA runs and integration tests stop leaving throwaway "Driver N" rows behind (18 on Nov 1 2026). Release and TestFlight builds are unchanged, and a key asked for in Settings still works. To let a dev build become a real driver on purpose: `--dart-define=MESHSONAR_ALLOW_PROD_KEY=true`. Code: `mayAutoCreateDriverKey` in `lib/app/build_flags.dart`, injected as `AppServices.mayAutoCreateKey`.
+
 ## [0.26.1] — 2026-11-02 — pings every 15 m by default, a cleaner drive map (folding legend; no coverage-% box, no region pointers)
 
 - **Minimum distance between pings now defaults to 15 m** (was 100 m, which held pings back at stops and in slow traffic: gaps of 60-216 s showed in the first 0.26.0 drives). Still adjustable in Settings > Wardriving and the quick sheet on the Map (15-500 m). A settings file written before 0.26.1 that still holds 100 m moves to 15 m once; a 100 m chosen afterwards stays (`min_distance_default` marks files written by 0.26.1+).

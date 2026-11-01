@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../core/api.dart';
+import 'build_flags.dart' show mayAutoCreateDriverKey;
 import '../core/gps_health.dart' show BackgroundLocation;
 import '../core/claim_flow.dart' show ClaimRestoreStore;
 import '../core/model.dart';
@@ -128,6 +129,11 @@ class AppServices {
   /// reason when there is none). Null = not fetched (tests).
   final Future<HubRegions> Function(String serverUrl)? regionCatalogFetch;
 
+  /// May the app create a driver key by itself on this server (`ensureKey`). The default refuses in development builds
+  /// when the server is production (lib/app/build_flags.dart), so simulator and test runs never create throwaway drivers
+  /// there. Tests that exercise the automatic key pass `(_) => true`.
+  final bool Function(String serverUrl) mayAutoCreateKey;
+
   /// Disk cache (ETag/LRU) for per-region site-config and coverage, with offline/as-of labels. Null = no caching.
   final RegionCache? regionCache;
 
@@ -184,6 +190,7 @@ class AppServices {
     this.reportDraftStore,
     this.regionIndexCache,
     this.regionCatalogFetch,
+    this.mayAutoCreateKey = mayAutoCreateDriverKey,
     this.regionCache,
     this.idleLocation,
     this.lastKnownStore,
