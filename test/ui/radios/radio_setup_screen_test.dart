@@ -177,7 +177,7 @@ void main() {
       expect(find.byKey(const Key('setup-advert-position-confirm')), findsOneWidget);
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
-      expect(count(rig, ToolCmd.setOtherParams), 0);
+      expect(count(rig, Cmd.setOtherParams), 0);
       await tapAndWait(tester, find.byKey(const Key('setup-advert-position')));
       await tester.tap(find.byKey(const Key('setup-advert-position-ok')));
       await settle(tester);
@@ -196,7 +196,7 @@ void main() {
       expect(rig.session.tools!.setup.config!.manualAdd, isTrue);
       await tapAndWait(tester, find.byKey(const Key('setup-multi-acks')));
       expect(rig.session.tools!.setup.config!.multiAcks, 1);
-      final f = rig.radio.sentFrames.lastWhere((f) => f[0] == ToolCmd.setOtherParams);
+      final f = rig.radio.sentFrames.lastWhere((f) => f[0] == Cmd.setOtherParams);
       expect(f.sublist(1), [1, 0, 0, 1]);
     });
 
