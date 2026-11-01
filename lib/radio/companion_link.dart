@@ -689,11 +689,24 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
     _fail('share contact', f);
   }
 
+  /// SELF_INFO as the radio holds it NOW (APP_START again; harmless mid-session). Another screen may have changed the radio's
+  /// "other params" since [start], and SET_OTHER_PARAMS overwrites them all, so never write from a stale copy.
+  Future<SelfInfoFrame> _freshSelfFrame() async {
+    final cached = _selfFrame;
+    if (cached == null) throw StateError('radio not started');
+    try {
+      final f = await _command(encodeAppStart(appName), priority: CommandPriority.admin);
+      if (f is SelfInfoFrame) return _selfFrame = f;
+    } on TimeoutException {
+      // fall back to what we last knew
+    }
+    return cached;
+  }
+
   /// What the radio does with a node it hears: from SELF_INFO (manual_add) and AUTOADD_CONFIG. [autoAddSupported] is false
   /// on a firmware without CMD_GET_AUTOADD_CONFIG (the per-type switches then do nothing).
   Future<ContactPolicy> getContactPolicy() async {
-    final si = _selfFrame;
-    if (si == null) throw StateError('radio not started');
+    final si = await _freshSelfFrame();
     var cfg = 0; // NodePrefs.h:38 default; also what a firmware without the command does in "ask" mode
     var hops = 0;
     var supported = false;
@@ -719,8 +732,7 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
 
   /// Writes [policy]. SET_OTHER_PARAMS carries the radio's other settings too, so they are sent back as SELF_INFO gave them.
   Future<void> setContactPolicy(ContactPolicy policy) async {
-    final si = _selfFrame;
-    if (si == null) throw StateError('radio not started');
+    final si = await _freshSelfFrame();
     final manual = policy.askBeforeAdding ? (si.manualAdd | 1) : (si.manualAdd & ~1);
     final f = await _command(
         encodeSetOtherParams(manualAdd: manual, telemetryModes: si.telemetryModes, advertLocPolicy: si.advertLocPolicy, multiAcks: si.multiAcks),

@@ -45,6 +45,10 @@ class ContactsController extends ChangeNotifier {
   final ChatService chat;
   final OpenConversation? openConversation;
   final OpenAdmin? openAdmin;
+
+  /// A room server can be opened as a conversation. Off until room login exists in the conversation screen (a post to a room
+  /// you have not logged in to goes nowhere); then ContactsTab turns it on.
+  final bool canOpenRooms;
   final int Function() nowMs;
 
   ContactFilter _filter = ContactFilter.all;
@@ -58,7 +62,7 @@ class ContactsController extends ChangeNotifier {
   int _total = 0;
   bool _disposed = false;
 
-  ContactsController({required this.chat, this.openConversation, this.openAdmin, int Function()? nowMs})
+  ContactsController({required this.chat, this.openConversation, this.openAdmin, this.canOpenRooms = false, int Function()? nowMs})
       : nowMs = nowMs ?? (() => DateTime.now().millisecondsSinceEpoch) {
     _evSub = chat.events.listen((e) {
       switch (e.kind) {

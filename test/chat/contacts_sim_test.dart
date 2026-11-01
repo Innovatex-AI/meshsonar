@@ -2,6 +2,7 @@
 // firmware's table, auto-add and ACK rules), with a real ChatStore. Time is sped up (timeScale) so a 350 contact download
 // that takes ~22 s on a real radio runs in well under a second.
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/chat/chat_service.dart';
@@ -12,6 +13,8 @@ import 'package:meshsonar/chat/outbox.dart';
 import 'package:meshsonar/chat/session_adapter.dart';
 import 'package:meshsonar/chat/store.dart';
 import 'package:meshsonar/radio/companion_link.dart';
+import 'package:meshsonar/radio/inbound.dart';
+import 'package:meshsonar/radio/packet.dart';
 import 'package:meshsonar/radio/crypto.dart' as c;
 import 'package:meshsonar/radio/protocol.dart';
 import 'package:meshsonar/radio/radio_session_impl.dart';
@@ -200,10 +203,74 @@ void main() {
     test('changing the policy hands the radio\'s other settings back unchanged (SET_OTHER_PARAMS overwrites all four)', () async {
       final rig = Rig();
       await rig.connect(bindAdapter: false);
+      // another screen (radio setup) changed these after the app started: they must survive our write
+      rig.radio
+        ..telemetryModes = 0x2a
+        ..advertLocPolicy = 2
+        ..multiAcks = 1;
       await rig.session.setContactPolicy((await rig.session.getContactPolicy()).copyWith(askBeforeAdding: true));
       final f = rig.radio.sentFrames.lastWhere((f) => f[0] == Cmd.setOtherParams);
       expect(f.length, 5);
       expect(f[1] & 1, 1);
+      expect([f[2], f[3], f[4]], [0x2a, 2, 1], reason: 'read fresh from the radio, not from the copy taken at start');
+      expect((rig.radio.telemetryModes, rig.radio.advertLocPolicy, rig.radio.multiAcks), (0x2a, 2, 1));
+      await rig.close();
+    });
+  });
+
+  group('contact commands over the simulated radio', () {
+    test('get, remove (true then false), reset path, and that a removed contact cannot be messaged', () async {
+      final rig = Rig();
+      await rig.connect(bindAdapter: false);
+      final ann = keyOf('Ann KE8ANN');
+      expect((await rig.session.getContact(ann))!.name, 'Ann KE8ANN');
+      expect(await rig.session.getContact('cd' * 32), isNull);
+      expect(await rig.session.resetContactPath(ann), isTrue);
+      expect(await rig.session.resetContactPath('cd' * 32), isFalse);
+      expect(await rig.session.removeContact(ann), isTrue);
+      expect(await rig.session.removeContact(ann), isFalse);
+      expect((await rig.session.sendContactMessage(ann, 'hi')).failure, SendFailure.noSuchContact);
+      await rig.close();
+    });
+
+    test('export and share need an advert the radio heard itself; a contact the phone wrote has none', () async {
+      final rig = Rig();
+      await rig.connect(bindAdapter: false);
+      final ann = keyOf('Ann KE8ANN');
+      expect(await rig.session.exportContactAdvert(ann), isNull);
+      expect(await rig.session.shareContactZeroHop(ann), isFalse);
+      rig.radio.injectNewAdvert('Heard H1'); // auto-add: the radio keeps the packet
+      await until(() => rig.radio.contactKeys.contains(keyOf2('Heard H1')));
+      final raw = await rig.session.exportContactAdvert(keyOf2('Heard H1'));
+      expect(raw, isNotNull);
+      expect(decodeAdvertPacket(raw!)!.name, 'Heard H1');
+      expect(await rig.session.shareContactZeroHop(keyOf2('Heard H1')), isTrue);
+      await rig.close();
+    });
+
+    test('importing an advert in ask-first mode is answered OK and then pushed as a new node, not added', () async {
+      final rig = Rig();
+      await rig.connect(bindAdapter: false);
+      await rig.session.setContactPolicy((await rig.session.getContactPolicy()).copyWith(askBeforeAdding: true));
+      final events = <RadioEvent>[];
+      rig.session.events.listen(events.add);
+      final key = List<int>.generate(32, (i) => 0x60 + i);
+      final before = rig.radio.contactCount;
+      await rig.session.importContactAdvert(buildUnsignedAdvertPacket(key, type: 2, name: 'Imported', timestamp: 1760000000, lat: 40, lon: -83));
+      await until(() => events.whereType<AdvertHeardEvent>().isNotEmpty);
+      final e = events.whereType<AdvertHeardEvent>().single;
+      expect((e.isNew, e.contact!.name, e.contact!.type), (true, 'Imported', AdvType.repeater));
+      expect(rig.radio.contactCount, before);
+      // junk is refused
+      await expectLater(rig.session.importContactAdvert(Uint8List.fromList(List.filled(120, 7))), throwsA(isA<CompanionException>()));
+      await rig.close();
+    });
+
+    test('the radio answers TABLE_FULL to a new contact: RadioTableFull', () async {
+      final rig = Rig(maxContacts: 9);
+      await rig.connect(bindAdapter: false);
+      await expectLater(
+          rig.session.addOrUpdateContact(RadioContact(publicKeyHex: 'ef' * 32, type: 1, name: 'No room', outPath: Uint8List(0))), throwsA(isA<RadioTableFull>()));
       await rig.close();
     });
   });

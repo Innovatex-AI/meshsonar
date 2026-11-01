@@ -287,7 +287,7 @@ class SimulatedTransport implements ByteTransport {
   int manualAddContacts = 0;
   int autoAddConfig = 0; // NodePrefs.h:38 default: with "ask before adding" on, nothing is added by itself
   int autoAddMaxHops = 0;
-  int _multiAcks = 0, _advertLocPolicy = 0, _telemetryModes = 0;
+  int multiAcks = 0, advertLocPolicy = 0, telemetryModes = 0;
 
   /// Test knob: the link drops after this many CONTACT frames of the next GET_CONTACTS (null = never).
   int? dropAfterContactFrames;
@@ -584,10 +584,10 @@ class SimulatedTransport implements ByteTransport {
           sf: _sf,
           cr: _cr,
           name: _name,
-          multiAcks: _multiAcks,
-          advertLocPolicy: _advertLocPolicy,
-          telemetryModes: _telemetryModes,
           manualAdd: manualAddContacts,
+          telemetryModes: telemetryModes,
+          advertLocPolicy: advertLocPolicy,
+          multiAcks: multiAcks,
         ));
         if (ambientTraffic) _startAmbient();
       case Cmd.deviceQuery:
@@ -691,9 +691,9 @@ class SimulatedTransport implements ByteTransport {
       case Cmd.setOtherParams:
         if (frame.length < 2) return _emit(encodeErr(ErrCode.illegalArg));
         manualAddContacts = frame[1];
-        if (frame.length >= 3) _telemetryModes = frame[2];
-        if (frame.length >= 4) _advertLocPolicy = frame[3];
-        if (frame.length >= 5) _multiAcks = frame[4];
+        if (frame.length >= 3) telemetryModes = frame[2];
+        if (frame.length >= 4) advertLocPolicy = frame[3];
+        if (frame.length >= 5) multiAcks = frame[4];
         _emit(encodeOk());
       case Cmd.setAutoAddConfig:
         if (!autoAddSupported) return _emit(encodeErr(ErrCode.unsupportedCmd));
@@ -1017,8 +1017,8 @@ class SimulatedTransport implements ByteTransport {
     // Repeaters that hear the advert repeat it with their hash in the path; this radio hears the repeats.
     final me = location.positionAt(_clock());
     final payload = buildAdvertPayload(publicKey, _clock().toUtc().millisecondsSinceEpoch ~/ 1000, AdvType.chat, _name,
-        lat: _advertLocPolicy != 0 && (_advLat != 0 || _advLon != 0) ? _advLat : null,
-        lon: _advertLocPolicy != 0 && (_advLat != 0 || _advLon != 0) ? _advLon : null);
+        lat: advertLocPolicy != 0 && (_advLat != 0 || _advLon != 0) ? _advLat : null,
+        lon: advertLocPolicy != 0 && (_advLat != 0 || _advLon != 0) ? _advLon : null);
     for (final r in repeaters) {
       final up = _linkSnr(_kmTo(r, me));
       if (!_decodes(up)) continue;
