@@ -46,6 +46,7 @@ void main() {
     final h = Harness();
     await h.pumpApp(tester);
     await tapShellTab(tester, 'More');
+    await tester.scrollUntilVisible(find.byKey(const Key('more-wardriving')), 200, scrollable: find.byType(Scrollable).first);
     expect(find.byKey(const Key('more-wardriving')), findsOneWidget);
     await tester.tap(find.byKey(const Key('more-wardriving')));
     await tester.pumpAndSettle();
