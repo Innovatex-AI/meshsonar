@@ -53,6 +53,9 @@ void main() {
     expect(Units.imperial.sliderDistance(imp.last), '1600 ft');
     expect(Units.imperial.sliderDistance(100), '330 ft');
     expect(Units.metric.sliderDistance(100), '100 m');
+    // the chip and the slider agree: a stored 100 m sits on the 300 ft stop
+    expect(Units.imperial.minDistanceLabel(100, metric), '300 ft');
+    expect(Units.metric.minDistanceLabel(100, metric), '100 m');
   });
 
   test('antenna summary uses the chosen height unit; plain summary stays metric', () {

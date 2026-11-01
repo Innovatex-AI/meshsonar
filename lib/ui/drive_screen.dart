@@ -10,7 +10,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../app/app_state.dart';
+import '../core/dead_area.dart';
 import 'app.dart';
+import 'drive/dead_area_chip.dart';
 import 'device_feedback.dart';
 import 'location_status.dart';
 import 'map/region_center.dart';
@@ -379,6 +381,13 @@ class _MapPane extends StatelessWidget {
                   // Region awareness lives in this corner, above the icon buttons, so it never competes with
                   // the hint/heard-box/report overlays for the same space. Nothing is added here (no chip, no
                   // gap) until there's something real to show — see RegionChip's own "no cache yet" state.
+                  if (s.driving && silentPingStreak(s.drivePings) >= deadAreaPings) ...[
+                    ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: (box.maxWidth - 2 * Gap.s - 46).clamp(80.0, 180.0)),
+                      child: DeadAreaChip(streak: silentPingStreak(s.drivePings)),
+                    ),
+                    const SizedBox(height: Gap.s),
+                  ],
                   if (s.regionIndexLoaded) ...[
                     ConstrainedBox(
                       constraints: BoxConstraints(maxWidth: (box.maxWidth - 2 * Gap.s - 46).clamp(80.0, 180.0)),

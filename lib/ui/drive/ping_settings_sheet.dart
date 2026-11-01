@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/app_state.dart';
 import '../app.dart';
+import '../settings/settings_kit.dart' show distanceStops;
 import '../settings/wardriving_section.dart' show pingCadenceTiles;
 import '../settings_screen.dart' show SettingsScreen;
 
@@ -23,7 +24,7 @@ class PingSettingsChip extends StatelessWidget {
     } else if (s.pingsPaused) {
       text = 'Pings paused';
     } else {
-      text = 'Ping ${st.intervalSec} s / ${s.units.shortLength(st.minDistanceM.toDouble())}';
+      text = 'Ping ${st.intervalSec} s / ${s.units.minDistanceLabel(st.minDistanceM, distanceStops)}';
     }
     return ActionChip(
       key: const Key('ping-settings-chip'),
