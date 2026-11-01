@@ -15,6 +15,7 @@ import '../drive/drive_controls.dart';
 import '../drive/drive_map_model.dart';
 import '../drive/heard_box.dart';
 import 'coverage_timeline_slider.dart';
+import '../region/region_switch_sheet.dart' show confirmRegionSwitch;
 import 'coverage_map.dart';
 import 'layers/layers_sheet.dart' show showGeneratedLayersSheet;
 import 'region_center.dart';
@@ -84,6 +85,8 @@ class FullscreenMapScreen extends StatelessWidget {
                   hexRes: model.coverageQuery.res,
                   labelAvoidKeys: model.fullscreenOverlayKeys,
                   fallbackCenter: viewedRegionCenter(s),
+                  regionNeighbours: s.regionNeighbours,
+                  onPickRegion: (r) => confirmRegionSwitch(context, r),
                   rotatable: true,
                   // Keep map buttons, attribution and framed repeaters clear of the control panel (bottom in
                   // portrait, bottom-right in landscape).

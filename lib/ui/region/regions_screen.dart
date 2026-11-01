@@ -18,6 +18,7 @@ import '../../core/units.dart';
 import '../app.dart';
 import '../widgets.dart';
 import 'region_common.dart';
+import 'region_switch_sheet.dart' show switchViewedRegion;
 import 'stats_panel.dart' show regionStatsApiFactory;
 
 /// One region with its figures: [stats] null = unavailable (see [failed]).
@@ -361,7 +362,7 @@ class _RegionsScreenState extends State<RegionsScreen> {
       return;
     }
     final nav = Navigator.of(context);
-    unawaited(AppScope.read(context).setViewingRegion(r.code));
+    unawaited(switchViewedRegion(AppScope.read(context), r));
     nav.pop();
   }
 

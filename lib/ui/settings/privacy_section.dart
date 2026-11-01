@@ -91,7 +91,7 @@ List<Widget> privacySectionRows(BuildContext context) {
         key: const Key('privacy-zones'),
         leading: const Icon(Icons.shield_outlined),
         title: Text(settingsEntry('privacy-zones').title),
-        subtitle: Text(privacyZonesSummary(s)),
+        subtitle: Text(privacyZonesSummary(s, AppScope.unitsOf(context))),
         trailing: const Icon(Icons.chevron_right),
         onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const PrivacyZonesScreen())),
       ),

@@ -1,20 +1,17 @@
 // Shared by the privacy-zone widget tests: a Harness whose client speaks driver-privacy, a screen pump with size / text
 // scale / brightness, and a way to tap a latitude/longitude on the zone map.
-import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:meshsonar/app/privacy_zones_controller.dart';
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/privacy_zones.dart';
 import 'package:meshsonar/core/idle_region_watcher.dart' show LastKnownStore;
 import 'package:meshsonar/radio/radio_api.dart' show GeoFix;
 import 'package:meshsonar/ui/app.dart';
 import 'package:meshsonar/ui/settings/privacy_zones_screen.dart';
-import 'package:meshsonar/ui/theme.dart';
 
 import '../ui/fakes.dart';
 

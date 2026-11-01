@@ -15,14 +15,15 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../app/app_state.dart';
 import '../../app/privacy_zones_controller.dart';
 import '../../core/privacy_zones.dart';
+import '../../core/units.dart' show Units;
 import '../app.dart';
 import '../map/coverage_map.dart' show CoverageMap;
 import '../map/offline_basemap.dart';
@@ -34,7 +35,7 @@ const String privacyZonesExplain = 'Drives inside a zone are hidden from the pub
     'and for future ones.';
 
 /// The line under the Settings row: how many zones, and whether any wait to be sent.
-String privacyZonesSummary(AppState s) {
+String privacyZonesSummary(AppState s, Units units) {
   final c = s.privacyZones;
   if (!c.loaded) {
     unawaited(c.load());
@@ -42,7 +43,7 @@ String privacyZonesSummary(AppState s) {
   }
   final n = c.zones.length;
   if (c.support() == ZoneSupport.no) return 'Not supported by this server yet';
-  final base = n == 0 ? 'No zones yet. Hide pings near home and other places.' : '$n ${n == 1 ? 'zone' : 'zones'}, trim ${c.trimM} m';
+  final base = n == 0 ? 'No zones yet. Hide pings near home and other places.' : '$n ${n == 1 ? 'zone' : 'zones'}, trim ${units.distance(c.trimM.toDouble())}';
   return c.pending ? '$base · waiting to be sent' : base;
 }
 
@@ -261,7 +262,7 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
           if (wide) {
             return Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               Expanded(child: map),
-              SizedBox(width: math.min(420, box.maxWidth * 0.45), child: ListView(key: const Key('zones-panel'), cacheExtent: 4000, padding: const EdgeInsets.all(Gap.l), children: panel)),
+              SizedBox(width: math.min(420, box.maxWidth * 0.45), child: ListView(key: const Key('zones-panel'), scrollCacheExtent: const ScrollCacheExtent.pixels(4000), padding: const EdgeInsets.all(Gap.l), children: panel)),
             ]);
           }
           // The map stays pinned on top while the list and the editor scroll under it, so a zone is always in view as it is edited.
@@ -270,7 +271,7 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
             Expanded(
               child: ListView(
                 key: const Key('zones-panel'),
-                cacheExtent: 4000, // the panel is short; keep all of it built (focus, semantics and tests)
+                scrollCacheExtent: const ScrollCacheExtent.pixels(4000), // the panel is short; keep all of it built (focus, semantics and tests)
                 padding: const EdgeInsets.all(Gap.l),
                 children: panel,
               ),

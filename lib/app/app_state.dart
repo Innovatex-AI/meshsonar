@@ -51,6 +51,7 @@ import '../radio/radio_session_impl.dart';
 import '../radio/session_manager.dart';
 import '../radio/wardrive_engine.dart' show DefaultWardriveEngine;
 import '../core/privacy_zone_store.dart' show MemoryPrivacyZoneStore;
+import '../core/region_neighbours.dart';
 import 'claims.dart';
 import 'privacy_zones_controller.dart';
 import 'context_upload_hook.dart';
@@ -565,6 +566,23 @@ class AppState extends ChangeNotifier {
   GeoFix? _switcherFix;
   String? _switcherGps;
   List<RegionIndexEntry> _switcherList = const [];
+
+  List<RegionIndexEntry>? _neighboursFor;
+  String? _neighboursCode;
+  RegionNeighbourSet? _neighboursSet;
+
+  /// The regions next to the viewed one (outlines, names), for the map's Regions layer. Worked out on the phone from the
+  /// regions-index it already holds, so it works offline; remembered per index and viewed region. Null with no index.
+  RegionNeighbourSet? get regionNeighbours {
+    final v = viewingRegion, idx = regionIndex;
+    if (v == null || idx.isEmpty) return null;
+    if (!identical(_neighboursFor, idx) || _neighboursCode != v.code) {
+      _neighboursSet = neighboursOf(idx, v);
+      _neighboursFor = idx;
+      _neighboursCode = v.code;
+    }
+    return _neighboursSet;
+  }
 
   /// Picks [code] to view, or null to follow the phone's GPS region again.
   Future<void> setViewingRegion(String? code) =>

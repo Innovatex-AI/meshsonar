@@ -59,6 +59,23 @@ class UiPrefs extends ChangeNotifier {
   /// The packet-header disclosure (version 1 or later) was seen: packet headers may flow as before.
   bool get packetHeadersDisclosed => _telemetryDisclosed;
 
+  /// The regions the person switched to by hand, most recent first, at most [kRecentRegionsMax] (region codes).
+  final List<String> _recentRegions = [];
+  List<String> get recentRegions => List.unmodifiable(_recentRegions);
+  static const int kRecentRegionsMax = 3;
+
+  Future<void> pushRecentRegion(String code) async {
+    if (_recentRegions.isNotEmpty && _recentRegions.first == code) return;
+    _recentRegions
+      ..remove(code)
+      ..insert(0, code);
+    while (_recentRegions.length > kRecentRegionsMax) {
+      _recentRegions.removeLast();
+    }
+    notifyListeners();
+    await persist();
+  }
+
   /// The disclosure version last seen.
   int get disclosedVersion => _disclosedVersion;
 
@@ -112,6 +129,7 @@ class UiPrefs extends ChangeNotifier {
         'telemetry_disclosed': _telemetryDisclosed,
         if (_lastTab != null) 'last_tab': _lastTab,
         if (_disclosedVersion > 0) collectionDisclosedKey: _disclosedVersion,
+        if (_recentRegions.isNotEmpty) 'recent_regions': _recentRegions,
         'labels': _labels,
       };
 }
@@ -136,6 +154,8 @@ class FileUiPrefs extends UiPrefs {
           _lastTab = lt is String ? lt : null;
           final v = j[collectionDisclosedKey];
           _disclosedVersion = v is num ? v.toInt() : (_telemetryDisclosed ? 1 : 0);
+          final rr = j['recent_regions'];
+          if (rr is List) _recentRegions..clear()..addAll([for (final c in rr) if (c is String) c].take(UiPrefs.kRecentRegionsMax));
           final l = j['labels'];
           if (l is Map) l.forEach((k, v) => _labels['$k'] = '$v');
         }

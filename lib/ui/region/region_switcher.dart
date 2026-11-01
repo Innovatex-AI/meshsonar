@@ -8,6 +8,8 @@ import '../../app/app_state.dart';
 import '../../core/region_lookup.dart';
 import '../../core/region_search.dart';
 import '../app.dart';
+import '../onboarding/ui_prefs.dart';
+import 'region_switch_sheet.dart' show switchViewedRegion;
 import 'regions_screen.dart';
 
 Future<void> showRegionSwitcher(BuildContext context) {
@@ -43,10 +45,12 @@ class _RowHeader extends _Row {
   const _RowHeader(this.key, this.label);
 }
 
+enum _RowKind { plain, near, recent }
+
 class _RowRegion extends _Row {
   final RegionIndexEntry region;
-  final bool near; // a "near you" shortcut: its own widget key, the same region again below
-  const _RowRegion(this.region, {this.near = false});
+  final _RowKind kind; // a "near" or "recent" shortcut: its own widget key, the same region again below
+  const _RowRegion(this.region, {this.kind = _RowKind.plain});
 }
 
 class _RegionSwitcherSheetState extends State<RegionSwitcherSheet> {
@@ -56,6 +60,8 @@ class _RegionSwitcherSheetState extends State<RegionSwitcherSheet> {
   List<RegionIndexEntry>? _rowsFor;
   List<RegionIndexEntry>? _rowsSwitcher;
   String _rowsQuery = '';
+  String _rowsRecent = '';
+  String _rowsViewing = '';
   List<_Row> _rows = const [];
 
   @override
@@ -65,17 +71,41 @@ class _RegionSwitcherSheetState extends State<RegionSwitcherSheet> {
   }
 
   List<_Row> _rowsOf(List<RegionIndexEntry> index, List<RegionIndexEntry> nearestFirst) {
-    if (identical(_rowsFor, index) && identical(_rowsSwitcher, nearestFirst) && _rowsQuery == _query) return _rows;
+    final recentCodes = uiPrefsFor(widget.state).recentRegions;
+    final recentKey = recentCodes.join(',');
+    final viewingCode = widget.state.viewingRegion?.code ?? '';
+    if (identical(_rowsFor, index) &&
+        identical(_rowsSwitcher, nearestFirst) &&
+        _rowsQuery == _query &&
+        _rowsRecent == recentKey &&
+        _rowsViewing == viewingCode) {
+      return _rows;
+    }
     final out = <_Row>[];
     if (_query.trim().isNotEmpty) {
       for (final r in RegionSearchIndex.of(index).search(_query)) {
         out.add(_RowRegion(r));
       }
     } else {
+      // The last regions switched to by hand, most recent first (website parity: "recents kept").
+      final byCode = {for (final r in index) r.code: r};
+      final recents = [for (final c in recentCodes) ?byCode[c]];
+      if (recents.isNotEmpty) {
+        out.add(const _RowHeader('regions-recent', 'Recent'));
+        for (final r in recents) {
+          out.add(_RowRegion(r, kind: _RowKind.recent));
+        }
+      }
       if (widget.state.regionFixKnown && nearestFirst.length > regionNearCount + 4) {
         out.add(const _RowHeader('regions-near', 'Near you'));
         for (final r in nearestFirst.take(regionNearCount)) {
-          out.add(_RowRegion(r, near: true));
+          out.add(_RowRegion(r, kind: _RowKind.near));
+        }
+      } else if (widget.state.regionNeighbours case final set? when !set.isEmpty) {
+        // No fix (or none useful): the regions next to the one on screen.
+        out.add(_RowHeader('regions-near-view', 'Near ${shortNameOf(set.viewing)}'));
+        for (final n in set.neighbours.take(regionNearCount)) {
+          out.add(_RowRegion(n.region, kind: _RowKind.near));
         }
       }
       final sorted = [...index]..sort((a, b) => foldForSearch(a.name).compareTo(foldForSearch(b.name)));
@@ -97,6 +127,8 @@ class _RegionSwitcherSheetState extends State<RegionSwitcherSheet> {
     _rowsFor = index;
     _rowsSwitcher = nearestFirst;
     _rowsQuery = _query;
+    _rowsRecent = recentKey;
+    _rowsViewing = viewingCode;
     _rows = out;
     return out;
   }
@@ -177,7 +209,7 @@ class _RegionSwitcherSheetState extends State<RegionSwitcherSheet> {
                           padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
                           child: Text(label, key: Key(key), style: t.textTheme.titleSmall),
                         ),
-                      _RowRegion(:final region, :final near) => _tile(context, region, gps, viewing, state, near: near),
+                      _RowRegion(:final region, :final kind) => _tile(context, region, gps, viewing, state, kind: kind),
                     };
                   },
                 ),
@@ -222,18 +254,18 @@ class _RegionSwitcherSheetState extends State<RegionSwitcherSheet> {
     );
   }
 
-  Widget _tile(BuildContext context, RegionIndexEntry r, RegionIndexEntry? gps, RegionIndexEntry? viewing, AppState state, {required bool near}) {
+  Widget _tile(BuildContext context, RegionIndexEntry r, RegionIndexEntry? gps, RegionIndexEntry? viewing, AppState state, {required _RowKind kind}) {
     final picked = state.viewingIsManual && viewing?.code == r.code;
     final here = r.code == gps?.code;
     final also = state.regionAlsoIn.any((x) => x.code == r.code);
     return ListTile(
-      key: Key('${near ? 'region-near' : 'region-option'}-${r.code}'),
+      key: Key('${switch (kind) { _RowKind.near => 'region-near', _RowKind.recent => 'region-recent', _RowKind.plain => 'region-option' }}-${r.code}'),
       leading: Icon(picked ? Icons.radio_button_checked : Icons.radio_button_unchecked),
       selected: picked,
       title: Text(r.name),
       subtitle: Text(here ? '${r.code} · you are here' : also ? '${r.code} · you are also here (shared border)' : r.code),
       onTap: () {
-        unawaited(state.setViewingRegion(r.code));
+        unawaited(switchViewedRegion(state, r));
         Navigator.of(context).pop();
       },
     );

@@ -52,15 +52,11 @@ void main() {
     final tmp = await Directory.systemTemp.createTemp('meshsonar_e2e_');
     addTearDown(() => tmp.delete(recursive: true));
 
-    // --- driver key: request, approve as admin, save in settings (what the Settings screen does)
+    // --- driver key: request (self-serve: approved at once), save in settings (what the Settings screen does)
     final client = HttpCmatClient(base);
     final settingsStore = FileSettingsStore(File(p.join(tmp.path, 'settings.json')));
     final req = await client.requestKey(name: 'E2E Driver', callsign: 'KE4BFI');
-    expect(req.status, DriverKeyStatus.pending);
-    final adm = await http.post(base.resolve('/api/cmh/driver-admin'),
-        headers: {'x-admin-key': adminKey, 'content-type': 'application/json'},
-        body: jsonEncode({'action': 'approve', 'driverId': req.driverId}));
-    expect(adm.statusCode, 200, reason: adm.body);
+    expect(req.status, DriverKeyStatus.approved);
     final st = await client.status(req.key);
     expect(st.status, DriverKeyStatus.approved);
     await settingsStore.save(Settings(driverKey: req.key, keyStatus: st.status, display: st.display));
@@ -82,7 +78,9 @@ void main() {
       channel: '#wardriving',
       radio: self.radio,
       antenna: const Antenna(type: 'external', gainDbi: 5.8, heightM: 1.8),
-      companion: Companion(publicKey: self.publicKey, name: self.name, firmware: self.firmware),
+      // The app never uploads a Simulator drive (firmware ends in '-sim'); this test sends the simulated pings as if a real radio
+      // made them, to exercise the wire contract.
+      companion: Companion(publicKey: self.publicKey, name: self.name, firmware: self.firmware?.replaceAll(Companion.simulatorFirmwareSuffix, '')),
     );
     await store.startSession(session);
     final saved = engine.pings.asyncMap((ping) => store.appendPing(session.id, ping).then((_) => ping)).toList();

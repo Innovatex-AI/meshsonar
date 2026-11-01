@@ -44,7 +44,7 @@
 // 'map-network-attribution',
 // 'map-heard-label-<key>', 'map-link-distance-<key>', 'map-position', 'map-recenter', 'map-compass', 'map-offline',
 // 'map-attribution', 'map-simulated'.
-import 'dart:async' show Timer;
+import 'dart:async' show Timer, unawaited;
 import 'dart:io' show Platform;
 import 'dart:math' as math;
 
@@ -64,6 +64,8 @@ import '../../core/model.dart';
 import '../../core/region_overview_api.dart' show RegionObserver;
 import '../../core/region_repeaters_api.dart' show RegionRepeater;
 import '../../core/network_coverage.dart';
+import '../../core/region_lookup.dart' show RegionIndexEntry;
+import '../../core/region_neighbours.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import 'cell_sheet.dart';
@@ -76,6 +78,7 @@ import 'layers/map_layers_adapter.dart';
 import 'layers/observer_layer.dart';
 import 'layers/repeater_cluster_layer.dart';
 import 'layers/repeater_map_source.dart';
+import 'layers/region_neighbours_layer.dart';
 import 'layers/repeater_name_labels.dart';
 import 'map_info_panel.dart';
 import 'live_puck.dart';
@@ -238,6 +241,14 @@ class CoverageMap extends StatefulWidget {
   /// so the drive's cells rescale as you zoom.
   final int? hexRes;
 
+  /// The regions next to the viewed one, drawn (dashed outlines, names) while the `regions` layer is on and the map is zoomed out
+  /// to region level. Null = no layer. A tap on a name or inside an outline calls [onPickRegion].
+  final RegionNeighbourSet? regionNeighbours;
+
+  /// Asks the person to confirm the switch and switches; true when it did. The map then frames the new region, drops the
+  /// selection and stops following the phone. Null = the layer is not drawn.
+  final Future<bool> Function(RegionIndexEntry region)? onPickRegion;
+
   /// Overlays the parent draws over this map (heard box, button column), found by key at paint time: repeater names are
   /// never placed under them.
   final List<GlobalKey> labelAvoidKeys;
@@ -273,6 +284,8 @@ class CoverageMap extends StatefulWidget {
     this.onZoomChanged,
     this.hexRes,
     this.labelAvoidKeys = const [],
+    this.regionNeighbours,
+    this.onPickRegion,
   });
 
   /// True unless running under `flutter test`.
@@ -371,6 +384,36 @@ class _CoverageMapState extends State<CoverageMap> {
       _linkSetRes = res;
     }
     return _linkSet;
+  }
+
+  bool _regionJustPicked = false;
+
+  bool get _regionsOn {
+    final set = widget.regionNeighbours;
+    if (set == null || set.isEmpty || widget.onPickRegion == null) return false;
+    return (widget.layerState ?? widget.layers.toLayerState().toggle(kLabelsLayerId, true).toggle(kRegionsLayerId, true)).isOn(kRegionsLayerId);
+  }
+
+  /// A neighbouring region was tapped (its name or its outline): confirm, switch, and frame it. The selection goes, the map
+  /// stops following the phone, and colour mode, palette and layer switches stay as they are.
+  Future<void> _pickRegion(RegionIndexEntry region) async {
+    final ok = await widget.onPickRegion?.call(region) ?? false;
+    if (!ok || !mounted) return;
+    _regionJustPicked = true;
+    _follow = false;
+    _mapTapTimer?.cancel();
+    _selectedRepeater = null;
+    widget.onSelectRepeater?.call(null);
+    _clearLinks();
+    final b = region.bbox;
+    if (_ready && b != null) {
+      _controller.fitCamera(CameraFit.bounds(
+        bounds: LatLngBounds(LatLng(b[1], b[0]), LatLng(b[3], b[2])),
+        padding: const EdgeInsets.all(24) + widget.overlayPadding,
+        maxZoom: 11,
+      ));
+    }
+    setState(() {});
   }
 
   void _clearLinks() {
@@ -805,7 +848,9 @@ class _CoverageMapState extends State<CoverageMap> {
     super.didUpdateWidget(old);
     if (old.follow != widget.follow) _follow = widget.follow;
     // The viewed region changed (or the index finished loading) while there is nothing else to look at: recentre.
-    if (old.fallbackCenter != widget.fallbackCenter &&
+    if (_regionJustPicked && old.fallbackCenter != widget.fallbackCenter) {
+      _regionJustPicked = false; // the person chose this region on the map: the framing above stands
+    } else if (old.fallbackCenter != widget.fallbackCenter &&
         widget.fallbackCenter != null &&
         _ready &&
         widget.position == null &&
@@ -992,6 +1037,14 @@ class _CoverageMapState extends State<CoverageMap> {
                 if (at != null && DateTime.now().difference(at) < const Duration(milliseconds: 600)) return;
                 final hit = widget.layers.networkCoverage ? networkCellAt(widget.networkCells, point) : null;
                 if (hit == null) {
+                  // A tap inside a neighbouring region's outline (not on a cell, repeater or name) offers to switch to it.
+                  if (_regionsOn && _controller.camera.zoom <= kRegionLayerMaxZoom) {
+                    final n = widget.regionNeighbours!.hit(point.latitude, point.longitude);
+                    if (n != null) {
+                      unawaited(_pickRegion(n.region));
+                      return;
+                    }
+                  }
                   _clearLinks(); // a tap on nothing puts the lines away
                   return;
                 }
@@ -1049,6 +1102,8 @@ class _CoverageMapState extends State<CoverageMap> {
                     ),
                 ],
               ),
+            if (_regionsOn)
+              RegionNeighboursLayer(set: widget.regionNeighbours!, onPick: (r) => unawaited(_pickRegion(r)), avoid: widget.overlayPadding),
             if (widget.showRings && layers.rings && pos != null)
               if (widget.puck case final puck?)
                 ListenableBuilder(

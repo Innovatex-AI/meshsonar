@@ -58,7 +58,7 @@ void main() {
       expect(cleanLabel(null), isNull);
       expect(cleanLabel('x' * 60)!.length, kZoneLabelMax);
     });
-    test('at most ${kZoneMax} zones survive a load', () {
+    test('at most $kZoneMax zones survive a load', () {
       final j = {'zones': [for (var i = 0; i < 14; i++) {'lat': 1.0 + i / 100, 'lon': 2.0, 'radiusM': 100}]};
       expect(PrivacyZoneState.fromJson(j).zones.length, kZoneMax);
     });

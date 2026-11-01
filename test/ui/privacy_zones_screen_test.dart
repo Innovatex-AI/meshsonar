@@ -3,7 +3,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart' show MapController;
 import 'package:latlong2/latlong.dart';
-import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/privacy_zones.dart';
@@ -268,7 +267,7 @@ void main() {
     expect(find.bySemanticsLabel('Cancel'), findsNothing, reason: 'the banner only exists in add / move mode');
     // The selected state is announced.
     final tile = tester.getSemantics(k('zone-tile-0'));
-    expect(tile.hasFlag(SemanticsFlag.isSelected), isTrue);
+    expect(tile.flagsCollection.isSelected.name, 'isTrue');
     handle.dispose();
   });
 }
