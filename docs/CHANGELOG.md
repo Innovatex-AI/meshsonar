@@ -5,6 +5,8 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- **Plan tools are native screens** (no browser): Airtime and load, Radio presets, Point-to-point link, Coverage painter, Coverage check, Field data. Airtime/presets/link maths runs on the phone (`lib/core/plan/`, ports of the website's `airtime.ts`, `presets.ts`, `mesh.ts`, `profile.ts`, `coverage.ts`, golden-tested against numbers the website generates). Link and painter use the website's existing public `score-link` and `coverage` calls (only the points and settings are sent); channel load uses `airtime-load`. The last result of each is kept on disk and shown "as of" when offline. The Plan tab drops the external-link icon for these and the "Coming next" list is empty. Planner, Recommended build and Site explorer still open the website.
+
 ## [0.25.2] — 2026-11-01 — map quick wins (base maps, coverage modes, filters, coverage %, leaderboard, ping feedback), dead-area warning, observer wizard
 
 - **Map tab quick wins.** Base-map cycler under the layers button (Chart, Street, Dark, Topo; offline packs still used except for Topo). Two new coverage colour modes in Coverage options: Ping age and Noise vs typical (own colour ramps; grey and purple keep their meaning, strength colours stay for signal). Filter drawer (result, age, repeater, my pings only). "In view: N% of M cells heard" pill. Trophy button: the region leaderboard plus your totals. Settings > Wardriving > Ping feedback: haptic tap on/off and an optional sound (off by default), different for heard and heard nothing.

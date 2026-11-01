@@ -230,23 +230,43 @@ void main() {
   });
 
   group('Plan tab', () {
-    testWidgets('every tool opens the website page for the region; planned in-app tools have no button', (tester) async {
+    testWidgets('native tools open a screen (no browser, no external-link icon); the rest open the website page for the region', (tester) async {
       phone(tester);
       final h = Harness();
       await h.pumpApp(tester);
       await tapShellTab(tester, 'Plan');
       final list = find.descendant(of: find.byKey(const Key('plan-list')), matching: find.byType(Scrollable)).first;
-      for (final t in planTools) {
+      Future<void> clearBar(Finder f) async {
+        while (tester.getCenter(f).dy > 640) {
+          await tester.drag(list, const Offset(0, -100));
+          await tester.pump();
+        }
+      }
+
+      final web = planTools.where((t) => t.native == null).toList();
+      final native = planTools.where((t) => t.native != null).toList();
+      expect(native.map((t) => t.id), containsAll(['link', 'painter', 'airtime', 'presets', 'check', 'field']));
+      expect(plannedInApp, isEmpty, reason: 'every planned in-app tool is now native');
+      for (final t in native) {
         await tester.scrollUntilVisible(find.byKey(Key('plan-${t.id}')), 120, scrollable: list);
+        await clearBar(find.byKey(Key('plan-${t.id}')));
+        final tile = find.byKey(Key('plan-${t.id}'));
+        expect(find.descendant(of: tile, matching: find.byIcon(Icons.open_in_new)), findsNothing, reason: t.id);
+        await tester.tap(tile);
+        await tester.pumpAndSettle();
+        expect(find.byKey(Key('plan-page-${t.id}')), findsOneWidget, reason: t.id);
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+      }
+      for (final t in web) {
+        await tester.scrollUntilVisible(find.byKey(Key('plan-${t.id}')), 120, scrollable: list);
+        await clearBar(find.byKey(Key('plan-${t.id}'))); // clear the bottom bar
         await tester.tap(find.byKey(Key('plan-${t.id}')));
         await tester.pump();
         expect(h.openedUrls.last.path, t.path, reason: t.id);
       }
-      expect(h.openedUrls.length, planTools.length);
-      await tester.scrollUntilVisible(find.text('Coming next, inside the app'), 120, scrollable: list);
-      for (final p in plannedInApp) {
-        expect(tester.widget<ListTile>(find.widgetWithText(ListTile, p.$1)).enabled, isFalse);
-      }
+      expect(h.openedUrls.length, web.length, reason: 'a native tool never opens the browser');
+      expect(find.text('Coming next, inside the app'), findsNothing);
       await drain(tester);
     });
   });

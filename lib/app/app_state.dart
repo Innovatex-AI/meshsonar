@@ -20,6 +20,7 @@ import '../core/data_categories.dart' show CategoryId, dataCategories;
 import '../core/drive_context.dart' show ContextSyncLedger, stripContextCategories, stripUnsentContextCategories;
 import '../core/drive_context_session.dart';
 import '../core/drive_env_cache.dart';
+import '../core/plan/plan_store.dart';
 import '../core/driver_summary.dart';
 import '../core/map_links.dart';
 import '../core/repeater_reach.dart';
@@ -164,6 +165,19 @@ class AppState extends ChangeNotifier {
     final cache = _envCache();
     return cache.get(sessionId, () => client.driveEnv(key, sessionId));
   }
+
+  // ---------- Plan tools (lib/core/plan, lib/ui/plan): the last good answer of each tool, kept on disk for offline ----------
+  PlanStore? _planStore;
+
+  /// Last results of the native Plan tools (link profile, painted coverage, channel load). Memory only when there is no cache dir.
+  PlanStore get planStore {
+    final rc = services.regionCache?.dir;
+    return _planStore ??= PlanStore(dir: rc == null ? null : Directory('${rc.parent.path}${Platform.pathSeparator}plan_tools'), clock: services.clock);
+  }
+
+  /// The server the Plan tools ask: the viewed region's own host (its repeaters and boundary feed the coverage model),
+  /// else the server the app is set to.
+  String get planBaseUrl => viewingRegion?.url ?? _settings.serverUrl;
 
   // ---------- driver summary (the account's history beyond this phone: lib/core/driver_summary.dart) ----------
   DriverSummaryCache? _driverSummaryCache;
