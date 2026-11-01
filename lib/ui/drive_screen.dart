@@ -21,8 +21,8 @@ import 'drive/drive_live_stats.dart';
 import 'drive/drive_map_model.dart';
 import 'drive/ping_settings_sheet.dart';
 import 'drive/heard_box.dart';
-import 'region/region_switch_sheet.dart' show confirmRegionSwitch;
 import 'map/coverage_map.dart';
+import 'map/map_key.dart';
 import 'map/fullscreen_map.dart';
 import 'drive/gps_health_banner.dart';
 import 'map/map_health_overlay.dart';
@@ -329,22 +329,23 @@ class _MapPane extends StatelessWidget {
                 simulated: model.simulated,
                 onZoomChanged: model.onMapZoom,
                 hexRes: model.coverageQuery.res,
+                mapKey: MapKey(model: model),
+                creditsOpen: model.creditsOpen,
+                onCreditsToggle: model.toggleCredits,
                 labelAvoidKeys: model.driveOverlayKeys,
                 fallbackCenter: viewedRegionCenter(s),
                 fallbackBounds: viewedRegionBounds(s),
-                regionNeighbours: s.regionNeighbours,
-                onPickRegion: (r) => confirmRegionSwitch(context, r),
               ),
             ),
             // GPS trouble (waiting, weak, lost, Precise Location off) as one line over the map's top edge, with the one button that fixes it.
             Positioned(left: 0, right: 0, top: 0, child: GpsBannerSlot(state: s, height: model.gpsBannerHeight, compact: box.maxHeight < kCompactMapHeight)),
             // Above the map's own credit stack (source chip, attribution, legend), which grows with what the map draws.
-            Positioned(left: Gap.s, bottom: model.attributionStackHeight + 14, child: CoverageAsOfBadge(model: model)),
-            Positioned(left: Gap.s, right: 60, bottom: model.attributionStackHeight + 54, child: Align(alignment: Alignment.bottomLeft, child: MapHealthOverlay(model: model))),
+            Positioned(left: Gap.s, bottom: model.driveAttributionStackHeight + 14, child: CoverageAsOfBadge(model: model)),
+            Positioned(left: Gap.s, right: 60, bottom: model.driveAttributionStackHeight + 54, child: Align(alignment: Alignment.bottomLeft, child: MapHealthOverlay(model: model))),
             if (s.regionDataOfflineLabel != null)
               Positioned(
                 left: Gap.s,
-                bottom: model.attributionStackHeight + 14,
+                bottom: model.driveAttributionStackHeight + 14,
                 child: Chip(
                   key: const Key('region-offline-label'),
                   avatar: const Icon(Icons.cloud_off, size: 16),
@@ -354,7 +355,7 @@ class _MapPane extends StatelessWidget {
               ),
             // At the bottom of the map: the top right holds the region chip, the last-known-location chip and the icon buttons,
             // which stack taller than a fixed offset can clear (the chips used to cover the hint's title).
-            if (pings.isEmpty) Positioned(left: 0, right: 0, bottom: model.attributionStackHeight + 12, child: IgnorePointer(child: MapHint(state: s))),
+            if (pings.isEmpty) Positioned(left: 0, right: 0, bottom: model.driveAttributionStackHeight + 12, child: IgnorePointer(child: MapHint(state: s))),
             if (showHeard)
               _BelowBanner(
                 height: model.gpsBannerHeight,
@@ -431,10 +432,10 @@ class _MapPane extends StatelessWidget {
               ),
             ),
             if (report != null)
-              Positioned(left: Gap.s, right: Gap.s, bottom: model.attributionStackHeight + 12, child: report!),
+              Positioned(left: Gap.s, right: Gap.s, bottom: model.driveAttributionStackHeight + 12, child: report!),
             if (pings.isNotEmpty && s.driving)
               Positioned(
-                bottom: model.attributionStackHeight + 8,
+                bottom: model.driveAttributionStackHeight + 8,
                 left: Gap.l,
                 right: Gap.l,
                 child: Center(child: PingResultFlash(ping: pings.first, label: model.labelFor)),

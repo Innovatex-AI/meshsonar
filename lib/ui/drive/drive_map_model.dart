@@ -44,6 +44,7 @@ import '../map/layers/registry.dart';
 import '../map/layers/repeater_map_source.dart';
 import '../map/cell_raster_layer.dart' show CellRasterLayer;
 import '../map/live_puck.dart';
+import '../map/map_key.dart' show mapKeyParts;
 import '../map/tile_source.dart' show MapTileStats;
 import '../map/tile_source.dart' as tiles show currentMapSource;
 import '../map/map_layers.dart';
@@ -413,8 +414,19 @@ class DriveMapModel extends ChangeNotifier {
   /// Height of the credit stack the map draws bottom-left (OpenStreetMap credit, the SIMULATED tag, the repeater age
   /// legend with MeshCore Map's credit), so overlays that sit above it (the result flash, the report card) clear it
   /// instead of covering it.
-  double get attributionStackHeight =>
-      64 + (simulated ? 28 : 0) + (layerState.isOn(kNetworkLayerId) && repeaterSource.globalPoints.length > 0 ? 64 : 0);
+  double get attributionStackHeight => 64 + (simulated ? 28 : 0) + mapKeyParts(this).height;
+
+  /// Whether the Drive screen's small map shows its source chip and repeater legend (folded away by default so the map keeps
+  /// its room; the attribution line stays). The full-screen map always shows them.
+  bool _creditsOpen = false;
+  bool get creditsOpen => _creditsOpen;
+  void toggleCredits() {
+    _creditsOpen = !_creditsOpen;
+    notifyListeners();
+  }
+
+  /// [attributionStackHeight] for the Drive screen's map: just the attribution line while the legend is folded.
+  double get driveAttributionStackHeight => _creditsOpen ? attributionStackHeight : 36 + (simulated ? 28 : 0);
 
   /// The simulator's own (made-up) repeaters, so a Simulator drive shows where they are like a real one would.
   static final List<RepeaterRef> simulatorRepeaters = [
@@ -683,20 +695,6 @@ class DriveMapModel extends ChangeNotifier {
     _boundsTimer = Timer(const Duration(milliseconds: 250), () {
       if (!_disposed) notifyListeners();
     });
-  }
-
-  CoverageSummary? _sum;
-  Object? _sumKey;
-
-  /// Coverage of what is drawn inside the view: share of mapped cells with something heard, and of your tx pings heard.
-  CoverageSummary get coverageSummary {
-    final cells = layers.networkCoverage ? visibleNetworkCells : const <NetworkCell>[];
-    final key = Object.hash(identityHashCode(cells), identityHashCode(visiblePings), _bounds, cells.length);
-    if (_sumKey != key || _sum == null) {
-      _sumKey = key;
-      _sum = summariseCoverage(cells: cells, pings: visiblePings, bounds: _bounds);
-    }
-    return _sum!;
   }
 
   // ---------- network-coverage layer controls (res by zoom, colour-by, since, source) ----------

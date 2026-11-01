@@ -10,9 +10,6 @@ import '../../../core/network_coverage.dart' show NetworkCell;
 import '../../../core/region_overview_api.dart' show RegionObserver;
 import 'repeater_map_source.dart' show RepeaterPoint;
 
-/// The registry id of the neighbouring-regions layer (also the website's `?show=` key).
-const String kRegionsLayerId = 'regions';
-
 /// Sections of the layers sheet, in this order.
 enum LayerGroup { drive, coverage, network, context }
 

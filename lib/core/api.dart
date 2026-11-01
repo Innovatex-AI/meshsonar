@@ -719,6 +719,8 @@ class Settings {
   /// Allowed ranges (UI sliders and clamping).
   static const int minIntervalSec = 10, maxIntervalSec = 120;
   static const int minDistance = 15, maxDistance = 500;
+  /// Default minimum distance between pings (0.26.1: 100 m held pings back at stops and in slow traffic).
+  static const int defaultMinDistance = 15;
   static const int minListenSec = 4, maxListenSec = 20;
 
   /// The default listen window, seconds: 10, what MeshMapper uses, so the two apps' `heard` compare like for like.
@@ -733,7 +735,7 @@ class Settings {
     this.display,
     this.channel = '#wardriving',
     this.intervalSec = 30,
-    this.minDistanceM = 100,
+    this.minDistanceM = defaultMinDistance,
     this.listenWindowSec = defaultListenSec,
     this.antenna = const Antenna(type: 'internal'),
     this.antennaProfiles = const {},
@@ -831,6 +833,7 @@ class Settings {
         'channel': channel,
         'interval_sec': intervalSec,
         'min_distance_m': minDistanceM,
+        'min_distance_default': defaultMinDistance, // marks a file written under the 15 m default
         if (listenWindowSec != defaultListenSec) 'listen_window_sec': listenWindowSec,
         'antenna': antenna.toJson(),
         'antenna_profiles': {for (final e in antennaProfiles.entries) e.key: e.value.toJson()},
@@ -862,7 +865,9 @@ class Settings {
         channel: _str(j['channel']) ?? '#wardriving',
         // 0 used to mean "manual only"; auto-ping is now always 10–120 s (Ping now still works any time)
         intervalSec: (_int(j['interval_sec']) ?? 30).clamp(minIntervalSec, maxIntervalSec),
-        minDistanceM: (_int(j['min_distance_m']) ?? 100).clamp(minDistance, maxDistance),
+        // Files from before 0.26.1 hold the old 100 m default as an explicit value: move it to the new default once.
+        minDistanceM: (j['min_distance_default'] == null && _int(j['min_distance_m']) == 100 ? defaultMinDistance : (_int(j['min_distance_m']) ?? defaultMinDistance))
+            .clamp(minDistance, maxDistance),
         listenWindowSec: (_int(j['listen_window_sec']) ?? defaultListenSec).clamp(minListenSec, maxListenSec),
         antenna: _antennaFrom(j['antenna']),
         antennaProfiles: _profilesFrom(j['antenna_profiles']),

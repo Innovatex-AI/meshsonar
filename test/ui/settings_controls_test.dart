@@ -64,12 +64,12 @@ void main() {
     expect(s.antenna.type, 'internal');
   });
 
-  testWidgets('defaults read "Every 30 s" and "100 m"; no "manual" wording', (tester) async {
+  testWidgets('defaults read "Every 30 s" and "15 m"; no "manual" wording', (tester) async {
     await openSettings(tester);
     await show(tester, 'interval');
     expect(valueText(tester, 'interval'), 'Every 30 s');
     await show(tester, 'min-distance');
-    expect(valueText(tester, 'min-distance'), '100 m');
+    expect(valueText(tester, 'min-distance'), '15 m');
     expect(find.textContaining('BOTH'), findsOneWidget);
     expect(find.textContaining('Ping now works any time'), findsOneWidget);
     expect(find.textContaining('manual'), findsNothing);
@@ -105,6 +105,15 @@ void main() {
     expect(h.settings.saveCount, saves + 1);
     expect(h.settings.saved.intervalSec, greaterThan(30));
     expect(intervalStops, contains(h.settings.saved.intervalSec));
+  });
+
+  test('the minimum distance defaults to 15 m; a file from before 0.26.1 holding the old 100 m moves once, a later 100 m stays', () {
+    expect(const Settings().minDistanceM, 15);
+    expect(Settings.fromJson(const {}).minDistanceM, 15);
+    expect(Settings.fromJson({'min_distance_m': 100}).minDistanceM, 15, reason: 'old explicit default');
+    expect(Settings.fromJson({'min_distance_m': 250}).minDistanceM, 250, reason: 'a real choice is kept');
+    final chosen = Settings.fromJson(const Settings().copyWith(minDistanceM: 100).toJson());
+    expect(chosen.minDistanceM, 100, reason: 'written by 0.26.1 or later: a deliberate 100 m stays');
   });
 
   testWidgets('an odd stored distance shows the nearest stop', (tester) async {

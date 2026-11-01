@@ -93,7 +93,7 @@ void main() {
     expect(odd.serverUrl, 'https://example.org');
     expect(odd.driverKey, 'ms_k');
     expect(odd.intervalSec, 30);
-    expect(odd.minDistanceM, 100);
+    expect(odd.minDistanceM, 15, reason: 'a bad value falls back to the default');
     expect(odd.autoSync, isTrue);
     expect(odd.channel, '#wardriving');
     expect(odd.antenna.type, 'internal');

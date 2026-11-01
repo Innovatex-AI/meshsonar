@@ -16,8 +16,8 @@ import '../drive/gps_health_banner.dart';
 import '../drive/drive_map_model.dart';
 import '../drive/heard_box.dart';
 import 'coverage_timeline_slider.dart';
-import '../region/region_switch_sheet.dart' show confirmRegionSwitch;
 import 'coverage_map.dart';
+import 'map_key.dart';
 import 'layers/layers_sheet.dart' show showGeneratedLayersSheet;
 import 'map_health_overlay.dart';
 import 'map_tools.dart';
@@ -89,11 +89,10 @@ class FullscreenMapScreen extends StatelessWidget {
                   simulated: model.simulated,
                   onZoomChanged: model.onMapZoom,
                   hexRes: model.coverageQuery.res,
+                  mapKey: MapKey(model: model),
                   labelAvoidKeys: model.fullscreenOverlayKeys,
                   fallbackCenter: viewedRegionCenter(s),
                 fallbackBounds: viewedRegionBounds(s),
-                  regionNeighbours: s.regionNeighbours,
-                  onPickRegion: (r) => confirmRegionSwitch(context, r),
                   rotatable: true,
                   // Keep map buttons, attribution and framed repeaters clear of the control panel (bottom in
                   // portrait, bottom-right in landscape).

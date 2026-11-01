@@ -1,9 +1,9 @@
-// Map tab quick tools: the base-map cycler, the filter drawer, the leaderboard / my stats sheet and the coverage % pill.
+// Map tab quick tools: the base-map cycler, the filter drawer, the leaderboard / my stats sheet.
 // One column (MapToolColumn) the Drive screen map and the full-screen map both add under their layers button; everything
 // reads and writes DriveMapModel, so the two screens stay in step. Feature ideas only from the wider wardriving world:
 // the design, wording and code are MeshSonar's own.
 //
-// Keys (prefix p = 'drive' or 'full'): '$p-map-style', '$p-map-filter', '$p-map-leaders', '$p-coverage-pct';
+// Keys (prefix p = 'drive' or 'full'): '$p-map-style', '$p-map-filter', '$p-map-leaders';
 // sheets: 'map-filter-sheet' (+ 'filter-heard-*', 'filter-age-*', 'filter-repeater', 'filter-own', 'filter-reset',
 // 'filter-counts'), 'map-leaders-sheet' ('leaders-board', 'leaders-me').
 import 'package:flutter/material.dart';
@@ -27,7 +27,7 @@ IconData baseStyleIcon(BaseMapStyle s) => switch (s) {
   BaseMapStyle.topo => Icons.terrain,
 };
 
-/// The three buttons and the coverage pill, for a right-hand map column.
+/// The three buttons for a right-hand map column.
 class MapToolColumn extends StatelessWidget {
   final DriveMapModel model;
 
@@ -90,54 +90,11 @@ class MapToolColumn extends StatelessWidget {
               tooltip: 'Leaderboard and your stats',
               onPressed: () => showMapLeadersSheet(context),
             ),
-            CoveragePctChip(model: model, keyName: '$keyPrefix-coverage-pct'),
           ],
         );
       },
     );
   }
-}
-
-/// "62% heard · 140 cells" for what is on screen, "73% of your 55 pings heard" when you have pings in view. Tap for the filter.
-class CoveragePctChip extends StatelessWidget {
-  final DriveMapModel model;
-  final String keyName;
-  const CoveragePctChip({super.key, required this.model, required this.keyName});
-
-  @override
-  Widget build(BuildContext context) {
-    final sum = model.coverageSummary;
-    final text = coverageLine(sum);
-    if (text == null) return const SizedBox.shrink();
-    final t = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(top: Gap.s),
-      child: Semantics(
-        label: 'Coverage in view: $text',
-        child: Container(
-          key: Key(keyName),
-          constraints: const BoxConstraints(maxWidth: 150),
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-          decoration: BoxDecoration(
-            color: t.colorScheme.surface.withValues(alpha: 0.93),
-            borderRadius: BorderRadius.circular(Corners.small),
-            border: Border.all(color: t.colorScheme.outlineVariant),
-          ),
-          child: Text(text, textAlign: TextAlign.right, style: t.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600)),
-        ),
-      ),
-    );
-  }
-}
-
-/// The pill's words; null when there is nothing to say (no cells and no pings in view).
-String? coverageLine(CoverageSummary s) {
-  if (s.isEmpty) return null;
-  final parts = <String>[
-    if (s.cellPercent != null) 'In view: ${s.cellPercent}% of ${s.cells} ${s.cells == 1 ? 'cell' : 'cells'} heard',
-    if (s.pingPercent != null) '${s.pingPercent}% of your ${s.pings} ${s.pings == 1 ? 'ping' : 'pings'} heard',
-  ];
-  return parts.join('\n');
 }
 
 // ------------------------------------------------------------------ filter drawer

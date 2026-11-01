@@ -70,7 +70,7 @@ void main() {
     expect(e.config!.listenWindow, const Duration(seconds: 10));
 
     expect(find.byKey(const Key('ping-settings-chip')), findsOneWidget);
-    expect(find.text('Ping 30 s / 100 m'), findsOneWidget);
+    expect(find.text('Ping 30 s / 15 m'), findsOneWidget);
     await tester.tap(find.byKey(const Key('ping-settings-chip')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('ping-settings-sheet')), findsOneWidget);
