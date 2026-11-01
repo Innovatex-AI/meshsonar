@@ -251,7 +251,7 @@ void main() {
 
       final web = planTools.where((t) => t.native == null).toList();
       final native = planTools.where((t) => t.native != null).toList();
-      expect(native.map((t) => t.id), containsAll(['link', 'painter', 'airtime', 'presets', 'check', 'field']));
+      expect(native.map((t) => t.id), containsAll(['planner', 'recommended', 'sites', 'scenarios', 'tracker', 'link', 'painter', 'airtime', 'presets', 'check', 'field']));
       expect(plannedInApp, isEmpty, reason: 'every planned in-app tool is now native');
       for (final t in native) {
         await tester.scrollUntilVisible(find.byKey(Key('plan-${t.id}')), 120, scrollable: list);
