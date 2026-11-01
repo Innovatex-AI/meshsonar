@@ -209,7 +209,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(PingLogScreen), findsOneWidget);
     await tester.pageBack();
-    await tester.pumpAndSettle();
+    await settleLive(tester);
 
     expect(find.byKey(const Key('drive-report-card')), findsNothing);
     await tester.tap(find.byKey(const Key('start-stop')));

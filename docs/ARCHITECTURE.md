@@ -290,6 +290,15 @@ names.
 **Startup failure.** If `buildRealServices()` throws (for example, storage can't be opened), `main.dart` shows
 `StartupErrorApp` instead of the app.
 
+### The live dot (`lib/ui/map/live_puck.dart`)
+
+GPS -> `FilteredLocationSource` (parked hold, accuracy gate; this is the fix pings use) -> `DriveMapModel._onFix` -> `PuckController.onFix`
+-> `PuckMotion` (display-only gate, push-ahead, ease). The model calls `notifyListeners` only when the phone moved 20 m or 2 s
+passed; the map is rebuilt by that, not by each fix. `PuckLayer` ticks at 30 fps while something moves and sleeps otherwise; its
+`onMoved` lets `CoverageMap` move the camera while following. Engine state `pinging` -> `pingSent` (rings); a saved ping ->
+`pingResolved(heard)` (answer ring, lines from `heard`). Under `flutter test` a live drive keeps a frame scheduled, so tests
+use `settleLive` instead of `pumpAndSettle` on a drive screen.
+
 ### App shell (`lib/ui/shell/`)
 
 `HomeShell` owns a `ShellController` (selected `AppTab`, Analyze view, pending More row), exposed by `ShellScope`. Tabs are
@@ -297,6 +306,22 @@ kept alive in an `IndexedStack` (Map always, others built on first visit) under 
 between bar and rail keeps every tab's state. The More tab has its own `Navigator` (and corrects `MediaQuery.size` for it).
 `MiniDriveBar` reads `AppState` (status, pingCount, heardCount, recentPings, `pingsPaused`) and nothing else. Chat plugs in
 through `ChatTabHost.provider` (a `ChatTabProvider`); the shell never imports `lib/chat`.
+
+### Repeater administration (`lib/radio/repeater_*.dart`, `lib/ui/radios/`)
+
+`RepeaterAdminSession` (`repeater_admin.dart`) administers one repeater or room over a `RepeaterAdminRadio` (`repeater_radio.dart`), which
+`MeshCoreCompanionLink` implements and `LinkRadioSession` forwards at priority P1 with the airtime ledger counting each call. Pure Dart. It owns:
+one request at a time; per-call timeouts from the SENT frame; read retries and no write retries; the rate limits; a redacted log. Writes are
+built only from `SettingDef`s (`repeater_settings.dart`: type, range, unit, danger, takes effect, read-back, typed phrase) after
+`classifyCommand` (`repeater_cli.dart`: exact strings only, secrets, redaction, reply parsing) accepted them. Binary requests and parsers
+are in `repeater_wire.dart`, the health check in `repeater_health.dart`, rooms in `room_session.dart`, remembered passwords in
+`admin_password_vault.dart` (memory, plus the Keychain only on opt-in).
+
+The UI side is one `RepeaterAdminController` (a `ChangeNotifier` holding the session and what each tab last read) behind
+`RepeaterAdminScreen` (login, then Overview / Settings / Neighbours / Regions / Access / Console) and one editor sheet for every change
+(`setting_editor_sheet.dart`). `admin_launcher.dart` builds the controller from `AppState.radioSession`; screens never touch the radio.
+Tests run the whole stack against `test/support/repeater_admin_fake.dart` (a fake companion and repeater that reproduce the measured
+behaviour: silence, the replay rule, loss, caps, prefix matching, the blank-password re-admit, rate limits).
 
 ## 6. Every file in `lib/`
 
@@ -308,6 +333,13 @@ through `ChatTabHost.provider` (a `ChatTabProvider`); the shell never imports `l
 | `app/services.dart` | app | `AppServices` dependency container (incl. `openUrl` for web pages and `appInfo`); `RepeaterCache` + `FileRepeaterCache` / `MemoryRepeaterCache`. |
 | `app/wiring.dart` | app | `buildRealServices()`: data root, concrete store/client/sync/settings, BLE + simulator scanners, filtered GPS, engine factory, export dir, share, browser, directory (7-day TTL); app version via `loadAppInfo` (package_info_plus). |
 | `app/messages.dart` | app | `friendlyError` / `friendlySyncError`: exceptions → short plain-language messages. |
+| `app/chat_controller.dart` | app | `ChatController`: what chat screens talk to. Owns the `ChatService` for the open store, follows the radio session (bind on connect, unbind on drop, outbox keeps waiting), `SwitchableSink`, `ChannelAdmin`, passenger lock, `send()` with plain-language errors, `incoming` stream for banners, `refreshFromRadio()`. No widgets, no network. |
+| `app/chat_wiring.dart` | app | `ChatWiring.attach(AppState)` (called from `main.dart`): opens the chat store, builds service + controller, applies retention, follows `radioSessions.sessions`, feeds drive facts to the passenger lock, counts own pings on the System row (`AppState.onTxPing`), sets `ChatTabHost.provider`. |
+| `chat/channel_admin.dart` | chat | Join Public / # / private / link, create, rename, delete, share link, `syncFromRadio` (slot conflicts, wardrive channel -> System). Radio first, phone second; every failure a plain sentence. `ChannelRadio` seam, `SessionChannelRadio` in `session_adapter.dart`. |
+| `chat/passenger_lock.dart` | chat | Composer lock above 8 km/h (unlock below 6) while driving; "I'm a passenger" per drive; stale or missing speed never locks. |
+| `ui/chat/conversation_screen.dart` | ui | `ConversationScreen` for channels, DMs and rooms (paged list, day headers, unread marker, delivery chips, search, long-press actions); `embedded` for the drive sheet. Parts: `composer.dart`, `message_bubble.dart`, `message_sheets.dart`, `message_format.dart`. |
+| `ui/chat/channels_view.dart`, `channel_detail_screen.dart`, `channel_flows.dart`, `qr_widgets.dart` | ui | Channels list + System section + traffic, channel info (QR, link, notify, pin, region, rename, delete), add-channel flows, QR show (`package:qr`) and scan (`mobile_scanner`, camera only on that screen). |
+| `ui/chat/chat_tab_provider.dart`, `contacts_view.dart`, `chat_search_screen.dart`, `chat_drive_sheet.dart`, `chat_banner_host.dart`, `chat_row.dart` | ui | The Chat tab provider (Contacts seam `contactsBuilder`), read-only real contacts, global search, Chat-in-Drive sheet, in-app banners, shared list row. |
 | `chat/models.dart` | chat (pure Dart) | `Contact`, `Channel` (`ChannelKind` public/hashtag/private/system), `ChatMessage` + `MessageState` + `FailReason`, `ConversationSummary`, `ConvKey`, `dedupeKeyFor`, hex helpers. |
 | `chat/chat_service.dart` | chat | `ChatService`: the one API the UI uses. Inbound (persist, then notify; idempotent), send, unread/mute/pin/drafts, search, retention, delete, system-channel stats, link import. |
 | `chat/outbox.dart` | chat | `Outbox` + `RetryPolicy`: queued sends, DM retries (flood/direct), ACK matching, give-up reasons, restart recovery. No timers inside; `ChatService` pumps it. |
@@ -339,6 +371,7 @@ through `ChatTabHost.provider` (a `ChatTabProvider`); the shell never imports `l
 | `core/network_coverage.dart` | core | `buildNetworkCells`/`levelFor`: turns a `PublicCoverage` answer into drawable `NetworkCell`s (square bbox or H3 hexagon boundary) bucketed by `CoverageColorBy` — the Drive map's network-wide background layer. |
 | `core/sync_service.dart` | core | `DefaultSyncService`: chunked, serialised, retry-safe uploads; rejection discovery; end-time reporting. For a server that accepts Drive Format v1.2 (injected `capabilities` provider and `categoryOn` gate, both wired by AppState from the upload server's own site-config) it adds the drive context to the upload, the late-context path (`POST drive-context`), the one-time plain-drive fallback on a 400 and `syncContextOnly`. |
 | `core/settings_store.dart` | core | `FileSettingsStore`: atomic JSON settings; missing/corrupt → defaults. |
+| `core/puck_motion.dart` | core | `PuckMotion`: display-only motion of the live dot (outlier/teleport gate, push-ahead along course, ease). Never feeds a recorded ping. |
 | `core/position_filter.dart` | core | `PositionFilter` (accuracy gate, Kalman smoothing, stationary hold) and `FilteredLocationSource` wrapper. |
 | `core/heard.dart` | core | `haversineM`, `bearingDeg`, `compass`; `RepeaterLookup` (prefix → repeater, CMAT first); `HeardTracker` (live/stale per repeater). |
 | `core/units.dart` | core | The only place numbers get units: `Units` (Auto/Metric/Imperial resolved, plus `UnitOverrides` per quantity: distance, speed, height, temperature, pressure hPa/inHg/mmHg), all distance/speed/height/temperature/pressure formatting and parsing; `description` for report labels. `test/core/no_raw_units_test.dart` forbids unit literals and conversions elsewhere. |
@@ -368,6 +401,15 @@ through `ChatTabHost.provider` (a `ChatTabProvider`); the shell never imports `l
 | `radio/inbound.dart` | radio | `InboundMessage`, `SendResult`, `FloodScope`, `RadioContact`, `ContactListing`, `RadioChannel`, `DeviceLimits`, `RadioEvent` subclasses. |
 | `radio/ping_gate.dart` | radio | `PingGate`, `PingDecision`, `PingSkipReason`, `PingSkippedException`, `AlwaysGoPingGate`. |
 | `radio/claim_radio.dart` | radio | `ClaimRadio` (what a claim needs from a radio: sign, ensureContact, login, runCli, status), `ClaimRadioException`, `RemoteLogin`. |
+| `radio/repeater_radio.dart` | radio (contract) | `RepeaterAdminRadio`: binary and anonymous requests, remote telemetry, raw status, tagged CLI. |
+| `radio/repeater_wire.dart` | radio | Binary request encoders and parsers: `RepeaterStats` (56 bytes), LPP telemetry, neighbour pages, access list, owner, anonymous clock and regions. |
+| `radio/repeater_cli.dart` | radio | `classifyCommand` (exact strings only), redaction of passwords, reply parsing. |
+| `radio/repeater_settings.dart` | radio | `SettingDef` registry (type, range, unit, danger, effect, typed phrase), `Confirmation`, `BoardLimits`. |
+| `radio/repeater_admin.dart` | radio | `RepeaterAdminSession`: login, reads, plan/apply/verify/undo, regions, access list, console, rate limits. |
+| `radio/repeater_health.dart` | radio | `evaluateHealth` (findings with severity and a suggested fix), `ObserverStatus` parser. |
+| `radio/room_session.dart` | radio | `RoomSession`: join, posts (txt_type 2 pushes), post, unread. |
+| `radio/admin_password_vault.dart` | radio | Passwords in memory; in the secure store only on opt-in. |
+| `ui/radios/*` | ui | Repeaters list, launcher, `repeater_admin/*` screens and editor sheet, `rooms/*` (room screen, join header). |
 | `core/node_claim.dart` | core | `NodeClaim`, `ClaimChallenge`, `ClaimStatus`, public-key helpers; the claim wire contract. |
 | `core/claim_flow.dart` | core | `OwnRadioClaimFlow` (sign) and `RepeaterClaimFlow` (login, name + code, advert, poll, ALWAYS restore), `composeClaimName`, `ClaimRestoreStore` (pending name restores on disk, never a password). |
 | `app/claims.dart` | app | `ClaimController`: My radios list, the running flow, pending restores; `AppState.claims`. |
@@ -393,6 +435,8 @@ through `ChatTabHost.provider` (a `ChatTabProvider`); the shell never imports `l
 | `ui/drive/drive_map_model.dart` | ui | `DriveMapModel` shared by the Drive screen and full-screen map: pings, heard, selection, `layerState` (registry ids; `layers` is the old bool view), the `RepeaterMapSource` over `AppStateRepeaterFeed`, observers fetch, `statusOf`/`retry` per layer, coverage query/timeline. |
 | `ui/drive/drive_live_stats.dart` | ui | `DriveLiveStats`: live new-vs-repeat grid-cell tally for the mid-drive stats strip. |
 | `ui/drive/heard_box.dart` | ui | `HeardBox`: live / holding / stale repeaters over the map. |
+| `ui/map/live_puck.dart` | ui | `PuckController` (owned by `DriveMapModel`, fed every GPS fix and ping event), `PuckLayer` (dot, accuracy disc, heading cone, ping rings; owns the 30 fps ticker, which sleeps when settled; calls back so the camera follows) and `PuckLinksLayer` (lines from the moving dot to the heard repeaters). They repaint on their own, so a GPS fix never rebuilds `CoverageMap`. |
+| `ui/drive/ping_settings_sheet.dart` | ui | The Map tab's "Ping 30 s / 100 m" chip and quick sheet (the same cadence sliders as Settings > Wardriving). |
 | `ui/map/coverage_map.dart` | ui | `CoverageMap` (flutter_map): grid, OSM tiles, rings, links, the clustered `network` / `repeaters` layers (from a host `RepeaterMapSource`, or its own built from `regionRepeaters`), observers, heard repeaters, ping dots, position, compass, recenter, attribution (+ the network layer's legend and credit); taps routed through `showMapHitSheet`; `SimulatedTag`. |
 | `ui/map/fullscreen_map.dart` | ui | Full-screen live map; `showMapLayersSheet` (opens the generated sheet). |
 | `ui/map/repeater_page_link.dart` | ui | `openRepeaterPageFromMap`: "Open repeater page" from a map repeater sheet. |

@@ -153,9 +153,8 @@ class _ComposerState extends State<Composer> {
                       keyboardType: TextInputType.multiline,
                       decoration: InputDecoration(
                         hintText: widget.hint,
-                        isDense: true,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(Corners.card)),
                         constraints: const BoxConstraints(minHeight: 48),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(Corners.card)),
                         contentPadding: const EdgeInsets.symmetric(horizontal: Gap.m, vertical: Gap.m),
                       ),
                     ),
@@ -210,16 +209,20 @@ class _LockedComposer extends StatelessWidget {
         top: false,
         child: Padding(
           padding: const EdgeInsets.all(Gap.m),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.directions_car_rounded, color: t.colorScheme.onSecondaryContainer),
-              const SizedBox(width: Gap.m),
-              Expanded(
-                child: Text('Typing is off while the car is moving. Messages still arrive here.',
-                    style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSecondaryContainer)),
-              ),
-              const SizedBox(width: Gap.s),
-              FilledButton.tonal(
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Icon(Icons.directions_car_rounded, color: t.colorScheme.onSecondaryContainer),
+                const SizedBox(width: Gap.m),
+                Expanded(
+                  child: Text('Typing is off while the car is moving. Messages still arrive here.',
+                      style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSecondaryContainer)),
+                ),
+              ]),
+              const SizedBox(height: Gap.s),
+              FilledButton(
                 key: const Key('passenger-button'),
                 style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
                 onPressed: () => controller.setPassenger(true),

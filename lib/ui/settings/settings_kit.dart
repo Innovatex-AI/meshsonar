@@ -197,6 +197,8 @@ Future<bool> confirmSettingsChange(
 /// Slider stops (values outside these, e.g. from an older settings file, snap to the nearest stop).
 const List<int> intervalStops = [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120];
 const List<int> distanceStops = [15, 25, 50, 75, 100, 125, 150, 200, 250, 300, 400, 500];
+/// Listen window seconds (Settings.minListenSec..maxListenSec).
+const List<int> listenStops = [4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 20];
 const List<int> holdStops = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 final List<int> syncEveryStops = [for (var m = Settings.minSyncEveryMin; m <= Settings.maxSyncEveryMin; m++) m];
 

@@ -86,7 +86,7 @@ void main() {
     expect(find.text('Heard nothing'), findsWidgets);
     expect(find.textContaining('Westerville Water Tower'), findsWidgets); // name from cache
     await tester.pageBack();
-    await tester.pumpAndSettle();
+    await settleLive(tester);
     expect(tester.widget<Text>(find.byKey(const Key('stat-pings'))).data, '2');
     expect(tester.widget<Text>(find.byKey(const Key('stat-heard'))).data, '1 heard');
     expect(tester.widget<Text>(find.byKey(const Key('stat-pct'))).data, '50%');

@@ -48,7 +48,7 @@ class RadioSessionChatAdapter implements OutboundMessageSink {
   }
 
   Future<void> dispose() async {
-    await _sub?.cancel();
+    unawaited(_sub?.cancel());
     _sub = null;
     _chat?.contacts.detach();
     session.setInboundPersister(null);

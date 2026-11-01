@@ -64,6 +64,13 @@ class OutboxRepository {
     }
   }
 
+  /// Makes every message that is waiting for the radio (queued, or between attempts) due at [nowMs]. Messages already sent and
+  /// waiting for an ack keep their ack timer.
+  int releaseWaiting(int nowMs) {
+    db.raw.execute("UPDATE outbox SET due_at_ms = ? WHERE due_at_ms > ? AND message_id IN (SELECT id FROM messages WHERE state IN ('queued','retrying'))", [nowMs, nowMs]);
+    return db.raw.updatedRows;
+  }
+
   void remove(String messageId) => db.raw.execute('DELETE FROM outbox WHERE message_id = ?', [messageId]);
 
   void addAttempt(DeliveryAttempt a) => db.raw.execute(
