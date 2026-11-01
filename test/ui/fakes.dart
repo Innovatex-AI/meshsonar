@@ -997,7 +997,7 @@ Future<void> _openMoreRow(WidgetTester tester, String key) async {
   }
   final row = find.byKey(Key(key));
   final scrollable = find.descendant(of: find.byKey(const Key('more-list')), matching: find.byType(Scrollable)).first;
-  await tester.scrollUntilVisible(row, 120, scrollable: scrollable);
+  await tester.scrollUntilVisible(row, 120, scrollable: scrollable, maxScrolls: 200);
   await tester.pumpAndSettle();
   await tester.tap(row);
   await tester.pumpAndSettle();

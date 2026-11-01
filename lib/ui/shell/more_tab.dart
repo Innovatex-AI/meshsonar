@@ -8,6 +8,7 @@ import '../app.dart';
 import '../map/legend_sheet.dart' show showMapLegend;
 import '../onboarding/onboarding_screen.dart';
 import '../radio/radio_screen.dart';
+import '../radios/observer_join_screen.dart';
 import '../radios/repeaters_screen.dart';
 import '../report_problem_screen.dart' show openReportProblem;
 import '../radios/radio_setup/radio_setup_screen.dart';
@@ -68,6 +69,7 @@ class _MoreTabState extends State<MoreTab> {
         MoreItem.noiseFloor => const NoiseScreen(),
         MoreItem.telemetry => const TelemetryScreen(),
         MoreItem.radioSetup => const RadioSetupScreen(),
+        MoreItem.observerJoin => const ObserverJoinScreen(),
         MoreItem.legend || MoreItem.howItWorks => const SizedBox.shrink(),
       };
 
@@ -153,6 +155,8 @@ class MoreList extends StatelessWidget {
             row(MoreItem.noiseFloor, Icons.show_chart, 'Noise floor and health', 'Interference and radio counters, live'),
             row(MoreItem.telemetry, Icons.thermostat, 'Telemetry', 'Battery, temperature and position of a node'),
             row(MoreItem.radioSetup, Icons.tune, 'Radio setup', 'Name, position, power and frequency, with checks'),
+            row(MoreItem.observerJoin, Icons.visibility_outlined, 'Become an observer',
+                'Step by step: make your repeater report to MeshSonar. Free'),
             header('App'),
             row(MoreItem.wardriving, Icons.radar, 'Wardriving settings',
                 'Send pings, channel, interval, distance, listen window'),
