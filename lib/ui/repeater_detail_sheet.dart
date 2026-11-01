@@ -10,6 +10,7 @@ import '../core/model.dart';
 import 'app.dart' show AppScope;
 import 'charts/sparkline.dart';
 import 'claims/claim_widgets.dart' show ClaimRepeaterAction;
+import 'radios/admin_launcher.dart' show AdminRepeaterButton;
 import 'repeater_widgets.dart';
 import 'theme.dart';
 import 'widgets.dart';
@@ -178,6 +179,7 @@ class RepeaterDetailSheet extends StatelessWidget {
           const SizedBox(height: Gap.l),
           RepeaterReachSection(repeaterKey: ref.key, lat: ref.lat, lon: ref.lon),
           ClaimRepeaterAction(keyHex: ref.key, name: repeaterTitle(m)),
+          AdminRepeaterButton(keyHex: ref.key, name: repeaterTitle(m)),
         ],
       ],
     );

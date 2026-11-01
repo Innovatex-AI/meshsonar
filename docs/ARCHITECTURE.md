@@ -298,6 +298,22 @@ between bar and rail keeps every tab's state. The More tab has its own `Navigato
 `MiniDriveBar` reads `AppState` (status, pingCount, heardCount, recentPings, `pingsPaused`) and nothing else. Chat plugs in
 through `ChatTabHost.provider` (a `ChatTabProvider`); the shell never imports `lib/chat`.
 
+### Repeater administration (`lib/radio/repeater_*.dart`, `lib/ui/radios/`)
+
+`RepeaterAdminSession` (`repeater_admin.dart`) administers one repeater or room over a `RepeaterAdminRadio` (`repeater_radio.dart`), which
+`MeshCoreCompanionLink` implements and `LinkRadioSession` forwards at priority P1 with the airtime ledger counting each call. Pure Dart. It owns:
+one request at a time; per-call timeouts from the SENT frame; read retries and no write retries; the rate limits; a redacted log. Writes are
+built only from `SettingDef`s (`repeater_settings.dart`: type, range, unit, danger, takes effect, read-back, typed phrase) after
+`classifyCommand` (`repeater_cli.dart`: exact strings only, secrets, redaction, reply parsing) accepted them. Binary requests and parsers
+are in `repeater_wire.dart`, the health check in `repeater_health.dart`, rooms in `room_session.dart`, remembered passwords in
+`admin_password_vault.dart` (memory, plus the Keychain only on opt-in).
+
+The UI side is one `RepeaterAdminController` (a `ChangeNotifier` holding the session and what each tab last read) behind
+`RepeaterAdminScreen` (login, then Overview / Settings / Neighbours / Regions / Access / Console) and one editor sheet for every change
+(`setting_editor_sheet.dart`). `admin_launcher.dart` builds the controller from `AppState.radioSession`; screens never touch the radio.
+Tests run the whole stack against `test/support/repeater_admin_fake.dart` (a fake companion and repeater that reproduce the measured
+behaviour: silence, the replay rule, loss, caps, prefix matching, the blank-password re-admit, rate limits).
+
 ## 6. Every file in `lib/`
 
 | File | Layer | Role |
@@ -367,6 +383,15 @@ through `ChatTabHost.provider` (a `ChatTabProvider`); the shell never imports `l
 | `radio/inbound.dart` | radio | `InboundMessage`, `SendResult`, `FloodScope`, `RadioContact`, `ContactListing`, `RadioChannel`, `DeviceLimits`, `RadioEvent` subclasses. |
 | `radio/ping_gate.dart` | radio | `PingGate`, `PingDecision`, `PingSkipReason`, `PingSkippedException`, `AlwaysGoPingGate`. |
 | `radio/claim_radio.dart` | radio | `ClaimRadio` (what a claim needs from a radio: sign, ensureContact, login, runCli, status), `ClaimRadioException`, `RemoteLogin`. |
+| `radio/repeater_radio.dart` | radio (contract) | `RepeaterAdminRadio`: binary and anonymous requests, remote telemetry, raw status, tagged CLI. |
+| `radio/repeater_wire.dart` | radio | Binary request encoders and parsers: `RepeaterStats` (56 bytes), LPP telemetry, neighbour pages, access list, owner, anonymous clock and regions. |
+| `radio/repeater_cli.dart` | radio | `classifyCommand` (exact strings only), redaction of passwords, reply parsing. |
+| `radio/repeater_settings.dart` | radio | `SettingDef` registry (type, range, unit, danger, effect, typed phrase), `Confirmation`, `BoardLimits`. |
+| `radio/repeater_admin.dart` | radio | `RepeaterAdminSession`: login, reads, plan/apply/verify/undo, regions, access list, console, rate limits. |
+| `radio/repeater_health.dart` | radio | `evaluateHealth` (findings with severity and a suggested fix), `ObserverStatus` parser. |
+| `radio/room_session.dart` | radio | `RoomSession`: join, posts (txt_type 2 pushes), post, unread. |
+| `radio/admin_password_vault.dart` | radio | Passwords in memory; in the secure store only on opt-in. |
+| `ui/radios/*` | ui | Repeaters list, launcher, `repeater_admin/*` screens and editor sheet, `rooms/*` (room screen, join header). |
 | `core/node_claim.dart` | core | `NodeClaim`, `ClaimChallenge`, `ClaimStatus`, public-key helpers; the claim wire contract. |
 | `core/claim_flow.dart` | core | `OwnRadioClaimFlow` (sign) and `RepeaterClaimFlow` (login, name + code, advert, poll, ALWAYS restore), `composeClaimName`, `ClaimRestoreStore` (pending name restores on disk, never a password). |
 | `app/claims.dart` | app | `ClaimController`: My radios list, the running flow, pending restores; `AppState.claims`. |

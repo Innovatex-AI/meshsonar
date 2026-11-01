@@ -52,6 +52,50 @@ get one sentence ("Drive in progress. 12 pings · 8 heard. Next ping 14 s. Last 
 Shared states: `ui/state_widgets.dart` has `LoadingState` (a spinner that gives up after a timeout and becomes an
 `ErrorState` with Try again) and `ErrorState`; `EmptyState` is in `ui/widgets.dart`.
 
+## Repeater administration and rooms (unreleased)
+
+Free, for the owner of the repeater. Files: `lib/ui/radios/` (`repeaters_screen.dart`, `admin_launcher.dart`, `repeater_admin/*`,
+`rooms/*`), logic in `lib/radio/repeater_*.dart` and `lib/radio/room_session.dart`.
+
+**Where.** More > Radios and tools > Repeaters and rooms (every repeater and room your radio knows, plus the ones you claimed);
+"Administer this repeater" on a repeater's sheet (map and Analyze); a room contact in Chat opens its conversation with a join header.
+Needs a connected radio that can do it (the built-in Simulator cannot: it has no repeaters, and the screen says so).
+
+**Login.** The admin password (or the guest or room password). It goes from the phone to your own radio and over the air to the
+repeater; it is never sent to MeshSonar. It lives in memory for the app run. "Remember passwords on this phone" is a switch,
+off by default, shown only where a secure store exists (iOS Keychain, this device only); turning it off deletes every saved password.
+A blank password is never sent (a blank one re-admits keys already on the list and proves nothing), and passwords over 15 bytes are
+refused (the radio would cut them). A wrong password and a repeater out of reach both get no answer; the screen says so in those words.
+
+| Tab | What it does |
+|---|---|
+| Overview | Name, role, firmware, board, key, last advert you heard; battery, chip temperature, uptime, noise floor, time on air (sending, listening), packets, floods and direct, errors, duplicates, last packet it heard; **clock vs your phone** with a one-tap **Sync clock** (confirmed; only moves a clock forward); **Health check**; **Adverts** (flood or local, confirmed, 30 s cooldown); Claim this repeater. Pull down to refresh. |
+| Settings | Grouped: Identity (name with a 23/31 byte counter, latitude and longitude, owner note, advert intervals), Radio (parameters compared with the region preset, TX power), Routing (repeat, flood hop limits, path hash size, loop detection, extra ACKs), Observer uplink (read only), Advanced (expert settings, **Reboot** behind a typed word). Each row opens one editor. |
+| Neighbours | The binary neighbour list: name from your contacts, key prefix, SNR with a colour and a word, how long ago. Newest or strongest first. "Look for neighbours" (confirmed). |
+| Regions | The flood-scope tree, default region, allow or stop flooding per region (confirmed, saved, read back). Denying `*` needs the typed words DENY ALL. Without admin: the allowed list from an anonymous request. |
+| Access | The access list (admin only) with roles; remove or change a role (your own radio is protected); guest password; admin password; **Test a password**. Says plainly that changing the admin password does not remove admins already on the list. |
+| Console | Read-only commands run at once; a write becomes the same review sheet as the form; actions are confirmed; everything unknown or dangerous is refused with the reason and never sent; replies are shown without secrets. |
+
+**Every change** (the editor sheet): edit, then **Review** (current to new, what it does in words, how risky, whether it needs a reboot, a typed
+phrase when it can cut the repeater off or lock you out: RADIO, REPEAT OFF, LOW LIMIT, CHANGE PASSWORD, GRANT ADMIN, DENY ALL, REBOOT), then
+**Apply**: the command is sent once, the value is read back, and the result is one of **Verified**, **Could not verify** (tap Check again; the
+screen never leaves it unknown), **Not applied** (the repeater still has the old value; nothing was resent), **The repeater refused**, or
+**Saved, but different**. **Put back <old value>** undoes it through the same review. Passwords have no undo (the old one is never shown).
+
+**Health check.** Plain-language findings with a severity and a "What to do": clock skew (warn over 60 s, fail over 600 s), radio against the
+region preset (a different frequency fails; bandwidth, SF or CR warns), TX power against the board, advert interval, flood hop limit, repeat
+off, neighbour count, battery (warn under 3.6 V, fail under 3.4 V), restarts (uptime dropped since the last check), noise floor, receive
+errors (over 40%), and on an observer build the uplink slots, drops, queue and time check. Suggestions are never applied for you.
+
+**Airtime.** Everything goes through the radio session at priority P1 and is counted in the airtime ledger. A **Using airtime** chip shows
+while a request is on the air. Limits per repeater: 45 commands per minute, 3 anonymous requests per 3 minutes (a repeater answers 4 to
+everyone together), writes 2 s apart.
+
+**Rooms.** In Chat a room contact shows a join header: a room only pushes its posts to radios that logged in. With the room password you read
+and post; with the admin password you can also manage it (the same admin screens, identity and access only). A read-only guest (the room allows
+guests) reads and sees why the composer is off. Rooms are also under Repeaters and rooms with a minimal conversation screen.
+
+
 ## First-run intro (onboarding)
 
 Files: `ui/onboarding/*`. The intro has four pages and is shown once. `ui_prefs.json` `onboarding_seen` is set when
