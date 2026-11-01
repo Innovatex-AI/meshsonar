@@ -642,6 +642,14 @@ class Settings {
   /// written to settings.json only when changed, so an older file reads as standard.
   final ColourPalette colourPalette;
 
+  /// Map tab base map (lib/core/map_styles.dart id: chart / street / dark / topo). Default chart; written only when changed.
+  final String baseMapStyle;
+
+  /// Wardriving feedback when a ping finishes (Settings > Wardriving): a haptic tap (on by default, as before) and a short
+  /// sound (off by default). Heard and not heard differ in both. Written only when not the default.
+  final bool pingHaptics;
+  final bool pingSound;
+
   /// Drive-context categories (lib/core/data_categories.dart ids) the person switched off. Every category is on by
   /// default (opt-out, Andy Oct 2026), so only the off ones are stored, under `collection_off`; ids this version does
   /// not know are kept as they are (a newer app's choice survives a downgrade). Packet headers stay on
@@ -693,6 +701,9 @@ class Settings {
     this.telemetryEnabled = true,
     this.mapRepeaterLabels = true,
     this.colourPalette = ColourPalette.standard,
+    this.baseMapStyle = 'chart',
+    this.pingHaptics = true,
+    this.pingSound = false,
     this.collectionOff = const {},
     this.contextErasePending = const {},
   });
@@ -721,6 +732,9 @@ class Settings {
     bool? telemetryEnabled,
     bool? mapRepeaterLabels,
     ColourPalette? colourPalette,
+    String? baseMapStyle,
+    bool? pingHaptics,
+    bool? pingSound,
     Set<String>? collectionOff,
     Set<String>? contextErasePending,
     bool clearKey = false,
@@ -749,6 +763,9 @@ class Settings {
         telemetryEnabled: telemetryEnabled ?? this.telemetryEnabled,
         mapRepeaterLabels: mapRepeaterLabels ?? this.mapRepeaterLabels,
         colourPalette: colourPalette ?? this.colourPalette,
+        baseMapStyle: baseMapStyle ?? this.baseMapStyle,
+        pingHaptics: pingHaptics ?? this.pingHaptics,
+        pingSound: pingSound ?? this.pingSound,
         collectionOff: collectionOff ?? this.collectionOff,
         contextErasePending: contextErasePending ?? this.contextErasePending,
       );
@@ -777,6 +794,9 @@ class Settings {
         if (!telemetryEnabled) 'telemetry_enabled': false,
         if (!mapRepeaterLabels) 'map_repeater_labels': false,
         if (colourPalette != ColourPalette.standard) 'colour_palette': colourPalette.id,
+        if (baseMapStyle != 'chart') 'base_map_style': baseMapStyle,
+        if (!pingHaptics) 'ping_haptics': false,
+        if (pingSound) 'ping_sound': true,
         if (collectionOff.isNotEmpty) 'collection_off': collectionOff.toList()..sort(),
         if (contextErasePending.isNotEmpty) 'context_erase_pending': contextErasePending.toList()..sort(),
       };
@@ -805,6 +825,9 @@ class Settings {
         telemetryEnabled: j['telemetry_enabled'] is bool ? j['telemetry_enabled'] as bool : true,
         mapRepeaterLabels: j['map_repeater_labels'] is bool ? j['map_repeater_labels'] as bool : true,
         colourPalette: ColourPalette.parse(j['colour_palette']),
+        baseMapStyle: _str(j['base_map_style']) ?? 'chart',
+        pingHaptics: j['ping_haptics'] is bool ? j['ping_haptics'] as bool : true,
+        pingSound: j['ping_sound'] is bool ? j['ping_sound'] as bool : false,
         collectionOff: {
           if (j['collection_off'] case final List l)
             for (final v in l)

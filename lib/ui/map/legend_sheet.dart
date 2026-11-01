@@ -243,6 +243,14 @@ class _MapLegendSheetState extends State<MapLegendSheet> {
     final steps = coverageLegend(_by);
     return [
       _note(context, 'Hexagons show what everyone has measured, not just this drive.'),
+      if (!_by.isStrength)
+        _note(
+          context,
+          _by == CoverageColorBy.age
+              ? 'Ping age is about freshness, not signal: its own indigo ramp, newest darkest. Green, blue, amber and red are only used for measured signal.'
+              : 'Noise against typical compares each cell with the median of the cells loaded. Its own teal-to-rust ramp, not a signal-strength colour.',
+          key: const Key('legend-ramp-note'),
+        ),
       Wrap(
         spacing: Gap.s,
         children: [
@@ -261,8 +269,8 @@ class _MapLegendSheetState extends State<MapLegendSheet> {
       for (final (level, text) in steps)
         LegendRow(
           id: 'cell-${level.name}',
-          swatch: LegendSwatch(color: networkLevelColor(context, level), silentCell: level == CoverageLevel.none),
-          title: _levelTitle(level, text),
+          swatch: LegendSwatch(color: networkLevelColor(context, level, mode: _by), silentCell: level == CoverageLevel.none),
+          title: _by.isStrength || level == CoverageLevel.none ? _levelTitle(level, text) : 'Ramp step: $text',
           detail: switch (level) {
             CoverageLevel.none => 'Someone pinged here and nothing answered. Not a strength colour.',
             CoverageLevel.unknown => 'Something answered but no signal reading came with it.',

@@ -10,8 +10,40 @@ import 'package:h3_flutter/h3_flutter.dart';
 import 'api.dart';
 import 'hex_cells.dart' show HexPoint;
 
-/// Which dimension buckets a cell's colour (the layer's colour-by picker: best SNR / share heard / noise floor).
-enum CoverageColorBy { snr, heard, noise }
+/// Which dimension buckets a cell's colour (the layer's colour-by picker: best SNR / share heard / noise floor / ping age /
+/// noise against the area's typical level).
+///
+/// Colour contract: grey ([CoverageLevel.none]) = mapped, nothing heard (or no reading for the dimension); purple
+/// ([CoverageLevel.unknown]) = heard, signal unknown; the strength colours (green/blue/amber/red) mean measured SNR and the
+/// share heard. [age] and [noiseDelta] are NOT strength, so they draw in their own ramps (lib/ui/map/coverage_ramps.dart).
+enum CoverageColorBy {
+  snr,
+  heard,
+  noise,
+
+  /// How long ago the cell was last measured: 24 h, 7 d, 30 d, older.
+  age,
+
+  /// The cell's mean noise floor against the median of the cells loaded: quieter, typical, noisier, much noisier.
+  noiseDelta;
+
+  /// True for the two modes that are about strength (SNR, share heard, absolute noise) and use the strength colours.
+  bool get isStrength => this == snr || this == heard || this == noise;
+}
+
+/// Edges of the [CoverageColorBy.age] buckets, days: up to 1, up to 7, up to 30, older.
+const List<int> kAgeBucketDays = [1, 7, 30];
+
+/// Edges of the [CoverageColorBy.noiseDelta] buckets, dB against the median: -3 or quieter, within 3, up to +8, above.
+const double kNoiseQuieterDb = -3, kNoiseTypicalDb = 3, kNoiseMuchDb = 8;
+
+/// The median noise floor of the cells that report one; null with fewer than 3 readings (no meaningful "typical").
+double? medianNoiseFloor(Iterable<CoverageCell> cells) {
+  final v = [for (final c in cells) if (c.noiseFloor != null && c.noiseFloor!.isFinite) c.noiseFloor!]..sort();
+  if (v.length < 3) return null;
+  final m = v.length ~/ 2;
+  return v.length.isOdd ? v[m] : (v[m - 1] + v[m]) / 2;
+}
 
 /// A cell's bucket on its [CoverageColorBy] legend, weakest to strongest. [none] means the cell was mapped but nothing
 /// was heard there (or there is no reading for the noise dimension): drawn GREY, never a coverage colour. [unknown]
@@ -28,6 +60,9 @@ const int kMinCellPings = 3;
 
 /// One drawable network-coverage cell: a boundary (square or hexagon corners) and the bucket it falls in.
 class NetworkCell {
+  /// The mode [level] was bucketed by, so the map draws it with that mode's colours.
+  final CoverageColorBy mode;
+
   /// H3 hex id, or a synthetic `lat,lon` id for a square cell.
   final String id;
 
@@ -37,13 +72,33 @@ class NetworkCell {
 
   /// The measured numbers behind the cell (tap-cell sheet).
   final CoverageCell? cell;
-  const NetworkCell({required this.id, required this.boundary, required this.level, this.cell});
+  const NetworkCell({required this.id, required this.boundary, required this.level, this.cell, this.mode = CoverageColorBy.snr});
 }
 
 /// Buckets one [CoverageCell] by [by], using the website's own `/coverage` thresholds (meshcore-insights
 /// `src/components/coverage/cells.ts`) so the app's gap layer reads the same as the site's map.
-CoverageLevel levelFor(CoverageCell c, CoverageColorBy by) {
+///
+/// [now] dates the age mode and [noiseBaseline] (see [medianNoiseFloor]) anchors the noise-delta mode; a cell without a
+/// date or reading, or no baseline, is [CoverageLevel.none]. In both new modes a cell where nothing was heard stays grey.
+CoverageLevel levelFor(CoverageCell c, CoverageColorBy by, {DateTime? now, double? noiseBaseline}) {
   switch (by) {
+    case CoverageColorBy.age:
+      if (c.heard <= 0) return CoverageLevel.none;
+      final at = DateTime.tryParse(c.lastAt);
+      if (at == null) return CoverageLevel.none;
+      final days = (now ?? DateTime.now()).difference(at).inHours / 24;
+      if (days <= kAgeBucketDays[0]) return CoverageLevel.strong;
+      if (days <= kAgeBucketDays[1]) return CoverageLevel.good;
+      if (days <= kAgeBucketDays[2]) return CoverageLevel.fair;
+      return CoverageLevel.weak;
+    case CoverageColorBy.noiseDelta:
+      final n = c.noiseFloor;
+      if (c.heard <= 0 || n == null || noiseBaseline == null) return CoverageLevel.none;
+      final d = n - noiseBaseline;
+      if (d <= kNoiseQuieterDb) return CoverageLevel.strong;
+      if (d < kNoiseTypicalDb) return CoverageLevel.good;
+      if (d < kNoiseMuchDb) return CoverageLevel.fair;
+      return CoverageLevel.weak;
     case CoverageColorBy.snr:
       if (c.heard <= 0) return CoverageLevel.none;
       final s = c.bestSnr;
@@ -84,7 +139,8 @@ List<HexPoint> _squareBoundary(double lat, double lon, double cellDeg) {
 /// Turns a [PublicCoverage] answer into drawable [NetworkCell]s, bucketed by [by]. Hexagon cells need [h3] (null
 /// on a platform/test run where the native library didn't load — those cells are skipped rather than guessed at,
 /// same philosophy as [buildHexCells] skipping a ping with an unusable position); square cells need no engine.
-List<NetworkCell> buildNetworkCells(PublicCoverage coverage, H3? h3, CoverageColorBy by) {
+List<NetworkCell> buildNetworkCells(PublicCoverage coverage, H3? h3, CoverageColorBy by, {DateTime? now}) {
+  final baseline = by == CoverageColorBy.noiseDelta ? medianNoiseFloor(coverage.cells) : null;
   final hex = coverage.grid.kind == CoverageGridKind.h3;
   final out = <NetworkCell>[];
   for (final c in coverage.cells) {
@@ -106,7 +162,7 @@ List<NetworkCell> buildNetworkCells(PublicCoverage coverage, H3? h3, CoverageCol
       boundary = _squareBoundary(c.lat, c.lon, coverage.grid.cellDeg);
       id = '${c.lat},${c.lon}';
     }
-    out.add(NetworkCell(id: id, boundary: boundary, level: levelFor(c, by), cell: c));
+    out.add(NetworkCell(id: id, boundary: boundary, level: levelFor(c, by, now: now, noiseBaseline: baseline), cell: c, mode: by));
   }
   return out;
 }

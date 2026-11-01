@@ -82,6 +82,9 @@ import 'layers/repeater_map_source.dart';
 import 'layers/region_neighbours_layer.dart';
 import 'layers/repeater_name_labels.dart';
 import 'map_info_panel.dart';
+import '../../core/map_filter.dart' show GeoBounds;
+import '../../core/map_styles.dart';
+import 'coverage_ramps.dart';
 import 'live_puck.dart';
 import 'map_layers.dart';
 import 'offline_basemap.dart';
@@ -146,7 +149,16 @@ Color pingColor(MeshSonarColors c, DrivePing p, [PingColorMode mode = PingColorM
 /// are deliberately told apart at a glance. The hex values come from the chosen colour palette
 /// ([MeshSonarColors.levelColor]). [CoverageLevel.none] (nothing heard) is grey and [CoverageLevel.unknown] (heard,
 /// signal unknown) is purple in every palette.
-Color networkLevelColor(BuildContext context, CoverageLevel level) => MeshSonarColors.of(context).levelColor(level);
+///
+/// [mode] picks the ramp for the two non-strength modes (ping age, noise against typical): those draw in their own colours
+/// (coverage_ramps.dart); grey and purple stay the palette's in every mode.
+Color networkLevelColor(BuildContext context, CoverageLevel level, {CoverageColorBy mode = CoverageColorBy.snr}) =>
+    rampColor(mode, level, Theme.of(context).brightness) ?? MeshSonarColors.of(context).levelColor(level);
+
+/// The colour matrix [style]'s online tiles are drawn through: Chart follows the theme's [themeMatrix], Dark is always the dark
+/// chart grading, Street and Topo are shown as the tile server made them (null).
+List<double>? tileMatrixFor(BaseMapStyle style, List<double> themeMatrix) =>
+    style.ungraded ? null : (style.forcesDark ? kDarkTileMatrix : themeMatrix);
 
 class CoverageMap extends StatefulWidget {
   /// Pings to draw. Order doesn't matter; the newest (by timestamp) gets the links and the pulse.
@@ -257,6 +269,14 @@ class CoverageMap extends StatefulWidget {
   /// never placed under them.
   final List<GlobalKey> labelAvoidKeys;
 
+  /// The base map under the data (street / dark / topo cycler). Offline region packs are drawn for every style that
+  /// [BaseMapStyle.usesOfflinePack].
+  final BaseMapStyle baseStyle;
+
+  /// Called (after the frame) with the part of the world on screen when the map opens and as it moves: the host works out
+  /// the coverage % of the view from it.
+  final ValueChanged<GeoBounds>? onBoundsChanged;
+
   const CoverageMap({
     super.key,
     required this.pings,
@@ -291,6 +311,8 @@ class CoverageMap extends StatefulWidget {
     this.labelAvoidKeys = const [],
     this.regionNeighbours,
     this.onPickRegion,
+    this.baseStyle = BaseMapStyle.chart,
+    this.onBoundsChanged,
   });
 
   /// True unless running under `flutter test`.
@@ -975,13 +997,26 @@ class _CoverageMapState extends State<CoverageMap> {
     super.dispose();
   }
 
+  /// Tells the host which part of the world is on screen (after the frame: this can run while the map builds).
+  void _reportBounds() {
+    final cb = widget.onBoundsChanged;
+    if (cb == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_ready) return;
+      final b = _controller.camera.visibleBounds;
+      cb(GeoBounds(b.south, b.west, b.north, b.east));
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final mc = MeshSonarColors.of(context);
     final t = Theme.of(context);
+    final style = widget.baseStyle;
+    final tileGrading = tileMatrixFor(style, mc.tileMatrix);
     final tiles = widget.showTiles ?? CoverageMap.tilesByDefault;
     // A downloaded region pack covering the map wins over online tiles; no pack (or a corrupt one) means online as before.
-    final offlinePack = tiles ? _pack.reader : null;
+    final offlinePack = tiles && style.usesOfflinePack ? _pack.reader : null;
     final layers = widget.layers;
     _ensureSorted();
     _ensureMarkers();
@@ -1029,6 +1064,7 @@ class _CoverageMapState extends State<CoverageMap> {
             ),
             onMapReady: () {
               _ready = true;
+              _reportBounds();
               final z = _controller.camera.zoom;
               if (z != _lastZoom) {
                 _lastZoom = z;
@@ -1070,6 +1106,7 @@ class _CoverageMapState extends State<CoverageMap> {
               });
             },
             onPositionChanged: (camera, hasGesture) {
+              _reportBounds();
               if (tiles && _pack.update(camera.center.latitude, camera.center.longitude)) setState(() {});
               if (camera.zoom != _lastZoom) {
                 _lastZoom = camera.zoom;
@@ -1095,17 +1132,25 @@ class _CoverageMapState extends State<CoverageMap> {
           children: [
             _ChartGrid(color: mc.mapGrid),
             if (offlinePack != null)
-              OfflineBasemapLayer(key: ValueKey('offline-pack-${_pack.code}'), reader: offlinePack)
+              OfflineBasemapLayer(
+                key: ValueKey('offline-pack-${_pack.code}${style == BaseMapStyle.chart ? '' : '-${style.id}'}'),
+                reader: offlinePack,
+                // Dark forces the dark look; Street and Chart draw the pack in the light look unless the app theme is dark.
+                dark: style.forcesDark ? true : (style == BaseMapStyle.street ? false : null),
+              )
             else if (tiles)
               TileLayer(
-                urlTemplate: CoverageMap.tileUrl,
+                key: ValueKey('tiles-${style.id}'),
+                urlTemplate: style.tileUrl,
                 userAgentPackageName: CoverageMap.userAgentPackageName,
-                maxNativeZoom: 19,
+                maxNativeZoom: style.maxNativeZoom,
                 tileDisplay: const TileDisplay.fadeIn(),
                 evictErrorTileStrategy: EvictErrorTileStrategy.notVisibleRespectMargin,
                 errorTileCallback: (_, _, _) => _onTileError(),
-                tileBuilder: (context, tile, _) =>
-                    ColorFiltered(colorFilter: ColorFilter.matrix(mc.tileMatrix), child: tile),
+                // Street and Topo are drawn as the tile server made them; Chart is graded to the theme, Dark to the dark chart.
+                tileBuilder: tileGrading == null
+                    ? null
+                    : (context, tile, _) => ColorFiltered(colorFilter: ColorFilter.matrix(tileGrading), child: tile),
               ),
             if (layers.networkCoverage && widget.networkCells.isNotEmpty)
               PolygonLayer(
@@ -1114,8 +1159,8 @@ class _CoverageMapState extends State<CoverageMap> {
                     Polygon(
                       points: [for (final b in n.boundary) LatLng(b.lat, b.lon)],
                       // One or two pings are a thin sample: drawn fainter than a cell the network measured properly.
-                      color: networkLevelColor(context, n.level).withValues(alpha: cellAlphas(n.level, n.cell?.pings ?? kMinCellPings).$1),
-                      borderColor: networkLevelColor(context, n.level).withValues(alpha: cellAlphas(n.level, n.cell?.pings ?? kMinCellPings).$2),
+                      color: networkLevelColor(context, n.level, mode: n.mode).withValues(alpha: cellAlphas(n.level, n.cell?.pings ?? kMinCellPings).$1),
+                      borderColor: networkLevelColor(context, n.level, mode: n.mode).withValues(alpha: cellAlphas(n.level, n.cell?.pings ?? kMinCellPings).$2),
                       borderStrokeWidth: 1,
                     ),
                 ],
@@ -1430,7 +1475,7 @@ class _CoverageMapState extends State<CoverageMap> {
               if (tiles)
                 _Pill(
                   key: const Key('map-attribution'),
-                  child: Text('© OpenStreetMap contributors', style: t.textTheme.labelSmall?.copyWith(fontSize: 11)),
+                  child: Text(style.attribution, style: t.textTheme.labelSmall?.copyWith(fontSize: 11)),
                 ),
               // The global repeater layer's legend and credit (its data is MeshCore Map's), only while it draws.
               if (showNetwork)
