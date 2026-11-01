@@ -311,11 +311,49 @@ Result: `repeater = path[0]` as lower-case hex (1–3 bytes), `hops = hop count`
 - **One echo per repeater** (`path[0]`). When several copies arrive, the copy with the **fewest hops** wins, and among
   equal hops the best SNR wins. Echoes keep first-heard order.
 
-### 5.4 Listen window and cut-short pings
+**Hash sizes and duplicates (checked Nov 2026, no change needed).** The repeater id is the first path hop at the mesh's hash
+size (1, 2 or 3 bytes, `path_len` bits 6-7). With 1-byte hashes two repeaters can share an id; the radio cannot tell them
+apart, and neither can we, so the echo is keyed by the id and the app's repeater lookup refuses to name an ambiguous prefix
+(`RepeaterLookup.ambiguousPrefixes`). Two copies of one ping from the same first hop (a direct one and one that came round
+another way) are one echo: fewest hops wins, then best SNR; the trace shows the second as `echo-repeat`. SNR and RSSI are
+always recorded when the radio reports them; for `hops > 1` they describe the last hop, not `path[0]`.
 
-The engine listens for **7 s** (`WardriveConfig.listenWindow`). It polls every 250 ms and stops early if the radio
+### 5.4 Listen window, adaptive extension and cut-short pings
+
+The engine listens for **10 s** (`WardriveConfig.listenWindow`, was 7 s; MeshMapper listens 10 s, so the two apps' `heard` compare like for like). The window is capped at the interval less 1 s (7 s minimum), so a 10 s interval still pings every 10 s. It polls every 250 ms and stops early if the radio
 disconnects or the drive stops. A ping whose window was cut short **and** that heard nothing is discarded rather than
 recorded as "heard nothing".
+
+**Adaptive extension (Nov 2026).** After the base window, while a repeat of THIS ping arrived less than 4 s ago, the listen carries
+on in 500 ms steps, up to 15 s and never past `interval - 1 s` (so the next ping is not delayed). A quiet mesh closes at the base window
+exactly. The status line shows "Heard N repeaters so far" from the first echo on, not only when the window closes. A
+repeat after the window is not added to the saved ping (it is already on disk and may be uploaded); it is noted in the trace.
+
+**Order of commands.** The send goes out first; the noise floor is read while the window runs (one radio round trip sooner).
+Pings are queued at P3 behind P0/P1 commands (message sync, claims); a measured 2 h drive on a channel with a wardriver every
+2 s and 120 ms BLE latency kept the 15 s cadence to within 0.1 s.
+
+**Fix on request.** A ping asks the platform for the current position with a 4 s timeout (an iPhone's call can sit 15 s while the position stream runs; Oct 31 field drive: pings 78-128 s apart at speed). On a timeout or no fix, the stream's newest fix stands in if it is at most 5 s old; otherwise the status says "No GPS fix". Waiting for a fix is recorded in the trace as `{no_fix: true}`. The interval is counted from when the cadence check began, so a slow fix never stretches it, and the listen window shrinks by the time the fix took.
+
+**Cadence.** Auto pings are scheduled with a one-shot timer at the due time, so the interval is the interval (it was the
+interval rounded up to the next 1 s tick: 16 s for 15 s).
+
+### 5.5 Which pings the arbiter may hold back
+
+Only a **chatting** driver is throttled: the radio-queue probe and the 2% / 10 min ping budget apply for 10 minutes after a
+message the person sent (`TxPolicy.chatWindow`). Binding the chat layer to the radio is not chatting. The hourly transmit
+cap holds pings back only where the region's cap is known (`RadioSessionManager.setRegionCap`); an unknown region has no cap
+(1% is only the warning level for a user message). Before this change the 1% default held back a third of a 15 s drive.
+
+### 5.6 The per-ping trace (`trace.jsonl`)
+
+Beside every drive's `pings.jsonl` the app writes `trace.jsonl` (local only, never uploaded, 8 MB cap). One JSON line per
+ping: `{v:1, ping, tag, at, tx_epoch_s, ack_ms (send command queued + written + the radio's OK), pkt_hash, manual, base_ms, window_ms, echoes, frames:[{t, v, snr, rssi, type, route,
+rep, hops, path}]}`. `t` = ms after the send; `v` is the verdict: `echo`, `echo-repeat` (same repeater again), `own-tx-no-repeater`
+(our transmission heard with an empty path), `other-timestamp` / `other-text` (someone else's message on the channel, or our
+earlier ping), `other-channel`, `not-group-text`, `unparsed`, `omitted` (count of chatter beyond 80 frames). Skipped pings:
+`{skipped: <reason>}`. Failed: `{failed}`. Late tail (frames after the window until the next ping): `{late_for: <ping id>,
+frames}`. Share it from the drive (Drives > the drive's menu > Share ping trace) when a drive looks wrong.
 
 ## 6. Other measurements
 

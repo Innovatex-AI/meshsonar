@@ -21,22 +21,22 @@ Future<void> slide(WidgetTester tester, String key, int index) async {
 }
 
 void main() {
-  test('listen window is a persisted setting: default 7 s, written only when changed, clamped on load', () {
-    expect(const Settings().listenWindowSec, 7);
+  test('listen window is a persisted setting: default 10 s, written only when changed, clamped on load', () {
+    expect(const Settings().listenWindowSec, 10);
     expect(const Settings().toJson().containsKey('listen_window_sec'), isFalse, reason: 'default file unchanged');
     final j = const Settings(listenWindowSec: 12).toJson();
     expect(j['listen_window_sec'], 12);
     expect(Settings.fromJson(j).listenWindowSec, 12);
     expect(Settings.fromJson({'listen_window_sec': 1}).listenWindowSec, Settings.minListenSec);
     expect(Settings.fromJson({'listen_window_sec': 999}).listenWindowSec, Settings.maxListenSec);
-    expect(Settings.fromJson(const {}).listenWindowSec, 7);
+    expect(Settings.fromJson(const {}).listenWindowSec, 10);
     expect(listenStops.first, Settings.minListenSec);
     expect(listenStops.last, Settings.maxListenSec);
   });
 
   test('Wardriving is a Settings section holding channel, discovery, interval, distance, listen window', () {
     expect(settingsSections.map((s) => s.id), contains('wardriving'));
-    for (final id in ['channel', 'discovery-mode', 'interval', 'min-distance', 'listen-window']) {
+    for (final id in ['channel', 'send-pings', 'interval', 'min-distance', 'listen-window']) {
       expect(settingsEntries.where((e) => e.id == id).single.section, 'wardriving', reason: id);
     }
   });
@@ -50,7 +50,7 @@ void main() {
     expect(find.byKey(const Key('more-wardriving')), findsOneWidget);
     await tester.tap(find.byKey(const Key('more-wardriving')));
     await tester.pumpAndSettle();
-    for (final k in ['channel', 'discovery-mode', 'interval', 'min-distance', 'listen-window']) {
+    for (final k in ['channel', 'send-pings', 'interval', 'min-distance', 'listen-window']) {
       expect(find.byKey(Key(k)), findsOneWidget, reason: k);
     }
     await slide(tester, 'listen-window-slider', listenStops.indexOf(12));
@@ -67,7 +67,7 @@ void main() {
     await settle(tester);
     final e = h.engines.single;
     expect(e.config!.intervalSec, 30);
-    expect(e.config!.listenWindow, const Duration(seconds: 7));
+    expect(e.config!.listenWindow, const Duration(seconds: 10));
 
     expect(find.byKey(const Key('ping-settings-chip')), findsOneWidget);
     expect(find.text('Ping 30 s / 100 m'), findsOneWidget);

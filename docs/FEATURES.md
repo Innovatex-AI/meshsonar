@@ -229,7 +229,7 @@ and ≥ 640 px) the map sits on the left and the controls on the right.
 
 - An auto-ping goes out when **both** of these are true:
   1. **Time:** at least `intervalSec` (10–120 s; default 30) since the last ping, auto or manual. The gap is never
-     shorter than one listen window (4–20 s, default 7, setting *Listen window*).
+     shorter than one listen window (4–20 s, default 10, setting *Listen window*; extended while repeats still arrive, see PROTOCOL 5.4).
   2. **Distance:** the current filtered GPS fix is at least `minDistanceM` (15–500 m; default 100) from where the last
      ping was sent (haversine, R = 6,371 km).
 - The **first ping goes out as soon as the drive starts** (no previous ping, so time and distance are both met).
@@ -621,8 +621,8 @@ current state (no key, no site-config yet) are never offered. The index lives in
 Phone layout: one list of section cards (expanded; a header tap folds one), search at the top, and two app bar
 buttons: **Search** (back to the field from anywhere) and **Sections** (a sheet listing every section; tap to open and
 scroll to it). No dead ends: every row is actionable, a declared information row, or says why it is unavailable and
-how to make it available (e.g. "Off in discovery mode: nothing is transmitted. Turn Discovery (listen-only) off to use
-it."); `test/ui/settings_no_dead_end_test.dart` enforces it.
+how to make it available (e.g. "Off while pings are not sent: nothing is transmitted. Turn on "Send pings to the mesh" to
+use it."); `test/ui/settings_no_dead_end_test.dart` enforces it.
 
 | Section | Item | Behaviour |
 |---|---|---|
@@ -640,11 +640,15 @@ it."); `test/ui/settings_no_dead_end_test.dart` enforces it.
 | | **What MeshSonar shares** | One page: every category (state, shared, never shared, where it goes), the other flows (drives, the on-air ping, problem reports, region/map downloads) and the location points. |
 | | **Location while driving** | Opens the same "Always" explainer as first run, read-only (Done; no permission prompt). |
 | | **Manage privacy zones on the website** (`privacy-zones-website`) | Opens `<server>/me/privacy`. |
-| Radio (`radio`) | **Radio details** | Opens the Radio tab's read-only screen. |
-| | **Channel** | Default `#wardriving`; `#` is added if missing. |
-| | **Discovery (listen-only)** | The next drive transmits nothing. Locked (disabled, not hidden) while driving. |
-| | **Auto-ping** | Every 5 s from **10 to 120 s** (default 30). |
+| Wardriving (`wardriving`) | **Wardrive channel** (`channel`) | Default `#wardriving`; `#` is added if missing; the key comes from the lower-cased name. Locked while driving. |
+| | **Send pings to the mesh** (`send-pings`) | On (default): each ping goes out as the flood group text `MS:` + 10 random characters; repeaters repeat it and observers report it, which is where a ping's repeaters, hop counts and routes come from. Off = listen-only (stored as `discovery_mode`): nothing is transmitted, only overheard repeaters are recorded, no observer can confirm the drive. Locked while driving. |
+| | **What goes on the air** (`ping-message`) | Read-only preview ("KE4BFI: MS:k3x9m2q7ab"), what the text never contains, and that it is an ordinary unscoped flood. |
+| | **Airtime per ping** (`ping-airtime`) | Time on air at the connected radio's SF/BW (`wardrivePingAirtimeMs`) and the share of time at the chosen interval. |
+| | **Auto-ping** | Every 5 s from **10 to 120 s** (default 30); a ping goes out exactly when the time has passed AND the distance is met (a one-shot timer at the due time, not a 1 s poll). Disabled with a reason while sending is off. |
 | | **Minimum distance** | Stops 15 … 500 m (feet in imperial; default 100 m). |
+| | **Listen window** | 4–20 s, default 10 s (MeshMapper's); capped at the interval less 1 s. Same three sliders open from the Map tab's ping chip. |
+| | **This drive** (`wardrive-counters`) | Pings sent, repeaters that heard them, pings held back by the arbiter (if any) and `Observers confirmed X of Y uploaded pings` from `GET drive-status` (or why there is no number: waiting for the first upload, no driver key, server without the route). |
+| Radio (`radio`) | **Radio details** | Opens the Radio tab's read-only screen. |
 | | **Each saved radio** (`antenna-profile-<key>`) | Mount, gain and height; tap to edit; **Forget** asks. Locked for the radio in use while driving. |
 | Drives & uploads (`drives`) | **Upload at end of drive**, **Upload during the drive**, **Upload interval** (1–30 min), last upload line | As before; during-drive needs end-of-drive. |
 | Data & storage (`storage`) | **Drives on this phone** | Count and bytes; "N fully uploaded, M not fully uploaded". **Remove uploaded drives** removes only ended drives whose every ping the server confirmed (none waiting, none rejected, no rename pending) and never the drive being recorded; the dialog says what stays and how many pings the server lacks. Others are deleted one by one from Drives. |

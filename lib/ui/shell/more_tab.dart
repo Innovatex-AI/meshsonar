@@ -154,7 +154,7 @@ class MoreList extends StatelessWidget {
             row(MoreItem.radioSetup, Icons.tune, 'Radio setup', 'Name, position, power and frequency, with checks'),
             header('App'),
             row(MoreItem.wardriving, Icons.radar, 'Wardriving settings',
-                'Ping interval, minimum distance, listen window, channel'),
+                'Send pings, channel, interval, distance, listen window'),
             row(MoreItem.settings, Icons.settings, 'Settings', 'Units, maps, uploads, storage, your driver key'),
             row(MoreItem.legend, Icons.palette_outlined, 'Colour legend', 'What the map colours mean'),
             row(MoreItem.howItWorks, Icons.explore_outlined, 'How it works', 'A short tour of the tabs'),

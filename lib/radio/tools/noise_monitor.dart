@@ -206,7 +206,7 @@ class NoiseMonitor with ToolChanges {
 
   OwnAirtime get ownAirtime {
     final snap = arbiter.snapshot();
-    final cap = arbiter.policy.capFraction * arbiter.policy.capWindow.inMilliseconds;
+    final cap = arbiter.policy.shownCapFraction * arbiter.policy.capWindow.inMilliseconds;
     return OwnAirtime(snap.totalMsInCapWindow, cap, snap.pingMsInWindow, snap.pingsSent, snap.userSends);
   }
 

@@ -12,13 +12,15 @@
 //   - the radio's own outbound queue is empty (GET_STATS core queue_len == 0, MyMesh.cpp 1914-1923),
 //   - no user message was sent in the last 2 s (let its repeats be heard first),
 //   - ping airtime in the rolling 10 minutes stays under 2% of wall time,
-//   - all own transmit time in the rolling hour stays under the region cap (unknown region: 1%, the CLI doc's
-//     "strictest EU requirement", docs/cli_commands.md:574),
+//   - all own transmit time in the rolling hour stays under the region cap, WHEN the region's cap is known (unknown region:
+//     no cap holds pings back; the 1% figure only warns after a user message. Oct 31 2026: the old 1% default skipped a
+//     third of a 15 s drive and left 15-minute holes),
 //   - and the engine's own distance/time rule is met (the engine checks that itself).
 // Otherwise the ping is SKIPPED with a reason; it is never queued for later.
 //
-// "Arbiter idle" (nobody chatting) = [chatActive] false: then the radio-queue probe and the two budgets are off and every
-// ping is a go, exactly the behaviour before sessions existed. The 2 s rule has nothing to act on without user sends.
+// "Arbiter idle" (nobody chatting) = no user message in the last [TxPolicy.chatWindow] (or [chatActive] false): then the
+// radio-queue probe and the budgets are off and every ping is a go, exactly the behaviour before sessions existed. Binding
+// the chat layer to the radio is not chatting. The 2 s rule has nothing to act on without user sends.
 // The caps are policy defaults, not legal advice.
 import 'dart:async';
 import 'dart:collection';
@@ -45,12 +47,24 @@ class TxPolicy {
   final double pingBudgetFraction;
   final Duration pingWindow;
 
-  /// All own transmit time allowed in [capWindow], as a fraction of wall time (the region cap).
+  /// All own transmit time allowed in [capWindow], as a fraction of wall time (the region cap). Only a cap that is KNOWN
+  /// for the region holds pings back; the default 1.0 (= 100%) means "no cap known", so a wardrive is never throttled by
+  /// a guess (Oct 31 2026 field report: the old unknown-region 1% skipped a third of a 15 s drive's pings).
   final double capFraction;
+
+  /// The share of the hour to show "own airtime" against: the region cap when one is known, else the 1% warning level.
+  double get shownCapFraction => capFraction < 1.0 ? capFraction : userWarnFraction;
+
+  /// A user message that takes the hour past this share of wall time only earns the caller a warning (never a refusal).
+  final double userWarnFraction;
   final Duration capWindow;
 
   /// No ping this soon after a user send.
   final Duration userSendGap;
+
+  /// After a user message the ping rules above (radio queue probe, 2% budget) stay on this long; with no chat sent for
+  /// this long a drive is a plain drive and pings follow the driver's cadence alone.
+  final Duration chatWindow;
 
   /// How long the queue_len probe may take before the ping goes anyway (a lost reply is not a busy radio).
   final Duration probeTimeout;
@@ -58,18 +72,22 @@ class TxPolicy {
   const TxPolicy({
     this.pingBudgetFraction = 0.02,
     this.pingWindow = const Duration(minutes: 10),
-    this.capFraction = 0.01,
+    this.capFraction = 1.0,
+    this.userWarnFraction = 0.01,
     this.capWindow = const Duration(hours: 1),
     this.userSendGap = const Duration(seconds: 2),
+    this.chatWindow = const Duration(minutes: 10),
     this.probeTimeout = const Duration(seconds: 3),
   });
 
-  TxPolicy copyWith({double? capFraction}) => TxPolicy(
+  TxPolicy copyWith({double? capFraction, Duration? chatWindow}) => TxPolicy(
         pingBudgetFraction: pingBudgetFraction,
         pingWindow: pingWindow,
         capFraction: capFraction ?? this.capFraction,
+        userWarnFraction: userWarnFraction,
         capWindow: capWindow,
         userSendGap: userSendGap,
+        chatWindow: chatWindow ?? this.chatWindow,
         probeTimeout: probeTimeout,
       );
 }
@@ -179,7 +197,7 @@ class TxArbiter implements PingGate {
     _lastUserSend = now;
     _users++;
     recordTx(TxPriority.user, airtimeMs, at: now);
-    return _msInWindow(now, policy.capWindow, null) > policy.capFraction * policy.capWindow.inMilliseconds;
+    return _msInWindow(now, policy.capWindow, null) > policy.userWarnFraction * policy.capWindow.inMilliseconds;
   }
 
   double _msInWindow(DateTime now, Duration window, TxPriority? cls) {
@@ -197,6 +215,14 @@ class TxArbiter implements PingGate {
     final now = _clock();
     return TxLedgerSnapshot(_msInWindow(now, policy.pingWindow, TxPriority.ping), _msInWindow(now, policy.capWindow, null),
         Map.unmodifiable(_skipped), _pings, _users);
+  }
+
+  /// True while the person is chatting: [chatActive] AND (no message sent yet, or the last one is younger than
+  /// [TxPolicy.chatWindow]). Merely having the chat layer bound to the radio is not chatting.
+  bool _chatInUse(DateTime now) {
+    if (!chatActive) return false;
+    final last = _lastUserSend;
+    return last != null && now.difference(last) < policy.chatWindow;
   }
 
   PingSkipReason? _lastSkip;
@@ -229,7 +255,7 @@ class TxArbiter implements PingGate {
     if (last != null && now.difference(last) < policy.userSendGap) {
       return _skip(PingSkipReason.userSendRecent, 'Ping skipped: a message was just sent');
     }
-    if (!chatActive) return const PingDecision.go();
+    if (!_chatInUse(now)) return const PingDecision.go();
 
     final probe = queueProbe;
     if (probe != null) {

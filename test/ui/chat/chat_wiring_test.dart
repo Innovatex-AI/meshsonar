@@ -98,6 +98,8 @@ void main() {
     var now = DateTime(2026, 11, 1, 12);
     final a = TxArbiter(clock: () => now, policy: const TxPolicy(pingBudgetFraction: 0.001));
     a.chatActive = true;
+    a.admitUserSend(100); // the budgets only apply while the person is chatting
+    now = now.add(const Duration(seconds: 3));
     a.airParams = () => const RadioAirParams(8, 62.5, 5);
     expect(a.pausedByBudget(), isFalse);
     a.pingSent();

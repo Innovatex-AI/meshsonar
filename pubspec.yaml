@@ -68,6 +68,7 @@ dev_dependencies:
     sdk: flutter
   flutter_test:
     sdk: flutter
+  fake_async: ^1.3.3 # replay tests of the ping pipeline run on fake time (test/support/replay_radio.dart)
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
