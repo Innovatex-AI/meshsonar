@@ -146,6 +146,62 @@ void main() {
     expect(reps.single.name, 'Test Repeater');
   }, skip: skip, timeout: const Timeout(Duration(minutes: 2)));
 
+  test('Drive Format v1.3: window_ms and outcome go through the real validator; an old-format server never sees them', () async {
+    final tmp = await Directory.systemTemp.createTemp('meshsonar_contract_v13_');
+    addTearDown(() => tmp.delete(recursive: true));
+    final client = HttpCmatClient(base);
+    final key = (await client.requestKey(name: 'V13 Driver')).key;
+    final settings = FileSettingsStore(File(p.join(tmp.path, 'settings.json')));
+    await settings.save(Settings(driverKey: key, keyStatus: DriverKeyStatus.approved));
+    const region = RegionInfo(slug: 'cmh', url: 'https://cmh.meshsonar.com');
+    final t0 = DateTime.now().toUtc().subtract(const Duration(hours: 1));
+    Future<(Map, String)> run(List<String> formats) async {
+      final store = await JsonlDriveStore.open(Directory(p.join(tmp.path, 'drives-${formats.length}')));
+      final session = makeSession(startedAt: t0.subtract(const Duration(minutes: 5)));
+      await store.startSession(session);
+      final heard = DrivePing(
+          id: newId(), ts: t0, lat: 40.1, lon: -82.9, windowMs: 10000, echoes: const [Echo(repeater: 'df0136', snrDb: 5, rssiDbm: -90, hops: 1)]);
+      final silent = DrivePing(id: newId(), ts: t0.add(const Duration(seconds: 20)), lat: 40.101, lon: -82.9, windowMs: 17000);
+      final rx = DrivePing(
+          id: newId(), ts: t0.add(const Duration(seconds: 40)), lat: 40.102, lon: -82.9, kind: PingKind.rx,
+          echoes: const [Echo(repeater: 'ab12', snrDb: 1, rssiDbm: -100, hops: 1)]);
+      for (final x in [heard, silent, rx]) {
+        await store.appendPing(session.id, x);
+      }
+      final r = await DefaultSyncService(
+        store: store, client: client, settings: settings,
+        capabilities: () async => SiteConfig(region: region, driveFormats: formats),
+      ).syncSession(session.id);
+      expect(r.error, isNull);
+      expect(r.stored, 3);
+      expect(r.rejected, 0);
+      final st = await serverState();
+      final byId = {for (final x in (st['pings'] as List).cast<Map>()) x['id']: x};
+      return (byId, '${heard.id}|${silent.id}|${rx.id}');
+    }
+
+    final (new13, ids13) = await run(['meshsonar.drive.v1', 'meshsonar.drive.v1.2', 'meshsonar.drive.v1.3']);
+    final [h, s, r] = ids13.split('|');
+    expect([new13[h]!['windowMs'], new13[h]!['outcome']], [10000, 'echo']);
+    expect([new13[s]!['windowMs'], new13[s]!['outcome']], [17000, 'no_reply']);
+    expect([new13[r]!['windowMs'], new13[r]!['outcome']], [null, null]);
+
+    final (old, idsOld) = await run(['meshsonar.drive.v1', 'meshsonar.drive.v1.1']);
+    for (final id in idsOld.split('|')) {
+      expect([old[id]!['windowMs'], old[id]!['outcome']], [null, null], reason: 'an older server gets the older format');
+    }
+
+    // The validator really is strict about it: an outcome that contradicts the echo list rejects that ping with a code.
+    final bad = await http.post(base.resolve('/api/cmh/drive-upload'), headers: {'x-driver-key': key, 'content-type': 'application/json'},
+        body: jsonEncode({
+          ...DriveBatch(app: const AppInfo(name: 'MeshSonar', version: '0.19.0', platform: 'ios'), session: makeSession(startedAt: t0), pings: [makePing(0)]).toJson(),
+          'format': 'meshsonar.drive.v1.3',
+          'pings': [{...makePing(1).toJson(), 'outcome': 'no_reply', 'window_ms': 10000}],
+        }));
+    expect(bad.statusCode, 200, reason: bad.body);
+    expect(((jsonDecode(bad.body) as Map)['rejections'] as List).single['reason'], startsWith('outcome_mismatch'));
+  }, skip: skip, timeout: const Timeout(Duration(minutes: 2)));
+
   test('12,001 pings sync in 3 requests and the real server stores all of them', () async {
     final tmp = await Directory.systemTemp.createTemp('meshsonar_contract_big_');
     addTearDown(() => tmp.delete(recursive: true));
