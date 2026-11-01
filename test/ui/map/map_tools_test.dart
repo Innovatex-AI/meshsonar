@@ -12,13 +12,14 @@ import 'package:latlong2/latlong.dart';
 import 'package:meshsonar/app/app_state.dart' show RadioKind;
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/colour_palette.dart';
-import 'package:meshsonar/core/map_filter.dart' show CoverageSummary;
 import 'package:meshsonar/core/map_styles.dart';
 import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/core/region_stats_api.dart';
 import 'package:meshsonar/ui/device_feedback.dart';
 import 'package:meshsonar/ui/map/coverage_map.dart';
-import 'package:meshsonar/ui/map/map_tools.dart';
+import 'package:meshsonar/ui/map/map_key.dart';
+import 'package:meshsonar/ui/drive/drive_map_model.dart';
+import 'package:meshsonar/ui/map/map_layers.dart' show PingColorMode;
 import 'package:meshsonar/ui/map/offline_basemap.dart';
 import 'package:meshsonar/ui/ping_cue.dart';
 import 'package:meshsonar/ui/region/stats_panel.dart' show regionStatsApiFactory;
@@ -216,24 +217,78 @@ void main() {
     });
   });
 
-  group('coverage %', () {
-    testWidgets('the pill reports the share of your tx pings in view that were heard', (tester) async {
-      final h = await driving(tester, pings: [
-        heardPing('p1', const [Echo(repeater: 'a1', snrDb: 6)]),
-        heardPing('p2', const [Echo(repeater: 'a1', snrDb: 2)]),
-        silentPing('p3'),
-        silentPing('p4'),
-      ]);
+  group('map key follows the view', () {
+    testWidgets('the key names what is drawn: pings by SNR or heard/not, nothing for a layer that is off, repeater dots as "last advert"', (tester) async {
+      final h = await driving(tester, pings: [heardPing('p1', const [Echo(repeater: 'a1', snrDb: 6)]), silentPing('p2')]);
+      final model = DriveMapModel(h.state);
+      addTearDown(model.dispose);
+      await tester.pumpWidget(MaterialApp(theme: meshSonarTheme(Brightness.light), home: Scaffold(body: MapKey(model: model))));
       await tester.pump(const Duration(milliseconds: 400));
-      expect(find.byKey(const Key('drive-coverage-pct')), findsOneWidget);
-      expect(find.text('50% of your 4 pings heard'), findsOneWidget);
+      expect(find.byKey(const Key('map-key-pings')), findsOneWidget);
+      expect(find.text('+10 dB'), findsOneWidget, reason: 'default ping colours are by SNR');
+      expect(find.textContaining('last advert'), findsNothing, reason: 'no repeater layer data: no repeater line');
+      model.layers = model.layers.copyWith(pingColors: PingColorMode.result);
+      await tester.pump();
+      expect(find.text('+10 dB'), findsNothing);
+      expect(find.text('heard'), findsOneWidget);
+      model.layers = model.layers.copyWith(pings: false);
+      await tester.pump();
+      expect(find.byKey(const Key('map-key-pings')), findsNothing, reason: 'pings layer off: not in the key');
       await stop(tester, h);
     });
+  });
 
-    test('coverageLine words: cells and pings, singular, and nothing at all when nothing is in view', () {
-      expect(coverageLine(const CoverageSummary()), isNull);
-      expect(coverageLine(const CoverageSummary(cells: 140, cellsHeard: 87)), 'In view: 62% of 140 cells heard');
-      expect(coverageLine(const CoverageSummary(cells: 1, cellsHeard: 1, pings: 1, pingsHeard: 0)), 'In view: 100% of 1 cell heard\n0% of your 1 ping heard');
+  group('map legend fold', () {
+    testWidgets('the Drive map folds the source chip away behind the attribution line; one tap opens and closes it', (tester) async {
+      var open = false;
+      late StateSetter set;
+      await tester.pumpWidget(MaterialApp(
+        theme: meshSonarTheme(Brightness.light),
+        home: Scaffold(
+          body: StatefulBuilder(builder: (context, setState) {
+            set = setState;
+            return SizedBox(
+              width: 400,
+              height: 400,
+              child: CoverageMap(
+                pings: const [],
+                showTiles: true,
+                fallbackCenter: const LatLng(39.96, -83.0),
+                creditsOpen: open,
+                onCreditsToggle: () => set(() => open = !open),
+              ),
+            );
+          }),
+        ),
+      ));
+      await tester.pump();
+      final chip = find.byKey(const Key('map-source'));
+      expect(find.byKey(const Key('map-attribution')), findsOneWidget, reason: 'the tile credit is always visible');
+      expect(chip, findsNothing, reason: 'folded by default');
+      await tester.tap(find.byKey(const Key('map-credits-toggle')));
+      await tester.pump();
+      expect(chip, findsOneWidget);
+      await tester.tap(find.byKey(const Key('map-credits-toggle')));
+      await tester.pump();
+      expect(chip, findsNothing);
+    });
+
+    testWidgets('the full-screen map has no toggle: the credits are always shown', (tester) async {
+      await tester.pumpWidget(MaterialApp(
+        theme: meshSonarTheme(Brightness.light),
+        home: Scaffold(body: SizedBox(width: 400, height: 400, child: CoverageMap(pings: const [], showTiles: true, fallbackCenter: const LatLng(39.96, -83.0)))),
+      ));
+      await tester.pump();
+      expect(find.byKey(const Key('map-credits-toggle')), findsNothing);
+      expect(find.byKey(const Key('map-source')), findsOneWidget);
+    });
+
+    testWidgets('no coverage percentage box and no neighbouring-region pointers on the map', (tester) async {
+      final h = await driving(tester, pings: [heardPing('p1', const [Echo(repeater: 'a1', snrDb: 6)])]);
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.byKey(const Key('drive-coverage-pct')), findsNothing);
+      expect(find.byKey(const Key('region-neighbours-layer')), findsNothing);
+      await stop(tester, h);
     });
   });
 

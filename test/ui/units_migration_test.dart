@@ -13,15 +13,15 @@ void main() {
   testWidgets('imperial: min-distance slider reads feet; metric reads metres', (tester) async {
     await openSettings(tester, settings: const Settings(units: UnitsPreference.imperial));
     await show(tester, 'min-distance');
-    expect(valueText(tester, 'min-distance'), '300 ft');
-    expect(find.text('50 ft'), findsOneWidget);
+    expect(valueText(tester, 'min-distance'), '50 ft');
+    expect(find.text('50 ft'), findsWidgets);
     expect(find.text('1600 ft'), findsOneWidget);
   });
 
   testWidgets('metric: min-distance slider reads metres', (tester) async {
     await openSettings(tester, settings: const Settings(units: UnitsPreference.metric));
     await show(tester, 'min-distance');
-    expect(valueText(tester, 'min-distance'), '100 m');
+    expect(valueText(tester, 'min-distance'), '15 m');
     expect(find.text('500 m'), findsOneWidget);
   });
 

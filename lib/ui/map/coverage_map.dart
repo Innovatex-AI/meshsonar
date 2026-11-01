@@ -64,8 +64,6 @@ import '../../core/model.dart';
 import '../../core/region_overview_api.dart' show RegionObserver;
 import '../../core/region_repeaters_api.dart' show RegionRepeater;
 import '../../core/network_coverage.dart';
-import '../../core/region_lookup.dart' show RegionIndexEntry;
-import '../../core/region_neighbours.dart';
 import '../../core/camera_follow.dart';
 import '../../core/heading.dart' show shortestArc;
 import '../../core/map_health.dart' show CameraTelemetry;
@@ -83,7 +81,6 @@ import 'layers/map_layers_adapter.dart';
 import 'layers/observer_layer.dart';
 import 'layers/repeater_cluster_layer.dart';
 import 'layers/repeater_map_source.dart';
-import 'layers/region_neighbours_layer.dart';
 import 'layers/repeater_name_labels.dart';
 import 'map_info_panel.dart';
 import '../../core/map_filter.dart' show GeoBounds;
@@ -268,13 +265,14 @@ class CoverageMap extends StatefulWidget {
   /// so the drive's cells rescale as you zoom.
   final int? hexRes;
 
-  /// The regions next to the viewed one, drawn (dashed outlines, names) while the `regions` layer is on and the map is zoomed out
-  /// to region level. Null = no layer. A tap on a name or inside an outline calls [onPickRegion].
-  final RegionNeighbourSet? regionNeighbours;
+  /// The Drive screen's small map folds the source chip and the repeater legend away behind the attribution line (which stays,
+  /// the tile licence needs it); [creditsOpen] says whether they show and [onCreditsToggle] flips it. Null = always open (the
+  /// full-screen map).
+  final bool? creditsOpen;
+  final VoidCallback? onCreditsToggle;
 
-  /// Asks the person to confirm the switch and switches; true when it did. The map then frames the new region, drops the
-  /// selection and stops following the phone. Null = the layer is not drawn.
-  final Future<bool> Function(RegionIndexEntry region)? onPickRegion;
+  /// The colour key for what this map is drawing (see map_key.dart). Null = the older behaviour: only the repeater-age legend.
+  final Widget? mapKey;
 
   /// Overlays the parent draws over this map (heard box, button column), found by key at paint time: repeater names are
   /// never placed under them.
@@ -325,9 +323,10 @@ class CoverageMap extends StatefulWidget {
     this.simulated = false,
     this.onZoomChanged,
     this.hexRes,
+    this.creditsOpen,
+    this.onCreditsToggle,
+    this.mapKey,
     this.labelAvoidKeys = const [],
-    this.regionNeighbours,
-    this.onPickRegion,
     this.baseStyle = BaseMapStyle.chart,
     this.onBoundsChanged,
     this.telemetry,
@@ -450,35 +449,6 @@ class _CoverageMapState extends State<CoverageMap> {
     return _linkSet;
   }
 
-  bool _regionJustPicked = false;
-
-  bool get _regionsOn {
-    final set = widget.regionNeighbours;
-    if (set == null || set.isEmpty || widget.onPickRegion == null) return false;
-    return (widget.layerState ?? widget.layers.toLayerState().toggle(kLabelsLayerId, true).toggle(kRegionsLayerId, true)).isOn(kRegionsLayerId);
-  }
-
-  /// A neighbouring region was tapped (its name or its outline): confirm, switch, and frame it. The selection goes, the map
-  /// stops following the phone, and colour mode, palette and layer switches stay as they are.
-  Future<void> _pickRegion(RegionIndexEntry region) async {
-    final ok = await widget.onPickRegion?.call(region) ?? false;
-    if (!ok || !mounted) return;
-    _regionJustPicked = true;
-    _follow = false;
-    _mapTapTimer?.cancel();
-    _selectedRepeater = null;
-    widget.onSelectRepeater?.call(null);
-    _clearLinks();
-    final b = region.bbox;
-    if (_ready && b != null) {
-      _controller.fitCamera(CameraFit.bounds(
-        bounds: LatLngBounds(LatLng(b[1], b[0]), LatLng(b[3], b[2])),
-        padding: const EdgeInsets.all(24) + widget.overlayPadding,
-        maxZoom: 11,
-      ));
-    }
-    setState(() {});
-  }
 
   void _clearLinks() {
     if (_linkId == null && _panelCell == null && _panelPoint == null && _panelPing == null) return;
@@ -968,9 +938,7 @@ class _CoverageMapState extends State<CoverageMap> {
     if (old.follow != widget.follow) _follow = widget.follow;
     // The viewed region changed (or the index finished loading) while there is nothing else to look at: recentre.
     final fallbackChanged = old.fallbackCenter != widget.fallbackCenter || old.fallbackBounds != widget.fallbackBounds;
-    if (_regionJustPicked && fallbackChanged) {
-      _regionJustPicked = false; // the person chose this region on the map: the framing above stands
-    } else if (fallbackChanged &&
+    if (fallbackChanged &&
         widget.fallbackCenter != null &&
         _ready &&
         widget.position == null &&
@@ -1244,6 +1212,8 @@ class _CoverageMapState extends State<CoverageMap> {
     final networkSource = widget.repeaterSource;
     final rosterSource = layerState.isOn(kRosterLayerId) ? _rosterSource() : null;
     final showNetwork = networkSource != null && layerState.isOn(kNetworkLayerId);
+    final foldable = widget.creditsOpen != null;
+    final creditsShown = widget.creditsOpen ?? true;
 
     // Legacy links (no heard list): from the newest ping to what it heard.
     final links = (!heardMode && showLinks && latest != null)
@@ -1317,14 +1287,6 @@ class _CoverageMapState extends State<CoverageMap> {
                 if (at != null && DateTime.now().difference(at) < const Duration(milliseconds: 600)) return;
                 final hit = widget.layers.networkCoverage ? networkCellAt(widget.networkCells, point) : null;
                 if (hit == null) {
-                  // A tap inside a neighbouring region's outline (not on a cell, repeater or name) offers to switch to it.
-                  if (_regionsOn && _controller.camera.zoom <= kRegionLayerMaxZoom) {
-                    final n = widget.regionNeighbours!.hit(point.latitude, point.longitude);
-                    if (n != null) {
-                      unawaited(_pickRegion(n.region));
-                      return;
-                    }
-                  }
                   _clearLinks(); // a tap on nothing puts the lines away
                   return;
                 }
@@ -1384,8 +1346,6 @@ class _CoverageMapState extends State<CoverageMap> {
               ),
             if (tiles && style.usesOfflinePack) ..._packOutlines(mc),
             if (layers.networkCoverage && widget.networkCells.isNotEmpty) CellRasterLayer(key: const Key('network-cells-layer'), data: _networkData(context)),
-            if (_regionsOn)
-              RegionNeighboursLayer(set: widget.regionNeighbours!, onPick: (r) => unawaited(_pickRegion(r)), avoid: widget.overlayPadding, obstacles: _overlayRects),
             if (widget.showRings && layers.rings && pos != null)
               if (widget.puck case final puck?)
                 ListenableBuilder(
@@ -1664,23 +1624,28 @@ class _CoverageMapState extends State<CoverageMap> {
               if (!tiles) ...[
                 _Pill(
                   key: const Key('map-offline'),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.cloud_off_rounded, size: 13, color: mc.textMuted),
-                      const SizedBox(width: 4),
-                      Flexible(
-                        child: Text(
-                          'Map offline. Pings still record.',
-                          overflow: TextOverflow.ellipsis,
-                          style: t.textTheme.labelSmall?.copyWith(fontSize: 11),
+                  child: InkWell(
+                    key: foldable ? const Key('map-credits-toggle') : null,
+                    onTap: foldable ? widget.onCreditsToggle : null,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.cloud_off_rounded, size: 13, color: mc.textMuted),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            'Map offline. Pings still record.',
+                            overflow: TextOverflow.ellipsis,
+                            style: t.textTheme.labelSmall?.copyWith(fontSize: 11),
+                          ),
                         ),
-                      ),
-                    ],
+                        if (foldable) Icon(creditsShown ? Icons.expand_more_rounded : Icons.expand_less_rounded, size: 16, color: mc.textMuted),
+                      ],
+                    ),
                   ),
                 ),
               ],
-              if (tiles) ...[
+              if (tiles && creditsShown) ...[
                 _SourceChip(
                   stats: _tileStats,
                   gate: _tiles().gate,
@@ -1692,10 +1657,29 @@ class _CoverageMapState extends State<CoverageMap> {
               if (tiles)
                 _Pill(
                   key: const Key('map-attribution'),
-                  child: Text(style.attribution, style: t.textTheme.labelSmall?.copyWith(fontSize: 11)),
+                  child: foldable
+                      ? InkWell(
+                          key: const Key('map-credits-toggle'),
+                          onTap: widget.onCreditsToggle,
+                          child: Semantics(
+                            button: true,
+                            label: creditsShown ? 'Hide map legend' : 'Show map legend',
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Flexible(child: Text(style.attribution, overflow: TextOverflow.ellipsis, style: t.textTheme.labelSmall?.copyWith(fontSize: 11))),
+                                const SizedBox(width: 2),
+                                Icon(creditsShown ? Icons.expand_more_rounded : Icons.expand_less_rounded, size: 16, color: mc.textMuted),
+                              ],
+                            ),
+                          ),
+                        )
+                      : Text(style.attribution, style: t.textTheme.labelSmall?.copyWith(fontSize: 11)),
                 ),
               // The global repeater layer's legend and credit (its data is MeshCore Map's), only while it draws.
-              if (showNetwork)
+              if (widget.mapKey != null && creditsShown)
+                Padding(padding: const EdgeInsets.only(top: Gap.xs), child: _Pill(key: const Key('map-key'), child: widget.mapKey!)),
+              if (widget.mapKey == null && showNetwork && creditsShown)
                 ListenableBuilder(
                   listenable: networkSource,
                   builder: (context, _) {

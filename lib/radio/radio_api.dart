@@ -129,7 +129,7 @@ class WardriveConfig {
   const WardriveConfig({
     this.channel = '#wardriving',
     this.intervalSec = 30,
-    this.minDistanceM = 100,
+    this.minDistanceM = 15,
     this.listenWindow = const Duration(seconds: 10),
     this.txPowerW,
     this.txDbm,

@@ -220,6 +220,9 @@ void main() {
       }
       await closeSheet(t);
       expect(find.byKey(const ValueKey('layer-network-paint')), findsOneWidget);
+      expect(find.byKey(const Key('map-network-attribution')), findsNothing, reason: 'the Drive map folds its legend away by default');
+      await t.tap(find.byKey(const Key('map-credits-toggle')));
+      await t.pump(const Duration(milliseconds: 300));
       expect(find.byKey(const Key('map-network-attribution')), findsOneWidget);
       expect(find.byKey(const Key('map-network-legend')), findsOneWidget);
 

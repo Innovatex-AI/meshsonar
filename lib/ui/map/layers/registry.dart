@@ -10,8 +10,6 @@ import 'repeater_map_source.dart';
 
 const List<MapLayerSpec> kMapLayers = [
   MapLayerSpec(id: 'measured', label: 'Network coverage', group: LayerGroup.coverage, z: 10, defaultOn: true, onWebsite: true, serverFed: true),
-  // The regions next to the viewed one: dashed outlines and names, tap to switch (the website's "Regions" layer). Default on, shown at region zoom.
-  MapLayerSpec(id: kRegionsLayerId, label: 'Neighbouring regions', group: LayerGroup.coverage, z: 15, defaultOn: true, onWebsite: true, serverFed: true),
   MapLayerSpec(id: 'hexes', label: 'Drive hexagons', group: LayerGroup.drive, z: 20, defaultOn: true, onWebsite: false, serverFed: false),
   // Default ON (Andy, Oct 24 2026; D3): scoped to the viewed region when one is detected or picked, grouped clusters
   // with counts for the whole world otherwise (AppStateRepeaterFeed).
@@ -116,12 +114,6 @@ LayerStatus layerStatus(String id, MapLayerInputs inputs, {RepeaterMapSource? re
         what: (n) => '$n ${n == 1 ? 'observer' : 'observers'} with a public position',
         none: 'No observers with a public position in ${inputs.regionName}',
       );
-    case kRegionsLayerId:
-      if (!inputs.regionIndexLoaded) return const LayerStatus(LayerAvailability.empty, detail: 'Region outlines load once the phone is online');
-      if (inputs.regionName == null || inputs.regionNeighbours == 0) {
-        return LayerStatus(LayerAvailability.empty, detail: inputs.regionName == null ? 'Pick a region to see its neighbours' : 'No neighbouring regions known for ${inputs.regionName}');
-      }
-      return LayerStatus(LayerAvailability.ready, detail: '${inputs.regionNeighbours} nearby · shown zoomed out to region level');
     case 'neighbours':
       return inputs.repeaterSelected
           ? const LayerStatus(LayerAvailability.ready)
@@ -150,7 +142,7 @@ LayerStatus _feedStatus(MapFeedState s, int count, {required String Function(int
 }
 
 /// Sanity: the registry's website ids are exactly the website keys the app draws (asserted by tests).
-const Set<String> kWebsiteKeysDrawn = {'measured', 'repeaters', 'observers', 'regions', 'network'};
+const Set<String> kWebsiteKeysDrawn = {'measured', 'repeaters', 'observers', 'network'};
 
 /// App-only ids, the same list the URL code writes in `meshsonar://` links.
 const List<String> kAppOnlyIds = kAppOnlyShowKeys;

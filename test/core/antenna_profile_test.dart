@@ -180,7 +180,7 @@ void main() {
         'display': 'KE4BFI',
         'channel': '#wardriving',
         'interval_sec': 30,
-        'min_distance_m': 100,
+        'min_distance_m': 150,
         'antenna': {'type': 'external', 'gain_dbi': 5.8, 'height_m': 1.8},
         'auto_sync': true,
         'sync_during_drive': true,
@@ -198,7 +198,7 @@ void main() {
         expect(saved[k], old[k], reason: '$k must be unchanged by the 0.4.0 upgrade');
       }
       // auto_key (automatic driver key) is new too; 0.11.0 adds discoveryMode alongside the 0.4.0 antennaProfiles upgrade.
-      expect(saved.keys.toSet().difference(old.keys.toSet()), {'antenna_profiles', 'discovery_mode', 'auto_key'});
+      expect(saved.keys.toSet().difference(old.keys.toSet()), {'antenna_profiles', 'discovery_mode', 'auto_key', 'min_distance_default'});
     });
   });
 }
