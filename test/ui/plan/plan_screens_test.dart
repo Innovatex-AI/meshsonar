@@ -260,13 +260,13 @@ void main() {
       expect(find.byKey(const Key('link-chart')), findsOneWidget);
       expect(find.text('Line blocked'), findsOneWidget);
       final stored33 = (fx('link')['stored'] as List)[1]['blockedM'];
-      expect(find.text(Units.metric.distance((stored33 as num).toDouble())), findsWidgets);
+      expect(find.text(Units.metric.distance(stored33.toDouble())), findsWidgets);
       await t.drag(find.byKey(const Key('link-ha')), const Offset(-400, 0));
       await t.pump();
       expect(find.byKey(const Key('link-figures')), findsOneWidget);
       await t.tap(find.byKey(const Key('link-33')));
       await t.pump();
-      expect(find.text(Units.metric.distance((stored33 as num).toDouble())), findsWidgets);
+      expect(find.text(Units.metric.distance(stored33.toDouble())), findsWidgets);
     });
 
     testWidgets('no stored profile for the pair says so', (t) async {
