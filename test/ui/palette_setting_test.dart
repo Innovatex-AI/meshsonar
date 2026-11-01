@@ -1,7 +1,6 @@
 // Settings > Units & display > Colour palette: three choices, persisted, applied to the whole app at once (the theme's
 // MeshSonarColors changes and the network cells on the real map are redrawn in the new colours without a restart).
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
 import '../support/cell_layers.dart';
 import 'package:meshsonar/core/api.dart';

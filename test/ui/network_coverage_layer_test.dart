@@ -1,7 +1,6 @@
 // The network-coverage background map layer (GET /api/cmh/public-coverage, the website's own measured cells —
 // not just this drive's pings): on by default, drawn under everything else, toggled with the other layers.
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
 import '../support/cell_layers.dart';
 import 'package:meshsonar/core/api.dart';

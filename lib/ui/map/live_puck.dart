@@ -202,6 +202,7 @@ class PuckController extends ChangeNotifier {
   /// Advance one frame: compute the pose and the heading and tell the layers to repaint. Returns true while another frame is
   /// needed.
   bool tick({bool reducedMotion = false}) {
+    if (_disposed) return false;
     final now = clock();
     final p = motion.poseAt(now, reducedMotion: reducedMotion) ?? _pose;
     _pose = p;
@@ -256,8 +257,11 @@ class PuckController extends ChangeNotifier {
     notifyListeners();
   }
 
+  bool _disposed = false;
+
   @override
   void dispose() {
+    _disposed = true;
     wake.dispose();
     super.dispose();
   }

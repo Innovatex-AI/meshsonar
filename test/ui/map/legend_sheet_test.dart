@@ -1,7 +1,6 @@
 // Legend & Info: every section explains what it shows with the real swatches, follows the colour mode and the colour
 // palette, is reachable from the layers sheet and Settings > About, and its swatch colours equal the colours the maps draw.
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
 import '../../support/cell_layers.dart';
 import 'package:meshsonar/core/api.dart';

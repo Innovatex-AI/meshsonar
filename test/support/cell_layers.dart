@@ -1,5 +1,4 @@
 // Test helpers for the map's cell layers (lib/ui/map/cell_raster_layer.dart): what is drawn is data, not a widget per polygon.
-import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/ui/map/cell_raster_layer.dart';
 

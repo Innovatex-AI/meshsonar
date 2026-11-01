@@ -1,8 +1,6 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show Matrix4;
-import 'package:vector_math/vector_math_64.dart' show Vector3;
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
@@ -50,10 +48,10 @@ void main() {
         ..translateByDouble(o.dx, o.dy, 0, 1)
         ..rotateZ(now.rotationRad)
         ..scaleByDouble(math.pow(2, 0.2).toDouble(), math.pow(2, 0.2).toDouble(), 1, 1);
-      final v = m.transform3(Vector3(local.dx, local.dy, 0));
+      final v = MatrixUtils.transformPoint(m, local);
       final want = now.latLngToScreenOffset(corner);
-      expect(v[0], closeTo(want.dx, 0.01), reason: 'rotation $rot');
-      expect(v[1], closeTo(want.dy, 0.01), reason: 'rotation $rot');
+      expect(v.dx, closeTo(want.dx, 0.01), reason: 'rotation $rot');
+      expect(v.dy, closeTo(want.dy, 0.01), reason: 'rotation $rot');
       render.dispose();
     }
   });

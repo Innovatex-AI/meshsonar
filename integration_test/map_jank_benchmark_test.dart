@@ -174,6 +174,8 @@ void main() {
     SchedulerBinding.instance.addTimingsCallback(onTimings);
     final sw = Stopwatch()..start();
     var lastProbe = 0;
+    var lastPingAt = 0, lastFixAt = 0;
+    final routeWall = Stopwatch()..start();
     var worstLag = 0;
     final lags = <int>[];
     final probe = Timer.periodic(const Duration(milliseconds: 4), (_) {
@@ -181,6 +183,10 @@ void main() {
       if (recording) {
         final gap = now - lastProbe - 4;
         if (gap > 0) lags.add(gap);
+        if (gap > 50) {
+          // ignore: avoid_print
+          print('LAG ${gap}ms at ${routeWall.elapsedMilliseconds} ms; last ping ${routeWall.elapsedMilliseconds - lastPingAt} ms ago, last fix ${routeWall.elapsedMilliseconds - lastFixAt} ms ago');
+        }
         worstLag = math.max(worstLag, gap);
       }
       lastProbe = now;
@@ -192,7 +198,6 @@ void main() {
     });
 
     // The clock the puck and the model see follows the wall clock from the route start.
-    final routeWall = Stopwatch()..start();
     void clockFrame(Duration _) {
       if (!alive) return;
       h.clockNow = _base.add(routeWall.elapsed);
@@ -208,13 +213,17 @@ void main() {
       while (next < route.samples.length && route.samples[next].t * 1000 <= ms) {
         final f = route.samples[next].fix;
         next++;
-        if (f != null) h.location.fixController.add(f);
+        if (f != null) {
+          lastFixAt = ms;
+          h.location.fixController.add(f);
+        }
       }
     });
     // A live ping every 8 s.
     var livePing = 1000;
     final pinger = Timer.periodic(const Duration(seconds: 8), (_) {
       final s = route.samples[math.min(route.samples.length - 1, routeWall.elapsed.inSeconds)];
+      lastPingAt = routeWall.elapsedMilliseconds;
       engine.emit(pingAt(livePing++, s));
     });
 
@@ -223,6 +232,7 @@ void main() {
     final stepsM = <double>[];
     var backwards = 0;
     var bigHops = 0;
+    final screenDx = <double>[], screenDy = <double>[];
     double? lastLat, lastLon;
     double? lastFrameMs;
     void sampleFrame(Duration _) {
@@ -236,6 +246,12 @@ void main() {
         final tl = a.trueLat + (b.trueLat - a.trueLat) * fr;
         final tn = a.trueLon + (b.trueLon - a.trueLon) * fr;
         lagM.add(routeDistM(p.lat, p.lon, tl, tn));
+        final mark = find.byKey(const Key('map-position'));
+        if (mark.evaluate().isNotEmpty) {
+          final c = t.getCenter(mark);
+          screenDx.add(c.dx);
+          screenDy.add(c.dy);
+        }
         if (lastLat != null) {
           final step = routeDistM(lastLat!, lastLon!, p.lat, p.lon);
           stepsM.add(step);
@@ -268,10 +284,8 @@ void main() {
     frames.reset();
     final startMs = routeWall.elapsedMilliseconds;
     final end = DateTime.now().add(Duration(seconds: _seconds));
-    var probeCamera = 0;
     while (DateTime.now().isBefore(end)) {
       await Future<void>.delayed(const Duration(milliseconds: 33));
-      probeCamera++;
     }
     recording = false;
     alive = false;
@@ -286,6 +300,13 @@ void main() {
     stepsM.sort();
     lags.sort();
     double q(List<num> s, double p) => s.isEmpty ? 0 : s[((s.length - 1) * p).round()].toDouble();
+    double mean(List<double> v) => v.isEmpty ? 0 : v.reduce((a, b) => a + b) / v.length;
+    double std(List<double> v) {
+      if (v.isEmpty) return 0;
+      final m = mean(v);
+      return math.sqrt(v.map((x) => (x - m) * (x - m)).reduce((a, b) => a + b) / v.length);
+    }
+
     final result = <String, Object?>{
       'name': _name,
       'seconds': windowS.round(),
@@ -300,6 +321,13 @@ void main() {
       'puck_frames_sampled': stepsM.length,
       'puck_error_m': {'p50': q(lagM, 0.5), 'p95': q(lagM, 0.95), 'max': lagM.isEmpty ? 0 : lagM.last},
       'puck_step_m': {'p50': q(stepsM, 0.5), 'p95': q(stepsM, 0.95), 'max': stepsM.isEmpty ? 0 : stepsM.last},
+      'puck_screen_px': {
+        'mean_dx': mean(screenDx),
+        'mean_dy': mean(screenDy),
+        'std_dx': std(screenDx),
+        'std_dy': std(screenDy),
+        'map_height': t.getSize(mapFinder).height,
+      },
       'puck_big_hops': bigHops,
       'puck_backwards_steps': backwards,
     };
@@ -313,6 +341,8 @@ void main() {
     expect(snap.frames, greaterThan(10), reason: 'frames were recorded');
     expect(snap.p95Ms, lessThan(_p95Max), reason: 'p95 frame cost ${snap.p95Ms} ms');
     expect(snap.worstMs, lessThan(_worstMax), reason: 'worst frame ${snap.worstMs} ms');
+    expect(std(screenDy), lessThan(4), reason: 'in follow mode the arrow stays put on the screen (std ${std(screenDy)} px)');
+    expect(backwards, 0);
     expect(worstLag, lessThan(_lagMax), reason: 'UI isolate was blocked $worstLag ms');
   }, timeout: const Timeout(Duration(minutes: 30)));
 }
