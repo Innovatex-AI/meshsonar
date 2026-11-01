@@ -18,11 +18,11 @@ import 'settings/my_radios_section.dart';
 import 'settings/notifications_section.dart';
 import 'settings/privacy_section.dart';
 import 'settings/radio_section.dart';
-import 'settings/wardriving_section.dart';
 import 'settings/region_section.dart';
 import 'settings/settings_index.dart';
 import 'settings/settings_kit.dart';
 import 'settings/storage_section.dart';
+import 'settings/wardriving_section.dart';
 
 export 'settings/account_section.dart'
     show DriverKeyScreen, KeyStatusBadge, keyStatusLabel, keyStatusHelp, confirmServerChange;

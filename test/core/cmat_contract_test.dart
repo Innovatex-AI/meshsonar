@@ -56,20 +56,19 @@ void main() {
   Future<Map<String, dynamic>> serverState() async =>
       jsonDecode((await http.get(base.resolve('/__test/state'))).body) as Map<String, dynamic>;
 
-  test('request key → approve → upload real drive → re-sync duplicates → end reported', () async {
+  test('request key (self-serve, approved at once) → upload real drive → re-sync duplicates → end reported', () async {
     final tmp = await Directory.systemTemp.createTemp('meshsonar_contract_');
     addTearDown(() => tmp.delete(recursive: true));
     final client = HttpCmatClient(base);
     final settings = FileSettingsStore(File(p.join(tmp.path, 'settings.json')));
 
-    // 1. Request a key: pending in approval mode.
+    // 1. Request a key: driver keys are self-serve (no approval queue or mode any more), so it is approved at once.
     final req = await client.requestKey(name: 'Andy Contract', callsign: 'ke4bfi', email: 'andy@example.org');
-    expect(req.status, DriverKeyStatus.pending);
+    expect(req.status, DriverKeyStatus.approved);
     expect(req.key, startsWith('ms_'));
     expect(req.display, 'KE4BFI');
-    expect((await client.status(req.key)).status, DriverKeyStatus.pending);
+    expect((await client.status(req.key)).status, DriverKeyStatus.approved);
 
-    // Pending key can't upload: 403 surfaces as "key not approved", nothing changes locally.
     final store = await JsonlDriveStore.open(Directory(p.join(tmp.path, 'drives')));
     final session = makeSession(startedAt: DateTime.now().toUtc().subtract(const Duration(hours: 2)));
     await store.startSession(session);
@@ -91,14 +90,7 @@ void main() {
 
     await settings.save(Settings(serverUrl: base.toString(), driverKey: req.key, keyStatus: DriverKeyStatus.approved));
     final sync = DefaultSyncService(store: store, client: client, settings: settings);
-    final denied = await sync.syncSession(session.id);
-    expect(denied.error, 'key not approved');
     expect(await store.unsyncedPings(session.id), hasLength(pings.length));
-
-    // 2. Admin approves.
-    final approved = await admin({'action': 'approve', 'driverId': req.driverId});
-    expect(approved['status'], 'approved');
-    expect((await client.status(req.key)).status, DriverKeyStatus.approved);
 
     // 3. Upload through the real sync path.
     final r1 = await sync.syncSession(session.id);
@@ -159,7 +151,6 @@ void main() {
     addTearDown(() => tmp.delete(recursive: true));
     final client = HttpCmatClient(base);
     final req = await client.requestKey(name: 'Bulk Driver');
-    await admin({'action': 'approve', 'driverId': req.driverId});
     final settings = FileSettingsStore(File(p.join(tmp.path, 'settings.json')));
     await settings.save(Settings(driverKey: req.key, keyStatus: DriverKeyStatus.approved));
     final store = await JsonlDriveStore.open(Directory(p.join(tmp.path, 'drives')));
@@ -184,7 +175,6 @@ void main() {
     addTearDown(() => tmp.delete(recursive: true));
     final client = HttpCmatClient(base);
     final req = await client.requestKey(name: 'Reject Driver');
-    await admin({'action': 'approve', 'driverId': req.driverId});
     final settings = FileSettingsStore(File(p.join(tmp.path, 'settings.json')));
     await settings.save(Settings(driverKey: req.key, keyStatus: DriverKeyStatus.approved));
     final store = await JsonlDriveStore.open(Directory(p.join(tmp.path, 'drives')));
@@ -210,16 +200,15 @@ void main() {
     expect(r2.stored + r2.duplicate + r2.rejected, 0);
   }, skip: skip, timeout: const Timeout(Duration(minutes: 1)));
 
-  test('unknown key → 401; revoked key → status revoked and upload 403', () async {
+  test('unknown key → 401; revoked key → status revoked and upload refused (401 revoked)', () async {
     final client = HttpCmatClient(base);
     await expectLater(client.status('ms_this_key_does_not_exist_000'),
         throwsA(isA<CmatException>().having((e) => e.status, 'status', 401)));
     final req = await client.requestKey(name: 'Revoked Driver');
-    await admin({'action': 'approve', 'driverId': req.driverId});
     await admin({'action': 'revoke', 'driverId': req.driverId});
     expect((await client.status(req.key)).status, DriverKeyStatus.revoked);
     await expectLater(
         client.upload(req.key, DriveBatch(app: const AppInfo(), session: makeSession(), pings: const [])),
-        throwsA(isA<CmatException>().having((e) => e.status, 'status', 403)));
+        throwsA(isA<CmatException>().having((e) => e.status, 'status', 401).having((e) => e.message, 'message', contains('revoked'))));
   }, skip: skip, timeout: const Timeout(Duration(minutes: 1)));
 }

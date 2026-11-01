@@ -49,3 +49,12 @@ int directTextPacketBytes(int textBytes, {bool transportCodes = false}) {
   final cipher = ((plain + 15) ~/ 16) * 16;
   return 1 + 1 + 1 + 1 + 2 + cipher + (transportCodes ? 4 : 0);
 }
+
+/// Time on air of one wardrive ping (`name: MS:xxxxxxxxxx`, 13 text bytes) at the given radio settings, ms; null
+/// when the radio's spreading factor or bandwidth is not known. [transportCodes] adds a scoped flood's 4 bytes.
+double? wardrivePingAirtimeMs({required String radioName, int? sf, double? bwKhz, int? cr, bool transportCodes = false}) {
+  if (sf == null || bwKhz == null || sf < 5 || sf > 12 || bwKhz <= 0) return null;
+  final nameBytes = radioName.codeUnits.length; // names are short ASCII in practice; a longer UTF-8 name only adds a block
+  final bytes = groupTextPacketBytes(nameBytes + 2 + 13, transportCodes: transportCodes);
+  return loraAirtimeMs(payloadBytes: bytes, sf: sf, bwKhz: bwKhz, cr: (cr ?? 5).clamp(5, 8));
+}

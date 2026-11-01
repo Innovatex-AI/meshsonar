@@ -167,7 +167,8 @@ Root: `getApplicationSupportDirectory()/meshsonar/` (falls back to the Documents
 ├── settings.json              Settings (atomic: settings.json.tmp → rename)
 ├── repeaters.json             [RepeaterRef] from CMAT drive-repeaters (atomic)
 ├── node_directory.json        DirectorySnapshot from map.meshcore.io (atomic)
-├── ui_prefs.json              {"onboarding_seen": bool, "labels": {}} (atomic; labels only from 0.2.x, migrated away)
+├── ui_prefs.json              {"onboarding_seen": bool, "labels": {}, "recent_regions": [code, ...]} (atomic; labels only from 0.2.x, migrated away; recent_regions = the last 3 regions switched to by hand, most recent first)
+├── privacy_zones.json         PrivacyZoneState: {zones: [{lat, lon, radiusM, label}], trimM, pending, scope, syncedAt} (atomic). At most 10 zones, lat/lon already rounded to 4 decimals, radius 50-5000 m. `pending` = a change not yet sent to the server (no driver key yet, offline); while it is true the phone's list wins over the server's.
 └── sessions/
     └── <session id>/          id must match ^[A-Za-z0-9_-]{1,100}$ (path-like ids refused)
         ├── session.json       DriveSession JSON; rewritten atomically at start, rename and end

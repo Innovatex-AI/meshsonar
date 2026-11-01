@@ -8,6 +8,7 @@ import '../core/api.dart';
 import '../core/claim_flow.dart' show ClaimRestoreStore;
 import '../core/model.dart';
 import '../core/phone_sensors.dart';
+import '../core/privacy_zone_store.dart';
 import '../core/idle_region_watcher.dart';
 import '../core/region_cache.dart';
 import '../core/region_lookup.dart';
@@ -109,6 +110,9 @@ class AppServices {
   /// Small JSON file for UI-only preferences (first-run intro seen, drive names). Null = keep them in memory only.
   final File? uiPrefsFile;
 
+  /// Where the privacy zones are kept (lib/core/privacy_zone_store.dart). Null = memory only.
+  final PrivacyZoneStore? privacyZoneStore;
+
   /// Where the unsent telemetry headers wait (lib/core/telemetry_uploader.dart). Null = memory only.
   final File? telemetryQueueFile;
 
@@ -170,6 +174,7 @@ class AppServices {
     this.appInfo = const AppInfo(name: 'MeshSonar'),
     this.uiPrefsFile,
     this.telemetryQueueFile,
+    this.privacyZoneStore,
     this.claimRestoreStore,
     this.directory,
     this.reportDraftStore,

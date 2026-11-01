@@ -130,7 +130,7 @@ class WardriveConfig {
     this.channel = '#wardriving',
     this.intervalSec = 30,
     this.minDistanceM = 100,
-    this.listenWindow = const Duration(seconds: 7),
+    this.listenWindow = const Duration(seconds: 10),
     this.txPowerW,
     this.txDbm,
     this.listenOnly = false,
@@ -173,8 +173,12 @@ class EngineStatus {
   /// [clockSkewWarnAfter] on several fixes in a row; null while the clocks agree. Pings are stamped with the phone
   /// clock, and the server refuses a ping stamped more than a day ahead.
   final Duration? clockSkew;
+
+  /// While a ping's window is open: how many different repeaters have repeated it so far (shown at once, not at the end of
+  /// the window). Null outside a window.
+  final int? heardSoFar;
   const EngineStatus(this.state,
-      {this.message, this.lastFix, this.nextPingAt, this.waitingFor, this.metresToGo, this.clockSkew});
+      {this.message, this.lastFix, this.nextPingAt, this.waitingFor, this.metresToGo, this.clockSkew, this.heardSoFar});
 }
 
 /// Runs a drive: pings on the channel on a timer/distance schedule, collects echoes for each ping,

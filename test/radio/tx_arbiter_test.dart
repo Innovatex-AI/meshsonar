@@ -42,8 +42,57 @@ void main() {
     });
   });
 
+  group('chat bound but nobody chatting (the Oct 31 field report)', () {
+    test('chatActive alone never holds a ping back: no probe, no budget, however many pings', () async {
+      arb.chatActive = true;
+      var asked = 0;
+      arb.queueProbe = () async {
+        asked++;
+        return 5;
+      };
+      for (var i = 0; i < 500; i++) {
+        expect((await arb.requestPing()).go, isTrue);
+        arb.pingSent();
+        clock.advance(const Duration(seconds: 3));
+      }
+      expect(asked, 0);
+      expect(arb.snapshot().skipped, isEmpty);
+    });
+
+    test('an unknown region has no hourly cap: 2 h of pings every 10 s at SF8 all go out', () async {
+      arb.chatActive = true;
+      arb.admitUserSend(300); // one message long ago
+      clock.advance(const Duration(minutes: 11));
+      var sent = 0;
+      for (var i = 0; i < 720; i++) {
+        expect((await arb.requestPing()).go, isTrue, reason: 'ping $i');
+        arb.pingSent();
+        sent++;
+        clock.advance(const Duration(seconds: 10));
+      }
+      expect(sent, 720);
+    });
+
+    test('the rules switch on with a message and off again 10 minutes after the last one', () async {
+      arb.chatActive = true;
+      queue = 3;
+      expect((await arb.requestPing()).go, isTrue);
+      arb.admitUserSend(300);
+      clock.advance(const Duration(seconds: 3));
+      expect((await arb.requestPing()).reason, PingSkipReason.radioQueueBusy);
+      clock.advance(const Duration(minutes: 10));
+      expect((await arb.requestPing()).go, isTrue);
+    });
+  });
+
   group('ping rules (chat active)', () {
-    setUp(() => arb.chatActive = true);
+    setUp(() {
+      // These rules are the ones that apply WHILE chatting; a long chatWindow keeps a long test chatting.
+      arb.policy = arb.policy.copyWith(chatWindow: const Duration(days: 2));
+      arb.chatActive = true;
+      arb.admitUserSend(300);
+      clock.advance(const Duration(seconds: 3)); // past the 2 s gap, still chatting
+    });
 
     test('radio outbound queue not empty: skipped with a reason', () async {
       queue = 2;
@@ -96,7 +145,8 @@ void main() {
       expect((await arb.requestPing()).go, isTrue);
     });
 
-    test('hourly cap (unknown region 1% = 36 s): pings stop, then resume after the hour', () async {
+    test('hourly cap (a KNOWN region cap of 1% = 36 s): pings stop, then resume after the hour', () async {
+      arb.policy = arb.policy.copyWith(capFraction: 0.01);
       // Spread pings out so the 10-minute budget never binds: one every 20 s = 30 per 10 min = 11.6 s.
       var sent = 0;
       for (var i = 0; i < 400; i++) {
@@ -109,7 +159,7 @@ void main() {
         sent++;
         clock.advance(const Duration(seconds: 20));
       }
-      expect(sent, inInclusiveRange(92, 94)); // 36 s / 0.386 s = 93
+      expect(sent, inInclusiveRange(91, 94)); // 36 s / 0.386 s = 93, less the user message's 0.3 s
       clock.advance(const Duration(hours: 1, minutes: 1));
       expect((await arb.requestPing()).go, isTrue);
     });
@@ -124,7 +174,7 @@ void main() {
         sent++;
         clock.advance(const Duration(seconds: 20));
       }
-      expect(sent, 400, reason: 'the default 1% cap stops at about 93; at 10% nothing binds at one ping per 20 s');
+      expect(sent, 400, reason: 'a 1% cap stops at about 93; at 10% nothing binds at one ping per 20 s');
     });
 
     test('manual ping is not held by the budgets (the driver chose it) but still waits for a busy radio', () async {
@@ -143,10 +193,11 @@ void main() {
         warned = arb.admitUserSend(800) || warned; // never throws, never waits
       }
       expect(warned, isTrue);
-      expect(arb.snapshot().userSends, 200);
+      expect(arb.snapshot().userSends, 201, reason: '200 here and the one in setUp');
     });
 
-    test('user airtime counts against the hourly cap for pings', () async {
+    test('user airtime counts against the hourly cap for pings (where the cap is known)', () async {
+      arb.policy = arb.policy.copyWith(capFraction: 0.01);
       for (var i = 0; i < 45; i++) {
         arb.admitUserSend(800); // 36 s: exactly the cap
       }
@@ -167,7 +218,12 @@ void main() {
       final rng = math.Random(seed);
       final c = FakeClock();
       var q = 0;
-      final a = TxArbiter(clock: c.call, queueProbe: () async => q, airParams: () => const RadioAirParams(8, 62.5, 5), senderNameBytes: () => 6)
+      final a = TxArbiter(
+          clock: c.call,
+          policy: const TxPolicy(capFraction: 0.01, chatWindow: Duration(days: 2)),
+          queueProbe: () async => q,
+          airParams: () => const RadioAirParams(8, 62.5, 5),
+          senderNameBytes: () => 6)
         ..chatActive = true;
       final est = a.estimatePingMs();
       final pings = <(DateTime, double)>[];
@@ -196,6 +252,12 @@ void main() {
               expect(c.now.difference(lastUser).inMilliseconds, greaterThanOrEqualTo(2000), reason: 'seed $seed step $step');
             }
             // the radio queue was empty when it was granted
+            // (the rules below hold once the person has chatted; before the first message the arbiter is idle by design)
+            if (lastUser == null) {
+              a.pingSent();
+              pings.add((c.now, est));
+              break;
+            }
             expect(q, 0, reason: 'seed $seed step $step');
             if (!manual) {
               final from10 = c.now.subtract(const Duration(minutes: 10));

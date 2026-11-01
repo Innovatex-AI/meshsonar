@@ -461,6 +461,11 @@ class _CardMenu extends StatelessWidget {
           child: const ListTile(leading: Icon(Icons.ios_share), title: Text('Export & share')),
         ),
         PopupMenuItem(
+          key: ValueKey('menu-trace-$id'),
+          value: 'trace',
+          child: const ListTile(leading: Icon(Icons.manage_search), title: Text('Share ping trace')),
+        ),
+        PopupMenuItem(
           key: ValueKey('rename-$id'),
           value: 'rename',
           child: const ListTile(leading: Icon(Icons.edit_outlined), title: Text('Rename')),
@@ -487,6 +492,8 @@ Future<bool> runDriveAction(BuildContext context, String action, SessionSummary 
       openDriveReport(context, id);
     case 'export':
       await s.exportAndShare(id);
+    case 'trace':
+      await s.shareTrace(id);
     case 'rename':
       await renameDrive(context, x);
     case 'delete':

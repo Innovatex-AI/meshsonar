@@ -68,6 +68,19 @@ class _Heard {
   _Heard(this.rx, this.arrived);
 }
 
+class _Waited {
+  Duration d = Duration.zero;
+}
+
+class _Tail {
+  final String id, tag, text;
+  final int? ts;
+  final DateTime sentAt;
+  final Uint8List secret;
+  final List<_Heard> frames = [];
+  _Tail(this.id, this.tag, this.text, this.ts, this.sentAt, this.secret);
+}
+
 class _Ctl {
   final ControlPacket pkt;
   _Ctl(this.pkt);
@@ -124,6 +137,28 @@ class DefaultWardriveEngine implements WardriveEngine {
   /// Pings the gate refused during this drive, by reason.
   final Map<PingSkipReason, int> skippedPings = {};
 
+  /// Receives one JSON-ready record per ping (and per skipped ping, and per late tail): every frame the radio reported
+  /// around the ping with its arrival time and why it did or did not count. The app writes them to `trace.jsonl` beside
+  /// the drive. Local only: never uploaded, never part of the drive format.
+  void Function(Map<String, Object?> record)? onTrace;
+
+  /// Keep listening past the window while repeats are still arriving (see [_listenAdaptive]). On by default; the
+  /// window never grows past [maxListen] or past the time the next ping is due.
+  bool adaptiveListen = true;
+
+  /// Listen windows shorter than this are never extended.
+  Duration minAdaptiveBase = const Duration(seconds: 5);
+
+  /// Hard ceiling of an extended listen.
+  Duration maxListen = const Duration(seconds: 15);
+
+  /// An extended listen carries on while the newest repeat is younger than this.
+  Duration extendGap = const Duration(seconds: 4);
+
+  /// After a ping's window closes its late repeats are still noted in the trace (never in the ping) until this long
+  /// after the send or the next ping, whichever is first.
+  Duration traceTail = const Duration(seconds: 20);
+
   final _pings = StreamController<DrivePing>.broadcast();
   final _status = StreamController<EngineStatus>.broadcast();
   EngineStatus _current = const EngineStatus(EngineState.idle);
@@ -137,11 +172,13 @@ class DefaultWardriveEngine implements WardriveEngine {
   // minDistanceM from where it was sent. Checked on every GPS fix and on a [tick] timer.
   final Duration tick;
   Timer? _autoTimer;
+  Timer? _dueTimer; // fires exactly when the next ping is due, so the cadence is the interval, not the interval + a tick
   StreamSubscription<GeoFix>? _fixSub;
   DateTime? _nextPingAt;
   DateTime? _lastPingTime; // when the last ping (auto or manual) was sent
   DateTime? _retryAfter; // after a failed auto ping, don't retry before this
   bool _evaluating = false;
+  DateTime? _noFixTraceAt;
   DateTime? _noFixSince; // since when there has been no GPS fix at all (permission off, Location Services off, no sky)
   Duration? _clockSkew; // see EngineStatus.clockSkew
   int _skewRun = 0;
@@ -183,6 +220,8 @@ class DefaultWardriveEngine implements WardriveEngine {
   @override
   EngineStatus get current => _current;
 
+  int? _heardSoFar;
+
   void _setStatus(EngineState s, [String? message]) {
     // Listen-only never pings, so a countdown / "move N m" / waiting-for-GPS status is meaningless in this mode.
     final auto = _running && !_config.listenOnly && _config.intervalSec > 0;
@@ -194,6 +233,7 @@ class DefaultWardriveEngine implements WardriveEngine {
       waitingFor: auto ? _waitingFor : null,
       metresToGo: auto ? _metresToGo : null,
       clockSkew: _clockSkew,
+      heardSoFar: s == EngineState.pinging ? _heardSoFar : null,
     );
     if (!_status.isClosed) _status.add(_current);
   }
@@ -210,10 +250,19 @@ class DefaultWardriveEngine implements WardriveEngine {
         listenOnly: c.listenOnly,
       );
 
+  /// The listen window of a ping: the configured one, but never so long that it eats the interval (a 10 s interval with
+  /// the default 10 s window would make every ping late): at most the interval less a second, and at least 7 s.
+  Duration get _window {
+    final w = _config.listenWindow;
+    if (_config.intervalSec <= 0) return w;
+    final room = Duration(seconds: math.max(7, _config.intervalSec - 1));
+    return w < room ? w : room;
+  }
+
   /// Shortest time between two auto pings: the interval, and never less than one listen window.
   Duration get _minGap {
     final i = Duration(seconds: _config.intervalSec);
-    return i < _config.listenWindow ? _config.listenWindow : i;
+    return i < _window ? _window : i;
   }
 
   /// Keeps the state, updates the message.
@@ -323,6 +372,7 @@ class DefaultWardriveEngine implements WardriveEngine {
 
   void _onRadioLost() {
     if (!_running) return;
+    if (!_busy) _closeTail();
     _running = false;
     _stopAuto();
     if (_config.listenOnly) _stopPassive();
@@ -351,6 +401,7 @@ class DefaultWardriveEngine implements WardriveEngine {
     try {
       _passiveFixSub = location.fixes.listen((f) {
         _lastFix = f;
+        _lastFixArrived = _clock();
         _onPassiveFix(f);
       }, onError: (Object _) {});
     } catch (_) {
@@ -449,6 +500,7 @@ class DefaultWardriveEngine implements WardriveEngine {
       try {
         _fixSub = location.fixes.listen((f) {
           _lastFix = f;
+          _lastFixArrived = _clock();
           _watchClock(f);
           _evaluate();
         }, onError: (Object _) {});
@@ -486,6 +538,8 @@ class DefaultWardriveEngine implements WardriveEngine {
     final sub = _fixSub;
     _fixSub = null;
     if (sub != null) unawaited(sub.cancel());
+    _dueTimer?.cancel();
+    _dueTimer = null;
     _nextPingAt = null;
     _waitingFor = null;
     _metresToGo = null;
@@ -515,6 +569,14 @@ class DefaultWardriveEngine implements WardriveEngine {
     if (!_busy) _setStatus(EngineState.driving, msg);
   }
 
+  void _armDue(Duration d) {
+    _dueTimer?.cancel();
+    _dueTimer = Timer(d + const Duration(milliseconds: 1), () {
+      _dueTimer = null;
+      unawaited(_evaluate());
+    });
+  }
+
   /// One cadence check: pings now if both the interval and the distance are met.
   Future<void> _evaluate() async {
     if (!_running || _stopping || _busy || _evaluating || _config.intervalSec <= 0) return;
@@ -525,16 +587,25 @@ class DefaultWardriveEngine implements WardriveEngine {
     _nextPingAt = due;
     if (now.isBefore(due)) {
       _wait(PingWait.time, _metresLeft(_lastFix));
+      _armDue(due.difference(now));
       return;
     }
     final retry = _retryAfter;
-    if (retry != null && now.isBefore(retry)) return;
+    if (retry != null && now.isBefore(retry)) {
+      _armDue(retry.difference(now));
+      return;
+    }
     _evaluating = true;
     try {
       final fix = await _fix();
       if (!_running || _stopping || _busy || _config.intervalSec <= 0) return;
       if (fix == null) {
         _noFixSince ??= now;
+        final lt = _noFixTraceAt;
+        if (lt == null || _clock().difference(lt) >= const Duration(seconds: 10)) {
+          _noFixTraceAt = _clock();
+          _emitTrace({'v': 1, 'no_fix': true, 'at': _clock().toUtc().toIso8601String(), 'since_ms': _clock().difference(_noFixSince!).inMilliseconds});
+        }
         final long = _clock().difference(_noFixSince!) >= noGpsHintAfter;
         final poor = _poorFixM;
         _wait(PingWait.gps, null,
@@ -559,7 +630,7 @@ class DefaultWardriveEngine implements WardriveEngine {
         final t = _lastPingTime;
         if (t != null && _clock().isBefore(t.add(_minGap))) return null;
         if ((_metresLeft(fix) ?? 1) > 0) return null;
-        return _ping(fix);
+        return _ping(fix, startedAt: now);
       });
     } catch (_) {
       // status already reported by _ping; don't hammer a failing radio
@@ -603,24 +674,50 @@ class DefaultWardriveEngine implements WardriveEngine {
   /// Accuracy of the last fix refused for being too poor to ping from; null when the last fix was fine or absent.
   double? _poorFixM;
 
+  /// How long the engine waits for the platform to produce a fix on request. The phone's "current position" call can sit
+  /// for 15 s while a position stream is running (Oct 31 field drive: pings 78-128 s apart at speed).
+  Duration fixTimeout = const Duration(seconds: 4);
+
+  /// When that call fails or times out, the position stream's newest fix stands in if it is at most this old (at 13 m/s
+  /// that is within about 65 m, and the ping records its accuracy); older than that there is no usable fix.
+  Duration staleFixOk = const Duration(seconds: 5);
+
+  DateTime? _lastFixArrived;
+
   Future<GeoFix?> _fix() async {
+    GeoFix? f;
     try {
-      final f = await location.current();
-      if (f != null) _lastFix = f;
-      final acc = f?.accuracyM;
-      _poorFixM = (acc != null && acc > maxPingAccuracyM) ? acc : null;
-      return _poorFixM == null ? f : null;
+      f = await location.current().timeout(fixTimeout);
     } catch (_) {
-      return null;
+      f = null;
     }
+    if (f != null) {
+      _lastFix = f;
+      _lastFixArrived = _clock();
+      final acc = f.accuracyM;
+      _poorFixM = (acc != null && acc > maxPingAccuracyM) ? acc : null;
+      return _poorFixM == null ? f : null; // a cell-tower guess is not a place to ping from
+    }
+    _poorFixM = null;
+    final last = _lastFix, at = _lastFixArrived;
+    if (last != null && at != null) {
+      final age = _clock().difference(at);
+      final acc = last.accuracyM;
+      if (!age.isNegative && age <= staleFixOk && (acc == null || acc <= maxPingAccuracyM)) return last;
+    }
+    return null;
   }
 
   // ------------------------------------------------------------------ one ping
 
   /// Sends one ping at [fix], listens, emits it. Returns null if the ping couldn't be sent or was cut short with
   /// nothing heard (a truncated listen is not evidence of "heard nothing").
-  Future<DrivePing?> _ping(GeoFix fix, {bool manual = false}) async {
+  ///
+  /// Order matters for latency: the send goes out FIRST; the noise floor is read while the window runs (it is the
+  /// background level, the same a moment later), so the ping leaves one radio round trip sooner than it did.
+  Future<DrivePing?> _ping(GeoFix fix, {bool manual = false, DateTime? startedAt}) async {
     _busy = true;
+    _closeTail();
     final idx = _channelIndex!;
     final secret = _secret!;
     final pingTag = newPingTag();
@@ -630,7 +727,14 @@ class DefaultWardriveEngine implements WardriveEngine {
     final ctl = <_Ctl>[];
     StreamSubscription<ControlPacket>? ctlSub;
     DateTime? sentAt;
+    int? sentTs;
+    final waited = _Waited(); // listening time so far; the window's own length is counted in our waits
+    Duration? lastEchoAt; // when the newest repeat arrived, as time since the send
     var cutShort = false;
+    int? ackMs;
+    final id = _newId();
+    final liveRepeaters = <String>{};
+    _heardSoFar = null;
     try {
       final asked = pingGate.requestPing(manual: manual);
       final decision = asked is Future<PingDecision> ? await asked : asked;
@@ -639,27 +743,41 @@ class DefaultWardriveEngine implements WardriveEngine {
         _lastSkip = decision;
         skippedPings[decision.reason!] = (skippedPings[decision.reason!] ?? 0) + 1;
         _retryAfter = _clock().add(pingSkipRetry);
+        _emitTrace({'v': 1, 'skipped': decision.reason!.name, 'at': _clock().toUtc().toIso8601String(), 'manual': manual});
         if (_running && !_stopping) _setStatus(EngineState.driving, decision.message);
         return null;
       }
       _setStatus(EngineState.pinging, 'Pinging');
-      double? noise;
-      try {
-        noise = await link.noiseFloor();
-      } catch (_) {
-        noise = null;
-      }
       if (!_running) return null;
 
-      _collector = (rx) => heard.add(_Heard(rx, _clock()));
+      _collector = (rx) {
+        final now = _clock();
+        heard.add(_Heard(rx, now));
+        final ts = sentTs;
+        if (ts != null) {
+          final pkt = MeshPacket.tryParse(rx.raw);
+          final m = pkt == null ? null : matchEcho(pkt, secret, text, timestamp: ts);
+          if (m != null) {
+            lastEchoAt = now.difference(sentAt!);
+            if (liveRepeaters.add(m.repeater) && _running && !_stopping) {
+              _heardSoFar = liveRepeaters.length;
+              _setStatus(EngineState.pinging,
+                  'Heard ${liveRepeaters.length} repeater${liveRepeaters.length == 1 ? '' : 's'} so far');
+            }
+          }
+        }
+      };
       sentAt = _clock();
       await link.sendChannelText(idx, text);
+      ackMs = _clock().difference(sentAt).inMilliseconds; // command queued + written + the radio's OK
       pingGate.pingSent();
       _lastPingAt = (lat: fix.lat, lon: fix.lon);
-      _lastPingTime = sentAt;
+      // The interval counts from the moment the ping was asked for (an auto ping: when the cadence check began), so a slow
+      // fix or a send that waited behind other commands never stretches the cadence.
+      _lastPingTime = startedAt ?? sentAt;
       _retryAfter = null;
       final l = link;
-      final sentTs = l is MeshCoreCompanionLink ? l.lastSentTimestamp : null;
+      sentTs = l is MeshCoreCompanionLink ? l.lastSentTimestamp : null;
 
       int? tag;
       if (discoverNeighbors && l is MeshCoreCompanionLink && (l.firmwareVerCode ?? 0) >= 8) {
@@ -673,17 +791,23 @@ class DefaultWardriveEngine implements WardriveEngine {
       }
 
       _note('Listening for repeaters');
-      cutShort = !await _listen(_config.listenWindow);
+      double? noise;
+      unawaited(link.noiseFloor().then<void>((v) => noise = v, onError: (Object _) {}));
+      final base = _window;
+      cutShort = !await _listenAdaptive(waited, base, () => lastEchoAt, startedAt == null ? Duration.zero : sentAt.difference(startedAt));
+      final windowMs = waited.d.inMilliseconds;
+      _heardSoFar = null;
       _collector = null;
 
       final echoes = _buildEchoes(heard, secret, text, sentTs, sentAt);
       final pktHash = _packetHash(heard, secret, text, sentTs, l is MeshCoreCompanionLink ? l.selfInfo?.name : null);
       final neighbor = tag == null ? null : _bestNeighbor(ctl, tag);
       if (cutShort && echoes.isEmpty && neighbor == null) {
+        _emitTrace({'v': 1, 'ping': id, 'tag': pingTag, 'cut_short': true, 'at': sentAt.toUtc().toIso8601String()});
         return null;
       }
       final ping = DrivePing(
-        id: _newId(),
+        id: id,
         ts: sentAt.toUtc(),
         lat: fix.lat,
         lon: fix.lon,
@@ -698,10 +822,25 @@ class DefaultWardriveEngine implements WardriveEngine {
         wireTag: pingTag,
         txDbm: txDbm,
       );
+      _emitTrace({
+        'v': 1,
+        'ping': id,
+        'tag': pingTag,
+        'at': sentAt.toUtc().toIso8601String(),
+        'tx_epoch_s': sentTs,
+        'ack_ms': ackMs,
+        'pkt_hash': pktHash,
+        'manual': manual,
+        'base_ms': base.inMilliseconds,
+        'window_ms': windowMs,
+        'echoes': echoes.length,
+        'frames': _traceFrames(heard, secret, text, sentTs, sentAt),
+      });
+      _openTail(id, pingTag, text, sentTs, sentAt, secret);
       if (!_pings.isClosed) _pings.add(ping);
       if (_running && !_stopping) {
         if (_config.intervalSec > 0) {
-          _nextPingAt = sentAt.add(_minGap);
+          _nextPingAt = (startedAt ?? sentAt).add(_minGap);
           _waitingFor = PingWait.time;
           _metresToGo = _config.minDistanceM.toDouble();
         }
@@ -713,7 +852,8 @@ class DefaultWardriveEngine implements WardriveEngine {
       }
       return ping;
     } catch (e) {
-      _collector = null;
+      if (_tail == null) _collector = null;
+      _emitTrace({'v': 1, 'ping': id, 'tag': pingTag, 'failed': _describe(e), 'at': (sentAt ?? _clock()).toUtc().toIso8601String()});
       if (!link.isConnected) {
         _onRadioLost();
       } else if (_running && !_stopping) {
@@ -721,10 +861,115 @@ class DefaultWardriveEngine implements WardriveEngine {
       }
       rethrow;
     } finally {
-      _collector = null;
+      if (_tail == null) _collector = null;
       await ctlSub?.cancel();
       _busy = false;
       if (_running && !_stopping && _config.intervalSec > 0) scheduleMicrotask(_evaluate);
+    }
+  }
+
+  void _emitTrace(Map<String, Object?> record) {
+    final sink = onTrace;
+    if (sink == null) return;
+    try {
+      sink(record);
+    } catch (_) {
+      // a failing trace writer must never touch the ping
+    }
+  }
+
+  /// Max frames kept per ping in the trace (a busy channel can report hundreds of other drivers' pings).
+  static const int traceFrameCap = 80;
+
+  List<Map<String, Object?>> _traceFrames(List<_Heard> heard, Uint8List secret, String text, int? ts, DateTime sentAt) {
+    final out = <Map<String, Object?>>[];
+    final seen = <String>{};
+    var dropped = 0;
+    for (final h in heard) {
+      final pkt = MeshPacket.tryParse(h.rx.raw);
+      final c = classifyEcho(pkt, secret, text, timestamp: ts);
+      var verdict = switch (c.verdict) {
+        EchoVerdict.echo => 'echo',
+        EchoVerdict.notGroupText => 'not-group-text',
+        EchoVerdict.emptyPath => 'own-tx-no-repeater',
+        EchoVerdict.otherChannel => 'other-channel',
+        EchoVerdict.otherTimestamp => 'other-timestamp',
+        EchoVerdict.otherText => 'other-text',
+        EchoVerdict.unparsed => 'unparsed',
+      };
+      final m = c.match;
+      if (m != null && !seen.add(m.repeater)) verdict = 'echo-repeat';
+      // Chatter from other drivers/adverts is counted, not listed one by one, once the cap is reached.
+      if (out.length >= traceFrameCap && m == null) {
+        dropped++;
+        continue;
+      }
+      out.add({
+        't': h.arrived.difference(sentAt).inMilliseconds,
+        'v': verdict,
+        'snr': _inRange(h.rx.snrDb, -40, 40),
+        'rssi': _inRange(h.rx.rssiDbm, -160, 0),
+        if (pkt != null) 'type': pkt.payloadType,
+        if (pkt != null) 'route': pkt.routeType,
+        if (m != null) 'rep': m.repeater,
+        if (m != null) 'hops': m.hops,
+        if (pkt != null && pkt.path.isNotEmpty) 'path': pkt.pathHex,
+      });
+    }
+    if (dropped > 0) out.add({'v': 'omitted', 'n': dropped});
+    return out;
+  }
+
+  // Late tail: frames after a ping's window, kept for the trace only until the next ping or [traceTail].
+  _Tail? _tail;
+  Timer? _tailTimer;
+
+  void _openTail(String id, String tag, String text, int? ts, DateTime sentAt, Uint8List secret) {
+    _tail = _Tail(id, tag, text, ts, sentAt, secret);
+    _collector = (rx) {
+      final t = _tail;
+      if (t != null && t.frames.length < traceFrameCap * 2) t.frames.add(_Heard(rx, _clock()));
+    };
+    _tailTimer?.cancel();
+    _tailTimer = Timer(traceTail, _closeTail);
+  }
+
+  void _closeTail() {
+    _tailTimer?.cancel();
+    _tailTimer = null;
+    final t = _tail;
+    if (t == null) return;
+    _tail = null;
+    _collector = null;
+    if (t.frames.isEmpty) return;
+    final frames = _traceFrames(t.frames, t.secret, t.text, t.ts, t.sentAt)
+        .where((f) => f['v'] == 'echo' || f['v'] == 'echo-repeat' || f['v'] == 'other-timestamp')
+        .toList();
+    if (frames.isEmpty) return;
+    _emitTrace({'v': 1, 'late_for': t.id, 'tag': t.tag, 'frames': frames});
+  }
+
+  /// Waits [base] after the send; then, while repeats of THIS ping are still arriving (the newest less than [extendGap]
+  /// old), keeps listening, up to [maxListen] and never into the time the next ping is due. A quiet mesh closes at
+  /// [base] exactly. Returns false if the radio went away first.
+  Future<bool> _listenAdaptive(_Waited waited, Duration base, Duration? Function() lastEcho, Duration lateStart) async {
+    if (!await _listen(base)) return false;
+    waited.d = base;
+    // Only a real listen window extends (tests use windows of a few milliseconds, which stay exactly as set).
+    if (!adaptiveListen || base < minAdaptiveBase) return true;
+    var ceiling = maxListen;
+    if (_config.intervalSec > 0) {
+      final room = Duration(seconds: _config.intervalSec) - lateStart - const Duration(seconds: 1); // lateStart: a slow fix already used some
+      if (room < ceiling) ceiling = room;
+    }
+    if (ceiling < base) ceiling = base;
+    while (true) {
+      final last = lastEcho();
+      if (last == null || waited.d >= ceiling || waited.d - last >= extendGap) return true;
+      final left = ceiling - waited.d;
+      final step = left < const Duration(milliseconds: 500) ? left : const Duration(milliseconds: 500);
+      if (!await _listen(step)) return false;
+      waited.d += step;
     }
   }
 
@@ -851,6 +1096,7 @@ class DefaultWardriveEngine implements WardriveEngine {
     }
     _running = false;
     _stopAuto();
+    _closeTail();
     await _rxSub?.cancel();
     _rxSub = null;
     _collector = null;

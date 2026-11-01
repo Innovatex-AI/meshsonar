@@ -5,6 +5,11 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- **Privacy zones in the app (website parity).** Settings > Privacy & data sharing > Privacy zones is a map editor: add a zone by tapping the map ("Add a zone", one tap = one zone) or "Use my location", radius 50-5000 m, a name, up to 10 zones, move on map, delete with Undo, and the trim distance for the start and end of each drive. Tapping a zone selects it and never adds a second one. Coordinates are rounded to 4 decimals and longitude wrapped before they are saved or sent (the same rules as the website's one validator, proven against its real code in a contract test). Works with no signal and no driver key yet: changes are saved on the phone and sent when there is a key and a connection (`GET/POST /api/cmh/driver-privacy`); the screen says which, and whether the zones are shared with your whole account. A server without `capabilities.driverPrivacy` gets a plain message. iPhone and iPad layouts, text up to 2.5x, dark mode, 48 px targets, VoiceOver.
+- **Region switching from the map (website parity).** A "Neighbouring regions" map layer (on by default, shown when zoomed out to region level): dashed outlines and names of the 15 nearest regions, off-screen ones pinned to the edge with an arrow. Tap a name or an outline > "Switch to <region>?" with Cancel as the default > the map frames that region and the selection clears; colour mode, palette and layer switches stay. The region switcher gains Recent (last 3), and "Near <region>" when there is no GPS fix; the "Outside coverage" chip opens the nearest regions. Computed on the phone from the stored regions list, so it works offline; same order as the website (contract-tested).
+
+## [0.25.0] — 2026-11-01 — one app, one radio: chat, contacts, tools, repeater admin, alerts; sonar dot; ping engine fixed
+
 - **Contacts and direct messages (M2).** Chat > Contacts is real: search, filters, favourites, New nodes nearby (Add / Ignore),
   contact details (route, position on a map, QR, share, notes, block, remove), add by QR / link / key, the radio's list with
   "On your radio: 45 of 100" and a way to free space, and Contact settings (ask before adding, per-type auto-add, replace the
@@ -55,6 +60,19 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
   restoration; `flutter_reactive_ble` has none). Background delivery is NOT claimed: no device result exists yet.
 - Android: foreground service for the radio link and notification permissions declared; not compiled (no Android toolchain here).
 - New dependencies: `flutter_local_notifications` 22.3.3, `universal_ble` 3.1.0 (adds about 2 MB to the iOS app).
+- **Ping and detection pipeline audit (Nov 1 2026).** Root cause of "not as sensitive / sluggish" since the session rewrite:
+  the TX arbiter treated a chat layer merely bound to the radio as chatting, so every drive got the 2% ping budget and an
+  hourly 1% cap for an unknown region. Replay of the same scripted 2 h drive (15 s cadence, SF7): 336 of 480 pings sent with
+  holes up to 931 s (pre-session engine: 451); 1 h at 10 s on SF8: 93 of 360 (pre-session: 328). Now 481 / 361, exactly on the
+  interval. Fixes: arbiter budgets only for 10 min after a chat message, an unknown region has no hourly cap; auto pings fire
+  from a one-shot timer at the due time (was up to 1 s late); the send leaves before the noise floor read; the listen window
+  is 10 s (was 7 s, like MeshMapper) and extends while repeats are still arriving (15 s max, never past the next ping); pings no longer wait up to 15 s for the platform's current-position call; "Heard N repeaters so far" from
+  the first echo; per-ping `trace.jsonl` of every frame and why it counted or not.
+- **Settings > Wardriving**: wardrive channel, "Send pings to the mesh" (off = listen-only), what goes on the air
+  (`MS:` + 10 characters), airtime per ping at the radio's SF/BW, cadence, and a This drive counter (pings sent, repeater
+  hearings, observers confirmed). Replaces Radio > Channel / Discovery / Auto-ping / Minimum distance.
+- **Observer feedback**: the Drive screen shows "Last ping: heard by N repeaters, M observers confirmed" using
+  `GET drive-status?session=` (polled every 45 s while driving, uploaded pings only).
 
 - **Sonar puck: the dot moves with you, continuously (Andy's field report: "GPS is jumpy and only shows when a ping is sent").**
   Every GPS fix used to rebuild the whole map (network cells, hexagons, repeaters, labels) and then jump the dot to it; as

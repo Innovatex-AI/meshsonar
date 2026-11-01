@@ -19,6 +19,7 @@ import 'drive/drive_live_stats.dart';
 import 'drive/drive_map_model.dart';
 import 'drive/ping_settings_sheet.dart';
 import 'drive/heard_box.dart';
+import 'region/region_switch_sheet.dart' show confirmRegionSwitch;
 import 'map/coverage_map.dart';
 import 'map/fullscreen_map.dart';
 import 'map/repeater_page_link.dart';
@@ -320,6 +321,8 @@ class _MapPane extends StatelessWidget {
                 hexRes: model.coverageQuery.res,
                 labelAvoidKeys: model.driveOverlayKeys,
                 fallbackCenter: viewedRegionCenter(s),
+                regionNeighbours: s.regionNeighbours,
+                onPickRegion: (r) => confirmRegionSwitch(context, r),
               ),
             ),
             Positioned(left: Gap.s, bottom: 44, child: CoverageAsOfBadge(model: model)),

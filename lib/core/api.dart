@@ -10,6 +10,7 @@ import 'driver_summary.dart' show DriverSummary;
 import 'model.dart';
 import 'map_links.dart';
 import 'node_claim.dart';
+import 'privacy_zones.dart';
 import 'repeater_reach.dart';
 import 'region_lookup.dart';
 import 'server_url.dart';
@@ -222,6 +223,9 @@ class SiteConfig {
   /// `GET network-repeaters?updated_since=` (`capabilities.networkRepeatersDelta`).
   bool get networkRepeatersDelta => capabilities.contains('networkRepeatersDelta');
 
+  /// `GET/POST driver-privacy` (`capabilities.driverPrivacy`): read and write this driver's privacy zones and trim distance.
+  bool get driverPrivacy => capabilities.contains('driverPrivacy');
+
   /// `GET driver-summary` (`capabilities.driverSummary`).
   bool get driverSummary => capabilities.contains('driverSummary');
 
@@ -325,6 +329,37 @@ class PublicCoverage {
   const PublicCoverage({required this.cells, required this.asOf, required this.grid});
 }
 
+/// What the server's observers made of one uploaded ping (`GET drive-status` item). An observer is a fixed receiver that
+/// heard the ping's packet on the air and reported it; `observers` counts distinct ones, `via` names up to three.
+class PingObservation {
+  final String id;
+
+  /// The observer status code or word as the server sent it (0 DROP, 1 BIDIR, 2 TX, 3 DEAD, 5 RX, 6 DISC, 7 TRACE).
+  final Object? status;
+
+  /// The server has stopped waiting for more observer reports for this ping.
+  final bool settled;
+  final int observers;
+  final bool lowConfidence;
+  final List<String> via;
+  const PingObservation(
+      {required this.id, this.status, this.settled = false, this.observers = 0, this.lowConfidence = false, this.via = const []});
+
+  static PingObservation? tryParse(Object? j) {
+    if (j is! Map || j['id'] is! String) return null;
+    final v = j['via'];
+    final o = j['observers'];
+    return PingObservation(
+      id: j['id'] as String,
+      status: j['status'],
+      settled: j['settled'] == true,
+      observers: o is num ? o.toInt() : (o is List ? o.length : 0),
+      lowConfidence: j['lowConfidence'] == true,
+      via: v is List ? [for (final e in v) if (e is String) e else if (e is Map && e['name'] is String) e['name'] as String] : const [],
+    );
+  }
+}
+
 /// HTTP client for CMAT's MeshSonar endpoints (docs/MESHSONAR_DRIVE_FORMAT.md). Base URL is configurable:
 /// any community's server that implements the spec works.
 abstract class CmatClient {
@@ -366,6 +401,21 @@ abstract class CmatClient {
   /// uploaded (per-ping `ctx`, `samples`). Same rules as a v1.2 upload. Throws [CmatException] (404 = the server does
   /// not know that drive).
   Future<ContextUploadResult> uploadDriveContext(String driverKey, DriveContextBatch batch);
+
+  /// `GET /api/cmh/driver-privacy` (`capabilities.driverPrivacy`): this driver's privacy zones and trim distance. Throws
+  /// [CmatException] (401 unknown key).
+  Future<DriverPrivacy> driverPrivacy(String driverKey) => throw const CmatException('not supported by this client');
+
+  /// `POST /api/cmh/driver-privacy`: replaces the zones and/or the trim distance. The server validates and rounds; a 400
+  /// carries a plain-words `error` naming the zone. Throws [CmatException].
+  Future<DriverPrivacy> setDriverPrivacy(String driverKey, {List<PrivacyZone>? zones, int? trimM}) =>
+      throw const CmatException('not supported by this client');
+
+  /// `GET /api/cmh/drive-status?session=` with the driver key: for each ping of this driver's own session the server holds,
+  /// how many observers heard it. Pings not uploaded yet are simply absent. Throws [CmatException] (403 not an approved
+  /// driver, 404 unknown session or an older server). Default: not supported.
+  Future<List<PingObservation>> driveStatus(String driverKey, String sessionId) =>
+      throw const CmatException('not supported by this client');
 
   /// `GET /api/cmh/driver-summary` (`capabilities.driverSummary`): the account's history across phones and installs.
   /// Throws [CmatException] (401 unknown key, 403 not allowed with [CmatException.serverStatus], 429 pause).
@@ -611,6 +661,9 @@ class Settings {
   static const int minIntervalSec = 10, maxIntervalSec = 120;
   static const int minDistance = 15, maxDistance = 500;
   static const int minListenSec = 4, maxListenSec = 20;
+
+  /// The default listen window, seconds: 10, what MeshMapper uses, so the two apps' `heard` compare like for like.
+  static const int defaultListenSec = 10;
   static const int minSyncEveryMin = 1, maxSyncEveryMin = 30;
 
   const Settings({
@@ -621,7 +674,7 @@ class Settings {
     this.channel = '#wardriving',
     this.intervalSec = 30,
     this.minDistanceM = 100,
-    this.listenWindowSec = 7,
+    this.listenWindowSec = defaultListenSec,
     this.antenna = const Antenna(type: 'internal'),
     this.antennaProfiles = const {},
     this.autoSync = true,
@@ -705,7 +758,7 @@ class Settings {
         'channel': channel,
         'interval_sec': intervalSec,
         'min_distance_m': minDistanceM,
-        if (listenWindowSec != 7) 'listen_window_sec': listenWindowSec,
+        if (listenWindowSec != defaultListenSec) 'listen_window_sec': listenWindowSec,
         'antenna': antenna.toJson(),
         'antenna_profiles': {for (final e in antennaProfiles.entries) e.key: e.value.toJson()},
         'auto_sync': autoSync,
@@ -733,7 +786,7 @@ class Settings {
         // 0 used to mean "manual only"; auto-ping is now always 10–120 s (Ping now still works any time)
         intervalSec: (_int(j['interval_sec']) ?? 30).clamp(minIntervalSec, maxIntervalSec),
         minDistanceM: (_int(j['min_distance_m']) ?? 100).clamp(minDistance, maxDistance),
-        listenWindowSec: (_int(j['listen_window_sec']) ?? 7).clamp(minListenSec, maxListenSec),
+        listenWindowSec: (_int(j['listen_window_sec']) ?? defaultListenSec).clamp(minListenSec, maxListenSec),
         antenna: _antennaFrom(j['antenna']),
         antennaProfiles: _profilesFrom(j['antenna_profiles']),
         autoSync: j['auto_sync'] is bool ? j['auto_sync'] as bool : true,

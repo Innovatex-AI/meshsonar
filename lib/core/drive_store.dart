@@ -53,6 +53,16 @@ abstract class SyncLedger {
   Future<void> clearSessionResend(String sessionId, String token);
 }
 
+/// A store that keeps the per-ping debug trace beside the drive (`trace.jsonl`): for each ping the send time and every frame
+/// the radio reported around it with its arrival time and why it did or did not count (lib/radio/wardrive_engine.dart).
+/// Local only: it is never uploaded and is not part of the Drive Format.
+abstract class TraceStore {
+  Future<void> appendTrace(String sessionId, Map<String, Object?> record);
+
+  /// The trace file of a drive, or null when it has none.
+  Future<File?> traceFile(String sessionId);
+}
+
 /// A store that can write an export as several Drive Format files when the drive has more pings than one upload may
 /// carry (the server refuses more than [maxPingsPerExport] pings in one body).
 abstract class ChunkedExport {
@@ -86,7 +96,7 @@ Future<List<String>> closeOrphanedSessions(DriveStore store, {Set<String> except
   return closed;
 }
 
-class JsonlDriveStore implements DriveStore, SyncLedger, StorageSized, DriveContextLedger, ContextSyncLedger, ChunkedExport {
+class JsonlDriveStore implements DriveStore, TraceStore, SyncLedger, StorageSized, DriveContextLedger, ContextSyncLedger, ChunkedExport {
   final Directory root;
   final Directory _sessionsDir;
   final Map<String, Future<void>> _locks = {};
@@ -263,6 +273,29 @@ class JsonlDriveStore implements DriveStore, SyncLedger, StorageSized, DriveCont
         _summaries.remove(sessionId);
         _repairedFiles.removeWhere((k) => k.startsWith('$sessionId/'));
       });
+
+  // ---- ping trace (TraceStore) ----
+
+  static const _traceFile = 'trace.jsonl';
+
+  /// A drive's trace stops growing here (a very long drive on a busy channel); the newest records are the ones that matter
+  /// less than a bounded file, so past the cap nothing more is written.
+  static const int traceMaxBytes = 8 * 1024 * 1024;
+
+  @override
+  Future<void> appendTrace(String sessionId, Map<String, Object?> record) => _locked(sessionId, () async {
+        if (!await _dir(sessionId).exists()) return;
+        final f = _file(sessionId, _traceFile);
+        if (await f.exists() && await f.length() > traceMaxBytes) return;
+        if (_repairedFiles.add('$sessionId/$_traceFile')) await _repairTail(f);
+        await _appendLines(f, [jsonEncode(record)]);
+      });
+
+  @override
+  Future<File?> traceFile(String sessionId) async {
+    final f = _file(sessionId, _traceFile);
+    return await f.exists() ? f : null;
+  }
 
   // ---- drive context (DriveContextLedger) ----
 

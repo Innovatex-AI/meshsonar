@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import '../../app/app_state.dart';
 import '../../app/chat_controller.dart';
 import '../../app/chat_wiring.dart';
+import '../../app/ping_feedback.dart' show lastPingSummary;
 import '../../core/antenna_profile.dart';
 import '../../core/heard.dart' show haversineM;
 import '../../core/model.dart';
@@ -19,6 +20,7 @@ import '../app.dart' show AppScope;
 import '../connect_screen.dart';
 import '../drive_stats.dart' show formatDuration;
 import '../ping_log_screen.dart' show openPingLog;
+import '../region/region_switch_sheet.dart' show showNearestRegionsSheet;
 import '../report/drive_report_screen.dart';
 import '../theme.dart';
 import '../widgets.dart';
@@ -192,6 +194,14 @@ class _DriveLiveStatsStripState extends State<DriveLiveStatsStrip> {
 
 // ------------------------------------------------------------------------------------------------ status
 
+/// The newest transmitted ping of this drive, or null.
+DrivePing? _lastTx(AppState s) {
+  for (final p in s.recentPings) {
+    if (p.kind == PingKind.tx) return p;
+  }
+  return null;
+}
+
 class DriveStatusRow extends StatelessWidget {
   final AppState state;
   final EdgeInsets padding;
@@ -231,12 +241,25 @@ class DriveStatusRow extends StatelessWidget {
           SizedBox(width: 26, child: Center(child: lead)),
           const SizedBox(width: Gap.s),
           Expanded(
-            child: Text(
-              s.statusLine,
-              key: const Key('status-line'),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: t.textTheme.titleMedium?.copyWith(color: error ? t.colorScheme.error : null),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  s.statusLine,
+                  key: const Key('status-line'),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: t.textTheme.titleMedium?.copyWith(color: error ? t.colorScheme.error : null),
+                ),
+                if (s.driving && !listening && _lastTx(s) != null)
+                  Text(
+                    lastPingSummary(_lastTx(s), s.pingFeedback) ?? '',
+                    key: const Key('ping-feedback'),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
+                  ),
+              ],
             ),
           ),
           if (s.driving && !listening) NextPingIndicator(state: s),
@@ -444,14 +467,24 @@ class RegionChip extends StatelessWidget {
       tooltip = s.regionIndexStale ? '${region.name} (offline: showing the last-known regions)' : region.name;
       color = t.colorScheme.primary;
     }
+    final outside = s.regionFixKnown && region == null;
+    final avatar = Icon(Icons.map_outlined, size: 18, color: color);
+    final text = Text(label, maxLines: 1, overflow: TextOverflow.ellipsis);
+    final side = BorderSide(color: color.withValues(alpha: 0.5));
+    // Outside coverage the chip offers the way out: the nearest regions. Elsewhere it is a plain label, as before.
     return Tooltip(
-      message: tooltip,
-      child: Chip(
-        avatar: Icon(Icons.map_outlined, size: 18, color: color),
-        label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
-        backgroundColor: color.withValues(alpha: 0.10),
-        side: BorderSide(color: color.withValues(alpha: 0.5)),
-      ),
+      message: outside ? '$tooltip. Tap for the nearest regions' : tooltip,
+      child: outside
+          ? ActionChip(
+              key: const Key('region-chip-outside'),
+              avatar: avatar,
+              label: text,
+              backgroundColor: color.withValues(alpha: 0.10),
+              side: side,
+              materialTapTargetSize: MaterialTapTargetSize.padded,
+              onPressed: () => unawaited(showNearestRegionsSheet(context)),
+            )
+          : Chip(avatar: avatar, label: text, backgroundColor: color.withValues(alpha: 0.10), side: side),
     );
   }
 }

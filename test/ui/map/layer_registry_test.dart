@@ -26,19 +26,21 @@ void main() {
       final web = {for (final l in kMapLayers) if (l.onWebsite) l.id};
       expect(web, kWebsiteKeysDrawn);
       expect(web.every(kWebsiteShowKeys.contains), isTrue);
+      expect(web, contains('regions'), reason: 'the website\'s Regions layer key');
       final app = {for (final l in kMapLayers) if (!l.onWebsite) l.id};
       expect(app, kAppOnlyShowKeys.toSet());
       expect(kWebsiteKeysNotDrawn, {'model', 'reach'});
     });
 
     test('defaults: the drive layers, measured and the global repeater layer on (D3, Andy Oct 24); roster/observers off', () {
-      expect(kDefaultLayerState.on, {'measured', 'hexes', 'links', 'heard', 'pings', 'rings', 'network', 'labels'});
+      expect(kDefaultLayerState.on, {'measured', 'regions', 'hexes', 'links', 'heard', 'pings', 'rings', 'network', 'labels'});
       // MapLayers has no field for `network`: its defaults are the registry defaults minus the global layer.
-      expect(kDefaultLayerState.toggle('network', false).toggle('labels', false), const MapLayers().toLayerState(mode: const {'measured': 'snr'}));
+      expect(kDefaultLayerState.toggle('network', false).toggle('labels', false).toggle('regions', false), const MapLayers().toLayerState(mode: const {'measured': 'snr'}));
       expect(layerSpec('network')!.label, 'All MeshCore repeaters');
       expect(layerSpec('nope'), isNull);
       final groups = layersByGroup();
       expect(groups[LayerGroup.network]!.map((l) => l.id), ['network', 'repeaters', 'observers', 'neighbours', 'labels']);
+      expect(groups[LayerGroup.coverage]!.map((l) => l.id), ['measured', 'regions']);
       expect(LayerGroup.values.map((g) => g.label).toSet(), hasLength(4));
     });
   });
