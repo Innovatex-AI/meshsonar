@@ -26,6 +26,35 @@ GeoFix fix(double east, double north, int sec, {double? acc = 5, double? speed})
 }
 
 void main() {
+  group('poor fixes cannot freeze the dot', () {
+    test('a 300 m-accurate fix does not make a 600 m parked bubble: driving off is followed within a few fixes', () {
+      final f = PositionFilter();
+      // Only poor fixes at first (accepted after 10 s), no speed (cell-tower location).
+      GeoFix? out;
+      for (var s = 0; s <= 12; s++) {
+        out = f.add(fix(0, 0, s, acc: 299, speed: null)) ?? out;
+      }
+      expect(f.stationary, isFalse, reason: 'never parks on a position that bad');
+      // Real GPS comes back and the car is moving east at 20 m/s: the output follows, not a frozen anchor.
+      for (var s = 13; s <= 25; s++) {
+        out = f.add(fix(20.0 * (s - 12), 0, s, acc: 6, speed: 20)) ?? out;
+      }
+      expect(eastOf(out!), greaterThan(200), reason: 'tracks the car, not frozen at the start');
+    });
+
+    test('the hold radius is capped at 40 m however bad the accuracy', () {
+      final f = PositionFilter();
+      f.add(fix(0, 0, 0, acc: 30, speed: 0));
+      expect(f.stationary, isTrue);
+      // 120 m away, three fixes each farther, with a 45 m accuracy that used to mean a 90 m radius: leaves the hold.
+      f.add(fix(60, 0, 1, acc: 45, speed: null));
+      f.add(fix(90, 0, 2, acc: 45, speed: null));
+      final out = f.add(fix(130, 0, 3, acc: 45, speed: null));
+      expect(f.stationary, isFalse);
+      expect(eastOf(out!), greaterThan(60));
+    });
+  });
+
   group('parked phone with ±20 m GPS jitter for 10 minutes', () {
     for (final reportSpeed in [true, false]) {
       for (final seed in [1, 2, 3, 4, 5]) {

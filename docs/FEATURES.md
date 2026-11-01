@@ -225,11 +225,11 @@ and ≥ 640 px) the map sits on the left and the controls on the right.
 
 ### Auto-ping cadence
 
-(`DefaultWardriveEngine`, settings *Auto-ping* and *Minimum distance*)
+(`DefaultWardriveEngine`, settings *Auto-ping*, *Minimum distance* and *Listen window*; More > Wardriving settings, or the Map tab's "Ping ..." chip)
 
 - An auto-ping goes out when **both** of these are true:
   1. **Time:** at least `intervalSec` (10–120 s; default 30) since the last ping, auto or manual. The gap is never
-     shorter than one listen window (7 s).
+     shorter than one listen window (4–20 s, default 7, setting *Listen window*).
   2. **Distance:** the current filtered GPS fix is at least `minDistanceM` (15–500 m; default 100) from where the last
      ping was sent (haversine, R = 6,371 km).
 - The **first ping goes out as soon as the drive starts** (no previous ping, so time and distance are both met).
@@ -244,6 +244,22 @@ and ≥ 640 px) the map sits on the left and the controls on the right.
   channel can't change mid-drive.
 - Values are clamped by the engine as well as by Settings. The engine also supports `intervalSec = 0` (manual only),
   but Settings can no longer produce it.
+
+### Live dot (the sonar puck)
+
+(`lib/core/puck_motion.dart`, `lib/ui/map/live_puck.dart`; display only, recorded pings keep the engine's fix)
+
+- Every GPS fix goes to the puck; the Map is only told when the phone moved 20 m or 2 s passed (labels, first zoom-in).
+- The dot glides: target = last fix pushed up to **1.2 s** along its course at its speed (speed >= 1.5 m/s), the shown dot
+  eases toward it (time constant 320 ms). Parked: no push, no drift. Course comes from the fix, else the last two fixes.
+- Outlier gate: non-finite / out-of-order fixes dropped; accuracy worse than **100 m** dropped while a better fix is under
+  10 s old; a **teleport** (> 90 m/s and further than the accuracies explain) is dropped, and believed only after 3 agreeing
+  fixes in a row (then the dot snaps).
+- Drawn: accuracy disc (when bigger than the dot), heading cone toward travel, the dot. 30 fps, ticker asleep when settled.
+- Camera follows the dot; dragging the map stops following; the re-centre button follows again.
+- Ping: rings from the dot while the engine is `pinging`; then lines from the moving dot to every live heard repeater with a
+  known position (link orange, 5 s full strength, fade to the held look, dashed when older); a silent ping sends one grey ring.
+- Reduced motion (system setting): no slide, no push-ahead, no rings; lines appear at once.
 
 ### GPS filter
 

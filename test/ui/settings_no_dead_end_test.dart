@@ -125,7 +125,7 @@ void main() {
       h.store.seed(_ended('waiting'), [silentPing('w1'), silentPing('w2')], syncedFirst: 1);
       await _open(tester, h, site: true);
       expect(_deadEnds(tester, h.state), isEmpty);
-      expect(find.textContaining('Turn Discovery (listen-only) off to use it'), findsNWidgets(2));
+      expect(find.textContaining('Turn Discovery (listen-only) off to use it'), findsNWidgets(3)); // interval, distance, listen window
       expect(find.textContaining('Turn that on first'), findsOneWidget);
       expect(find.textContaining('Turn them on first'), findsOneWidget);
     });
@@ -230,6 +230,7 @@ void main() {
       await tester.tap(find.byKey(const Key('settings-sections-action')));
       await tester.pumpAndSettle();
       for (final s in settingsSections) {
+        await tester.scrollUntilVisible(find.byKey(Key('jump-${s.id}')), 100, scrollable: find.byType(Scrollable).last);
         expect(find.byKey(Key('jump-${s.id}')), findsOneWidget, reason: s.id);
       }
       expect(find.text('Folded; opens when you jump to it'), findsOneWidget);

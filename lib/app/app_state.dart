@@ -1857,6 +1857,11 @@ class AppState extends ChangeNotifier {
 
       final engine = services.engineFactory(link, location);
       _engine = engine;
+      // Keep the GPS stream open for the whole drive, whatever the screen or the engine does: with no listener the stream
+      // (and, on iOS, the background location session that keeps the app alive behind navigation) is torn down. Pause
+      // pings, a closed Map tab or listen-only mode must not stop the position.
+      unawaited(_driveFixKeepAlive?.cancel());
+      _driveFixKeepAlive = location.fixes.listen((_) {}, onError: (Object _) {});
       _attachGate(engine);
       _status = engine.current;
       _pingSub = engine.pings.listen(_onPing, onError: (Object e) => _say(friendlyError(e, action: 'A ping')));
@@ -1881,6 +1886,7 @@ class AppState extends ChangeNotifier {
         channel: s.channel,
         intervalSec: s.intervalSec,
         minDistanceM: s.minDistanceM,
+        listenWindow: Duration(seconds: s.listenWindowSec),
         txPowerW: txW,
         txDbm: info?.radio.txDbm,
         listenOnly: s.discoveryMode,
@@ -2066,7 +2072,11 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  StreamSubscription<GeoFix>? _driveFixKeepAlive;
+
   Future<void> _teardownEngine() async {
+    unawaited(_driveFixKeepAlive?.cancel());
+    _driveFixKeepAlive = null;
     // Not awaited: nothing depends on the cancel finishing, and some stream cancels complete late.
     unawaited(_pingSub?.cancel());
     unawaited(_statusSub?.cancel());
@@ -2530,6 +2540,7 @@ class AppState extends ChangeNotifier {
       channel: s.channel,
       intervalSec: _pingsPaused ? 0 : s.intervalSec,
       minDistanceM: s.minDistanceM,
+      listenWindow: Duration(seconds: s.listenWindowSec),
       txPowerW: txDbm == null ? null : _dbmToWatts(txDbm),
       txDbm: txDbm,
       listenOnly: s.discoveryMode, // ignored by a running engine anyway: listenOnly can't change mid-drive

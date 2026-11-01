@@ -534,6 +534,10 @@ class Settings {
   /// Skip an auto-ping if we haven't moved this far since the last one.
   final int minDistanceM;
 
+  /// How long to collect echoes after each ping (4-20 s, default 7). Longer hears more distant repeaters; it also
+  /// sets the shortest gap between two pings.
+  final int listenWindowSec;
+
   /// The one antenna setting of MeshSonar 0.3.x. Kept in the file, read-only, to prefill each radio's first
   /// [antennaProfiles] entry; drives no longer use it.
   final Antenna antenna;
@@ -606,6 +610,7 @@ class Settings {
   /// Allowed ranges (UI sliders and clamping).
   static const int minIntervalSec = 10, maxIntervalSec = 120;
   static const int minDistance = 15, maxDistance = 500;
+  static const int minListenSec = 4, maxListenSec = 20;
   static const int minSyncEveryMin = 1, maxSyncEveryMin = 30;
 
   const Settings({
@@ -616,6 +621,7 @@ class Settings {
     this.channel = '#wardriving',
     this.intervalSec = 30,
     this.minDistanceM = 100,
+    this.listenWindowSec = 7,
     this.antenna = const Antenna(type: 'internal'),
     this.antennaProfiles = const {},
     this.autoSync = true,
@@ -643,6 +649,7 @@ class Settings {
     String? channel,
     int? intervalSec,
     int? minDistanceM,
+    int? listenWindowSec,
     Map<String, AntennaProfile>? antennaProfiles,
     bool? autoSync,
     bool? autoKey,
@@ -670,6 +677,7 @@ class Settings {
         channel: channel ?? this.channel,
         intervalSec: intervalSec ?? this.intervalSec,
         minDistanceM: minDistanceM ?? this.minDistanceM,
+        listenWindowSec: listenWindowSec ?? this.listenWindowSec,
         antenna: antenna, // the 0.3.x setting is read-only: always kept as loaded
         antennaProfiles: antennaProfiles ?? this.antennaProfiles,
         autoSync: autoSync ?? this.autoSync,
@@ -697,6 +705,7 @@ class Settings {
         'channel': channel,
         'interval_sec': intervalSec,
         'min_distance_m': minDistanceM,
+        if (listenWindowSec != 7) 'listen_window_sec': listenWindowSec,
         'antenna': antenna.toJson(),
         'antenna_profiles': {for (final e in antennaProfiles.entries) e.key: e.value.toJson()},
         'auto_sync': autoSync,
@@ -724,6 +733,7 @@ class Settings {
         // 0 used to mean "manual only"; auto-ping is now always 10–120 s (Ping now still works any time)
         intervalSec: (_int(j['interval_sec']) ?? 30).clamp(minIntervalSec, maxIntervalSec),
         minDistanceM: (_int(j['min_distance_m']) ?? 100).clamp(minDistance, maxDistance),
+        listenWindowSec: (_int(j['listen_window_sec']) ?? 7).clamp(minListenSec, maxListenSec),
         antenna: _antennaFrom(j['antenna']),
         antennaProfiles: _profilesFrom(j['antenna_profiles']),
         autoSync: j['auto_sync'] is bool ? j['auto_sync'] as bool : true,

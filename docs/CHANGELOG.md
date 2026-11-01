@@ -47,6 +47,30 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 - Android: foreground service for the radio link and notification permissions declared; not compiled (no Android toolchain here).
 - New dependencies: `flutter_local_notifications` 22.3.3, `universal_ble` 3.1.0 (adds about 2 MB to the iOS app).
 
+- **Sonar puck: the dot moves with you, continuously (Andy's field report: "GPS is jumpy and only shows when a ping is sent").**
+  Every GPS fix used to rebuild the whole map (network cells, hexagons, repeaters, labels) and then jump the dot to it; as
+  those layers grew (0.9 network cells, 0.22 grid-by-zoom and names, 0.23 link lines) the rebuild got slow enough to make the
+  dot hop and stall between pings. Now the dot is its own layer (`lib/ui/map/live_puck.dart`, motion in `lib/core/puck_motion.dart`):
+  it glides between fixes (pushed up to 1.2 s along your course, eased), rejects accuracy outliers and teleports (documented
+  in the file), shows an accuracy disc and a heading cone, and repaints at 30 fps without touching the other layers; a ticker
+  that sleeps when you stand still. The camera follows the dot until you drag the map; the re-centre button brings it back.
+  Recorded pings are unchanged: they keep the engine's own fix, never the smoothed one.
+- **Frozen position and skipped pings (prod evidence, session d4833627 / b1a556b8).** (1) The GPS stream is now held open for
+  the whole drive (`AppState._driveFixKeepAlive`), whatever the engine, the Map tab or Pause pings do: with no listener the
+  stream, and on iOS the background location session, was torn down, so behind another app the position froze on the last
+  fix. (2) A ping is never sent from a fix worse than 50 m (`maxPingAccuracyM`); the status says "GPS is not accurate enough
+  (±N m): waiting to ping" instead of pinging at a 300 m-wrong place, and Ping now refuses the same way. (3) The parked-phone
+  hold no longer forms around a poor fix and its radius is capped at 40 m (it was 2x accuracy: a 300 m fix made a 600 m
+  bubble that froze the dot and the distance rule for the next kilometre, i.e. 60-130 s gaps at speed). (4) A cached position
+  older than 15 s from the OS is treated as no fix.
+- **Ping rings and live lines.** A ping sends sonar rings from the dot while it waits for echoes; when it is answered the lines
+  draw out from the moving dot to every repeater that heard it (link orange, never a signal strength, as the legend says), stay
+  full for 5 s, then fade to the held look; nothing heard sends one grey ring. Reduced motion: the dot goes straight to each
+  fix, no rings, lines appear at once.
+- **Ping settings are easy to find again.** New Settings section **Wardriving** (More > Wardriving settings, or Settings >
+  Wardriving) holds channel, discovery (listen-only), auto-ping interval, minimum distance and a new **listen window** (4-20 s,
+  default 7). The same three sliders open from the Map tab's "Ping 30 s / 100 m" chip. Both apply straight away, even mid-drive.
+  (They had moved from a main tab to Settings > Radio, collapsed, when the shell arrived in wave 1C.)
 - **New app shell (wave 1C).** Five tabs: Chat, Map, Analyze, Plan, More (rail on iPad and landscape). The old Drive tab is
   Map (Drive is a mode of it), Region and Drives are Analyze, Radio and Settings are in More. Plan lists the website tools
   with working links; Chat shows an honest first-run state until chat arrives. The last tab is remembered.
