@@ -340,7 +340,7 @@ class _MapPane extends StatelessWidget {
               ),
             // At the bottom of the map: the top right holds the region chip, the last-known-location chip and the icon buttons,
             // which stack taller than a fixed offset can clear (the chips used to cover the hint's title).
-            if (pings.isEmpty) Positioned(left: 0, right: 0, bottom: model.attributionStackHeight + 12, child: MapHint(state: s)),
+            if (pings.isEmpty) Positioned(left: 0, right: 0, bottom: model.attributionStackHeight + 12, child: IgnorePointer(child: MapHint(state: s))),
             if (showHeard)
               Positioned(
                 left: Gap.s,
