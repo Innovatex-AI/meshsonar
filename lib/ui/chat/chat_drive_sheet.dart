@@ -1,6 +1,8 @@
 // Chat-in-Drive: a half-height sheet over the Map tab's drive controls. It lists the conversations with unread messages
 // (else the latest ones) and opens one with a quick composer. The composer follows the passenger rule (design 1.3):
 // while the car is moving it is replaced by "I'm a passenger". The sheet never blocks pings.
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../app/chat_controller.dart';
@@ -17,7 +19,11 @@ Future<void> showChatDriveSheet(BuildContext context, ChatController controller)
     isScrollControlled: true,
     showDragHandle: true,
     useSafeArea: true,
-    builder: (ctx) => FractionallySizedBox(heightFactor: 0.55, child: ChatDriveSheet(controller: controller)),
+    // Over half the screen on a phone; on an iPad that would be a mostly empty 1,100 dp slab, so it stops at 640 dp.
+    builder: (ctx) => SizedBox(
+      height: math.min(MediaQuery.sizeOf(ctx).height * 0.55, 640),
+      child: ChatDriveSheet(controller: controller),
+    ),
   );
 }
 
