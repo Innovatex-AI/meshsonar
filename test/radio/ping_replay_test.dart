@@ -88,7 +88,7 @@ void main() {
   test('a phone whose "current position" call stalls 12 s does not stretch the cadence (4 s timeout, then the stream\'s fix)', () {
     final r = runReplay(build: appStack(), seed: 5, driveSeconds: 900, currentDelay: const Duration(seconds: 12));
     report('app/slow-current-position', r);
-    expect(r.pingsSent, inInclusiveRange(58, 60), reason: '900 s / 15 s');
+    expect(r.pingsSent, inInclusiveRange(59, 61), reason: '900 s / 15 s, and the first goes out at once (it used to wait out the 4 s platform timeout)');
     expect(r.sendGaps().reduce((a, b) => a > b ? a : b), lessThan(15.6));
   });
 }

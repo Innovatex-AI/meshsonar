@@ -6,6 +6,7 @@ import 'package:geolocator/geolocator.dart';
 
 import '../core/idle_region_watcher.dart';
 import '../radio/radio_api.dart';
+import 'geolocator_stream_hub.dart';
 
 class GeolocatorIdleLocationSource implements IdleLocationSource {
   final int distanceFilterM;
@@ -32,7 +33,9 @@ class GeolocatorIdleLocationSource implements IdleLocationSource {
   }
 
   @override
-  Stream<GeoFix> fixes({required bool background}) => Geolocator.getPositionStream(locationSettings: _settings(background)).map((p) => GeoFix(
+  Stream<GeoFix> fixes({required bool background}) => GeolocatorStreamHub.shared
+      .stream(HubProfile.idle, _settings(background), key: background ? 'idle-bg' : 'idle-fg')
+      .map((p) => GeoFix(
         lat: p.latitude,
         lon: p.longitude,
         accuracyM: (p.accuracy.isNaN || p.accuracy <= 0) ? null : p.accuracy,

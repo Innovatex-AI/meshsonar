@@ -5,6 +5,7 @@ import '../app/app_state.dart';
 import '../core/api.dart';
 import '../core/model.dart';
 import 'app.dart';
+import 'drive/drive_timing_card.dart';
 import 'drive_detail_map.dart';
 import 'drive_stats.dart';
 import 'onboarding/ui_prefs.dart';
@@ -147,6 +148,7 @@ class _DriveDetailScreenState extends State<DriveDetailScreen> {
                     SliverToBoxAdapter(child: _Header(summary: summary, label: label, stats: st)),
                     SliverToBoxAdapter(child: _Actions(summary: summary)),
                     SliverToBoxAdapter(child: _StatsGrid(stats: st)),
+                    SliverToBoxAdapter(child: DriveTimingCard(state: s, sessionId: ses.id)),
                     if (st.repeaters.isNotEmpty) SliverToBoxAdapter(child: _Repeaters(stats: st)),
                     SliverToBoxAdapter(
                       child: _SectionTitle('Pings', trailing: '${pings.length}'),

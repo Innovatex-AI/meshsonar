@@ -20,6 +20,9 @@ import 'dart:typed_data';
 import 'package:uuid/uuid.dart';
 
 import '../core/api.dart' show Settings;
+import '../core/drive_health_sink.dart';
+import '../core/drive_timing.dart';
+import '../core/fix_window.dart';
 import '../core/model.dart';
 import 'companion_link.dart';
 import 'ping_gate.dart';
@@ -106,9 +109,10 @@ const Duration passiveFlushInterval = Duration(seconds: 30);
 /// After this long without any GPS fix the status tells the driver where to look (Location off, permission taken away).
 const Duration noGpsHintAfter = Duration(seconds: 20);
 
-/// A ping is only sent from a fix at least this accurate (metres). A worse one (a cell-tower or Wi-Fi guess, hundreds of
-/// metres off) would put the ping on the wrong place on the map: the engine says "waiting for GPS" instead.
-const double maxPingAccuracyM = 50;
+/// The worst accuracy (metres) a ping is sent from: [pingAccuracyGateM] (100 m, see lib/core/fix_window.dart for why). A worse fix
+/// (a cell-tower or Wi-Fi guess) would put the ping on the wrong street: the engine says "waiting for GPS" instead. Pings from a fix
+/// worse than [pingAccuracyFlagM] (50 m) are flagged `low_acc` in the trace; their `gps_accuracy_m` is stored as measured.
+const double maxPingAccuracyM = pingAccuracyGateM;
 
 /// How far the phone must move since the last flush to force an early one.
 const double passiveFlushDistanceM = 25;
@@ -174,12 +178,32 @@ class DefaultWardriveEngine implements WardriveEngine {
   Timer? _autoTimer;
   Timer? _dueTimer; // fires exactly when the next ping is due, so the cadence is the interval, not the interval + a tick
   StreamSubscription<GeoFix>? _fixSub;
-  DateTime? _nextPingAt;
-  DateTime? _lastPingTime; // when the last ping (auto or manual) was sent
-  DateTime? _retryAfter; // after a failed auto ping, don't retry before this
+  DateTime? _nextPingAt; // wall time of [_dueMono], for the status line only (set when the due time changes, never recomputed per fix)
+
+  // The cadence runs on a MONOTONIC clock ([_mono]): a wall-clock step (NTP, a manual change) or a busy UI isolate that fires a timer late
+  // can never reorder or stretch it. Due times sit on a grid (previous due + interval), so a ping that went out 3 s late does not push
+  // every later ping 3 s late.
+  late final Duration Function() _mono;
+  Duration? _dueMono; // earliest monotonic time the next auto ping may go out; null before the first
+  Duration? _lastPingMono; // when the last ping (auto or manual) was sent
+  Duration? _retryMono; // after a failed or skipped auto ping, don't retry before this
   bool _evaluating = false;
-  DateTime? _noFixTraceAt;
-  DateTime? _noFixSince; // since when there has been no GPS fix at all (permission off, Location Services off, no sky)
+  Duration? _noFixTraceAt;
+  Duration? _noFixSinceMono; // since when the drive has been waiting for a usable fix (permission off, Location Services off, no sky)
+  String? _episode; // the hold-back episode in progress (`no_fix`, `distance`, ...), counted once
+  String? _lastSkipReason; // the arbiter's last refusal, counted once per episode
+  Duration? _lastCurrentAsk;
+  final FixWindow _fixes = FixWindow();
+  final StaleFixGuard _staleGuard = StaleFixGuard();
+
+  /// How well the drive kept its schedule (see [DriveTiming]); read it at the end of the drive.
+  final DriveTiming timing = DriveTiming();
+
+  /// Where drive-health facts go (the app points this at the trace writer). Never awaited, never throws into a ping.
+  DriveHealthSink health = const NullDriveHealthSink();
+
+  /// The schedule summary so far (sent vs expected, gaps, lateness, held-back episodes).
+  DriveTimingSummary timingSummary() => timing.summary(_mono());
   Duration? _clockSkew; // see EngineStatus.clockSkew
   int _skewRun = 0;
   Duration? _skewLast;
@@ -204,14 +228,27 @@ class DefaultWardriveEngine implements WardriveEngine {
   Timer? _passiveTimer;
   StreamSubscription<GeoFix>? _passiveFixSub;
 
+  /// [monotonic] is the clock cadence and fix ages run on. Left out it follows [clock] when one is given (tests drive both from one fake
+  /// clock) and a Stopwatch otherwise, which never jumps.
   DefaultWardriveEngine({
     required this.link,
     required this.location,
     DateTime Function()? clock,
     String Function()? newId,
     this.tick = const Duration(seconds: 1),
+    Duration Function()? monotonic,
   })  : _clock = clock ?? DateTime.now,
-        _newId = newId ?? const Uuid().v4;
+        _newId = newId ?? const Uuid().v4 {
+    if (monotonic != null) {
+      _mono = monotonic;
+    } else if (clock != null) {
+      final origin = clock();
+      _mono = () => clock().difference(origin);
+    } else {
+      final sw = Stopwatch()..start();
+      _mono = () => sw.elapsed;
+    }
+  }
 
   @override
   Stream<DrivePing> get pings => _pings.stream;
@@ -274,12 +311,18 @@ class DefaultWardriveEngine implements WardriveEngine {
     _config = clampConfig(config);
     config = _config;
     _lastPingAt = null;
-    _lastPingTime = null;
-    _retryAfter = null;
+    _lastPingMono = null;
+    _dueMono = null;
+    _retryMono = null;
     _waitingFor = null;
     _metresToGo = null;
     _nextPingAt = null;
-    _noFixSince = null;
+    _noFixSinceMono = null;
+    _episode = null;
+    _lastCurrentAsk = null;
+    _fixes.clear();
+    _staleGuard.reset();
+    _lastFix = null;
     _clockSkew = null;
     _skewRun = 0;
     _skewLast = null;
@@ -292,6 +335,8 @@ class DefaultWardriveEngine implements WardriveEngine {
       rethrow;
     }
     _running = true;
+    timing.begin(_mono(), config.listenOnly ? 0 : config.intervalSec);
+    _noFixSinceMono = _mono();
     if (_config.listenOnly) {
       _setStatus(EngineState.driving, 'Listening');
       _startPassive();
@@ -340,9 +385,9 @@ class DefaultWardriveEngine implements WardriveEngine {
       rethrow;
     }
     if (_stopping) return;
-    _retryAfter = null;
+    _retryMono = null;
     _running = true;
-    // _lastPingTime / _lastPingAt are kept: the cadence carries on as if the radio had never dropped.
+    // _lastPingMono / _dueMono / _lastPingAt are kept: the cadence carries on as if the radio had never dropped.
     if (_config.listenOnly) {
       _setStatus(EngineState.driving, 'Listening');
       _startPassive();
@@ -366,6 +411,10 @@ class DefaultWardriveEngine implements WardriveEngine {
       listenOnly: _config.listenOnly, // can't switch mid-drive either, same as the channel
     );
     if (_config.listenOnly) return; // interval/distance don't apply; the passive pipeline is already running
+    timing.intervalChanged(_mono(), _config.intervalSec);
+    // A new interval re-anchors the next due time to it (counted from the last ping), as it always has.
+    final last = _lastPingMono;
+    if (last != null && _config.intervalSec > 0) _setDue(last + _minGap);
     _startAuto();
     if (_config.intervalSec <= 0 && !_busy) _setStatus(EngineState.driving, 'Ready (manual pings)');
   }
@@ -400,9 +449,8 @@ class DefaultWardriveEngine implements WardriveEngine {
     });
     try {
       _passiveFixSub = location.fixes.listen((f) {
-        _lastFix = f;
-        _lastFixArrived = _clock();
-        _onPassiveFix(f);
+        final e = _ingest(f);
+        if (e != null) _onPassiveFix(e);
       }, onError: (Object _) {});
     } catch (_) {
       _passiveFixSub = null; // no stream: the timer still flushes on elapsed time
@@ -410,7 +458,8 @@ class DefaultWardriveEngine implements WardriveEngine {
     // Don't wait on the GPS stream's own cadence for a starting position: ask once up front too, same helper the
     // ping flows use, so a batch heard before the stream's first fix still has somewhere to land.
     if (_passiveOrigin == null) {
-      unawaited(_fix().then((f) {
+      unawaited(_selectFix(first: false).then((p) {
+        final f = p?.fix;
         if (f != null && _passiveOrigin == null && _running) _passiveOrigin = (lat: f.lat, lon: f.lon);
       }));
     }
@@ -492,23 +541,45 @@ class DefaultWardriveEngine implements WardriveEngine {
   /// (Re)starts or stops the cadence checks for the current config.
   void _startAuto() {
     if (!_running || _stopping || _config.intervalSec <= 0) {
-      _stopAuto();
+      // Manual-only: no cadence, but the fix window still fills so a manual ping has a fix to take.
+      final keep = _running && !_stopping && !_config.listenOnly;
+      _stopAuto(keepFixes: keep);
+      if (keep) _ensureFixListener();
       return;
     }
     _autoTimer ??= Timer.periodic(tick, (_) => _evaluate());
-    if (_fixSub == null) {
-      try {
-        _fixSub = location.fixes.listen((f) {
-          _lastFix = f;
-          _lastFixArrived = _clock();
-          _watchClock(f);
-          _evaluate();
-        }, onError: (Object _) {});
-      } catch (_) {
-        _fixSub = null; // no stream: the tick still checks current()
-      }
-    }
+    _ensureFixListener();
     scheduleMicrotask(_evaluate);
+  }
+
+  /// One subscription to the position stream for the whole run. Its handler is cheap: a window insert and a cadence check, no status
+  /// fan-out, nothing awaited.
+  void _ensureFixListener() {
+    if (_fixSub != null) return;
+    try {
+      _fixSub = location.fixes.listen((f) {
+        final e = _ingest(f);
+        if (e != null && _config.intervalSec > 0 && !_config.listenOnly) unawaited(_evaluate());
+      }, onError: (Object _) {});
+    } catch (_) {
+      _fixSub = null; // no stream: the tick still asks the platform
+    }
+  }
+
+  /// Puts a fix into the window (refusing a cached one). Returns the enriched fix, or null when refused.
+  GeoFix? _ingest(GeoFix f) {
+    final now = _clock();
+    final stale = _staleGuard.isStale(f.at, now);
+    _watchClock(f);
+    final e = _fixes.add(f, _mono(), stale: stale);
+    if (e == null) {
+      timing.fixesRefused++;
+      health.record('fix_drop', {'why': 'cached', 'age_ms': now.difference(f.at).inMilliseconds, 'acc': f.accuracyM});
+      return null;
+    }
+    if ((e.accuracyM ?? 0) > pingAccuracyGateM) timing.fixesRefused++;
+    _lastFix = e;
+    return e;
   }
 
   /// Compares a fresh GPS fix with the phone clock. A cached fix is late by an ever-changing amount, a wrong clock is
@@ -532,12 +603,14 @@ class DefaultWardriveEngine implements WardriveEngine {
     }
   }
 
-  void _stopAuto() {
+  void _stopAuto({bool keepFixes = false}) {
     _autoTimer?.cancel();
     _autoTimer = null;
-    final sub = _fixSub;
-    _fixSub = null;
-    if (sub != null) unawaited(sub.cancel());
+    if (!keepFixes) {
+      final sub = _fixSub;
+      _fixSub = null;
+      if (sub != null) unawaited(sub.cancel());
+    }
     _dueTimer?.cancel();
     _dueTimer = null;
     _nextPingAt = null;
@@ -577,64 +650,110 @@ class DefaultWardriveEngine implements WardriveEngine {
     });
   }
 
-  /// One cadence check: pings now if both the interval and the distance are met.
+  /// Sets the next due time (monotonic) and the wall time the status shows for it.
+  void _setDue(Duration due) {
+    _dueMono = due;
+    _nextPingAt = _clock().add(due - _mono());
+  }
+
+  /// The next due time after a ping sent at [sent] that was due at [due]: the next point on the grid (due + interval), so a ping that
+  /// went out a little late does not delay the ones after it. After a long wait (more than half an interval late, e.g. a GPS outage) the
+  /// grid restarts from the send so the next ping is not squeezed in right behind it.
+  Duration _nextDue(Duration? due, Duration sent, {required bool manual}) {
+    final gap = _minGap;
+    if (manual || due == null) return sent + gap;
+    final late = sent - due;
+    if (late > gap ~/ 2) return sent + gap;
+    return due + gap;
+  }
+
+  /// Counts a hold-back once per episode, however many checks it spans.
+  void _hold(String? reason) {
+    if (reason == _episode) return;
+    _episode = reason;
+    if (reason != null) timing.skipped(reason);
+  }
+
+  /// One cadence check: pings now if both the interval and the distance are met. Cheap when nothing is due: no await, no status churn.
   Future<void> _evaluate() async {
     if (!_running || _stopping || _busy || _evaluating || _config.intervalSec <= 0) return;
     if (_radioGone()) return;
-    final now = _clock();
-    final lastTime = _lastPingTime;
-    final due = lastTime == null ? now : lastTime.add(_minGap);
-    _nextPingAt = due;
-    if (now.isBefore(due)) {
+    final now = _mono();
+    if (_dueMono == null) _setDue(now); // the first ping is due as soon as there is a fix
+    final due = _dueMono!;
+    if (now < due) {
       _wait(PingWait.time, _metresLeft(_lastFix));
-      _armDue(due.difference(now));
+      _armDue(due - now);
       return;
     }
-    final retry = _retryAfter;
-    if (retry != null && now.isBefore(retry)) {
-      _armDue(retry.difference(now));
+    final retry = _retryMono;
+    if (retry != null && now < retry) {
+      _armDue(retry - now);
       return;
     }
     _evaluating = true;
     try {
-      final fix = await _fix();
+      final pick = await _selectFix(first: _lastPingAt == null);
       if (!_running || _stopping || _busy || _config.intervalSec <= 0) return;
-      if (fix == null) {
-        _noFixSince ??= now;
+      if (pick == null) {
+        _noFixSinceMono ??= now;
+        final since = _mono() - _noFixSinceMono!;
+        final newest = _fixes.newest;
+        final poor = newest != null && (newest.fix.accuracyM ?? 0) > (_lastPingAt == null && since < firstPingRelaxAfter ? firstPingAccuracyM : pingAccuracyGateM)
+            ? newest.fix.accuracyM
+            : null;
+        final first = _lastPingAt == null;
+        _hold(first ? 'first_fix' : (poor != null ? 'gate' : 'no_fix'));
         final lt = _noFixTraceAt;
-        if (lt == null || _clock().difference(lt) >= const Duration(seconds: 10)) {
-          _noFixTraceAt = _clock();
-          _emitTrace({'v': 1, 'no_fix': true, 'at': _clock().toUtc().toIso8601String(), 'since_ms': _clock().difference(_noFixSince!).inMilliseconds});
+        if (lt == null || _mono() - lt >= const Duration(seconds: 10)) {
+          _noFixTraceAt = _mono();
+          _emitTrace({
+            'v': 1,
+            'no_fix': true,
+            'at': _clock().toUtc().toIso8601String(),
+            'since_ms': since.inMilliseconds,
+            'why': first ? 'first_fix' : (poor != null ? 'gate' : 'no_fix'),
+            'acc': poor,
+          });
         }
-        final long = _clock().difference(_noFixSince!) >= noGpsHintAfter;
-        final poor = _poorFixM;
+        final long = since >= noGpsHintAfter;
         _wait(PingWait.gps, null,
-            message: poor != null
-                ? 'GPS is not accurate enough (±${poor.round()} m): waiting to ping'
-                : long
-                    ? 'No GPS fix. Check that Location is on and allowed for MeshSonar.'
-                    : 'No GPS fix: waiting to ping');
+            message: _lastPingAt == null
+                ? 'Waiting for GPS (${since.inSeconds} s)${poor != null ? ': best so far ±${poor.round()} m' : ''}'
+                : poor != null
+                    ? 'GPS is not accurate enough (±${poor.round()} m): waiting to ping'
+                    : long
+                        ? 'No GPS fix. Check that Location is on and allowed for MeshSonar.'
+                        : 'No GPS fix: waiting to ping');
         return;
       }
-      _noFixSince = null;
-      final togo = _metresLeft(fix)!;
+      _noFixSinceMono = null;
+      final togo = _metresLeft(pick.fix)!;
       if (togo > 0) {
+        _hold('distance');
         _wait(PingWait.distance, togo, message: 'Move ${math.max(1, togo.round())} m more to ping');
         return;
       }
+      _hold(null);
       _waitingFor = null;
       _metresToGo = null;
+      // The first ping is due when the first usable fix is in hand: the wait for GPS is reported as time-to-first-ping and "Waiting for
+      // GPS", not as lateness, and it does not squeeze the second ping toward the first.
+      var dueNow = due;
+      if (_lastPingAt == null) {
+        dueNow = _mono();
+        _setDue(dueNow);
+      }
       await _serial(() async {
         if (!_running || _stopping || _config.intervalSec <= 0) return null;
-        // A manual ping may have gone out while we waited for the GPS: it resets the timer and the anchor.
-        final t = _lastPingTime;
-        if (t != null && _clock().isBefore(t.add(_minGap))) return null;
-        if ((_metresLeft(fix) ?? 1) > 0) return null;
-        return _ping(fix, startedAt: now);
+        // A manual ping may have gone out while we waited: it moved the due time on and reset the anchor.
+        if (_dueMono != dueNow) return null;
+        if ((_metresLeft(pick.fix) ?? 1) > 0) return null;
+        return _ping(pick, due: dueNow);
       });
     } catch (_) {
       // status already reported by _ping; don't hammer a failing radio
-      _retryAfter = _clock().add(const Duration(seconds: 5));
+      _retryMono = _mono() + const Duration(seconds: 5);
     } finally {
       _evaluating = false;
     }
@@ -648,13 +767,13 @@ class DefaultWardriveEngine implements WardriveEngine {
     if (_config.listenOnly) throw StateError('Listen-only: this drive transmits nothing, including manual pings');
     return _serial(() async {
       if (!_running || _stopping) throw StateError('Not driving');
-      final fix = await _fix();
-      if (fix == null) {
+      final pick = await _selectFix(first: false);
+      if (pick == null) {
         _note('No GPS fix: can\'t ping');
         throw StateError('No GPS fix');
       }
       _lastSkip = null;
-      final p = await _ping(fix, manual: true);
+      final p = await _ping(pick, manual: true);
       final skip = _lastSkip;
       if (p == null && skip != null) throw PingSkippedException(skip);
       if (p == null) throw StateError('Ping did not complete');
@@ -671,41 +790,30 @@ class DefaultWardriveEngine implements WardriveEngine {
     return result;
   }
 
-  /// Accuracy of the last fix refused for being too poor to ping from; null when the last fix was fine or absent.
-  double? _poorFixM;
+  /// How long the engine waits for the platform's "current position" when the window holds nothing usable. Short on purpose: the
+  /// position stream keeps filling the window, so a slow platform call costs only the wait, never a ping (the Oct 31 drive saw it sit
+  /// 15 s). It is asked at most once every 3 s.
+  Duration fixTimeout = const Duration(seconds: 2);
 
-  /// How long the engine waits for the platform to produce a fix on request. The phone's "current position" call can sit
-  /// for 15 s while a position stream is running (Oct 31 field drive: pings 78-128 s apart at speed).
-  Duration fixTimeout = const Duration(seconds: 4);
-
-  /// When that call fails or times out, the position stream's newest fix stands in if it is at most this old (at 13 m/s
-  /// that is within about 65 m, and the ping records its accuracy); older than that there is no usable fix.
-  Duration staleFixOk = const Duration(seconds: 5);
-
-  DateTime? _lastFixArrived;
-
-  Future<GeoFix?> _fix() async {
-    GeoFix? f;
-    try {
-      f = await location.current().timeout(fixTimeout);
-    } catch (_) {
-      f = null;
+  /// The fix to ping from, chosen from the last 8 s of the stream (see lib/core/fix_window.dart for the rules). Answers at once when the
+  /// window has one; only an empty or all-poor window falls back to the platform, briefly.
+  Future<FixPick?> _selectFix({required bool first}) async {
+    Duration waited() => _noFixSinceMono == null ? Duration.zero : _mono() - _noFixSinceMono!;
+    var pick = _fixes.pick(_mono(), first: first, waited: waited());
+    if (pick != null) return pick;
+    final ask = _lastCurrentAsk;
+    if (ask == null || _mono() - ask >= const Duration(seconds: 3)) {
+      _lastCurrentAsk = _mono();
+      GeoFix? f;
+      try {
+        f = await location.current().timeout(fixTimeout);
+      } catch (_) {
+        f = null;
+      }
+      if (f != null) _ingest(f);
+      pick = _fixes.pick(_mono(), first: first, waited: waited());
     }
-    if (f != null) {
-      _lastFix = f;
-      _lastFixArrived = _clock();
-      final acc = f.accuracyM;
-      _poorFixM = (acc != null && acc > maxPingAccuracyM) ? acc : null;
-      return _poorFixM == null ? f : null; // a cell-tower guess is not a place to ping from
-    }
-    _poorFixM = null;
-    final last = _lastFix, at = _lastFixArrived;
-    if (last != null && at != null) {
-      final age = _clock().difference(at);
-      final acc = last.accuracyM;
-      if (!age.isNegative && age <= staleFixOk && (acc == null || acc <= maxPingAccuracyM)) return last;
-    }
-    return null;
+    return pick;
   }
 
   // ------------------------------------------------------------------ one ping
@@ -715,7 +823,8 @@ class DefaultWardriveEngine implements WardriveEngine {
   ///
   /// Order matters for latency: the send goes out FIRST; the noise floor is read while the window runs (it is the
   /// background level, the same a moment later), so the ping leaves one radio round trip sooner than it did.
-  Future<DrivePing?> _ping(GeoFix fix, {bool manual = false, DateTime? startedAt}) async {
+  Future<DrivePing?> _ping(FixPick pick, {bool manual = false, Duration? due}) async {
+    final fix = pick.fix;
     _busy = true;
     _closeTail();
     final idx = _channelIndex!;
@@ -732,6 +841,8 @@ class DefaultWardriveEngine implements WardriveEngine {
     Duration? lastEchoAt; // when the newest repeat arrived, as time since the send
     var cutShort = false;
     int? ackMs;
+    Duration sendMono = Duration.zero;
+    var lateMs = 0;
     final id = _newId();
     final liveRepeaters = <String>{};
     _heardSoFar = null;
@@ -742,12 +853,13 @@ class DefaultWardriveEngine implements WardriveEngine {
         // Skipped, never queued late: the cadence check asks again in a moment, at the then-current position.
         _lastSkip = decision;
         skippedPings[decision.reason!] = (skippedPings[decision.reason!] ?? 0) + 1;
-        _retryAfter = _clock().add(pingSkipRetry);
+        if (_lastSkipReason != decision.reason!.name) timing.skipped(decision.reason!.name); // one count per episode
+        _lastSkipReason = decision.reason!.name;
+        _retryMono = _mono() + pingSkipRetry;
         _emitTrace({'v': 1, 'skipped': decision.reason!.name, 'at': _clock().toUtc().toIso8601String(), 'manual': manual});
         if (_running && !_stopping) _setStatus(EngineState.driving, decision.message);
         return null;
       }
-      _setStatus(EngineState.pinging, 'Pinging');
       if (!_running) return null;
 
       _collector = (rx) {
@@ -768,14 +880,22 @@ class DefaultWardriveEngine implements WardriveEngine {
         }
       };
       sentAt = _clock();
-      await link.sendChannelText(idx, text);
+      sendMono = _mono();
+      // The command is issued BEFORE anything that tells the UI (status fan-out runs in microtasks once we yield).
+      final sending = link.sendChannelText(idx, text);
+      _setStatus(EngineState.pinging, 'Pinging');
+      await sending;
       ackMs = _clock().difference(sentAt).inMilliseconds; // command queued + written + the radio's OK
       pingGate.pingSent();
       _lastPingAt = (lat: fix.lat, lon: fix.lon);
-      // The interval counts from the moment the ping was asked for (an auto ping: when the cadence check began), so a slow
-      // fix or a send that waited behind other commands never stretches the cadence.
-      _lastPingTime = startedAt ?? sentAt;
-      _retryAfter = null;
+      // The next due time sits on the grid of the previous one (see [_nextDue]), so a slow fix, a send that waited behind other commands
+      // or a UI isolate that ran a timer late never stretches the cadence.
+      _lastPingMono = sendMono;
+      _setDue(_nextDue(due, sendMono, manual: manual));
+      _retryMono = null;
+      _lastSkipReason = null;
+      lateMs = due == null || manual ? 0 : math.max(0, (sendMono - due).inMilliseconds);
+      timing.sent(sendMono, late: Duration(milliseconds: lateMs), lowAccuracy: pick.lowAccuracy);
       final l = link;
       sentTs = l is MeshCoreCompanionLink ? l.lastSentTimestamp : null;
 
@@ -794,7 +914,7 @@ class DefaultWardriveEngine implements WardriveEngine {
       double? noise;
       unawaited(link.noiseFloor().then<void>((v) => noise = v, onError: (Object _) {}));
       final base = _window;
-      cutShort = !await _listenAdaptive(waited, base, () => lastEchoAt, startedAt == null ? Duration.zero : sentAt.difference(startedAt));
+      cutShort = !await _listenAdaptive(waited, base, () => lastEchoAt, (_dueMono ?? sendMono + _minGap) - sendMono);
       final windowMs = waited.d.inMilliseconds;
       _heardSoFar = null;
       _collector = null;
@@ -832,6 +952,17 @@ class DefaultWardriveEngine implements WardriveEngine {
         'ack_ms': ackMs,
         'pkt_hash': pktHash,
         'manual': manual,
+        // The fix policy and the schedule, per ping (lib/core/fix_window.dart): how old the fix was, how good, which rule chose it, and how
+        // late the ping went against its due time. `low_acc` = worse than 50 m (the number itself is in the ping's gps_accuracy_m).
+        'fix_age_ms': pick.age.inMilliseconds,
+        'acc': fix.accuracyM,
+        'low_acc': pick.lowAccuracy,
+        'fix_rule': pick.first ? 'first' : (pick.notNewest ? 'best_in_window' : 'newest'),
+        'cands': pick.candidates,
+        'refused_poor': pick.refusedPoor,
+        'speed_src': pick.speedSource.name,
+        'late_ms': lateMs,
+        'mono_ms': sendMono.inMilliseconds,
         'base_ms': base.inMilliseconds,
         'window_ms': windowMs,
         'echoes': echoes.length,
@@ -841,7 +972,6 @@ class DefaultWardriveEngine implements WardriveEngine {
       if (!_pings.isClosed) _pings.add(ping);
       if (_running && !_stopping) {
         if (_config.intervalSec > 0) {
-          _nextPingAt = (startedAt ?? sentAt).add(_minGap);
           _waitingFor = PingWait.time;
           _metresToGo = _config.minDistanceM.toDouble();
         }
@@ -953,14 +1083,14 @@ class DefaultWardriveEngine implements WardriveEngine {
   /// Waits [base] after the send; then, while repeats of THIS ping are still arriving (the newest less than [extendGap]
   /// old), keeps listening, up to [maxListen] and never into the time the next ping is due. A quiet mesh closes at
   /// [base] exactly. Returns false if the radio went away first.
-  Future<bool> _listenAdaptive(_Waited waited, Duration base, Duration? Function() lastEcho, Duration lateStart) async {
+  Future<bool> _listenAdaptive(_Waited waited, Duration base, Duration? Function() lastEcho, Duration untilNext) async {
     if (!await _listen(base)) return false;
     waited.d = base;
     // Only a real listen window extends (tests use windows of a few milliseconds, which stay exactly as set).
     if (!adaptiveListen || base < minAdaptiveBase) return true;
     var ceiling = maxListen;
     if (_config.intervalSec > 0) {
-      final room = Duration(seconds: _config.intervalSec) - lateStart - const Duration(seconds: 1); // lateStart: a slow fix already used some
+      final room = untilNext - const Duration(seconds: 1); // never into the time the next ping is due
       if (room < ceiling) ceiling = room;
     }
     if (ceiling < base) ceiling = base;
@@ -1098,6 +1228,8 @@ class DefaultWardriveEngine implements WardriveEngine {
     _running = false;
     _stopAuto();
     _closeTail();
+    final summary = timing.summary(_mono());
+    health.record('timing', summary.toJson());
     await _rxSub?.cancel();
     _rxSub = null;
     _collector = null;
