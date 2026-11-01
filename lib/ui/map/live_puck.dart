@@ -1,16 +1,22 @@
-// The live "sonar" puck: the dot that moves with you, the rings a ping sends out, and the lines that come back from the
+// The live "sonar" puck: the arrow that moves with you, the rings a ping sends out, and the lines that come back from the
 // repeaters that heard it. Three pieces:
 //
-//   PuckController  Owns the dot's motion (lib/core/puck_motion.dart) and the ping animation clock. The Drive map model
-//                   feeds it every GPS fix and every ping event. It is DISPLAY ONLY; pings record the engine's own fix.
-//   PuckLinksLayer  A flutter_map layer under the repeater markers: lines from the moving dot to each repeater that
-//                   echoed the latest ping (orange link colour, never a signal strength), drawn out from the dot and
-//                   faded a few seconds later.
-//   PuckLayer       A flutter_map layer on top: accuracy disc, heading cone, ping rings and the dot. Owns the Ticker,
-//                   which sleeps whenever nothing is moving.
+//   PuckController  Owns the motion (lib/core/puck_motion.dart), the direction (lib/core/heading.dart) and the ping animation
+//                   clock. The Drive map model feeds it every GPS fix, compass reading and ping event. DISPLAY ONLY; pings
+//                   record the engine's own fix.
+//   PuckLinksLayer  A flutter_map layer under the repeater markers: lines from the moving dot to each repeater that echoed the
+//                   latest ping (orange link colour, never a signal strength), drawn out from the dot and faded later.
+//   PuckLayer       A flutter_map layer on top: accuracy disc, ping rings and the direction arrow. Owns the Ticker, which runs at
+//                   the display's refresh rate (60 or 120 Hz) while anything moves and sleeps when nothing does.
 //
-// Both layers repaint on their own every frame without rebuilding the map: a GPS fix never touches the hex, cell or
-// repeater layers (that rebuild was what made the old dot hop).
+// Direction: a navigation arrow (chevron), not a dot. It points along the course while the car moves (above ~1.5 m/s) and along
+// the compass when stopped; the angle is eased along the shortest arc, so it never spins at north. Sonar rings are thin circles
+// that pulse out of it on each ping, so the two never look alike. GPS weak (no fix for 2.5 s): the arrow dims, its ring grows
+// and a "GPS weak" tag appears; after 5 s it stops coasting and holds.
+//
+// Both layers repaint on their own every frame without rebuilding the map: a GPS fix never touches the hex, cell or repeater
+// layers (that rebuild was what made the old dot hop).
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -19,6 +25,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../core/heading.dart';
 import '../../core/puck_motion.dart';
 import '../../radio/radio_api.dart';
 import '../theme.dart';
@@ -43,15 +50,48 @@ const Duration linkFade = Duration(seconds: 4);
 /// The strength of a held (older or faded) line.
 const double linkHeldAlpha = 0.38;
 
+/// Counters the health recorder reads (and resets) every sample.
+class PuckStats {
+  int frames = 0;
+  int fixes = 0;
+  int fixesRejected = 0;
+  double maxFixGapS = 0;
+  int weakFrames = 0;
+  int compassReadings = 0;
+
+  /// Longest wait between two frames of the running ticker (a stall of the UI isolate shows up here), in ms.
+  double maxFrameGapMs = 0;
+
+  Map<String, Object?> toJson(double windowS) => {
+    'puck_updates_hz': windowS <= 0 ? 0 : double.parse((frames / windowS).toStringAsFixed(1)),
+    'fixes': fixes,
+    'fixes_rejected': fixesRejected,
+    'max_fix_gap_s': double.parse(maxFixGapS.toStringAsFixed(1)),
+    'weak_frames': weakFrames,
+    'compass_readings': compassReadings,
+    'max_frame_gap_ms': double.parse(maxFrameGapMs.toStringAsFixed(1)),
+  };
+
+  void reset() {
+    frames = fixes = fixesRejected = weakFrames = compassReadings = 0;
+    maxFixGapS = 0;
+    maxFrameGapMs = 0;
+  }
+}
+
 class PuckController extends ChangeNotifier {
   final DateTime Function() clock;
   final PuckMotion motion;
+  final HeadingSmoother heading = HeadingSmoother();
   PuckController({DateTime Function()? clock, PuckConfig config = const PuckConfig()})
     : clock = clock ?? DateTime.now,
       motion = PuckMotion(config);
 
   /// Bumped when there is something to animate again; the ticker wakes on it.
   final ValueNotifier<int> wake = ValueNotifier<int>(0);
+
+  /// Counters for the health recorder.
+  final PuckStats stats = PuckStats();
 
   PuckPose? _pose;
 
@@ -70,12 +110,50 @@ class PuckController extends ChangeNotifier {
   bool get resolvedHeard => _resolvedHeard;
   bool get waiting => _sentAt != null && (_resolvedAt == null || _resolvedAt!.isBefore(_sentAt!));
 
+  // ---- direction ----
+  double? _compassDeg;
+  DateTime? _compassAt;
+  double? _lastCourse;
+  double? _headingDeg;
+  DateTime? _lastTickAt;
+  DateTime? _lastFixArrived;
+
+  /// The heading the arrow points along on the map (degrees clockwise from north), eased; null when unknown.
+  double? get headingDeg => _headingDeg;
+
+  final HeadingSmoother _courseSmoother = HeadingSmoother(tau: 0.35);
+  double? _mapHeading;
+
+  /// Direction of travel for turning the map (heading-up): the smoothed GPS course, held when the car stops. Never the
+  /// compass, so a parked car does not spin the map.
+  double? get mapHeadingDeg => _mapHeading;
+
+  /// True while the arrow follows the compass (the car is stopped) rather than the course.
+  bool get headingFromCompass => (_pose?.courseDeg == null) && _compassFresh(clock());
+
+  bool _compassFresh(DateTime now) => _compassDeg != null && _compassAt != null && now.difference(_compassAt!) < const Duration(seconds: 3);
+
+  /// A compass reading (degrees clockwise from north). Used for the arrow only while no course is known.
+  void onCompass(double deg) {
+    _compassDeg = normalizeDeg(deg);
+    _compassAt = clock();
+    stats.compassReadings++;
+    if (_pose?.courseDeg == null) _wake();
+  }
+
   /// A GPS fix arrived. Returns whether the dot accepted it (see PuckMotion's outlier gate).
   bool onFix(GeoFix f) {
-    final ok = motion.add(f, clock());
+    final now = clock();
+    final ok = motion.add(f, now);
     if (ok) {
-      _pose ??= motion.poseAt(clock());
+      stats.fixes++;
+      final last = _lastFixArrived;
+      if (last != null) stats.maxFixGapS = math.max(stats.maxFixGapS, now.difference(last).inMicroseconds / 1e6);
+      _lastFixArrived = now;
+      _pose ??= motion.poseAt(now);
       _wake();
+    } else {
+      stats.fixesRejected++;
     }
     return ok;
   }
@@ -98,7 +176,14 @@ class PuckController extends ChangeNotifier {
   /// Forget the drive (drive ended).
   void reset() {
     motion.reset();
+    heading.reset();
+    _courseSmoother.reset();
+    _mapHeading = null;
     _pose = null;
+    _headingDeg = null;
+    _lastCourse = null;
+    _lastTickAt = null;
+    _lastFixArrived = null;
     _sentAt = _resolvedAt = null;
     _resolvedHeard = false;
     notifyListeners();
@@ -114,12 +199,50 @@ class PuckController extends ChangeNotifier {
     return now.difference(r) < linkHold + linkFade + const Duration(milliseconds: 200);
   }
 
-  /// Advance one frame: compute the pose and tell the layers to repaint. Returns true while another frame is needed.
+  /// Advance one frame: compute the pose and the heading and tell the layers to repaint. Returns true while another frame is
+  /// needed.
   bool tick({bool reducedMotion = false}) {
     final now = clock();
-    _pose = motion.poseAt(now, reducedMotion: reducedMotion) ?? _pose;
+    final p = motion.poseAt(now, reducedMotion: reducedMotion) ?? _pose;
+    _pose = p;
+    stats.frames++;
+    if (p != null && p.weak) stats.weakFrames++;
+    var dt = _lastTickAt == null ? 0.0 : now.difference(_lastTickAt!).inMicroseconds / 1e6;
+    if (_lastTickAt != null) stats.maxFrameGapMs = math.max(stats.maxFrameGapMs, dt * 1000);
+    if (dt < 0 || dt > 0.5) dt = 0.016;
+    _lastTickAt = now;
+    var headingBusy = false;
+    if (p != null) {
+      final course = p.courseDeg;
+      double? target;
+      if (course != null) {
+        target = course;
+        _lastCourse = course;
+        _mapHeading = reducedMotion ? (_courseSmoother..set(course)).value : _courseSmoother.step(course, dt);
+      } else if (_compassFresh(now)) {
+        target = _compassDeg;
+      } else {
+        target = _lastCourse;
+      }
+      if (target != null) {
+        final before = heading.value;
+        _headingDeg = reducedMotion ? (heading..set(target)).value : heading.step(target, dt);
+        headingBusy = before != null && shortestArc(before, target).abs() > 0.3;
+      }
+    }
     notifyListeners();
-    return !(_pose?.settled ?? true) || (!reducedMotion && animatingPing(now)) || (reducedMotion && _linksFading(now));
+    return !(p?.settled ?? true) || headingBusy || (!reducedMotion && animatingPing(now)) || (reducedMotion && _linksFading(now));
+  }
+
+  /// The ticker went to sleep: the next gap is not a stall.
+  void tickerStopped() => _lastTickAt = null;
+
+  /// Seconds until the pose turns "weak" if no fix arrives; null when it already is, or there is no fix.
+  Duration? get untilWeak {
+    final p = _pose;
+    if (p == null || p.weak) return null;
+    final left = motion.config.weakAfter.inMicroseconds / 1e6 - p.fixAgeS;
+    return Duration(milliseconds: (left * 1000).ceil() + 30);
   }
 
   bool _linksFading(DateTime now) {
@@ -290,16 +413,20 @@ class _LinksPainter extends CustomPainter {
   bool shouldRepaint(_LinksPainter old) => true;
 }
 
-/// The dot, its accuracy disc, heading cone and ping rings. Owns the frame ticker.
+/// The puck: accuracy disc, ping rings and the direction arrow. Owns the frame ticker.
 class PuckLayer extends StatefulWidget {
   final PuckController puck;
 
   /// Shown, still, until the first live fix: the phone's last-known or idle position.
   final LatLng? fallback;
 
-  /// Called after every frame with the dot's position, so the camera can follow it.
-  final void Function(LatLng at)? onMoved;
-  const PuckLayer({super.key, required this.puck, this.fallback, this.onMoved});
+  /// Called once per frame (after the pose is updated) with the dot's position and the seconds since the last frame, so the
+  /// camera can follow it in the same frame.
+  final void Function(LatLng at, double dtS)? onMoved;
+
+  /// Called every frame the ticker runs (before [onMoved]); the health recorder counts frames here.
+  final VoidCallback? onFrame;
+  const PuckLayer({super.key, required this.puck, this.fallback, this.onMoved, this.onFrame});
 
   @override
   State<PuckLayer> createState() => _PuckLayerState();
@@ -307,7 +434,8 @@ class PuckLayer extends StatefulWidget {
 
 class _PuckLayerState extends State<PuckLayer> with SingleTickerProviderStateMixin {
   late final Ticker _ticker = createTicker(_onTick);
-  Duration _lastPaint = Duration.zero;
+  Timer? _weakTimer;
+  Duration _last = Duration.zero;
   bool _reduced = false;
 
   @override
@@ -334,23 +462,32 @@ class _PuckLayerState extends State<PuckLayer> with SingleTickerProviderStateMix
   }
 
   void _start() {
-    if (!mounted || _ticker.isActive) return;
-    _lastPaint = Duration.zero;
+    if (!mounted) return;
+    _weakTimer?.cancel();
+    if (_ticker.isActive) return;
+    _last = Duration.zero;
     _ticker.start();
   }
 
   void _onTick(Duration elapsed) {
-    // 30 frames a second is plenty for a dot at driving speed, and halves the map's repaint work on 120 Hz iPads.
-    if (_lastPaint != Duration.zero && elapsed - _lastPaint < const Duration(milliseconds: 30)) return;
-    _lastPaint = elapsed;
+    final dt = _last == Duration.zero ? 0.016 : (elapsed - _last).inMicroseconds / 1e6;
+    _last = elapsed;
     final more = widget.puck.tick(reducedMotion: _reduced);
+    widget.onFrame?.call();
     final p = widget.puck.pose;
-    if (p != null) widget.onMoved?.call(LatLng(p.lat, p.lon));
-    if (!more) _ticker.stop();
+    if (p != null) widget.onMoved?.call(LatLng(p.lat, p.lon), dt);
+    if (!more) {
+      _ticker.stop();
+      widget.puck.tickerStopped();
+      // Asleep, but the dot must still go "weak" when the fixes stop: wake once for that.
+      final due = widget.puck.untilWeak;
+      if (due != null) _weakTimer = Timer(due, _start);
+    }
   }
 
   @override
   void dispose() {
+    _weakTimer?.cancel();
     widget.puck.wake.removeListener(_start);
     _ticker.dispose();
     super.dispose();
@@ -369,6 +506,8 @@ class _PuckLayerState extends State<PuckLayer> with SingleTickerProviderStateMix
         if (at == null) return const SizedBox.shrink();
         final c = camera.latLngToScreenOffset(at);
         final now = puck.clock();
+        final weak = pose?.weak ?? false;
+        final heading = puck.headingDeg;
         return IgnorePointer(
           child: Stack(
             clipBehavior: Clip.none,
@@ -382,6 +521,7 @@ class _PuckLayerState extends State<PuckLayer> with SingleTickerProviderStateMix
                     center: c,
                     pose: pose,
                     color: t.colorScheme.primary,
+                    weakColor: mc.beacon,
                     echoColor: mc.linkLine,
                     silentColor: mc.silent,
                     sentSince: puck.waiting && puck.sentAt != null ? now.difference(puck.sentAt!) : null,
@@ -392,12 +532,41 @@ class _PuckLayerState extends State<PuckLayer> with SingleTickerProviderStateMix
                 ),
               ),
               Positioned(
-                left: c.dx - 24,
-                top: c.dy - 24,
-                width: 48,
-                height: 48,
-                child: _Dot(key: const Key('map-position'), color: t.colorScheme.primary, ring: t.colorScheme.surface),
+                left: c.dx - 28,
+                top: c.dy - 28,
+                width: 56,
+                height: 56,
+                child: _PuckMark(
+                  key: const Key('map-position'),
+                  color: t.colorScheme.primary,
+                  outline: Colors.white,
+                  // The arrow on the screen: the heading plus however much the map is turned.
+                  angle: heading == null ? null : (heading + camera.rotation) * math.pi / 180,
+                  weak: weak,
+                  weakColor: mc.beacon,
+                  fromCompass: puck.headingFromCompass,
+                ),
               ),
+              if (weak)
+                Positioned(
+                  left: c.dx - 40,
+                  top: c.dy + 26,
+                  width: 80,
+                  child: Center(
+                    child: DecoratedBox(
+                      key: const Key('gps-weak-tag'),
+                      decoration: BoxDecoration(
+                        color: t.colorScheme.surface.withValues(alpha: 0.9),
+                        borderRadius: BorderRadius.circular(7),
+                        border: Border.all(color: mc.beacon, width: 1.2),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                        child: Text('GPS weak', style: t.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w700, fontSize: 11)),
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         );
@@ -406,28 +575,87 @@ class _PuckLayerState extends State<PuckLayer> with SingleTickerProviderStateMix
   }
 }
 
-class _Dot extends StatelessWidget {
+/// The arrow (or a plain dot while the direction is unknown). 56 x 56 logical px, the arrow about 36 px tall: readable at arm's
+/// length on a dash mount, white outline and a shadow so it stands out on a light or a dark map.
+class _PuckMark extends StatelessWidget {
   final Color color;
-  final Color ring;
-  const _Dot({super.key, required this.color, required this.ring});
+  final Color outline;
+  final Color weakColor;
+  final double? angle;
+  final bool weak;
+  final bool fromCompass;
+  const _PuckMark({super.key, required this.color, required this.outline, required this.weakColor, required this.angle, required this.weak, required this.fromCompass});
+
   @override
   Widget build(BuildContext context) {
+    final fill = weak ? Color.lerp(color, Colors.grey, 0.55)! : color;
+    final child = angle == null
+        ? CustomPaint(size: const Size(56, 56), painter: _DotPainter(fill, outline))
+        : Transform.rotate(
+            key: const Key('map-heading-arrow'),
+            angle: angle!,
+            child: CustomPaint(size: const Size(56, 56), painter: _ArrowPainter(fill, outline, hollow: fromCompass)),
+          );
     return Semantics(
-      label: 'Your position',
-      child: Center(
-        child: Container(
-          width: 20,
-          height: 20,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: color,
-            border: Border.all(color: ring, width: 3),
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.35), blurRadius: 6)],
-          ),
-        ),
-      ),
+      label: weak ? 'Your position, GPS signal weak' : 'Your position',
+      child: Opacity(opacity: weak ? 0.75 : 1, child: child),
     );
   }
+}
+
+class _DotPainter extends CustomPainter {
+  final Color fill, outline;
+  _DotPainter(this.fill, this.outline);
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = size.center(Offset.zero);
+    canvas.drawCircle(c + const Offset(0, 1.5), 12, Paint()..color = Colors.black.withValues(alpha: 0.30)..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3));
+    canvas.drawCircle(c, 11, Paint()..color = outline);
+    canvas.drawCircle(c, 8, Paint()..color = fill);
+  }
+
+  @override
+  bool shouldRepaint(_DotPainter old) => old.fill != fill || old.outline != outline;
+}
+
+/// A navigation chevron pointing up (rotated by the parent). [hollow]: the direction is from the compass, not the road, drawn
+/// with a lighter centre so the two can be told apart.
+class _ArrowPainter extends CustomPainter {
+  final Color fill, outline;
+  final bool hollow;
+  _ArrowPainter(this.fill, this.outline, {required this.hollow});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = size.center(Offset.zero);
+    final path = ui.Path()
+      ..moveTo(c.dx, c.dy - 19)
+      ..lineTo(c.dx + 14, c.dy + 16)
+      ..lineTo(c.dx, c.dy + 8)
+      ..lineTo(c.dx - 14, c.dy + 16)
+      ..close();
+    canvas.drawPath(path.shift(const Offset(0, 2)), Paint()..color = Colors.black.withValues(alpha: 0.32)..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.5));
+    canvas.drawPath(
+      path,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 7
+        ..strokeJoin = StrokeJoin.round
+        ..color = outline,
+    );
+    canvas.drawPath(path, Paint()..color = hollow ? Color.alphaBlend(Colors.white.withValues(alpha: 0.35), fill) : fill);
+    canvas.drawPath(
+      path,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2
+        ..strokeJoin = StrokeJoin.round
+        ..color = fill,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_ArrowPainter old) => old.fill != fill || old.outline != outline || old.hollow != hollow;
 }
 
 class _PuckPainter extends CustomPainter {
@@ -435,7 +663,7 @@ class _PuckPainter extends CustomPainter {
   final LatLng at;
   final Offset center;
   final PuckPose? pose;
-  final Color color, echoColor, silentColor;
+  final Color color, weakColor, echoColor, silentColor;
   final Duration? sentSince; // while waiting for echoes
   final Duration? resolvedSince;
   final bool resolvedHeard;
@@ -446,6 +674,7 @@ class _PuckPainter extends CustomPainter {
     required this.center,
     required this.pose,
     required this.color,
+    required this.weakColor,
     required this.echoColor,
     required this.silentColor,
     required this.sentSince,
@@ -464,49 +693,27 @@ class _PuckPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final ppm = _pxPerMetre();
     final p = pose;
+    final weak = p?.weak ?? false;
 
-    // Accuracy disc (only when it is bigger than the dot, so it reads as uncertainty).
+    // Accuracy disc (only when it is bigger than the arrow, so it reads as uncertainty). Dashed amber while the signal is weak.
     final acc = p?.accuracyM;
     if (acc != null) {
-      final r = (acc * ppm).clamp(0.0, 140.0);
-      if (r > 14) {
-        canvas.drawCircle(center, r, Paint()..color = color.withValues(alpha: 0.10));
-        canvas.drawCircle(
-          center,
-          r,
-          Paint()
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 1
-            ..color = color.withValues(alpha: 0.28),
-        );
-      }
-    }
-
-    // Heading cone: a wedge toward the direction of travel, measured on screen so map rotation is respected.
-    final course = p?.courseDeg;
-    if (course != null) {
-      final r = course * math.pi / 180;
-      const aheadM = 40.0;
-      final tip = camera.latLngToScreenOffset(
-        LatLng(
-          at.latitude + math.cos(r) * aheadM / 111320.0,
-          at.longitude + math.sin(r) * aheadM / (111320.0 * math.cos(at.latitude * math.pi / 180)),
-        ),
-      );
-      final v = tip - center;
-      if (v.distance > 1) {
-        final ang = math.atan2(v.dy, v.dx);
-        const len = 46.0, half = 0.46;
-        final path = ui.Path()
-          ..moveTo(center.dx, center.dy)
-          ..lineTo(center.dx + math.cos(ang - half) * len, center.dy + math.sin(ang - half) * len)
-          ..arcTo(Rect.fromCircle(center: center, radius: len), ang - half, half * 2, false)
-          ..close();
-        canvas.drawPath(
-          path,
-          Paint()
-            ..shader = ui.Gradient.radial(center, len, [color.withValues(alpha: 0.55), color.withValues(alpha: 0)]),
-        );
+      final r = (acc * ppm).clamp(0.0, 160.0);
+      if (r > 20) {
+        final base = weak ? weakColor : color;
+        canvas.drawCircle(center, r, Paint()..color = base.withValues(alpha: weak ? 0.07 : 0.10));
+        final ring = Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = weak ? 1.6 : 1
+          ..color = base.withValues(alpha: weak ? 0.7 : 0.28);
+        if (weak) {
+          final n = (2 * math.pi * r / 12).clamp(16, 120).round();
+          for (var i = 0; i < n; i++) {
+            canvas.drawArc(Rect.fromCircle(center: center, radius: r), 2 * math.pi * i / n, math.pi / n, false, ring);
+          }
+        } else {
+          canvas.drawCircle(center, r, ring);
+        }
       }
     }
 
@@ -516,7 +723,7 @@ class _PuckPainter extends CustomPainter {
     final s = sentSince;
     if (s != null) {
       for (final ring in waitingRings(s)) {
-        final r = 14 + ring.grow * 120;
+        final r = 20 + ring.grow * 120;
         canvas.drawCircle(
           center,
           r,
@@ -535,7 +742,7 @@ class _PuckPainter extends CustomPainter {
       final c = resolvedHeard ? echoColor : silentColor;
       canvas.drawCircle(
         center,
-        14 + (1 - math.pow(1 - f, 2).toDouble()) * 70,
+        20 + (1 - math.pow(1 - f, 2).toDouble()) * 70,
         Paint()
           ..style = PaintingStyle.stroke
           ..strokeWidth = 3

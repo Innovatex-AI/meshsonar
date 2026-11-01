@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../../app/app_state.dart';
 import '../../core/diagnostics.dart';
+import '../../core/map_prefs.dart';
 import '../../core/redact.dart';
 import '../app.dart';
 import '../report_problem_screen.dart';
@@ -32,6 +33,21 @@ List<Widget> diagnosticsSectionRows(BuildContext context) {
       ),
     ),
     SettingsAnchor(id: 'diagnostics-ble', child: bleDiagnosticsRows(context).first),
+    SettingsAnchor(
+      id: 'map-health-overlay',
+      child: ListenableBuilder(
+        listenable: MapPrefs.shared,
+        builder: (context, _) => SwitchListTile(
+          key: const Key('map-health-overlay'),
+          secondary: const Icon(Icons.speed_outlined),
+          title: Text(settingsEntry('map-health-overlay').title),
+          subtitle: const Text('Frame times, GPS rate, camera and map source over the map. A sample every 10 s is saved with each '
+              'drive either way (Drives > menu > Share map health). Stays on this phone.'),
+          value: MapPrefs.shared.healthOverlay,
+          onChanged: (v) => MapPrefs.shared.healthOverlay = v,
+        ),
+      ),
+    ),
     SettingsAnchor(
       id: 'report-problem',
       child: ListTile(

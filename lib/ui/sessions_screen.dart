@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../app/app_state.dart';
 import '../core/api.dart';
 import 'app.dart';
+import 'map/share_map_health.dart';
 import 'charts/heard_strip.dart';
 import 'drive_detail_screen.dart';
 import 'drive_stats.dart';
@@ -466,6 +467,11 @@ class _CardMenu extends StatelessWidget {
           child: const ListTile(leading: Icon(Icons.manage_search), title: Text('Share ping trace')),
         ),
         PopupMenuItem(
+          key: ValueKey('menu-map-health-$id'),
+          value: 'map-health',
+          child: const ListTile(leading: Icon(Icons.speed_outlined), title: Text('Share map health')),
+        ),
+        PopupMenuItem(
           key: ValueKey('rename-$id'),
           value: 'rename',
           child: const ListTile(leading: Icon(Icons.edit_outlined), title: Text('Rename')),
@@ -494,6 +500,8 @@ Future<bool> runDriveAction(BuildContext context, String action, SessionSummary 
       await s.exportAndShare(id);
     case 'trace':
       await s.shareTrace(id);
+    case 'map-health':
+      await shareMapHealth(context, s, id);
     case 'rename':
       await renameDrive(context, x);
     case 'delete':

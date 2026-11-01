@@ -63,6 +63,16 @@ abstract class TraceStore {
   Future<File?> traceFile(String sessionId);
 }
 
+/// A store that keeps the map and GPS health samples beside the drive (`map_health.jsonl`, written by lib/core/map_health.dart:
+/// one line per 10 seconds with frame times, puck update rate, camera mode and tile source mix). Local only, never uploaded,
+/// not part of the Drive Format, capped in size like the trace.
+abstract class MapHealthStore {
+  Future<void> appendMapHealth(String sessionId, Map<String, Object?> record);
+
+  /// The health file of a drive, or null when it has none.
+  Future<File?> mapHealthFile(String sessionId);
+}
+
 /// A store that can write an export as several Drive Format files when the drive has more pings than one upload may
 /// carry (the server refuses more than [maxPingsPerExport] pings in one body).
 abstract class ChunkedExport {
@@ -96,7 +106,7 @@ Future<List<String>> closeOrphanedSessions(DriveStore store, {Set<String> except
   return closed;
 }
 
-class JsonlDriveStore implements DriveStore, TraceStore, SyncLedger, StorageSized, DriveContextLedger, ContextSyncLedger, ChunkedExport {
+class JsonlDriveStore implements DriveStore, TraceStore, MapHealthStore, SyncLedger, StorageSized, DriveContextLedger, ContextSyncLedger, ChunkedExport {
   final Directory root;
   final Directory _sessionsDir;
   final Map<String, Future<void>> _locks = {};
@@ -294,6 +304,28 @@ class JsonlDriveStore implements DriveStore, TraceStore, SyncLedger, StorageSize
   @override
   Future<File?> traceFile(String sessionId) async {
     final f = _file(sessionId, _traceFile);
+    return await f.exists() ? f : null;
+  }
+
+  // ---- map and GPS health (MapHealthStore) ----
+
+  static const _mapHealthFile = 'map_health.jsonl';
+
+  /// A drive's map health stops growing here (about 8,000 samples = 22 hours at one per 10 s).
+  static const int mapHealthMaxBytes = 4 * 1024 * 1024;
+
+  @override
+  Future<void> appendMapHealth(String sessionId, Map<String, Object?> record) => _locked(sessionId, () async {
+        if (!await _dir(sessionId).exists()) return;
+        final f = _file(sessionId, _mapHealthFile);
+        if (await f.exists() && await f.length() > mapHealthMaxBytes) return;
+        if (_repairedFiles.add('$sessionId/$_mapHealthFile')) await _repairTail(f);
+        await _appendLines(f, [jsonEncode(record)]);
+      });
+
+  @override
+  Future<File?> mapHealthFile(String sessionId) async {
+    final f = _file(sessionId, _mapHealthFile);
     return await f.exists() ? f : null;
   }
 
