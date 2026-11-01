@@ -13,6 +13,7 @@ import '../../core/api.dart' show Settings;
 import '../../radio/airtime.dart';
 import '../../radio/wardrive_engine.dart' show formatPingText, pingTagLength;
 import '../app.dart';
+import 'ping_feedback_rows.dart';
 import 'settings_kit.dart';
 
 const String wardrivingHelp = 'MeshSonar wardrives by sending one short message, a ping, on a shared channel. Repeaters '
@@ -179,6 +180,7 @@ List<Widget> wardrivingSectionRows(BuildContext context) {
     SettingsAnchor(id: 'interval', child: tiles[0]),
     SettingsAnchor(id: 'min-distance', child: tiles[1]),
     SettingsAnchor(id: 'listen-window', child: tiles[2]),
+    pingFeedbackRows(context),
     SettingsAnchor(id: 'wardrive-counters', child: WardriveCountersTile(state: s)),
   ];
 }

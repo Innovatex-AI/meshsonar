@@ -392,6 +392,10 @@ Circles where this driver's pings are hidden from every public view, for drives 
 - **Layout.** Phone: map on top (36% of the height, 200-380 px), list and editor scroll below; iPad and landscape (>= 720 dp wide): map left, panel right. Text up to 2.5x scrolls; the map banner and the neighbour names cap their own text at 1.3x so they never swallow the map, and are read in full by VoiceOver. All buttons and the pins are at least 48 px. VoiceOver: the map has a spoken summary ("N zones"), every zone is a labelled selected/unselected button ("Home, radius 400 m"), the sliders speak their value and step, and the zone list does everything the map does.
 - **Tests.** `test/core/privacy_zones_test.dart` (rounding, wrap, limits, select-not-add hit test), `test/app/privacy_zones_controller_test.dart` (queue, lazy key, offline, unsupported, refusals, in-flight edits), `test/core/privacy_zones_contract_test.dart` (the app's normalisation and client against the website's real `zones.ts` and `zone-handlers.ts` through bun; skips without bun or the checkout), `test/ui/privacy_zones_screen_test.dart` (the screen on iPhone / iPad, 2.5x text, dark, 48 px, VoiceOver, offline, no key, unsupported).
 
+## Map tab quick tools (unreleased)
+
+Under the layers button (Drive map and full-screen map): **base map** cycler (Chart, Street, Dark, Topo; saved; offline packs drawn for all but Topo), **filter** drawer (result, age, repeater, my pings only; badge shows how many are on), **trophy** (region leaderboard + your totals from this phone) and the **coverage pill** (share of cells and of your tx pings heard inside the view). Coverage options > Colour by adds **Ping age** (indigo ramp) and **Noise vs typical** (teal to rust); grey = mapped nothing heard, purple = heard signal unknown, green/blue/amber/red only for signal. Settings > Wardriving > Ping feedback: haptic tap (on) and sound (off), different for heard and heard nothing.
+
 ## Full-screen map
 
 (`ui/map/fullscreen_map.dart`, `fullscreen-map`) The whole screen is map. It shows the heard box (top left), exit

@@ -68,6 +68,8 @@ class _Palette {
 
 // Tile colour matrices. OSM's standard tiles are light; these remap each pixel's luminance onto the palette, so the
 // base map reads as a quiet chart under bright data. (Prototyped on real Westerville tiles.)
+/// The dark chart grading, public so the Dark base map can force it whatever the app theme is.
+const List<double> kDarkTileMatrix = _darkTiles;
 const List<double> _darkTiles = [
   -0.2412, -0.8114, -0.0819, 0, 302.29, //
   -0.2948, -0.9917, -0.1001, 0, 380.57, //

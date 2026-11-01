@@ -18,6 +18,7 @@ import 'coverage_timeline_slider.dart';
 import '../region/region_switch_sheet.dart' show confirmRegionSwitch;
 import 'coverage_map.dart';
 import 'layers/layers_sheet.dart' show showGeneratedLayersSheet;
+import 'map_tools.dart';
 import 'region_center.dart';
 import 'repeater_page_link.dart';
 
@@ -56,7 +57,7 @@ class FullscreenMapScreen extends StatelessWidget {
       body: AnimatedBuilder(
         animation: model,
         builder: (context, _) {
-          final pings = model.pings;
+          final pings = model.visiblePings;
           final latest = s.recentPings.isEmpty ? null : s.recentPings.first;
           return Stack(
             children: [
@@ -71,7 +72,9 @@ class FullscreenMapScreen extends StatelessWidget {
                   repeaterLabel: s.repeaterLabel,
                   heard: model.heard,
                   layers: model.layers,
-                  networkCells: model.networkCells,
+                  networkCells: model.visibleNetworkCells,
+                  baseStyle: model.baseStyle,
+                  onBoundsChanged: model.onMapBounds,
                   regionRepeaters: model.regionRepeaters,
                   repeaterSource: model.repeaterSource,
                   layerState: model.layerState,
@@ -131,7 +134,12 @@ class FullscreenMapScreen extends StatelessWidget {
               Positioned(
                 right: safe.right + Gap.m,
                 top: safe.top + Gap.m,
-                child: Column(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxHeight: (mq.size.height - safe.top - safe.bottom - panelHeight - 2 * Gap.m).clamp(0.0, double.infinity)),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.topRight,
+                    child: Column(
                   key: model.fullscreenOverlayKeys[1],
                   children: [
                     MapIconButton(
@@ -147,7 +155,11 @@ class FullscreenMapScreen extends StatelessWidget {
                       tooltip: 'Map layers',
                       onPressed: () => showMapLayersSheet(context, model),
                     ),
+                    const SizedBox(height: Gap.s),
+                    MapToolColumn(model: model, keyPrefix: 'full'),
                   ],
+                ),
+                  ),
                 ),
               ),
               if (latest != null && s.driving)

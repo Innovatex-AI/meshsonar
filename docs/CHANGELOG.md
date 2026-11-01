@@ -5,6 +5,8 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- **Map tab quick wins.** Base-map cycler under the layers button (Chart, Street, Dark, Topo; offline packs still used except for Topo). Two new coverage colour modes in Coverage options: Ping age and Noise vs typical (own colour ramps; grey and purple keep their meaning, strength colours stay for signal). Filter drawer (result, age, repeater, my pings only). "In view: N% of M cells heard" pill. Trophy button: the region leaderboard plus your totals. Settings > Wardriving > Ping feedback: haptic tap on/off and an optional sound (off by default), different for heard and heard nothing.
+
 ## [0.25.1] — 2026-11-01 — integration pass, privacy-zone editor, region switching, Drive Format v1.3, Plan "Where to drive next"
 
 - **Drive Format v1.3: ping-by-ping comparison with MeshMapper (website PR 194, migration 0099).** When the server lists `meshsonar.drive.v1.3` in `driveFormats`, uploads are v1.3 and each tx ping carries `outcome` (`echo` | `no_reply`) and `window_ms` (the listen window actually used, kept on the ping on disk). Older servers get the old body unchanged. Contract-tested against the website validator (`test/core/cmat_contract_test.dart`), wire shape in `test/core/drive_v13_wire_test.dart`.

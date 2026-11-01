@@ -16,6 +16,8 @@ String colorByLabel(CoverageColorBy by) => switch (by) {
   CoverageColorBy.snr => 'Best SNR',
   CoverageColorBy.heard => 'Share heard',
   CoverageColorBy.noise => 'Noise floor',
+  CoverageColorBy.age => 'Ping age',
+  CoverageColorBy.noiseDelta => 'Noise vs typical',
 };
 
 /// Legend steps for a colour-by mode, strongest first (same thresholds as [levelFor]).
@@ -41,6 +43,20 @@ List<(CoverageLevel, String)> coverageLegend(CoverageColorBy by) =>
         (CoverageLevel.good, '-125 to -115'),
         (CoverageLevel.fair, '-115 to -105'),
         (CoverageLevel.weak, 'noisy, above -105'),
+      ],
+      CoverageColorBy.age => const [
+        (CoverageLevel.strong, 'measured in the last 24 hours'),
+        (CoverageLevel.good, '1 to 7 days ago'),
+        (CoverageLevel.fair, '7 to 30 days ago'),
+        (CoverageLevel.weak, 'older than 30 days'),
+        (CoverageLevel.none, 'mapped, nothing heard'),
+      ],
+      CoverageColorBy.noiseDelta => const [
+        (CoverageLevel.strong, 'quieter than typical (3 dB or more)'),
+        (CoverageLevel.good, 'typical (within 3 dB)'),
+        (CoverageLevel.fair, 'noisier (3 to 8 dB above)'),
+        (CoverageLevel.weak, 'much noisier (over 8 dB above)'),
+        (CoverageLevel.none, 'nothing heard, or no noise reading'),
       ],
     };
 
@@ -127,7 +143,7 @@ class CoverageLayerControls extends StatelessWidget {
                           width: 10,
                           height: 10,
                           decoration: BoxDecoration(
-                            color: networkLevelColor(context, lvl),
+                            color: networkLevelColor(context, lvl, mode: model.colorBy),
                             shape: BoxShape.circle,
                           ),
                         ),
