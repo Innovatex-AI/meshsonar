@@ -10,6 +10,7 @@ import '../core/claim_flow.dart' show FileClaimRestoreStore;
 import '../core/cmat_client.dart';
 import '../core/drive_store.dart';
 import '../core/etag_client.dart';
+import '../core/gps_health.dart' show BackgroundLocation;
 import '../core/idle_region_watcher.dart';
 import '../core/position_filter.dart';
 import '../core/privacy_zone_store.dart';
@@ -21,6 +22,7 @@ import '../core/repeater_sync.dart';
 import '../core/report_draft_store.dart';
 import '../core/settings_store.dart';
 import '../core/sync_service.dart';
+import '../platform/always_location.dart';
 import '../platform/app_version.dart';
 import '../platform/geolocator_idle_location.dart';
 import '../platform/geolocator_location.dart';
@@ -123,6 +125,18 @@ Future<AppServices> buildRealServices() async {
     idleLocation: GeolocatorIdleLocationSource(),
     lastKnownStore: LastKnownStore(File('${root.path}${Platform.pathSeparator}last_known_fix.json')),
     locationAccess: GeolocatorLocationAccess(),
+    backgroundLocation: () async {
+      switch (await alwaysLocationState()) {
+        case AlwaysLocationState.granted:
+          return BackgroundLocation.always;
+        case AlwaysLocationState.canUpgrade:
+          return BackgroundLocation.whileUsing;
+        case AlwaysLocationState.unavailable:
+          return BackgroundLocation.unknown;
+        case AlwaysLocationState.notApplicable:
+          return BackgroundLocation.notApplicable;
+      }
+    },
     // Region rosters + the network repeater list, stored for offline names and pins (lib/core/repeater_sync.dart).
     repeaterSync: RepeaterSync(store: RepeaterSyncStore(Directory('${root.path}${Platform.pathSeparator}repeater_sync'))),
     regionCache: RegionCache(Directory('${root.path}${Platform.pathSeparator}region_cache')),

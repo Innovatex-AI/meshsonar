@@ -44,5 +44,6 @@ void main() {
     expect(find.textContaining('It has no radio preset on file'), findsOneWidget);
     expect(find.byKey(const Key('region-preset-dialog')), findsNothing);
     expect(h.state.presetPrompt, isNull);
+    await h.state.stopDrive(); // the drive's GPS monitor ticks once a second until it stops
   });
 }

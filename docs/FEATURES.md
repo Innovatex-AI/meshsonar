@@ -232,7 +232,14 @@ and ≥ 640 px) the map sits on the left and the controls on the right.
      shorter than one listen window (4–20 s, default 10, setting *Listen window*; extended while repeats still arrive, see PROTOCOL 5.4).
   2. **Distance:** the current filtered GPS fix is at least `minDistanceM` (15–500 m; default 100) from where the last
      ping was sent (haversine, R = 6,371 km).
-- The **first ping goes out as soon as the drive starts** (no previous ping, so time and distance are both met).
+- The **first ping goes out as soon as the drive has a fix of 50 m or better** (time and distance are both met at once); until
+  then the status says "Waiting for GPS (N s)". After 20 s it takes any fix inside 100 m. A cached first fix is never used.
+- Due times sit on a grid of the interval on a monotonic clock: a ping that goes out late (a slow fix, a busy phone) does not push
+  the ones after it. A ping goes out within 1 s of its due time whenever the last 8 s hold a fix inside 100 m.
+- **Which fix:** the best of the last **8 s** of GPS fixes at the due time (smallest accuracy plus speed x age, ties to the fresher),
+  not "whatever the platform answers in 4 s". Gate **100 m** (cell-tower guesses are refused); a ping from a fix worse than **50 m**
+  is sent with its real accuracy and flagged `low_acc` in the trace. Speed and course the phone does not report are derived from
+  the window when the movement clearly exceeds the fixes' error, else left empty.
 - The check runs on **every GPS fix** and on a **1 s tick**.
 - **Ping now** is allowed any time while driving. It queues behind a ping already on the air, and it **resets both
   the timer and the distance anchor**.
@@ -267,15 +274,16 @@ and ≥ 640 px) the map sits on the left and the controls on the right.
 
 | Rule | Value |
 |---|---|
-| Drop a fix with reported accuracy worse than | **50 m** — unless no fix ≤ 50 m has arrived for **10 s**, then poor fixes are used |
+| Drop a fix with reported accuracy worse than | **100 m** (was 50) — unless no fix ≤ 100 m has arrived for **10 s**, then poor fixes are used |
+| Cached fix | A fix whose own timestamp is older than **8 s** on arrival is dropped (never seeds the smoother or the hold) |
 | Accuracy assumed when none is reported | 10 m |
-| Smoothing | Accuracy-weighted 1-D Kalman on position. Process noise = (speed × dt)², speed ≥ 1 m/s, from reported speed or raw fix-to-fix speed. |
+| Smoothing | Accuracy-weighted alpha-beta (constant-velocity Kalman): predicts forward by the estimated velocity, then blends the fix in with gain max(Kalman gain, **0.15**) while moving. Velocity is primed from the reported speed and course. |
 | "Stopped" speed | < **1.0 m/s** |
 | "Moving" speed | ≥ **2.0 m/s** on 2 fixes in a row |
 | "Clearly driving" speed | ≥ **5.0 m/s** on one fix |
 | Hold radius around the parked anchor | max(2 × accuracy, **15 m**) |
 | Leave the hold without speed | **3** fixes in a row beyond the radius, each further than the last, the last at least max(2 × radius, **50 m**) out (4 × radius when the phone reports speed < 1 m/s) |
-| Enter the hold | First fix with no speed or speed < 1 m/s; reported speed < 1 m/s on 2 fixes in a row; or, with no speed, the last 3 fixes within the radius of their centre |
+| Enter the hold | First fix with no speed or speed < 1 m/s (accuracy <= 50 m); reported speed < 1 m/s on 2 fixes in a row; or, with no speed, the last **8** fixes (over >= 7 s) all within the radius of their centre AND not trending (first-half and second-half means within radius / 3). The old "3 fixes within the radius" took a 10 m/s car for parked at poor accuracy. |
 | While holding | The output is the anchor position with speed 0. Accuracy is always the raw value. |
 | On leaving | The smoother restarts at the fix that proved movement (no pull-back lag) |
 | `current()` | Returns the last filtered fix if it arrived within **3 s**, else asks the platform. An older cached fix never rewinds the filter. |

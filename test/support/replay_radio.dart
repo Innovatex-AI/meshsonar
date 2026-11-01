@@ -237,8 +237,14 @@ class ScriptedTransport implements ByteTransport {
   }
 }
 
+/// A location source the replay harness starts and stops.
+abstract interface class RunnableLocation implements LocationSource {
+  void run();
+  void stop();
+}
+
 /// A car at 13 m/s heading north; one fix per second.
-class ReplayLocation implements LocationSource {
+class ReplayLocation implements RunnableLocation {
   final DateTime Function() clock;
   final DateTime start;
   final double speedMps;
@@ -254,7 +260,9 @@ class ReplayLocation implements LocationSource {
     return GeoFix(lat: 40.1262 + s * speedMps / 111320.0, lon: -82.9312, accuracyM: 5, speedMps: speedMps, at: clock());
   }
 
+  @override
   void run() => _t = Timer.periodic(const Duration(seconds: 1), (_) => _c.add(_fix()));
+  @override
   void stop() => _t?.cancel();
   @override
   Stream<GeoFix> get fixes => _c.stream;
@@ -274,7 +282,9 @@ class ReplayResult {
   final DefaultWardriveEngine engine;
   final Duration driven;
   final Map<String, DateTime> echoSeenByApp; // (ping id|repeater) -> when the engine held the echo
-  ReplayResult(this.pings, this.radio, this.engine, this.driven, this.echoSeenByApp);
+  final LocationSource? gps;
+  final DateTime? engineStartedAt;
+  ReplayResult(this.pings, this.radio, this.engine, this.driven, this.echoSeenByApp, {this.gps, this.engineStartedAt});
 
   int get pingsSent => radio.sent.length;
 
@@ -305,6 +315,11 @@ class ReplayResult {
   }
 }
 
+/// The harness's monotonic clock (fake elapsed time, unaffected by `jank`'s clock jumps), for stacks that give the engine one.
+class ReplayClocks {
+  static Duration Function() mono = () => Duration.zero;
+}
+
 typedef StackBuilder = Future<DefaultWardriveEngine> Function(MeshCoreCompanionLink link, LocationSource gps, DateTime Function() clock);
 
 /// Drives [driveSeconds] of fake time at [intervalSec] cadence (distance rule always met) and returns what was measured.
@@ -320,13 +335,24 @@ ReplayResult runReplay({
   int sf = 7,
   Duration currentDelay = Duration.zero,
   WardriveConfig Function(WardriveConfig base)? tweak,
+  RunnableLocation Function(DateTime Function() clock)? makeGps,
+
+  /// Simulates a UI isolate that is blocked: at each second the clock the engine reads jumps ahead by the returned time while every
+  /// timer it armed still fires at its old fake time, i.e. LATE by that much (what a frozen isolate does to Timers).
+  Duration Function(int second)? jank,
+
+  /// Called after each simulated second with the engine (to press "Ping now" mid-drive, change the config, ...).
+  void Function(int second, DefaultWardriveEngine engine)? onSecond,
 }) {
   late ReplayResult result;
   fakeAsync((fa) {
     final t0 = DateTime.utc(2026, 11, 1, 12);
-    DateTime clock() => t0.add(fa.elapsed);
+    var jankOffset = Duration.zero;
+    ReplayClocks.mono = () => fa.elapsed;
+    DateTime clock() => t0.add(fa.elapsed + jankOffset);
     final radio = ScriptedTransport(clock: clock, seed: seed, script: script, backgroundEverySec: backgroundEverySec, bleLatency: Duration(milliseconds: bleLatencyMs), sf: sf);
-    final gps = ReplayLocation(clock, currentDelay: currentDelay);
+    final RunnableLocation gps = makeGps != null ? makeGps(clock) : ReplayLocation(clock, currentDelay: currentDelay);
+    DateTime? startedAt;
     final link = MeshCoreCompanionLink(radio, timeout: const Duration(seconds: 5), clock: clock);
     final pings = <DrivePing>[];
     late DefaultWardriveEngine engine;
@@ -337,6 +363,7 @@ ReplayResult runReplay({
       engine.pings.listen(pings.add);
       var cfg = WardriveConfig(intervalSec: intervalSec, minDistanceM: 15, listenWindow: listenWindow);
       if (tweak != null) cfg = tweak(cfg);
+      startedAt = clock();
       await engine.start(cfg);
       gps.run();
       radio.startBackground();
@@ -350,6 +377,8 @@ ReplayResult runReplay({
     assert(ready, 'stack did not start');
     for (var s = 0; s < driveSeconds; s++) {
       fa.elapse(const Duration(seconds: 1));
+      if (jank != null) jankOffset += jank(s);
+      if (onSecond != null) onSecond(s, engine);
     }
     var stopped = false;
     engine.stop().then((_) => stopped = true);
@@ -357,7 +386,7 @@ ReplayResult runReplay({
       fa.elapse(const Duration(milliseconds: 100));
     }
     gps.stop();
-    result = ReplayResult(pings, radio, engine, Duration(seconds: driveSeconds), const {});
+    result = ReplayResult(pings, radio, engine, Duration(seconds: driveSeconds), const {}, gps: gps, engineStartedAt: startedAt);
     unawaited(link.close());
     fa.flushMicrotasks();
   });

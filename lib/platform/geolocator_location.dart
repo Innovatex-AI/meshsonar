@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../radio/radio_api.dart';
+import 'geolocator_stream_hub.dart';
 
 /// A remembered position is only good for a ping when it is this fresh: a fix from an hour ago is where the car WAS.
 const Duration lastKnownMaxAge = Duration(seconds: 30);
@@ -77,7 +78,7 @@ class GeolocatorLocationSource implements LocationSource {
       );
 
   @override
-  Stream<GeoFix> get fixes => Geolocator.getPositionStream(locationSettings: _settings()).map(_toFix);
+  Stream<GeoFix> get fixes => GeolocatorStreamHub.shared.stream(HubProfile.drive, _settings(), key: 'drive').map(_toFix);
 
   @override
   Future<GeoFix?> current() async {
