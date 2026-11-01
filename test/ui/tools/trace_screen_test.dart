@@ -69,7 +69,7 @@ void main() {
   testWidgets('no radio: the gate, nothing else', (tester) async {
     final host = FakeToolsHost()..linkState = LinkState.disconnected;
     await pumpTool(tester, const TraceScreen(), host);
-    expect(find.text('No radio connected'), findsOneWidget);
+    expect(find.text('Radio not connected'), findsOneWidget);
     expect(find.byKey(const Key('trace-send')), findsNothing);
   });
 

@@ -36,7 +36,7 @@ void main() {
 
   group('ToolPage gate', () {
     for (final (state, words) in [
-      (LinkState.disconnected, 'No radio connected'),
+      (LinkState.disconnected, 'Radio not connected'),
       (LinkState.reconnecting, 'Getting your radio back'),
       (LinkState.connecting, 'Connecting'),
       (LinkState.handedOver, 'Radio handed to another app'),

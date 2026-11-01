@@ -61,7 +61,7 @@ void main() {
       await tester.tap(find.byKey(Key('more-$item')));
       await tester.pumpAndSettle();
       expect(find.byKey(Key('tool-$id')), findsOneWidget);
-      expect(find.text('No radio connected'), findsOneWidget);
+      expect(find.text('Radio not connected'), findsOneWidget);
       expect(find.byKey(const Key('tool-connect')), findsOneWidget);
     });
   }

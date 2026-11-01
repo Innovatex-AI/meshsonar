@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import '../../app/chat_controller.dart';
 import '../../chat/models.dart';
 import '../chat/conversation_screen.dart';
+import '../radios/admin_launcher.dart' show openRepeaterAdmin;
+import '../radios/rooms/room_join_header.dart';
 import 'contact_detail_screen.dart';
 import 'contacts_controller.dart';
 import 'contacts_view.dart';
@@ -26,9 +28,13 @@ class _ContactsTabState extends State<ContactsTab> {
   late final ContactsController _c = ContactsController(
     chat: widget.chat.service,
     openConversation: _openConversation,
-    openAdmin: widget.openAdmin,
-    canOpenRooms: false, // flips to true when the room login header exists (Wave 2D)
+    openAdmin: widget.openAdmin ?? _defaultAdmin,
+    canOpenRooms: true, // the conversation carries the room login header
   );
+
+  /// Remote administration through the connected radio (says plainly why when there is none).
+  static void _defaultAdmin(BuildContext context, Contact c) =>
+      openRepeaterAdmin(context, keyHex: c.publicKey, name: c.displayName, isRoom: c.type == ContactType.room);
 
   void _openConversation(BuildContext context, Contact c) {
     if (c.type != ContactType.companion && c.type != ContactType.room) return;
@@ -47,7 +53,7 @@ class _ContactsTabState extends State<ContactsTab> {
           onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ContactDetailScreen(controller: _c, publicKey: c.publicKey))),
         ),
       ],
-      header: room ? null : DmRouteHeader(controller: _c, publicKey: c.publicKey),
+      header: room ? RoomJoinHeader(keyHex: c.publicKey, name: c.displayName) : DmRouteHeader(controller: _c, publicKey: c.publicKey),
     );
   }
 

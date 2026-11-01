@@ -76,7 +76,7 @@ class ToolUnavailable extends StatelessWidget {
         ),
       LinkState.disconnected => (
           Icons.bluetooth_disabled,
-          'No radio connected',
+          'Radio not connected',
           'Connect a MeshCore radio and these tools work with it. Nothing is sent to the mesh until you ask.',
           true
         ),

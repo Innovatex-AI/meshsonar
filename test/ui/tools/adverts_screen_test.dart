@@ -34,7 +34,7 @@ void main() {
   testWidgets('no radio: the plain-language gate, nothing else', (tester) async {
     final host = FakeToolsHost()..linkState = LinkState.disconnected;
     await pumpTool(tester, const AdvertsScreen(), host);
-    expect(find.text('No radio connected'), findsOneWidget);
+    expect(find.text('Radio not connected'), findsOneWidget);
     expect(find.byKey(const Key('adverts-send-local')), findsNothing);
     await end(tester);
   });

@@ -66,7 +66,7 @@ class _ContactsViewState extends State<ContactsView> {
 
   /// A person opens their conversation (the thing you came here to do); everything else, and anyone when no conversation
   /// screen is wired, opens the details. People get an info button for the details.
-  bool _converses(Contact c) => _c.openConversation != null && c.type == ContactType.companion;
+  bool _converses(Contact c) => _c.openConversation != null && (c.type == ContactType.companion || (c.type == ContactType.room && _c.canOpenRooms));
   void _open(Contact c) => _converses(c) ? _c.openConversation!(context, c) : _details(c);
 
   @override

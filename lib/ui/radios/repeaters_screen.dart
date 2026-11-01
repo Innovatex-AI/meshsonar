@@ -2,6 +2,8 @@
 // claimed, each one tap from its admin screen (or the room conversation). Nothing is sent from this list.
 import 'package:flutter/material.dart';
 
+import '../drive/drive_controls.dart' show openConnect;
+
 import '../../radio/inbound.dart';
 import '../../radio/protocol.dart' show AdvType;
 import '../app.dart';
@@ -66,6 +68,8 @@ class _RepeatersScreenState extends State<RepeatersScreen> {
         title: app.radioSession == null ? 'Radio not connected' : 'Not available on this connection',
         message: why,
         icon: Icons.bluetooth_disabled,
+        onRetry: app.radioSession == null ? () => openConnect(context) : null,
+        retryLabel: 'Connect radio',
       );
     } else if (_error != null) {
       body = ErrorState(title: 'Could not read your contacts', message: _error, onRetry: _load);

@@ -7,6 +7,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
+import '../../alerts/alerts_runtime.dart' show AlertsHost;
 import '../../app/chat_controller.dart';
 import '../../app/chat_wiring.dart';
 import '../../chat/models.dart';
@@ -50,6 +51,9 @@ class _ChatBannerHostState extends State<ChatBannerHost> {
 
   void _onMessage(ChatMessage m) {
     if (!mounted) return;
+    // One banner per message: when the alerts layer is running it owns the in-app banner (it honours the Notifications
+    // settings: off, muted, quiet hours, privacy). This one is the fallback for a build without it.
+    if (widget.controllerListenable == null && AlertsHost.runtime.value != null) return;
     _timer?.cancel();
     setState(() => _shown = m);
     _timer = Timer(widget.visibleFor, () {
