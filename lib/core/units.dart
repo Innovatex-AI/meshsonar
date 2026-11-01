@@ -368,3 +368,7 @@ class Units {
     return '$snapped ft';
   }
 }
+
+/// "45.0 °C" or "113.0 °F" (one decimal), the single place a temperature is converted.
+String formatTemperatureC(double celsius, {required bool imperial}) =>
+    imperial ? '${(celsius * 9 / 5 + 32).toStringAsFixed(1)} \u00B0F' : '${celsius.toStringAsFixed(1)} \u00B0C';

@@ -105,6 +105,33 @@ are unchanged. The 2 s rule has nothing to act on without user sends.
 **Dependency rule added:** `lib/chat` (pure Dart, Wave 1B) and `AppState` talk to the radio only through `RadioSession`;
 nothing outside `lib/radio` constructs a `MeshCoreCompanionLink` except `wiring.dart`'s `linkFactory`.
 
+### 1.2 The Tools (Nov 2026, "Radios and tools")
+
+Trace path, Discover nearby, Adverts, Rx log, Noise floor and health, Telemetry and Radio setup. Pure-Dart logic in `lib/radio/tools/`,
+thin screens in `lib/ui/tools/` and `lib/ui/radios/radio_setup/`.
+
+| Piece | File | Job |
+|---|---|---|
+| `ToolsRadio` | `tools/tools_radio.dart` | the small interface every tool codes against: send a command at a named priority, the raw push stream, RX log, control packets, events, stats reads, contacts. `LinkToolsRadio` (`link_tools_radio.dart`) implements it over `MeshCoreCompanionLink` + the session; tests use a scripted fake |
+| `RadioTools` | `tools/radio_tools.dart` | one object per `LinkRadioSession` (`session.tools`) holding all tools, sharing the session's `TxArbiter` so every transmission lands in the one airtime ledger |
+| `TraceTool` | `trace_tool.dart` | builds and sends `SEND_TRACE_PATH`, waits on the raw push stream for the tag (silence = a normal result), maps hops to names, distance, ambiguity; `TraceStore` / `FileTraceStore` saved traces; `compareTraces` |
+| `DiscoverTool` | `discover_tool.dart` | node discovery with a 4-per-120-s `RateWindow` (cooldown, never an error), both SNRs, "Add to contacts" |
+| `AdvertTool` | `advert_tool.dart` | send zero-hop / flood adverts with separate cooldowns (30 s / 5 min); the book of every advert heard (RX log + pushes) with scope check |
+| `RxLog` | `rx_log.dart` | bounded ring of header-decoded packets, counts, filters, pause, CSV of headers. Channel packets are only labelled for joined channels by checking the 2-byte MAC; nothing is decrypted or kept |
+| `NoiseMonitor` | `noise_monitor.dart` | GET_STATS at command class P4 while a screen watches, skipped while a ping is in flight; min/avg/max, spikes, the website's thresholds (`core/rf_thresholds.dart`), own airtime from the ledger |
+| `TelemetryTool` | `telemetry_tool.dart`, `lpp.dart` | telemetry for a contact or this radio; Cayenne LPP decode (big endian) |
+| `RadioSetupTool` | `radio_setup.dart` | name / position / TX power / behaviour / LoRa parameters: limits first, write, **read back via APP_START**, mismatch reported, one-step undo |
+| frames | `tool_frames.dart`, `advert_decode.dart`, `transport_code.dart` | encoders/decoders and the region-scope check (docs/PROTOCOL.md 2.6) |
+
+**Priorities.** Trace, telemetry and settings writes go at P1 (admin), adverts at P2, noise reads and discovery at P4. The command queue
+picks by class, so a message the person sends or a ping always goes before any queued tool command (`test/radio/tools/tools_integration_test.dart`
+proves it, including 20 queued reads with a message sent in the middle). Nothing in the Tools transmits by itself: every send follows a
+button press, and adverts, discovery, traces and telemetry have a visible cooldown.
+
+**UI seam.** Screens read the app through `ToolsHost` (`ui/tools/tools_host.dart`): the connected `RadioTools`, link state, whether a drive is
+recording, the viewed region's preset and scope names, joined channels, the phone position, opening a URL. `AppStateToolsHost` backs it with
+`AppState`; widget tests put a fake in a `ToolsHostScope` around a real `RadioTools` over the simulated radio.
+
 ### Dependency rules (as implemented)
 
 1. **`lib/core` and `lib/radio` (except `ble_transport.dart`) never import Flutter.** They run under plain `dart test`
@@ -417,6 +444,9 @@ behaviour: silence, the replay rule, loss, caps, prefix matching, the blank-pass
 | `radio/radio_health.dart` | radio | `RadioStatsSource`, `radioSampleFrom` (frames to a `DriveSample`, unmeasured = null), `RadioHealthPoller` (every 60 s, never while a ping is in flight; injectable clock + timer). |
 | `radio/wardrive_engine.dart` | radio | `DefaultWardriveEngine`: cadence, one ping at a time, listen window, echo building, optional neighbour discovery; `formatPingText`. |
 | `radio/simulator.dart` | radio | `SimulatedLocationSource` (Westerville loop), `SimulatedTransport` (speaks real frames and real encrypted packets), `SimulatedRadioScanner`, simulated repeaters. |
+| `radio/tools/*.dart` | radio | The Tools (section 1.2): `tools_radio`, `link_tools_radio`, `radio_tools`, `tool_frames`, `trace_tool`, `discover_tool`, `advert_tool`, `advert_decode`, `transport_code`, `rx_log`, `noise_monitor`, `telemetry_tool`, `lpp`, `radio_setup`, `tool_state`. |
+| `ui/tools/*.dart` | ui | `tool_kit` (page gate, cooldown button, notes, small map, formatters), `tools_host` (the app seam), and the screens: trace, discover, adverts, rx log, noise, telemetry. |
+| `ui/radios/radio_setup/radio_setup_screen.dart` | ui | Radio setup with guard rails: limits, the loud confirm for LoRa parameters, drive guard, read-back, undo. |
 | `radio/ble_transport.dart` | platform | `BleRadioScanner` / `_BleTransport` over flutter_reactive_ble (Nordic-UART-style service). |
 | `platform/phone_sensors_plus.dart` | platform | `SensorsPlusBarometer` (sensors_plus), `BatteryPlusSource` (battery_plus), `DeviceInfoPlusDetails` (device_info_plus; hardware model id, never the device name). |
 | `platform/geolocator_location.dart` | platform | `GeolocatorLocationSource`: per-OS location settings (Android foreground notification, iOS background updates), permission. |

@@ -10,7 +10,14 @@ import '../onboarding/onboarding_screen.dart';
 import '../radio/radio_screen.dart';
 import '../radios/repeaters_screen.dart';
 import '../report_problem_screen.dart' show openReportProblem;
+import '../radios/radio_setup/radio_setup_screen.dart';
 import '../settings_screen.dart';
+import '../tools/adverts_screen.dart';
+import '../tools/discover_screen.dart';
+import '../tools/noise_screen.dart';
+import '../tools/rx_log_screen.dart';
+import '../tools/telemetry_screen.dart';
+import '../tools/trace_screen.dart';
 
 class MoreTab extends StatefulWidget {
   const MoreTab({super.key});
@@ -53,6 +60,13 @@ class _MoreTabState extends State<MoreTab> {
         MoreItem.settings => const SettingsScreen(),
         MoreItem.about => const AboutScreen(),
         MoreItem.privacy => const SettingsScreen(initialSection: 'privacy'),
+        MoreItem.trace => const TraceScreen(),
+        MoreItem.discover => const DiscoverScreen(),
+        MoreItem.adverts => const AdvertsScreen(),
+        MoreItem.rxLog => const RxLogScreen(),
+        MoreItem.noiseFloor => const NoiseScreen(),
+        MoreItem.telemetry => const TelemetryScreen(),
+        MoreItem.radioSetup => const RadioSetupScreen(),
         MoreItem.legend || MoreItem.howItWorks => const SizedBox.shrink(),
       };
 
@@ -131,6 +145,13 @@ class MoreList extends StatelessWidget {
             header('Radios and tools'),
             row(MoreItem.repeaters, Icons.cell_tower, 'Repeaters and rooms',
                 s.connected ? 'Administer a repeater, read and post in a room' : 'Needs your radio. Free repeater administration'),
+            row(MoreItem.trace, Icons.route, 'Trace path', 'Test the route through repeaters, hop by hop'),
+            row(MoreItem.discover, Icons.radar, 'Discover nearby', 'Find repeaters that can hear you, and how well'),
+            row(MoreItem.adverts, Icons.campaign_outlined, 'Adverts', 'Send yours, see who is advertising'),
+            row(MoreItem.rxLog, Icons.list_alt, 'Rx log', 'Every packet your radio hears'),
+            row(MoreItem.noiseFloor, Icons.show_chart, 'Noise floor and health', 'Interference and radio counters, live'),
+            row(MoreItem.telemetry, Icons.thermostat, 'Telemetry', 'Battery, temperature and position of a node'),
+            row(MoreItem.radioSetup, Icons.tune, 'Radio setup', 'Name, position, power and frequency, with checks'),
             header('App'),
             row(MoreItem.wardriving, Icons.radar, 'Wardriving settings',
                 'Ping interval, minimum distance, listen window, channel'),

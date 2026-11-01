@@ -14,6 +14,10 @@ import 'dart:typed_data';
 import 'crypto.dart';
 import 'packet.dart';
 import 'protocol.dart';
+import 'tools/advert_decode.dart' show buildAdvertPayload;
+import 'tools/lpp.dart';
+import 'tools/tool_frames.dart';
+import 'tools/transport_code.dart';
 import 'radio_api.dart';
 
 // ------------------------------------------------------------------ the drive
@@ -233,6 +237,28 @@ class SimulatedTransport implements ByteTransport {
 
   final String nodeName;
   final Uint8List publicKey;
+
+  // Settings the Tools can change (SET_ADVERT_NAME, SET_ADVERT_LATLON, SET_RADIO_TX_POWER, SET_RADIO_PARAMS,
+  // SET_OTHER_PARAMS); SELF_INFO reports them.
+  late String _name = nodeName;
+  double _advLat = 0, _advLon = 0;
+  int _txDbm = 22;
+  int _freqKhz = 910525, _bwHz = 62500, _sf = 7, _cr = 5;
+
+  /// Home page demo / screenshots: other nodes advertise and chatter on the Public channel now and then, so the Rx log and
+  /// the adverts list are not empty. Off in tests.
+  final bool ambientTraffic;
+  Timer? _ambient;
+  int _ambientTick = 0;
+
+  /// Adverts this radio sent through SEND_SELF_ADVERT (true = flood), for tests.
+  final List<bool> sentAdverts = [];
+
+  /// The radio's current LoRa parameters as the app set them.
+  ({int freqKhz, int bwHz, int sf, int cr}) get radioParams => (freqKhz: _freqKhz, bwHz: _bwHz, sf: _sf, cr: _cr);
+  String get advertName => _name;
+  ({double lat, double lon}) get advertPosition => (lat: _advLat, lon: _advLon);
+  int get txPowerDbm => _txDbm;
   final _out = StreamController<Uint8List>.broadcast();
   bool _connected = true;
   final List<Timer> _timers = [];
@@ -329,6 +355,7 @@ class SimulatedTransport implements ByteTransport {
     this.autoAddSupported = true,
     int extraContacts = 0,
     this.contactFramePaceMs = 10,
+    this.ambientTraffic = false,
   })  : location = location ?? SimulatedLocationSource(timeScale: timeScale, clock: clock),
         repeaters = repeaters ?? defaultSimulatedRepeaters(),
         _rng = math.Random(seed),
@@ -547,19 +574,22 @@ class SimulatedTransport implements ByteTransport {
       case Cmd.appStart:
         if (frame.length < 8) return _emit(encodeErr(ErrCode.illegalArg));
         _emit(encodeSelfInfo(
-          txPowerDbm: 22,
+          txPowerDbm: _txDbm,
           maxTxPowerDbm: 22,
           publicKey: publicKey,
-          freqKhz: 910525,
-          bwHz: 62500,
-          sf: 7,
-          cr: 5,
-          name: nodeName,
+          advLat: _advLat,
+          advLon: _advLon,
+          freqKhz: _freqKhz,
+          bwHz: _bwHz,
+          sf: _sf,
+          cr: _cr,
+          name: _name,
           manualAdd: manualAddContacts,
           telemetryModes: telemetryModes,
           advertLocPolicy: advertLocPolicy,
           multiAcks: multiAcks,
         ));
+        if (ambientTraffic) _startAmbient();
       case Cmd.deviceQuery:
         if (frame.length >= 2) _appTargetVer = frame[1];
         _emit(encodeDeviceInfo(
@@ -704,13 +734,51 @@ class SimulatedTransport implements ByteTransport {
       case Cmd.getBattAndStorage:
         _emit(encodeBattAndStorage(batteryMv: _batteryMv, usedKb: 120, totalKb: 1984));
       case Cmd.sendTelemetryReq:
-        // Only the 'self' form ([39][3 reserved]); the answer is a push, like the firmware.
-        if (frame.length != 4) return _emit(encodeErr(ErrCode.unsupportedCmd));
-        _emit(encodeSelfTelemetryPush(prefix6: publicKey.sublist(0, 6), voltageV: _batteryMv / 1000, mcuTempC: _mcuTempC));
+        // The 'self' form ([39][3 reserved]) answers with a push only; the key form ([39][3 reserved][key x32]) answers SENT
+        // and then a push from the contact (MyMesh.cpp 1680-1718).
+        if (frame.length == 4) {
+          _emit(encodeSelfTelemetryPush(prefix6: publicKey.sublist(0, 6), voltageV: _batteryMv / 1000, mcuTempC: _mcuTempC));
+        } else if (frame.length >= 36) {
+          _onTelemetryFor(frame.sublist(4, 36));
+        } else {
+          _emit(encodeErr(ErrCode.unsupportedCmd));
+        }
       case Cmd.sendControlData:
         if (frame.length < 2 || (frame[1] & 0x80) == 0) return _emit(encodeErr(ErrCode.unsupportedCmd));
         _emit(encodeOk());
         _simulateDiscover(frame.sublist(1));
+      case ToolCmd.sendSelfAdvert:
+        _onSelfAdvert(frame.length >= 2 && frame[1] == 1);
+      case ToolCmd.sendTracePath:
+        _onTrace(frame);
+      case ToolCmd.setAdvertName:
+        if (frame.length < 2) return _emit(encodeErr(ErrCode.illegalArg));
+        _name = utf8.decode(frame.sublist(1, math.min(frame.length, 32)), allowMalformed: true);
+        _emit(encodeOk());
+      case ToolCmd.setAdvertLatLon:
+        if (frame.length < 9) return _emit(encodeErr(ErrCode.illegalArg));
+        final la = bd.getInt32(1, Endian.little), lo = bd.getInt32(5, Endian.little);
+        if (la.abs() > 90000000 || lo.abs() > 180000000) return _emit(encodeErr(ErrCode.illegalArg));
+        _advLat = la / 1e6;
+        _advLon = lo / 1e6;
+        _emit(encodeOk());
+      case ToolCmd.setRadioTxPower:
+        if (frame.length < 2) return _emit(encodeErr(ErrCode.illegalArg));
+        final p = bd.getInt8(1);
+        if (p < -9 || p > 22) return _emit(encodeErr(ErrCode.illegalArg));
+        _txDbm = p;
+        _emit(encodeOk());
+      case ToolCmd.setRadioParams:
+        if (frame.length < 11) return _emit(encodeErr(ErrCode.illegalArg));
+        final fk = bd.getUint32(1, Endian.little), bw = bd.getUint32(5, Endian.little), sf = frame[9], cr = frame[10];
+        if (fk < 150000 || fk > 2500000 || sf < 5 || sf > 12 || cr < 5 || cr > 8 || bw < 7000 || bw > 500000) {
+          return _emit(encodeErr(ErrCode.illegalArg));
+        }
+        _freqKhz = fk;
+        _bwHz = bw;
+        _sf = sf;
+        _cr = cr;
+        _emit(encodeOk());
       default:
         _emit(encodeErr(ErrCode.unsupportedCmd));
     }
@@ -874,7 +942,7 @@ class SimulatedTransport implements ByteTransport {
 
   void _simulateFlood(Uint8List secret, int ts, String text) {
     final me = location.positionAt(_clock());
-    final payload = buildGroupTextPayload(secret, ts, nodeName, text);
+    final payload = buildGroupTextPayload(secret, ts, _name, text);
     final header = makeHeader(RouteType.flood, PayloadType.grpTxt);
 
     // Hop 1: repeaters that decode our transmission retransmit with path [self].
@@ -935,6 +1003,155 @@ class SimulatedTransport implements ByteTransport {
     }
   }
 
+  // ---------------------------------------------------------------- Tools: adverts, trace, telemetry, ambient traffic
+
+  /// Reported SNR saturates like a real radio's (see [_hearPacket]).
+  double _reportSnr(double snr) => math.min(snr, 11.5 + _gauss() * 0.75).clamp(-31.0, 31.0);
+
+  void _onSelfAdvert(bool flood) {
+    sentAdverts.add(flood);
+    _sent++;
+    _txAirMs += 350;
+    _emit(encodeOk());
+    if (!flood) return;
+    // Repeaters that hear the advert repeat it with their hash in the path; this radio hears the repeats.
+    final me = location.positionAt(_clock());
+    final payload = buildAdvertPayload(publicKey, _clock().toUtc().millisecondsSinceEpoch ~/ 1000, AdvType.chat, _name,
+        lat: advertLocPolicy != 0 && (_advLat != 0 || _advLon != 0) ? _advLat : null,
+        lon: advertLocPolicy != 0 && (_advLat != 0 || _advLon != 0) ? _advLon : null);
+    for (final r in repeaters) {
+      final up = _linkSnr(_kmTo(r, me));
+      if (!_decodes(up)) continue;
+      final down = _linkSnr(_kmTo(r, me)) + 2.0;
+      if (!_decodes(down)) continue;
+      _hearPacket(
+          MeshPacket(header: makeHeader(RouteType.flood, PayloadType.advert), pathLenByte: encodePathLen(pathHashSize, 1), path: [_hash(r)], payload: payload),
+          down,
+          Duration(milliseconds: 400 + _rng.nextInt(1800)));
+    }
+  }
+
+  // CMD_SEND_TRACE_PATH (MyMesh.cpp 1813-1832): a hop that does not exist, or a link that does not decode, gives silence.
+  void _onTrace(Uint8List f) {
+    if (f.length <= 10) return _emit(encodeErr(ErrCode.unsupportedCmd));
+    final flags = f[9];
+    final sz = 1 << (flags & 3);
+    final path = f.sublist(10);
+    if (path.length % sz != 0) return _emit(encodeErr(ErrCode.illegalArg));
+    final tag = ByteData.sublistView(f).getUint32(1, Endian.little);
+    final hops = path.length ~/ sz;
+    _emit(encodeSent(tag: tag, estTimeoutMs: 1800 + 400 * hops));
+    _sent++;
+    _txAirMs += _airMsPerPacket;
+    final me = location.positionAt(_clock());
+    final chain = <SimulatedRepeater>[];
+    for (var i = 0; i < hops; i++) {
+      final h = path.sublist(i * sz, (i + 1) * sz);
+      final r = repeaters.where((r) {
+        for (var k = 0; k < sz; k++) {
+          if (r.publicKey[k] != h[k]) return false;
+        }
+        return true;
+      }).firstOrNull;
+      if (r == null) return; // missing hop: silence
+      chain.add(r);
+    }
+    final snrs = <double>[];
+    for (var i = 0; i < chain.length; i++) {
+      final link = i == 0 ? _linkSnr(_kmTo(chain[0], me)) : _linkSnr(_kmBetween(chain[i - 1], chain[i])) + 6.0;
+      if (!_decodes(link)) return;
+      snrs.add(_reportSnr(link));
+    }
+    final back = _linkSnr(_kmTo(chain.last, me)) + 2.0;
+    if (!_decodes(back)) return;
+    _emit(encodeTraceDataPush(tag, path, snrs, _reportSnr(back), hashSize: sz), Duration(milliseconds: 250 + 250 * hops + _rng.nextInt(200)));
+  }
+
+  void _onTelemetryFor(List<int> key) {
+    final c = _contactByPrefix(key, 32);
+    if (c == null) return _emit(encodeErr(ErrCode.notFound));
+    _emit(encodeSent(tag: 0x7e1e, estTimeoutMs: 1800));
+    if (c.type == AdvType.chat) return; // companions do not answer telemetry unless allowed: silence
+    final lpp = <int>[
+      ...lppVoltage(3.80 + (c.key[3] % 40) / 100),
+      ...lppTemperature(18.0 + (c.key[4] % 200) / 10),
+      if (c.lat != 0 || c.lon != 0) ...lppGps(c.lat, c.lon, 215),
+    ];
+    _emit(encodeTelemetryResponsePush(c.key.sublist(0, 6), lpp), const Duration(milliseconds: 700));
+  }
+
+  /// An advert "from the air": the RX log gets the packet, and the radio pushes ADVERT (a contact) or NEW_ADVERT (not a
+  /// contact; it is added to the table unless the radio is in manual-add mode). [scope] puts a real transport code for that
+  /// region name on the packet. Returns false when the radio is gone.
+  bool injectAdvertHeard(String name,
+      {int type = AdvType.repeater, double? lat, double? lon, List<int> pathHashes = const [], String? scope, double snrDb = 4.5, int? timestamp}) {
+    if (!_connected) return false;
+    final key = sha256(utf8.encode('meshsonar-sim-advert:$name'));
+    final ts = timestamp ?? _clock().toUtc().millisecondsSinceEpoch ~/ 1000;
+    final payload = buildAdvertPayload(key, ts, type, name, lat: lat, lon: lon);
+    final path = [for (final h in pathHashes) Uint8List.fromList([h])];
+    final scoped = scope != null;
+    final pkt = MeshPacket(
+      header: makeHeader(scoped ? RouteType.transportFlood : RouteType.flood, PayloadType.advert),
+      transportCode1: scoped ? transportCodeFor(regionTransportKey(scope), PayloadType.advert, payload) : null,
+      transportCode2: scoped ? 0 : null,
+      pathLenByte: encodePathLen(1, path.length),
+      path: path,
+      payload: payload,
+    );
+    _recv++;
+    _rxAirMs += _airMsPerPacket;
+    final rssi = (_nf + snrDb).clamp(-140.0, -20.0).round();
+    _lastRssi = rssi;
+    _lastSnr = snrDb;
+    _emit(encodeLogRxData(snrDb, rssi, pkt.toBytes()));
+    final known = _contactByPrefix(key, 32);
+    if (known != null) {
+      _emit(encodeAdvertPush(key), const Duration(milliseconds: 10));
+    } else if ((manualAddContacts & 1) == 0) {
+      final c = _SimContact(key, type, name, _modClock++)
+        ..lat = lat ?? 0
+        ..lon = lon ?? 0
+        ..lastAdvert = ts;
+      _contacts.add(c);
+      _emit(encodeContactFrame(key, type: type, name: name, lastAdvert: ts, lat: lat ?? 0, lon: lon ?? 0, lastMod: c.lastMod, code: Push.newAdvert),
+          const Duration(milliseconds: 10));
+    }
+    return true;
+  }
+
+  /// Some other node's channel message "in the air" (header-only interest: the RX log shows it as a channel packet).
+  void injectChatter(String sender, String text, {int slot = 0, List<int> pathHashes = const [0x1a], double snrDb = 2.0}) {
+    if (!_connected || slot < 0 || slot >= _slots.length) return;
+    final payload = buildGroupTextPayload(_slots[slot].secret, _clock().toUtc().millisecondsSinceEpoch ~/ 1000, sender, text);
+    final path = [for (final h in pathHashes) Uint8List.fromList([h])];
+    final pkt = MeshPacket(
+        header: makeHeader(RouteType.flood, PayloadType.grpTxt), pathLenByte: encodePathLen(1, path.length), path: path, payload: payload);
+    _recv++;
+    _emit(encodeLogRxData(snrDb, (_nf + snrDb).round(), pkt.toBytes()));
+  }
+
+  void _startAmbient() {
+    if (_ambient != null) return;
+    _ambient = Timer.periodic(_scaled(const Duration(seconds: 6)), (_) {
+      if (!_connected) return;
+      final i = _ambientTick++;
+      final r = repeaters[i % repeaters.length];
+      if (i % 3 == 2) {
+        injectChatter(['KD8XYZ', 'N8OHI', 'W8LAB'][i % 3], ['anyone around?', 'check check', 'net starts at 8'][(i ~/ 3) % 3]);
+      } else {
+        injectAdvertHeard(r.name,
+            type: AdvType.repeater,
+            lat: r.lat,
+            lon: r.lon,
+            pathHashes: i % 4 == 0 ? const [] : [repeaters[(i + 1) % repeaters.length].publicKey[0]],
+            scope: i % 2 == 0 ? '#cmh' : null,
+            snrDb: 6.0 - (i % 7));
+      }
+    });
+    _timers.add(_ambient!);
+  }
+
   void _simulateDiscover(Uint8List req) {
     // NODE_DISCOVER_REQ (examples/simple_repeater/MyMesh.cpp ~791): [0x80|prefix][filter][tag u32][since u32].
     if ((req[0] & 0xF0) != 0x80 || req.length < 6) return;
@@ -970,6 +1187,9 @@ class SimulatedRadioScanner implements RadioScanner {
   final DateTime Function()? clock;
   final String firmwareVersion;
 
+  /// Other nodes advertise and chatter now and then (the app's Simulator; not tests).
+  final bool ambientTraffic;
+
   /// The transport handed out by the last [connect], for tests and demos.
   SimulatedTransport? lastTransport;
 
@@ -998,6 +1218,7 @@ class SimulatedRadioScanner implements RadioScanner {
     this.extraContacts = 0,
     this.autoAddSupported = true,
     this.contactFramePaceMs = 10,
+    this.ambientTraffic = false,
   });
 
   @override
@@ -1018,7 +1239,8 @@ class SimulatedRadioScanner implements RadioScanner {
         maxContacts: maxContacts,
         extraContacts: extraContacts,
         autoAddSupported: autoAddSupported,
-        contactFramePaceMs: contactFramePaceMs);
+        contactFramePaceMs: contactFramePaceMs,
+        ambientTraffic: ambientTraffic);
     lastTransport = t;
     return t;
   }

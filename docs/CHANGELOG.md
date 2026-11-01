@@ -65,6 +65,15 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
   Wardriving) holds channel, discovery (listen-only), auto-ping interval, minimum distance and a new **listen window** (4-20 s,
   default 7). The same three sliders open from the Map tab's "Ping 30 s / 100 m" chip. Both apply straight away, even mid-drive.
   (They had moved from a main tab to Settings > Radio, collapsed, when the shell arrived in wave 1C.)
+- **Radios and tools (wave 2E).** More > Radios and tools: Trace path (hop-by-hop SNR, distance, map, ambiguous 1-byte hashes flagged, saved and
+  compared traces, link to the website's route tool), Discover nearby (both-direction SNR, 4-per-2-minutes cooldown, Add to contacts), Adverts
+  (send local / mesh-wide with cooldowns and an airtime note; every advert heard with the region scope check "in scope: #cmh"), Rx log (header
+  decode, counts, filters, pause, CSV; other people's message text is never read or stored), Noise floor and health (live chart, Quiet / Raised /
+  Noisy with the website's thresholds, MeshSonar's own airtime), Telemetry (battery, temperature, position of a node or this radio), and Radio
+  setup with guard rails (limits, a loud confirm for LoRa parameters, read-back after every write, undo, drive guard). Tool traffic goes through the
+  command queue below chat and pings. New protocol pieces with fixtures from the live research runs: docs/PROTOCOL.md 2.6. The simulator answers
+  all of it (and can show other nodes advertising). The Radio and Settings > Region texts that said MeshSonar never changes your radio now say it
+  never does so by itself.
 - **New app shell (wave 1C).** Five tabs: Chat, Map, Analyze, Plan, More (rail on iPad and landscape). The old Drive tab is
   Map (Drive is a mode of it), Region and Drives are Analyze, Radio and Settings are in More. Plan lists the website tools
   with working links; Chat shows an honest first-run state until chat arrives. The last tab is remembered.

@@ -97,7 +97,7 @@ Future<void> showPresetPrompt(BuildContext context, RegionPresetPrompt p, {requi
           Text(fmt(p.preset.freqMhz, p.preset.bwKhz, p.preset.sf, p.preset.cr)),
           const SizedBox(height: 12),
           const Text('MeshSonar never changes your radio by itself. To use this region, change the preset on your radio '
-              '(in the MeshCore app), then reconnect.'),
+              '(More > Radio setup, or the MeshCore app), then reconnect.'),
         ]),
       ),
       actions: [
