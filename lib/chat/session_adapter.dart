@@ -294,15 +294,6 @@ class SessionContactPort implements ContactRadioPort {
   }
 
   @override
-  Future<Uint8List?> exportAdvert(String publicKey) async {
-    try {
-      return await session.exportContactAdvert(publicKey);
-    } catch (e) {
-      _unavailable(e);
-    }
-  }
-
-  @override
   Future<void> importAdvert(Uint8List packet) async {
     try {
       await session.importContactAdvert(packet);

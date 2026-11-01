@@ -28,6 +28,7 @@ import 'channel_flows.dart';
 import 'composer.dart';
 import 'message_bubble.dart';
 import 'message_format.dart';
+import '../contacts/message_details.dart' as details;
 import 'message_sheets.dart';
 
 class ConversationScreen extends StatefulWidget {
@@ -254,7 +255,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
       case MessageAction.delete:
         if (await confirmDeleteMessage(context)) c.service.deleteMessage(m.id);
       case MessageAction.details:
-        await showMessageDetails(context, m, radioConnected: c.radioConnected);
+        await details.showMessageDetails(context, chat: c.service, messageId: m.id);
       case MessageAction.openLink:
         final l = r.$2;
         if (l == null) return;
@@ -344,7 +345,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
           minTileHeight: 56,
           title: Text(m.text, maxLines: 2, overflow: TextOverflow.ellipsis),
           subtitle: Text('${m.isOutgoing ? 'You' : (m.senderName ?? 'Unknown')}, ${dayLabel(context, m.tsLocalMs, now: c.now())} ${timeLabel(context, m.tsLocalMs)}', style: t.textTheme.labelMedium),
-          onTap: () => showMessageDetails(context, m, radioConnected: c.radioConnected),
+          onTap: () => details.showMessageDetails(context, chat: c.service, messageId: m.id),
         );
       },
     );
@@ -383,7 +384,12 @@ class _ConversationScreenState extends State<ConversationScreen> {
         }),
       );
     }
-    if (_msgs.isEmpty) return _empty(context);
+    if (_msgs.isEmpty) {
+      // Scrollable: at the largest text size the explanation is taller than the room above the composer.
+      return LayoutBuilder(
+        builder: (context, box) => SingleChildScrollView(child: ConstrainedBox(constraints: BoxConstraints(minHeight: box.maxHeight), child: _empty(context))),
+      );
+    }
 
     final items = <Widget>[];
     final me = c.selfName;
