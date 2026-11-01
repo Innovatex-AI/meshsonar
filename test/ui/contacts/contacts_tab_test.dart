@@ -8,6 +8,7 @@ import 'package:meshsonar/ui/chat/channel_flows.dart';
 import 'package:meshsonar/ui/chat/conversation_screen.dart';
 import 'package:meshsonar/ui/contacts/contact_detail_screen.dart';
 import 'package:meshsonar/ui/contacts/contacts_tab.dart';
+import 'package:meshsonar/ui/radios/rooms/room_join_header.dart';
 
 import '../../chat/contact_support.dart';
 import '../chat/chat_kit.dart' as kitlib;
@@ -103,6 +104,24 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(ContactDetailScreen), findsOneWidget);
     expect(find.byType(ConversationScreen), findsNothing);
+  });
+
+  testWidgets('a room opens as a conversation with the room login header; a repeater\'s details carry Admin', (tester) async {
+    await boot(tester);
+    port.radioAdd(radioContact(3, name: 'Lounge', type: ContactType.room));
+    await kit.service.contacts.syncNow();
+    await tester.pump();
+    await tester.tap(find.text('Lounge'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ConversationScreen), findsOneWidget);
+    expect(find.byType(RoomJoinHeader), findsOneWidget);
+    expect(find.byKey(const Key('dm-route-header')), findsNothing);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Tower'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ContactDetailScreen), findsOneWidget);
+    expect(find.byKey(const Key('contact-admin')), findsOneWidget);
   });
 
   group('a tapped or scanned meshcore:// link', () {

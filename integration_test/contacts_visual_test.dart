@@ -72,20 +72,28 @@ void main() {
     }
 
     // Filters and search.
-    await t.tap(find.text('Repeaters').first);
+    // The chip row scrolls sideways: bring the chip into view before tapping it.
+    await t.ensureVisible(find.byKey(const Key('filter-repeaters')));
+    await pumpFor(t, const Duration(milliseconds: 800));
+    await t.tap(find.byKey(const Key('filter-repeaters')));
     await pumpFor(t, const Duration(seconds: 1));
     await shot(t, 'contacts-filter-repeaters');
-    await t.tap(find.text('All').first);
+    await t.ensureVisible(find.byKey(const Key('filter-all')));
+    await pumpFor(t, const Duration(milliseconds: 800));
+    await t.tap(find.byKey(const Key('filter-all')));
     await pumpFor(t, const Duration(milliseconds: 500));
     await t.enterText(find.byKey(const Key('contacts-search')), 'zzz');
     await pumpFor(t, const Duration(seconds: 1));
     await shot(t, 'contacts-no-match');
-    await t.enterText(find.byKey(const Key('contacts-search')), '');
-    await pumpFor(t, const Duration(milliseconds: 500));
+    await t.tap(find.byKey(const Key('contacts-search-clear')));
+    await pumpFor(t, const Duration(milliseconds: 800));
+    expect(find.byKey(const Key('contacts-list')), findsOneWidget, reason: 'the list is back after clearing the search');
 
     // A direct message: flood first, delivered, route learned, then direct.
-    final ann = find.textContaining('Ann KE8ANN').first;
-    await t.tap(ann);
+    // The list is lazy: scroll the row into the built range first.
+    final ann = find.textContaining('Ann KE8ANN');
+    await t.scrollUntilVisible(ann, 200, scrollable: find.descendant(of: find.byKey(const Key('contacts-list')), matching: find.byType(Scrollable)).first);
+    await t.tap(ann.first);
     await pumpFor(t, const Duration(seconds: 2));
     await shot(t, 'dm-empty');
     await t.enterText(find.byKey(const Key('composer-field')), 'Morning Ann, are you on the hill today?');
@@ -98,6 +106,9 @@ void main() {
     radio.injectDirectMessage('Ann KE8ANN', 'Yes! Up there by 10. Bring the long antenna.');
     await pumpFor(t, const Duration(seconds: 8));
     await shot(t, 'dm-reply');
+    // A person taps the field first; after a reply arrived the test's text input connection is stale otherwise.
+    await t.tap(find.byKey(const Key('composer-field')));
+    await pumpFor(t, const Duration(milliseconds: 500));
     await t.enterText(find.byKey(const Key('composer-field')), 'On it.');
     await pumpFor(t, const Duration(milliseconds: 300));
     await t.tap(find.byKey(const Key('composer-send')));
@@ -129,9 +140,15 @@ void main() {
     await pumpFor(t, const Duration(seconds: 1));
     await t.pageBack();
     await pumpFor(t, const Duration(seconds: 1));
+    await shot(t, 'back-to-contacts');
 
-    // A repeater's details, the add flow, the radio list and the settings sheet.
-    await t.tap(find.text('Repeaters').first);
+    // A repeater's details, the add flow, the radio list and the settings sheet. The list is scrolled down from the
+    // conversation we came from: the header (search, chips) is its first item, so go back to the top first.
+    await t.drag(find.byKey(const Key('contacts-list')), const Offset(0, 4000));
+    await pumpFor(t, const Duration(seconds: 1));
+    await t.ensureVisible(find.byKey(const Key('filter-repeaters')));
+    await pumpFor(t, const Duration(milliseconds: 800));
+    await t.tap(find.byKey(const Key('filter-repeaters')));
     await pumpFor(t, const Duration(seconds: 1));
     final rep = find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key as ValueKey<String>).value.startsWith('contact-') && !(w.key as ValueKey<String>).value.startsWith('contact-details'));
     if (rep.evaluate().isNotEmpty) {
@@ -141,8 +158,12 @@ void main() {
       await t.pageBack();
       await pumpFor(t, const Duration(seconds: 1));
     }
-    await t.tap(find.text('All').first);
+    await t.ensureVisible(find.byKey(const Key('filter-all')));
+    await pumpFor(t, const Duration(milliseconds: 800));
+    await t.tap(find.byKey(const Key('filter-all')));
     await pumpFor(t, const Duration(milliseconds: 500));
+    await t.ensureVisible(find.byKey(const Key('contacts-add')));
+    await pumpFor(t, const Duration(milliseconds: 800));
     await t.tap(find.byKey(const Key('contacts-add')));
     await pumpFor(t, const Duration(seconds: 1));
     await shot(t, 'add-contact');
@@ -160,12 +181,17 @@ void main() {
     await pumpFor(t, const Duration(seconds: 1));
     final usage = find.byKey(const Key('contacts-usage'));
     if (usage.evaluate().isNotEmpty) {
+      await t.ensureVisible(usage);
+      await pumpFor(t, const Duration(milliseconds: 800));
+    await pumpFor(t, const Duration(milliseconds: 800));
       await t.tap(usage);
       await pumpFor(t, const Duration(seconds: 2));
       await shot(t, 'radio-list');
       await t.tapAt(const Offset(10, 10));
       await pumpFor(t, const Duration(seconds: 1));
     }
+    await t.ensureVisible(find.byKey(const Key('contacts-settings')));
+    await pumpFor(t, const Duration(milliseconds: 800));
     await t.tap(find.byKey(const Key('contacts-settings')));
     await pumpFor(t, const Duration(seconds: 2));
     await shot(t, 'contacts-settings');

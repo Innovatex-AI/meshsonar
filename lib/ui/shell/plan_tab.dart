@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 
 import '../app.dart';
+import 'drive_next_card.dart';
 
 class PlanTool {
   final String id;
@@ -19,6 +20,8 @@ class PlanTool {
 /// Website tools, with the names and leads the site itself uses (meshcore-insights `TOOL_PAGES`).
 const List<PlanTool> planTools = [
   PlanTool('planner', 'Planner', 'Ask the planning engine where to build next.', Icons.edit_road_outlined, '/plan/planner'),
+  PlanTool('recommended', 'Recommended build', 'The engine\'s recommended build, phase by phase, with the budget and the risks.',
+      Icons.checklist_rtl, '/plan/recommended'),
   PlanTool('sites', 'Site explorer', 'Candidate sites and the links between them.', Icons.place_outlined, '/sites'),
   PlanTool('link', 'Point-to-point link',
       'A terrain check between any two points: line of sight, clearance and the odds the link works.', Icons.timeline, '/tools/link'),
@@ -60,9 +63,12 @@ class PlanTab extends StatelessWidget {
           key: const Key('plan-list'),
           padding: const EdgeInsets.fromLTRB(Gap.l, Gap.s, Gap.l, Gap.xl),
           children: [
+            const DriveNextCard(),
+            Semantics(header: true, child: Text('Plan on the website', style: t.textTheme.titleSmall)),
+            const SizedBox(height: Gap.xs),
             Text(
               'Plan where the next repeater should go. These tools open on the website${region == null ? '' : ' for ${region.name}'}, '
-              'in your browser.',
+              'in your browser. No account needed.',
               style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant),
             ),
             const SizedBox(height: Gap.m),
