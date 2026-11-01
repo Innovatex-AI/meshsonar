@@ -21,6 +21,15 @@ Future<void> tapTab(WidgetTester t, String name) async {
   await pumpFor(t, const Duration(milliseconds: 600));
 }
 
+/// Lists are lazy: scroll the widget into the built range, then into view.
+Future<void> reveal(WidgetTester t, Finder f) async {
+  if (f.evaluate().isEmpty) {
+    await t.scrollUntilVisible(f, 200, scrollable: find.byWidgetPredicate((w) => w is Scrollable && w.axis == Axis.vertical).first, maxScrolls: 60);
+  }
+  await t.ensureVisible(f);
+  await pumpFor(t, const Duration(milliseconds: 400));
+}
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -39,17 +48,17 @@ void main() {
       await waitFor(t, find.byKey(const Key('card-status')));
       await pumpFor(t, const Duration(seconds: 1));
       await shot(t, 'admin-overview-$d');
-      await t.ensureVisible(find.byKey(const Key('run-health')));
+      await reveal(t, find.byKey(const Key('run-health')));
       await t.tap(find.byKey(const Key('run-health')));
       await waitFor(t, find.byKey(const Key('finding-clock')), timeout: const Duration(seconds: 40));
       await pumpFor(t, const Duration(seconds: 1));
-      await t.ensureVisible(find.byKey(const Key('finding-advert')));
+      await reveal(t, find.byKey(const Key('finding-advert')));
       await shot(t, 'admin-health-$d');
       await tapTab(t, 'settings');
       await waitFor(t, find.byKey(const Key('setting-name')));
       await pumpFor(t, const Duration(seconds: 6));
       await shot(t, 'admin-settings-$d');
-      await t.ensureVisible(find.byKey(const Key('setting-name')));
+      await reveal(t, find.byKey(const Key('setting-name')));
       await t.tap(find.byKey(const Key('setting-name')));
       await pumpFor(t, const Duration(milliseconds: 800));
       await t.enterText(find.byKey(const Key('editor-text')), 'Hilltop 2');
@@ -61,7 +70,7 @@ void main() {
       await shot(t, 'admin-verified-$d');
       await t.tap(find.byKey(const Key('result-done')));
       await pumpFor(t, const Duration(milliseconds: 600));
-      await t.ensureVisible(find.byKey(const Key('setting-radio')));
+      await reveal(t, find.byKey(const Key('setting-radio')));
       await t.tap(find.byKey(const Key('setting-radio')));
       await pumpFor(t, const Duration(milliseconds: 800));
       await shot(t, 'admin-radio-warning-$d');

@@ -59,7 +59,12 @@ class PlanTab extends StatelessWidget {
       appBar: AppBar(title: const Text('Plan')),
       body: SafeArea(
         top: false,
-        child: ListView(
+        // A reading column: on an iPad the cards would otherwise stretch across 1,100 dp.
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 760),
+            child: ListView(
           key: const Key('plan-list'),
           padding: const EdgeInsets.fromLTRB(Gap.l, Gap.s, Gap.l, Gap.xl),
           children: [
@@ -104,6 +109,8 @@ class PlanTab extends StatelessWidget {
                 subtitle: Text(p.$2),
               ),
           ],
+        ),
+          ),
         ),
       ),
     );

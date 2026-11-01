@@ -31,6 +31,15 @@ import 'message_format.dart';
 import '../contacts/message_details.dart' as details;
 import 'message_sheets.dart';
 
+/// Wide Chat tab (two columns): lists inside it open conversations in the right-hand pane through this.
+class ConversationPaneScope extends InheritedWidget {
+  final void Function(Widget conversation) show;
+  const ConversationPaneScope({super.key, required this.show, required super.child});
+  static ConversationPaneScope? maybeOf(BuildContext context) => context.getInheritedWidgetOfExactType<ConversationPaneScope>();
+  @override
+  bool updateShouldNotify(ConversationPaneScope old) => false;
+}
+
 class ConversationScreen extends StatefulWidget {
   final ChatController controller;
   final String convKey;
@@ -68,6 +77,13 @@ class ConversationScreen extends StatefulWidget {
     List<Widget> actions = const [],
     Widget? header,
   }) {
+    // Two-column Chat on a wide screen: show it in the right-hand pane instead of pushing a page.
+    final pane = ConversationPaneScope.maybeOf(context);
+    if (pane != null) {
+      pane.show(ConversationScreen(
+          key: ValueKey('pane-$convKey'), controller: controller, convKey: convKey, title: title, subtitle: subtitle, actions: actions, header: header));
+      return Future<void>.value();
+    }
     return Navigator.of(context).push(MaterialPageRoute<void>(
       builder: (_) => ConversationScreen(controller: controller, convKey: convKey, title: title, subtitle: subtitle, actions: actions, header: header),
     ));
