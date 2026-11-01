@@ -15,6 +15,7 @@ import '../drive_screen.dart';
 import '../onboarding/ui_prefs.dart';
 import '../telemetry_sheet.dart';
 import 'analyze_tab.dart';
+import '../chat/chat_banner_host.dart';
 import 'chat_tab.dart';
 import 'chat_tab_host.dart';
 import 'mini_drive_bar.dart';
@@ -168,7 +169,8 @@ class _HomeShellState extends State<HomeShell> {
 
   @override
   Widget build(BuildContext context) {
-    return ShellScope(
+    return ChatBannerHost(
+      child: ShellScope(
       controller: _shell,
       child: ListenableBuilder(
         listenable: _shell,
@@ -229,6 +231,7 @@ class _HomeShellState extends State<HomeShell> {
             ),
           );
         },
+      ),
       ),
     );
   }

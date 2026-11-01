@@ -6,12 +6,15 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../app/app_state.dart';
+import '../../app/chat_controller.dart';
+import '../../app/chat_wiring.dart';
 import '../../core/antenna_profile.dart';
 import '../../core/heard.dart' show haversineM;
 import '../../core/model.dart';
 import '../../radio/radio_api.dart';
 import '../../core/units.dart';
 import '../antenna_sheet.dart';
+import '../chat/chat_drive_sheet.dart';
 import '../app.dart' show AppScope;
 import '../connect_screen.dart';
 import '../drive_stats.dart' show formatDuration;
@@ -645,6 +648,47 @@ class DriveActionButtons extends StatelessWidget {
               ),
             ),
           ],
+          // Chat-in-Drive: only when chat is running in this build.
+          ValueListenableBuilder<ChatController?>(
+            valueListenable: ChatWiring.controller,
+            builder: (context, chat, _) {
+              if (chat == null) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(left: Gap.m),
+                child: SizedBox(
+                  width: h,
+                  height: h,
+                  child: ListenableBuilder(
+                    listenable: chat,
+                    builder: (context, _) {
+                      final n = chat.unreadConversations;
+                      return Semantics(
+                        button: true,
+                        label: n > 0 ? 'Messages, $n unread' : 'Messages',
+                        child: ExcludeSemantics(
+                          child: OutlinedButton(
+                            key: const Key('drive-chat'),
+                            style: OutlinedButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              side: BorderSide(color: n > 0 ? t.colorScheme.primary : t.colorScheme.outlineVariant, width: 2),
+                              foregroundColor: t.colorScheme.primary,
+                              backgroundColor: compact ? t.colorScheme.surface.withValues(alpha: 0.92) : null,
+                            ),
+                            onPressed: () => showChatDriveSheet(context, chat),
+                            child: Badge(
+                              isLabelVisible: n > 0,
+                              label: Text('$n'),
+                              child: const Icon(Icons.chat_bubble_outline_rounded, size: 28),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              );
+            },
+          ),
         ],
       ),
     );

@@ -446,6 +446,16 @@ Chat is decoupled from frames by two interfaces in `lib/chat/radio_bridge.dart`;
 `RadioSession` (lib/radio/session.dart) to them. Inbound texts arrive through `RadioSession.setInboundPersister`, so a message is
 in SQLite before the radio's destructive queue is asked for the next one. `SEND_CONFIRMED` becomes an ACK match on any attempt of
 a waiting DM. A `queued` send result (no answer from the radio in time) is retried with the SAME timestamp, which is safe because
+receivers dedupe on (conversation, timestamp, text). The last DM attempt floods: the adapter writes the contact back with an
+unknown path (`ADD_UPDATE_CONTACT`, out_path_len 0xFF) first. DM frames of text type 1 (CLI data) are not chat and are ignored.
+
+### Region scope per channel (chat UI)
+
+A channel's `region_scope` (from a `meshcore://channel/add?...&region_scope=` link or the Region row of channel info) is sent
+with every flood of that channel through `ScopeGuard` (`SET_FLOOD_SCOPE_KEY` right before the send, cleared before the next ping).
+The 16-byte key is derived from the region name like a hashtag key: `sha256("#" + lower-case name)[0..16]`. **Assumption, not yet
+verified on a real radio against a region configured on a repeater**; no scope is set by default (whole mesh).
+
 receivers dedupe on (conversation, timestamp, text). The last DM attempt floods: the adapter sends `RESET_PATH` first (section 11). DM frames of text type 1 (CLI data) are not chat and are ignored.
 
 ## 11. Contacts: management frames, auto-add and the phone-is-master sync (M2, Nov 2026)

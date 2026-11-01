@@ -5,6 +5,17 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- **Chat (wave 2A).** The Chat tab is real. Channels: your channels with last message, unread count, pin and mute; a pinned
+  System section for the wardrive channel (pings sent, last ping, "paused by the airtime budget", read-only View traffic).
+  Add a channel: join Public, join a # channel, scan a QR code, paste a link or a name and secret, create a private channel.
+  Channel info: QR code and link to share, notifications (All / Mentions / Muted), pin, region, rename, delete; plain-language
+  errors when the radio is away, full, or too old. Conversations: delivery state under each message (queued, sending, sent,
+  heard by N repeaters, delivered, not sent with Retry / Delete), live byte counter, drafts, search in a conversation and
+  across all, long-press copy / details (SNR, hops) / delete, tappable links, mentions. Driving: typing is off above 8 km/h
+  unless "I'm a passenger"; new messages show as an in-app banner; Map has a Messages button that opens a half-height sheet.
+  Chat never leaves the phone. New dependencies: `mobile_scanner` (QR camera, BSD-3, iOS camera string added) and `qr`.
+
+
 - **Repeater administration and rooms (M4 part 1).** Free remote administration of your own repeaters and room servers, through your radio:
   More > Radios and tools > Repeaters and rooms, and "Administer this repeater" on a repeater's sheet. Login with the admin password (memory
   only; "Remember passwords on this phone" is an off-by-default Keychain opt-in); Overview (battery, uptime, noise, airtime, packets, errors,
