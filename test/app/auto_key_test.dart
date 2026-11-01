@@ -1,6 +1,7 @@
 // One-tap onboarding: a phone with no driver key creates one by itself (no form), once, quietly, and never after the
 // person removed their key.
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/app/build_flags.dart';
 import 'package:meshsonar/core/api.dart';
 
 import '../ui/fakes.dart';
@@ -12,6 +13,29 @@ Future<void> settle() async {
 }
 
 void main() {
+  group('production guard', () {
+    test('a release build always may; a dev build may not on production hosts unless told', () {
+      expect(mayAutoCreateDriverKey('https://meshsonar.com', devBuild: false, allowProd: false), isTrue);
+      expect(mayAutoCreateDriverKey('https://meshsonar.com', devBuild: true, allowProd: false), isFalse);
+      expect(mayAutoCreateDriverKey('https://cmh.meshsonar.com/', devBuild: true, allowProd: false), isFalse);
+      expect(mayAutoCreateDriverKey('https://MESHSONAR.com', devBuild: true, allowProd: false), isFalse);
+      expect(mayAutoCreateDriverKey('https://meshsonar.com', devBuild: true, allowProd: true), isTrue);
+      expect(mayAutoCreateDriverKey('http://localhost:3000', devBuild: true, allowProd: false), isTrue);
+      expect(mayAutoCreateDriverKey('https://notmeshsonar.com', devBuild: true, allowProd: false), isTrue);
+    });
+
+    test('with the guard closed, launch makes no key request at all', () async {
+      final h = Harness()..mayAutoCreateKey = (_) => false;
+      h.settings.autoKeyOn = true;
+      await h.state.init();
+      await settle();
+      expect(h.client.requestCalls, 0);
+      expect(h.state.hasKey, isFalse);
+      expect(await h.state.ensureKey(), isFalse);
+      expect(h.client.requestCalls, 0);
+    });
+  });
+
   test('launch with no key creates one with the generic name and keeps it', () async {
     final h = Harness();
     h.settings.autoKeyOn = true;

@@ -631,6 +631,7 @@ class Harness {
 
   /// The hub catalogue read (`/v1/regions`); null = not fetched, as before.
   Future<HubRegions> Function(String serverUrl)? regionCatalogFetch;
+  bool Function(String serverUrl) mayAutoCreateKey = (_) => true;
   final List<FakeCmatClient> clients = [];
   final List<FakeEngine> engines = [];
 
@@ -725,6 +726,7 @@ class Harness {
     newId: nextId,
     regionIndexCache: regionIndexCache,
     regionCatalogFetch: regionCatalogFetch,
+    mayAutoCreateKey: mayAutoCreateKey,
     locationAccess: locationAccess,
     repeaterSync: repeaterSync,
     lastKnownStore: lastKnownStore,
