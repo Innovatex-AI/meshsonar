@@ -9,14 +9,33 @@ import 'screens.dart';
 
 Future<void> openTool(WidgetTester t, String rowKey) async {
   await openShellTab(t, 'More');
-  if (find.byKey(const Key('more-list')).hitTestable().evaluate().isEmpty) await openShellTab(t, 'More');
+  if (!await waitFor(t, find.byKey(const Key('more-list')).hitTestable(), timeout: const Duration(seconds: 3))) {
+    await openShellTab(t, 'More');
+    await waitFor(t, find.byKey(const Key('more-list')));
+  }
   final row = find.byKey(Key(rowKey));
   if (row.evaluate().isEmpty) {
-    await t.scrollUntilVisible(row, 150, scrollable: find.descendant(of: find.byKey(const Key('more-list')), matching: find.byType(Scrollable)).first);
+    await t.drag(find.byKey(const Key('more-list')), const Offset(0, 3000));
+    await t.pump(const Duration(milliseconds: 500));
+  }
+  if (row.evaluate().isEmpty) {
+    await t.dragUntilVisible(row, find.byKey(const Key('more-list')), const Offset(0, -150));
   }
   await t.ensureVisible(row);
   await t.tap(row);
   await pumpFor(t, const Duration(seconds: 2));
+}
+
+Future<void> back(WidgetTester t) async {
+  final b = find.byTooltip('Back');
+  if (b.evaluate().isNotEmpty) {
+    await t.tap(b.first);
+  } else {
+    await t.pageBack();
+  }
+  await pumpFor(t, const Duration(seconds: 1));
+  // ignore: avoid_print
+  print('BACK list=${find.byKey(const Key('more-list')).evaluate().isNotEmpty}');
 }
 
 void main() {
@@ -38,7 +57,7 @@ void main() {
     // No radio yet: the gate.
     await openTool(t, 'more-trace');
     await shot(t, 'tool-gate-no-radio');
-    await t.pageBack();
+    await back(t);
     await pumpFor(t, const Duration(seconds: 1));
     // Connect the Simulator radio.
     await openShellTab(t, 'Map');
@@ -68,10 +87,10 @@ void main() {
 
     await openTool(t, 'more-adverts');
     await shot(t, 'tool-adverts');
-    await t.pageBack();
+    await back(t);
     await openTool(t, 'more-rxLog');
     await shot(t, 'tool-rxlog');
-    await t.pageBack();
+    await back(t);
     await openTool(t, 'more-discover');
     final scan = find.byKey(const Key('discover-scan'));
     if (scan.evaluate().isNotEmpty) {
@@ -80,14 +99,14 @@ void main() {
       await pumpFor(t, const Duration(seconds: 18));
     }
     await shot(t, 'tool-discover');
-    await t.pageBack();
+    await back(t);
     await openTool(t, 'more-noiseFloor');
     await pumpFor(t, const Duration(seconds: 40));
     await shot(t, 'tool-noise');
-    await t.pageBack();
+    await back(t);
     await openTool(t, 'more-telemetry');
     await shot(t, 'tool-telemetry');
-    await t.pageBack();
+    await back(t);
     await openTool(t, 'more-radioSetup');
     await shot(t, 'tool-radio-setup-1');
     final list = find.byKey(const Key('setup-list'));
@@ -96,7 +115,7 @@ void main() {
       await pumpFor(t, const Duration(milliseconds: 500));
       await shot(t, 'tool-radio-setup-2');
     }
-    await t.pageBack();
+    await back(t);
     await openTool(t, 'more-trace');
     await pumpFor(t, const Duration(seconds: 3));
     await t.tap(find.byKey(const Key('trace-add-hop')));
