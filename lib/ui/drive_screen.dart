@@ -337,8 +337,9 @@ class _MapPane extends StatelessWidget {
                   visualDensity: VisualDensity.compact,
                 ),
               ),
-            // Below the region chip (top right), which is wider than the icon buttons and used to overlap the hint.
-            if (pings.isEmpty) Positioned(left: 0, right: 50, top: Gap.s + 44, child: MapHint(state: s)),
+            // At the bottom of the map: the top right holds the region chip, the last-known-location chip and the icon buttons,
+            // which stack taller than a fixed offset can clear (the chips used to cover the hint's title).
+            if (pings.isEmpty) Positioned(left: 0, right: 0, bottom: model.attributionStackHeight + 12, child: MapHint(state: s)),
             if (showHeard)
               Positioned(
                 left: Gap.s,

@@ -9,6 +9,7 @@ import 'package:latlong2/latlong.dart';
 import '../../core/drive_next.dart';
 import '../../core/heard.dart' show compass;
 import '../../core/hex_cells.dart' show loadHexEngine;
+import '../../core/startup_location.dart' show LocationAction;
 import '../../core/units.dart' show Units;
 import '../app.dart';
 import '../map/coverage_map.dart' show CoverageMap;
@@ -110,7 +111,11 @@ class _DriveNextCardState extends State<DriveNextCard> {
         context,
         _note(
           context,
-          note?.message ?? 'MeshSonar needs your location to find gaps near you. No account needed.',
+          note == null
+              ? 'MeshSonar needs your location to find coverage gaps near you. No account needed.'
+              : note.action == LocationAction.ask
+                  ? 'Allow location and MeshSonar lists the silent and unmapped areas near you. No account needed.'
+                  : 'Location is off for MeshSonar. Turn it on in Settings to find coverage gaps near you.',
           action: note?.actionLabel == null
               ? null
               : FilledButton.tonal(
