@@ -25,7 +25,11 @@ class RegionNeighboursLayer extends StatelessWidget {
 
   /// Space the parent covers with its own controls (chips, buttons, the control panel): names are not placed under it.
   final EdgeInsets avoid;
-  const RegionNeighboursLayer({super.key, required this.set, required this.onPick, this.avoid = EdgeInsets.zero});
+
+  /// Rectangles (in the map's own coordinates) of the parent's overlays, read each build: a name is not placed under one;
+  /// a pinned name slides along the edge to the nearest free spot.
+  final List<Rect> Function()? obstacles;
+  const RegionNeighboursLayer({super.key, required this.set, required this.onPick, this.avoid = EdgeInsets.zero, this.obstacles});
 
   static final StrokePattern _dashed = StrokePattern.dashed(segments: const [7, 6]);
 
@@ -40,12 +44,16 @@ class RegionNeighboursLayer extends StatelessWidget {
     final safe = Rect.fromLTRB(avoid.left + 8, avoid.top + 8, size.width - avoid.right - 8, size.height - avoid.bottom - 8);
     final visible = Rect.fromLTWH(0, 0, size.width, size.height);
 
+    final obs = obstacles?.call() ?? const <Rect>[];
+    bool free(Rect r) => !obs.any((o) => o.overlaps(r));
     final names = <Widget>[];
     final edge = <Widget>[];
     var pinned = 0;
     for (final n in set.neighbours) {
       final o = camera.latLngToScreenOffset(LatLng(n.label.lat, n.label.lon));
+      final box = Rect.fromCenter(center: o, width: _NameButton.width, height: _NameButton.height);
       if (visible.contains(o) && safe.contains(o)) {
+        if (!free(box)) continue; // under an overlay: the outline still takes the tap
         names.add(Positioned(
           key: ValueKey('region-name-pos-${n.region.code}'),
           left: o.dx - _NameButton.width / 2,
@@ -56,7 +64,8 @@ class RegionNeighboursLayer extends StatelessWidget {
         ));
       } else if (pinned < kRegionEdgePins && !visible.contains(o)) {
         pinned++;
-        edge.add(_edgePin(context, n, o, safe, size));
+        final pin = _edgePin(context, n, o, safe, size, free);
+        if (pin != null) edge.add(pin);
       }
     }
 
@@ -83,7 +92,7 @@ class RegionNeighboursLayer extends StatelessWidget {
   }
 
   /// A name pinned to the map edge, on the line from the middle of the map to the neighbour, with an arrow toward it.
-  Widget _edgePin(BuildContext context, RegionNeighbour n, Offset target, Rect safe, Size size) {
+  Widget? _edgePin(BuildContext context, RegionNeighbour n, Offset target, Rect safe, Size size, bool Function(Rect) free) {
     final centre = Offset(size.width / 2, size.height / 2);
     final d = target - centre;
     // Scale the direction so the point lands on the inner rectangle's edge.
@@ -92,7 +101,24 @@ class RegionNeighboursLayer extends StatelessWidget {
     final sx = d.dx == 0 ? double.infinity : ((d.dx > 0 ? inner.right : inner.left) - centre.dx) / d.dx;
     final sy = d.dy == 0 ? double.infinity : ((d.dy > 0 ? inner.bottom : inner.top) - centre.dy) / d.dy;
     final s = math.min(sx.abs(), sy.abs());
-    final p = centre + d * s;
+    var p = centre + d * s;
+    // Slide along the edge (the axis the pin is not pinned on) to the nearest spot no overlay covers.
+    final onSide = sx.abs() < sy.abs(); // pinned to the left or right edge: slide vertically
+    Rect at(Offset q) => Rect.fromCenter(center: q, width: _NameButton.width, height: _NameButton.height);
+    if (!free(at(p))) {
+      Offset? found;
+      for (var step = 1; step <= 40 && found == null; step++) {
+        for (final sign in [1, -1]) {
+          final q = onSide ? Offset(p.dx, p.dy + sign * step * 28.0) : Offset(p.dx + sign * step * 28.0, p.dy);
+          if (inner.contains(q) && free(at(q))) {
+            found = q;
+            break;
+          }
+        }
+      }
+      if (found == null) return null;
+      p = found;
+    }
     return Positioned(
       key: ValueKey('region-edge-pos-${n.region.code}'),
       left: p.dx - _NameButton.width / 2,

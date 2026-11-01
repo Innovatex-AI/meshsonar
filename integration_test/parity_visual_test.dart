@@ -33,8 +33,12 @@ void main() {
     await openTab(t, 'Map');
     await pumpFor(t, const Duration(seconds: 4));
     await shot(t, 'map-regions');
-    final names = find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('region-name-')
-        && !(w.key! as ValueKey<String>).value.startsWith('region-name-pos-'));
+    final names = find.byWidgetPredicate((w) {
+      final k = w.key;
+      if (k is! ValueKey<String>) return false;
+      final v = k.value;
+      return (v.startsWith('region-name-') || v.startsWith('region-edge-')) && !v.contains('-pos-');
+    });
     if (names.evaluate().isEmpty) {
       // ignore: avoid_print
       print('SKIPPED no neighbour names on screen');

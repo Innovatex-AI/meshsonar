@@ -1103,7 +1103,7 @@ class _CoverageMapState extends State<CoverageMap> {
                 ],
               ),
             if (_regionsOn)
-              RegionNeighboursLayer(set: widget.regionNeighbours!, onPick: (r) => unawaited(_pickRegion(r)), avoid: widget.overlayPadding),
+              RegionNeighboursLayer(set: widget.regionNeighbours!, onPick: (r) => unawaited(_pickRegion(r)), avoid: widget.overlayPadding, obstacles: _overlayRects),
             if (widget.showRings && layers.rings && pos != null)
               if (widget.puck case final puck?)
                 ListenableBuilder(
