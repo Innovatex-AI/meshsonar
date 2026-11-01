@@ -5,6 +5,8 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+## [0.25.0] — 2026-11-01 — one app, one radio: chat, contacts, tools, repeater admin, alerts; sonar dot; ping engine fixed
+
 - **Contacts and direct messages (M2).** Chat > Contacts is real: search, filters, favourites, New nodes nearby (Add / Ignore),
   contact details (route, position on a map, QR, share, notes, block, remove), add by QR / link / key, the radio's list with
   "On your radio: 45 of 100" and a way to free space, and Contact settings (ask before adding, per-type auto-add, replace the
