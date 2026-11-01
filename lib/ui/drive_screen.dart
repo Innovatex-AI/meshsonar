@@ -321,6 +321,7 @@ class _MapPane extends StatelessWidget {
                 hexRes: model.coverageQuery.res,
                 labelAvoidKeys: model.driveOverlayKeys,
                 fallbackCenter: viewedRegionCenter(s),
+                fallbackBounds: viewedRegionBounds(s),
                 regionNeighbours: s.regionNeighbours,
                 onPickRegion: (r) => confirmRegionSwitch(context, r),
               ),
