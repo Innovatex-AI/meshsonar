@@ -196,7 +196,10 @@ class OfflinePackSelection {
 /// A flutter_map child layer drawing [reader]'s tiles. Build as a `children:` entry.
 class OfflineBasemapLayer extends StatelessWidget {
   final PmtilesReader reader;
-  const OfflineBasemapLayer({super.key, required this.reader});
+
+  /// Forces the dark (true) or light (false) look; null follows the app theme.
+  final bool? dark;
+  const OfflineBasemapLayer({super.key, required this.reader, this.dark});
 
   /// Widget tests replace the vector layer (it spins up isolates the test binding cancels).
   @visibleForTesting
@@ -206,7 +209,7 @@ class OfflineBasemapLayer extends StatelessWidget {
   Widget build(BuildContext context) {
     final debug = debugBuilder;
     if (debug != null) return debug(reader);
-    final dark = Theme.of(context).brightness == Brightness.dark;
+    final dark = this.dark ?? Theme.of(context).brightness == Brightness.dark;
     return VectorTileLayer(
       theme: vtr.ThemeReader().read(offlineMapStyle(dark: dark)),
       tileProviders: TileProviders({'openmaptiles': PmtilesVectorTileProvider(reader)}),

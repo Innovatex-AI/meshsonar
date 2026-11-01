@@ -24,6 +24,8 @@ import 'drive/heard_box.dart';
 import 'region/region_switch_sheet.dart' show confirmRegionSwitch;
 import 'map/coverage_map.dart';
 import 'map/fullscreen_map.dart';
+import 'map/map_tools.dart';
+import 'ping_cue.dart';
 import 'map/repeater_page_link.dart';
 import 'map/coverage_timeline_slider.dart';
 import 'widgets.dart';
@@ -74,7 +76,7 @@ class _DriveScreenState extends State<DriveScreen> {
     final newest = recent.isEmpty ? null : recent.first;
     if (newest != null && newest.id != _lastPingId) {
       if ((_lastPingId != null || s.driving) && s.driving) {
-        unawaited(_feedback?.pingResult(heard: !newest.heardNothing));
+        unawaited(PingCue.ping(s.settings, _feedback, heard: !newest.heardNothing));
       }
       _lastPingId = newest.id;
     }
@@ -300,7 +302,7 @@ class _MapPane extends StatelessWidget {
             Positioned.fill(
               child: CoverageMap(
                 key: const Key('drive-map'),
-                pings: model.pings,
+                pings: model.visiblePings,
                 repeaters: model.repeaters,
                 // Not driving: the phone's position (last-known at once, then the fresh fix) so the map opens on it.
                 position: model.position ?? (model.pings.isEmpty ? idleMapPosition(s) : null),
@@ -309,7 +311,9 @@ class _MapPane extends StatelessWidget {
                 repeaterLabel: s.repeaterLabel,
                 heard: model.heard,
                 layers: model.layers,
-                networkCells: model.networkCells,
+                networkCells: model.visibleNetworkCells,
+                baseStyle: model.baseStyle,
+                onBoundsChanged: model.onMapBounds,
                 regionRepeaters: model.regionRepeaters,
                 repeaterSource: model.repeaterSource,
                 layerState: model.layerState,
@@ -364,7 +368,13 @@ class _MapPane extends StatelessWidget {
             Positioned(
               right: Gap.s,
               top: Gap.s,
-              child: Column(
+              // Scales the column down on a short map pane instead of overflowing (the tool buttons add to its height).
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: (box.maxHeight - 2 * Gap.s).clamp(0.0, double.infinity)),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.topRight,
+                  child: Column(
                 key: model.driveOverlayKeys[1],
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
@@ -405,7 +415,11 @@ class _MapPane extends StatelessWidget {
                     tooltip: 'Map layers',
                     onPressed: () => showMapLayersSheet(context, model),
                   ),
+                  const SizedBox(height: Gap.s),
+                  MapToolColumn(model: model, keyPrefix: 'drive'),
                 ],
+              ),
+                ),
               ),
             ),
             if (report != null)

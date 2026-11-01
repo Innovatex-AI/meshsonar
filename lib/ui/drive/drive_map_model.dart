@@ -16,6 +16,8 @@ import '../../core/api.dart' show PublicCoverage;
 import '../../core/coverage_query.dart';
 import '../../core/heard.dart';
 import '../../core/hex_cells.dart' show loadHexEngine;
+import '../../core/map_filter.dart';
+import '../../core/map_styles.dart';
 import '../../core/model.dart';
 import '../../core/coverage_timeline.dart';
 import '../../core/region_timeline_api.dart';
@@ -403,6 +405,10 @@ class DriveMapModel extends ChangeNotifier {
       _driving = s.driving;
       changed = true;
     }
+    if (s.settings.baseMapStyle != _styleId) {
+      _styleId = s.settings.baseMapStyle;
+      changed = true;
+    }
 
     // The viewed region changed: the timeline's first-data date is per region, so go back to live and reload it.
     final rc = s.viewingRegion?.code;
@@ -417,7 +423,7 @@ class DriveMapModel extends ChangeNotifier {
     // if nothing else about the drive changed (most often: the fetch lands before anyone has started driving).
     if (!identical(s.networkCoverage, _networkSrc)) {
       _networkSrc = s.networkCoverage;
-      _networkCells = _networkSrc == null ? const [] : buildNetworkCells(_networkSrc!, _h3, _colorBy);
+      _networkCells = _networkSrc == null ? const [] : buildNetworkCells(_networkSrc!, _h3, _colorBy, now: state.services.clock());
       changed = true;
     }
 
@@ -480,13 +486,99 @@ class DriveMapModel extends ChangeNotifier {
     }
   }
 
+  // ---------- base map style (street / dark / topo), the filter drawer and the coverage % of what is in view ----------
+  late String _styleId = state.settings.baseMapStyle;
+
+  /// The base map drawn under everything (Settings.baseMapStyle, saved).
+  BaseMapStyle get baseStyle => BaseMapStyle.parse(state.settings.baseMapStyle);
+  void setBaseStyle(BaseMapStyle v) {
+    if (v == baseStyle) return;
+    unawaited(state.updateSettings(state.settings.copyWith(baseMapStyle: v.id)));
+  }
+
+  /// The cycler button: the next style.
+  void cycleBaseStyle() => setBaseStyle(baseStyle.next);
+
+  MapFilter _filter = MapFilter.none;
+  MapFilter get filter => _filter;
+  set filter(MapFilter f) {
+    if (f == _filter) return;
+    _filter = f;
+    notifyListeners();
+  }
+
+  List<DrivePing>? _vpSrc;
+  MapFilter? _vpFilter;
+  List<DrivePing> _vp = const [];
+
+  /// [pings] with the filter applied: what the map draws (the hexagons follow it too). [pings] itself stays whole.
+  List<DrivePing> get visiblePings {
+    if (_filter.isNone) return _pings;
+    if (!identical(_pings, _vpSrc) || _filter != _vpFilter) {
+      _vpSrc = _pings;
+      _vpFilter = _filter;
+      _vp = _filter.pings(_pings, state.services.clock());
+    }
+    return _vp;
+  }
+
+  List<NetworkCell>? _vcSrc;
+  MapFilter? _vcFilter;
+  List<NetworkCell> _vc = const [];
+
+  /// [networkCells] with the filter applied.
+  List<NetworkCell> get visibleNetworkCells {
+    if (_filter.isNone) return _networkCells;
+    if (!identical(_networkCells, _vcSrc) || _filter != _vcFilter) {
+      _vcSrc = _networkCells;
+      _vcFilter = _filter;
+      _vc = _filter.cells(_networkCells, state.services.clock());
+    }
+    return _vc;
+  }
+
+  GeoBounds? _bounds;
+
+  /// The part of the world the map shows now (null until the map reports it).
+  GeoBounds? get visibleBounds => _bounds;
+  Timer? _boundsTimer;
+
+  /// The map reports its view as it moves; the figures settle 250 ms after the last move.
+  void onMapBounds(GeoBounds b) {
+    if (b == _bounds) return;
+    final first = _bounds == null;
+    _bounds = b;
+    _boundsTimer?.cancel();
+    if (first) {
+      notifyListeners();
+      return;
+    }
+    _boundsTimer = Timer(const Duration(milliseconds: 250), () {
+      if (!_disposed) notifyListeners();
+    });
+  }
+
+  CoverageSummary? _sum;
+  Object? _sumKey;
+
+  /// Coverage of what is drawn inside the view: share of mapped cells with something heard, and of your tx pings heard.
+  CoverageSummary get coverageSummary {
+    final cells = layers.networkCoverage ? visibleNetworkCells : const <NetworkCell>[];
+    final key = Object.hash(identityHashCode(cells), identityHashCode(visiblePings), _bounds, cells.length);
+    if (_sumKey != key || _sum == null) {
+      _sumKey = key;
+      _sum = summariseCoverage(cells: cells, pings: visiblePings, bounds: _bounds);
+    }
+    return _sum!;
+  }
+
   // ---------- network-coverage layer controls (res by zoom, colour-by, since, source) ----------
   CoverageColorBy _colorBy = CoverageColorBy.snr;
   CoverageColorBy get colorBy => _colorBy;
   set colorBy(CoverageColorBy v) {
     if (v == _colorBy) return;
     _colorBy = v;
-    _networkCells = _networkSrc == null ? const [] : buildNetworkCells(_networkSrc!, _h3, _colorBy);
+    _networkCells = _networkSrc == null ? const [] : buildNetworkCells(_networkSrc!, _h3, _colorBy, now: state.services.clock());
     notifyListeners();
   }
 
@@ -551,6 +643,7 @@ class DriveMapModel extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _fetchTimer?.cancel();
+    _boundsTimer?.cancel();
     timeline.dispose();
     state.removeListener(_onState);
     repeaterSource.dispose();
