@@ -220,6 +220,9 @@ class SiteConfig {
   /// The server accepts Drive Format v1.2 (drive context: sensors, radio health, device).
   bool get acceptsDriveV12 => driveFormats.contains(driveFormatV12);
 
+  /// The server accepts Drive Format v1.3 (per-ping `window_ms` and `outcome`).
+  bool get acceptsDriveV13 => driveFormats.contains(driveFormatV13);
+
   /// `GET network-repeaters?updated_since=` (`capabilities.networkRepeatersDelta`).
   bool get networkRepeatersDelta => capabilities.contains('networkRepeatersDelta');
 

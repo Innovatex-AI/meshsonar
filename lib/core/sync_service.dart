@@ -104,14 +104,17 @@ class DefaultSyncService implements SyncService {
     final st = store;
     final ctx = st is DriveContextLedger ? st as DriveContextLedger : null;
     final sent = st is ContextSyncLedger ? st as ContextSyncLedger : null;
-    var accepts = false;
-    if (ctx != null && sent != null && capabilities != null) {
+    var accepts = false, accepts13 = false;
+    if (capabilities != null) {
       try {
-        accepts = (await capabilities!())?.acceptsDriveV12 == true;
+        final caps = await capabilities!();
+        accepts = ctx != null && sent != null && caps?.acceptsDriveV12 == true;
+        accepts13 = caps?.acceptsDriveV13 == true;
       } catch (_) {}
     }
     return _Run(
       v12: accepts,
+      v13: accepts13,
       ctx: ctx,
       sent: sent,
       off: {for (final c in dataCategories) if (c.id != CategoryId.packetHeaders && !on(c.id)) c.id},
@@ -336,9 +339,12 @@ class DefaultSyncService implements SyncService {
   /// Posts one drive-upload body. A v1.2 body answered 400 as a whole is repeated once as the plain drive for this
   /// session (this run). Returns the answer and whether the context part was really sent.
   Future<(UploadResult, bool)> _post(
-      String key, DriveSession session, List<DrivePing> pings, ContextUpload? cu, _SessionResult r, _SessionCtx? sc) async {
+      String key, DriveSession session, List<DrivePing> pings, ContextUpload? cu, _SessionResult r, _SessionCtx? sc, _Run run) async {
     try {
-      return (await client.upload(key, DriveBatch(app: app, session: session, pings: pings, context: cu)), cu != null);
+      // Drive Format v1.3 (per-ping window_ms / outcome): the body is v1.3 whenever the server lists it, with an
+      // enrich-only context when there is nothing else to say, so the weather opt-out stays explicit.
+      final send = run.v13 ? (cu ?? ContextUpload(weather: run.weatherOn)) : cu;
+      return (await client.upload(key, DriveBatch(app: app, session: session, pings: pings, context: send, v13: run.v13)), cu != null);
     } on CmatException catch (e) {
       if (cu == null || e.status != 400) rethrow;
       _plainOnly.add(session.id);
@@ -380,7 +386,7 @@ class DefaultSyncService implements SyncService {
     for (var round = 0; round <= chunk.length + 1; round++) {
       final slice = firstRound && sc != null && !sc.disabled ? sc.samplesLeft.take(maxSamplesPerUpload).toList() : <DriveSample>[];
       final cu = _contextFor(run, sc, toSend, slice, withoutCtx: withoutCtx);
-      final (res, withContext) = await _post(key, session, toSend, cu, r, sc);
+      final (res, withContext) = await _post(key, session, toSend, cu, r, sc, run);
       r.uploaded = true;
       if (withContext && sc != null) {
         await _afterContext(session.id, run, sc, res, slice, r, hadSession: sc.sessionMark != null);
@@ -462,7 +468,7 @@ class DefaultSyncService implements SyncService {
       if (!(need || (force && !any))) return any;
       final slice = live ? sc.samplesLeft.take(maxSamplesPerUpload).toList() : <DriveSample>[];
       final cu = _contextFor(run, sc, const [], slice);
-      final (res, withContext) = await _post(key, session, const [], cu, r, sc);
+      final (res, withContext) = await _post(key, session, const [], cu, r, sc, run);
       r.uploaded = true;
       any = true;
       if (withContext && sc != null) {
@@ -508,13 +514,14 @@ class DefaultSyncService implements SyncService {
 
 class _Run {
   final bool v12;
+  final bool v13;
   final DriveContextLedger? ctx;
   final ContextSyncLedger? sent;
   final Set<String> off;
   final bool weatherOn;
   final DateTime Function() now;
   const _Run(
-      {required this.v12, required this.ctx, required this.sent, required this.off, required this.weatherOn, required this.now});
+      {required this.v12, this.v13 = false, required this.ctx, required this.sent, required this.off, required this.weatherOn, required this.now});
 }
 
 /// One session's context that the server does not have yet.

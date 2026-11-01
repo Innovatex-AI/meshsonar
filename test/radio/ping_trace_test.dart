@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/radio/crypto.dart';
 import 'package:meshsonar/radio/packet.dart';
 import 'package:meshsonar/radio/ping_gate.dart';
@@ -61,6 +62,8 @@ void main() {
       final r = runReplay(build: tracing(), seed: 3, driveSeconds: 600, backgroundEverySec: 3);
       final pings = trace.where((t) => t.containsKey('frames') && t.containsKey('ping')).toList();
       expect(pings.length, r.pingsSent);
+      // Drive Format v1.3: the ping carries the window the trace recorded (what MeshMapper's window_ms is compared with).
+      expect({for (final x in r.pings.where((x) => x.kind == PingKind.tx)) x.id: x.windowMs}, {for (final t in pings) t['ping']! as String: t['window_ms']! as int});
       for (final t in pings) {
         expect(t['tag'], matches(RegExp(r'^[0-9a-z]{10}$')));
         expect(t['at'], isA<String>());

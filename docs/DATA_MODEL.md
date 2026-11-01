@@ -275,6 +275,13 @@ Implemented in `DefaultSyncService` (`lib/core/sync_service.dart`):
     (ping context) and a ping-less v1.2 upload (samples, device, radio extras). A v1.2 body answered 400 as a whole is
     sent again as the plain drive (that session, this run); a ping whose `ctx` is refused is sent again without it. A
     category that is off is never in a body.
+12. **Ping-by-ping comparison (Drive Format v1.3).** When the server's site-config `driveFormats` lists
+    `meshsonar.drive.v1.3`, every drive-upload body is v1.3 (v1.2 plus per-ping fields; an enrich-only context carries
+    `session.enrich.weather` when there is no other context, because v1.3 defaults weather to on). Each tx ping then
+    carries `outcome` (`echo` when it has at least one echo, else `no_reply`; derived at send time from the saved echo
+    list so it always agrees with what the server checks) and `window_ms` (the listen window the engine actually used,
+    saved on the ping as `window_ms` in pings.jsonl; sent only when 1000..60000, else omitted). rx pings carry neither.
+    Older servers get the older body byte for byte: `DriveBatch` strips `window_ms` unless `v13`.
 
 On a store that doesn't implement `SyncLedger` (test fakes), rejected ids and end markers are tracked in memory for
 the life of the sync service, and renames are not re-sent on their own.
