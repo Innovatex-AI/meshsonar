@@ -33,7 +33,7 @@ enum AppTab {
 enum AnalyzeView { region, drives }
 
 /// Rows on the More tab that other code can open directly.
-enum MoreItem { radio, myRadios, settings, about, legend, privacy, howItWorks }
+enum MoreItem { radio, myRadios, settings, about, legend, privacy, howItWorks, repeaters }
 
 /// Where the pre-0.25 five tabs (0 Drive, 1 Region, 2 Drives, 3 Radio, 4 Settings) live now.
 class LegacyTab {

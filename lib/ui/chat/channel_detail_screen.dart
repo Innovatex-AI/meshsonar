@@ -101,7 +101,6 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
         ],
       ),
     );
-    ctl.dispose();
     if (name == null) return;
     await _guard(() async {
       await c.admin.edit(ch, name: name);
@@ -126,7 +125,6 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
         ],
       ),
     );
-    ctl.dispose();
     if (res == null) return;
     await _guard(() async {
       final v = res.trim();
@@ -213,13 +211,22 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
     return Scaffold(
       appBar: AppBar(title: Text(ch.name, maxLines: 1, overflow: TextOverflow.ellipsis)),
       body: SafeArea(
-        child: ListView(
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 640),
+            child: ListView(
           key: const Key('channel-detail'),
           padding: const EdgeInsets.only(bottom: Gap.xl),
           children: [
             ListTile(
               minTileHeight: 56,
-              leading: const Icon(Icons.tag_rounded),
+              leading: Icon(switch (ch.kind) {
+                ChannelKind.public => Icons.public_rounded,
+                ChannelKind.hashtag => Icons.tag_rounded,
+                ChannelKind.private => Icons.lock_outline_rounded,
+                ChannelKind.system => Icons.sensors_rounded,
+              }),
               title: Text(kindLabel),
               subtitle: Text(ch.slot == null ? 'Not on your radio right now' : 'On your radio, slot ${ch.slot}'),
             ),
@@ -257,7 +264,7 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: Gap.s),
-                  SelectableText(_link!, key: const Key('share-link'), style: t.textTheme.bodySmall),
+                  Text(_link!, key: const Key('share-link'), style: t.textTheme.bodySmall),
                   const SizedBox(height: Gap.s),
                   Wrap(spacing: Gap.s, runSpacing: Gap.s, alignment: WrapAlignment.center, children: [
                     OutlinedButton.icon(
@@ -278,7 +285,7 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
                   ]),
                   if (_showSecret && _secretHex != null) ...[
                     const SizedBox(height: Gap.s),
-                    SelectableText(_secretHex!, key: const Key('secret-hex'), style: t.textTheme.bodyMedium?.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
+                    Text(_secretHex!, key: const Key('secret-hex'), style: t.textTheme.bodyMedium?.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
                     TextButton(key: const Key('copy-secret'), style: TextButton.styleFrom(minimumSize: const Size(48, 48)), onPressed: () => _copy(_secretHex!, 'Secret'), child: const Text('Copy secret')),
                   ],
                 ]),
@@ -343,6 +350,8 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
               ),
             ],
           ],
+        ),
+          ),
         ),
       ),
     );

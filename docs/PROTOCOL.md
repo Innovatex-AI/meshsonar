@@ -454,6 +454,16 @@ Chat is decoupled from frames by two interfaces in `lib/chat/radio_bridge.dart`;
 `RadioSession` (lib/radio/session.dart) to them. Inbound texts arrive through `RadioSession.setInboundPersister`, so a message is
 in SQLite before the radio's destructive queue is asked for the next one. `SEND_CONFIRMED` becomes an ACK match on any attempt of
 a waiting DM. A `queued` send result (no answer from the radio in time) is retried with the SAME timestamp, which is safe because
+receivers dedupe on (conversation, timestamp, text). The last DM attempt floods: the adapter writes the contact back with an
+unknown path (`ADD_UPDATE_CONTACT`, out_path_len 0xFF) first. DM frames of text type 1 (CLI data) are not chat and are ignored.
+
+### Region scope per channel (chat UI)
+
+A channel's `region_scope` (from a `meshcore://channel/add?...&region_scope=` link or the Region row of channel info) is sent
+with every flood of that channel through `ScopeGuard` (`SET_FLOOD_SCOPE_KEY` right before the send, cleared before the next ping).
+The 16-byte key is derived from the region name like a hashtag key: `sha256("#" + lower-case name)[0..16]`. **Assumption, not yet
+verified on a real radio against a region configured on a repeater**; no scope is set by default (whole mesh).
+
 receivers dedupe on (conversation, timestamp, text). The last DM attempt floods: the adapter sends `RESET_PATH` first (section 11). DM frames of text type 1 (CLI data) are not chat and are ignored.
 
 ## 11. Contacts: management frames, auto-add and the phone-is-master sync (M2, Nov 2026)
@@ -527,3 +537,54 @@ how big, 100 by default) is a cache of what it needs to send and receive DMs.
 11. Contact details > Send to radios nearby, with a second radio in range: it should offer the contact. Proves SHARE_CONTACT (needs a contact this radio heard itself).
 12. Scan a contact QR from the official app, and show yours to it. Proves the `meshcore://contact/add` round trip.
 
+## 12. Repeater and room administration (M4 part 1, Nov 2026)
+
+Everything here was measured on a real repeater on Oct 31 2026 (INNO-OB-2, observer firmware v1.17.1.5, over a companion with firmware code
+13) unless it says "firmware source". Full evidence, timings and logs: `meshsonar-infra/docs/planning/repeater-observer-live-research-2026-11-01.md`
+and `research-logs/`. The parsers are pinned by `test/radio/repeater_wire_test.dart` with the captured hex.
+
+**Requests (app to radio).** `CMD_SEND_BINARY_REQ 50 [pub_key x32][request]`, `CMD_SEND_ANON_REQ 57 [pub_key x32][request]`,
+`CMD_SEND_TELEMETRY_REQ 39 [0 0 0][pub_key x32]` (the 4-byte form is the radio's own), `CMD_SEND_STATUS_REQ 27`. All answer `RESP_SENT [6][flood][tag u32][est_timeout u32]`; the answer is a later push. One request of each kind at a time (the companion keeps one pending slot per kind).
+
+| Request | Bytes after the key | Answer |
+|---|---|---|
+| Neighbours (binary) | `[6][0][count][offset u16][order][prefix len][random x4]` (order 0 newest, 1 oldest, 2 strongest, 3 weakest) | `0x8C [0][tag u32][total u16][returned u16][per entry: prefix, seconds ago u32, snr i8 / 4]` |
+| Access list (admin only) | `[5][0][0]` | `0x8C` data: 7-byte entries `[pub6][perm]`; perm 0 and all-zero entries are padding |
+| Owner info | `[7]` | `0x8C` data: `version\nname\nowner` |
+| Anonymous clock | `[3][0]` | `0x8C` data: `[clock u32][features u8]` (0x80 repeat disabled) |
+| Anonymous regions | `[1][0]` | `0x8C` data: `[clock u32]["*,cmh"]` |
+| Anonymous owner | `[2][0]` | `0x8C` data: `[clock u32]["name\nowner"]` |
+| Status | (command 27) | `0x87 [0][pub6][RepeaterStats 56 bytes + 4 zero]` |
+| Telemetry | (command 39) | `0x8B [0][pub6][Cayenne LPP, big endian, zero padded]`: `01 74 01 82` = 3.86 V, `01 67 01 C2` = 45.0 C |
+
+The binary push `0x8C` carries the tag of the matching SENT frame (firmware source, `pending_req`); the app matches on it. Every answer is
+zero padded to 16-byte blocks: trust the counts, not the length. Anonymous requests need no login, go direct only, and the repeater answers
+4 per 180 s to everybody together (the 5th is silence). `RepeaterStats` (little endian, MyMesh.h): battery mV u16 @0, queue u16 @2, noise
+floor i16 @4, last RSSI i16 @6, received u32 @8, sent u32 @12, air seconds u32 @16, uptime u32 @20, sent flood @24, sent direct @28, received
+flood @32, received direct @36, error events u16 @40, last SNR x4 i16 @42, direct dups u16 @44, flood dups u16 @46, rx air seconds u32 @48,
+receive errors u32 @52.
+
+**CLI.** `SEND_TXT_MSG` type 1 (`CLI_DATA`) after an admin login; the reply is a queued contact message (type 1). The app prefixes every
+command with a two-digit tag and a bar (`07|get radio`): the repeater reflects the tag (only when the command is longer than 4 characters),
+so a late reply to an earlier command is never taken for the answer. Replies are cut near 160 characters (the tag counts); a command over
+160 characters is dropped silently by the companion, the app caps at 150. About 3% of replies never arrive: reads are retried twice, writes
+never (the value is read back instead). The repeater runs a CLI command only if its timestamp is newer than the last one it accepted; the
+companion stamps CLI data with its own clock, and the app's counter only ever increases.
+
+**Firmware quirks the app respects** (source: `CommonCLI.cpp`, `CommonRadioPrefs.cpp`, `simple_repeater/MyMesh.cpp`, `simple_room_server/MyMesh.cpp`
+at MeshCore main, Oct 2026): commands match by PREFIX (`advertXYZ`, `rebootXYZ`, `verXYZ`, `clockXYZ`), so the app sends only exact strings it
+has classified (`lib/radio/repeater_cli.dart`); `set repeat` treats anything but `off` as on; `setperm <key>` without a permission answers
+`Err - bad params` (remove with `setperm <key> 0`, a partial key works only for removal, never the key you are logged in with);
+`region load` swallows every following line and is never sent; `region default <name>` CREATES the region when the name is unknown, and
+`region get/allowf/denyf/home` match by prefix, so the app only passes names it has just read; `password <new>` echoes the new password and
+`get guest.password` prints it in clear: both are masked and never logged; a blank password re-admits any key already in the access list; a
+password change does not remove admins; `set tx`, `set lat`, `set lon` have no range check (the app imposes one; a Heltec V4 reads `tx` 28);
+`advert.interval` is stored halved and values under 60 turn it off; `set radio` is saved and used after a reboot (`OK - reboot to apply`);
+`clock sync` only moves a clock forward.
+
+**Rooms.** Login is the same `SEND_LOGIN`; the companion adds the 4-byte `sync_since` for a contact of type room (3). The room PUSHES each post
+to every logged-in client as a normal text with `txt_type 2` (signed plain): `[timestamp][2 << 2 | attempt][author key prefix x4][text]`; the
+companion queues it as `CONTACT_MSG_RECV_V3` with the 4-byte signer prefix. A post is a plain direct message (`txt_type 0`) to the room; the
+room acknowledges it and echoes it to everyone. The room password gives read and write, the admin password admin, and with `allow.read.only`
+on anyone logs in as a read-only guest who gets neither an ack nor the right to post. `RemoteLogin.aclPermissions` carries the stored role
+(login push byte 12).

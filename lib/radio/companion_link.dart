@@ -20,6 +20,8 @@ import 'message_sync.dart';
 import 'protocol.dart';
 import 'radio_api.dart';
 import 'radio_health.dart';
+import 'repeater_radio.dart';
+import 'repeater_wire.dart';
 import 'scope_guard.dart';
 
 class CompanionException implements Exception {
@@ -40,7 +42,7 @@ class ControlPacket {
   const ControlPacket(this.at, this.snrDb, this.rssiDbm, this.pathLen, this.payload);
 }
 
-class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRadio, MessageSource {
+class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRadio, RepeaterAdminRadio, MessageSource {
   final ByteTransport _transport;
   final Duration timeout;
   final DateTime Function() _clock;
@@ -163,6 +165,12 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
       if (t != null && w != null && !w.isCompleted) {
         _telemetryWaiter = null;
         w.complete(t);
+      } else if (t == null) {
+        // Not our own telemetry: a repeater's answer to a remote telemetry request (admin screens).
+        try {
+          final f = decodeFrame(data);
+          if (f is TelemetryResponsePush && !_claimEvents.isClosed) _claimEvents.add(f);
+        } catch (_) {}
       }
       return;
     }
@@ -196,7 +204,7 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
         if (!_rx.isClosed) _rx.add(RxPacket(at: now, raw: f.raw, snrDb: f.snrDb, rssiDbm: f.rssiDbm.toDouble()));
       case ControlDataPush():
         if (!_control.isClosed) _control.add(ControlPacket(now, f.snrDb, f.rssiDbm, f.pathLen, f.payload));
-      case LoginSuccessPush() || LoginFailPush() || StatusResponsePush():
+      case LoginSuccessPush() || LoginFailPush() || StatusResponsePush() || BinaryResponsePush():
         if (!_claimEvents.isClosed) _claimEvents.add(f);
       case MsgWaitingPush():
         // Drain the radio's offline queue so it never fills (MyMesh.cpp addToOfflineQueue ~224).
@@ -818,7 +826,7 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
         _lastCliTs.remove(pubkeyHex.toLowerCase());
         final seed = await _cliTimestamp(pubkeyHex.toLowerCase());
         _lastCliTs[pubkeyHex.toLowerCase()] = seed;
-        return RemoteLogin(isAdmin: f.isAdmin, firmwareLevel: f.firmwareLevel);
+        return RemoteLogin(isAdmin: f.isAdmin, firmwareLevel: f.firmwareLevel, aclPermissions: f.aclPermissions);
       }
       throw const ClaimRadioException(ClaimRadioError.radio, 'the repeater refused the login');
     } finally {
@@ -882,6 +890,101 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
       return (await waiter.wait(_waitFromSent(sent, timeout), 'no status')).status;
     } on ClaimRadioException {
       return null;
+    } finally {
+      waiter.cancel();
+    }
+  }
+
+  // ---------------------------------------------------------------- RepeaterAdminRadio
+
+  /// How long an admin call waits after the radio took the command: the radio's own estimate plus 3 s (research packet D1),
+  /// at least 4 s.
+  Duration _adminWait(SentFrame sent, Duration? override) {
+    if (override != null) return override;
+    if (claimReplyTimeout != null) return claimReplyTimeout!;
+    return Duration(milliseconds: math.max(4000, sent.estTimeoutMs + 3000));
+  }
+
+  Future<Uint8List> _binary(String keyHex, Uint8List frame, String what, Duration? timeout) async {
+    // The answer carries the tag of the SENT frame, which is only known after the send: keep answers that arrive early.
+    final done = Completer<Uint8List>();
+    done.future.then<void>((_) {}, onError: (_) {});
+    final early = <BinaryResponsePush>[];
+    int? tag;
+    Timer? timer;
+    final sub = _claimEvents.stream.listen((f) {
+      if (f is! BinaryResponsePush) return;
+      if (tag == null) {
+        early.add(f);
+      } else if (f.tag == tag && !done.isCompleted) {
+        done.complete(f.data);
+      }
+    }, onDone: () {
+      if (!done.isCompleted) done.completeError(const ClaimRadioException(ClaimRadioError.notConnected, 'radio disconnected'));
+    });
+    try {
+      final sent = await _claimCommand(frame, what);
+      if (sent is! SentFrame) throw _sendFailure(sent, what);
+      tag = sent.tag;
+      for (final a in early) {
+        if (a.tag == tag && !done.isCompleted) done.complete(a.data);
+      }
+      timer = Timer(_adminWait(sent, timeout), () {
+        if (!done.isCompleted) done.completeError(ClaimRadioException(ClaimRadioError.silent, 'the repeater did not answer ($what)'));
+      });
+      return await done.future;
+    } finally {
+      timer?.cancel();
+      await sub.cancel();
+    }
+  }
+
+  @override
+  Future<Uint8List> binaryRequest(String keyHex, List<int> request, {Duration? timeout}) =>
+      _binary(keyHex, encodeSendBinaryReq(fromHex(keyHex), request), 'binary request', timeout);
+
+  @override
+  Future<Uint8List> anonRequest(String keyHex, List<int> request, {Duration? timeout}) =>
+      _binary(keyHex, encodeSendAnonReq(fromHex(keyHex), request), 'anonymous request', timeout);
+
+  @override
+  Future<Uint8List> telemetryRequest(String keyHex, {Duration? timeout}) async {
+    final prefix = keyHex.substring(0, 12).toLowerCase();
+    final waiter = _waitFor<TelemetryResponsePush>((f) => f.prefixHex == prefix);
+    try {
+      final sent = await _claimCommand(encodeSendRemoteTelemetryReq(fromHex(keyHex)), 'telemetry');
+      if (sent is! SentFrame) throw _sendFailure(sent, 'telemetry');
+      return (await waiter.wait(_adminWait(sent, timeout), 'the repeater did not send telemetry')).lpp;
+    } finally {
+      waiter.cancel();
+    }
+  }
+
+  @override
+  Future<Uint8List> statusBytes(String keyHex, {Duration? timeout}) async {
+    final prefix = keyHex.substring(0, 12).toLowerCase();
+    final waiter = _waitFor<StatusResponsePush>((f) => f.prefixHex == prefix);
+    try {
+      final sent = await _claimCommand(encodeSendStatusReq(fromHex(keyHex)), 'status');
+      if (sent is! SentFrame) throw _sendFailure(sent, 'status');
+      final p = await waiter.wait(_adminWait(sent, timeout), 'the repeater did not send its status');
+      return p.statsBytes ?? Uint8List(0);
+    } finally {
+      waiter.cancel();
+    }
+  }
+
+  @override
+  Future<String> runTaggedCli(String keyHex, String tag, String command, {Duration? timeout}) async {
+    final prefix = keyHex.substring(0, 12).toLowerCase();
+    final waiter = _waitFor<ContactTextFrame>(
+        (f) => f.prefixHex == prefix && (f.txtType == txtTypeCliData || f.txtType == txtTypeCliCommand) && f.text.startsWith('$tag|'));
+    try {
+      final ts = await _cliTimestamp(keyHex.toLowerCase());
+      final sent = await _claimCommand(encodeSendTxt(txtTypeCliData, 0, ts, fromHex(keyHex), '$tag|$command'), 'cli');
+      if (sent is! SentFrame) throw _sendFailure(sent, 'cli');
+      final reply = await waiter.wait(_adminWait(sent, timeout), 'the repeater did not reply');
+      return reply.text.substring(tag.length + 1).trim();
     } finally {
       waiter.cancel();
     }

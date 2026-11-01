@@ -351,6 +351,11 @@ class _ConversationScreenState extends State<ConversationScreen> {
   }
 
   Widget _chatBody(BuildContext context) {
+    // On an iPad the conversation is a readable column, not a wall of full-width bubbles.
+    return Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 760), child: _chatColumn(context)));
+  }
+
+  Widget _chatColumn(BuildContext context) {
     return Column(
       children: [
         if (widget.header != null) widget.header!,

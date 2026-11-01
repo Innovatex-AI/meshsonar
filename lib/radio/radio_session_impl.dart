@@ -17,10 +17,11 @@ import 'ping_gate.dart';
 import 'protocol.dart';
 import 'radio_api.dart';
 import 'radio_health.dart';
+import 'repeater_radio.dart';
 import 'session.dart';
 import 'tx_arbiter.dart';
 
-class LinkRadioSession implements RadioSession, RadioStatsSource {
+class LinkRadioSession implements RadioSession, RepeaterAdminRadio, RadioStatsSource {
   /// The link this session owns.
   final CompanionLink link;
   final DateTime Function() _clock;
@@ -371,6 +372,47 @@ class LinkRadioSession implements RadioSession, RadioStatsSource {
   Future<RepeaterStatus?> status(String pubkeyHex, {Duration? timeout}) {
     _countAdmin();
     return _claimOrThrow.status(pubkeyHex, timeout: timeout);
+  }
+
+  // ---------------------------------------------------------------- RepeaterAdminRadio (priority P1, counted in the ledger)
+
+  RepeaterAdminRadio get _adminOrThrow {
+    final l = link;
+    if (l is RepeaterAdminRadio) return l as RepeaterAdminRadio;
+    throw const ClaimRadioException(ClaimRadioError.unsupported, 'this radio link cannot administer repeaters');
+  }
+
+  /// This session's link can administer repeaters (binary requests, remote telemetry, tagged CLI).
+  bool get supportsRepeaterAdmin => link is RepeaterAdminRadio;
+
+  @override
+  Future<Uint8List> binaryRequest(String keyHex, List<int> request, {Duration? timeout}) {
+    _countAdmin();
+    return _adminOrThrow.binaryRequest(keyHex, request, timeout: timeout);
+  }
+
+  @override
+  Future<Uint8List> anonRequest(String keyHex, List<int> request, {Duration? timeout}) {
+    _countAdmin();
+    return _adminOrThrow.anonRequest(keyHex, request, timeout: timeout);
+  }
+
+  @override
+  Future<Uint8List> telemetryRequest(String keyHex, {Duration? timeout}) {
+    _countAdmin();
+    return _adminOrThrow.telemetryRequest(keyHex, timeout: timeout);
+  }
+
+  @override
+  Future<Uint8List> statusBytes(String keyHex, {Duration? timeout}) {
+    _countAdmin();
+    return _adminOrThrow.statusBytes(keyHex, timeout: timeout);
+  }
+
+  @override
+  Future<String> runTaggedCli(String keyHex, String tag, String command, {Duration? timeout}) {
+    _countAdmin();
+    return _adminOrThrow.runTaggedCli(keyHex, tag, command, timeout: timeout);
   }
 
   // ---------------------------------------------------------------- end

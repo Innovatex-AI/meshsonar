@@ -1,5 +1,6 @@
 // Shared kit for the chat UI tests: an in-memory chat store, a ChatService with a fake clock and no timers, a
 // ChatController with no radio (messages wait in the outbox, like an offline phone), and a themed host app.
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -10,6 +11,9 @@ import 'package:meshsonar/chat/models.dart';
 import 'package:meshsonar/chat/outbox.dart';
 import 'package:meshsonar/chat/radio_bridge.dart';
 import 'package:meshsonar/chat/store.dart';
+import 'package:meshsonar/radio/inbound.dart' as r;
+import 'package:meshsonar/radio/radio_api.dart' as r show SelfInfo;
+import 'package:meshsonar/radio/session.dart' as r;
 import 'package:meshsonar/ui/theme.dart';
 
 const radioA = 'aa00000000000000000000000000000000000000000000000000000000000001';
@@ -86,6 +90,13 @@ class ChatKit {
     service.handleInbound(InboundChannelText(radioId: radioA, channelSlot: ch.slot!, timestamp: ts ?? clockMs ~/ 1000, text: '$sender: $text', snr: 5.5, pathLen: 2));
   }
 
+  /// Binds a fake radio session to the controller, like a connect.
+  Future<FakeRadioSession> connect({FakeRadioSession? session}) async {
+    final s = session ?? FakeRadioSession();
+    await controller.onSession(s);
+    return s;
+  }
+
   void dispose() {
     controller.dispose();
     store.close();
@@ -105,4 +116,60 @@ void setSize(WidgetTester tester, {double w = 390, double h = 844, double scale 
   tester.platformDispatcher.textScaleFactorTestValue = scale;
   addTearDown(tester.view.reset);
   addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+}
+
+/// A radio session with channel slots, for the UI flows. Only what chat touches is implemented.
+class FakeRadioSession implements r.RadioSession {
+  @override
+  String? selfPublicKey = radioA;
+  @override
+  bool isConnected = true;
+  @override
+  bool chatActive = false;
+  @override
+  r.DeviceLimits? limits = const r.DeviceLimits(maxChannels: 4);
+  final List<r.RadioChannel> slots;
+  Object? failWrite;
+  final events_ = StreamController<r.RadioEvent>.broadcast(sync: true);
+  final sentChannel = <(int, String, r.FloodScope?)>[];
+  int syncs = 0;
+
+  FakeRadioSession({int n = 4}) : slots = List.generate(n, (i) => r.RadioChannel(i, '', Uint8List(16)));
+
+  void put(int i, String name, List<int> secret) => slots[i] = r.RadioChannel(i, name, Uint8List.fromList(secret));
+
+  @override
+  Stream<r.RadioEvent> get events => events_.stream;
+  @override
+  Stream<r.LinkState> get linkStates => const Stream.empty();
+  @override
+  r.SelfInfo? get selfInfo => null;
+  @override
+  void setInboundPersister(Future<void> Function(r.InboundMessage message)? persist) {}
+  @override
+  Future<void> syncMessagesNow() async => syncs++;
+  @override
+  Future<List<r.RadioChannel>> listChannels() async => List.of(slots);
+  @override
+  Future<void> setChannel(int index, String name, Uint8List secret16) async {
+    if (failWrite != null) throw failWrite!;
+    slots[index] = r.RadioChannel(index, name, Uint8List.fromList(secret16));
+  }
+
+  @override
+  Future<void> deleteChannel(int index) async {
+    if (failWrite != null) throw failWrite!;
+    slots[index] = r.RadioChannel(index, '', Uint8List(16));
+  }
+
+  @override
+  Future<r.ContactListing> getContacts({int since = 0}) async => const r.ContactListing(totalOnRadio: 0, contacts: [], mostRecentLastMod: 0);
+  @override
+  Future<r.SendResult> sendChannelMessage(int channelIndex, String text, {r.FloodScope? scope}) async {
+    sentChannel.add((channelIndex, text, scope));
+    return const r.SendResult.accepted(1000);
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError('${invocation.memberName}');
 }
