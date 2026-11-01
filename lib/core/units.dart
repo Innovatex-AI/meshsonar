@@ -367,6 +367,17 @@ class Units {
     final snapped = ft < 1000 ? (ft / 10).round() * 10 : (ft / 100).round() * 100;
     return '$snapped ft';
   }
+
+  /// The slider's label for a stored minimum distance: the label of the stop the slider sits on, so a chip that quotes the
+  /// setting ("Ping 30 s / 300 ft") always agrees with the slider (a stored 100 m sits on the 300 ft stop).
+  String minDistanceLabel(int metres, List<int> metricStops) {
+    final stops = minDistanceStops(metricStops);
+    var best = 0;
+    for (var i = 1; i < stops.length; i++) {
+      if ((stops[i] - metres).abs() < (stops[best] - metres).abs()) best = i;
+    }
+    return sliderDistance(stops[best]);
+  }
 }
 
 /// "45.0 °C" or "113.0 °F" (one decimal), the single place a temperature is converted.

@@ -5,6 +5,10 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- **Become an observer (More > Radios and tools).** A five-step guide from "I have a radio and a repeater" to a repeater that reports to MeshSonar: connect the radio, claim it, claim the repeater with its admin password (the existing login-attested claim; nothing on the repeater is changed and the app sends it no commands), point it at the broker (opens the website's /observers/setup), see it on the map. Free, no approval.
+- **Dead-area warning.** On the Map tab, after 5 transmitted pings in a row with no repeater heard, a chip says "No repeaters heard for N pings" and clears on the next echo. Display only: no extra airtime, no change to the ping cadence.
+- **The Ping chip and the Wardriving slider now agree.** The chip quotes the slider's label ("Ping 30 s / 300 ft"), not the exact conversion (328 ft).
+
 ## [0.25.1] — 2026-11-01 — integration pass, privacy-zone editor, region switching, Drive Format v1.3, Plan "Where to drive next"
 
 - **Drive Format v1.3: ping-by-ping comparison with MeshMapper (website PR 194, migration 0099).** When the server lists `meshsonar.drive.v1.3` in `driveFormats`, uploads are v1.3 and each tx ping carries `outcome` (`echo` | `no_reply`) and `window_ms` (the listen window actually used, kept on the ping on disk). Older servers get the old body unchanged. Contract-tested against the website validator (`test/core/cmat_contract_test.dart`), wire shape in `test/core/drive_v13_wire_test.dart`.
