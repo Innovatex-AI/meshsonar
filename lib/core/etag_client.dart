@@ -17,7 +17,7 @@ import 'region_cache.dart';
 
 /// Paths (after the host) this client may cache. Everything else is passed through. Region reads all live under
 /// `/api/cmh/` on the region's own host (the host picks the region).
-final _cacheablePath = RegExp(r'^/(api/cmh/(region-[a-z-]+|regions-index|public-coverage|site-config|public-stats|leaderboard)|v1/regions)/?$');
+final _cacheablePath = RegExp(r'^/(api/cmh/(region-[a-z-]+|tool-routes|regions-index|public-coverage|site-config|public-stats|leaderboard)|v1/regions)/?$');
 
 /// Response header the [EtagClient] adds: `network`, `304` or `offline` (the stored copy, served because the network failed).
 const cacheSourceHeader = 'x-meshsonar-cache';

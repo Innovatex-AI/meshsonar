@@ -13,6 +13,7 @@ import '../../core/live_stream.dart';
 import '../../core/region_packets_api.dart' show packetTypeName, packetRouteName;
 import '../map/coverage_map.dart';
 import '../widgets.dart';
+import 'packet_detail_screen.dart';
 import 'region_common.dart';
 
 class LivePanel extends StatefulWidget {
@@ -192,7 +193,10 @@ class _LivePanelState extends State<LivePanel> with WidgetsBindingObserver {
                   key: const Key('live-list'),
                   itemCount: _rows.length,
                   separatorBuilder: (_, _) => const Divider(height: 1),
-                  itemBuilder: (_, i) => _LiveRow(packet: _rows[i]),
+                  itemBuilder: (_, i) => _LiveRow(
+                    packet: _rows[i],
+                    onTap: () => openPacketDetail(context, baseUrl: widget.baseUrl, regionSlug: widget.regionSlug, hash: _rows[i].hash),
+                  ),
                 ),
         ),
       ],
@@ -202,7 +206,8 @@ class _LivePanelState extends State<LivePanel> with WidgetsBindingObserver {
 
 class _LiveRow extends StatelessWidget {
   final LivePacket packet;
-  const _LiveRow({required this.packet});
+  final VoidCallback? onTap;
+  const _LiveRow({required this.packet, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -212,6 +217,7 @@ class _LiveRow extends StatelessWidget {
     final n = packet.observations.length;
     return ListTile(
       dense: true,
+      onTap: onTap,
       title: Text(packetTypeName(packet.type)),
       subtitle: Text([
         packetRouteName(packet.route),

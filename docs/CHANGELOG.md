@@ -5,6 +5,8 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- **Native network (V3).** Analyze > Region gains Routes (flood routes: trace one packet hop by hop on a map with Play, or all floods: who carries them, corridors, hop histogram, where floods end, 1-byte collisions) and Findings (insights with evidence and recommendations). Observers open a detail page (noise floor, airtime, battery, packets per hour, packet types, nodes it hears, health chip when the server sends it). Packets and Live rows open a packet detail with a "Trace the flood route" button. More > How it works and More > Method are readable pages. The Trace screen's website link-out is now a native "Network flood routes" button. Needs the website's `region-findings` (capability `regionFindings`) for Findings; the rest uses existing endpoints.
+
 ## [0.25.2] — 2026-11-01 — map quick wins (base maps, coverage modes, filters, coverage %, leaderboard, ping feedback), dead-area warning, observer wizard
 
 - **Map tab quick wins.** Base-map cycler under the layers button (Chart, Street, Dark, Topo; offline packs still used except for Topo). Two new coverage colour modes in Coverage options: Ping age and Noise vs typical (own colour ramps; grey and purple keep their meaning, strength colours stay for signal). Filter drawer (result, age, repeater, my pings only). "In view: N% of M cells heard" pill. Trophy button: the region leaderboard plus your totals. Settings > Wardriving > Ping feedback: haptic tap on/off and an optional sound (off by default), different for heard and heard nothing.

@@ -11,6 +11,7 @@ import '../../radio/tools/radio_tools.dart';
 import '../../radio/tools/tool_frames.dart' show maxTraceHops, traceHashSizes;
 import '../../radio/tools/trace_tool.dart';
 import '../app.dart';
+import '../region/routes_panel.dart' show openFloodRoutes;
 import 'tool_kit.dart';
 import 'tools_host.dart';
 
@@ -120,10 +121,12 @@ class _TraceBodyState extends State<_TraceBody> {
     setState(() => _comparison = compareTraces(a, b));
   }
 
-  Future<void> _openWebsite() async {
+  /// The network-wide flood route analysis (all observers of the region), native: same data as the website's routes page.
+  void _openNetworkRoutes() {
     final site = widget.host.regionSite;
-    final uri = site == null ? Uri.parse('https://meshsonar.com/tools/routes') : site.replace(path: '/tools/routes');
-    await widget.host.openUrl(uri);
+    if (site == null) return;
+    final base = site.replace(path: '', query: '', fragment: '').toString().replaceAll(RegExp(r'/+$'), '');
+    openFloodRoutes(context, baseUrl: base, regionSlug: site.host.split('.').first);
   }
 
   @override
@@ -243,14 +246,14 @@ class _TraceBodyState extends State<_TraceBody> {
                           if (mounted) setState(() {});
                         },
                 ),
-              if (result != null) ...[
+              if (widget.host.regionSite != null) ...[
                 const SizedBox(height: Gap.m),
                 OutlinedButton.icon(
-                  key: const Key('trace-website'),
+                  key: const Key('trace-network-routes'),
                   style: OutlinedButton.styleFrom(minimumSize: const Size(kToolTarget, kToolTarget)),
-                  onPressed: _openWebsite,
-                  icon: const Icon(Icons.open_in_new),
-                  label: const Text('Analyze routes on the website'),
+                  onPressed: _openNetworkRoutes,
+                  icon: const Icon(Icons.hub_outlined),
+                  label: const Text('Network flood routes (all observers)'),
                 ),
               ],
               ..._savedSection(context),

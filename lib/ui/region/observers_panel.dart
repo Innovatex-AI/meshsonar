@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../core/region_overview_api.dart';
 import '../theme.dart';
 import '../widgets.dart';
+import 'observer_detail_screen.dart';
 import 'region_common.dart';
 
 class ObserversPanel extends StatefulWidget {
@@ -84,7 +85,7 @@ class _ObserversPanelState extends State<ObserversPanel> {
           );
         }
         final asOf = snap.data!.offlineAsOf;
-        final body = ObserversContent(data: snap.data!, onRefresh: _reload);
+        final body = ObserversContent(data: snap.data!, onRefresh: _reload, baseUrl: widget.baseUrl, regionSlug: widget.regionSlug);
         if (asOf == null) return body;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -99,7 +100,11 @@ class _ObserversPanelState extends State<ObserversPanel> {
 class ObserversContent extends StatelessWidget {
   final RegionObservers data;
   final VoidCallback? onRefresh;
-  const ObserversContent({super.key, required this.data, this.onRefresh});
+
+  /// Where a tapped observer's detail page is read from (null = tiles are not tappable, as in the old tests).
+  final String? baseUrl;
+  final String regionSlug;
+  const ObserversContent({super.key, required this.data, this.onRefresh, this.baseUrl, this.regionSlug = ''});
 
   static List<RegionObserver> sorted(List<RegionObserver> rows) {
     final l = [...rows];
@@ -153,7 +158,11 @@ class ObserversContent extends StatelessWidget {
             style: t.textTheme.labelLarge,
           ),
           const SizedBox(height: Gap.xs),
-          for (final r in rows) ObserverTile(observer: r),
+          for (final r in rows)
+            ObserverTile(
+              observer: r,
+              onTap: baseUrl == null ? null : () => openObserverDetail(context, baseUrl: baseUrl!, regionSlug: regionSlug, observer: r),
+            ),
         ],
       ],
     );
@@ -162,7 +171,8 @@ class ObserversContent extends StatelessWidget {
 
 class ObserverTile extends StatelessWidget {
   final RegionObserver observer;
-  const ObserverTile({super.key, required this.observer});
+  final VoidCallback? onTap;
+  const ObserverTile({super.key, required this.observer, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -193,6 +203,7 @@ class ObserverTile extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
         ),
         subtitle: Text(bits.join(' · ')),
+        onTap: onTap,
         trailing: o.source == 'meshsonar'
             ? Icon(
                 Icons.verified_outlined,
