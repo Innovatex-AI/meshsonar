@@ -210,7 +210,7 @@ void main() {
       }
       expect(list.hitTestable(), findsOneWidget, reason: 'came back from $key');
     }
-    expect(h.openedUrls.map((u) => u.path), containsAll(['/me/privacy', '/me/devices']));
+    expect(h.openedUrls.map((u) => u.path), contains('/me/privacy')); // /me/devices is a native screen now (Devices and keys)
   });
 
   group('app bar: Search and Sections', () {

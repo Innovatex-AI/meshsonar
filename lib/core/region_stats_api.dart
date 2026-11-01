@@ -237,6 +237,12 @@ class RegionStatsApi {
     return Leaderboard.fromJson(j, offlineAsOf: asOf);
   }
 
+  /// `GET network-leaderboard` (`capabilities.networkLeaderboard`): the board over every region, each driver once.
+  Future<Leaderboard> networkLeaderboard({String period = '30d'}) async {
+    final (j, asOf) = await _getWithAsOf(_uri('/api/cmh/network-leaderboard', {'period': period}));
+    return Leaderboard.fromJson(j, offlineAsOf: asOf);
+  }
+
   /// Never cached (live counts from a disk copy would lie), so offline this throws with `offline: true`.
   Future<RegionLive> live() async => RegionLive.fromJson(await _get(_uri('/api/cmh/public-live')));
   Future<HubRegions> hubRegions() async => HubRegions.fromJson(await _get(_uri('/v1/regions')));

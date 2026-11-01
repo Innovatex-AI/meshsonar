@@ -512,7 +512,7 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
         style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
         onPressed: () => unawaited(s.openWebPage('/me/privacy')),
         icon: const Icon(Icons.open_in_new, size: 18),
-        label: const Text('Open privacy settings on the website'),
+        label: const Text('View this page on the website'),
       ),
     ];
   }

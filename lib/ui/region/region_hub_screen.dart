@@ -1,11 +1,13 @@
-// The Region tab: the viewed region (switcher at the top), twelve tabs of website data for it, and Export region report.
+// The Region tab: the viewed region (switcher at the top), fifteen tabs of website data for it, and Export region report.
 import 'package:flutter/material.dart';
 
+import '../../core/airtime_share.dart';
 import '../app.dart';
 import '../location_status.dart';
 import 'findings_panel.dart';
 import 'growth_panel.dart';
 import 'live_screen.dart';
+import 'packet_analytics_panels.dart';
 import 'region_panels.dart';
 import 'region_report_export_sheet.dart';
 import 'rf_panel.dart';
@@ -48,7 +50,7 @@ class RegionHubScreen extends StatelessWidget {
     final s = AppScope.of(context);
     final region = s.viewingRegion;
     return DefaultTabController(
-      length: 12,
+      length: 15,
       child: Scaffold(
         appBar: AppBar(
           title: Text(region?.name ?? 'Region', key: const Key('region-title')),
@@ -79,6 +81,9 @@ class RegionHubScreen extends StatelessWidget {
               Tab(text: 'Reports'),
               Tab(text: 'Stats'),
               Tab(text: 'Live'),
+              Tab(text: 'Hops'),
+              Tab(text: 'Silent'),
+              Tab(text: 'Wardrive'),
             ],
           ),
         ),
@@ -119,6 +124,18 @@ class RegionHubScreen extends StatelessWidget {
                         buildReportsPanel(region.url, region.slug),
                         StatsPanel(baseUrl: region.url, regionSlug: region.slug),
                         LivePanel(baseUrl: region.url, regionSlug: region.slug),
+                        HopsPanel(baseUrl: region.url, regionSlug: region.slug),
+                        SilentRepeatersPanel(
+                          baseUrl: region.url,
+                          regionSlug: region.slug,
+                          ownKeys: {for (final c in s.claims.active) c.pubkey.toLowerCase()},
+                        ),
+                        AirtimeSharePanel(
+                          baseUrl: region.url,
+                          regionSlug: region.slug,
+                          radio: s.viewingPreset == null ? null : LoraRadio(s.viewingPreset!.sf, s.viewingPreset!.bwKhz, s.viewingPreset!.cr),
+                          radioLabel: s.viewingPreset?.name,
+                        ),
                       ],
                     ),
                   ),
