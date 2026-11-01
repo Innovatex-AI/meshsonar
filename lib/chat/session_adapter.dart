@@ -36,7 +36,6 @@ class RadioSessionChatAdapter implements OutboundMessageSink {
   /// Starts feeding [chat]. Call once per session; call [dispose] when the session ends.
   void bind(ChatService chat) {
     _chat = chat;
-    session.chatActive = true;
     session.setInboundPersister((m) async {
       final id = radioId;
       if (id == null) throw StateError('radio identity unknown'); // not persisted: the session must not drop it from the radio
@@ -52,7 +51,6 @@ class RadioSessionChatAdapter implements OutboundMessageSink {
     _sub = null;
     _chat?.contacts.detach();
     session.setInboundPersister(null);
-    session.chatActive = false;
   }
 
   // ---------------------------------------------------------------- inbound

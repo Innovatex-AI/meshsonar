@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import '../../app/app_state.dart';
 import '../../app/chat_controller.dart';
 import '../../app/chat_wiring.dart';
+import '../../app/ping_feedback.dart' show lastPingSummary;
 import '../../core/antenna_profile.dart';
 import '../../core/heard.dart' show haversineM;
 import '../../core/model.dart';
@@ -193,6 +194,14 @@ class _DriveLiveStatsStripState extends State<DriveLiveStatsStrip> {
 
 // ------------------------------------------------------------------------------------------------ status
 
+/// The newest transmitted ping of this drive, or null.
+DrivePing? _lastTx(AppState s) {
+  for (final p in s.recentPings) {
+    if (p.kind == PingKind.tx) return p;
+  }
+  return null;
+}
+
 class DriveStatusRow extends StatelessWidget {
   final AppState state;
   final EdgeInsets padding;
@@ -232,12 +241,25 @@ class DriveStatusRow extends StatelessWidget {
           SizedBox(width: 26, child: Center(child: lead)),
           const SizedBox(width: Gap.s),
           Expanded(
-            child: Text(
-              s.statusLine,
-              key: const Key('status-line'),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: t.textTheme.titleMedium?.copyWith(color: error ? t.colorScheme.error : null),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  s.statusLine,
+                  key: const Key('status-line'),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: t.textTheme.titleMedium?.copyWith(color: error ? t.colorScheme.error : null),
+                ),
+                if (s.driving && !listening && _lastTx(s) != null)
+                  Text(
+                    lastPingSummary(_lastTx(s), s.pingFeedback) ?? '',
+                    key: const Key('ping-feedback'),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
+                  ),
+              ],
             ),
           ),
           if (s.driving && !listening) NextPingIndicator(state: s),

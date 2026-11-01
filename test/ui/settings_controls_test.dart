@@ -183,15 +183,15 @@ void main() {
     expect(find.textContaining('Last upload failed'), findsOneWidget);
   });
 
-  testWidgets('discovery mode: greys the interval/distance sliders, persists, and locks the switch while driving',
+  testWidgets('send pings off (listen-only): greys the interval/distance sliders, persists, and locks the switch while driving',
       (tester) async {
     final h = await openSettings(tester);
-    await show(tester, 'discovery-mode');
-    expect(tester.widget<SwitchListTile>(find.byKey(const Key('discovery-mode'))).value, isFalse);
+    await show(tester, 'send-pings');
+    expect(tester.widget<SwitchListTile>(find.byKey(const Key('send-pings'))).value, isTrue, reason: 'sending is the default');
     expect(tester.widget<Slider>(find.byKey(const Key('interval-slider'))).onChanged, isNotNull);
     expect(tester.widget<Slider>(find.byKey(const Key('min-distance-slider'))).onChanged, isNotNull);
 
-    await tester.tap(find.byKey(const Key('discovery-mode')));
+    await tester.tap(find.byKey(const Key('send-pings')));
     await tester.pumpAndSettle();
     expect(h.settings.saved.discoveryMode, isTrue);
     await show(tester, 'interval-slider');
@@ -200,16 +200,16 @@ void main() {
     expect(tester.widget<Slider>(find.byKey(const Key('min-distance-slider'))).onChanged, isNull);
 
     // Turned back off (not driving yet), then a drive starts: the switch locks, disabled rather than hidden.
-    await show(tester, 'discovery-mode');
-    await tester.tap(find.byKey(const Key('discovery-mode')));
+    await show(tester, 'send-pings');
+    await tester.tap(find.byKey(const Key('send-pings')));
     await tester.pumpAndSettle();
     expect(h.settings.saved.discoveryMode, isFalse);
 
     await h.state.connect(h.bt.devices.first, RadioKind.bluetooth);
     await h.state.startDrive();
     await tester.pumpAndSettle();
-    await show(tester, 'discovery-mode');
-    expect(tester.widget<SwitchListTile>(find.byKey(const Key('discovery-mode'))).onChanged, isNull,
+    await show(tester, 'send-pings');
+    expect(tester.widget<SwitchListTile>(find.byKey(const Key('send-pings'))).onChanged, isNull,
         reason: 'privacy-critical toggle: disabled, not hidden, while a drive is active');
     await h.state.stopDrive();
   });

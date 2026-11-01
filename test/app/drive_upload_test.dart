@@ -243,6 +243,8 @@ class RecordingClient implements CmatClient {
   @override
   Future<DriverPrivacy> setDriverPrivacy(String driverKey, {List<PrivacyZone>? zones, int? trimM}) => throw UnimplementedError();
   @override
+  Future<List<PingObservation>> driveStatus(String driverKey, String sessionId) => throw UnimplementedError();
+  @override
   Future<KeyRequestResult> requestKey({required String name, String? callsign, String? email}) => throw UnimplementedError();
   @override
   Future<({DriverKeyStatus status, String display})> status(String driverKey) async =>
