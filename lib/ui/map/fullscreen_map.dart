@@ -85,6 +85,7 @@ class FullscreenMapScreen extends StatelessWidget {
                   hexRes: model.coverageQuery.res,
                   labelAvoidKeys: model.fullscreenOverlayKeys,
                   fallbackCenter: viewedRegionCenter(s),
+                fallbackBounds: viewedRegionBounds(s),
                   regionNeighbours: s.regionNeighbours,
                   onPickRegion: (r) => confirmRegionSwitch(context, r),
                   rotatable: true,

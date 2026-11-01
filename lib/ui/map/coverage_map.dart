@@ -69,6 +69,7 @@ import '../../core/region_neighbours.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import 'cell_sheet.dart';
+import 'region_center.dart' show continentalCenter, continentalZoom;
 import '../../app/app_state.dart' show AppState;
 import '../app.dart' show AppScope;
 import 'layers/layers_sheet.dart' show NetworkAgeLegend;
@@ -190,6 +191,9 @@ class CoverageMap extends StatefulWidget {
   /// Null (index never loaded) shows a whole-world view rather than guessing a city.
   final LatLng? fallbackCenter;
 
+  /// The viewed region's bounds, when known: with no position and no pings the map frames these (not just their centre).
+  final LatLngBounds? fallbackBounds;
+
   /// Extra space at the edges for overlays drawn on top of the map by the parent (e.g. a chip row).
   final EdgeInsets overlayPadding;
 
@@ -268,6 +272,7 @@ class CoverageMap extends StatefulWidget {
     this.showTiles,
     this.repeaterLabel,
     this.fallbackCenter,
+    this.fallbackBounds,
     this.overlayPadding = EdgeInsets.zero,
     this.heard,
     this.layers = const MapLayers(),
@@ -786,6 +791,8 @@ class _CoverageMapState extends State<CoverageMap> {
     if (widget.position != null) return widget.position!;
     final l = _latest;
     if (l != null) return LatLng(l.lat, l.lon);
+    // Nothing of our own: the viewed region comes before the mean of whatever repeaters happen to be loaded.
+    if (widget.fallbackCenter != null) return widget.fallbackCenter!;
     if (widget.repeaters.isNotEmpty) {
       var lat = 0.0, lon = 0.0;
       for (final r in widget.repeaters) {
@@ -794,13 +801,14 @@ class _CoverageMapState extends State<CoverageMap> {
       }
       return LatLng(lat / widget.repeaters.length, lon / widget.repeaters.length);
     }
-    return widget.fallbackCenter ?? const LatLng(20, 0);
+    return continentalCenter;
   }
 
   double get _initialZoom {
     if (widget.position != null || widget.pings.isNotEmpty) return 13.6;
+    if (widget.fallbackCenter != null) return 8;
     if (widget.repeaters.isNotEmpty) return 11;
-    return widget.fallbackCenter == null ? 1.5 : 8;
+    return continentalZoom;
   }
 
   CameraFit? get _initialFit {
@@ -810,6 +818,10 @@ class _CoverageMapState extends State<CoverageMap> {
         padding: const EdgeInsets.all(40) + widget.overlayPadding,
         maxZoom: 15.5, // a short drive should still show its streets, not upscaled blurry tiles
       );
+    }
+    // Nothing of our own (no position, no pings): the viewed region's bounds come first.
+    if (widget.position == null && widget.pings.isEmpty && widget.fallbackBounds != null) {
+      return CameraFit.bounds(bounds: widget.fallbackBounds!, padding: const EdgeInsets.all(24) + widget.overlayPadding, maxZoom: 12);
     }
     // Nothing of our own to frame yet (no position, no pings): frame the network-coverage cells instead, so the
     // background layer is actually visible on first open rather than requiring a manual pan to find it.
@@ -848,15 +860,21 @@ class _CoverageMapState extends State<CoverageMap> {
     super.didUpdateWidget(old);
     if (old.follow != widget.follow) _follow = widget.follow;
     // The viewed region changed (or the index finished loading) while there is nothing else to look at: recentre.
-    if (_regionJustPicked && old.fallbackCenter != widget.fallbackCenter) {
+    final fallbackChanged = old.fallbackCenter != widget.fallbackCenter || old.fallbackBounds != widget.fallbackBounds;
+    if (_regionJustPicked && fallbackChanged) {
       _regionJustPicked = false; // the person chose this region on the map: the framing above stands
-    } else if (old.fallbackCenter != widget.fallbackCenter &&
+    } else if (fallbackChanged &&
         widget.fallbackCenter != null &&
         _ready &&
         widget.position == null &&
         widget.pings.isEmpty &&
-        widget.repeaters.isEmpty) {
-      _controller.move(widget.fallbackCenter!, 10);
+        (widget.repeaters.isEmpty || widget.fallbackBounds != null)) {
+      final b = widget.fallbackBounds;
+      if (b != null) {
+        _controller.fitCamera(CameraFit.bounds(bounds: b, padding: const EdgeInsets.all(24) + widget.overlayPadding, maxZoom: 12));
+      } else {
+        _controller.move(widget.fallbackCenter!, 10);
+      }
     }
     if (old.highlightKey != widget.highlightKey) {
       _selectedRepeater = widget.highlightKey;

@@ -67,6 +67,7 @@ Future<(ZonesHarness, MapController)> pumpZones(
   bool capable = true,
   bool withKey = true,
   bool withFix = true,
+  void Function(ZonesHarness h)? setup,
 }) async {
   tester.view.physicalSize = size * 2;
   tester.view.devicePixelRatio = 2;
@@ -79,6 +80,7 @@ Future<(ZonesHarness, MapController)> pumpZones(
     region: const RegionInfo(slug: 'cmh', url: 'https://cmh.meshsonar.com'),
     capabilities: {if (capable) 'driverPrivacy'},
   );
+  setup?.call(h);
   await h.state.init();
   await tester.pumpAndSettle();
   final map = MapController();
