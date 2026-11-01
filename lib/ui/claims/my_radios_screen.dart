@@ -1,6 +1,7 @@
 // Settings > My radios: the radios this driver key manages. List, give up a radio, change its name / whether its
 // position is public / notes; start "Claim my radio" or "Claim a repeater"; finish a name restore still owed. The full
-// multi-radio management is on the website (/me/radios). Nothing here decides whether a radio's data counts.
+// same list is on the website (/me/radios). Observer claims show their health (hearing, quiet, deaf, offline) and battery.
+// Nothing here decides whether a radio's data counts.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -151,6 +152,12 @@ class _MyRadiosScreenState extends State<MyRadiosScreen> {
                         Wrap(spacing: Gap.s, runSpacing: Gap.xs, children: [
                           _Chip(_typeWord(claim.nodeType), Icons.cell_tower),
                           _Chip(_how(claim.method), Icons.verified_outlined),
+                          if (claim.health != null) _Chip(claim.health!.words, _healthIcon(claim.health!)),
+                          if (claim.health?.batteryMv != null)
+                            _Chip(
+                                'Battery ${(claim.health!.batteryMv! / 1000).toStringAsFixed(2)} V${claim.health!.batteryLow ? ' (low)' : ''}'
+                                '${claim.health!.batteryTrend == null || claim.health!.batteryTrend == 'unknown' ? '' : ', ${claim.health!.batteryTrend}'}',
+                                claim.health!.batteryLow ? Icons.battery_alert : Icons.battery_full),
                           _Chip(
                             claim.positionPublic == null
                                 ? 'Position: server default'
@@ -160,6 +167,7 @@ class _MyRadiosScreenState extends State<MyRadiosScreen> {
                         ]),
                         const SizedBox(height: Gap.xs),
                         Text(claim.pubkey.substring(0, 16), style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
+                        if (claim.verifiedAt != null) Text('Claimed ${claim.verifiedAt!.toLocal().toIso8601String().substring(0, 10)}', style: t.textTheme.bodySmall),
                         if (claim.notes != null) Padding(padding: const EdgeInsets.only(top: Gap.xs), child: Text(claim.notes!, style: t.textTheme.bodySmall)),
                         const SizedBox(height: Gap.xs),
                         Wrap(spacing: Gap.s, children: [
@@ -204,8 +212,8 @@ class _MyRadiosScreenState extends State<MyRadiosScreen> {
                   key: const Key('my-radios-website'),
                   minVerticalPadding: Gap.s,
                   leading: const Icon(Icons.open_in_new),
-                  title: const Text('Manage all your radios on the website'),
-                  subtitle: Text('Several radios across phones, alerts and more: ${s.webPage('/me/radios')}'),
+                  title: const Text('View your radios on the website'),
+                  subtitle: Text('The same list, optional: ${s.webPage('/me/radios')}'),
                   onTap: () => s.openWebPage('/me/radios'),
                 ),
               ],
@@ -216,6 +224,13 @@ class _MyRadiosScreenState extends State<MyRadiosScreen> {
     );
   }
 }
+
+IconData _healthIcon(ObserverHealth h) => switch (h.state) {
+      'ok' => Icons.hearing,
+      'deaf' => Icons.hearing_disabled,
+      'offline' => Icons.cloud_off_outlined,
+      _ => Icons.volume_mute_outlined,
+    };
 
 class _Chip extends StatelessWidget {
   final String text;

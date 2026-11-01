@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/app_state.dart';
 import '../../app/context_upload_hook.dart';
+import '../../app/messages.dart';
 import '../app.dart';
 import 'settings_index.dart';
 import 'settings_kit.dart';
@@ -21,12 +22,17 @@ const String deleteMyDataLead = 'This deletes what MeshSonar collected alongside
     'it heard) are not touched here: delete a drive from its own screen. Collection continues as the switches in '
     'Privacy & data sharing say; turn a switch off to stop it.';
 
-/// Account deletion (App Store guideline 5.1.1(v)): the account lives on the website, signed in by emailed link, and
-/// "Delete my account" there removes the account, every drive and ping and the driver keys. The button opens that page.
-const String deleteAccountText = 'Your MeshSonar account is on the website. "Delete my account" opens the page where '
-    'you sign in with your email and delete it: that removes your account, all your drives and their pings, and '
-    'revokes your driver keys. Without an account (only a driver key), contact whoever runs the server to have the key '
-    'and its drives removed. The buttons below clear this phone.';
+/// Account deletion (App Store guideline 5.1.1(v)) from inside the app: `DELETE driver-delete` removes this driver key and
+/// everything tied to it on the server. A website account linked to the key (if you made one) is separate and is deleted
+/// from the website. An older server without the endpoint keeps the website hand-off.
+const String deleteAccountText = 'Delete my account removes your driver key and every drive, ping, weather lookup, packet '
+    'header and problem report the server holds for it. It cannot be undone. A website account you may have linked to '
+    'the key is separate: delete that one on the website. Drives on this phone stay unless you tick the box. '
+    'You can make a new key afterwards.';
+
+/// What the person is told before "Download my data".
+const String exportText = 'Download my data saves everything the server holds for your account (your keys, every drive '
+    'with each ping, and your reports) as one file you can keep or share.';
 
 class DeleteMyDataScreen extends StatefulWidget {
   const DeleteMyDataScreen({super.key});
@@ -43,6 +49,81 @@ class _DeleteMyDataScreenState extends State<DeleteMyDataScreen> {
   String? _localResult;
   bool _drivesBusy = false;
   String? _drivesResult;
+  bool _exportBusy = false;
+  String? _exportResult;
+  bool _acctBusy = false;
+  String? _acctResult;
+
+  Future<void> _export(AppState s) async {
+    setState(() {
+      _exportBusy = true;
+      _exportResult = null;
+    });
+    String msg;
+    try {
+      await s.exportAccountData();
+      msg = 'Done. Choose where to keep the file.';
+    } catch (e) {
+      msg = friendlyError(e, action: 'Downloading your data');
+    }
+    if (!mounted) return;
+    setState(() {
+      _exportBusy = false;
+      _exportResult = msg;
+    });
+  }
+
+  Future<void> _deleteAccount(AppState s) async {
+    var alsoPhone = false;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, set) => AlertDialog(
+          key: const Key('delete-account-dialog'),
+          title: const Text('Delete my account?'),
+          content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('This deletes your driver key and all your drives, pings and reports on the server. It cannot be undone.'),
+            CheckboxListTile(
+              key: const Key('delete-account-also-phone'),
+              contentPadding: EdgeInsets.zero,
+              value: alsoPhone,
+              onChanged: (v) => set(() => alsoPhone = v ?? false),
+              title: const Text('Also delete the drives on this phone'),
+              subtitle: const Text('Ones not uploaded yet are lost.'),
+            ),
+          ]),
+          actions: [
+            TextButton(key: const Key('delete-account-cancel'), onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            FilledButton(
+              key: const Key('delete-account-confirm'),
+              style: FilledButton.styleFrom(backgroundColor: Theme.of(ctx).colorScheme.error, foregroundColor: Theme.of(ctx).colorScheme.onError),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Delete my account'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (ok != true || !mounted) return;
+    setState(() {
+      _acctBusy = true;
+      _acctResult = null;
+    });
+    String msg;
+    try {
+      final c = await s.deleteAccountOnServer(alsoOnPhone: alsoPhone);
+      msg = c == null
+          ? 'The server no longer knew this key, so there was nothing left to delete. This phone forgot it.'
+          : 'Deleted: ${c.sessions} drive${c.sessions == 1 ? '' : 's'}, ${c.pings} pings, ${c.reports} report${c.reports == 1 ? '' : 's'}. This phone forgot the key.';
+    } catch (e) {
+      msg = '${friendlyError(e, action: 'Deleting the account')} Nothing was changed.';
+    }
+    if (!mounted) return;
+    setState(() {
+      _acctBusy = false;
+      _acctResult = msg;
+    });
+  }
 
   Future<void> _deleteOnServer(AppState s) async {
     final ok = await confirmSettingsChange(
@@ -211,16 +292,48 @@ class _DeleteMyDataScreenState extends State<DeleteMyDataScreen> {
                 padding: const EdgeInsets.only(top: 12),
                 child: Semantics(liveRegion: true, child: Text(_localResult!, key: const Key('delete-local-result'))),
               ),
+            head('Download my data'),
+            const Text(exportText, key: Key('export-text')),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              key: const Key('export-data'),
+              onPressed: (!s.accountAvailable || _exportBusy) ? null : () => _export(s),
+              icon: _exportBusy ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.download_outlined),
+              label: const Text('Download my data'),
+            ),
+            if (!s.accountAvailable)
+              const Padding(padding: EdgeInsets.only(top: 6), child: Text('Needs a confirmed driver key on a server that offers it.', key: Key('export-whynot'))),
+            if (_exportResult != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Semantics(liveRegion: true, child: Text(_exportResult!, key: const Key('export-result'))),
+              ),
             head('Your account and drives'),
             const Text(deleteAccountText, key: Key('delete-account-text')),
             const SizedBox(height: 8),
-            FilledButton.icon(
-              key: const Key('delete-account-website'),
-              style: FilledButton.styleFrom(backgroundColor: t.colorScheme.error, foregroundColor: t.colorScheme.onError),
-              onPressed: () => s.openWebPage('/me/privacy'),
-              icon: const Icon(Icons.manage_accounts_outlined),
-              label: const Text('Delete my account'),
-            ),
+            if (s.serverCanDeleteDriver)
+              FilledButton.icon(
+                key: const Key('delete-account'),
+                style: FilledButton.styleFrom(backgroundColor: t.colorScheme.error, foregroundColor: t.colorScheme.onError),
+                onPressed: _acctBusy ? null : () => _deleteAccount(s),
+                icon: _acctBusy
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.manage_accounts_outlined),
+                label: const Text('Delete my account'),
+              )
+            else
+              FilledButton.icon(
+                key: const Key('delete-account-website'),
+                style: FilledButton.styleFrom(backgroundColor: t.colorScheme.error, foregroundColor: t.colorScheme.onError),
+                onPressed: () => s.openWebPage('/me/privacy'),
+                icon: const Icon(Icons.manage_accounts_outlined),
+                label: const Text('Delete my account on the website'),
+              ),
+            if (_acctResult != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Semantics(liveRegion: true, child: Text(_acctResult!, key: const Key('delete-account-result'))),
+              ),
             const SizedBox(height: 8),
             OutlinedButton.icon(
               key: const Key('delete-all-drives'),

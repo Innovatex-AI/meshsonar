@@ -357,6 +357,8 @@ earlier ping), `other-channel`, `not-group-text`, `unparsed`, `omitted` (count o
 `{skipped: <reason>}`. Failed: `{failed}`. Late tail (frames after the window until the next ping): `{late_for: <ping id>,
 frames}`. Share it from the drive (Drives > the drive's menu > Share ping trace) when a drive looks wrong.
 
+Fix policy and schedule fields on every ping line (lib/core/fix_window.dart): `fix_age_ms` (how old the chosen fix was when the ping went out, at most 8000), `acc` (its accuracy, metres), `low_acc` (true above 50 m; the number itself travels as the ping's `gps_accuracy_m`, there is no upload flag), `fix_rule` (`first` | `newest` | `best_in_window`), `cands` / `refused_poor` (fixes weighed / refused by the 100 m gate), `speed_src` (`os` | `derived` | `none`), `late_ms` (send time minus due time), `mono_ms` (monotonic send time). `{no_fix, why: first_fix|gate|no_fix, since_ms, acc}` says why a ping was held. Health records (`lib/core/drive_health_sink.dart`): `{v:1, health: gps|fix_drop|timing|frame|..., at, ...}`; `timing` is the end-of-drive summary (`sent, expected, gap_p50_s, gap_p95_s, gap_max_s, late_*_s, first_ping_s, skipped{}, fixes_refused, low_accuracy_pings`).
+
 ## 6. Other measurements
 
 ### 6.1 Noise floor (GET_STATS)

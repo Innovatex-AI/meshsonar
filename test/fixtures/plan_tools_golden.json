@@ -1,0 +1,3652 @@
+{
+ "generatedFrom": "meshcore-insights src/lib/tools/plan-tools-golden.ts",
+ "airtime": {
+  "toa": [
+   {
+    "radio": {
+     "sf": 7,
+     "bwKHz": 62.5,
+     "cr": 5
+    },
+    "bytes": 1,
+    "tsymMs": 2.048,
+    "ldro": false,
+    "preambleSymbols": 36.25,
+    "payloadSymbols": 13,
+    "preambleMs": 74.24,
+    "payloadMs": 26.624000000000002,
+    "totalMs": 100.864
+   },
+   {
+    "radio": {
+     "sf": 7,
+     "bwKHz": 62.5,
+     "cr": 5
+    },
+    "bytes": 20,
+    "tsymMs": 2.048,
+    "ldro": false,
+    "preambleSymbols": 36.25,
+    "payloadSymbols": 43,
+    "preambleMs": 74.24,
+    "payloadMs": 88.06400000000001,
+    "totalMs": 162.304
+   },
+   {
+    "radio": {
+     "sf": 7,
+     "bwKHz": 62.5,
+     "cr": 5
+    },
+    "bytes": 50,
+    "tsymMs": 2.048,
+    "ldro": false,
+    "preambleSymbols": 36.25,
+    "payloadSymbols": 83,
+    "preambleMs": 74.24,
+    "payloadMs": 169.984,
+    "totalMs": 244.224
+   },
+   {
+    "radio": {
+     "sf": 7,
+     "bwKHz": 62.5,
+     "cr": 5
+    },
+    "bytes": 100,
+    "tsymMs": 2.048,
+    "ldro": false,
+    "preambleSymbols": 36.25,
+    "payloadSymbols": 158,
+    "preambleMs": 74.24,
+    "payloadMs": 323.584,
+    "totalMs": 397.824
+   },
+   {
+    "radio": {
+     "sf": 7,
+     "bwKHz": 62.5,
+     "cr": 5
+    },
+    "bytes": 184,
+    "tsymMs": 2.048,
+    "ldro": false,
+    "preambleSymbols": 36.25,
+    "payloadSymbols": 278,
+    "preambleMs": 74.24,
+    "payloadMs": 569.344,
+    "totalMs": 643.5840000000001
+   },
+   {
+    "radio": {
+     "sf": 7,
+     "bwKHz": 62.5,
+     "cr": 5
+    },
+    "bytes": 255,
+    "tsymMs": 2.048,
+    "ldro": false,
+    "preambleSymbols": 36.25,
+    "payloadSymbols": 378,
+    "preambleMs": 74.24,
+    "payloadMs": 774.144,
+    "totalMs": 848.384
+   },
+   {
+    "radio": {
+     "sf": 8,
+     "bwKHz": 62.5,
+     "cr": 5
+    },
+    "bytes": 1,
+    "tsymMs": 4.096,
+    "ldro": false,
+    "preambleSymbols": 36.25,
+    "payloadSymbols": 13,
+    "preambleMs": 148.48,
+    "payloadMs": 53.248000000000005,
+    "totalMs": 201.728
+   },
+   {
+    "radio": {
+     "sf": 8,
+     "bwKHz": 62.5,
+     "cr": 5
+    },
+    "bytes": 20,
+    "tsymMs": 4.096,
+    "ldro": false,
+    "preambleSymbols": 36.25,
+    "payloadSymbols": 38,
+    "preambleMs": 148.48,
+    "payloadMs": 155.648,
+    "totalMs": 304.128
+   },
+   {
+    "radio": {
+     "sf": 8,
+     "bwKHz": 62.5,
+     "cr": 5
+    },
+    "bytes": 50,
+    "tsymMs": 4.096,
+    "ldro": false,
+    "preambleSymbols": 36.25,
+    "payloadSymbols": 73,
+    "preambleMs": 148.48,
+    "payloadMs": 299.008,
+    "totalMs": 447.48799999999994
+   },
+   {
+    "radio": {
+     "sf": 8,
+     "bwKHz": 62.5,
+     "cr": 5
+    },
+    "bytes": 100,
+    "tsymMs": 4.096,
+    "ldro": false,
+    "preambleSymbols": 36.25,
+    "payloadSymbols": 138,
+    "preambleMs": 148.48,
+    "payloadMs": 565.248,
+    "totalMs": 713.7280000000001
+   },
+   {
+    "radio": {
+     "sf": 8,
+     "bwKHz": 62.5,
+     "cr": 5
+    },
+    "bytes": 184,
+    "tsymMs": 4.096,
+    "ldro": false,
+    "preambleSymbols": 36.25,
+    "payloadSymbols": 243,
+    "preambleMs": 148.48,
+    "payloadMs": 995.328,
+    "totalMs": 1143.808
+   },
+   {
+    "radio": {
+     "sf": 8,
+     "bwKHz": 62.5,
+     "cr": 5
+    },
+    "bytes": 255,
+    "tsymMs": 4.096,
+    "ldro": false,
+    "preambleSymbols": 36.25,
+    "payloadSymbols": 333,
+    "preambleMs": 148.48,
+    "payloadMs": 1363.968,
+    "totalMs": 1512.448
+   },
+   {
+    "radio": {
+     "sf": 10,
+     "bwKHz": 125,
+     "cr": 5
+    },
+    "bytes": 1,
+    "tsymMs": 8.192,
+    "ldro": false,
+    "preambleSymbols": 20.25,
+    "payloadSymbols": 13,
+    "preambleMs": 165.888,
+    "payloadMs": 106.49600000000001,
+    "totalMs": 272.384
+   },
+   {
+    "radio": {
+     "sf": 10,
+     "bwKHz": 125,
+     "cr": 5
+    },
+    "bytes": 20,
+    "tsymMs": 8.192,
+    "ldro": false,
+    "preambleSymbols": 20.25,
+    "payloadSymbols": 33,
+    "preambleMs": 165.888,
+    "payloadMs": 270.336,
+    "totalMs": 436.22400000000005
+   },
+   {
+    "radio": {
+     "sf": 10,
+     "bwKHz": 125,
+     "cr": 5
+    },
+    "bytes": 50,
+    "tsymMs": 8.192,
+    "ldro": false,
+    "preambleSymbols": 20.25,
+    "payloadSymbols": 63,
+    "preambleMs": 165.888,
+    "payloadMs": 516.096,
+    "totalMs": 681.984
+   },
+   {
+    "radio": {
+     "sf": 10,
+     "bwKHz": 125,
+     "cr": 5
+    },
+    "bytes": 100,
+    "tsymMs": 8.192,
+    "ldro": false,
+    "preambleSymbols": 20.25,
+    "payloadSymbols": 113,
+    "preambleMs": 165.888,
+    "payloadMs": 925.696,
+    "totalMs": 1091.584
+   },
+   {
+    "radio": {
+     "sf": 10,
+     "bwKHz": 125,
+     "cr": 5
+    },
+    "bytes": 184,
+    "tsymMs": 8.192,
+    "ldro": false,
+    "preambleSymbols": 20.25,
+    "payloadSymbols": 193,
+    "preambleMs": 165.888,
+    "payloadMs": 1581.056,
+    "totalMs": 1746.944
+   },
+   {
+    "radio": {
+     "sf": 10,
+     "bwKHz": 125,
+     "cr": 5
+    },
+    "bytes": 255,
+    "tsymMs": 8.192,
+    "ldro": false,
+    "preambleSymbols": 20.25,
+    "payloadSymbols": 268,
+    "preambleMs": 165.888,
+    "payloadMs": 2195.456,
+    "totalMs": 2361.344
+   },
+   {
+    "radio": {
+     "sf": 11,
+     "bwKHz": 250,
+     "cr": 8
+    },
+    "bytes": 1,
+    "tsymMs": 8.192,
+    "ldro": false,
+    "preambleSymbols": 20.25,
+    "payloadSymbols": 16,
+    "preambleMs": 165.888,
+    "payloadMs": 131.072,
+    "totalMs": 296.96000000000004
+   },
+   {
+    "radio": {
+     "sf": 11,
+     "bwKHz": 250,
+     "cr": 8
+    },
+    "bytes": 20,
+    "tsymMs": 8.192,
+    "ldro": false,
+    "preambleSymbols": 20.25,
+    "payloadSymbols": 40,
+    "preambleMs": 165.888,
+    "payloadMs": 327.68,
+    "totalMs": 493.568
+   },
+   {
+    "radio": {
+     "sf": 11,
+     "bwKHz": 250,
+     "cr": 8
+    },
+    "bytes": 50,
+    "tsymMs": 8.192,
+    "ldro": false,
+    "preambleSymbols": 20.25,
+    "payloadSymbols": 88,
+    "preambleMs": 165.888,
+    "payloadMs": 720.896,
+    "totalMs": 886.784
+   },
+   {
+    "radio": {
+     "sf": 11,
+     "bwKHz": 250,
+     "cr": 8
+    },
+    "bytes": 100,
+    "tsymMs": 8.192,
+    "ldro": false,
+    "preambleSymbols": 20.25,
+    "payloadSymbols": 160,
+    "preambleMs": 165.888,
+    "payloadMs": 1310.72,
+    "totalMs": 1476.608
+   },
+   {
+    "radio": {
+     "sf": 11,
+     "bwKHz": 250,
+     "cr": 8
+    },
+    "bytes": 184,
+    "tsymMs": 8.192,
+    "ldro": false,
+    "preambleSymbols": 20.25,
+    "payloadSymbols": 280,
+    "preambleMs": 165.888,
+    "payloadMs": 2293.76,
+    "totalMs": 2459.648
+   },
+   {
+    "radio": {
+     "sf": 11,
+     "bwKHz": 250,
+     "cr": 8
+    },
+    "bytes": 255,
+    "tsymMs": 8.192,
+    "ldro": false,
+    "preambleSymbols": 20.25,
+    "payloadSymbols": 384,
+    "preambleMs": 165.888,
+    "payloadMs": 3145.728,
+    "totalMs": 3311.616
+   },
+   {
+    "radio": {
+     "sf": 12,
+     "bwKHz": 125,
+     "cr": 6
+    },
+    "bytes": 1,
+    "tsymMs": 32.768,
+    "ldro": true,
+    "preambleSymbols": 20.25,
+    "payloadSymbols": 14,
+    "preambleMs": 663.552,
+    "payloadMs": 458.752,
+    "totalMs": 1122.304
+   },
+   {
+    "radio": {
+     "sf": 12,
+     "bwKHz": 125,
+     "cr": 6
+    },
+    "bytes": 20,
+    "tsymMs": 32.768,
+    "ldro": true,
+    "preambleSymbols": 20.25,
+    "payloadSymbols": 32,
+    "preambleMs": 663.552,
+    "payloadMs": 1048.576,
+    "totalMs": 1712.1280000000002
+   },
+   {
+    "radio": {
+     "sf": 12,
+     "bwKHz": 125,
+     "cr": 6
+    },
+    "bytes": 50,
+    "tsymMs": 32.768,
+    "ldro": true,
+    "preambleSymbols": 20.25,
+    "payloadSymbols": 68,
+    "preambleMs": 663.552,
+    "payloadMs": 2228.224,
+    "totalMs": 2891.7760000000003
+   },
+   {
+    "radio": {
+     "sf": 12,
+     "bwKHz": 125,
+     "cr": 6
+    },
+    "bytes": 100,
+    "tsymMs": 32.768,
+    "ldro": true,
+    "preambleSymbols": 20.25,
+    "payloadSymbols": 128,
+    "preambleMs": 663.552,
+    "payloadMs": 4194.304,
+    "totalMs": 4857.856
+   },
+   {
+    "radio": {
+     "sf": 12,
+     "bwKHz": 125,
+     "cr": 6
+    },
+    "bytes": 184,
+    "tsymMs": 32.768,
+    "ldro": true,
+    "preambleSymbols": 20.25,
+    "payloadSymbols": 230,
+    "preambleMs": 663.552,
+    "payloadMs": 7536.64,
+    "totalMs": 8200.192000000001
+   },
+   {
+    "radio": {
+     "sf": 12,
+     "bwKHz": 125,
+     "cr": 6
+    },
+    "bytes": 255,
+    "tsymMs": 32.768,
+    "ldro": true,
+    "preambleSymbols": 20.25,
+    "payloadSymbols": 314,
+    "preambleMs": 663.552,
+    "payloadMs": 10289.152,
+    "totalMs": 10952.704
+   },
+   {
+    "radio": {
+     "sf": 9,
+     "bwKHz": 250,
+     "cr": 7
+    },
+    "bytes": 1,
+    "tsymMs": 2.048,
+    "ldro": false,
+    "preambleSymbols": 20.25,
+    "payloadSymbols": 15,
+    "preambleMs": 41.472,
+    "payloadMs": 30.72,
+    "totalMs": 72.19200000000001
+   },
+   {
+    "radio": {
+     "sf": 9,
+     "bwKHz": 250,
+     "cr": 7
+    },
+    "bytes": 20,
+    "tsymMs": 2.048,
+    "ldro": false,
+    "preambleSymbols": 20.25,
+    "payloadSymbols": 43,
+    "preambleMs": 41.472,
+    "payloadMs": 88.06400000000001,
+    "totalMs": 129.536
+   },
+   {
+    "radio": {
+     "sf": 9,
+     "bwKHz": 250,
+     "cr": 7
+    },
+    "bytes": 50,
+    "tsymMs": 2.048,
+    "ldro": false,
+    "preambleSymbols": 20.25,
+    "payloadSymbols": 92,
+    "preambleMs": 41.472,
+    "payloadMs": 188.416,
+    "totalMs": 229.888
+   },
+   {
+    "radio": {
+     "sf": 9,
+     "bwKHz": 250,
+     "cr": 7
+    },
+    "bytes": 100,
+    "tsymMs": 2.048,
+    "ldro": false,
+    "preambleSymbols": 20.25,
+    "payloadSymbols": 169,
+    "preambleMs": 41.472,
+    "payloadMs": 346.112,
+    "totalMs": 387.584
+   },
+   {
+    "radio": {
+     "sf": 9,
+     "bwKHz": 250,
+     "cr": 7
+    },
+    "bytes": 184,
+    "tsymMs": 2.048,
+    "ldro": false,
+    "preambleSymbols": 20.25,
+    "payloadSymbols": 302,
+    "preambleMs": 41.472,
+    "payloadMs": 618.496,
+    "totalMs": 659.968
+   },
+   {
+    "radio": {
+     "sf": 9,
+     "bwKHz": 250,
+     "cr": 7
+    },
+    "bytes": 255,
+    "tsymMs": 2.048,
+    "ldro": false,
+    "preambleSymbols": 20.25,
+    "payloadSymbols": 407,
+    "preambleMs": 41.472,
+    "payloadMs": 833.5360000000001,
+    "totalMs": 875.008
+   },
+   {
+    "radio": {
+     "sf": 7,
+     "bwKHz": 125,
+     "cr": 5,
+     "preamble": 8
+    },
+    "bytes": 1,
+    "tsymMs": 1.024,
+    "ldro": false,
+    "preambleSymbols": 12.25,
+    "payloadSymbols": 13,
+    "preambleMs": 12.544,
+    "payloadMs": 13.312000000000001,
+    "totalMs": 25.856
+   },
+   {
+    "radio": {
+     "sf": 7,
+     "bwKHz": 125,
+     "cr": 5,
+     "preamble": 8
+    },
+    "bytes": 20,
+    "tsymMs": 1.024,
+    "ldro": false,
+    "preambleSymbols": 12.25,
+    "payloadSymbols": 43,
+    "preambleMs": 12.544,
+    "payloadMs": 44.032000000000004,
+    "totalMs": 56.57600000000001
+   },
+   {
+    "radio": {
+     "sf": 7,
+     "bwKHz": 125,
+     "cr": 5,
+     "preamble": 8
+    },
+    "bytes": 50,
+    "tsymMs": 1.024,
+    "ldro": false,
+    "preambleSymbols": 12.25,
+    "payloadSymbols": 83,
+    "preambleMs": 12.544,
+    "payloadMs": 84.992,
+    "totalMs": 97.536
+   },
+   {
+    "radio": {
+     "sf": 7,
+     "bwKHz": 125,
+     "cr": 5,
+     "preamble": 8
+    },
+    "bytes": 100,
+    "tsymMs": 1.024,
+    "ldro": false,
+    "preambleSymbols": 12.25,
+    "payloadSymbols": 158,
+    "preambleMs": 12.544,
+    "payloadMs": 161.792,
+    "totalMs": 174.336
+   },
+   {
+    "radio": {
+     "sf": 7,
+     "bwKHz": 125,
+     "cr": 5,
+     "preamble": 8
+    },
+    "bytes": 184,
+    "tsymMs": 1.024,
+    "ldro": false,
+    "preambleSymbols": 12.25,
+    "payloadSymbols": 278,
+    "preambleMs": 12.544,
+    "payloadMs": 284.672,
+    "totalMs": 297.216
+   },
+   {
+    "radio": {
+     "sf": 7,
+     "bwKHz": 125,
+     "cr": 5,
+     "preamble": 8
+    },
+    "bytes": 255,
+    "tsymMs": 1.024,
+    "ldro": false,
+    "preambleSymbols": 12.25,
+    "payloadSymbols": 378,
+    "preambleMs": 12.544,
+    "payloadMs": 387.072,
+    "totalMs": 399.616
+   }
+  ],
+  "packets": [
+   {
+    "spec": {
+     "kind": "ack"
+    },
+    "header": 1,
+    "transport": 0,
+    "pathLen": 1,
+    "path": 0,
+    "payload": 4,
+    "total": 6,
+    "overLimit": null
+   },
+   {
+    "spec": {
+     "kind": "group",
+     "chars": 40,
+     "hops": 2,
+     "hashSize": 1
+    },
+    "header": 1,
+    "transport": 0,
+    "pathLen": 1,
+    "path": 2,
+    "payload": 51,
+    "total": 55,
+    "overLimit": null
+   },
+   {
+    "spec": {
+     "kind": "direct",
+     "chars": 100,
+     "hops": 3,
+     "hashSize": 2,
+     "transport": true
+    },
+    "header": 1,
+    "transport": 4,
+    "pathLen": 1,
+    "path": 6,
+    "payload": 116,
+    "total": 128,
+    "overLimit": null
+   },
+   {
+    "spec": {
+     "kind": "advert",
+     "nameLen": 12,
+     "withLocation": true,
+     "hops": 0
+    },
+    "header": 1,
+    "transport": 0,
+    "pathLen": 1,
+    "path": 0,
+    "payload": 121,
+    "total": 123,
+    "overLimit": null
+   },
+   {
+    "spec": {
+     "kind": "advert",
+     "nameLen": 40,
+     "withLocation": false,
+     "hops": 1,
+     "hashSize": 3
+    },
+    "header": 1,
+    "transport": 0,
+    "pathLen": 1,
+    "path": 3,
+    "payload": 141,
+    "total": 146,
+    "overLimit": null
+   },
+   {
+    "spec": {
+     "kind": "custom",
+     "customBytes": 90,
+     "hops": 5,
+     "hashSize": 2
+    },
+    "header": 1,
+    "transport": 0,
+    "pathLen": 1,
+    "path": 10,
+    "payload": 90,
+    "total": 102,
+    "overLimit": null
+   },
+   {
+    "spec": {
+     "kind": "group",
+     "chars": 200,
+     "hops": 40,
+     "hashSize": 3
+    },
+    "header": 1,
+    "transport": 0,
+    "pathLen": 1,
+    "path": 120,
+    "payload": 211,
+    "total": 333,
+    "overLimit": "payload 211 B exceeds the 184 B firmware limit"
+   }
+  ],
+  "floods": [
+   {
+    "spec": {
+     "kind": "group",
+     "chars": 40,
+     "hops": 2,
+     "hashSize": 1
+    },
+    "relays": 4,
+    "radio": {
+     "sf": 7,
+     "bwKHz": 62.5,
+     "cr": 5
+    },
+    "steps": [
+     {
+      "hop": 2,
+      "bytes": 55,
+      "ms": 264.704
+     },
+     {
+      "hop": 3,
+      "bytes": 56,
+      "ms": 264.704
+     },
+     {
+      "hop": 4,
+      "bytes": 57,
+      "ms": 264.704
+     },
+     {
+      "hop": 5,
+      "bytes": 58,
+      "ms": 274.944
+     },
+     {
+      "hop": 6,
+      "bytes": 59,
+      "ms": 274.944
+     }
+    ],
+    "totalMs": 1344
+   },
+   {
+    "spec": {
+     "kind": "advert",
+     "nameLen": 12,
+     "withLocation": true,
+     "hops": 0
+    },
+    "relays": 6,
+    "radio": {
+     "sf": 8,
+     "bwKHz": 62.5,
+     "cr": 5
+    },
+    "steps": [
+     {
+      "hop": 0,
+      "bytes": 123,
+      "ms": 836.6080000000001
+     },
+     {
+      "hop": 1,
+      "bytes": 124,
+      "ms": 836.6080000000001
+     },
+     {
+      "hop": 2,
+      "bytes": 125,
+      "ms": 836.6080000000001
+     },
+     {
+      "hop": 3,
+      "bytes": 126,
+      "ms": 836.6080000000001
+     },
+     {
+      "hop": 4,
+      "bytes": 127,
+      "ms": 857.0880000000001
+     },
+     {
+      "hop": 5,
+      "bytes": 128,
+      "ms": 857.0880000000001
+     },
+     {
+      "hop": 6,
+      "bytes": 129,
+      "ms": 857.0880000000001
+     }
+    ],
+    "totalMs": 5917.696
+   }
+  ],
+  "delays": [
+   {
+    "spec": {
+     "kind": "group",
+     "chars": 40,
+     "hops": 2,
+     "hashSize": 1
+    },
+    "txdelay": 0.5,
+    "radio": {
+     "sf": 7,
+     "bwKHz": 62.5,
+     "cr": 5
+    },
+    "tMs": 132.352,
+    "maxMs": 661.76,
+    "meanMs": 330.88
+   },
+   {
+    "spec": {
+     "kind": "direct",
+     "chars": 100,
+     "hops": 3,
+     "hashSize": 2,
+     "transport": true
+    },
+    "txdelay": 0.5,
+    "radio": {
+     "sf": 7,
+     "bwKHz": 62.5,
+     "cr": 5
+    },
+    "tMs": 229.632,
+    "maxMs": 1148.16,
+    "meanMs": 574.08
+   }
+  ],
+  "raws": [
+   {
+    "hex": "1500aabbccdd",
+    "header": {
+     "bytes": 6,
+     "routeType": 1,
+     "payloadType": 5,
+     "hashSize": 1,
+     "hopCount": 0
+    }
+   },
+   {
+    "hex": "00041111111111111111111111111111111111111111",
+    "header": {
+     "bytes": 22,
+     "routeType": 0,
+     "payloadType": 0,
+     "hashSize": 1,
+     "hopCount": 17
+    }
+   },
+   {
+    "hex": "1503aabbccddee",
+    "header": {
+     "bytes": 7,
+     "routeType": 1,
+     "payloadType": 5,
+     "hashSize": 1,
+     "hopCount": 3
+    }
+   },
+   {
+    "hex": "zz",
+    "header": null
+   },
+   {
+    "hex": "15",
+    "header": null
+   }
+  ],
+  "duty": [
+   {
+    "af": 0,
+    "pct": 100
+   },
+   {
+    "af": 1,
+    "pct": 50
+   },
+   {
+    "af": 3,
+    "pct": 25
+   },
+   {
+    "af": 9,
+    "pct": 10
+   }
+  ],
+  "aloha": [
+   {
+    "g": 0,
+    "p": 0
+   },
+   {
+    "g": 0.01,
+    "p": 0.019801326693244747
+   },
+   {
+    "g": 0.05,
+    "p": 0.09516258196404048
+   },
+   {
+    "g": 0.2,
+    "p": 0.3296799539643607
+   }
+  ],
+  "observation": 82,
+  "whatIfs": [
+   {
+    "mix": {
+     "fixedS": 120.5,
+     "floodByHopS": [
+      30,
+      55.25,
+      41.5,
+      18,
+      6.75,
+      2
+     ],
+     "advertByHopS": [
+      12,
+      25.5,
+      19,
+      8.25,
+      3
+     ]
+    },
+    "w": {
+     "repeaters": 40,
+     "links": 70,
+     "addRepeaters": 0,
+     "floodMax": 64,
+     "advertIntervalH": 12,
+     "baselineAdvertIntervalH": 12
+    },
+    "k": 3.5,
+    "kNew": 3.5,
+    "rho": 1,
+    "total": 341.75,
+    "flood": 153.5,
+    "advert": 67.75,
+    "fixed": 120.5
+   },
+   {
+    "mix": {
+     "fixedS": 120.5,
+     "floodByHopS": [
+      30,
+      55.25,
+      41.5,
+      18,
+      6.75,
+      2
+     ],
+     "advertByHopS": [
+      12,
+      25.5,
+      19,
+      8.25,
+      3
+     ]
+    },
+    "w": {
+     "repeaters": 40,
+     "links": 70,
+     "addRepeaters": 20,
+     "floodMax": 64,
+     "advertIntervalH": 12,
+     "baselineAdvertIntervalH": 12
+    },
+    "k": 3.5,
+    "kNew": 5.25,
+    "rho": 1.3888888888888888,
+    "total": 456.1736111111111,
+    "flood": 201.52777777777777,
+    "advert": 134.14583333333331,
+    "fixed": 120.5
+   },
+   {
+    "mix": {
+     "fixedS": 120.5,
+     "floodByHopS": [
+      30,
+      55.25,
+      41.5,
+      18,
+      6.75,
+      2
+     ],
+     "advertByHopS": [
+      12,
+      25.5,
+      19,
+      8.25,
+      3
+     ]
+    },
+    "w": {
+     "repeaters": 40,
+     "links": 70,
+     "addRepeaters": 10,
+     "floodMax": 3,
+     "advertIntervalH": 24,
+     "baselineAdvertIntervalH": 12
+    },
+    "k": 3.5,
+    "kNew": 4.375,
+    "rho": 1.1944444444444444,
+    "total": 334.44184027777777,
+    "flood": 167.0625,
+    "advert": 46.87934027777778,
+    "fixed": 120.5
+   },
+   {
+    "mix": {
+     "fixedS": 120.5,
+     "floodByHopS": [
+      30,
+      55.25,
+      41.5,
+      18,
+      6.75,
+      2
+     ],
+     "advertByHopS": [
+      12,
+      25.5,
+      19,
+      8.25,
+      3
+     ]
+    },
+    "w": {
+     "repeaters": 0,
+     "links": 0,
+     "addRepeaters": 5,
+     "floodMax": 2,
+     "advertIntervalH": 6,
+     "baselineAdvertIntervalH": 12
+    },
+    "k": 0,
+    "kNew": 0,
+    "rho": 1,
+    "total": 925.25,
+    "flood": 126.75,
+    "advert": 678,
+    "fixed": 120.5
+   },
+   {
+    "mix": {
+     "fixedS": 120.5,
+     "floodByHopS": [
+      30,
+      55.25,
+      41.5,
+      18,
+      6.75,
+      2
+     ],
+     "advertByHopS": [
+      12,
+      25.5,
+      19,
+      8.25,
+      3
+     ]
+    },
+    "w": {
+     "repeaters": 12,
+     "links": 0,
+     "addRepeaters": 12,
+     "floodMax": 64,
+     "advertIntervalH": 12,
+     "baselineAdvertIntervalH": 12
+    },
+    "k": 0,
+    "kNew": 0,
+    "rho": 1,
+    "total": 409.5,
+    "flood": 153.5,
+    "advert": 135.5,
+    "fixed": 120.5
+   }
+  ]
+ },
+ "presets": {
+  "sens": [
+   {
+    "sf": 7,
+    "bw": 62.5,
+    "dbm": -127.54119982655925,
+    "deltaUs": 0
+   },
+   {
+    "sf": 7,
+    "bw": 125,
+    "dbm": -124.53089986991944,
+    "deltaUs": -3.0102999566398125
+   },
+   {
+    "sf": 7,
+    "bw": 250,
+    "dbm": -121.52059991327963,
+    "deltaUs": -6.020599913279625
+   },
+   {
+    "sf": 7,
+    "bw": 500,
+    "dbm": -118.51029995663981,
+    "deltaUs": -9.030899869919438
+   },
+   {
+    "sf": 8,
+    "bw": 62.5,
+    "dbm": -130.04119982655925,
+    "deltaUs": 2.5
+   },
+   {
+    "sf": 8,
+    "bw": 125,
+    "dbm": -127.03089986991944,
+    "deltaUs": -0.5102999566398125
+   },
+   {
+    "sf": 8,
+    "bw": 250,
+    "dbm": -124.02059991327963,
+    "deltaUs": -3.520599913279625
+   },
+   {
+    "sf": 8,
+    "bw": 500,
+    "dbm": -121.01029995663981,
+    "deltaUs": -6.530899869919438
+   },
+   {
+    "sf": 9,
+    "bw": 62.5,
+    "dbm": -132.54119982655925,
+    "deltaUs": 5
+   },
+   {
+    "sf": 9,
+    "bw": 125,
+    "dbm": -129.53089986991944,
+    "deltaUs": 1.9897000433601875
+   },
+   {
+    "sf": 9,
+    "bw": 250,
+    "dbm": -126.52059991327963,
+    "deltaUs": -1.020599913279625
+   },
+   {
+    "sf": 9,
+    "bw": 500,
+    "dbm": -123.51029995663981,
+    "deltaUs": -4.030899869919438
+   },
+   {
+    "sf": 10,
+    "bw": 62.5,
+    "dbm": -135.04119982655925,
+    "deltaUs": 7.5
+   },
+   {
+    "sf": 10,
+    "bw": 125,
+    "dbm": -132.03089986991944,
+    "deltaUs": 4.4897000433601875
+   },
+   {
+    "sf": 10,
+    "bw": 250,
+    "dbm": -129.02059991327963,
+    "deltaUs": 1.479400086720375
+   },
+   {
+    "sf": 10,
+    "bw": 500,
+    "dbm": -126.01029995663981,
+    "deltaUs": -1.5308998699194376
+   },
+   {
+    "sf": 11,
+    "bw": 62.5,
+    "dbm": -137.54119982655925,
+    "deltaUs": 10
+   },
+   {
+    "sf": 11,
+    "bw": 125,
+    "dbm": -134.53089986991944,
+    "deltaUs": 6.9897000433601875
+   },
+   {
+    "sf": 11,
+    "bw": 250,
+    "dbm": -131.52059991327963,
+    "deltaUs": 3.979400086720375
+   },
+   {
+    "sf": 11,
+    "bw": 500,
+    "dbm": -128.5102999566398,
+    "deltaUs": 0.9691001300805624
+   },
+   {
+    "sf": 12,
+    "bw": 62.5,
+    "dbm": -140.04119982655925,
+    "deltaUs": 12.5
+   },
+   {
+    "sf": 12,
+    "bw": 125,
+    "dbm": -137.03089986991944,
+    "deltaUs": 9.489700043360187
+   },
+   {
+    "sf": 12,
+    "bw": 250,
+    "dbm": -134.02059991327963,
+    "deltaUs": 6.479400086720375
+   },
+   {
+    "sf": 12,
+    "bw": 500,
+    "dbm": -131.0102999566398,
+    "deltaUs": 3.4691001300805624
+   }
+  ],
+  "rows": [
+   {
+    "base": {
+     "sf": 7,
+     "bwKHz": 62.5,
+     "cr": 5
+    },
+    "cr": 5,
+    "repeaters": 17,
+    "rows": [
+     {
+      "sf": 7,
+      "bwKHz": 62.5,
+      "cr": 5,
+      "isBase": true,
+      "toaMs": 244.224,
+      "sensitivityDbm": -127.54119982655925,
+      "deltaDb": 0,
+      "floodLoadMs": 4151.808
+     },
+     {
+      "sf": 8,
+      "bwKHz": 62.5,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 447.48799999999994,
+      "sensitivityDbm": -130.04119982655925,
+      "deltaDb": 2.5,
+      "floodLoadMs": 7607.295999999999
+     },
+     {
+      "sf": 9,
+      "bwKHz": 62.5,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 722.9440000000001,
+      "sensitivityDbm": -132.54119982655925,
+      "deltaDb": 5,
+      "floodLoadMs": 12290.048
+     },
+     {
+      "sf": 10,
+      "bwKHz": 62.5,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 1527.808,
+      "sensitivityDbm": -135.04119982655925,
+      "deltaDb": 7.5,
+      "floodLoadMs": 25972.736
+     },
+     {
+      "sf": 11,
+      "bwKHz": 62.5,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 2891.7760000000003,
+      "sensitivityDbm": -137.54119982655925,
+      "deltaDb": 10,
+      "floodLoadMs": 49160.192
+     },
+     {
+      "sf": 12,
+      "bwKHz": 62.5,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 5128.192,
+      "sensitivityDbm": -140.04119982655925,
+      "deltaDb": 12.5,
+      "floodLoadMs": 87179.264
+     },
+     {
+      "sf": 7,
+      "bwKHz": 125,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 122.112,
+      "sensitivityDbm": -124.53089986991944,
+      "deltaDb": -3.0102999566398125,
+      "floodLoadMs": 2075.904
+     },
+     {
+      "sf": 8,
+      "bwKHz": 125,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 223.74399999999997,
+      "sensitivityDbm": -127.03089986991944,
+      "deltaDb": -0.5102999566398125,
+      "floodLoadMs": 3803.6479999999997
+     },
+     {
+      "sf": 9,
+      "bwKHz": 125,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 361.47200000000004,
+      "sensitivityDbm": -129.53089986991944,
+      "deltaDb": 1.9897000433601875,
+      "floodLoadMs": 6145.024
+     },
+     {
+      "sf": 10,
+      "bwKHz": 125,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 681.984,
+      "sensitivityDbm": -132.03089986991944,
+      "deltaDb": 4.4897000433601875,
+      "floodLoadMs": 11593.728000000001
+     },
+     {
+      "sf": 11,
+      "bwKHz": 125,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 1445.8880000000001,
+      "sensitivityDbm": -134.53089986991944,
+      "deltaDb": 6.9897000433601875,
+      "floodLoadMs": 24580.096
+     },
+     {
+      "sf": 12,
+      "bwKHz": 125,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 2564.096,
+      "sensitivityDbm": -137.03089986991944,
+      "deltaDb": 9.489700043360187,
+      "floodLoadMs": 43589.632
+     },
+     {
+      "sf": 7,
+      "bwKHz": 250,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 61.056,
+      "sensitivityDbm": -121.52059991327963,
+      "deltaDb": -6.020599913279625,
+      "floodLoadMs": 1037.952
+     },
+     {
+      "sf": 8,
+      "bwKHz": 250,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 111.87199999999999,
+      "sensitivityDbm": -124.02059991327963,
+      "deltaDb": -3.520599913279625,
+      "floodLoadMs": 1901.8239999999998
+     },
+     {
+      "sf": 9,
+      "bwKHz": 250,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 180.73600000000002,
+      "sensitivityDbm": -126.52059991327963,
+      "deltaDb": -1.020599913279625,
+      "floodLoadMs": 3072.512
+     },
+     {
+      "sf": 10,
+      "bwKHz": 250,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 340.992,
+      "sensitivityDbm": -129.02059991327963,
+      "deltaDb": 1.479400086720375,
+      "floodLoadMs": 5796.8640000000005
+     },
+     {
+      "sf": 11,
+      "bwKHz": 250,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 641.024,
+      "sensitivityDbm": -131.52059991327963,
+      "deltaDb": 3.979400086720375,
+      "floodLoadMs": 10897.408
+     },
+     {
+      "sf": 12,
+      "bwKHz": 250,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 1282.048,
+      "sensitivityDbm": -134.02059991327963,
+      "deltaDb": 6.479400086720375,
+      "floodLoadMs": 21794.816
+     },
+     {
+      "sf": 7,
+      "bwKHz": 500,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 30.528,
+      "sensitivityDbm": -118.51029995663981,
+      "deltaDb": -9.030899869919438,
+      "floodLoadMs": 518.976
+     },
+     {
+      "sf": 8,
+      "bwKHz": 500,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 55.93599999999999,
+      "sensitivityDbm": -121.01029995663981,
+      "deltaDb": -6.530899869919438,
+      "floodLoadMs": 950.9119999999999
+     },
+     {
+      "sf": 9,
+      "bwKHz": 500,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 90.36800000000001,
+      "sensitivityDbm": -123.51029995663981,
+      "deltaDb": -4.030899869919438,
+      "floodLoadMs": 1536.256
+     },
+     {
+      "sf": 10,
+      "bwKHz": 500,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 170.496,
+      "sensitivityDbm": -126.01029995663981,
+      "deltaDb": -1.5308998699194376,
+      "floodLoadMs": 2898.4320000000002
+     },
+     {
+      "sf": 11,
+      "bwKHz": 500,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 320.512,
+      "sensitivityDbm": -128.5102999566398,
+      "deltaDb": 0.9691001300805624,
+      "floodLoadMs": 5448.704
+     },
+     {
+      "sf": 12,
+      "bwKHz": 500,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 600.064,
+      "sensitivityDbm": -131.0102999566398,
+      "deltaDb": 3.4691001300805624,
+      "floodLoadMs": 10201.088
+     }
+    ]
+   },
+   {
+    "base": {
+     "sf": 7,
+     "bwKHz": 62.5,
+     "cr": 5
+    },
+    "cr": 8,
+    "repeaters": 17,
+    "rows": [
+     {
+      "sf": 7,
+      "bwKHz": 62.5,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 336.384,
+      "sensitivityDbm": -127.54119982655925,
+      "deltaDb": 0,
+      "floodLoadMs": 5718.528
+     },
+     {
+      "sf": 8,
+      "bwKHz": 62.5,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 607.232,
+      "sensitivityDbm": -130.04119982655925,
+      "deltaDb": 2.5,
+      "floodLoadMs": 10322.944
+     },
+     {
+      "sf": 9,
+      "bwKHz": 62.5,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 1017.8560000000001,
+      "sensitivityDbm": -132.54119982655925,
+      "deltaDb": 5,
+      "floodLoadMs": 17303.552000000003
+     },
+     {
+      "sf": 10,
+      "bwKHz": 62.5,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 2166.784,
+      "sensitivityDbm": -135.04119982655925,
+      "deltaDb": 7.5,
+      "floodLoadMs": 36835.328
+     },
+     {
+      "sf": 11,
+      "bwKHz": 62.5,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 4071.4240000000004,
+      "sensitivityDbm": -137.54119982655925,
+      "deltaDb": 10,
+      "floodLoadMs": 69214.20800000001
+     },
+     {
+      "sf": 12,
+      "bwKHz": 62.5,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 7094.272,
+      "sensitivityDbm": -140.04119982655925,
+      "deltaDb": 12.5,
+      "floodLoadMs": 120602.624
+     },
+     {
+      "sf": 7,
+      "bwKHz": 125,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 168.192,
+      "sensitivityDbm": -124.53089986991944,
+      "deltaDb": -3.0102999566398125,
+      "floodLoadMs": 2859.264
+     },
+     {
+      "sf": 8,
+      "bwKHz": 125,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 303.616,
+      "sensitivityDbm": -127.03089986991944,
+      "deltaDb": -0.5102999566398125,
+      "floodLoadMs": 5161.472
+     },
+     {
+      "sf": 9,
+      "bwKHz": 125,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 508.92800000000005,
+      "sensitivityDbm": -129.53089986991944,
+      "deltaDb": 1.9897000433601875,
+      "floodLoadMs": 8651.776000000002
+     },
+     {
+      "sf": 10,
+      "bwKHz": 125,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 952.32,
+      "sensitivityDbm": -132.03089986991944,
+      "deltaDb": 4.4897000433601875,
+      "floodLoadMs": 16189.44
+     },
+     {
+      "sf": 11,
+      "bwKHz": 125,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 2035.7120000000002,
+      "sensitivityDbm": -134.53089986991944,
+      "deltaDb": 6.9897000433601875,
+      "floodLoadMs": 34607.10400000001
+     },
+     {
+      "sf": 12,
+      "bwKHz": 125,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 3547.136,
+      "sensitivityDbm": -137.03089986991944,
+      "deltaDb": 9.489700043360187,
+      "floodLoadMs": 60301.312
+     },
+     {
+      "sf": 7,
+      "bwKHz": 250,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 84.096,
+      "sensitivityDbm": -121.52059991327963,
+      "deltaDb": -6.020599913279625,
+      "floodLoadMs": 1429.632
+     },
+     {
+      "sf": 8,
+      "bwKHz": 250,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 151.808,
+      "sensitivityDbm": -124.02059991327963,
+      "deltaDb": -3.520599913279625,
+      "floodLoadMs": 2580.736
+     },
+     {
+      "sf": 9,
+      "bwKHz": 250,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 254.46400000000003,
+      "sensitivityDbm": -126.52059991327963,
+      "deltaDb": -1.020599913279625,
+      "floodLoadMs": 4325.888000000001
+     },
+     {
+      "sf": 10,
+      "bwKHz": 250,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 476.16,
+      "sensitivityDbm": -129.02059991327963,
+      "deltaDb": 1.479400086720375,
+      "floodLoadMs": 8094.72
+     },
+     {
+      "sf": 11,
+      "bwKHz": 250,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 886.784,
+      "sensitivityDbm": -131.52059991327963,
+      "deltaDb": 3.979400086720375,
+      "floodLoadMs": 15075.328
+     },
+     {
+      "sf": 12,
+      "bwKHz": 250,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 1773.568,
+      "sensitivityDbm": -134.02059991327963,
+      "deltaDb": 6.479400086720375,
+      "floodLoadMs": 30150.656
+     },
+     {
+      "sf": 7,
+      "bwKHz": 500,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 42.048,
+      "sensitivityDbm": -118.51029995663981,
+      "deltaDb": -9.030899869919438,
+      "floodLoadMs": 714.816
+     },
+     {
+      "sf": 8,
+      "bwKHz": 500,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 75.904,
+      "sensitivityDbm": -121.01029995663981,
+      "deltaDb": -6.530899869919438,
+      "floodLoadMs": 1290.368
+     },
+     {
+      "sf": 9,
+      "bwKHz": 500,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 127.23200000000001,
+      "sensitivityDbm": -123.51029995663981,
+      "deltaDb": -4.030899869919438,
+      "floodLoadMs": 2162.9440000000004
+     },
+     {
+      "sf": 10,
+      "bwKHz": 500,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 238.08,
+      "sensitivityDbm": -126.01029995663981,
+      "deltaDb": -1.5308998699194376,
+      "floodLoadMs": 4047.36
+     },
+     {
+      "sf": 11,
+      "bwKHz": 500,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 443.392,
+      "sensitivityDbm": -128.5102999566398,
+      "deltaDb": 0.9691001300805624,
+      "floodLoadMs": 7537.664
+     },
+     {
+      "sf": 12,
+      "bwKHz": 500,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 821.248,
+      "sensitivityDbm": -131.0102999566398,
+      "deltaDb": 3.4691001300805624,
+      "floodLoadMs": 13961.216
+     }
+    ]
+   },
+   {
+    "base": {
+     "sf": 8,
+     "bwKHz": 62.5,
+     "cr": 5
+    },
+    "cr": 5,
+    "repeaters": 17,
+    "rows": [
+     {
+      "sf": 7,
+      "bwKHz": 62.5,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 244.224,
+      "sensitivityDbm": -127.54119982655925,
+      "deltaDb": -2.5,
+      "floodLoadMs": 4151.808
+     },
+     {
+      "sf": 8,
+      "bwKHz": 62.5,
+      "cr": 5,
+      "isBase": true,
+      "toaMs": 447.48799999999994,
+      "sensitivityDbm": -130.04119982655925,
+      "deltaDb": 0,
+      "floodLoadMs": 7607.295999999999
+     },
+     {
+      "sf": 9,
+      "bwKHz": 62.5,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 722.9440000000001,
+      "sensitivityDbm": -132.54119982655925,
+      "deltaDb": 2.5,
+      "floodLoadMs": 12290.048
+     },
+     {
+      "sf": 10,
+      "bwKHz": 62.5,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 1527.808,
+      "sensitivityDbm": -135.04119982655925,
+      "deltaDb": 5,
+      "floodLoadMs": 25972.736
+     },
+     {
+      "sf": 11,
+      "bwKHz": 62.5,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 2891.7760000000003,
+      "sensitivityDbm": -137.54119982655925,
+      "deltaDb": 7.5,
+      "floodLoadMs": 49160.192
+     },
+     {
+      "sf": 12,
+      "bwKHz": 62.5,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 5128.192,
+      "sensitivityDbm": -140.04119982655925,
+      "deltaDb": 10,
+      "floodLoadMs": 87179.264
+     },
+     {
+      "sf": 7,
+      "bwKHz": 125,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 122.112,
+      "sensitivityDbm": -124.53089986991944,
+      "deltaDb": -5.5102999566398125,
+      "floodLoadMs": 2075.904
+     },
+     {
+      "sf": 8,
+      "bwKHz": 125,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 223.74399999999997,
+      "sensitivityDbm": -127.03089986991944,
+      "deltaDb": -3.0102999566398125,
+      "floodLoadMs": 3803.6479999999997
+     },
+     {
+      "sf": 9,
+      "bwKHz": 125,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 361.47200000000004,
+      "sensitivityDbm": -129.53089986991944,
+      "deltaDb": -0.5102999566398125,
+      "floodLoadMs": 6145.024
+     },
+     {
+      "sf": 10,
+      "bwKHz": 125,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 681.984,
+      "sensitivityDbm": -132.03089986991944,
+      "deltaDb": 1.9897000433601875,
+      "floodLoadMs": 11593.728000000001
+     },
+     {
+      "sf": 11,
+      "bwKHz": 125,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 1445.8880000000001,
+      "sensitivityDbm": -134.53089986991944,
+      "deltaDb": 4.4897000433601875,
+      "floodLoadMs": 24580.096
+     },
+     {
+      "sf": 12,
+      "bwKHz": 125,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 2564.096,
+      "sensitivityDbm": -137.03089986991944,
+      "deltaDb": 6.9897000433601875,
+      "floodLoadMs": 43589.632
+     },
+     {
+      "sf": 7,
+      "bwKHz": 250,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 61.056,
+      "sensitivityDbm": -121.52059991327963,
+      "deltaDb": -8.520599913279625,
+      "floodLoadMs": 1037.952
+     },
+     {
+      "sf": 8,
+      "bwKHz": 250,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 111.87199999999999,
+      "sensitivityDbm": -124.02059991327963,
+      "deltaDb": -6.020599913279625,
+      "floodLoadMs": 1901.8239999999998
+     },
+     {
+      "sf": 9,
+      "bwKHz": 250,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 180.73600000000002,
+      "sensitivityDbm": -126.52059991327963,
+      "deltaDb": -3.520599913279625,
+      "floodLoadMs": 3072.512
+     },
+     {
+      "sf": 10,
+      "bwKHz": 250,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 340.992,
+      "sensitivityDbm": -129.02059991327963,
+      "deltaDb": -1.020599913279625,
+      "floodLoadMs": 5796.8640000000005
+     },
+     {
+      "sf": 11,
+      "bwKHz": 250,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 641.024,
+      "sensitivityDbm": -131.52059991327963,
+      "deltaDb": 1.479400086720375,
+      "floodLoadMs": 10897.408
+     },
+     {
+      "sf": 12,
+      "bwKHz": 250,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 1282.048,
+      "sensitivityDbm": -134.02059991327963,
+      "deltaDb": 3.979400086720375,
+      "floodLoadMs": 21794.816
+     },
+     {
+      "sf": 7,
+      "bwKHz": 500,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 30.528,
+      "sensitivityDbm": -118.51029995663981,
+      "deltaDb": -11.530899869919438,
+      "floodLoadMs": 518.976
+     },
+     {
+      "sf": 8,
+      "bwKHz": 500,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 55.93599999999999,
+      "sensitivityDbm": -121.01029995663981,
+      "deltaDb": -9.030899869919438,
+      "floodLoadMs": 950.9119999999999
+     },
+     {
+      "sf": 9,
+      "bwKHz": 500,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 90.36800000000001,
+      "sensitivityDbm": -123.51029995663981,
+      "deltaDb": -6.530899869919438,
+      "floodLoadMs": 1536.256
+     },
+     {
+      "sf": 10,
+      "bwKHz": 500,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 170.496,
+      "sensitivityDbm": -126.01029995663981,
+      "deltaDb": -4.030899869919438,
+      "floodLoadMs": 2898.4320000000002
+     },
+     {
+      "sf": 11,
+      "bwKHz": 500,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 320.512,
+      "sensitivityDbm": -128.5102999566398,
+      "deltaDb": -1.5308998699194376,
+      "floodLoadMs": 5448.704
+     },
+     {
+      "sf": 12,
+      "bwKHz": 500,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 600.064,
+      "sensitivityDbm": -131.0102999566398,
+      "deltaDb": 0.9691001300805624,
+      "floodLoadMs": 10201.088
+     }
+    ]
+   },
+   {
+    "base": {
+     "sf": 8,
+     "bwKHz": 62.5,
+     "cr": 5
+    },
+    "cr": 8,
+    "repeaters": 17,
+    "rows": [
+     {
+      "sf": 7,
+      "bwKHz": 62.5,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 336.384,
+      "sensitivityDbm": -127.54119982655925,
+      "deltaDb": -2.5,
+      "floodLoadMs": 5718.528
+     },
+     {
+      "sf": 8,
+      "bwKHz": 62.5,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 607.232,
+      "sensitivityDbm": -130.04119982655925,
+      "deltaDb": 0,
+      "floodLoadMs": 10322.944
+     },
+     {
+      "sf": 9,
+      "bwKHz": 62.5,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 1017.8560000000001,
+      "sensitivityDbm": -132.54119982655925,
+      "deltaDb": 2.5,
+      "floodLoadMs": 17303.552000000003
+     },
+     {
+      "sf": 10,
+      "bwKHz": 62.5,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 2166.784,
+      "sensitivityDbm": -135.04119982655925,
+      "deltaDb": 5,
+      "floodLoadMs": 36835.328
+     },
+     {
+      "sf": 11,
+      "bwKHz": 62.5,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 4071.4240000000004,
+      "sensitivityDbm": -137.54119982655925,
+      "deltaDb": 7.5,
+      "floodLoadMs": 69214.20800000001
+     },
+     {
+      "sf": 12,
+      "bwKHz": 62.5,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 7094.272,
+      "sensitivityDbm": -140.04119982655925,
+      "deltaDb": 10,
+      "floodLoadMs": 120602.624
+     },
+     {
+      "sf": 7,
+      "bwKHz": 125,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 168.192,
+      "sensitivityDbm": -124.53089986991944,
+      "deltaDb": -5.5102999566398125,
+      "floodLoadMs": 2859.264
+     },
+     {
+      "sf": 8,
+      "bwKHz": 125,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 303.616,
+      "sensitivityDbm": -127.03089986991944,
+      "deltaDb": -3.0102999566398125,
+      "floodLoadMs": 5161.472
+     },
+     {
+      "sf": 9,
+      "bwKHz": 125,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 508.92800000000005,
+      "sensitivityDbm": -129.53089986991944,
+      "deltaDb": -0.5102999566398125,
+      "floodLoadMs": 8651.776000000002
+     },
+     {
+      "sf": 10,
+      "bwKHz": 125,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 952.32,
+      "sensitivityDbm": -132.03089986991944,
+      "deltaDb": 1.9897000433601875,
+      "floodLoadMs": 16189.44
+     },
+     {
+      "sf": 11,
+      "bwKHz": 125,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 2035.7120000000002,
+      "sensitivityDbm": -134.53089986991944,
+      "deltaDb": 4.4897000433601875,
+      "floodLoadMs": 34607.10400000001
+     },
+     {
+      "sf": 12,
+      "bwKHz": 125,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 3547.136,
+      "sensitivityDbm": -137.03089986991944,
+      "deltaDb": 6.9897000433601875,
+      "floodLoadMs": 60301.312
+     },
+     {
+      "sf": 7,
+      "bwKHz": 250,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 84.096,
+      "sensitivityDbm": -121.52059991327963,
+      "deltaDb": -8.520599913279625,
+      "floodLoadMs": 1429.632
+     },
+     {
+      "sf": 8,
+      "bwKHz": 250,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 151.808,
+      "sensitivityDbm": -124.02059991327963,
+      "deltaDb": -6.020599913279625,
+      "floodLoadMs": 2580.736
+     },
+     {
+      "sf": 9,
+      "bwKHz": 250,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 254.46400000000003,
+      "sensitivityDbm": -126.52059991327963,
+      "deltaDb": -3.520599913279625,
+      "floodLoadMs": 4325.888000000001
+     },
+     {
+      "sf": 10,
+      "bwKHz": 250,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 476.16,
+      "sensitivityDbm": -129.02059991327963,
+      "deltaDb": -1.020599913279625,
+      "floodLoadMs": 8094.72
+     },
+     {
+      "sf": 11,
+      "bwKHz": 250,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 886.784,
+      "sensitivityDbm": -131.52059991327963,
+      "deltaDb": 1.479400086720375,
+      "floodLoadMs": 15075.328
+     },
+     {
+      "sf": 12,
+      "bwKHz": 250,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 1773.568,
+      "sensitivityDbm": -134.02059991327963,
+      "deltaDb": 3.979400086720375,
+      "floodLoadMs": 30150.656
+     },
+     {
+      "sf": 7,
+      "bwKHz": 500,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 42.048,
+      "sensitivityDbm": -118.51029995663981,
+      "deltaDb": -11.530899869919438,
+      "floodLoadMs": 714.816
+     },
+     {
+      "sf": 8,
+      "bwKHz": 500,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 75.904,
+      "sensitivityDbm": -121.01029995663981,
+      "deltaDb": -9.030899869919438,
+      "floodLoadMs": 1290.368
+     },
+     {
+      "sf": 9,
+      "bwKHz": 500,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 127.23200000000001,
+      "sensitivityDbm": -123.51029995663981,
+      "deltaDb": -6.530899869919438,
+      "floodLoadMs": 2162.9440000000004
+     },
+     {
+      "sf": 10,
+      "bwKHz": 500,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 238.08,
+      "sensitivityDbm": -126.01029995663981,
+      "deltaDb": -4.030899869919438,
+      "floodLoadMs": 4047.36
+     },
+     {
+      "sf": 11,
+      "bwKHz": 500,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 443.392,
+      "sensitivityDbm": -128.5102999566398,
+      "deltaDb": -1.5308998699194376,
+      "floodLoadMs": 7537.664
+     },
+     {
+      "sf": 12,
+      "bwKHz": 500,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 821.248,
+      "sensitivityDbm": -131.0102999566398,
+      "deltaDb": 0.9691001300805624,
+      "floodLoadMs": 13961.216
+     }
+    ]
+   },
+   {
+    "base": {
+     "sf": 10,
+     "bwKHz": 125,
+     "cr": 5
+    },
+    "cr": 5,
+    "repeaters": 17,
+    "rows": [
+     {
+      "sf": 7,
+      "bwKHz": 62.5,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 244.224,
+      "sensitivityDbm": -127.54119982655925,
+      "deltaDb": -4.4897000433601875,
+      "floodLoadMs": 4151.808
+     },
+     {
+      "sf": 8,
+      "bwKHz": 62.5,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 447.48799999999994,
+      "sensitivityDbm": -130.04119982655925,
+      "deltaDb": -1.9897000433601875,
+      "floodLoadMs": 7607.295999999999
+     },
+     {
+      "sf": 9,
+      "bwKHz": 62.5,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 722.9440000000001,
+      "sensitivityDbm": -132.54119982655925,
+      "deltaDb": 0.5102999566398125,
+      "floodLoadMs": 12290.048
+     },
+     {
+      "sf": 10,
+      "bwKHz": 62.5,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 1527.808,
+      "sensitivityDbm": -135.04119982655925,
+      "deltaDb": 3.0102999566398125,
+      "floodLoadMs": 25972.736
+     },
+     {
+      "sf": 11,
+      "bwKHz": 62.5,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 2891.7760000000003,
+      "sensitivityDbm": -137.54119982655925,
+      "deltaDb": 5.5102999566398125,
+      "floodLoadMs": 49160.192
+     },
+     {
+      "sf": 12,
+      "bwKHz": 62.5,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 5128.192,
+      "sensitivityDbm": -140.04119982655925,
+      "deltaDb": 8.010299956639813,
+      "floodLoadMs": 87179.264
+     },
+     {
+      "sf": 7,
+      "bwKHz": 125,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 122.112,
+      "sensitivityDbm": -124.53089986991944,
+      "deltaDb": -7.5,
+      "floodLoadMs": 2075.904
+     },
+     {
+      "sf": 8,
+      "bwKHz": 125,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 223.74399999999997,
+      "sensitivityDbm": -127.03089986991944,
+      "deltaDb": -5,
+      "floodLoadMs": 3803.6479999999997
+     },
+     {
+      "sf": 9,
+      "bwKHz": 125,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 361.47200000000004,
+      "sensitivityDbm": -129.53089986991944,
+      "deltaDb": -2.5,
+      "floodLoadMs": 6145.024
+     },
+     {
+      "sf": 10,
+      "bwKHz": 125,
+      "cr": 5,
+      "isBase": true,
+      "toaMs": 681.984,
+      "sensitivityDbm": -132.03089986991944,
+      "deltaDb": 0,
+      "floodLoadMs": 11593.728000000001
+     },
+     {
+      "sf": 11,
+      "bwKHz": 125,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 1445.8880000000001,
+      "sensitivityDbm": -134.53089986991944,
+      "deltaDb": 2.5,
+      "floodLoadMs": 24580.096
+     },
+     {
+      "sf": 12,
+      "bwKHz": 125,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 2564.096,
+      "sensitivityDbm": -137.03089986991944,
+      "deltaDb": 5,
+      "floodLoadMs": 43589.632
+     },
+     {
+      "sf": 7,
+      "bwKHz": 250,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 61.056,
+      "sensitivityDbm": -121.52059991327963,
+      "deltaDb": -10.510299956639813,
+      "floodLoadMs": 1037.952
+     },
+     {
+      "sf": 8,
+      "bwKHz": 250,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 111.87199999999999,
+      "sensitivityDbm": -124.02059991327963,
+      "deltaDb": -8.010299956639813,
+      "floodLoadMs": 1901.8239999999998
+     },
+     {
+      "sf": 9,
+      "bwKHz": 250,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 180.73600000000002,
+      "sensitivityDbm": -126.52059991327963,
+      "deltaDb": -5.5102999566398125,
+      "floodLoadMs": 3072.512
+     },
+     {
+      "sf": 10,
+      "bwKHz": 250,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 340.992,
+      "sensitivityDbm": -129.02059991327963,
+      "deltaDb": -3.0102999566398125,
+      "floodLoadMs": 5796.8640000000005
+     },
+     {
+      "sf": 11,
+      "bwKHz": 250,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 641.024,
+      "sensitivityDbm": -131.52059991327963,
+      "deltaDb": -0.5102999566398125,
+      "floodLoadMs": 10897.408
+     },
+     {
+      "sf": 12,
+      "bwKHz": 250,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 1282.048,
+      "sensitivityDbm": -134.02059991327963,
+      "deltaDb": 1.9897000433601875,
+      "floodLoadMs": 21794.816
+     },
+     {
+      "sf": 7,
+      "bwKHz": 500,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 30.528,
+      "sensitivityDbm": -118.51029995663981,
+      "deltaDb": -13.520599913279625,
+      "floodLoadMs": 518.976
+     },
+     {
+      "sf": 8,
+      "bwKHz": 500,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 55.93599999999999,
+      "sensitivityDbm": -121.01029995663981,
+      "deltaDb": -11.020599913279625,
+      "floodLoadMs": 950.9119999999999
+     },
+     {
+      "sf": 9,
+      "bwKHz": 500,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 90.36800000000001,
+      "sensitivityDbm": -123.51029995663981,
+      "deltaDb": -8.520599913279625,
+      "floodLoadMs": 1536.256
+     },
+     {
+      "sf": 10,
+      "bwKHz": 500,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 170.496,
+      "sensitivityDbm": -126.01029995663981,
+      "deltaDb": -6.020599913279625,
+      "floodLoadMs": 2898.4320000000002
+     },
+     {
+      "sf": 11,
+      "bwKHz": 500,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 320.512,
+      "sensitivityDbm": -128.5102999566398,
+      "deltaDb": -3.520599913279625,
+      "floodLoadMs": 5448.704
+     },
+     {
+      "sf": 12,
+      "bwKHz": 500,
+      "cr": 5,
+      "isBase": false,
+      "toaMs": 600.064,
+      "sensitivityDbm": -131.0102999566398,
+      "deltaDb": -1.020599913279625,
+      "floodLoadMs": 10201.088
+     }
+    ]
+   },
+   {
+    "base": {
+     "sf": 10,
+     "bwKHz": 125,
+     "cr": 5
+    },
+    "cr": 8,
+    "repeaters": 17,
+    "rows": [
+     {
+      "sf": 7,
+      "bwKHz": 62.5,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 336.384,
+      "sensitivityDbm": -127.54119982655925,
+      "deltaDb": -4.4897000433601875,
+      "floodLoadMs": 5718.528
+     },
+     {
+      "sf": 8,
+      "bwKHz": 62.5,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 607.232,
+      "sensitivityDbm": -130.04119982655925,
+      "deltaDb": -1.9897000433601875,
+      "floodLoadMs": 10322.944
+     },
+     {
+      "sf": 9,
+      "bwKHz": 62.5,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 1017.8560000000001,
+      "sensitivityDbm": -132.54119982655925,
+      "deltaDb": 0.5102999566398125,
+      "floodLoadMs": 17303.552000000003
+     },
+     {
+      "sf": 10,
+      "bwKHz": 62.5,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 2166.784,
+      "sensitivityDbm": -135.04119982655925,
+      "deltaDb": 3.0102999566398125,
+      "floodLoadMs": 36835.328
+     },
+     {
+      "sf": 11,
+      "bwKHz": 62.5,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 4071.4240000000004,
+      "sensitivityDbm": -137.54119982655925,
+      "deltaDb": 5.5102999566398125,
+      "floodLoadMs": 69214.20800000001
+     },
+     {
+      "sf": 12,
+      "bwKHz": 62.5,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 7094.272,
+      "sensitivityDbm": -140.04119982655925,
+      "deltaDb": 8.010299956639813,
+      "floodLoadMs": 120602.624
+     },
+     {
+      "sf": 7,
+      "bwKHz": 125,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 168.192,
+      "sensitivityDbm": -124.53089986991944,
+      "deltaDb": -7.5,
+      "floodLoadMs": 2859.264
+     },
+     {
+      "sf": 8,
+      "bwKHz": 125,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 303.616,
+      "sensitivityDbm": -127.03089986991944,
+      "deltaDb": -5,
+      "floodLoadMs": 5161.472
+     },
+     {
+      "sf": 9,
+      "bwKHz": 125,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 508.92800000000005,
+      "sensitivityDbm": -129.53089986991944,
+      "deltaDb": -2.5,
+      "floodLoadMs": 8651.776000000002
+     },
+     {
+      "sf": 10,
+      "bwKHz": 125,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 952.32,
+      "sensitivityDbm": -132.03089986991944,
+      "deltaDb": 0,
+      "floodLoadMs": 16189.44
+     },
+     {
+      "sf": 11,
+      "bwKHz": 125,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 2035.7120000000002,
+      "sensitivityDbm": -134.53089986991944,
+      "deltaDb": 2.5,
+      "floodLoadMs": 34607.10400000001
+     },
+     {
+      "sf": 12,
+      "bwKHz": 125,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 3547.136,
+      "sensitivityDbm": -137.03089986991944,
+      "deltaDb": 5,
+      "floodLoadMs": 60301.312
+     },
+     {
+      "sf": 7,
+      "bwKHz": 250,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 84.096,
+      "sensitivityDbm": -121.52059991327963,
+      "deltaDb": -10.510299956639813,
+      "floodLoadMs": 1429.632
+     },
+     {
+      "sf": 8,
+      "bwKHz": 250,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 151.808,
+      "sensitivityDbm": -124.02059991327963,
+      "deltaDb": -8.010299956639813,
+      "floodLoadMs": 2580.736
+     },
+     {
+      "sf": 9,
+      "bwKHz": 250,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 254.46400000000003,
+      "sensitivityDbm": -126.52059991327963,
+      "deltaDb": -5.5102999566398125,
+      "floodLoadMs": 4325.888000000001
+     },
+     {
+      "sf": 10,
+      "bwKHz": 250,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 476.16,
+      "sensitivityDbm": -129.02059991327963,
+      "deltaDb": -3.0102999566398125,
+      "floodLoadMs": 8094.72
+     },
+     {
+      "sf": 11,
+      "bwKHz": 250,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 886.784,
+      "sensitivityDbm": -131.52059991327963,
+      "deltaDb": -0.5102999566398125,
+      "floodLoadMs": 15075.328
+     },
+     {
+      "sf": 12,
+      "bwKHz": 250,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 1773.568,
+      "sensitivityDbm": -134.02059991327963,
+      "deltaDb": 1.9897000433601875,
+      "floodLoadMs": 30150.656
+     },
+     {
+      "sf": 7,
+      "bwKHz": 500,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 42.048,
+      "sensitivityDbm": -118.51029995663981,
+      "deltaDb": -13.520599913279625,
+      "floodLoadMs": 714.816
+     },
+     {
+      "sf": 8,
+      "bwKHz": 500,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 75.904,
+      "sensitivityDbm": -121.01029995663981,
+      "deltaDb": -11.020599913279625,
+      "floodLoadMs": 1290.368
+     },
+     {
+      "sf": 9,
+      "bwKHz": 500,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 127.23200000000001,
+      "sensitivityDbm": -123.51029995663981,
+      "deltaDb": -8.520599913279625,
+      "floodLoadMs": 2162.9440000000004
+     },
+     {
+      "sf": 10,
+      "bwKHz": 500,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 238.08,
+      "sensitivityDbm": -126.01029995663981,
+      "deltaDb": -6.020599913279625,
+      "floodLoadMs": 4047.36
+     },
+     {
+      "sf": 11,
+      "bwKHz": 500,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 443.392,
+      "sensitivityDbm": -128.5102999566398,
+      "deltaDb": -3.520599913279625,
+      "floodLoadMs": 7537.664
+     },
+     {
+      "sf": 12,
+      "bwKHz": 500,
+      "cr": 8,
+      "isBase": false,
+      "toaMs": 821.248,
+      "sensitivityDbm": -131.0102999566398,
+      "deltaDb": -1.020599913279625,
+      "floodLoadMs": 13961.216
+     }
+    ]
+   }
+  ],
+  "shifts": [
+   {
+    "p": 0.05,
+    "delta": -6,
+    "q": 0.022406453233038744
+   },
+   {
+    "p": 0.05,
+    "delta": -1.5,
+    "q": 0.04100210475896301
+   },
+   {
+    "p": 0.05,
+    "delta": 0,
+    "q": 0.05000000000000001
+   },
+   {
+    "p": 0.05,
+    "delta": 3,
+    "q": 0.07386465319584049
+   },
+   {
+    "p": 0.05,
+    "delta": 9,
+    "q": 0.15479468095296914
+   },
+   {
+    "p": 0.1,
+    "delta": -6,
+    "q": 0.04615347279234404
+   },
+   {
+    "p": 0.1,
+    "delta": -1.5,
+    "q": 0.08278833665519246
+   },
+   {
+    "p": 0.1,
+    "delta": 0,
+    "q": 0.10000000000000002
+   },
+   {
+    "p": 0.1,
+    "delta": 3,
+    "q": 0.144109184588995
+   },
+   {
+    "p": 0.1,
+    "delta": 9,
+    "q": 0.27883141536599676
+   },
+   {
+    "p": 0.5,
+    "delta": -6,
+    "q": 0.3033689941797641
+   },
+   {
+    "p": 0.5,
+    "delta": -1.5,
+    "q": 0.44822957937068647
+   },
+   {
+    "p": 0.5,
+    "delta": 0,
+    "q": 0.5
+   },
+   {
+    "p": 0.5,
+    "delta": 3,
+    "q": 0.6024425844484879
+   },
+   {
+    "p": 0.5,
+    "delta": 9,
+    "q": 0.7767730056425896
+   },
+   {
+    "p": 0.9,
+    "delta": -6,
+    "q": 0.7967199379257897
+   },
+   {
+    "p": 0.9,
+    "delta": -1.5,
+    "q": 0.8796794424768108
+   },
+   {
+    "p": 0.9,
+    "delta": 0,
+    "q": 0.8999999999999999
+   },
+   {
+    "p": 0.9,
+    "delta": 3,
+    "q": 0.931685774236581
+   },
+   {
+    "p": 0.9,
+    "delta": 9,
+    "q": 0.9690572082773837
+   }
+  ]
+ },
+ "link": {
+  "profiles": [
+   {
+    "name": "hills",
+    "ground": [
+     250,
+     262.4,
+     273.8,
+     283.7,
+     291.2,
+     296.1,
+     298.1,
+     297.4,
+     294.4,
+     289.6,
+     283.7,
+     277.7,
+     272.2,
+     268,
+     265.5,
+     265,
+     266.6,
+     270.1,
+     274.9,
+     280.5,
+     286,
+     290.7,
+     293.9,
+     294.8,
+     293.1,
+     288.7,
+     281.5,
+     272,
+     260.8,
+     248.5,
+     236.1,
+     224.5,
+     214.4,
+     206.5,
+     201.2,
+     198.9,
+     199.3,
+     202.3,
+     207.1,
+     213.2,
+     219.7,
+     225.8,
+     230.8,
+     234.2,
+     235.6,
+     234.9,
+     232.2,
+     228.1,
+     223,
+     217.8,
+     213.2,
+     209.9,
+     208.7,
+     210,
+     214.1,
+     220.8,
+     289.9,
+     300.9,
+     312.9,
+     325.3,
+     337.1,
+     347.4,
+     355.6,
+     361.2,
+     363.8,
+     363.6,
+     360.8,
+     355.9,
+     349.6,
+     342.7,
+     276,
+     270.2,
+     266,
+     263.7,
+     263.5,
+     265.3,
+     268.8,
+     273.3,
+     278.2,
+     282.7,
+     286,
+     287.5,
+     286.6,
+     283,
+     276.7,
+     268.1,
+     257.5,
+     245.6,
+     233.4,
+     221.6,
+     211.1,
+     202.6,
+     196.7,
+     193.8,
+     193.7,
+     196.4,
+     201.3,
+     207.8,
+     215.1,
+     222.4,
+     228.9,
+     234,
+     237.2,
+     238.3,
+     237.3,
+     234.5,
+     230.5,
+     226,
+     221.6,
+     218.2,
+     216.5,
+     217,
+     220.1,
+     225.9,
+     234,
+     244.2,
+     255.8,
+     267.9,
+     279.7,
+     290.3,
+     298.9
+    ],
+    "km": 12
+   },
+   {
+    "name": "flat",
+    "ground": [
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200,
+     200
+    ],
+    "km": 12
+   },
+   {
+    "name": "short",
+    "ground": [
+     250,
+     262.4,
+     273.8,
+     283.7,
+     291.2,
+     296.1,
+     298.1,
+     297.4,
+     294.4,
+     289.6,
+     283.7,
+     277.7,
+     272.2,
+     268,
+     265.5,
+     265,
+     266.6,
+     270.1,
+     274.9,
+     280.5,
+     286
+    ],
+    "km": 1.8
+   }
+  ],
+  "links": [
+   {
+    "profile": "hills",
+    "haM": 6,
+    "hbM": 8,
+    "bullDb": 32.706199570244905,
+    "odds": 0.0013828806947806622,
+    "tier": "Stretch",
+    "clearance": {
+     "worstRatio": -3.0506385098648807,
+     "worstKm": 6.4,
+     "worstClearM": -82.8,
+     "clearShare": 0.5546218487394958,
+     "blockedM": 4100,
+     "bullDb": 32.706199570244905,
+     "fspl": 113.20946241259911
+    },
+    "p2p": {
+     "fsplDb": 113.21724563448248,
+     "bullLossDb": 32.706199570244905,
+     "nu": 9.830559236224454,
+     "los": false,
+     "lowFrac": 0.4462809917355372,
+     "clutterDb": 71.22644628099175,
+     "pathLossDb": 217.14989148571914,
+     "marginDb": -61.60869165915989,
+     "prxDbm": -189.14989148571914,
+     "snrDb": -69.10869165915989
+    }
+   },
+   {
+    "profile": "hills",
+    "haM": 2,
+    "hbM": 2,
+    "bullDb": 33.726327751393896,
+    "odds": 0.0012008279677881942,
+    "tier": "Stretch",
+    "clearance": {
+     "worstRatio": -3.375731137271709,
+     "worstKm": 6.4,
+     "worstClearM": -87.8,
+     "clearShare": 0.5042016806722689,
+     "blockedM": 4500,
+     "bullDb": 33.726327751393896,
+     "fspl": 113.20946241259911
+    },
+    "p2p": {
+     "fsplDb": 113.21724563448248,
+     "bullLossDb": 33.726327751393896,
+     "nu": 11.049229740374045,
+     "los": false,
+     "lowFrac": 0.4793388429752066,
+     "clutterDb": 76.50247933884299,
+     "pathLossDb": 223.44605272471938,
+     "marginDb": -67.90485289816013,
+     "prxDbm": -195.44605272471938,
+     "snrDb": -75.40485289816013
+    }
+   },
+   {
+    "profile": "hills",
+    "haM": 20,
+    "hbM": 33,
+    "bullDb": 28.85663954641089,
+    "odds": 0.002355034084278912,
+    "tier": "Stretch",
+    "clearance": {
+     "worstRatio": -2.005703778343062,
+     "worstKm": 6.4,
+     "worstClearM": -62.9,
+     "clearShare": 0.6638655462184874,
+     "blockedM": 3000,
+     "bullDb": 28.85663954641089,
+     "fspl": 113.20946241259911
+    },
+    "p2p": {
+     "fsplDb": 113.21724563448248,
+     "bullLossDb": 28.85663954641089,
+     "nu": 6.32336705243416,
+     "los": false,
+     "lowFrac": 0.33884297520661155,
+     "clutterDb": 54.07933884297521,
+     "pathLossDb": 196.15322402386857,
+     "marginDb": -40.612024197309324,
+     "prxDbm": -168.15322402386857,
+     "snrDb": -48.112024197309324
+    }
+   },
+   {
+    "profile": "hills",
+    "haM": 10,
+    "hbM": 10,
+    "bullDb": 31.847777083996455,
+    "odds": 0.0015572624482280554,
+    "tier": "Stretch",
+    "clearance": {
+     "worstRatio": -2.738814969290983,
+     "worstKm": 6.4,
+     "worstClearM": -79.8,
+     "clearShare": 0.5630252100840336,
+     "blockedM": 4000,
+     "bullDb": 31.847777083996455,
+     "fspl": 113.20946241259911
+    },
+    "p2p": {
+     "fsplDb": 113.21724563448248,
+     "bullLossDb": 31.847777083996455,
+     "nu": 8.909812303287495,
+     "los": false,
+     "lowFrac": 0.4214876033057851,
+     "clutterDb": 67.26942148760331,
+     "pathLossDb": 212.33444420608225,
+     "marginDb": -56.793244379523,
+     "prxDbm": -184.33444420608225,
+     "snrDb": -64.293244379523
+    }
+   },
+   {
+    "profile": "flat",
+    "haM": 6,
+    "hbM": 8,
+    "bullDb": 4.189347214068236,
+    "odds": 0.06715947481882563,
+    "tier": "Stretch",
+    "clearance": {
+     "worstRatio": 0.15355935297556395,
+     "worstKm": 5.3,
+     "worstClearM": 4.8,
+     "clearShare": 0.058823529411764705,
+     "blockedM": 0,
+     "bullDb": 4.189347214068236,
+     "fspl": 113.20946241259911
+    },
+    "p2p": {
+     "fsplDb": 113.21724563448248,
+     "bullLossDb": 4.189347214068236,
+     "nu": -0.2171657196072798,
+     "los": true,
+     "lowFrac": 1,
+     "clutterDb": 159.60000000000002,
+     "pathLossDb": 277.0065928485507,
+     "marginDb": -121.46539302199147,
+     "prxDbm": -249.00659284855072,
+     "snrDb": -128.96539302199147
+    }
+   },
+   {
+    "profile": "flat",
+    "haM": 2,
+    "hbM": 2,
+    "bullDb": 6.079783519993833,
+    "odds": 0.05249640263597435,
+    "tier": "Stretch",
+    "clearance": {
+     "worstRatio": -0.003785616004438754,
+     "worstKm": 6,
+     "worstClearM": -0.1,
+     "clearShare": 0,
+     "blockedM": 2900,
+     "bullDb": 6.079783519993833,
+     "fspl": 113.20946241259911
+    },
+    "p2p": {
+     "fsplDb": 113.21724563448248,
+     "bullLossDb": 6.079783519993833,
+     "nu": 0.005428682242416191,
+     "los": false,
+     "lowFrac": 1,
+     "clutterDb": 159.60000000000002,
+     "pathLossDb": 278.89702915447634,
+     "marginDb": -123.35582932791709,
+     "prxDbm": -250.89702915447634,
+     "snrDb": -130.8558293279171
+    }
+   },
+   {
+    "profile": "flat",
+    "haM": 20,
+    "hbM": 33,
+    "bullDb": 0,
+    "odds": 0.11397904345766185,
+    "tier": "Possible",
+    "clearance": {
+     "worstRatio": 0.7519279472546996,
+     "worstKm": 4.6000000000000005,
+     "worstClearM": 23,
+     "clearShare": 1,
+     "blockedM": 0,
+     "bullDb": 0,
+     "fspl": 113.20946241259911
+    },
+    "p2p": {
+     "fsplDb": 113.21724563448248,
+     "bullLossDb": 0,
+     "nu": -1.0633867009349574,
+     "los": true,
+     "lowFrac": 0,
+     "clutterDb": 0,
+     "pathLossDb": 113.21724563448248,
+     "marginDb": 42.32395419207677,
+     "prxDbm": -85.21724563448248,
+     "snrDb": 34.82395419207677
+    }
+   },
+   {
+    "profile": "flat",
+    "haM": 10,
+    "hbM": 10,
+    "bullDb": 3.075897711620992,
+    "odds": 0.07749390427511925,
+    "tier": "Stretch",
+    "clearance": {
+     "worstRatio": 0.2507596036713524,
+     "worstKm": 6,
+     "worstClearM": 7.9,
+     "clearShare": 0.13445378151260504,
+     "blockedM": 0,
+     "bullDb": 3.075897711620992,
+     "fspl": 113.20946241259911
+    },
+    "p2p": {
+     "fsplDb": 113.21724563448248,
+     "bullLossDb": 3.075897711620992,
+     "nu": -0.3546276324073287,
+     "los": true,
+     "lowFrac": 1,
+     "clutterDb": 159.60000000000002,
+     "pathLossDb": 275.8931433461035,
+     "marginDb": -120.35194351954425,
+     "prxDbm": -247.8931433461035,
+     "snrDb": -127.85194351954425
+    }
+   },
+   {
+    "profile": "short",
+    "haM": 6,
+    "hbM": 8,
+    "bullDb": 26.211221464139612,
+    "odds": 0.039255667077335396,
+    "tier": "Stretch",
+    "clearance": {
+     "worstRatio": -2.906212214130763,
+     "worstKm": 0.54,
+     "worstClearM": -30.7,
+     "clearShare": 0.3684210526315789,
+     "blockedM": 990,
+     "bullDb": 26.211221464139612,
+     "fspl": 96.73128759371274
+    },
+    "p2p": {
+     "fsplDb": 96.73907081559611,
+     "bullLossDb": 26.211221464139612,
+     "nu": 4.664694050221343,
+     "los": false,
+     "lowFrac": 0.7619047619047619,
+     "clutterDb": 18.24,
+     "pathLossDb": 141.19029227973573,
+     "marginDb": 14.350907546823521,
+     "prxDbm": -113.19029227973573,
+     "snrDb": 6.850907546823521
+    }
+   },
+   {
+    "profile": "short",
+    "haM": 2,
+    "hbM": 2,
+    "bullDb": 27.757372168032965,
+    "odds": 0.03192768652229433,
+    "tier": "Stretch",
+    "clearance": {
+     "worstRatio": -3.3330975250377772,
+     "worstKm": 0.54,
+     "worstClearM": -35.3,
+     "clearShare": 0.3684210526315789,
+     "blockedM": 990,
+     "bullDb": 27.757372168032965,
+     "fspl": 96.73128759371274
+    },
+    "p2p": {
+     "fsplDb": 96.73907081559611,
+     "bullLossDb": 27.757372168032965,
+     "nu": 5.57342287739598,
+     "los": false,
+     "lowFrac": 1,
+     "clutterDb": 23.94,
+     "pathLossDb": 148.43644298362906,
+     "marginDb": 7.104756842930186,
+     "prxDbm": -120.43644298362906,
+     "snrDb": -0.39524315706981383
+    }
+   },
+   {
+    "profile": "short",
+    "haM": 20,
+    "hbM": 33,
+    "bullDb": 18.73195699383113,
+    "odds": 0.10327508918539466,
+    "tier": "Possible",
+    "clearance": {
+     "worstRatio": -1.317250223532431,
+     "worstKm": 0.45,
+     "worstClearM": -13.9,
+     "clearShare": 0.5789473684210527,
+     "blockedM": 540,
+     "bullDb": 18.731956993831126,
+     "fspl": 96.73128759371274
+    },
+    "p2p": {
+     "fsplDb": 96.73907081559611,
+     "bullLossDb": 18.731956993831126,
+     "nu": 1.9243479420320864,
+     "los": false,
+     "lowFrac": 0.47619047619047616,
+     "clutterDb": 11.4,
+     "pathLossDb": 126.87102780942723,
+     "marginDb": 28.670172017132018,
+     "prxDbm": -98.87102780942723,
+     "snrDb": 21.170172017132018
+    }
+   },
+   {
+    "profile": "short",
+    "haM": 10,
+    "hbM": 10,
+    "bullDb": 24.90854887579635,
+    "odds": 0.046658150368549124,
+    "tier": "Stretch",
+    "clearance": {
+     "worstRatio": -2.5741903056475293,
+     "worstKm": 0.54,
+     "worstClearM": -27.3,
+     "clearShare": 0.42105263157894735,
+     "blockedM": 900,
+     "bullDb": 24.90854887579635,
+     "fspl": 96.73128759371274
+    },
+    "p2p": {
+     "fsplDb": 96.73907081559611,
+     "bullLossDb": 24.90854887579635,
+     "nu": 4.012667741495324,
+     "los": false,
+     "lowFrac": 0.7142857142857143,
+     "clutterDb": 17.1,
+     "pathLossDb": 138.74761969139246,
+     "marginDb": 16.793580135166792,
+     "prxDbm": -110.74761969139246,
+     "snrDb": 9.293580135166792
+    }
+   }
+  ],
+  "lambdaM": 0.3292523082836825,
+  "keM": 8494666.666666666,
+  "sensitivityDbm": -127.54119982655925,
+  "noiseFloorDbm": -120.04119982655925,
+  "existing": {
+   "heightM": 8,
+   "gainDbi": 3,
+   "txDbm": 22
+  },
+  "haversine": [
+   {
+    "a": 39.96,
+    "b": -82.99,
+    "c": 39.76,
+    "d": -84.19,
+    "km": 104.81131155434392
+   },
+   {
+    "a": 39.96,
+    "b": -82.99,
+    "c": 39.97,
+    "d": -82.98,
+    "km": 1.4009810562997473
+   },
+   {
+    "a": 0,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "km": 0
+   }
+  ],
+  "lidar": [
+   {
+    "km": 2,
+    "bull": 5,
+    "tree": 3,
+    "odds": 0.966827943008707,
+    "tiers": {
+     "strong": 0.3322,
+     "likely": 0.1787,
+     "possible": 0.1058
+    }
+   },
+   {
+    "km": 10,
+    "bull": 20,
+    "tree": 12,
+    "odds": 0.45939668019949265,
+    "tiers": {
+     "strong": 0.3322,
+     "likely": 0.1787,
+     "possible": 0.1058
+    }
+   }
+  ],
+  "tiers": {
+   "strong": 0.279,
+   "likely": 0.164,
+   "possible": 0.097
+  },
+  "oddsGrid": [
+   {
+    "km": 0.3,
+    "bull": 0,
+    "odds": 0.9416233636925381
+   },
+   {
+    "km": 0.3,
+    "bull": 10,
+    "odds": 0.8014178529886201
+   },
+   {
+    "km": 0.3,
+    "bull": 40,
+    "odds": 0.059448815114874584
+   },
+   {
+    "km": 1,
+    "bull": 0,
+    "odds": 0.7692031104979642
+   },
+   {
+    "km": 1,
+    "bull": 10,
+    "odds": 0.4547012995203602
+   },
+   {
+    "km": 1,
+    "bull": 40,
+    "odds": 0.012891357261120047
+   },
+   {
+    "km": 5,
+    "bull": 0,
+    "odds": 0.288208021274118
+   },
+   {
+    "km": 5,
+    "bull": 10,
+    "odds": 0.09198685336679002
+   },
+   {
+    "km": 5,
+    "bull": 40,
+    "odds": 0.0015841163090353097
+   },
+   {
+    "km": 20,
+    "bull": 0,
+    "odds": 0.06181698880107936
+   },
+   {
+    "km": 20,
+    "bull": 10,
+    "odds": 0.016218092216609786
+   },
+   {
+    "km": 20,
+    "bull": 40,
+    "odds": 0.0002581254192020599
+   }
+  ]
+ }
+}

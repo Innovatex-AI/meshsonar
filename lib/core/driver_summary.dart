@@ -103,6 +103,29 @@ class ServerDrive {
     this.flags = const [],
   });
 
+  /// One drive row of `driver-summary` / `driver-drive`; null for a row without an id or a start time.
+  static ServerDrive? tryParse(Object? d) {
+    final id = d is Map ? _str(d['id'], 64) : null;
+    final start = d is Map ? _time(d['startedAt']) : null;
+    if (d is! Map || id == null || start == null) return null;
+    return ServerDrive(
+      id: id,
+      startedAt: start,
+      endedAt: _time(d['endedAt']),
+      callsign: _str(d['callsign'], 40),
+      label: _str(d['label'], 80),
+      review: _str(d['review'], 12),
+      pings: _int(d['pings']),
+      heardPings: _int(d['heardPings']),
+      repeaters: _int(d['repeaters']),
+      settledPings: _int(d['settledPings']),
+      confirmedPings: _int(d['confirmedPings']),
+      km: _dbl(d['km']),
+      bestSnr: d['bestSnr'] is num && (d['bestSnr'] as num).isFinite ? (d['bestSnr'] as num).toDouble() : null,
+      flags: [if (d['flags'] is List) for (final f in (d['flags'] as List).take(8)) ?_str(f, 40)],
+    );
+  }
+
   int? get heardPercent => pings == null || heardPings == null || pings == 0 ? null : (100 * heardPings! / pings!).round();
 
   /// Plain words for the review state; null for a normal drive.
@@ -149,28 +172,12 @@ class DriverSummary {
     final dr = j['drives'];
     if (dr is List) {
       for (final d in dr.take(200)) {
-        final id = d is Map ? _str(d['id'], 64) : null;
-        final start = d is Map ? _time(d['startedAt']) : null;
-        if (d is! Map || id == null || start == null || !seen.add(id)) {
+        final x = ServerDrive.tryParse(d);
+        if (x == null || !seen.add(x.id)) {
           skipped++;
           continue;
         }
-        drives.add(ServerDrive(
-          id: id,
-          startedAt: start,
-          endedAt: _time(d['endedAt']),
-          callsign: _str(d['callsign'], 40),
-          label: _str(d['label'], 80),
-          review: _str(d['review'], 12),
-          pings: _int(d['pings']),
-          heardPings: _int(d['heardPings']),
-          repeaters: _int(d['repeaters']),
-          settledPings: _int(d['settledPings']),
-          confirmedPings: _int(d['confirmedPings']),
-          km: _dbl(d['km']),
-          bestSnr: d['bestSnr'] is num && (d['bestSnr'] as num).isFinite ? (d['bestSnr'] as num).toDouble() : null,
-          flags: [if (d['flags'] is List) for (final f in (d['flags'] as List).take(8)) ?_str(f, 40)],
-        ));
+        drives.add(x);
       }
     }
     drives.sort((a, b) => b.startedAt.compareTo(a.startedAt));
