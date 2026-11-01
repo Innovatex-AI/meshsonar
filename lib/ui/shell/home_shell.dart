@@ -105,7 +105,8 @@ class _HomeShellState extends State<HomeShell> {
 
   void _onPendingOpen() {
     if (!mounted || _alerts?.coordinator.pendingOpen.value == null) return;
-    _shell.select(AppTab.chat);
+    // A drive on the Map tab stays on screen: the conversation opens over it and Back returns to the map.
+    if (!(_shell.tab == AppTab.map && (_state?.driving ?? false))) _shell.select(AppTab.chat);
     final key = _alerts!.coordinator.takePendingOpen();
     final open = ChatTabHost.openConversation;
     if (key != null && open != null) open(context, key);

@@ -28,7 +28,7 @@ void main() {
   testWidgets('no radio: the plain-language gate', (tester) async {
     final host = FakeToolsHost()..linkState = LinkState.disconnected;
     await pumpTool(tester, const RxLogScreen(), host);
-    expect(find.text('No radio connected'), findsOneWidget);
+    expect(find.text('Radio not connected'), findsOneWidget);
     expect(find.byKey(const Key('rxlog-privacy')), findsNothing);
     await end(tester);
   });
