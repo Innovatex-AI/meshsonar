@@ -19,6 +19,9 @@ import '../core/diagnostics.dart';
 import '../core/data_categories.dart' show CategoryId, dataCategories;
 import '../core/drive_context.dart' show ContextSyncLedger, stripContextCategories, stripUnsentContextCategories;
 import '../core/drive_context_session.dart';
+import '../core/drive_health_sink.dart';
+import '../core/drive_timing.dart';
+import '../core/gps_health.dart';
 import '../core/drive_env_cache.dart';
 import '../core/plan/plan_store.dart';
 import '../core/driver_account.dart';
@@ -52,6 +55,7 @@ import '../radio/radio_api.dart';
 import '../radio/radio_session_impl.dart';
 import '../radio/session_manager.dart';
 import '../radio/wardrive_engine.dart' show DefaultWardriveEngine;
+import 'gps_monitor.dart';
 import '../core/privacy_zone_store.dart' show MemoryPrivacyZoneStore;
 import '../core/region_neighbours.dart';
 import 'claims.dart';
@@ -2102,15 +2106,33 @@ class AppState extends ChangeNotifier {
       // Keep the GPS stream open for the whole drive, whatever the screen or the engine does: with no listener the stream
       // (and, on iOS, the background location session that keeps the app alive behind navigation) is torn down. Pause
       // pings, a closed Map tab or listen-only mode must not stop the position.
-      unawaited(_driveFixKeepAlive?.cancel());
-      _driveFixKeepAlive = location.fixes.listen((_) {}, onError: (Object _) {});
       _attachGate(engine);
       final storeForTrace = services.store;
-      if (engine is DefaultWardriveEngine && storeForTrace is TraceStore) {
+      _healthSink = const NullDriveHealthSink();
+      if (storeForTrace is TraceStore) {
         final sidForTrace = session.id;
         final TraceStore sink = storeForTrace as TraceStore;
-        engine.onTrace = (r) => unawaited(sink.appendTrace(sidForTrace, r).catchError((Object _) {}));
+        void write(Map<String, Object?> r) => unawaited(sink.appendTrace(sidForTrace, r).catchError((Object _) {}));
+        _healthSink = TraceDriveHealthSink(write, clock: services.clock);
+        if (engine is DefaultWardriveEngine) engine.onTrace = write;
       }
+      if (engine is DefaultWardriveEngine) engine.health = _healthSink;
+      _lastDriveTiming = null;
+      // The GPS stays open for the whole drive (see GpsMonitor): the keepalive, every fix to the puck, and the health line.
+      unawaited(_gpsMonitor?.dispose());
+      final monitor = GpsMonitor(
+        location: location,
+        clock: services.clock,
+        sink: _healthSink,
+        onFix: _rawFixes.add,
+        onHealth: (h) => gpsHealth.value = h,
+        access: services.locationAccess?.check,
+        background: services.backgroundLocation,
+        firstPingPending: () => _txCount == 0,
+        distance: (m) => units.shortLength(m),
+      );
+      _gpsMonitor = monitor;
+      monitor.start();
       _startObserverPolling();
       _status = engine.current;
       _pingSub = engine.pings.listen(_onPing, onError: (Object e) => _say(friendlyError(e, action: 'A ping')));
@@ -2284,6 +2306,11 @@ class AppState extends ChangeNotifier {
       } catch (e) {
         _say(friendlyError(e, action: 'Stopping'));
       }
+      final eng = _engine;
+      if (eng is DefaultWardriveEngine && !_settings.discoveryMode) {
+        final t = eng.timingSummary();
+        _lastDriveTiming = t.sent > 0 ? t : null;
+      }
       // Let any ping emitted during stop arrive, then write everything.
       await Future<void>.microtask(() {});
       await _teardownEngine();
@@ -2322,11 +2349,55 @@ class AppState extends ChangeNotifier {
     _stopObserverPolling(finalPoll: true);
   }
 
-  StreamSubscription<GeoFix>? _driveFixKeepAlive;
+  GpsMonitor? _gpsMonitor;
+  final StreamController<GeoFix> _rawFixes = StreamController<GeoFix>.broadcast();
+  DriveHealthSink _healthSink = const NullDriveHealthSink();
+  DriveTimingSummary? _lastDriveTiming;
+
+  /// EVERY fix of the running drive as it arrives (speed and course filled in when the OS gave none), for the map's puck. Broadcast, never
+  /// replayed; the handler on the way here does no work beyond handing the fix on, so a listener that is slow only delays itself.
+  /// Nothing is emitted outside a drive.
+  Stream<GeoFix> get rawFixes => _rawFixes.stream;
+
+  /// How the GPS is doing, as one value with a plain-English line (lib/core/gps_health.dart). Changes a few times a minute, not per fix.
+  /// The drive screen shows it with `GpsHealthBanner` (lib/ui/drive/gps_health_banner.dart). `GpsHealth.idle` outside a drive.
+  final ValueNotifier<GpsHealth> gpsHealth = ValueNotifier<GpsHealth>(GpsHealth.idle);
+
+  /// Where drive-health facts go while a drive records (the trace). `record(kind, data)`: see lib/core/drive_health_sink.dart. The map
+  /// agent reports UI frame lateness through it.
+  DriveHealthSink get driveHealthSink => _healthSink;
+
+  /// How the drive that just ended kept its schedule; null while driving or when it sent nothing.
+  DriveTimingSummary? get lastDriveTiming => _lastDriveTiming;
+
+  /// Opens the phone's Settings for the GPS health line's action (Precise Location, Location permission, Location Services).
+  Future<void> openGpsSettings(GpsHealthAction action) async {
+    final probe = services.locationAccess;
+    if (probe == null || action == GpsHealthAction.none) return;
+    final ok = action == GpsHealthAction.openLocationSettings ? await probe.openLocationSettings() : await probe.openAppSettings();
+    if (!ok) _say('Open the Settings app, then Privacy, Location Services, MeshSonar.');
+  }
+
+  /// The timing summary of any saved drive, read from its trace (the engine writes it when the drive stops); null when it has none.
+  Future<DriveTimingSummary?> driveTimingFor(String sessionId) async {
+    try {
+      final st = services.store;
+      final f = st is TraceStore ? await (st as TraceStore).traceFile(sessionId) : null;
+      if (f == null) return null;
+      final lines = await f.readAsLines();
+      for (var i = lines.length - 1; i >= 0; i--) {
+        if (!lines[i].contains('"health":"timing"')) continue;
+        final j = jsonDecode(lines[i]);
+        if (j is Map<String, dynamic>) return timingFromJson(j);
+      }
+    } catch (_) {}
+    return null;
+  }
 
   Future<void> _teardownEngine() async {
-    unawaited(_driveFixKeepAlive?.cancel());
-    _driveFixKeepAlive = null;
+    unawaited(_gpsMonitor?.dispose());
+    _gpsMonitor = null;
+    gpsHealth.value = GpsHealth.idle;
     // Not awaited: nothing depends on the cancel finishing, and some stream cancels complete late.
     unawaited(_pingSub?.cancel());
     unawaited(_statusSub?.cancel());
@@ -3203,6 +3274,9 @@ class AppState extends ChangeNotifier {
     _resumeBridge?.detach();
     services.repeaterSync?.removeListener(_onRepeaterSync);
     unawaited(_idle?.dispose());
+    unawaited(_gpsMonitor?.dispose());
+    unawaited(_rawFixes.close());
+    gpsHealth.dispose();
     _cancelDriveSync();
     _observerTimer?.cancel();
     _pingSub?.cancel();

@@ -31,7 +31,8 @@ class Rig {
     final radio = SimulatedTransport(location: gps, seed: seed, timeScale: 40, clock: worldClock);
     final link = MeshCoreCompanionLink(radio, timeout: const Duration(seconds: 2));
     var n = 0;
-    final engine = DefaultWardriveEngine(link: link, location: gps, newId: () => 'id-${n++}');
+    // The engine shares the GPS's clock when a test steps its own world: a fix stamped in that world is not a "cached" one.
+    final engine = DefaultWardriveEngine(link: link, location: gps, newId: () => 'id-${n++}', clock: worldClock);
     return Rig._(gps, radio, link, engine);
   }
 

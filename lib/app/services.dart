@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../core/api.dart';
+import '../core/gps_health.dart' show BackgroundLocation;
 import '../core/claim_flow.dart' show ClaimRestoreStore;
 import '../core/model.dart';
 import '../core/phone_sensors.dart';
@@ -137,6 +138,9 @@ class AppServices {
   /// Reads location permission without prompting (and asks only when the person taps). Null = not shown (tests).
   final LocationAccessProbe? locationAccess;
 
+  /// Whether location is "Always" or "While Using" (iOS; null or `notApplicable` elsewhere), for the GPS health line. Null = not shown (tests).
+  final Future<BackgroundLocation> Function()? backgroundLocation;
+
   /// Region roster + network repeater list sync with its on-disk store. Null = off (tests).
   final RepeaterSync? repeaterSync;
 
@@ -184,6 +188,7 @@ class AppServices {
     this.idleLocation,
     this.lastKnownStore,
     this.locationAccess,
+    this.backgroundLocation,
     this.repeaterSync,
     this.barometer,
     this.phoneBattery,

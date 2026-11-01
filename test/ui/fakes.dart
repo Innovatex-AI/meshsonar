@@ -1,5 +1,6 @@
 // Hand-written fakes for UI tests. No concrete lib/core or lib/radio classes are used.
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -10,6 +11,7 @@ import 'package:meshsonar/app/services.dart';
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/drive_context.dart';
 import 'package:meshsonar/core/drive_context_wire.dart';
+import 'package:meshsonar/core/drive_store.dart' show TraceStore;
 import 'package:meshsonar/core/phone_sensors.dart';
 import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/core/idle_region_watcher.dart';
@@ -21,7 +23,22 @@ import 'package:meshsonar/core/startup_location.dart';
 import 'package:meshsonar/radio/radio_api.dart';
 import 'package:meshsonar/ui/app.dart';
 
-class FakeDriveStore implements DriveStore, DriveContextLedger, ContextSyncLedger {
+class FakeDriveStore implements DriveStore, DriveContextLedger, ContextSyncLedger, TraceStore {
+  /// The per-drive trace records the app appended (engine pings, GPS health, timing), oldest first.
+  final Map<String, List<Map<String, Object?>>> traces = {};
+
+  @override
+  Future<void> appendTrace(String sessionId, Map<String, Object?> record) async => (traces[sessionId] ??= []).add(record);
+
+  @override
+  Future<File?> traceFile(String sessionId) async {
+    final lines = traces[sessionId];
+    if (lines == null) return null;
+    final f = File('${Directory.systemTemp.path}/fake-trace-$sessionId.jsonl');
+    await f.writeAsString(lines.map(jsonEncode).join('\n'));
+    return f;
+  }
+
   /// The drive context recorded beside each drive (stream 7).
   final FakeContextLedger ctx = FakeContextLedger();
 

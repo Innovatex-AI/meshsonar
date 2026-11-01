@@ -566,7 +566,7 @@ class DriveReportCard extends StatelessWidget {
                   children: [
                     Text('View drive report', style: t.textTheme.titleMedium?.copyWith(color: t.colorScheme.onPrimaryContainer)),
                     Text(
-                      'Coverage and repeaters heard.',
+                      AppScope.of(context).lastDriveTiming?.line ?? 'Coverage and repeaters heard.',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: t.textTheme.labelMedium?.copyWith(color: t.colorScheme.onPrimaryContainer.withValues(alpha: 0.8)),

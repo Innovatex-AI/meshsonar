@@ -178,7 +178,7 @@ sequenceDiagram
     EN->>EN: interval passed AND moved ≥ min distance?
   end
   EN->>LK: noiseFloor()  (GET_STATS radio)
-  EN->>GPS: current()
+  EN->>EN: best fix of the last 8 s (FixWindow); current() only if the window is empty
   EN->>LK: sendChannelText(idx, "MS:<random tag>")  // no position on a public channel
   TR-->>LK: PUSH LOG_RX_DATA (raw packets) for 7 s
   LK-->>EN: rxPackets
@@ -199,6 +199,8 @@ sequenceDiagram
   AS->>SY: syncSession(id)  (if "Upload at end of drive" and key approved)
   SY->>CM: remaining pings + ended_at (or one empty upload to report ended_at)
 ```
+
+**GPS path during a drive (Nov 2026).** `GeolocatorStreamHub` (`lib/platform/geolocator_stream_hub.dart`) is the only caller of the plugin's position stream, because the plugin memoises it and ignores later settings: a drive always runs the `bestForNavigation` / `automotiveNavigation` / distance-filter-0 stream, the idle region watcher the cheap one, restarted on change. `FilteredLocationSource` refuses cached fixes and smooths; `GpsMonitor` (`lib/app/gps_monitor.dart`) holds the stream open for the whole drive, publishes every fix on `AppState.rawFixes` and a change-only `AppState.gpsHealth`; the engine keeps its own `FixWindow` (`lib/core/fix_window.dart`: 8 s window, 100 m gate, first-ping rule, derived speed/course) and runs the cadence on a monotonic due-time grid. Nothing on the send path awaits the UI.
 
 Step by step:
 

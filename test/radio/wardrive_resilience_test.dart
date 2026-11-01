@@ -46,7 +46,7 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 500));
     expect(pings, isEmpty, reason: 'no ping from a position that could be 300 m off');
     expect(engine.current.waitingFor, PingWait.gps);
-    expect(engine.current.message, contains('not accurate enough'));
+    expect(engine.current.message, allOf(contains('Waiting for GPS'), contains('±300 m')), reason: 'the first ping waits for a decent fix and says what it has');
     await expectLater(engine.pingNow(), throwsA(isA<StateError>()));
     gps.emit(GeoFix(lat: 40.14, lon: -82.98, at: t, accuracyM: 8, speedMps: 0));
     await Future<void>.delayed(const Duration(milliseconds: 700));
@@ -72,7 +72,8 @@ void main() {
     t = t.add(const Duration(seconds: 25));
     await Future<void>.delayed(const Duration(milliseconds: 100));
     expect(engine.current.message, contains('Location is on and allowed'));
-    // Location comes back: the drive carries on by itself.
+    // Location comes back: the drive carries on by itself (a few seconds later; the engine asks the platform at most every 3 s).
+    t = t.add(const Duration(seconds: 4));
     gps.now = fix(t);
     await Future<void>.delayed(const Duration(milliseconds: 600));
     expect(engine.current.waitingFor, isNot(PingWait.gps));
