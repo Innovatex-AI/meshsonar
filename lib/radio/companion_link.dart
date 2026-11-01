@@ -55,6 +55,11 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
   final _rx = StreamController<RxPacket>.broadcast();
   final _control = StreamController<ControlPacket>.broadcast();
 
+  /// Every push frame (code >= 0x80) as received, except the high-volume RX log: the Tools wait on trace, telemetry and
+  /// binary replies here (lib/radio/tools).
+  final _rawPushes = StreamController<Uint8List>.broadcast();
+  Uint8List? _selfTelemetryRaw;
+
   /// Pushes that are not replies and not rx log / control / claim traffic: DM confirmations, path updates, adverts,
   /// contact table notices. The session turns them into [RadioEvent]s.
   final _unsolicited = StreamController<Frame>.broadcast();
@@ -158,12 +163,14 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
 
   void _onFrame(Uint8List data) {
     if (data.isEmpty) return;
+    if (data[0] >= 0x80 && data[0] != Push.logRxData && !_rawPushes.isClosed) _rawPushes.add(Uint8List.fromList(data));
     if (data[0] == Push.telemetryResponse) {
       final w = _telemetryWaiter;
       final self = _self?.publicKey;
       final t = decodeSelfTelemetryPush(data, selfPrefix: self == null || self.length < 12 ? null : fromHex(self.substring(0, 12)));
       if (t != null && w != null && !w.isCompleted) {
         _telemetryWaiter = null;
+        _selfTelemetryRaw = Uint8List.fromList(data);
         w.complete(t);
       } else if (t == null) {
         // Not our own telemetry: a repeater's answer to a remote telemetry request (admin screens).
@@ -237,6 +244,7 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
     sync.dispose();
     _rx.close();
     _control.close();
+    _rawPushes.close();
     _unsolicited.close();
     _claimEvents.close();
   }
@@ -445,11 +453,11 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
   static const _telemetryKey = -2;
   Completer<SelfTelemetry>? _telemetryWaiter;
 
-  Future<T?> _readStats<T extends Frame>(int key, Uint8List cmd) async {
+  Future<T?> _readStats<T extends Frame>(int key, Uint8List cmd, {int priority = CommandPriority.normal}) async {
     if (!isConnected || _unsupported.contains(key)) return null;
     if (key != _battKey && _statsUnsupported) return null;
     try {
-      final f = await _command(cmd);
+      final f = await _command(cmd, priority: priority);
       if (f is T) return f;
       if (f is ErrFrame) {
         if (f.code == ErrCode.unsupportedCmd) {
@@ -485,6 +493,46 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
   @override
   Future<PacketStatsFrame?> packetStats() =>
       _readStats<PacketStatsFrame>(StatsType.packets, encodeGetStats(StatsType.packets));
+
+  // ---------------------------------------------------------------- Tools (lib/radio/tools)
+
+  /// Every push frame as received (except the RX log), for the Tools' reply waiters.
+  Stream<Uint8List> get rawPushes => _rawPushes.stream;
+
+  /// One command through the queue at [priority]; returns the radio's reply frame. Throws TimeoutException when the radio
+  /// does not answer and StateError when the link is down. For the Tools only: chat and the wardrive engine have their own
+  /// calls.
+  Future<Frame> sendToolCommand(Uint8List frame, {int priority = CommandPriority.admin}) => _command(frame, priority: priority);
+
+  /// GET_STATS at [priority] (the Tools read at the lowest class so a ping or a message is never delayed).
+  Future<RadioStatsFrame?> radioStatsAt(int priority) =>
+      _readStats<RadioStatsFrame>(StatsType.radio, encodeGetStats(StatsType.radio), priority: priority);
+  Future<CoreStatsFrame?> coreStatsAt(int priority) =>
+      _readStats<CoreStatsFrame>(StatsType.core, encodeGetStats(StatsType.core), priority: priority);
+  Future<PacketStatsFrame?> packetStatsAt(int priority) =>
+      _readStats<PacketStatsFrame>(StatsType.packets, encodeGetStats(StatsType.packets), priority: priority);
+
+  /// APP_START again: the radio answers SELF_INFO with its CURRENT settings, which is the read-back after a setting was
+  /// written. Null on a timeout or an error reply.
+  Future<SelfInfoFrame?> readSelfInfoFrame() async {
+    if (!isConnected) return null;
+    try {
+      final f = await _command(encodeAppStart(appName), priority: CommandPriority.admin);
+      return f is SelfInfoFrame ? f : null;
+    } on TimeoutException {
+      return null;
+    } on StateError {
+      return null;
+    }
+  }
+
+  /// The raw frame of the radio's own telemetry answer (every LPP record, not just temperature and voltage); null when the
+  /// board does not answer.
+  Future<Uint8List?> selfTelemetryFrame() async {
+    _selfTelemetryRaw = null;
+    final t = await selfTelemetry();
+    return t == null ? null : _selfTelemetryRaw;
+  }
 
   /// The radio's own telemetry (MCU temperature, battery voltage): CMD_SEND_TELEMETRY_REQ "self" form, answered by a
   /// PUSH_CODE_TELEMETRY_RESPONSE instead of a reply (protocol.dart decodeSelfTelemetryPush). Goes through the command
@@ -641,11 +689,24 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
     _fail('share contact', f);
   }
 
+  /// SELF_INFO as the radio holds it NOW (APP_START again; harmless mid-session). Another screen may have changed the radio's
+  /// "other params" since [start], and SET_OTHER_PARAMS overwrites them all, so never write from a stale copy.
+  Future<SelfInfoFrame> _freshSelfFrame() async {
+    final cached = _selfFrame;
+    if (cached == null) throw StateError('radio not started');
+    try {
+      final f = await _command(encodeAppStart(appName), priority: CommandPriority.admin);
+      if (f is SelfInfoFrame) return _selfFrame = f;
+    } on TimeoutException {
+      // fall back to what we last knew
+    }
+    return cached;
+  }
+
   /// What the radio does with a node it hears: from SELF_INFO (manual_add) and AUTOADD_CONFIG. [autoAddSupported] is false
   /// on a firmware without CMD_GET_AUTOADD_CONFIG (the per-type switches then do nothing).
   Future<ContactPolicy> getContactPolicy() async {
-    final si = _selfFrame;
-    if (si == null) throw StateError('radio not started');
+    final si = await _freshSelfFrame();
     var cfg = 0; // NodePrefs.h:38 default; also what a firmware without the command does in "ask" mode
     var hops = 0;
     var supported = false;
@@ -671,8 +732,7 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
 
   /// Writes [policy]. SET_OTHER_PARAMS carries the radio's other settings too, so they are sent back as SELF_INFO gave them.
   Future<void> setContactPolicy(ContactPolicy policy) async {
-    final si = _selfFrame;
-    if (si == null) throw StateError('radio not started');
+    final si = await _freshSelfFrame();
     final manual = policy.askBeforeAdding ? (si.manualAdd | 1) : (si.manualAdd & ~1);
     final f = await _command(
         encodeSetOtherParams(manualAdd: manual, telemetryModes: si.telemetryModes, advertLocPolicy: si.advertLocPolicy, multiAcks: si.multiAcks),

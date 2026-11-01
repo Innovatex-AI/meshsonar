@@ -187,6 +187,38 @@ Verified on hardware (Oct 31 2026, `meshsonar-infra/docs/planning/repeater-obser
 Not supported: claiming a **room server** (its login frame carries an extra `sync_since` field and the radio treats the
 contact type differently); the claim button is hidden for rooms.
 
+### 2.6 Tool frames: trace, discovery, adverts, telemetry, radio setup (Nov 2026, unreleased)
+
+Code: `lib/radio/tools/tool_frames.dart` (encoders/decoders), `lpp.dart`, `advert_decode.dart`, `transport_code.dart`. Fixtures are the
+real captures in `test/support/tools_fixtures.dart` (from `meshsonar-infra/docs/planning/research-logs`). **Verified** = answered on a real
+radio in the Oct 31 - Nov 1 2026 research runs (companion fw code 13, Wio Tracker L1). **Firmware** = read from the MeshCore source at
+81dbae5 (v1.18.0, code 14) only, never run on hardware. Where a frame is rebuilt from logged decoded fields (the runs kept decoded
+fields, not hex, for 0x89 and 0x8E) the test file says so.
+
+| Frame | Layout | Status |
+|---|---|---|
+| `SEND_TRACE_PATH` (36) | `[36][tag u32][auth u32][flags][hash bytes]`; `flags & 3` = hash size shift (0: 1 byte, 1: 2 bytes, 2: 4 bytes). Empty path: `ERR 1`. Reply `SENT` with `est_timeout_ms` (2.5-3.8 s measured). A missing hop gives **no push at all** (3 tests, 12 s). | Verified (1- and 2-byte, 0 hops; missing hop) |
+| `PUSH_TRACE_DATA` (0x89) | `[0x89][0][path_len bytes][flags][tag u32][auth u32][hashes x path_len][snr i8 x4 per hop][final snr i8 x4]`; hops = `path_len >> (flags & 3)`. Hop SNR = how that repeater heard the packet; final SNR = how this radio heard it come back from the last hop (so the last hop must be heard directly). | Verified |
+| `SEND_SELF_ADVERT` (7) | `[7][0 zero-hop \| 1 flood]` -> `OK` (60 ms). Flood goes out under the radio's default scope; the advert carries the stored position only when `advert_loc_policy` allows. | Verified (both; the repeater re-flooded ours and we heard it at hop 1) |
+| `SEND_CONTROL_DATA` (55) discovery | request `[0x80\|prefix_only][type filter, bit n = AdvType n][tag u32][since u32]`; answer `PUSH_CONTROL_DATA` (0x8E) `[snr x4][rssi][path_len][0x90\|type][their snr x4][tag u32][key x32, or x8 with prefix_only]` (38 or 14 byte payload). First answer 1.5-2.4 s; 4 of 5 requests answered, one empty. Repeaters answer at most 4 requests per 120 s. | Verified |
+| `GET_ADVERT_PATH` (42) | `[42][0][pub_key x32]` -> `[22][recv timestamp u32][path_len][path]` or `ERR 2` (16-entry RAM table, first 7 key bytes compared). | Verified (answered with `path_len` 0x40) |
+| `SEND_TELEMETRY_REQ` (39) for a contact | `[39][0 0 0][pub_key x32]` -> `SENT`, later `PUSH_TELEMETRY_RESPONSE` (0x8B) `[0x8B][0][pub6][Cayenne LPP]`. **LPP is big endian**: ch1 voltage 3.86 V, ch1 temperature 45.0 C (read little endian the same bytes give 332 V). `ERR 2` when the radio lacks the contact. The firmware marks it deprecated in favour of `SEND_BINARY_REQ`, but it works on code 13 and 14. | Verified (0.63-0.72 s) |
+| `SET_ADVERT_NAME` (8) | `[8][name...]`, firmware keeps 31 bytes -> `OK` | Firmware |
+| `SET_ADVERT_LATLON` (14) | `[14][lat i32][lon i32]` (1e-6 deg) -> `OK`, or `ERR 6` outside +-90 / +-180 | Firmware |
+| `SET_RADIO_TX_POWER` (12) | `[12][dBm i8]` -> `OK`, or `ERR 6` outside -9 .. `MAX_LORA_TX_POWER` (SELF_INFO byte 3) | Firmware |
+| `SET_RADIO_PARAMS` (11) | `[11][freq kHz u32][bw Hz u32][sf][cr]` -> `OK`, or `ERR 6` outside 150000-2500000 kHz / 7000-500000 Hz / SF 5-12 / CR 5-8. **Retunes at once**, no reboot, saved. Without the optional 10th byte the client-repeat flag is written off. | Firmware |
+| `SET_OTHER_PARAMS` (38) | `[38][manual_add][telemetry modes][advert_loc_policy][multi_acks]` -> `OK`. All four bytes are written, so a change sends the others as `SELF_INFO` reported them. | Firmware |
+| `SELF_INFO` bytes 44-47 | `multi_acks`, `advert_loc_policy` (0 none, 1 share, 2 prefs), `telemetry modes` (env<<4 \| loc<<2 \| base), `manual_add_contacts`. Re-sending `APP_START` returns the current `SELF_INFO`: that is the read-back after every write. | Verified (read); order matches the firmware |
+
+**Region scope check (transport codes).** A scoped flood is `TRANSPORT_FLOOD` (header 0x10 for an advert) with two transport words
+after the header. The first is `HMAC-SHA256(key = SHA256(region name)[0:16], payload type byte + payload)[0:2]`, stored as the raw
+two bytes (little endian word); 0 becomes 1 and 0xFFFF becomes 0xFFFE (`TransportKeyStore::calcTransportCode`). **Verified** on the
+repeater's flood advert (bytes `41 7a`, code 0x7a41) against `#cmh`; `cmh` and `#CMH` give other codes. A code cannot be turned back
+into a name, so a mismatch only means "not the region asked about". `transport_code.dart` implements the check.
+
+**Silence is the failure signal** (trace to a missing hop, discovery over the limit, telemetry to a node that does not share it): every
+tool takes its wait from the `SENT` frame's `est_timeout_ms` (or its own listen window) and reports "no answer" as a normal result.
+
 ## 3. Over-the-air packet (inside LOG_RX_DATA)
 
 ```

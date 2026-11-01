@@ -18,6 +18,7 @@ import '../chat/chat_service.dart';
 import '../core/model.dart' show PingKind;
 import '../ui/chat/chat_tab_provider.dart';
 import '../ui/chat/conversation_screen.dart';
+import '../ui/contacts/contacts_tab.dart';
 import '../ui/shell/chat_tab_host.dart';
 import 'app_state.dart';
 import 'chat_controller.dart';
@@ -45,6 +46,8 @@ class ChatWiring {
       sink: sink,
       selfName: () => ctl.selfName,
       nowMs: () => app.services.clock().millisecondsSinceEpoch,
+      // A full contact download holds the radio's command queue for its whole length: not while pings are going out.
+      deferContactSync: () => app.driving,
     );
     ctl = ChatController(
       store: store,
@@ -89,6 +92,7 @@ class ChatWiring {
         controller: ctl, convKey: convKey, title: service.conversation(convKey)?.title);
 
     controller.value = ctl;
+    ChatTabProviderImpl.contactsBuilder = (context, c) => ContactsTab(chat: c);
     ChatTabHost.provider.value = ChatTabProviderImpl(ctl);
     return ctl;
   }
@@ -104,6 +108,7 @@ class ChatWiring {
     _app = null;
     ChatTabHost.provider.value = null;
     ChatTabHost.openConversation = null;
+    ChatTabProviderImpl.contactsBuilder = null;
     final c = controller.value;
     controller.value = null;
     c?.dispose();

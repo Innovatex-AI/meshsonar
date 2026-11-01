@@ -64,7 +64,7 @@ on Map). Tapping the open More tab again returns it to its list.
 
 | Tab | Holds |
 |---|---|
-| Chat | Contacts \| Channels through the `ChatTabHost` seam. Until chat services plug in: "Messages arrive here once you connect a radio" with Connect radio; connected: "Chat is coming to this tab" with Open the map. Unread badge on the tab icon. |
+| Chat | Contacts \| Channels through the `ChatTabHost` seam (see Contacts and direct messages, below). Without a chat store: "Messages arrive here once you connect a radio". Unread badge on the tab icon. |
 | Map | The coverage map and the drive controls (the old Drive tab). Drive is a mode of this tab: the title says "Drive mode" while recording, "Not driving" otherwise; Start drive is the big button. |
 | Analyze | Segmented Region (the Region hub) \| Drives (drive list, reports, progress). |
 | Plan | Website tools for the viewed region, each opening the real page in the browser (planner, site explorer, point-to-point link, coverage painter, airtime, radio presets, coverage check). In-app tools that do not exist yet are listed once as "Coming next", with no button. |
@@ -660,6 +660,56 @@ it."); `test/ui/settings_no_dead_end_test.dart` enforces it.
 The first-run disclosure sheet lists every registry category with exactly what is shared and never shared, where it
 goes, and "Change your mind any time in Settings, under Privacy & data sharing"; both choices stay pinned on screen.
 
+## Contacts and direct messages (unreleased)
+
+Files: `ui/contacts/*` (screens), `app/chat_wiring.dart` (builds `ContactsTab` for the Chat tab), `chat/contact_manager.dart` (the
+book and its sync), `chat/delivery_text.dart` (the words). Nothing here is ever uploaded: contacts, messages and notes live in
+the app's own database on this phone.
+
+**The idea.** Your phone keeps every contact you have. Your radio keeps a copy of the ones it needs (its list holds 100 by
+default). Taking a contact off the radio never deletes it from the phone, and the app puts one back on the radio before you message it.
+
+**Chat > Contacts.** Search; filter chips All, Favourites, Recent, People, Repeaters, Rooms, Sensors; sections New nodes nearby,
+Favourites, All. Tap a person to open the conversation (a quiet info button opens their details); tap a repeater, room or sensor to
+open its details. Pull down to read the radio's list again. "Add contact" and a settings button sit under the search box.
+
+| State | What you see |
+|---|---|
+| No radio ever connected | "Your contacts appear here", what will happen, Connect radio |
+| Connected, nobody yet | "No contacts yet": nodes the radio hears appear under New nodes nearby; add one by QR, link or key |
+| Radio away, book saved | Banner "Radio not connected. Showing the contacts saved on this phone." and Connect radio; messages wait |
+| List coming from the radio | A progress line "Loading contacts from your radio: 120 of 350"; the list stays usable |
+| Reading the list failed | The reason in words ("What arrived is saved") and Try again |
+| Radio list full | "Your radio's contact list is full (N of M)" and Free up space |
+| Radio adds every node it hears | One-time card: "Ask me before adding?" with Ask me first / Keep automatic |
+| Search finds nothing | "No contact matches ..." and Clear |
+
+**New nodes nearby.** With the radio on "ask before adding" (Contact settings), a node it hears is shown here, never added behind
+your back. Add puts it on the radio with the advert's own time; Ignore hides it (Contact settings lists ignored nodes with Restore).
+Per-type switches keep the radio adding repeaters, people, rooms or sensors by itself if you want, plus "replace the oldest when
+full (never a favourite)" and a hop limit. Older firmware without the per-type commands shows only the ask-first switch.
+
+**Radio list** (tap "On your radio: 45 of 100"): who could be taken off the radio to make room (never a favourite, anyone you have
+talked to, or a message in flight), with the reason ("Last heard 40 days ago"). Adding a contact to a full radio frees one slot by
+itself and tells you.
+
+**Add a contact.** Scan a QR code (camera only on that screen), paste a `meshcore://` link or a 64-character key (with an optional
+name), or show your own contact QR to someone else. Wrong input is explained under the field in plain words; a channel link says
+"Open Channels to join it". With the radio away the contact is saved and goes onto the radio when it connects.
+
+**Contact details.** Name (rename, reset), type, key with Copy and QR, "on your radio" status, position on a small map with the time of
+their last advert, route (hops, the repeaters on it, last heard), "Always send by flood", Reset route, notes, favourite, Share
+contact (link, QR, or "Send to radios nearby"), Block, Remove (says what it does; optionally deletes the messages), Message,
+Claim (repeaters) and Admin (repeaters, when the remote-admin screen exists). Rooms show details only: posting to a room needs a
+login that arrives with room support.
+
+**Direct messages.** Written in the shared conversation screen; a strip on top says how the next message travels ("Direct, 2 hops via
+a1b2 then c3d4", or "No saved route yet. The first message floods..."). A new contact is reached by flood; the radio learns the
+route from the reply and later messages go direct. Delivery under each message: Waiting to send, Sending, Sent waiting for the
+reply, Delivered in 2.4 s, Not delivered. Tries: 3 by flood, 5 along a saved route (the last one floods and the saved route is
+cleared). A message that gets no acknowledgement says why ("No acknowledgement after 3 tries ... The repeater path to them may have
+changed") and offers Retry. Long-press a message > Details shows each try, the route, hops, signal, and the explanation.
+
 ## My radios and claims (unreleased)
 
 Needs a server that lists `nodeClaims` in its site-config capabilities and an approved driver key; otherwise the three rows
@@ -684,6 +734,54 @@ public, notes, giving it up). Recording, uploading and counting never check it: 
   "Owned by you" chip once claimed (the chip is also in the collapsed panel header). Room servers have no claim button.
 - Accessibility: every control is at least 48 px, steps and chips have screen-reader labels, progress is a live region, large
   text and dark mode are covered by tests.
+
+## Radios and tools (unreleased)
+
+More > **Radios and tools** (rows `more-trace`, `-discover`, `-adverts`, `-rxLog`, `-noiseFloor`, `-telemetry`, `-radioSetup`). Files:
+`ui/tools/*`, `ui/radios/radio_setup/*`, logic in `radio/tools/*` (docs/ARCHITECTURE.md 1.2, frames in docs/PROTOCOL.md 2.6). Every tool is
+a `ToolPage` (`Key('tool-<id>')`): with no usable radio the body is `tool-unavailable`, in plain words for each state (no radio, connecting,
+reconnecting, handed to another app, a connection that cannot run tools) with a Connect button where that helps. **Nothing transmits by itself.**
+Every send follows a button and has a visible cooldown (the button turns into "Wait 23 s"; a cooldown is a normal state, never an error), an
+airtime note ("about 0.4 s of airtime; MeshSonar has transmitted 2.1 s in the last hour; its limit is 36 s"), and goes through the command
+queue at a class below chat and pings, so tool traffic can never hold up a message or a ping. Every control is at least 48 px, text survives
+2.5x, words carry meaning (icon + words, never colour alone), and each screen is tested at iPhone, small iPhone and iPad sizes in light and dark.
+
+- **Trace path** (`trace`). Pick repeaters and rooms from the radio's contact list (names resolved), order them, choose the hash width (1, 2 or
+  4 bytes; default 2), send `SEND_TRACE_PATH`. Shows each hop's SNR with a word (strong / good / fair / weak, the website's levels), "heard
+  back at" for the return, distance per hop and in total (partial when a hop has no position), the route on a map with numbered pins and SNR
+  coloured lines. A 1-byte hash that another known repeater shares is flagged by name. A missing or out-of-range hop is silence from the radio:
+  the screen waits the radio's own estimate plus 2 s and then says "No answer" with what to try (the last hop must be one this radio hears
+  directly). Save a trace (kept on the phone, newest 40), compare two saved traces or one against the latest (per-hop change in words),
+  link out to the website's `/tools/routes` for the viewed region.
+- **Discover nearby** (`discover`). One zero-hop request; repeaters, rooms and sensors answer with their key and the SNR at which they heard
+  the request; this radio measures the SNR of each answer, so every result has both directions plus RSSI, sorted by the weaker direction.
+  Repeaters answer 4 requests per 2 minutes, so the app does the same: after 4 scans the button counts down. Results on a map, "In your
+  contacts" or "Add to contacts" (needs the full key; a prefix-only answer says why it cannot be added). An empty scan is a normal result.
+- **Adverts** (`adverts`). Send a local (zero-hop, 30 s cooldown) or whole-mesh (flood, 5 min cooldown, confirm first) advert. Below, every advert
+  heard (RX log and pushes): name, type, hops and path, SNR, first/last seen, position and distance, clock skew over 2 min, whether the radio keeps
+  it as a contact, and the **region scope check**: "in scope: #cmh" when the packet's transport code matches the viewed region's name, "scoped to
+  another region", or "unscoped". A heard advert is a hint, not proof (no signature check in the app).
+- **Rx log** (`rx-log`). Live list of every packet the radio hears, header-decoded: route, payload type, hops, hash size, path hashes, SNR/RSSI,
+  length. Counts by type (tap to filter), filter sheet, pause (counts keep running), clear, copy as CSV (headers only). Privacy, said on screen
+  and enforced in code: message text of other people's channels is never read or stored; a channel the person has joined is only *named* by
+  checking its 2-byte MAC (nothing is decrypted); the last 500 packets are kept in memory only.
+- **Noise floor and health** (`noise`). Samples the radio's stats while the screen is open (5-60 s, at the lowest command class, skipped while a
+  ping is in flight). Line chart with the -100 dBm interference line and spike ticks, min / average / max, **Quiet / Raised / Noisy** with the
+  website's wording and thresholds (`core/rf_thresholds.dart`), last RSSI/SNR, queue length, error flags and receive errors in words, radio-
+  reported air time, and **MeshSonar's own airtime** from the transmit ledger against the hourly cap (1% unless the region says otherwise).
+- **Telemetry** (`telemetry`). This radio, or a contact: battery voltage, temperature (your unit), humidity, pressure, position if the node reports
+  one, and any other readings, decoded from Cayenne LPP (big endian). A node answers only if it shares telemetry, so silence is normal and said so.
+  A reported position is shown here only, never stored or uploaded. Latest answers per node are kept while the app runs.
+- **Radio setup** (`radio-setup`, `ui/radios/radio_setup`). Name (byte counter, no colon), position (type it, or use the phone's location after a
+  consent that says adverts publish it; 0,0 refused), "include the position in adverts" (asks before turning on), add new contacts myself,
+  extra acknowledgements, TX power (slider from -9 dBm to the board's own maximum from SELF_INFO), and **the airwaves**: current LoRa settings,
+  "Matches the <region> preset" or what differs, and a chooser (the viewed region's preset, a community preset loaded only when asked, or values
+  by hand). **Apply radio parameters** is red and opens a confirm that states the change takes effect at once, that the radio will stop hearing
+  and being heard by radios on the old settings, that it may disconnect other devices, and which two settings are involved; it needs "I
+  understand". After every write the radio's settings are read back and compared ("Saved: the radio reports the new name", or "reads back
+  differently: ..." with the field). The last change has an Undo. While a drive records, LoRa parameters and TX power are blocked until the
+  drive is stopped (button) or the person confirms the survey will contain two settings. Nothing is ever applied from the Internet or by
+  itself; the other Radio screen (More > Radio) stays read-only and now points here.
 
 ## Regions at 559 (0.20.1)
 

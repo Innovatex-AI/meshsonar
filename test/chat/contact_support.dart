@@ -96,9 +96,6 @@ class FakeRadioPort implements ContactRadioPort {
   }
 
   @override
-  Future<Uint8List?> exportAdvert(String publicKey) async => hasAdvert.contains(publicKey) ? Uint8List(120) : null;
-
-  @override
   Future<void> importAdvert(Uint8List packet) async => imports.add(packet);
 
   @override

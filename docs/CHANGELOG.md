@@ -5,6 +5,15 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- **Contacts and direct messages (M2).** Chat > Contacts is real: search, filters, favourites, New nodes nearby (Add / Ignore),
+  contact details (route, position on a map, QR, share, notes, block, remove), add by QR / link / key, the radio's list with
+  "On your radio: 45 of 100" and a way to free space, and Contact settings (ask before adding, per-type auto-add, replace the
+  oldest when full, hop limit). A direct message is written in the shared conversation screen with a route strip on top; delivery
+  says Sending / Sent / Delivered in 2.4 s / Not delivered with the reason; long-press > Details lists every try. Every state (no
+  radio, syncing with progress, failed with Try again, radio full) is explained in plain words. The conversation's empty state scrolls
+  at the largest text size and its message field is 48 dp tall. Rooms stay read-only until room login exists. One camera screen
+  (`QrScanScreen`) now serves channels and contacts.
+- **Contacts and direct messages, foundation.** The phone is the master copy of your contacts; the radio's table is
 - **Chat (wave 2A).** The Chat tab is real. Channels: your channels with last message, unread count, pin and mute; a pinned
   System section for the wardrive channel (pings sent, last ping, "paused by the airtime budget", read-only View traffic).
   Add a channel: join Public, join a # channel, scan a QR code, paste a link or a name and secret, create a private channel.
@@ -71,6 +80,15 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
   Wardriving) holds channel, discovery (listen-only), auto-ping interval, minimum distance and a new **listen window** (4-20 s,
   default 7). The same three sliders open from the Map tab's "Ping 30 s / 100 m" chip. Both apply straight away, even mid-drive.
   (They had moved from a main tab to Settings > Radio, collapsed, when the shell arrived in wave 1C.)
+- **Radios and tools (wave 2E).** More > Radios and tools: Trace path (hop-by-hop SNR, distance, map, ambiguous 1-byte hashes flagged, saved and
+  compared traces, link to the website's route tool), Discover nearby (both-direction SNR, 4-per-2-minutes cooldown, Add to contacts), Adverts
+  (send local / mesh-wide with cooldowns and an airtime note; every advert heard with the region scope check "in scope: #cmh"), Rx log (header
+  decode, counts, filters, pause, CSV; other people's message text is never read or stored), Noise floor and health (live chart, Quiet / Raised /
+  Noisy with the website's thresholds, MeshSonar's own airtime), Telemetry (battery, temperature, position of a node or this radio), and Radio
+  setup with guard rails (limits, a loud confirm for LoRa parameters, read-back after every write, undo, drive guard). Tool traffic goes through the
+  command queue below chat and pings. New protocol pieces with fixtures from the live research runs: docs/PROTOCOL.md 2.6. The simulator answers
+  all of it (and can show other nodes advertising). The Radio and Settings > Region texts that said MeshSonar never changes your radio now say it
+  never does so by itself.
 - **New app shell (wave 1C).** Five tabs: Chat, Map, Analyze, Plan, More (rail on iPad and landscape). The old Drive tab is
   Map (Drive is a mode of it), Region and Drives are Analyze, Radio and Settings are in More. Plan lists the website tools
   with working links; Chat shows an honest first-run state until chat arrives. The last tab is remembered.

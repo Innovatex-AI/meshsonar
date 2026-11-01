@@ -8,7 +8,6 @@ import 'package:flutter/material.dart';
 import '../../app/chat_controller.dart';
 import '../../chat/channel_admin.dart';
 import '../../chat/channel_secret.dart';
-import '../../chat/chat_service.dart';
 import '../../chat/mesh_links.dart';
 import '../../chat/models.dart';
 import '../alerts/permission_prompt.dart';
@@ -125,7 +124,7 @@ Future<void> _errorDialog(BuildContext context, String message) => showDialog<vo
       ),
     );
 
-/// A tapped or scanned meshcore:// link. Channel: ask, then join. Contact: save it. Anything else: say what it is.
+/// A tapped or scanned meshcore:// link. Channel: ask, then join. Contact or advert: add it to Contacts. Anything else: say what it is.
 Future<void> handleMeshLink(BuildContext context, ChatController controller, String link) async {
   final p = MeshLinks.parse(link);
   switch (p) {
@@ -150,22 +149,15 @@ Future<void> handleMeshLink(BuildContext context, ChatController controller, Str
         ),
       );
       if (ok == true && context.mounted) await runChannelAction(context, controller, () => controller.admin.joinFromLink(controller.radioId ?? '', link));
-    case ContactLink():
-      final id = controller.radioId;
-      if (id == null) {
-        await _errorDialog(context, 'Connect your radio once first, then open this link again.');
-        return;
-      }
-      final r = await controller.service.importLink(id, link);
+    case ContactLink() || AdvertLink():
+      // The contact book (ContactManager) saves it on the phone and puts it on the radio when it can.
+      final r = await controller.service.contacts.addFromLink(link);
       if (!context.mounted) return;
-      if (r is ContactImported) {
-        controller.refresh();
-        ScaffoldMessenger.maybeOf(context)
-          ?..hideCurrentSnackBar()
-          ..showSnackBar(SnackBar(content: Text(r.created ? 'Saved ${r.contact.displayName} to Contacts' : '${r.contact.displayName} is already in Contacts')));
-      }
-    case AdvertLink():
-      await _errorDialog(context, 'This is a contact advert. Add it from Contacts, where the radio can learn the contact.');
+      controller.refresh();
+      final text = r.ok ? '${r.created ? 'Added' : 'Already in Contacts:'} ${r.contact!.displayName}.${r.note == null ? '' : ' ${r.note}'}' : (r.error ?? 'That contact could not be added.');
+      ScaffoldMessenger.maybeOf(context)
+        ?..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(text)));
   }
 }
 

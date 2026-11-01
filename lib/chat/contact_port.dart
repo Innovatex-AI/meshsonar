@@ -57,7 +57,6 @@ abstract interface class ContactRadioPort {
   /// RESET_PATH; false when the radio did not have it.
   Future<bool> resetPath(String publicKey);
 
-  Future<Uint8List?> exportAdvert(String publicKey);
   Future<void> importAdvert(Uint8List packet);
   Future<bool> shareZeroHop(String publicKey);
 

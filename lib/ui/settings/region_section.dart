@@ -123,7 +123,7 @@ class RadioPresetTile extends StatelessWidget {
         ),
         Padding(
           padding: const EdgeInsets.only(left: 40, top: 8),
-          child: Text('Information only. MeshSonar never changes your radio; change the preset in the MeshCore app.',
+          child: Text('Information only. MeshSonar never changes your radio by itself; to change it yourself, use More > Radio setup.',
               style: t.textTheme.bodySmall?.copyWith(color: c.onSurfaceVariant)),
         ),
       ]),

@@ -19,6 +19,9 @@ import 'radio_api.dart';
 import 'radio_health.dart';
 import 'repeater_radio.dart';
 import 'session.dart';
+import 'tools/link_tools_radio.dart';
+import 'tools/radio_tools.dart';
+import 'tools/trace_tool.dart' show TraceStore;
 import 'tx_arbiter.dart';
 
 class LinkRadioSession implements RadioSession, RepeaterAdminRadio, RadioStatsSource {
@@ -415,10 +418,31 @@ class LinkRadioSession implements RadioSession, RepeaterAdminRadio, RadioStatsSo
     return _adminOrThrow.runTaggedCli(keyHex, tag, command, timeout: timeout);
   }
 
+  // ---------------------------------------------------------------- Tools (lib/radio/tools)
+
+  RadioTools? _tools;
+
+  /// True while a wardrive ping is in flight; the Tools' noise monitor then skips its read. Set by the app.
+  bool Function()? pingBusy;
+
+  /// Where saved traces live (null = memory). Set by the app before the first use of [tools].
+  TraceStore? traceStore;
+
+  /// This session's Tools (trace, discovery, adverts, RX log, noise floor, telemetry, radio setup), sharing this session's
+  /// airtime ledger. Null when the link is not a MeshCore companion link (a test fake).
+  RadioTools? get tools {
+    final mc = _mc;
+    if (mc == null) return null;
+    return _tools ??= RadioTools(LinkToolsRadio(mc, this), arbiter, clock: _clock, pingBusy: () => pingBusy?.call() ?? false, traceStore: traceStore);
+  }
+
   // ---------------------------------------------------------------- end
 
   @override
   Future<void> close() async {
+    final t = _tools;
+    _tools = null;
+    if (t != null) unawaited(t.dispose());
     unawaited(_unsolicitedSub?.cancel());
     unawaited(_rxDoneSub?.cancel());
     _state = LinkState.disconnected;

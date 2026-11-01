@@ -934,14 +934,14 @@ Frame decodeFrame(Uint8List f) {
         publicKey: Uint8List.fromList(f.sublist(4, 36)),
         advLat: bd.getInt32(36, Endian.little) / 1e6,
         advLon: bd.getInt32(40, Endian.little) / 1e6,
-        freqKhz: bd.getUint32(48, Endian.little),
-        bwHz: bd.getUint32(52, Endian.little),
-        sf: f[56],
-        cr: f[57],
         multiAcks: f[44],
         advertLocPolicy: f[45],
         telemetryModes: f[46],
         manualAdd: f[47],
+        freqKhz: bd.getUint32(48, Endian.little),
+        bwHz: bd.getUint32(52, Endian.little),
+        sf: f[56],
+        cr: f[57],
         name: utf8.decode(f.sublist(58).takeWhile((b) => b != 0).toList(), allowMalformed: true),
       );
     case Resp.deviceInfo:

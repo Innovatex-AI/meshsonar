@@ -118,8 +118,8 @@ void main() {
     await tester.tap(find.byKey(const Key('act-details')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('message-details')), findsOneWidget);
-    expect(find.text('+5.5 dB'), findsOneWidget);
-    expect(find.textContaining('2 repeaters'), findsOneWidget);
+    expect(find.textContaining('5.5 dB, strong'), findsOneWidget);
+    expect(find.textContaining('2 hops through repeaters'), findsOneWidget);
     await tester.tapAt(const Offset(10, 10));
     await tester.pumpAndSettle();
     await tester.longPress(find.text('good morning everyone'));
