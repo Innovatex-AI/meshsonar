@@ -12,6 +12,7 @@ import '../core/drive_store.dart';
 import '../core/etag_client.dart';
 import '../core/idle_region_watcher.dart';
 import '../core/position_filter.dart';
+import '../core/privacy_zone_store.dart';
 import '../core/region_cache.dart';
 import '../core/region_lookup.dart';
 import '../core/region_stats_api.dart';
@@ -103,6 +104,7 @@ Future<AppServices> buildRealServices() async {
     appInfo: app,
     uiPrefsFile: File('${root.path}${Platform.pathSeparator}ui_prefs.json'),
     telemetryQueueFile: File('${root.path}${Platform.pathSeparator}telemetry_queue.json'),
+    privacyZoneStore: FilePrivacyZoneStore(File('${root.path}${Platform.pathSeparator}privacy_zones.json')),
     claimRestoreStore: FileClaimRestoreStore(File('${root.path}${Platform.pathSeparator}claim_restore.json')),
     // The one problem report that couldn't be sent yet, next to settings.json.
     reportDraftStore: FileReportDraftStore(File('${root.path}${Platform.pathSeparator}report_draft.json')),

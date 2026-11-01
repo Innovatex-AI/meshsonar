@@ -50,7 +50,9 @@ import '../radio/radio_api.dart';
 import '../radio/radio_session_impl.dart';
 import '../radio/session_manager.dart';
 import '../radio/wardrive_engine.dart' show DefaultWardriveEngine;
+import '../core/privacy_zone_store.dart' show MemoryPrivacyZoneStore;
 import 'claims.dart';
+import 'privacy_zones_controller.dart';
 import 'context_upload_hook.dart';
 import 'drive_context_hook.dart';
 import 'messages.dart';
@@ -239,6 +241,32 @@ class AppState extends ChangeNotifier {
   /// Claiming a REPEATER by logging in needs the server's login attestation (`nodeClaimsLogin`); older servers only had the
   /// rename-and-wait-for-an-observer proof, which the app no longer does.
   bool get repeaterClaimEnabled => nodeClaimsEnabled && uploadSiteConfig?.nodeClaimsLogin == true;
+
+  PrivacyZonesController? _privacyZones;
+
+  /// The privacy zones (lib/app/privacy_zones_controller.dart): edited and saved on the phone at any time, sent to the
+  /// server's `driver-privacy` as soon as there is a driver key, a server that has it and a connection.
+  PrivacyZonesController get privacyZones => _privacyZones ??= PrivacyZonesController(
+        store: services.privacyZoneStore ?? MemoryPrivacyZoneStore(),
+        driverKey: () => _settings.driverKey,
+        client: () => client,
+        support: () {
+          final c = uploadSiteConfig;
+          return c == null ? ZoneSupport.unknown : (c.driverPrivacy ? ZoneSupport.yes : ZoneSupport.no);
+        },
+        clock: services.clock,
+      );
+
+  /// Sends privacy-zone changes that are waiting (offline, or made before there was a key). Quiet and cheap when none are.
+  Future<void> syncPrivacyZonesIfPending() async {
+    try {
+      final z = privacyZones;
+      await z.load();
+      if (z.pending) await z.sync();
+    } catch (e) {
+      _logError('Sending privacy zones failed', e);
+    }
+  }
 
   ClaimController? _claims;
 
@@ -954,6 +982,7 @@ class AppState extends ChangeNotifier {
     _claims?.appResumed();
     unawaited(refreshLocationAccess());
     unawaited(ensureKey());
+    unawaited(syncPrivacyZonesIfPending());
     unawaited(_retryPendingUploads());
     unawaited(syncRepeaterLists(SyncTrigger.resume));
     unawaited(_refreshRegionIndexIfDue());
@@ -1250,6 +1279,7 @@ class AppState extends ChangeNotifier {
       _uploadCapsAt = (r.meta?.offline ?? false) ? null : services.clock();
       notifyListeners();
       unawaited(_afterUploadCaps(server));
+      unawaited(syncPrivacyZonesIfPending());
       if (nodeClaimsEnabled) unawaited(claims.refresh());
     } catch (e) {
       _logError('Fetching the upload server\'s site-config failed', e);
@@ -2463,6 +2493,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> updateSettings(Settings s) async {
+    final keyBefore = _settings.driverKey;
     // Keys belong to one server: a new server URL with the old key would only be refused, so the key goes with it.
     // Another address of the same server (lib/core/server_url.dart sameServerHosts) keeps it.
     if (s.serverUrl != _settings.serverUrl &&
@@ -2505,6 +2536,7 @@ class AppState extends ChangeNotifier {
     _ctx?.refresh(); // a drive-context category switched off stops at once, one switched on starts now
     notifyListeners();
     if (serverChanged) unawaited(refreshSiteConfig());
+    if (!serverChanged && keyBefore != s.driverKey && (s.driverKey ?? '').isNotEmpty) unawaited(syncPrivacyZonesIfPending()); // the lazy key arrived
     if (serverChanged) _autoKeyNotBefore = null;
     if (serverChanged && !hasKey) unawaited(ensureKey());
     if (serverChanged) unawaited(refreshNetworkCoverage());

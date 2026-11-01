@@ -12,6 +12,7 @@ import '../always_location_screen.dart';
 import '../app.dart';
 import 'data_sharing.dart';
 import 'delete_my_data.dart';
+import 'privacy_zones_screen.dart';
 import 'settings_index.dart';
 import 'settings_kit.dart';
 
@@ -85,12 +86,23 @@ List<Widget> privacySectionRows(BuildContext context) {
       ),
     ),
     SettingsAnchor(
+      id: 'privacy-zones',
+      child: ListTile(
+        key: const Key('privacy-zones'),
+        leading: const Icon(Icons.shield_outlined),
+        title: Text(settingsEntry('privacy-zones').title),
+        subtitle: Text(privacyZonesSummary(s)),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const PrivacyZonesScreen())),
+      ),
+    ),
+    SettingsAnchor(
       id: 'privacy-zones-website',
       child: ListTile(
         key: const Key('privacy-zones-website'),
         leading: const Icon(Icons.open_in_new),
         title: Text(settingsEntry('privacy-zones-website').title),
-        subtitle: Text('Hide pings near places like home on ${s.webPage('/me/privacy')}. Applies to uploaded drives.'),
+        subtitle: Text('The same zones, plus your account settings, on ${s.webPage('/me/privacy')}.'),
         onTap: () => s.openWebPage('/me/privacy'),
       ),
     ),

@@ -10,6 +10,7 @@ import 'driver_summary.dart' show DriverSummary;
 import 'model.dart';
 import 'map_links.dart';
 import 'node_claim.dart';
+import 'privacy_zones.dart';
 import 'repeater_reach.dart';
 import 'region_lookup.dart';
 import 'server_url.dart';
@@ -222,6 +223,9 @@ class SiteConfig {
   /// `GET network-repeaters?updated_since=` (`capabilities.networkRepeatersDelta`).
   bool get networkRepeatersDelta => capabilities.contains('networkRepeatersDelta');
 
+  /// `GET/POST driver-privacy` (`capabilities.driverPrivacy`): read and write this driver's privacy zones and trim distance.
+  bool get driverPrivacy => capabilities.contains('driverPrivacy');
+
   /// `GET driver-summary` (`capabilities.driverSummary`).
   bool get driverSummary => capabilities.contains('driverSummary');
 
@@ -366,6 +370,15 @@ abstract class CmatClient {
   /// uploaded (per-ping `ctx`, `samples`). Same rules as a v1.2 upload. Throws [CmatException] (404 = the server does
   /// not know that drive).
   Future<ContextUploadResult> uploadDriveContext(String driverKey, DriveContextBatch batch);
+
+  /// `GET /api/cmh/driver-privacy` (`capabilities.driverPrivacy`): this driver's privacy zones and trim distance. Throws
+  /// [CmatException] (401 unknown key).
+  Future<DriverPrivacy> driverPrivacy(String driverKey) => throw const CmatException('not supported by this client');
+
+  /// `POST /api/cmh/driver-privacy`: replaces the zones and/or the trim distance. The server validates and rounds; a 400
+  /// carries a plain-words `error` naming the zone. Throws [CmatException].
+  Future<DriverPrivacy> setDriverPrivacy(String driverKey, {List<PrivacyZone>? zones, int? trimM}) =>
+      throw const CmatException('not supported by this client');
 
   /// `GET /api/cmh/driver-summary` (`capabilities.driverSummary`): the account's history across phones and installs.
   /// Throws [CmatException] (401 unknown key, 403 not allowed with [CmatException.serverStatus], 429 pause).
