@@ -246,6 +246,8 @@ class DriveMapModel extends ChangeNotifier {
       observersWithPosition: _observers.length,
       regionName: state.viewingRegion?.name,
       repeaterSelected: _selected != null,
+      regionIndexLoaded: state.regionIndexLoaded,
+      regionNeighbours: state.regionNeighbours?.neighbours.length ?? 0,
     ),
     repeaters: repeaterSource,
   );

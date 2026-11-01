@@ -373,12 +373,24 @@ simulator's repeaters in Simulator mode), **ping dots**, and the current **posit
 Building blocks behind the layers above (stream-1-maps.md), in `ui/map/layers/` and `ui/map/sheets/`:
 
 - **Layer registry**: every map layer with the website's `?show=` key where the website has the same layer
-  (`measured`, `repeaters`, `observers`, `network`) and app-only keys for the drive layers (`hexes`, `links`,
+  (`measured`, `repeaters`, `observers`, `regions`, `network`) and app-only keys for the drive layers (`hexes`, `links`,
   `neighbours`, `heard`, `pings`, `rings`). `neighbours` (links of the selected repeater) is registered but not drawn
   yet, so the sheet does not list it.
 - **Map links**: `MapViewState` reads and writes `https://<region>.meshsonar.com/coverage?show=…&color=…&since=…&src=…
   &res=…&lat=…&lon=…` (the website's own parameters, same validation) plus `z` and `until`, and the same query on
   `meshsonar://map?…&region=cmh`. Opening such a link in the app (URL scheme, app_links) is not built yet.
+
+## Privacy zones (app counterpart of the website's /me/privacy editor)
+
+(`ui/settings/privacy_zones_screen.dart`, `app/privacy_zones_controller.dart`, `core/privacy_zones.dart`, `core/privacy_zone_store.dart`; Settings > Privacy & data sharing > **Privacy zones**.)
+Circles where this driver's pings are hidden from every public view, for drives already uploaded and future ones; the start and end of every drive are also trimmed. The screen says so in those words.
+
+- **Map editor.** The map stays pinned on top (iPad: left) with the zone list and editor scrolling under it. A zone is a numbered circle (its number is also a 48 px tap target for a zone too small to hit). **Tapping a zone selects it and never adds one**; tapping empty map selects nothing. A zone is only added by **Add a zone** (the map says "Tap the map where the zone goes", one tap = one zone, Cancel) or **Use my location** (the phone's last or live fix; with none it says so and adds nothing). Selected zone: name (up to 40 characters), **radius slider 50-5000 m** (logarithmic, 100 steps, spoken as a distance), **Move on map**, **Move here**, **Delete** (with Undo for 8 s). **Trim distance** slider 0-2000 m in 50 m steps ("Trim the start and end of each drive"), saved with the zones. At most **10 zones**; at 10 Add is off and the screen says "10 of 10 zones. Delete one to add another."
+- **Rules shared with the website's one validator** (`zones.ts`): latitude clamped, **longitude wrapped into -180..180**, both **rounded to 4 decimals** (about 11 m) before saving and before sending (the website refused 5 decimals in a form), radius 50-5000 m in whole metres, label up to 40 characters. `PrivacyZone.toJson` re-normalises, so no caller can send 5 decimals. Distances are shown in the person's Units; the wire is metres.
+- **Server.** `GET/POST /api/cmh/driver-privacy` with `x-driver-key`, body `{privacyZones: [{lat, lon, radiusM, label}], trimM}` (either field), answer `{privacy: {trimM, privacyZones, scope}}`; `scope` `account` = the zones are shared with every driver key of the account, `driver` = this key only; the status line says which. Gated on `site-config.capabilities.driverPrivacy`: a server without it gets a plain message ("does not support privacy zones yet") and no editing; an older server answering 404 is treated the same.
+- **Offline and lazy key (decision D9).** The editor works with no driver key and no signal. Every change is written to `privacy_zones.json` before anything else and marked pending; it is sent when there is a key (a key created or pasted later sends it at once), a server that has the endpoint and a connection (retried at launch, on resume, when the upload capabilities arrive and whenever the editor opens). While a change is pending the phone's list wins; with nothing pending the server's list replaces the phone's (it may have been edited on the website). An edit made while a send is in flight is sent by the next pass. The status line says "Saved on this phone. They are sent as soon as this phone has a driver key" / "...when the server can be reached" / "Saved. Shared with every driver key of your account."; a refusal (400, with the server's plain-words reason, or 401) is shown and the zones are kept.
+- **Layout.** Phone: map on top (36% of the height, 200-380 px), list and editor scroll below; iPad and landscape (>= 720 dp wide): map left, panel right. Text up to 2.5x scrolls; the map banner and the neighbour names cap their own text at 1.3x so they never swallow the map, and are read in full by VoiceOver. All buttons and the pins are at least 48 px. VoiceOver: the map has a spoken summary ("N zones"), every zone is a labelled selected/unselected button ("Home, radius 400 m"), the sliders speak their value and step, and the zone list does everything the map does.
+- **Tests.** `test/core/privacy_zones_test.dart` (rounding, wrap, limits, select-not-add hit test), `test/app/privacy_zones_controller_test.dart` (queue, lazy key, offline, unsupported, refusals, in-flight edits), `test/core/privacy_zones_contract_test.dart` (the app's normalisation and client against the website's real `zones.ts` and `zone-handlers.ts` through bun; skips without bun or the checkout), `test/ui/privacy_zones_screen_test.dart` (the screen on iPhone / iPad, 2.5x text, dark, 48 px, VoiceOver, offline, no key, unsupported).
 
 ## Full-screen map
 
@@ -639,7 +651,8 @@ use it."); `test/ui/settings_no_dead_end_test.dart` enforces it.
 | | **Erase shared packet headers** (`telemetry-erase-now`, with a key) | Destructive confirm, then `DELETE`; sharing stays as it was. Shows when an erase is waiting to be retried. |
 | | **What MeshSonar shares** | One page: every category (state, shared, never shared, where it goes), the other flows (drives, the on-air ping, problem reports, region/map downloads) and the location points. |
 | | **Location while driving** | Opens the same "Always" explainer as first run, read-only (Done; no permission prompt). |
-| | **Manage privacy zones on the website** (`privacy-zones-website`) | Opens `<server>/me/privacy`. |
+| | **Privacy zones** (`privacy-zones`) | Opens the zone map editor (below). The line under it says how many zones and the trim distance, or "waiting to be sent". |
+| | **Manage privacy zones on the website** (`privacy-zones-website`) | Opens `<server>/me/privacy` (the same zones, plus the account's other settings). |
 | Wardriving (`wardriving`) | **Wardrive channel** (`channel`) | Default `#wardriving`; `#` is added if missing; the key comes from the lower-cased name. Locked while driving. |
 | | **Send pings to the mesh** (`send-pings`) | On (default): each ping goes out as the flood group text `MS:` + 10 random characters; repeaters repeat it and observers report it, which is where a ping's repeaters, hop counts and routes come from. Off = listen-only (stored as `discovery_mode`): nothing is transmitted, only overheard repeaters are recorded, no observer can confirm the drive. Locked while driving. |
 | | **What goes on the air** (`ping-message`) | Read-only preview ("KE4BFI: MS:k3x9m2q7ab"), what the text never contains, and that it is an ordinary unscoped flood. |
@@ -786,6 +799,15 @@ queue at a class below chat and pings, so tool traffic can never hold up a messa
   differently: ..." with the field). The last change has an Undo. While a drive records, LoRa parameters and TX power are blocked until the
   drive is stopped (button) or the person confirms the survey will contain two settings. Nothing is ever applied from the Internet or by
   itself; the other Radio screen (More > Radio) stays read-only and now points here.
+
+## Switching region from the map (app counterpart of the website's region switching)
+
+(`core/region_neighbours.dart`, `ui/map/layers/region_neighbours_layer.dart`, `ui/region/region_switch_sheet.dart`, `ui/region/region_switcher.dart`.)
+- **Regions layer** (`regions`, the website's `?show=` key; Layers sheet > Coverage > "Neighbouring regions", **on by default**). The 15 regions nearest to the viewed one are drawn as quiet dashed outlines with their names, **only while the map is zoomed out to region level** (zoom 12.5 or less; the street-level drive map stays clean). Worked out **on the phone** from the regions-index it already keeps for offline use (outlines about 300 m), so it works with no signal and makes no request; the order is the website's (`regionsNear`: smallest gap between bounding boxes, then nearest centre), proven equal by a bun contract test against `src/lib/region/neighbours.ts`. Names are real buttons (48 px, spoken "Switch to Dayton"); a neighbour off screen keeps its name pinned to the map edge with an arrow (the nearest six); names are never placed under the map's own controls.
+- **Tap an outline or a name** -> sheet "Switch to <region>?" / "The map and stats will show that region." with **Cancel (the default, autofocus) and Switch**, 48 px. A tap inside the region you are already viewing never offers a switch, and a tap on a cell or repeater still opens its sheet first. **Switch** = the app's one existing switch (`AppState.setViewingRegion`, saved as the manual region, survives a restart; "Follow my location" in the switcher goes back). The map frames the new region, the selected repeater and cell are dropped, the map stops following the phone (Recenter is there), and **colour mode, palette and layer switches are untouched**.
+- **Switcher.** Searchable (accents, codes, country) as before; now with **Recent** (the last 3 regions switched to by hand, most recent first, kept in `ui_prefs.json`) at the top, then **Near you** (GPS) or, with no fix, **Near <viewed region>**.
+- **Outside coverage.** The "Outside coverage" chip on the Drive map is now tappable and opens **Nearest regions** (five, with the reason), each one asking before it switches.
+- **Tests.** `test/core/region_neighbours_test.dart` (order, outlines, hit test, 559 regions, website contract), `test/ui/map/region_switch_test.dart` (layer, off-screen pins, tap, confirm / cancel, keeps/clears, recents, outside coverage, iPhone / iPad, 2.5x text, dark, 48 px, VoiceOver).
 
 ## Regions at 559 (0.20.1)
 

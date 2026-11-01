@@ -20,6 +20,7 @@ import '../app.dart' show AppScope;
 import '../connect_screen.dart';
 import '../drive_stats.dart' show formatDuration;
 import '../ping_log_screen.dart' show openPingLog;
+import '../region/region_switch_sheet.dart' show showNearestRegionsSheet;
 import '../report/drive_report_screen.dart';
 import '../theme.dart';
 import '../widgets.dart';
@@ -466,14 +467,24 @@ class RegionChip extends StatelessWidget {
       tooltip = s.regionIndexStale ? '${region.name} (offline: showing the last-known regions)' : region.name;
       color = t.colorScheme.primary;
     }
+    final outside = s.regionFixKnown && region == null;
+    final avatar = Icon(Icons.map_outlined, size: 18, color: color);
+    final text = Text(label, maxLines: 1, overflow: TextOverflow.ellipsis);
+    final side = BorderSide(color: color.withValues(alpha: 0.5));
+    // Outside coverage the chip offers the way out: the nearest regions. Elsewhere it is a plain label, as before.
     return Tooltip(
-      message: tooltip,
-      child: Chip(
-        avatar: Icon(Icons.map_outlined, size: 18, color: color),
-        label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
-        backgroundColor: color.withValues(alpha: 0.10),
-        side: BorderSide(color: color.withValues(alpha: 0.5)),
-      ),
+      message: outside ? '$tooltip. Tap for the nearest regions' : tooltip,
+      child: outside
+          ? ActionChip(
+              key: const Key('region-chip-outside'),
+              avatar: avatar,
+              label: text,
+              backgroundColor: color.withValues(alpha: 0.10),
+              side: side,
+              materialTapTargetSize: MaterialTapTargetSize.padded,
+              onPressed: () => unawaited(showNearestRegionsSheet(context)),
+            )
+          : Chip(avatar: avatar, label: text, backgroundColor: color.withValues(alpha: 0.10), side: side),
     );
   }
 }

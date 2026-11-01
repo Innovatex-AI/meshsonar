@@ -52,7 +52,7 @@ void main() {
       expect(searchSettings('units').first.id, 'units-tile');
       expect(searchSettings('MILES').map((e) => e.id), contains('units-tile'), reason: 'case-insensitive keyword');
       expect(searchSettings('upload').first.id, 'auto-sync');
-      expect(searchSettings('privacy zones').first.id, 'privacy-zones-website');
+      expect(searchSettings('privacy zones').first.id, 'privacy-zones');
       expect(searchSettings('opt out').map((e) => e.id), contains('telemetry-toggle'));
       expect(searchSettings('data & storage').map((e) => e.id), contains('storage-drives'), reason: 'section name');
       expect(searchSettings('bug').map((e) => e.id), contains('report-problem'));

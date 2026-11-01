@@ -99,4 +99,15 @@ void main() {
     await tester.pumpAndSettle();
     expect(h.openedUrls, [Uri.parse('https://meshsonar.com/me/privacy')]);
   });
+
+  testWidgets('Privacy zones row opens the map editor, which works with no key and no connection', (tester) async {
+    await openSettings(tester);
+    await tester.scrollUntilVisible(find.byKey(const Key('privacy-zones')), 100, scrollable: settingsScroll);
+    expect(find.text('Privacy zones'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('privacy-zones')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('privacy-zones-screen')), findsOneWidget);
+    expect(find.byKey(const Key('zones-map')), findsOneWidget);
+    expect(find.textContaining('hidden from the public map'), findsOneWidget);
+  });
 }

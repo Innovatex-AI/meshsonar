@@ -6,6 +6,7 @@
 //                                                                          samplesStored, samplesDuplicate, samplesRejected,
 //                                                                          sampleRejections[]}      (Drive Format v1.2)
 //   <base>/api/cmh/drive-context    DELETE ?category=<id>|all           -> {category, sessions, pings, samples}
+//   <base>/api/cmh/driver-privacy   GET|POST x-driver-key               -> {privacy: {trimM, privacyZones[{lat,lon,radiusM,label}], scope}}
 //   <base>/api/cmh/drive-status     GET  ?session= x-driver-key         -> {pings[{id,status,settled,observers,lowConfidence,via[]}]}
 //   <base>/api/cmh/driver-summary   GET  x-driver-key                   -> {v:1, asOf, stats, weeks[], drives[]}  (lib/core/driver_summary.dart)
 //   <base>/api/cmh/drive-repeaters  GET  x-driver-key                   -> {repeaters[{key,name,lat,lon}], at}
@@ -34,6 +35,7 @@ import 'region_lookup.dart';
 import 'hex_cells.dart' show loadHexEngine;
 import 'map_links.dart';
 import 'node_claim.dart';
+import 'privacy_zones.dart';
 import 'repeater_reach.dart';
 import 'report_body.dart' show problemReportMaxBytes;
 import 'telemetry_uploader.dart';
@@ -300,6 +302,19 @@ class HttpCmatClient implements CmatClient, TelemetryTransport {
     // The licence needs this exact line wherever the values are shown; never display a server-edited one in its place.
     return DriveEnv(session: j['session'] as String? ?? sessionId, status: status, attribution: openMeteoCredit, snapshots: snaps);
   }
+
+  @override
+  Future<DriverPrivacy> driverPrivacy(String driverKey) async =>
+      _privacyOf(await _send('GET', 'driver-privacy', driverKey: driverKey));
+
+  @override
+  Future<DriverPrivacy> setDriverPrivacy(String driverKey, {List<PrivacyZone>? zones, int? trimM}) async => _privacyOf(await _send(
+      'POST', 'driver-privacy',
+      driverKey: driverKey,
+      body: {if (zones != null) 'privacyZones': [for (final z in zones) z.toJson()], 'trimM': ?trimM}));
+
+  DriverPrivacy _privacyOf(Map<String, dynamic> j) =>
+      DriverPrivacy.tryParse(j) ?? (throw const CmatException('server sent an unreadable answer', status: 200));
 
   @override
   Future<List<PingObservation>> driveStatus(String driverKey, String sessionId) async {

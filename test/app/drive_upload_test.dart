@@ -9,6 +9,7 @@ import 'package:meshsonar/core/repeater_reach.dart';
 import 'package:meshsonar/core/drive_context_wire.dart';
 import 'package:meshsonar/core/driver_summary.dart';
 import 'package:meshsonar/core/model.dart';
+import 'package:meshsonar/core/privacy_zones.dart';
 import 'package:meshsonar/core/region_lookup.dart';
 import 'package:meshsonar/core/sync_service.dart';
 
@@ -235,6 +236,12 @@ class RecordingClient implements CmatClient {
   RecordingClient(this.uploads);
   @override
   Future<DriverSummary> driverSummary(String driverKey) => throw UnimplementedError();
+
+  @override
+  Future<DriverPrivacy> driverPrivacy(String driverKey) => throw UnimplementedError();
+
+  @override
+  Future<DriverPrivacy> setDriverPrivacy(String driverKey, {List<PrivacyZone>? zones, int? trimM}) => throw UnimplementedError();
   @override
   Future<List<PingObservation>> driveStatus(String driverKey, String sessionId) => throw UnimplementedError();
   @override
