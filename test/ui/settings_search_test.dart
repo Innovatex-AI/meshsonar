@@ -114,13 +114,13 @@ void main() {
     useTallScreen(tester);
     final handle = tester.ensureSemantics();
     await openSettings(tester);
-    await showSetting(tester, 'section-toggle-radio');
+    await showSetting(tester, 'section-toggle-wardriving');
     expect(find.byKey(const Key('channel')), findsOneWidget);
-    expect(tester.getSemantics(find.byKey(const Key('section-toggle-radio'))), isSemantics(isButton: true, isExpanded: true, hasExpandedState: true, isHeader: true, hasTapAction: true, isFocusable: true, label: 'RADIO'));
-    await tester.tap(find.byKey(const Key('section-toggle-radio')));
+    expect(tester.getSemantics(find.byKey(const Key('section-toggle-wardriving'))), isSemantics(isButton: true, isExpanded: true, hasExpandedState: true, isHeader: true, hasTapAction: true, isFocusable: true, label: 'WARDRIVING'));
+    await tester.tap(find.byKey(const Key('section-toggle-wardriving')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('channel')), findsNothing);
-    await tester.tap(find.byKey(const Key('section-toggle-radio')));
+    await tester.tap(find.byKey(const Key('section-toggle-wardriving')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('channel')), findsOneWidget);
     handle.dispose();
@@ -160,7 +160,7 @@ void main() {
       expect(find.byKey(Key('section-nav-${s.id}')), findsOneWidget);
     }
     expect(find.byKey(const Key('section-driver')), findsOneWidget);
-    expect(find.byKey(const Key('section-radio')), findsNothing, reason: 'one section at a time');
+    expect(find.byKey(const Key('section-wardriving')), findsNothing, reason: 'one section at a time');
     await tester.tap(find.byKey(const Key('section-nav-privacy')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('telemetry-toggle')).hitTestable(), findsOneWidget);
@@ -170,9 +170,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('search-result-min-distance')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('section-radio')), findsOneWidget);
+    expect(find.byKey(const Key('section-wardriving')), findsOneWidget);
     expect(find.byKey(const Key('min-distance')).hitTestable(), findsOneWidget);
-    expect(tester.widget<ListTile>(find.byKey(const Key('section-nav-radio'))).selected, isTrue);
+    expect(tester.widget<ListTile>(find.byKey(const Key('section-nav-wardriving'))).selected, isTrue);
   });
 }
 

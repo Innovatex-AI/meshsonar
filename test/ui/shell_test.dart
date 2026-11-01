@@ -278,7 +278,7 @@ void main() {
       final waiting = tester.widget<Text>(find.byKey(const Key('mini-bar-waiting'))).textSpan!.toPlainText();
       expect(waiting, contains('SNR +6.5 dB'));
       await tester.tap(find.byKey(const Key('mini-bar-open')));
-      await tester.pumpAndSettle();
+      await settleLive(tester);
       expect(find.byKey(const Key('map-mode')), findsOneWidget);
       expect(find.byKey(const Key('mini-drive-bar')), findsNothing);
       await h.state.stopDrive();

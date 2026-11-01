@@ -11,6 +11,9 @@ import '../radio/radio_api.dart';
 /// A remembered position is only good for a ping when it is this fresh: a fix from an hour ago is where the car WAS.
 const Duration lastKnownMaxAge = Duration(seconds: 30);
 
+/// A fix handed back by `current()` must have been taken this recently.
+const Duration currentFixMaxAge = Duration(seconds: 15);
+
 /// Whether a remembered fix taken at [at] may still stand in for a live one at [now].
 bool lastKnownIsFresh(DateTime at, DateTime now, {Duration maxAge = lastKnownMaxAge}) {
   final age = now.difference(at);
@@ -83,6 +86,9 @@ class GeolocatorLocationSource implements LocationSource {
       final perm = await Geolocator.checkPermission();
       if (perm == LocationPermission.denied || perm == LocationPermission.deniedForever) return null;
       final p = await Geolocator.getCurrentPosition(locationSettings: _settings()).timeout(const Duration(seconds: 15));
+      // iOS can answer with its cached position, minutes old, while the app is in the background: that is where the car
+      // WAS. Treat it as no fix.
+      if (!lastKnownIsFresh(p.timestamp, DateTime.now(), maxAge: currentFixMaxAge)) return null;
       return _toFix(p);
     } catch (_) {
       try {

@@ -33,6 +33,27 @@ GeoFix fix(DateTime at) => GeoFix(lat: 40.1, lon: -82.9, at: at, accuracyM: 5, s
 
 void main() {
   echoTests();
+  test('a 300 m-accurate fix is never pinged from: "waiting for GPS" until an accurate one arrives', () async {
+    var t = DateTime.utc(2026, 10, 30, 12);
+    final gps = HandGps()..now = GeoFix(lat: 40.14, lon: -82.98, at: t, accuracyM: 299.7, speedMps: 0);
+    final radio = SimulatedTransport(location: SimulatedLocationSource(speedMps: 0), seed: 1, timeScale: 40);
+    final link = MeshCoreCompanionLink(radio, timeout: const Duration(seconds: 2));
+    await link.start();
+    final pings = <DrivePing>[];
+    final engine = DefaultWardriveEngine(link: link, location: gps, clock: () => t, tick: const Duration(milliseconds: 20));
+    engine.pings.listen(pings.add);
+    await engine.start(const WardriveConfig(intervalSec: 10, minDistanceM: 15, listenWindow: Duration(milliseconds: 100)));
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    expect(pings, isEmpty, reason: 'no ping from a position that could be 300 m off');
+    expect(engine.current.waitingFor, PingWait.gps);
+    expect(engine.current.message, contains('not accurate enough'));
+    await expectLater(engine.pingNow(), throwsA(isA<StateError>()));
+    gps.emit(GeoFix(lat: 40.14, lon: -82.98, at: t, accuracyM: 8, speedMps: 0));
+    await Future<void>.delayed(const Duration(milliseconds: 700));
+    expect(pings, isNotEmpty, reason: 'pings as soon as the fix is good');
+    await engine.stop();
+  });
+
   test('GPS gone mid-drive: the status starts as "waiting", then tells the driver where to look', () async {
     var t = DateTime.utc(2026, 10, 30, 12);
     final gps = HandGps()..now = fix(t);

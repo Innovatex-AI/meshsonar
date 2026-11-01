@@ -32,6 +32,7 @@ import '../map/layers/map_layers_adapter.dart';
 import '../map/layers/observer_layer.dart' show positionedObservers;
 import '../map/layers/registry.dart';
 import '../map/layers/repeater_map_source.dart';
+import '../map/live_puck.dart';
 import '../map/map_layers.dart';
 import '../region/region_common.dart' show regionApiFactory;
 
@@ -64,7 +65,15 @@ class DriveMapModel extends ChangeNotifier {
   /// Who's in range, frozen at the last ping (live first).
   List<HeardView> get heard => _heard;
 
+  /// The live puck: the dot's motion and the ping rings/lines animation (lib/ui/map/live_puck.dart). Every GPS fix goes to
+  /// it directly; it repaints its own layers per frame, so a fix does NOT rebuild the map (see [_onFix]).
+  late final PuckController puck = PuckController(clock: state.services.clock);
+
   GeoFix? _fix;
+  GeoFix? _notifiedFix;
+  DateTime? _notifiedAt;
+  EngineState _engineState = EngineState.idle;
+  int _pingsResolved = -1;
 
   /// The live fix behind [position] (continuous while driving, via the same subscription), for callers that
   /// need more than lat/lon -- e.g. its reported accuracy for a live GPS-accuracy indicator.
@@ -418,17 +427,55 @@ class DriveMapModel extends ChangeNotifier {
       _fixSource = src;
       if (src == null) {
         _fix = null;
+        puck.reset();
         changed = true;
       } else {
+        puck.reset();
+        _notifiedFix = null;
+        _notifiedAt = null;
         try {
-          _fixSub = src.fixes.listen((f) {
-            _fix = f;
-            notifyListeners();
-          }, onError: (Object _) {});
+          _fixSub = src.fixes.listen(_onFix, onError: (Object _) {});
         } catch (_) {}
       }
     }
+
+    // Ping animation: rings when the engine starts a ping, the answer when it is saved.
+    final es = s.status.state;
+    if (es == EngineState.pinging && _engineState != EngineState.pinging && s.driving) puck.pingSent();
+    _engineState = es;
+    if (s.driving) {
+      final n = s.pingCount;
+      if (_pingsResolved >= 0 && n > _pingsResolved) {
+        final newest = s.recentPings.isEmpty ? null : s.recentPings.first;
+        puck.pingResolved(heard: newest != null && !newest.heardNothing);
+      }
+      _pingsResolved = n;
+    } else {
+      _pingsResolved = -1;
+    }
     if (changed) notifyListeners();
+  }
+
+  /// A live GPS fix. The dot moves on every one (it repaints itself); the model, and with it the whole map and the
+  /// numbers beside it, is only told when the phone moved [_slowStepM] or [_slowEvery] has passed: rebuilding thousands
+  /// of hexagons and markers once a second is what made the dot hop and stutter.
+  static const double _slowStepM = 20;
+  static const Duration _slowEvery = Duration(seconds: 2);
+
+  void _onFix(GeoFix f) {
+    _fix = f;
+    puck.onFix(f);
+    final was = _notifiedFix;
+    final now = state.services.clock();
+    final due = was == null ||
+        _notifiedAt == null ||
+        now.difference(_notifiedAt!) >= _slowEvery ||
+        (f.lat - was.lat).abs() * 111320 + (f.lon - was.lon).abs() * 85000 >= _slowStepM;
+    if (due) {
+      _notifiedFix = f;
+      _notifiedAt = now;
+      notifyListeners();
+    }
   }
 
   // ---------- network-coverage layer controls (res by zoom, colour-by, since, source) ----------
@@ -507,6 +554,7 @@ class DriveMapModel extends ChangeNotifier {
     repeaterSource.dispose();
     repeaterFeed.dispose();
     unawaited(_fixSub?.cancel());
+    puck.dispose();
     super.dispose();
   }
 }

@@ -65,6 +65,7 @@ class FullscreenMapScreen extends StatelessWidget {
                   pings: pings,
                   repeaters: model.repeaters,
                   position: model.position ?? (pings.isEmpty ? idleMapPosition(s) : null),
+                  puck: model.puck,
                   showRings: s.driving,
                   repeaterLabel: s.repeaterLabel,
                   heard: model.heard,

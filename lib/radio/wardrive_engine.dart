@@ -93,6 +93,10 @@ const Duration passiveFlushInterval = Duration(seconds: 30);
 /// After this long without any GPS fix the status tells the driver where to look (Location off, permission taken away).
 const Duration noGpsHintAfter = Duration(seconds: 20);
 
+/// A ping is only sent from a fix at least this accurate (metres). A worse one (a cell-tower or Wi-Fi guess, hundreds of
+/// metres off) would put the ping on the wrong place on the map: the engine says "waiting for GPS" instead.
+const double maxPingAccuracyM = 50;
+
 /// How far the phone must move since the last flush to force an early one.
 const double passiveFlushDistanceM = 25;
 
@@ -532,10 +536,13 @@ class DefaultWardriveEngine implements WardriveEngine {
       if (fix == null) {
         _noFixSince ??= now;
         final long = _clock().difference(_noFixSince!) >= noGpsHintAfter;
+        final poor = _poorFixM;
         _wait(PingWait.gps, null,
-            message: long
-                ? 'No GPS fix. Check that Location is on and allowed for MeshSonar.'
-                : 'No GPS fix: waiting to ping');
+            message: poor != null
+                ? 'GPS is not accurate enough (±${poor.round()} m): waiting to ping'
+                : long
+                    ? 'No GPS fix. Check that Location is on and allowed for MeshSonar.'
+                    : 'No GPS fix: waiting to ping');
         return;
       }
       _noFixSince = null;
@@ -593,11 +600,16 @@ class DefaultWardriveEngine implements WardriveEngine {
     return result;
   }
 
+  /// Accuracy of the last fix refused for being too poor to ping from; null when the last fix was fine or absent.
+  double? _poorFixM;
+
   Future<GeoFix?> _fix() async {
     try {
       final f = await location.current();
       if (f != null) _lastFix = f;
-      return f;
+      final acc = f?.accuracyM;
+      _poorFixM = (acc != null && acc > maxPingAccuracyM) ? acc : null;
+      return _poorFixM == null ? f : null;
     } catch (_) {
       return null;
     }
