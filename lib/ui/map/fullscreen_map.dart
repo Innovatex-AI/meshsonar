@@ -12,12 +12,14 @@ import 'package:flutter/material.dart';
 
 import '../app.dart';
 import '../drive/drive_controls.dart';
+import '../drive/gps_health_banner.dart';
 import '../drive/drive_map_model.dart';
 import '../drive/heard_box.dart';
 import 'coverage_timeline_slider.dart';
 import '../region/region_switch_sheet.dart' show confirmRegionSwitch;
 import 'coverage_map.dart';
 import 'layers/layers_sheet.dart' show showGeneratedLayersSheet;
+import 'map_health_overlay.dart';
 import 'map_tools.dart';
 import 'region_center.dart';
 import 'repeater_page_link.dart';
@@ -68,6 +70,7 @@ class FullscreenMapScreen extends StatelessWidget {
                   repeaters: model.repeaters,
                   position: model.position ?? (pings.isEmpty ? idleMapPosition(s) : null),
                   puck: model.puck,
+                  telemetry: model.telemetry,
                   showRings: s.driving,
                   repeaterLabel: s.repeaterLabel,
                   heard: model.heard,
@@ -102,6 +105,7 @@ class FullscreenMapScreen extends StatelessWidget {
                   ),
                 ),
               ),
+              Positioned(left: 0, right: 0, top: safe.top, child: GpsHealthBanner(state: s, showWhenGood: false)),
               // Top: heard box (left), close + layers (right).
               Positioned(
                 left: safe.left + Gap.m,
@@ -131,6 +135,7 @@ class FullscreenMapScreen extends StatelessWidget {
                 top: safe.top + Gap.m,
                 child: CoverageAsOfBadge(model: model),
               ),
+              Positioned(left: safe.left + Gap.m, bottom: safe.bottom + (landscape ? Gap.m : panelHeight + Gap.m) + 40, child: MapHealthOverlay(model: model)),
               Positioned(
                 right: safe.right + Gap.m,
                 top: safe.top + Gap.m,

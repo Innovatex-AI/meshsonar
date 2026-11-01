@@ -1,8 +1,8 @@
 // Settings > Units & display > Colour palette: three choices, persisted, applied to the whole app at once (the theme's
 // MeshSonarColors changes and the network cells on the real map are redrawn in the new colours without a restart).
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
+import '../support/cell_layers.dart';
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/colour_palette.dart';
 import 'package:meshsonar/ui/settings/display_section.dart';
@@ -39,7 +39,7 @@ void main() {
     for (var i = 0; i < 5; i++) {
       await tester.pump(const Duration(milliseconds: 50));
     }
-    Color cell() => [for (final w in tester.widgetList(find.byType(PolygonLayer))) ...(w as PolygonLayer).polygons].single.borderColor;
+    Color cell() => drawnCellStyles(tester).single.border;
     MeshSonarColors theme() => Theme.of(tester.element(find.byType(Scaffold).first)).extension<MeshSonarColors>()!;
     final before = cell();
     expect(theme().palette, ColourPalette.standard);

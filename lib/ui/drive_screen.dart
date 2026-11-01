@@ -24,7 +24,10 @@ import 'drive/heard_box.dart';
 import 'region/region_switch_sheet.dart' show confirmRegionSwitch;
 import 'map/coverage_map.dart';
 import 'map/fullscreen_map.dart';
+import 'drive/gps_health_banner.dart';
+import 'map/map_health_overlay.dart';
 import 'map/map_tools.dart';
+import '../platform/compass_sensors_plus.dart';
 import 'ping_cue.dart';
 import 'map/repeater_page_link.dart';
 import 'map/coverage_timeline_slider.dart';
@@ -60,7 +63,7 @@ class _DriveScreenState extends State<DriveScreen> {
       _model?.dispose();
       _liveStats?.dispose();
       _state = s;
-      _model = DriveMapModel(s);
+      _model = DriveMapModel(s, compass: CoverageMap.tilesByDefault ? SensorsPlusCompass() : null);
       _liveStats = DriveLiveStats(s);
       s.addListener(_onState);
       _onState();
@@ -307,6 +310,7 @@ class _MapPane extends StatelessWidget {
                 // Not driving: the phone's position (last-known at once, then the fresh fix) so the map opens on it.
                 position: model.position ?? (model.pings.isEmpty ? idleMapPosition(s) : null),
                 puck: model.puck,
+                telemetry: model.telemetry,
                 showRings: s.driving,
                 repeaterLabel: s.repeaterLabel,
                 heard: model.heard,
@@ -332,7 +336,10 @@ class _MapPane extends StatelessWidget {
                 onPickRegion: (r) => confirmRegionSwitch(context, r),
               ),
             ),
+            // GPS trouble (waiting, weak, lost, Precise Location off) as one line over the map's top edge, with the one button that fixes it.
+            Positioned(left: 0, right: 0, top: 0, child: GpsHealthBanner(state: s, showWhenGood: false)),
             Positioned(left: Gap.s, bottom: 44, child: CoverageAsOfBadge(model: model)),
+            Positioned(left: Gap.s, right: 60, bottom: 84, child: Align(alignment: Alignment.bottomLeft, child: MapHealthOverlay(model: model))),
             if (s.regionDataOfflineLabel != null)
               Positioned(
                 left: Gap.s,

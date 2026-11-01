@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/material.dart' hide Radio;
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/ui/map/cell_raster_layer.dart';
 import 'package:h3_ffi/h3_ffi.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:meshsonar/core/api.dart';
@@ -158,7 +159,7 @@ void main() {
   }
 
   Offset screenOf(WidgetTester t, double lat, double lon) {
-    final cam = MapCamera.of(t.element(find.byType(PolygonLayer).first));
+    final cam = MapCamera.of(t.element(find.byType(CellRasterLayer).first));
     return cam.latLngToScreenOffset(LatLng(lat, lon));
   }
 

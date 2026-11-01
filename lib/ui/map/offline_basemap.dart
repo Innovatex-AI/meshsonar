@@ -18,6 +18,7 @@ import '../../core/offline_style.dart';
 import '../../core/pmtiles_reader.dart';
 import '../../platform/app_lifecycle_bridge.dart';
 import '../../platform/network_monitor.dart';
+import 'tile_source.dart' show MapTileStats;
 
 /// Serves tiles from an open PMTiles file to the vector renderer.
 class PmtilesVectorTileProvider extends VectorTileProvider {
@@ -40,6 +41,7 @@ class PmtilesVectorTileProvider extends VectorTileProvider {
       // The pack was closed (deleted/updated) or is damaged: an empty tile, never a crash.
       throw ProviderException(message: e.message, retryable: Retryable.none);
     }
+    MapTileStats.instance.recordPack(hit: b != null);
     if (b == null) {
       throw ProviderException(message: 'no tile ${tile.z}/${tile.x}/${tile.y} in pack', retryable: Retryable.none);
     }

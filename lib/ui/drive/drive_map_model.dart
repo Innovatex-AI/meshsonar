@@ -5,8 +5,12 @@
 // one, it's selected in the other) and the GPS stream is subscribed once. Everything heavy is recomputed only when
 // a ping finishes or the repeater list changes, never per frame.
 import 'dart:async';
+import 'dart:isolate';
+import 'dart:math' as math;
+import 'dart:ui' as ui show FrameTiming;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart' show SchedulerBinding;
 import 'package:flutter/widgets.dart' show GlobalKey;
 import 'package:h3_flutter/h3_flutter.dart' show H3;
 import 'package:latlong2/latlong.dart';
@@ -20,6 +24,10 @@ import '../../core/map_filter.dart';
 import '../../core/map_styles.dart';
 import '../../core/model.dart';
 import '../../core/coverage_timeline.dart';
+import '../../core/drive_store.dart' show MapHealthStore;
+import '../../core/frame_stats.dart';
+import '../../core/heading.dart' show CompassSource;
+import '../../core/map_health.dart';
 import '../../core/region_timeline_api.dart';
 import '../../core/network_coverage.dart';
 import '../../core/region_overview_api.dart' show RegionObserver, RegionObservers;
@@ -34,13 +42,24 @@ import '../map/layers/map_layers_adapter.dart';
 import '../map/layers/observer_layer.dart' show positionedObservers;
 import '../map/layers/registry.dart';
 import '../map/layers/repeater_map_source.dart';
+import '../map/cell_raster_layer.dart' show CellRasterLayer;
 import '../map/live_puck.dart';
+import '../map/tile_source.dart' show MapTileStats;
+import '../map/tile_source.dart' as tiles show currentMapSource;
 import '../map/map_layers.dart';
 import '../region/region_common.dart' show regionApiFactory;
 
 class DriveMapModel extends ChangeNotifier {
   final AppState state;
-  DriveMapModel(this.state, {int repeaterIsolateThreshold = 2000}) {
+  DriveMapModel(this.state, {int repeaterIsolateThreshold = 2000, this.cellIsolateThreshold = 600, CompassSource? compass, MapHealthSink? healthSink})
+    // ignore: prefer_initializing_formals
+    : _compass = compass,
+      health = MapHealthRecorder(
+        sink: healthSink ?? _sinkFor(state),
+        clock: state.services.clock,
+      ) {
+    _wireHealth();
+    SchedulerBinding.instance.addTimingsCallback(_onTimings);
     // The one persisted layer choice: repeater names on/off (Settings.mapRepeaterLabels, default on).
     _layerState = kDefaultLayerState.toggle(kLabelsLayerId, state.settings.mapRepeaterLabels);
     repeaterFeed = AppStateRepeaterFeed(state, fallbackRoster: _fallbackRoster);
@@ -48,6 +67,74 @@ class DriveMapModel extends ChangeNotifier {
       ..dedupeAgainstRoster = _layerState.isOn(kRosterLayerId);
     state.addListener(_onState);
     _onState();
+  }
+
+  /// Widget tests and the benchmark feed fixes through the fake location instead of the engine's [AppState.rawFixes].
+  @visibleForTesting
+  static Stream<GeoFix> Function(AppState state)? debugFixes;
+
+  /// Network cell sets bigger than this are built (H3 boundaries) off the UI isolate.
+  final int cellIsolateThreshold;
+
+  /// "Map and GPS health": per-10-second samples written into the drive folder (map_health.jsonl). The ping engine can write to
+  /// the same sink with its own `kind` (see lib/core/map_health.dart).
+  final MapHealthRecorder health;
+
+  /// What the map's camera reports (mode, zoom, frames driven); the health sample reads it.
+  final CameraTelemetry telemetry = CameraTelemetry();
+
+  final CompassSource? _compass;
+  StreamSubscription<double>? _compassSub;
+
+  static MapHealthSink _sinkFor(AppState state) {
+    final store = state.services.store;
+    if (store is MapHealthStore) return DriveStoreHealthSink(store as MapHealthStore, () => state.currentSession?.id);
+    return MemoryHealthSink();
+  }
+
+  /// Bumped after each health sample (the on-screen overlay listens).
+  final ValueNotifier<int> healthTick = ValueNotifier<int>(0);
+
+  int _lastCellPaints = 0;
+
+  void _wireHealth() {
+    health.onSample = (_) => healthTick.value++;
+    health.providers['puck'] = (w) {
+      final j = puck.stats.toJson(w);
+      puck.stats.reset();
+      return j;
+    };
+    health.providers['camera'] = telemetry.cameraJson;
+    health.providers['tiles'] = (w) {
+      final j = <String, Object?>{...MapTileStats.instance.takeWindow()};
+      j['source'] = ((j['pack_hit'] as int?) ?? 0) > 0
+          ? 'offline_pack'
+          : tiles.currentMapSource(MapTileStats.instance, state.services.clock(), packActive: false).name;
+      return j;
+    };
+    health.providers['layers'] = (w) {
+      final n = CellRasterLayer.totalPaints;
+      final d = n - _lastCellPaints;
+      _lastCellPaints = n;
+      return {'cell_paints': d};
+    };
+  }
+
+  void _onTimings(List<ui.FrameTiming> ts) {
+    if (!health.running) return;
+    var worst = 0.0, late = 0;
+    for (final f in ts) {
+      final c = math.max(f.buildDuration.inMicroseconds, f.rasterDuration.inMicroseconds) / 1000;
+      if (c > 50) {
+        late++;
+        worst = math.max(worst, c);
+      }
+    }
+    // A frame over 50 ms is what can make a ping late: it goes into the drive's trace (the sink limits it to 4 a second).
+    if (late > 0) state.driveHealthSink.record('frame', {'late_ms': worst.round(), 'worst_ms': worst.round(), 'n': late});
+    for (final f in ts) {
+      health.onFrame(FrameSample(f.buildDuration.inMicroseconds / 1000, f.rasterDuration.inMicroseconds / 1000, f.totalSpan.inMicroseconds / 1000));
+    }
   }
 
   /// The two repeater lists the map draws (`network`: every MeshCore repeater; `repeaters`: the viewed region's roster),
@@ -282,6 +369,37 @@ class DriveMapModel extends ChangeNotifier {
   /// Network-wide measured coverage cells for the map's background layer; empty until the first fetch answers.
   List<NetworkCell> get networkCells => _networkCells;
 
+  int _cellsSeq = 0;
+
+  /// Builds [networkCells] from the fetched coverage: in place for a small set (returns true), on another isolate for a big one
+  /// (H3 boundaries for thousands of cells would stall the UI; the map keeps the old cells until the new ones land).
+  bool _rebuildNetworkCells() {
+    final src = _networkSrc;
+    final seq = ++_cellsSeq;
+    if (src == null) {
+      _networkCells = const [];
+      return true;
+    }
+    final by = _colorBy;
+    final now = state.services.clock();
+    if (src.cells.length < cellIsolateThreshold) {
+      _networkCells = buildNetworkCells(src, _h3, by, now: now);
+      return true;
+    }
+    unawaited(
+      Isolate.run(() => buildNetworkCells(src, loadHexEngine(), by, now: now)).then<void>((r) {
+        if (_disposed || seq != _cellsSeq) return;
+        _networkCells = r;
+        notifyListeners();
+      }, onError: (Object _) {
+        if (_disposed || seq != _cellsSeq) return;
+        _networkCells = buildNetworkCells(src, _h3, by, now: now); // no isolate here: do it in place
+        notifyListeners();
+      }),
+    );
+    return false;
+  }
+
   bool get simulated => state.radioKind == RadioKind.simulator;
 
   /// Overlays the Drive screen and the full-screen map draw over their maps (heard box, button column): the map keeps
@@ -423,8 +541,7 @@ class DriveMapModel extends ChangeNotifier {
     // if nothing else about the drive changed (most often: the fetch lands before anyone has started driving).
     if (!identical(s.networkCoverage, _networkSrc)) {
       _networkSrc = s.networkCoverage;
-      _networkCells = _networkSrc == null ? const [] : buildNetworkCells(_networkSrc!, _h3, _colorBy, now: state.services.clock());
-      changed = true;
+      if (_rebuildNetworkCells()) changed = true;
     }
 
     // Live position while driving (permission was granted by Start drive).
@@ -436,13 +553,19 @@ class DriveMapModel extends ChangeNotifier {
       if (src == null) {
         _fix = null;
         puck.reset();
+        health.stop();
+        unawaited(_compassSub?.cancel());
+        _compassSub = null;
         changed = true;
       } else {
         puck.reset();
+        health.start();
+        unawaited(_compassSub?.cancel());
+        _compassSub = _compass?.headings.listen(puck.onCompass, onError: (Object _) {});
         _notifiedFix = null;
         _notifiedAt = null;
         try {
-          _fixSub = src.fixes.listen(_onFix, onError: (Object _) {});
+          _fixSub = (debugFixes?.call(state) ?? state.rawFixes).listen(_onFix, onError: (Object _) {});
         } catch (_) {}
       }
     }
@@ -467,14 +590,15 @@ class DriveMapModel extends ChangeNotifier {
   /// A live GPS fix. The dot moves on every one (it repaints itself); the model, and with it the whole map and the
   /// numbers beside it, is only told when the phone moved [_slowStepM] or [_slowEvery] has passed: rebuilding thousands
   /// of hexagons and markers once a second is what made the dot hop and stutter.
-  static const double _slowStepM = 20;
-  static const Duration _slowEvery = Duration(seconds: 2);
+  static const double _slowStepM = 100;
+  static const Duration _slowEvery = Duration(seconds: 6);
 
   void _onFix(GeoFix f) {
     _fix = f;
     puck.onFix(f);
     final was = _notifiedFix;
     final now = state.services.clock();
+    health.maybeSample(now);
     final due = was == null ||
         _notifiedAt == null ||
         now.difference(_notifiedAt!) >= _slowEvery ||
@@ -578,7 +702,7 @@ class DriveMapModel extends ChangeNotifier {
   set colorBy(CoverageColorBy v) {
     if (v == _colorBy) return;
     _colorBy = v;
-    _networkCells = _networkSrc == null ? const [] : buildNetworkCells(_networkSrc!, _h3, _colorBy, now: state.services.clock());
+    _rebuildNetworkCells();
     notifyListeners();
   }
 
@@ -649,7 +773,11 @@ class DriveMapModel extends ChangeNotifier {
     repeaterSource.dispose();
     repeaterFeed.dispose();
     unawaited(_fixSub?.cancel());
+    unawaited(_compassSub?.cancel());
+    health.stop(flush: false);
+    SchedulerBinding.instance.removeTimingsCallback(_onTimings);
     puck.dispose();
+    healthTick.dispose();
     super.dispose();
   }
 }

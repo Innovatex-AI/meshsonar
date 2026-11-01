@@ -44,7 +44,7 @@
 // 'map-network-attribution',
 // 'map-heard-label-<key>', 'map-link-distance-<key>', 'map-position', 'map-recenter', 'map-compass', 'map-offline',
 // 'map-attribution', 'map-simulated'.
-import 'dart:async' show Timer, unawaited;
+import 'dart:async' show StreamController, StreamSubscription, Timer, unawaited;
 import 'dart:io' show Platform;
 import 'dart:math' as math;
 
@@ -66,6 +66,10 @@ import '../../core/region_repeaters_api.dart' show RegionRepeater;
 import '../../core/network_coverage.dart';
 import '../../core/region_lookup.dart' show RegionIndexEntry;
 import '../../core/region_neighbours.dart';
+import '../../core/camera_follow.dart';
+import '../../core/heading.dart' show shortestArc;
+import '../../core/map_health.dart' show CameraTelemetry;
+import '../../core/map_prefs.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import 'cell_sheet.dart';
@@ -84,7 +88,11 @@ import 'layers/repeater_name_labels.dart';
 import 'map_info_panel.dart';
 import '../../core/map_filter.dart' show GeoBounds;
 import '../../core/map_styles.dart';
+import 'cell_raster_layer.dart';
 import 'coverage_ramps.dart';
+import 'tile_source.dart';
+import '../../core/offline_packs.dart' show NetworkKind;
+import '../../platform/map_prefs_store.dart' show openSharedMapPrefs;
 import 'live_puck.dart';
 import 'map_layers.dart';
 import 'offline_basemap.dart';
@@ -277,6 +285,12 @@ class CoverageMap extends StatefulWidget {
   /// the coverage % of the view from it.
   final ValueChanged<GeoBounds>? onBoundsChanged;
 
+  /// What the camera tells the "Map and GPS health" recorder (mode, zoom, frames driven). Optional.
+  final CameraTelemetry? telemetry;
+
+  /// The remembered map choices (heading-up, auto re-centre, zoom by speed). Null = the app-wide [MapPrefs.shared].
+  final MapPrefs? prefs;
+
   const CoverageMap({
     super.key,
     required this.pings,
@@ -313,6 +327,8 @@ class CoverageMap extends StatefulWidget {
     this.onPickRegion,
     this.baseStyle = BaseMapStyle.chart,
     this.onBoundsChanged,
+    this.telemetry,
+    this.prefs,
   });
 
   /// True unless running under `flutter test`.
@@ -339,11 +355,29 @@ class _CoverageMapState extends State<CoverageMap> {
   static final StrokePattern _dashed = StrokePattern.dashed(segments: const [10, 8]);
   final MapController _controller = MapController();
   bool _ready = false;
-  late bool _follow = widget.follow;
+  // Follow state: the camera drives itself until the person moves the map (lib/core/camera_follow.dart).
+  final CameraFollow _fc = CameraFollow(autoResume: null);
+  MapPrefs get _prefs => widget.prefs ?? MapPrefs.shared;
+  DateTime _now() => widget.puck?.clock() ?? DateTime.now();
+  bool get _follow => _fc.following;
+  set _follow(bool v) {
+    if (v) {
+      _fc.resume();
+    } else {
+      _fc.userMoved(_now());
+    }
+  }
+
+  double _userZoom = 14;
+  double _zoomOffset = 0;
+  final ValueNotifier<double> _rotationN = ValueNotifier<double>(0);
+  DateTime _lastBounds = DateTime.fromMillisecondsSinceEpoch(0);
+  Timer? _boundsTimer;
+  final StreamController<void> _tileReset = StreamController<void>.broadcast();
+  MeshTileProvider? _tileProvider;
+  final MapTileStats _tileStats = MapTileStats.instance;
+  StreamSubscription<NetworkKind>? _netSub;
   String? _selectedRepeater;
-  bool _tilesFailing = false;
-  int _tileErrors = 0;
-  double _rotation = 0;
   double? _lastZoom;
 
   /// The camera zoom as last seen (before the first camera event: the zoom the map opened at).
@@ -861,11 +895,58 @@ class _CoverageMapState extends State<CoverageMap> {
   void initState() {
     super.initState();
     _selectedRepeater = widget.highlightKey;
+    if (!widget.follow) _fc.userMoved(_now());
+    _applyPrefs();
+    _prefs.addListener(_onPrefs);
+    if (widget.puck != null) unawaited(openSharedMapPrefs());
     if (widget.showTiles ?? CoverageMap.tilesByDefault) {
       _pack.basemap.addListener(_onPacksChanged);
       _pack.basemap.ensureOpen();
       _pack.update(_initialCenter.latitude, _initialCenter.longitude);
+      _watchNetwork();
     }
+  }
+
+  /// The phone's own view of the network closes or opens the tile gate at once (no doomed requests while offline).
+  void _watchNetwork() {
+    final net = _pack.basemap.network;
+    unawaited(net.current().then((k) => _tiles().gate.setPhoneOnline(k != NetworkKind.offline), onError: (Object _) {}));
+    _netSub = net.changes.listen((k) {
+      final online = k != NetworkKind.offline;
+      _tiles().gate.setPhoneOnline(online);
+      if (online) _tileReset.add(null); // tiles that failed while offline are asked for again
+    }, onError: (Object _) {});
+  }
+
+  void _applyPrefs() {
+    final sec = _prefs.autoResumeSec;
+    _fc.autoResume = widget.puck == null || sec <= 0 ? null : Duration(seconds: sec);
+  }
+
+  void _onPrefs() {
+    if (!mounted) return;
+    final was = _headingUpApplied;
+    _applyPrefs();
+    if (was && !_prefs.headingUp) _northUp(); // heading-up off: the map turns back to north
+    _headingUpApplied = _prefs.headingUp;
+    setState(() {});
+  }
+
+  bool _headingUpApplied = false;
+
+  MeshTileProvider _tiles() => _tileProvider ??= MeshTileProvider(shouldSkip: _packDraws);
+
+  /// True when the installed pack draws tile z/x/y, so no request is made for it.
+  bool _packDraws(int z, int x, int y) {
+    final code = _pack.code;
+    if (code == null) return false;
+    final ip = _pack.basemap.managerOrNull?.installed[code];
+    final r = _pack.reader;
+    if (ip == null || r == null || z < r.header.minZoom) return false;
+    final n = math.pow(2, z).toDouble();
+    final lon = (x + 0.5) / n * 360 - 180;
+    final lat = math.atan(0.5 * (math.exp(math.pi * (1 - 2 * (y + 0.5) / n)) - math.exp(-math.pi * (1 - 2 * (y + 0.5) / n)))) * 180 / math.pi;
+    return ip.covers(lat, lon);
   }
 
   // Offline region pack drawn under the overlays; follows the camera centre (see OfflinePackSelection).
@@ -874,6 +955,7 @@ class _CoverageMapState extends State<CoverageMap> {
   void _onPacksChanged() {
     if (!mounted) return;
     _pack.refresh();
+    _tileReset.add(null);
     setState(() {});
   }
 
@@ -949,9 +1031,56 @@ class _CoverageMapState extends State<CoverageMap> {
     }
   }
 
-  /// The dot moved (every frame while driving): keep it in the middle until the person drags the map.
-  void _onPuckMoved(LatLng at) {
-    if (_follow && _ready) _controller.move(at, _controller.camera.zoom);
+  /// One display frame of the puck: drives the camera so the arrow stays at its place on the screen. The camera moves from the
+  /// SAME pose the arrow is drawn with, in the same frame, so there is nothing to lag or fight. A finger on the map, or a map the
+  /// person moved, is left alone (until the re-centre button or the auto-resume).
+  void _onPuckFrame(LatLng at, double dt) {
+    final puck = widget.puck;
+    if (puck == null || !_ready) return;
+    final now = puck.clock();
+    final wasFollowing = _fc.following;
+    final drive = _fc.shouldDrive(now);
+    if (!wasFollowing && _fc.following && mounted) setState(() {}); // auto re-centred
+    final tele = widget.telemetry;
+    if (tele != null) {
+      tele.mode = _fc.following ? 'follow' : 'paused';
+      tele.headingUp = _prefs.headingUp;
+    }
+    if (!drive) return;
+    final pose = puck.pose;
+    if (pose == null) return;
+    final cam = _controller.camera;
+    var z = cam.zoom;
+    if (_prefs.zoomBySpeed) {
+      _zoomOffset = easeToward(_zoomOffset, speedZoomOffset(pose.speedMps), dt, 1.5);
+      z = (_userZoom + _zoomOffset).clamp(3.0, 18.0).toDouble();
+    } else {
+      _zoomOffset = 0;
+      _userZoom = z;
+    }
+    var rot = cam.rotation;
+    final mh = puck.mapHeadingDeg;
+    if (_prefs.headingUp && mh != null) rot = rot + shortestArc(rot, headingUpRotation(mh));
+    final size = cam.nonRotatedSize;
+    final pad = widget.overlayPadding;
+    final a = followAnchor(
+      width: size.width,
+      height: size.height,
+      left: pad.left,
+      top: pad.top,
+      right: pad.right,
+      bottom: pad.bottom,
+      fromTop: widget.showRings ? 0.66 : 0.5,
+    );
+    final r = rot * math.pi / 180;
+    final rx = a.dx * math.cos(r) + a.dy * math.sin(r);
+    final ry = -a.dx * math.sin(r) + a.dy * math.cos(r);
+    final p = cam.projectAtZoom(at, z);
+    final c = cam.unprojectAtZoom(p - Offset(rx, ry), z);
+    if (z == cam.zoom && rot == cam.rotation && (c.latitude - cam.center.latitude).abs() < 1e-9 && (c.longitude - cam.center.longitude).abs() < 1e-9) return;
+    _controller.moveAndRotate(c, z, rot);
+    tele?.drives++;
+    tele?.zoom = z;
   }
 
   LatLng? get _livePosition {
@@ -963,14 +1092,21 @@ class _CoverageMapState extends State<CoverageMap> {
     setState(() => _follow = true);
     final target = _livePosition ?? (_latest == null ? null : LatLng(_latest!.lat, _latest!.lon));
     if (target != null && _ready) {
-      _controller.move(target, math.max(_controller.camera.zoom, 14));
+      final double z = math.max(_controller.camera.zoom, 14.0);
+      _userZoom = z - _zoomOffset;
+      if (widget.puck != null) {
+        _onPuckFrame(target, 0.016); // the follower puts it at its place on the screen at once
+        if (_controller.camera.zoom < z) _controller.move(_controller.camera.center, z);
+      } else {
+        _controller.move(target, z);
+      }
     }
   }
 
   void _northUp() {
     if (!_ready) return;
     _controller.rotate(0);
-    setState(() => _rotation = 0);
+    _rotationN.value = 0;
   }
 
   void _select(String? key) {
@@ -978,17 +1114,16 @@ class _CoverageMapState extends State<CoverageMap> {
     widget.onSelectRepeater?.call(key);
   }
 
-  void _onTileError() {
-    _tileErrors++;
-    if (_tilesFailing || _tileErrors < 2) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && !_tilesFailing) setState(() => _tilesFailing = true);
-    });
-  }
-
   @override
   void dispose() {
     _mapTapTimer?.cancel();
+    _boundsTimer?.cancel();
+    _prefs.removeListener(_onPrefs);
+    unawaited(_netSub?.cancel());
+    unawaited(_tileReset.close());
+    _tileProvider?.dispose();
+    _rotationN.dispose();
+    _fc.dispose();
     _pingScroll.dispose();
     _pack.basemap.removeListener(_onPacksChanged);
     _ownSource?.dispose();
@@ -998,14 +1133,92 @@ class _CoverageMapState extends State<CoverageMap> {
   }
 
   /// Tells the host which part of the world is on screen (after the frame: this can run while the map builds).
-  void _reportBounds() {
+  void _reportBounds({bool force = false}) {
     final cb = widget.onBoundsChanged;
     if (cb == null) return;
+    // While the camera follows the car this is called every frame: at most ~3 reports a second, and one more after it settles.
+    final now = DateTime.now();
+    if (!force && now.difference(_lastBounds) < const Duration(milliseconds: 300)) {
+      _boundsTimer?.cancel();
+      _boundsTimer = Timer(const Duration(milliseconds: 320), () => _reportBounds(force: true));
+      return;
+    }
+    _lastBounds = now;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_ready) return;
       final b = _controller.camera.visibleBounds;
       cb(GeoBounds(b.south, b.west, b.north, b.east));
     });
+  }
+
+  // ---------- cell layers: prepared once per data / palette change, painted from a cached picture ----------
+  CellLayerData? _netData;
+  List<NetworkCell>? _netSrc;
+  MeshSonarColors? _netMc;
+  Brightness? _netBr;
+
+  CellLayerData _networkData(BuildContext context) {
+    final cells = widget.networkCells;
+    final mc = MeshSonarColors.of(context);
+    final br = Theme.of(context).brightness;
+    final cur = _netData;
+    if (cur != null && identical(_netSrc, cells) && identical(_netMc, mc) && _netBr == br) return cur;
+    final colours = <int, Color>{};
+    Color colourOf(NetworkCell n) =>
+        colours.putIfAbsent(n.level.index * 16 + n.mode.index, () => networkLevelColor(context, n.level, mode: n.mode));
+    final d = CellLayerData.build(cells.length, (i) => cells[i].boundary, (i) {
+      final n = cells[i];
+      final c = colourOf(n);
+      // One or two pings are a thin sample: drawn fainter than a cell the network measured properly.
+      final (fill, edge) = cellAlphas(n.level, n.cell?.pings ?? kMinCellPings);
+      return CellStyle(c.withValues(alpha: fill), c.withValues(alpha: edge), 1);
+    });
+    _netData = d;
+    _netSrc = cells;
+    _netMc = mc;
+    _netBr = br;
+    return d;
+  }
+
+  CellLayerData? _hexLayerData;
+  List<HexCell>? _hexLayerSrc;
+  MeshSonarColors? _hexLayerMc;
+
+  CellLayerData _hexData(MeshSonarColors mc) {
+    final hexes = _ensureHexes();
+    final cur = _hexLayerData;
+    if (cur != null && identical(_hexLayerSrc, hexes) && identical(_hexLayerMc, mc)) return cur;
+    final d = CellLayerData.build(hexes.length, (i) => hexes[i].boundary, (i) {
+      final h = hexes[i];
+      final c = h.wasHeard ? mc.forPing(heard: true, snr: h.bestSnrDb) : mc.silent;
+      return CellStyle(c.withValues(alpha: h.wasHeard ? 0.34 : 0.22), c.withValues(alpha: 0.75), 1.2);
+    });
+    _hexLayerData = d;
+    _hexLayerSrc = hexes;
+    _hexLayerMc = mc;
+    return d;
+  }
+
+  /// Dashed outlines of the installed offline packs (the one in use drawn stronger): where the map works with no signal.
+  List<Widget> _packOutlines(MeshSonarColors mc) {
+    final m = _pack.basemap.managerOrNull;
+    if (m == null || m.installed.isEmpty) return const [];
+    return [
+      PolygonLayer(
+        key: const Key('pack-outlines'),
+        polygons: [
+          for (final ip in m.installed.values)
+            if (ip.bbox.length == 4)
+              Polygon(
+                points: [LatLng(ip.bbox[1], ip.bbox[0]), LatLng(ip.bbox[1], ip.bbox[2]), LatLng(ip.bbox[3], ip.bbox[2]), LatLng(ip.bbox[3], ip.bbox[0])],
+                color: Colors.transparent,
+                borderColor: (ip.code == _pack.code ? mc.beacon : mc.textMuted).withValues(alpha: ip.code == _pack.code ? 0.85 : 0.5),
+                borderStrokeWidth: ip.code == _pack.code ? 2 : 1.2,
+                pattern: _dashed,
+              ),
+        ],
+      ),
+    ];
   }
 
   @override
@@ -1062,9 +1275,14 @@ class _CoverageMapState extends State<CoverageMap> {
                   ? InteractiveFlag.none
                   : (widget.rotatable ? InteractiveFlag.all : (InteractiveFlag.all & ~InteractiveFlag.rotate)),
             ),
+            onPointerDown: (_, _) => _fc.pointerDown(),
+            onPointerUp: (_, _) => _fc.pointerUp(_now()),
+            onPointerCancel: (_, _) => _fc.pointerUp(_now()),
             onMapReady: () {
               _ready = true;
-              _reportBounds();
+              _userZoom = _controller.camera.zoom;
+              _headingUpApplied = _prefs.headingUp;
+              _reportBounds(force: true);
               final z = _controller.camera.zoom;
               if (z != _lastZoom) {
                 _lastZoom = z;
@@ -1119,52 +1337,45 @@ class _CoverageMapState extends State<CoverageMap> {
                 _zoomNow = camera.zoom;
                 if (before != hexResolution || captionsBefore != _captions) setState(() {});
               }
-              final rot = camera.rotation;
-              final rotChanged = widget.rotatable && (rot - _rotation).abs() > 0.5;
-              if ((hasGesture && _follow) || rotChanged) {
-                setState(() {
-                  if (hasGesture) _follow = false;
-                  _rotation = rot;
-                });
+              if (widget.rotatable) _rotationN.value = camera.rotation;
+              if (hasGesture) {
+                // The person moved the map: the camera stops driving at once (never fights a finger).
+                final was = _fc.following;
+                _fc.userMoved(_now());
+                _userZoom = camera.zoom - _zoomOffset;
+                if (was) setState(() {});
               }
             },
           ),
           children: [
             _ChartGrid(color: mc.mapGrid),
+            // Online + disk-cached tiles everywhere, except where an installed offline pack draws (no request for those); the
+            // pack's vector tiles go on top of that. Where a pack ends the online/cached tiles carry on: never a blank edge.
+            if (tiles)
+              TileLayer(
+                key: ValueKey('tiles-${style.id}'),
+                urlTemplate: style.tileUrl,
+                userAgentPackageName: CoverageMap.userAgentPackageName,
+                maxNativeZoom: style.maxNativeZoom,
+                tileProvider: _tiles(),
+                reset: _tileReset.stream,
+                tileDisplay: const TileDisplay.fadeIn(duration: Duration(milliseconds: 150)),
+                keepBuffer: 2,
+                panBuffer: 1,
+                // Street and Topo are drawn as the tile server made them; Chart is graded to the theme, Dark to the dark chart.
+                tileBuilder: tileGrading == null
+                    ? null
+                    : (context, tile, _) => ColorFiltered(colorFilter: ColorFilter.matrix(tileGrading), child: tile),
+              ),
             if (offlinePack != null)
               OfflineBasemapLayer(
                 key: ValueKey('offline-pack-${_pack.code}${style == BaseMapStyle.chart ? '' : '-${style.id}'}'),
                 reader: offlinePack,
                 // Dark forces the dark look; Street and Chart draw the pack in the light look unless the app theme is dark.
                 dark: style.forcesDark ? true : (style == BaseMapStyle.street ? false : null),
-              )
-            else if (tiles)
-              TileLayer(
-                key: ValueKey('tiles-${style.id}'),
-                urlTemplate: style.tileUrl,
-                userAgentPackageName: CoverageMap.userAgentPackageName,
-                maxNativeZoom: style.maxNativeZoom,
-                tileDisplay: const TileDisplay.fadeIn(),
-                evictErrorTileStrategy: EvictErrorTileStrategy.notVisibleRespectMargin,
-                errorTileCallback: (_, _, _) => _onTileError(),
-                // Street and Topo are drawn as the tile server made them; Chart is graded to the theme, Dark to the dark chart.
-                tileBuilder: tileGrading == null
-                    ? null
-                    : (context, tile, _) => ColorFiltered(colorFilter: ColorFilter.matrix(tileGrading), child: tile),
               ),
-            if (layers.networkCoverage && widget.networkCells.isNotEmpty)
-              PolygonLayer(
-                polygons: [
-                  for (final n in widget.networkCells)
-                    Polygon(
-                      points: [for (final b in n.boundary) LatLng(b.lat, b.lon)],
-                      // One or two pings are a thin sample: drawn fainter than a cell the network measured properly.
-                      color: networkLevelColor(context, n.level, mode: n.mode).withValues(alpha: cellAlphas(n.level, n.cell?.pings ?? kMinCellPings).$1),
-                      borderColor: networkLevelColor(context, n.level, mode: n.mode).withValues(alpha: cellAlphas(n.level, n.cell?.pings ?? kMinCellPings).$2),
-                      borderStrokeWidth: 1,
-                    ),
-                ],
-              ),
+            if (tiles && style.usesOfflinePack) ..._packOutlines(mc),
+            if (layers.networkCoverage && widget.networkCells.isNotEmpty) CellRasterLayer(key: const Key('network-cells-layer'), data: _networkData(context)),
             if (_regionsOn)
               RegionNeighboursLayer(set: widget.regionNeighbours!, onPick: (r) => unawaited(_pickRegion(r)), avoid: widget.overlayPadding, obstacles: _overlayRects),
             if (widget.showRings && layers.rings && pos != null)
@@ -1246,17 +1457,7 @@ class _CoverageMapState extends State<CoverageMap> {
               KeyedSubtree(
                 // The resolution is in the key so a test (and a screenshot) can see which band is on screen.
                 key: ValueKey('drive-hexes-res-$hexResolution'),
-                child: PolygonLayer(
-                  polygons: [
-                    for (final h in _ensureHexes())
-                      Polygon(
-                        points: [for (final b in h.boundary) LatLng(b.lat, b.lon)],
-                        color: (h.wasHeard ? mc.forPing(heard: true, snr: h.bestSnrDb) : mc.silent).withValues(alpha: h.wasHeard ? 0.34 : 0.22),
-                        borderColor: (h.wasHeard ? mc.forPing(heard: true, snr: h.bestSnrDb) : mc.silent).withValues(alpha: 0.75),
-                        borderStrokeWidth: 1.2,
-                      ),
-                  ],
-                ),
+                child: CellRasterLayer(key: const Key('drive-hexes-layer'), data: _hexData(mc)),
               ),
             if (_currentLinks() case final ls?) ...linkLineLayers(context, ls, labels: _captions || hexResolution >= 9),
             if (showNetwork)
@@ -1365,7 +1566,7 @@ class _CoverageMapState extends State<CoverageMap> {
                 ],
               ),
             if (widget.puck case final puck?)
-              PuckLayer(puck: puck, fallback: pos, onMoved: _onPuckMoved)
+              PuckLayer(puck: puck, fallback: pos, onMoved: _onPuckFrame)
             else if (pos != null)
               MarkerLayer(
                 markers: [
@@ -1452,7 +1653,7 @@ class _CoverageMapState extends State<CoverageMap> {
                 const SimulatedTag(key: Key('map-simulated')),
                 const SizedBox(height: Gap.xs),
               ],
-              if (_tilesFailing || !tiles) ...[
+              if (!tiles) ...[
                 _Pill(
                   key: const Key('map-offline'),
                   child: Row(
@@ -1470,7 +1671,15 @@ class _CoverageMapState extends State<CoverageMap> {
                     ],
                   ),
                 ),
-                if (tiles) const SizedBox(height: Gap.xs),
+              ],
+              if (tiles) ...[
+                _SourceChip(
+                  stats: _tileStats,
+                  gate: _tiles().gate,
+                  packName: _pack.code == null ? null : (_pack.basemap.managerOrNull?.installed[_pack.code]?.name ?? _pack.code),
+                  clock: _now,
+                ),
+                const SizedBox(height: Gap.xs),
               ],
               if (tiles)
                 _Pill(
@@ -1512,7 +1721,20 @@ class _CoverageMapState extends State<CoverageMap> {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (widget.rotatable) ...[
-                _Compass(rotation: _rotation, onPressed: _northUp),
+                ValueListenableBuilder<double>(
+                  valueListenable: _rotationN,
+                  builder: (context, rot, _) => _Compass(rotation: rot, onPressed: _northUp),
+                ),
+                const SizedBox(height: Gap.s),
+              ],
+              if (widget.puck != null && widget.interactive) ...[
+                FloatingActionButton.small(
+                  key: const Key('map-heading-toggle'),
+                  heroTag: null,
+                  tooltip: _prefs.headingUp ? 'Heading up (tap for north up)' : 'North up (tap for heading up)',
+                  onPressed: () => _prefs.headingUp = !_prefs.headingUp,
+                  child: Icon(_prefs.headingUp ? Icons.navigation_rounded : Icons.explore_outlined),
+                ),
                 const SizedBox(height: Gap.s),
               ],
               if (!_follow && (pos != null || latest != null))
@@ -1618,6 +1840,71 @@ class SimulatedTag extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Where the base map is coming from right now: the installed offline pack, the network, or the disk cache with no signal.
+class _SourceChip extends StatefulWidget {
+  final MapTileStats stats;
+  final TileFetchGate gate;
+  final String? packName;
+  final DateTime Function() clock;
+  const _SourceChip({required this.stats, required this.gate, required this.packName, required this.clock});
+
+  @override
+  State<_SourceChip> createState() => _SourceChipState();
+}
+
+class _SourceChipState extends State<_SourceChip> {
+  late MapSource _source = _compute();
+
+  MapSource _compute() => currentMapSource(widget.stats, widget.clock(), packActive: widget.packName != null, gateOpen: widget.gate.isOpen);
+
+  @override
+  void initState() {
+    super.initState();
+    widget.stats.addListener(_changed);
+  }
+
+  void _changed() {
+    final n = _compute();
+    if (n != _source && mounted) setState(() => _source = n);
+  }
+
+  @override
+  void didUpdateWidget(_SourceChip old) {
+    super.didUpdateWidget(old);
+    final n = _compute();
+    if (n != _source) _source = n;
+  }
+
+  @override
+  void dispose() {
+    widget.stats.removeListener(_changed);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final mc = MeshSonarColors.of(context);
+    final (icon, text, color) = switch (_source) {
+      MapSource.offlinePack => (Icons.download_done_rounded, 'Offline map: ${widget.packName ?? 'pack'}', mc.snrStrong),
+      MapSource.online => (Icons.cloud_done_outlined, 'Online map', mc.textMuted),
+      MapSource.cachedOffline => (Icons.sd_storage_outlined, 'Saved map (no signal)', mc.beacon),
+      MapSource.none => (Icons.cloud_off_rounded, 'No map here (no signal)', mc.beacon),
+    };
+    return _Pill(
+      key: _source == MapSource.cachedOffline || _source == MapSource.none ? const Key('map-offline') : const Key('map-source'),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: color),
+          const SizedBox(width: 4),
+          Flexible(child: Text(text, overflow: TextOverflow.ellipsis, style: t.textTheme.labelSmall?.copyWith(fontSize: 11))),
+        ],
       ),
     );
   }
