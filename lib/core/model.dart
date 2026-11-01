@@ -19,6 +19,13 @@ const String driveFormat = 'meshsonar.drive.v1';
 /// server that lists it in `site-config.capabilities.driveFormats`.
 const String driveFormatV12 = 'meshsonar.drive.v1.2';
 
+/// Drive Format v1.3: v1.2 plus per-ping `window_ms` (the listen window actually used) and `outcome` (`echo` | `no_reply`)
+/// so MeshSonar and MeshMapper compare ping by ping. Sent only to a server that lists it in `capabilities.driveFormats`.
+const String driveFormatV13 = 'meshsonar.drive.v1.3';
+
+/// The server accepts `window_ms` only inside this range (ms); a ping outside it goes up without the field.
+const int windowMsMin = 1000, windowMsMax = 60000;
+
 class AppInfo {
   final String? name;
   final String? version;
@@ -212,6 +219,10 @@ class DrivePing {
 
   /// v1.1: the radio's TX power for this ping in dBm (power can change mid-drive). Null when unknown.
   final double? txDbm;
+
+  /// The listen window actually used for this tx ping, in ms (the 10 s base, longer when the adaptive extension ran).
+  /// Kept on disk; goes on the wire only in a Drive Format v1.3 body ([DriveBatch.v13]). Null on rx pings and old pings.
+  final int? windowMs;
   const DrivePing({
     required this.id,
     required this.ts,
@@ -227,6 +238,7 @@ class DrivePing {
     this.txEpochS,
     this.wireTag,
     this.txDbm,
+    this.windowMs,
   });
 
   bool get heardNothing => kind == PingKind.tx && echoes.isEmpty && neighbor == null;
@@ -246,6 +258,8 @@ class DrivePing {
         'tx_epoch_s': txEpochS,
         'wire_tag': wireTag,
         'tx_dbm': txDbm,
+        // Local-only unless v1.3: DriveBatch strips it from older bodies (the v1.1 key set is pinned by a golden test).
+        'window_ms': ?windowMs,
       };
   factory DrivePing.fromJson(Map<String, dynamic> j) => DrivePing(
         id: j['id'] as String,
@@ -262,6 +276,7 @@ class DrivePing {
         txEpochS: (j['tx_epoch_s'] as num?)?.toInt(),
         wireTag: j['wire_tag'] as String?,
         txDbm: (j['tx_dbm'] as num?)?.toDouble(),
+        windowMs: (j['window_ms'] as num?)?.toInt(),
       );
 
   static final _hex16 = RegExp(r'^[0-9a-f]{16}$');
@@ -283,12 +298,30 @@ class DriveBatch {
   final DriveSession session;
   final List<DrivePing> pings;
   final ContextUpload? context;
-  const DriveBatch({required this.app, required this.session, required this.pings, this.context});
+
+  /// Drive Format v1.3 body: needs [context] (its `enrich` flag keeps the weather opt-out explicit, the v1.3 default is on);
+  /// each tx ping then carries `window_ms` (when 1000..60000) and `outcome`. Without it no ping carries either key.
+  final bool v13;
+  const DriveBatch({required this.app, required this.session, required this.pings, this.context, this.v13 = false});
+
+  /// `outcome` is derived from the echo list the same way the server checks it: `echo` iff at least one echo.
+  static String outcomeOf(DrivePing p) => p.echoes.isEmpty ? 'no_reply' : 'echo';
+
+  Map<String, dynamic> _pingJson(DrivePing p) {
+    final j = p.toJson();
+    j.remove('window_ms');
+    if (v13 && p.kind == PingKind.tx) {
+      final w = p.windowMs;
+      if (w != null && w >= windowMsMin && w <= windowMsMax) j['window_ms'] = w;
+      j['outcome'] = outcomeOf(p);
+    }
+    return j;
+  }
 
   Map<String, dynamic> toJson() {
     final c = context;
     if (c == null) {
-      return {'format': driveFormat, 'app': app.toJson(), 'session': session.toJson(), 'pings': pings.map((p) => p.toJson()).toList()};
+      return {'format': driveFormat, 'app': app.toJson(), 'session': session.toJson(), 'pings': pings.map(_pingJson).toList()};
     }
     final s = session.toJson();
     final ext = c.companionJson;
@@ -299,11 +332,11 @@ class DriveBatch {
     s['enrich'] = {'weather': c.weather};
     final samples = c.samplesJson;
     return {
-      'format': driveFormatV12,
+      'format': v13 ? driveFormatV13 : driveFormatV12,
       'app': app.toJson(),
       'session': s,
       'pings': [
-        for (final p in pings) {...p.toJson(), 'ctx': ?c.ctxJson(p.id)},
+        for (final p in pings) {..._pingJson(p), 'ctx': ?c.ctxJson(p.id)},
       ],
       if (samples.isNotEmpty) 'samples': samples,
     };

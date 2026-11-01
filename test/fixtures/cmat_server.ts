@@ -24,7 +24,7 @@ const server = Bun.serve({
     if (url.pathname === "/__test/state") {
       return Response.json({
         sessions: [...store._sessions.values()].map((x) => ({ id: x.s.id, endedAt: x.s.endedAt, pingCount: x.pingCount, label: x.s.label })),
-        pings: [...store._pings.values()].map((p) => ({ id: p.id, echoes: p.echoes.length, neighbor: p.neighbor !== null })),
+        pings: [...store._pings.values()].map((p) => ({ id: p.id, echoes: p.echoes.length, neighbor: p.neighbor !== null, windowMs: p.window_ms ?? null, outcome: p.outcome ?? null })),
       });
     }
     const m = url.pathname.match(/^\/api\/cmh\/([a-z-]+)$/);

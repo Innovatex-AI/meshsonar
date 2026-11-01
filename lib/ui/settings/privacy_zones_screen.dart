@@ -28,6 +28,7 @@ import '../app.dart';
 import '../map/coverage_map.dart' show CoverageMap;
 import '../map/offline_basemap.dart';
 import '../map/region_center.dart';
+import 'privacy_zones_start.dart';
 
 /// The copy that says what a zone does. One place, so the screen, the search entry and the docs agree.
 const String privacyZonesExplain = 'Drives inside a zone are hidden from the public map. The start and end of each drive '
@@ -75,6 +76,8 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
   ({PrivacyZone zone, int index})? _deleted;
   bool _mapReady = false;
   int? _trimDraft;
+  bool _touched = false; // the person moved the map: stop following the best-known start
+  String? _framedKey;
 
   bool get _tiles => widget.showTiles ?? CoverageMap.tilesByDefault;
 
@@ -158,11 +161,7 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
     }
   }
 
-  /// A zoom at which a circle of [radiusM] at [lat] is about 110 px in radius: the whole circle and its surroundings in view.
-  double _zoomFor(double radiusM, double lat) {
-    final z = math.log(156543.03392 * math.cos(lat * math.pi / 180) * 110 / math.max(radiusM, 1)) / math.ln2;
-    return z.clamp(9.0, 17.0);
-  }
+  double _zoomFor(double radiusM, double lat) => zoneZoomFor(radiusM, lat);
 
   Future<void> _addAt(double lat, double lon) async {
     await _commitDraft();
@@ -252,6 +251,9 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
   @override
   Widget build(BuildContext context) {
     final s = AppScope.of(context);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _c != null) _reframe(s);
+    });
     return Scaffold(
       appBar: AppBar(title: const Text('Privacy zones')),
       body: SafeArea(
@@ -297,17 +299,20 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
         key: const Key('zones-map'),
         mapController: _map,
         options: MapOptions(
-          initialCenter: start.$1,
-          initialZoom: start.$2,
+          initialCenter: start.center,
+          initialZoom: start.zoom,
+          initialCameraFit: start.bounds == null ? null : CameraFit.bounds(bounds: start.bounds!, padding: const EdgeInsets.all(40), maxZoom: 16),
           minZoom: 2,
           maxZoom: 18,
           backgroundColor: mc.mapBackground,
           interactionOptions: const InteractionOptions(flags: InteractiveFlag.all & ~InteractiveFlag.rotate),
           onMapReady: () {
             _mapReady = true;
-            if (_tiles && _pack.update(start.$1.latitude, start.$1.longitude) && mounted) setState(() {});
+            _framedKey = _keyOf(start);
+            if (_tiles && _pack.update(start.center.latitude, start.center.longitude) && mounted) setState(() {});
           },
-          onPositionChanged: (cam, _) {
+          onPositionChanged: (cam, hasGesture) {
+            if (hasGesture) _touched = true;
             if (_tiles && _pack.update(cam.center.latitude, cam.center.longitude) && mounted) setState(() {});
           },
           onTap: (_, p) => unawaited(_onMapTap(p)),
@@ -412,14 +417,34 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
     );
   }
 
-  /// Where the map opens and how far in: the selected or first zone, else the phone, else the viewed region, else the world.
-  (LatLng, double) _startView(AppState s) {
-    final z = _selected != null && _selected! < c.zones.length ? c.zones[_selected!] : (c.zones.isEmpty ? null : c.zones.first);
-    if (z != null) return (LatLng(z.lat, z.lon), _zoomFor(z.radiusM, z.lat));
-    final p = _phone();
-    if (p != null) return (LatLng(p.lat, p.lon), 14);
-    final r = viewedRegionCenter(s);
-    return r != null ? (r, 9) : (const LatLng(20, 0), 2);
+  /// Where the map opens: all the zones framed, else the phone's last known position, else the viewed region, else a
+  /// continental view (see privacy_zones_start.dart). A selected zone wins while it is selected.
+  ZoneStart _startView(AppState s) {
+    final sel = _selected != null && _selected! < c.zones.length ? c.zones[_selected!] : null;
+    if (sel != null) return ZoneStart(ZoneStartKind.zones, LatLng(sel.lat, sel.lon), _zoomFor(sel.radiusM, sel.lat));
+    return zoneStart(zones: c.zones, phone: _phone(), region: s.viewingRegion, hub: viewedRegionCenter(s));
+  }
+
+  /// The data this view is built from can arrive after the map is first drawn (zones load, the last-known fix is read, the region
+  /// index comes in). Until the person touches the map, follow the best answer; after that, never move it under them.
+  void _reframe(AppState s) {
+    if (!_mapReady || _touched || _mode != _Mode.select) return;
+    final st = _startView(s);
+    final key = _keyOf(st);
+    if (key == _framedKey) return;
+    _framedKey = key;
+    _fit(st);
+  }
+
+  String _keyOf(ZoneStart st) => '${st.kind.name}:${st.center.latitude.toStringAsFixed(4)},${st.center.longitude.toStringAsFixed(4)}:${c.zones.length}';
+
+  void _fit(ZoneStart st) {
+    final b = st.bounds;
+    if (b != null) {
+      _map.fitCamera(CameraFit.bounds(bounds: b, padding: const EdgeInsets.all(40), maxZoom: 16));
+    } else {
+      _map.move(st.center, st.zoom);
+    }
   }
 
   List<Widget> _panel(BuildContext context, AppState s) {

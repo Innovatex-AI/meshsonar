@@ -821,6 +821,7 @@ class DefaultWardriveEngine implements WardriveEngine {
         txEpochS: sentTs,
         wireTag: pingTag,
         txDbm: txDbm,
+        windowMs: windowMs,
       );
       _emitTrace({
         'v': 1,

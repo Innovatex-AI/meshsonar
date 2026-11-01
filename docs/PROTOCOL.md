@@ -333,6 +333,8 @@ repeat after the window is not added to the saved ping (it is already on disk an
 Pings are queued at P3 behind P0/P1 commands (message sync, claims); a measured 2 h drive on a channel with a wardriver every
 2 s and 120 ms BLE latency kept the 15 s cadence to within 0.1 s.
 
+**Window on the wire.** The window actually used (`window_ms` in the trace) is saved on the ping and uploaded as `window_ms` with `outcome` in Drive Format v1.3, so a MeshSonar ping and a MeshMapper ping (10 s window, `outcome`) compare field by field.
+
 **Fix on request.** A ping asks the platform for the current position with a 4 s timeout (an iPhone's call can sit 15 s while the position stream runs; Oct 31 field drive: pings 78-128 s apart at speed). On a timeout or no fix, the stream's newest fix stands in if it is at most 5 s old; otherwise the status says "No GPS fix". Waiting for a fix is recorded in the trace as `{no_fix: true}`. The interval is counted from when the cadence check began, so a slow fix never stretches it, and the listen window shrinks by the time the fix took.
 
 **Cadence.** Auto pings are scheduled with a one-shot timer at the due time, so the interval is the interval (it was the
