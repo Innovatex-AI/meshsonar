@@ -6,6 +6,7 @@ import '../app.dart';
 import '../drive/drive_controls.dart' show openConnect;
 import '../drive_screen.dart' show ConnectionChip;
 import '../widgets.dart' show EmptyState;
+import '../chat/conversation_screen.dart' show ConversationPaneScope;
 import 'chat_tab_host.dart';
 
 class ChatTab extends StatefulWidget {
@@ -16,16 +17,26 @@ class ChatTab extends StatefulWidget {
 
 class _ChatTabState extends State<ChatTab> {
   ChatSegment _segment = ChatSegment.contacts;
+
+  /// From this content width the Chat tab is two columns: the lists on the left, the open conversation on the right.
+  static const double splitWidth = 900;
+  Widget? _pane;
   final _fixture = DebugFixtureChat();
 
   ChatTabProvider? get _provider =>
-      ChatTabHost.provider.value ?? (chatFixturesAllowed && ChatTabHost.debugFixtures.value ? _fixture : null);
+      ChatTabHost.provider.value ??
+      (chatFixturesAllowed && ChatTabHost.debugFixtures.value
+          ? _fixture
+          : null);
 
   @override
   Widget build(BuildContext context) {
     final s = AppScope.of(context);
     return ListenableBuilder(
-      listenable: Listenable.merge([ChatTabHost.provider, ChatTabHost.debugFixtures]),
+      listenable: Listenable.merge([
+        ChatTabHost.provider,
+        ChatTabHost.debugFixtures,
+      ]),
       builder: (context, _) {
         final p = _provider;
         return Scaffold(
@@ -37,8 +48,13 @@ class _ChatTabState extends State<ChatTab> {
               Padding(
                 padding: const EdgeInsets.only(right: Gap.m),
                 child: ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.6),
-                  child: ConnectionChip(state: s, onPressed: () => openConnect(context)),
+                  constraints: BoxConstraints(
+                    maxWidth: MediaQuery.sizeOf(context).width * 0.6,
+                  ),
+                  child: ConnectionChip(
+                    state: s,
+                    onPressed: () => openConnect(context),
+                  ),
                 ),
               ),
             ],
@@ -57,17 +73,20 @@ class _ChatTabState extends State<ChatTab> {
     return EmptyState(
       key: const Key('chat-empty'),
       icon: Icons.chat_bubble_outline_rounded,
-      title: s.connected ? 'Chat is coming to this tab' : 'Messages arrive here once you connect a radio',
+      title: s.connected
+          ? 'Chat is coming to this tab'
+          : 'Messages arrive here once you connect a radio',
       body: s.connected
           ? 'Your radio is connected and ready. Contacts and channels will show up here in a coming update. '
-              'Driving and mapping work now: open the Map tab.'
+                'Driving and mapping work now: open the Map tab.'
           : 'Connect your MeshCore companion radio over Bluetooth. Contacts and channels will show up here; '
-              'you can map coverage while you wait.',
+                'you can map coverage while you wait.',
       action: s.connected
           ? FilledButton.tonalIcon(
               key: const Key('chat-open-map'),
               style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
-              onPressed: () => ShellScope.maybeRead(context)?.select(AppTab.map),
+              onPressed: () =>
+                  ShellScope.maybeRead(context)?.select(AppTab.map),
               icon: const Icon(Icons.map_outlined),
               label: const Text('Open the map'),
             )
@@ -87,30 +106,75 @@ class _ChatTabState extends State<ChatTab> {
       builder: (context, _) {
         final s = AppScope.of(context);
         if (!s.connected && p.isEmpty) return _noChatYet(context);
-        return Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(Gap.l, Gap.s, Gap.l, Gap.s),
-              child: SizedBox(
-                width: double.infinity,
-                child: SegmentedButton<ChatSegment>(
-                  key: const Key('chat-segments'),
-                  showSelectedIcon: false,
-                  segments: const [
-                    ButtonSegment(value: ChatSegment.contacts, label: Text('Contacts'), icon: Icon(Icons.person_outline)),
-                    ButtonSegment(value: ChatSegment.channels, label: Text('Channels'), icon: Icon(Icons.tag)),
-                  ],
-                  selected: {_segment},
-                  onSelectionChanged: (v) => setState(() => _segment = v.first),
-                ),
+        return LayoutBuilder(
+          builder: (context, box) {
+            final list = _lists(context, p);
+            if (box.maxWidth < splitWidth) {
+              if (_pane != null) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) setState(() => _pane = null);
+                });
+              }
+              return list;
+            }
+            return ConversationPaneScope(
+              show: (w) => setState(() => _pane = w),
+              child: Row(
+                children: [
+                  SizedBox(width: 380, child: list),
+                  const VerticalDivider(width: 1),
+                  Expanded(
+                    child:
+                        _pane ??
+                        const EmptyState(
+                          key: Key('chat-pane-empty'),
+                          icon: Icons.forum_outlined,
+                          title: 'Pick a conversation',
+                          body: 'Channels and people are on the left.',
+                        ),
+                  ),
+                ],
               ),
-            ),
-            Expanded(
-              child: _segment == ChatSegment.contacts ? p.contactsView(context) : p.channelsView(context),
-            ),
-          ],
+            );
+          },
         );
       },
+    );
+  }
+
+  Widget _lists(BuildContext context, ChatTabProvider p) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(Gap.l, Gap.s, Gap.l, Gap.s),
+          child: SizedBox(
+            width: double.infinity,
+            child: SegmentedButton<ChatSegment>(
+              key: const Key('chat-segments'),
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(
+                  value: ChatSegment.contacts,
+                  label: Text('Contacts'),
+                  icon: Icon(Icons.person_outline),
+                ),
+                ButtonSegment(
+                  value: ChatSegment.channels,
+                  label: Text('Channels'),
+                  icon: Icon(Icons.tag),
+                ),
+              ],
+              selected: {_segment},
+              onSelectionChanged: (v) => setState(() => _segment = v.first),
+            ),
+          ),
+        ),
+        Expanded(
+          child: _segment == ChatSegment.contacts
+              ? p.contactsView(context)
+              : p.channelsView(context),
+        ),
+      ],
     );
   }
 }

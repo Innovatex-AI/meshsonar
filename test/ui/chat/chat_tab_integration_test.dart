@@ -64,4 +64,23 @@ void main() {
     expect(find.byKey(Key('drive-chat-row-${ch.convKey}')), findsOneWidget);
     expect(find.text('road closed ahead'), findsOneWidget);
   });
+
+  testWidgets('iPad landscape: two columns, a tapped conversation opens in the right pane', (tester) async {
+    setSize(tester, w: 1194, h: 834);
+    final ch = await kit.channel(1, 'Ohio');
+    kit.incoming(ch, 'Ann', 'morning all');
+    final h = Harness();
+    await h.pumpApp(tester);
+    await tester.tap(find.descendant(of: find.byKey(const Key('shell-rail')), matching: find.text('Chat')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('chat-pane-empty')), findsOneWidget);
+    await tester.tap(find.text('Channels'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ohio'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('chat-pane-empty')), findsNothing);
+    expect(find.byKey(const Key('composer-field')), findsOneWidget, reason: 'the conversation is in the pane');
+    expect(find.byKey(const Key('chat-segments')), findsOneWidget, reason: 'the list is still on screen beside it');
+    await tester.pump(const Duration(seconds: 7));
+  });
 }
