@@ -405,13 +405,16 @@ class DriveMapModel extends ChangeNotifier {
   /// Overlays the Drive screen and the full-screen map draw over their maps (heard box, button column): the map keeps
   /// repeater names out from under them. Separate sets because both screens can be alive at once.
   final List<GlobalKey> driveOverlayKeys = [GlobalKey(debugLabel: 'drive-heard'), GlobalKey(debugLabel: 'drive-controls')];
+  /// Height of the GPS health banner over the top of whichever map shows it (0 when it shows nothing), so the heard box and
+  /// the button column start below it instead of under it.
+  final ValueNotifier<double> gpsBannerHeight = ValueNotifier(0);
   final List<GlobalKey> fullscreenOverlayKeys = [GlobalKey(debugLabel: 'full-heard'), GlobalKey(debugLabel: 'full-controls')];
 
   /// Height of the credit stack the map draws bottom-left (OpenStreetMap credit, the SIMULATED tag, the repeater age
   /// legend with MeshCore Map's credit), so overlays that sit above it (the result flash, the report card) clear it
   /// instead of covering it.
   double get attributionStackHeight =>
-      32 + (simulated ? 28 : 0) + (layerState.isOn(kNetworkLayerId) && repeaterSource.globalPoints.length > 0 ? 64 : 0);
+      64 + (simulated ? 28 : 0) + (layerState.isOn(kNetworkLayerId) && repeaterSource.globalPoints.length > 0 ? 64 : 0);
 
   /// The simulator's own (made-up) repeaters, so a Simulator drive shows where they are like a real one would.
   static final List<RepeaterRef> simulatorRepeaters = [
@@ -769,6 +772,7 @@ class DriveMapModel extends ChangeNotifier {
     _fetchTimer?.cancel();
     _boundsTimer?.cancel();
     timeline.dispose();
+    gpsBannerHeight.dispose();
     state.removeListener(_onState);
     repeaterSource.dispose();
     repeaterFeed.dispose();

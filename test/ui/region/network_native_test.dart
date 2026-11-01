@@ -257,7 +257,8 @@ void main() {
       await tester.pumpWidget(_app(FindingsPanel(baseUrl: 'https://day.meshsonar.com', regionSlug: 'day', client: _server(findings: findingsBody(empty: true)))));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('findings-empty')), findsOneWidget);
-      expect(find.text('No findings have been written for this region yet.'), findsWidgets);
+      // The server sends the same sentence as its reason: it is said once, not twice.
+      expect(find.text('No findings have been written for this region yet.'), findsOneWidget);
     });
 
     test('findingRefText writes site ids and links out', () {

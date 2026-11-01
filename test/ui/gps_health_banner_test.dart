@@ -17,6 +17,7 @@ GpsHealth h(Duration since, {Duration? age, double? acc, bool usable = true, Loc
     computeGpsHealth(sinceStart: since, fixAge: age, accuracyM: acc, haveUsableFix: usable, access: access, background: bg);
 
 void main() {
+  _bannerSlotTests();
   testWidgets('each state shows its plain-English line; idle and good-without-advice can be hidden', (tester) async {
     final cases = <GpsHealth, String>{
       h(const Duration(seconds: 12), usable: false): 'Waiting for GPS (12 s)',
@@ -76,5 +77,30 @@ void main() {
     expect(find.textContaining('12 pings were sent from a GPS fix worse than 164 ft'), findsOneWidget);
     expect(find.textContaining('First ping after 2.5 s'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+}
+
+void _bannerSlotTests() {
+  testWidgets('the banner slot reports its height (0 while it shows nothing) so overlays can start below it', (tester) async {
+    final height = ValueNotifier<double>(0);
+    final health = ValueNotifier<GpsHealth>(GpsHealth.idle);
+    await tester.pumpWidget(host(
+      ValueListenableBuilder<GpsHealth>(
+        valueListenable: health,
+        builder: (context, v, _) => GpsBannerHeightProbe(height: height, child: GpsHealthView(health: v)),
+      ),
+    ));
+    await tester.pump();
+    expect(height.value, 0);
+    health.value = h(const Duration(seconds: 3), usable: false, access: LocationAccess.approximate);
+    await tester.pump();
+    await tester.pump();
+    expect(height.value, greaterThan(40));
+    final view = tester.getSize(find.byType(GpsHealthView)).height;
+    expect(height.value, view);
+    health.value = GpsHealth.idle;
+    await tester.pump();
+    await tester.pump();
+    expect(height.value, 0);
   });
 }

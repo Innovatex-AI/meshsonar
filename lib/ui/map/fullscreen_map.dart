@@ -105,11 +105,11 @@ class FullscreenMapScreen extends StatelessWidget {
                   ),
                 ),
               ),
-              Positioned(left: 0, right: 0, top: safe.top, child: GpsHealthBanner(state: s, showWhenGood: false)),
-              // Top: heard box (left), close + layers (right).
-              Positioned(
-                left: safe.left + Gap.m,
-                top: safe.top + Gap.m,
+              Positioned(left: 0, right: 0, top: safe.top, child: GpsBannerSlot(state: s, height: model.gpsBannerHeight, compact: true)),
+              // Top: heard box (left), close + layers (right), both under the GPS banner while it shows.
+              ValueListenableBuilder<double>(
+                valueListenable: model.gpsBannerHeight,
+                builder: (context, bannerH, child) => Positioned(left: safe.left + Gap.m, top: safe.top + Gap.m + bannerH, child: child!),
                 child: ConstrainedBox(
                   constraints: BoxConstraints(
                     // Never negative: with the keyboard up over a short window the sum goes below zero and layout throws.
@@ -130,17 +130,18 @@ class FullscreenMapScreen extends StatelessWidget {
                   ),
                 ),
               ),
+              // Bottom-left, above the map's credit stack (the heard box owns the top-left corner).
               Positioned(
                 left: safe.left + Gap.m,
-                top: safe.top + Gap.m,
+                bottom: safe.bottom + (landscape ? Gap.m : panelHeight + Gap.m) + model.attributionStackHeight + 6,
                 child: CoverageAsOfBadge(model: model),
               ),
-              Positioned(left: safe.left + Gap.m, bottom: safe.bottom + (landscape ? Gap.m : panelHeight + Gap.m) + 40, child: MapHealthOverlay(model: model)),
-              Positioned(
-                right: safe.right + Gap.m,
-                top: safe.top + Gap.m,
+              Positioned(left: safe.left + Gap.m, bottom: safe.bottom + (landscape ? Gap.m : panelHeight + Gap.m) + model.attributionStackHeight + 46, child: MapHealthOverlay(model: model)),
+              ValueListenableBuilder<double>(
+                valueListenable: model.gpsBannerHeight,
+                builder: (context, bannerH, child) => Positioned(right: safe.right + Gap.m, top: safe.top + Gap.m + bannerH, child: child!),
                 child: ConstrainedBox(
-                  constraints: BoxConstraints(maxHeight: (mq.size.height - safe.top - safe.bottom - panelHeight - 2 * Gap.m).clamp(0.0, double.infinity)),
+                  constraints: BoxConstraints(maxHeight: (mq.size.height - safe.top - safe.bottom - panelHeight - 2 * Gap.m - model.gpsBannerHeight.value).clamp(0.0, double.infinity)),
                   child: FittedBox(
                     fit: BoxFit.scaleDown,
                     alignment: Alignment.topRight,

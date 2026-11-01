@@ -85,7 +85,8 @@ class _RegionDatasetViewState<T extends Object> extends State<RegionDatasetView<
             children: [
               Text(widget.title, style: t.textTheme.titleLarge),
               const SizedBox(height: Gap.s),
-              RegionStatusBlock(widget.status(d)),
+              // The server's own reason often says the same thing as the empty text ("No findings have been written yet"): say it once.
+              RegionStatusBlock(widget.status(d), hideReasonIf: widget.isEmpty(d) ? widget.emptyText : null),
               if (r.offlineAsOf != null) ...[
                 const SizedBox(height: Gap.s),
                 Row(key: Key('$id-offline'), children: [

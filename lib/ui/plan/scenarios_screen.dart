@@ -139,23 +139,21 @@ class _ScenariosScreenState extends State<ScenariosScreen> {
           ChoiceChip(key: Key('scn-preset-${p.id}'), label: Text(p.label), tooltip: '${p.detail}: ${p.sites.isEmpty ? 'no sites' : p.sites.join(', ')}', selected: same(p.sites), onSelected: (_) => _change(() => _sites = [...p.sites])),
       ]),
       const SizedBox(height: Gap.s),
-      Row(children: [
-        Expanded(
-          child: SegmentedButton<int>(
-            key: const Key('scn-height'),
-            segments: [ButtonSegment(value: 20, label: Text(mountName(20))), ButtonSegment(value: 33, label: Text(mountName(33)))],
-            selected: {_h},
-            onSelectionChanged: (s) => _change(() => _h = s.first),
-          ),
+      // Natural widths that wrap, not two half-width cells ("33 ft" and "Likely+" broke mid-word on a phone).
+      Wrap(spacing: Gap.s, runSpacing: Gap.s, children: [
+        SegmentedButton<int>(
+          key: const Key('scn-height'),
+          showSelectedIcon: false,
+          segments: [ButtonSegment(value: 20, label: Text(mountName(20))), ButtonSegment(value: 33, label: Text(mountName(33)))],
+          selected: {_h},
+          onSelectionChanged: (s) => _change(() => _h = s.first),
         ),
-        const SizedBox(width: Gap.s),
-        Expanded(
-          child: SegmentedButton<String>(
-            key: const Key('scn-tier'),
-            segments: const [ButtonSegment(value: 'possible', label: Text('Possible+')), ButtonSegment(value: 'likely', label: Text('Likely+'))],
-            selected: {_tier},
-            onSelectionChanged: (s) => _change(() => _tier = s.first),
-          ),
+        SegmentedButton<String>(
+          key: const Key('scn-tier'),
+          showSelectedIcon: false,
+          segments: const [ButtonSegment(value: 'possible', label: Text('Possible+')), ButtonSegment(value: 'likely', label: Text('Likely+'))],
+          selected: {_tier},
+          onSelectionChanged: (s) => _change(() => _tier = s.first),
         ),
       ]),
       Text('Population radius: ${radiusText(context, _r)}', style: t.textTheme.labelLarge),
