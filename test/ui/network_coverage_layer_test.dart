@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
+import '../support/cell_layers.dart';
 import 'package:meshsonar/core/api.dart';
 
 import 'fakes.dart';
@@ -17,11 +18,7 @@ Future<void> settle(WidgetTester tester) async {
 /// hex_cells.dart's loadHexEngine), so the drive's own hex layer always contributes 0 — any polygons found here
 /// are the network-coverage layer's, unambiguously.
 int polygonCount(WidgetTester tester) {
-  var total = 0;
-  for (final w in tester.widgetList(find.byType(PolygonLayer))) {
-    total += (w as dynamic).polygons.length as int;
-  }
-  return total;
+  return drawnCellCount(tester);
 }
 
 PublicCoverage twoCells() => PublicCoverage(

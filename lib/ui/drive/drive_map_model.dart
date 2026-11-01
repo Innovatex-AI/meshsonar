@@ -6,6 +6,7 @@
 // a ping finishes or the repeater list changes, never per frame.
 import 'dart:async';
 import 'dart:isolate';
+import 'dart:math' as math;
 import 'dart:ui' as ui show FrameTiming;
 
 import 'package:flutter/foundation.dart';
@@ -68,6 +69,10 @@ class DriveMapModel extends ChangeNotifier {
     _onState();
   }
 
+  /// Widget tests and the benchmark feed fixes through the fake location instead of the engine's [AppState.rawFixes].
+  @visibleForTesting
+  static Stream<GeoFix> Function(AppState state)? debugFixes;
+
   /// Network cell sets bigger than this are built (H3 boundaries) off the UI isolate.
   final int cellIsolateThreshold;
 
@@ -117,6 +122,16 @@ class DriveMapModel extends ChangeNotifier {
 
   void _onTimings(List<ui.FrameTiming> ts) {
     if (!health.running) return;
+    var worst = 0.0, late = 0;
+    for (final f in ts) {
+      final c = math.max(f.buildDuration.inMicroseconds, f.rasterDuration.inMicroseconds) / 1000;
+      if (c > 50) {
+        late++;
+        worst = math.max(worst, c);
+      }
+    }
+    // A frame over 50 ms is what can make a ping late: it goes into the drive's trace (the sink limits it to 4 a second).
+    if (late > 0) state.driveHealthSink.record('frame', {'late_ms': worst.round(), 'worst_ms': worst.round(), 'n': late});
     for (final f in ts) {
       health.onFrame(FrameSample(f.buildDuration.inMicroseconds / 1000, f.rasterDuration.inMicroseconds / 1000, f.totalSpan.inMicroseconds / 1000));
     }
@@ -550,7 +565,7 @@ class DriveMapModel extends ChangeNotifier {
         _notifiedFix = null;
         _notifiedAt = null;
         try {
-          _fixSub = src.fixes.listen(_onFix, onError: (Object _) {});
+          _fixSub = (debugFixes?.call(state) ?? state.rawFixes).listen(_onFix, onError: (Object _) {});
         } catch (_) {}
       }
     }

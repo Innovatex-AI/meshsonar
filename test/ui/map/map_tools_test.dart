@@ -133,7 +133,7 @@ void main() {
         await tester.pump();
         final layer = tester.widget<OfflineBasemapLayer>(find.byType(OfflineBasemapLayer));
         looks.add(layer.dark);
-        expect(find.byType(TileLayer), findsNothing, reason: '${s.id} uses the pack');
+        expect(find.byType(TileLayer), findsOneWidget, reason: '${s.id}: online/cached tiles stay under the pack, skipping what it draws');
       }
       expect(looks, [null, false, true], reason: 'chart follows the theme, street is the light look, dark is forced dark');
       await mapWith(tester, BaseMapStyle.topo);

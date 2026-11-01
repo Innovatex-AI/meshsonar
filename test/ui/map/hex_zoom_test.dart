@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart' hide Radio;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/ui/map/cell_raster_layer.dart';
 import 'package:h3_ffi/h3_ffi.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:meshsonar/core/coverage_query.dart';
@@ -53,7 +54,7 @@ void main() {
 
   int polygons(WidgetTester tester) {
     final f = find.byWidgetPredicate((w) => w.key is ValueKey && (w.key as ValueKey).value.toString().startsWith('drive-hexes-res-'));
-    return (tester.widget<KeyedSubtree>(f).child as dynamic).polygons.length as int;
+    return (tester.widget<KeyedSubtree>(f).child as CellRasterLayer).data.shapes.length;
   }
 
   String resKey(WidgetTester tester) => find

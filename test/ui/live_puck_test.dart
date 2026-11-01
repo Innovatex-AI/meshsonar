@@ -7,6 +7,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/radio/radio_api.dart';
 import 'package:meshsonar/ui/app.dart';
+import 'package:meshsonar/ui/drive/drive_map_model.dart';
 import 'package:meshsonar/ui/map/coverage_map.dart';
 import 'package:meshsonar/ui/map/live_puck.dart';
 import 'package:meshsonar/ui/map/map_layers.dart';
@@ -47,6 +48,8 @@ Widget bareMap(PuckController puck, {List<HeardView> heard = const [], bool redu
 }
 
 void main() {
+  setUp(() => DriveMapModel.debugFixes = (s) => s.activeLocation.fixes);
+  tearDown(() => DriveMapModel.debugFixes = null);
   testWidgets('the dot slides between fixes with no ping involved, and does not hop', (tester) async {
     var now = DateTime.utc(2026, 11, 1, 12);
     final puck = PuckController(clock: () => now);

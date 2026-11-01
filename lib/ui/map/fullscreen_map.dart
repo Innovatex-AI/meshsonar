@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 
 import '../app.dart';
 import '../drive/drive_controls.dart';
+import '../drive/gps_health_banner.dart';
 import '../drive/drive_map_model.dart';
 import '../drive/heard_box.dart';
 import 'coverage_timeline_slider.dart';
@@ -104,6 +105,7 @@ class FullscreenMapScreen extends StatelessWidget {
                   ),
                 ),
               ),
+              Positioned(left: 0, right: 0, top: safe.top, child: GpsHealthBanner(state: s, showWhenGood: false)),
               // Top: heard box (left), close + layers (right).
               Positioned(
                 left: safe.left + Gap.m,

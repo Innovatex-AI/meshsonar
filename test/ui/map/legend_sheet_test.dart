@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
+import '../../support/cell_layers.dart';
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/colour_palette.dart';
 import 'package:meshsonar/core/network_coverage.dart';
@@ -255,12 +256,10 @@ void main() {
         for (var i = 0; i < 5; i++) {
           await tester.pump(const Duration(milliseconds: 50));
         }
-        final polys = [
-          for (final w in tester.widgetList(find.byType(PolygonLayer))) ...(w as PolygonLayer).polygons,
-        ];
+        final polys = drawnCellStyles(tester);
         expect(polys, hasLength(2));
         Color solid(Color c) => c.withValues(alpha: 1);
-        final onMap = {solid(polys[0].borderColor), solid(polys[1].borderColor)};
+        final onMap = {solid(polys[0].border), solid(polys[1].border)};
 
         await tester.tap(find.byKey(const Key('drive-map-layers')));
         await tester.pumpAndSettle();

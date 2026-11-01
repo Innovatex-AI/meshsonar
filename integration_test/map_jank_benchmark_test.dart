@@ -31,6 +31,7 @@ import 'package:meshsonar/core/frame_stats.dart';
 import 'package:h3_flutter/h3_flutter.dart' show GeoCoord;
 import 'package:meshsonar/core/hex_cells.dart';
 import 'package:meshsonar/core/model.dart';
+import 'package:meshsonar/ui/drive/drive_map_model.dart';
 import 'package:meshsonar/ui/map/coverage_map.dart';
 
 import '../test/support/gps_route.dart';
@@ -61,6 +62,7 @@ void main() {
       prev?.call(d);
     };
     CoverageMap.tilesByDefault = _tiles != 'none';
+    DriveMapModel.debugFixes = (s) => s.activeLocation.fixes; // the fake location stands in for the engine's rawFixes
 
     final rnd = math.Random(11);
     final route = GpsRoute.generate(seconds: _seconds + 40, seed: 7);

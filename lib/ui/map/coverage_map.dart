@@ -1362,7 +1362,6 @@ class _CoverageMapState extends State<CoverageMap> {
                 tileDisplay: const TileDisplay.fadeIn(duration: Duration(milliseconds: 150)),
                 keepBuffer: 2,
                 panBuffer: 1,
-                tileUpdateTransformer: TileUpdateTransformers.throttle(const Duration(milliseconds: 80)),
                 // Street and Topo are drawn as the tile server made them; Chart is graded to the theme, Dark to the dark chart.
                 tileBuilder: tileGrading == null
                     ? null
@@ -1860,7 +1859,6 @@ class _SourceChip extends StatefulWidget {
 
 class _SourceChipState extends State<_SourceChip> {
   late MapSource _source = _compute();
-  Timer? _decay;
 
   MapSource _compute() => currentMapSource(widget.stats, widget.clock(), packActive: widget.packName != null, gateOpen: widget.gate.isOpen);
 
@@ -1873,9 +1871,6 @@ class _SourceChipState extends State<_SourceChip> {
   void _changed() {
     final n = _compute();
     if (n != _source && mounted) setState(() => _source = n);
-    // After the last tile event the answer can still change (traffic ages out of the window): look again once.
-    _decay?.cancel();
-    _decay = Timer(const Duration(seconds: 13), _changed);
   }
 
   @override
@@ -1887,7 +1882,6 @@ class _SourceChipState extends State<_SourceChip> {
 
   @override
   void dispose() {
-    _decay?.cancel();
     widget.stats.removeListener(_changed);
     super.dispose();
   }
