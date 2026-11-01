@@ -7,6 +7,7 @@ import '../../app/chat_controller.dart';
 import '../../chat/models.dart';
 import '../theme.dart';
 import '../widgets.dart' show EmptyState;
+import '../radios/rooms/room_join_header.dart';
 import 'chat_row.dart';
 import 'conversation_screen.dart';
 import 'message_format.dart';
@@ -105,7 +106,12 @@ class _ContactsViewState extends State<ContactsView> {
                                 subtitle: Text(s?.lastPreview ?? 'No messages yet', maxLines: 2, overflow: TextOverflow.ellipsis),
                                 stamp: listStamp(context, s?.lastTsMs, now: c.now()),
                                 badge: unread > 0 ? Badge(label: Text(unread > 99 ? '99+' : '$unread')) : null,
-                                onTap: () => ConversationScreen.open(context, controller: c, convKey: _convKeyFor(x), title: x.displayName),
+                                onTap: () => ConversationScreen.open(context,
+                                    controller: c,
+                                    convKey: _convKeyFor(x),
+                                    title: x.displayName,
+                                    // A room only pushes its posts to radios that joined it (lib/ui/radios/rooms).
+                                    header: x.type == ContactType.room ? RoomJoinHeader(keyHex: x.publicKey, name: x.displayName) : null),
                               ),
                             ),
                           );
