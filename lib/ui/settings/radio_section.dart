@@ -2,6 +2,7 @@
 // settings to a radio. The pinging controls (channel, discovery, interval, distance, listen window) are Wardriving.
 import 'package:flutter/material.dart';
 
+import '../design/app_surfaces.dart';
 import '../../core/antenna_profile.dart';
 import '../antenna_sheet.dart';
 import '../app.dart';
@@ -56,21 +57,14 @@ class AntennaProfileTile extends StatelessWidget {
 
   Future<void> _forget(BuildContext context, String name) async {
     final s = AppScope.read(context);
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Forget the antenna of $name?'),
-        content: const Text('Its drives keep what they recorded. The next time this radio connects, MeshSonar asks '
-            'about its antenna again.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(
-            key: const Key('antenna-forget-confirm'),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Forget'),
-          ),
-        ],
-      ),
+    final ok = await showAppAlert(
+      context,
+      title: 'Forget the antenna of $name?',
+      message: 'Its drives keep what they recorded. The next time this radio connects, MeshSonar asks '
+          'about its antenna again.',
+      confirmLabel: 'Forget',
+      destructive: true,
+      confirmKey: const Key('antenna-forget-confirm'),
     );
     if (ok == true) await s.forgetAntennaProfile(radioKey);
   }

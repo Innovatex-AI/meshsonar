@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 import '../../alerts/alerts_runtime.dart';
 import '../../radio/ble_transport_universal.dart' show BleEngineChoice;
 import '../app.dart';
+import '../design/app_surfaces.dart';
 
 const String bleDiagnosticsIntro = 'For testing whether MeshSonar keeps your radio and your alerts alive while it is in the '
     'background. Do the steps in the test script, then press Copy and paste the result to the developer. '
@@ -126,7 +127,7 @@ class _BleDiagnosticsScreenState extends State<BleDiagnosticsScreen> {
                           final text = rt.log.export(header: await _header(rt, version: s.services.appInfo.version ?? '?'));
                           await Clipboard.setData(ClipboardData(text: text));
                           if (!context.mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Copied ${rt.log.entries.length} lines.')));
+                          showAppToast(context, 'Copied ${rt.log.entries.length} lines.', kind: AppToastKind.success);
                         },
                         child: const Text('Copy log'),
                       ),

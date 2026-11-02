@@ -13,6 +13,7 @@ import '../../core/plan/plan_sites.dart' show groupInt;
 import '../../core/plan/planner_query.dart';
 import '../../core/region_dataset_fetch.dart';
 import '../../core/region_cache.dart' show asOfLabel;
+import '../pick_field.dart';
 import '../theme.dart';
 import 'plan_engine_common.dart';
 import 'recommended_screen.dart' show phaseColor;
@@ -106,13 +107,12 @@ class _PlannerScreenState extends State<PlannerScreen> {
               onSelectionChanged: (s) => _set(q.copyWith(start: s.first)),
             ),
             const SizedBox(height: Gap.m),
-            Text('What matters most', style: t.textTheme.labelLarge),
-            DropdownButton<PlannerObjective>(
+            PickField<PlannerObjective>(
               key: const Key('planner-objective'),
-              isExpanded: true,
+              label: 'What matters most',
               value: q.objective,
-              items: [for (final o in PlannerObjective.values) DropdownMenuItem(value: o, child: Text(plannerObjectiveLabel[o]!))],
-              onChanged: (o) => o == null ? null : _set(q.copyWith(objective: o)),
+              options: [for (final o in PlannerObjective.values) PickOption(o, plannerObjectiveLabel[o]!)],
+              onChanged: (o) => _set(q.copyWith(objective: o)),
             ),
             Text(plannerObjectiveRule[q.objective]!, style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
             const SizedBox(height: Gap.m),

@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import '../app/app_state.dart';
 import '../core/api.dart';
 import 'app.dart';
+import 'design/app_surfaces.dart';
+import 'design/app_symbols.dart';
 import 'map/share_map_health.dart';
 import 'charts/heard_strip.dart';
 import 'drive_detail_screen.dart';
@@ -439,50 +441,26 @@ class _CardMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final id = summary.session.id;
-    return PopupMenuButton<String>(
+    return IconButton(
       key: ValueKey('menu-$id'),
       tooltip: 'More',
-      onSelected: (v) => runDriveAction(context, v, summary),
-      itemBuilder: (_) => [
-        PopupMenuItem(
-          key: ValueKey('menu-sync-$id'),
-          value: 'sync',
-          enabled: summary.hasSomethingToSync,
-          child: const ListTile(leading: Icon(Icons.cloud_upload_outlined), title: Text('Sync now')),
-        ),
-        PopupMenuItem(
-          key: ValueKey('menu-report-$id'),
-          value: 'report',
-          enabled: summary.pingCount > 0,
-          child: const ListTile(leading: Icon(Icons.insights), title: Text('Drive report')),
-        ),
-        PopupMenuItem(
-          key: ValueKey('menu-export-$id'),
-          value: 'export',
-          child: const ListTile(leading: Icon(Icons.ios_share), title: Text('Export & share')),
-        ),
-        PopupMenuItem(
-          key: ValueKey('menu-trace-$id'),
-          value: 'trace',
-          child: const ListTile(leading: Icon(Icons.manage_search), title: Text('Share ping trace')),
-        ),
-        PopupMenuItem(
-          key: ValueKey('menu-map-health-$id'),
-          value: 'map-health',
-          child: const ListTile(leading: Icon(Icons.speed_outlined), title: Text('Share map health')),
-        ),
-        PopupMenuItem(
-          key: ValueKey('rename-$id'),
-          value: 'rename',
-          child: const ListTile(leading: Icon(Icons.edit_outlined), title: Text('Rename')),
-        ),
-        PopupMenuItem(
-          key: ValueKey('delete-$id'),
-          value: 'delete',
-          enabled: !active,
-          child: const ListTile(leading: Icon(Icons.delete_outline), title: Text('Delete')),
-        ),
-      ],
+      icon: const AppSymbolIcon(AppSymbols.ellipsisCircle, size: 24),
+      onPressed: () async {
+        final v = await showAppActionSheet<String>(
+          context,
+          title: 'Drive',
+          actions: [
+            if (summary.hasSomethingToSync) AppAction('Sync now', 'sync', key: ValueKey('menu-sync-$id')),
+            if (summary.pingCount > 0) AppAction('Drive report', 'report', key: ValueKey('menu-report-$id')),
+            AppAction('Export & share', 'export', key: ValueKey('menu-export-$id')),
+            AppAction('Share ping trace', 'trace', key: ValueKey('menu-trace-$id')),
+            AppAction('Share map health', 'map-health', key: ValueKey('menu-map-health-$id')),
+            AppAction('Rename', 'rename', key: ValueKey('rename-$id')),
+            if (!active) AppAction('Delete', 'delete', destructive: true, key: ValueKey('delete-$id')),
+          ],
+        );
+        if (v != null && context.mounted) await runDriveAction(context, v, summary);
+      },
     );
   }
 }
@@ -517,29 +495,10 @@ Future<bool> runDriveAction(BuildContext context, String action, SessionSummary 
 Future<void> renameDrive(BuildContext context, SessionSummary x) async {
   final s = AppScope.read(context);
   final current = driveLabel(s, x.session.id, x.session.label) ?? '';
-  final c = TextEditingController(text: current);
-  final v = await showDialog<String>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: const Text('Name this drive'),
-      content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-        TextField(
-          key: const Key('rename-field'),
-          controller: c,
-          autofocus: true,
-          textCapitalization: TextCapitalization.sentences,
-          decoration: InputDecoration(hintText: formatDateTime(x.session.startedAt)),
-          onSubmitted: (v) => Navigator.pop(ctx, v),
-        ),
-        const SizedBox(height: 8),
-        Text('Saved with the drive and sent to the server on the next sync. Leave empty to use the date.',
-            style: Theme.of(ctx).textTheme.bodySmall),
-      ]),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-        FilledButton(key: const Key('rename-save'), onPressed: () => Navigator.pop(ctx, c.text), child: const Text('Save')),
-      ],
-    ),
+  final v = await showAppSheet<String>(
+    context,
+    detents: const [0.45],
+    builder: (ctx, controller) => _RenameSheet(initial: current, hint: formatDateTime(x.session.startedAt), controller: controller),
   );
   if (v == null) return;
   // Saved in the drive itself (exports carry it) and marked so the next sync uploads it. Empty clears the name.
@@ -555,26 +514,55 @@ Future<bool> renameDriveTo(AppState s, String sessionId, String? name) async {
 
 Future<bool> confirmDeleteDrive(BuildContext context, SessionSummary x) async {
   final unsynced = x.unsyncedCount;
-  final ok = await showDialog<bool>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: const Text('Delete this drive?'),
-      content: Text(
-        unsynced > 0
-            ? '$unsynced of ${x.pingCount} pings have NOT been uploaded and will be lost. '
-                'Export or sync first if you want to keep them.'
-            : 'This removes the drive from this phone. Pings already uploaded stay on the server.',
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-        FilledButton(
-          key: const Key('confirm-delete'),
-          style: FilledButton.styleFrom(backgroundColor: Theme.of(ctx).colorScheme.error),
-          onPressed: () => Navigator.pop(ctx, true),
-          child: const Text('Delete'),
-        ),
-      ],
-    ),
+  final ok = await showAppConfirm(
+    context,
+    title: 'Delete this drive?',
+    message: unsynced > 0
+        ? '$unsynced of ${x.pingCount} pings have NOT been uploaded and will be lost. '
+            'Export or sync first if you want to keep them.'
+        : 'This removes the drive from this phone. Pings already uploaded stay on the server.',
+    confirmLabel: 'Delete',
+    destructive: true,
+    confirmKey: const Key('confirm-delete'),
   );
-  return ok == true;
+  return ok;
+}
+
+class _RenameSheet extends StatefulWidget {
+  final String initial, hint;
+  final ScrollController controller;
+  const _RenameSheet({required this.initial, required this.hint, required this.controller});
+  @override
+  State<_RenameSheet> createState() => _RenameSheetState();
+}
+
+class _RenameSheetState extends State<_RenameSheet> {
+  late final TextEditingController _c = TextEditingController(text: widget.initial);
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AppSheetScaffold(
+        controller: widget.controller,
+        title: 'Name this drive',
+        primaryAction: FilledButton(key: const Key('rename-save'), onPressed: () => Navigator.pop(context, _c.text), child: const Text('Save')),
+        secondaryAction: TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        children: [
+          TextField(
+            key: const Key('rename-field'),
+            controller: _c,
+            autofocus: true,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: InputDecoration(hintText: widget.hint),
+            onSubmitted: (v) => Navigator.pop(context, v),
+          ),
+          const SizedBox(height: 8),
+          Text('Saved with the drive and sent to the server on the next sync. Leave empty to use the date.',
+              style: Theme.of(context).textTheme.bodySmall),
+        ],
+      );
 }

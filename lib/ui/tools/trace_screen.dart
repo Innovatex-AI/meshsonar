@@ -14,6 +14,7 @@ import '../app.dart';
 import '../region/routes_panel.dart' show openFloodRoutes;
 import 'tool_kit.dart';
 import 'tools_host.dart';
+import '../design/app_surfaces.dart';
 
 class TraceScreen extends StatelessWidget {
   const TraceScreen({super.key});
@@ -79,11 +80,10 @@ class _TraceBodyState extends State<_TraceBody> {
       [for (final c in _contacts) if (c.type == AdvType.repeater || c.type == AdvType.room) c]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
   Future<void> _addHop() async {
-    final c = await showModalBottomSheet<RadioContact>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (ctx) => _PickerSheet(contacts: _pickable),
+    final c = await showAppSheet<RadioContact>(
+      context,
+      detents: const [0.92],
+      builder: (ctx, sc) => _PickerSheet(contacts: _pickable, controller: sc),
     );
     if (c != null && mounted) setState(() => _hops.add(TraceStop.fromContact(c)));
   }
@@ -401,13 +401,15 @@ class _TraceBodyState extends State<_TraceBody> {
 
 class _PickerSheet extends StatelessWidget {
   final List<RadioContact> contacts;
-  const _PickerSheet({required this.contacts});
+  final ScrollController? controller;
+  const _PickerSheet({required this.contacts, this.controller});
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
     return SafeArea(
       child: ListView(
+        controller: controller,
         key: const Key('trace-picker'),
         shrinkWrap: true,
         padding: const EdgeInsets.only(bottom: Gap.l),

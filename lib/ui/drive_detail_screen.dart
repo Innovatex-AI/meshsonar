@@ -14,6 +14,8 @@ import 'ping_log_screen.dart';
 import 'report_problem_screen.dart';
 import 'sessions_screen.dart';
 import 'widgets.dart';
+import 'design/app_surfaces.dart';
+import 'design/app_symbols.dart';
 
 void openDriveDetail(BuildContext context, String sessionId) {
   Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => DriveDetailScreen(sessionId: sessionId)));
@@ -93,19 +95,17 @@ class _DriveDetailScreenState extends State<DriveDetailScreen> {
                       },
                 icon: const Icon(Icons.delete_outline),
               ),
-              PopupMenuButton<void>(
+              IconButton(
                 key: const Key('detail-more'),
                 tooltip: 'More',
-                itemBuilder: (_) => [
-                  PopupMenuItem<void>(
-                    onTap: () => openReportProblem(context, driveId: ses.id),
-                    child: const ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(Icons.bug_report_outlined),
-                      title: Text('Report a problem with this drive'),
-                    ),
-                  ),
-                ],
+                icon: const AppSymbolIcon(AppSymbols.ellipsisCircle, size: 24),
+                onPressed: () async {
+                  final v = await showAppActionSheet<String>(
+                    context,
+                    actions: const [AppAction('Report a problem with this drive', 'report', key: Key('detail-more-report'))],
+                  );
+                  if (v == 'report' && context.mounted) openReportProblem(context, driveId: ses.id);
+                },
               ),
             ],
           ),

@@ -4,7 +4,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../app/messages.dart';
 import '../../core/offline_packs.dart';
+import '../design/app_surfaces.dart';
 import '../map/offline_basemap.dart';
 import '../region/region_common.dart' show agoText;
 import '../theme.dart';
@@ -115,26 +117,20 @@ class _OfflinePacksScreenState extends State<OfflinePacksScreen> {
     final r = await m.start(e, net);
     if (!mounted) return;
     if (r == StartResult.offline) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No connection. The download starts by itself when you are back online.')),
-      );
+      showAppToast(context, 'No connection. The download starts by itself when you are back online.');
       return;
     }
     if (r != StartResult.needsCellularConsent) return;
-    final now = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        key: const Key('pack-cellular-dialog'),
-        title: const Text('Not on Wi-Fi'),
-        content: Text(
-          '${e.name} is ${formatPackBytes(e.bytes)}. Download it over cellular now, or wait and it downloads by itself '
+    final now = await showAppActionSheet<bool>(
+      context,
+      sheetKey: const Key('pack-cellular-dialog'),
+      title: 'Not on Wi-Fi',
+      message: '${e.name} is ${formatPackBytes(e.bytes)}. Download it over cellular now, or wait and it downloads by itself '
           'when you are on Wi-Fi (with the app open).',
-        ),
-        actions: [
-          TextButton(key: const Key('pack-wait-wifi'), onPressed: () => Navigator.pop(ctx, false), child: const Text('Wait for Wi-Fi')),
-          FilledButton(key: const Key('pack-use-cellular'), onPressed: () => Navigator.pop(ctx, true), child: const Text('Download now')),
-        ],
-      ),
+      actions: [
+        const AppAction('Download now', true, key: Key('pack-use-cellular')),
+        const AppAction('Wait for Wi-Fi', false, key: Key('pack-wait-wifi'), isDefault: true),
+      ],
     );
     if (now == true) {
       m.allowCellular(e.code);
@@ -145,35 +141,31 @@ class _OfflinePacksScreenState extends State<OfflinePacksScreen> {
   }
 
   Future<void> _confirmDelete(InstalledPack ip) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Delete ${ip.name}?'),
-        content: Text('Frees ${formatPackBytes(ip.bytes)}. The map goes back to online tiles here.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Keep')),
-          FilledButton(key: const Key('pack-delete-confirm'), onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
-        ],
-      ),
+    final ok = await showAppConfirm(
+      context,
+      title: 'Delete ${ip.name}?',
+      message: 'Frees ${formatPackBytes(ip.bytes)}. The map goes back to online tiles here.',
+      confirmLabel: 'Delete',
+      destructive: true,
+      cancelLabel: 'Keep',
+      confirmKey: const Key('pack-delete-confirm'),
     );
-    if (ok == true) {
+    if (ok) {
       await _guard(() => _m!.delete(ip.code));
     }
   }
 
   Future<void> _confirmDeleteAll() async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete all map packs?'),
-        content: Text('Frees ${formatPackBytes(_used)}, including unfinished downloads. The map goes back to online tiles.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Keep')),
-          FilledButton(key: const Key('pack-delete-all-confirm'), onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete all')),
-        ],
-      ),
+    final ok = await showAppConfirm(
+      context,
+      title: 'Delete all map packs?',
+      message: 'Frees ${formatPackBytes(_used)}, including unfinished downloads. The map goes back to online tiles.',
+      confirmLabel: 'Delete all',
+      destructive: true,
+      cancelLabel: 'Keep',
+      confirmKey: const Key('pack-delete-all-confirm'),
     );
-    if (ok == true) {
+    if (ok) {
       await _guard(() => _m!.deleteAll());
     }
   }
@@ -183,7 +175,7 @@ class _OfflinePacksScreenState extends State<OfflinePacksScreen> {
       await f();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Couldn't delete: ${e.toString().split(':').first}")));
+        showAppToast(context, friendlyError(e, action: 'Deleting the map pack'), kind: AppToastKind.error);
       }
     }
   }

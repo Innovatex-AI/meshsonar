@@ -10,6 +10,7 @@ import 'app.dart' show AppScope;
 import 'repeater_widgets.dart';
 import 'theme.dart';
 import 'widgets.dart';
+import 'design/app_surfaces.dart';
 
 /// Opens the ping detail sheet. [onRepeaterTap] (optional) is called with an echo's repeater id.
 Future<void> showPingDetail(
@@ -18,19 +19,11 @@ Future<void> showPingDetail(
   required RepeaterLookup lookup,
   void Function(String repeaterId)? onRepeaterTap,
 }) {
-  return showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    showDragHandle: true,
-    builder: (_) => DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: 0.7,
-      minChildSize: 0.4,
-      maxChildSize: 0.95,
-      builder: (context, scroll) =>
-          PingDetailSheet(ping: ping, lookup: lookup, scrollController: scroll, onRepeaterTap: onRepeaterTap),
-    ),
+  return showAppSheet<void>(
+    context,
+    detents: const [0.7, 0.95],
+    builder: (context, scroll) =>
+        PingDetailSheet(ping: ping, lookup: lookup, scrollController: scroll, onRepeaterTap: onRepeaterTap),
   );
 }
 
@@ -178,9 +171,8 @@ class PingDetailSheet extends StatelessWidget {
           child: OutlinedButton.icon(
             key: const Key('ping-copy'),
             onPressed: () async {
-              final messenger = ScaffoldMessenger.maybeOf(context);
               await Clipboard.setData(ClipboardData(text: pingAsText(p, lookup, AppScope.read(context).units)));
-              messenger?.showSnackBar(const SnackBar(content: Text('Ping copied as text.')));
+              if (context.mounted) showAppToast(context, 'Ping copied as text.', kind: AppToastKind.success);
             },
             icon: const Icon(Icons.copy_all_outlined),
             label: const Text('Copy as text'),

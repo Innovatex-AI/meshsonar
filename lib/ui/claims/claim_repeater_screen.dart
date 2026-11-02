@@ -12,6 +12,7 @@ import '../../core/model.dart';
 import '../../core/node_claim.dart';
 import '../app.dart';
 import 'claim_widgets.dart';
+import '../design/app_surfaces.dart';
 
 String claimOutcomeTitle(ClaimOutcome o) => switch (o) {
       ClaimOutcome.verified => 'The repeater is yours',
@@ -141,7 +142,7 @@ class _ClaimRepeaterScreenState extends State<ClaimRepeaterScreen> {
       canPop: !_busy,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop && _busy) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('A claim is running. Press Cancel first.')));
+          showAppToast(context, 'A claim is running. Press Cancel first.');
         }
       },
       child: Scaffold(
@@ -456,7 +457,7 @@ class _CommandBox extends StatelessWidget {
           onPressed: () async {
             await Clipboard.setData(ClipboardData(text: command));
             if (!context.mounted) return;
-            ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(content: Text('Copied')));
+            showAppToast(context, 'Copied', kind: AppToastKind.success);
           },
         ),
       ]),

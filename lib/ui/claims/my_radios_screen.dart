@@ -14,6 +14,7 @@ import '../settings/settings_kit.dart' show confirmSettingsChange;
 import 'claim_radio_screen.dart';
 import 'claim_repeater_screen.dart';
 import 'claim_widgets.dart';
+import '../design/app_surfaces.dart';
 
 class MyRadiosScreen extends StatefulWidget {
   const MyRadiosScreen({super.key});
@@ -63,17 +64,15 @@ class _MyRadiosScreenState extends State<MyRadiosScreen> {
       await s.claims.release(c.pubkey);
     } on CmatException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not give it up: ${e.message}')));
+      showAppToast(context, 'Could not give it up: ${e.message}', kind: AppToastKind.error);
     }
   }
 
   Future<void> _edit(AppState s, NodeClaim c) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      showDragHandle: true,
-      builder: (_) => EditRadioSheet(claim: c, state: s),
+    await showAppSheet<void>(
+      context,
+      detents: const [0.7, 0.92],
+      builder: (_, controller) => EditRadioSheet(claim: c, state: s, controller: controller),
     );
   }
 
@@ -302,7 +301,8 @@ class _PendingRestoreCard extends StatelessWidget {
 class EditRadioSheet extends StatefulWidget {
   final NodeClaim claim;
   final AppState state;
-  const EditRadioSheet({super.key, required this.claim, required this.state});
+  final ScrollController? controller;
+  const EditRadioSheet({super.key, required this.claim, required this.state, this.controller});
   @override
   State<EditRadioSheet> createState() => _EditRadioSheetState();
 }
@@ -355,6 +355,7 @@ class _EditRadioSheetState extends State<EditRadioSheet> {
     return Padding(
       padding: EdgeInsets.fromLTRB(Gap.l, 0, Gap.l, MediaQuery.viewInsetsOf(context).bottom + Gap.l),
       child: SingleChildScrollView(
+        controller: widget.controller,
         child: Column(
           key: const Key('edit-radio-sheet'),
           mainAxisSize: MainAxisSize.min,

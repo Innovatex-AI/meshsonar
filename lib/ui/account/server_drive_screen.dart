@@ -12,6 +12,7 @@ import '../app.dart';
 import '../drive_detail_map.dart';
 import '../settings/settings_kit.dart' show confirmSettingsChange;
 import '../widgets.dart';
+import '../design/app_surfaces.dart';
 
 Future<void> openServerDrive(BuildContext context, ServerDrive drive) =>
     Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ServerDriveScreen(drive: drive)));
@@ -48,19 +49,11 @@ class _ServerDriveScreenState extends State<ServerDriveScreen> {
       ];
 
   Future<void> _rename(ServerDriveDetail d) async {
-    final c = TextEditingController(text: _label ?? d.drive.label ?? '');
-    final v = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Name this drive'),
-        content: TextField(key: const Key('server-drive-name'), controller: c, maxLength: 80, decoration: const InputDecoration(hintText: 'Empty uses the date')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(key: const Key('server-drive-name-save'), onPressed: () => Navigator.pop(ctx, c.text.trim()), child: const Text('Save')),
-        ],
-      ),
+    final v = await showAppSheet<String>(
+      context,
+      detents: const [0.4],
+      builder: (ctx, controller) => _NameSheet(initial: _label ?? d.drive.label ?? '', controller: controller),
     );
-    c.dispose();
     if (v == null || !mounted) return;
     await _run('Renaming', () => AppScope.read(context).updateServerDrive(d.drive.id, label: v, clearLabel: v.isEmpty), then: () => setState(() {
           _label = v;
@@ -71,7 +64,7 @@ class _ServerDriveScreenState extends State<ServerDriveScreen> {
     final hide = !(_hidden ?? d.drive.review == 'hidden');
     await _run(hide ? 'Hiding' : 'Showing', () => AppScope.read(context).updateServerDrive(d.drive.id, hidden: hide), then: () {
       setState(() => _hidden = hide);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(hide ? 'Hidden from the public maps.' : 'Shown on the public maps again.')));
+      showAppToast(context, hide ? 'Hidden from the public maps.' : 'Shown on the public maps again.', kind: AppToastKind.success);
     });
   }
 
@@ -93,7 +86,7 @@ class _ServerDriveScreenState extends State<ServerDriveScreen> {
       if (!mounted) return;
       then();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyError(e, action: what))));
+      if (mounted) showAppToast(context, friendlyError(e, action: what), kind: AppToastKind.error);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -183,4 +176,34 @@ class _ServerDriveScreenState extends State<ServerDriveScreen> {
       ),
     );
   }
+}
+
+
+class _NameSheet extends StatefulWidget {
+  final String initial;
+  final ScrollController controller;
+  const _NameSheet({required this.initial, required this.controller});
+  @override
+  State<_NameSheet> createState() => _NameSheetState();
+}
+
+class _NameSheetState extends State<_NameSheet> {
+  late final TextEditingController _c = TextEditingController(text: widget.initial);
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AppSheetScaffold(
+        controller: widget.controller,
+        title: 'Name this drive',
+        primaryAction: FilledButton(key: const Key('server-drive-name-save'), onPressed: () => Navigator.pop(context, _c.text.trim()), child: const Text('Save')),
+        secondaryAction: TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        children: [
+          TextField(key: const Key('server-drive-name'), controller: _c, maxLength: 80, decoration: const InputDecoration(hintText: 'Empty uses the date')),
+        ],
+      );
 }

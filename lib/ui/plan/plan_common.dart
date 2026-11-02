@@ -10,6 +10,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../../app/app_state.dart';
 import '../../core/region_cache.dart' show asOfLabel;
+import '../pick_field.dart';
 import '../app.dart';
 import '../map/coverage_map.dart' show CoverageMap;
 import '../map/region_center.dart';
@@ -203,15 +204,13 @@ class PlanDropdown<T> extends StatelessWidget {
   const PlanDropdown({super.key, required this.id, required this.label, required this.value, required this.items, required this.text, required this.onChanged});
 
   @override
-  Widget build(BuildContext context) => DropdownButtonFormField<T>(
+  Widget build(BuildContext context) => PickField<T>(
         key: Key(id),
-        initialValue: value,
-        isExpanded: true,
-        decoration: InputDecoration(labelText: label, border: const OutlineInputBorder(), isDense: true),
-        items: [for (final i in items) DropdownMenuItem<T>(value: i, child: Text(text(i), overflow: TextOverflow.ellipsis))],
-        onChanged: (v) {
-          if (v != null) onChanged(v);
-        },
+        label: label,
+        dense: true,
+        value: value,
+        options: [for (final i in items) PickOption<T>(i, text(i))],
+        onChanged: onChanged,
       );
 }
 

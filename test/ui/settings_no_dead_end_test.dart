@@ -3,6 +3,7 @@
 // next to such a reason. Walked in several real states. Also: every link row opens something real, the app bar's
 // Sections index jumps to a section, the per-quantity unit rows work end to end, and the list lays out on 320 / 375 /
 // 390 / 430 dp phones at 1.0x and 2.0x text in light and dark without overflow. Golden-free.
+import 'toast_test_kit.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/app/app_state.dart' show AppState, RadioKind;
@@ -108,7 +109,7 @@ Future<Harness> _open(WidgetTester tester, Harness h, {bool site = false}) async
 
 void main() {
   group('no dead ends: every row is actionable, information, or says why not', () {
-    testWidgets('first run: no key, no server answer, no radio ever set up', (tester) async {
+    testWidgetsT('first run: no key, no server answer, no radio ever set up', (tester) async {
       useTallScreen(tester);
       final h = await _open(tester, Harness(antennaProfile: false));
       expect(_deadEnds(tester, h.state), isEmpty);
@@ -117,7 +118,7 @@ void main() {
       expect(find.textContaining('Nothing to remove: there are no drives on this phone.'), findsOneWidget);
     });
 
-    testWidgets('approved key, server answered, discovery on, uploads off, drives on the phone', (tester) async {
+    testWidgetsT('approved key, server answered, discovery on, uploads off, drives on the phone', (tester) async {
       useTallScreen(tester);
       final h = Harness()..approveKey();
       h.settings.saved = h.settings.saved.copyWith(discoveryMode: true, autoSync: false);
@@ -130,7 +131,7 @@ void main() {
       expect(find.textContaining('Turn them on first'), findsOneWidget);
     });
 
-    testWidgets('upload at end on, during the drive off: the interval says to turn it on', (tester) async {
+    testWidgetsT('upload at end on, during the drive off: the interval says to turn it on', (tester) async {
       useTallScreen(tester);
       final h = Harness()..approveKey();
       h.settings.saved = h.settings.saved.copyWith(syncDuringDrive: false);
@@ -139,7 +140,7 @@ void main() {
       expect(find.textContaining('Turn it on to choose the interval'), findsOneWidget);
     });
 
-    testWidgets('while driving: locked rows say so and how to unlock them', (tester) async {
+    testWidgetsT('while driving: locked rows say so and how to unlock them', (tester) async {
       useTallScreen(tester);
       final h = Harness()..approveKey();
       await h.pumpApp(tester);
@@ -155,7 +156,7 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('key pending approval', (tester) async {
+    testWidgetsT('key pending approval', (tester) async {
       useTallScreen(tester);
       final h = Harness();
       h.settings.saved = const Settings(driverKey: 'secretkey-abcdef-1234', keyStatus: DriverKeyStatus.pending);
@@ -168,7 +169,7 @@ void main() {
     });
   });
 
-  testWidgets('every link row opens something real (a screen, a dialog, a sheet or the website)', (tester) async {
+  testWidgetsT('every link row opens something real (a screen, a dialog, a sheet or the website)', (tester) async {
     useTallScreen(tester);
     final h = Harness(antennaProfile: false);
     await _open(tester, h);
@@ -214,7 +215,7 @@ void main() {
   });
 
   group('app bar: Search and Sections', () {
-    testWidgets('Sections lists every section; picking one opens it (even when folded) and scrolls to it',
+    testWidgetsT('Sections lists every section; picking one opens it (even when folded) and scrolls to it',
         (tester) async {
       tester.view.physicalSize = const Size(1170, 3000); // 390 dp wide, tall enough that the index sheet lists all 12 sections
       tester.view.devicePixelRatio = 3.0;
@@ -243,7 +244,7 @@ void main() {
       handle.dispose();
     });
 
-    testWidgets('Search from far down the list goes back to the field and focuses it', (tester) async {
+    testWidgetsT('Search from far down the list goes back to the field and focuses it', (tester) async {
       useTallScreen(tester);
       await _open(tester, Harness()..approveKey());
       await showSetting(tester, 'show-intro', step: 400);
@@ -255,7 +256,7 @@ void main() {
       expect(field.focusNode!.hasFocus, isTrue);
     });
 
-    testWidgets('wide screens list sections on the left, so there is no Sections button', (tester) async {
+    testWidgetsT('wide screens list sections on the left, so there is no Sections button', (tester) async {
       tester.view.physicalSize = const Size(2388, 1668);
       tester.view.devicePixelRatio = 2.0;
       addTearDown(tester.view.reset);
@@ -266,7 +267,7 @@ void main() {
   });
 
   group('per-quantity units', () {
-    testWidgets('each quantity follows Units by default; picking one changes only it, everywhere, and saves it',
+    testWidgetsT('each quantity follows Units by default; picking one changes only it, everywhere, and saves it',
         (tester) async {
       useTallScreen(tester);
       final h = Harness();
@@ -300,13 +301,13 @@ void main() {
       await tester.pumpAndSettle();
       expect(h.settings.saved.unitOverrides.isEmpty, isTrue);
       expect(find.byKey(const Key('units-reset-overrides')), findsNothing);
-      await tester.tap(find.byKey(const Key('units-reset-undo')));
+      await tester.tap(find.text('Undo'));
       await tester.pumpAndSettle();
       expect(h.settings.saved.unitOverrides,
           const UnitOverrides(speed: UnitChoice.imperial, pressure: PressureChoice.mmHg));
     });
 
-    testWidgets('a dismissed picker changes nothing; the current choice is marked for screen readers', (tester) async {
+    testWidgetsT('a dismissed picker changes nothing; the current choice is marked for screen readers', (tester) async {
       useTallScreen(tester);
       final handle = tester.ensureSemantics();
       final h = Harness();
@@ -336,7 +337,7 @@ void main() {
     for (final width in [320.0, 375.0, 390.0, 430.0]) {
       for (final scale in [1.0, 2.0]) {
         for (final dark in [false, true]) {
-          testWidgets('${width.toInt()} dp, ${scale}x text, ${dark ? 'dark' : 'light'}: every row lays out', (tester) async {
+          testWidgetsT('${width.toInt()} dp, ${scale}x text, ${dark ? 'dark' : 'light'}: every row lays out', (tester) async {
             tester.view.physicalSize = Size(width * 3, 2532);
             tester.view.devicePixelRatio = 3.0;
             tester.platformDispatcher.textScaleFactorTestValue = scale;

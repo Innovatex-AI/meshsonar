@@ -5,6 +5,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../design/app_surfaces.dart';
 import '../../app/app_state.dart';
 import '../../core/etag_client.dart';
 import '../../core/offline_packs.dart';
@@ -95,7 +96,7 @@ class _StorageRowsState extends State<StorageRows> {
     }
   }
 
-  void _say(String text) => ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(text)));
+  void _say(String text) => showAppToast(context, text);
 
   Future<void> _run(Future<void> Function() action) async {
     if (_busy) return;

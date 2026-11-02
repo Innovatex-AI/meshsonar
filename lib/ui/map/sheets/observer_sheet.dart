@@ -12,6 +12,7 @@ import '../../../core/units.dart' show Units;
 import '../../app.dart' show AppScope;
 import '../../region/region_common.dart' show agoText, groupInt;
 import '../../theme.dart';
+import '../../design/app_surfaces.dart';
 
 /// What the observer sheet needs from the host besides the observer.
 class ObserverSheetContext {
@@ -27,11 +28,10 @@ Future<void> showObserverSheet(
   String? regionName,
   ObserverSheetContext ctx = const ObserverSheetContext(),
 }) {
-  return showModalBottomSheet<void>(
-    context: context,
-    showDragHandle: true,
-    isScrollControlled: true,
-    builder: (_) => SafeArea(child: ObserverSheet(observer: observer, regionName: regionName, ctx: ctx)),
+  return showAppSheet<void>(
+    context,
+    detents: const [0.6, 0.92],
+    builder: (_, c) => SafeArea(child: ObserverSheet(observer: observer, regionName: regionName, ctx: ctx, scrollController: c)),
   );
 }
 
@@ -45,7 +45,8 @@ class ObserverSheet extends StatelessWidget {
   final RegionObserver observer;
   final String? regionName;
   final ObserverSheetContext ctx;
-  const ObserverSheet({super.key, required this.observer, this.regionName, this.ctx = const ObserverSheetContext()});
+  final ScrollController? scrollController;
+  const ObserverSheet({super.key, required this.observer, this.regionName, this.ctx = const ObserverSheetContext(), this.scrollController});
 
   @override
   Widget build(BuildContext context) {
@@ -70,6 +71,7 @@ class ObserverSheet extends StatelessWidget {
     final distance = (pos == null || o.lat == null || o.lon == null) ? null : haversineM(pos.latitude, pos.longitude, o.lat!, o.lon!);
     final model = [o.model, o.firmware].whereType<String>().join(' · ');
     return SingleChildScrollView(
+      controller: scrollController,
       child: Padding(
         key: const Key('observer-sheet'),
         padding: const EdgeInsets.fromLTRB(Gap.l, 0, Gap.l, Gap.m),

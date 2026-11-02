@@ -20,6 +20,7 @@ import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../design/app_surfaces.dart';
 import '../../app/app_state.dart';
 import '../../app/privacy_zones_controller.dart';
 import '../../core/privacy_zones.dart';
@@ -193,9 +194,7 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
     return f == null ? null : (lat: f.fix.lat, lon: f.fix.lon);
   }
 
-  void _say(String text) => ScaffoldMessenger.of(context)
-    ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(content: Text(text)));
+  void _say(String text) => showAppToast(context, text);
 
   Future<void> _addHere() async {
     final p = _phone();
@@ -225,14 +224,13 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
       _draft = null;
       _deleted = (zone: z, index: i);
     });
-    final m = ScaffoldMessenger.of(context);
-    m.hideCurrentSnackBar();
-    m.showSnackBar(SnackBar(
-      key: const Key('zone-deleted'),
-      content: Text('Deleted ${_title(z, i)}'),
+    showAppToast(
+      context,
+      'Deleted ${_title(z, i)}',
       duration: const Duration(seconds: 8),
-      action: SnackBarAction(label: 'Undo', onPressed: () => unawaited(_undoDelete())),
-    ));
+      actionLabel: 'Undo',
+      onAction: () => unawaited(_undoDelete()),
+    );
   }
 
   Future<void> _undoDelete() async {

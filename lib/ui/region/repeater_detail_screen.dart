@@ -19,6 +19,7 @@ import '../theme.dart';
 import '../repeater_reach_section.dart';
 import '../your_drives_section.dart';
 import 'snr_trend_card.dart';
+import '../design/app_surfaces.dart';
 
 /// Pushes the detail screen for one repeater of the region served at [baseUrl].
 Future<void> openRepeaterDetail(
@@ -354,9 +355,7 @@ class _RepeaterDetailScreenState extends State<RepeaterDetailScreen> {
           onTap: () async {
             await Clipboard.setData(ClipboardData(text: r.key));
             if (!context.mounted) return;
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(const SnackBar(content: Text('Public key copied')));
+            showAppToast(context, 'Public key copied', kind: AppToastKind.success);
           },
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: Gap.xs),

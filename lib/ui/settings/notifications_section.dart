@@ -13,6 +13,9 @@ import '../../chat/models.dart';
 import '../../platform/local_notifications.dart';
 import '../alerts/permission_prompt.dart';
 import '../app.dart';
+import '../design/app_surfaces.dart';
+import '../design/app_symbols.dart';
+import 'app_time_pick.dart';
 import 'settings_index.dart';
 import 'settings_kit.dart';
 
@@ -229,10 +232,9 @@ class _NotificationRows extends StatelessWidget {
                 title: Text(settingsEntry('notif-test').title),
                 subtitle: const Text('Shows one alert in 3 seconds. Lock the phone or leave the app to see how it looks.'),
                 onTap: () async {
-                  final messenger = ScaffoldMessenger.maybeOf(context);
                   await Future<void>.delayed(const Duration(seconds: 3));
                   final why = await c.sendTest();
-                  messenger?.showSnackBar(SnackBar(content: Text(why ?? 'Test notification sent.')));
+                  if (context.mounted) showAppToast(context, why ?? 'Test notification sent.');
                 },
               ),
             ),
@@ -258,7 +260,7 @@ class _QuietHoursTile extends StatelessWidget {
   Future<void> _pick(BuildContext context, bool start) async {
     final q = prefs.quiet;
     final minute = start ? q.startMinute : q.endMinute;
-    final t = await showTimePicker(context: context, initialTime: TimeOfDay(hour: minute ~/ 60, minute: minute % 60));
+    final t = await showAppTimePicker(context, TimeOfDay(hour: minute ~/ 60, minute: minute % 60));
     if (t == null) return;
     final m = t.hour * 60 + t.minute;
     await prefs.setQuiet(start ? q.copyWith(startMinute: m) : q.copyWith(endMinute: m));
@@ -354,18 +356,25 @@ class _ConversationAlertsScreenState extends State<ConversationAlertsScreen> {
                         key: Key('notif-conv-${c.key}'),
                         title: Text(c.title),
                         subtitle: Text(notifyModeLabel(c, now)),
-                        trailing: PopupMenuButton<_Choice>(
+                        trailing: IconButton(
                           key: Key('notif-conv-menu-${c.key}'),
                           tooltip: 'Alerts for ${c.title}',
-                          onSelected: (v) => _apply(c, v),
-                          itemBuilder: (_) => [
-                            const PopupMenuItem(value: _Choice.all, child: Text('All messages')),
-                            if (c.kind == ConvKind.channel) const PopupMenuItem(value: _Choice.mentions, child: Text('Only when mentioned')),
-                            const PopupMenuItem(value: _Choice.mute1h, child: Text('Mute for 1 hour')),
-                            const PopupMenuItem(value: _Choice.mute8h, child: Text('Mute for 8 hours')),
-                            const PopupMenuItem(value: _Choice.mute24h, child: Text('Mute for 24 hours')),
-                            const PopupMenuItem(value: _Choice.muteForever, child: Text('Mute until I turn it back on')),
-                          ],
+                          icon: const AppSymbolIcon(AppSymbols.ellipsis),
+                          onPressed: () async {
+                            final v = await showAppActionSheet<_Choice>(
+                              context,
+                              title: 'Alerts for ${c.title}',
+                              actions: [
+                                const AppAction('All messages', _Choice.all),
+                                if (c.kind == ConvKind.channel) const AppAction('Only when mentioned', _Choice.mentions),
+                                const AppAction('Mute for 1 hour', _Choice.mute1h),
+                                const AppAction('Mute for 8 hours', _Choice.mute8h),
+                                const AppAction('Mute for 24 hours', _Choice.mute24h),
+                                const AppAction('Mute until I turn it back on', _Choice.muteForever),
+                              ],
+                            );
+                            if (v != null) _apply(c, v);
+                          },
                         ),
                       ),
                   ],

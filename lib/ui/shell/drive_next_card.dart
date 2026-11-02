@@ -13,6 +13,7 @@ import '../../core/startup_location.dart' show LocationAction;
 import '../../core/units.dart' show Units;
 import '../app.dart';
 import '../map/coverage_map.dart' show CoverageMap;
+import '../design/app_surfaces.dart';
 
 typedef DriveNextMapBuilder = Widget Function(
   BuildContext context,
@@ -234,9 +235,7 @@ class _DriveNextCardState extends State<DriveNextCard> {
             appleMapsDirections(x.lat, x.lon, label: 'MeshSonar: $what'),
           );
           if (!ok && context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Could not open Maps.')),
-            );
+            showAppToast(context, 'Could not open Maps.', kind: AppToastKind.error);
           }
         },
       ),

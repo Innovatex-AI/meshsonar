@@ -13,6 +13,7 @@ import '../app.dart';
 import 'advert_facts.dart';
 import 'tool_kit.dart';
 import 'tools_host.dart';
+import '../design/app_surfaces.dart';
 
 class AdvertsScreen extends StatelessWidget {
   const AdvertsScreen({super.key});
@@ -48,29 +49,16 @@ class _AdvertsBodyState extends State<_AdvertsBody> {
 
   Future<void> _send({required bool flood}) async {
     if (flood) {
-      final ok = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          key: const Key('adverts-flood-confirm'),
-          title: const Text('Send an advert to the whole mesh?'),
-          content: Text('Every repeater that hears it will send it on, so it costs airtime across the whole mesh, not just yours '
-              '(about ${fmtAir(_adverts.estimateAirtimeMs())} for your radio alone). Your radio already sends adverts by itself, '
-              'and that is usually enough.'),
-          actions: [
-            TextButton(
-              key: const Key('adverts-flood-cancel'),
-              style: TextButton.styleFrom(minimumSize: const Size(kToolTarget, kToolTarget)),
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              key: const Key('adverts-flood-go'),
-              style: FilledButton.styleFrom(minimumSize: const Size(kToolTarget, kToolTarget)),
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Send to the whole mesh'),
-            ),
-          ],
-        ),
+      final ok = await showAppAlert(
+        context,
+        dialogKey: const Key('adverts-flood-confirm'),
+        title: 'Send an advert to the whole mesh?',
+        message: 'Every repeater that hears it will send it on, so it costs airtime across the whole mesh, not just yours '
+            '(about ${fmtAir(_adverts.estimateAirtimeMs())} for your radio alone). Your radio already sends adverts by itself, '
+            'and that is usually enough.',
+        confirmLabel: 'Send to the whole mesh',
+        confirmKey: const Key('adverts-flood-go'),
+        cancelKey: const Key('adverts-flood-cancel'),
       );
       if (ok != true || !mounted) return;
     }
