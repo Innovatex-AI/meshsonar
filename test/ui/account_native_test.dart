@@ -313,6 +313,22 @@ void main() {
     expect(tester.widget<Text>(find.byKey(const Key('delete-account-result'))).data, contains('3 drives'));
   });
 
+  testWidgets('Delete my account: Cancel (and dismissing the sheet) changes nothing', (tester) async {
+    final h = await open(tester);
+    push(tester, const DeleteMyDataScreen());
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.byKey(const Key('delete-account')), 300, scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.byKey(const Key('delete-account')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('delete-account-dialog')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('delete-account-cancel')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('delete-account-dialog')), findsNothing);
+    expect(h.ac.deleteCalls, 0);
+    expect(h.state.hasKey, isTrue);
+    expect(find.byKey(const Key('delete-account-result')), findsNothing);
+  });
+
   testWidgets('Delete my account: offline changes nothing and says so', (tester) async {
     final h = await open(tester);
     h.ac.deleteError = const CmatException('network error: down');

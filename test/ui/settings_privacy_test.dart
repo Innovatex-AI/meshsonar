@@ -1,5 +1,6 @@
 // Settings > Privacy & data sharing, and the first-run disclosure: one source of truth for the words, opt-out
 // switches driven by the category registry, confirmation before sharing starts, and erase on the way out.
+import 'toast_test_kit.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -66,7 +67,7 @@ void main() {
     });
   });
 
-  testWidgets('first-run sheet and Settings say the same words (one source)', (tester) async {
+  testWidgetsT('first-run sheet and Settings say the same words (one source)', (tester) async {
     useTallScreen(tester);
     final h = Harness();
     await h.state.init();
@@ -94,7 +95,7 @@ void main() {
     expect(find.textContaining(telemetryCategory.summary), findsOneWidget);
   });
 
-  testWidgets('turning sharing on asks first and states what is shared; cancel keeps it off', (tester) async {
+  testWidgetsT('turning sharing on asks first and states what is shared; cancel keeps it off', (tester) async {
     final h = await open(tester, settings: const Settings(
         driverKey: 'secretkey-abcdef-1234', keyStatus: DriverKeyStatus.approved, telemetryEnabled: false));
     await showSetting(tester, 'telemetry-toggle');
@@ -115,7 +116,7 @@ void main() {
     expect(h.settings.saved.telemetryEnabled, isTrue);
   });
 
-  testWidgets('turning it off with a key stops it and offers the erase; Erase calls DELETE', (tester) async {
+  testWidgetsT('turning it off with a key stops it and offers the erase; Erase calls DELETE', (tester) async {
     final h = await open(tester);
     await showSetting(tester, 'telemetry-toggle');
     await tester.tap(find.byKey(const Key('telemetry-toggle')));
@@ -129,7 +130,7 @@ void main() {
     expect(find.text('Erased 7 shared packet headers.'), findsOneWidget);
   });
 
-  testWidgets('turning it off and keeping the server copy sends no DELETE', (tester) async {
+  testWidgetsT('turning it off and keeping the server copy sends no DELETE', (tester) async {
     final h = await open(tester);
     await showSetting(tester, 'telemetry-toggle');
     await tester.tap(find.byKey(const Key('telemetry-toggle')));
@@ -140,7 +141,7 @@ void main() {
     expect(h.state.settings.telemetryEnabled, isFalse);
   });
 
-  testWidgets('without a key: off is immediate, says so, and there is nothing to erase', (tester) async {
+  testWidgetsT('without a key: off is immediate, says so, and there is nothing to erase', (tester) async {
     final h = await open(tester, key: false);
     await showSetting(tester, 'telemetry-toggle');
     expect(find.textContaining('nothing is collected until this phone has a driver key'), findsOneWidget);
@@ -152,7 +153,7 @@ void main() {
     expect(find.textContaining('Share packet headers is off.'), findsOneWidget);
   });
 
-  testWidgets('erase without turning sharing off: destructive confirm, then DELETE', (tester) async {
+  testWidgetsT('erase without turning sharing off: destructive confirm, then DELETE', (tester) async {
     final h = await open(tester);
     await showSetting(tester, 'telemetry-erase-now');
     await tester.tap(find.byKey(const Key('telemetry-erase-now')));
@@ -171,7 +172,7 @@ void main() {
     expect(h.state.settings.telemetryEnabled, isTrue);
   });
 
-  testWidgets('"What MeshSonar shares" lists every category item, every other flow and the location points',
+  testWidgetsT('"What MeshSonar shares" lists every category item, every other flow and the location points',
       (tester) async {
     await open(tester);
     await showSetting(tester, 'privacy-what-shared');
@@ -190,7 +191,7 @@ void main() {
     }
   });
 
-  testWidgets('Location row opens the same explainer the first run shows, read-only', (tester) async {
+  testWidgetsT('Location row opens the same explainer the first run shows, read-only', (tester) async {
     await open(tester);
     await showSetting(tester, 'privacy-location');
     expect(find.text(locationSummary), findsOneWidget);
@@ -219,7 +220,7 @@ void main() {
       expect(unitsExplanation(UnitsPreference.metric, Units.metric), startsWith('Showing metric'));
     });
 
-    testWidgets('the Units row shows the explanation and follows the choice', (tester) async {
+    testWidgetsT('the Units row shows the explanation and follows the choice', (tester) async {
       final h = await open(tester, settings: const Settings(units: UnitsPreference.metric));
       await showSetting(tester, 'units-tile');
       expect(find.text(unitsExplanation(UnitsPreference.metric, h.state.units)), findsOneWidget);

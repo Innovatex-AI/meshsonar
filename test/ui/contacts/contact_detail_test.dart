@@ -55,7 +55,7 @@ void main() {
 
   // The rig must be built INSIDE the test's fake-async zone, or the controller's microtasks never run under pump().
   void tw(String name, Future<void> Function(WidgetTester) body) {
-    testWidgets(name, (tester) async {
+    testWidgetsT(name, (tester) async {
       rig = ContactsRig();
       await body(tester);
     });
@@ -244,6 +244,20 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('rename-reset')));
       await tester.pumpAndSettle();
+      expect(c(keyN(1)).customName, isNull);
+    });
+
+    tw('rename cancel changes nothing', (tester) async {
+      setScreen(tester);
+      await rig.withContacts(1);
+      await pumpDetail(tester, rig, keyN(1));
+      await scrollTo(tester, find.byKey(const Key('contact-rename')));
+      await tester.tap(find.byKey(const Key('contact-rename')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('rename-field')), 'Nope');
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('rename-field')), findsNothing);
       expect(c(keyN(1)).customName, isNull);
     });
 

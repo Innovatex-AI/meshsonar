@@ -3,6 +3,7 @@
 // directly under any values and links out; the phone barometer is compared honestly; no coordinate is ever shown.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/ui/design/app_surfaces.dart';
 import 'package:meshsonar/app/app_state.dart' show DriveWeatherGate;
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/drive_context.dart';
@@ -167,6 +168,8 @@ void main() {
       h.browserWorks = false;
       await tapVisible(tester, find.byKey(const Key('weather-credit')));
       expect(find.textContaining('Couldn\'t open the browser'), findsOneWidget);
+      dismissAppToast();
+      await tester.pump();
     });
 
     testWidgets('the Chart/Table switch shows every hour; all hourly values are listed with precipitation and cloud', (tester) async {

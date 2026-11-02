@@ -17,6 +17,7 @@ import '../layers/repeater_map_source.dart';
 import '../map_layers.dart' show formatSnrShort;
 import '../../claims/claim_widgets.dart' show ClaimRepeaterAction;
 import '../../radios/admin_launcher.dart' show AdminRepeaterButton;
+import '../../design/app_surfaces.dart';
 
 /// What the sheet needs from the host besides the point.
 class RepeaterSheetContext {
@@ -34,21 +35,19 @@ class RepeaterSheetContext {
 }
 
 Future<void> showRepeaterSheet(BuildContext context, RepeaterPoint point, {RepeaterSheetContext ctx = const RepeaterSheetContext()}) {
-  return showModalBottomSheet<void>(
-    context: context,
-    showDragHandle: true,
-    isScrollControlled: true,
-    builder: (_) => SafeArea(child: RepeaterSheet(point: point, ctx: ctx)),
+  return showAppSheet<void>(
+    context,
+    detents: const [0.75, 0.92],
+    builder: (_, c) => SafeArea(child: RepeaterSheet(point: point, ctx: ctx, scrollController: c)),
   );
 }
 
 /// Several repeaters drawn on the same spot: pick one.
 Future<void> showRepeaterListSheet(BuildContext context, List<RepeaterPoint> points, {RepeaterSheetContext ctx = const RepeaterSheetContext()}) {
-  return showModalBottomSheet<void>(
-    context: context,
-    showDragHandle: true,
-    isScrollControlled: true,
-    builder: (sheet) => SafeArea(
+  return showAppSheet<void>(
+    context,
+    detents: const [0.5, 0.92],
+    builder: (sheet, c) => SafeArea(
       child: RepeaterListSheet(
         points: points,
         onPick: (p) {
@@ -86,7 +85,10 @@ class RepeaterSheet extends StatelessWidget {
 
   /// False when the sheet is embedded in the map's info panel (there is no route of its own to pop).
   final bool dismissOnOpen;
-  const RepeaterSheet({super.key, required this.point, this.ctx = const RepeaterSheetContext(), this.dismissOnOpen = true});
+
+  /// The sheet's scroll controller, so dragging the content hands off to the sheet.
+  final ScrollController? scrollController;
+  const RepeaterSheet({super.key, required this.point, this.ctx = const RepeaterSheetContext(), this.dismissOnOpen = true, this.scrollController});
 
   @override
   Widget build(BuildContext context) {
@@ -120,6 +122,7 @@ class RepeaterSheet extends StatelessWidget {
     final seenVerb = p.source == RepeaterPointSource.global ? 'Last advert' : 'Last heard';
     final open = ctx.openRegionPage;
     return SingleChildScrollView(
+      controller: scrollController,
       child: Padding(
         key: const Key('repeater-sheet'),
         padding: const EdgeInsets.fromLTRB(Gap.l, 0, Gap.l, Gap.m),
@@ -221,7 +224,7 @@ class _KeyRow extends StatelessWidget {
           onPressed: () async {
             await Clipboard.setData(ClipboardData(text: keyHex));
             if (!context.mounted) return;
-            ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(content: Text('Key copied')));
+            showAppToast(context, 'Key copied', kind: AppToastKind.success);
           },
         ),
       ],

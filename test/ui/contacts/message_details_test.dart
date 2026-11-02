@@ -14,7 +14,7 @@ void main() {
   final clip = <String>[];
 
   void tw(String name, Future<void> Function(WidgetTester) body) {
-    testWidgets(name, (tester) async {
+    testWidgetsT(name, (tester) async {
       rig = ContactsRig();
       clip.clear();
       TestWidgetsFlutterBinding.ensureInitialized().defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
@@ -166,7 +166,7 @@ void main() {
       }
       await open(tester, 'lay', b: cfg.value.b);
       expect(tester.takeException(), isNull);
-      if (cfg.key.contains('ipad')) expect(find.byType(Dialog), findsOneWidget);
+      if (cfg.key.contains('ipad')) expect(find.byKey(const Key('app-sheet')), findsOneWidget);
       await expectAccessible(tester);
     });
   }

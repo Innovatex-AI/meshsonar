@@ -19,6 +19,7 @@ import '../../core/drive_report_pdf.dart';
 import '../../core/drive_stats.dart' show formatDuration;
 import '../../core/model.dart';
 import '../app.dart';
+import '../design/app_surfaces.dart' show showAppSheet;
 import '../map/coverage_map.dart' show CoverageMap;
 import '../map/layers/repeater_name_labels.dart' show MarkerLabelInput, RepeaterNameLabels;
 import '../onboarding/ui_prefs.dart' show driveLabel;
@@ -28,8 +29,19 @@ import 'drive_report_sections.dart';
 import 'drive_weather_section.dart';
 import 'pdf_export.dart';
 
-void openDriveReport(BuildContext context, String sessionId) {
-  Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => DriveReportScreen(sessionId: sessionId)));
+/// The one way to open a drive report (Drive tab finished dock, Drives list, drive detail, progress). On Apple
+/// platforms it is a full-height page sheet with a Done button (swipe down also closes); elsewhere a normal page.
+Future<void> openDriveReport(BuildContext context, String sessionId) async {
+  final apple = const {TargetPlatform.iOS, TargetPlatform.macOS}.contains(Theme.of(context).platform);
+  if (apple) {
+    await showAppSheet<void>(
+      context,
+      detents: const [1.0],
+      builder: (_, _) => DriveReportScreen(sessionId: sessionId, asSheet: true),
+    );
+    return;
+  }
+  await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => DriveReportScreen(sessionId: sessionId)));
 }
 
 /// Loads the drive, the earlier drives on this phone and builds the report.
@@ -54,7 +66,10 @@ Future<DriveReport> loadDriveReport(AppState s, String sessionId) async {
 
 class DriveReportScreen extends StatefulWidget {
   final String sessionId;
-  const DriveReportScreen({super.key, required this.sessionId});
+
+  /// True inside the page sheet: a Done button replaces the back arrow.
+  final bool asSheet;
+  const DriveReportScreen({super.key, required this.sessionId, this.asSheet = false});
   @override
   State<DriveReportScreen> createState() => _DriveReportScreenState();
 }
@@ -140,6 +155,15 @@ class _DriveReportScreenState extends State<DriveReportScreen> {
           key: const Key('drive-report'),
           appBar: AppBar(
             title: const Text('Drive report'),
+            automaticallyImplyLeading: !widget.asSheet,
+            leading: widget.asSheet
+                ? TextButton(
+                    key: const Key('report-done'),
+                    onPressed: () => Navigator.of(context).maybePop(),
+                    child: const Text('Done'),
+                  )
+                : null,
+            leadingWidth: widget.asSheet ? 88 : null,
             actions: [
               if (r != null)
                 PopupMenuButton<String>(

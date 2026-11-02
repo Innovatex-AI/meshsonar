@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../chat/contact_manager.dart';
 import '../../chat/mesh_links.dart';
 import '../../chat/models.dart';
+import '../design/app_surfaces.dart';
 import '../theme.dart';
 import 'contacts_controller.dart';
 import 'qr_scan_screen.dart';
@@ -75,9 +76,8 @@ class _AddContactScreenState extends State<AddContactScreen> {
       setState(() => _error = r.error ?? 'That could not be added.');
       return;
     }
-    final messenger = ScaffoldMessenger.of(context);
+    showAppToast(context, 'Added ${r.contact!.displayName}.${r.note == null ? '' : ' ${r.note}'}', kind: AppToastKind.success);
     Navigator.of(context).pop();
-    messenger.showSnackBar(SnackBar(content: Text('Added ${r.contact!.displayName}.${r.note == null ? '' : ' ${r.note}'}')));
   }
 
   void _scan() {
@@ -99,12 +99,10 @@ class _AddContactScreenState extends State<AddContactScreen> {
   void _showMine() {
     final id = _m.radioId;
     final connected = _m.connected && id != null;
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      showDragHandle: true,
-      builder: (ctx) {
+    showAppSheet<void>(
+      context,
+      detents: const [0.92],
+      builder: (ctx, scroll) {
         String? link;
         if (connected) {
           var name = widget.controller.chat.selfName();
@@ -117,6 +115,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
         }
         final t = Theme.of(ctx);
         return SingleChildScrollView(
+          controller: scroll,
           padding: const EdgeInsets.fromLTRB(Gap.l, 0, Gap.l, Gap.xl),
           child: Column(
             key: const Key('my-contact'),
@@ -138,7 +137,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
                     label: const Text('Copy link'),
                     onPressed: () async {
                       await Clipboard.setData(ClipboardData(text: link!));
-                      if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Link copied')));
+                      if (ctx.mounted) showAppToast(ctx, 'Link copied');
                     },
                   ),
                   OutlinedButton.icon(

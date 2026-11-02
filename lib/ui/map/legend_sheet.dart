@@ -16,6 +16,7 @@ import 'coverage_layer_controls.dart' show colorByLabel, coverageLegend;
 import 'coverage_map.dart' show networkLevelColor;
 import 'layers/layers_sheet.dart' show NetworkAgeLegend;
 import 'map_layers.dart' show PingColorMode;
+import '../design/app_surfaces.dart';
 
 /// Opens the legend. [colorBy] and [pingColors] are the map's current choices so the legend opens on what the person sees.
 Future<void> showMapLegend(
@@ -23,14 +24,10 @@ Future<void> showMapLegend(
   CoverageColorBy colorBy = CoverageColorBy.snr,
   PingColorMode pingColors = PingColorMode.snr,
 }) {
-  final h = MediaQuery.sizeOf(context).height;
-  return showModalBottomSheet<void>(
-    context: context,
-    showDragHandle: true,
-    isScrollControlled: true,
-    useSafeArea: true,
-    constraints: BoxConstraints(maxHeight: h * 0.92),
-    builder: (_) => MapLegendSheet(colorBy: colorBy, pingColors: pingColors),
+  return showAppSheet<void>(
+    context,
+    detents: const [0.92],
+    builder: (_, c) => SafeArea(child: MapLegendSheet(colorBy: colorBy, pingColors: pingColors)),
   );
 }
 

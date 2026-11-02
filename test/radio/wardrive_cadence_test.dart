@@ -24,7 +24,8 @@ class HandGps implements LocationSource {
   double north = 0, east = 0;
   double? speed;
   bool hasFix = true;
-  final _c = StreamController<GeoFix>.broadcast();
+  // sync: a fix is in the engine's window the instant emit() returns, so a 5 ms tick can never see the new fake time without it.
+  final _c = StreamController<GeoFix>.broadcast(sync: true);
   HandGps(this.clock);
 
   GeoFix get fix =>

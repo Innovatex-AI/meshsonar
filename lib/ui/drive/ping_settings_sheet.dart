@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 
 import '../../app/app_state.dart';
 import '../app.dart';
+import '../design/app_surfaces.dart' show showAppSheet;
+import '../design/sheet_detents.dart';
 import '../settings/settings_kit.dart' show distanceStops;
 import '../settings/wardriving_section.dart' show pingCadenceTiles;
 import '../settings_screen.dart' show SettingsScreen;
@@ -37,17 +39,16 @@ class PingSettingsChip extends StatelessWidget {
 }
 
 Future<void> showPingSettingsSheet(BuildContext context) {
-  return showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    showDragHandle: true,
-    builder: (_) => const _PingSettingsSheet(),
+  return showAppSheet<void>(
+    context,
+    detents: formSheetDetents(context),
+    builder: (_, controller) => _PingSettingsSheet(controller: controller),
   );
 }
 
 class _PingSettingsSheet extends StatelessWidget {
-  const _PingSettingsSheet();
+  final ScrollController controller;
+  const _PingSettingsSheet({required this.controller});
 
   @override
   Widget build(BuildContext context) {
@@ -55,6 +56,7 @@ class _PingSettingsSheet extends StatelessWidget {
     final s = AppScope.of(context);
     return SingleChildScrollView(
       key: const Key('ping-settings-sheet'),
+      controller: controller,
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

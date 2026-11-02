@@ -190,7 +190,8 @@ void main() {
 
     // The drive ends: the puck forgets it.
     await tester.tap(find.byKey(const Key('start-stop')));
-    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
     await tester.tap(find.byKey(const Key('stop-drive-confirm')));
     await settle(tester);
     expect(find.text('Start drive'), findsOneWidget);

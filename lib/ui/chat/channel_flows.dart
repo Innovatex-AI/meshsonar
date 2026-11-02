@@ -3,6 +3,7 @@ import 'dart:async';
 // Add-a-channel flows: join Public, join a #hashtag channel, scan a QR code, paste a link or secret, create a private
 // channel; plus what happens when a meshcore:// link is tapped in a message. Every failure is a plain sentence that says
 // what to do (ChannelAdminException.message).
+import 'package:flutter/cupertino.dart' show CupertinoActivityIndicator, CupertinoButton, CupertinoListTile;
 import 'package:flutter/material.dart';
 
 import '../../app/chat_controller.dart';
@@ -11,6 +12,8 @@ import '../../chat/channel_secret.dart';
 import '../../chat/mesh_links.dart';
 import '../../chat/models.dart';
 import '../alerts/permission_prompt.dart';
+import '../design/app_surfaces.dart';
+import '../design/app_symbols.dart';
 import '../theme.dart';
 import 'channel_detail_screen.dart';
 import 'conversation_screen.dart';
@@ -24,35 +27,29 @@ abstract final class ChatUiHooks {
 enum AddChannelChoice { public, hashtag, scan, paste, create }
 
 Future<void> showAddChannelSheet(BuildContext context, ChatController controller) async {
-  final choice = await showModalBottomSheet<AddChannelChoice>(
-    context: context,
-    showDragHandle: true,
-    isScrollControlled: true,
-    builder: (ctx) {
-      Widget tile(IconData icon, String title, String sub, AddChannelChoice c, Key key) => ListTile(
+  final choice = await showAppSheet<AddChannelChoice>(
+    context,
+    detents: const [0.6, 0.92],
+    builder: (ctx, scroll) {
+      Widget tile(AppSymbol icon, String title, String sub, AddChannelChoice c, Key key) => CupertinoListTile(
             key: key,
-            minTileHeight: 56,
-            leading: Icon(icon),
+            leading: AppSymbolIcon(icon, size: 22),
             title: Text(title),
             subtitle: Text(sub),
             onTap: () => Navigator.pop(ctx, c),
           );
-      return SafeArea(
-        child: SingleChildScrollView(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(Gap.l, 0, Gap.l, Gap.s),
-              child: Align(alignment: Alignment.centerLeft, child: Text('Add a channel', style: Theme.of(ctx).textTheme.titleLarge)),
-            ),
-            tile(Icons.public_rounded, 'Join Public', 'The open channel most MeshCore users share', AddChannelChoice.public, const Key('add-public')),
-            tile(Icons.tag_rounded, 'Join a # channel', 'Type a name like #hamradio. Anyone who types the same name joins the same channel',
-                AddChannelChoice.hashtag, const Key('add-hashtag')),
-            tile(Icons.qr_code_scanner_rounded, 'Scan a QR code', 'Use the camera on a code from a friend', AddChannelChoice.scan, const Key('add-scan')),
-            tile(Icons.link_rounded, 'Paste a link or secret', 'A meshcore:// link, or a channel name with its secret', AddChannelChoice.paste, const Key('add-paste')),
-            tile(Icons.lock_outline_rounded, 'Create a private channel', 'Only people you give the QR code or link to can read it', AddChannelChoice.create,
-                const Key('add-create')),
-          ]),
-        ),
+      return AppSheetScaffold(
+        controller: scroll,
+        title: 'Add a channel',
+        children: [
+          tile(AppSymbols.person2, 'Join Public', 'The open channel most MeshCore users share', AddChannelChoice.public, const Key('add-public')),
+          tile(AppSymbols.message, 'Join a # channel', 'Type a name like #hamradio. Anyone who types the same name joins the same channel',
+              AddChannelChoice.hashtag, const Key('add-hashtag')),
+          tile(AppSymbols.location, 'Scan a QR code', 'Use the camera on a code from a friend', AddChannelChoice.scan, const Key('add-scan')),
+          tile(AppSymbols.docOnDoc, 'Paste a link or secret', 'A meshcore:// link, or a channel name with its secret', AddChannelChoice.paste, const Key('add-paste')),
+          tile(AppSymbols.lock, 'Create a private channel', 'Only people you give the QR code or link to can read it', AddChannelChoice.create,
+              const Key('add-create')),
+        ],
       );
     },
   );
@@ -73,7 +70,11 @@ Future<void> showAddChannelSheet(BuildContext context, ChatController controller
 }
 
 Future<void> _form(BuildContext context, ChatController controller, _FormMode mode) async {
-  final join = await showDialog<ChannelJoin>(context: context, builder: (_) => _ChannelForm(controller: controller, mode: mode));
+  final join = await showAppSheet<ChannelJoin>(
+    context,
+    detents: const [0.6, 0.92],
+    builder: (_, scroll) => _ChannelForm(controller: controller, mode: mode, scroll: scroll),
+  );
   if (join == null || !context.mounted) return;
   _announce(context, controller, join);
   if (mode == _FormMode.create) {
@@ -85,14 +86,13 @@ Future<void> _form(BuildContext context, ChatController controller, _FormMode mo
 void _announce(BuildContext context, ChatController controller, ChannelJoin join) {
   // First channel joined: the right moment to explain alerts (once; never at launch).
   if (join.created) unawaited(offerAlertsAfterFirstAction(context));
-  final m = ScaffoldMessenger.maybeOf(context);
-  if (m == null) return;
-  m
-    ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(
-      content: Text(join.created ? 'Joined ${join.channel.name}' : 'You already have ${join.channel.name}'),
-      action: SnackBarAction(label: 'Open', onPressed: () => ConversationScreen.open(context, controller: controller, convKey: join.channel.convKey)),
-    ));
+  showAppToast(
+    context,
+    join.created ? 'Joined ${join.channel.name}' : 'You already have ${join.channel.name}',
+    kind: AppToastKind.success,
+    actionLabel: 'Open',
+    onAction: () => ConversationScreen.open(context, controller: controller, convKey: join.channel.convKey),
+  );
 }
 
 /// Runs a join with a progress indicator and shows the plain-language error in a dialog when it fails.
@@ -113,15 +113,13 @@ Future<ChannelJoin?> runChannelAction(BuildContext context, ChatController contr
   return null;
 }
 
-Future<void> _errorDialog(BuildContext context, String message) => showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        key: const Key('channel-error-dialog'),
-        icon: const Icon(Icons.error_outline_rounded),
-        title: const Text('Could not do that'),
-        content: Text(message),
-        actions: [FilledButton(style: FilledButton.styleFrom(minimumSize: const Size(48, 48)), onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
-      ),
+Future<void> _errorDialog(BuildContext context, String message) => showAppAlert(
+      context,
+      title: 'Could not do that',
+      message: message,
+      confirmLabel: 'OK',
+      cancelLabel: 'Close',
+      dialogKey: const Key('channel-error-dialog'),
     );
 
 /// A tapped or scanned meshcore:// link. Channel: ask, then join. Contact or advert: add it to Contacts. Anything else: say what it is.
@@ -132,21 +130,17 @@ Future<void> handleMeshLink(BuildContext context, ChatController controller, Str
       await _errorDialog(context, ChannelAdmin.describeLinkError(p.error));
     case ChannelLink():
       final kind = classifyName(p);
-      final ok = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          key: const Key('join-link-dialog'),
-          title: Text('Join ${p.name}?'),
-          content: Text(
+      final ok = await showAppAlert(
+        context,
+        title: 'Join ${p.name}?',
+        message:
             '${kind == ChannelKind.private ? 'This is a private channel. Everyone who has this link can read it.' : 'This is an open channel. Anyone who types the same name can read it.'}'
             '${p.regionScope != null ? '\n\nIt is limited to the region "${p.regionScope}".' : ''}'
             '\n\nIt uses one of your radio\'s channel slots.',
-          ),
-          actions: [
-            TextButton(style: TextButton.styleFrom(minimumSize: const Size(48, 48)), onPressed: () => Navigator.pop(ctx, false), child: const Text('Not now')),
-            FilledButton(key: const Key('join-link-confirm'), style: FilledButton.styleFrom(minimumSize: const Size(48, 48)), onPressed: () => Navigator.pop(ctx, true), child: const Text('Join')),
-          ],
-        ),
+        confirmLabel: 'Join',
+        cancelLabel: 'Not now',
+        dialogKey: const Key('join-link-dialog'),
+        confirmKey: const Key('join-link-confirm'),
       );
       if (ok == true && context.mounted) await runChannelAction(context, controller, () => controller.admin.joinFromLink(controller.radioId ?? '', link));
     case ContactLink() || AdvertLink():
@@ -155,9 +149,7 @@ Future<void> handleMeshLink(BuildContext context, ChatController controller, Str
       if (!context.mounted) return;
       controller.refresh();
       final text = r.ok ? '${r.created ? 'Added' : 'Already in Contacts:'} ${r.contact!.displayName}.${r.note == null ? '' : ' ${r.note}'}' : (r.error ?? 'That contact could not be added.');
-      ScaffoldMessenger.maybeOf(context)
-        ?..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(text)));
+      showAppToast(context, text, kind: r.ok ? AppToastKind.success : AppToastKind.error);
   }
 }
 
@@ -168,7 +160,8 @@ enum _FormMode { hashtag, paste, create }
 class _ChannelForm extends StatefulWidget {
   final ChatController controller;
   final _FormMode mode;
-  const _ChannelForm({required this.controller, required this.mode});
+  final ScrollController scroll;
+  const _ChannelForm({required this.controller, required this.mode, required this.scroll});
   @override
   State<_ChannelForm> createState() => _ChannelFormState();
 }
@@ -232,11 +225,18 @@ class _ChannelFormState extends State<_ChannelForm> {
       _FormMode.paste => ('Paste a link or secret', 'Join'),
       _FormMode.create => ('Create a private channel', 'Create'),
     };
-    return AlertDialog(
+    return AppSheetScaffold(
       key: const Key('channel-form'),
-      title: Text(title),
-      content: SingleChildScrollView(
-        child: Column(
+      controller: widget.scroll,
+      title: title,
+      primaryAction: CupertinoButton.filled(
+        key: const Key('form-submit'),
+        onPressed: _busy ? null : _submit,
+        child: _busy ? const CupertinoActivityIndicator() : Text(action),
+      ),
+      secondaryAction: CupertinoButton(onPressed: _busy ? null : () => Navigator.pop(context), child: const Text('Cancel')),
+      children: [
+        Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -282,15 +282,6 @@ class _ChannelFormState extends State<_ChannelForm> {
               Text(_error!, key: const Key('form-error'), style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.error)),
             ],
           ],
-        ),
-      ),
-      actions: [
-        TextButton(style: TextButton.styleFrom(minimumSize: const Size(48, 48)), onPressed: _busy ? null : () => Navigator.pop(context), child: const Text('Cancel')),
-        FilledButton(
-          key: const Key('form-submit'),
-          style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
-          onPressed: _busy ? null : _submit,
-          child: _busy ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : Text(action),
         ),
       ],
     );

@@ -11,14 +11,14 @@ import '../app.dart';
 import '../onboarding/ui_prefs.dart';
 import 'region_switch_sheet.dart' show switchViewedRegion;
 import 'regions_screen.dart';
+import '../design/app_surfaces.dart';
 
 Future<void> showRegionSwitcher(BuildContext context) {
   final state = AppScope.read(context);
-  return showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    showDragHandle: true,
-    builder: (_) => RegionSwitcherSheet(state: state),
+  return showAppSheet<void>(
+    context,
+    detents: const [0.7, 0.95],
+    builder: (_, c) => RegionSwitcherSheet(state: state),
   );
 }
 

@@ -6,16 +6,19 @@ import '../core/antenna_profile.dart';
 import '../core/model.dart';
 import '../core/units.dart';
 import 'app.dart';
+import 'design/app_surfaces.dart' show showAppSheet;
+import 'design/sheet_detents.dart';
 
 /// Opens the antenna sheet for [radioKey] (default: the connected radio), prefilled from its saved profile, or for a
 /// radio set up for the first time from the antenna setting of MeshSonar 0.3.x.
-Future<void> showAntennaSheet(BuildContext context, {String? radioKey}) {
-  return showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    showDragHandle: true,
-    builder: (_) => _AntennaSheet(radioKey: radioKey),
+///
+/// [userInitiated] false is the first-connect auto prompt: the drive guard holds it while a drive is active.
+Future<void> showAntennaSheet(BuildContext context, {String? radioKey, bool userInitiated = true}) {
+  return showAppSheet<void>(
+    context,
+    detents: formSheetDetents(context),
+    userInitiated: userInitiated,
+    builder: (_, controller) => _AntennaSheet(radioKey: radioKey, controller: controller),
   );
 }
 
@@ -28,7 +31,8 @@ const Map<AntennaMount, (IconData, String)> _mountInfo = {
 
 class _AntennaSheet extends StatefulWidget {
   final String? radioKey;
-  const _AntennaSheet({this.radioKey});
+  final ScrollController controller;
+  const _AntennaSheet({this.radioKey, required this.controller});
   @override
   State<_AntennaSheet> createState() => _AntennaSheetState();
 }
@@ -125,6 +129,7 @@ class _AntennaSheetState extends State<_AntennaSheet> {
       key: const Key('antenna-sheet'),
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: SingleChildScrollView(
+        controller: widget.controller,
         padding: const EdgeInsets.fromLTRB(Gap.l, 0, Gap.l, Gap.l),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -148,14 +153,16 @@ class _AntennaSheetState extends State<_AntennaSheet> {
             const SizedBox(height: Gap.m),
             for (final m in _mounts) _mountTile(context, m),
             const SizedBox(height: Gap.m),
+            _fieldLabel(t, 'Gain (dBi)'),
             TextField(
               key: const Key('antenna-gain-field'),
               controller: _gain,
               enabled: !_gainUnknown,
               keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
               decoration: InputDecoration(
-                labelText: 'Gain (dBi)',
                 helperText: 'From −10 to 20 dBi. Often printed on the antenna.',
+                helperMaxLines: 8,
+                errorMaxLines: 3,
                 errorText: !_gainUnknown && gainText.isNotEmpty && _gainValue == null ? 'Enter −10 to 20 dBi' : null,
               ),
               onChanged: (_) => setState(() {}),
@@ -169,15 +176,17 @@ class _AntennaSheetState extends State<_AntennaSheet> {
               onChanged: (v) => setState(() => _gainUnknown = v),
             ),
             const SizedBox(height: Gap.s),
+            _fieldLabel(t, 'Height above ground (${_units.heightImperial ? 'feet' : 'metres'})'),
             TextField(
               key: const Key('antenna-height-field'),
               controller: _height,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               decoration: InputDecoration(
-                labelText: 'Height above ground (${_units.heightImperial ? 'feet' : 'metres'})',
                 helperText: _units.heightImperial
                     ? 'Roughly: about 3 ft in a hand or inside a car, 5 ft on a car roof.'
                     : 'Roughly: about 1 m in a hand or inside a car, 1.5 m on a car roof.',
+                helperMaxLines: 8,
+                errorMaxLines: 3,
                 errorText: heightText.isNotEmpty && _heightValue == null ? _units.heightImperial ? 'Enter 0 to 984 feet' : 'Enter 0 to 300 metres' : null,
               ),
               onChanged: (_) => setState(() {}),
@@ -203,6 +212,10 @@ class _AntennaSheetState extends State<_AntennaSheet> {
       ),
     );
   }
+
+  /// The field's name sits above it and wraps; a floating InputDecoration label would ellipsise at large text sizes.
+  Widget _fieldLabel(ThemeData t, String text) =>
+      Padding(padding: const EdgeInsets.only(bottom: Gap.xs), child: Text(text, style: t.textTheme.labelLarge));
 
   Widget _mountTile(BuildContext context, AntennaMount m) {
     final t = Theme.of(context);

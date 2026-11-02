@@ -19,6 +19,7 @@ import '../widgets.dart';
 import '../account/server_drive_screen.dart' show openServerDrive;
 import 'drive_report_screen.dart' show openDriveReport;
 import 'progress_screen.dart' show ProgressTile, chartWeeks;
+import '../design/app_surfaces.dart';
 
 /// The summary plus the ids of the drives stored on this phone (for "on this phone" and the compare line).
 class ServerLoad {
@@ -350,11 +351,10 @@ class _DriveRow extends StatelessWidget {
 }
 
 void _sheet(BuildContext context, ServerDrive x, Units u) {
-  showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    showDragHandle: true,
-    builder: (context) {
+  showAppSheet<void>(
+    context,
+    detents: const [0.6, 0.92],
+    builder: (context, controller) {
       final t = Theme.of(context);
       final review = x.reviewWords;
       Widget row(String k, String v) => Padding(
@@ -366,6 +366,7 @@ void _sheet(BuildContext context, ServerDrive x, Units u) {
           );
       return SafeArea(
         child: SingleChildScrollView(
+          controller: controller,
           key: const Key('progress-server-drive-sheet'),
           padding: const EdgeInsets.fromLTRB(Gap.l, 0, Gap.l, Gap.l),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

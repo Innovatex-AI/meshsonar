@@ -21,6 +21,7 @@ import '../../chat/events.dart';
 import '../../chat/models.dart';
 import '../app.dart' show AppScope;
 import '../state_widgets.dart';
+import '../design/app_surfaces.dart';
 import '../theme.dart';
 import '../widgets.dart' show EmptyState;
 import 'channel_detail_screen.dart';
@@ -254,7 +255,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
     if (open == null) return;
     final ok = await open(uri);
     if (!ok && mounted) {
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(content: Text('Could not open that link. Long-press the message to copy it.')));
+      showAppToast(context, 'Could not open that link. Long-press the message to copy it.', kind: AppToastKind.error);
     }
   }
 

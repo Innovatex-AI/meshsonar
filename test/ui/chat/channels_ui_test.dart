@@ -325,6 +325,24 @@ void main() {
       expect(kit.store.channels.getById(j.channel.id!), isNull);
     });
 
+    testWidgets('delete: Keep does nothing, the channel and its radio slot stay', (tester) async {
+      setSize(tester, h: 1400);
+      final s = FakeRadioSession();
+      await kit.connect(session: s);
+      final j = await kit.controller.admin.createPrivate(radioA, 'Keeper');
+      await tester.pumpWidget(host(ChannelDetailScreen(controller: kit.controller, channelId: j.channel.id!)));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(find.byKey(const Key('delete-channel')), 300, scrollable: find.byType(Scrollable).first);
+      await tester.tap(find.byKey(const Key('delete-channel')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('delete-channel-dialog')), findsOneWidget);
+      await tester.tap(find.text('Keep'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('delete-channel-dialog')), findsNothing);
+      expect(kit.store.channels.getById(j.channel.id!), isNotNull);
+      expect(s.slots.any((x) => x.name == 'Keeper'), isTrue);
+    });
+
     testWidgets('delete with the radio away is refused in plain words and keeps the channel', (tester) async {
       setSize(tester, h: 1400);
       final s = FakeRadioSession();

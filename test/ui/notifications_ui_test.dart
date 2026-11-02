@@ -1,5 +1,6 @@
 // Settings > Notifications, the permission pre-prompt, the in-app banner, the status strip, tapping through to Chat, and the
 // Background Bluetooth test screen. Uses a fake LocalNotifications; no OS is involved.
+import 'toast_test_kit.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -73,7 +74,7 @@ void main() {
   });
 
   group('Settings > Notifications', () {
-    testWidgets('not allowed yet: says so; Allow shows OUR explanation first, then the system prompt', (tester) async {
+    testWidgetsT('not allowed yet: says so; Allow shows OUR explanation first, then the system prompt', (tester) async {
       useTallScreen(tester);
       final s = await install(tester);
       await openNotifications(tester, Harness());
@@ -91,7 +92,7 @@ void main() {
       expect(find.textContaining('You will not get messages while your radio is not connected'), findsOneWidget);
     });
 
-    testWidgets('Not now: no system prompt', (tester) async {
+    testWidgetsT('Not now: no system prompt', (tester) async {
       useTallScreen(tester);
       final s = await install(tester);
       await openNotifications(tester, Harness());
@@ -104,7 +105,7 @@ void main() {
       expect(find.text('Not allowed yet'), findsOneWidget);
     });
 
-    testWidgets('denied: honest text and a button to the system settings', (tester) async {
+    testWidgetsT('denied: honest text and a button to the system settings', (tester) async {
       useTallScreen(tester);
       final s = await install(tester);
       await s.prefs.markAsked();
@@ -117,7 +118,7 @@ void main() {
       expect(s.fake.settingsOpened, isTrue);
     });
 
-    testWidgets('previews default to hidden and the text says why; the switch flips it', (tester) async {
+    testWidgetsT('previews default to hidden and the text says why; the switch flips it', (tester) async {
       useTallScreen(tester);
       final s = await install(tester);
       await openNotifications(tester, Harness());
@@ -130,7 +131,7 @@ void main() {
       expect(find.textContaining('also on a locked screen'), findsOneWidget);
     });
 
-    testWidgets('master switch and sound; quiet hours show their pickers when on', (tester) async {
+    testWidgetsT('master switch and sound; quiet hours show their pickers when on', (tester) async {
       useTallScreen(tester);
       final s = await install(tester);
       await openNotifications(tester, Harness());
@@ -151,7 +152,7 @@ void main() {
       expect(find.text('Alerts are off'), findsOneWidget);
     });
 
-    testWidgets('test notification: needs permission, then arrives through the real show path', (tester) async {
+    testWidgetsT('test notification: needs permission, then arrives through the real show path', (tester) async {
       useTallScreen(tester);
       final s = await install(tester);
       await openNotifications(tester, Harness());
@@ -168,7 +169,7 @@ void main() {
       await tester.pump(const Duration(seconds: 10));
     });
 
-    testWidgets('queue warning appears in Settings with its reason and can be dismissed', (tester) async {
+    testWidgetsT('queue warning appears in Settings with its reason and can be dismissed', (tester) async {
       useTallScreen(tester);
       final s = await install(tester);
       s.queue.onDrained(14);
@@ -181,7 +182,7 @@ void main() {
   });
 
   group('per-conversation alerts', () {
-    testWidgets('lists conversations (not the wardrive channel), shows the mode, mute and mentions change it', (tester) async {
+    testWidgetsT('lists conversations (not the wardrive channel), shows the mode, mute and mentions change it', (tester) async {
       final s = await install(tester);
       final h = chat.Harness();
       h.bob();
@@ -214,7 +215,7 @@ void main() {
       expect(find.textContaining('Muted until'), findsOneWidget);
     });
 
-    testWidgets('without a chat service it says so', (tester) async {
+    testWidgetsT('without a chat service it says so', (tester) async {
       final s = await install(tester);
       await tester.pumpWidget(MaterialApp(home: ConversationAlertsScreen(s.runtime)));
       expect(find.byKey(const Key('notif-no-chat')), findsOneWidget);
@@ -232,7 +233,7 @@ void main() {
   });
 
   group('first-action pre-prompt', () {
-    testWidgets('offered once after a first action, never again after Not now', (tester) async {
+    testWidgetsT('offered once after a first action, never again after Not now', (tester) async {
       final s = await install(tester);
       late BuildContext ctx;
       await tester.pumpWidget(MaterialApp(home: Builder(builder: (c) {
@@ -251,7 +252,7 @@ void main() {
       expect(s.fake.requests, 0);
     });
 
-    testWidgets('not offered when alerts are off or already allowed', (tester) async {
+    testWidgetsT('not offered when alerts are off or already allowed', (tester) async {
       final s = await install(tester);
       s.fake.state = NotificationPermission.granted;
       late BuildContext ctx;
@@ -267,7 +268,7 @@ void main() {
   });
 
   group('in-app banner and tap-through', () {
-    testWidgets('a banner shows while in front; tapping it asks for the conversation; it fades by itself', (tester) async {
+    testWidgetsT('a banner shows while in front; tapping it asks for the conversation; it fades by itself', (tester) async {
       final s = await install(tester);
       final h = chat.Harness();
       h.bob();
@@ -291,7 +292,7 @@ void main() {
       expect(find.byKey(const Key('in-app-banner')), findsNothing);
     });
 
-    testWidgets('a notification tap switches the shell to the Chat tab and opens that conversation', (tester) async {
+    testWidgetsT('a notification tap switches the shell to the Chat tab and opens that conversation', (tester) async {
       final s = await install(tester);
       final h = Harness();
       await h.pumpApp(tester);
@@ -306,13 +307,13 @@ void main() {
       expect(ShellScope.maybeOf(tester.element(find.byKey(const Key('chat-empty'))))?.tab, AppTab.chat);
     });
 
-    testWidgets('a banner tap during a drive on the Drive tab opens the conversation over the map and stays on Map', (tester) async {
+    testWidgetsT('a banner tap during a drive on the Drive tab opens the conversation over the map and stays on Map', (tester) async {
       final s = await install(tester);
       final h = Harness()..approveKey();
       await h.pumpApp(tester);
       await h.state.connectSimulator();
       await tester.pumpAndSettle();
-      while (find.byType(BottomSheet).evaluate().isNotEmpty) {
+      while ((find.byType(BottomSheet).evaluate().isNotEmpty || find.byKey(const Key('app-sheet')).evaluate().isNotEmpty)) {
         await tester.tapAt(const Offset(2, 2));
         await tester.pumpAndSettle();
       }
@@ -330,7 +331,7 @@ void main() {
       await tester.pump(const Duration(seconds: 12));
     });
 
-    testWidgets('before chat is up a tap still brings the Chat tab forward and does not crash', (tester) async {
+    testWidgetsT('before chat is up a tap still brings the Chat tab forward and does not crash', (tester) async {
       final s = await install(tester);
       final h = Harness();
       await h.pumpApp(tester);
@@ -342,7 +343,7 @@ void main() {
   });
 
   group('status strip', () {
-    testWidgets('Reconnecting to <radio>… while trying; Reconnect button after giving up; queue warning with Dismiss', (tester) async {
+    testWidgetsT('Reconnecting to <radio>… while trying; Reconnect button after giving up; queue warning with Dismiss', (tester) async {
       final s = await install(tester);
       final connectCalls = <String>[];
       var ok = false;
@@ -386,7 +387,7 @@ void main() {
       expect(find.byKey(const Key('queue-strip')), findsNothing);
     });
 
-    testWidgets('the reconnecting wording while a try runs', (tester) async {
+    testWidgetsT('the reconnecting wording while a try runs', (tester) async {
       final s = await install(tester);
       final lr = LaunchReconnect(
         store: s.store,
@@ -405,7 +406,7 @@ void main() {
   });
 
   group('Background Bluetooth test screen', () {
-    testWidgets('notes land in the log with fg/bg and time; Copy puts header and lines on the clipboard; Clear empties', (tester) async {
+    testWidgetsT('notes land in the log with fg/bg and time; Copy puts header and lines on the clipboard; Clear empties', (tester) async {
       tester.view.physicalSize = const Size(1080, 5000);
       tester.view.devicePixelRatio = 2.5;
       addTearDown(tester.view.reset);

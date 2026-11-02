@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 
 import '../core/region_preset.dart';
 import '../platform/always_location.dart';
+import 'design/app_surfaces.dart' show showAppSheet;
+import 'design/sheet_detents.dart';
+import 'theme.dart' show Gap;
 import 'settings/data_sharing.dart' show locationPoints;
 
 const List<IconData> _pointIcons = [Icons.lock_outline, Icons.public, Icons.visibility_off_outlined, Icons.tune];
@@ -82,40 +85,57 @@ class AlwaysLocationScreen extends StatelessWidget {
 Future<void> showPresetPrompt(BuildContext context, RegionPresetPrompt p, {required void Function(bool switchView) onAnswer}) {
   String fmt(double f, double bw, int? sf, int? cr) => '${f.toStringAsFixed(3)} MHz · ${bw.toStringAsFixed(1)} kHz · SF$sf · CR$cr';
   final r = p.radio;
-  return showDialog<void>(
-    context: context,
-    barrierDismissible: false,
-    builder: (ctx) => AlertDialog(
+  return showAppSheet<void>(
+    context,
+    detents: formSheetDetents(context),
+    dismissible: false,
+    userInitiated: false,
+    builder: (ctx, controller) => Column(
       key: const Key('region-preset-dialog'),
-      title: Text('${p.to.name} uses a different radio preset'),
-      content: SingleChildScrollView(
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Your radio', style: Theme.of(ctx).textTheme.bodySmall),
-          Text(fmt(r.freqMhz ?? 0, r.bwKhz ?? 0, r.sf, r.cr)),
-          const SizedBox(height: 10),
-          Text('${p.preset.name} (${p.to.code})', style: Theme.of(ctx).textTheme.bodySmall),
-          Text(fmt(p.preset.freqMhz, p.preset.bwKhz, p.preset.sf, p.preset.cr)),
-          const SizedBox(height: 12),
-          const Text('MeshSonar never changes your radio by itself. To use this region, change the preset on your radio '
-              '(More > Radio setup, or the MeshCore app), then reconnect.'),
-        ]),
-      ),
-      actions: [
-        TextButton(
-          key: const Key('region-preset-stay'),
-          onPressed: () {
-            Navigator.of(ctx).pop();
-            onAnswer(false);
-          },
-          child: Text('Keep showing ${p.from.code}'),
+      children: [
+        Expanded(
+          child: ListView(
+            controller: controller,
+            padding: const EdgeInsets.fromLTRB(Gap.l, Gap.xs, Gap.l, Gap.m),
+            children: [
+              Semantics(header: true, child: Text('${p.to.name} uses a different radio preset', style: Theme.of(ctx).textTheme.titleLarge)),
+              const SizedBox(height: Gap.m),
+              Text('Your radio', style: Theme.of(ctx).textTheme.bodySmall),
+              Text(fmt(r.freqMhz ?? 0, r.bwKhz ?? 0, r.sf, r.cr)),
+              const SizedBox(height: 10),
+              Text('${p.preset.name} (${p.to.code})', style: Theme.of(ctx).textTheme.bodySmall),
+              Text(fmt(p.preset.freqMhz, p.preset.bwKhz, p.preset.sf, p.preset.cr)),
+              const SizedBox(height: 12),
+              const Text('MeshSonar never changes your radio by itself. To use this region, change the preset on your radio '
+                  '(More > Radio setup, or the MeshCore app), then reconnect.'),
+            ],
+          ),
         ),
-        FilledButton(
-          key: const Key('region-preset-switch'),
-          onPressed: () {
-            Navigator.of(ctx).pop();
-            onAnswer(true);
-          },
-          child: Text('Show ${p.to.code}'),
+        Padding(
+          padding: EdgeInsets.fromLTRB(Gap.l, Gap.s, Gap.l, Gap.l + MediaQuery.viewPaddingOf(ctx).bottom),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              FilledButton(
+                key: const Key('region-preset-switch'),
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  onAnswer(true);
+                },
+                child: Text('Show ${p.to.code}'),
+              ),
+              const SizedBox(height: Gap.xs),
+              TextButton(
+                key: const Key('region-preset-stay'),
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  onAnswer(false);
+                },
+                child: Text('Keep showing ${p.from.code}'),
+              ),
+            ],
+          ),
         ),
       ],
     ),

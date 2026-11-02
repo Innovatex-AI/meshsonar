@@ -18,6 +18,7 @@ import '../antenna_sheet.dart';
 import '../chat/chat_drive_sheet.dart';
 import '../app.dart' show AppScope;
 import '../connect_screen.dart';
+import '../design/app_surfaces.dart';
 import '../drive_stats.dart' show formatDuration;
 import '../ping_log_screen.dart' show openPingLog;
 import '../region/region_switch_sheet.dart' show showNearestRegionsSheet;
@@ -30,35 +31,29 @@ void openConnect(BuildContext context) {
   Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const ConnectScreen()));
 }
 
-void openDriveReport(BuildContext context, String sessionId) {
-  Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => DriveReportScreen(sessionId: sessionId)));
+/// Finished-dock hook point: "View drive report". The dock (and the mini bar) call this, never `openDriveReport` ad hoc.
+Future<void> openFinishedDriveReport(BuildContext context, String sessionId) => openDriveReport(context, sessionId);
+
+/// Asks "Stop this drive?" and, on confirm, stops it. The Start/Stop button and the mini bar both go through here.
+Future<bool> confirmAndStopDrive(BuildContext context, AppState s) async {
+  if (!await confirmStopDrive(context)) return false;
+  unawaited(s.stopDrive());
+  return true;
 }
 
-/// "Stop this drive?" so a bump in the car can't end a drive. Keep driving is the default; returns true to stop.
+/// "Stop this drive?" so a bump in the car can't end a drive. An iOS action sheet: the red Stop drive row, then a
+/// separate Keep driving (cancel). Returns true to stop; dismissing the sheet keeps driving.
 Future<bool> confirmStopDrive(BuildContext context) async {
-  final ok = await showDialog<bool>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      key: const Key('stop-drive-dialog'),
-      title: const Text('Stop this drive?'),
-      content: const Text('Pings stop and the drive is saved on this phone. Start drive begins a new one.'),
-      actions: [
-        FilledButton(
-          key: const Key('stop-drive-keep'),
-          style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
-          onPressed: () => Navigator.pop(ctx, false),
-          child: const Text('Keep driving'),
-        ),
-        TextButton(
-          key: const Key('stop-drive-confirm'),
-          style: TextButton.styleFrom(minimumSize: const Size(0, 48), foregroundColor: Theme.of(ctx).colorScheme.error),
-          onPressed: () => Navigator.pop(ctx, true),
-          child: const Text('Stop drive'),
-        ),
-      ],
-    ),
+  final stop = await showAppActionSheet<bool>(
+    context,
+    title: 'Stop this drive?',
+    message: 'Pings stop and the drive is saved on this phone. Start drive begins a new one.',
+    actions: const [AppAction<bool>('Stop drive', true, destructive: true, key: Key('stop-drive-confirm'))],
+    cancelLabel: 'Keep driving',
+    cancelKey: const Key('stop-drive-keep'),
+    sheetKey: const Key('stop-drive-dialog'),
   );
-  return ok == true;
+  return stop == true;
 }
 
 // ------------------------------------------------------------------------------------------------ stats
@@ -552,7 +547,7 @@ class DriveReportCard extends StatelessWidget {
       child: InkWell(
         key: const Key('view-report'),
         borderRadius: BorderRadius.circular(Corners.chip),
-        onTap: () => openDriveReport(context, sessionId),
+        onTap: () => openFinishedDriveReport(context, sessionId),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(Gap.m, Gap.s, Gap.xs, Gap.s),
           child: Row(
@@ -635,7 +630,7 @@ class DriveActionButtons extends StatelessWidget {
                     ? null
                     : () async {
                         if (driving) {
-                          if (await confirmStopDrive(context)) unawaited(s.stopDrive());
+                          await confirmAndStopDrive(context, s);
                         } else if (!s.connected) {
                           openConnect(context);
                         } else {

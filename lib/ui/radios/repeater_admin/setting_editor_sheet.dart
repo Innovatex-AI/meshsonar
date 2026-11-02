@@ -8,18 +8,17 @@ import 'package:flutter/services.dart';
 import '../../../radio/repeater_admin.dart';
 import '../../../radio/repeater_cli.dart' show utf8Length;
 import '../../../radio/repeater_settings.dart';
+import '../../design/app_surfaces.dart';
 import '../../theme.dart';
 import 'admin_common.dart';
 import 'admin_controller.dart';
 
 /// Opens the editor for [def]. [initial] pre-fills the value (for example the region preset). Returns when the sheet closes.
 Future<void> showSettingEditor(BuildContext context, RepeaterAdminController c, SettingDef def, {String? initial, ChangePlan? startAtReview}) {
-  return showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    showDragHandle: true,
-    builder: (_) => SettingEditorSheet(controller: c, def: def, initial: initial, startAtReview: startAtReview),
+  return showAppSheet<void>(
+    context,
+    detents: const [0.6, 0.92],
+    builder: (_, scroll) => SettingEditorSheet(controller: c, def: def, initial: initial, startAtReview: startAtReview, scroll: scroll),
   );
 }
 
@@ -32,7 +31,10 @@ class SettingEditorSheet extends StatefulWidget {
 
   /// Start on the review step of an existing plan (an undo, or a console write).
   final ChangePlan? startAtReview;
-  const SettingEditorSheet({super.key, required this.controller, required this.def, this.initial, this.startAtReview});
+
+  /// The sheet's scroll controller (from showAppSheet), so dragging the content hands off to the sheet.
+  final ScrollController? scroll;
+  const SettingEditorSheet({super.key, required this.controller, required this.def, this.initial, this.startAtReview, this.scroll});
 
   @override
   State<SettingEditorSheet> createState() => _SettingEditorSheetState();
@@ -204,13 +206,14 @@ class _SettingEditorSheetState extends State<SettingEditorSheet> {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+    return SafeArea(
+      top: false,
       child: Align(
         alignment: Alignment.topCenter,
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 640),
           child: SingleChildScrollView(
+            controller: widget.scroll,
             padding: const EdgeInsets.fromLTRB(Gap.l, 0, Gap.l, Gap.xl),
             child: Column(
               key: Key('editor-${def.key}'),

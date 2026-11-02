@@ -9,20 +9,16 @@ import '../../chat/chat_service.dart';
 import '../../chat/db/outbox_repository.dart';
 import '../../chat/delivery_text.dart';
 import '../../chat/models.dart';
+import '../design/app_surfaces.dart';
 import '../theme.dart';
 
 /// Opens the details of one message (bottom sheet on phones, dialog on wide screens).
 Future<void> showMessageDetails(BuildContext context, {required ChatService chat, required String messageId}) async {
-  final wide = MediaQuery.sizeOf(context).width >= 700;
-  Widget body(BuildContext c) => MessageDetails(chat: chat, messageId: messageId);
-  if (wide) {
-    await showDialog<void>(
-      context: context,
-      builder: (c) => Dialog(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 520, maxHeight: 640), child: body(c))),
-    );
-  } else {
-    await showModalBottomSheet<void>(context: context, isScrollControlled: true, showDragHandle: true, builder: (c) => SafeArea(child: body(c)));
-  }
+  await showAppSheet<void>(
+    context,
+    detents: const [0.92],
+    builder: (c, scroll) => PrimaryScrollController(controller: scroll, child: SafeArea(child: MessageDetails(chat: chat, messageId: messageId))),
+  );
 }
 
 String _clock(int ms) {
@@ -140,9 +136,7 @@ class _MessageDetailsState extends State<MessageDetails> {
             label: const Text('Copy text'),
             onPressed: () async {
               await Clipboard.setData(ClipboardData(text: m.text));
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Text copied')));
-              }
+              if (context.mounted) showAppToast(context, 'Text copied');
             },
           ),
         ]),

@@ -7,6 +7,7 @@ import 'package:meshsonar/ui/onboarding/ui_prefs.dart';
 import 'package:meshsonar/ui/radio/radio_screen.dart';
 
 import 'fakes.dart';
+import 'toast_test_kit.dart';
 
 class _Src implements CommunityPresetSource {
   @override
@@ -52,7 +53,7 @@ void main() {
     expect(find.byKey(const Key('community-Elsewhere')), findsOneWidget);
   });
 
-  testWidgets('Settings: telemetry toggle persists', (tester) async {
+  testWidgetsT('Settings: telemetry toggle persists', (tester) async {
     useTallScreen(tester);
     final h = Harness();
     await h.pumpApp(tester);

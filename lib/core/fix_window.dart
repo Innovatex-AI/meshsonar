@@ -222,6 +222,16 @@ class FixWindow {
     WindowFix? best;
     double bestErr = double.infinity;
     var candidates = 0, refused = 0;
+    // A fix with no speed of its own is not a parked car: it takes the newest speed the window knows, so an old speedless fix (the
+    // first ones of a drive have none until a 3 s baseline exists) cannot beat fresher ones on a zero age penalty.
+    double? lastSpeed;
+    for (var i = _fixes.length - 1; i >= 0; i--) {
+      final v = _fixes[i].fix.speedMps;
+      if (v != null) {
+        lastSpeed = v;
+        break;
+      }
+    }
     for (final w in _fixes) {
       final age = now - w.arrived;
       if (age > span || age.isNegative) continue;
@@ -235,7 +245,7 @@ class FixWindow {
         continue;
       }
       candidates++;
-      final err = (acc ?? unknownAccuracyM) + (w.fix.speedMps ?? 0) * age.inMilliseconds / 1000.0;
+      final err = (acc ?? unknownAccuracyM) + (w.fix.speedMps ?? lastSpeed ?? 0) * age.inMilliseconds / 1000.0;
       if (best == null || err < bestErr || (err == bestErr && w.arrived > best.arrived)) {
         best = w;
         bestErr = err;

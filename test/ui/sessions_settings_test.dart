@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/ui/design/app_surfaces.dart';
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/ui/about_screen.dart';
@@ -68,7 +69,7 @@ void main() {
     expect(find.text('Uploaded 3 new pings.'), findsOneWidget);
 
     // Export & share (the progress card above the list puts this button under the sync SnackBar: close it first)
-    ScaffoldMessenger.of(tester.element(find.byKey(const ValueKey('export-old')))).hideCurrentSnackBar();
+    dismissAppToast();
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('export-old')));
     await tester.pumpAndSettle();
@@ -211,6 +212,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('mount-roofMagMount')));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('antenna-gain-unknown')));
     await tester.tap(find.byKey(const Key('antenna-gain-unknown'))); // the seeded profile's gain is "Don't know"
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('antenna-gain-field')), '5.8');

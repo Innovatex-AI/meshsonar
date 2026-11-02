@@ -1,15 +1,14 @@
 // "Contacts on your radio": what the radio's table holds, and a way to free slots without touching the phone's book.
 import 'package:flutter/material.dart';
 
+import '../design/app_surfaces.dart';
 import '../theme.dart';
 import 'contacts_controller.dart';
 
-Future<void> showRadioListSheet(BuildContext context, ContactsController controller) => showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      showDragHandle: true,
-      builder: (_) => RadioListSheet(controller: controller),
+Future<void> showRadioListSheet(BuildContext context, ContactsController controller) => showAppSheet<void>(
+      context,
+      detents: const [0.92],
+      builder: (_, scroll) => PrimaryScrollController(controller: scroll, child: RadioListSheet(controller: controller)),
     );
 
 class RadioListSheet extends StatefulWidget {
@@ -34,7 +33,7 @@ class _RadioListSheetState extends State<RadioListSheet> {
       _picked.clear();
       if (mounted) {
         setState(() => _busy = false);
-        ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text('$n taken off your radio. They are still on this phone.')));
+        showAppToast(context, '$n taken off your radio. They are still on this phone.');
       }
     } catch (_) {
       if (mounted) {

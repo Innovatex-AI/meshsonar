@@ -19,6 +19,7 @@ import '../region/stats_panel.dart' show LeaderboardView, regionStatsApiFactory;
 import '../report/local_drives.dart';
 import '../account/leaderboard_screen.dart' show openLeaderboard;
 import '../report/progress_screen.dart' show openProgress;
+import '../design/app_surfaces.dart';
 
 IconData baseStyleIcon(BaseMapStyle s) => switch (s) {
   BaseMapStyle.chart => Icons.radar,
@@ -52,12 +53,7 @@ class MapToolColumn extends StatelessWidget {
               tooltip: 'Base map: ${style.label}. Tap for ${style.next.label}',
               onPressed: () {
                 model.cycleBaseStyle();
-                final m = ScaffoldMessenger.maybeOf(context);
-                m?.hideCurrentSnackBar();
-                m?.showSnackBar(SnackBar(
-                  duration: const Duration(milliseconds: 1400),
-                  content: Text('${model.baseStyle.label}: ${model.baseStyle.blurb}'),
-                ));
+                showAppToast(context, '${model.baseStyle.label}: ${model.baseStyle.blurb}', duration: const Duration(milliseconds: 1400));
               },
             ),
             const SizedBox(height: Gap.s),
@@ -99,11 +95,10 @@ class MapToolColumn extends StatelessWidget {
 
 // ------------------------------------------------------------------ filter drawer
 
-Future<void> showMapFilterSheet(BuildContext context, DriveMapModel model) => showModalBottomSheet<void>(
-  context: context,
-  isScrollControlled: true,
-  showDragHandle: true,
-  builder: (_) => SafeArea(child: MapFilterSheet(model: model)),
+Future<void> showMapFilterSheet(BuildContext context, DriveMapModel model) => showAppSheet<void>(
+  context,
+  detents: const [0.7, 0.92],
+  builder: (_, c) => SafeArea(child: MapFilterSheet(model: model)),
 );
 
 class MapFilterSheet extends StatelessWidget {
@@ -213,11 +208,10 @@ class MapFilterSheet extends StatelessWidget {
 
 // ------------------------------------------------------------------ leaderboard and my stats
 
-Future<void> showMapLeadersSheet(BuildContext context) => showModalBottomSheet<void>(
-  context: context,
-  isScrollControlled: true,
-  showDragHandle: true,
-  builder: (_) => const SafeArea(child: MapLeadersSheet()),
+Future<void> showMapLeadersSheet(BuildContext context) => showAppSheet<void>(
+  context,
+  detents: const [0.6, 0.92],
+  builder: (_, c) => const SafeArea(child: MapLeadersSheet()),
 );
 
 /// The viewed region's 30-day leaderboard (the website's public `leaderboard` endpoint, opted-in drivers only) above your

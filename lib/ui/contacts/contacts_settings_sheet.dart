@@ -2,15 +2,14 @@
 import 'package:flutter/material.dart';
 
 import '../../chat/contact_port.dart';
+import '../design/app_surfaces.dart';
 import '../theme.dart';
 import 'contacts_controller.dart';
 
-Future<void> showContactsSettings(BuildContext context, ContactsController controller) => showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      showDragHandle: true,
-      builder: (_) => ContactsSettingsSheet(controller: controller),
+Future<void> showContactsSettings(BuildContext context, ContactsController controller) => showAppSheet<void>(
+      context,
+      detents: const [0.92],
+      builder: (_, scroll) => PrimaryScrollController(controller: scroll, child: ContactsSettingsSheet(controller: controller)),
     );
 
 class ContactsSettingsSheet extends StatefulWidget {

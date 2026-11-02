@@ -4,14 +4,14 @@ import 'package:flutter/material.dart';
 
 import '../../app/app_state.dart';
 import '../../core/drive_store.dart' show MapHealthStore;
+import '../design/app_surfaces.dart';
 
 Future<void> shareMapHealth(BuildContext context, AppState s, String sessionId) async {
-  final messenger = ScaffoldMessenger.maybeOf(context);
   try {
     final st = s.services.store;
     final f = st is MapHealthStore ? await (st as MapHealthStore).mapHealthFile(sessionId) : null;
     if (f == null) {
-      messenger?.showSnackBar(const SnackBar(content: Text('This drive has no map health samples. Drives recorded from this version on keep them.')));
+      if (context.mounted) showAppToast(context, 'This drive has no map health samples. Drives recorded from this version on keep them.');
       return;
     }
     final dir = await s.services.exportDir();
@@ -19,6 +19,6 @@ Future<void> shareMapHealth(BuildContext context, AppState s, String sessionId) 
     final out = await f.copy('${dir.path}/meshsonar-map-health-$short.jsonl');
     await s.services.shareFile(out);
   } catch (e) {
-    messenger?.showSnackBar(const SnackBar(content: Text('Could not share the map health file.')));
+    if (context.mounted) showAppToast(context, 'Could not share the map health file.', kind: AppToastKind.error);
   }
 }

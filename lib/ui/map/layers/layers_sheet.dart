@@ -25,6 +25,7 @@ import '../sheets/repeater_sheet.dart' show rosterStatusText;
 import 'map_layer.dart';
 import 'registry.dart';
 import 'repeater_map_source.dart';
+import '../../design/app_surfaces.dart';
 
 /// Layers this build draws. `neighbours` is in the registry (website parity, WP-M4) but has no renderer yet, so the
 /// sheet does not offer a switch that would do nothing.
@@ -59,13 +60,10 @@ Key layerSwitchKey(String id) => Key(switch (id) {
 
 /// Opens the sheet for [model] (shared by the Drive screen map and the full-screen map).
 Future<void> showGeneratedLayersSheet(BuildContext context, DriveMapModel model) {
-  final h = MediaQuery.sizeOf(context).height;
-  return showModalBottomSheet<void>(
-    context: context,
-    showDragHandle: true,
-    isScrollControlled: true,
-    constraints: BoxConstraints(maxHeight: h * 0.85),
-    builder: (context) => SafeArea(child: MapLayersSheet(model: model)),
+  return showAppSheet<void>(
+    context,
+    detents: const [0.85],
+    builder: (context, c) => SafeArea(child: MapLayersSheet(model: model)),
   );
 }
 

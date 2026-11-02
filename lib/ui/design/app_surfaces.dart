@@ -550,8 +550,12 @@ void dismissAppToast() {
   _activeToast = null;
   if (a == null) return;
   a.timer.cancel();
-  if (a.entry.mounted) a.entry.remove();
-  a.entry.dispose();
+  final entry = a.entry;
+  // An entry can be attached to the overlay yet not built (timer fires before the next frame), and Overlay.remove can
+  // defer detaching; so always remove, and dispose only once the frame has detached it.
+  entry.remove();
+  WidgetsBinding.instance.addPostFrameCallback((_) => entry.dispose());
+  WidgetsBinding.instance.ensureVisualUpdate();
   appToastMessage.value = null;
 }
 

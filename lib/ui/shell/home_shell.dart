@@ -14,6 +14,7 @@ import '../alerts/in_app_banner.dart';
 import '../always_location_screen.dart';
 import '../antenna_sheet.dart';
 import '../app.dart';
+import '../design/app_surfaces.dart' show AppToastHost, ToastAnchor, dismissAppToast, showAppToast;
 import '../drive_screen.dart';
 import '../onboarding/ui_prefs.dart';
 import '../telemetry_sheet.dart';
@@ -136,7 +137,7 @@ class _HomeShellState extends State<HomeShell> {
       _antennaSheetScheduled = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _antennaSheetScheduled = false;
-        if (mounted && s.takeAntennaPrompt()) showAntennaSheet(context);
+        if (mounted && s.takeAntennaPrompt()) showAntennaSheet(context, userInitiated: false);
       });
     }
     // First run: tell the person what telemetry shares (it is on unless they opt out).
@@ -159,13 +160,13 @@ class _HomeShellState extends State<HomeShell> {
     if (s.pendingNotice == null) return;
     final msg = s.takeNotice();
     if (msg == null) return;
-    _messengerKey.currentState
-      ?..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(msg, style: const TextStyle(fontSize: 16)), duration: const Duration(seconds: 6)));
+    // Top-anchored on the Drive tab (its bottom is the dock and controls), bottom elsewhere (AppToastHost below).
+    showAppToast(_contentKey.currentContext ?? context, msg, duration: const Duration(seconds: 6));
   }
 
   @override
   void dispose() {
+    dismissAppToast();
     _state?.removeListener(_onState);
     _shell.removeListener(_onShell);
     AlertsHost.runtime.removeListener(_bindAlerts);
@@ -230,13 +231,17 @@ class _HomeShellState extends State<HomeShell> {
                 );
                 // The Drive tab already is the drive screen (its dock is the bar); the bar is for every other tab.
                 final bar = onDrive ? const SizedBox.shrink() : MiniDriveBar(onOpen: _shell.openDrive);
-                final content = InAppBannerHost(
-                  child: Column(key: _contentKey, children: [
-                    Expanded(child: pages),
-                    AlertsStatusStrip(bottomInset: onDrive ? barPad : 0),
-                    bar,
-                    SizedBox(height: onDrive ? 0 : barPad),
-                  ]),
+                final content = AppToastHost(
+                  anchor: onDrive ? ToastAnchor.top : ToastAnchor.bottom,
+                  inset: onDrive ? 56 : 72,
+                  child: InAppBannerHost(
+                    child: Column(key: _contentKey, children: [
+                      Expanded(child: pages),
+                      AlertsStatusStrip(bottomInset: onDrive ? barPad : 0),
+                      bar,
+                      SizedBox(height: onDrive ? 0 : barPad),
+                    ]),
+                  ),
                 );
                 if (!wide) return content;
                 return Row(children: [

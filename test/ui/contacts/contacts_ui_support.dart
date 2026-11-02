@@ -3,6 +3,7 @@
 // dark mode.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/ui/design/app_surfaces.dart' show dismissAppToast;
 import 'package:meshsonar/chat/chat_service.dart';
 import 'package:meshsonar/chat/models.dart';
 import 'package:meshsonar/chat/outbox.dart';
@@ -84,3 +85,12 @@ Future<void> expectAccessible(WidgetTester tester) async {
   await expectLater(tester, meetsGuideline(textContrastGuideline));
   handle.dispose();
 }
+
+/// `testWidgets` that also removes any app toast before the end-of-test timer check (toasts own a 2.5 s timer).
+void testWidgetsT(String description, Future<void> Function(WidgetTester tester) body) => testWidgets(description, (tester) async {
+      try {
+        await body(tester);
+      } finally {
+        dismissAppToast();
+      }
+    });

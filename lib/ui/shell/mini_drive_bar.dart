@@ -14,7 +14,7 @@ import '../../core/units.dart';
 import '../../radio/radio_api.dart';
 import '../../app/app_state.dart';
 import '../app.dart';
-import '../drive/drive_controls.dart' show LiveDot, confirmStopDrive;
+import '../drive/drive_controls.dart' show LiveDot, confirmAndStopDrive;
 import '../widgets.dart' show bestSnr;
 
 /// Text the bar shows for a drive, split for layout (visual) and one sentence for screen readers.
@@ -264,7 +264,7 @@ class _MiniDriveBarState extends State<MiniDriveBar> {
                   onPressed: s.busy
                       ? null
                       : () async {
-                          if (await confirmStopDrive(context)) unawaited(s.stopDrive());
+                          await confirmAndStopDrive(context, s);
                         },
                   icon: const Icon(Icons.stop_rounded, size: 28),
                 ),

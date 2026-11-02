@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme.dart';
+import '../design/app_surfaces.dart';
 
 /// Label / value pairs; each pair reads as one line to a screen reader.
 class FactRows extends StatelessWidget {
@@ -31,12 +32,12 @@ class FactRows extends StatelessWidget {
 
 /// Opens a scrollable bottom sheet with a title.
 Future<void> showToolSheet(BuildContext context, {required Key key, required String title, required List<Widget> children}) {
-  return showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    showDragHandle: true,
-    builder: (ctx) => SafeArea(
+  return showAppSheet<void>(
+    context,
+    detents: const [0.6, 0.92],
+    builder: (ctx, c) => SafeArea(
       child: SingleChildScrollView(
+        controller: c,
         key: key,
         padding: const EdgeInsets.fromLTRB(Gap.l, 0, Gap.l, Gap.xl),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

@@ -37,6 +37,16 @@ void main() {
       expect(m.pick(s(7))!.accuracyM, 52);
     });
 
+    test('a speedless old fix does not beat fresher ones: it takes the newest known speed (first seconds of a drive)', () {
+      final w = FixWindow();
+      w.add(fix(5, north: 0, atSec: 0), s(0)); // no speed yet: no 3 s baseline
+      w.add(fix(5, north: 56, atSec: 1), s(1));
+      w.add(fix(5, north: 167, speed: 55.5, atSec: 3), s(3));
+      w.add(fix(5, north: 500, speed: 55.5, atSec: 9), s(9));
+      // Old: 5 + 0 (parked, wrongly) would win at t = 10. With the car's speed it costs 5 + 55.5 * 10.
+      expect(w.pick(s(10))!.fix.at, t0.add(const Duration(seconds: 9)));
+    });
+
     test('ties go to the fresher fix', () {
       final w = FixWindow();
       w.add(fix(30, speed: 0.0, atSec: 0), s(0));

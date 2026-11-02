@@ -98,7 +98,8 @@ void main() {
     expect(tester.widget<Text>(find.byKey(const Key('stat-pings'))).data, '3');
 
     await tester.tap(find.byKey(const Key('start-stop')));
-    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
     await tester.tap(find.byKey(const Key('stop-drive-confirm')));
     await settle(tester);
     expect(e.stopped, isTrue);
@@ -140,7 +141,8 @@ void main() {
     await settle(tester);
 
     await tester.tap(find.byKey(const Key('start-stop')));
-    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
     await tester.tap(find.byKey(const Key('stop-drive-confirm')));
     await settle(tester);
     expect(h.sync.syncedSessions.length, 1);
@@ -185,7 +187,8 @@ void main() {
     h.engines.single.emit(silentPing('p1'));
     await settle(tester);
     await tester.tap(find.byKey(const Key('start-stop')));
-    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
     await tester.tap(find.byKey(const Key('stop-drive-confirm')));
     await settle(tester);
     expect(h.sync.syncedSessions, isEmpty);
@@ -271,7 +274,8 @@ void main() {
     expect(h.state.driving, isTrue);
 
     await tester.tap(find.byKey(const Key('start-stop')));
-    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
     expect(find.byKey(const Key('stop-drive-dialog')), findsOneWidget);
     expect(find.text('Stop this drive?'), findsOneWidget);
     final keep = tester.getSize(find.byKey(const Key('stop-drive-keep')));
@@ -279,12 +283,14 @@ void main() {
     expect(keep.height, greaterThanOrEqualTo(44));
     expect(stop.height, greaterThanOrEqualTo(44));
     await tester.tap(find.byKey(const Key('stop-drive-keep')));
-    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
     expect(find.byKey(const Key('stop-drive-dialog')), findsNothing);
     expect(h.state.driving, isTrue, reason: 'Keep driving changes nothing');
 
     await tester.tap(find.byKey(const Key('start-stop')));
-    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
     await tester.tap(find.byKey(const Key('stop-drive-confirm')));
     await settle(tester);
     expect(h.state.driving, isFalse);

@@ -132,6 +132,20 @@ void main() {
     expect(find.text('anyone on 910?'), findsOneWidget);
   });
 
+  testWidgets('delete message: Keep leaves it, confirm removes it', (tester) async {
+    setSize(tester);
+    await pump(tester);
+    await tester.longPress(find.text('good morning everyone'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('act-delete')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('confirm-delete-message')), findsOneWidget);
+    await tester.tap(find.text('Keep'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('confirm-delete-message')), findsNothing);
+    expect(find.text('good morning everyone'), findsOneWidget);
+  });
+
   testWidgets('search in the conversation', (tester) async {
     setSize(tester);
     await pump(tester);

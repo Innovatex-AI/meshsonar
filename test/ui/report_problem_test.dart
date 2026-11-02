@@ -388,6 +388,32 @@ void main() {
       expect(h2.reports.sent, isEmpty);
       await drain(tester);
     });
+
+    testWidgets('Keep on the discard sheet leaves the saved draft alone', (tester) async {
+      useTallScreen(tester);
+      final h1 = M1Harness();
+      h1.settings.saved = approved();
+      h1.reports.error = const CmatException('timed out talking to cmat.example.org');
+      await h1.pumpApp(tester);
+      await fillAndReview(tester);
+      await send(tester);
+      expect(h1.drafts.draft, isNotNull);
+      await drain(tester);
+
+      final h2 = M1Harness(drafts: h1.drafts);
+      h2.settings.saved = approved();
+      await h2.pumpApp(tester);
+      await openReportFromSettings(tester);
+      await tester.tap(find.byKey(const Key('report-discard-saved')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('report-discard-confirm')), findsOneWidget);
+      await tester.tap(find.text('Keep'));
+      await tester.pumpAndSettle();
+      expect(h2.drafts.draft, isNotNull);
+      expect(find.byKey(const Key('report-send-saved')), findsOneWidget);
+      expect(h2.reports.sent, isEmpty);
+      await drain(tester);
+    });
   });
 
   group('diagnostic log is fed by the app', () {

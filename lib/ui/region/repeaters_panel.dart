@@ -15,6 +15,7 @@ import '../../app/app_state.dart';
 import '../../core/region_repeaters_api.dart';
 import '../../core/repeater_sync.dart';
 import '../app.dart';
+import '../design/app_surfaces.dart';
 
 enum RepeaterSort { lastHeard, name, snr, neighbours }
 
@@ -284,16 +285,21 @@ class _RepeatersPanelState extends State<RepeatersPanel> {
                   onChanged: (v) => setState(() => _query = v),
                 ),
               ),
-              PopupMenuButton<RepeaterSort>(
+              IconButton(
                 key: const Key('repeaters-sort'),
                 tooltip: 'Sort',
                 icon: const Icon(Icons.sort_rounded),
-                initialValue: _sort,
-                onSelected: (v) => setState(() => _sort = v),
-                itemBuilder: (_) => [
-                  for (final s in RepeaterSort.values)
-                    PopupMenuItem(value: s, child: Text('Sort: ${s.label}')),
-                ],
+                onPressed: () async {
+                  final v = await showAppActionSheet<RepeaterSort>(
+                    context,
+                    title: 'Sort repeaters',
+                    actions: [
+                      for (final s in RepeaterSort.values)
+                        AppAction('Sort: ${s.label}', s, checked: s == _sort),
+                    ],
+                  );
+                  if (v != null && mounted) setState(() => _sort = v);
+                },
               ),
             ],
           ),
@@ -448,10 +454,10 @@ class _RepeaterTile extends StatelessWidget {
         regionSlug: regionSlug,
         repeaterKey: r.key,
       ),
-      onLongPress: () => showModalBottomSheet<void>(
-        context: context,
-        showDragHandle: true,
-        builder: (_) => SafeArea(child: _RepeaterDetail(r)),
+      onLongPress: () => showAppSheet<void>(
+        context,
+        detents: const [0.6, 0.92],
+        builder: (_, c) => SafeArea(child: SingleChildScrollView(controller: c, child: _RepeaterDetail(r))),
       ),
     );
   }

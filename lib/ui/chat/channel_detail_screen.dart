@@ -1,10 +1,12 @@
 // Channel info: share (QR, link, copy), notifications, pin, region, rename, put back on the radio, clear history, delete.
+import 'package:flutter/cupertino.dart' show CupertinoButton;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../app/chat_controller.dart';
 import '../../chat/channel_admin.dart';
 import '../../chat/models.dart';
+import '../design/app_surfaces.dart';
 import '../theme.dart';
 import '../widgets.dart' show SectionLabel;
 import 'qr_widgets.dart';
@@ -70,36 +72,44 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
       await f();
     } on ChannelAdminException catch (e) {
       if (!mounted) return;
-      await showDialog<void>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          key: const Key('channel-error-dialog'),
-          icon: const Icon(Icons.error_outline_rounded),
-          title: const Text('Could not do that'),
-          content: Text(e.message),
-          actions: [FilledButton(style: FilledButton.styleFrom(minimumSize: const Size(48, 48)), onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
-        ),
+      await showAppAlert(
+        context,
+        title: 'Could not do that',
+        message: e.message,
+        confirmLabel: 'OK',
+        cancelLabel: 'Close',
+        dialogKey: const Key('channel-error-dialog'),
       );
     }
   }
 
   Future<void> _copy(String text, String what) async {
     await Clipboard.setData(ClipboardData(text: text));
-    if (mounted) ScaffoldMessenger.maybeOf(context)?..hideCurrentSnackBar()..showSnackBar(SnackBar(content: Text('$what copied')));
+    if (mounted) showAppToast(context, '$what copied', kind: AppToastKind.success);
+  }
+
+  /// A small form sheet: [fields] above a Save button; returns [value] on Save, null on dismiss.
+  Future<String?> _textSheet({required String title, required Key saveKey, required List<Widget> fields, required String Function() value}) {
+    return showAppSheet<String>(
+      context,
+      detents: const [0.5, 0.92],
+      builder: (ctx, controller) => AppSheetScaffold(
+        controller: controller,
+        title: title,
+        primaryAction: CupertinoButton.filled(key: saveKey, onPressed: () => Navigator.pop(ctx, value()), child: const Text('Save')),
+        secondaryAction: CupertinoButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+        children: fields,
+      ),
+    );
   }
 
   Future<void> _rename(Channel ch) async {
     final ctl = TextEditingController(text: ch.name);
-    final name = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Rename channel'),
-        content: TextField(key: const Key('rename-field'), controller: ctl, autofocus: true, decoration: const InputDecoration(labelText: 'Channel name')),
-        actions: [
-          TextButton(style: TextButton.styleFrom(minimumSize: const Size(48, 48)), onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(key: const Key('rename-save'), style: FilledButton.styleFrom(minimumSize: const Size(48, 48)), onPressed: () => Navigator.pop(ctx, ctl.text), child: const Text('Save')),
-        ],
-      ),
+    final name = await _textSheet(
+      title: 'Rename channel',
+      saveKey: const Key('rename-save'),
+      fields: [TextField(key: const Key('rename-field'), controller: ctl, autofocus: true, decoration: const InputDecoration(labelText: 'Channel name'))],
+      value: () => ctl.text,
     );
     if (name == null) return;
     await _guard(() async {
@@ -110,20 +120,15 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
 
   Future<void> _editRegion(Channel ch) async {
     final ctl = TextEditingController(text: ch.regionScope ?? '');
-    final res = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Region'),
-        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text(_regionHelp),
-          const SizedBox(height: Gap.m),
-          TextField(key: const Key('region-field'), controller: ctl, autofocus: true, autocorrect: false, decoration: const InputDecoration(labelText: 'Region name', hintText: 'Leave empty for the whole mesh')),
-        ]),
-        actions: [
-          TextButton(style: TextButton.styleFrom(minimumSize: const Size(48, 48)), onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(key: const Key('region-save'), style: FilledButton.styleFrom(minimumSize: const Size(48, 48)), onPressed: () => Navigator.pop(ctx, ctl.text), child: const Text('Save')),
-        ],
-      ),
+    final res = await _textSheet(
+      title: 'Region',
+      saveKey: const Key('region-save'),
+      fields: [
+        const Text(_regionHelp),
+        const SizedBox(height: Gap.m),
+        TextField(key: const Key('region-field'), controller: ctl, autofocus: true, autocorrect: false, decoration: const InputDecoration(labelText: 'Region name', hintText: 'Leave empty for the whole mesh')),
+      ],
+      value: () => ctl.text,
     );
     if (res == null) return;
     await _guard(() async {
@@ -144,24 +149,17 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
       });
 
   Future<void> _delete(Channel ch) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        key: const Key('delete-channel-dialog'),
-        title: Text('Delete ${ch.name}?'),
-        content: Text(ch.slot == null
-            ? 'The channel and its messages are removed from this phone.'
-            : 'The channel is removed from your radio and its messages from this phone. You can join it again later with its link, if you still have it.'),
-        actions: [
-          TextButton(style: TextButton.styleFrom(minimumSize: const Size(48, 48)), onPressed: () => Navigator.pop(ctx, false), child: const Text('Keep')),
-          FilledButton(
-            key: const Key('delete-channel-confirm'),
-            style: FilledButton.styleFrom(minimumSize: const Size(48, 48), backgroundColor: Theme.of(ctx).colorScheme.error),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+    final ok = await showAppAlert(
+      context,
+      title: 'Delete ${ch.name}?',
+      message: ch.slot == null
+          ? 'The channel and its messages are removed from this phone.'
+          : 'The channel is removed from your radio and its messages from this phone. You can join it again later with its link, if you still have it.',
+      confirmLabel: 'Delete',
+      cancelLabel: 'Keep',
+      destructive: true,
+      dialogKey: const Key('delete-channel-dialog'),
+      confirmKey: const Key('delete-channel-confirm'),
     );
     if (ok != true) return;
     await _guard(() async {
@@ -171,16 +169,14 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
   }
 
   Future<void> _clearHistory(Channel ch) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Clear the messages?'),
-        content: const Text('The messages of this channel are removed from this phone. The channel stays.'),
-        actions: [
-          TextButton(style: TextButton.styleFrom(minimumSize: const Size(48, 48)), onPressed: () => Navigator.pop(ctx, false), child: const Text('Keep')),
-          FilledButton(key: const Key('clear-history-confirm'), style: FilledButton.styleFrom(minimumSize: const Size(48, 48)), onPressed: () => Navigator.pop(ctx, true), child: const Text('Clear')),
-        ],
-      ),
+    final ok = await showAppAlert(
+      context,
+      title: 'Clear the messages?',
+      message: 'The messages of this channel are removed from this phone. The channel stays.',
+      confirmLabel: 'Clear',
+      cancelLabel: 'Keep',
+      destructive: true,
+      confirmKey: const Key('clear-history-confirm'),
     );
     if (ok == true) {
       c.service.deleteHistory(ch.convKey);

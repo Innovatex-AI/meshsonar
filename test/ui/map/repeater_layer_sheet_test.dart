@@ -259,6 +259,8 @@ void main() {
       expect(find.text('12'), findsOneWidget);
       expect(find.text('CC'), findsOneWidget);
       expect(find.text('MeshSonar region roster (CMH)'), findsOneWidget);
+      await t.ensureVisible(find.byKey(const Key('repeater-sheet-open')));
+      await t.pumpAndSettle();
       await t.tap(find.byKey(const Key('repeater-sheet-open')));
       await t.pumpAndSettle();
       expect(opened.single.key, k('a'));
@@ -279,6 +281,8 @@ void main() {
       await t.pumpAndSettle();
       expect(copied, [k('a')]);
       expect(find.text('Key copied'), findsOneWidget);
+      await t.pump(const Duration(seconds: 3)); // let the toast time out
+      await t.pumpAndSettle();
     });
 
     testWidgets('unknown last advert reads "Not reported"', (t) async {

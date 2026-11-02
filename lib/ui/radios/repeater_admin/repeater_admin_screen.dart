@@ -2,6 +2,8 @@
 // Console. Free for the owner. The password goes only to your own radio; nothing here talks to MeshSonar's servers.
 import 'package:flutter/material.dart';
 
+import '../../design/app_surfaces.dart';
+import '../../design/app_symbols.dart';
 import '../../theme.dart';
 import 'admin_access_view.dart';
 import 'admin_common.dart';
@@ -76,13 +78,14 @@ class _RepeaterAdminScreenState extends State<RepeaterAdminScreen> {
               title: Text(title, overflow: TextOverflow.ellipsis),
               actions: [
                 AirtimeChip(active: c.usingAirtime),
-                PopupMenuButton<String>(
+                IconButton(
                   key: const Key('admin-menu'),
                   tooltip: 'More',
-                  onSelected: (v) {
+                  icon: const AppSymbolIcon(AppSymbols.ellipsisCircle),
+                  onPressed: () async {
+                    final v = await showAppActionSheet<String>(context, actions: const [AppAction('Log out', 'logout', destructive: true, key: Key('admin-menu-logout'))]);
                     if (v == 'logout') c.logout();
                   },
-                  itemBuilder: (_) => const [PopupMenuItem(value: 'logout', child: Text('Log out'))],
                 ),
               ],
               bottom: TabBar(

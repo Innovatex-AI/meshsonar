@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../../chat/contact_manager.dart';
 import '../../chat/models.dart';
+import '../design/app_surfaces.dart';
 import '../drive/drive_controls.dart' show openConnect;
 import '../theme.dart';
 import '../widgets.dart' show EmptyState;
@@ -46,7 +47,7 @@ class _ContactsViewState extends State<ContactsView> {
   void initState() {
     super.initState();
     _notices = _m.notices.listen((n) {
-      if (mounted) ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(n.message), duration: const Duration(seconds: 6)));
+      if (mounted) showAppToast(context, n.message, duration: const Duration(seconds: 6));
     });
   }
 
@@ -273,12 +274,11 @@ class _ContactsViewState extends State<ContactsView> {
           key: const Key('ask-yes'),
           style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
           onPressed: () async {
-            final messenger = ScaffoldMessenger.maybeOf(context);
             try {
               await _m.setPolicy(_m.state.policy!.copyWith(askBeforeAdding: true));
               _m.answerPolicyPrompt('ask');
             } catch (_) {
-              messenger?.showSnackBar(const SnackBar(content: Text('The radio did not take that. Try again in a moment.')));
+              if (context.mounted) showAppToast(context, 'The radio did not take that. Try again in a moment.', kind: AppToastKind.error);
             }
           },
           child: const Text('Ask me first'),
@@ -473,8 +473,8 @@ class _NearbyRow extends StatelessWidget {
       onPressed: () async {
         final r = await controller.manager.addNearby(a);
         if (!context.mounted) return;
-        ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
-            content: Text(r.ok ? 'Added ${a.name}.${r.note == null ? '' : ' ${r.note}'}' : (r.error ?? 'That could not be added.'))));
+        showAppToast(context, r.ok ? 'Added ${a.name}.${r.note == null ? '' : ' ${r.note}'}' : (r.error ?? 'That could not be added.'),
+            kind: r.ok ? AppToastKind.success : AppToastKind.error);
       },
       child: const Text('Add'),
     );

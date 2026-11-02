@@ -10,6 +10,8 @@ import '../app/app_state.dart';
 import '../core/api.dart';
 import '../core/report_body.dart';
 import 'app.dart';
+import 'design/app_surfaces.dart';
+import 'pick_field.dart';
 import 'onboarding/ui_prefs.dart';
 import 'settings_screen.dart' show DriverKeyScreen, keyStatusLabel;
 import 'widgets.dart';
@@ -207,22 +209,16 @@ class _SavedReport extends StatelessWidget {
 
   Future<void> _discard(BuildContext context) async {
     final s = AppScope.read(context);
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Discard the saved report?'),
-        content: const Text('It hasn\'t been sent, and it will be deleted from this phone.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Keep')),
-          FilledButton(
-            key: const Key('report-discard-confirm'),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Discard'),
-          ),
-        ],
-      ),
+    final ok = await showAppConfirm(
+      context,
+      title: 'Discard the saved report?',
+      message: 'It hasn\'t been sent, and it will be deleted from this phone.',
+      confirmLabel: 'Discard',
+      cancelLabel: 'Keep',
+      destructive: true,
+      confirmKey: const Key('report-discard-confirm'),
     );
-    if (ok == true) await s.discardSavedReport();
+    if (ok) await s.discardSavedReport();
   }
 
   @override
@@ -316,23 +312,15 @@ class _DrivePicker extends StatelessWidget {
       return name == null ? formatDateTime(startedAt) : '$name, ${formatDateTime(startedAt)}';
     }
 
-    return DropdownButtonFormField<String?>(
+    return PickField<String?>(
       key: const Key('report-attach-drive'),
-      initialValue: value,
-      isExpanded: true,
-      decoration: const InputDecoration(
-        labelText: 'Attach a drive',
-        helperText: 'Sends only the drive\'s ID, never its pings.',
-      ),
-      items: [
-        const DropdownMenuItem<String?>(value: null, child: Text('None')),
-        for (final d in drives)
-          DropdownMenuItem<String?>(
-            value: d.id,
-            child: Text(label(d.id, d.startedAt, d.label), maxLines: 1, overflow: TextOverflow.ellipsis),
-          ),
-        if (value != null && drives.every((d) => d.id != value))
-          DropdownMenuItem<String?>(value: value, child: const Text('This drive')),
+      label: 'Attach a drive',
+      helper: 'Sends only the drive\'s ID, never its pings.',
+      value: value,
+      options: [
+        const PickOption<String?>(null, 'None'),
+        for (final d in drives) PickOption<String?>(d.id, label(d.id, d.startedAt, d.label)),
+        if (value != null && drives.every((d) => d.id != value)) PickOption<String?>(value, 'This drive'),
       ],
       onChanged: onChanged,
     );
@@ -380,25 +368,13 @@ class _ReportPreviewScreenState extends State<ReportPreviewScreen> {
   }
 
   Future<bool> _confirmReplace() async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Replace the saved report?'),
-        content: const Text(
-          'A report saved on this phone hasn\'t been sent. If this one can\'t be sent either, it '
-          'replaces the saved one.',
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(
-            key: const Key('report-replace-confirm'),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Send this one'),
-          ),
-        ],
-      ),
+    return showAppConfirm(
+      context,
+      title: 'Replace the saved report?',
+      message: 'A report saved on this phone hasn\'t been sent. If this one can\'t be sent either, it replaces the saved one.',
+      confirmLabel: 'Send this one',
+      confirmKey: const Key('report-replace-confirm'),
     );
-    return ok == true;
   }
 
   @override
