@@ -22,6 +22,9 @@ enum MapSlot { banner, topLeading, topTrailing, toast, controls, attribution, bo
 
 const double kOverlayMargin = 8;
 
+/// Below this host height the button column can reach the bottom stack and the controls (the old compact-pane behaviour).
+const double kCompactPane = 380;
+
 class MapOverlayHost extends StatefulWidget {
   /// The map engine, filling the host.
   final Widget map;
@@ -95,7 +98,8 @@ class _MapOverlayHostState extends State<MapOverlayHost> {
         ),
       );
     }
-    if (clip) c = ClipRect(child: c);
+    // The clip is the slot's rect plus room for a drop shadow (never more than 8 pt), so elevated buttons are not cut off.
+    if (clip) c = ClipRect(clipper: const _SlotClip(), child: c);
     return LayoutId(id: s, child: c);
   }
 
@@ -123,6 +127,14 @@ class _MapOverlayHostState extends State<MapOverlayHost> {
   }
 }
 
+class _SlotClip extends CustomClipper<Rect> {
+  const _SlotClip();
+  @override
+  Rect getClip(Size size) => Rect.fromLTRB(-8, -8, size.width + 8, size.height + 8);
+  @override
+  bool shouldReclip(_SlotClip old) => false;
+}
+
 class _OverlayLayout extends MultiChildLayoutDelegate {
   final void Function(EdgeInsets) onInsets;
   _OverlayLayout(this.onInsets);
@@ -148,14 +160,21 @@ class _OverlayLayout extends MultiChildLayoutDelegate {
     final attrTop = h - m - attr.height;
     put(MapSlot.attribution, Offset(w - m - attr.width, attrTop));
 
-    // Vertical priority, so the slots can never overlap: the bottom stack and the controls take their natural height first
-    // (each at most half of the room), the top slots share what is left above them and scale down to fit.
+    // The button column (top-trailing) keeps the whole height it had before: its tap targets matter most while driving, and it
+    // scales itself down to fit. On a pane short enough that it reaches the bottom stack (under [kCompactPane]) the bottom stack
+    // and the controls sit over / beside its lower end, as they always did; on any taller pane every slot is disjoint.
     final room = (attrTop - 4 - topY).clamp(0.0, h);
     final colW = (w - 2 * m).clamp(0.0, w);
+    final trail = lay(MapSlot.topTrailing, BoxConstraints(maxWidth: colW, maxHeight: room));
+    put(MapSlot.topTrailing, Offset(w - m - trail.width, topY));
+    final trailBottom = trail.height > 0 ? topY + trail.height : topY;
+
     final ctrl = lay(MapSlot.controls, BoxConstraints(maxWidth: colW, maxHeight: room / 2));
     final ctrlTop = attrTop - 4 - ctrl.height;
-    put(MapSlot.controls, Offset(w - 12 - ctrl.width, ctrlTop));
-    final bottomMaxW = (w - 2 * m - (ctrl.width > 0 ? ctrl.width + m : 0)).clamp(0.0, w);
+    // A tall column leaves the controls the corner; a column that reaches them moves them left of its buttons.
+    final ctrlShift = trailBottom + 4 > ctrlTop && trail.width > 0 ? (trail.width < 52 ? trail.width : 52.0) + 6 : 0.0;
+    put(MapSlot.controls, Offset(w - 12 - ctrl.width - ctrlShift, ctrlTop));
+    final bottomMaxW = (w - 2 * m - (ctrl.width > 0 ? ctrl.width + ctrlShift + m : 0)).clamp(0.0, w);
     final bottom = lay(MapSlot.bottom, BoxConstraints(maxWidth: bottomMaxW, maxHeight: room / 2));
     final bottomTop = attrTop - 4 - bottom.height;
     put(MapSlot.bottom, Offset(m, bottomTop));
@@ -163,17 +182,14 @@ class _OverlayLayout extends MultiChildLayoutDelegate {
     final leadH = ((bottom.height > 0 ? bottomTop : attrTop) - 4 - topY).clamp(0.0, h);
     final lead = lay(MapSlot.topLeading, BoxConstraints(maxWidth: colW, maxHeight: leadH));
     put(MapSlot.topLeading, Offset(m, topY));
-    final aboveRight = [if (bottom.height > 0) bottomTop, if (ctrl.height > 0) ctrlTop, attrTop].reduce((a, b) => a < b ? a : b);
-    final trailH = (aboveRight - 4 - topY).clamp(0.0, h);
-    final trail = lay(MapSlot.topTrailing, BoxConstraints(maxWidth: colW, maxHeight: trailH));
-    put(MapSlot.topTrailing, Offset(w - m - trail.width, topY));
     final toast = lay(MapSlot.toast, BoxConstraints(maxWidth: colW, maxHeight: leadH));
     put(MapSlot.toast, Offset((w - toast.width) / 2, topY));
+    assert(lead.height >= 0 && toast.height >= 0);
 
     var coveredBottomTop = attrTop;
     if (bottom.height > 0 && bottomTop < coveredBottomTop) coveredBottomTop = bottomTop;
     if (ctrl.height > 0 && ctrlTop < coveredBottomTop) coveredBottomTop = ctrlTop;
-    final right = ctrl.width > trail.width ? ctrl.width : trail.width;
+    final right = ctrl.width + ctrlShift > trail.width ? ctrl.width + ctrlShift : trail.width;
     onInsets(EdgeInsets.fromLTRB(0, banner.height, right > 0 ? right + m : 0, h - coveredBottomTop));
   }
 

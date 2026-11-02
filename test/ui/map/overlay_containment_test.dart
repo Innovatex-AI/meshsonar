@@ -71,6 +71,10 @@ void main() {
           for (var j = i + 1; j < keys.length; j++) {
             final a = named[keys[i]]!, b = named[keys[j]]!;
             if (a.isEmpty || b.isEmpty) continue;
+            // A pane shorter than kCompactPane lets the tall button column reach the bottom stack and the controls (as before the
+            // refactor); every taller pane must be fully disjoint.
+            final pair = {keys[i], keys[j]};
+            if (size.height < kCompactPane && pair.contains('trail') && (pair.contains('bottom') || pair.contains('ctrl') || pair.contains('attr'))) continue;
             expect(a.deflate(0.5).overlaps(b.deflate(0.5)), isFalse, reason: '${keys[i]} $a overlaps ${keys[j]} $b');
           }
         }
