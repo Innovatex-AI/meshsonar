@@ -8,6 +8,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../chat/channel_admin.dart';
+import '../chat/conversation_row.dart';
 import '../chat/chat_service.dart';
 import '../chat/events.dart';
 import '../chat/models.dart';
@@ -90,7 +91,7 @@ class ChatController extends ChangeNotifier {
       onChanged: _changed,
     );
     _radioId = store.db.setting(_lastRadioKey);
-    _unread = service.unreadBadge();
+    _unread = service.unreadMessages();
     _sub = service.events.listen(_onEvent);
   }
 
@@ -100,7 +101,8 @@ class ChatController extends ChangeNotifier {
   String? get radioId => _radioId;
   bool get hasRadioIdentity => _radioId != null;
   bool get radioConnected => sink.canSend;
-  int get unreadConversations => _unread;
+  /// Unread MESSAGES (muted and system conversations excluded): the Chat tab badge (D19).
+  int get unreadMessages => _unread;
   Stream<ChatEvent> get events => service.events;
 
   /// New incoming messages that deserve attention (the notify rules of ChatService applied).
@@ -123,6 +125,23 @@ class ChatController extends ChangeNotifier {
   bool get pingsPausedByBudget => _arbiter?.pausedByBudget() ?? false;
 
   bool get isEmpty => service.conversations(includeEmpty: true).isEmpty && (_radioId == null || store.channels.list(_radioId!, includeSystem: true).isEmpty);
+
+  /// The merged Chats list (DMs, channels, rooms; System last), computed from the store. Cheap enough to call per rebuild:
+  /// four queries, one pass.
+  List<ConversationRow> conversationRows() {
+    final id = _radioId;
+    return buildConversationRows(
+      summaries: service.conversations(radioId: id, includeEmpty: true),
+      channels: id == null ? const [] : store.channels.list(id, includeSystem: true),
+      contacts: id == null ? const [] : store.contacts.list(id, includeBlocked: false),
+      lastMessages: {
+        for (final e in store.messages.lastMessages().entries)
+          e.key: LastMessageInfo(direction: e.value.direction, state: e.value.state, senderName: e.value.senderName),
+      },
+      drafts: store.drafts.all(),
+      nowMs: now().millisecondsSinceEpoch,
+    );
+  }
 
   // ------------------------------------------------------------------ session
 
@@ -251,7 +270,7 @@ class ChatController extends ChangeNotifier {
 
   void _changed() {
     if (_disposed) return;
-    _unread = service.unreadBadge();
+    _unread = service.unreadMessages();
     notifyListeners();
   }
 

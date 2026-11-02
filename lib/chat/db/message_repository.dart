@@ -208,6 +208,32 @@ WHERE cv.unread > 0
     return r.first['c'] as int;
   }
 
+  /// Badge value of the redesigned Chat tab (D19): unread MESSAGES, muted, blocked-contact and system conversations excluded.
+  int unreadMessageCount({required int nowMs}) {
+    final r = db.raw.select('''
+SELECT coalesce(sum(cv.unread), 0) c FROM conversations cv
+WHERE cv.unread > 0
+  AND NOT (cv.notify_mode = 'muted' AND (cv.muted_until_ms IS NULL OR cv.muted_until_ms > ?))
+  AND NOT EXISTS (SELECT 1 FROM channels ch WHERE 'c:' || ch.id = cv.conv_key AND ch.kind = 'system')
+''', [nowMs]);
+    return (r.first['c'] as num).toInt();
+  }
+
+  /// Direction, state and sender of the newest message of every conversation (the Chats list glyph and channel prefix).
+  Map<String, ({Direction direction, MessageState state, String? senderName})> lastMessages() {
+    final out = <String, ({Direction direction, MessageState state, String? senderName})>{};
+    for (final r in db.raw.select('''
+SELECT cv.conv_key k, m.direction d, m.state s, m.sender_name n FROM conversations cv JOIN messages m ON m.id = cv.last_msg_id
+''')) {
+      out[r['k'] as String] = (
+        direction: r['d'] == 'out' ? Direction.outgoing : Direction.incoming,
+        state: MessageState.values.firstWhere((x) => x.name == r['s'], orElse: () => MessageState.received),
+        senderName: r['n'] as String?,
+      );
+    }
+    return out;
+  }
+
   int unreadCount(String convKey) {
     final r = db.raw.select('SELECT unread FROM conversations WHERE conv_key = ?', [convKey]);
     return r.isEmpty ? 0 : r.first['unread'] as int;
