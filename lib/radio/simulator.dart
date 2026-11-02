@@ -175,8 +175,26 @@ class SimulatedRepeater {
   final String name;
   final double lat, lon;
   final Uint8List publicKey;
-  SimulatedRepeater(this.name, this.lat, this.lon) : publicKey = sha256(utf8.encode('meshsonar-sim:$name'));
+  SimulatedRepeater(this.name, this.lat, this.lon,
+      {this.adminPassword = 'admin', this.guestPassword = 'guest', this.silent = false, this.wrongPasswordReplies = true, this.estTimeoutMs = 1200})
+      : publicKey = sha256(utf8.encode('meshsonar-sim:$name'));
   String get keyHex => toHex(publicKey);
+
+  /// Remote-request behaviour (CMD_SEND_LOGIN / CMD_SEND_STATUS_REQ), for the remote request queue tests.
+  final String adminPassword;
+  final String guestPassword;
+
+  /// True: the repeater never answers anything (out of reach, off, busy): the radio still says SENT, then silence.
+  bool silent;
+
+  /// True: a wrong password is answered with PUSH_LOGIN_FAIL 0x86. False: pure silence (what most firmware does).
+  bool wrongPasswordReplies;
+
+  /// est_timeout the radio reports in SENT for requests to this repeater.
+  int estTimeoutMs;
+
+  /// Public-key prefixes (hex, 12 chars) of logins this repeater accepted; a status request needs one.
+  final Set<String> loggedIn = {};
 }
 
 /// Fixed repeaters around Westerville (made-up names and keys; plausible sites).
@@ -554,6 +572,55 @@ class SimulatedTransport implements ByteTransport {
 
   Duration _scaled(Duration d) => Duration(microseconds: (d.inMicroseconds / timeScale).round());
 
+  SimulatedRepeater? _repeaterByKey(List<int> key) {
+    final k = toHex(key);
+    for (final r in repeaters) {
+      if (r.keyHex == k) return r;
+    }
+    return null;
+  }
+
+  /// Remote logins the simulated radio got (key prefix hex), in order. Never holds a password.
+  final List<String> remoteLoginLog = [];
+
+  /// Remote status requests the radio got (key prefix hex), in order.
+  final List<String> remoteStatusLog = [];
+
+  void _onRemoteLogin(Uint8List frame) {
+    if (frame.length < 34) return _emit(encodeErr(ErrCode.illegalArg));
+    final r = _repeaterByKey(frame.sublist(1, 33));
+    if (r == null) return _emit(encodeErr(ErrCode.notFound));
+    final pw = utf8.decode(frame.sublist(33).takeWhile((b) => b != 0).toList(), allowMalformed: true);
+    remoteLoginLog.add(r.keyHex.substring(0, 12));
+    _emit(encodeSent(flood: false, tag: 0x1000 + remoteLoginLog.length, estTimeoutMs: r.estTimeoutMs));
+    if (r.silent) return;
+    final delay = Duration(milliseconds: 20);
+    if (pw == r.adminPassword) {
+      r.loggedIn.add(r.keyHex.substring(0, 12));
+      _emit(encodeLoginSuccess(r.publicKey, isAdmin: true), delay);
+    } else if (pw == r.guestPassword) {
+      r.loggedIn.add(r.keyHex.substring(0, 12));
+      _emit(encodeLoginSuccess(r.publicKey, isAdmin: false, aclPermissions: 0), delay);
+    } else if (r.wrongPasswordReplies) {
+      _emit(encodeLoginFail(r.publicKey), delay);
+    }
+  }
+
+  void _onRemoteStatus(Uint8List frame) {
+    if (frame.length < 33) return _emit(encodeErr(ErrCode.illegalArg));
+    final r = _repeaterByKey(frame.sublist(1, 33));
+    if (r == null) return _emit(encodeErr(ErrCode.notFound));
+    remoteStatusLog.add(r.keyHex.substring(0, 12));
+    _emit(encodeSent(flood: false, tag: 0x2000 + remoteStatusLog.length, estTimeoutMs: r.estTimeoutMs));
+    if (r.silent || !r.loggedIn.contains(r.keyHex.substring(0, 12))) return;
+    _emit(
+        encodeStatusResponse(
+            r.publicKey,
+            const RepeaterStatus(
+                battMilliVolts: 3860, txQueueLen: 0, noiseFloorDbm: -110, lastRssiDbm: -90, packetsRecv: 10, packetsSent: 5, airTimeSecs: 3, upTimeSecs: 3600, lastSnrDb: 5)),
+        const Duration(milliseconds: 20));
+  }
+
   void _emit(Uint8List frame, [Duration delay = const Duration(milliseconds: 5)]) {
     if (!_connected) return;
     late Timer t;
@@ -733,6 +800,10 @@ class SimulatedTransport implements ByteTransport {
         }
       case Cmd.getBattAndStorage:
         _emit(encodeBattAndStorage(batteryMv: _batteryMv, usedKb: 120, totalKb: 1984));
+      case Cmd.sendLogin:
+        _onRemoteLogin(frame);
+      case Cmd.sendStatusReq:
+        _onRemoteStatus(frame);
       case Cmd.sendTelemetryReq:
         // The 'self' form ([39][3 reserved]) answers with a push only; the key form ([39][3 reserved][key x32]) answers SENT
         // and then a push from the contact (MyMesh.cpp 1680-1718).
