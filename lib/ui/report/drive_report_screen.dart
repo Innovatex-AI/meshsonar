@@ -19,7 +19,8 @@ import '../../core/drive_report_pdf.dart';
 import '../../core/drive_stats.dart' show formatDuration;
 import '../../core/model.dart';
 import '../app.dart';
-import '../design/app_surfaces.dart' show showAppSheet;
+import '../design/app_surfaces.dart' show AppAction, AppToastKind, showAppActionSheet, showAppSheet, showAppToast;
+import '../design/app_symbols.dart' show AppSymbols;
 import '../map/coverage_map.dart' show CoverageMap;
 import '../map/layers/repeater_name_labels.dart' show MarkerLabelInput, RepeaterNameLabels;
 import '../onboarding/ui_prefs.dart' show driveLabel;
@@ -118,18 +119,16 @@ class _DriveReportScreenState extends State<DriveReportScreen> {
 
   Future<void> _sharePdf(DriveReport r, String title) async {
     final s = AppScope.read(context);
-    final messenger = ScaffoldMessenger.of(context);
     try {
       final w = await _weatherForExport(r);
       await shareReportPdf(s, '$_fileBase.pdf', driveReportPdf(r, title: title, units: s.units, duration: formatDuration, weather: w));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Couldn\'t make the PDF. Text and CSV still work. $e')));
+      if (mounted) showAppToast(context, 'Couldn\'t make the PDF. Text and CSV still work. $e', kind: AppToastKind.error);
     }
   }
 
   Future<void> _write(String name, String Function() body) async {
     final s = AppScope.read(context);
-    final messenger = ScaffoldMessenger.of(context);
     try {
       final text = body();
       final dir = await s.services.exportDir();
@@ -137,7 +136,33 @@ class _DriveReportScreenState extends State<DriveReportScreen> {
       await f.writeAsString(text);
       await s.services.shareFile(f);
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Couldn\'t share the report. $e')));
+      if (mounted) showAppToast(context, 'Couldn\'t share the report. $e', kind: AppToastKind.error);
+    }
+  }
+
+  /// Export choices. CSV and PDF are left out when the drive has no pings (never an empty file).
+  Future<void> _openExport(DriveReport r, String title) async {
+    final hasPings = r.sortedPings.isNotEmpty;
+    final v = await showAppActionSheet<String>(
+      context,
+      title: 'Export report',
+      message: hasPings ? 'CSV contains your exact track. PDF shows where you drove (grid cells).' : null,
+      actions: [
+        const AppAction('Text summary', 'text', symbol: AppSymbols.squareAndArrowUp, key: Key('report-export-text')),
+        if (hasPings) ...const [
+          AppAction('CSV (all tables, one file)', 'csv', key: Key('report-export-csv')),
+          AppAction('PDF report', 'pdf', key: Key('report-export-pdf')),
+        ],
+      ],
+    );
+    if (v == null || !mounted) return;
+    switch (v) {
+      case 'csv':
+        await _shareCsv(r);
+      case 'pdf':
+        await _sharePdf(r, title);
+      default:
+        await _share(r, title);
     }
   }
 
@@ -166,44 +191,11 @@ class _DriveReportScreenState extends State<DriveReportScreen> {
             leadingWidth: widget.asSheet ? 88 : null,
             actions: [
               if (r != null)
-                PopupMenuButton<String>(
+                IconButton(
                   key: const Key('report-export'),
                   tooltip: 'Export report',
                   icon: const Icon(Icons.ios_share),
-                  onSelected: (v) => switch (v) {
-                    'csv' => _shareCsv(r),
-                    'pdf' => _sharePdf(r, title),
-                    _ => _share(r, title),
-                  },
-                  itemBuilder: (_) => [
-                    const PopupMenuItem(
-                      key: Key('report-export-text'),
-                      value: 'text',
-                      child: ListTile(leading: Icon(Icons.notes), title: Text('Text summary'), contentPadding: EdgeInsets.zero),
-                    ),
-                    PopupMenuItem(
-                      key: const Key('report-export-csv'),
-                      value: 'csv',
-                      enabled: r.sortedPings.isNotEmpty,
-                      child: const ListTile(
-                        leading: Icon(Icons.table_chart_outlined),
-                        title: Text('CSV (all tables, one file)'),
-                        subtitle: Text('Contains your exact track'),
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                    ),
-                    PopupMenuItem(
-                      key: const Key('report-export-pdf'),
-                      value: 'pdf',
-                      enabled: r.sortedPings.isNotEmpty,
-                      child: const ListTile(
-                        leading: Icon(Icons.picture_as_pdf_outlined),
-                        title: Text('PDF report'),
-                        subtitle: Text('Contains where you drove (grid cells)'),
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                    ),
-                  ],
+                  onPressed: () => _openExport(r, title),
                 ),
             ],
           ),
