@@ -1,4 +1,3 @@
-import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// `testWidgets` for tests that make the app show a toast. A toast holds a Timer (2.5 s to 5 s) that the test binding
