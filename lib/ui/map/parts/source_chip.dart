@@ -26,6 +26,7 @@ class SourceChipState extends State<SourceChip> {
   void initState() {
     super.initState();
     widget.stats.addListener(_changed);
+    TileFetchGate.debugForceOffline.addListener(_changed);
   }
 
   void _changed() {
@@ -43,6 +44,7 @@ class SourceChipState extends State<SourceChip> {
   @override
   void dispose() {
     widget.stats.removeListener(_changed);
+    TileFetchGate.debugForceOffline.removeListener(_changed);
     super.dispose();
   }
 
