@@ -33,6 +33,20 @@ Same benchmark (`map_jank_benchmark_test.dart`, 90 s, 60 repeaters, 3,934 networ
 
 The Drive plan's gate for WP2 is "p95 <= 10 ms" against this baseline. **Real-phone baseline (120 Hz and 60 Hz, `flutter drive --profile`) is NOT captured yet**: Andy's iPhone was `unavailable` in `xcrun devicectl list devices` when WP0 ran (only the iPad was connected). It is a checklist line for Andy's A1 checkpoint in HANDOFF section 105. Run: `flutter drive --profile --driver=test_driver/integration_test.dart --target=integration_test/map_jank_benchmark_test.dart -d <iphone id> --dart-define=BENCH_SECONDS=90 --dart-define=BENCH_NAME=phone_baseline` (add `--dart-define=BENCH_REPEATERS=600` for the S5 sprite-atlas variant) on a build from `main` before the Drive redesign merges, and paste the table here.
 
+## Drive WP2 (map core extraction, one map instance, new credit line), Nov 2 2026
+
+Same benchmark, same iPhone 17 Pro simulator (60 Hz, HDD, other builds running), `BENCH_NAME=wp2`, branch `feat/drive-wp2-core`:
+
+| | WP0 baseline | WP2 |
+|---|---|---|
+| frame p50 / p95 / p99 | 3.12 / 7.39 / 13.74 ms | 3.45 / 8.25 / 13.43 ms |
+| worst frame | 21.63 ms | 22.36 ms |
+| frames > 16 ms / > 8 ms / > 50 ms | 19 / 210 / 0 | 10 / 264 / 0 (of 5,285) |
+| UI event-loop lag p95 / p99 / worst | 7 / 14 / 28 ms | 7 / 14 / 24 ms |
+| puck updates per s, big hops, backwards | 60.1, 0, 0 | 59.8, 0, 0 |
+
+p95 +11.6% against the baseline (gate: within 20% and <= 10 ms): passes.
+
 ## Where the time went (evidence)
 
 1. `PolygonLayer` projected and culled every polygon on every camera move. The camera moved 30 times a second while following. (A/B: 3,934 cells vs 1: p95 15.9 vs 8.1 ms, worst 137 vs 26 ms.)
