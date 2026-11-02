@@ -119,8 +119,13 @@ void main() {
       await tester.ensureVisible(find.byKey(const Key('advert-flood')));
       await tester.tap(find.byKey(const Key('advert-flood')));
       await frames(tester);
-      expect(find.descendant(of: find.byType(AlertDialog), matching: find.textContaining('0.35 s each')), findsOneWidget);
+      expect(find.textContaining('You can send one every 30 seconds'), findsOneWidget);
       expect(rig.rep.adverts, isEmpty);
+      await tester.tap(find.byKey(const Key('confirm-cancel')));
+      await frames(tester);
+      expect(rig.rep.adverts, isEmpty, reason: 'cancel sends nothing');
+      await tester.tap(find.byKey(const Key('advert-flood')));
+      await frames(tester);
       await tester.tap(find.byKey(const Key('advert-confirm')));
       await pumpUntil(tester, () => rig.rep.adverts.isNotEmpty);
       expect(rig.rep.adverts, ['flood']);
@@ -353,6 +358,23 @@ void main() {
     });
   });
 
+  group('menu', () {
+    adminTest('the More menu is an action sheet: cancel stays logged in, Log out logs out', (tester) async {
+      final rig = await openAdmin(tester);
+      await tester.tap(find.byKey(const Key('admin-menu')));
+      await frames(tester);
+      expect(find.byKey(const Key('admin-menu-logout')), findsOneWidget);
+      await tester.tapAt(const Offset(2, 2));
+      await frames(tester);
+      expect(rig.controller.stage, AdminStage.ready);
+      await tester.tap(find.byKey(const Key('admin-menu')));
+      await frames(tester);
+      await tester.tap(find.byKey(const Key('admin-menu-logout')));
+      await frames(tester);
+      expect(rig.controller.stage, isNot(AdminStage.ready));
+    });
+  });
+
   group('access', () {
     adminTest('list with roles, the warning that a password change does not remove admins, no remove for your own radio', (tester) async {
       final rig = await openAdmin(tester, setup: (r) => r.acl['a9b1acd3a408${'11' * 26}'] = 3);
@@ -371,6 +393,18 @@ void main() {
       await tester.tap(find.byKey(const Key('remove-confirm')));
       await pumpUntil(tester, () => rig.rep.acl.length == 1);
       expect(rig.rep.received.where((c) => c.startsWith('setperm')), ['setperm a9b1acd3a408 0']);
+    });
+
+    adminTest('removing an ACL entry: cancel leaves it, the role picker is an action sheet', (tester) async {
+      final rig = await openAdmin(tester, setup: (r) => r.acl['a9b1acd3a408${'11' * 26}'] = 3);
+      await tapTab(tester, 'access');
+      await pumpUntilFound(tester, find.byKey(const Key('acl-a9b1acd3a408')));
+      await tester.tap(find.byKey(const Key('remove-a9b1acd3a408')));
+      await frames(tester);
+      await tester.tap(find.byKey(const Key('confirm-cancel')));
+      await frames(tester);
+      expect(rig.rep.acl.length, 2);
+      expect(rig.rep.received.where((c) => c.startsWith('setperm')), isEmpty);
     });
 
     adminTest('guest password: masked entry twice, differing entries refused, set, verified, never displayed', (tester) async {

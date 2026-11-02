@@ -52,7 +52,7 @@ String contactLinkFor(int n, {String name = 'Sam K8SAM', int type = 1}) => 'mesh
 
 void main() {
   group('paste a link or key', () {
-    testWidgets('a good contact link adds the contact, goes back and says so', (tester) async {
+    testWidgetsT('a good contact link adds the contact, goes back and says so', (tester) async {
       final rig = await pumpAdd(tester);
       await openPaste(tester);
       await tester.enterText(find.byKey(const Key('add-text')), contactLinkFor(40));
@@ -66,7 +66,7 @@ void main() {
       await tester.pump(const Duration(seconds: 5));
     });
 
-    testWidgets('a bad link: the reason in plain words under the field, nothing added', (tester) async {
+    testWidgetsT('a bad link: the reason in plain words under the field, nothing added', (tester) async {
       final rig = await pumpAdd(tester);
       await openPaste(tester);
       await tester.enterText(find.byKey(const Key('add-text')), 'https://example.com/x');
@@ -78,7 +78,7 @@ void main() {
       expect(rig.store.contacts.count(radioA), 0);
     });
 
-    testWidgets('a channel link is recognised and the user is told where it belongs', (tester) async {
+    testWidgetsT('a channel link is recognised and the user is told where it belongs', (tester) async {
       await pumpAdd(tester);
       await openPaste(tester);
       await tester.enterText(find.byKey(const Key('add-text')), 'meshcore://channel/add?name=Ohio&secret=${'ab' * 16}');
@@ -89,7 +89,7 @@ void main() {
       expect(find.textContaining('Channels'), findsOneWidget);
     });
 
-    testWidgets('a bare 64-character key shows the optional name field and adds with that name', (tester) async {
+    testWidgetsT('a bare 64-character key shows the optional name field and adds with that name', (tester) async {
       final rig = await pumpAdd(tester);
       await openPaste(tester);
       expect(find.byKey(const Key('add-name')), findsNothing);
@@ -103,7 +103,7 @@ void main() {
       await tester.pump(const Duration(seconds: 5));
     });
 
-    testWidgets('a key that is too short is explained, not swallowed', (tester) async {
+    testWidgetsT('a key that is too short is explained, not swallowed', (tester) async {
       await pumpAdd(tester);
       await openPaste(tester);
       await tester.enterText(find.byKey(const Key('add-text')), 'abcdef0123');
@@ -113,7 +113,7 @@ void main() {
       expect(find.textContaining('not a MeshCore link'), findsOneWidget);
     });
 
-    testWidgets('Paste reads the clipboard; an empty clipboard says so', (tester) async {
+    testWidgetsT('Paste reads the clipboard; an empty clipboard says so', (tester) async {
       await pumpAdd(tester, clipboard: contactLinkFor(41, name: 'Lee'));
       await openPaste(tester);
       await tester.tap(find.byKey(const Key('add-clipboard')));
@@ -121,7 +121,7 @@ void main() {
       expect(find.text(contactLinkFor(41, name: 'Lee')), findsOneWidget);
     });
 
-    testWidgets('empty clipboard', (tester) async {
+    testWidgetsT('empty clipboard', (tester) async {
       await pumpAdd(tester, clipboard: '');
       await openPaste(tester);
       await tester.tap(find.byKey(const Key('add-clipboard')));
@@ -129,7 +129,7 @@ void main() {
       expect(find.textContaining('clipboard is empty'), findsOneWidget);
     });
 
-    testWidgets('radio away: saved on the phone with the honest note', (tester) async {
+    testWidgetsT('radio away: saved on the phone with the honest note', (tester) async {
       final rig = await pumpAdd(tester, link: false);
       await openPaste(tester);
       await tester.enterText(find.byKey(const Key('add-text')), contactLinkFor(42, name: 'Kim'));
@@ -144,7 +144,7 @@ void main() {
   });
 
   group('scan a QR code', () {
-    testWidgets('a MeshCore code adds the contact; a stranger\'s QR is refused with a notice and scanning goes on', (tester) async {
+    testWidgetsT('a MeshCore code adds the contact; a stranger\'s QR is refused with a notice and scanning goes on', (tester) async {
       final good = contactLinkFor(43, name: 'Ria');
       final rig = await pumpAdd(tester, scanner: (context, onCode) => _Emit(codes: ['WIFI:S:home;;', 'WIFI:S:home;;', good, good], onCode: onCode));
       await tester.tap(find.byKey(const Key('add-scan')));
@@ -160,7 +160,7 @@ void main() {
       await tester.pump(const Duration(seconds: 5));
     });
 
-    testWidgets('Paste instead leaves the camera and opens the paste field', (tester) async {
+    testWidgetsT('Paste instead leaves the camera and opens the paste field', (tester) async {
       await pumpAdd(tester, scanner: (c, o) => const SizedBox());
       await tester.tap(find.byKey(const Key('add-scan')));
       await tester.pumpAndSettle();
@@ -169,7 +169,7 @@ void main() {
       expect(find.byKey(const Key('add-text')), findsOneWidget);
     });
 
-    testWidgets('Cancel closes the scanner', (tester) async {
+    testWidgetsT('Cancel closes the scanner', (tester) async {
       await pumpAdd(tester, scanner: (c, o) => const SizedBox());
       await tester.tap(find.byKey(const Key('add-scan')));
       await tester.pumpAndSettle();
@@ -181,7 +181,7 @@ void main() {
   });
 
   group('show my contact', () {
-    testWidgets('connected: QR of this radio\'s contact link, copy and share', (tester) async {
+    testWidgetsT('connected: QR of this radio\'s contact link, copy and share', (tester) async {
       final shared = <String>[];
       await pumpAdd(tester, shared: shared);
       await tester.tap(find.byKey(const Key('add-mine')));
@@ -195,7 +195,7 @@ void main() {
       expect(l.type, ContactType.companion);
     });
 
-    testWidgets('no radio: says to connect first, no code', (tester) async {
+    testWidgetsT('no radio: says to connect first, no code', (tester) async {
       await pumpAdd(tester, link: false);
       await tester.tap(find.byKey(const Key('add-mine')));
       await tester.pumpAndSettle();
@@ -208,7 +208,7 @@ void main() {
     for (final size in [phoneSize, ipadSize]) {
       for (final scale in [1.0, 2.5]) {
         for (final dark in [false, true]) {
-          testWidgets('Add contact ${size.w.toInt()}x${size.h.toInt()} x$scale ${dark ? 'dark' : 'light'}', (tester) async {
+          testWidgetsT('Add contact ${size.w.toInt()}x${size.h.toInt()} x$scale ${dark ? 'dark' : 'light'}', (tester) async {
             await pumpAdd(tester, w: size.w, h: size.h, scale: scale, b: dark ? Brightness.dark : Brightness.light);
             await openPaste(tester);
             await tester.ensureVisible(find.byKey(const Key('add-text')));
@@ -224,7 +224,7 @@ void main() {
       }
     }
 
-    testWidgets('VoiceOver labels on the three choices', (tester) async {
+    testWidgetsT('VoiceOver labels on the three choices', (tester) async {
       final h = tester.ensureSemantics();
       await pumpAdd(tester);
       expect(find.bySemanticsLabel(RegExp('Scan a QR code')), findsOneWidget);
@@ -248,7 +248,7 @@ void main() {
       return rig;
     }
 
-    testWidgets('switches write to the radio: ask first, then per-type, overwrite and hop limit', (tester) async {
+    testWidgetsT('switches write to the radio: ask first, then per-type, overwrite and hop limit', (tester) async {
       final rig = await pumpSettings(tester);
       expect(find.byKey(const Key('set-repeaters')), findsNothing, reason: 'per-type switches only matter once the radio asks first');
       await tester.tap(find.byKey(const Key('set-ask')));
@@ -274,14 +274,14 @@ void main() {
       expect(rig.port.policy.maxHops, 1);
     });
 
-    testWidgets('radio away: the switches are off and the sentence says why', (tester) async {
+    testWidgetsT('radio away: the switches are off and the sentence says why', (tester) async {
       await pumpSettings(tester, link: false);
       expect(find.text('Connect your radio to change this.'), findsOneWidget);
       final sw = tester.widget<SwitchListTile>(find.byKey(const Key('set-ask')));
       expect(sw.onChanged, isNull);
     });
 
-    testWidgets('ignored nodes can be restored', (tester) async {
+    testWidgetsT('ignored nodes can be restored', (tester) async {
       setScreen(tester);
       final rig = ContactsRig();
       addTearDown(rig.dispose);
@@ -301,7 +301,7 @@ void main() {
 
     for (final size in [phoneSize, ipadSize]) {
       for (final scale in [1.0, 2.5]) {
-        testWidgets('layout ${size.w.toInt()} x$scale', (tester) async {
+        testWidgetsT('layout ${size.w.toInt()} x$scale', (tester) async {
           final rig = await pumpSettings(tester, scale: scale, w: size.w, h: size.h);
           await rig.chat.contacts.setPolicy(rig.port.policy.copyWith(askBeforeAdding: true));
           await tester.pumpAndSettle();

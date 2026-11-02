@@ -550,9 +550,12 @@ void dismissAppToast() {
   _activeToast = null;
   if (a == null) return;
   a.timer.cancel();
-  // remove() is a no-op when the overlay is already gone (a toast that outlived its tree, e.g. between tests).
-  a.entry.remove();
-  a.entry.dispose();
+  final entry = a.entry;
+  // An entry can be attached to the overlay yet not built (timer fires before the next frame), and Overlay.remove can
+  // defer detaching; so always remove, and dispose only once the frame has detached it.
+  entry.remove();
+  WidgetsBinding.instance.addPostFrameCallback((_) => entry.dispose());
+  WidgetsBinding.instance.ensureVisualUpdate();
   appToastMessage.value = null;
 }
 

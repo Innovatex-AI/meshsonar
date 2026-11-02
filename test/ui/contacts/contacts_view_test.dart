@@ -40,7 +40,7 @@ Future<ContactsRig> pumpView(WidgetTester tester, {int contacts = 0, bool link =
 
 void main() {
   group('states', () {
-    testWidgets('(a) no radio ever: explains, one Connect radio button', (tester) async {
+    testWidgetsT('(a) no radio ever: explains, one Connect radio button', (tester) async {
       var connects = 0;
       await pumpView(tester, contacts: 0, link: false, onConnect: () => connects++);
       expect(find.byKey(const Key('contacts-no-radio')), findsOneWidget);
@@ -49,7 +49,7 @@ void main() {
       expect(connects, 1);
     });
 
-    testWidgets('(b) connected, nothing yet: says how contacts arrive and offers Add contact', (tester) async {
+    testWidgetsT('(b) connected, nothing yet: says how contacts arrive and offers Add contact', (tester) async {
       await pumpView(tester, contacts: 0);
       expect(find.byKey(const Key('contacts-empty')), findsOneWidget);
       expect(find.text('No contacts yet'), findsOneWidget);
@@ -57,7 +57,7 @@ void main() {
       expect(find.byKey(const Key('contacts-add')), findsOneWidget);
     });
 
-    testWidgets('(c) radio away: banner says the phone copy is shown, Connect radio works, the list is still there', (tester) async {
+    testWidgetsT('(c) radio away: banner says the phone copy is shown, Connect radio works, the list is still there', (tester) async {
       var connects = 0;
       await pumpView(tester, contacts: 6, link: false, onConnect: () => connects++);
       expect(find.byKey(const Key('banner-offline')), findsOneWidget);
@@ -67,7 +67,7 @@ void main() {
       expect(connects, 1);
     });
 
-    testWidgets('(d) sync in progress: progress with counts, the list stays usable', (tester) async {
+    testWidgetsT('(d) sync in progress: progress with counts, the list stays usable', (tester) async {
       setScreen(tester);
       final rig = ContactsRig();
       addTearDown(rig.dispose);
@@ -85,7 +85,7 @@ void main() {
       expect(find.byKey(const Key('banner-syncing')), findsNothing);
     });
 
-    testWidgets('(e) sync failed: plain sentence and Try again completes it', (tester) async {
+    testWidgetsT('(e) sync failed: plain sentence and Try again completes it', (tester) async {
       setScreen(tester);
       final rig = ContactsRig();
       addTearDown(rig.dispose);
@@ -106,7 +106,7 @@ void main() {
       expect(rig.store.contacts.count(radioA), 8);
     });
 
-    testWidgets('(f) radio list full: banner with numbers, Free up space frees a slot and the banner goes', (tester) async {
+    testWidgetsT('(f) radio list full: banner with numbers, Free up space frees a slot and the banner goes', (tester) async {
       setScreen(tester);
       final rig = ContactsRig();
       addTearDown(rig.dispose);
@@ -137,7 +137,7 @@ void main() {
       expect(find.byKey(const Key('banner-full')), findsNothing);
     });
 
-    testWidgets('(g) usage line opens the radio list; offline the sheet says to connect', (tester) async {
+    testWidgetsT('(g) usage line opens the radio list; offline the sheet says to connect', (tester) async {
       await pumpView(tester, contacts: 5);
       expect(find.text('On your radio: 5 of 100 contacts'), findsOneWidget);
       await tester.tap(find.byKey(const Key('contacts-usage')));
@@ -146,7 +146,7 @@ void main() {
       expect(find.text('5 of 100 used'), findsOneWidget);
     });
 
-    testWidgets('(g2) radio list sheet while the radio is away', (tester) async {
+    testWidgetsT('(g2) radio list sheet while the radio is away', (tester) async {
       final rig = await pumpView(tester, contacts: 5, link: false);
       expect(find.byKey(const Key('contacts-usage')), findsNothing);
       await tester.tap(find.byKey(const Key('contacts-settings')));
@@ -155,7 +155,7 @@ void main() {
       expect(find.text('Connect your radio to change this.'), findsOneWidget);
     });
 
-    testWidgets('(h) ask-first offer: "Ask me first" switches the radio and the card goes', (tester) async {
+    testWidgetsT('(h) ask-first offer: "Ask me first" switches the radio and the card goes', (tester) async {
       final rig = await pumpView(tester, contacts: 3);
       expect(find.byKey(const Key('ask-first')), findsOneWidget);
       await tester.tap(find.byKey(const Key('ask-yes')));
@@ -166,7 +166,7 @@ void main() {
       expect(find.byKey(const Key('ask-first')), findsNothing);
     });
 
-    testWidgets('(h2) ask-first offer: "Keep automatic" leaves the radio alone and does not come back', (tester) async {
+    testWidgetsT('(h2) ask-first offer: "Keep automatic" leaves the radio alone and does not come back', (tester) async {
       final rig = await pumpView(tester, contacts: 3);
       await tester.tap(find.byKey(const Key('ask-keep')));
       await tester.pump();
@@ -175,7 +175,7 @@ void main() {
       expect(find.byKey(const Key('ask-first')), findsNothing);
     });
 
-    testWidgets('(i) search with no hits says so and Clear search restores the list', (tester) async {
+    testWidgetsT('(i) search with no hits says so and Clear search restores the list', (tester) async {
       await pumpView(tester, contacts: 6);
       await tester.enterText(find.byKey(const Key('contacts-search')), 'zzz');
       await tester.pump();
@@ -188,7 +188,7 @@ void main() {
       expect(find.byKey(Key('contact-${keyN(2).substring(0, 8)}')), findsOneWidget);
     });
 
-    testWidgets('(j) a notice from the manager (a slot was freed for a DM) appears as a snackbar', (tester) async {
+    testWidgetsT('(j) a notice from the manager (a slot was freed for a DM) appears as a snackbar', (tester) async {
       final rig = ContactsRig();
       addTearDown(rig.dispose);
       setScreen(tester);
@@ -209,7 +209,7 @@ void main() {
   });
 
   group('list behaviour', () {
-    testWidgets('sections: favourites first, then the rest alphabetically; unread badge and last message show', (tester) async {
+    testWidgetsT('sections: favourites first, then the rest alphabetically; unread badge and last message show', (tester) async {
       final rig = await pumpView(tester, contacts: 6, before: (rig) {
         rig.chat.contacts.setFavourite(keyN(4), true);
         rig.store.messages.insert(ChatMessage(
@@ -225,7 +225,7 @@ void main() {
       expect(rig.opened, isEmpty);
     });
 
-    testWidgets('filters: repeaters only; favourites; people; recent', (tester) async {
+    testWidgetsT('filters: repeaters only; favourites; people; recent', (tester) async {
       await pumpView(tester, contacts: 10, before: (rig) => rig.chat.contacts.setFavourite(keyN(3), true));
       await tester.ensureVisible(find.byKey(const Key('filter-repeaters')));
       await tester.tap(find.byKey(const Key('filter-repeaters')));
@@ -246,7 +246,7 @@ void main() {
       expect(find.text('No contacts in Recent'), findsOneWidget);
     });
 
-    testWidgets('search narrows by name', (tester) async {
+    testWidgetsT('search narrows by name', (tester) async {
       await pumpView(tester, contacts: 12);
       await tester.enterText(find.byKey(const Key('contacts-search')), 'Node 11');
       await tester.pump();
@@ -255,7 +255,7 @@ void main() {
       expect(find.byKey(Key('contact-${keyN(2).substring(0, 8)}')), findsNothing);
     });
 
-    testWidgets('tapping a person opens the conversation; the info button opens the details', (tester) async {
+    testWidgetsT('tapping a person opens the conversation; the info button opens the details', (tester) async {
       final rig = await pumpView(tester, contacts: 3);
       await tester.tap(find.byKey(Key('contact-${keyN(2).substring(0, 8)}')));
       await tester.pumpAndSettle();
@@ -267,7 +267,7 @@ void main() {
       expect(find.byKey(const Key('contacts-search')), findsNothing);
     });
 
-    testWidgets('a repeater has no conversation: tapping it opens the details', (tester) async {
+    testWidgetsT('a repeater has no conversation: tapping it opens the details', (tester) async {
       final rig = await pumpView(tester, contacts: 5);
       await tester.dragUntilVisible(find.byKey(Key('contact-${keyN(5).substring(0, 8)}')), find.byKey(const Key('contacts-list')), const Offset(0, -120));
       await tester.tap(find.byKey(Key('contact-${keyN(5).substring(0, 8)}')));
@@ -277,7 +277,7 @@ void main() {
       expect(find.byKey(Key('contact-details-${keyN(5).substring(0, 8)}')), findsNothing);
     });
 
-    testWidgets('pull to refresh does a full read of the radio', (tester) async {
+    testWidgetsT('pull to refresh does a full read of the radio', (tester) async {
       final rig = await pumpView(tester, contacts: 8);
       final before = rig.port.downloads.length;
       await tester.fling(find.byKey(const Key('contacts-list')), const Offset(0, 400), 1000);
@@ -290,7 +290,7 @@ void main() {
   });
 
   group('New nodes nearby', () {
-    testWidgets('three shown, See all expands; Ignore removes the row; Add puts it on the radio and the row leaves', (tester) async {
+    testWidgetsT('three shown, See all expands; Ignore removes the row; Add puts it on the radio and the row leaves', (tester) async {
       final rig = await pumpView(tester, contacts: 3, before: (rig) {
         for (var i = 1; i <= 5; i++) {
           advert(rig, i);
@@ -319,7 +319,7 @@ void main() {
       await tester.pump(const Duration(seconds: 5));
     });
 
-    testWidgets('semantics: a new node row reads name, type and how it was heard', (tester) async {
+    testWidgetsT('semantics: a new node row reads name, type and how it was heard', (tester) async {
       final handle = tester.ensureSemantics();
       await pumpView(tester, contacts: 1, before: (rig) => advert(rig, 1, name: 'Hilltop'));
       expect(find.bySemanticsLabel(RegExp('New node Hilltop, Repeater, heard 5 min ago, 2 hops')), findsOneWidget);
@@ -331,7 +331,7 @@ void main() {
     for (final size in [phoneSize, ipadSize]) {
       for (final scale in [1.0, 2.5]) {
         for (final dark in [false, true]) {
-          testWidgets('everything at once: ${size.w.toInt()}x${size.h.toInt()} text x$scale ${dark ? 'dark' : 'light'}', (tester) async {
+          testWidgetsT('everything at once: ${size.w.toInt()}x${size.h.toInt()} text x$scale ${dark ? 'dark' : 'light'}', (tester) async {
             final rig = await pumpView(tester, contacts: 14, w: size.w, h: size.h, scale: scale, b: dark ? Brightness.dark : Brightness.light, before: (rig) {
               for (var i = 1; i <= 4; i++) {
                 advert(rig, i);
@@ -355,7 +355,7 @@ void main() {
       }
     }
 
-    testWidgets('VoiceOver: a tile reads "name, type, status, N unread"; key buttons are labelled', (tester) async {
+    testWidgetsT('VoiceOver: a tile reads "name, type, status, N unread"; key buttons are labelled', (tester) async {
       final handle = tester.ensureSemantics();
       await pumpView(tester, contacts: 4, before: (rig) {
         rig.store.messages.insert(ChatMessage(
@@ -369,7 +369,7 @@ void main() {
       handle.dispose();
     });
 
-    testWidgets('big text hides the route chip instead of overflowing; normal text shows route words', (tester) async {
+    testWidgetsT('big text hides the route chip instead of overflowing; normal text shows route words', (tester) async {
       await pumpView(tester, contacts: 3);
       expect(find.textContaining('no route yet'), findsWidgets);
     });

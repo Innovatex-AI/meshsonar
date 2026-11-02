@@ -9,6 +9,7 @@ import '../../core/node_claim.dart';
 import '../app.dart';
 import '../claims/claim_radio_screen.dart';
 import '../claims/claim_repeater_screen.dart';
+import '../design/app_surfaces.dart';
 import '../shell/plan_tab.dart' show planToolUri;
 
 /// The website page with the copy-paste settings for each kind of observer.
@@ -151,8 +152,7 @@ class ObserverJoinScreen extends StatelessWidget {
                         onPressed: () async {
                           final ok = await s.services.openUrl(planToolUri(base, observerSetupPath));
                           if (!ok && context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                                content: Text('Couldn\'t open the browser. Try again, or visit meshsonar.com/observers/setup.')));
+                            showAppToast(context, 'Couldn\'t open the browser. Try again, or visit meshsonar.com/observers/setup.', kind: AppToastKind.error);
                           }
                         },
                         child: const Text('Open the setup steps'))),

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/api.dart';
 import '../app.dart';
+import '../design/app_surfaces.dart';
 
 // ---------- anchors (search and the section index scroll to these) ----------
 
@@ -169,25 +170,16 @@ Future<bool> confirmSettingsChange(
   String cancelLabel = 'Cancel',
   bool destructive = false,
 }) async {
-  final ok = await showDialog<bool>(
-    context: context,
-    builder: (ctx) {
-      final c = Theme.of(ctx).colorScheme;
-      return AlertDialog(
-        key: Key(dialogKey),
-        title: Text(title),
-        content: SingleChildScrollView(child: Text(body)),
-        actions: [
-          TextButton(key: Key('$dialogKey-cancel'), onPressed: () => Navigator.pop(ctx, false), child: Text(cancelLabel)),
-          FilledButton(
-            key: Key('$dialogKey-confirm'),
-            style: destructive ? FilledButton.styleFrom(backgroundColor: c.error, foregroundColor: c.onError) : null,
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(confirmLabel),
-          ),
-        ],
-      );
-    },
+  final ok = await showAppAlert(
+    context,
+    title: title,
+    message: body,
+    confirmLabel: confirmLabel,
+    cancelLabel: cancelLabel,
+    destructive: destructive,
+    dialogKey: Key(dialogKey),
+    cancelKey: Key('$dialogKey-cancel'),
+    confirmKey: Key('$dialogKey-confirm'),
   );
   return ok == true;
 }
@@ -342,13 +334,23 @@ Future<String?> editSettingText(
 }) {
   final c = TextEditingController(text: initial);
   final formKey = GlobalKey<FormState>();
-  return showDialog<String>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: Text(title),
-      content: Form(
-        key: formKey,
-        child: SingleChildScrollView(
+  return showAppSheet<String>(
+    context,
+    detents: const [0.5],
+    builder: (ctx, scroll) => AppSheetScaffold(
+      controller: scroll,
+      title: title,
+      primaryAction: FilledButton(
+        key: const Key('edit-save'),
+        onPressed: () {
+          if (formKey.currentState?.validate() ?? false) Navigator.pop(ctx, c.text);
+        },
+        child: const Text('Save'),
+      ),
+      secondaryAction: TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+      children: [
+        Form(
+          key: formKey,
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
             TextFormField(
               key: const Key('edit-field'),
@@ -364,16 +366,6 @@ Future<String?> editSettingText(
             ),
             if (help != null) ...[const SizedBox(height: 8), Text(help, style: Theme.of(ctx).textTheme.bodySmall)],
           ]),
-        ),
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-        FilledButton(
-          key: const Key('edit-save'),
-          onPressed: () {
-            if (formKey.currentState?.validate() ?? false) Navigator.pop(ctx, c.text);
-          },
-          child: const Text('Save'),
         ),
       ],
     ),

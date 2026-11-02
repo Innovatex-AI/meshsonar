@@ -13,6 +13,7 @@ import '../../radio/radio_session_impl.dart';
 import '../../radio/repeater_admin.dart';
 import '../../radio/room_session.dart';
 import '../app.dart';
+import '../design/app_surfaces.dart';
 import 'repeater_admin/admin_common.dart' show kTarget;
 import 'repeater_admin/admin_controller.dart';
 import 'repeater_admin/repeater_admin_screen.dart';
@@ -72,7 +73,7 @@ Future<void> openRepeaterAdmin(BuildContext context, {required String keyHex, re
   final app = AppScope.of(context);
   final why = adminUnavailableReason(context);
   if (why != null) {
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(why), behavior: SnackBarBehavior.floating));
+    showAppToast(context, why, kind: AppToastKind.error);
     return;
   }
   final session = app.radioSession!;
@@ -96,7 +97,7 @@ Future<void> openRoom(BuildContext context, {required String keyHex, required St
   final app = AppScope.of(context);
   final why = adminUnavailableReason(context);
   if (why != null) {
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(why), behavior: SnackBarBehavior.floating));
+    showAppToast(context, why, kind: AppToastKind.error);
     return;
   }
   final session = app.radioSession!;

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../../radio/repeater_health.dart';
 import '../../../radio/repeater_settings.dart';
+import '../../design/app_surfaces.dart';
 import '../../theme.dart';
 import 'admin_controller.dart';
 
@@ -185,61 +186,67 @@ Color dangerColor(BuildContext context, Danger d) {
 /// Min 48 x 48 target for tappable rows and buttons.
 const Size kTarget = Size(48, 48);
 
-/// A plain "are you sure" dialog that says what will happen. True when confirmed.
+/// A plain "are you sure" alert that says what will happen. True when confirmed.
 Future<bool> confirmAction(BuildContext context, {required String title, required String body, required String confirmLabel, bool danger = false, Key? confirmKey}) async {
-  final r = await showDialog<bool>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: Text(title),
-      content: SingleChildScrollView(child: Text(body)),
-      actions: [
-        TextButton(key: const Key('confirm-cancel'), style: TextButton.styleFrom(minimumSize: kTarget), onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
-        FilledButton(
-          key: confirmKey ?? const Key('confirm-ok'),
-          style: FilledButton.styleFrom(minimumSize: kTarget, backgroundColor: danger ? Theme.of(ctx).colorScheme.error : null),
-          onPressed: () => Navigator.of(ctx).pop(true),
-          child: Text(confirmLabel),
-        ),
-      ],
-    ),
+  final r = await showAppAlert(
+    context,
+    title: title,
+    message: body,
+    confirmLabel: confirmLabel,
+    destructive: danger,
+    cancelKey: const Key('confirm-cancel'),
+    confirmKey: confirmKey ?? const Key('confirm-ok'),
   );
   return r ?? false;
 }
 
-/// A dialog that asks for [phrase] to be typed before it can be confirmed. True when confirmed with the exact phrase.
+/// A sheet that asks for [phrase] to be typed before it can be confirmed. Returns the typed phrase, or null when cancelled.
 Future<String?> typedConfirm(BuildContext context, {required String title, required String body, required String phrase, required String confirmLabel}) {
-  return showDialog<String>(
-    context: context,
-    builder: (ctx) {
-      final ctl = TextEditingController();
-      return StatefulBuilder(
-        builder: (ctx, set) => AlertDialog(
-          title: Text(title),
-          content: SingleChildScrollView(
-            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(body),
-              const SizedBox(height: Gap.m),
-              Text('Type $phrase to go on', style: const TextStyle(fontWeight: FontWeight.w700)),
-              TextField(key: const Key('typed-confirm'), controller: ctl, autocorrect: false, enableSuggestions: false, textCapitalization: TextCapitalization.characters, onChanged: (_) => set(() {})),
-            ]),
-          ),
-          actions: [
-            TextButton(key: const Key('confirm-cancel'), style: TextButton.styleFrom(minimumSize: kTarget), onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
-            FilledButton(
-              key: const Key('confirm-ok'),
-              style: FilledButton.styleFrom(minimumSize: kTarget, backgroundColor: Theme.of(ctx).colorScheme.error),
-              onPressed: ctl.text.trim() == phrase ? () => Navigator.of(ctx).pop(ctl.text.trim()) : null,
-              child: Text(confirmLabel),
-            ),
-          ],
-        ),
-      );
-    },
+  return showAppSheet<String>(
+    context,
+    detents: const [0.6, 0.92],
+    builder: (ctx, scroll) => _TypedConfirmBody(controller: scroll, title: title, body: body, phrase: phrase, confirmLabel: confirmLabel),
   );
 }
 
-void showSnack(BuildContext context, String text) {
-  final m = ScaffoldMessenger.maybeOf(context);
-  m?.hideCurrentSnackBar();
-  m?.showSnackBar(SnackBar(content: Text(text), behavior: SnackBarBehavior.floating));
+class _TypedConfirmBody extends StatefulWidget {
+  final ScrollController controller;
+  final String title, body, phrase, confirmLabel;
+  const _TypedConfirmBody({required this.controller, required this.title, required this.body, required this.phrase, required this.confirmLabel});
+
+  @override
+  State<_TypedConfirmBody> createState() => _TypedConfirmBodyState();
 }
+
+class _TypedConfirmBodyState extends State<_TypedConfirmBody> {
+  final _ctl = TextEditingController();
+
+  @override
+  void dispose() {
+    _ctl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AppSheetScaffold(
+      controller: widget.controller,
+      title: widget.title,
+      primaryAction: FilledButton(
+        key: const Key('confirm-ok'),
+        style: FilledButton.styleFrom(minimumSize: kTarget, backgroundColor: Theme.of(context).colorScheme.error),
+        onPressed: _ctl.text.trim() == widget.phrase ? () => Navigator.of(context).pop(_ctl.text.trim()) : null,
+        child: Text(widget.confirmLabel),
+      ),
+      secondaryAction: TextButton(key: const Key('confirm-cancel'), style: TextButton.styleFrom(minimumSize: kTarget), onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+      children: [
+        Text(widget.body),
+        const SizedBox(height: Gap.m),
+        Text('Type ${widget.phrase} to go on', style: const TextStyle(fontWeight: FontWeight.w700)),
+        TextField(key: const Key('typed-confirm'), controller: _ctl, autocorrect: false, enableSuggestions: false, textCapitalization: TextCapitalization.characters, onChanged: (_) => setState(() {})),
+      ],
+    );
+  }
+}
+
+void showSnack(BuildContext context, String text) => showAppToast(context, text);
