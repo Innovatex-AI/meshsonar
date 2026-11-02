@@ -1,4 +1,4 @@
-// Map tab quick tools: the base-map cycler, the filter drawer, the leaderboard / my stats sheet.
+// Drive tab quick tools: the base-map cycler, the filter drawer, the leaderboard / my stats sheet.
 // One column (MapToolColumn) the Drive screen map and the full-screen map both add under their layers button; everything
 // reads and writes DriveMapModel, so the two screens stay in step. Feature ideas only from the wider wardriving world:
 // the design, wording and code are MeshSonar's own.

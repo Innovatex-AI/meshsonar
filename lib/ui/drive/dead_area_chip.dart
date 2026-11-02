@@ -1,4 +1,4 @@
-// Non-blocking warning on the Map tab while driving: the last few pings heard no repeater. Display only; it reads the
+// Non-blocking warning on the Drive tab while driving: the last few pings heard no repeater. Display only; it reads the
 // drive's pings and never touches the radio or the ping cadence.
 import 'package:flutter/material.dart';
 

@@ -1,4 +1,4 @@
-// Chat-in-Drive: a half-height sheet over the Map tab's drive controls. It lists the conversations with unread messages
+// Chat-in-Drive: a half-height sheet over the Drive tab's drive controls. It lists the conversations with unread messages
 // (else the latest ones) and opens one with a quick composer. The composer follows the passenger rule (design 1.3):
 // while the car is moving it is replaced by "I'm a passenger". The sheet never blocks pings.
 import 'dart:math' as math;

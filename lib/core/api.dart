@@ -690,13 +690,17 @@ class Settings {
   /// written to settings.json only when changed, so an older file reads as standard.
   final ColourPalette colourPalette;
 
-  /// Map tab base map (lib/core/map_styles.dart id: chart / street / dark / topo). Default chart; written only when changed.
+  /// Drive tab base map (lib/core/map_styles.dart id: chart / street / dark / topo). Default chart; written only when changed.
   final String baseMapStyle;
 
   /// Wardriving feedback when a ping finishes (Settings > Wardriving): a haptic tap (on by default, as before) and a short
   /// sound (off by default). Heard and not heard differ in both. Written only when not the default.
   final bool pingHaptics;
   final bool pingSound;
+
+  /// UI haptics (selection, light, soft, success, warning, error: lib/ui/design/app_haptics.dart). On by default; written
+  /// only when switched off. Separate from the ping feedback above.
+  final bool haptics;
 
   /// Drive-context categories (lib/core/data_categories.dart ids) the person switched off. Every category is on by
   /// default (opt-out, Andy Oct 2026), so only the off ones are stored, under `collection_off`; ids this version does
@@ -755,6 +759,7 @@ class Settings {
     this.baseMapStyle = 'chart',
     this.pingHaptics = true,
     this.pingSound = false,
+    this.haptics = true,
     this.collectionOff = const {},
     this.contextErasePending = const {},
   });
@@ -788,6 +793,7 @@ class Settings {
     String? baseMapStyle,
     bool? pingHaptics,
     bool? pingSound,
+    bool? haptics,
     Set<String>? collectionOff,
     Set<String>? contextErasePending,
     bool clearKey = false,
@@ -820,6 +826,7 @@ class Settings {
         baseMapStyle: baseMapStyle ?? this.baseMapStyle,
         pingHaptics: pingHaptics ?? this.pingHaptics,
         pingSound: pingSound ?? this.pingSound,
+        haptics: haptics ?? this.haptics,
         collectionOff: collectionOff ?? this.collectionOff,
         contextErasePending: contextErasePending ?? this.contextErasePending,
       );
@@ -853,6 +860,7 @@ class Settings {
         if (baseMapStyle != 'chart') 'base_map_style': baseMapStyle,
         if (!pingHaptics) 'ping_haptics': false,
         if (pingSound) 'ping_sound': true,
+        if (!haptics) 'haptics': false,
         if (collectionOff.isNotEmpty) 'collection_off': collectionOff.toList()..sort(),
         if (contextErasePending.isNotEmpty) 'context_erase_pending': contextErasePending.toList()..sort(),
       };
@@ -887,6 +895,7 @@ class Settings {
         baseMapStyle: _str(j['base_map_style']) ?? 'chart',
         pingHaptics: j['ping_haptics'] is bool ? j['ping_haptics'] as bool : true,
         pingSound: j['ping_sound'] is bool ? j['ping_sound'] as bool : false,
+        haptics: j['haptics'] is bool ? j['haptics'] as bool : true,
         collectionOff: {
           if (j['collection_off'] case final List l)
             for (final v in l)

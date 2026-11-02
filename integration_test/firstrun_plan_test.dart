@@ -31,7 +31,7 @@ void main() {
       await t.tap(keep);
       await pumpFor(t, const Duration(seconds: 1));
     }
-    for (final tab in ['Map', 'Chat', 'Analyze', 'Plan', 'More']) {
+    for (final tab in ['Drive', 'Chat', 'Analyze', 'Plan', 'More']) {
       await openShellTab(t, tab);
       await pumpFor(t, const Duration(seconds: 4));
       await shot(t, 'first-$tab');

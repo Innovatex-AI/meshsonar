@@ -628,7 +628,7 @@ class DriveActionButtons extends StatelessWidget {
                 style: FilledButton.styleFrom(
                   backgroundColor: driving ? t.colorScheme.error : null,
                   foregroundColor: driving ? t.colorScheme.onError : null,
-                  textStyle: TextStyle(fontFamily: 'Barlow', fontSize: compact ? 19 : 22, fontWeight: FontWeight.w700),
+                  textStyle: TextStyle(fontSize: compact ? 19 : 22, fontWeight: FontWeight.w700),
                 ),
                 // A radio not set up yet waits for its antenna (the hint above opens the setup).
                 onPressed: s.busy || (!driving && s.needsAntennaSetup)

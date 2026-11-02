@@ -60,7 +60,7 @@ void main() {
     await back(t);
     await pumpFor(t, const Duration(seconds: 1));
     // Connect the Simulator radio.
-    await openShellTab(t, 'Map');
+    await openShellTab(t, 'Drive');
     await t.tap(find.byKey(const Key('connection-chip')));
     await pumpFor(t, const Duration(seconds: 3));
     final sim = find.byKey(const Key('simulator'));

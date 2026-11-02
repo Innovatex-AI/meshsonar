@@ -46,7 +46,7 @@ Future<void> scrollShots(WidgetTester t, String prefix, {int max = 3}) async {
 }
 
 Future<void> connectSimulator(WidgetTester t) async {
-  await openShellTab(t, 'Map');
+  await openShellTab(t, 'Drive');
   final chip = find.byKey(const Key('connection-chip'));
   if (!await waitFor(t, chip)) return;
   await t.tap(chip);
@@ -146,7 +146,7 @@ void main() {
 
     if (want('first')) {
       await step('tabs', () async {
-        for (final tab in ['Chat', 'Map', 'Analyze', 'Plan', 'More']) {
+        for (final tab in ['Chat', 'Drive', 'Analyze', 'Plan', 'More']) {
           await openShellTab(t, tab);
           await shot(t, 'tab-${tab.toLowerCase()}');
           if (tab == 'More') await scrollShots(t, 'tab-more', max: 4);
@@ -239,7 +239,7 @@ void main() {
     if (want('map')) {
       await step('map', () async {
         await connectSimulator(t);
-        await openShellTab(t, 'Map');
+        await openShellTab(t, 'Drive');
         await shot(t, 'map-ready');
         await t.tap(find.byKey(const Key('start-stop')));
         await pumpFor(t, const Duration(seconds: 25));

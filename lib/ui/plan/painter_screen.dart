@@ -3,7 +3,7 @@
 // clutter) runs on the server (`POST /api/cmh/coverage`, the same call the website's painter makes) and the footprint is drawn
 // on a map here with the area in each strength band, the people it reaches and the predicted links to live repeaters.
 // Only the point and the model settings are sent. The last result is kept on disk and shown, labelled, when offline. Modelled,
-// not measured: measured coverage is on the Map tab. The server runs the model inside the viewed region's own boundary.
+// not measured: measured coverage is on the Drive tab. The server runs the model inside the viewed region's own boundary.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -91,7 +91,7 @@ class _PainterScreenState extends State<PainterScreen> {
     }
     return PlanPage(id: 'painter', title: 'Coverage painter', children: [
       Text(
-        'Modelled coverage from any point, from terrain and the link model. It is a model, not a measurement: measured coverage is on the Map tab. '
+        'Modelled coverage from any point, from terrain and the link model. It is a model, not a measurement: measured coverage is on the Drive tab. '
         'Only the point and the settings below are sent to ${s.viewingRegion?.name ?? 'the server'}.',
         style: t.textTheme.bodyMedium,
       ),

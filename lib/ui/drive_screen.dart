@@ -113,34 +113,9 @@ class _DriveScreenState extends State<DriveScreen> {
       appBar: AppBar(
         titleSpacing: Gap.l,
         toolbarHeight: 60,
-        title: Row(
-          children: [
-            Icon(Icons.radar, color: t.colorScheme.primary, size: 26),
-            const SizedBox(width: Gap.s),
-            // At the largest text sizes the logo alone leaves the connection chip room to say its state.
-            if (MediaQuery.textScalerOf(context).scale(16) <= 22)
-              Flexible(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Map', maxLines: 1, overflow: TextOverflow.fade, softWrap: false),
-                    // Drive is a mode of the Map tab: say which one this is.
-                    Text(
-                      s.driving ? 'Drive mode' : 'Not driving',
-                      key: const Key('map-mode'),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: t.textTheme.labelSmall?.copyWith(
-                        color: s.driving ? t.colorScheme.primary : t.colorScheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        ),
+        // The tab bar says which tab this is (the old 'Map' / 'Drive mode' title row is gone); the AppBar keeps the
+        // connection chip. WP3 replaces this AppBar with the new Drive chrome.
+        title: Icon(Icons.radar, color: t.colorScheme.primary, size: 26),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: Gap.m),

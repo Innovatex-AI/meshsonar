@@ -1,5 +1,5 @@
-// PDF export glue for the UI: loads Barlow from the app's bundled fonts (assets/fonts, SIL OFL 1.1: embedding in a
-// document is allowed) and writes a rendered report (lib/core/report_pdf.dart) to the export folder, then opens the
+// PDF export glue for the UI: loads Barlow from the plain assets in assets/fonts (SIL OFL 1.1: embedding in a
+// document is allowed; D46: the only place a font file is read, and SF is never embedded) and writes a rendered report (lib/core/report_pdf.dart) to the export folder, then opens the
 // share sheet through the existing seams (services.exportDir / services.shareFile). The share sheet offers Print and
 // Save to Files for a PDF, so there is no print plugin. Nothing here touches the network.
 import 'dart:io';
@@ -9,9 +9,10 @@ import 'package:flutter/services.dart' show rootBundle;
 
 import '../../app/app_state.dart';
 import '../../core/report_pdf.dart';
+import '../design/app_type.dart';
 
-const String pdfRegularFont = 'assets/fonts/Barlow-Regular.ttf';
-const String pdfBoldFont = 'assets/fonts/Barlow-SemiBold.ttf';
+const String pdfRegularFont = AppType.documentRegular;
+const String pdfBoldFont = AppType.documentBold;
 
 Future<ReportFonts> loadReportFonts() async =>
     ReportFonts(regular: await rootBundle.load(pdfRegularFont), bold: await rootBundle.load(pdfBoldFont));

@@ -1,4 +1,4 @@
-// The Map tab's dead-area chip: after 5 silent tx pings in a row during a drive, cleared by the next echo.
+// The Drive tab's dead-area chip: after 5 silent tx pings in a row during a drive, cleared by the next echo.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/app/app_state.dart' show RadioKind;

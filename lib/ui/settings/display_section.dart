@@ -7,6 +7,8 @@ import '../../core/colour_palette.dart';
 import '../../core/network_coverage.dart' show CoverageLevel;
 import '../../core/units.dart';
 import '../app.dart';
+import '../design/app_symbols.dart';
+import '../design/app_widgets.dart';
 import 'settings_index.dart';
 import 'settings_kit.dart';
 
@@ -113,6 +115,17 @@ List<Widget> displaySectionRows(BuildContext context) {
     const SettingsAnchor(id: 'units-tile', child: UnitsTile()),
     for (final q in unitQuantities) SettingsAnchor(id: q.id, child: UnitOverrideTile(quantity: q)),
     const SettingsAnchor(id: 'colour-palette', child: ColourPaletteTile()),
+    SettingsAnchor(
+      id: 'ui-haptics',
+      child: AppSwitchTile(
+        key: const Key('ui-haptics'),
+        symbol: AppSymbols.waveform,
+        title: settingsEntry('ui-haptics').title,
+        subtitle: settingsEntry('ui-haptics').summary,
+        value: st.haptics,
+        onChanged: (v) => s.updateSettings(st.copyWith(haptics: v)),
+      ),
+    ),
     SettingsAnchor(
       id: 'heard-hold',
       child: SliderTile(

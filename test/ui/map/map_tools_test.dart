@@ -1,4 +1,4 @@
-// Map tab quick wins on screen: the base-map cycler (and what the map draws for each style, offline packs respected), the
+// Drive tab quick wins on screen: the base-map cycler (and what the map draws for each style, offline packs respected), the
 // filter drawer, the coverage % pill, the leaderboard / my stats sheet, and the ping sound + haptic settings.
 import 'dart:io';
 

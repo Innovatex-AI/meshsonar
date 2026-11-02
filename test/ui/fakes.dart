@@ -981,7 +981,7 @@ Future<void> settleLive(WidgetTester tester, {Duration limit = const Duration(se
 }
 
 /// Old "Drive" tab.
-Future<void> openDriveTab(WidgetTester tester) => tapShellTab(tester, 'Map');
+Future<void> openDriveTab(WidgetTester tester) => tapShellTab(tester, 'Drive');
 
 /// Old "Region" tab: Analyze, Region view.
 Future<void> openRegionTab(WidgetTester tester) async {

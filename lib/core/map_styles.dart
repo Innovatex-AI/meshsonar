@@ -1,4 +1,4 @@
-// Base maps the Map tab can show. Pure Dart. The cycler button steps through [BaseMapStyle.values].
+// Base maps the Drive tab can show. Pure Dart. The cycler button steps through [BaseMapStyle.values].
 //
 //  chart   the app's own look: OpenStreetMap graded to the theme (and the downloaded offline pack when one covers the map).
 //  street  plain OpenStreetMap colours, no grading: readable in sunlight, labels exactly as OSM draws them.

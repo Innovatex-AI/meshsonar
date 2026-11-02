@@ -6,7 +6,9 @@ import '../../alerts/alerts_runtime.dart';
 import '../theme.dart';
 
 class AlertsStatusStrip extends StatelessWidget {
-  const AlertsStatusStrip({super.key});
+  /// Space kept under the strip when it shows (the Drive tab runs behind the tab bar, so the strip clears it).
+  final double bottomInset;
+  const AlertsStatusStrip({super.key, this.bottomInset = 0});
 
   @override
   Widget build(BuildContext context) {
@@ -41,7 +43,7 @@ class AlertsStatusStrip extends StatelessWidget {
               ));
             }
             if (rows.isEmpty) return const SizedBox.shrink();
-            return Column(mainAxisSize: MainAxisSize.min, children: rows);
+            return Padding(padding: EdgeInsets.only(bottom: bottomInset), child: Column(mainAxisSize: MainAxisSize.min, children: rows));
           },
         );
       },

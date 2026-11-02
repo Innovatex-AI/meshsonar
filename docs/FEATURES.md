@@ -58,29 +58,28 @@ builds an alert from a message its radio handed over; no server, no remote push,
 
 ## App shell: five tabs
 
-Files: `ui/shell/*`. Tabs `Chat | Map | Analyze | Plan | More`: a bottom bar on phones, a navigation rail from 700 dp wide
+Files: `ui/shell/*`. Tabs `Chat | Drive | Analyze | Plan | More`: a bottom bar on phones, a navigation rail from 700 dp wide
 (iPad, phones in landscape). The last open tab is remembered (`ui_prefs.json` `last_tab`, by name; a fresh install opens
-on Map). Tapping the open More tab again returns it to its list.
+on Drive; a saved `map` from before the rename still restores Drive). Tapping the open More tab again returns it to its list.
 
 | Tab | Holds |
 |---|---|
 | Chat | Contacts \| Channels through the `ChatTabHost` seam (see Contacts and direct messages, below). Without a chat store: "Messages arrive here once you connect a radio". Unread badge on the tab icon. |
-| Map | The coverage map and the drive controls (the old Drive tab). Drive is a mode of this tab: the title says "Drive mode" while recording, "Not driving" otherwise; Start drive is the big button. |
+| Drive | The coverage map and the drive controls (called Map before the redesign). Start drive is the big button. The tab runs behind the translucent, blurred tab bar (opaque under Reduce Transparency); `ShellController.immersive` hides the bar, the rail and the mini drive bar for the full-screen map. Icon: car. |
 | Analyze | Segmented Region (the Region hub) \| Drives (drive list, reports, progress). |
 | Plan | Native tools (`ui/plan/*`, `core/plan/*`): Airtime and load (calculator offline; 24 h channel load and what-if from `airtime-load`, last result cached), Radio presets (offline; the website's link-survival columns need its terrain grid and are not shown), Point-to-point link (ground profile from `score-link`, then line of sight, Fresnel clearance, odds and margin on the phone; offline for a pair already checked), Coverage painter (`coverage`, footprint on a map, last result cached), Coverage check (from the cached measured cells; offline), Field data. Planner, Recommended build and Site explorer open the website until their native twins land. |
 | Plan | Planner, Recommended build, Site explorer (dossier, link profile, compare), Scenarios and Build tracker run in the app on the website's planning engine (`plan-native`), with the last results cached for offline. The other tools (point-to-point link, coverage painter, airtime, radio presets, coverage check) open the real page in the browser until they are converted. In-app tools that do not exist yet are listed once as "Coming next", with no button. |
 | More | Radio, My radios and claims, Settings, Colour legend, How it works (replays the tour), Privacy and data sharing, Report a problem, About, Privacy policy. Opens inside the tab (own Navigator), so the bars stay. |
 
-Old tab names: Drive = Map; Region and Drives = Analyze; Radio and Settings = More. `HomeShell(legacyTab: n)` maps the old
+Old tab names: Drive = Map (renamed in the Drive redesign); Region and Drives = Analyze; Radio and Settings = More. `HomeShell(legacyTab: n)` maps the old
 indexes 0..4 (`LegacyTab.fromIndex`).
 
-**Mini drive bar** (`ui/shell/mini_drive_bar.dart`): while a drive runs, a 48 dp bar above the tab bar on every tab except
-Map (which is the drive screen). Live dot, "N pings · M heard", what the next ping waits for (Next ping 14 s, Move 40 m,
-Waiting for GPS, Listening for echoes, Pings paused, Radio problem or reconnecting), last SNR (strength colour only for a
-measured SNR; "none" in grey), **Pause pings** / **Resume pings** (engine runs at interval 0 = manual pings only; never
-saved; a new drive starts unpaused; hidden in listen-only discovery) and **Stop** (same confirm as the Stop drive button).
-Tapping the summary opens the Map tab. The bar's text stops growing at 1.6x so it never swallows the screen; screen readers
-get one sentence ("Drive in progress. 12 pings · 8 heard. Next ping 14 s. Last SNR 6.5 decibels.").
+**Mini drive bar** (`ui/shell/mini_drive_bar.dart`): while a drive runs, a 56 dp opaque bar above the tab bar on every tab
+except Drive (which is the drive screen) and never while Drive is immersive. Status dot, one hero for the last ping ("2 heard",
+"No echo", "No pings yet", or the radio problem), elapsed time (tabular) and **Stop** (44 dp, trailing, same confirm as the
+Stop drive button). Tapping the body opens the Drive tab. Pause pings lives in the Drive controls only. The bar's text stops
+growing at 1.6x; screen readers get one sentence ("Drive in progress, 2 repeaters heard last ping, 18 minutes") plus the
+separate Stop button.
 
 Shared states: `ui/state_widgets.dart` has `LoadingState` (a spinner that gives up after a timeout and becomes an
 `ErrorState` with Try again) and `ErrorState`; `EmptyState` is in `ui/widgets.dart`.
@@ -167,7 +166,7 @@ it's finished or skipped. More > How it works replays it (no connect buttons).
 | 1 "Your MeshCore radio, in one app" | Map, plan and check your mesh with one radio | Next |
 | 2 "Find your way around" | The five tabs in one line each | Next |
 | 3 "Connect your radio" | BLE pairing; Simulator (debug builds) | **Connect radio** → Connect screen; **Try the Simulator** → connects the simulator |
-| 4 "Nothing to sign up for" | The driver key is created automatically; drives are saved locally and upload on their own | **Get started** → Map tab |
+| 4 "Nothing to sign up for" | The driver key is created automatically; drives are saved locally and upload on their own | **Get started** → Drive tab |
 
 **Skip** is always available. Settings → "Show the welcome tour" reopens the intro. When there's no prefs file (tests),
 the intro counts as already seen.
@@ -226,7 +225,7 @@ and ≥ 640 px) the map sits on the left and the controls on the right.
 
 ### Auto-ping cadence
 
-(`DefaultWardriveEngine`, settings *Auto-ping*, *Minimum distance* and *Listen window*; More > Wardriving settings, or the Map tab's "Ping ..." chip)
+(`DefaultWardriveEngine`, settings *Auto-ping*, *Minimum distance* and *Listen window*; More > Wardriving settings, or the Drive tab's "Ping ..." chip)
 
 - An auto-ping goes out when **both** of these are true:
   1. **Time:** at least `intervalSec` (10–120 s; default 30) since the last ping, auto or manual. The gap is never
@@ -401,7 +400,7 @@ Circles where this driver's pings are hidden from every public view, for drives 
 - **Layout.** Phone: map on top (36% of the height, 200-380 px), list and editor scroll below; iPad and landscape (>= 720 dp wide): map left, panel right. Text up to 2.5x scrolls; the map banner and the neighbour names cap their own text at 1.3x so they never swallow the map, and are read in full by VoiceOver. All buttons and the pins are at least 48 px. VoiceOver: the map has a spoken summary ("N zones"), every zone is a labelled selected/unselected button ("Home, radius 400 m"), the sliders speak their value and step, and the zone list does everything the map does.
 - **Tests.** `test/core/privacy_zones_test.dart` (rounding, wrap, limits, select-not-add hit test), `test/app/privacy_zones_controller_test.dart` (queue, lazy key, offline, unsupported, refusals, in-flight edits), `test/core/privacy_zones_contract_test.dart` (the app's normalisation and client against the website's real `zones.ts` and `zone-handlers.ts` through bun; skips without bun or the checkout), `test/ui/privacy_zones_screen_test.dart` (the screen on iPhone / iPad, 2.5x text, dark, 48 px, VoiceOver, offline, no key, unsupported).
 
-## Map tab quick tools (unreleased)
+## Drive tab quick tools (unreleased)
 
 Under the layers button (Drive map and full-screen map): **base map** cycler (Chart, Street, Dark, Topo; saved; offline packs drawn for all but Topo), **filter** drawer (result, age, repeater, my pings only; badge shows how many are on), **trophy** (region leaderboard + your totals from this phone) and the **coverage pill** (share of cells and of your tx pings heard inside the view). Coverage options > Colour by adds **Ping age** (indigo ramp) and **Noise vs typical** (teal to rust); grey = mapped nothing heard, purple = heard signal unknown, green/blue/amber/red only for signal. Settings > Wardriving > Ping feedback: haptic tap (on) and sound (off), different for heard and heard nothing.
 
@@ -672,7 +671,7 @@ use it."); `test/ui/settings_no_dead_end_test.dart` enforces it.
 | | **Airtime per ping** (`ping-airtime`) | Time on air at the connected radio's SF/BW (`wardrivePingAirtimeMs`) and the share of time at the chosen interval. |
 | | **Auto-ping** | Every 5 s from **10 to 120 s** (default 30); a ping goes out exactly when the time has passed AND the distance is met (a one-shot timer at the due time, not a 1 s poll). Disabled with a reason while sending is off. |
 | | **Minimum distance** | Stops 15 … 500 m (feet in imperial; default 100 m). |
-| | **Listen window** | 4–20 s, default 10 s (MeshMapper's); capped at the interval less 1 s. Same three sliders open from the Map tab's ping chip. |
+| | **Listen window** | 4–20 s, default 10 s (MeshMapper's); capped at the interval less 1 s. Same three sliders open from the Drive tab's ping chip. |
 | | **This drive** (`wardrive-counters`) | Pings sent, repeaters that heard them, pings held back by the arbiter (if any) and `Observers confirmed X of Y uploaded pings` from `GET drive-status` (or why there is no number: waiting for the first upload, no driver key, server without the route). |
 | Radio (`radio`) | **Radio details** | Opens the Radio tab's read-only screen. |
 | | **Each saved radio** (`antenna-profile-<key>`) | Mount, gain and height; tap to edit; **Forget** asks. Locked for the radio in use while driving. |

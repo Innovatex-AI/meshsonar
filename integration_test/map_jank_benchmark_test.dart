@@ -1,4 +1,4 @@
-// Map and puck jank benchmark. Plays a recorded-style car route through the REAL Map tab (the Harness app: DriveScreen,
+// Map and puck jank benchmark. Plays a recorded-style car route through the REAL Drive tab (the Harness app: DriveScreen,
 // DriveMapModel, CoverageMap, PuckController) with a realistic data load (thousands of network hex cells, 60 repeaters,
 // a 300-ping drive, synthetic base-map tiles) and measures what the person would feel:
 //
@@ -42,6 +42,8 @@ const _seconds = int.fromEnvironment('BENCH_SECONDS', defaultValue: 90);
 const _name = String.fromEnvironment('BENCH_NAME', defaultValue: 'run');
 const _tiles = String.fromEnvironment('BENCH_TILES', defaultValue: 'none');
 const _cellCount = int.fromEnvironment('BENCH_CELLS', defaultValue: 4000);
+// Repeater count (spike S5 variant: 600 badges). Default keeps the recorded baseline comparable.
+const _repeaterCount = int.fromEnvironment('BENCH_REPEATERS', defaultValue: 60);
 const _p95Max = int.fromEnvironment('BENCH_P95_MAX_MS', defaultValue: 40);
 const _worstMax = int.fromEnvironment('BENCH_WORST_MAX_MS', defaultValue: 250);
 const _lagMax = int.fromEnvironment('BENCH_LAG_MAX_MS', defaultValue: 250);
@@ -74,7 +76,7 @@ void main() {
     final h = Harness()..approveKey();
     final repeaters = <RepeaterRef>[];
     final used = <String>{};
-    while (repeaters.length < 60) {
+    while (repeaters.length < _repeaterCount) {
       final key = _hex(rnd, 64);
       if (!used.add(key.substring(0, 4))) continue;
       final at = full.samples[rnd.nextInt(full.samples.length)];

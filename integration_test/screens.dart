@@ -65,7 +65,7 @@ Future<void> _analyze(WidgetTester t, String segment) async {
 Future<void> openTab(WidgetTester t, String label) async {
   switch (label) {
     case 'Drive':
-      await openShellTab(t, 'Map');
+      await openShellTab(t, 'Drive');
     case 'Region':
       await _analyze(t, 'Region');
     case 'Drives':
@@ -183,24 +183,16 @@ final List<ScreenStep> screens = [
     await t.tap(go);
     await pumpFor(t, const Duration(seconds: 30));
     await shot(t, 'drive-live');
-    // The mini drive bar on every other tab, then paused, then back to the Map from the bar.
+    // The mini drive bar on every other tab, then back to the Drive tab from the bar.
     for (final tab in ['Chat', 'Plan', 'More']) {
       await openShellTab(t, tab);
       await shot(t, 'minibar-${tab.toLowerCase()}');
     }
     await openTab(t, 'Region');
     await shot(t, 'minibar-analyze');
-    final pause = find.byKey(const Key('mini-bar-pause'));
-    if (pause.evaluate().isNotEmpty) {
-      await t.tap(pause);
-      await pumpFor(t, const Duration(seconds: 1));
-      await shot(t, 'minibar-paused');
-      await t.tap(pause);
-      await pumpFor(t, const Duration(seconds: 1));
-    }
     await t.tap(find.byKey(const Key('mini-bar-open')));
     await pumpFor(t, const Duration(seconds: 1));
-    await shot(t, 'minibar-opened-map');
+    await shot(t, 'minibar-opened-drive');
     await t.tap(go);
     await pumpFor(t, const Duration(milliseconds: 600));
     await shot(t, 'stop-confirm');
