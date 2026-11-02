@@ -8,7 +8,6 @@
 // 'filter-counts'), 'map-leaders-sheet' ('leaders-board', 'leaders-me').
 import 'package:flutter/material.dart';
 
-import '../design/app_surfaces.dart' show showAppToast;
 import '../../core/map_filter.dart';
 import '../../core/map_styles.dart';
 import '../../core/personal_progress.dart';
