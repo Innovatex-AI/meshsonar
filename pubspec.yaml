@@ -63,6 +63,8 @@ dependencies:
   mobile_scanner: ^7.4.3
   flutter_local_notifications: ^22.3.3
   universal_ble: ^3.1.0
+  flutter_slidable: ^4.0.3
+  local_auth: ^3.0.0
 dev_dependencies:
   integration_test:
     sdk: flutter
@@ -91,23 +93,12 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
-  # Barlow (SIL OFL 1.1, assets/fonts/Barlow-OFL.txt): a road-signage grotesque, legible at a glance in a car.
-  fonts:
-    - family: Barlow
-      fonts:
-        - asset: assets/fonts/Barlow-Regular.ttf
-        - asset: assets/fonts/Barlow-Medium.ttf
-          weight: 500
-        - asset: assets/fonts/Barlow-SemiBold.ttf
-          weight: 600
-        - asset: assets/fonts/Barlow-Bold.ttf
-          weight: 700
-    - family: BarlowSemiCondensed
-      fonts:
-        - asset: assets/fonts/BarlowSemiCondensed-SemiBold.ttf
-          weight: 600
-        - asset: assets/fonts/BarlowSemiCondensed-Bold.ttf
-          weight: 700
+  # Plain assets, NOT font families (D46): the two SIL OFL 1.1 Barlow files are read only by the PDF export
+  # (AppType.documentRegular / documentBold). The UI uses the system font; no SF font file is ever bundled.
+  assets:
+    - assets/fonts/Barlow-Regular.ttf
+    - assets/fonts/Barlow-SemiBold.ttf
+    - assets/fonts/Barlow-OFL.txt
 
   # To add assets to your application, add an assets section, like this:
   # assets:

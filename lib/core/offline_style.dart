@@ -76,12 +76,19 @@ const cartoColors = <String, String>{
   'halo': '#ffffff',
 };
 
-/// Which renderer the style is for. [app]: vector_tile_renderer in the app (text-font = bundled Flutter families,
+/// Which renderer the style is for. [app]: vector_tile_renderer in the app (text-font = the system font family [appLabelFont],
 /// source without a URL). [web]: MapLibre GL (text-font = the glyph stacks hosted on tiles.meshsonar.com, a
 /// `pmtiles://` source and `glyphs` URL).
 enum OfflineStyleTarget { app, web }
 
-/// Glyph stacks published under `fonts/` in the tiles bucket (built from the same Barlow files the app bundles).
+/// The Flutter family the app target asks for (spike S1, D14): vector_tile_renderer passes the first `text-font` entry
+/// straight to a Flutter `TextStyle.fontFamily`, and `CupertinoSystemText` is Flutter's alias for the platform system
+/// font (SF Pro Text on iOS/macOS; an unknown family falls back to the default font elsewhere). So offline-pack labels are
+/// drawn in SF Pro with no font file bundled. Weight is not carried by the renderer, so bold labels use the same family.
+const appLabelFont = 'CupertinoSystemText';
+
+/// Glyph stacks published under `fonts/` in the tiles bucket (built from the Barlow OFL files in assets/fonts). This
+/// is a documented Barlow exception (web only; the app never loads these).
 const webFontRegular = 'Barlow-Regular', webFontMedium = 'Barlow-Medium', webFontBold = 'BarlowSemiCondensed-SemiBold';
 
 Map<String, dynamic> offlineStyle({
@@ -94,9 +101,9 @@ Map<String, dynamic> offlineStyle({
   String c(String role) => tintHex(cartoColors[role]!, m);
   final web = target == OfflineStyleTarget.web;
   List<String> font(String weight) => switch (weight) {
-    'bold' => [web ? webFontBold : 'BarlowSemiCondensed'],
-    'medium' => [web ? webFontMedium : 'Barlow'],
-    _ => [web ? webFontRegular : 'Barlow'],
+    'bold' => [web ? webFontBold : appLabelFont],
+    'medium' => [web ? webFontMedium : appLabelFont],
+    _ => [web ? webFontRegular : appLabelFont],
   };
   const src = 'openmaptiles';
 

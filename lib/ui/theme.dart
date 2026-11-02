@@ -2,16 +2,18 @@
 //
 // Direction: an in-car instrument, not a web dashboard. Deep "sonar water" navy in dark mode (the default at night),
 // a cool chart-paper grey in light mode, one strong sonar-teal accent, and a warm beacon amber reserved for
-// repeaters, so "you", "your pings" and "the towers" never share a colour. Numbers are set in Barlow Semi Condensed
-// with tabular figures, big enough to read at arm's length; everything else is Barlow (a road-signage grotesque).
+// repeaters, so "you", "your pings" and "the towers" never share a colour. Type is the system font (SF Pro on Apple
+// platforms; see design/app_type.dart): numbers use tabular figures, big enough to read at arm's length.
 //
 // Screens read the extra colours with `MeshSonarColors.of(context)`.
 import 'dart:io' show Platform;
 
+import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
 
 import '../core/colour_palette.dart';
 import '../core/network_coverage.dart' show CoverageLevel;
+import 'design/app_type.dart';
 
 /// Spacing scale (logical px). Use these instead of ad-hoc numbers.
 abstract final class Gap {
@@ -28,10 +30,16 @@ abstract final class Corners {
   static const double button = 18;
   static const double chip = 14;
   static const double small = 10;
+
+  /// Chat bubbles: outer corner, and the corner joining a grouped run.
+  static const double bubble = 18;
+  static const double bubbleInner = 6;
+
+  /// Quick-action tiles and channel avatars (rounded square).
+  static const double tile = 16;
+  static const double channelAvatar = 14;
 }
 
-const String _body = 'Barlow';
-const String _numeric = 'BarlowSemiCondensed';
 
 // ---------------------------------------------------------------- palette
 class _Palette {
@@ -420,7 +428,6 @@ class MeshSonarColors extends ThemeExtension<MeshSonarColors> {
 /// Big readable numbers (stats, countdowns). Tabular figures so digits don't jitter as they change.
 TextStyle numberStyle(BuildContext context, {double size = 30, Color? color, FontWeight weight = FontWeight.w700}) =>
     TextStyle(
-      fontFamily: _numeric,
       fontSize: size,
       height: 1.0,
       fontWeight: weight,
@@ -466,10 +473,10 @@ ThemeData meshSonarTheme(Brightness b, {ColourPalette palette = ColourPalette.st
     inversePrimary: p.accentContainer,
   );
 
-  final base = ThemeData(useMaterial3: true, brightness: b, fontFamily: _body, colorScheme: scheme);
+  final base = ThemeData(useMaterial3: true, brightness: b, colorScheme: scheme);
   final tt = base.textTheme;
   TextStyle? num(TextStyle? s, double size) =>
-      s?.copyWith(fontFamily: _numeric, fontSize: size, fontWeight: FontWeight.w700, height: 1.05, letterSpacing: 0);
+      s?.copyWith(fontSize: size, fontWeight: FontWeight.w700, height: 1.05, fontFeatures: AppType.tabular);
   final text = tt
       .copyWith(
         displayLarge: num(tt.displayLarge, 56),
@@ -489,14 +496,21 @@ ThemeData meshSonarTheme(Brightness b, {ColourPalette palette = ColourPalette.st
         labelSmall: tt.labelSmall?.copyWith(fontWeight: FontWeight.w500, fontSize: 12, color: p.textMuted),
       )
       .apply(bodyColor: p.text, displayColor: p.text);
+  final tracked = AppType.withTracking(text);
 
   final buttonShape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(Corners.button));
-  const buttonText = TextStyle(fontFamily: _body, fontSize: 18, fontWeight: FontWeight.w700, letterSpacing: 0.1);
+  const buttonText = TextStyle(fontSize: 18, fontWeight: FontWeight.w700, letterSpacing: 0.1);
 
   return base.copyWith(
     scaffoldBackgroundColor: p.bg,
     canvasColor: p.bg,
-    textTheme: text,
+    textTheme: tracked,
+    pageTransitionsTheme: const PageTransitionsTheme(
+      builders: {
+        TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+        TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+      },
+    ),
     visualDensity: VisualDensity.standard,
     extensions: [mc],
     appBarTheme: AppBarTheme(
@@ -570,7 +584,6 @@ ThemeData meshSonarTheme(Brightness b, {ColourPalette palette = ColourPalette.st
       height: 72,
       labelTextStyle: WidgetStateProperty.resolveWith(
         (s) => TextStyle(
-          fontFamily: _body,
           fontSize: 14,
           fontWeight: s.contains(WidgetState.selected) ? FontWeight.w700 : FontWeight.w500,
           color: s.contains(WidgetState.selected) ? p.text : p.textMuted,
@@ -585,7 +598,7 @@ ThemeData meshSonarTheme(Brightness b, {ColourPalette palette = ColourPalette.st
       // Float above the thumb zone so a message never covers Start/Stop or Ping now on the Drive screen.
       insetPadding: const EdgeInsets.fromLTRB(Gap.l, Gap.s, Gap.l, 160), // clear of the Antenna/Log row and the big buttons
       backgroundColor: p.text,
-      contentTextStyle: TextStyle(fontFamily: _body, color: p.bg, fontSize: 16, fontWeight: FontWeight.w500),
+      contentTextStyle: TextStyle(color: p.bg, fontSize: 16, fontWeight: FontWeight.w500),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Corners.chip)),
     ),
     inputDecorationTheme: InputDecorationTheme(
