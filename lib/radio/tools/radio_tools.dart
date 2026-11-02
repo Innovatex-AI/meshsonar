@@ -5,6 +5,7 @@ import 'dart:async';
 
 import '../tx_arbiter.dart';
 import 'advert_tool.dart';
+import 'device_settings.dart';
 import 'discover_tool.dart';
 import 'noise_monitor.dart';
 import 'radio_setup.dart';
@@ -24,7 +25,10 @@ class RadioTools {
   final TelemetryTool telemetry;
   final RadioSetupTool setup;
 
-  RadioTools._(this.radio, this.arbiter, this.trace, this.discover, this.adverts, this.rxLog, this.noise, this.telemetry, this.setup);
+  /// Device settings (Chat plan 4.14): the verified writes of the Device settings screen.
+  final DeviceSettingsTool device;
+
+  RadioTools._(this.radio, this.arbiter, this.trace, this.discover, this.adverts, this.rxLog, this.noise, this.telemetry, this.setup, this.device);
 
   /// [pingBusy]: true while a wardrive ping is in flight (the noise monitor then skips its read). [traceStore]: where saved
   /// traces live (null = memory).
@@ -40,6 +44,7 @@ class RadioTools {
       NoiseMonitor(radio, arbiter, clock: clock, busy: pingBusy),
       TelemetryTool(radio, arbiter, clock: clock),
       RadioSetupTool(radio),
+      DeviceSettingsTool(radio, clock: clock),
     );
   }
 
@@ -59,5 +64,6 @@ class RadioTools {
     discover.dispose();
     telemetry.dispose();
     setup.dispose();
+    device.dispose();
   }
 }
