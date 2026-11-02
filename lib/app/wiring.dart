@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
+import 'app_flags.dart';
 import '../core/claim_flow.dart' show FileClaimRestoreStore;
 import '../core/cmat_client.dart';
 import '../core/drive_store.dart';
@@ -62,8 +63,12 @@ Future<Directory> _dataRoot() async {
   return root;
 }
 
+/// Where the redesign flags (More > Developer) are saved.
+File redesignFlagsFile(Directory root) => File('${root.path}${Platform.pathSeparator}redesign_flags.json');
+
 Future<AppServices> buildRealServices() async {
   final root = await _dataRoot();
+  await AppFlags.load(redesignFlagsFile(root));
   Future<ChatStore>? chatStore;
 
   await BleEngineChoice.load(File('${root.path}${Platform.pathSeparator}ble_engine.txt'));

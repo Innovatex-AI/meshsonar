@@ -8,7 +8,7 @@ import '../../chat/models.dart';
 import '../chat/conversation_screen.dart';
 import '../radios/admin_launcher.dart' show openRepeaterAdmin;
 import '../radios/rooms/room_join_header.dart';
-import 'contact_detail_screen.dart';
+import 'contact_profile_screen.dart';
 import 'contacts_controller.dart';
 import 'contacts_view.dart';
 import 'dm_route_header.dart';
@@ -50,7 +50,7 @@ class _ContactsTabState extends State<ContactsTab> {
           tooltip: 'Contact details',
           constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
           icon: const Icon(Icons.info_outline_rounded),
-          onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ContactDetailScreen(controller: _c, publicKey: c.publicKey))),
+          onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ContactProfileScreen(controller: _c, publicKey: c.publicKey))),
         ),
       ],
       header: room ? RoomJoinHeader(keyHex: c.publicKey, name: c.displayName) : DmRouteHeader(controller: _c, publicKey: c.publicKey),

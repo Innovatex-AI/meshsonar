@@ -11,7 +11,8 @@ import '../drive/drive_controls.dart' show openConnect;
 import '../theme.dart';
 import '../widgets.dart' show EmptyState;
 import 'add_contact_screen.dart';
-import 'contact_detail_screen.dart';
+import 'contact_profile_screen.dart';
+import '../design/app_symbols.dart';
 import 'contact_widgets.dart';
 import 'contacts_controller.dart';
 import 'contacts_settings_sheet.dart';
@@ -63,7 +64,7 @@ class _ContactsViewState extends State<ContactsView> {
   void _add() => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AddContactScreen(controller: _c, scannerBuilder: widget.scannerBuilder)));
 
   void _details(Contact c) =>
-      Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ContactDetailScreen(controller: _c, publicKey: c.publicKey)));
+      Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ContactProfileScreen(controller: _c, publicKey: c.publicKey)));
 
   /// A person opens their conversation (the thing you came here to do); everything else, and anyone when no conversation
   /// screen is wired, opens the details. People get an info button for the details.
@@ -397,7 +398,7 @@ class ContactTile extends StatelessWidget {
     final t = Theme.of(context);
     final c = row.contact;
     final status = (row.preview != null && row.preview!.isNotEmpty) ? row.preview! : heardText(c.lastHeardMs ?? (c.lastAdvertTs == null ? null : c.lastAdvertTs! * 1000), nowMs);
-    final route = !c.hasPath ? 'no route yet' : ((c.pathHops ?? 0) == 0 ? 'direct' : 'direct, ${c.pathHops} ${c.pathHops == 1 ? 'hop' : 'hops'}');
+    final route = routeCaption(c);
     final unread = row.unread;
     final label = '${c.displayName}, ${contactTypeLabel(c.type)}, $status${unread > 0 ? ', $unread unread' : ''}';
     final small = MediaQuery.textScalerOf(context).scale(14) < 14 * 1.6;
@@ -496,7 +497,7 @@ class _NearbyRow extends StatelessWidget {
         child: LayoutBuilder(builder: (context, box) {
           // Buttons beside the name while there is room; under it at the largest text sizes and on narrow screens.
           final inline = box.maxWidth >= 340 && MediaQuery.textScalerOf(context).scale(14) <= 14 * 1.3;
-          final avatar = ExcludeSemantics(child: CircleAvatar(radius: 20, child: Icon(contactTypeIcon(type), size: 20)));
+          final avatar = ExcludeSemantics(child: CircleAvatar(radius: 20, child: AppSymbolIcon(contactTypeSymbol(type), size: 20)));
           if (inline) {
             return Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
               avatar,

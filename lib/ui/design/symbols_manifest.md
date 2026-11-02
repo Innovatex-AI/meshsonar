@@ -62,3 +62,7 @@ redistributed.
 | `thermometer` | `thermometer` | shared |
 | `tray` | `tray` | shared |
 | `waveform` | `waveform` | shared |
+| `route` | `point.topleft.down.to.point.bottomright.curvepath.fill` | contact profile |
+| `gauge` | `gauge.with.dots.needle.67percent` | contact profile |
+| `bubbles` | `bubble.left.and.bubble.right.fill` | contact profile |
+| `qrcode` | `qrcode` | contact profile |

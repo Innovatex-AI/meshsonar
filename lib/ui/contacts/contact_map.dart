@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../design/app_symbols.dart';
 import '../map/coverage_map.dart' show CoverageMap;
 import '../theme.dart';
 
@@ -31,7 +32,7 @@ Widget defaultContactMap(BuildContext context, double lat, double lon) {
             maxNativeZoom: 19,
             tileBuilder: (context, tile, _) => ColorFiltered(colorFilter: ColorFilter.matrix(m.tileMatrix), child: tile),
           ),
-          MarkerLayer(markers: [Marker(point: at, width: 28, height: 28, child: Icon(Icons.place_rounded, color: m.beacon, size: 28))]),
+          MarkerLayer(markers: [Marker(point: at, width: 28, height: 28, child: AppSymbolIcon(AppSymbols.locationFill, color: m.beacon, size: 28, scaleWithText: false))]),
         ],
       ),
     ),
