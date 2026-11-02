@@ -13,6 +13,7 @@ import 'dart:typed_data';
 import '../core/drive_context.dart';
 import '../core/model.dart';
 import 'claim_radio.dart';
+import 'caps.dart';
 import 'command_queue.dart';
 import 'crypto.dart';
 import 'inbound.dart';
@@ -75,6 +76,16 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
   void Function(Frame f)? _multi;
   bool _closed = false;
   bool _statsUnsupported = false;
+
+  /// While true, PUSH_LOG_RX_DATA is dropped at the edge: a remote request is in flight and the radio's 4-frame push queue
+  /// must not be fed Rx log traffic (remote_request_queue.dart). Set by the session manager from the queue's hook.
+  bool rxLogPaused = false;
+
+  /// Rx log packets dropped while [rxLogPaused] (shown as the "paused" tag on the Rx log).
+  int rxLogDroppedWhilePaused = 0;
+
+  /// Called with every RESP SENT the radio answers to a remote command (est_timeout for the request in flight).
+  void Function(SentFrame sent)? onRemoteSent;
 
   /// Drains the radio's offline message queue (see message_sync.dart). The link feeds it PUSH_MSG_WAITING and starts it
   /// after [start]; the session sets its persister and listens to its messages.
@@ -146,6 +157,18 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
     return d.isEmpty ? null : d;
   }
 
+  PathDiscoverySupport _pathDiscovery = PathDiscoverySupport.unknown;
+
+  /// What this radio's firmware can do, from DEVICE_INFO (caps.dart). Baseline before start().
+  RadioCaps get radioCaps {
+    final di = _deviceInfo;
+    final base = di == null ? RadioCaps.baseline : RadioCaps.fromDeviceInfo(di);
+    return base.copyWith(pathDiscovery: _pathDiscovery);
+  }
+
+  /// A path discovery command (CMD 52) came back ERR 1 UNSUPPORTED_CMD (or worked): remembered in [radioCaps].
+  void notePathDiscoverySupport(bool supported) => _pathDiscovery = supported ? PathDiscoverySupport.yes : PathDiscoverySupport.no;
+
   /// The secret of a channel this link has read or written, for decrypting echoes.
   Uint8List? channelSecret(int index) => _secrets[index];
 
@@ -208,6 +231,10 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
     final now = _clock();
     switch (f) {
       case LogRxDataPush():
+        if (rxLogPaused) {
+          rxLogDroppedWhilePaused++;
+          break;
+        }
         if (!_rx.isClosed) _rx.add(RxPacket(at: now, raw: f.raw, snrDb: f.snrDb, rssiDbm: f.rssiDbm.toDouble()));
       case ControlDataPush():
         if (!_control.isClosed) _control.add(ControlPacket(now, f.snrDb, f.rssiDbm, f.pathLen, f.payload));
@@ -806,7 +833,9 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
   Future<Frame> _claimCommand(Uint8List frame, String what) async {
     _requireLink();
     try {
-      return await _command(frame, priority: CommandPriority.admin);
+      final r = await _command(frame, priority: CommandPriority.admin);
+      if (r is SentFrame) onRemoteSent?.call(r);
+      return r;
     } on TimeoutException {
       throw ClaimRadioException(ClaimRadioError.silent, 'the radio did not answer ($what)');
     } on StateError {

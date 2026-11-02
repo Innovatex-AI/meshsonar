@@ -25,6 +25,10 @@ abstract final class CommandPriority {
   /// P4 discovery requests.
   static const int discovery = 4;
 
+  /// P5 background refresh (auto-refresh of a repeater dashboard). Never queued behind anything: the remote request
+  /// queue drops it when a request is running or waiting.
+  static const int background = 5;
+
   /// What a command gets when nobody says otherwise: a ping's class, so an unmarked caller (the wardrive engine, which
   /// does not know about priorities) never jumps ahead of a user message.
   static const int normal = ping;

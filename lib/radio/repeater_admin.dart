@@ -23,7 +23,9 @@ import 'protocol.dart' show AdvType, maxLoginPasswordBytes;
 import 'repeater_cli.dart';
 import 'repeater_radio.dart';
 import 'repeater_settings.dart';
+import 'remote_request_queue.dart';
 import 'repeater_wire.dart';
+import 'command_queue.dart' show CommandPriority;
 
 // ------------------------------------------------------------------ errors
 
@@ -46,6 +48,12 @@ enum AdminErrorKind {
 
   /// Sent too much too fast; try again after [AdminException.retryAfter].
   rateLimited,
+
+  /// An auto refresh was not started because the radio is busy with another remote request (it is dropped, not queued).
+  busy,
+
+  /// The request was cancelled (by the person, or the queue closed) before or while it ran.
+  cancelled,
 }
 
 class AdminException implements Exception {
@@ -271,6 +279,11 @@ class RepeaterAdminSession {
   final Future<void> Function(Duration) _delay;
   final int readRetries;
 
+  /// Every request to the repeater goes through this queue (one in flight per radio). A session made without one gets its own;
+  /// the app passes the radio's shared queue (RadioSessionManager.remoteQueue) so a status refresh and a login to different
+  /// nodes never overlap.
+  final RemoteRequestQueue _queue;
+
   RepeaterAdminSession({
     required this.radio,
     required String keyHex,
@@ -280,7 +293,9 @@ class RepeaterAdminSession {
     DateTime Function()? clock,
     Future<void> Function(Duration)? delay,
     this.readRetries = 2,
-  })  : keyHex = keyHex.toLowerCase(),
+    RemoteRequestQueue? queue,
+  })  : _queue = queue ?? RemoteRequestQueue(),
+        keyHex = keyHex.toLowerCase(),
         _clock = clock ?? DateTime.now,
         _delay = delay ?? ((d) => Future<void>.delayed(d));
 
@@ -297,7 +312,6 @@ class RepeaterAdminSession {
   DateTime? _lastWrite;
   final Map<String, DateTime> _lastAction = {};
   final Set<String> _pendingReboot = {};
-  Future<void> _chain = Future<void>.value();
   int _outstanding = 0;
   final _activity = StreamController<bool>.broadcast();
   int _commandsSent = 0;
@@ -338,26 +352,31 @@ class RepeaterAdminSession {
     if (_log.length > 400) _log.removeRange(0, _log.length - 400);
   }
 
-  // ---- serialisation: one outstanding request at a time
-  Future<T> _exclusive<T>(Future<T> Function() job) {
-    final c = Completer<T>();
-    final prev = _chain;
-    _chain = (() async {
-      try {
-        await prev;
-      } catch (_) {}
-      _outstanding++;
-      if (_outstanding == 1 && !_activity.isClosed) _activity.add(true);
-      try {
-        c.complete(await job());
-      } catch (e, st) {
-        c.completeError(e, st);
-      } finally {
-        _outstanding--;
-        if (_outstanding == 0 && !_activity.isClosed) _activity.add(false);
-      }
-    })();
-    return c.future;
+  // ---- serialisation: every request goes through the radio-wide remote request queue (one in flight)
+  Future<T> _exclusive<T>(Future<T> Function() job, {RemoteKind kind = RemoteKind.cli, int priority = CommandPriority.admin}) async {
+    try {
+      return await _queue.submit<T>(
+        kind: kind,
+        target: keyHex,
+        priority: priority,
+        isNoReply: (e) => e is AdminException && e.kind == AdminErrorKind.silent,
+        isRefused: (e) => e is AdminException && e.kind != AdminErrorKind.radioLost,
+        run: (ctx) async {
+          _outstanding++;
+          if (_outstanding == 1 && !_activity.isClosed) _activity.add(true);
+          try {
+            return await job();
+          } finally {
+            _outstanding--;
+            if (_outstanding == 0 && !_activity.isClosed) _activity.add(false);
+          }
+        },
+      );
+    } on RemoteRequestAborted catch (e) {
+      throw e.state == RemoteState.dropped
+          ? const AdminException(AdminErrorKind.busy, 'The radio is busy with another request.')
+          : const AdminException(AdminErrorKind.cancelled, 'The request was cancelled.');
+    }
   }
 
   // ---- budgets
@@ -425,7 +444,7 @@ class RepeaterAdminSession {
         }
         throw _fromRadio(e);
       }
-    });
+    }, kind: RemoteKind.login);
   }
 
   Future<void> logout() async {
@@ -442,7 +461,7 @@ class RepeaterAdminSession {
   bool _contactReady = false;
 
   /// The radio must hold the repeater as a contact before any request (anonymous requests need no login, but do need this).
-  Future<void> _ensureContact() => _contactReady ? Future<void>.value() : _exclusive(_ensureContactNow);
+  Future<void> _ensureContact() => _contactReady ? Future<void>.value() : _exclusive(_ensureContactNow, kind: RemoteKind.contact);
 
   Future<void> _ensureContactNow() async {
     if (_contactReady) return;
@@ -484,12 +503,12 @@ class RepeaterAdminSession {
         }
       }
       throw last!;
-    });
+    }, kind: RemoteKind.cli);
   }
 
   // ------------------------------------------------------------------ reads
 
-  Future<Uint8List> _binary(Future<Uint8List> Function() send, String what) {
+  Future<Uint8List> _binary(Future<Uint8List> Function() send, String what, {RemoteKind kind = RemoteKind.anon, int priority = CommandPriority.admin}) {
     return _exclusive(() async {
       AdminException? last;
       for (var i = 0; i <= readRetries; i++) {
@@ -506,21 +525,26 @@ class RepeaterAdminSession {
         }
       }
       throw last!;
-    });
+    }, kind: kind, priority: priority);
   }
 
   /// STATUS_REQ: works for guests too.
-  Future<RepeaterStats> readStatus({Duration? timeout}) async {
+  ///
+  /// [background] marks an auto refresh: if the radio is busy with anything else the call throws [AdminErrorKind.busy] at once
+  /// (it is dropped, never queued).
+  Future<RepeaterStats> readStatus({Duration? timeout, bool background = false}) async {
     if (!_loggedIn) throw const AdminException(AdminErrorKind.notLoggedIn, 'Log in first.');
-    final b = await _binary(() => radio.statusBytes(keyHex, timeout: timeout), 'status');
+    final b = await _binary(() => radio.statusBytes(keyHex, timeout: timeout), 'status',
+        kind: RemoteKind.status, priority: background ? CommandPriority.background : CommandPriority.admin);
     final s = RepeaterStats.parse(b);
     if (s == null) throw const AdminException(AdminErrorKind.radio, 'The repeater sent a status block this version does not understand.');
     return s;
   }
 
-  Future<RepeaterTelemetry> readTelemetry({Duration? timeout}) async {
+  Future<RepeaterTelemetry> readTelemetry({Duration? timeout, bool background = false}) async {
     if (!_loggedIn) throw const AdminException(AdminErrorKind.notLoggedIn, 'Log in first.');
-    final b = await _binary(() => radio.telemetryRequest(keyHex, timeout: timeout), 'telemetry');
+    final b = await _binary(() => radio.telemetryRequest(keyHex, timeout: timeout), 'telemetry',
+        kind: RemoteKind.telemetry, priority: background ? CommandPriority.background : CommandPriority.admin);
     return RepeaterTelemetry.parse(b);
   }
 
@@ -543,7 +567,7 @@ class RepeaterAdminSession {
 
   Future<OwnerInfo> readOwner() async {
     if (!_loggedIn) throw const AdminException(AdminErrorKind.notLoggedIn, 'Log in first.');
-    final b = await _binary(() => radio.binaryRequest(keyHex, ownerRequest), 'owner info');
+    final b = await _binary(() => radio.binaryRequest(keyHex, ownerRequest), 'owner info', kind: RemoteKind.ownerInfo);
     return OwnerInfo.parse(b);
   }
 
@@ -623,7 +647,7 @@ class RepeaterAdminSession {
     var total = 0;
     for (var page = 0; page < 4; page++) {
       final req = neighboursRequest(count: 8, offset: out.length, order: order, random: [page + 1, 7, 7, 7]);
-      final b = await _binary(() => radio.binaryRequest(keyHex, req), 'neighbours');
+      final b = await _binary(() => radio.binaryRequest(keyHex, req), 'neighbours', kind: RemoteKind.neighbours);
       final p = NeighbourPage.parse(b);
       if (p == null) throw const AdminException(AdminErrorKind.radio, 'The neighbour list could not be read.');
       total = p.total;
@@ -636,7 +660,7 @@ class RepeaterAdminSession {
   /// The access list (admin only; a guest gets silence from the repeater, so this refuses first).
   Future<List<AclEntry>> readAcl() async {
     _requireAdmin();
-    final b = await _binary(() => radio.binaryRequest(keyHex, accessListRequest), 'access list');
+    final b = await _binary(() => radio.binaryRequest(keyHex, accessListRequest), 'access list', kind: RemoteKind.acl);
     return parseAclList(b);
   }
 

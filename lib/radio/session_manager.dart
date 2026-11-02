@@ -6,7 +6,9 @@
 // session in this manager (design doc C section 3.2 item 8).
 import 'dart:async';
 
+import 'companion_link.dart' show MeshCoreCompanionLink;
 import 'radio_api.dart';
+import 'remote_request_queue.dart';
 import 'radio_health.dart';
 import 'radio_session_impl.dart';
 import 'session.dart';
@@ -41,6 +43,16 @@ class RadioSessionManager {
   /// the rolling 10-minute and one-hour ledgers survive a reconnect.
   late final TxArbiter arbiter;
 
+  /// The one remote request queue of this app's radio (login, status, telemetry, neighbours, CLI ... to other nodes). One
+  /// instance for all sessions, so a reconnect does not lose the list; it pauses the Rx log of whatever link is current
+  /// while a request is in flight.
+  late final RemoteRequestQueue remoteQueue = RemoteRequestQueue(clock: _clock, onRxPause: _pauseRx);
+
+  void _pauseRx(bool paused) {
+    final l = _session?.link;
+    if (l is MeshCoreCompanionLink) l.rxLogPaused = paused;
+  }
+
   /// The live session, or null when no radio is connected.
   LinkRadioSession? get session => _session;
 
@@ -70,6 +82,11 @@ class RadioSessionManager {
     _watch?.cancel();
     _watch = null;
     _session = s;
+    final l = s?.link;
+    if (l is MeshCoreCompanionLink) {
+      l.rxLogPaused = remoteQueue.rxPaused;
+      l.onRemoteSent = remoteQueue.reportSentForCurrent;
+    }
     if (s != null) {
       _watch = s.linkStates.listen((st) {
         // The link dropped under a session that is still current: say so (the owner decides whether to reconnect).
@@ -210,6 +227,7 @@ class RadioSessionManager {
 
   Future<void> dispose() async {
     await disconnect();
+    remoteQueue.close();
     unawaited(_states.close());
     unawaited(_sessions.close());
   }

@@ -21,8 +21,8 @@ Map<String, dynamic> traceBody() => {
       'packet': {'firstSeen': '2026-11-02T11:58:01Z', 'payloadType': 'ADVERT', 'routeType': 1, 'decoded': null},
       'origin': {'pubkey': 'a1' * 32, 'name': 'Alpha', 'lat': 40.0, 'lon': -83.0, 'kind': 'advert'},
       'observations': [
-        {'observerId': 'ob1' + '0' * 61, 'observerName': 'Obs One', 'time': '2026-11-02T11:58:03Z', 'snr': 6.5, 'rssi': -90, 'path': ['b2', 'c3'], 'resolvedPath': null, 'observerLat': 40.1, 'observerLon': -83.1},
-        {'observerId': 'ob2' + '0' * 61, 'observerName': null, 'time': '2026-11-02T11:58:04Z', 'snr': null, 'rssi': null, 'path': ['b2'], 'resolvedPath': null, 'observerLat': null, 'observerLon': null},
+        {'observerId': 'ob1${'0' * 61}', 'observerName': 'Obs One', 'time': '2026-11-02T11:58:03Z', 'snr': 6.5, 'rssi': -90, 'path': ['b2', 'c3'], 'resolvedPath': null, 'observerLat': 40.1, 'observerLon': -83.1},
+        {'observerId': 'ob2${'0' * 61}', 'observerName': null, 'time': '2026-11-02T11:58:04Z', 'snr': null, 'rssi': null, 'path': ['b2'], 'resolvedPath': null, 'observerLat': null, 'observerLon': null},
       ],
       'hops': {},
       'tree': {
@@ -100,7 +100,7 @@ Map<String, dynamic> aggregateBody({int hours = 24, int hashes = 200}) => {
             'seenAsOneByteHop': 12,
             'nodes': [
               {'pubkey': 'b2' * 32, 'name': 'Bravo', 'role': 'repeater', 'hashSize': 1, 'lat': 40.05, 'lon': -83.05},
-              {'pubkey': 'b2' + 'ff' * 31, 'name': null, 'role': null, 'hashSize': null, 'lat': null, 'lon': null},
+              {'pubkey': 'b2${'ff' * 31}', 'name': null, 'role': null, 'hashSize': null, 'lat': null, 'lon': null},
             ],
           },
         ],
@@ -164,8 +164,8 @@ Map<String, dynamic> packetBody() => {
       'status': {'state': 'ready', 'reason': null, 'computedAt': '2026-11-02T11:59:00Z', 'source': 'MeshSonar observers'},
       'row': {'hash': kHashA, 'type': 4, 'route': 1, 'firstAt': '2026-11-02T11:58:01Z', 'observers': 2, 'minHops': 1, 'bestSnrDb': 6.5, 'originKey': 'a1' * 32, 'originName': 'Alpha'},
       'observations': [
-        {'observer': 'ob1' + '0' * 61, 'observerName': 'Obs One', 'at': '2026-11-02T11:58:03Z', 'snrDb': 6.5, 'rssiDbm': -90, 'hops': 2, 'path': ['b2', 'c3']},
-        {'observer': 'ob2' + '0' * 61, 'observerName': null, 'at': '2026-11-02T11:58:04Z', 'snrDb': null, 'rssiDbm': null, 'hops': 1, 'path': ['b2'], 'via': {'id': 7, 'name': 'Outside Feed'}},
+        {'observer': 'ob1${'0' * 61}', 'observerName': 'Obs One', 'at': '2026-11-02T11:58:03Z', 'snrDb': 6.5, 'rssiDbm': -90, 'hops': 2, 'path': ['b2', 'c3']},
+        {'observer': 'ob2${'0' * 61}', 'observerName': null, 'at': '2026-11-02T11:58:04Z', 'snrDb': null, 'rssiDbm': null, 'hops': 1, 'path': ['b2'], 'via': {'id': 7, 'name': 'Outside Feed'}},
       ],
       'tree': {
         'hop': 'a1',
