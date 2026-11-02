@@ -31,7 +31,7 @@ void main() {
     await openReport(tester, h, 'rf');
     await tester.tap(find.byKey(const Key('report-export')));
     await tester.pumpAndSettle();
-    expect(find.text('Contains where you drove (grid cells)'), findsOneWidget);
+    expect(find.textContaining('PDF shows where you drove (grid cells)'), findsOneWidget);
     await tester.tap(find.byKey(const Key('report-export-pdf')));
     await tester.pump();
     await settleIo(tester, () => h.shared.isNotEmpty);
@@ -42,7 +42,7 @@ void main() {
     expect(bytes.length, greaterThan(4000));
   });
 
-  testWidgets('a drive with no pings: the PDF item is disabled, never an empty file', (tester) async {
+  testWidgets('a drive with no pings: the PDF and CSV items are omitted, never an empty file', (tester) async {
     final h = Harness();
     h.store.seed(DriveSession(id: 'empty', startedAt: t0), const []);
     useTallScreen(tester);
@@ -51,7 +51,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('report-export')));
     await tester.pumpAndSettle();
-    expect(tester.widget<PopupMenuItem<String>>(find.byKey(const Key('report-export-pdf'))).enabled, isFalse);
+    expect(find.byKey(const Key('report-export-pdf')), findsNothing);
+    expect(find.byKey(const Key('report-export-csv')), findsNothing);
+    expect(find.byKey(const Key('report-export-text')), findsOneWidget);
   });
 
   testWidgets('region export sheet: PDF bytes with the region file name', (tester) async {

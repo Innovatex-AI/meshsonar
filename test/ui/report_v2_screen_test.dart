@@ -7,6 +7,7 @@ import 'package:meshsonar/core/units.dart';
 import 'package:meshsonar/ui/report/drive_report_screen.dart';
 
 import 'fakes.dart';
+import 'toast_test_kit.dart';
 
 final t0 = DateTime.utc(2026, 10, 16, 18);
 const mPerDegLat = 111195.0802;
@@ -111,12 +112,33 @@ void main() {
     expect(find.byKey(const Key('report-gps')), findsNothing);
   });
 
+  testWidgetsT('Export menu: cancel shares nothing; a failed share shows an error toast', (tester) async {
+    final h = radioDrive();
+    await openReport(tester, h, 'rf');
+    await tester.tap(find.byKey(const Key('report-export')));
+    await tester.pumpAndSettle();
+    await tester.tapAt(const Offset(5, 5));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('report-export-text')), findsNothing);
+    expect(h.shared, isEmpty);
+    h.shareError = StateError('nope');
+    await tester.tap(find.byKey(const Key('report-export')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('report-export-text')));
+    await tester.pumpAndSettle();
+    for (var i = 0; i < 40 && find.textContaining('Couldn\'t share the report').evaluate().isEmpty; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
+      await tester.pump();
+    }
+    expect(find.textContaining('Couldn\'t share the report'), findsOneWidget);
+  });
+
   testWidgets('Export menu: CSV goes through the share seam as one .csv file', (tester) async {
     final h = radioDrive();
     await openReport(tester, h, 'rf');
     await tester.tap(find.byKey(const Key('report-export')));
     await tester.pumpAndSettle();
-    expect(find.text('Contains your exact track'), findsOneWidget);
+    expect(find.textContaining('CSV contains your exact track'), findsOneWidget);
     await tester.tap(find.byKey(const Key('report-export-csv')));
     await tester.pumpAndSettle();
     // The file is written with real IO: let it run outside the fake clock, then let its callbacks land.
