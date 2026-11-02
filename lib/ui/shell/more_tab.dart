@@ -180,6 +180,19 @@ class MoreList extends StatelessWidget {
                 },
               ),
             ),
+            ValueListenableBuilder<bool>(
+              valueListenable: AppFlags.driveRedesignNotifier,
+              builder: (context, on, _) => AppSwitchTile(
+                switchKey: const Key('more-drive-redesign'),
+                title: 'New Drive screen',
+                subtitle: 'The map with the bottom panel. Turn off to go back to the old footer layout.',
+                value: on,
+                onChanged: (v) {
+                  final dir = s.services.uiPrefsFile?.parent;
+                  AppFlags.setDriveRedesign(v, file: dir == null ? null : File('${dir.path}${Platform.pathSeparator}redesign_flags.json'));
+                },
+              ),
+            ),
             header('Radios and tools'),
             row(MoreItem.repeaters, Icons.cell_tower, 'Repeaters and rooms',
                 s.connected ? 'Administer a repeater, read and post in a room' : 'Needs your radio. Free repeater administration'),

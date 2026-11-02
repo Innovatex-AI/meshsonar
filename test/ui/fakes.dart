@@ -576,8 +576,11 @@ class FakeEngine implements WardriveEngine {
 
   void emit(DrivePing p) => _pings.add(p);
 
+  int pingNowCalls = 0;
+
   @override
   Future<DrivePing> pingNow() async {
+    pingNowCalls++;
     _n++;
     final p = heardPing('now-$_n', [const Echo(repeater: 'a1b2', snrDb: 6.5, hops: 1)]);
     _pings.add(p); // the real engine also emits on the stream; AppState must de-duplicate

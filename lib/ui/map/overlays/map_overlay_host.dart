@@ -41,6 +41,12 @@ class MapOverlayHost extends StatefulWidget {
 
   /// Receives the insets when they settle (also available through [MapInsets]).
   final MapInsetsNotifier? insets;
+
+  /// Room kept clear at the top (the status bar / safe area when the map is full bleed) and at the bottom (the Drive panel's
+  /// settled top). The map itself still fills the host; only the overlay slots are laid out inside the remaining rect, and
+  /// the published insets include both. Callers change these at settle, never per animation frame.
+  final double topClearance;
+  final double bottomClearance;
   const MapOverlayHost({
     super.key,
     required this.map,
@@ -53,6 +59,8 @@ class MapOverlayHost extends StatefulWidget {
     this.bottom,
     this.slotKeys = const {},
     this.insets,
+    this.topClearance = 0,
+    this.bottomClearance = 0,
   });
 
   @override
@@ -120,7 +128,7 @@ class _MapOverlayHostState extends State<MapOverlayHost> {
         fit: StackFit.expand,
         children: [
           widget.map,
-          CustomMultiChildLayout(delegate: _OverlayLayout(_laidOut), children: slots),
+          CustomMultiChildLayout(delegate: _OverlayLayout(_laidOut, widget.topClearance, widget.bottomClearance), children: slots),
         ],
       ),
     );
@@ -137,17 +145,19 @@ class _SlotClip extends CustomClipper<Rect> {
 
 class _OverlayLayout extends MultiChildLayoutDelegate {
   final void Function(EdgeInsets) onInsets;
-  _OverlayLayout(this.onInsets);
+  final double top, bottomClear;
+  _OverlayLayout(this.onInsets, this.top, this.bottomClear);
 
   @override
   void performLayout(Size size) {
     const m = kOverlayMargin;
     Size lay(MapSlot s, BoxConstraints c) => hasChild(s) ? layoutChild(s, c) : Size.zero;
     void put(MapSlot s, Offset o) {
-      if (hasChild(s)) positionChild(s, o);
+      if (hasChild(s)) positionChild(s, o.translate(0, top));
     }
 
-    final w = size.width, h = size.height;
+    // Slots live in the rect between the clearances: y values below are relative to its top (shifted back when placing).
+    final w = size.width, h = (size.height - top - bottomClear).clamp(0.0, size.height);
     // Banner: the top edge, full width.
     // Unbounded height: a banner that is a Column asks for its own height, not the pane's (it is clipped to the pane below).
     final bannerRaw = lay(MapSlot.banner, BoxConstraints(minWidth: w, maxWidth: w));
@@ -190,7 +200,7 @@ class _OverlayLayout extends MultiChildLayoutDelegate {
     if (bottom.height > 0 && bottomTop < coveredBottomTop) coveredBottomTop = bottomTop;
     if (ctrl.height > 0 && ctrlTop < coveredBottomTop) coveredBottomTop = ctrlTop;
     final right = ctrl.width + ctrlShift > trail.width ? ctrl.width + ctrlShift : trail.width;
-    onInsets(EdgeInsets.fromLTRB(0, banner.height, right > 0 ? right + m : 0, h - coveredBottomTop));
+    onInsets(EdgeInsets.fromLTRB(0, top + banner.height, right > 0 ? right + m : 0, bottomClear + h - coveredBottomTop));
   }
 
   @override
