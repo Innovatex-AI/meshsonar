@@ -1,6 +1,7 @@
 // The redesigned Drive screen: heard box (live → holding → stale), map markers following it, the antenna toggle,
 // the full-screen map, the LOG button, the drive report card, the next-ping indicator and the simulator tag.
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart' show FlutterMap;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/app/app_state.dart';
 import 'package:meshsonar/core/api.dart';
@@ -164,8 +165,9 @@ void main() {
     await tester.tap(find.byKey(const Key('map-fullscreen')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
-    expect(find.byKey(const Key('fullscreen-map')), findsOneWidget);
-    expect(find.byKey(const Key('heard-box')), findsOneWidget); // the drive screen's is offstage
+    expect(find.byKey(const Key('fullscreen-close')), findsOneWidget, reason: 'the same map, expanded');
+    expect(find.byType(FlutterMap), findsOneWidget, reason: 'one map instance, not a second route');
+    expect(find.byKey(const Key('heard-box')), findsOneWidget);
     expect(heardRow('a1b2'), findsOneWidget);
     expect(find.byKey(const Key('map-compass')), findsOneWidget);
     expect(find.byKey(const Key('start-stop')), findsOneWidget);
@@ -176,7 +178,7 @@ void main() {
     expect(h.state.pingCount, 2);
 
     // Layers: switch ping colours to heard/not and hide repeaters.
-    await tester.tap(find.byKey(const Key('map-layers')));
+    await tester.tap(find.byKey(const Key('drive-map-layers')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byKey(const Key('layers-sheet')), findsOneWidget);
@@ -192,7 +194,8 @@ void main() {
     await tester.tap(find.byKey(const Key('fullscreen-close')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
-    expect(find.byKey(const Key('fullscreen-map')), findsNothing);
+    expect(find.byKey(const Key('fullscreen-close')), findsNothing);
+    expect(find.byKey(const Key('map-fullscreen')), findsOneWidget);
     expect(find.byKey(const Key('drive-map')), findsOneWidget);
     // Layer choices are shared with the Drive screen's map.
     expect(marker('a1b2c3d4', 'fresh'), findsNothing);

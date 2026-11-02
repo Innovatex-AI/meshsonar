@@ -11,7 +11,6 @@ import 'dart:ui' as ui show FrameTiming;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart' show SchedulerBinding;
-import 'package:flutter/widgets.dart' show GlobalKey;
 import 'package:h3_flutter/h3_flutter.dart' show H3;
 import 'package:latlong2/latlong.dart';
 
@@ -38,13 +37,12 @@ import '../../radio/simulator.dart' show defaultSimulatedRepeaters;
 import '../map/coverage_timeline_controller.dart';
 import '../map/layers/app_repeater_feed.dart';
 import '../map/layers/map_layer.dart';
-import '../map/layers/map_layers_adapter.dart';
 import '../map/layers/observer_layer.dart' show positionedObservers;
 import '../map/layers/registry.dart';
 import '../map/layers/repeater_map_source.dart';
 import '../map/cell_raster_layer.dart' show CellRasterLayer;
 import '../map/live_puck.dart';
-import '../map/map_key.dart' show mapKeyParts;
+import '../map/core/map_view_controller.dart';
 import '../map/tile_source.dart' show MapTileStats;
 import '../map/tile_source.dart' as tiles show currentMapSource;
 import '../map/map_layers.dart';
@@ -403,30 +401,18 @@ class DriveMapModel extends ChangeNotifier {
 
   bool get simulated => state.radioKind == RadioKind.simulator;
 
-  /// Overlays the Drive screen and the full-screen map draw over their maps (heard box, button column): the map keeps
-  /// repeater names out from under them. Separate sets because both screens can be alive at once.
-  final List<GlobalKey> driveOverlayKeys = [GlobalKey(debugLabel: 'drive-heard'), GlobalKey(debugLabel: 'drive-controls')];
-  /// Height of the GPS health banner over the top of whichever map shows it (0 when it shows nothing), so the heard box and
-  /// the button column start below it instead of under it.
-  final ValueNotifier<double> gpsBannerHeight = ValueNotifier(0);
-  final List<GlobalKey> fullscreenOverlayKeys = [GlobalKey(debugLabel: 'full-heard'), GlobalKey(debugLabel: 'full-controls')];
+  /// The one camera for the whole app session (Drive plan 9.4 step 5): the in-tab map and the expanded ("full screen") map
+  /// are the same map instance, so panning in one is panning in the other and a layout change never loses the view.
+  final MapViewController mapView = MapViewController();
 
-  /// Height of the credit stack the map draws bottom-left (OpenStreetMap credit, the SIMULATED tag, the repeater age
-  /// legend with MeshCore Map's credit), so overlays that sit above it (the result flash, the report card) clear it
-  /// instead of covering it.
-  double get attributionStackHeight => 64 + (simulated ? 28 : 0) + mapKeyParts(this).height;
-
-  /// Whether the Drive screen's small map shows its source chip and repeater legend (folded away by default so the map keeps
-  /// its room; the attribution line stays). The full-screen map always shows them.
-  bool _creditsOpen = false;
-  bool get creditsOpen => _creditsOpen;
-  void toggleCredits() {
-    _creditsOpen = !_creditsOpen;
+  /// The map is expanded: the old footer (stat strips, chips) is collapsed so the map takes the screen. Temporary stand-in for
+  /// the full-screen route this replaces; WP3a turns it into the panel's Immersive state.
+  bool _expanded = false;
+  bool get expanded => _expanded;
+  void toggleExpanded() {
+    _expanded = !_expanded;
     notifyListeners();
   }
-
-  /// [attributionStackHeight] for the Drive screen's map: just the attribution line while the legend is folded.
-  double get driveAttributionStackHeight => _creditsOpen ? attributionStackHeight : 36 + (simulated ? 28 : 0);
 
   /// The simulator's own (made-up) repeaters, so a Simulator drive shows where they are like a real one would.
   static final List<RepeaterRef> simulatorRepeaters = [
@@ -770,7 +756,7 @@ class DriveMapModel extends ChangeNotifier {
     _fetchTimer?.cancel();
     _boundsTimer?.cancel();
     timeline.dispose();
-    gpsBannerHeight.dispose();
+    mapView.dispose();
     state.removeListener(_onState);
     repeaterSource.dispose();
     repeaterFeed.dispose();

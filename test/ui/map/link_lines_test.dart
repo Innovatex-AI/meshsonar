@@ -18,7 +18,6 @@ import 'package:meshsonar/ui/app.dart';
 import 'package:meshsonar/ui/map/coverage_map.dart';
 import 'package:meshsonar/ui/map/layers/repeater_map_source.dart';
 import 'package:meshsonar/ui/map/map_layers.dart';
-import 'package:meshsonar/ui/map/layers/map_layers_adapter.dart';
 
 import '../fakes.dart';
 

@@ -406,7 +406,7 @@ Under the layers button (Drive map and full-screen map): **base map** cycler (Ch
 
 ## Full-screen map
 
-(`ui/map/fullscreen_map.dart`, `fullscreen-map`) The whole screen is map. It shows the heard box (top left), exit
+(Since Drive WP2 this is the Drive map itself, expanded: `map-fullscreen` / `fullscreen-close` toggle `DriveMapModel.expanded`; there is no second map or route. Before that, `ui/map/fullscreen_map.dart`.) The whole screen is map. It shows the heard box (top left), exit
 (`fullscreen-close`) and layers buttons (top right), the ping flash, and a bottom panel with the status row plus
 compact **Stop / Ping now** buttons (bottom-right half in landscape). **Two-finger rotate** is enabled, and a compass
 returns to north-up. It respects safe areas. It shares the `DriveMapModel` with the Drive screen, so the selection,

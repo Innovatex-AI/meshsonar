@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:meshsonar/ui/map/overlays/map_overlay_host.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/core/drive_timing.dart';
 import 'package:meshsonar/core/gps_health.dart';
@@ -81,26 +82,33 @@ void main() {
 }
 
 void _bannerSlotTests() {
-  testWidgets('the banner slot reports its height (0 while it shows nothing) so overlays can start below it', (tester) async {
-    final height = ValueNotifier<double>(0);
+  testWidgets('the overlay host places the slots under the banner from its measured size (no probe, no shared notifier)', (tester) async {
     final health = ValueNotifier<GpsHealth>(GpsHealth.idle);
-    await tester.pumpWidget(host(
-      ValueListenableBuilder<GpsHealth>(
-        valueListenable: health,
-        builder: (context, v, _) => GpsBannerHeightProbe(height: height, child: GpsHealthView(health: v)),
+    Widget app() => host(
+      SizedBox(
+        width: 400,
+        height: 400,
+        child: ValueListenableBuilder<GpsHealth>(
+          valueListenable: health,
+          builder: (context, v, _) => MapOverlayHost(
+            map: const ColoredBox(color: Color(0xFFEEEEEE)),
+            attribution: const SizedBox(width: 100, height: 18),
+            banner: GpsHealthView(health: v),
+            topLeading: const SizedBox(key: Key('lead'), width: 50, height: 50),
+          ),
+        ),
       ),
-    ));
+    );
+    await tester.pumpWidget(app());
     await tester.pump();
-    expect(height.value, 0);
+    expect(tester.getTopLeft(find.byKey(const Key('lead'))).dy, closeTo(kOverlayMargin, 0.01), reason: 'banner shows nothing: 8 pt from the top');
     health.value = h(const Duration(seconds: 3), usable: false, access: LocationAccess.approximate);
     await tester.pump();
-    await tester.pump();
-    expect(height.value, greaterThan(40));
     final view = tester.getSize(find.byType(GpsHealthView)).height;
-    expect(height.value, view);
+    expect(view, greaterThan(40));
+    expect(tester.getTopLeft(find.byKey(const Key('lead'))).dy, closeTo(view + kOverlayMargin, 0.01), reason: 'starts below the banner, same frame');
     health.value = GpsHealth.idle;
     await tester.pump();
-    await tester.pump();
-    expect(height.value, 0);
+    expect(tester.getTopLeft(find.byKey(const Key('lead'))).dy, closeTo(kOverlayMargin, 0.01));
   });
 }

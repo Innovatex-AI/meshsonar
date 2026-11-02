@@ -44,7 +44,7 @@ class _MapInfoPanelState extends State<MapInfoPanel> {
     final t = Theme.of(context);
     final maxBody = (MediaQuery.sizeOf(context).height * 0.42).clamp(160.0, 420.0);
     return Material(
-      color: t.colorScheme.surface.withValues(alpha: 0.95),
+      color: t.colorScheme.surface,
       elevation: 3,
       borderRadius: BorderRadius.circular(14),
       clipBehavior: Clip.antiAlias,

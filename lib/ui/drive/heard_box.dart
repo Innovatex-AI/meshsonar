@@ -125,7 +125,7 @@ class _HeardBoxState extends State<HeardBox> {
     return Container(
       width: widget.width,
       decoration: BoxDecoration(
-        color: t.colorScheme.surface.withValues(alpha: 0.93),
+        color: t.colorScheme.surface,
         borderRadius: BorderRadius.circular(Corners.chip),
         border: Border.all(color: t.colorScheme.outlineVariant),
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.22), blurRadius: 12, offset: const Offset(0, 3))],

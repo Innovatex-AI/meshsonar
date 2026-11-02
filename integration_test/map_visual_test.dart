@@ -103,15 +103,15 @@ void main() {
 
     // full screen
     await t.tap(find.byKey(const Key('map-fullscreen')));
-    expect(await waitFor(t, find.byKey(const Key('fullscreen-map'))), isTrue);
+    expect(await waitFor(t, find.byKey(const Key('fullscreen-close'))), isTrue);
     await shot(t, 'm07-fullscreen');
-    final fs = find.byKey(const Key('fullscreen-coverage-map'));
+    final fs = find.byKey(const Key('drive-map'));
     await doubleTap(t, fs);
     await doubleTap(t, fs);
     await shot(t, 'm08-fullscreen-zoom-in');
     await pinch(t, fs, out: true);
     await shot(t, 'm09-fullscreen-zoom-out');
-    await t.tap(find.byKey(const Key('map-layers')));
+    await t.tap(find.byKey(const Key('drive-map-layers')));
     await pumpFor(t, const Duration(seconds: 1));
     await shot(t, 'm10-fullscreen-layers');
     await t.tap(find.byKey(const Key('layer-labels')));

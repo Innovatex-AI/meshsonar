@@ -4,7 +4,6 @@ import 'package:meshsonar/core/map_view_state.dart';
 import 'package:meshsonar/core/region_repeaters_api.dart';
 import 'package:meshsonar/core/repeater_points.dart';
 import 'package:meshsonar/ui/map/layers/map_layer.dart';
-import 'package:meshsonar/ui/map/layers/map_layers_adapter.dart';
 import 'package:meshsonar/ui/map/layers/registry.dart';
 import 'package:meshsonar/ui/map/layers/repeater_map_source.dart';
 import 'package:meshsonar/ui/map/map_layers.dart';

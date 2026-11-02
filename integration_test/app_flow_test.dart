@@ -71,7 +71,7 @@ void main() {
 
     // Full-screen map with the heard box and the controls; then back.
     await tapWhenReady(t, find.byKey(const Key('map-fullscreen')), 'full-screen map button');
-    expect(await waitFor(t, find.byKey(const Key('fullscreen-map'))), isTrue, reason: 'full-screen map');
+    expect(await waitFor(t, find.byKey(const Key('fullscreen-close'))), isTrue, reason: 'full-screen map');
     await screen(t, 'fullscreen-map');
     await tapWhenReady(t, find.byKey(const Key('fullscreen-close')), 'exit full screen');
     expect(await waitFor(t, find.byKey(const Key('drive-map'))), isTrue, reason: 'back on the Drive screen');

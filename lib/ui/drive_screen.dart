@@ -4,7 +4,8 @@
 // LOG button, the "View drive report" card after a drive, and the big Start/Stop and Ping now buttons in thumb
 // reach. The screen stays awake while driving.
 //
-// Parts live in lib/ui/drive/ (controls, heard box, the shared map model) and lib/ui/map/ (map, full-screen map).
+// Parts live in lib/ui/drive/ (controls, heard box, the shared map model) and lib/ui/map/ (map). "Full screen" is the same map
+// instance with the footer collapsed (DriveMapModel.expanded); there is no second map and no route.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -23,7 +24,8 @@ import 'drive/ping_settings_sheet.dart';
 import 'drive/heard_box.dart';
 import 'map/coverage_map.dart';
 import 'map/map_key.dart';
-import 'map/fullscreen_map.dart';
+import 'map/legend_sheet.dart' show showMapLegend;
+import 'map/layers/layers_sheet.dart' show showGeneratedLayersSheet;
 import 'drive/gps_health_banner.dart';
 import 'map/map_health_overlay.dart';
 import 'map/map_tools.dart';
@@ -46,6 +48,7 @@ class _DriveScreenState extends State<DriveScreen> {
   DeviceFeedback? _feedback;
   DriveMapModel? _model;
   DriveLiveStats? _liveStats;
+  ShellController? _shell;
 
   String? _lastPingId;
   bool _awake = false;
@@ -57,17 +60,37 @@ class _DriveScreenState extends State<DriveScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     _feedback = DeviceFeedbackScope.of(context);
+    final shell = ShellScope.maybeRead(context);
+    if (!identical(shell, _shell)) {
+      _shell?.removeListener(_shellChanged);
+      _shell = shell;
+      shell?.addListener(_shellChanged);
+    }
     final s = AppScope.read(context);
     if (!identical(s, _state)) {
       _state?.removeListener(_onState);
+      _model?.removeListener(_syncImmersive);
       _model?.dispose();
       _liveStats?.dispose();
       _state = s;
       _model = DriveMapModel(s, compass: CoverageMap.tilesByDefault ? SensorsPlusCompass() : null);
       _liveStats = DriveLiveStats(s);
+      _model!.addListener(_syncImmersive);
       s.addListener(_onState);
       _onState();
     }
+  }
+
+  /// The expanded map hides the tab bar and rail (ShellController.immersive); leaving the tab collapses it again.
+  void _syncImmersive() {
+    final m = _model;
+    if (m == null) return;
+    _shell?.setImmersive(m.expanded);
+  }
+
+  void _shellChanged() {
+    final m = _model;
+    if (m != null && m.expanded && _shell != null && !_shell!.immersive) m.toggleExpanded();
   }
 
   void _onState() {
@@ -94,6 +117,16 @@ class _DriveScreenState extends State<DriveScreen> {
   @override
   void dispose() {
     _state?.removeListener(_onState);
+    _shell?.removeListener(_shellChanged);
+    final shellToClear = (_model?.expanded ?? false) ? _shell : null;
+    if (shellToClear != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        try {
+          shellToClear.setImmersive(false);
+        } catch (_) {} // the shell went away first
+      });
+    }
+    _model?.removeListener(_syncImmersive);
     _model?.dispose();
     _liveStats?.dispose();
     if (_awake) unawaited(_feedback?.keepAwake(false));
@@ -109,8 +142,17 @@ class _DriveScreenState extends State<DriveScreen> {
     final report = s.driving ? null : s.lastFinishedSessionId;
     final showReport = report != null && report != _dismissedReport;
 
+    // The expanded map changes the whole screen (app bar, footer), so the screen listens to the model, not just the map.
+    return AnimatedBuilder(
+      animation: model,
+      builder: (context, _) => _scaffold(context, s, t, model, liveStats, report, showReport),
+    );
+  }
+
+  Widget _scaffold(BuildContext context, AppState s, ThemeData t, DriveMapModel model, DriveLiveStats liveStats, String? report, bool showReport) {
+    final expanded = model.expanded;
     return Scaffold(
-      appBar: AppBar(
+      appBar: expanded ? null : AppBar(
         titleSpacing: Gap.l,
         toolbarHeight: 60,
         // The tab bar says which tab this is (the old 'Map' / 'Drive mode' title row is gone); the AppBar keeps the
@@ -128,7 +170,7 @@ class _DriveScreenState extends State<DriveScreen> {
         ],
       ),
       body: SafeArea(
-        top: false,
+        top: expanded,
         child: LayoutBuilder(
           builder: (context, box) {
             // The overlays on the map (heard box, region chip, hint) are glanceable extras on a map of fixed size; they
@@ -145,14 +187,15 @@ class _DriveScreenState extends State<DriveScreen> {
                   // After Stop the drive's report is one tap away (on the map, clear of snackbars).
                   report: showReport
                       ? DriveReportCard(
-                          sessionId: report,
+                          sessionId: report!,
                           onDismiss: () => setState(() => _dismissedReport = report),
                         )
                       : null,
                 ),
               ),
             ));
-            final controls = <Widget>[
+            // Expanded map: the footer collapses to the status line and Start/Stop/Ping (the old full-screen panel).
+            final controls = expanded ? <Widget>[DriveStatusRow(state: s), if (s.needsAntennaSetup && !s.driving) const AntennaSetupHint()] : <Widget>[
               // Location off / not asked / approximate: say so with the one action (the map still opens on the region).
               if (s.locationNote != null && !s.driving)
                 Padding(
@@ -198,7 +241,7 @@ class _DriveScreenState extends State<DriveScreen> {
                 ),
               ),
             ];
-            final actions = DriveActionButtons(state: s);
+            final actions = DriveActionButtons(state: s, compact: expanded);
             // Landscape (phone on a dash mount, tablet): map on the left, controls on the right.
             if (box.maxWidth > box.maxHeight && box.maxWidth >= 640) {
               return Row(
@@ -258,7 +301,8 @@ class _DriveScreenState extends State<DriveScreen> {
   }
 }
 
-/// The map with its overlays (heard box, full-screen and layer buttons, hint, result flash).
+/// The map with its overlay slots filled (heard box, button column, banner, hint, result flash). The map itself mounts the
+/// overlay host, the attribution line and the credit sheet.
 class _MapPane extends StatelessWidget {
   final AppState state;
   final DriveMapModel model;
@@ -270,74 +314,48 @@ class _MapPane extends StatelessWidget {
     final s = state;
     final pings = s.recentPings;
     final showHeard = pings.isNotEmpty && (s.driving || model.heard.isNotEmpty);
+    final expanded = model.expanded;
     return LayoutBuilder(
       builder: (context, box) {
         final boxWidth = (box.maxWidth - 46 - 3 * Gap.s).clamp(160.0, 260.0);
         // Room for about this many rows under the header.
-        final rows = ((box.maxHeight - 110) / 44).floor().clamp(1, 5);
-        return Stack(
-          children: [
-            Positioned.fill(
-              child: CoverageMap(
-                key: const Key('drive-map'),
-                pings: model.visiblePings,
-                repeaters: model.repeaters,
-                // Not driving: the phone's position (last-known at once, then the fresh fix) so the map opens on it.
-                position: model.position ?? (model.pings.isEmpty ? idleMapPosition(s) : null),
-                puck: model.puck,
-                telemetry: model.telemetry,
-                showRings: s.driving,
-                repeaterLabel: s.repeaterLabel,
-                heard: model.heard,
-                layers: model.layers,
-                networkCells: model.visibleNetworkCells,
-                baseStyle: model.baseStyle,
-                onBoundsChanged: model.onMapBounds,
-                regionRepeaters: model.regionRepeaters,
-                repeaterSource: model.repeaterSource,
-                layerState: model.layerState,
-                observers: model.observers,
-                observersRegionName: s.viewingRegion?.name,
-                openRepeaterPage: openRepeaterPageFromMap,
-                highlightKey: model.selected,
-                onSelectRepeater: model.select,
-                simulated: model.simulated,
-                onZoomChanged: model.onMapZoom,
-                hexRes: model.coverageQuery.res,
-                mapKey: MapKey(model: model),
-                creditsOpen: model.creditsOpen,
-                onCreditsToggle: model.toggleCredits,
-                labelAvoidKeys: model.driveOverlayKeys,
-                fallbackCenter: viewedRegionCenter(s),
-                fallbackBounds: viewedRegionBounds(s),
-              ),
-            ),
-            // GPS trouble (waiting, weak, lost, Precise Location off) as one line over the map's top edge, with the one button that fixes it.
-            Positioned(left: 0, right: 0, top: 0, child: GpsBannerSlot(state: s, height: model.gpsBannerHeight, compact: box.maxHeight < kCompactMapHeight)),
-            // Above the map's own credit stack (source chip, attribution, legend), which grows with what the map draws.
-            Positioned(left: Gap.s, bottom: model.driveAttributionStackHeight + 14, child: CoverageAsOfBadge(model: model)),
-            Positioned(left: Gap.s, right: 60, bottom: model.driveAttributionStackHeight + 54, child: Align(alignment: Alignment.bottomLeft, child: MapHealthOverlay(model: model))),
-            if (s.regionDataOfflineLabel != null)
-              Positioned(
-                left: Gap.s,
-                bottom: model.driveAttributionStackHeight + 14,
-                child: Chip(
-                  key: const Key('region-offline-label'),
-                  avatar: const Icon(Icons.cloud_off, size: 16),
-                  label: Text(s.regionDataOfflineLabel!),
-                  visualDensity: VisualDensity.compact,
-                ),
-              ),
-            // At the bottom of the map: the top right holds the region chip, the last-known-location chip and the icon buttons,
-            // which stack taller than a fixed offset can clear (the chips used to cover the hint's title).
-            if (pings.isEmpty) Positioned(left: 0, right: 0, bottom: model.driveAttributionStackHeight + 12, child: IgnorePointer(child: MapHint(state: s))),
-            if (showHeard)
-              _BelowBanner(
-                height: model.gpsBannerHeight,
-                left: Gap.s,
-                child: KeyedSubtree(
-                  key: model.driveOverlayKeys[0],
-                  child: HeardBox(
+        final rows = ((box.maxHeight - 110) / 44).floor().clamp(expanded ? 4 : 1, expanded ? 7 : 5);
+        return CoverageMap(
+          key: const Key('drive-map'),
+          viewController: model.mapView,
+          pings: model.visiblePings,
+          repeaters: model.repeaters,
+          // Not driving: the phone's position (last-known at once, then the fresh fix) so the map opens on it.
+          position: model.position ?? (model.pings.isEmpty ? idleMapPosition(s) : null),
+          puck: model.puck,
+          telemetry: model.telemetry,
+          showRings: s.driving,
+          rotatable: expanded,
+          repeaterLabel: s.repeaterLabel,
+          heard: model.heard,
+          layers: model.layers,
+          networkCells: model.visibleNetworkCells,
+          baseStyle: model.baseStyle,
+          onBoundsChanged: model.onMapBounds,
+          regionRepeaters: model.regionRepeaters,
+          repeaterSource: model.repeaterSource,
+          layerState: model.layerState,
+          observers: model.observers,
+          observersRegionName: s.viewingRegion?.name,
+          openRepeaterPage: openRepeaterPageFromMap,
+          highlightKey: model.selected,
+          onSelectRepeater: model.select,
+          simulated: model.simulated,
+          onZoomChanged: model.onMapZoom,
+          hexRes: model.coverageQuery.res,
+          mapKey: MapKey(model: model),
+          openLegend: () => showMapLegend(context, colorBy: model.colorBy, pingColors: model.layers.pingColors),
+          fallbackCenter: viewedRegionCenter(s),
+          fallbackBounds: viewedRegionBounds(s),
+          // GPS trouble (waiting, weak, lost, Precise Location off) as one line over the map's top edge, with the one button that fixes it.
+          banner: GpsBannerSlot(state: s, compact: expanded || box.maxHeight < kCompactMapHeight),
+          topLeading: showHeard
+              ? HeardBox(
                   heard: model.heard,
                   holdPings: s.settings.heardHoldPings,
                   here: model.position,
@@ -346,76 +364,80 @@ class _MapPane extends StatelessWidget {
                   driving: s.driving,
                   maxRows: rows,
                   width: boxWidth,
+                )
+              : null,
+          // Scales the column down on a short map pane instead of overflowing (the tool buttons add to its height).
+          topTrailing: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.topRight,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                // Region awareness lives in this corner, above the icon buttons. Nothing is added here (no chip, no gap) until
+                // there's something real to show.
+                if (s.driving && silentPingStreak(s.drivePings) >= deadAreaPings) ...[
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: (box.maxWidth - 2 * Gap.s - 46).clamp(80.0, 180.0)),
+                    child: DeadAreaChip(streak: silentPingStreak(s.drivePings)),
                   ),
+                  const SizedBox(height: Gap.s),
+                ],
+                if (s.regionIndexLoaded) ...[
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: (box.maxWidth - 2 * Gap.s - 46).clamp(80.0, 180.0)),
+                    child: RegionChip(state: s),
+                  ),
+                  const SizedBox(height: Gap.s),
+                ],
+                if (s.phoneFixNote != null && !s.driving && model.pings.isEmpty) ...[
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: (box.maxWidth - 2 * Gap.s - 46).clamp(80.0, 220.0)),
+                    child: PhoneFixNoteChip(state: s),
+                  ),
+                  const SizedBox(height: Gap.s),
+                ],
+                MapIconButton(
+                  key: expanded ? const Key('fullscreen-close') : const Key('map-fullscreen'),
+                  icon: expanded ? Icons.close_fullscreen_rounded : Icons.open_in_full_rounded,
+                  tooltip: expanded ? 'Exit full screen' : 'Full-screen map',
+                  onPressed: model.toggleExpanded,
                 ),
-              ),
-            _BelowBanner(
-              height: model.gpsBannerHeight,
-              right: Gap.s,
-              // Scales the column down on a short map pane instead of overflowing (the tool buttons add to its height).
-              child: ConstrainedBox(
-                constraints: BoxConstraints(maxHeight: (box.maxHeight - 2 * Gap.s - model.gpsBannerHeight.value).clamp(0.0, double.infinity)),
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.topRight,
-                  child: Column(
-                key: model.driveOverlayKeys[1],
-                crossAxisAlignment: CrossAxisAlignment.end,
+                const SizedBox(height: Gap.s),
+                MapIconButton(
+                  key: const Key('drive-map-layers'),
+                  icon: Icons.layers_rounded,
+                  tooltip: 'Map layers',
+                  onPressed: () => showGeneratedLayersSheet(context, model),
+                ),
+                const SizedBox(height: Gap.s),
+                MapToolColumn(model: model, keyPrefix: 'drive'),
+              ],
+            ),
+          ),
+          bottom: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Align(alignment: Alignment.bottomLeft, child: MapHealthOverlay(model: model)),
+              Wrap(
+                spacing: Gap.s,
+                crossAxisAlignment: WrapCrossAlignment.end,
                 children: [
-                  // Region awareness lives in this corner, above the icon buttons, so it never competes with
-                  // the hint/heard-box/report overlays for the same space. Nothing is added here (no chip, no
-                  // gap) until there's something real to show — see RegionChip's own "no cache yet" state.
-                  if (s.driving && silentPingStreak(s.drivePings) >= deadAreaPings) ...[
-                    ConstrainedBox(
-                      constraints: BoxConstraints(maxWidth: (box.maxWidth - 2 * Gap.s - 46).clamp(80.0, 180.0)),
-                      child: DeadAreaChip(streak: silentPingStreak(s.drivePings)),
+                  CoverageAsOfBadge(model: model),
+                  if (s.regionDataOfflineLabel != null)
+                    Chip(
+                      key: const Key('region-offline-label'),
+                      avatar: const Icon(Icons.cloud_off, size: 16),
+                      label: Text(s.regionDataOfflineLabel!),
+                      visualDensity: VisualDensity.compact,
                     ),
-                    const SizedBox(height: Gap.s),
-                  ],
-                  if (s.regionIndexLoaded) ...[
-                    ConstrainedBox(
-                      constraints: BoxConstraints(maxWidth: (box.maxWidth - 2 * Gap.s - 46).clamp(80.0, 180.0)),
-                      child: RegionChip(state: s),
-                    ),
-                    const SizedBox(height: Gap.s),
-                  ],
-                  if (s.phoneFixNote != null && !s.driving && model.pings.isEmpty) ...[
-                    ConstrainedBox(
-                      constraints: BoxConstraints(maxWidth: (box.maxWidth - 2 * Gap.s - 46).clamp(80.0, 220.0)),
-                      child: PhoneFixNoteChip(state: s),
-                    ),
-                    const SizedBox(height: Gap.s),
-                  ],
-                  MapIconButton(
-                    key: const Key('map-fullscreen'),
-                    icon: Icons.open_in_full_rounded,
-                    tooltip: 'Full-screen map',
-                    onPressed: () => openFullscreenMap(context, model),
-                  ),
-                  const SizedBox(height: Gap.s),
-                  MapIconButton(
-                    key: const Key('drive-map-layers'),
-                    icon: Icons.layers_rounded,
-                    tooltip: 'Map layers',
-                    onPressed: () => showMapLayersSheet(context, model),
-                  ),
-                  const SizedBox(height: Gap.s),
-                  MapToolColumn(model: model, keyPrefix: 'drive'),
                 ],
               ),
-                ),
-              ),
-            ),
-            if (report != null)
-              Positioned(left: Gap.s, right: Gap.s, bottom: model.driveAttributionStackHeight + 12, child: report!),
-            if (pings.isNotEmpty && s.driving)
-              Positioned(
-                bottom: model.driveAttributionStackHeight + 8,
-                left: Gap.l,
-                right: Gap.l,
-                child: Center(child: PingResultFlash(ping: pings.first, label: model.labelFor)),
-              ),
-          ],
+              if (pings.isEmpty) Align(alignment: Alignment.center, child: IgnorePointer(child: MapHint(state: s))),
+              if (report != null) SizedBox(width: double.infinity, child: report!),
+              if (pings.isNotEmpty && s.driving) Align(alignment: Alignment.center, child: PingResultFlash(ping: pings.first, label: model.labelFor)),
+            ],
+          ),
         );
       },
     );
@@ -467,18 +489,4 @@ class ConnectionChip extends StatelessWidget {
       backgroundColor: dot.withValues(alpha: 0.10),
     ));
   }
-}
-
-/// A Stack child pinned [Gap.s] under the GPS health banner (or the map's top edge while there is none).
-class _BelowBanner extends StatelessWidget {
-  final ValueNotifier<double> height;
-  final double? left, right;
-  final Widget child;
-  const _BelowBanner({required this.height, this.left, this.right, required this.child});
-
-  @override
-  Widget build(BuildContext context) => ValueListenableBuilder<double>(
-        valueListenable: height,
-        builder: (context, h, _) => Positioned(left: left, right: right, top: Gap.s + h, child: child),
-      );
 }
