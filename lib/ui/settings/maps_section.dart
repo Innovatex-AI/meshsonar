@@ -26,7 +26,7 @@ List<Widget> mapsSectionRows(BuildContext context) => [
       SettingsAnchor(id: 'map-follow-options', child: const MapFollowOptions()),
     ];
 
-/// The follow choices (remembered on this phone, MapPrefs): the Map tab's heading-up button changes the same setting.
+/// The follow choices (remembered on this phone, MapPrefs): the Drive tab's heading-up button changes the same setting.
 class MapFollowOptions extends StatelessWidget {
   const MapFollowOptions({super.key});
 

@@ -24,7 +24,7 @@ const String wardrivingHelp = 'MeshSonar wardrives by sending one short message,
 const String _notSendingReason = 'Off while pings are not sent: nothing is transmitted. Turn on "Send pings to the mesh" to '
     'use it.';
 
-/// The three cadence sliders. [prefix] keeps the keys of the Settings copy and the Map tab's quick sheet apart (that sheet is
+/// The three cadence sliders. [prefix] keeps the keys of the Settings copy and the Drive tab's quick sheet apart (that sheet is
 /// lib/ui/drive/ping_settings_sheet.dart). Changes apply straight away, even mid-drive.
 List<Widget> pingCadenceTiles(BuildContext context, {String prefix = ''}) {
   final s = AppScope.of(context);

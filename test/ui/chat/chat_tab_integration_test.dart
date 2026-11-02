@@ -1,4 +1,4 @@
-// The real shell with the real chat provider: Chat tab (Contacts | Channels), unread badge, Chat-in-Drive button on the Map tab.
+// The real shell with the real chat provider: Chat tab (Contacts | Channels), unread badge, Chat-in-Drive button on the Drive tab.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/app/chat_wiring.dart';
@@ -51,7 +51,7 @@ void main() {
     expect(find.byKey(const Key('global-search-results')), findsOneWidget);
   });
 
-  testWidgets('Map tab has the Messages button; it opens the drive sheet with the unread conversation', (tester) async {
+  testWidgets('Drive tab has the Messages button; it opens the drive sheet with the unread conversation', (tester) async {
     setSize(tester);
     final ch = await kit.channel(1, 'Ohio');
     kit.incoming(ch, 'Ann', 'road closed ahead');

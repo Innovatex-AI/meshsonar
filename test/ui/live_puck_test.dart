@@ -148,7 +148,7 @@ void main() {
     expect(waitingRings(const Duration(seconds: 20)), isEmpty);
   });
 
-  testWidgets('end to end: fixes move the dot on the Map tab between pings; rings follow a ping; it ends with the drive',
+  testWidgets('end to end: fixes move the dot on the Drive tab between pings; rings follow a ping; it ends with the drive',
       (tester) async {
     useTallScreen(tester);
     final h = Harness()..approveKey();

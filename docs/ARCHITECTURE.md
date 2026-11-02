@@ -490,7 +490,7 @@ behaviour: silence, the replay rule, loss, caps, prefix matching, the blank-pass
 | `ui/drive/drive_live_stats.dart` | ui | `DriveLiveStats`: live new-vs-repeat grid-cell tally for the mid-drive stats strip. |
 | `ui/drive/heard_box.dart` | ui | `HeardBox`: live / holding / stale repeaters over the map. |
 | `ui/map/live_puck.dart` | ui | `PuckController` (owned by `DriveMapModel`, fed every GPS fix and ping event), `PuckLayer` (dot, accuracy disc, heading cone, ping rings; owns the 30 fps ticker, which sleeps when settled; calls back so the camera follows) and `PuckLinksLayer` (lines from the moving dot to the heard repeaters). They repaint on their own, so a GPS fix never rebuilds `CoverageMap`. |
-| `ui/drive/ping_settings_sheet.dart` | ui | The Map tab's "Ping 30 s / 100 m" chip and quick sheet (the same cadence sliders as Settings > Wardriving). |
+| `ui/drive/ping_settings_sheet.dart` | ui | The Drive tab's "Ping 30 s / 100 m" chip and quick sheet (the same cadence sliders as Settings > Wardriving). |
 | `ui/map/coverage_map.dart` | ui | `CoverageMap` (flutter_map): grid, OSM tiles, rings, links, the clustered `network` / `repeaters` layers (from a host `RepeaterMapSource`, or its own built from `regionRepeaters`), observers, heard repeaters, ping dots, position, compass, recenter, attribution (+ the network layer's legend and credit); taps routed through `showMapHitSheet`; `SimulatedTag`. |
 | `ui/map/fullscreen_map.dart` | ui | Full-screen live map; `showMapLayersSheet` (opens the generated sheet). |
 | `ui/map/repeater_page_link.dart` | ui | `openRepeaterPageFromMap`: "Open repeater page" from a map repeater sheet. |

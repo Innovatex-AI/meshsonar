@@ -78,7 +78,7 @@ class _ChatTabState extends State<ChatTab> {
           : 'Messages arrive here once you connect a radio',
       body: s.connected
           ? 'Your radio is connected and ready. Contacts and channels will show up here in a coming update. '
-                'Driving and mapping work now: open the Map tab.'
+                'Driving and mapping work now: open the Drive tab.'
           : 'Connect your MeshCore companion radio over Bluetooth. Contacts and channels will show up here; '
                 'you can map coverage while you wait.',
       action: s.connected
@@ -86,7 +86,7 @@ class _ChatTabState extends State<ChatTab> {
               key: const Key('chat-open-map'),
               style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
               onPressed: () =>
-                  ShellScope.maybeRead(context)?.select(AppTab.map),
+                  ShellScope.maybeRead(context)?.select(AppTab.drive),
               icon: const Icon(Icons.map_outlined),
               label: const Text('Open the map'),
             )

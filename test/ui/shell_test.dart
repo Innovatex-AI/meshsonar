@@ -3,8 +3,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/core/model.dart';
+import 'package:meshsonar/platform/accessibility_channel.dart';
 import 'package:meshsonar/radio/radio_api.dart';
 import 'package:meshsonar/ui/app.dart';
+import 'package:meshsonar/ui/design/app_symbols.dart';
+import 'package:meshsonar/ui/drive_screen.dart';
 import 'package:meshsonar/ui/onboarding/ui_prefs.dart';
 import 'package:meshsonar/ui/shell/chat_tab_host.dart';
 import 'package:meshsonar/ui/shell/mini_drive_bar.dart';
@@ -50,11 +53,11 @@ void main() {
       await h.pumpApp(tester);
       expect(find.byKey(const Key('shell-tabs')), findsOneWidget);
       expect(find.byKey(const Key('shell-rail')), findsNothing);
-      for (final t in ['Chat', 'Map', 'Analyze', 'Plan', 'More']) {
+      for (final t in ['Chat', 'Drive', 'Analyze', 'Plan', 'More']) {
         expect(find.descendant(of: find.byKey(const Key('shell-tabs')), matching: find.text(t)), findsOneWidget, reason: t);
       }
-      // Fresh install opens on the Map tab.
-      expect(find.byKey(const Key('map-mode')), findsOneWidget);
+      // Fresh install opens on the Drive tab.
+      expect(find.byType(DriveScreen), findsOneWidget);
       await tapShellTab(tester, 'Chat');
       expect(find.byKey(const Key('chat-empty')), findsOneWidget);
       await tapShellTab(tester, 'Analyze');
@@ -72,7 +75,7 @@ void main() {
       await h.pumpApp(tester);
       expect(find.byKey(const Key('shell-rail')), findsOneWidget);
       expect(find.byKey(const Key('shell-tabs')), findsNothing);
-      for (final t in ['Chat', 'Map', 'Analyze', 'Plan', 'More']) {
+      for (final t in ['Chat', 'Drive', 'Analyze', 'Plan', 'More']) {
         expect(find.descendant(of: find.byKey(const Key('shell-rail')), matching: find.text(t)), findsOneWidget, reason: t);
       }
       await openSettingsTab(tester);
@@ -111,15 +114,119 @@ void main() {
     });
 
     test('old tab indexes land on the screen that now holds them', () {
-      expect(LegacyTab.fromIndex(0).tab, AppTab.map);
+      expect(LegacyTab.fromIndex(0).tab, AppTab.drive);
       expect(LegacyTab.fromIndex(1).tab, AppTab.analyze);
       expect(LegacyTab.fromIndex(1).analyze, AnalyzeView.region);
       expect(LegacyTab.fromIndex(2).analyze, AnalyzeView.drives);
       expect(LegacyTab.fromIndex(3).more, MoreItem.radio);
       expect(LegacyTab.fromIndex(4).more, MoreItem.settings);
-      expect(LegacyTab.fromIndex(99).tab, AppTab.map);
+      expect(LegacyTab.fromIndex(99).tab, AppTab.drive);
       expect(AppTab.byName('analyze'), AppTab.analyze);
       expect(AppTab.byName('nope'), isNull);
+    });
+
+    test('a saved "map" (pre-rename) restores the Drive tab; new writes use "drive"', () async {
+      expect(AppTab.byName('map'), AppTab.drive);
+      expect(AppTab.byName('drive'), AppTab.drive);
+      expect(AppTab.drive.name, 'drive');
+      expect(AppTab.drive.label, 'Drive');
+      final prefs = UiPrefs(seen: true);
+      await prefs.setLastTab('map');
+      expect(AppTab.byName(prefs.lastTab), AppTab.drive);
+    });
+
+    testWidgets('a stored lastTab "map" opens Drive, and the next tab change stores "drive"', (tester) async {
+      phone(tester);
+      final h = Harness();
+      final prefs = UiPrefs(seen: true);
+      await prefs.setLastTab('map');
+      attachUiPrefs(h.state, prefs);
+      await h.pumpApp(tester);
+      expect(find.byType(DriveScreen), findsOneWidget);
+      await tapShellTab(tester, 'Plan');
+      await tapShellTab(tester, 'Drive');
+      expect(prefs.lastTab, 'drive');
+      await drain(tester);
+    });
+
+    test('ShellController.immersive: Drive only, cleared when the tab changes', () {
+      final c = ShellController();
+      expect(c.tab, AppTab.drive);
+      expect(c.immersive, isFalse);
+      c.setImmersive(true);
+      expect(c.immersive, isTrue);
+      c.select(AppTab.plan);
+      expect(c.immersive, isFalse);
+      c.setImmersive(true); // not on Drive: ignored
+      expect(c.immersive, isFalse);
+      c.select(AppTab.drive);
+      expect(c.immersive, isFalse, reason: 'leaving Drive cleared it');
+      var n = 0;
+      c.addListener(() => n++);
+      c.setImmersive(true);
+      c.setImmersive(true);
+      expect(n, 1);
+    });
+
+    testWidgets('phone: immersive hides the tab bar and the mini bar; the Drive page runs behind a translucent bar', (tester) async {
+      phone(tester);
+      final h = Harness();
+      await h.pumpApp(tester);
+      final shell = ShellScope.maybeOf(tester.element(find.byType(DriveScreen)))!;
+      expect(find.byKey(const Key('shell-tabs')), findsOneWidget);
+      // Drive extends behind the bar: it spans the whole screen height (the bar overlays its bottom).
+      expect(tester.getSize(find.byType(DriveScreen)).height, 844);
+      shell.setImmersive(true);
+      await tester.pump();
+      expect(find.byKey(const Key('shell-tabs')), findsNothing);
+      shell.setImmersive(false);
+      await tester.pump();
+      expect(find.byKey(const Key('shell-tabs')), findsOneWidget);
+      // Other tabs stay above the bar, never under it.
+      await tapShellTab(tester, 'Plan');
+      final bar = tester.getRect(find.byKey(const Key('shell-tabs')));
+      expect(tester.getRect(find.byKey(const Key('plan-list'))).bottom, lessThanOrEqualTo(bar.top + 0.5));
+      await drain(tester);
+    });
+
+    testWidgets('the tab bar is blurred, opaque under Reduce Transparency, and the Drive icon is the car', (tester) async {
+      phone(tester);
+      final h = Harness();
+      await h.pumpApp(tester);
+      // Unknown platform answer (tests) = opaque.
+      AccessibilitySignals.reduceTransparency = null;
+      await tester.pump();
+      expect(find.byKey(const Key('blur-bar-opaque')), findsOneWidget);
+      expect(find.byType(BackdropFilter), findsNothing);
+      AccessibilitySignals.reduceTransparency = false;
+      addTearDown(() => AccessibilitySignals.reduceTransparency = null);
+      await tapShellTab(tester, 'Plan');
+      expect(find.byKey(const Key('blur-bar-blurred')), findsOneWidget);
+      expect(find.ancestor(of: find.byKey(const Key('shell-tabs')), matching: find.byType(BackdropFilter)), findsOneWidget);
+      AccessibilitySignals.reduceTransparency = true;
+      await tapShellTab(tester, 'Chat');
+      expect(find.byKey(const Key('blur-bar-opaque')), findsOneWidget);
+      // Drive is unselected here (Chat is open): the outline car; selected it is car.fill.
+      final car = find.descendant(of: find.byKey(const Key('shell-tabs')), matching: find.byType(AppSymbolIcon));
+      expect(tester.widget<AppSymbolIcon>(car).symbol, AppSymbols.car);
+      await tapShellTab(tester, 'Drive');
+      expect(tester.widget<AppSymbolIcon>(car).symbol, AppSymbols.carFill);
+      await drain(tester);
+    });
+
+    testWidgets('iPad: immersive hides the rail', (tester) async {
+      phone(tester, w: 834, h: 1194);
+      final h = Harness();
+      await h.pumpApp(tester);
+      final shell = ShellScope.maybeOf(tester.element(find.byType(DriveScreen)))!;
+      expect(find.byKey(const Key('shell-rail')), findsOneWidget);
+      shell.setImmersive(true);
+      await tester.pump();
+      expect(find.byKey(const Key('shell-rail')), findsNothing);
+      shell.setImmersive(false);
+      await tester.pump();
+      expect(find.byKey(const Key('shell-rail')), findsOneWidget);
+      await drain(tester);
     });
 
     testWidgets('HomeShell(legacyTab: 2) opens Analyze > Drives, (legacyTab: 4) opens Settings', (tester) async {
@@ -214,7 +321,7 @@ void main() {
       expect(find.byKey(const Key('chat-connect')), findsNothing);
       await tester.tap(find.byKey(const Key('chat-open-map')));
       await tester.pumpAndSettle();
-      expect(find.byKey(const Key('map-mode')), findsOneWidget);
+      expect(find.byType(DriveScreen), findsOneWidget);
       await drain(tester);
     });
 
@@ -281,15 +388,15 @@ void main() {
   });
 
   group('mini drive bar', () {
-    testWidgets('no bar without a drive; with one it shows on every tab except Map', (tester) async {
+    testWidgets('no bar without a drive; with one it shows on every tab except Drive', (tester) async {
       phone(tester);
       final h = await startDriving(tester);
-      expect(find.byKey(const Key('mini-drive-bar')), findsNothing, reason: 'Map tab is the drive screen');
+      expect(find.byKey(const Key('mini-drive-bar')), findsNothing, reason: 'Drive tab is the drive screen');
       for (final t in ['Chat', 'Analyze', 'Plan', 'More']) {
         await tapShellTab(tester, t);
         expect(find.byKey(const Key('mini-drive-bar')), findsOneWidget, reason: t);
       }
-      await tapShellTab(tester, 'Map');
+      await tapShellTab(tester, 'Drive');
       expect(find.byKey(const Key('mini-drive-bar')), findsNothing);
       await h.state.stopDrive();
       await tapShellTab(tester, 'Plan');
@@ -297,30 +404,65 @@ void main() {
       await drain(tester);
     });
 
-    testWidgets('shows pings sent / heard and the last SNR; tapping it opens the Map tab', (tester) async {
+    testWidgets('shows the last ping result and elapsed time; tapping it opens the Drive tab', (tester) async {
       phone(tester);
       final h = await startDriving(tester);
       h.engines.single.emit(heardPing('p1', const [Echo(repeater: 'a1b2', snrDb: 6.5, hops: 1)]));
       await tester.pump(const Duration(milliseconds: 100));
       await tapShellTab(tester, 'Plan');
-      expect(tester.widget<Text>(find.byKey(const Key('mini-bar-counts'))).data, '1 ping · 1 heard');
-      final waiting = tester.widget<Text>(find.byKey(const Key('mini-bar-waiting'))).textSpan!.toPlainText();
-      expect(waiting, contains('SNR +6.5 dB'));
+      expect(tester.widget<Text>(find.byKey(const Key('mini-bar-hero'))).data, '1 heard');
+      expect(tester.widget<Text>(find.byKey(const Key('mini-bar-elapsed'))).data, matches(RegExp(r'^\d+:\d\d$')));
       await tester.tap(find.byKey(const Key('mini-bar-open')));
       await settleLive(tester);
-      expect(find.byKey(const Key('map-mode')), findsOneWidget);
+      expect(find.byType(DriveScreen), findsOneWidget);
       expect(find.byKey(const Key('mini-drive-bar')), findsNothing);
       await h.state.stopDrive();
       await drain(tester);
     });
 
-    testWidgets('a silent ping reads "none", not a strength', (tester) async {
+    testWidgets('a silent ping reads "No echo"', (tester) async {
       phone(tester);
       final h = await startDriving(tester);
       h.engines.single.emit(silentPing('p1'));
       await tester.pump(const Duration(milliseconds: 100));
       await tapShellTab(tester, 'Plan');
-      expect(tester.widget<Text>(find.byKey(const Key('mini-bar-waiting'))).textSpan!.toPlainText(), contains('SNR none'));
+      expect(tester.widget<Text>(find.byKey(const Key('mini-bar-hero'))).data, 'No echo');
+      await h.state.stopDrive();
+      await drain(tester);
+    });
+
+    testWidgets('Pause pings (state) stops the automatic pings (interval 0) and the bar shows the paused dot', (tester) async {
+      phone(tester);
+      final h = await startDriving(tester);
+      final e = h.engines.single;
+      await tapShellTab(tester, 'Plan');
+      h.state.setPingsPaused(true);
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(e.updates.last.intervalSec, 0);
+      expect(miniBarSummary(h.state).waiting, 'Pings paused');
+      expect(find.byIcon(Icons.pause_circle_outline_rounded), findsOneWidget);
+      h.state.setPingsPaused(false);
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(e.updates.last.intervalSec, h.state.settings.intervalSec);
+      await h.state.stopDrive();
+      await drain(tester);
+    });
+
+    test('miniBarElapsed formats m:ss and h:mm:ss', () {
+      expect(miniBarElapsed(const Duration(seconds: 7)), '0:07');
+      expect(miniBarElapsed(const Duration(minutes: 18, seconds: 5)), '18:05');
+      expect(miniBarElapsed(const Duration(hours: 1, minutes: 5, seconds: 7)), '1:05:07');
+      expect(miniBarElapsed(const Duration(seconds: -3)), '0:00');
+    });
+
+    testWidgets('spoken sentence names repeaters heard on the last ping and the minutes driven', (tester) async {
+      phone(tester);
+      final h = await startDriving(tester);
+      h.engines.single.emit(heardPing('p1', const [Echo(repeater: 'a1b2', snrDb: 6.5, hops: 1), Echo(repeater: 'c3d4', snrDb: 2, hops: 1)]));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(miniBarHero(h.state, elapsed: const Duration(minutes: 18)).spoken,
+          'Drive in progress, 2 repeaters heard last ping, 18 minutes');
+      expect(miniBarHero(h.state, elapsed: const Duration(seconds: 20)).spoken, endsWith('less than a minute'));
       await h.state.stopDrive();
       await drain(tester);
     });
@@ -353,30 +495,6 @@ void main() {
       await drain(tester);
     });
 
-    testWidgets('Pause pings stops the automatic pings (interval 0) and Resume brings them back', (tester) async {
-      phone(tester);
-      final h = await startDriving(tester);
-      final e = h.engines.single;
-      await tapShellTab(tester, 'Plan');
-      expect(find.byTooltip('Pause pings'), findsOneWidget);
-      await tester.tap(find.byKey(const Key('mini-bar-pause')));
-      await tester.pump(const Duration(milliseconds: 100));
-      expect(h.state.pingsPaused, isTrue);
-      expect(e.updates.last.intervalSec, 0);
-      expect(miniBarSummary(h.state).waiting, 'Pings paused');
-      expect(h.state.statusLine, contains('paused'));
-      expect(find.byTooltip('Resume pings'), findsOneWidget);
-      await tester.tap(find.byKey(const Key('mini-bar-pause')));
-      await tester.pump(const Duration(milliseconds: 100));
-      expect(h.state.pingsPaused, isFalse);
-      expect(e.updates.last.intervalSec, h.state.settings.intervalSec);
-      // A new drive starts unpaused even if the last one ended paused.
-      h.state.setPingsPaused(true);
-      await h.state.stopDrive();
-      expect(h.state.pingsPaused, isFalse);
-      await drain(tester);
-    });
-
     testWidgets('Stop asks first; Keep driving leaves the drive running; Stop drive ends it', (tester) async {
       phone(tester);
       final h = await startDriving(tester);
@@ -396,21 +514,21 @@ void main() {
       await drain(tester);
     });
 
-    testWidgets('controls are at least 48 square and have spoken labels', (tester) async {
+    testWidgets('bar is 56 pt, Stop is 44 pt, one spoken sentence plus a separate Stop button', (tester) async {
       phone(tester);
       final h = await startDriving(tester);
       await tapShellTab(tester, 'Plan');
-      for (final k in ['mini-bar-pause', 'mini-bar-stop']) {
-        final size = tester.getSize(find.byKey(Key(k)));
-        expect(size.width, greaterThanOrEqualTo(48), reason: k);
-        expect(size.height, greaterThanOrEqualTo(48), reason: k);
-      }
-      expect(tester.getSize(find.byKey(const Key('mini-drive-bar'))).height, greaterThanOrEqualTo(miniDriveBarHeight));
+      final stop = tester.getSize(find.byKey(const Key('mini-bar-stop')));
+      expect(stop.width, greaterThanOrEqualTo(44));
+      expect(stop.height, greaterThanOrEqualTo(44));
+      expect(tester.getSize(find.byKey(const Key('mini-drive-bar'))).height, miniDriveBarHeight);
+      expect(miniDriveBarHeight, 56);
+      expect(find.byKey(const Key('mini-bar-pause')), findsNothing, reason: 'Pause lives in the Drive controls only');
       final handle = tester.ensureSemantics();
       final sem = tester.getSemantics(find.byKey(const Key('mini-bar-open')));
-      expect(sem.label, startsWith('Drive in progress.'));
-      expect(sem.label, contains('0 pings'));
-      expect(tester.getSemantics(find.byKey(const Key('mini-bar-pause'))).tooltip, 'Pause pings');
+      expect(sem.label, startsWith('Drive in progress, '));
+      expect(sem.label, contains('no pings yet'));
+      expect(sem.hint, 'Opens the Drive tab');
       expect(tester.getSemantics(find.byKey(const Key('mini-bar-stop'))).tooltip, 'Stop drive');
       handle.dispose();
       await h.state.stopDrive();

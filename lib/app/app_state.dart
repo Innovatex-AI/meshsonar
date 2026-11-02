@@ -2105,7 +2105,7 @@ class AppState extends ChangeNotifier {
       _engine = engine;
       // Keep the GPS stream open for the whole drive, whatever the screen or the engine does: with no listener the stream
       // (and, on iOS, the background location session that keeps the app alive behind navigation) is torn down. Pause
-      // pings, a closed Map tab or listen-only mode must not stop the position.
+      // pings, a closed Drive tab or listen-only mode must not stop the position.
       _attachGate(engine);
       final storeForTrace = services.store;
       _healthSink = const NullDriveHealthSink();

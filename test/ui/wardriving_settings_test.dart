@@ -1,5 +1,5 @@
 // The ping settings (interval, minimum distance, listen window): in More > Settings > Wardriving and as a quick sheet on the
-// Map tab; saved, and actually consumed by the engine (also mid-drive).
+// Drive tab; saved, and actually consumed by the engine (also mid-drive).
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/core/api.dart';
@@ -58,7 +58,7 @@ void main() {
     expect(h.state.settings.listenWindowSec, 12);
   });
 
-  testWidgets('Map tab chip opens the quick sheet; a change saves and reaches the running engine at once', (tester) async {
+  testWidgets('Drive tab chip opens the quick sheet; a change saves and reaches the running engine at once', (tester) async {
     useTallScreen(tester);
     final h = Harness();
     await h.pumpApp(tester);

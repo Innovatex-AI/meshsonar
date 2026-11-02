@@ -690,7 +690,7 @@ class Settings {
   /// written to settings.json only when changed, so an older file reads as standard.
   final ColourPalette colourPalette;
 
-  /// Map tab base map (lib/core/map_styles.dart id: chart / street / dark / topo). Default chart; written only when changed.
+  /// Drive tab base map (lib/core/map_styles.dart id: chart / street / dark / topo). Default chart; written only when changed.
   final String baseMapStyle;
 
   /// Wardriving feedback when a ping finishes (Settings > Wardriving): a haptic tap (on by default, as before) and a short

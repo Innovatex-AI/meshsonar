@@ -1,6 +1,6 @@
 // Run on a simulator (see scripts/verify_sim.sh for the device handling): connects the debug Simulator radio, starts a
 // drive and prints "SCREEN <name>" while the simulated car drives, so a script can screenshot the sonar puck moving
-// between pings, the ping rings, and the lines to the repeaters that heard it. Also opens the Map tab's Ping settings.
+// between pings, the ping rings, and the lines to the repeaters that heard it. Also opens the Drive tab's Ping settings.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';

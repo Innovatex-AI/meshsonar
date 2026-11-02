@@ -1,4 +1,4 @@
-// Map and puck jank benchmark. Plays a recorded-style car route through the REAL Map tab (the Harness app: DriveScreen,
+// Map and puck jank benchmark. Plays a recorded-style car route through the REAL Drive tab (the Harness app: DriveScreen,
 // DriveMapModel, CoverageMap, PuckController) with a realistic data load (thousands of network hex cells, 60 repeaters,
 // a 300-ping drive, synthetic base-map tiles) and measures what the person would feel:
 //
