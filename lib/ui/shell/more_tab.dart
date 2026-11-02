@@ -165,6 +165,21 @@ class MoreList extends StatelessWidget {
             row(MoreItem.devices, Icons.key_outlined, 'Devices and keys', 'Your driver key, other phones, MeshMapper forwarding'),
             row(MoreItem.leaderboard, Icons.emoji_events_outlined, 'Leaderboard', 'Drivers who opted in, this region or every region'),
             row(MoreItem.myReports, Icons.report_gmailerrorred_outlined, 'My reports', 'Problem reports you sent and where they stand'),
+            // Kept above the long groups on purpose: rows below it keep their distance from the end of the list.
+            header('Developer'),
+            ValueListenableBuilder<bool>(
+              valueListenable: AppFlags.chatRedesignNotifier,
+              builder: (context, on, _) => AppSwitchTile(
+                switchKey: const Key('more-chat-redesign'),
+                title: 'New Chat screens (preview)',
+                subtitle: 'Shows the unfinished parts of the Chat redesign. Off by default.',
+                value: on,
+                onChanged: (v) {
+                  final dir = s.services.uiPrefsFile?.parent;
+                  AppFlags.setChatRedesign(v, file: dir == null ? null : File('${dir.path}${Platform.pathSeparator}redesign_flags.json'));
+                },
+              ),
+            ),
             header('Radios and tools'),
             row(MoreItem.repeaters, Icons.cell_tower, 'Repeaters and rooms',
                 s.connected ? 'Administer a repeater, read and post in a room' : 'Needs your radio. Free repeater administration'),
@@ -205,20 +220,6 @@ class MoreList extends StatelessWidget {
               subtitle: const Text('Opens in your browser'),
               trailing: const Icon(Icons.open_in_new, size: 18),
               onTap: () => s.services.openUrl(Uri.parse(privacyPolicyUrl)),
-            ),
-            header('Developer'),
-            ValueListenableBuilder<bool>(
-              valueListenable: AppFlags.chatRedesign,
-              builder: (context, on, _) => AppSwitchTile(
-                switchKey: const Key('more-chat-redesign'),
-                title: 'New Chat screens (preview)',
-                subtitle: 'Shows the unfinished parts of the Chat redesign. Off by default.',
-                value: on,
-                onChanged: (v) {
-                  final dir = s.services.uiPrefsFile?.parent;
-                  AppFlags.setChatRedesign(v, file: dir == null ? null : File('${dir.path}${Platform.pathSeparator}redesign_flags.json'));
-                },
-              ),
             ),
             const SizedBox(height: Gap.xl),
           ],

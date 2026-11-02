@@ -70,14 +70,14 @@ void main() {
     shared.clear();
     files.clear();
     clip.clear();
-    AppFlags.chatRedesign.value = false;
+    AppFlags.chatRedesign = false;
     TestWidgetsFlutterBinding.ensureInitialized().defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
       if (call.method == 'Clipboard.setData') clip.add((call.arguments as Map)['text'] as String);
       return null;
     });
   });
   tearDown(() {
-    AppFlags.chatRedesign.value = false;
+    AppFlags.chatRedesign = false;
     TestWidgetsFlutterBinding.ensureInitialized().defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null);
     rig.dispose();
   });
@@ -182,7 +182,7 @@ void main() {
       await pumpProfile(tester, rig, keyN(9));
       expect(find.byKey(const Key('tile-route')), findsOneWidget);
       expect(find.byKey(const Key('tile-telemetry')), findsNothing);
-      AppFlags.chatRedesign.value = true;
+      AppFlags.chatRedesign = true;
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('tile-telemetry')), findsOneWidget);
       expect(find.byKey(const Key('tile-ping')), findsOneWidget);
@@ -265,7 +265,7 @@ void main() {
   group('flag on: tiles that wait for WP7 / WP8', () {
     tw('person gets Ping and Stats; each opens a labelled "coming" sheet', (tester) async {
       setScreen(tester);
-      AppFlags.chatRedesign.value = true;
+      AppFlags.chatRedesign = true;
       await rig.withContacts(1);
       await pumpProfile(tester, rig, keyN(1));
       expect(find.byKey(const Key('tile-ping')), findsOneWidget);
@@ -277,7 +277,7 @@ void main() {
 
     tw('radio away: Ping is dimmed with the reason, and a tap says why instead of doing nothing', (tester) async {
       setScreen(tester);
-      AppFlags.chatRedesign.value = true;
+      AppFlags.chatRedesign = true;
       await rig.withContacts(1);
       rig.port.isConnected = false;
       rig.chat.contacts.detach();
@@ -582,7 +582,7 @@ void main() {
     for (final e in configs.entries) {
       tw('person with route and flag on, ${e.key}: no overflow, accessible, targets >= 44', (tester) async {
         setScreen(tester, w: e.value.w, h: e.value.h, scale: e.value.scale);
-        AppFlags.chatRedesign.value = true;
+        AppFlags.chatRedesign = true;
         rig.port.radioAdd(radioContact(1, name: 'Maya Chen with a rather long display name', path: true));
         rig.chat.contacts.attach(rig.port);
         await rig.chat.contacts.syncNow();
@@ -609,7 +609,7 @@ void main() {
 
     tw('three tiles on a repeater fit one row at 375 pt', (tester) async {
       setScreen(tester, w: 375, h: 667);
-      AppFlags.chatRedesign.value = true;
+      AppFlags.chatRedesign = true;
       await rig.withContacts(5);
       await pumpProfile(tester, rig, keyN(5));
       final ys = {for (final t in ['dashboard', 'ping', 'route']) tester.getTopLeft(find.byKey(Key('tile-$t'))).dy};
@@ -623,7 +623,7 @@ void main() {
       for (final b in Brightness.values) {
         tw('profile ${e.key} ${b.name}', (tester) async {
           setScreen(tester, w: 393, h: 852);
-          AppFlags.chatRedesign.value = true;
+          AppFlags.chatRedesign = true;
           final withRooms = ContactsRig(canOpenRooms: true);
           addTearDown(withRooms.dispose);
           withRooms.port.radioAdd(radioContact(1, type: e.value, name: 'Maya Chen', path: true));

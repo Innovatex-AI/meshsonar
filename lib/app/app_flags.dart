@@ -8,20 +8,25 @@ import 'package:flutter/foundation.dart';
 
 abstract final class AppFlags {
   /// New Chat screens that are not finished everywhere yet (Ping, Stats and Route tools on the contact profile, ...).
-  static final ValueNotifier<bool> chatRedesign = ValueNotifier<bool>(false);
+  static final ValueNotifier<bool> chatRedesignNotifier = ValueNotifier<bool>(false);
+
+  /// Plain read / write of the flag (the shape the other Chat work packages use); widgets that must rebuild when it
+  /// flips listen to [chatRedesignNotifier].
+  static bool get chatRedesign => chatRedesignNotifier.value;
+  static set chatRedesign(bool v) => chatRedesignNotifier.value = v;
 
   /// Reads the saved choice. A missing or damaged file leaves the default (off).
   static Future<void> load(File? file) async {
     if (file == null) return;
     try {
       final j = jsonDecode(await file.readAsString());
-      if (j is Map && j['chatRedesign'] is bool) chatRedesign.value = j['chatRedesign'] as bool;
+      if (j is Map && j['chatRedesign'] is bool) chatRedesign = j['chatRedesign'] as bool;
     } catch (_) {}
   }
 
   /// Sets the flag and saves it (best effort: a failed write only costs the choice on the next launch).
   static Future<void> setChatRedesign(bool v, {File? file}) async {
-    chatRedesign.value = v;
+    chatRedesign = v;
     if (file == null) return;
     try {
       await file.parent.create(recursive: true);

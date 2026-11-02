@@ -91,7 +91,7 @@ class _ContactProfileScreenState extends State<ContactProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: Listenable.merge([_c, AppFlags.chatRedesign]),
+      listenable: Listenable.merge([_c, AppFlags.chatRedesignNotifier]),
       builder: (context, _) {
         final c = _c.contact(widget.publicKey);
         if (c == null) return _gone(context);
@@ -130,7 +130,7 @@ class _ContactProfileScreenState extends State<ContactProfileScreen> {
     // Rooms need a login before the server takes a post; until it exists there is no button to a conversation that cannot work.
     final canMessage = _c.openConversation != null && (c.type == ContactType.companion || (c.type == ContactType.room && _c.canOpenRooms));
     final canAdmin = _c.openAdmin != null && (c.type == ContactType.repeater || c.type == ContactType.room);
-    final redesign = AppFlags.chatRedesign.value;
+    final redesign = AppFlags.chatRedesign;
     final tiles = profileTiles(c,
         connected: connected,
         caps: widget.radioCaps?.call() ?? RadioCaps.baseline,
@@ -372,7 +372,7 @@ class _ContactProfileScreenState extends State<ContactProfileScreen> {
         context,
         current: () => _c.contact(widget.publicKey) ?? c,
         changes: _c,
-        redesign: AppFlags.chatRedesign.value,
+        redesign: AppFlags.chatRedesign,
         onAlwaysSearch: (v) => _m.setForceFlood(c.publicKey, v),
         onReset: () async {
           await _m.resetPath(c.publicKey);

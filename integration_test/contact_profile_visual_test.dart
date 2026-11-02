@@ -62,7 +62,7 @@ void main() {
 
     await openContact('Ann KE8ANN');
     await shot(t, 'profile-person-flag-off');
-    AppFlags.chatRedesign.value = true;
+    AppFlags.chatRedesign = true;
     await pumpFor(t, const Duration(seconds: 1));
     await shot(t, 'profile-person');
     await t.drag(find.byKey(const Key('contact-profile')), const Offset(0, -500));
@@ -105,6 +105,6 @@ void main() {
       await pumpFor(t, const Duration(seconds: 2));
       await shot(t, 'profile-repeater');
     }
-    AppFlags.chatRedesign.value = false;
+    AppFlags.chatRedesign = false;
   });
 }
