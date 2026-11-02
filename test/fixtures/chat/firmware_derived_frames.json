@@ -1,0 +1,77 @@
+{
+ "_note": "SOURCE-DERIVED fixtures built from MeshCore commit 81dbae5 (examples/companion_radio/MyMesh.cpp, src/Packet.cpp). NOT captured from a radio; replace with captures after the radio run in docs/protocol/chat-spikes-2026-11.md",
+ "path_len_encoding": {
+  "rule": "byte = ((hash_size-1)<<6) | hop_count; hash_size 4 (top bits 11) reserved/invalid; hop_count*hash_size <= 64",
+  "rows": [
+   {
+    "hash_size": 1,
+    "hops": 0,
+    "path_len_byte": "0x00",
+    "path_bytes": 0
+   },
+   {
+    "hash_size": 1,
+    "hops": 2,
+    "path_len_byte": "0x02",
+    "path_bytes": 2
+   },
+   {
+    "hash_size": 2,
+    "hops": 2,
+    "path_len_byte": "0x42",
+    "path_bytes": 4
+   },
+   {
+    "hash_size": 3,
+    "hops": 2,
+    "path_len_byte": "0x82",
+    "path_bytes": 6
+   },
+   {
+    "hash_size": 1,
+    "hops": 63,
+    "path_len_byte": "0x3f",
+    "path_bytes": 63
+   },
+   {
+    "hash_size": 2,
+    "hops": 32,
+    "path_len_byte": "0x60",
+    "path_bytes": 64
+   },
+   {
+    "hash_size": 3,
+    "hops": 21,
+    "path_len_byte": "0x95",
+    "path_bytes": 63
+   }
+  ]
+ },
+ "push_0x8d_path_discovery": {
+  "layout": "[0x8D][0x00][pubkey prefix 6][out_path_len][out_path bytes][in_path_len][in_path bytes]; telemetry in response is discarded by firmware",
+  "hex": "8d0001020304050602aabb4211112222",
+  "out_path_len": "0x02 (2 hops, 1-byte)",
+  "in_path_len": "0x42 (2 hops, 2-byte)"
+ },
+ "cmd_50_binary_req_min_max_avg": {
+  "layout": "[50][pubkey 32][0x04][start_secs_ago u32 LE][end_secs_ago u32 LE][0][0]; answered only by sensor firmware (SensorMesh), role >= READ_ONLY; reply push 0x8C [0][tag u32][ now u32 ][ch][lpp_type][min][max][avg]...",
+  "hex": "320102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f200480510100000000000000"
+ },
+ "resp_16_contact_msg_v3": {
+  "layout": "[0x10][snr*4 i8][0][0][prefix 6][path_len byte or 0xFF][txt_type][ts u32 LE][text]; NO RSSI field (reserved bytes are zero)",
+  "hex": "10e700000102030405064200803bb16a6869",
+  "decoded": {
+   "snr_db": -6.25,
+   "hops": 2,
+   "hash_size": 2,
+   "text": "hi"
+  }
+ },
+ "text_limits": {
+  "MAX_TEXT_LEN": 160,
+  "dm_max_bytes": 160,
+  "dm_max_bytes_attempt_gt_3": 158,
+  "channel_formula": "len(sender_name)+2+len(text) <= 160, firmware silently truncates the tail",
+  "MAX_FRAME_SIZE": 176
+ }
+}
