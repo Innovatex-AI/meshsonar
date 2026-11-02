@@ -5,11 +5,6 @@ lib/ui/account/devices_screen.dart|showSnackBar(|3
 lib/ui/account/server_drive_screen.dart|AlertDialog(|1
 lib/ui/account/server_drive_screen.dart|showDialog(|1
 lib/ui/account/server_drive_screen.dart|showSnackBar(|2
-lib/ui/alerts/permission_prompt.dart|AlertDialog(|1
-lib/ui/alerts/permission_prompt.dart|showDialog(|1
-lib/ui/always_location_screen.dart|AlertDialog(|1
-lib/ui/always_location_screen.dart|showDialog(|1
-lib/ui/antenna_sheet.dart|showModalBottomSheet(|1
 lib/ui/chat/channel_detail_screen.dart|AlertDialog(|5
 lib/ui/chat/channel_detail_screen.dart|Card(|1
 lib/ui/chat/channel_detail_screen.dart|CircularProgressIndicator|1
@@ -114,15 +109,11 @@ lib/ui/contacts/qr_scan_screen.dart|Icons.|3
 lib/ui/contacts/radio_list_sheet.dart|FilledButton|2
 lib/ui/contacts/radio_list_sheet.dart|showModalBottomSheet(|1
 lib/ui/contacts/radio_list_sheet.dart|showSnackBar(|1
-lib/ui/drive/drive_controls.dart|AlertDialog(|1
-lib/ui/drive/drive_controls.dart|showDialog(|1
-lib/ui/drive/ping_settings_sheet.dart|showModalBottomSheet(|1
 lib/ui/drive_detail_screen.dart|PopupMenuButton|1
 lib/ui/map/cell_sheet.dart|showModalBottomSheet(|1
 lib/ui/map/layers/layers_sheet.dart|showModalBottomSheet(|1
 lib/ui/map/legend_sheet.dart|showModalBottomSheet(|1
 lib/ui/map/map_tools.dart|showModalBottomSheet(|2
-lib/ui/map/map_tools.dart|showSnackBar(|1
 lib/ui/map/share_map_health.dart|showSnackBar(|2
 lib/ui/map/sheets/observer_sheet.dart|showModalBottomSheet(|1
 lib/ui/map/sheets/repeater_sheet.dart|showModalBottomSheet(|2
@@ -251,9 +242,7 @@ lib/ui/settings/settings_kit.dart|showDialog(|2
 lib/ui/settings/storage_section.dart|showSnackBar(|1
 lib/ui/settings_screen.dart|showModalBottomSheet(|1
 lib/ui/shell/drive_next_card.dart|showSnackBar(|1
-lib/ui/shell/home_shell.dart|showSnackBar(|1
 lib/ui/shell/plan_tab.dart|showSnackBar(|1
-lib/ui/telemetry_sheet.dart|showModalBottomSheet(|1
 lib/ui/tools/advert_facts.dart|showModalBottomSheet(|1
 lib/ui/tools/adverts_screen.dart|AlertDialog(|1
 lib/ui/tools/adverts_screen.dart|showDialog(|1

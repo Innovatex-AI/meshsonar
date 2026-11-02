@@ -60,7 +60,7 @@ class AdminHarness extends Harness {
 
 Future<void> openRepeatersRow(WidgetTester tester) async {
   await tapShellTab(tester, 'More');
-  for (var i = 0; i < 3 && find.byType(BottomSheet).evaluate().isNotEmpty; i++) {
+  for (var i = 0; i < 3 && (find.byType(BottomSheet).evaluate().isNotEmpty || find.byKey(const Key('app-sheet')).evaluate().isNotEmpty); i++) {
     await tester.tapAt(const Offset(2, 2));
     await tester.pumpAndSettle();
   }

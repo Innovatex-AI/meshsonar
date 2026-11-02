@@ -211,6 +211,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('mount-roofMagMount')));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('antenna-gain-unknown')));
     await tester.tap(find.byKey(const Key('antenna-gain-unknown'))); // the seeded profile's gain is "Don't know"
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('antenna-gain-field')), '5.8');

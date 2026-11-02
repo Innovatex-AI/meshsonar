@@ -8,6 +8,7 @@
 // 'filter-counts'), 'map-leaders-sheet' ('leaders-board', 'leaders-me').
 import 'package:flutter/material.dart';
 
+import '../design/app_surfaces.dart' show showAppToast;
 import '../../core/map_filter.dart';
 import '../../core/map_styles.dart';
 import '../../core/personal_progress.dart';
@@ -52,12 +53,7 @@ class MapToolColumn extends StatelessWidget {
               tooltip: 'Base map: ${style.label}. Tap for ${style.next.label}',
               onPressed: () {
                 model.cycleBaseStyle();
-                final m = ScaffoldMessenger.maybeOf(context);
-                m?.hideCurrentSnackBar();
-                m?.showSnackBar(SnackBar(
-                  duration: const Duration(milliseconds: 1400),
-                  content: Text('${model.baseStyle.label}: ${model.baseStyle.blurb}'),
-                ));
+                showAppToast(context, '${model.baseStyle.label}: ${model.baseStyle.blurb}', duration: const Duration(milliseconds: 1400));
               },
             ),
             const SizedBox(height: Gap.s),

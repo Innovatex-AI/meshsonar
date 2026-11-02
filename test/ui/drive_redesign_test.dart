@@ -213,7 +213,8 @@ void main() {
 
     expect(find.byKey(const Key('drive-report-card')), findsNothing);
     await tester.tap(find.byKey(const Key('start-stop')));
-    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
     await tester.tap(find.byKey(const Key('stop-drive-confirm')));
     await settle(tester);
     expect(h.state.lastFinishedSessionId, isNotNull);
