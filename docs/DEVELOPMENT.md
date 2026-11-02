@@ -144,7 +144,7 @@ public map.
 `integration_test/app_flow_test.dart` runs the **real app** (real wiring, storage and engine) with the Simulator
 radio: first run → simulator drive → full-screen map → ping log → stop → drives list → drive detail → settings. It
 prints `SCREEN <name>` and then holds still for 4 s at each key screen (`onboarding`, `drive-empty`, `connect`,
-`drive-active`, `fullscreen-map`, `log`, `drive-stopped`, `drives`, `detail`, `settings`), so a script can take
+`drive-active`, `fullscreen-map` (the expanded Drive map), `log`, `drive-stopped`, `drives`, `detail`, `settings`), so a script can take
 screenshots.
 
 On the iOS Simulator:

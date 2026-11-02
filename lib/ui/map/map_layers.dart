@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../core/heard.dart';
 import '../../core/model.dart';
+import 'layers/map_layer.dart';
 
 /// How ping dots are coloured.
 enum PingColorMode {
@@ -168,3 +169,33 @@ List<HeardView> heardSnapshot(HeardTracker t) {
 
 /// "+6.5", "-3.0".
 String formatSnrShort(double snr) => '${snr > 0 ? '+' : ''}${snr.toStringAsFixed(1)}';
+
+// ---- MapLayers <-> registry MapLayerState (was layers/map_layers_adapter.dart, folded in here in Drive WP2) ----
+// Id renames: MapLayers.repeaters (heard beacons) -> `heard`, MapLayers.regionRepeaters -> `repeaters` (the website's key),
+// MapLayers.networkCoverage -> `measured`.
+extension MapLayersToState on MapLayers {
+  MapLayerState toLayerState({Map<String, String> mode = const {}}) => MapLayerState(
+    on: Set.unmodifiable({
+      if (networkCoverage) 'measured',
+      if (hexes) 'hexes',
+      if (regionRepeaters) 'repeaters',
+      if (links) 'links',
+      if (repeaters) 'heard',
+      if (pings) 'pings',
+      if (rings) 'rings',
+    }),
+    mode: Map.unmodifiable({...mode, 'pings': pingColors == PingColorMode.result ? 'result' : 'snr'}),
+  );
+}
+
+/// The `MapLayers` for [s]. Layers MapLayers has no field for (network, observers, neighbours) are not represented.
+MapLayers mapLayersFromState(MapLayerState s) => MapLayers(
+  pings: s.isOn('pings'),
+  hexes: s.isOn('hexes'),
+  pingColors: s.modeOf('pings') == 'result' ? PingColorMode.result : PingColorMode.snr,
+  repeaters: s.isOn('heard'),
+  links: s.isOn('links'),
+  rings: s.isOn('rings'),
+  networkCoverage: s.isOn('measured'),
+  regionRepeaters: s.isOn('repeaters'),
+);

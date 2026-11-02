@@ -64,7 +64,7 @@ class GpsHealthView extends StatelessWidget {
         // Opaque: over a map the words would otherwise run into the tiles and whatever sits under them.
         child: Container(
           decoration: BoxDecoration(
-            color: t.colorScheme.surface.withValues(alpha: 0.97),
+            color: t.colorScheme.surface,
             border: Border(bottom: BorderSide(color: t.colorScheme.outlineVariant)),
           ),
           padding: const EdgeInsets.symmetric(horizontal: Gap.m, vertical: Gap.xs),
@@ -98,55 +98,13 @@ class GpsHealthView extends StatelessWidget {
   }
 }
 
-/// Places the GPS health banner over the top of a map and reports its height to [height], so the overlays under it can start below.
+/// The GPS health banner for the top slot of a map (MapOverlayHost places the slots under it from its size, so no height
+/// is measured or shared).
 class GpsBannerSlot extends StatelessWidget {
   final AppState state;
-  final ValueNotifier<double> height;
   final bool compact;
-  const GpsBannerSlot({super.key, required this.state, required this.height, this.compact = false});
+  const GpsBannerSlot({super.key, required this.state, this.compact = false});
 
   @override
-  Widget build(BuildContext context) => GpsBannerHeightProbe(height: height, child: GpsHealthBanner(state: state, showWhenGood: false, compact: compact));
-}
-
-/// Measures [child] and publishes its height to [height] whenever it changes (0 when it draws nothing).
-class GpsBannerHeightProbe extends StatefulWidget {
-  final ValueNotifier<double> height;
-  final Widget child;
-  const GpsBannerHeightProbe({super.key, required this.height, required this.child});
-
-  @override
-  State<GpsBannerHeightProbe> createState() => _GpsBannerHeightProbeState();
-}
-
-class _GpsBannerHeightProbeState extends State<GpsBannerHeightProbe> {
-  void _measure() {
-    if (!mounted) return;
-    final h = (context.findRenderObject() as RenderBox?)?.size.height ?? 0;
-    if (widget.height.value != h) widget.height.value = h;
-  }
-
-  @override
-  void dispose() {
-    // The notifier belongs to the map model, which can outlive this widget: leave no stale inset behind.
-    final n = widget.height;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      try {
-        n.value = 0;
-      } catch (_) {} // already disposed with its model
-    });
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
-    return NotificationListener<SizeChangedLayoutNotification>(
-      onNotification: (_) {
-        WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
-        return false;
-      },
-      child: SizeChangedLayoutNotifier(child: widget.child),
-    );
-  }
+  Widget build(BuildContext context) => GpsHealthBanner(state: state, showWhenGood: false, compact: compact);
 }

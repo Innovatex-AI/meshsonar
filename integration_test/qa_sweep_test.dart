@@ -284,7 +284,7 @@ void main() {
           await t.tap(fs);
           await pumpFor(t, const Duration(seconds: 4));
           await shot(t, 'map-fullscreen');
-          final ml = find.byKey(const Key('map-layers'));
+          final ml = find.byKey(const Key('drive-map-layers'));
           if (ml.evaluate().isNotEmpty) {
             await t.tap(ml);
             await pumpFor(t, const Duration(seconds: 1));

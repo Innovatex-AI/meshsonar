@@ -223,6 +223,7 @@ void main() {
       final model = DriveMapModel(h.state);
       addTearDown(model.dispose);
       await tester.pumpWidget(MaterialApp(theme: meshSonarTheme(Brightness.light), home: Scaffold(body: MapKey(model: model))));
+      await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       expect(find.byKey(const Key('map-key-pings')), findsOneWidget);
       expect(find.text('+10 dB'), findsOneWidget, reason: 'default ping colours are by SNR');
@@ -238,53 +239,30 @@ void main() {
     });
   });
 
-  group('map legend fold', () {
-    testWidgets('the Drive map folds the source chip away behind the attribution line; one tap opens and closes it', (tester) async {
-      var open = false;
-      late StateSetter set;
-      await tester.pumpWidget(MaterialApp(
-        theme: meshSonarTheme(Brightness.light),
-        home: Scaffold(
-          body: StatefulBuilder(builder: (context, setState) {
-            set = setState;
-            return SizedBox(
-              width: 400,
-              height: 400,
-              child: CoverageMap(
-                pings: const [],
-                showTiles: true,
-                fallbackCenter: const LatLng(39.96, -83.0),
-                creditsOpen: open,
-                onCreditsToggle: () => set(() => open = !open),
-              ),
-            );
-          }),
-        ),
-      ));
-      await tester.pump();
-      final chip = find.byKey(const Key('map-source'));
-      expect(find.byKey(const Key('map-attribution')), findsOneWidget, reason: 'the tile credit is always visible');
-      expect(chip, findsNothing, reason: 'folded by default');
-      await tester.tap(find.byKey(const Key('map-credits-toggle')));
-      await tester.pump();
-      expect(chip, findsOneWidget);
-      await tester.tap(find.byKey(const Key('map-credits-toggle')));
-      await tester.pump();
-      expect(chip, findsNothing);
-    });
-
-    testWidgets('the full-screen map has no toggle: the credits are always shown', (tester) async {
+  group('map credits', () {
+    testWidgets('the credit line is always visible, bottom-right, and the (i) opens the Credits sheet with the source state', (tester) async {
       await tester.pumpWidget(MaterialApp(
         theme: meshSonarTheme(Brightness.light),
         home: Scaffold(body: SizedBox(width: 400, height: 400, child: CoverageMap(pings: const [], showTiles: true, fallbackCenter: const LatLng(39.96, -83.0)))),
       ));
       await tester.pump();
-      expect(find.byKey(const Key('map-credits-toggle')), findsNothing);
-      expect(find.byKey(const Key('map-source')), findsOneWidget);
+      final line = find.byKey(const Key('map-attribution'));
+      expect(line, findsOneWidget, reason: 'the tile credit is always visible');
+      final r = tester.getRect(line);
+      expect(r.right, greaterThan(400 - 20), reason: 'right edge');
+      expect(r.bottom, greaterThan(400 - 20), reason: 'bottom edge');
+      expect(find.byKey(const Key('map-source')), findsNothing, reason: 'the source chip left the map');
+      await tester.tap(find.byKey(const Key('map-attribution-info')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.byKey(const Key('credits-sheet')), findsOneWidget);
+      expect(find.byKey(const Key('credits-source')), findsOneWidget);
+      expect(find.byKey(const Key('map-source')), findsOneWidget, reason: 'where the base map comes from, in the sheet');
     });
 
     testWidgets('no coverage percentage box and no neighbouring-region pointers on the map', (tester) async {
       final h = await driving(tester, pings: [heardPing('p1', const [Echo(repeater: 'a1', snrDb: 6)])]);
+      await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       expect(find.byKey(const Key('drive-coverage-pct')), findsNothing);
       expect(find.byKey(const Key('region-neighbours-layer')), findsNothing);

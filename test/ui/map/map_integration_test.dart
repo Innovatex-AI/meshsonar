@@ -220,16 +220,24 @@ void main() {
       }
       await closeSheet(t);
       expect(find.byKey(const ValueKey('layer-network-paint')), findsOneWidget);
-      expect(find.byKey(const Key('map-network-attribution')), findsNothing, reason: 'the Drive map folds its legend away by default');
-      await t.tap(find.byKey(const Key('map-credits-toggle')));
-      await t.pump(const Duration(milliseconds: 300));
+      expect(find.byKey(const Key('map-network-attribution')), findsNothing, reason: 'no legend stack on the map; the key lives in the Credits sheet');
+      expect(find.byKey(const Key('map-attribution-meshcore')), findsOneWidget, reason: 'MeshCore Map is credited in the corner line while its layer draws');
+      await t.tap(find.byKey(const Key('map-attribution-info')));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 400));
+      expect(find.byKey(const Key('credits-sheet')), findsOneWidget);
+      expect(find.byKey(const Key('credits-meshcore')), findsOneWidget);
       expect(find.byKey(const Key('map-network-attribution')), findsOneWidget);
       expect(find.byKey(const Key('map-network-legend')), findsOneWidget);
+      await t.tapAt(const Offset(200, 40));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 400));
 
       await t.tap(find.byKey(const Key('map-fullscreen')));
       await t.pump();
+      await t.pump();
       await t.pump(const Duration(milliseconds: 400));
-      expect(find.byKey(const ValueKey('layer-network-paint'), skipOffstage: false), findsNWidgets(2), reason: 'both maps draw it (layer state is shared)');
+      expect(find.byKey(const ValueKey('layer-network-paint'), skipOffstage: false), findsOneWidget, reason: 'one map instance: expanding does not mount a second');
     });
 
     testWidgets('stale: the stored list stays on, the sheet says it is an offline copy with Retry', (t) async {

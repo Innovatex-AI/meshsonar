@@ -74,10 +74,8 @@ import 'cell_sheet.dart';
 import 'region_center.dart' show continentalCenter, continentalZoom;
 import '../../app/app_state.dart' show AppState;
 import '../app.dart' show AppScope;
-import 'layers/layers_sheet.dart' show NetworkAgeLegend;
 import 'layers/link_lines_layer.dart';
 import 'layers/map_layer.dart';
-import 'layers/map_layers_adapter.dart';
 import 'layers/observer_layer.dart';
 import 'layers/repeater_cluster_layer.dart';
 import 'layers/repeater_map_source.dart';
@@ -92,6 +90,20 @@ import '../../core/offline_packs.dart' show NetworkKind;
 import '../../platform/map_prefs_store.dart' show openSharedMapPrefs;
 import 'live_puck.dart';
 import 'map_layers.dart';
+import 'core/map_hit_resolver.dart';
+import 'core/map_view_controller.dart';
+import 'overlays/attribution_line.dart';
+import 'overlays/credits_sheet.dart';
+import 'overlays/map_overlay_host.dart';
+import 'parts/chart_grid.dart';
+import 'parts/map_chips.dart';
+import 'parts/map_compass.dart';
+import 'parts/map_markers.dart';
+import 'parts/range_rings.dart';
+import 'parts/simulated_tag.dart';
+import 'parts/source_chip.dart';
+
+export 'parts/simulated_tag.dart' show SimulatedTag;
 import 'offline_basemap.dart';
 import 'sheets/map_hit_sheet.dart';
 import '../ping_detail_sheet.dart' show PingDetailSheet;
@@ -265,18 +277,22 @@ class CoverageMap extends StatefulWidget {
   /// so the drive's cells rescale as you zoom.
   final int? hexRes;
 
-  /// The Drive screen's small map folds the source chip and the repeater legend away behind the attribution line (which stays,
-  /// the tile licence needs it); [creditsOpen] says whether they show and [onCreditsToggle] flips it. Null = always open (the
-  /// full-screen map).
-  final bool? creditsOpen;
-  final VoidCallback? onCreditsToggle;
-
-  /// The colour key for what this map is drawing (see map_key.dart). Null = the older behaviour: only the repeater-age legend.
+  /// The colour key for what this map is drawing (see map_key.dart): shown in the Credits sheet, not on the map. Null = none.
   final Widget? mapKey;
 
-  /// Overlays the parent draws over this map (heard box, button column), found by key at paint time: repeater names are
-  /// never placed under them.
-  final List<GlobalKey> labelAvoidKeys;
+  /// "What do the colours mean?" in the Credits sheet. Null = no button.
+  final VoidCallback? openLegend;
+
+  /// The camera and follow state shared with the host (the Drive model owns one for the whole app session, so the in-tab map and
+  /// the expanded map are the same camera). Null = this map makes its own and disposes it.
+  final MapViewController? viewController;
+
+  // Overlay slots (MapOverlayHost, overlays/map_overlay_host.dart). The map mounts the host and the attribution line itself, so
+  // no screen can forget the credit; screens only fill the slots.
+  final Widget? banner;
+  final Widget? topLeading;
+  final Widget? topTrailing;
+  final Widget? bottom;
 
   /// The base map under the data (street / dark / topo cycler). Offline region packs are drawn for every style that
   /// [BaseMapStyle.usesOfflinePack].
@@ -323,10 +339,13 @@ class CoverageMap extends StatefulWidget {
     this.simulated = false,
     this.onZoomChanged,
     this.hexRes,
-    this.creditsOpen,
-    this.onCreditsToggle,
     this.mapKey,
-    this.labelAvoidKeys = const [],
+    this.openLegend,
+    this.viewController,
+    this.banner,
+    this.topLeading,
+    this.topTrailing,
+    this.bottom,
     this.baseStyle = BaseMapStyle.chart,
     this.onBoundsChanged,
     this.telemetry,
@@ -355,10 +374,13 @@ class CoverageMap extends StatefulWidget {
 
 class _CoverageMapState extends State<CoverageMap> {
   static final StrokePattern _dashed = StrokePattern.dashed(segments: const [10, 8]);
-  final MapController _controller = MapController();
+  late final MapViewController _vc = widget.viewController ?? MapViewController();
+  late final bool _ownsVc = widget.viewController == null;
+  MapController get _controller => _vc.map;
+  final MapHitResolver _hits = MapHitResolver();
   bool _ready = false;
   // Follow state: the camera drives itself until the person moves the map (lib/core/camera_follow.dart).
-  final CameraFollow _fc = CameraFollow(autoResume: null);
+  CameraFollow get _fc => _vc.follow;
   MapPrefs get _prefs => widget.prefs ?? MapPrefs.shared;
   DateTime _now() => widget.puck?.clock() ?? DateTime.now();
   bool get _follow => _fc.following;
@@ -370,9 +392,11 @@ class _CoverageMapState extends State<CoverageMap> {
     }
   }
 
-  double _userZoom = 14;
-  double _zoomOffset = 0;
-  final ValueNotifier<double> _rotationN = ValueNotifier<double>(0);
+  double get _userZoom => _vc.userZoom;
+  set _userZoom(double v) => _vc.userZoom = v;
+  double get _zoomOffset => _vc.zoomOffset;
+  set _zoomOffset(double v) => _vc.zoomOffset = v;
+  ValueNotifier<double> get _rotationN => _vc.rotation;
   DateTime _lastBounds = DateTime.fromMillisecondsSinceEpoch(0);
   Timer? _boundsTimer;
   final StreamController<void> _tileReset = StreamController<void>.broadcast();
@@ -427,8 +451,6 @@ class _CoverageMapState extends State<CoverageMap> {
   NetworkCell? _panelCell;
   DrivePing? _panelPing;
   final ScrollController _pingScroll = ScrollController();
-  DateTime? _hitAt; // when a repeater/observer/cluster was last tapped
-  Timer? _mapTapTimer;
   RepeaterPoint? _panelPoint;
   ReachTotals? _reachTotals;
 
@@ -730,8 +752,12 @@ class _CoverageMapState extends State<CoverageMap> {
 
   /// A tap on a clustered repeater layer or an observer (cells come through [MapOptions.onTap]).
   void _onHit(MapHit hit) {
-    _hitAt = DateTime.now();
-    _mapTapTimer?.cancel(); // the same tap also reaches the map: it must not open the cell underneath
+    // One tap, one decision (MapHitResolver): the same tap also reaches the map itself and any marker under the finger.
+    _hits.submit(MapHitCandidate(hit is ObserverHit ? MapHitKind.observer : MapHitKind.repeater, () => _applyHit(hit)));
+  }
+
+  void _applyHit(MapHit hit) {
+    if (!mounted) return;
     if (hit is ClusterHit && hit.colocated.length <= 1) setState(() => _follow = false); // the camera moves to it
     final here = widget.position ?? (_latest == null ? null : LatLng(_latest!.lat, _latest!.lon));
     if (hit is RepeaterHit) {
@@ -841,6 +867,7 @@ class _CoverageMapState extends State<CoverageMap> {
   }
 
   CameraFit? get _initialFit {
+    if (_hadCamera) return null;
     if (widget.fitToPings && widget.pings.length >= 2) {
       return CameraFit.coordinates(
         coordinates: [for (final p in widget.pings) LatLng(p.lat, p.lon)],
@@ -864,11 +891,19 @@ class _CoverageMapState extends State<CoverageMap> {
     return null;
   }
 
+  /// True when a map was mounted on this controller before: its camera is kept, the starting fit is not applied again.
+  bool _hadCamera = false;
+
   @override
   void initState() {
     super.initState();
     _selectedRepeater = widget.highlightKey;
-    if (!widget.follow) _fc.userMoved(_now());
+    _hadCamera = _vc.initialised;
+    if (!_hadCamera) {
+      _vc.initialised = true;
+      if (!widget.follow) _fc.userMoved(_now());
+    }
+    _hits.onNothing = _clearLinks; // a tap on nothing puts the lines away
     _applyPrefs();
     _prefs.addListener(_onPrefs);
     if (widget.puck != null) unawaited(openSharedMapPrefs());
@@ -1087,19 +1122,17 @@ class _CoverageMapState extends State<CoverageMap> {
 
   @override
   void dispose() {
-    _mapTapTimer?.cancel();
+    _hits.dispose();
     _boundsTimer?.cancel();
     _prefs.removeListener(_onPrefs);
     unawaited(_netSub?.cancel());
     unawaited(_tileReset.close());
     _tileProvider?.dispose();
-    _rotationN.dispose();
-    _fc.dispose();
     _pingScroll.dispose();
     _pack.basemap.removeListener(_onPacksChanged);
     _ownSource?.dispose();
     _ownFeed?.dispose();
-    _controller.dispose();
+    if (_ownsVc) _vc.dispose();
     super.dispose();
   }
 
@@ -1199,6 +1232,7 @@ class _CoverageMapState extends State<CoverageMap> {
     final style = widget.baseStyle;
     final tileGrading = tileMatrixFor(style, mc.tileMatrix);
     final tiles = widget.showTiles ?? CoverageMap.tilesByDefault;
+    final wide = MediaQuery.sizeOf(context).shortestSide >= 600;
     // A downloaded region pack covering the map wins over online tiles; no pack (or a corrupt one) means online as before.
     final offlinePack = tiles && style.usesOfflinePack ? _pack.reader : null;
     final layers = widget.layers;
@@ -1212,8 +1246,6 @@ class _CoverageMapState extends State<CoverageMap> {
     final networkSource = widget.repeaterSource;
     final rosterSource = layerState.isOn(kRosterLayerId) ? _rosterSource() : null;
     final showNetwork = networkSource != null && layerState.isOn(kNetworkLayerId);
-    final foldable = widget.creditsOpen != null;
-    final creditsShown = widget.creditsOpen ?? true;
 
     // Legacy links (no heard list): from the newest ping to what it heard.
     final links = (!heardMode && showLinks && latest != null)
@@ -1232,14 +1264,9 @@ class _CoverageMapState extends State<CoverageMap> {
     RepeaterRef? selected;
     if (_selectedRepeater != null) selected = _refFor(_selectedRepeater!);
 
-    return LayoutBuilder(builder: (context, box) {
-    // A short pane (a phone's drive map) has no room for the compass / heading / recenter buttons under the tool column, so
-    // they sit to its left instead of under it.
-    final compact = box.maxHeight < kCompactMapHeight;
-    final sideShift = compact && widget.interactive ? 52.0 : 0.0;
-    return Stack(
-      children: [
-        FlutterMap(
+    return MapOverlayHost(
+      slotKeys: _slotKeys,
+      map: FlutterMap(
           mapController: _controller,
           options: MapOptions(
             initialCenter: _initialCenter,
@@ -1278,20 +1305,14 @@ class _CoverageMapState extends State<CoverageMap> {
               }
             },
             onTap: (_, point) {
-              // A repeater (or observer, or cluster) drawn on top of a cell gets the same tap as the cell under it. Give the
-              // layer a moment to say it took the tap; the cell only opens when nothing else did.
-              _mapTapTimer?.cancel();
-              _mapTapTimer = Timer(const Duration(milliseconds: 90), () {
-                if (!mounted) return;
-                final at = _hitAt;
-                if (at != null && DateTime.now().difference(at) < const Duration(milliseconds: 600)) return;
-                final hit = widget.layers.networkCoverage ? networkCellAt(widget.networkCells, point) : null;
-                if (hit == null) {
-                  _clearLinks(); // a tap on nothing puts the lines away
-                  return;
-                }
-                _showCellLinks(hit);
-              });
+              // A repeater, ping, observer or cluster drawn on top of a cell gets the tap, not the cell under it: the cell is
+              // only one candidate, and the resolver picks the winner by priority once the tap has reached every source.
+              final cell = widget.layers.networkCoverage ? networkCellAt(widget.networkCells, point) : null;
+              if (cell == null) {
+                _hits.tapReachedMap();
+              } else {
+                _hits.submit(MapHitCandidate(MapHitKind.cell, () => _showCellLinks(cell)));
+              }
             },
             onPositionChanged: (camera, hasGesture) {
               _reportBounds();
@@ -1318,7 +1339,7 @@ class _CoverageMapState extends State<CoverageMap> {
             },
           ),
           children: [
-            _ChartGrid(color: mc.mapGrid),
+            ChartGrid(color: mc.mapGrid),
             // Online + disk-cached tiles everywhere, except where an installed offline pack draws (no request for those); the
             // pack's vector tiles go on top of that. Where a pack ends the online/cached tiles carry on: never a blank edge.
             if (tiles)
@@ -1330,8 +1351,10 @@ class _CoverageMapState extends State<CoverageMap> {
                 tileProvider: _tiles(),
                 reset: _tileReset.stream,
                 tileDisplay: const TileDisplay.fadeIn(duration: Duration(milliseconds: 150)),
-                keepBuffer: 2,
-                panBuffer: 1,
+                // Wide viewports (iPad, 4.21) keep and pre-load more rings so a pan or a first paint shows tiles, not grey squares;
+                // the chart grid underneath stays as the fallback for any tile that is still on its way.
+                keepBuffer: wide ? 4 : 2,
+                panBuffer: wide ? 2 : 1,
                 // Street and Topo are drawn as the tile server made them; Chart is graded to the theme, Dark to the dark chart.
                 tileBuilder: tileGrading == null
                     ? null
@@ -1352,7 +1375,7 @@ class _CoverageMapState extends State<CoverageMap> {
                   listenable: puck,
                   builder: (context, _) {
                     final p = puck.pose;
-                    return _RangeRings(
+                    return RangeRings(
                       center: p == null ? pos : LatLng(p.lat, p.lon),
                       color: t.colorScheme.primary,
                       ringMetres: AppScope.unitsOf(context).rangeRingMetres,
@@ -1360,7 +1383,7 @@ class _CoverageMapState extends State<CoverageMap> {
                   },
                 )
               else
-                _RangeRings(center: pos, color: t.colorScheme.primary, ringMetres: AppScope.unitsOf(context).rangeRingMetres),
+                RangeRings(center: pos, color: t.colorScheme.primary, ringMetres: AppScope.unitsOf(context).rangeRingMetres),
             if (widget.showRings && layers.rings && pos != null && _captions)
               MarkerLayer(
                 markers: [
@@ -1442,7 +1465,7 @@ class _CoverageMapState extends State<CoverageMap> {
                       point: LatLng(r.lat, r.lon),
                       width: 56,
                       height: 56,
-                      child: _RepeaterMarker(
+                      child: RepeaterMarker(
                         key: ValueKey('map-repeater-${r.key}'),
                         repeaterKey: r.key,
                         name: r.name,
@@ -1452,7 +1475,7 @@ class _CoverageMapState extends State<CoverageMap> {
                         phase: heardMode ? _heardByKey[r.key]?.phase : (legacyLit.contains(r.key) ? HeardPhase.fresh : null),
                         heardAt: _heardByKey[r.key]?.lastPingIndex,
                         selected: r.key == _selectedRepeater,
-                        onTap: () {
+                        onTap: () => _hits.submit(MapHitCandidate(MapHitKind.repeater, () {
                           final on = _selectedRepeater != r.key;
                           _select(on ? r.key : null);
                           if (on) {
@@ -1460,7 +1483,7 @@ class _CoverageMapState extends State<CoverageMap> {
                           } else {
                             _clearLinks();
                           }
-                        },
+                        })),
                       ),
                     ),
                 ],
@@ -1476,8 +1499,8 @@ class _CoverageMapState extends State<CoverageMap> {
                       child: GestureDetector(
                         key: ValueKey('map-ping-tap-${p.id}'),
                         behavior: HitTestBehavior.opaque,
-                        onTap: () => _showPingLinks(p),
-                        child: _PingDot(
+                        onTap: () => _hits.submit(MapHitCandidate(MapHitKind.ping, () => _showPingLinks(p))),
+                        child: PingDot(
                           dotKey: ValueKey('map-ping-${p.id}'),
                           color: pingColor(mc, p, layers.pingColors),
                           ring: t.colorScheme.surface,
@@ -1500,7 +1523,7 @@ class _CoverageMapState extends State<CoverageMap> {
                       height: 24,
                       child: IgnorePointer(
                         child: Center(
-                          child: _MapTag(
+                          child: MapTag(
                             key: ValueKey('map-link-distance-${h.ref!.key}'),
                             text: AppScope.unitsOf(context).distance(approx: true, haversineM(origin.latitude, origin.longitude, h.ref!.lat, h.ref!.lon)),
                             color: h.phase == HeardPhase.fresh ? mc.beacon : t.colorScheme.outline,
@@ -1522,7 +1545,7 @@ class _CoverageMapState extends State<CoverageMap> {
                         alignment: const Alignment(0, 2.6),
                         child: IgnorePointer(
                           child: Center(
-                            child: _MapTag(
+                            child: MapTag(
                               key: ValueKey('map-heard-label-${h.ref!.key}'),
                               text: h.snrDb == null ? h.label : '${h.label}  ${formatSnrShort(h.snrDb!)}',
                               color: h.phase == HeardPhase.fresh ? mc.beacon : t.colorScheme.outline,
@@ -1543,7 +1566,7 @@ class _CoverageMapState extends State<CoverageMap> {
                     width: 48,
                     height: 48,
                     child: IgnorePointer(
-                      child: _PositionMarker(
+                      child: PositionMarker(
                         key: const Key('map-position'),
                         color: t.colorScheme.primary,
                         ring: t.colorScheme.surface,
@@ -1592,7 +1615,7 @@ class _CoverageMapState extends State<CoverageMap> {
                       alignment: Alignment.bottomCenter,
                       child: Padding(
                         padding: const EdgeInsets.only(bottom: 30),
-                        child: _RepeaterLabel(
+                        child: RepeaterLabel(
                           onTap: () => _select(null),
                           name: _nameFor(selected),
                           keyHex: selected.key,
@@ -1606,157 +1629,136 @@ class _CoverageMapState extends State<CoverageMap> {
               ),
           ],
         ),
-        // Attribution (required by the OSM tile licence), the offline note and the simulator tag.
-        Positioned(
-          left: Gap.s + widget.overlayPadding.left,
-          bottom: Gap.s + widget.overlayPadding.bottom,
-          right: 72 + sideShift + widget.overlayPadding.right,
-          child: Column(
-            key: _stackKey,
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (_panel(context) case final panel?) ...[SizedBox(width: double.infinity, child: panel), const SizedBox(height: Gap.xs)],
-              if (widget.simulated) ...[
-                const SimulatedTag(key: Key('map-simulated')),
-                const SizedBox(height: Gap.xs),
-              ],
-              if (!tiles) ...[
-                _Pill(
-                  key: const Key('map-offline'),
-                  child: InkWell(
-                    key: foldable ? const Key('map-credits-toggle') : null,
-                    onTap: foldable ? widget.onCreditsToggle : null,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.cloud_off_rounded, size: 13, color: mc.textMuted),
-                        const SizedBox(width: 4),
-                        Flexible(
-                          child: Text(
-                            'Map offline. Pings still record.',
-                            overflow: TextOverflow.ellipsis,
-                            style: t.textTheme.labelSmall?.copyWith(fontSize: 11),
-                          ),
-                        ),
-                        if (foldable) Icon(creditsShown ? Icons.expand_more_rounded : Icons.expand_less_rounded, size: 16, color: mc.textMuted),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-              if (tiles && creditsShown) ...[
-                _SourceChip(
-                  stats: _tileStats,
-                  gate: _tiles().gate,
-                  packName: _pack.code == null ? null : (_pack.basemap.managerOrNull?.installed[_pack.code]?.name ?? _pack.code),
-                  clock: _now,
-                ),
-                const SizedBox(height: Gap.xs),
-              ],
-              if (tiles)
-                _Pill(
-                  key: const Key('map-attribution'),
-                  child: foldable
-                      ? InkWell(
-                          key: const Key('map-credits-toggle'),
-                          onTap: widget.onCreditsToggle,
-                          child: Semantics(
-                            button: true,
-                            label: creditsShown ? 'Hide map legend' : 'Show map legend',
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Flexible(child: Text(style.attribution, overflow: TextOverflow.ellipsis, style: t.textTheme.labelSmall?.copyWith(fontSize: 11))),
-                                const SizedBox(width: 2),
-                                Icon(creditsShown ? Icons.expand_more_rounded : Icons.expand_less_rounded, size: 16, color: mc.textMuted),
-                              ],
-                            ),
-                          ),
-                        )
-                      : Text(style.attribution, style: t.textTheme.labelSmall?.copyWith(fontSize: 11)),
-                ),
-              // The global repeater layer's legend and credit (its data is MeshCore Map's), only while it draws.
-              if (widget.mapKey != null && creditsShown)
-                Padding(padding: const EdgeInsets.only(top: Gap.xs), child: _Pill(key: const Key('map-key'), child: widget.mapKey!)),
-              if (widget.mapKey == null && showNetwork && creditsShown)
-                ListenableBuilder(
-                  listenable: networkSource,
-                  builder: (context, _) {
-                    if (networkSource.globalPoints.length == 0) return const SizedBox.shrink();
-                    final set = networkSource.feed.global;
-                    return Padding(
-                      padding: const EdgeInsets.only(top: Gap.xs),
-                      child: _Pill(
-                        key: const Key('map-network-attribution'),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            NetworkAgeLegend(set: set, dense: true),
-                            if (set.attribution != null)
-                              Text(set.attribution!, style: t.textTheme.labelSmall?.copyWith(fontSize: 11)),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-            ],
-          ),
-        ),
-        Positioned(
-          right: Gap.m + sideShift + widget.overlayPadding.right,
-          bottom: Gap.m + widget.overlayPadding.bottom,
-          child: Column(
-            key: _buttonsKey,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (widget.rotatable) ...[
-                ValueListenableBuilder<double>(
-                  valueListenable: _rotationN,
-                  builder: (context, rot, _) => _Compass(rotation: rot, onPressed: _northUp),
-                ),
-                const SizedBox(height: Gap.s),
-              ],
-              if (widget.puck != null && widget.interactive) ...[
-                FloatingActionButton.small(
-                  key: const Key('map-heading-toggle'),
-                  heroTag: null,
-                  tooltip: _prefs.headingUp ? 'Heading up (tap for north up)' : 'North up (tap for heading up)',
-                  onPressed: () => _prefs.headingUp = !_prefs.headingUp,
-                  child: Icon(_prefs.headingUp ? Icons.navigation_rounded : Icons.explore_outlined),
-                ),
-                const SizedBox(height: Gap.s),
-              ],
-              if (!_follow && (pos != null || latest != null))
-                FloatingActionButton.small(
-                  key: const Key('map-recenter'),
-                  heroTag: null,
-                  tooltip: 'Recenter and follow',
-                  onPressed: _recenter,
-                  child: const Icon(Icons.my_location_rounded),
-                ),
-            ],
-          ),
-        ),
-      ],
+      banner: widget.banner,
+      topLeading: widget.topLeading,
+      topTrailing: widget.topTrailing,
+      controls: _controls(context, pos, latest),
+      bottom: _bottomColumn(context, tiles, mc, t),
+      // The credit: always mounted (Drive plan section 8), bottom-right, tapped (i) opens the Credits sheet.
+      attribution: networkSource == null
+          ? AttributionLine(style: style, onInfo: () => _openCredits(context, style, tiles, null))
+          : ListenableBuilder(
+              listenable: networkSource,
+              builder: (context, _) {
+                final meshCore = showNetwork && networkSource.globalPoints.length > 0;
+                return AttributionLine(
+                  style: style,
+                  showMeshCore: meshCore,
+                  onInfo: () => _openCredits(context, style, tiles, meshCore ? (networkSource.feed.global.attribution ?? 'MeshCore Map') : null),
+                );
+              },
+            ),
     );
-    });
   }
 
-  final GlobalKey _stackKey = GlobalKey(debugLabel: 'map-credit-stack');
-  final GlobalKey _buttonsKey = GlobalKey(debugLabel: 'map-buttons');
+  void _openCredits(BuildContext context, BaseMapStyle style, bool tiles, String? meshCoreCredit) {
+    showMapCredits(
+      context,
+      style: style,
+      sourceState: tiles
+          ? SourceChip(
+              stats: _tileStats,
+              gate: _tiles().gate,
+              packName: _pack.code == null ? null : (_pack.basemap.managerOrNull?.installed[_pack.code]?.name ?? _pack.code),
+              clock: _now,
+            )
+          : null,
+      colourKey: widget.mapKey,
+      meshCoreCredit: meshCoreCredit,
+      openLegend: widget.openLegend == null
+          ? null
+          : () {
+              Navigator.of(context, rootNavigator: true).maybePop();
+              widget.openLegend!();
+            },
+    );
+  }
 
-  /// Where the overlays sit, in this map's own coordinates (the credit stack, the recenter/compass buttons and the
-  /// parent's [CoverageMap.labelAvoidKeys]), a little inflated. Read at paint time, so one frame behind a layout change.
+  /// The bottom slot: what the host puts there, then this map's own status (the info panel, the SIMULATED tag, the offline note).
+  /// Nothing here is a credit; the credit is the [AttributionLine].
+  Widget? _bottomColumn(BuildContext context, bool tiles, MeshSonarColors mc, ThemeData t) {
+    final panel = _panel(context);
+    final children = <Widget>[
+      ?widget.bottom,
+      if (panel != null) ...[SizedBox(width: double.infinity, child: panel), const SizedBox(height: Gap.xs)],
+      if (widget.simulated) ...[const SimulatedTag(key: Key('map-simulated')), const SizedBox(height: Gap.xs)],
+      if (!tiles)
+        MapPill(
+          key: const Key('map-offline'),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.cloud_off_rounded, size: 13, color: mc.textMuted),
+              const SizedBox(width: 4),
+              Flexible(child: Text('Map offline. Pings still record.', overflow: TextOverflow.ellipsis, style: t.textTheme.labelSmall?.copyWith(fontSize: 11))),
+            ],
+          ),
+        ),
+    ];
+    if (children.isEmpty) return null;
+    return Column(
+      key: _stackKey,
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: children,
+    );
+  }
+
+  /// The round buttons above the attribution: compass (rotatable), heading-up toggle (live puck), recenter (not following).
+  Widget? _controls(BuildContext context, LatLng? pos, DrivePing? latest) {
+    final showHeading = widget.puck != null && widget.interactive;
+    final showRecenter = !_follow && (pos != null || latest != null);
+    if (!widget.rotatable && !showHeading && !showRecenter) return null;
+    return Column(
+      key: _buttonsKey,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (widget.rotatable) ...[
+          ValueListenableBuilder<double>(
+            valueListenable: _rotationN,
+            builder: (context, rot, _) => MapCompass(rotation: rot, onPressed: _northUp),
+          ),
+          const SizedBox(height: Gap.s),
+        ],
+        if (showHeading) ...[
+          FloatingActionButton.small(
+            key: const Key('map-heading-toggle'),
+            heroTag: null,
+            tooltip: _prefs.headingUp ? 'Heading up (tap for north up)' : 'North up (tap for heading up)',
+            onPressed: () => _prefs.headingUp = !_prefs.headingUp,
+            child: Icon(_prefs.headingUp ? Icons.navigation_rounded : Icons.explore_outlined),
+          ),
+          const SizedBox(height: Gap.s),
+        ],
+        if (showRecenter)
+          FloatingActionButton.small(
+            key: const Key('map-recenter'),
+            heroTag: null,
+            tooltip: 'Recenter and follow',
+            onPressed: _recenter,
+            child: const Icon(Icons.my_location_rounded),
+          ),
+      ],
+    );
+  }
+
+  final GlobalKey _stackKey = GlobalKey(debugLabel: 'map-bottom-stack');
+  final GlobalKey _buttonsKey = GlobalKey(debugLabel: 'map-buttons');
+  late final Map<MapSlot, GlobalKey> _slotKeys = {
+    MapSlot.banner: GlobalKey(debugLabel: 'slot-banner'),
+    MapSlot.topLeading: GlobalKey(debugLabel: 'slot-top-leading'),
+    MapSlot.topTrailing: GlobalKey(debugLabel: 'slot-top-trailing'),
+  };
+
+  /// Where the overlays sit, in this map's own coordinates (the bottom stack, the recenter/compass buttons and the
+  /// banner / top slots), a little inflated. Read at paint time, so one frame behind a layout change.
   List<Rect> _overlayRects() {
     if (!mounted) return const [];
     try {
       final mapBox = context.findRenderObject();
       if (mapBox is! RenderBox || !mapBox.hasSize) return const [];
       final out = <Rect>[];
-      for (final k in [_stackKey, _buttonsKey, ...widget.labelAvoidKeys]) {
+      for (final k in [_stackKey, _buttonsKey, ..._slotKeys.values]) {
         final c = k.currentContext;
         if (c == null || !c.mounted) continue;
         final o = c.findRenderObject();
@@ -1792,507 +1794,4 @@ class _CoverageMapState extends State<CoverageMap> {
   }
 
   static LatLng _offsetNorth(LatLng p, double metres) => LatLng(p.latitude + metres / 111320.0, p.longitude);
-}
-
-/// The small "this isn't real" tag shown on the map and the connection chip in Simulator mode.
-class SimulatedTag extends StatelessWidget {
-  final bool dense;
-  const SimulatedTag({super.key, this.dense = false});
-  @override
-  Widget build(BuildContext context) {
-    final mc = MeshSonarColors.of(context);
-    final t = Theme.of(context);
-    return Tooltip(
-      message: 'Simulator mode: the position moves along a demo route and the radio is simulated.',
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: mc.beacon.withValues(alpha: 0.92),
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: dense ? 4 : 7, vertical: dense ? 1 : 3),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.science_rounded, size: dense ? 10 : 13, color: mc.onBeacon),
-              SizedBox(width: dense ? 2 : 4),
-              Flexible(
-                child: Text(
-                  'SIMULATED GPS & RADIO',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: t.textTheme.labelSmall?.copyWith(
-                    color: mc.onBeacon,
-                    fontSize: dense ? 9 : 11,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.6,
-                    height: 1.1,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Where the base map is coming from right now: the installed offline pack, the network, or the disk cache with no signal.
-class _SourceChip extends StatefulWidget {
-  final MapTileStats stats;
-  final TileFetchGate gate;
-  final String? packName;
-  final DateTime Function() clock;
-  const _SourceChip({required this.stats, required this.gate, required this.packName, required this.clock});
-
-  @override
-  State<_SourceChip> createState() => _SourceChipState();
-}
-
-class _SourceChipState extends State<_SourceChip> {
-  late MapSource _source = _compute();
-
-  MapSource _compute() => currentMapSource(widget.stats, widget.clock(), packActive: widget.packName != null, gateOpen: widget.gate.isOpen);
-
-  @override
-  void initState() {
-    super.initState();
-    widget.stats.addListener(_changed);
-  }
-
-  void _changed() {
-    final n = _compute();
-    if (n != _source && mounted) setState(() => _source = n);
-  }
-
-  @override
-  void didUpdateWidget(_SourceChip old) {
-    super.didUpdateWidget(old);
-    final n = _compute();
-    if (n != _source) _source = n;
-  }
-
-  @override
-  void dispose() {
-    widget.stats.removeListener(_changed);
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    final mc = MeshSonarColors.of(context);
-    final (icon, text, color) = switch (_source) {
-      MapSource.offlinePack => (Icons.download_done_rounded, 'Offline map: ${widget.packName ?? 'pack'}', mc.snrStrong),
-      MapSource.online => (Icons.cloud_done_outlined, 'Online map', mc.textMuted),
-      MapSource.cachedOffline => (Icons.sd_storage_outlined, 'Saved map (no signal)', mc.beacon),
-      MapSource.none => (Icons.cloud_off_rounded, 'No map here (no signal)', mc.beacon),
-    };
-    return _Pill(
-      key: _source == MapSource.cachedOffline || _source == MapSource.none ? const Key('map-offline') : const Key('map-source'),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 13, color: color),
-          const SizedBox(width: 4),
-          Flexible(child: Text(text, overflow: TextOverflow.ellipsis, style: t.textTheme.labelSmall?.copyWith(fontSize: 11))),
-        ],
-      ),
-    );
-  }
-}
-
-class _Compass extends StatelessWidget {
-  final double rotation;
-  final VoidCallback onPressed;
-  const _Compass({required this.rotation, required this.onPressed});
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    final northUp = rotation.abs() < 0.5;
-    return FloatingActionButton.small(
-      key: const Key('map-compass'),
-      heroTag: null,
-      tooltip: northUp ? 'North up' : 'Turn map north up',
-      onPressed: onPressed,
-      child: Transform.rotate(
-        angle: rotation * math.pi / 180,
-        child: Icon(Icons.navigation_rounded, color: northUp ? t.colorScheme.onSurface : t.colorScheme.error),
-      ),
-    );
-  }
-}
-
-/// A small text pill drawn on the map (distance on a link, a heard repeater's name).
-class _MapTag extends StatelessWidget {
-  final String text;
-  final Color color;
-  final bool strong;
-  const _MapTag({super.key, required this.text, required this.color, this.strong = false});
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: t.colorScheme.surface.withValues(alpha: 0.88),
-        borderRadius: BorderRadius.circular(7),
-        border: Border.all(color: color.withValues(alpha: strong ? 0.9 : 0.5), width: strong ? 1.4 : 1),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-        child: Text(
-          text,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: numberStyle(
-            context,
-            size: 12.5,
-            weight: FontWeight.w600,
-            color: strong ? t.colorScheme.onSurface : t.colorScheme.onSurfaceVariant,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _Pill extends StatelessWidget {
-  final Widget child;
-  const _Pill({super.key, required this.child});
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: t.colorScheme.surface.withValues(alpha: 0.82),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Padding(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3), child: child),
-    );
-  }
-}
-
-class _PingDot extends StatelessWidget {
-  final Key dotKey;
-  final Color color;
-  final Color ring;
-  final bool pulse;
-  const _PingDot({required this.dotKey, required this.color, required this.ring, required this.pulse});
-
-  @override
-  Widget build(BuildContext context) {
-    final dot = DecoratedBox(
-      key: dotKey,
-      decoration: BoxDecoration(
-        color: color,
-        shape: BoxShape.circle,
-        border: Border.all(color: ring, width: 2),
-      ),
-      child: const SizedBox(width: 15, height: 15),
-    );
-    if (!pulse) return Center(child: dot);
-    // One expanding ring when a ping lands (not repeating, so the map is calm between pings).
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 1400),
-      curve: Curves.easeOutCubic,
-      builder: (context, v, child) => Stack(
-        alignment: Alignment.center,
-        children: [
-          if (v < 1)
-            Container(
-              width: 15 + 25 * v,
-              height: 15 + 25 * v,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: color.withValues(alpha: 1 - v), width: 2.5),
-              ),
-            ),
-          child!,
-        ],
-      ),
-      child: dot,
-    );
-  }
-}
-
-class _PositionMarker extends StatelessWidget {
-  final Color color;
-  final Color ring;
-  const _PositionMarker({super.key, required this.color, required this.ring});
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Container(
-        width: 34,
-        height: 34,
-        decoration: BoxDecoration(shape: BoxShape.circle, color: color.withValues(alpha: 0.18)),
-        alignment: Alignment.center,
-        child: Container(
-          width: 18,
-          height: 18,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: color,
-            border: Border.all(color: ring, width: 3),
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.35), blurRadius: 6)],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// A repeater beacon. [phase] null = not heard this drive (dim amber); fresh = pops up and glows; holding = lit,
-/// no glow; stale = greyed out. [heardAt] changes every time it's heard again, which replays the pop-up.
-class _RepeaterMarker extends StatelessWidget {
-  final String repeaterKey;
-
-  /// Spoken by VoiceOver (the written name is on the map as a label).
-  final String name;
-  final Color color;
-  final Color onColor;
-  final Color greyColor;
-  final HeardPhase? phase;
-  final int? heardAt;
-  final bool selected;
-  final VoidCallback onTap;
-  const _RepeaterMarker({
-    super.key,
-    required this.repeaterKey,
-    required this.name,
-    required this.color,
-    required this.onColor,
-    required this.greyColor,
-    required this.phase,
-    required this.heardAt,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final surface = Theme.of(context).colorScheme.surface;
-    final fresh = phase == HeardPhase.fresh;
-    final holding = phase == HeardPhase.holding;
-    final stale = phase == HeardPhase.stale;
-    final big = fresh || holding || selected;
-    final size = fresh ? 32.0 : (big ? 28.0 : 22.0);
-    final Color fill = stale
-        ? Color.alphaBlend(greyColor.withValues(alpha: 0.55), surface)
-        : (big ? color : Color.alphaBlend(color.withValues(alpha: 0.7), Colors.black));
-    final diamond = Transform.rotate(
-      angle: math.pi / 4,
-      child: Container(
-        key: ValueKey('map-repeater-state-$repeaterKey-${phase?.name ?? 'idle'}'),
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          color: fill,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: selected ? Theme.of(context).colorScheme.onSurface : surface, width: 2),
-          boxShadow: fresh
-              ? [BoxShadow(color: color.withValues(alpha: 0.7), blurRadius: 16, spreadRadius: 2)]
-              : (holding ? [BoxShadow(color: color.withValues(alpha: 0.3), blurRadius: 8)] : null),
-        ),
-        child: Transform.rotate(
-          angle: -math.pi / 4,
-          child: Icon(Icons.cell_tower_rounded, size: big ? 18 : 13, color: stale ? surface : onColor),
-        ),
-      ),
-    );
-    Widget child = Center(child: diamond);
-    if (fresh) {
-      // Pop up and send one ring out each time it's heard.
-      child = TweenAnimationBuilder<double>(
-        key: ValueKey('pop-$heardAt'),
-        tween: Tween(begin: 0, end: 1),
-        duration: const Duration(milliseconds: 1100),
-        builder: (context, v, d) {
-          final scale = v < 0.35 ? 0.6 + 0.75 * Curves.easeOut.transform(v / 0.35) : 1.35 - 0.35 * Curves.easeInOut.transform((v - 0.35) / 0.65);
-          return Stack(
-            alignment: Alignment.center,
-            children: [
-              if (v < 1)
-                Container(
-                  width: 30 + 26 * v,
-                  height: 30 + 26 * v,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: color.withValues(alpha: (1 - v) * 0.9), width: 2.5),
-                  ),
-                ),
-              Transform.scale(scale: scale, child: d),
-            ],
-          );
-        },
-        child: diamond,
-      );
-    }
-    return Semantics(
-      button: true,
-      label: name.isEmpty ? 'Repeater ${repeaterKey.substring(0, math.min(4, repeaterKey.length))}' : 'Repeater $name',
-      hint: 'Shows repeater details',
-      excludeSemantics: true,
-      onTap: onTap,
-      child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: onTap, child: child),
-    );
-  }
-}
-
-class _RepeaterLabel extends StatelessWidget {
-  final String name;
-  final String keyHex;
-  final String? detail;
-  final Color color;
-  final VoidCallback onTap;
-  const _RepeaterLabel({required this.name, required this.keyHex, this.detail, required this.color, required this.onTap});
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    final box = Container(
-      key: const Key('map-repeater-label'),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      decoration: BoxDecoration(
-        color: t.colorScheme.surface,
-        borderRadius: BorderRadius.circular(Corners.small),
-        border: Border.all(color: color, width: 1.5),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 10)],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: t.textTheme.titleSmall),
-          Text(
-            detail == null ? keyHex.substring(0, math.min(8, keyHex.length)) : '${keyHex.substring(0, math.min(4, keyHex.length))} · $detail',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: t.textTheme.labelSmall,
-          ),
-        ],
-      ),
-    );
-    return Semantics(
-      button: true,
-      label: detail == null ? name : '$name, $detail',
-      hint: 'Shows repeater details',
-      excludeSemantics: true,
-      onTap: onTap,
-      child: GestureDetector(onTap: onTap, child: box),
-    );
-  }
-}
-
-/// A faint lat/lon grid that moves with the map: the "chart paper" you see when tiles can't load.
-class _ChartGrid extends StatelessWidget {
-  final Color color;
-  const _ChartGrid({required this.color});
-  @override
-  Widget build(BuildContext context) {
-    final camera = MapCamera.of(context);
-    return IgnorePointer(
-      child: CustomPaint(painter: _GridPainter(camera, color), size: Size.infinite),
-    );
-  }
-}
-
-class _GridPainter extends CustomPainter {
-  final MapCamera camera;
-  final Color color;
-  _GridPainter(this.camera, this.color);
-
-  static const _steps = [0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0];
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final pxPerDeg = 256 * math.pow(2, camera.zoom) / 360;
-    var step = _steps.last;
-    for (final s in _steps) {
-      if (s * pxPerDeg >= 70) {
-        step = s;
-        break;
-      }
-    }
-    final b = camera.visibleBounds;
-    final minor = Paint()
-      ..color = color.withValues(alpha: 0.07)
-      ..strokeWidth = 1;
-    final major = Paint()
-      ..color = color.withValues(alpha: 0.14)
-      ..strokeWidth = 1;
-    final west = b.west - step, east = b.east + step;
-    final south = math.max(-85.0, b.south - step), north = math.min(85.0, b.north + step);
-    var i = (south / step).floor();
-    for (var lat = i * step; lat <= north; lat += step, i++) {
-      final a = camera.latLngToScreenOffset(LatLng(lat, west.clamp(-180.0, 180.0)));
-      final c = camera.latLngToScreenOffset(LatLng(lat, east.clamp(-180.0, 180.0)));
-      canvas.drawLine(a, c, i % 5 == 0 ? major : minor);
-    }
-    var j = (west / step).floor();
-    for (var lon = j * step; lon <= east; lon += step, j++) {
-      final a = camera.latLngToScreenOffset(LatLng(south, lon));
-      final c = camera.latLngToScreenOffset(LatLng(north, lon));
-      canvas.drawLine(a, c, j % 5 == 0 ? major : minor);
-    }
-  }
-
-  @override
-  bool shouldRepaint(_GridPainter old) =>
-      old.camera.center != camera.center ||
-      old.camera.zoom != camera.zoom ||
-      old.camera.rotation != camera.rotation ||
-      old.color != color ||
-      old.camera.size != camera.size;
-}
-
-/// Dashed range rings (1 km / 2 km, or 0.5 mi / 1 mi) around the current position, drawn directly so they stay crisp at any zoom.
-class _RangeRings extends StatelessWidget {
-  final LatLng center;
-  final Color color;
-  final List<double> ringMetres;
-  const _RangeRings({required this.center, required this.color, required this.ringMetres});
-  @override
-  Widget build(BuildContext context) {
-    final camera = MapCamera.of(context);
-    return IgnorePointer(
-      child: CustomPaint(painter: _RingPainter(camera, center, color, ringMetres), size: Size.infinite),
-    );
-  }
-}
-
-class _RingPainter extends CustomPainter {
-  final MapCamera camera;
-  final LatLng center;
-  final Color color;
-  final List<double> ringMetres;
-  _RingPainter(this.camera, this.center, this.color, this.ringMetres);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final c = camera.latLngToScreenOffset(center);
-    for (final m in ringMetres) {
-      final edge = camera.latLngToScreenOffset(LatLng(center.latitude + m / 111320.0, center.longitude));
-      final r = (c - edge).distance;
-      if (r < 6 || r > 6000) continue;
-      final paint = Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.4
-        ..color = color.withValues(alpha: m == ringMetres.first ? 0.55 : 0.35);
-      // Dashes: ~60 per ring, capped so small rings stay readable.
-      final n = (2 * math.pi * r / 14).clamp(24, 160).round();
-      for (var i = 0; i < n; i++) {
-        final a0 = 2 * math.pi * i / n;
-        canvas.drawArc(Rect.fromCircle(center: c, radius: r), a0, math.pi / n, false, paint);
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(_RingPainter old) =>
-      old.center != center ||
-      old.color != color ||
-      old.ringMetres.first != ringMetres.first ||
-      old.camera.center != camera.center ||
-      old.camera.zoom != camera.zoom;
 }
