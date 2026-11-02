@@ -10,11 +10,13 @@ import 'package:path/path.dart' as p;
 /// lib/core/server_url.dart, kept equal to [sameServerHosts] by the test below), the public node map, and
 /// OpenStreetMap tiles.
 const allowedServerHosts = {'meshsonar.com', 'cmh.meshsonar.com', 'cmh-meshcore.lovable.app'};
-const allowedLiteralHosts = {...allowedServerHosts, 'map.meshcore.io', 'tile.openstreetmap.org', 'tile.opentopomap.org', 'api.meshcore.nz', 'tiles.meshsonar.com', 'open-meteo.com', 'www.openstreetmap.org', 'opendatacommons.org', 'opentopomap.org', 'creativecommons.org'};
+const allowedLiteralHosts = {...allowedServerHosts, 'map.meshcore.io', 'tile.openstreetmap.org', 'tile.opentopomap.org', 'api.meshcore.nz', 'tiles.meshsonar.com', 'open-meteo.com', 'www.openstreetmap.org', 'opendatacommons.org', 'opentopomap.org', 'creativecommons.org', 'flasher.meshcore.io'};
 // www.openstreetmap.org, opendatacommons.org, opentopomap.org, creativecommons.org: the map credit LINKS in the Credits sheet (the (i)
 // on the map's credit line), opened in the browser on tap only, like open-meteo.com above (Drive WP2 default decision, HANDOFF 105).
 // open-meteo.com: the licence credit LINK for server-side weather, opened in the browser on tap only (About, drive report
 // Weather block). The app never contacts Open-Meteo; the server does (stream 7 WP6).
+// flasher.meshcore.io: the official MeshCore firmware flasher, a LINK opened in the browser on tap only (Device settings >
+// Firmware, chat plan 4.14); the app never contacts it and never flashes firmware itself.
 // api.meshcore.nz: read-only MeshCore community radio-preset list (Andy, Oct 21 2026 decision; Radio tab, on tap only).
 
 void main() {
