@@ -12,7 +12,6 @@ import 'package:meshsonar/ui/map/layers/map_layer.dart';
 import 'package:meshsonar/ui/map/layers/registry.dart';
 import 'package:meshsonar/ui/map/layers/repeater_map_source.dart';
 import 'package:meshsonar/ui/map/layers/repeater_name_labels.dart';
-import 'package:meshsonar/ui/map/map_layers.dart';
 import 'package:meshsonar/ui/theme.dart';
 
 import '../fakes.dart';
@@ -154,9 +153,6 @@ void main() {
       final next = DriveMapModel(h.state);
       addTearDown(next.dispose);
       expect(next.layerState.isOn(kLabelsLayerId), isFalse);
-      // The bool-bag setter used by older callers keeps the choice.
-      next.layers = next.layers.copyWith(rings: false);
-      expect(next.layerState.isOn(kLabelsLayerId), isFalse);
     });
   });
 
@@ -172,7 +168,7 @@ void main() {
             body: SizedBox(
               width: width ?? 600,
               height: 600,
-              child: CoverageMap(pings: const [], repeaters: const [a, b], position: const LatLng(40.126, -82.93), layerState: state, layers: const MapLayers()),
+              child: CoverageMap(pings: const [], repeaters: const [a, b], position: const LatLng(40.126, -82.93), layerState: state),
             ),
           ),
         ),

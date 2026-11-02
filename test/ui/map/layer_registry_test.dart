@@ -1,12 +1,12 @@
-// The layer registry, MapLayerState <-> ?show=, the MapLayers adapter, and every layer's availability text.
+// The layer registry, MapLayerState <-> ?show=, and every layer's availability text.
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/core/map_prefs.dart';
 import 'package:meshsonar/core/map_view_state.dart';
 import 'package:meshsonar/core/region_repeaters_api.dart';
 import 'package:meshsonar/core/repeater_points.dart';
 import 'package:meshsonar/ui/map/layers/map_layer.dart';
 import 'package:meshsonar/ui/map/layers/registry.dart';
 import 'package:meshsonar/ui/map/layers/repeater_map_source.dart';
-import 'package:meshsonar/ui/map/map_layers.dart';
 
 final now = DateTime.utc(2026, 10, 24, 12);
 const cmh = RosterRegion(slug: 'cmh', name: 'CMH', baseUrl: 'https://cmh.meshsonar.com');
@@ -30,29 +30,51 @@ void main() {
       expect(kWebsiteKeysNotDrawn, {'model', 'reach', 'regions'}, reason: 'the app dropped the neighbouring-regions pointers (0.26.1)');
     });
 
-    test('defaults: the drive layers, measured and the global repeater layer on (D3, Andy Oct 24); roster/observers off', () {
-      expect(kDefaultLayerState.on, {'measured', 'hexes', 'links', 'heard', 'pings', 'rings', 'network', 'labels'});
-      // MapLayers has no field for `network`: its defaults are the registry defaults minus the global layer.
-      expect(kDefaultLayerState.toggle('network', false).toggle('labels', false), const MapLayers().toLayerState(mode: const {'measured': 'snr'}));
+    test('the final ten layers (Drive plan 7.1): the dead neighbours entry is gone', () {
+      expect(kMapLayers.map((l) => l.id).toSet(), {'pings', 'hexes', 'links', 'measured', 'heard', 'repeaters', 'network', 'observers', 'labels', 'rings'});
+      expect(kMapLayers, hasLength(10));
+      expect(layerSpec('neighbours'), isNull);
+      expect(kAppOnlyShowKeys, isNot(contains('neighbours')));
+    });
+
+    test('defaults: network (56,889 points) is OFF, region and heard repeaters stay on (D11 revised); observers off', () {
+      expect(kDefaultLayerState.on, {'measured', 'hexes', 'links', 'heard', 'pings', 'rings', 'repeaters', 'labels'});
       expect(layerSpec('network')!.label, 'All MeshCore repeaters');
+      expect(layerSpec('network')!.defaultOn, isFalse);
       expect(layerSpec('nope'), isNull);
       final groups = layersByGroup();
-      expect(groups[LayerGroup.network]!.map((l) => l.id), ['network', 'repeaters', 'observers', 'neighbours', 'labels']);
+      expect(groups[LayerGroup.drive]!.map((l) => l.id), ['hexes', 'links', 'pings']);
+      expect(groups[LayerGroup.repeaters]!.map((l) => l.id), ['network', 'repeaters', 'observers', 'heard']);
       expect(groups[LayerGroup.coverage]!.map((l) => l.id), ['measured']);
-      expect(LayerGroup.values.map((g) => g.label).toSet(), hasLength(4));
+      expect(groups[LayerGroup.display]!.map((l) => l.id), ['labels', 'rings']);
+      expect(LayerGroup.values.map((g) => g.label), ['This drive', 'Coverage', 'Repeaters', 'Display']);
+      expect([for (final id in ['hexes', 'links', 'measured', 'heard', 'repeaters']) layerSpec(id)!.label],
+          ['Your coverage', 'Lines to repeaters', 'Network coverage', 'Heard this drive', 'Region repeaters']);
+    });
+
+    test('LayerPrefs: only the person\'s choices are applied on top of the defaults; unknown ids and modes are ignored', () {
+      final s = layerStateFromPrefs(const LayerPrefs(toggles: {'network': true, 'pings': false, 'nope': true}, modes: {'pings': 'result'}));
+      expect(s.isOn('network'), isTrue);
+      expect(s.isOn('pings'), isFalse);
+      expect(s.isOn('hexes'), isTrue, reason: 'untouched layers keep their default');
+      expect(s.modeOf('pings'), 'result');
+      expect(layerStateFromPrefs(const LayerPrefs(modes: {'pings': 'wat'})).modeOf('pings'), 'snr');
+      expect(layerStateFromPrefs(LayerPrefs.empty), kDefaultLayerState);
+      // The old Settings.mapRepeaterLabels key is the fallback until a choice is made here.
+      expect(layerStateFromPrefs(LayerPrefs.empty, labelsFallback: false).isOn('labels'), isFalse);
+      expect(layerStateFromPrefs(const LayerPrefs(toggles: {'labels': true}), labelsFallback: false).isOn('labels'), isTrue);
     });
   });
 
   group('MapLayerState', () {
     test('toggle, mode, equality', () {
-      final s = kDefaultLayerState.toggle('network', true).withMode('measured', 'noise');
-      expect(s.isOn('network'), isTrue);
+      final s = kDefaultLayerState.toggle('observers', true).withMode('measured', 'noise');
+      expect(s.isOn('observers'), isTrue);
       expect(s.modeOf('measured'), 'noise');
-      expect(s.toggle('network', true), same(s));
+      expect(s.toggle('observers', true), same(s));
       expect(s.withMode('measured', 'noise'), same(s));
-      expect(s.withMode('measured', 'snr'), kDefaultLayerState, reason: 'network is a default layer');
-      expect(s.toggle('network', false).withMode('measured', 'snr'), isNot(kDefaultLayerState));
-      expect(s.hashCode, kDefaultLayerState.toggle('network', true).withMode('measured', 'noise').hashCode);
+      expect(s.toggle('observers', false).withMode('measured', 'snr'), kDefaultLayerState);
+      expect(s.hashCode, kDefaultLayerState.toggle('observers', true).withMode('measured', 'noise').hashCode);
     });
 
     test('toShow: website keys only and in the website order for web; app keys after for app links', () {
@@ -78,23 +100,6 @@ void main() {
       expect(s.isOn('repeaters'), isFalse);
       expect(s.modeOf('measured'), 'noise');
       expect(layerStateForLink(MapViewState.empty), kDefaultLayerState);
-    });
-  });
-
-  group('MapLayers adapter', () {
-    test('round trip for every bool and the ping colour mode', () {
-      const variants = [
-        MapLayers(),
-        MapLayers(pings: false, hexes: false, repeaters: false, links: false, rings: false, networkCoverage: false),
-        MapLayers(regionRepeaters: true, pingColors: PingColorMode.result),
-      ];
-      for (final m in variants) {
-        expect(mapLayersFromState(m.toLayerState()), m);
-      }
-      final s = const MapLayers(regionRepeaters: true, repeaters: false).toLayerState();
-      expect(s.isOn('repeaters'), isTrue, reason: 'regionRepeaters is the website\'s repeaters');
-      expect(s.isOn('heard'), isFalse, reason: 'MapLayers.repeaters is the heard beacons');
-      expect(const MapLayers(pingColors: PingColorMode.result).toLayerState().modeOf('pings'), 'result');
     });
   });
 
@@ -127,9 +132,10 @@ void main() {
       );
     });
 
-    test('neighbours need a selected repeater; drive layers are always ready', () {
-      expect(layerStatus('neighbours', const MapLayerInputs()).enabled, isFalse);
-      expect(layerStatus('neighbours', const MapLayerInputs(repeaterSelected: true)).enabled, isTrue);
+    test('F5: a saved copy says when it was fetched; drive layers are always ready', () {
+      final saved = layerStatus('measured', MapLayerInputs(coverageState: MapFeedState.stale, coverageCells: 10, coverageSavedAt: DateTime(2026, 11, 1, 9)));
+      expect(saved.detail, '10 cells measured · Saved copy from Nov 1');
+      expect(saved.canRetry, isTrue);
       for (final id in ['hexes', 'links', 'heard', 'pings', 'rings', 'labels']) {
         expect(layerStatus(id, const MapLayerInputs()), const LayerStatus(LayerAvailability.ready), reason: id);
       }

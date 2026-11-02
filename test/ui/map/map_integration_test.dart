@@ -12,6 +12,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:meshsonar/core/api.dart';
+import 'package:meshsonar/core/map_prefs.dart';
 import 'package:meshsonar/core/region_lookup.dart';
 import 'package:meshsonar/core/region_overview_api.dart';
 import 'package:meshsonar/radio/radio_api.dart' show GeoFix;
@@ -89,12 +90,15 @@ Future<void> openSheet(WidgetTester t) async {
 }
 
 Future<void> closeSheet(WidgetTester t) async {
-  await t.tapAt(const Offset(200, 40));
+  await t.tap(find.byKey(const Key('layers-done')));
   await t.pumpAndSettle();
   expect(find.byKey(const Key('layers-sheet')), findsNothing);
 }
 
-SwitchListTile sw(WidgetTester t, String key) => t.widget<SwitchListTile>(find.byKey(Key(key)));
+Switch sw(WidgetTester t, String key) => t.widget<Switch>(find.byKey(Key(key)));
+
+/// The person has turned "All MeshCore repeaters" on (it is off by default for a driver, Drive plan 7.1): remembered, as in the app.
+void networkOn() => MapPrefs.shared.setLayerPrefs(kDriveLayerPage, const LayerPrefs(toggles: {'network': true}));
 String statusText(WidgetTester t, String id) => t.widget<Text>(find.byKey(Key('layer-$id-status'))).data!;
 
 Future<void> toggle(WidgetTester t, String key) async {
@@ -117,29 +121,29 @@ void main() {
       await t.pumpAndSettle();
       await openSheet(t);
       final ys = [
-        for (final g in ['drive', 'coverage', 'network', 'context']) t.getTopLeft(find.byKey(Key('layers-group-$g'), skipOffstage: false)).dy,
+        for (final g in ['drive', 'coverage', 'repeaters', 'display']) t.getTopLeft(find.byKey(Key('layers-group-$g'), skipOffstage: false)).dy,
       ];
-      expect(ys, orderedEquals([...ys]..sort()), reason: 'This drive, Coverage, Network, Around you');
+      expect(ys, orderedEquals([...ys]..sort()), reason: 'This drive, Coverage, Repeaters, Display');
       for (final key in [
         'layer-hexes', 'layer-links', 'layer-repeaters', 'layer-pings', 'layer-network-coverage', //
         'layer-network', 'layer-region-repeaters', 'layer-observers', 'layer-rings',
       ]) {
         expect(find.byKey(Key(key), skipOffstage: false), findsOneWidget, reason: key);
       }
-      expect(find.byKey(const Key('layer-neighbours'), skipOffstage: false), findsNothing, reason: 'no renderer yet (WP-M4)');
-      // Defaults: drive layers + coverage + the global layer on (D3); it shows off here because this build cannot
-      // offer it (no sync), and its switch is disabled.
+      expect(find.byKey(const Key('layer-neighbours'), skipOffstage: false), findsNothing, reason: 'the dead entry is gone (D12)');
+      // Defaults: drive layers, coverage, heard and region repeaters on; the global 56,889-point layer is off (D11 revised);
+      // here this build cannot offer it anyway (no sync), so its switch is disabled.
       expect(sw(t, 'layer-repeaters').value, isTrue);
       expect(sw(t, 'layer-network-coverage').value, isTrue);
       expect(h.state.services.repeaterSync, isNull);
       expect(sw(t, 'layer-network').value, isFalse);
-      expect(sw(t, 'layer-region-repeaters').value, isFalse);
+      expect(sw(t, 'layer-region-repeaters').value, isTrue);
       // No sync in this build and no region: honest reasons, switches that cannot work are disabled.
       expect(sw(t, 'layer-network').onChanged, isNull);
       expect(statusText(t, 'network'), 'Not available on this server yet');
       expect(sw(t, 'layer-observers').onChanged, isNull);
       expect(statusText(t, 'observers'), 'Pick a region to see its observers');
-      expect(sw(t, 'layer-region-repeaters').onChanged, isNull);
+      expect(sw(t, 'layer-region-repeaters').onChanged, isNotNull, reason: 'on, so it can always be switched off');
       expect(statusText(t, 'repeaters'), 'Pick a region to see its repeaters');
     });
 
@@ -167,6 +171,7 @@ void main() {
   });
 
   group('global "All MeshCore repeaters" layer', () {
+    setUp(networkOn);
     testWidgets('server answers 404: switch disabled with "Not available on this server yet", nothing drawn', (t) async {
       useTallScreen(t);
       final srv = FakeMapServer()..networkStatus = 404;
@@ -200,7 +205,7 @@ void main() {
       expect(statusText(t, 'network'), startsWith('3 repeaters in and around Columbus, US'));
     });
 
-    testWidgets('ready: ON by default, limited to the phone\'s region + margin, legend + credit; the fullscreen map shares it', (t) async {
+    testWidgets('ready: switched on, limited to the phone\'s region + margin, legend + credit; the fullscreen map shares it', (t) async {
       useTallScreen(t);
       final srv = FakeMapServer();
       final h = make(srv);
@@ -213,10 +218,9 @@ void main() {
       await openSheet(t);
       expect(sw(t, 'layer-network').value, isTrue);
       expect(statusText(t, 'network'), '3 repeaters in and around Columbus, US · 4 hidden by their owners · Data: MeshCore Map (map.meshcore.io)');
-      expect(find.byKey(const Key('network-legend')), findsOneWidget);
-      expect(find.textContaining(', as of '), findsOneWidget, reason: 'one credit line: source and age together');
-      for (final l in ['24 h', '7 d', '30 d', 'Older']) {
-        expect(find.descendant(of: find.byKey(const Key('network-legend')), matching: find.text(l)), findsOneWidget);
+      expect(find.byKey(const Key('layer-network-key')), findsOneWidget);
+      for (final l in ['fresh, 24 h', 'recent, 7 d', 'older']) {
+        expect(find.descendant(of: find.byKey(const Key('layer-network-key')), matching: find.text(l)), findsOneWidget);
       }
       await closeSheet(t);
       expect(find.byKey(const ValueKey('layer-network-paint')), findsOneWidget);
@@ -266,8 +270,8 @@ void main() {
       await t.pumpAndSettle();
       await openSheet(t);
       expect(statusText(t, 'repeaters'), '1 repeater with a position');
-      await toggle(t, 'layer-region-repeaters');
-      expect(find.byKey(const Key('roster-legend')), findsOneWidget);
+      expect(sw(t, 'layer-region-repeaters').value, isTrue, reason: 'on by default (D11)');
+      expect(find.byKey(const Key('layer-repeaters-key')), findsOneWidget);
       await closeSheet(t);
       final painters = [
         for (final key in ['layer-network-paint', 'layer-repeaters-paint'])
@@ -307,6 +311,7 @@ void main() {
   });
 
   group('global layer scope', () {
+    setUp(networkOn);
     testWidgets('phone outside every region: the whole list (world view, count clusters); picking a region limits it', (t) async {
       useTallScreen(t);
       final srv = FakeMapServer();
@@ -334,9 +339,7 @@ void main() {
       final h = make(FakeMapServer());
       await h.pumpApp(t);
       await t.pumpAndSettle();
-      await openSheet(t);
-      await toggle(t, 'layer-region-repeaters');
-      await closeSheet(t);
+      expect(h.state.globalRepeaterSet, isNotNull);
       final paint = find.byKey(const ValueKey('layer-repeaters-paint'));
       final painter = t.widget<CustomPaint>(paint).painter! as ClusteredPointsPainter;
       await t.tapAt(t.getTopLeft(paint) + painter.camera.latLngToScreenOffset(const LatLng(40.13, -82.92)));

@@ -185,7 +185,7 @@ void main() {
     await tester.tap(find.byKey(const Key('layer-color-result')));
     await tester.tap(find.byKey(const Key('layer-repeaters')));
     await settle(tester);
-    await tester.tapAt(const Offset(200, 60)); // dismiss the sheet
+    await tester.tap(find.byKey(const Key('layers-done'))); // dismiss the sheet
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byKey(const Key('layers-sheet')), findsNothing);

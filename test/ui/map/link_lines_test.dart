@@ -17,7 +17,7 @@ import 'package:meshsonar/core/repeater_reach.dart';
 import 'package:meshsonar/ui/app.dart';
 import 'package:meshsonar/ui/map/coverage_map.dart';
 import 'package:meshsonar/ui/map/layers/repeater_map_source.dart';
-import 'package:meshsonar/ui/map/map_layers.dart';
+import 'package:meshsonar/ui/map/layers/registry.dart';
 
 import '../fakes.dart';
 
@@ -144,7 +144,7 @@ void main() {
               pings: const [],
               position: LatLng(centre.lat, centre.lon),
               hexRes: 9,
-              layerState: const MapLayers().toLayerState().toggle(kNetworkLayerId, true),
+              layerState: kDefaultLayerState.toggle(kNetworkLayerId, true),
               networkCells: cells,
               repeaterSource: src,
             ),

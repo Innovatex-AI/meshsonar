@@ -26,8 +26,8 @@ class MapKeyParts {
 }
 
 MapKeyParts mapKeyParts(DriveMapModel m) => MapKeyParts(
-  cells: m.layers.networkCoverage && m.networkCells.isNotEmpty,
-  pings: m.layers.pings && m.visiblePings.isNotEmpty,
+  cells: m.layerState.isOn('measured') && m.networkCells.isNotEmpty,
+  pings: m.layerState.isOn('pings') && m.visiblePings.isNotEmpty,
   repeaters: m.layerState.isOn(kNetworkLayerId) && m.repeaterSource.globalPoints.length > 0,
 );
 
@@ -66,7 +66,7 @@ class MapKey extends StatelessWidget {
         );
 
         final by = model.colorBy;
-        final byResult = model.layers.pingColors == PingColorMode.result;
+        final byResult = model.pingColors == PingColorMode.result;
         final set = model.repeaterSource.feed.global;
         return Column(
           mainAxisSize: MainAxisSize.min,

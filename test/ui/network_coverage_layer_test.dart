@@ -49,12 +49,12 @@ void main() {
     await tester.tap(find.byKey(const Key('drive-map-layers')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('layers-sheet')), findsOneWidget);
-    final sw = tester.widget<SwitchListTile>(find.byKey(const Key('layer-network-coverage')));
+    final sw = tester.widget<Switch>(find.byKey(const Key('layer-network-coverage')));
     expect(sw.value, isTrue, reason: 'basic visibility: on by default, no extra step to find it');
 
     await tester.tap(find.byKey(const Key('layer-network-coverage')));
     await settle(tester);
-    await tester.tapAt(const Offset(200, 60)); // dismiss the sheet
+    await tester.tap(find.byKey(const Key('layers-done'))); // dismiss the sheet
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('layers-sheet')), findsNothing);
     expect(polygonCount(tester), 0, reason: 'toggled off');
@@ -63,7 +63,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('layer-network-coverage')));
     await settle(tester);
-    await tester.tapAt(const Offset(200, 60));
+    await tester.tap(find.byKey(const Key('layers-done')));
     await tester.pumpAndSettle();
     expect(polygonCount(tester), 2, reason: 'toggled back on');
   });
@@ -101,9 +101,9 @@ void main() {
     await tester.tap(find.byKey(const Key('drive-map-layers')));
     await tester.pumpAndSettle();
     // The generated sheet lists "This drive" first, so the coverage controls sit lower: scroll them into view.
-    await tester.ensureVisible(find.byKey(const Key('coverage-layer-controls')));
+    await tester.ensureVisible(find.byKey(const Key('layer-measured-options')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('coverage-layer-controls')));
+    await tester.tap(find.byKey(const Key('layer-measured-options')));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.byKey(const Key('cov-source-MeshMapper')));
     await tester.pumpAndSettle();

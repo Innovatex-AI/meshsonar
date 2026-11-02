@@ -41,8 +41,13 @@ class _CoverageTimelineSliderState extends State<CoverageTimelineSlider> {
           Widget body;
           if (tl.load == TimelineLoad.loading || tl.load == TimelineLoad.idle) {
             body = note('Loading the timeline...', key: const Key('timeline-loading'));
+          } else if (tl.load == TimelineLoad.empty) {
+            body = note('No growth history yet for ${model.state.viewingRegion?.name ?? 'this region'}', key: const Key('timeline-empty'));
+          } else if (tl.load == TimelineLoad.single) {
+            body = note('Only one day of data so far', key: const Key('timeline-single'));
           } else if (sc == null) {
-            body = note("Timeline unavailable: this region's first-data date could not be loaded.", key: const Key('timeline-unavailable'));
+            // Reserved for a real failure (no answer, an error status): never for a region that simply has little data.
+            body = note("Couldn't load the timeline. Check the connection.", key: const Key('timeline-unavailable'));
           } else {
             final i = tl.index;
             final live = tl.isLive;
@@ -125,7 +130,7 @@ class CoverageAsOfBadge extends StatelessWidget {
     return ListenableBuilder(
       listenable: model.timeline,
       builder: (context, _) {
-        final text = model.layers.networkCoverage ? model.timeline.asOfLabel : null;
+        final text = model.layerState.isOn('measured') ? model.timeline.asOfLabel : null;
         if (text == null) return const SizedBox.shrink();
         return Chip(
           key: const Key('coverage-as-of'),

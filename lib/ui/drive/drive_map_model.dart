@@ -20,6 +20,7 @@ import '../../core/coverage_query.dart';
 import '../../core/heard.dart';
 import '../../core/hex_cells.dart' show loadHexEngine;
 import '../../core/map_filter.dart';
+import '../../core/map_prefs.dart';
 import '../../core/map_styles.dart';
 import '../../core/model.dart';
 import '../../core/coverage_timeline.dart';
@@ -50,22 +51,59 @@ import '../region/region_common.dart' show regionApiFactory;
 
 class DriveMapModel extends ChangeNotifier {
   final AppState state;
-  DriveMapModel(this.state, {int repeaterIsolateThreshold = 2000, this.cellIsolateThreshold = 600, CompassSource? compass, MapHealthSink? healthSink})
-    // ignore: prefer_initializing_formals
-    : _compass = compass,
+  DriveMapModel(
+    this.state, {
+    int repeaterIsolateThreshold = 2000,
+    this.cellIsolateThreshold = 600,
+    CompassSource? compass,
+    MapHealthSink? healthSink,
+    MapPrefs? prefs,
+    this.pageId = kDriveLayerPage,
+  }) : _prefs = prefs ?? MapPrefs.shared,
+       // ignore: prefer_initializing_formals
+       _compass = compass,
       health = MapHealthRecorder(
         sink: healthSink ?? _sinkFor(state),
         clock: state.services.clock,
       ) {
     _wireHealth();
     SchedulerBinding.instance.addTimingsCallback(_onTimings);
-    // The one persisted layer choice: repeater names on/off (Settings.mapRepeaterLabels, default on).
-    _layerState = kDefaultLayerState.toggle(kLabelsLayerId, state.settings.mapRepeaterLabels);
+    // The remembered layer choices of this page (LayerPrefs, read synchronously: main loads the file before the first frame), so
+    // there is no flash of defaults. Repeater names fall back to the old Settings.mapRepeaterLabels key until chosen here.
+    _lp = _prefs.layerPrefs(pageId);
+    _layerState = layerStateFromPrefs(_lp, labelsFallback: state.settings.mapRepeaterLabels);
+    _colorBy = _colorByFromPrefs(_lp);
+    _query = _queryFromPrefs(_lp);
     repeaterFeed = AppStateRepeaterFeed(state, fallbackRoster: _fallbackRoster);
     repeaterSource = RepeaterMapSource(repeaterFeed, clock: state.services.clock, isolateThreshold: repeaterIsolateThreshold)
       ..dedupeAgainstRoster = _layerState.isOn(kRosterLayerId);
     state.addListener(_onState);
     _onState();
+    // A remembered window / source / detail is asked for now, not on the next zoom.
+    if (_query != const CoverageQuery()) _scheduleCoverageFetch(immediate: true);
+  }
+
+  /// The page-config id the layer choices are remembered under (`drive`; the Analyze map gets its own later).
+  final String pageId;
+  final MapPrefs _prefs;
+  late LayerPrefs _lp;
+
+  static CoverageColorBy _colorByFromPrefs(LayerPrefs p) {
+    for (final c in CoverageColorBy.values) {
+      if (c.name == p.colorBy) return c;
+    }
+    return CoverageColorBy.snr;
+  }
+
+  static CoverageQuery _queryFromPrefs(LayerPrefs p) => CoverageQuery(
+    res: p.res,
+    since: CoverageSince.values.where((e) => e.name == p.since).firstOrNull ?? CoverageSince.all,
+    source: CoverageSource.values.where((e) => e.name == p.source).firstOrNull ?? CoverageSource.all,
+  );
+
+  void _saveLayerPrefs(LayerPrefs next) {
+    _lp = next;
+    _prefs.setLayerPrefs(pageId, next);
   }
 
   /// Widget tests and the benchmark feed fixes through the fake location instead of the engine's [AppState.rawFixes].
@@ -181,17 +219,27 @@ class DriveMapModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Which layers are on (registry ids, lib/ui/map/layers/registry.dart) plus their modes. [layers] is the old bool bag
-  // view of the same state, kept for one release (stream-1-maps.md 4.1).
-  MapLayerState _layerState = kDefaultLayerState;
+  // Which layers are on (registry ids, lib/ui/map/layers/registry.dart) plus their modes: the one layer system. Every change is
+  // remembered (LayerPrefs, Drive plan 7.2); the filter drawer, the timeline position and the selection are not.
+  late MapLayerState _layerState;
   MapLayerState get layerState => _layerState;
   set layerState(MapLayerState n) {
     if (n == _layerState) return;
     final was = _layerState;
     _layerState = n;
-    _layersView = null;
     repeaterSource.dedupeAgainstRoster = n.isOn(kRosterLayerId);
+    // Remember what the person changed (not the whole state, so a layer added later arrives with its own default).
+    final toggles = {..._lp.toggles};
+    for (final id in kMapLayerIds) {
+      if (n.isOn(id) != was.isOn(id)) toggles[id] = n.isOn(id);
+    }
+    final modes = {..._lp.modes};
+    for (final e in n.mode.entries) {
+      if (was.mode[e.key] != e.value) modes[e.key] = e.value;
+    }
+    _saveLayerPrefs(_lp.copyWith(toggles: toggles, modes: modes));
     notifyListeners();
+    // Settings.mapRepeaterLabels is still written: the drive report reads it for its map.
     if (n.isOn(kLabelsLayerId) != was.isOn(kLabelsLayerId) && n.isOn(kLabelsLayerId) != state.settings.mapRepeaterLabels) {
       unawaited(state.updateSettings(state.settings.copyWith(mapRepeaterLabels: n.isOn(kLabelsLayerId))));
     }
@@ -204,17 +252,31 @@ class DriveMapModel extends ChangeNotifier {
   /// Turns one registry layer on or off.
   void setLayer(String id, bool on) => layerState = _layerState.toggle(id, on);
 
-  MapLayers? _layersView;
-  MapLayers get layers => _layersView ??= mapLayersFromState(_layerState);
-  set layers(MapLayers l) {
-    if (l == layers) return;
-    // Layers the bool bag has no field for (network, observers, neighbours) keep their state.
-    final keep = {for (final id in _layerState.on) if (!_layersIds.contains(id)) id};
-    final next = l.toLayerState(mode: _layerState.mode);
-    layerState = MapLayerState(on: Set.unmodifiable({...next.on, ...keep}), mode: next.mode);
-  }
+  /// How the Pings and Your-coverage layers colour (By SNR / Heard).
+  PingColorMode get pingColors => pingColorModeOf(_layerState);
+  set pingColors(PingColorMode m) => layerState = _layerState.withMode('pings', m == PingColorMode.result ? 'result' : 'snr');
 
-  static const Set<String> _layersIds = {'measured', 'hexes', 'repeaters', 'links', 'heard', 'pings', 'rings'};
+  /// "Reset layers": every layer, the Pings mode and the network coverage options back to the defaults, and forgets the saved
+  /// choices. The base map, the filter and the timeline position are not layers and stay.
+  void resetLayers() {
+    _saveLayerPrefs(LayerPrefs.empty);
+    _colorBy = CoverageColorBy.snr;
+    final was = _layerState;
+    _layerState = kDefaultLayerState;
+    repeaterSource.dedupeAgainstRoster = _layerState.isOn(kRosterLayerId);
+    if (_layerState.isOn(kLabelsLayerId) != state.settings.mapRepeaterLabels) {
+      unawaited(state.updateSettings(state.settings.copyWith(mapRepeaterLabels: _layerState.isOn(kLabelsLayerId))));
+    }
+    _rebuildNetworkCells();
+    final q = CoverageQuery(until: _query.until);
+    final queryChanged = q != _query;
+    _query = q;
+    notifyListeners();
+    if (queryChanged) _scheduleCoverageFetch(immediate: true);
+    if (_layerState.isOn(kRosterLayerId) && !was.isOn(kRosterLayerId) && _regionRepeaters.isEmpty && repeaterFeed.region.rows.isEmpty) {
+      unawaited(loadRegionRepeaters());
+    }
+  }
 
   // The region's whole repeater roster for the "Region repeaters" layer. Fetched the first time the layer is
   // switched on (or by [loadRegionRepeaters] / [regionRepeaters]=, e.g. when the region switcher changes region).
@@ -319,7 +381,8 @@ class DriveMapModel extends ChangeNotifier {
 
   // ---------- layer availability (the generated layers sheet) ----------
   MapFeedState get _coverageState {
-    if (state.networkCoverage != null) return state.networkCoverageFailed ? MapFeedState.stale : MapFeedState.ready;
+    // A saved copy served because the live fetch failed counts as stale even though the fetch itself "succeeded" (F5).
+    if (state.networkCoverage != null) return (state.networkCoverageFailed || state.networkCoverageFromCache) ? MapFeedState.stale : MapFeedState.ready;
     if (state.networkCoverageLoading) return MapFeedState.loading;
     return state.networkCoverageFailed ? MapFeedState.failed : MapFeedState.idle;
   }
@@ -330,12 +393,10 @@ class DriveMapModel extends ChangeNotifier {
     MapLayerInputs(
       coverageState: _coverageState,
       coverageCells: _networkCells.length,
+      coverageSavedAt: state.networkCoverageSavedAt,
       observersState: _observersSlug == state.viewingRegion?.slug ? _observersState : MapFeedState.idle,
       observersWithPosition: _observers.length,
       regionName: state.viewingRegion?.name,
-      repeaterSelected: _selected != null,
-      regionIndexLoaded: state.regionIndexLoaded,
-      regionNeighbours: state.regionNeighbours?.neighbours.length ?? 0,
     ),
     repeaters: repeaterSource,
   );
@@ -684,22 +745,37 @@ class DriveMapModel extends ChangeNotifier {
   }
 
   // ---------- network-coverage layer controls (res by zoom, colour-by, since, source) ----------
-  CoverageColorBy _colorBy = CoverageColorBy.snr;
+  late CoverageColorBy _colorBy;
   CoverageColorBy get colorBy => _colorBy;
   set colorBy(CoverageColorBy v) {
     if (v == _colorBy) return;
     _colorBy = v;
+    _saveLayerPrefs(v == CoverageColorBy.snr ? _lp.copyWith(clearColorBy: true) : _lp.copyWith(colorBy: v.name));
     _rebuildNetworkCells();
     notifyListeners();
   }
 
-  CoverageQuery _query = const CoverageQuery();
+  late CoverageQuery _query;
 
   /// The layer's filters; `res == null` means automatic by zoom.
   CoverageQuery get coverageQuery => _query;
   set coverageQuery(CoverageQuery q) {
     if (q == _query) return;
+    final was = _query;
     _query = q;
+    // Detail, window and source are remembered; the timeline's "as of" is not (always Live on launch).
+    if (q.res != was.res || q.since != was.since || q.source != was.source) {
+      _saveLayerPrefs(
+        _lp.copyWith(
+          res: q.res,
+          clearRes: q.res == null,
+          since: q.since.name,
+          clearSince: q.since == CoverageSince.all,
+          source: q.source.name,
+          clearSource: q.source == CoverageSource.all,
+        ),
+      );
+    }
     notifyListeners();
     _scheduleCoverageFetch(immediate: true);
   }
