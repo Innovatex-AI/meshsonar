@@ -312,7 +312,7 @@ void main() {
       await h.pumpApp(tester);
       await h.state.connectSimulator();
       await tester.pumpAndSettle();
-      while (find.byType(BottomSheet).evaluate().isNotEmpty) {
+      while ((find.byType(BottomSheet).evaluate().isNotEmpty || find.byKey(const Key('app-sheet')).evaluate().isNotEmpty)) {
         await tester.tapAt(const Offset(2, 2));
         await tester.pumpAndSettle();
       }

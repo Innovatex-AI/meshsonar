@@ -959,7 +959,7 @@ class FakeDeviceDetails implements DeviceDetailsSource {
 /// Taps a bottom-bar / rail destination by its label.
 Future<void> tapShellTab(WidgetTester tester, String label) async {
   // A sheet the app opened by itself (antenna setup after a connect) covers the tab bar: dismiss it first.
-  for (var i = 0; i < 3 && find.byType(BottomSheet).evaluate().isNotEmpty; i++) {
+  for (var i = 0; i < 3 && (find.byType(BottomSheet).evaluate().isNotEmpty || find.byKey(const Key('app-sheet')).evaluate().isNotEmpty); i++) {
     await tester.tapAt(const Offset(2, 2));
     await tester.pumpAndSettle();
   }
@@ -1010,7 +1010,7 @@ Future<void> openSettingsTab(WidgetTester tester) async {
 /// Opens a row of the More list (scrolling to it first: at large text sizes it is below the fold).
 Future<void> _openMoreRow(WidgetTester tester, String key) async {
   await tapShellTab(tester, 'More');
-  for (var i = 0; i < 3 && find.byType(BottomSheet).evaluate().isNotEmpty; i++) {
+  for (var i = 0; i < 3 && (find.byType(BottomSheet).evaluate().isNotEmpty || find.byKey(const Key('app-sheet')).evaluate().isNotEmpty); i++) {
     await tester.tapAt(const Offset(2, 2));
     await tester.pumpAndSettle();
   }

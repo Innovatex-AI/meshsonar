@@ -36,7 +36,7 @@ Future<Harness> startDriving(WidgetTester tester, {Harness? harness}) async {
   await h.state.connectSimulator();
   await tester.pumpAndSettle();
   // The first connect opens the antenna sheet; the tests are about the shell, so close it.
-  while (find.byType(BottomSheet).evaluate().isNotEmpty) {
+  while ((find.byType(BottomSheet).evaluate().isNotEmpty || find.byKey(const Key('app-sheet')).evaluate().isNotEmpty)) {
     await tester.tapAt(const Offset(2, 2));
     await tester.pumpAndSettle();
   }
