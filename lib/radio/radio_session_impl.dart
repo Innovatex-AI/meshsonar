@@ -10,6 +10,7 @@ import 'dart:typed_data';
 import '../core/drive_context.dart';
 import 'claim_radio.dart';
 import 'command_queue.dart';
+import 'remote_request_queue.dart';
 import 'companion_link.dart';
 import 'crypto.dart' show toHex;
 import 'inbound.dart';
@@ -425,6 +426,9 @@ class LinkRadioSession implements RadioSession, RepeaterAdminRadio, RadioStatsSo
   /// True while a wardrive ping is in flight; the Tools' noise monitor then skips its read. Set by the app.
   bool Function()? pingBusy;
 
+  /// The radio's shared remote-request queue (set by the session manager); the Stats telemetry request goes through it.
+  RemoteRequestQueue? remoteQueue;
+
   /// Where saved traces live (null = memory). Set by the app before the first use of [tools].
   TraceStore? traceStore;
 
@@ -433,7 +437,9 @@ class LinkRadioSession implements RadioSession, RepeaterAdminRadio, RadioStatsSo
   RadioTools? get tools {
     final mc = _mc;
     if (mc == null) return null;
-    return _tools ??= RadioTools(LinkToolsRadio(mc, this), arbiter, clock: _clock, pingBusy: () => pingBusy?.call() ?? false, traceStore: traceStore);
+    final t = _tools ??= RadioTools(LinkToolsRadio(mc, this), arbiter, clock: _clock, pingBusy: () => pingBusy?.call() ?? false, traceStore: traceStore);
+    t.telemetry.queue ??= remoteQueue;
+    return t;
   }
 
   // ---------------------------------------------------------------- end
