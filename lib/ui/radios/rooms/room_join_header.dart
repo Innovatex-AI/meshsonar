@@ -10,15 +10,9 @@ import '../../../radio/claim_radio.dart';
 import '../../../radio/protocol.dart' show AdvType;
 import '../../app.dart';
 import '../admin_launcher.dart';
+import 'room_joins.dart';
+export 'room_joins.dart';
 import '../repeater_admin/admin_common.dart' show kTarget;
-
-/// Which rooms this app run has joined, and how.
-class RoomJoins {
-  static final Map<String, RemoteLogin> _joined = {};
-  static RemoteLogin? of(String keyHex) => _joined[keyHex.toLowerCase()];
-  static void set(String keyHex, RemoteLogin l) => _joined[keyHex.toLowerCase()] = l;
-  static void clear() => _joined.clear();
-}
 
 class RoomJoinHeader extends StatefulWidget {
   final String keyHex;
