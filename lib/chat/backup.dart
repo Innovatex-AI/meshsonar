@@ -10,6 +10,7 @@ import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 
+import '../radio/inbound.dart' show RadioChannel, RadioContact;
 import 'backup_crypto.dart';
 import 'channel_secret.dart';
 import 'db/contact_repository.dart';
@@ -436,5 +437,219 @@ class ChatBackup {
       }
     });
     return report;
+  }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Radio backup (WP12): the radio's own identity key, contact table and channel slots, in ONE passphrase-encrypted file.
+//
+//  * The file only ever exists encrypted (PBKDF2-HMAC-SHA256 600k -> AES-256-GCM, [BackupCrypto]); there is no function that
+//    writes the key in clear. The identity key is the radio: whoever opens the file and has the passphrase can BE this radio.
+//  * The key is never logged: [RadioBackupData.toString] redacts it, and callers zero the bytes ([RadioBackupData.wipe]) when done.
+//  * Input is untrusted: sizes, counts and hex are checked on the way in; a bad entry is dropped and counted.
+//  * The inner JSON has its own `format`, so a radio backup is not mistaken for a chat backup (and the reverse).
+
+class RadioBackupData {
+  final String radioName;
+  final String publicKeyHex;
+  final int createdMs;
+
+  /// 64 bytes, or null when the firmware refused to export it (the backup then holds contacts and channels only).
+  Uint8List? identityKey;
+  final List<RadioContact> contacts;
+  final List<RadioChannel> channels;
+
+  /// Entries dropped as invalid when this was read from a file.
+  final int skipped;
+  RadioBackupData({
+    required this.radioName,
+    required this.publicKeyHex,
+    required this.createdMs,
+    this.identityKey,
+    this.contacts = const [],
+    this.channels = const [],
+    this.skipped = 0,
+  });
+
+  bool get hasIdentity => identityKey != null;
+
+  /// Overwrites the key in memory. Call when the backup has been written or restored.
+  void wipe() {
+    identityKey?.fillRange(0, identityKey!.length, 0);
+    identityKey = null;
+  }
+
+  @override
+  String toString() => 'RadioBackupData($radioName, identity: ${hasIdentity ? '<redacted>' : 'none'}, contacts ${contacts.length}, channels ${channels.length})';
+}
+
+abstract final class RadioBackup {
+  static const String format = 'meshsonar-radio-backup';
+  static const int formatVersion = 1;
+  static const int minPassphraseChars = 10;
+  static const int maxContacts = 20000;
+  static const int maxChannels = 256;
+
+  /// Why [p] cannot protect a radio identity, or null.
+  static String? passphraseProblem(String p) {
+    if (p.trim() != p) return 'The passphrase cannot start or end with a space.';
+    if (p.length < minPassphraseChars) return 'Use at least $minPassphraseChars characters. Three or four random words work well.';
+    if (RegExp(r'^(.)\1+$').hasMatch(p)) return 'That is one character repeated. Use a real passphrase.';
+    return null;
+  }
+
+  /// The encrypted file bytes (JSON envelope, see [BackupCrypto]). Set [useIsolate] false in tests and pass few [iterations].
+  static Future<Uint8List> seal(RadioBackupData d, String passphrase, {int iterations = BackupCrypto.defaultIterations, bool useIsolate = true}) {
+    final problem = passphraseProblem(passphrase);
+    if (problem != null) throw ArgumentError(problem);
+    final k = d.identityKey;
+    if (k != null && k.length != 64) throw ArgumentError('an identity key is 64 bytes');
+    final plain = utf8.encode(jsonEncode({
+      'format': format,
+      'version': formatVersion,
+      'createdMs': d.createdMs,
+      'radio': {'name': d.radioName, 'publicKey': d.publicKeyHex},
+      if (k != null) 'identity': {'privateKey': base64.encode(k)},
+      'contacts': [
+        for (final c in d.contacts)
+          {
+            'key': c.publicKeyHex,
+            'type': c.type,
+            'flags': c.flags,
+            'outPathLen': c.outPathLen,
+            'outPath': c.outPath.map((b) => b.toRadixString(16).padLeft(2, '0')).join(),
+            'name': c.name,
+            'lastAdvert': c.lastAdvert,
+            if (c.lat != null && c.lon != null) 'lat': c.lat,
+            if (c.lat != null && c.lon != null) 'lon': c.lon,
+            'lastMod': c.lastMod,
+          }
+      ],
+      'channels': [
+        for (final ch in d.channels)
+          if (!ch.isEmpty) {'index': ch.index, 'name': ch.name, 'secret': ch.secret.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}
+      ],
+    }));
+    return BackupCrypto.encrypt(Uint8List.fromList(plain), passphrase, iterations: iterations, useIsolate: useIsolate);
+  }
+
+  /// Decrypts and validates [file]. Throws [BackupWrongPassphrase] for a wrong passphrase or damage, [BackupFormatException]
+  /// for something that is not a radio backup (including a chat backup).
+  static Future<RadioBackupData> open(Uint8List file, String passphrase, {bool useIsolate = true}) async {
+    if (file.length > ChatBackup.maxFileBytes) throw const BackupFormatException('this file is too large to be a radio backup');
+    final Object? env;
+    try {
+      env = jsonDecode(utf8.decode(file));
+    } catch (_) {
+      throw const BackupFormatException('this is not a MeshSonar backup file');
+    }
+    if (env is! Map<String, dynamic> || !BackupCrypto.looksEncrypted(env)) {
+      throw const BackupFormatException('this is not an encrypted MeshSonar backup. Radio backups are always encrypted.');
+    }
+    final Uint8List plain;
+    try {
+      plain = await BackupCrypto.decrypt(env, passphrase, useIsolate: useIsolate);
+    } on BackupCryptoException catch (e) {
+      if (e is BackupWrongPassphrase) rethrow;
+      throw BackupFormatException(e.message);
+    }
+    try {
+      return _parse(plain);
+    } finally {
+      plain.fillRange(0, plain.length, 0);
+    }
+  }
+
+  static final _hex64 = RegExp(r'^[0-9a-f]{64}$');
+  static final _hex32 = RegExp(r'^[0-9a-f]{32}$');
+
+  static Uint8List _unhex(String h) => Uint8List.fromList([for (var i = 0; i < h.length; i += 2) int.parse(h.substring(i, i + 2), radix: 16)]);
+
+  static RadioBackupData _parse(Uint8List plain) {
+    final Object? j;
+    try {
+      j = jsonDecode(utf8.decode(plain));
+    } catch (_) {
+      throw const BackupFormatException('the backup is damaged');
+    }
+    if (j is! Map<String, dynamic>) throw const BackupFormatException('the backup is damaged');
+    if (j['format'] == ChatBackup.format) throw const BackupFormatException('this is a chat backup, not a radio backup');
+    if (j['format'] != format) throw const BackupFormatException('this is not a radio backup');
+    final v = j['version'];
+    if (v is! int || v > formatVersion) throw const BackupFormatException('this backup was made by a newer MeshSonar');
+    final radio = j['radio'];
+    if (radio is! Map<String, dynamic>) throw const BackupFormatException('the backup is damaged');
+    final pk = radio['publicKey'];
+    if (pk is! String || !_hex64.hasMatch(pk)) throw const BackupFormatException('the backup has no valid radio key');
+    var skipped = 0;
+    Uint8List? key;
+    final id = j['identity'];
+    if (id is Map<String, dynamic>) {
+      try {
+        final b = base64.decode(id['privateKey'] as String);
+        if (b.length != 64) throw const FormatException();
+        key = Uint8List.fromList(b);
+      } catch (_) {
+        throw const BackupFormatException('the identity key in the backup is damaged');
+      }
+    }
+    final contacts = <RadioContact>[];
+    final cj = j['contacts'];
+    if (cj is List) {
+      for (final e in cj.take(maxContacts)) {
+        if (e is! Map<String, dynamic>) {
+          skipped++;
+          continue;
+        }
+        final k = e['key'], t = e['type'], name = e['name'], path = e['outPath'];
+        final pl = e['outPathLen'];
+        if (k is! String || !_hex64.hasMatch(k) || t is! int || t < 0 || t > 4 || name is! String || path is! String || pl is! int || pl < 0 || pl > 0xFF) {
+          skipped++;
+          continue;
+        }
+        if (path.length > 128 || path.length.isOdd || !RegExp(r'^[0-9a-f]*$').hasMatch(path)) {
+          skipped++;
+          continue;
+        }
+        final lat = e['lat'], lon = e['lon'];
+        contacts.add(RadioContact(
+          publicKeyHex: k,
+          type: t,
+          flags: (e['flags'] is int ? e['flags'] as int : 0) & 0xFF,
+          outPathLen: pl,
+          outPath: _unhex(path),
+          name: name.length > 64 ? name.substring(0, 64) : name,
+          lastAdvert: e['lastAdvert'] is int ? e['lastAdvert'] as int : 0,
+          lat: lat is num && lon is num ? lat.toDouble() : null,
+          lon: lat is num && lon is num ? lon.toDouble() : null,
+          lastMod: e['lastMod'] is int ? e['lastMod'] as int : 0,
+        ));
+      }
+    }
+    final channels = <RadioChannel>[];
+    final chj = j['channels'];
+    if (chj is List) {
+      for (final e in chj.take(maxChannels)) {
+        if (e is! Map<String, dynamic>) {
+          skipped++;
+          continue;
+        }
+        final i = e['index'], n = e['name'], s = e['secret'];
+        if (i is! int || i < 0 || i >= maxChannels || n is! String || s is! String || !_hex32.hasMatch(s)) {
+          skipped++;
+          continue;
+        }
+        channels.add(RadioChannel(i, n.length > 31 ? n.substring(0, 31) : n, _unhex(s)));
+      }
+    }
+    return RadioBackupData(
+      radioName: radio['name'] is String ? radio['name'] as String : '',
+      publicKeyHex: pk,
+      createdMs: j['createdMs'] is int ? j['createdMs'] as int : 0,
+      identityKey: key,
+      contacts: contacts,
+      channels: channels,
+      skipped: skipped,
+    );
   }
 }

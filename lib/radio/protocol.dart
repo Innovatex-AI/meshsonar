@@ -25,6 +25,10 @@ abstract final class Cmd {
   static const addUpdateContact = 9;
   static const syncNextMessage = 10;
   static const resetPath = 13; // MyMesh.cpp 1317
+  static const reboot = 19; // payload must be the literal "reboot" (MyMesh.cpp 1512)
+  static const exportPrivateKey = 23; // MyMesh.cpp 1528; DISABLED unless the firmware was built with ENABLE_PRIVATE_KEY_EXPORT
+  static const importPrivateKey = 24; // MyMesh.cpp 1541
+  static const setDevicePin = 37; // [37][pin u32]: 0 or 100000..999999 else ERR 6 (MyMesh.cpp 1839-1850)
   static const removeContact = 15; // MyMesh.cpp 1349
   static const shareContact = 16; // MyMesh.cpp 1359
   static const exportContact = 17;
@@ -48,6 +52,9 @@ abstract final class Cmd {
   static const sendTelemetryReq = 39; // with exactly 3 reserved bytes = the companion's own ('self') telemetry
   static const sendBinaryReq = 50; // [50][pub_key x32][request bytes]: neighbours, ACL, owner (repeater_wire.dart)
   static const sendAnonReq = 57; // [57][pub_key x32][request bytes]: clock, regions, owner without a login
+  static const factoryReset = 51; // payload must be the literal "reset" (MyMesh.cpp 1965-1977)
+  static const setPathHashMode = 61; // [61][0][mode 0..2] (fw code 10+; MyMesh.cpp 1504-1511)
+  static const runCliCommand = 66; // [66][text] -> CLI_REPLY (fw 1.18+; MyMesh.cpp 1118-1131)
 }
 
 abstract final class Resp {
@@ -65,6 +72,7 @@ abstract final class Resp {
   static const exportContact = 11;
   static const battAndStorage = 12;
   static const deviceInfo = 13;
+  static const privateKey = 14; // [14][prv_key x64]: the radio's identity. A SECRET: never log it.
   static const disabled = 15;
   static const contactMsgRecvV3 = 16;
   static const autoAddConfig = 25; // [25][config][max_hops] (MyMesh.cpp 2030-2036)
@@ -73,6 +81,7 @@ abstract final class Resp {
   static const signStart = 19;
   static const signature = 20;
   static const stats = 24;
+  static const cliReply = 29; // [29][text]: the answer to RUN_CLI_COMMAND
   static const channelDataRecv = 27; // binary channel datagram in the offline queue (drained like a message)
 }
 
@@ -375,6 +384,79 @@ Uint8List encodeSetAutoAddConfig(int config, {int? maxHops}) =>
 /// CMD_GET_AUTOADD_CONFIG: [59] -> RESP_CODE_AUTOADD_CONFIG [25][config][max_hops] (MyMesh.cpp 2030-2036).
 Uint8List encodeGetAutoAddConfig() => Uint8List.fromList([Cmd.getAutoAddConfig]);
 
+// ------------------------------------------------------------------ device settings (WP12)
+// Layouts from MyMesh.cpp handleCmdFrame() at main b204f9a (fw code 14), read in the planning docs
+// app-radio-settings-and-ui-design-plan-2026-10-21 and meshcore-protocol-capabilities-for-one-app-2026-10-31; NOT yet run on
+// hardware (no radio reachable on Nov 2 2026): the test fixtures are firmware-derived, not captured.
+
+/// A 6-digit Bluetooth PIN, or 0 (the firmware's "pick a random PIN at boot"), is all SET_DEVICE_PIN takes.
+const int minBlePin = 100000;
+const int maxBlePin = 999999;
+
+/// CMD_SET_DEVICE_PIN: [37][pin u32 LE] -> OK, ERR(ILLEGAL_ARG) unless 0 or 100000..999999. Takes effect at the next pairing.
+/// Throws [ArgumentError] for a value the firmware would refuse, so a bad PIN never reaches the radio.
+Uint8List encodeSetDevicePin(int pin) {
+  if (pin != 0 && (pin < minBlePin || pin > maxBlePin)) throw ArgumentError.value(pin, 'pin', 'must be 0 or 6 digits');
+  final out = Uint8List(5)..[0] = Cmd.setDevicePin;
+  ByteData.sublistView(out).setUint32(1, pin, Endian.little);
+  return out;
+}
+
+/// CMD_REBOOT: [19]['r','e','b','o','o','t'] -> NO REPLY, the radio saves pending contacts and restarts (BLE drops). Anything
+/// but the literal is refused with ERR(ILLEGAL_ARG).
+Uint8List encodeReboot() => Uint8List.fromList([Cmd.reboot, ...utf8.encode('reboot')]);
+
+/// CMD_FACTORY_RESET: [51]['r','e','s','e','t'] -> OK, then the radio formats its filesystem (identity key, contacts,
+/// channels, preferences) and restarts. ERR(FILE_IO_ERROR) when the format failed.
+Uint8List encodeFactoryReset() => Uint8List.fromList([Cmd.factoryReset, ...utf8.encode('reset')]);
+
+/// CMD_EXPORT_PRIVATE_KEY: [23] -> PRIVATE_KEY [14][x64], or DISABLED (15) on a firmware built without export.
+Uint8List encodeExportPrivateKey() => Uint8List.fromList([Cmd.exportPrivateKey]);
+
+/// The size of the radio's identity key as the firmware stores it (ed25519 expanded private key).
+const int privateKeyBytes = 64;
+
+/// CMD_IMPORT_PRIVATE_KEY: [24][prv_key x64] -> OK (the radio saves it and uses it from now on), DISABLED (15) on a firmware
+/// built without import, ERR(FILE_IO_ERROR) when saving failed.
+Uint8List encodeImportPrivateKey(List<int> key64) {
+  if (key64.length != privateKeyBytes) throw ArgumentError.value(key64.length, 'key64', 'an identity key is 64 bytes');
+  return Uint8List.fromList([Cmd.importPrivateKey, ...key64]);
+}
+
+/// CMD_SET_PATH_HASH_MODE: [61][0][mode] with mode 0 (1-byte hashes), 1 (2 bytes), 2 (3 bytes); >= 3 is refused with
+/// ERR(ILLEGAL_ARG). fw code 10+. Read back from DEVICE_INFO byte 81.
+Uint8List encodeSetPathHashMode(int mode) {
+  if (mode < 0 || mode > 2) throw ArgumentError.value(mode, 'mode', 'path hash mode is 0, 1 or 2');
+  return Uint8List.fromList([Cmd.setPathHashMode, 0, mode]);
+}
+
+/// The longest local CLI line that fits one frame (MAX_FRAME_SIZE 176 minus the opcode, with margin for the firmware's own
+/// 160-byte command buffer).
+const int maxCliCommandBytes = 160;
+
+/// CMD_RUN_CLI_COMMAND: [66][text] -> CLI_REPLY [29][text] (fw 1.18+, code 14 main). ERR(UNSUPPORTED_CMD) on older firmware.
+Uint8List encodeRunCliCommand(String text) {
+  final b = utf8.encode(text);
+  if (b.isEmpty || b.length > maxCliCommandBytes) throw ArgumentError.value(b.length, 'text', 'a CLI line is 1-$maxCliCommandBytes bytes');
+  return Uint8List.fromList([Cmd.runCliCommand, ...b]);
+}
+
+/// The three 2-bit telemetry sharing modes in SELF_INFO byte 46 / SET_OTHER_PARAMS byte 2: `env << 4 | location << 2 | base`.
+/// Each is 0 (nobody), 1 (contacts that have the telemetry flag set), 2 (everybody).
+class TelemetryModes {
+  static const int deny = 0, perContact = 1, everyone = 2;
+  final int base, location, env;
+  const TelemetryModes({this.base = 0, this.location = 0, this.env = 0});
+  factory TelemetryModes.fromByte(int b) => TelemetryModes(base: b & 3, location: (b >> 2) & 3, env: (b >> 4) & 3);
+  int get byte => ((env & 3) << 4) | ((location & 3) << 2) | (base & 3);
+  TelemetryModes copyWith({int? base, int? location, int? env}) => TelemetryModes(base: base ?? this.base, location: location ?? this.location, env: env ?? this.env);
+  bool get valid => base <= 2 && location <= 2 && env <= 2;
+  @override
+  bool operator ==(Object other) => other is TelemetryModes && other.byte == byte;
+  @override
+  int get hashCode => byte;
+}
+
 // ------------------------------------------------------------------ decoded frames
 
 sealed class Frame {
@@ -460,6 +542,9 @@ class DeviceInfoFrame extends Frame {
   final String? manufacturer;
   final String? firmwareVersion;
   final int? pathHashMode;
+
+  /// The Bluetooth PIN (bytes 4-7). Used only to read a PIN change back; never shown, logged or stored.
+  final int? blePin;
   const DeviceInfoFrame({
     required this.firmwareVerCode,
     this.maxContacts,
@@ -468,6 +553,7 @@ class DeviceInfoFrame extends Frame {
     this.manufacturer,
     this.firmwareVersion,
     this.pathHashMode,
+    this.blePin,
   });
 }
 
@@ -830,6 +916,21 @@ class DiscoverResponse {
   }
 }
 
+/// RESP_CODE_PRIVATE_KEY (MyMesh.cpp 1528-1540): [14][prv_key x64]. THE RADIO'S IDENTITY: whoever holds it can be this radio.
+/// [toString] never shows it and nothing may log the bytes.
+class PrivateKeyFrame extends Frame {
+  final Uint8List key;
+  const PrivateKeyFrame(this.key);
+  @override
+  String toString() => 'PrivateKeyFrame(<${key.length} bytes redacted>)';
+}
+
+/// RESP_CODE_CLI_REPLY: [29][text...] (the answer to RUN_CLI_COMMAND).
+class CliReplyFrame extends Frame {
+  final String text;
+  const CliReplyFrame(this.text);
+}
+
 class UnknownFrame extends Frame {
   final int code;
   final Uint8List data;
@@ -954,6 +1055,7 @@ Frame decodeFrame(Uint8List f) {
         manufacturer: f.length >= 60 ? _cString(f, 20, 40) : null,
         firmwareVersion: f.length >= 80 ? _cString(f, 60, 20) : null,
         pathHashMode: f.length >= 82 ? f[81] : null,
+        blePin: f.length >= 8 ? bd.getUint32(4, Endian.little) : null,
       );
     case Resp.autoAddConfig:
       need(2, 'AUTOADD_CONFIG');
@@ -1093,6 +1195,11 @@ Frame decodeFrame(Uint8List f) {
       return SignatureFrame(Uint8List.fromList(f.sublist(1, 65)));
     case Resp.exportContact:
       return ExportContactFrame(Uint8List.fromList(f.sublist(1)));
+    case Resp.privateKey:
+      need(65, 'PRIVATE_KEY');
+      return PrivateKeyFrame(Uint8List.fromList(f.sublist(1, 65)));
+    case Resp.cliReply:
+      return CliReplyFrame(utf8.decode(f.sublist(1).takeWhile((b) => b != 0).toList(), allowMalformed: true));
     case Push.msgWaiting:
       return const MsgWaitingPush();
     case Push.logRxData:
@@ -1153,13 +1260,14 @@ Uint8List encodeDeviceInfo({
   required String manufacturer,
   required String firmwareVersion,
   int pathHashMode = 0,
+  int blePin = 0,
 }) {
   final out = Uint8List(82);
   out[0] = Resp.deviceInfo;
   out[1] = firmwareVerCode;
   out[2] = maxContactsHalf;
   out[3] = maxChannels;
-  // 4..7 ble pin = 0
+  ByteData.sublistView(out).setUint32(4, blePin, Endian.little);
   void put(int at, String s, int max) {
     final b = utf8Truncate(s, max - 1);
     out.setRange(at, at + b.length, b);
@@ -1430,3 +1538,8 @@ Uint8List encodeContactText(List<int> senderKey, String text,
   b.add(utf8.encode(text));
   return b.toBytes();
 }
+
+/// Radio-side encoders for the simulator and tests (device settings).
+Uint8List encodePrivateKey(List<int> key64) => Uint8List.fromList([Resp.privateKey, ...key64]);
+Uint8List encodeDisabled() => Uint8List.fromList([Resp.disabled]);
+Uint8List encodeCliReply(String text) => Uint8List.fromList([Resp.cliReply, ...utf8.encode(text)]);
