@@ -2,7 +2,6 @@
 // region's preset and, on request, the MeshCore community presets. Nothing here writes to a radio.
 import 'package:flutter/material.dart' hide Radio;
 
-import '../../app/app_flags.dart';
 import '../../core/model.dart';
 import '../../core/radio_presets.dart';
 import '../../radio/radio_api.dart';
@@ -59,7 +58,7 @@ class _RadioScreenState extends State<RadioScreen> {
           key: const Key('radio-list'),
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
           children: [
-            if (AppFlags.chatRedesign && info != null) ...[
+            if (info != null) ...[
               OutlinedButton.icon(
                 key: const Key('radio-device-settings'),
                 onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const DeviceSettingsScreen())),
