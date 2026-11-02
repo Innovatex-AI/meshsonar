@@ -4,7 +4,6 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:meshsonar/radio/command_queue.dart';
 import 'package:meshsonar/radio/inbound.dart';
 import 'package:meshsonar/radio/protocol.dart';
 import 'package:meshsonar/radio/remote_request_queue.dart';

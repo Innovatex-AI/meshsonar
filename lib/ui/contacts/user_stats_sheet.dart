@@ -12,7 +12,6 @@ import 'package:flutter/material.dart';
 
 import '../../chat/models.dart';
 import '../../radio/inbound.dart' show RadioContact;
-import '../../radio/tools/lpp.dart';
 import '../../radio/tools/telemetry_tool.dart';
 import '../app.dart';
 import '../design/app_surfaces.dart';
@@ -162,7 +161,6 @@ class _UserStatsBodyState extends State<UserStatsBody> {
             controller: widget.controller,
             title: 'Stats · $name',
             padding: EdgeInsets.zero,
-            children: kids,
             primaryAction: t == null
                 ? null
                 : CupertinoButton(
@@ -170,6 +168,7 @@ class _UserStatsBodyState extends State<UserStatsBody> {
                     onPressed: _loading ? null : () => _refresh(),
                     child: Text(_loading ? 'Asking…' : 'Refresh', style: AppType.headline.copyWith(color: _loading ? c.textMuted : c.accent)),
                   ),
+            children: kids,
           ),
         ),
       ],
