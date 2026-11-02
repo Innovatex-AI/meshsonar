@@ -136,7 +136,7 @@ void main() {
     await t.drag(listView, const Offset(0, -700));
     await pumpFor(t, const Duration(seconds: 1));
     await shot(t, 'contact-detail-3');
-    await t.pageBack();
+    await t.tap(find.byKey(const Key('contact-back')));
     await pumpFor(t, const Duration(seconds: 1));
     await t.pageBack();
     await pumpFor(t, const Duration(seconds: 1));
@@ -155,7 +155,7 @@ void main() {
       await t.tap(rep.first);
       await pumpFor(t, const Duration(seconds: 2));
       await shot(t, 'repeater-detail');
-      await t.pageBack();
+      await t.tap(find.byKey(const Key('contact-back')));
       await pumpFor(t, const Duration(seconds: 1));
     }
     await t.ensureVisible(find.byKey(const Key('filter-all')));

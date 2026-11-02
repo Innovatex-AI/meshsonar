@@ -40,14 +40,6 @@ lib/ui/contacts/add_contact_screen.dart|FilledButton|2
 lib/ui/contacts/add_contact_screen.dart|Icons.|6
 lib/ui/contacts/add_contact_screen.dart|InkWell(|1
 lib/ui/contacts/add_contact_screen.dart|TextField(|2
-lib/ui/contacts/contact_detail_screen.dart|Chip(|3
-lib/ui/contacts/contact_detail_screen.dart|FilledButton|8
-lib/ui/contacts/contact_detail_screen.dart|Icons.|20
-lib/ui/contacts/contact_detail_screen.dart|SwitchListTile(|1
-lib/ui/contacts/contact_detail_screen.dart|TextButton|6
-lib/ui/contacts/contact_detail_screen.dart|TextField(|2
-lib/ui/contacts/contact_map.dart|Icons.|1
-lib/ui/contacts/contact_widgets.dart|Icons.|4
 lib/ui/contacts/contacts_settings_sheet.dart|ListTile(|1
 lib/ui/contacts/contacts_settings_sheet.dart|SwitchListTile(|3
 lib/ui/contacts/contacts_settings_sheet.dart|TextButton|2

@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../chat/delivery_text.dart';
 import '../theme.dart';
-import 'contact_detail_screen.dart';
+import 'contact_profile_screen.dart';
 import 'contact_widgets.dart';
 import 'contacts_controller.dart';
 
@@ -42,7 +42,7 @@ class DmRouteHeader extends StatelessWidget {
           label: 'Route to ${c.displayName}. $line Opens contact details.',
           child: InkWell(
             key: const Key('dm-route-header'),
-            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ContactDetailScreen(controller: controller, publicKey: c.publicKey))),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ContactProfileScreen(controller: controller, publicKey: c.publicKey))),
             child: ConstrainedBox(
               constraints: const BoxConstraints(minHeight: 48),
               child: Container(

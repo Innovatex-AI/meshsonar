@@ -371,7 +371,7 @@ void main() {
 
     testWidgetsT('big text hides the route chip instead of overflowing; normal text shows route words', (tester) async {
       await pumpView(tester, contacts: 3);
-      expect(find.textContaining('no route yet'), findsWidgets);
+      expect(find.textContaining('No route yet'), findsWidgets);
     });
   });
 }

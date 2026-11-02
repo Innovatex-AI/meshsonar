@@ -2,6 +2,9 @@
 import 'package:flutter/material.dart';
 
 import '../../chat/models.dart';
+import '../design/app_symbols.dart';
+import '../design/avatar_style.dart';
+import '../design/tokens.dart';
 
 String contactTypeLabel(ContactType t) => switch (t) {
       ContactType.companion => 'Person',
@@ -10,12 +13,22 @@ String contactTypeLabel(ContactType t) => switch (t) {
       ContactType.sensor => 'Sensor',
     };
 
-IconData contactTypeIcon(ContactType t) => switch (t) {
-      ContactType.companion => Icons.person_rounded,
-      ContactType.repeater => Icons.cell_tower_rounded,
-      ContactType.room => Icons.forum_rounded,
-      ContactType.sensor => Icons.sensors_rounded,
+AppSymbol contactTypeSymbol(ContactType t) => switch (t) {
+      ContactType.companion => AppSymbols.personFill,
+      ContactType.repeater => AppSymbols.antenna,
+      ContactType.room => AppSymbols.person2Fill,
+      ContactType.sensor => AppSymbols.thermometer,
     };
+
+/// How messages reach the contact, in the app-wide words (plan 2.1): "Direct" (no repeater between), "Via 2 repeaters"
+/// (a saved route), "Searching" (every message goes to everyone nearby), "No route yet".
+String routeCaption(Contact c) {
+  if (c.forceFlood) return 'Searching';
+  if (!c.hasPath) return 'No route yet';
+  final n = c.pathHops ?? 0;
+  if (n == 0) return 'Direct';
+  return 'Via $n ${n == 1 ? 'repeater' : 'repeaters'}';
+}
 
 /// "just now", "5 min ago", "3 h ago", "yesterday", "12 days ago", "never heard".
 String heardText(int? ms, int nowMs) {
@@ -31,8 +44,8 @@ String heardText(int? ms, int nowMs) {
   return 'Heard $days days ago';
 }
 
-/// First letter of the name on a coloured disc (colour from the key, so a contact keeps its colour); repeaters, rooms and
-/// sensors show their type icon instead.
+/// Initials on a coloured disc (colour from the key via [avatarStyle], so a contact keeps its colour and the initials
+/// always read at 4.5:1); repeaters, rooms and sensors show their type symbol instead.
 class ContactAvatar extends StatelessWidget {
   final Contact contact;
   final double size;
@@ -40,20 +53,19 @@ class ContactAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    final hue = (int.tryParse(contact.publicKey.substring(0, 4), radix: 16) ?? 0) % 360;
-    final dark = t.brightness == Brightness.dark;
-    final bg = HSLColor.fromAHSL(1, hue.toDouble(), 0.45, dark ? 0.30 : 0.82).toColor();
-    final fg = HSLColor.fromAHSL(1, hue.toDouble(), 0.5, dark ? 0.85 : 0.25).toColor();
+    final style = avatarStyle(contact.publicKey, AppColors.of(context));
     final person = contact.type == ContactType.companion;
     final name = contact.displayName.trim();
     final letter = name.isEmpty ? '?' : String.fromCharCode(name.runes.first).toUpperCase();
     return ExcludeSemantics(
-      child: CircleAvatar(
-        radius: size / 2,
-        backgroundColor: bg,
-        foregroundColor: fg,
-        child: person ? Text(letter, style: TextStyle(fontSize: size * 0.42, fontWeight: FontWeight.w600)) : Icon(contactTypeIcon(contact.type), size: size * 0.5),
+      child: Container(
+        width: size,
+        height: size,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(color: style.fill, shape: BoxShape.circle),
+        child: person
+            ? Text(letter, textScaler: TextScaler.noScaling, style: TextStyle(fontSize: size * 0.42, fontWeight: FontWeight.w600, color: style.initials))
+            : AppSymbolIcon(contactTypeSymbol(contact.type), size: size * 0.5, color: style.initials, scaleWithText: false),
       ),
     );
   }

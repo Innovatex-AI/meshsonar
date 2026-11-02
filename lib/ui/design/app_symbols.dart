@@ -89,6 +89,12 @@ abstract final class AppSymbols {
   static const tray = AppSymbol('tray', CupertinoIcons.tray, Icons.inbox_outlined);
   static const waveform = AppSymbol('waveform', CupertinoIcons.waveform, Icons.graphic_eq);
 
+  // Contact profile tiles (Chat WP6a)
+  static const route = AppSymbol('point.topleft.down.to.point.bottomright.curvepath.fill', CupertinoIcons.arrow_branch, Icons.route);
+  static const gauge = AppSymbol('gauge.with.dots.needle.67percent', CupertinoIcons.gauge, Icons.speed);
+  static const bubbles = AppSymbol('bubble.left.and.bubble.right.fill', CupertinoIcons.bubble_left_bubble_right_fill, Icons.forum);
+  static const qrcode = AppSymbol('qrcode', CupertinoIcons.qrcode, Icons.qr_code_2);
+
   /// Every symbol, for the manifest test and the gallery.
   static const List<AppSymbol> all = [
     car, carFill, message, messageFill, chartBar, ellipsisCircle, map, mapFill, //
@@ -98,7 +104,8 @@ abstract final class AppSymbols {
     pinFill, paperplaneFill, arrowUpCircleFill, //
     star, starFill, bell, bellSlash, exclamationTriangle, exclamationCircle, infoCircle, lock, lockFill, clock, flag,
     gear, //
-    location, locationFill, antenna, wifi, bolt, battery, thermometer, tray, waveform,
+    location, locationFill, antenna, wifi, bolt, battery, thermometer, tray, waveform, //
+    route, gauge, bubbles, qrcode,
   ];
 }
 

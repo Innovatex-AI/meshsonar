@@ -1,6 +1,10 @@
 // The More tab: everything that is not a daily screen. It has its own Navigator, so Radio, Settings and the rest open
 // inside the tab and the tab bar and mini drive bar stay in view.
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+
+import '../../app/app_flags.dart';
 
 import '../../core/server_url.dart' show privacyPolicyUrl;
 import '../about_screen.dart';
@@ -17,6 +21,7 @@ import '../settings_screen.dart';
 import '../tools/adverts_screen.dart';
 import '../tools/discover_screen.dart';
 import '../account/devices_screen.dart';
+import '../design/app_widgets.dart' show AppSwitchTile;
 import '../account/leaderboard_screen.dart';
 import '../account/reports_history_screen.dart';
 import '../tools/noise_screen.dart';
@@ -160,6 +165,21 @@ class MoreList extends StatelessWidget {
             row(MoreItem.devices, Icons.key_outlined, 'Devices and keys', 'Your driver key, other phones, MeshMapper forwarding'),
             row(MoreItem.leaderboard, Icons.emoji_events_outlined, 'Leaderboard', 'Drivers who opted in, this region or every region'),
             row(MoreItem.myReports, Icons.report_gmailerrorred_outlined, 'My reports', 'Problem reports you sent and where they stand'),
+            // Kept above the long groups on purpose: rows below it keep their distance from the end of the list.
+            header('Developer'),
+            ValueListenableBuilder<bool>(
+              valueListenable: AppFlags.chatRedesignNotifier,
+              builder: (context, on, _) => AppSwitchTile(
+                switchKey: const Key('more-chat-redesign'),
+                title: 'New Chat screens (preview)',
+                subtitle: 'Shows the unfinished parts of the Chat redesign. Off by default.',
+                value: on,
+                onChanged: (v) {
+                  final dir = s.services.uiPrefsFile?.parent;
+                  AppFlags.setChatRedesign(v, file: dir == null ? null : File('${dir.path}${Platform.pathSeparator}redesign_flags.json'));
+                },
+              ),
+            ),
             header('Radios and tools'),
             row(MoreItem.repeaters, Icons.cell_tower, 'Repeaters and rooms',
                 s.connected ? 'Administer a repeater, read and post in a room' : 'Needs your radio. Free repeater administration'),

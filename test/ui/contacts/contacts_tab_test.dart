@@ -6,7 +6,7 @@ import 'package:meshsonar/chat/models.dart';
 import 'package:meshsonar/radio/packet.dart';
 import 'package:meshsonar/ui/chat/channel_flows.dart';
 import 'package:meshsonar/ui/chat/conversation_screen.dart';
-import 'package:meshsonar/ui/contacts/contact_detail_screen.dart';
+import 'package:meshsonar/ui/contacts/contact_profile_screen.dart';
 import 'package:meshsonar/ui/contacts/contacts_tab.dart';
 import 'package:meshsonar/ui/radios/rooms/room_join_header.dart';
 
@@ -45,12 +45,12 @@ void main() {
     expect(find.textContaining('No saved route yet'), findsOneWidget);
     await tester.tap(find.byKey(const Key('dm-route-header')));
     await tester.pumpAndSettle();
-    expect(find.byType(ContactDetailScreen), findsOneWidget);
-    await tester.pageBack();
+    expect(find.byType(ContactProfileScreen), findsOneWidget);
+    await tester.tap(find.byKey(const Key('contact-back')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('dm-contact-info')));
     await tester.pumpAndSettle();
-    expect(find.byType(ContactDetailScreen), findsOneWidget);
+    expect(find.byType(ContactProfileScreen), findsOneWidget);
   });
 
   testWidgets('a message written in the conversation goes out through the chat service', (tester) async {
@@ -102,7 +102,7 @@ void main() {
     await boot(tester);
     await tester.tap(find.text('Tower'));
     await tester.pumpAndSettle();
-    expect(find.byType(ContactDetailScreen), findsOneWidget);
+    expect(find.byType(ContactProfileScreen), findsOneWidget);
     expect(find.byType(ConversationScreen), findsNothing);
   });
 
@@ -120,8 +120,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Tower'));
     await tester.pumpAndSettle();
-    expect(find.byType(ContactDetailScreen), findsOneWidget);
-    expect(find.byKey(const Key('contact-admin')), findsOneWidget);
+    expect(find.byType(ContactProfileScreen), findsOneWidget);
+    expect(find.byKey(const Key('tile-dashboard')), findsOneWidget);
   });
 
   group('a tapped or scanned meshcore:// link', () {
