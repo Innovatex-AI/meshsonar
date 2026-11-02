@@ -80,6 +80,8 @@ void main() {
       await openScreen(tester);
       await see(tester, 'delete-account-website');
       expect(find.text(deleteAccountText), findsOneWidget);
+      await tester.ensureVisible(find.byKey(const Key('delete-account-website')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('delete-account-website')));
       await tester.pumpAndSettle();
       expect(h.openedUrls.single.path, '/me/privacy');

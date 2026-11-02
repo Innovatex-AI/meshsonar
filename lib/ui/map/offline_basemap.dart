@@ -222,5 +222,5 @@ class OfflineBasemapLayer extends StatelessWidget {
 }
 
 /// The app's offline style: OSM Carto colours through the same matrix as the online tiles (see core/offline_style.dart),
-/// labels drawn with Flutter text from the bundled Barlow fonts (no glyph files needed in the app).
+/// labels drawn with Flutter text in the system font (SF Pro on iOS, spike S1; no glyph files needed in the app).
 Map<String, dynamic> offlineMapStyle({required bool dark}) => offlineStyle(dark: dark);

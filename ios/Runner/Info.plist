@@ -78,6 +78,8 @@
 	<string>MeshSonar connects to your MeshCore companion radio over Bluetooth to send wardriving pings and hear repeater echoes.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>MeshSonar uses the camera only when you tap Scan QR code, to read a MeshCore channel or contact code. Nothing is recorded or saved.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>MeshSonar can use Face ID to protect saved repeater and room passwords.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>MeshSonar records where each ping was sent so your drive can be mapped.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>

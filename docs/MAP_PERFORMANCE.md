@@ -17,6 +17,22 @@ Benchmark: `integration_test/map_jank_benchmark_test.dart` (run on an iOS simula
 
 Simulator numbers are a floor: a phone is several times slower, so the margins matter more than the absolutes. With the cells removed the old build was already at p95 8.1 ms: the cell layer was ~8 ms of the p95 and ~110 ms of the worst frame.
 
+## Baseline for the Drive redesign (spike S2, WP0, Nov 2 2026): the UNMODIFIED app before the SF Pro swap
+
+Same benchmark (`map_jank_benchmark_test.dart`, 90 s, 60 repeaters, 3,934 network cells, 312 pings, no base tiles), run on `main` at `120dd79` on the **iPhone 17 Pro simulator (iOS 26.5), 60 Hz, Mac on the external HDD with other builds running**, before any WP0 code existed (`BENCH_NAME=wp0_baseline`).
+
+| | simulator baseline |
+|---|---|
+| frame p50 / p95 / p99 | 3.12 / 7.39 / 13.74 ms |
+| worst frame | 21.63 ms |
+| build p95 / raster p95 | 7.39 / 1.99 ms |
+| frames > 16 ms / > 8 ms / > 50 ms | 19 / 210 / 0 (of 5,312) |
+| UI event-loop lag p95 / p99 / worst | 7 / 14 / 28 ms |
+| puck updates per s | 60.1 (every frame), 0 big hops, 0 backwards steps |
+| puck error vs route p50 / p95 / max | 3.4 / 29.3 / 44.2 m |
+
+The Drive plan's gate for WP2 is "p95 <= 10 ms" against this baseline. **Real-phone baseline (120 Hz and 60 Hz, `flutter drive --profile`) is NOT captured yet**: Andy's iPhone was `unavailable` in `xcrun devicectl list devices` when WP0 ran (only the iPad was connected). It is a checklist line for Andy's A1 checkpoint in HANDOFF section 105. Run: `flutter drive --profile --driver=test_driver/integration_test.dart --target=integration_test/map_jank_benchmark_test.dart -d <iphone id> --dart-define=BENCH_SECONDS=90 --dart-define=BENCH_NAME=phone_baseline` (add `--dart-define=BENCH_REPEATERS=600` for the S5 sprite-atlas variant) on a build from `main` before the Drive redesign merges, and paste the table here.
+
 ## Where the time went (evidence)
 
 1. `PolygonLayer` projected and culled every polygon on every camera move. The camera moved 30 times a second while following. (A/B: 3,934 cells vs 1: p95 15.9 vs 8.1 ms, worst 137 vs 26 ms.)

@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 
 import '../app/app_state.dart';
 import '../core/units.dart';
+import '../platform/accessibility_channel.dart';
+import 'design/app_haptics.dart';
+import 'design/drive_guard.dart';
 import 'onboarding/first_run_gate.dart';
 import 'shell/home_shell.dart';
 import 'theme.dart';
@@ -30,9 +33,22 @@ class AppScope extends InheritedNotifier<AppState> {
       (context.getElementForInheritedWidgetOfExactType<AppScope>()!.widget as AppScope).notifier!;
 }
 
-class MeshSonarApp extends StatelessWidget {
+class MeshSonarApp extends StatefulWidget {
   final AppState state;
   const MeshSonarApp({super.key, required this.state});
+
+  @override
+  State<MeshSonarApp> createState() => _MeshSonarAppState();
+}
+
+class _MeshSonarAppState extends State<MeshSonarApp> {
+  AppState get state => widget.state;
+
+  @override
+  void initState() {
+    super.initState();
+    AccessibilitySignals.refresh(); // Reduce Transparency, for the blurred bars (S10)
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -40,7 +56,12 @@ class MeshSonarApp extends StatelessWidget {
       state: state,
       // Builder so the theme follows Settings > Colour palette (the strength colours live in the theme extension).
       child: Builder(builder: (context) {
-        final palette = AppScope.of(context).settings.colourPalette;
+        final scope = AppScope.of(context);
+        final palette = scope.settings.colourPalette;
+        // Foundation wiring (WP0): the Haptics setting, and the drive guard that holds self-raised prompts while driving.
+        AppHaptics.enabled = scope.settings.haptics;
+        final driving = scope.driving;
+        WidgetsBinding.instance.addPostFrameCallback((_) => DriveGuard.instance.setDriving(driving));
         return MaterialApp(
           // Screens pushed for one AppState (a report form, its review) belong to it. Without this key, giving the app
           // a new AppState (a restart in the same engine, as widget tests do) would keep the old screen stack and Navigator

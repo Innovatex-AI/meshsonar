@@ -142,7 +142,7 @@ void main() {
       }
       for (final l in layers.where((l) => l['type'] == 'symbol')) {
         expect((l['paint'] as Map)['text-halo-width'], greaterThanOrEqualTo(2), reason: '${l['id']} halo for the car');
-        expect(((l['layout'] as Map)['text-font'] as List).single, isIn(['Barlow', 'BarlowSemiCondensed']));
+        expect(((l['layout'] as Map)['text-font'] as List).single, appLabelFont);
       }
       // The theme parses (unknown properties would throw or be dropped silently).
       final theme = vtr.ThemeReader().read(style);
