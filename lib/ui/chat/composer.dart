@@ -1,10 +1,13 @@
 // The message composer: live byte counter, draft autosave, mention helper, and the passenger lock (design 1.3).
 import 'dart:async';
 
+import 'package:flutter/cupertino.dart' show CupertinoListTile;
 import 'package:flutter/material.dart';
 
 import '../../app/chat_controller.dart';
 import '../alerts/permission_prompt.dart';
+import '../design/app_surfaces.dart';
+import '../design/app_symbols.dart';
 import '../theme.dart';
 import 'message_format.dart';
 
@@ -84,14 +87,21 @@ class _ComposerState extends State<Composer> {
   }
 
   Future<void> _mention() async {
-    final name = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      builder: (ctx) => SafeArea(
-        child: ListView(shrinkWrap: true, children: [
-          const Padding(padding: EdgeInsets.fromLTRB(Gap.l, 0, Gap.l, Gap.s), child: Text('Mention someone')),
-          for (final n in widget.mentionNames) ListTile(minTileHeight: 48, leading: const Icon(Icons.alternate_email_rounded), title: Text(n), onTap: () => Navigator.pop(ctx, n)),
-        ]),
+    final name = await showAppSheet<String>(
+      context,
+      detents: const [0.5],
+      builder: (ctx, controller) => AppSheetScaffold(
+        controller: controller,
+        title: 'Mention someone',
+        children: [
+          for (final n in widget.mentionNames)
+            CupertinoListTile(
+              key: Key('mention-$n'),
+              leading: const AppSymbolIcon(AppSymbols.person, size: 20),
+              title: Text(n),
+              onTap: () => Navigator.pop(ctx, n),
+            ),
+        ],
       ),
     );
     if (name == null || !mounted) return;

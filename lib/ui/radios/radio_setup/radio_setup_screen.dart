@@ -19,6 +19,7 @@ import '../../../radio/tools/radio_setup.dart';
 import '../../../radio/tools/radio_tools.dart';
 import '../../../radio/tools/tool_frames.dart' show RadioParamLimits;
 import '../../radio/radio_screen.dart' show ComparisonTable;
+import '../../design/app_surfaces.dart';
 import '../../theme.dart';
 import '../../tools/tool_kit.dart';
 import '../../tools/tools_host.dart';
@@ -258,18 +259,14 @@ class _SetupBodyState extends State<_SetupBody> {
   double? _num(String s) => double.tryParse(s.trim().replaceAll(',', '.'));
 
   Future<void> _usePhone() async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        key: const Key('setup-phone-location-confirm'),
-        title: const Text('Use your phone’s location?'),
-        content: const Text(
-            'Your phone’s position is copied into the boxes below. It only goes to the radio when you press Save position. Once saved, adverts can carry it, and everyone who hears an advert sees where it was set.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(key: const Key('setup-phone-location-ok'), onPressed: () => Navigator.pop(ctx, true), child: const Text('Use my location')),
-        ],
-      ),
+    final ok = await showAppAlert(
+      context,
+      title: 'Use your phone’s location?',
+      message:
+          'Your phone’s position is copied into the boxes below. It only goes to the radio when you press Save position. Once saved, adverts can carry it, and everyone who hears an advert sees where it was set.',
+      confirmLabel: 'Use my location',
+      dialogKey: const Key('setup-phone-location-confirm'),
+      confirmKey: const Key('setup-phone-location-ok'),
     );
     if (ok != true || !mounted) return;
     final p = await widget.host.phonePosition();
@@ -358,17 +355,13 @@ class _SetupBodyState extends State<_SetupBody> {
 
   Future<void> _togglePositionPolicy(bool on) async {
     if (on) {
-      final ok = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          key: const Key('setup-advert-position-confirm'),
-          title: const Text('Share this radio’s position in adverts?'),
-          content: const Text('Every advert will carry the position stored on the radio. Anyone with a radio or a map site that hears it can see it. You can turn this off again.'),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-            FilledButton(key: const Key('setup-advert-position-ok'), onPressed: () => Navigator.pop(ctx, true), child: const Text('Share position')),
-          ],
-        ),
+      final ok = await showAppAlert(
+        context,
+        title: 'Share this radio’s position in adverts?',
+        message: 'Every advert will carry the position stored on the radio. Anyone with a radio or a map site that hears it can see it. You can turn this off again.',
+        confirmLabel: 'Share position',
+        dialogKey: const Key('setup-advert-position-confirm'),
+        confirmKey: const Key('setup-advert-position-ok'),
       );
       if (ok != true || !mounted) return;
     }
@@ -687,54 +680,70 @@ class _SetupBodyState extends State<_SetupBody> {
       );
 
   Future<void> _confirmApply(RadioConfig c, RadioParams target) async {
-    var understood = false;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setD) => AlertDialog(
-          key: const Key('setup-confirm'),
-          icon: Icon(Icons.warning_amber_rounded, color: Theme.of(ctx).colorScheme.error, size: 36),
-          title: const Text('Change the airwaves your radio uses?'),
-          content: SingleChildScrollView(
-            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('From:  ${c.params.label}', key: const Key('setup-confirm-from')),
-              Text('To:  ${target.label}', key: const Key('setup-confirm-to'), style: const TextStyle(fontWeight: FontWeight.w700)),
-              const SizedBox(height: Gap.m),
-              const Text('This takes effect immediately and changes which radios can hear yours.'),
-              const SizedBox(height: Gap.s),
-              const Text('Your radio will stop hearing, and being heard by, every radio and repeater that is not on the new settings.'),
-              const SizedBox(height: Gap.s),
-              const Text('It may disconnect you from other devices that use this radio, and from friends who are on the old settings.'),
-              const SizedBox(height: Gap.s),
-              const Text('MeshSonar will read the radio back to check, and you can undo it straight after.'),
-              if (widget.host.driveRecording) ...[
-                const SizedBox(height: Gap.s),
-                const Text('A drive is recording: it will contain both settings.', style: TextStyle(fontWeight: FontWeight.w700)),
-              ],
-              const SizedBox(height: Gap.m),
-              CheckboxListTile(
-                key: const Key('setup-confirm-understood'),
-                contentPadding: EdgeInsets.zero,
-                controlAffinity: ListTileControlAffinity.leading,
-                title: const Text('I understand'),
-                value: understood,
-                onChanged: (v) => setD(() => understood = v ?? false),
-              ),
-            ]),
-          ),
-          actions: [
-            TextButton(key: const Key('setup-confirm-cancel'), onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-            FilledButton(
-              key: const Key('setup-confirm-apply'),
-              style: FilledButton.styleFrom(backgroundColor: Theme.of(ctx).colorScheme.error, foregroundColor: Theme.of(ctx).colorScheme.onError),
-              onPressed: understood ? () => Navigator.pop(ctx, true) : null,
-              child: const Text('Apply radio parameters'),
-            ),
-          ],
-        ),
-      ),
+    final ok = await showAppSheet<bool>(
+      context,
+      detents: const [0.92],
+      builder: (ctx, scroll) => _ConfirmApplySheet(controller: scroll, from: c.params, target: target, driveRecording: widget.host.driveRecording),
     );
     if (ok != true || !mounted) return;
     await _run('airwaves', () => setup.applyRadioParams(target));
+  }
+}
+
+class _ConfirmApplySheet extends StatefulWidget {
+  final ScrollController controller;
+  final RadioParams from, target;
+  final bool driveRecording;
+  const _ConfirmApplySheet({required this.controller, required this.from, required this.target, required this.driveRecording});
+
+  @override
+  State<_ConfirmApplySheet> createState() => _ConfirmApplySheetState();
+}
+
+class _ConfirmApplySheetState extends State<_ConfirmApplySheet> {
+  bool _understood = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return AppSheetScaffold(
+      key: const Key('setup-confirm'),
+      controller: widget.controller,
+      title: 'Change the airwaves your radio uses?',
+      primaryAction: FilledButton(
+        key: const Key('setup-confirm-apply'),
+        style: FilledButton.styleFrom(backgroundColor: cs.error, foregroundColor: cs.onError),
+        onPressed: _understood ? () => Navigator.pop(context, true) : null,
+        child: const Text('Apply radio parameters'),
+      ),
+      secondaryAction: TextButton(key: const Key('setup-confirm-cancel'), onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+      children: [
+        Icon(Icons.warning_amber_rounded, color: cs.error, size: 36),
+        const SizedBox(height: Gap.s),
+        Text('From:  ${widget.from.label}', key: const Key('setup-confirm-from')),
+        Text('To:  ${widget.target.label}', key: const Key('setup-confirm-to'), style: const TextStyle(fontWeight: FontWeight.w700)),
+        const SizedBox(height: Gap.m),
+        const Text('This takes effect immediately and changes which radios can hear yours.'),
+        const SizedBox(height: Gap.s),
+        const Text('Your radio will stop hearing, and being heard by, every radio and repeater that is not on the new settings.'),
+        const SizedBox(height: Gap.s),
+        const Text('It may disconnect you from other devices that use this radio, and from friends who are on the old settings.'),
+        const SizedBox(height: Gap.s),
+        const Text('MeshSonar will read the radio back to check, and you can undo it straight after.'),
+        if (widget.driveRecording) ...[
+          const SizedBox(height: Gap.s),
+          const Text('A drive is recording: it will contain both settings.', style: TextStyle(fontWeight: FontWeight.w700)),
+        ],
+        const SizedBox(height: Gap.m),
+        CheckboxListTile(
+          key: const Key('setup-confirm-understood'),
+          contentPadding: EdgeInsets.zero,
+          controlAffinity: ListTileControlAffinity.leading,
+          title: const Text('I understand'),
+          value: _understood,
+          onChanged: (v) => setState(() => _understood = v ?? false),
+        ),
+      ],
+    );
   }
 }

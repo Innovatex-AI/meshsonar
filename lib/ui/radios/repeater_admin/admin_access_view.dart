@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../radio/repeater_admin.dart';
 import '../../../radio/repeater_settings.dart';
 import '../../../radio/repeater_wire.dart';
+import '../../design/app_surfaces.dart';
 import '../../theme.dart';
 import 'admin_common.dart';
 import 'admin_controller.dart';
@@ -179,15 +180,10 @@ class _AdminAccessViewState extends State<AdminAccessView> {
   }
 
   Future<void> _role(BuildContext context, AclEntry e, String full) async {
-    final role = await showDialog<AclRole>(
-      context: context,
-      builder: (ctx) => SimpleDialog(
-        title: const Text('Change role'),
-        children: [
-          for (final r in [AclRole.readOnly, AclRole.readWrite, AclRole.admin])
-            SimpleDialogOption(key: Key('pick-${r.name}'), onPressed: () => Navigator.of(ctx).pop(r), child: Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text(r.label))),
-        ],
-      ),
+    final role = await showAppActionSheet<AclRole>(
+      context,
+      title: 'Change role',
+      actions: [for (final r in [AclRole.readOnly, AclRole.readWrite, AclRole.admin]) AppAction(r.label, r, key: Key('pick-${r.name}'))],
     );
     if (role == null || !context.mounted) return;
     var typed = '';
@@ -229,22 +225,45 @@ class _AdminAccessViewState extends State<AdminAccessView> {
   }
 
   Future<void> _test(BuildContext context) async {
-    final ctl = TextEditingController();
-    final pw = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Test a password'),
-        content: TextField(key: const Key('test-password-field'), controller: ctl, obscureText: true, autocorrect: false, enableSuggestions: false, maxLength: 15, decoration: const InputDecoration(labelText: 'Password to test')),
-        actions: [
-          TextButton(style: TextButton.styleFrom(minimumSize: kTarget), onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
-          FilledButton(key: const Key('test-password-go'), style: FilledButton.styleFrom(minimumSize: kTarget), onPressed: () => Navigator.of(ctx).pop(ctl.text), child: const Text('Test')),
-        ],
-      ),
+    final pw = await showAppSheet<String>(
+      context,
+      detents: const [0.5, 0.92],
+      builder: (ctx, scroll) => _TestPasswordBody(controller: scroll),
     );
-    ctl.clear();
-    ctl.dispose();
     if (pw == null || pw.isEmpty || !context.mounted) return;
     final ok = await c.testPassword(pw);
     if (context.mounted) showSnack(context, ok ? 'That password works as admin.' : 'No admin login with that password (or no answer). Try again.');
+  }
+}
+
+class _TestPasswordBody extends StatefulWidget {
+  final ScrollController controller;
+  const _TestPasswordBody({required this.controller});
+
+  @override
+  State<_TestPasswordBody> createState() => _TestPasswordBodyState();
+}
+
+class _TestPasswordBodyState extends State<_TestPasswordBody> {
+  final _ctl = TextEditingController();
+
+  @override
+  void dispose() {
+    _ctl.clear();
+    _ctl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AppSheetScaffold(
+      controller: widget.controller,
+      title: 'Test a password',
+      primaryAction: FilledButton(key: const Key('test-password-go'), style: FilledButton.styleFrom(minimumSize: kTarget), onPressed: () => Navigator.of(context).pop(_ctl.text), child: const Text('Test')),
+      secondaryAction: TextButton(style: TextButton.styleFrom(minimumSize: kTarget), onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+      children: [
+        TextField(key: const Key('test-password-field'), controller: _ctl, obscureText: true, autocorrect: false, enableSuggestions: false, maxLength: 15, decoration: const InputDecoration(labelText: 'Password to test')),
+      ],
+    );
   }
 }

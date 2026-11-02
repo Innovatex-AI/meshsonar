@@ -11,6 +11,7 @@ import '../../chat/contact_port.dart';
 import '../../chat/delivery_text.dart';
 import '../../chat/models.dart';
 import '../claims/claim_widgets.dart' show ClaimRepeaterAction;
+import '../design/app_surfaces.dart';
 import '../theme.dart';
 import 'contact_map.dart';
 import 'contact_widgets.dart';
@@ -81,9 +82,7 @@ class _ContactDetailScreenState extends State<ContactDetailScreen> {
 
   void _say(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(msg)));
+    showAppToast(context, msg);
   }
 
   @override
@@ -363,21 +362,22 @@ class _ContactDetailScreenState extends State<ContactDetailScreen> {
 
   Future<void> _rename(Contact c) async {
     final hasCustom = c.customName != null && c.customName!.trim().isNotEmpty;
-    final res = await showDialog<String?>(
-      context: context,
-      builder: (ctx) => _RenameDialog(initial: c.customName ?? c.name, advertisedAs: c.name, hasCustom: hasCustom),
+    final res = await showAppSheet<String?>(
+      context,
+      detents: const [0.6, 0.92],
+      builder: (ctx, scroll) => _RenameDialog(initial: c.customName ?? c.name, advertisedAs: c.name, hasCustom: hasCustom, scroll: scroll),
     );
     if (res != null) _m.rename(c.publicKey, res);
   }
 
   Future<void> _showQr(Contact c) {
     final link = _m.linkFor(c);
-    return showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (ctx) => SafeArea(
+    return showAppSheet<void>(
+      context,
+      detents: const [0.92],
+      builder: (ctx, scroll) => SafeArea(
         child: SingleChildScrollView(
+          controller: scroll,
           padding: const EdgeInsets.fromLTRB(Gap.l, 0, Gap.l, Gap.xl),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             Text(c.displayName, style: Theme.of(ctx).textTheme.titleMedium, textAlign: TextAlign.center),
@@ -527,12 +527,26 @@ class _ContactDetailScreenState extends State<ContactDetailScreen> {
 
   Future<void> _remove(Contact c) async {
     var deleteMessages = false;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, set) => AlertDialog(
-          title: Text('Remove ${c.displayName}?'),
-          content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+    final ok = await showAppSheet<bool>(
+      context,
+      detents: const [0.5, 0.92],
+      builder: (ctx, scroll) => StatefulBuilder(
+        builder: (ctx, set) => AppSheetScaffold(
+          controller: scroll,
+          title: 'Remove ${c.displayName}?',
+          primaryAction: FilledButton(
+            key: const Key('remove-confirm'),
+            style: FilledButton.styleFrom(minimumSize: const Size(48, 48), backgroundColor: Theme.of(ctx).colorScheme.error, foregroundColor: Theme.of(ctx).colorScheme.onError),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Remove'),
+          ),
+          secondaryAction: TextButton(
+            key: const Key('remove-cancel'),
+            style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          children: [
             const Text('This removes the contact from this phone and from your radio. If you meet them on air again, the radio may offer them as a new node.'),
             CheckboxListTile(
               key: const Key('remove-delete-messages'),
@@ -541,15 +555,6 @@ class _ContactDetailScreenState extends State<ContactDetailScreen> {
               value: deleteMessages,
               onChanged: (v) => set(() => deleteMessages = v ?? false),
               title: const Text('Also delete the messages with them'),
-            ),
-          ]),
-          actions: [
-            TextButton(style: TextButton.styleFrom(minimumSize: const Size(48, 48)), onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-            FilledButton(
-              key: const Key('remove-confirm'),
-              style: FilledButton.styleFrom(minimumSize: const Size(48, 48), backgroundColor: Theme.of(ctx).colorScheme.error, foregroundColor: Theme.of(ctx).colorScheme.onError),
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Remove'),
             ),
           ],
         ),
@@ -571,7 +576,8 @@ class _RenameDialog extends StatefulWidget {
   final String initial;
   final String advertisedAs;
   final bool hasCustom;
-  const _RenameDialog({required this.initial, required this.advertisedAs, required this.hasCustom});
+  final ScrollController scroll;
+  const _RenameDialog({required this.initial, required this.advertisedAs, required this.hasCustom, required this.scroll});
 
   @override
   State<_RenameDialog> createState() => _RenameDialogState();
@@ -588,17 +594,15 @@ class _RenameDialogState extends State<_RenameDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Rename contact'),
-      content: TextField(
-        key: const Key('rename-field'),
-        controller: _ctl,
-        autofocus: true,
-        maxLength: 31,
-        decoration: InputDecoration(helperText: 'Only changes the name on this phone. They still advertise as ${widget.advertisedAs}.'),
-        onSubmitted: (v) => Navigator.pop(context, v),
-      ),
-      actions: [
+    return AppSheetScaffold(
+      controller: widget.scroll,
+      title: 'Rename contact',
+      primaryAction: FilledButton(
+          key: const Key('rename-save'),
+          style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+          onPressed: () => Navigator.pop(context, _ctl.text),
+          child: const Text('Save')),
+      secondaryAction: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
         TextButton(style: TextButton.styleFrom(minimumSize: const Size(48, 48)), onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
         if (widget.hasCustom)
           TextButton(
@@ -606,11 +610,16 @@ class _RenameDialogState extends State<_RenameDialog> {
               style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
               onPressed: () => Navigator.pop(context, ''),
               child: const Text('Reset name')),
-        FilledButton(
-            key: const Key('rename-save'),
-            style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
-            onPressed: () => Navigator.pop(context, _ctl.text),
-            child: const Text('Save')),
+      ]),
+      children: [
+        TextField(
+          key: const Key('rename-field'),
+          controller: _ctl,
+          autofocus: true,
+          maxLength: 31,
+          decoration: InputDecoration(helperText: 'Only changes the name on this phone. They still advertise as ${widget.advertisedAs}.'),
+          onSubmitted: (v) => Navigator.pop(context, v),
+        ),
       ],
     );
   }
