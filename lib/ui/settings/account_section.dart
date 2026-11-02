@@ -5,6 +5,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../design/app_surfaces.dart';
+import 'confirm_sheet.dart';
 import '../account/devices_screen.dart';
 import '../../app/app_state.dart';
 import '../../core/api.dart';
@@ -161,25 +163,19 @@ String keyStatusHelp(DriverKeyStatus s) => switch (s) {
 /// Asks before switching servers when this phone has a driver key: keys only work on the server that issued them,
 /// so the key is removed. Returns true to go ahead.
 Future<bool> confirmServerChange(BuildContext context, String newUrl) async {
-  final ok = await showDialog<bool>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      key: const Key('server-change-dialog'),
-      title: const Text('Change server and remove your key?'),
-      content: Text('A driver key only works on the server that issued it, so your current key will be removed. '
-          'MeshSonar will create a new key for $newUrl afterwards.\n\n'
-          'Drives already uploaded stay on the old server. Drives not yet uploaded stay on this phone and will upload '
-          'to the new server once you have a key there.'),
-      actions: [
-        TextButton(key: const Key('server-change-cancel'), onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-        FilledButton(
-            key: const Key('server-change-confirm'),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Change server')),
-      ],
-    ),
+  final ok = await showConfirmSheet(
+    context,
+    sheetKey: const Key('server-change-dialog'),
+    title: 'Change server and remove your key?',
+    body: 'A driver key only works on the server that issued it, so your current key will be removed. '
+        'MeshSonar will create a new key for $newUrl afterwards.\n\n'
+        'Drives already uploaded stay on the old server. Drives not yet uploaded stay on this phone and will upload '
+        'to the new server once you have a key there.',
+    confirmLabel: 'Change server',
+    confirmKey: const Key('server-change-confirm'),
+    cancelKey: const Key('server-change-cancel'),
   );
-  return ok == true;
+  return ok;
 }
 
 /// Where to manage drives on the website, and a button to get a key there. (Privacy zones moved to Settings >
@@ -302,9 +298,7 @@ class _DriverKeySectionState extends State<DriverKeySection> {
                 icon: const Icon(Icons.copy_rounded),
                 onPressed: () async {
                   await Clipboard.setData(ClipboardData(text: st.driverKey ?? ''));
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Key copied')));
-                  }
+                  if (context.mounted) showAppToast(context, 'Key copied', kind: AppToastKind.success);
                 },
               ),
           ]),
@@ -321,27 +315,19 @@ class _DriverKeySectionState extends State<DriverKeySection> {
               key: const Key('forget-key'),
               style: TextButton.styleFrom(foregroundColor: t.colorScheme.error),
               onPressed: () async {
-                final ok = await showDialog<bool>(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    key: const Key('forget-key-dialog'),
-                    title: const Text('Remove this driver key?'),
-                    content: const Text(
-                        'Make sure you can get it again before you remove it: the website\'s Devices page shows keys made after it was updated, otherwise you\'ll need a new one.\n\n'
-                        'Without a key, drives stay on this phone and nothing uploads; packet headers stop being collected. '
-                        'The app keeps no copy: to undo, paste the same key again with "I already have a key".'),
-                    actions: [
-                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-                      FilledButton(
-                          key: const Key('forget-key-confirm'),
-                          style: FilledButton.styleFrom(
-                              backgroundColor: Theme.of(ctx).colorScheme.error, foregroundColor: Theme.of(ctx).colorScheme.onError),
-                          onPressed: () => Navigator.pop(ctx, true),
-                          child: const Text('Remove')),
-                    ],
-                  ),
+                final ok = await showConfirmSheet(
+                  context,
+                  sheetKey: const Key('forget-key-dialog'),
+                  title: 'Remove this driver key?',
+                  body:
+                      'Make sure you can get it again before you remove it: the website\'s Devices page shows keys made after it was updated, otherwise you\'ll need a new one.\n\n'
+                      'Without a key, drives stay on this phone and nothing uploads; packet headers stop being collected. '
+                      'The app keeps no copy: to undo, paste the same key again with "I already have a key".',
+                  confirmLabel: 'Remove',
+                  destructive: true,
+                  confirmKey: const Key('forget-key-confirm'),
                 );
-                if (ok == true) await s.forgetKey();
+                if (ok) await s.forgetKey();
               },
               child: const Text('Remove key'),
             ),

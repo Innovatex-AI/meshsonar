@@ -10,6 +10,7 @@ import '../theme.dart';
 import 'advert_facts.dart';
 import 'tool_kit.dart';
 import 'tools_host.dart';
+import '../design/app_surfaces.dart';
 
 class RxLogScreen extends StatelessWidget {
   const RxLogScreen({super.key});
@@ -174,11 +175,10 @@ class _RxLogBodyState extends State<_RxLogBody> {
   }
 
   void _openFilter() {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (ctx) => StatefulBuilder(builder: (ctx, setSheet) {
+    showAppSheet<void>(
+      context,
+      detents: const [0.6, 0.92],
+      builder: (ctx, sheetScroll) => StatefulBuilder(builder: (ctx, setSheet) {
         void apply(RxLogFilter f) {
           setState(() => _filter = f);
           setSheet(() {});
@@ -188,6 +188,7 @@ class _RxLogBodyState extends State<_RxLogBody> {
         final routes = _log.countsByRoute.keys.toList()..sort();
         return SafeArea(
           child: SingleChildScrollView(
+            controller: sheetScroll,
             key: const Key('rxlog-filter-sheet'),
             padding: const EdgeInsets.fromLTRB(Gap.l, 0, Gap.l, Gap.xl),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

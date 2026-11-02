@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../design/app_surfaces.dart';
 import '../../app/app_state.dart';
 import '../../core/diagnostics.dart';
 import '../../core/map_prefs.dart';
@@ -96,8 +97,7 @@ class _DiagnosticsLogScreenState extends State<DiagnosticsLogScreen> {
     await Clipboard.setData(ClipboardData(text: r.text));
     if (!context.mounted) return;
     final what = redactionSummary(r.counts);
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text('Log copied${what == null ? '.' : ' ($what).'}')));
+    showAppToast(context, 'Log copied${what == null ? '.' : ' ($what).'}', kind: AppToastKind.success);
   }
 
   Future<void> _clear(BuildContext context, AppState s) async {

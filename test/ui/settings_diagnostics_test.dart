@@ -1,5 +1,6 @@
 // Settings > Diagnostics: the log is shown and copied with the problem-report redaction (no keys, tokens or
 // passwords; coordinates rounded), and clearing it asks first.
+import 'toast_test_kit.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -27,7 +28,7 @@ void main() {
     return (h, copied);
   }
 
-  testWidgets('the screen shows the log redacted', (tester) async {
+  testWidgetsT('the screen shows the log redacted', (tester) async {
     await open(tester);
     await showSetting(tester, 'diagnostics-log');
     await tester.tap(find.byKey(const Key('diagnostics-log')));
@@ -40,7 +41,7 @@ void main() {
     expect(shown, contains('39.961,-82.999'));
   });
 
-  testWidgets('Copy puts the redacted log (with app and settings lines) on the clipboard and says what was hidden',
+  testWidgetsT('Copy puts the redacted log (with app and settings lines) on the clipboard and says what was hidden',
       (tester) async {
     final (h, copied) = await open(tester);
     await showSetting(tester, 'diagnostics-log');
@@ -57,10 +58,9 @@ void main() {
     expect(text, contains('Settings: server meshsonar.com'));
     expect(text, contains('39.961,-82.999'));
     expect(text, diagnosticsExport(h.state).text);
-    final snack = find.byType(SnackBar);
-    expect(find.descendant(of: snack, matching: find.textContaining('Log copied (')), findsOneWidget);
-    expect(find.descendant(of: snack, matching: find.textContaining('secrets hidden')), findsOneWidget);
-    expect(find.descendant(of: snack, matching: find.textContaining('rounded')), findsOneWidget);
+    expect(find.textContaining('Log copied ('), findsOneWidget);
+    expect(find.textContaining('secrets hidden'), findsOneWidget);
+    expect(find.textContaining('positions rounded)'), findsOneWidget);
   });
 
   test('redactionSummary', () {
@@ -68,7 +68,7 @@ void main() {
     expect(redactionSummary({'driverKey': 1, 'secret': 1, 'coords': 1}), '2 secrets hidden, 1 position rounded');
   });
 
-  testWidgets('Clear asks, then empties the log; an empty log says what would appear', (tester) async {
+  testWidgetsT('Clear asks, then empties the log; an empty log says what would appear', (tester) async {
     final (h, _) = await open(tester);
     await showSetting(tester, 'diagnostics-log');
     await tester.tap(find.byKey(const Key('diagnostics-log')));

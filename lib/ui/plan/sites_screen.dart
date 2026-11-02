@@ -6,10 +6,12 @@ import 'package:latlong2/latlong.dart';
 
 import '../../core/plan/plan_native_api.dart';
 import '../../core/plan/plan_sites.dart';
+import '../pick_field.dart';
 import '../theme.dart';
 import 'compare_screen.dart';
 import 'plan_engine_common.dart';
 import 'site_detail_screen.dart';
+import '../design/app_surfaces.dart';
 
 const _kindLabel = {'worship': 'Church / worship', 'school': 'School', 'park': 'Park', 'plan': 'Original plan'};
 
@@ -68,10 +70,10 @@ class _SitesListState extends State<_SitesList> {
   Future<void> _pickNear() async {
     final d = widget.data;
     // A site is the nearest thing to "a place" the list knows: pick one to sort by distance from it.
-    final picked = await showModalBottomSheet<SiteRow>(
-      context: context,
-      isScrollControlled: true,
-      builder: (c) => _PlacePicker(rows: d.rows),
+    final picked = await showAppSheet<SiteRow>(
+      context,
+      detents: const [0.6, 0.92],
+      builder: (c, controller) => _PlacePicker(rows: d.rows, controller: controller),
     );
     if (picked != null) _set(_f.copyWith(near: NearPoint(picked.lat, picked.lon, picked.name), sort: SiteSort.dist, asc: true));
   }
@@ -108,14 +110,13 @@ class _SitesListState extends State<_SitesList> {
       ]),
       Row(children: [
         Expanded(
-          child: DropdownButton<String>(
+          child: PickField<String?>(
             key: const Key('sites-town'),
-            isExpanded: true,
+            label: 'Town',
             value: _f.town,
-            hint: Text('All towns (${towns.length})'),
-            items: [
-              DropdownMenuItem<String>(value: null, child: Text('All towns (${towns.length})')),
-              for (final tw in towns) DropdownMenuItem(value: tw.$1, child: Text('${tw.$1} (${tw.$2})')),
+            options: [
+              PickOption<String?>(null, 'All towns (${towns.length})'),
+              for (final tw in towns) PickOption<String?>(tw.$1, '${tw.$1} (${tw.$2})'),
             ],
             onChanged: (v) => _set(_f.copyWith(town: v)),
           ),
@@ -123,12 +124,12 @@ class _SitesListState extends State<_SitesList> {
       ]),
       Row(children: [
         Expanded(
-          child: DropdownButton<SiteSort>(
+          child: PickField<SiteSort>(
             key: const Key('sites-sort'),
-            isExpanded: true,
+            label: 'Order',
             value: _f.sort,
-            items: [for (final s in SiteSort.values) if (s != SiteSort.dist || _f.near != null) DropdownMenuItem(value: s, child: Text('Order: ${siteSortLabels[s]}'))],
-            onChanged: (s) => s == null ? null : _sort(s),
+            options: [for (final s in SiteSort.values) if (s != SiteSort.dist || _f.near != null) PickOption(s, 'Order: ${siteSortLabels[s]}')],
+            onChanged: _sort,
           ),
         ),
         IconButton(
@@ -266,7 +267,8 @@ class _SiteTile extends StatelessWidget {
 
 class _PlacePicker extends StatefulWidget {
   final List<SiteRow> rows;
-  const _PlacePicker({required this.rows});
+  final ScrollController controller;
+  const _PlacePicker({required this.rows, required this.controller});
   @override
   State<_PlacePicker> createState() => _PlacePickerState();
 }
@@ -276,18 +278,13 @@ class _PlacePickerState extends State<_PlacePicker> {
   @override
   Widget build(BuildContext context) {
     final hits = [for (final r in widget.rows) if (_q.trim().length >= 2 && matchRow(r, _q)) r].take(20).toList();
-    return Padding(
-      padding: EdgeInsets.fromLTRB(Gap.l, Gap.l, Gap.l, MediaQuery.of(context).viewInsets.bottom + Gap.l),
-      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('Sort by distance from…', style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: Gap.s),
+    return AppSheetScaffold(
+      controller: widget.controller,
+      title: 'Sort by distance from…',
+      children: [
         TextField(key: const Key('place-search'), autofocus: true, decoration: const InputDecoration(hintText: 'Type a site name or town', prefixIcon: Icon(Icons.search)), onChanged: (v) => setState(() => _q = v)),
-        Flexible(
-          child: ListView(shrinkWrap: true, children: [
-            for (final r in hits) ListTile(key: Key('place-${r.id}'), title: Text(r.name), subtitle: Text(r.town), onTap: () => Navigator.of(context).pop(r)),
-          ]),
-        ),
-      ]),
+        for (final r in hits) ListTile(key: Key('place-${r.id}'), title: Text(r.name), subtitle: Text(r.town), onTap: () => Navigator.of(context).pop(r)),
+      ],
     );
   }
 }

@@ -1,6 +1,7 @@
 // Stream 7 WP5 UI: each category says truthfully where its data goes with the connected server, switching one off strips
 // what was never uploaded and offers the server erase (Erase highlighted), a server that cannot erase says so, weather
 // goes live with the server's capability, and "Delete my collected data" handles every state in words.
+import 'toast_test_kit.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -78,40 +79,40 @@ void main() {
   }
 
   group('where each category says its data goes', () {
-    testWidgets('unknown server: saved on this phone only until the app can check', (tester) async {
+    testWidgetsT('unknown server: saved on this phone only until the app can check', (tester) async {
       await open(tester);
       await showSetting(tester, 'collect-motion-toggle');
       expect(inTile('collect-motion-toggle', 'Saved on this phone only until the app can check'), findsOneWidget);
     });
 
-    testWidgets('a server that does not accept v1.2: saved on this phone only, this server does not accept it yet',
+    testWidgetsT('a server that does not accept v1.2: saved on this phone only, this server does not accept it yet',
         (tester) async {
       await open(tester, caps: _v1);
       await showSetting(tester, 'collect-barometer-toggle');
       expect(inTile('collect-barometer-toggle', 'Saved on this phone only: this server does not accept it yet.'), findsOneWidget);
     });
 
-    testWidgets('a server that accepts v1.2: uploaded with your drive', (tester) async {
+    testWidgetsT('a server that accepts v1.2: uploaded with your drive', (tester) async {
       await open(tester, caps: _v12);
       await showSetting(tester, 'collect-radio_health-toggle');
       expect(inTile('collect-radio_health-toggle', 'Uploaded with your drive.'), findsOneWidget);
       expect(inTile('collect-radio_health-toggle', 'this server does not accept it yet'), findsNothing);
     });
 
-    testWidgets('without an approved key the upload is conditional, said plainly', (tester) async {
+    testWidgetsT('without an approved key the upload is conditional, said plainly', (tester) async {
       await open(tester, caps: _v12, key: false);
       await showSetting(tester, 'collect-device-toggle');
       expect(inTile('collect-device-toggle', 'Uploaded with your drive once your driver key is ready'), findsOneWidget);
     });
 
-    testWidgets('weather is live only when the server looks it up and accepts v1.2', (tester) async {
+    testWidgetsT('weather is live only when the server looks it up and accepts v1.2', (tester) async {
       await open(tester, caps: _v12);
       await showSetting(tester, 'collect-weather-toggle');
       expect(inTile('collect-weather-toggle', 'On: this server looks up weather near your uploaded drives'), findsOneWidget);
       expect(inTile('collect-weather-toggle', 'Not available yet'), findsNothing);
     });
 
-    testWidgets('weather says plainly when the server does not do it', (tester) async {
+    testWidgetsT('weather says plainly when the server does not do it', (tester) async {
       await open(tester, caps: _v1);
       await showSetting(tester, 'collect-weather-toggle');
       expect(inTile('collect-weather-toggle', 'Not available yet on this server: it does not look up weather for drives'), findsOneWidget);
@@ -119,7 +120,7 @@ void main() {
   });
 
   group('switching a category off', () {
-    testWidgets('v1.2 server that can erase: unsent context is stripped, sent context stays, Erase is offered first',
+    testWidgetsT('v1.2 server that can erase: unsent context is stripped, sent context stays, Erase is offered first',
         (tester) async {
       final h = await open(tester, caps: _v12, setup: seed);
       await switchOff(tester, 'barometer');
@@ -150,7 +151,7 @@ void main() {
       expect(h.store.ctx.ctxBySession['d2']!['d2-p1']!.pressureHpa, 990);
     });
 
-    testWidgets('Keep on the erase offer sends no DELETE', (tester) async {
+    testWidgetsT('Keep on the erase offer sends no DELETE', (tester) async {
       final h = await open(tester, caps: _v12, setup: seed);
       await switchOff(tester, 'motion');
       await tester.tap(find.byKey(const Key('motion-erase-keep')));
@@ -159,7 +160,7 @@ void main() {
       expect(find.byKey(const Key('motion-local-dialog')), findsOneWidget);
     });
 
-    testWidgets('a server that accepts context but cannot erase it says so plainly and claims nothing else', (tester) async {
+    testWidgetsT('a server that accepts context but cannot erase it says so plainly and claims nothing else', (tester) async {
       final h = await open(tester, caps: _v12NoErase, setup: seed);
       await switchOff(tester, 'phone_battery');
       expect(find.byKey(const Key('phone_battery-erase-dialog')), findsNothing);
@@ -170,7 +171,7 @@ void main() {
       expect(h.tele.erasedCategories, isEmpty);
     });
 
-    testWidgets('a server that does not accept it: as before, nothing left the phone, nothing stripped, Keep default',
+    testWidgetsT('a server that does not accept it: as before, nothing left the phone, nothing stripped, Keep default',
         (tester) async {
       final h = await open(tester, caps: _v1, setup: seedUnsent);
       await switchOff(tester, 'barometer');
@@ -183,7 +184,7 @@ void main() {
       expect(h.tele.erasedCategories, isEmpty);
     });
 
-    testWidgets('weather off: no dialog, the server is asked to stop and delete, the text says so', (tester) async {
+    testWidgetsT('weather off: no dialog, the server is asked to stop and delete, the text says so', (tester) async {
       final h = await open(tester, caps: _v12);
       await switchOff(tester, 'weather');
       await settleIo(tester, until: () => h.tele.erasedCategories.contains('weather'));
@@ -194,7 +195,7 @@ void main() {
       expect(h.state.settings.contextErasePending, isEmpty, reason: 'done, nothing to retry');
     });
 
-    testWidgets('weather off while offline: remembered, retried by itself when the server answers', (tester) async {
+    testWidgetsT('weather off while offline: remembered, retried by itself when the server answers', (tester) async {
       final h = await open(tester, caps: _v12);
       h.tele.eraseError = const CmatException('network error: down');
       await switchOff(tester, 'weather');
@@ -230,7 +231,7 @@ void main() {
       await settleIo(tester, until: () => find.byKey(const Key('delete-server-result')).evaluate().isNotEmpty);
     }
 
-    testWidgets('it is in the index, searchable, and says what it does and does not touch', (tester) async {
+    testWidgetsT('it is in the index, searchable, and says what it does and does not touch', (tester) async {
       await open(tester, caps: _v12);
       expect(searchSettings('delete my data').map((e) => e.id), contains('delete-my-data'));
       expect(searchSettings('gdpr erase').map((e) => e.id), contains('delete-my-data'));
@@ -238,7 +239,7 @@ void main() {
       expect(find.text(deleteMyDataLead), findsOneWidget);
     });
 
-    testWidgets('delete on the server: category=all and the packet headers, with the server\'s counts', (tester) async {
+    testWidgetsT('delete on the server: category=all and the packet headers, with the server\'s counts', (tester) async {
       final h = await open(tester, caps: _v12);
       await openScreen(tester);
       await deleteOnServer(tester, h);
@@ -249,7 +250,7 @@ void main() {
       expect(find.text('Done'), findsOneWidget);
     });
 
-    testWidgets('cancel does nothing', (tester) async {
+    testWidgetsT('cancel does nothing', (tester) async {
       final h = await open(tester, caps: _v12);
       await openScreen(tester);
       await tester.tap(find.byKey(const Key('delete-server-data')));
@@ -260,7 +261,7 @@ void main() {
       expect(h.tele.deletes, 0);
     });
 
-    testWidgets('429: try again in an hour, remembered and retried', (tester) async {
+    testWidgetsT('429: try again in an hour, remembered and retried', (tester) async {
       final h = await open(tester, caps: _v12);
       h.tele.eraseError = const CmatException('rate', status: 429);
       await openScreen(tester);
@@ -270,7 +271,7 @@ void main() {
       expect(h.state.settings.contextErasePending, {'all'});
     });
 
-    testWidgets('401/403: the server does not recognise the key, nothing erased, nothing pending', (tester) async {
+    testWidgetsT('401/403: the server does not recognise the key, nothing erased, nothing pending', (tester) async {
       final h = await open(tester, caps: _v12);
       h.tele.eraseError = const CmatException('no', status: 401);
       await openScreen(tester);
@@ -279,7 +280,7 @@ void main() {
       expect(h.state.settings.contextErasePending, isEmpty);
     });
 
-    testWidgets('offline: said plainly, remembered', (tester) async {
+    testWidgetsT('offline: said plainly, remembered', (tester) async {
       final h = await open(tester, caps: _v12);
       h.tele.eraseError = const CmatException('network error: down');
       await openScreen(tester);
@@ -288,7 +289,7 @@ void main() {
       expect(h.state.settings.contextErasePending, {'all'});
     });
 
-    testWidgets('no driver key: the server button is disabled with the reason; local delete is still offered',
+    testWidgetsT('no driver key: the server button is disabled with the reason; local delete is still offered',
         (tester) async {
       final h = await open(tester, key: false, setup: seed);
       await openScreen(tester);
@@ -299,7 +300,7 @@ void main() {
       expect(h.tele.erasedCategories, isEmpty);
     });
 
-    testWidgets('an older server: the button says it is unavailable on this server; local delete still works',
+    testWidgetsT('an older server: the button says it is unavailable on this server; local delete still works',
         (tester) async {
       final h = await open(tester, caps: _v12NoErase, setup: seed);
       await openScreen(tester);
@@ -317,7 +318,7 @@ void main() {
       expect(h.tele.erasedCategories, isEmpty);
     });
 
-    testWidgets('local delete is separate and Keep by default: cancel leaves everything', (tester) async {
+    testWidgetsT('local delete is separate and Keep by default: cancel leaves everything', (tester) async {
       final h = await open(tester, caps: _v12, setup: seed);
       await openScreen(tester);
       await showLocalButton(tester);

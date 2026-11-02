@@ -2,6 +2,7 @@
 // people who only saw the packet-header sheet), the per-category switches in Settings > Privacy & data sharing (on asks
 // first; off stops at once and offers to delete what is saved on this phone, since nothing of it left the phone), the
 // honest unavailable states (no barometer, weather not available yet), and the context section of the drive report.
+import 'toast_test_kit.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -74,7 +75,7 @@ void main() {
     });
   });
 
-  testWidgets('disclosure v2 lists every category with its own switch; Continue keeps the choices', (tester) async {
+  testWidgetsT('disclosure v2 lists every category with its own switch; Continue keeps the choices', (tester) async {
     final h = await openSheet(tester);
     for (final c in dataCategories) {
       final sw = find.byKey(Key('disclosure-switch-${c.id}'));
@@ -102,7 +103,7 @@ void main() {
     expect(h.state.collectionOn(core.CategoryId.barometer), isFalse);
   });
 
-  testWidgets('disclosure v2: Turn all off switches every category off', (tester) async {
+  testWidgetsT('disclosure v2: Turn all off switches every category off', (tester) async {
     final h = await openSheet(tester);
     await tester.tap(find.byKey(const Key('telemetry-off')));
     await tester.pumpAndSettle();
@@ -112,7 +113,7 @@ void main() {
     expect(h.settings.saved.toJson()['collection_off'], hasLength(dataCategories.length - 1));
   });
 
-  testWidgets('the sheet shows the current state: headers already off stay off unless switched on', (tester) async {
+  testWidgetsT('the sheet shows the current state: headers already off stay off unless switched on', (tester) async {
     final h = await openSheet(tester, settings: const Settings(telemetryEnabled: false));
     expect(tester.widget<Switch>(find.byKey(const Key('disclosure-switch-telemetry'))).value, isFalse);
     await tester.tap(find.byKey(const Key('telemetry-keep')));
@@ -164,7 +165,7 @@ void main() {
       h.store.ctx.appendSamples('d1', [DriveSample(ts: t0, src: SampleSource.phone, battPct: 60, pressureHpa: 990)]);
     }
 
-    testWidgets('one switch per category, each with its exact sentence', (tester) async {
+    testWidgetsT('one switch per category, each with its exact sentence', (tester) async {
       await open(tester);
       for (final c in dataCategories) {
         await showSetting(tester, c.toggleKey);
@@ -173,7 +174,7 @@ void main() {
       }
     });
 
-    testWidgets('off: stops at once, says nothing left the phone, Delete strips it from the drives here', (tester) async {
+    testWidgetsT('off: stops at once, says nothing left the phone, Delete strips it from the drives here', (tester) async {
       final h = await open(tester, setup: seedContext);
       await showSetting(tester, 'collect-motion-toggle');
       await tester.tap(find.byKey(const Key('collect-motion-toggle')));
@@ -191,7 +192,7 @@ void main() {
       expect(h.tele.deletes, 0, reason: 'no server call for a category that never left the phone');
     });
 
-    testWidgets('off and Keep leaves what is saved on the phone', (tester) async {
+    testWidgetsT('off and Keep leaves what is saved on the phone', (tester) async {
       final h = await open(tester, setup: seedContext);
       await showSetting(tester, 'collect-phone_battery-toggle');
       await tester.tap(find.byKey(const Key('collect-phone_battery-toggle')));
@@ -203,7 +204,7 @@ void main() {
       expect(find.textContaining('Off: nothing is collected.'), findsOneWidget);
     });
 
-    testWidgets('on asks first with what is collected; cancel keeps it off', (tester) async {
+    testWidgetsT('on asks first with what is collected; cancel keeps it off', (tester) async {
       final h = await open(tester, setup: (h) => h.settings.saved = h.settings.saved.withCollection('device', false));
       await showSetting(tester, 'collect-device-toggle');
       await tester.tap(find.byKey(const Key('collect-device-toggle')));
@@ -221,7 +222,7 @@ void main() {
       expect(h.settings.saved.toJson().containsKey('collection_off'), isFalse);
     });
 
-    testWidgets('honest states: no barometer support, weather not available yet', (tester) async {
+    testWidgetsT('honest states: no barometer support, weather not available yet', (tester) async {
       await open(tester);
       await showSetting(tester, 'collect-barometer-toggle');
       expect(find.textContaining('no barometer support'), findsOneWidget);
@@ -229,7 +230,7 @@ void main() {
       expect(find.textContaining('Not available yet on this server: it does not look up weather'), findsOneWidget);
     });
 
-    testWidgets('a barometer that gave nothing on the last drive says so', (tester) async {
+    testWidgetsT('a barometer that gave nothing on the last drive says so', (tester) async {
       final h = Harness()..barometer = FakeBarometer(fail: true);
       useTallScreen(tester);
       await h.state.init();
@@ -289,7 +290,7 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('pressure, altitude, batteries and radio counters, through Units', (tester) async {
+    testWidgetsT('pressure, altitude, batteries and radio counters, through Units', (tester) async {
       final h = seeded(units: UnitsPreference.imperial);
       await openReport(tester, h, 'd1');
       await tester.scrollUntilVisible(find.byKey(const Key('chart-ctx-pressure')), 300, scrollable: list());
@@ -311,7 +312,7 @@ void main() {
       expect(find.text('Noise floor and SNR by radio temperature'), findsOneWidget);
     });
 
-    testWidgets('a drive without context says so', (tester) async {
+    testWidgetsT('a drive without context says so', (tester) async {
       final h = Harness();
       h.store.seed(DriveSession(id: 'old', startedAt: t0, endedAt: t0.add(const Duration(minutes: 1))),
           [DrivePing(id: 'x', ts: t0, lat: 40.1, lon: -82.9)]);
@@ -320,7 +321,7 @@ void main() {
       expect(find.byKey(const Key('report-context-none')), findsOneWidget);
     });
 
-    testWidgets('a drive without context names the categories that are off', (tester) async {
+    testWidgetsT('a drive without context names the categories that are off', (tester) async {
       final h = Harness();
       h.settings.saved = h.settings.saved.withCollection('barometer', false).withCollection('motion', false);
       h.store.seed(DriveSession(id: 'old', startedAt: t0, endedAt: t0.add(const Duration(minutes: 1))),

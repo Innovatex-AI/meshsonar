@@ -7,6 +7,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 
+import 'design/app_surfaces.dart';
 import 'app.dart';
 import 'settings/about_section.dart';
 import 'settings/account_section.dart';
@@ -139,14 +140,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   /// App bar Sections: every section in one short list; tapping one opens it and scrolls to it.
   Future<void> _showSectionIndex(BuildContext context) async {
-    final picked = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      showDragHandle: true,
-      builder: (ctx) => ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(ctx).height * 0.8),
-        child: ListView(key: const Key('settings-section-index'), shrinkWrap: true, children: [
+    final picked = await showAppSheet<String>(
+      context,
+      detents: const [0.8],
+      builder: (ctx, controller) => ListView(
+        key: const Key('settings-section-index'),
+        controller: controller,
+        children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
             child: Semantics(header: true, child: Text('Jump to a section', style: Theme.of(ctx).textTheme.titleMedium)),
@@ -159,7 +159,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               subtitle: _collapsed.contains(info.id) ? const Text('Folded; opens when you jump to it') : null,
               onTap: () => Navigator.pop(ctx, info.id),
             ),
-        ]),
+        ],
       ),
     );
     if (picked == null || !mounted) return;

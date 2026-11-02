@@ -3,6 +3,7 @@
 // bright in the heard list. Every number on screen goes through lib/core/units.dart, so a change here applies everywhere.
 import 'package:flutter/material.dart';
 
+import '../design/app_surfaces.dart';
 import '../../core/colour_palette.dart';
 import '../../core/network_coverage.dart' show CoverageLevel;
 import '../../core/units.dart';
@@ -12,7 +13,8 @@ import '../design/app_widgets.dart';
 import 'settings_index.dart';
 import 'settings_kit.dart';
 
-const String displayHelp = 'How numbers and lists look. Nothing stored changes: drives keep metres and m/s, and the '
+const String displayHelp =
+    'How numbers and lists look. Nothing stored changes: drives keep metres and m/s, and the '
     'server receives the same data whatever you pick here.';
 
 /// What the Units choice means, including what Auto resolves to on this phone right now, and which quantities have
@@ -22,8 +24,9 @@ String unitsExplanation(UnitsPreference pref, Units now) {
   final current = '${base.isImperial ? 'imperial' : 'metric'} (${base.lengthUnit}, ${base.longDistanceUnit}, ${base.speedUnit})';
   final own = now.isMixed ? ' Own choice below: ${joinAnd(now.exceptions)}.' : '';
   return switch (pref) {
-    UnitsPreference.auto => 'Auto follows your phone\'s region: imperial in the US, Liberia and Myanmar, metric '
-        'elsewhere. Showing $current.$own',
+    UnitsPreference.auto =>
+      'Auto follows your phone\'s region: imperial in the US, Liberia and Myanmar, metric '
+          'elsewhere. Showing $current.$own',
     _ => 'Showing $current everywhere: distances, speeds, antenna heights and reports.$own',
   };
 }
@@ -104,16 +107,19 @@ final List<UnitQuantity> unitQuantities = [
 ];
 
 /// "Follows Units: km and m." or "Always mph, whatever Units says."
-String unitOverrideState(UnitQuantity q, Units now) => q.current(now.overrides) == 'follow'
-    ? 'Follows Units: ${q.unitWords(now)}.'
-    : 'Always ${q.unitWords(now)}, whatever Units says.';
+String unitOverrideState(UnitQuantity q, Units now) =>
+    q.current(now.overrides) == 'follow' ? 'Follows Units: ${q.unitWords(now)}.' : 'Always ${q.unitWords(now)}, whatever Units says.';
 
 List<Widget> displaySectionRows(BuildContext context) {
   final s = AppScope.of(context);
   final st = s.settings;
   return [
     const SettingsAnchor(id: 'units-tile', child: UnitsTile()),
-    for (final q in unitQuantities) SettingsAnchor(id: q.id, child: UnitOverrideTile(quantity: q)),
+    for (final q in unitQuantities)
+      SettingsAnchor(
+        id: q.id,
+        child: UnitOverrideTile(quantity: q),
+      ),
     const SettingsAnchor(id: 'colour-palette', child: ColourPaletteTile()),
     SettingsAnchor(
       id: 'ui-haptics',
@@ -136,7 +142,8 @@ List<Widget> displaySectionRows(BuildContext context) {
         stops: holdStops,
         value: st.heardHoldPings,
         label: (v) => '$v ping${v == 1 ? '' : 's'}',
-        caption: 'Keep repeaters in the heard list for this many pings after they were last heard, then grey '
+        caption:
+            'Keep repeaters in the heard list for this many pings after they were last heard, then grey '
             'them out (they never disappear during a drive).',
         minLabel: '1',
         maxLabel: '10',
@@ -155,14 +162,12 @@ class UnitsTile extends StatelessWidget {
     final before = s.settings.unitOverrides;
     await s.updateSettings(s.settings.copyWith(unitOverrides: const UnitOverrides()));
     if (!context.mounted) return;
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
-      content: const Text('Every quantity follows Units again.'),
-      action: SnackBarAction(
-        key: const Key('units-reset-undo'),
-        label: 'Undo',
-        onPressed: () => s.updateSettings(s.settings.copyWith(unitOverrides: before)),
-      ),
-    ));
+    showAppToast(
+      context,
+      'Every quantity follows Units again.',
+      actionLabel: 'Undo',
+      onAction: () => s.updateSettings(s.settings.copyWith(unitOverrides: before)),
+    );
   }
 
   @override
@@ -174,36 +179,39 @@ class UnitsTile extends StatelessWidget {
       key: const Key('units-tile'),
       leading: const Icon(Icons.straighten),
       title: const Text('Units'),
-      subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Text(unitsExplanation(pref, s.units), key: const Key('units-explanation')),
-        ),
-        Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: SegmentedButton<UnitsPreference>(
-            key: const Key('units-selector'),
-            showSelectedIcon: false,
-            segments: const [
-              ButtonSegment(value: UnitsPreference.auto, label: Text('Auto')),
-              ButtonSegment(value: UnitsPreference.metric, label: Text('Metric')),
-              ButtonSegment(value: UnitsPreference.imperial, label: Text('Imperial')),
-            ],
-            selected: {pref},
-            onSelectionChanged: (v) => s.updateSettings(s.settings.copyWith(units: v.first)),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(unitsExplanation(pref, s.units), key: const Key('units-explanation')),
           ),
-        ),
-        if (mixed)
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton(
-              key: const Key('units-reset-overrides'),
-              style: TextButton.styleFrom(padding: EdgeInsets.zero),
-              onPressed: () => _resetOverrides(context),
-              child: const Text('Make every quantity follow Units'),
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: SegmentedButton<UnitsPreference>(
+              key: const Key('units-selector'),
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(value: UnitsPreference.auto, label: Text('Auto')),
+                ButtonSegment(value: UnitsPreference.metric, label: Text('Metric')),
+                ButtonSegment(value: UnitsPreference.imperial, label: Text('Imperial')),
+              ],
+              selected: {pref},
+              onSelectionChanged: (v) => s.updateSettings(s.settings.copyWith(units: v.first)),
             ),
           ),
-      ]),
+          if (mixed)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                key: const Key('units-reset-overrides'),
+                style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                onPressed: () => _resetOverrides(context),
+                child: const Text('Make every quantity follow Units'),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
@@ -234,18 +242,23 @@ class UnitOverrideTile extends StatelessWidget {
   }
 }
 
-/// The choices for [q] in a dialog, the current one marked. Returns the picked value, or null when dismissed.
+/// The choices for [q] in a sheet, the current one marked. Returns the picked value, or null when dismissed.
 Future<String?> pickUnit(BuildContext context, UnitQuantity q) {
   final s = AppScope.read(context);
   final now = s.units;
   final base = Units(now.system);
   final cur = q.current(now.overrides);
   final labels = ['Follow Units (now ${q.unitWords(base)})', ...q.labels(base)];
-  return showDialog<String>(
-    context: context,
-    builder: (ctx) => SimpleDialog(
+  return showAppSheet<String>(
+    context,
+    detents: const [0.6],
+    builder: (ctx, controller) => AppSheetScaffold(
       key: Key('${q.id}-dialog'),
-      title: Text(settingsEntry(q.id).title),
+      controller: controller,
+      title: settingsEntry(q.id).title,
+      padding: EdgeInsets.zero,
+
+      secondaryAction: TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
       children: [
         for (var i = 0; i < q.values.length; i++)
           Semantics(
@@ -259,13 +272,6 @@ Future<String?> pickUnit(BuildContext context, UnitQuantity q) {
               onTap: () => Navigator.pop(ctx, q.values[i]),
             ),
           ),
-        Align(
-          alignment: Alignment.centerRight,
-          child: Padding(
-            padding: const EdgeInsets.only(right: 16),
-            child: TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ),
-        ),
       ],
     ),
   );
@@ -275,7 +281,8 @@ Future<String?> pickUnit(BuildContext context, UnitQuantity q) {
 String paletteSummary(ColourPalette p) => switch (p) {
   ColourPalette.standard => 'Blue, teal and green for your pings; green, blue, amber and red for network coverage.',
   ColourPalette.colourBlind => 'Blue to yellow to orange. Safe for red-green and blue-yellow colour blindness. Link lines turn dashed.',
-  ColourPalette.highContrast => 'Brighter on the dark map and deeper on the light map, for strong separation from the map. Link lines turn dashed.',
+  ColourPalette.highContrast =>
+    'Brighter on the dark map and deeper on the light map, for strong separation from the map. Link lines turn dashed.',
 };
 
 /// The strength colours of [p] as a strip: strongest to weakest, then "nothing heard" (grey) and "heard, signal unknown"
@@ -288,7 +295,14 @@ class PaletteStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     final mc = MeshSonarColors.forPalette(palette, Theme.of(context).brightness);
     final colours = [
-      for (final l in [CoverageLevel.strong, CoverageLevel.good, CoverageLevel.fair, CoverageLevel.weak, CoverageLevel.none, CoverageLevel.unknown])
+      for (final l in [
+        CoverageLevel.strong,
+        CoverageLevel.good,
+        CoverageLevel.fair,
+        CoverageLevel.weak,
+        CoverageLevel.none,
+        CoverageLevel.unknown,
+      ])
         mc.levelColor(l),
     ];
     return ExcludeSemantics(
@@ -339,8 +353,10 @@ class ColourPaletteTile extends StatelessWidget {
             child: ListTile(
               key: Key('colour-palette-${p.id}'),
               minTileHeight: 56,
-              leading: Icon(p == cur ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-                  color: p == cur ? t.colorScheme.primary : t.colorScheme.onSurfaceVariant),
+              leading: Icon(
+                p == cur ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                color: p == cur ? t.colorScheme.primary : t.colorScheme.onSurfaceVariant,
+              ),
               title: Text(p.label),
               subtitle: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

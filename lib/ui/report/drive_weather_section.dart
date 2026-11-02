@@ -20,6 +20,7 @@ import '../charts/chart_frame.dart';
 import '../charts/time_line_chart.dart';
 import '../widgets.dart';
 import 'drive_context_section.dart' show AppStateLike, loadDriveContextReport;
+import '../design/app_surfaces.dart';
 
 /// Where the licence line links to.
 final Uri openMeteoUrl = Uri.parse('https://open-meteo.com');
@@ -709,16 +710,13 @@ class _CreditLine extends StatelessWidget {
       child: InkWell(
         key: const Key('weather-credit'),
         onTap: () async {
-          final messenger = ScaffoldMessenger.of(context);
           final ok = await AppScope.read(context).services
               .openUrl(openMeteoUrl);
-          if (!ok) {
-            messenger.showSnackBar(
-              const SnackBar(
-                content: Text(
-                  'Couldn\'t open the browser. The link is open-meteo.com.',
-                ),
-              ),
+          if (!ok && context.mounted) {
+            showAppToast(
+              context,
+              'Couldn\'t open the browser. The link is open-meteo.com.',
+              kind: AppToastKind.error,
             );
           }
         },

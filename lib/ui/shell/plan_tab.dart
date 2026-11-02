@@ -16,6 +16,7 @@ import '../plan/tracker_screen.dart';
 import '../plan/painter_screen.dart';
 import '../plan/presets_screen.dart';
 import 'drive_next_card.dart';
+import '../design/app_surfaces.dart';
 
 class PlanTool {
   final String id;
@@ -128,8 +129,7 @@ class PlanTab extends StatelessWidget {
                     onTap: () async {
                       final ok = await s.services.openUrl(planToolUri(base, tool.path));
                       if (!ok && context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Couldn\'t open the browser. Try again, or visit meshsonar.com.')));
+                        showAppToast(context, 'Couldn\'t open the browser. Try again, or visit meshsonar.com.', kind: AppToastKind.error);
                       }
                     },
                   ),

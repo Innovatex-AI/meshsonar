@@ -17,6 +17,7 @@ import '../../core/region_report_pdf.dart';
 import '../../core/report_pdf.dart';
 import '../report/pdf_export.dart';
 import '../app.dart';
+import '../design/app_surfaces.dart';
 
 /// Writes [content] to a file called [name] and opens the share sheet.
 typedef ShareText = Future<void> Function(String name, String content);
@@ -25,11 +26,10 @@ typedef ShareText = Future<void> Function(String name, String content);
 typedef ShareBytes = Future<void> Function(String name, Uint8List content);
 
 Future<void> showRegionReportExport(BuildContext context, {required String baseUrl, required String regionSlug, http.Client? client}) =>
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (_) => RegionReportExportSheet(baseUrl: baseUrl, regionSlug: regionSlug, client: client),
+    showAppSheet<void>(
+      context,
+      detents: const [0.6, 0.92],
+      builder: (_, c) => RegionReportExportSheet(baseUrl: baseUrl, regionSlug: regionSlug, client: client),
     );
 
 class RegionReportExportSheet extends StatefulWidget {
@@ -64,19 +64,17 @@ class _RegionReportExportSheetState extends State<RegionReportExportSheet> {
   }
 
   Future<void> _share(String name, String Function() content) async {
-    final messenger = ScaffoldMessenger.maybeOf(context);
     setState(() => _busy = true);
     try {
       await (widget.share ?? _defaultShare)(name, content());
     } catch (e) {
-      messenger?.showSnackBar(SnackBar(content: Text('Couldn\'t share the report. $e')));
+      if (mounted) showAppToast(context, 'Couldn\'t share the report. $e', kind: AppToastKind.error);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
   Future<void> _sharePdf(RegionReportExport e) async {
-    final messenger = ScaffoldMessenger.maybeOf(context);
     final units = AppScope.unitsOf(context);
     final name = '${e.slug}-region-report.pdf';
     setState(() => _busy = true);
@@ -88,7 +86,7 @@ class _RegionReportExportSheetState extends State<RegionReportExportSheet> {
         await shareReportPdf(AppScope.read(context), name, doc);
       }
     } catch (err) {
-      messenger?.showSnackBar(SnackBar(content: Text('Couldn\'t make the PDF. Text, JSON and CSV still work. $err')));
+      if (mounted) showAppToast(context, 'Couldn\'t make the PDF. Text, JSON and CSV still work. $err', kind: AppToastKind.error);
     } finally {
       if (mounted) setState(() => _busy = false);
     }

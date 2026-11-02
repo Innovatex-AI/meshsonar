@@ -1,5 +1,6 @@
 // Settings > Data & storage: sizes, and every clear action asks first, says what it costs, and never removes a drive
 // the server does not fully have.
+import 'toast_test_kit.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -56,7 +57,7 @@ void main() {
     return f.evaluate().isEmpty ? null : tester.widget<Text>(f).data;
   }
 
-  testWidgets('drives: only fully uploaded drives are removed, after a dialog that names what stays', (tester) async {
+  testWidgetsT('drives: only fully uploaded drives are removed, after a dialog that names what stays', (tester) async {
     final h = await open(tester, seed: (h) {
       h.store.seed(ended('up'), [silentPing('u1'), silentPing('u2')], syncedFirst: 2);
       h.store.seed(ended('waiting'), [silentPing('w1'), silentPing('w2'), silentPing('w3')], syncedFirst: 1);
@@ -89,7 +90,7 @@ void main() {
     expect(btn.onPressed, isNull, reason: 'nothing left that is safe to remove');
   });
 
-  testWidgets('drives: the drive being recorded is never offered, even if fully uploaded', (tester) async {
+  testWidgetsT('drives: the drive being recorded is never offered, even if fully uploaded', (tester) async {
     final h = await open(tester);
     await h.state.connect(h.bt.devices.first, RadioKind.bluetooth);
     await h.state.startDrive();
@@ -101,14 +102,14 @@ void main() {
     await h.state.stopDrive();
   });
 
-  testWidgets('drives: none on the phone says so and offers nothing', (tester) async {
+  testWidgetsT('drives: none on the phone says so and offers nothing', (tester) async {
     await open(tester);
     await showSetting(tester, 'storage-drives');
     expect(text(tester, 'storage-drives-value'), 'No drives on this phone.');
     expect(tester.widget<TextButton>(find.byKey(const Key('storage-drives-clear'))).onPressed, isNull);
   });
 
-  testWidgets('saved region data: size shown, clear asks, then the files are gone', (tester) async {
+  testWidgetsT('saved region data: size shown, clear asks, then the files are gone', (tester) async {
     final h = await open(tester, seed: (h) {
       final d = Directory('${tmp.path}/region_cache')..createSync(recursive: true);
       File('${d.path}/rc_cmh_site-config.json').writeAsStringSync('{"key":"k","body":"x","at":"2026-10-16T17:00:00Z"}');
@@ -132,7 +133,7 @@ void main() {
     expect(find.byKey(const Key('storage-region-clear')), findsNothing);
   });
 
-  testWidgets('repeater names: forget asks, then names are gone on disk and in memory', (tester) async {
+  testWidgetsT('repeater names: forget asks, then names are gone on disk and in memory', (tester) async {
     final h = await open(tester, seed: (h) {
       h.cache.items = const [RepeaterRef(key: 'abcd01', name: 'Water Tower', lat: 40, lon: -83)];
     });
@@ -148,7 +149,7 @@ void main() {
     expect(find.textContaining('None saved yet'), findsOneWidget);
   });
 
-  testWidgets('public node map: size shown, clear removes the file and its names', (tester) async {
+  testWidgetsT('public node map: size shown, clear removes the file and its names', (tester) async {
     final h = await open(tester, seed: (h) => h.seedNodeMap());
     await settleIo(tester, until: () => h.state.directory != null && !_measuring(tester));
     expect(h.state.directory, isNotNull);
@@ -164,21 +165,21 @@ void main() {
     expect(text(tester, 'storage-node-map-value'), 'Not downloaded.');
   });
 
-  testWidgets('offline maps: shows what is downloaded and opens the packs screen to delete', (tester) async {
+  testWidgetsT('offline maps: shows what is downloaded and opens the packs screen to delete', (tester) async {
     await open(tester);
     await showSetting(tester, 'storage-offline-maps');
     expect(text(tester, 'storage-offline-maps-value'), 'No offline maps downloaded.');
     expect(find.byKey(const Key('storage-offline-maps-open')), findsOneWidget);
   });
 
-  testWidgets('offline maps: a folder that cannot be read says so instead of a number', (tester) async {
+  testWidgetsT('offline maps: a folder that cannot be read says so instead of a number', (tester) async {
     storagePackManager = () async => throw const FileSystemException('denied');
     await open(tester);
     await showSetting(tester, 'storage-offline-maps');
     expect(text(tester, 'storage-offline-maps-value'), 'Couldn\'t read the offline maps folder.');
   });
 
-  testWidgets('total adds up what could be measured', (tester) async {
+  testWidgetsT('total adds up what could be measured', (tester) async {
     await open(tester, seed: (h) => h.seedNodeMap());
     await showSetting(tester, 'storage-total');
     expect(text(tester, 'storage-total'), startsWith('About '));

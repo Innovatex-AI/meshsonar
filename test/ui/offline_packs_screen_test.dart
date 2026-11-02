@@ -1,3 +1,4 @@
+import 'toast_test_kit.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -53,12 +54,18 @@ void main() {
     }
   }
 
+  /// The app sheet and action sheet slide in on a spring: let them arrive before tapping inside.
+  Future<void> sheetIn(WidgetTester tester) async {
+    await tester.pump(const Duration(milliseconds: 700));
+    await tester.pump(const Duration(milliseconds: 700));
+  }
+
   Future<void> tapAsync(WidgetTester tester, Finder f) async {
     await tester.runAsync(() async => tester.tap(f));
     await tester.pump();
   }
 
-  testWidgets('lists packs, downloads one on Wi-Fi, shows storage, deletes it', (tester) async {
+  testWidgetsT('lists packs, downloads one on Wi-Fi, shows storage, deletes it', (tester) async {
     final m = manager();
     await tester.runAsync(() => m.load());
     await tester.pumpWidget(MaterialApp(home: OfflinePacksScreen(manager: m, network: FakeNetworkMonitor())));
@@ -83,7 +90,7 @@ void main() {
     expect(find.textContaining('Storage used by map packs: 0 KB'), findsOneWidget);
   });
 
-  testWidgets('on cellular with Wi-Fi only: asks with the size; "Wait for Wi-Fi" queues it and Wi-Fi starts it', (tester) async {
+  testWidgetsT('on cellular with Wi-Fi only: asks with the size; "Wait for Wi-Fi" queues it and Wi-Fi starts it', (tester) async {
     final m = manager();
     final net = FakeNetworkMonitor(NetworkKind.cellular);
     await tester.runAsync(() => m.load());
@@ -91,6 +98,7 @@ void main() {
     await settle(tester, find.byKey(const Key('pack-download-CMH')));
     await tapAsync(tester, find.byKey(const Key('pack-download-CMH')));
     await settle(tester, find.byKey(const Key('pack-cellular-dialog')));
+    await sheetIn(tester);
     expect(find.textContaining('Columbus is 3 KB'), findsOneWidget);
     await tapAsync(tester, find.byKey(const Key('pack-wait-wifi')));
     await settle(tester, find.text('Waiting for Wi-Fi'));
@@ -104,19 +112,20 @@ void main() {
     expect(m.pending, isEmpty);
   });
 
-  testWidgets('on cellular: "Download now" downloads at once', (tester) async {
+  testWidgetsT('on cellular: "Download now" downloads at once', (tester) async {
     final m = manager();
     await tester.runAsync(() => m.load());
     await tester.pumpWidget(MaterialApp(home: OfflinePacksScreen(manager: m, network: FakeNetworkMonitor(NetworkKind.cellular))));
     await settle(tester, find.byKey(const Key('pack-download-CMH')));
     await tapAsync(tester, find.byKey(const Key('pack-download-CMH')));
     await settle(tester, find.byKey(const Key('pack-use-cellular')));
+    await sheetIn(tester);
     await tapAsync(tester, find.byKey(const Key('pack-use-cellular')));
     await settle(tester, find.textContaining('Downloaded'));
     expect(m.installed.keys, ['CMH']);
   });
 
-  testWidgets('Wi-Fi only off: cellular downloads without asking; the switch persists', (tester) async {
+  testWidgetsT('Wi-Fi only off: cellular downloads without asking; the switch persists', (tester) async {
     final m = manager();
     await tester.runAsync(() => m.load());
     await tester.pumpWidget(MaterialApp(home: OfflinePacksScreen(manager: m, network: FakeNetworkMonitor(NetworkKind.cellular))));
@@ -132,7 +141,7 @@ void main() {
     expect(again.wifiOnly, isFalse);
   });
 
-  testWidgets('no connection: the saved pack list shows with "Offline - as of" and installed packs stay', (tester) async {
+  testWidgetsT('no connection: the saved pack list shows with "Offline - as of" and installed packs stay', (tester) async {
     var offline = false;
     final m = manager(offline: () => offline);
     await tester.runAsync(() async {
@@ -147,7 +156,7 @@ void main() {
     expect(find.byKey(const Key('pack-manifest-error')), findsNothing);
   });
 
-  testWidgets('a newer version shows "Update available (size)"; the old pack stays installed until the new one verifies', (tester) async {
+  testWidgetsT('a newer version shows "Update available (size)"; the old pack stays installed until the new one verifies', (tester) async {
     var v = 1;
     final m = manager(v: () => v);
     await tester.runAsync(() async {
@@ -165,7 +174,7 @@ void main() {
     expect(sha256.convert(m.packFile('CMH').readAsBytesSync()).toString(), sha256.convert(body2).toString());
   });
 
-  testWidgets('Delete all removes packs and partial downloads after confirming', (tester) async {
+  testWidgetsT('Delete all removes packs and partial downloads after confirming', (tester) async {
     final m = manager();
     await tester.runAsync(() async {
       await m.load();
@@ -178,6 +187,7 @@ void main() {
     expect(find.textContaining('Storage used by map packs: 4 KB'), findsOneWidget); // 2.9 KB pack + 1 KB stray part
     await tester.tap(find.byKey(const Key('pack-delete-all')));
     await settle(tester, find.byKey(const Key('pack-delete-all-confirm')));
+    await sheetIn(tester);
     await tapAsync(tester, find.byKey(const Key('pack-delete-all-confirm')));
     await settle(tester, find.byKey(const Key('pack-download-CMH')));
     expect(m.installed, isEmpty);
@@ -186,7 +196,31 @@ void main() {
     expect(find.byKey(const Key('pack-delete-all')), findsNothing);
   });
 
-  testWidgets('manifest failure with nothing saved shows an honest message with Retry', (tester) async {
+  testWidgetsT('Delete: Keep does nothing, Delete removes the pack', (tester) async {
+    final m = manager();
+    await tester.runAsync(() async {
+      await m.load();
+      await m.download((await m.fetchManifest()).packs.single);
+    });
+    await tester.pumpWidget(MaterialApp(home: OfflinePacksScreen(manager: m, network: FakeNetworkMonitor())));
+    await settle(tester, find.byKey(const Key('pack-delete-CMH')));
+    await tester.tap(find.byKey(const Key('pack-delete-CMH')));
+    await settle(tester, find.byKey(const Key('pack-delete-confirm')));
+    await sheetIn(tester);
+    await tester.tap(find.text('Keep'));
+    await tester.pump(const Duration(milliseconds: 700));
+    await tester.pump(const Duration(milliseconds: 700));
+    expect(find.byKey(const Key('pack-delete-confirm')), findsNothing);
+    expect(m.installed.keys, contains('CMH'), reason: 'Keep leaves the pack alone');
+    await tester.tap(find.byKey(const Key('pack-delete-CMH')));
+    await settle(tester, find.byKey(const Key('pack-delete-confirm')));
+    await sheetIn(tester);
+    await tapAsync(tester, find.byKey(const Key('pack-delete-confirm')));
+    await settle(tester, find.byKey(const Key('pack-download-CMH')));
+    expect(m.installed, isEmpty);
+  });
+
+  testWidgetsT('manifest failure with nothing saved shows an honest message with Retry', (tester) async {
     final m = OfflinePackManager(root: Directory('${tmp.path}/p'), client: MockClient((_) async => throw const SocketException('offline')));
     await tester.runAsync(() => m.load());
     await tester.pumpWidget(MaterialApp(home: OfflinePacksScreen(manager: m, network: FakeNetworkMonitor(NetworkKind.offline))));

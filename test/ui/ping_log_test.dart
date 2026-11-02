@@ -9,6 +9,7 @@ import 'package:meshsonar/ui/ping_log_screen.dart';
 import 'package:meshsonar/ui/repeater_widgets.dart';
 
 import 'fakes.dart';
+import 'toast_test_kit.dart';
 
 String k(String p) => p.padRight(64, '0');
 
@@ -135,7 +136,7 @@ void main() {
       expect(find.byKey(const ValueKey('log-ping-p1')), findsOneWidget);
     });
 
-    testWidgets('tap a ping → detail sheet with every echo, neighbour and copy as text', (tester) async {
+    testWidgetsT('tap a ping → detail sheet with every echo, neighbour and copy as text', (tester) async {
       await open(tester);
       await tester.tap(find.byKey(const ValueKey('log-ping-p1')));
       await tester.pumpAndSettle();

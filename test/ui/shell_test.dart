@@ -2,6 +2,7 @@
 // semantics, the Chat seam and the Plan links.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/ui/map/legend_sheet.dart' show MapLegendSheet;
 import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/platform/accessibility_channel.dart';
 import 'package:meshsonar/radio/radio_api.dart';
@@ -15,6 +16,7 @@ import 'package:meshsonar/ui/shell/plan_tab.dart';
 import 'package:meshsonar/ui/shell/shell_controller.dart';
 
 import 'fakes.dart';
+import 'toast_test_kit.dart';
 
 /// Lets snackbars time out so no timers are left pending.
 Future<void> drain(WidgetTester tester) async {
@@ -254,7 +256,7 @@ void main() {
       await drain(tester);
     });
 
-    testWidgets('More: every row opens something real', (tester) async {
+    testWidgetsT('More: every row opens something real', (tester) async {
       phone(tester);
       final h = Harness();
       await h.pumpApp(tester);
@@ -276,7 +278,7 @@ void main() {
       expect(find.text('About MeshSonar'), findsWidgets);
       await tapShellTab(tester, 'More'); // re-tap pops to the list
       await row('more-legend');
-      expect(find.byType(BottomSheet), findsOneWidget);
+      expect(find.byType(MapLegendSheet), findsOneWidget);
       await tester.tapAt(const Offset(2, 2));
       await tester.pumpAndSettle();
       await row('more-howItWorks');

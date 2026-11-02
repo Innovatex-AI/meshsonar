@@ -1,5 +1,6 @@
 // The privacy-zone editor: select-not-add, add by map tap and by location, limits, radius / name / move / delete+undo,
 // the offline queue and lazy key, an unsupported server, and the layout on iPhone / iPad / 2.5x text / dark / 48 px / VoiceOver.
+import 'toast_test_kit.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart' show MapController;
 import 'package:latlong2/latlong.dart';
@@ -35,7 +36,7 @@ Future<void> addByTap(WidgetTester tester, MapController map, double lat, double
 }
 
 void main() {
-  testWidgets('empty: explains what zones do, offers Add, adds nothing by itself', (tester) async {
+  testWidgetsT('empty: explains what zones do, offers Add, adds nothing by itself', (tester) async {
     final (h, _) = await pumpZones(tester);
     expect(find.textContaining('hidden from the public map'), findsOneWidget);
     expect(find.textContaining('start and end of each drive'), findsWidgets);
@@ -45,7 +46,7 @@ void main() {
     expect(h.state.privacyZones.zones, isEmpty);
   });
 
-  testWidgets('add by tapping the map: one tap, one zone, 4 decimals, selected, sent to the server', (tester) async {
+  testWidgetsT('add by tapping the map: one tap, one zone, 4 decimals, selected, sent to the server', (tester) async {
     final (h, map) = await pumpZones(tester);
     await addByTap(tester, map, 39.961234567, -82.998765432);
     final z = h.state.privacyZones.zones;
@@ -61,7 +62,7 @@ void main() {
     expect(h.zc.posts.last.single.toJson()['lat'], z.single.lat);
   });
 
-  testWidgets('tapping an existing zone SELECTS it and adds nothing; tapping empty map adds nothing', (tester) async {
+  testWidgetsT('tapping an existing zone SELECTS it and adds nothing; tapping empty map adds nothing', (tester) async {
     final (h, map) = await pumpZones(tester);
     await addByTap(tester, map, 39.9612, -82.9988);
     final zone = h.state.privacyZones.zones.single;
@@ -79,7 +80,7 @@ void main() {
     expect(k('zone-editor'), findsNothing, reason: 'a tap on nothing selects nothing');
   });
 
-  testWidgets('"Use my location" adds a zone at the phone\'s position, rounded', (tester) async {
+  testWidgetsT('"Use my location" adds a zone at the phone\'s position, rounded', (tester) async {
     final (h, _) = await pumpZones(tester);
     await scrollTo(tester, k('zone-add-here'));
     await tester.tap(k('zone-add-here'));
@@ -88,7 +89,7 @@ void main() {
     expect((z.lat, z.lon), (39.9612, -82.9988));
   });
 
-  testWidgets('"Use my location" with no fix says so and adds nothing', (tester) async {
+  testWidgetsT('"Use my location" with no fix says so and adds nothing', (tester) async {
     final (h, _) = await pumpZones(tester, withFix: false);
     await scrollTo(tester, k('zone-add-here'));
     await tester.tap(k('zone-add-here'));
@@ -97,7 +98,7 @@ void main() {
     expect(h.state.privacyZones.zones, isEmpty);
   });
 
-  testWidgets('limit: 10 zones, then Add is off and the limit is said', (tester) async {
+  testWidgetsT('limit: 10 zones, then Add is off and the limit is said', (tester) async {
     final (h, _) = await pumpZones(tester);
     await h.state.privacyZones.load();
     await h.state.privacyZones.setZones([for (var i = 0; i < kZoneMax; i++) PrivacyZone.normalized(lat: 39.9 + i / 100, lon: -83.0)]);
@@ -108,7 +109,7 @@ void main() {
     expect(tester.widget<OutlinedButton>(k('zone-add-here')).onPressed, isNull);
   });
 
-  testWidgets('radius slider: 50 to 5000 m, saved when released; name saved on submit', (tester) async {
+  testWidgetsT('radius slider: 50 to 5000 m, saved when released; name saved on submit', (tester) async {
     final (h, map) = await pumpZones(tester);
     await addByTap(tester, map, 39.9612, -82.9988);
     await scrollTo(tester, k('zone-radius'));
@@ -127,7 +128,7 @@ void main() {
     expect(find.text('Home'), findsWidgets);
   });
 
-  testWidgets('move on map relocates the selected zone; delete removes it and Undo brings it back', (tester) async {
+  testWidgetsT('move on map relocates the selected zone; delete removes it and Undo brings it back', (tester) async {
     final (h, map) = await pumpZones(tester);
     await addByTap(tester, map, 39.9612, -82.9988);
     await scrollTo(tester, k('zone-move'));
@@ -147,7 +148,7 @@ void main() {
     expect(h.state.privacyZones.zones.length, 1);
   });
 
-  testWidgets('trim distance is a setting and is sent', (tester) async {
+  testWidgetsT('trim distance is a setting and is sent', (tester) async {
     final (h, _) = await pumpZones(tester);
     await scrollTo(tester, k('zone-trim'));
     await tester.drag(k('zone-trim'), const Offset(600, 0));
@@ -157,7 +158,7 @@ void main() {
   });
 
   group('offline and lazy key', () {
-    testWidgets('offline: the zone is kept, the screen says it waits, and it goes out when the server answers', (tester) async {
+    testWidgetsT('offline: the zone is kept, the screen says it waits, and it goes out when the server answers', (tester) async {
       final (h, map) = await pumpZones(tester);
       h.zc.error = const CmatException('network error: down');
       await addByTap(tester, map, 39.9612, -82.9988);
@@ -173,7 +174,7 @@ void main() {
       expect(find.textContaining('Saved.'), findsOneWidget);
     });
 
-    testWidgets('no driver key yet: usable, says it waits for a key, and sends once a key exists', (tester) async {
+    testWidgetsT('no driver key yet: usable, says it waits for a key, and sends once a key exists', (tester) async {
       final (h, map) = await pumpZones(tester, withKey: false);
       await addByTap(tester, map, 39.9612, -82.9988);
       expect(h.state.privacyZones.zones.length, 1);
@@ -186,7 +187,7 @@ void main() {
     });
   });
 
-  testWidgets('a server without driverPrivacy: a plain message, no editing, nothing sent', (tester) async {
+  testWidgetsT('a server without driverPrivacy: a plain message, no editing, nothing sent', (tester) async {
     final (h, _) = await pumpZones(tester, capable: false);
     expect(k('zones-unsupported'), findsOneWidget);
     expect(find.textContaining('does not support privacy zones'), findsOneWidget);
@@ -215,7 +216,7 @@ void main() {
       ('iPad landscape dark', const Size(1366, 1024), 1.0, true),
       ('iPad 2.5x text', const Size(834, 1194), 2.5, false),
     ]) {
-      testWidgets('$name: no overflow, targets at least 48 px, with a zone selected', (tester) async {
+      testWidgetsT('$name: no overflow, targets at least 48 px, with a zone selected', (tester) async {
         final (h, map) = await pumpZones(tester, size: size, textScale: scale, brightness: dark ? Brightness.dark : Brightness.light);
         await h.state.privacyZones.load();
         await h.state.privacyZones.setZones([
@@ -245,7 +246,7 @@ void main() {
     }
   });
 
-  testWidgets('VoiceOver: the map, every zone and the sliders have spoken labels; the list edits without the map', (tester) async {
+  testWidgetsT('VoiceOver: the map, every zone and the sliders have spoken labels; the list edits without the map', (tester) async {
     final handle = tester.ensureSemantics();
     final (h, _) = await pumpZones(tester);
     await h.state.privacyZones.load();

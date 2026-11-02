@@ -14,6 +14,7 @@ import '../../core/driver_account.dart';
 import '../app.dart';
 import '../settings/settings_kit.dart' show confirmSettingsChange;
 import '../widgets.dart';
+import '../design/app_surfaces.dart';
 
 const Duration keyRevealFor = Duration(seconds: 30);
 
@@ -209,7 +210,7 @@ class _ThisPhoneState extends State<_ThisPhone> {
                 icon: const Icon(Icons.copy_rounded),
                 onPressed: () async {
                   await Clipboard.setData(ClipboardData(text: st.driverKey ?? ''));
-                  if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Key copied')));
+                  if (context.mounted) showAppToast(context, 'Key copied', kind: AppToastKind.success);
                 },
               ),
           ]),
@@ -352,10 +353,14 @@ class _RevealButtonState extends State<_RevealButton> {
     if (!mounted) return;
     setState(() => _busy = false);
     if (err != null || r == null || !r.revealable) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err ?? 'This key was made before keys could be viewed, so it cannot be shown. Make a new key.')));
+      showAppToast(context, err ?? 'This key was made before keys could be viewed, so it cannot be shown. Make a new key.', kind: AppToastKind.error);
       return;
     }
-    await showDialog<void>(context: context, builder: (_) => _RevealDialog(title: widget.label, revealed: r!));
+    await showAppSheet<void>(
+      context,
+      detents: const [0.5],
+      builder: (_, controller) => _RevealDialog(title: widget.label, revealed: r!, controller: controller),
+    );
   }
 
   @override
@@ -370,7 +375,8 @@ class _RevealButtonState extends State<_RevealButton> {
 class _RevealDialog extends StatefulWidget {
   final String title;
   final RevealedKey revealed;
-  const _RevealDialog({required this.title, required this.revealed});
+  final ScrollController controller;
+  const _RevealDialog({required this.title, required this.revealed, required this.controller});
   @override
   State<_RevealDialog> createState() => _RevealDialogState();
 }
@@ -395,25 +401,24 @@ class _RevealDialogState extends State<_RevealDialog> {
   Widget build(BuildContext context) {
     final r = widget.revealed;
     final text = r.configLink ?? r.key!;
-    return AlertDialog(
+    return AppSheetScaffold(
       key: const Key('reveal-dialog'),
-      title: Text(widget.title),
-      content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+      controller: widget.controller,
+      title: widget.title,
+      primaryAction: FilledButton(key: const Key('reveal-close'), onPressed: () => Navigator.of(context).pop(), child: const Text('Close')),
+      secondaryAction: TextButton(
+        key: const Key('reveal-copy'),
+        onPressed: () async {
+          await Clipboard.setData(ClipboardData(text: text));
+          if (context.mounted) showAppToast(context, 'Copied', kind: AppToastKind.success);
+        },
+        child: const Text('Copy'),
+      ),
+      children: [
         SelectableText(text, key: const Key('reveal-text'), style: const TextStyle(fontFamily: 'monospace')),
         const SizedBox(height: Gap.s),
         Text(r.configLink != null ? 'Copy the link, then paste it into MeshMapper\'s Custom API Endpoint. ' : '', style: Theme.of(context).textTheme.bodySmall),
         Text('This closes by itself after 30 seconds.', style: Theme.of(context).textTheme.bodySmall),
-      ]),
-      actions: [
-        TextButton(
-          key: const Key('reveal-copy'),
-          onPressed: () async {
-            await Clipboard.setData(ClipboardData(text: text));
-            if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Copied')));
-          },
-          child: const Text('Copy'),
-        ),
-        TextButton(key: const Key('reveal-close'), onPressed: () => Navigator.of(context).pop(), child: const Text('Close')),
       ],
     );
   }

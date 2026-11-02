@@ -13,16 +13,16 @@ import '../../core/region_lookup.dart';
 import '../../core/region_search.dart' show shortNameOf;
 import '../app.dart';
 import '../onboarding/ui_prefs.dart';
+import '../design/app_surfaces.dart';
 
 /// Asks "Switch to (region)?" and, on Switch, makes it the viewed region. Returns true when the region was switched. The
 /// sheet starts on Cancel (autofocus), so a stray tap or Return never switches; dismissing it is Cancel.
 Future<bool> confirmRegionSwitch(BuildContext context, RegionIndexEntry region) async {
   final s = AppScope.read(context);
-  final ok = await showModalBottomSheet<bool>(
-    context: context,
-    isScrollControlled: true,
-    showDragHandle: true,
-    builder: (_) => _ConfirmSheet(region: region),
+  final ok = await showAppSheet<bool>(
+    context,
+    detents: const [0.45],
+    builder: (_, c) => _ConfirmSheet(region: region),
   );
   if (ok != true) return false;
   await switchViewedRegion(s, region);
@@ -88,11 +88,10 @@ class _ConfirmSheet extends StatelessWidget {
 /// "Outside coverage": the regions nearest to the phone, one tap each (then the usual confirm).
 Future<void> showNearestRegionsSheet(BuildContext context) {
   final s = AppScope.read(context);
-  return showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    showDragHandle: true,
-    builder: (sheet) {
+  return showAppSheet<void>(
+    context,
+    detents: const [0.6, 0.92],
+    builder: (sheet, c) {
       final near = s.switcherRegions.take(5).toList();
       final t = Theme.of(sheet);
       return SafeArea(

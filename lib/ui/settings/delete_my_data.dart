@@ -6,6 +6,8 @@
 // Every state is said in words: no driver key, a server that cannot erase context, a key the server does not know
 // (401/403), the hourly limit (429, "try again in an hour"), no connection (remembered and retried), and the server's
 // own counts when it worked.
+import '../design/app_surfaces.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../app/app_state.dart';
@@ -16,7 +18,8 @@ import 'settings_index.dart';
 import 'settings_kit.dart';
 
 /// What the screen tells a person before they press anything.
-const String deleteMyDataLead = 'This deletes what MeshSonar collected alongside your driving: the drive context (air '
+const String deleteMyDataLead =
+    'This deletes what MeshSonar collected alongside your driving: the drive context (air '
     'pressure, altitude and direction, phone and radio readings, phone and app details, the weather lookup for your '
     'drives) and the packet headers this phone shared. Your drives themselves (where each ping was sent and what '
     'it heard) are not touched here: delete a drive from its own screen. Collection continues as the switches in '
@@ -25,13 +28,15 @@ const String deleteMyDataLead = 'This deletes what MeshSonar collected alongside
 /// Account deletion (App Store guideline 5.1.1(v)) from inside the app: `DELETE driver-delete` removes this driver key and
 /// everything tied to it on the server. A website account linked to the key (if you made one) is separate and is deleted
 /// from the website. An older server without the endpoint keeps the website hand-off.
-const String deleteAccountText = 'Delete my account removes your driver key and every drive, ping, weather lookup, packet '
+const String deleteAccountText =
+    'Delete my account removes your driver key and every drive, ping, weather lookup, packet '
     'header and problem report the server holds for it. It cannot be undone. A website account you may have linked to '
     'the key is separate: delete that one on the website. Drives on this phone stay unless you tick the box. '
     'You can make a new key afterwards.';
 
 /// What the person is told before "Download my data".
-const String exportText = 'Download my data saves everything the server holds for your account (your keys, every drive '
+const String exportText =
+    'Download my data saves everything the server holds for your account (your keys, every drive '
     'with each ping, and your reports) as one file you can keep or share.';
 
 class DeleteMyDataScreen extends StatefulWidget {
@@ -75,13 +80,30 @@ class _DeleteMyDataScreenState extends State<DeleteMyDataScreen> {
 
   Future<void> _deleteAccount(AppState s) async {
     var alsoPhone = false;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, set) => AlertDialog(
+    final ok = await showAppSheet<bool>(
+      context,
+      detents: const [0.55],
+      builder: (ctx, controller) => StatefulBuilder(
+        builder: (ctx, set) => AppSheetScaffold(
           key: const Key('delete-account-dialog'),
-          title: const Text('Delete my account?'),
-          content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          controller: controller,
+          title: 'Delete my account?',
+
+          primaryAction: FilledButton(
+            key: const Key('delete-account-confirm'),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+              foregroundColor: Theme.of(ctx).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete my account'),
+          ),
+          secondaryAction: TextButton(
+            key: const Key('delete-account-cancel'),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          children: [
             const Text('This deletes your driver key and all your drives, pings and reports on the server. It cannot be undone.'),
             CheckboxListTile(
               key: const Key('delete-account-also-phone'),
@@ -90,15 +112,6 @@ class _DeleteMyDataScreenState extends State<DeleteMyDataScreen> {
               onChanged: (v) => set(() => alsoPhone = v ?? false),
               title: const Text('Also delete the drives on this phone'),
               subtitle: const Text('Ones not uploaded yet are lost.'),
-            ),
-          ]),
-          actions: [
-            TextButton(key: const Key('delete-account-cancel'), onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-            FilledButton(
-              key: const Key('delete-account-confirm'),
-              style: FilledButton.styleFrom(backgroundColor: Theme.of(ctx).colorScheme.error, foregroundColor: Theme.of(ctx).colorScheme.onError),
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Delete my account'),
             ),
           ],
         ),
@@ -130,7 +143,8 @@ class _DeleteMyDataScreenState extends State<DeleteMyDataScreen> {
       context,
       dialogKey: 'delete-server-dialog',
       title: 'Delete my data on the server?',
-      body: 'The server deletes all the drive context it holds for your driver key (every drive) and every packet '
+      body:
+          'The server deletes all the drive context it holds for your driver key (every drive) and every packet '
           'header this phone shared. This cannot be undone. Your drives and their pings stay. Collection continues '
           'as your switches say.',
       confirmLabel: 'Delete on the server',
@@ -162,7 +176,8 @@ class _DeleteMyDataScreenState extends State<DeleteMyDataScreen> {
       context,
       dialogKey: 'delete-local-dialog',
       title: 'Delete the context saved on this phone?',
-      body: 'Removes the air pressure, altitude, battery, radio readings and phone details recorded with your drives '
+      body:
+          'Removes the air pressure, altitude, battery, radio readings and phone details recorded with your drives '
           'from every drive on this phone, and from the drive reports. The drives themselves stay. This does not '
           'change the server.',
       confirmLabel: 'Delete on this phone',
@@ -193,8 +208,8 @@ class _DeleteMyDataScreenState extends State<DeleteMyDataScreen> {
       body: n == 0
           ? 'There are no drives on this phone.'
           : 'Deletes $n drive${n == 1 ? '' : 's'} from this phone, including any that have not uploaded yet (those '
-              'are lost: export them first if you want a copy). Drives already on the server stay there until you '
-              'delete your account. This cannot be undone.',
+                'are lost: export them first if you want a copy). Drives already on the server stay there until you '
+                'delete your account. This cannot be undone.',
       confirmLabel: 'Delete drives',
       destructive: true,
     );
@@ -217,7 +232,8 @@ class _DeleteMyDataScreenState extends State<DeleteMyDataScreen> {
       context,
       dialogKey: 'delete-key-dialog',
       title: 'Remove the driver key from this phone?',
-      body: 'This phone forgets the key and stops uploading. The key and your account stay on the server until you '
+      body:
+          'This phone forgets the key and stops uploading. The key and your account stay on the server until you '
           'delete your account on the website. The app keeps no copy of the key.',
       confirmLabel: 'Remove key',
       destructive: true,
@@ -231,16 +247,16 @@ class _DeleteMyDataScreenState extends State<DeleteMyDataScreen> {
     final s = AppScope.of(context);
     final t = Theme.of(context);
     Widget head(String text) => Padding(
-          padding: const EdgeInsets.only(top: 20, bottom: 6),
-          child: Semantics(header: true, child: Text(text, style: t.textTheme.titleMedium)),
-        );
+      padding: const EdgeInsets.only(top: 20, bottom: 6),
+      child: Semantics(header: true, child: Text(text, style: t.textTheme.titleMedium)),
+    );
 
     final caps = s.uploadSiteConfig;
     final String? serverWhyNot = !s.hasKey
         ? 'This phone has no driver key, so there is nothing of yours on the server to delete.'
         : (caps != null && !caps.driveContextErase)
-            ? '$serverCannotEraseText Packet headers can still be erased with "Erase shared packet headers" in Privacy & data sharing.'
-            : null;
+        ? '$serverCannotEraseText Packet headers can still be erased with "Erase shared packet headers" in Privacy & data sharing.'
+        : null;
 
     return Scaffold(
       appBar: AppBar(title: Text(settingsEntry('delete-my-data').title)),
@@ -278,8 +294,10 @@ class _DeleteMyDataScreenState extends State<DeleteMyDataScreen> {
               ),
             ],
             head('On this phone'),
-            const Text('The context saved with your drives on this phone is yours and stays unless you delete it here. '
-                'Deleting it does not change the server.'),
+            const Text(
+              'The context saved with your drives on this phone is yours and stays unless you delete it here. '
+              'Deleting it does not change the server.',
+            ),
             const SizedBox(height: 8),
             OutlinedButton.icon(
               key: const Key('delete-local-context'),
@@ -298,11 +316,16 @@ class _DeleteMyDataScreenState extends State<DeleteMyDataScreen> {
             OutlinedButton.icon(
               key: const Key('export-data'),
               onPressed: (!s.accountAvailable || _exportBusy) ? null : () => _export(s),
-              icon: _exportBusy ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.download_outlined),
+              icon: _exportBusy
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.download_outlined),
               label: const Text('Download my data'),
             ),
             if (!s.accountAvailable)
-              const Padding(padding: EdgeInsets.only(top: 6), child: Text('Needs a confirmed driver key on a server that offers it.', key: Key('export-whynot'))),
+              const Padding(
+                padding: EdgeInsets.only(top: 6),
+                child: Text('Needs a confirmed driver key on a server that offers it.', key: Key('export-whynot')),
+              ),
             if (_exportResult != null)
               Padding(
                 padding: const EdgeInsets.only(top: 12),

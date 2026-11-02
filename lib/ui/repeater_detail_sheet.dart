@@ -16,6 +16,7 @@ import 'theme.dart';
 import 'widgets.dart';
 import 'repeater_reach_section.dart';
 import 'your_drives_section.dart';
+import 'design/app_surfaces.dart';
 
 /// One hearing of a repeater on a ping (echo or neighbour exchange).
 class RepeaterHearing {
@@ -61,18 +62,11 @@ Future<void> showRepeaterDetail(
   required RepeaterLookup lookup,
   required List<DrivePing> pings,
 }) {
-  return showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    showDragHandle: true,
-    builder: (_) => DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: 0.6,
-      minChildSize: 0.35,
-      maxChildSize: 0.95,
-      builder: (context, scroll) =>
-          RepeaterDetailSheet(id: id, lookup: lookup, pings: pings, scrollController: scroll),
+  return showAppSheet<void>(
+    context,
+    detents: const [0.6, 0.95],
+    builder: (context, scroll) => SafeArea(
+      child: RepeaterDetailSheet(id: id, lookup: lookup, pings: pings, scrollController: scroll),
     ),
   );
 }

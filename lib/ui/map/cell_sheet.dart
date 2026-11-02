@@ -7,6 +7,7 @@ import '../../core/network_coverage.dart';
 import '../theme.dart';
 import 'coverage_map.dart' show networkLevelColor;
 import 'map_layers.dart' show formatSnrShort;
+import '../design/app_surfaces.dart';
 
 /// The cell under [p], if any (point-in-polygon over the drawn cells; smallest cell wins when layers overlap).
 NetworkCell? networkCellAt(List<NetworkCell> cells, LatLng p) {
@@ -52,10 +53,10 @@ String lastSeenText(String iso, {DateTime? now}) {
 }
 
 Future<void> showCellSheet(BuildContext context, NetworkCell n) {
-  return showModalBottomSheet<void>(
-    context: context,
-    showDragHandle: true,
-    builder: (context) => SafeArea(child: CellSheet(cell: n)),
+  return showAppSheet<void>(
+    context,
+    detents: const [0.5],
+    builder: (context, c) => SafeArea(child: SingleChildScrollView(controller: c, child: CellSheet(cell: n))),
   );
 }
 

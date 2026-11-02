@@ -10,6 +10,7 @@ import '../../radio/tools/radio_tools.dart';
 import '../app.dart';
 import 'tool_kit.dart';
 import 'tools_host.dart';
+import '../design/app_surfaces.dart';
 
 class DiscoverScreen extends StatelessWidget {
   const DiscoverScreen({super.key});
@@ -62,7 +63,7 @@ class _DiscoverBodyState extends State<_DiscoverBody> {
     if (!mounted) return;
     final text = err ?? '${n.displayName} is now in your radio’s contacts.';
     setState(() => _addNote = text);
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+    showAppToast(context, text, kind: err == null ? AppToastKind.success : AppToastKind.error);
   }
 
   static String _typeWord(int t) => switch (t) { AdvType.repeater => 'Repeater', AdvType.room => 'Room', AdvType.sensor => 'Sensor', AdvType.chat => 'Chat node', _ => 'Node' };
