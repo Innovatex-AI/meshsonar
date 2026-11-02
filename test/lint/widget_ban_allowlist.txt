@@ -23,7 +23,6 @@ lib/ui/chat/chat_search_screen.dart|Icons.|2
 lib/ui/chat/chat_search_screen.dart|ListTile(|1
 lib/ui/chat/chat_search_screen.dart|TextField(|1
 lib/ui/chat/chat_tab_provider.dart|Icons.|1
-lib/ui/chat/chats_list_view.dart|CupertinoIcons.|7
 lib/ui/chat/composer.dart|FilledButton|2
 lib/ui/chat/composer.dart|Icons.|3
 lib/ui/chat/composer.dart|TextField(|1
