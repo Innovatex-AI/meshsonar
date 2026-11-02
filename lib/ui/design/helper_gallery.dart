@@ -92,7 +92,7 @@ class _HelperGalleryState extends State<HelperGallery> {
           ),
           h('Rows and banners'),
           AppSwitchTile(symbol: AppSymbols.waveform, title: 'Haptics', subtitle: 'Small taps for toggles and results', value: _sw, onChanged: (v) => setState(() => _sw = v)),
-          const ChatStatusBanner(kind: StatusBannerKind.warning, message: 'Radio not connected', actionLabel: 'Connect'),
+          ChatStatusBanner(kind: StatusBannerKind.warning, message: 'Radio not connected', actionLabel: 'Connect', onAction: _noop0),
           const TipCard(tipId: 'gallery-tip', title: 'Tip', message: 'Open the guide for the legend.'),
           h('Helpers'),
           Padding(
@@ -106,7 +106,7 @@ class _HelperGalleryState extends State<HelperGallery> {
             ]),
           ),
           h('States'),
-          const SizedBox(height: 180, child: AppEmptyView(symbol: AppSymbols.tray, title: 'No messages yet', message: 'Say hello to someone on the mesh.', actionLabel: 'New message')),
+          SizedBox(height: 180, child: AppEmptyView(symbol: AppSymbols.tray, title: 'No messages yet', message: 'Say hello to someone on the mesh.', actionLabel: 'New message', onAction: _noop0)),
           const SizedBox(height: 40),
         ],
       ),
@@ -160,3 +160,5 @@ class _Avatar extends StatelessWidget {
     );
   }
 }
+
+void _noop0() {}

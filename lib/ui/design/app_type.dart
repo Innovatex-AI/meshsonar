@@ -41,7 +41,13 @@ abstract final class AppType {
     return 0;
   }
 
+  /// Spike S4: Flutter's default family never switches optical size, so SF Pro Display is requested explicitly from 20 pt
+  /// up (`CupertinoSystemDisplay`, Flutter's alias for the system display face; other platforms fall back to their
+  /// default font). Below 20 pt the default (SF Pro Text) is right.
+  static const String displayFamily = 'CupertinoSystemDisplay';
+
   static TextStyle _s(double size, FontWeight w, {double? height, bool numeric = false}) => TextStyle(
+    fontFamily: size >= 20 ? displayFamily : null,
     fontSize: size,
     fontWeight: w,
     letterSpacing: tracking(size),

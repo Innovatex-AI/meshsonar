@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:meshsonar/core/offline_style.dart' show appLabelFont;
+import 'package:meshsonar/ui/design/app_surfaces.dart' show dismissAppToast;
 import 'package:meshsonar/ui/design/app_type.dart';
 import 'package:meshsonar/ui/design/helper_gallery.dart';
 import 'package:meshsonar/ui/theme.dart';
@@ -48,6 +49,12 @@ void main() {
       // ignore: avoid_print
       print('SPIKE_S4 size=$size plain1=$w1p plain0=$w0p tnum1=$w1t tnum0=$w0t tnumEqual=${(w1t - w0t).abs() < 0.01} proportionalDiffers=${(w1p - w0p).abs() > 0.01}');
     }
+    // tnum on the Display face (>= 20 pt): the hero and ring use it.
+    const disp = TextStyle(fontSize: 34, fontFamily: AppType.displayFamily, fontFeatures: AppType.tabular);
+    final d1 = _w('1111111111', disp), d0 = _w('0000000000', disp);
+    final dp1 = _w('1111111111', const TextStyle(fontSize: 34, fontFamily: AppType.displayFamily)), dp0 = _w('0000000000', const TextStyle(fontSize: 34, fontFamily: AppType.displayFamily));
+    // ignore: avoid_print
+    print('SPIKE_S4 display34 tnum1=$d1 tnum0=$d0 tnumEqual=${(d1 - d0).abs() < 0.01} plain1=$dp1 plain0=$dp0');
     // Weight 600 resolves to a distinct face.
     final reg = _w('Weights resolve', const TextStyle(fontSize: 17)), semi = _w('Weights resolve', const TextStyle(fontSize: 17, fontWeight: FontWeight.w600));
     // ignore: avoid_print
@@ -118,6 +125,7 @@ void main() {
       }
     }
     // AX3 sheet.
+    dismissAppToast();
     await t.pumpWidget(_app(Brightness.light, 2.35));
     await _settle(t, 500);
     await t.drag(find.byType(ListView).first, const Offset(0, -6000));
