@@ -6,7 +6,7 @@
 //    mismatch in plain words. Nothing is written without a person pressing a button.
 //  * Reboot, restore-with-identity and factory reset are blocked while a drive is recording, and factory reset and identity
 //    replacement need a typed word (checked again inside the tool).
-//  * Behind AppFlags.chatRedesign until the redesign ships (the entry is on the Radio screen).
+//  * Entry: top of the Radio screen whenever a radio is connected (not behind the chatRedesign flag).
 import 'dart:async';
 import 'dart:io';
 
