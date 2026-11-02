@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 import '../../app/chat_controller.dart';
 import '../../chat/conversation_row.dart';
 import '../../chat/models.dart';
-import '../contacts/contact_detail_screen.dart';
+import '../contacts/contact_profile_screen.dart';
 import '../contacts/contacts_controller.dart';
 import '../contacts/dm_route_header.dart';
 import '../design/app_symbols.dart';
@@ -94,6 +94,6 @@ class ChatNavigator {
   }
 
   void openProfile(BuildContext context, Contact c) {
-    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ContactDetailScreen(controller: contacts, publicKey: c.publicKey)));
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ContactProfileScreen(controller: contacts, publicKey: c.publicKey)));
   }
 }
