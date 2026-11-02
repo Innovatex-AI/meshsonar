@@ -9,6 +9,8 @@ import 'package:flutter/material.dart';
 import '../core/data_categories.dart' show savedWithDriveNote;
 import '../core/phone_sensors.dart' show phoneTemperatureNote;
 import 'app.dart';
+import 'design/app_surfaces.dart' show showAppSheet;
+import 'design/sheet_detents.dart' show kFormSheetFull;
 import 'onboarding/ui_prefs.dart';
 import 'settings/data_sharing.dart';
 
@@ -22,13 +24,14 @@ const String disclosureLead = 'Everything below is on unless you turn it off her
     'private messages, and nothing about other apps, ever.';
 
 Future<void> showTelemetryDisclosure(BuildContext context) {
-  return showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    isDismissible: false,
-    enableDrag: false,
-    useSafeArea: true,
-    builder: (_) => const _CollectionSheet(),
+  // Raised by the phone on first run: the drive guard holds it while a drive is active. Only the two buttons close it.
+  return showAppSheet<void>(
+    context,
+    detents: const [kFormSheetFull],
+    dismissible: false,
+    grabber: false,
+    userInitiated: false,
+    builder: (_, _) => const _CollectionSheet(),
   );
 }
 

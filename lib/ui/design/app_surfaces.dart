@@ -550,7 +550,8 @@ void dismissAppToast() {
   _activeToast = null;
   if (a == null) return;
   a.timer.cancel();
-  if (a.entry.mounted) a.entry.remove();
+  // remove() is a no-op when the overlay is already gone (a toast that outlived its tree, e.g. between tests).
+  a.entry.remove();
   a.entry.dispose();
   appToastMessage.value = null;
 }

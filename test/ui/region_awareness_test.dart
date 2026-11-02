@@ -185,6 +185,7 @@ void main() {
     await tester.pump(const Duration(seconds: 20));
     await tester.pump(const Duration(seconds: 1));
     expect(find.byKey(const Key('region-preset-dialog')), findsOneWidget);
+    await tester.pumpAndSettle(); // the sheet is still sliding up
     await tester.tap(find.byKey(const Key('region-preset-switch')));
     await tester.pumpAndSettle();
     expect(h.state.presetPrompt, isNull);
