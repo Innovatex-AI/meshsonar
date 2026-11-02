@@ -1,9 +1,9 @@
 // Dead-area warning: how many of the latest tx pings in a row heard no repeater. Pure over the pings the engine already
-// emitted (no radio traffic, no cadence change); the Map tab shows a chip once the run reaches [deadAreaPings] and it
+// emitted (no radio traffic, no cadence change); the Drive tab shows a chip once the run reaches [deadAreaPings] and it
 // clears by itself on the next ping that was heard.
 import 'model.dart';
 
-/// Consecutive silent tx pings before the Map tab warns.
+/// Consecutive silent tx pings before the Drive tab warns.
 const int deadAreaPings = 5;
 
 /// The run of silent tx pings at the end of [pings] (oldest first). Passive rx pings are ignored: they are not answers

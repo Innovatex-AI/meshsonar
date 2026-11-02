@@ -22,7 +22,7 @@ class FieldScreen extends StatelessWidget {
       const SizedBox(height: Gap.m),
       PlanCard(cardKey: const Key('field-summary'), title: s.viewingRegion?.name ?? 'Measured coverage', children: [
         if (cov == null)
-          const PlanNote('Measured coverage has not loaded yet. Open the Map tab to load it.', key: Key('field-none'))
+          const PlanNote('Measured coverage has not loaded yet. Open the Drive tab to load it.', key: Key('field-none'))
         else
           PlanFacts([
             ('Driven cells', '${driven.length}'),
@@ -39,7 +39,7 @@ class FieldScreen extends StatelessWidget {
           leading: const Icon(Icons.map_outlined),
           title: const Text('Measured coverage map'),
           subtitle: const Text('Every driven square, by signal, age or noise.'),
-          onTap: () => _go(context, AppTab.map),
+          onTap: () => _go(context, AppTab.drive),
         ),
         ListTile(
           key: const Key('field-drive'),
@@ -47,7 +47,7 @@ class FieldScreen extends StatelessWidget {
           leading: const Icon(Icons.directions_car_outlined),
           title: const Text('Drive and contribute'),
           subtitle: const Text('Your drives upload as they finish and count at once.'),
-          onTap: () => _go(context, AppTab.map, drive: true),
+          onTap: () => _go(context, AppTab.drive, drive: true),
         ),
       ]),
       Text('Revoking or banning driver keys is an admin job on the website; anyone can drive with a key from the app.', style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),

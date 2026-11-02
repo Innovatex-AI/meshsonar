@@ -87,7 +87,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         art: const _TabsArt(),
                         title: 'Find your way around',
                         body: 'Chat: contacts and channels, once your radio is connected.\n'
-                            'Map: the coverage map. Start a drive here.\n'
+                            'Drive: record a drive, ping, and see coverage live.\n'
                             'Analyze: your region and your drives.\n'
                             'Plan: tools for deciding where to build.\n'
                             'More: your radio, settings, privacy and this tour.',
@@ -184,7 +184,7 @@ class _TabsArt extends StatelessWidget {
                   width: 52,
                   height: 52,
                   decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(16)),
-                  child: Icon(t.selectedIcon, color: Brand.glow, size: 26),
+                  child: IconTheme(data: const IconThemeData(color: Brand.glow, size: 26), child: t.iconWidget(selected: true)),
                 ),
                 const SizedBox(height: 6),
                 Text(t.label, style: const TextStyle(color: Colors.white70, fontSize: 12)),

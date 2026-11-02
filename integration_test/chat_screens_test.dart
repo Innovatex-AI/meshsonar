@@ -100,7 +100,7 @@ void main() {
     await pumpFor(t, const Duration(milliseconds: 400));
 
     // Chat-in-Drive
-    await openShellTab(t, 'Map');
+    await openShellTab(t, 'Drive');
     await pumpFor(t, const Duration(seconds: 1));
     await shot(t, 'chat-map-button');
     if (await waitFor(t, find.byKey(const Key('drive-chat')), timeout: const Duration(seconds: 8))) {

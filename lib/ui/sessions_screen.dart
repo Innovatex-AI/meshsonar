@@ -190,7 +190,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
                     child: EmptyState(
                       icon: Icons.directions_car,
                       title: 'No drives yet',
-                      body: 'Start a drive on the Map tab. Drives are saved on this phone and listed here.',
+                      body: 'Start a drive on the Drive tab. Drives are saved on this phone and listed here.',
                       action: Text('Pull down to refresh.', style: t.textTheme.bodySmall),
                     ),
                   ),

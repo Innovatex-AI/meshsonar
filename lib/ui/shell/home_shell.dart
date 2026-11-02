@@ -1,4 +1,4 @@
-// The app shell: five tabs (Chat, Map, Analyze, Plan, More), a bottom bar on phones and a navigation rail from 700 dp
+// The app shell: five tabs (Chat, Drive, Analyze, Plan, More), a bottom bar on phones and a navigation rail from 700 dp
 // wide (iPad, phones in landscape), and the mini drive bar above the tabs while a drive runs.
 //
 // Tab API: see shell_controller.dart (ShellScope). Seams for other work: ChatTabHost (chat_tab_host.dart) and
@@ -18,6 +18,7 @@ import '../drive_screen.dart';
 import '../onboarding/ui_prefs.dart';
 import '../telemetry_sheet.dart';
 import 'analyze_tab.dart';
+import 'blur_bar.dart';
 import '../chat/chat_banner_host.dart';
 import 'chat_tab.dart';
 import 'chat_tab_host.dart';
@@ -30,7 +31,7 @@ import 'shell_controller.dart';
 const double shellRailWidth = 700;
 
 class HomeShell extends StatefulWidget {
-  /// Opens this tab; null restores the last open tab (Map on a fresh install).
+  /// Opens this tab; null restores the last open tab (Drive on a fresh install).
   final AppTab? initialTab;
 
   /// Opens where a pre-0.25 tab index lives now (0 Drive, 1 Region, 2 Drives, 3 Radio, 4 Settings). For old callers.
@@ -51,13 +52,13 @@ class _HomeShellState extends State<HomeShell> {
 
   /// Keeps every tab's state (map, scroll, More's Navigator) when the layout flips between rail and bar on rotation.
   final _contentKey = GlobalKey();
-  AppTab _lastTab = AppTab.map;
+  AppTab _lastTab = AppTab.drive;
   AnalyzeView _lastAnalyze = AnalyzeView.region;
 
   @override
   void initState() {
     super.initState();
-    _shell = ShellController(initial: widget.initialTab ?? AppTab.map)..visited.add(AppTab.map);
+    _shell = ShellController(initial: widget.initialTab ?? AppTab.drive)..visited.add(AppTab.drive);
     _shell.visited.add(_shell.tab);
     _shell.addListener(_onShell);
     // A tap on a message notification or in-app banner: go to the Chat tab and open that conversation
@@ -105,8 +106,8 @@ class _HomeShellState extends State<HomeShell> {
 
   void _onPendingOpen() {
     if (!mounted || _alerts?.coordinator.pendingOpen.value == null) return;
-    // A drive on the Map tab stays on screen: the conversation opens over it and Back returns to the map.
-    if (!(_shell.tab == AppTab.map && (_state?.driving ?? false))) _shell.select(AppTab.chat);
+    // A drive on the Drive tab stays on screen: the conversation opens over it and Back returns to the map.
+    if (!(_shell.tab == AppTab.drive && (_state?.driving ?? false))) _shell.select(AppTab.chat);
     final key = _alerts!.coordinator.takePendingOpen();
     final open = ChatTabHost.openConversation;
     if (key != null && open != null) open(context, key);
@@ -175,7 +176,7 @@ class _HomeShellState extends State<HomeShell> {
 
   Widget _page(AppTab t) => switch (t) {
         AppTab.chat => const ChatTab(),
-        AppTab.map => const DriveScreen(),
+        AppTab.drive => const DriveScreen(),
         AppTab.analyze => const AnalyzeTab(),
         AppTab.plan => const PlanTab(),
         AppTab.more => const MoreTab(),
@@ -183,7 +184,7 @@ class _HomeShellState extends State<HomeShell> {
 
   /// The Chat tab's icon, with the unread count when chat services report one.
   Widget _icon(AppTab t, {required bool selected}) {
-    final icon = Icon(selected ? t.selectedIcon : t.icon);
+    final icon = t.iconWidget(selected: selected);
     if (t != AppTab.chat) return icon;
     return ListenableBuilder(
       listenable: Listenable.merge([ChatTabHost.provider, ChatTabHost.provider.value?.changes]),
@@ -205,58 +206,82 @@ class _HomeShellState extends State<HomeShell> {
         builder: (context, _) {
           final tab = _shell.tab;
           final wide = MediaQuery.sizeOf(context).width >= shellRailWidth;
-          final pages = IndexedStack(
-            index: tab.index,
-            children: [
-              for (final t in AppTab.values)
-                _shell.visited.contains(t) || t == AppTab.map ? _page(t) : const SizedBox.shrink(),
-            ],
-          );
-          // The Map tab already is the drive screen, so the bar is for every other tab.
-          final bar = tab == AppTab.map ? const SizedBox.shrink() : MiniDriveBar(onOpen: _shell.openDrive);
-          final content = InAppBannerHost(
-            child: Column(key: _contentKey, children: [Expanded(child: pages), const AlertsStatusStrip(), bar]),
-          );
+          final immersive = _shell.immersive;
+          final onDrive = tab == AppTab.drive;
+          // Phone: the body runs behind the translucent tab bar (extendBody). The Drive tab uses that room; every other
+          // tab is padded up to the bar so nothing sits underneath it. Wide: the rail sits beside the body, no overlap.
+          final behindBar = !wide;
           return ScaffoldMessenger(
             key: _messengerKey,
             child: Scaffold(
-              body: wide
-                  ? Row(children: [
-                      SafeArea(
-                        right: false,
-                        child: NavigationRail(
-                          key: const Key('shell-rail'),
-                          selectedIndex: tab.index,
-                          labelType: NavigationRailLabelType.all,
-                          onDestinationSelected: (i) => _shell.select(AppTab.values[i]),
-                          destinations: [
-                            for (final t in AppTab.values)
-                              NavigationRailDestination(
-                                icon: _icon(t, selected: false),
-                                selectedIcon: _icon(t, selected: true),
-                                label: Text(t.label),
-                              ),
-                          ],
-                        ),
+              extendBody: behindBar,
+              body: Builder(builder: (context) {
+                // With extendBody the body's bottom padding is the bar's height (the device inset when it is hidden).
+                final barPad = behindBar ? MediaQuery.paddingOf(context).bottom : 0.0;
+                final pages = IndexedStack(
+                  index: tab.index,
+                  children: [
+                    for (final t in AppTab.values)
+                      if (_shell.visited.contains(t) || t == AppTab.drive)
+                        t == AppTab.drive ? _page(t) : MediaQuery.removePadding(context: context, removeBottom: true, child: _page(t))
+                      else
+                        const SizedBox.shrink(),
+                  ],
+                );
+                // The Drive tab already is the drive screen (its dock is the bar); the bar is for every other tab.
+                final bar = onDrive ? const SizedBox.shrink() : MiniDriveBar(onOpen: _shell.openDrive);
+                final content = InAppBannerHost(
+                  child: Column(key: _contentKey, children: [
+                    Expanded(child: pages),
+                    AlertsStatusStrip(bottomInset: onDrive ? barPad : 0),
+                    bar,
+                    SizedBox(height: onDrive ? 0 : barPad),
+                  ]),
+                );
+                if (!wide) return content;
+                return Row(children: [
+                  if (!immersive) ...[
+                    SafeArea(
+                      right: false,
+                      child: NavigationRail(
+                        key: const Key('shell-rail'),
+                        selectedIndex: tab.index,
+                        labelType: NavigationRailLabelType.all,
+                        onDestinationSelected: (i) => _shell.select(AppTab.values[i]),
+                        destinations: [
+                          for (final t in AppTab.values)
+                            NavigationRailDestination(
+                              icon: _icon(t, selected: false),
+                              selectedIcon: _icon(t, selected: true),
+                              label: Text(t.label),
+                            ),
+                        ],
                       ),
-                      const VerticalDivider(width: 1),
-                      Expanded(child: content),
-                    ])
-                  : content,
-              bottomNavigationBar: wide
+                    ),
+                    const VerticalDivider(width: 1),
+                  ],
+                  Expanded(child: content),
+                ]);
+              }),
+              bottomNavigationBar: wide || immersive
                   ? null
-                  : NavigationBar(
-                      key: const Key('shell-tabs'),
-                      selectedIndex: tab.index,
-                      onDestinationSelected: (i) => _shell.select(AppTab.values[i]),
-                      destinations: [
-                        for (final t in AppTab.values)
-                          NavigationDestination(
-                            icon: _icon(t, selected: false),
-                            selectedIcon: _icon(t, selected: true),
-                            label: t.label,
-                          ),
-                      ],
+                  : BlurBar(
+                      child: NavigationBar(
+                        key: const Key('shell-tabs'),
+                        backgroundColor: Colors.transparent,
+                        surfaceTintColor: Colors.transparent,
+                        elevation: 0,
+                        selectedIndex: tab.index,
+                        onDestinationSelected: (i) => _shell.select(AppTab.values[i]),
+                        destinations: [
+                          for (final t in AppTab.values)
+                            NavigationDestination(
+                              icon: _icon(t, selected: false),
+                              selectedIcon: _icon(t, selected: true),
+                              label: t.label,
+                            ),
+                        ],
+                      ),
                     ),
             ),
           );

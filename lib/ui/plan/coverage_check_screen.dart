@@ -1,6 +1,6 @@
 // Plan > Coverage check. "Is there measured coverage at this place?" answered from real drives: the measured coverage cells
 // the app already holds for the viewed region (the data behind the website's /coverage map). Nothing is modelled and nothing
-// is sent anywhere: the point never leaves the phone. Works offline whenever the cells are cached (the Map tab keeps them).
+// is sent anywhere: the point never leaves the phone. Works offline whenever the cells are cached (the Drive tab keeps them).
 import 'dart:async';
 
 import 'package:flutter/material.dart';

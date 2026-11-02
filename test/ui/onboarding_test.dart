@@ -20,7 +20,7 @@ void main() {
     await tester.tap(find.byKey(const Key('onboarding-next')));
     await tester.pumpAndSettle();
     expect(find.text('Find your way around'), findsOneWidget);
-    for (final tab in ['Chat', 'Map', 'Analyze', 'Plan', 'More']) {
+    for (final tab in ['Chat', 'Drive', 'Analyze', 'Plan', 'More']) {
       expect(find.text(tab), findsWidgets);
     }
     await tester.tap(find.byKey(const Key('onboarding-next')));
@@ -33,7 +33,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('onboarding')), findsNothing);
     expect(prefs.onboardingSeen, isTrue);
-    expect(find.text('Map'), findsWidgets);
+    expect(find.text('Drive'), findsWidgets);
 
     // A fresh app with the same prefs goes straight in.
     final h2 = Harness();

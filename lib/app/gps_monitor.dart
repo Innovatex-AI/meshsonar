@@ -1,6 +1,6 @@
 // Owns the GPS stream for the length of a drive and turns it into the three things the rest of the app wants, none of which may slow a ping:
 //
-//  1. the stream stays OPEN (the keepalive that stops iOS ending the background location session when the Map tab or the engine stops
+//  1. the stream stays OPEN (the keepalive that stops iOS ending the background location session when the Drive tab or the engine stops
 //     listening; this replaces AppState's old no-op subscription);
 //  2. `onFix`: EVERY fix, as it arrives, with speed and course filled in when the OS reported none (derived from the last seconds of fixes,
 //     lib/core/fix_window.dart). The map agent animates the puck from this (AppState.rawFixes); the handler does a list insert and one

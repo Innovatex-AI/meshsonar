@@ -30,7 +30,7 @@ void main() {
     await pumpFor(t, const Duration(seconds: 6)); // site-config, regions-index and coverage arrive
 
     // ---- neighbouring regions on the map
-    await openTab(t, 'Map');
+    await openTab(t, 'Drive');
     await pumpFor(t, const Duration(seconds: 4));
     await shot(t, 'map-regions');
     final names = find.byWidgetPredicate((w) {

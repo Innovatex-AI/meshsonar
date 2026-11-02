@@ -306,7 +306,7 @@ void main() {
       expect(ShellScope.maybeOf(tester.element(find.byKey(const Key('chat-empty'))))?.tab, AppTab.chat);
     });
 
-    testWidgets('a banner tap during a drive on the Map tab opens the conversation over the map and stays on Map', (tester) async {
+    testWidgets('a banner tap during a drive on the Drive tab opens the conversation over the map and stays on Map', (tester) async {
       final s = await install(tester);
       final h = Harness()..approveKey();
       await h.pumpApp(tester);
@@ -321,11 +321,11 @@ void main() {
       String? opened;
       ChatTabHost.openConversation = (context, key) => opened = key;
       addTearDown(() => ChatTabHost.openConversation = null);
-      expect(ShellScope.maybeOf(tester.element(find.byType(Scaffold).first))?.tab, AppTab.map);
+      expect(ShellScope.maybeOf(tester.element(find.byType(Scaffold).first))?.tab, AppTab.drive);
       s.coordinator.pendingOpen.value = 'c:7';
       await tester.pump(const Duration(milliseconds: 200));
       expect(opened, 'c:7');
-      expect(ShellScope.maybeOf(tester.element(find.byType(Scaffold).first))?.tab, AppTab.map, reason: 'the drive stays in front');
+      expect(ShellScope.maybeOf(tester.element(find.byType(Scaffold).first))?.tab, AppTab.drive, reason: 'the drive stays in front');
       await h.state.stopDrive();
       await tester.pump(const Duration(seconds: 12));
     });

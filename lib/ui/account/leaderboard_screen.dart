@@ -1,5 +1,5 @@
 // The full leaderboard (the website's /drives/leaderboard and /leaderboard): opted-in drivers by distance, 30 days or all time,
-// for the viewed region or for every region. The Map tab's trophy sheet links here. Last good answer is cached by the region
+// for the viewed region or for every region. The Drive tab's trophy sheet links here. Last good answer is cached by the region
 // client, so it opens offline with an "offline copy" note.
 import 'package:flutter/material.dart';
 

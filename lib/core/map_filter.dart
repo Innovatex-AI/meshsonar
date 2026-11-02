@@ -1,4 +1,4 @@
-// The Map tab's filter drawer and the "coverage % of what you can see" figure. Pure Dart, no Flutter.
+// The Drive tab's filter drawer and the "coverage % of what you can see" figure. Pure Dart, no Flutter.
 //
 // A filter narrows what is DRAWN; it never deletes or changes data. Rules (written in the drawer too):
 //  - Heard / not heard: your pings by whether any repeater heard them; network cells by whether anything was heard there.

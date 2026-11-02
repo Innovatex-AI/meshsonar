@@ -1,4 +1,4 @@
-// Quick access to the ping settings from the Map tab: a chip that says what the drive is doing ("Ping 30 s / 100 m") and a
+// Quick access to the ping settings from the Drive tab: a chip that says what the drive is doing ("Ping 30 s / 100 m") and a
 // sheet with the same three sliders as More > Settings > Wardriving (interval, minimum distance, listen window). Changes
 // save at once and, mid-drive, reach the engine at once (AppState._applyPingCadence).
 import 'package:flutter/material.dart';

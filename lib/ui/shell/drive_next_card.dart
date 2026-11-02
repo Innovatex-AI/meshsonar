@@ -166,7 +166,7 @@ class _DriveNextCardState extends State<DriveNextCard> {
         _note(
           context,
           'No silent or unmapped areas within ${units.distance(15000)} of you in the data we have'
-          '. Pick a place on the Map tab to look elsewhere.',
+          '. Pick a place on the Drive tab to look elsewhere.',
         ),
       );
     }
