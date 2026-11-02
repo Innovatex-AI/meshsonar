@@ -16,10 +16,12 @@ import 'package:meshsonar/core/region_lookup.dart';
 import 'package:meshsonar/core/region_overview_api.dart';
 import 'package:meshsonar/radio/radio_api.dart' show GeoFix;
 import 'package:meshsonar/core/repeater_sync.dart';
-import 'package:meshsonar/ui/map/layers/clustered_points_layer.dart' show ClusteredPointsPainter;
+import 'package:meshsonar/ui/map/layers/repeater_map_source.dart' show kNetworkLayerId, kRosterLayerId;
+import 'package:meshsonar/ui/map/layers/repeater_painter_layer.dart';
 import 'package:meshsonar/ui/region/region_common.dart' as region_common;
 
 import '../fakes.dart';
+import 'repeater_probe.dart';
 
 const cmh = RegionIndexEntry(code: 'CMH', slug: 'cmh', name: 'Columbus, US', url: 'https://cmh.meshsonar.com', bbox: [-83.5, 39.75, -82.45, 40.65]);
 String k(String c) => c * 64;
@@ -178,7 +180,7 @@ void main() {
       expect(sw(t, 'layer-network').onChanged, isNull);
       expect(sw(t, 'layer-network').value, isFalse, reason: 'default on, but shown off: the server cannot offer it');
       expect(statusText(t, 'network'), 'Not available on this server yet');
-      expect(find.byKey(const ValueKey('layer-network-paint')), findsNothing);
+      expect(find.byKey(RepeaterPainterLayer.paintKey), findsNothing);
     });
 
     testWidgets('server error with nothing stored: failed + Retry; the switch still works', (t) async {
@@ -207,9 +209,8 @@ void main() {
       await h.pumpApp(t);
       await t.pumpAndSettle();
       expect(h.state.currentRegion?.code, 'CMH');
-      expect(find.byKey(const ValueKey('layer-network-paint')), findsOneWidget, reason: 'on by default (D3, Andy Oct 24)');
-      final painter = t.widget<CustomPaint>(find.byKey(const ValueKey('layer-network-paint'))).painter! as ClusteredPointsPainter;
-      expect(painter.index.indexedCount, 3, reason: 'the Seattle repeater is outside CMH + 40 km');
+      expect(find.byKey(RepeaterPainterLayer.paintKey), findsOneWidget, reason: 'on by default (D3, Andy Oct 24)');
+      expect(indexedCountOf(t, kNetworkLayerId), 3, reason: 'the Seattle repeater is outside CMH + 40 km');
       await openSheet(t);
       expect(sw(t, 'layer-network').value, isTrue);
       expect(statusText(t, 'network'), '3 repeaters in and around Columbus, US · 4 hidden by their owners · Data: MeshCore Map (map.meshcore.io)');
@@ -219,7 +220,7 @@ void main() {
         expect(find.descendant(of: find.byKey(const Key('network-legend')), matching: find.text(l)), findsOneWidget);
       }
       await closeSheet(t);
-      expect(find.byKey(const ValueKey('layer-network-paint')), findsOneWidget);
+      expect(find.byKey(RepeaterPainterLayer.paintKey), findsOneWidget);
       expect(find.byKey(const Key('map-network-attribution')), findsNothing, reason: 'no legend stack on the map; the key lives in the Credits sheet');
       expect(find.byKey(const Key('map-attribution-meshcore')), findsOneWidget, reason: 'MeshCore Map is credited in the corner line while its layer draws');
       await t.tap(find.byKey(const Key('map-attribution-info')));
@@ -237,7 +238,7 @@ void main() {
       await t.pump();
       await t.pump();
       await t.pump(const Duration(milliseconds: 400));
-      expect(find.byKey(const ValueKey('layer-network-paint'), skipOffstage: false), findsOneWidget, reason: 'one map instance: expanding does not mount a second');
+      expect(find.byKey(RepeaterPainterLayer.paintKey, skipOffstage: false), findsOneWidget, reason: 'one map instance: expanding does not mount a second');
     });
 
     testWidgets('stale: the stored list stays on, the sheet says it is an offline copy with Retry', (t) async {
@@ -255,7 +256,7 @@ void main() {
       expect(statusText(t, 'network'), startsWith('3 repeaters in and around Columbus, US · 4 hidden by their owners · Data: MeshCore Map (map.meshcore.io) · Offline'));
       expect(find.byKey(const Key('layer-network-retry')), findsOneWidget);
       await closeSheet(t);
-      expect(find.byKey(const ValueKey('layer-network-paint')), findsOneWidget, reason: 'offline copy still drawn');
+      expect(find.byKey(RepeaterPainterLayer.paintKey), findsOneWidget, reason: 'offline copy still drawn');
     });
 
     testWidgets('roster on too: the roster key is drawn once (by the roster layer), the global count drops by one', (t) async {
@@ -269,12 +270,8 @@ void main() {
       await toggle(t, 'layer-region-repeaters');
       expect(find.byKey(const Key('roster-legend')), findsOneWidget);
       await closeSheet(t);
-      final painters = [
-        for (final key in ['layer-network-paint', 'layer-repeaters-paint'])
-          t.widget<CustomPaint>(find.byKey(ValueKey(key))).painter! as ClusteredPointsPainter,
-      ];
-      expect(painters[0].index.indexedCount, 2, reason: 'global without the roster key');
-      expect(painters[1].index.indexedCount, 1);
+      expect(indexedCountOf(t, kNetworkLayerId), 2, reason: 'global without the roster key');
+      expect(indexedCountOf(t, kRosterLayerId), 1);
     });
 
     testWidgets('cluster tap zooms in to its members; then a tap on one opens its sheet with the roster-free fields', (t) async {
@@ -283,8 +280,8 @@ void main() {
       final h = make(srv);
       await h.pumpApp(t);
       await t.pumpAndSettle();
-      final paint = find.byKey(const ValueKey('layer-network-paint'));
-      ClusteredPointsPainter painter() => t.widget<CustomPaint>(paint).painter! as ClusteredPointsPainter;
+      final paint = find.byKey(RepeaterPainterLayer.paintKey);
+      RepeaterPainter painter() => t.widget<CustomPaint>(paint).painter! as RepeaterPainter;
       Offset screenOf(LatLng p) => t.getTopLeft(paint) + painter().camera.latLngToScreenOffset(p);
       final zoom0 = painter().camera.zoom;
       await t.tapAt(screenOf(const LatLng(40.12661, -82.93051)));
@@ -315,8 +312,7 @@ void main() {
       await h.pumpApp(t);
       await t.pumpAndSettle();
       expect(h.state.currentRegion, isNull);
-      ClusteredPointsPainter painter() => t.widget<CustomPaint>(find.byKey(const ValueKey('layer-network-paint'))).painter! as ClusteredPointsPainter;
-      expect(painter().index.indexedCount, 4, reason: 'no region detected or picked: every repeater');
+      expect(indexedCountOf(t, kNetworkLayerId), 4, reason: 'no region detected or picked: every repeater');
       await openSheet(t);
       expect(statusText(t, 'network'), startsWith('4 repeaters · '));
       await closeSheet(t);
@@ -324,7 +320,7 @@ void main() {
       await h.state.setViewingRegion('CMH');
       await t.pumpAndSettle();
       expect(h.state.viewingIsManual, isTrue);
-      expect(painter().index.indexedCount, 3, reason: 'picked region: CMH + 40 km only');
+      expect(indexedCountOf(t, kNetworkLayerId), 3, reason: 'picked region: CMH + 40 km only');
     });
   });
 
@@ -337,8 +333,8 @@ void main() {
       await openSheet(t);
       await toggle(t, 'layer-region-repeaters');
       await closeSheet(t);
-      final paint = find.byKey(const ValueKey('layer-repeaters-paint'));
-      final painter = t.widget<CustomPaint>(paint).painter! as ClusteredPointsPainter;
+      final paint = find.byKey(RepeaterPainterLayer.paintKey);
+      final painter = t.widget<CustomPaint>(paint).painter! as RepeaterPainter;
       await t.tapAt(t.getTopLeft(paint) + painter.camera.latLngToScreenOffset(const LatLng(40.13, -82.92)));
       await t.pumpAndSettle();
       await t.tap(find.byKey(const Key('info-panel-header'))); // the panel opens collapsed

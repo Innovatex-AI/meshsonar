@@ -6,6 +6,7 @@ import 'package:meshsonar/ui/map/coverage_map.dart';
 import 'package:meshsonar/ui/theme.dart';
 
 import 'fakes.dart';
+import 'map/repeater_probe.dart';
 
 Color dotColor(WidgetTester tester, String id) {
   final box = tester.widget<DecoratedBox>(find.byKey(ValueKey('map-ping-$id')));
@@ -63,8 +64,8 @@ void main() {
     expect(dotColor(tester, 'strong'), c.snrStrong);
     expect(dotColor(tester, 'weak'), c.snrWeak);
     expect(dotColor(tester, 'quiet'), c.silent);
-    expect(find.byKey(const ValueKey('map-repeater-a1b2c3d4e5')), findsOneWidget);
-    expect(find.byKey(const ValueKey('map-repeater-ff09aa')), findsOneWidget);
+    expect(repeaterItem(tester, 'a1b2c3d4e5'), isNotNull, reason: 'one badge per repeater');
+    expect(repeaterItem(tester, 'ff09aa'), isNotNull);
     expect(find.byKey(const Key('map-position')), findsOneWidget);
     // Tiles are off under flutter test: the map says so instead of showing an empty grey box.
     expect(find.byKey(const Key('map-offline')), findsOneWidget);
@@ -74,10 +75,11 @@ void main() {
   testWidgets('tapping a repeater shows its name', (tester) async {
     await pumpMap(tester, const CoverageMap(pings: [], repeaters: [tower], position: LatLng(40.13, -82.925)));
     expect(find.text('Westerville Water Tower'), findsNothing);
-    await tester.tap(find.byKey(const ValueKey('map-repeater-a1b2c3d4e5')));
+    await tester.tapAt(repeaterGlobal(tester, repeaterItem(tester, 'a1b2c3d4e5')!));
     await tester.pump();
-    expect(find.byKey(const Key('map-repeater-label')), findsOneWidget);
-    expect(find.text('Westerville Water Tower'), findsWidgets); // the label and the panel title
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(repeaterItem(tester, 'a1b2c3d4e5')!.selected, isTrue);
+    expect(find.text('Westerville Water Tower'), findsWidgets); // the panel title (and the painted label)
   });
 
   testWidgets('attribution shows when tiles are on; dragging stops follow and offers Recenter', (tester) async {

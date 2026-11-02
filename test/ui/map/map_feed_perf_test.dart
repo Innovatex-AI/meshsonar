@@ -18,7 +18,7 @@ import 'package:meshsonar/core/repeater_sync.dart';
 import 'package:meshsonar/core/units.dart';
 import 'package:meshsonar/ui/map/coverage_map.dart';
 import 'package:meshsonar/ui/map/layers/app_repeater_feed.dart';
-import 'package:meshsonar/ui/map/layers/clustered_points_layer.dart' show ClusteredPointsPainter;
+import 'package:meshsonar/ui/map/layers/repeater_painter_layer.dart';
 import 'package:meshsonar/ui/map/layers/map_layer.dart';
 import 'package:meshsonar/ui/map/layers/registry.dart';
 import 'package:meshsonar/ui/map/layers/repeater_map_source.dart';
@@ -262,10 +262,9 @@ void main() {
         await t.pumpWidget(host());
         await t.pump();
         render.stop();
-        expect(find.byKey(const ValueKey('layer-network-paint')), findsOneWidget);
-        ClusteredPointsPainter painter() =>
-            t.widget<CustomPaint>(find.byKey(const ValueKey('layer-network-paint'))).painter! as ClusteredPointsPainter;
-        final wide = painter().slice.length;
+        expect(find.byKey(RepeaterPainterLayer.paintKey), findsOneWidget);
+        RepeaterPainter painter() => t.widget<CustomPaint>(find.byKey(RepeaterPainterLayer.paintKey)).painter! as RepeaterPainter;
+        final wide = painter().scene.singles.length + painter().scene.clusters.length;
         expect(
           wide,
           inInclusiveRange(1, 400),
@@ -274,7 +273,7 @@ void main() {
 
         // Pan/zoom frames: move the camera through world -> street zoom and repaint each time.
         final pan = Stopwatch()..start();
-        final cam = MapCamera.of(t.element(find.byKey(const ValueKey('layer-network-paint'))));
+        final cam = MapCamera.of(t.element(find.byKey(RepeaterPainterLayer.paintKey)));
         expect(cam.zoom, closeTo(8, 0.01));
         var frames = 0;
         for (final (lat, lon, z) in [
@@ -285,7 +284,7 @@ void main() {
           (34.05, -118.24, 14.0),
           (34.05, -118.24, 16.0),
         ]) {
-          MapController.maybeOf(t.element(find.byKey(const ValueKey('layer-network-paint'))))!
+          MapController.maybeOf(t.element(find.byKey(RepeaterPainterLayer.paintKey)))!
               .move(LatLng(lat, lon), z);
           await t.pump();
           frames++;

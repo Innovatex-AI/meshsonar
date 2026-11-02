@@ -20,7 +20,7 @@ import '../coverage_layer_controls.dart';
 import '../coverage_map.dart' show networkLevelColor;
 import '../legend_sheet.dart' show showMapLegend;
 import '../map_layers.dart' show PingColorMode;
-import '../region_repeater_layer.dart' show regionRepeaterColor;
+import 'repeater_cluster_layer.dart' show regionRepeaterColor;
 import '../sheets/repeater_sheet.dart' show rosterStatusText;
 import 'map_layer.dart';
 import 'registry.dart';
@@ -283,7 +283,7 @@ class RosterStatusLegend extends StatelessWidget {
         for (final a in RepeaterActivity.values)
           Row(
             mainAxisSize: MainAxisSize.min,
-            children: [_Dot(color: regionRepeaterColor(a), size: 10), const SizedBox(width: 3), Text(rosterStatusText(a), style: style)],
+            children: [_Dot(color: regionRepeaterColor(a, Theme.of(context).brightness), size: 10), const SizedBox(width: 3), Text(rosterStatusText(a), style: style)],
           ),
       ],
     );

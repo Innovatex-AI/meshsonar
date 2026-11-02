@@ -12,8 +12,8 @@ import 'package:meshsonar/core/region_repeaters_api.dart';
 import 'package:meshsonar/core/repeater_points.dart';
 import 'package:meshsonar/core/units.dart';
 import 'package:meshsonar/ui/map/layers/map_layer.dart';
-import 'package:meshsonar/ui/map/layers/repeater_cluster_layer.dart';
 import 'package:meshsonar/ui/map/layers/repeater_map_source.dart';
+import 'package:meshsonar/ui/map/layers/repeater_painter_layer.dart';
 import 'package:meshsonar/ui/map/sheets/map_hit_sheet.dart';
 import 'package:meshsonar/ui/map/sheets/repeater_sheet.dart';
 
@@ -128,7 +128,7 @@ void main() {
             child: FlutterMap(
               mapController: c,
               options: MapOptions(initialCenter: const LatLng(40, -83), initialZoom: zoom),
-              children: [RepeaterClusterLayer(source: src, layerId: layerId, onHit: hits.add, selectedKey: k('a'))],
+              children: [RepeaterPainterLayer(sources: [(src, layerId)], onHit: hits.add, selectedKey: k('a'))],
             ),
           ),
         ),
@@ -142,7 +142,7 @@ void main() {
       await t.pumpWidget(host(src, 'network', hits, c));
       await src.settled;
       await t.pump();
-      expect(find.byKey(const ValueKey('layer-network-paint')), findsOneWidget);
+      expect(find.byKey(RepeaterPainterLayer.paintKey), findsOneWidget);
       await t.tapAt(c.camera.latLngToScreenOffset(const LatLng(40.01, -83)));
       await t.pump(const Duration(milliseconds: 400));
       final hit = hits.single as RepeaterHit;
@@ -168,7 +168,7 @@ void main() {
       final src = RepeaterMapSource(StaticRepeaterMapFeed(), clock: () => now);
       await t.pumpWidget(host(src, 'network', [], MapController()));
       await t.pump();
-      expect(find.byKey(const ValueKey('layer-network-paint')), findsNothing);
+      expect(find.byKey(RepeaterPainterLayer.paintKey), findsNothing);
       src.dispose();
     });
 

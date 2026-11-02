@@ -75,7 +75,7 @@ String sourceText(RepeaterPoint p) => switch (p.source) {
 };
 
 Color _dotColor(BuildContext context, RepeaterPoint p) {
-  final c = p.source == RepeaterPointSource.global ? networkBandColors(context) : rosterBandColors();
+  final c = p.source == RepeaterPointSource.global ? networkBandColors(context) : rosterBandColors(context);
   return c[p.band < c.length ? p.band : c.length - 1];
 }
 

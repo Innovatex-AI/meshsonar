@@ -77,7 +77,8 @@ import '../app.dart' show AppScope;
 import 'layers/link_lines_layer.dart';
 import 'layers/map_layer.dart';
 import 'layers/observer_layer.dart';
-import 'layers/repeater_cluster_layer.dart';
+import 'layers/repeater_painter_layer.dart';
+import 'layers/repeater_sprites.dart' show RepeaterFreshness, freshnessOfAdvertBand, freshnessOfRosterBand;
 import 'layers/repeater_map_source.dart';
 import 'layers/repeater_name_labels.dart';
 import 'map_info_panel.dart';
@@ -418,6 +419,60 @@ class _CoverageMapState extends State<CoverageMap> {
   List<RepeaterRef> _markerRepeaters = const [];
   Map<String, HeardView> _heardByKey = const {};
 
+  // The drive's repeaters as painter badges, rebuilt only when their inputs change (the label placer keys on identity).
+  List<RepeaterBadge> _badges = const [];
+  Object? _badgeKey;
+
+  /// Heard > roster > network (plan 6.1): the drive's repeaters are drawn as badges; both lists leave those keys out of
+  /// their points and clusters, and lend their colour band and last advert to the badge.
+  List<RepeaterBadge> _badgesFor(RepeaterMapSource? roster, RepeaterMapSource? network, bool on, String? legacyLitId, Set<String> legacyLit) {
+    final key = Object.hash(
+      identityHashCode(_markerRepeaters),
+      identityHashCode(_heardByKey),
+      roster?.revision,
+      network?.revision,
+      identical(roster, network),
+      on,
+      _captions,
+      legacyLitId,
+    );
+    if (_badgeKey == key) return _badges;
+    final claimed = on ? {for (final r in _markerRepeaters) r.key} : const <String>{};
+    for (final s in {?roster, ?network}) {
+      s.claimedKeys = claimed;
+    }
+    final out = <RepeaterBadge>[];
+    if (on) {
+      for (final r in _markerRepeaters) {
+        final h = _heardByKey[r.key];
+        final info = roster?.claimedInfo(r.key) ?? network?.claimedInfo(r.key);
+        final heard = h != null || legacyLit.contains(r.key);
+        final RepeaterFreshness f;
+        if (heard) {
+          f = RepeaterFreshness.fresh;
+        } else if (info != null) {
+          f = info.layerId == kRosterLayerId ? freshnessOfRosterBand(info.band) : freshnessOfAdvertBand(info.band);
+        } else {
+          f = RepeaterFreshness.stale;
+        }
+        out.add(RepeaterBadge(
+          key: r.key,
+          name: _plainName(r),
+          lat: r.lat,
+          lon: r.lon,
+          isRoom: r.isRoom,
+          freshness: f,
+          heard: heard,
+          heardLast: h != null && h.pingsAgo == 0,
+          lastSeen: info?.lastSeen,
+          snr: _captions && h != null && h.live && h.snrDb != null ? formatSnrShort(h.snrDb!) : null,
+        ));
+      }
+    }
+    _badgeKey = key;
+    return _badges = out;
+  }
+
   // Without a host RepeaterMapSource, [CoverageMap.regionRepeaters] is drawn through a source of our own (rebuilt only
   // when that list's identity changes).
   StaticRepeaterMapFeed? _ownFeed;
@@ -703,7 +758,7 @@ class _CoverageMapState extends State<CoverageMap> {
       source: RepeaterPointSource.global,
       key: r.key,
       name: _nameFor(r),
-      isRoom: false,
+      isRoom: r.isRoom,
       lat: r.lat,
       lon: r.lon,
       band: 0,
@@ -748,6 +803,21 @@ class _CoverageMapState extends State<CoverageMap> {
       padding: widget.overlayPadding + const EdgeInsets.all(56),
       maxZoom: 15,
     ));
+  }
+
+  /// A tap on a badge of the drive's own repeaters: select it and show its panel, a second tap puts it away.
+  void _onBadgeTap(RepeaterBadge b) {
+    final r = _refFor(b.key);
+    if (r == null) return;
+    _hits.submit(MapHitCandidate(MapHitKind.repeater, () {
+      final on = _selectedRepeater != r.key;
+      _select(on ? r.key : null);
+      if (on) {
+        _showRepeaterLinks(_pointForRef(r));
+      } else {
+        _clearLinks();
+      }
+    }));
   }
 
   /// A tap on a clustered repeater layer or an observer (cells come through [MapOptions.onTap]).
@@ -1451,43 +1521,22 @@ class _CoverageMapState extends State<CoverageMap> {
                 child: CellRasterLayer(key: const Key('drive-hexes-layer'), data: _hexData(mc)),
               ),
             if (_currentLinks() case final ls?) ...linkLineLayers(context, ls, labels: _captions || hexResolution >= 9),
-            if (showNetwork)
-              RepeaterClusterLayer(source: networkSource, layerId: kNetworkLayerId, selectedKey: _selectedRepeater, onHit: _onHit),
-            if (rosterSource != null)
-              RepeaterClusterLayer(source: rosterSource, layerId: kRosterLayerId, selectedKey: _selectedRepeater, onHit: _onHit),
+            if (showNetwork || rosterSource != null || layers.repeaters)
+              ListenableBuilder(
+                listenable: Listenable.merge([?rosterSource, ?networkSource]),
+                builder: (context, _) => RepeaterPainterLayer(
+                  sources: [
+                    if (rosterSource != null) (rosterSource, kRosterLayerId),
+                    if (showNetwork) (networkSource, kNetworkLayerId),
+                  ],
+                  badges: _badgesFor(rosterSource, networkSource, layers.repeaters, latest?.id, legacyLit),
+                  selectedKey: _selectedRepeater,
+                  onHit: _onHit,
+                  onBadgeTap: _onBadgeTap,
+                ),
+              ),
             if (layerState.isOn('observers') && widget.observers.isNotEmpty)
               ObserverLayer(observers: widget.observers, regionName: widget.observersRegionName, onHit: _onHit),
-            if (layers.repeaters)
-              MarkerLayer(
-                markers: [
-                  for (final r in _markerRepeaters)
-                    Marker(
-                      point: LatLng(r.lat, r.lon),
-                      width: 56,
-                      height: 56,
-                      child: RepeaterMarker(
-                        key: ValueKey('map-repeater-${r.key}'),
-                        repeaterKey: r.key,
-                        name: r.name,
-                        color: mc.beacon,
-                        onColor: mc.onBeacon,
-                        greyColor: t.colorScheme.outline,
-                        phase: heardMode ? _heardByKey[r.key]?.phase : (legacyLit.contains(r.key) ? HeardPhase.fresh : null),
-                        heardAt: _heardByKey[r.key]?.lastPingIndex,
-                        selected: r.key == _selectedRepeater,
-                        onTap: () => _hits.submit(MapHitCandidate(MapHitKind.repeater, () {
-                          final on = _selectedRepeater != r.key;
-                          _select(on ? r.key : null);
-                          if (on) {
-                            _showRepeaterLinks(_pointForRef(r));
-                          } else {
-                            _clearLinks();
-                          }
-                        })),
-                      ),
-                    ),
-                ],
-              ),
             if (layers.pings)
               MarkerLayer(
                 markers: [
@@ -1510,52 +1559,6 @@ class _CoverageMapState extends State<CoverageMap> {
                     ),
                 ],
               ),
-            if (liveLinks.isNotEmpty && _captions)
-              MarkerLayer(
-                markers: [
-                  for (final h in liveLinks)
-                    Marker(
-                      point: LatLng(
-                        (origin!.latitude + h.ref!.lat) / 2,
-                        (origin.longitude + h.ref!.lon) / 2,
-                      ),
-                      width: 80,
-                      height: 24,
-                      child: IgnorePointer(
-                        child: Center(
-                          child: MapTag(
-                            key: ValueKey('map-link-distance-${h.ref!.key}'),
-                            text: AppScope.unitsOf(context).distance(approx: true, haversineM(origin.latitude, origin.longitude, h.ref!.lat, h.ref!.lon)),
-                            color: h.phase == HeardPhase.fresh ? mc.beacon : t.colorScheme.outline,
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            if (layers.repeaters && heardMode && _captions)
-              MarkerLayer(
-                markers: [
-                  for (final h in widget.heard!)
-                    if (h.live && h.ref != null && h.ref!.key != _selectedRepeater)
-                      Marker(
-                        point: LatLng(h.ref!.lat, h.ref!.lon),
-                        width: 150,
-                        height: 22,
-                        alignment: const Alignment(0, 2.6),
-                        child: IgnorePointer(
-                          child: Center(
-                            child: MapTag(
-                              key: ValueKey('map-heard-label-${h.ref!.key}'),
-                              text: h.snrDb == null ? h.label : '${h.label}  ${formatSnrShort(h.snrDb!)}',
-                              color: h.phase == HeardPhase.fresh ? mc.beacon : t.colorScheme.outline,
-                              strong: h.phase == HeardPhase.fresh,
-                            ),
-                          ),
-                        ),
-                      ),
-                ],
-              ),
             if (widget.puck case final puck?)
               PuckLayer(puck: puck, fallback: pos, onMoved: _onPuckFrame)
             else if (pos != null)
@@ -1575,57 +1578,39 @@ class _CoverageMapState extends State<CoverageMap> {
                   ),
                 ],
               ),
-            if (layerState.isOn(kLabelsLayerId))
-              RepeaterNameLabels(
-                markers: [
-                  if (layers.repeaters)
-                    for (final r in _markerRepeaters)
-                      MarkerLabelInput(
-                        key: r.key,
-                        name: _plainName(r),
-                        point: LatLng(r.lat, r.lon),
-                        heard: _heardByKey.containsKey(r.key),
-                        // A live heard repeater already carries its name + SNR tag.
-                        ownTag: _captions && heardMode && (_heardByKey[r.key]?.live ?? false),
-                      ),
-                ],
-                clustered: [
-                  if (rosterSource != null) (rosterSource, kRosterLayerId),
-                  if (showNetwork) (networkSource, kNetworkLayerId),
-                ],
-                selectedKey: _selectedRepeater,
-                origin: origin,
-                blockers: [
-                  for (final h in liveLinks) LatLng((origin!.latitude + h.ref!.lat) / 2, (origin.longitude + h.ref!.lon) / 2),
-                  if (widget.showRings && layers.rings && pos != null)
-                    for (final m in AppScope.unitsOf(context).rangeRingMetres) _offsetNorth(pos, -m),
-                ],
-                inset: widget.overlayPadding + const EdgeInsets.only(bottom: 30),
-                avoid: (size) => _overlayRects(),
-              ),
-            if (selected != null)
-              MarkerLayer(
-                markers: [
-                  Marker(
-                    point: LatLng(selected.lat, selected.lon),
-                    width: 220,
-                    height: 104,
-                    alignment: Alignment.topCenter,
-                    child: Align(
-                      alignment: Alignment.bottomCenter,
-                      child: Padding(
-                        padding: const EdgeInsets.only(bottom: 30),
-                        child: RepeaterLabel(
-                          onTap: () => _select(null),
-                          name: _nameFor(selected),
-                          keyHex: selected.key,
-                          detail: _detailFor(selected, origin),
-                          color: mc.beacon,
+            if (layerState.isOn(kLabelsLayerId) || (liveLinks.isNotEmpty && _captions))
+              ListenableBuilder(
+                listenable: Listenable.merge([?rosterSource, ?networkSource]),
+                builder: (context, _) => RepeaterNameLabels(
+                  showNames: layerState.isOn(kLabelsLayerId),
+                  badges: _badgesFor(rosterSource, networkSource, layers.repeaters, latest?.id, legacyLit),
+                  sources: [
+                    if (rosterSource != null) (rosterSource, kRosterLayerId),
+                    if (showNetwork) (networkSource, kNetworkLayerId),
+                  ],
+                  selectedKey: _selectedRepeater,
+                  selectedDetail: selected == null ? null : _detailFor(selected, origin),
+                  origin: origin,
+                  puck: pos,
+                  pill: style == BaseMapStyle.street || style == BaseMapStyle.topo,
+                  linkTags: [
+                    if (_captions)
+                      for (final h in liveLinks)
+                        LinkTagInput(
+                          id: 'link-${h.ref!.key}',
+                          a: origin!,
+                          b: LatLng(h.ref!.lat, h.ref!.lon),
+                          text: AppScope.unitsOf(context).distance(approx: true, haversineM(origin.latitude, origin.longitude, h.ref!.lat, h.ref!.lon)),
+                          color: h.phase == HeardPhase.fresh ? mc.beacon : t.colorScheme.outline,
                         ),
-                      ),
-                    ),
-                  ),
-                ],
+                  ],
+                  blockers: [
+                    if (widget.showRings && layers.rings && pos != null)
+                      for (final m in AppScope.unitsOf(context).rangeRingMetres) _offsetNorth(pos, -m),
+                  ],
+                  inset: widget.overlayPadding + const EdgeInsets.only(bottom: 30),
+                  avoid: (size) => _overlayRects(),
+                ),
               ),
           ],
         ),

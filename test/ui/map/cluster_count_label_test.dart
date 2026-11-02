@@ -10,6 +10,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:meshsonar/core/repeater_points.dart';
 import 'package:meshsonar/ui/map/layers/clustered_points_layer.dart';
 import 'package:meshsonar/ui/map/layers/repeater_cluster_layer.dart';
+import 'package:meshsonar/ui/map/layers/repeater_painter_layer.dart';
 import 'package:meshsonar/ui/map/layers/repeater_map_source.dart';
 import 'package:meshsonar/ui/theme.dart';
 
@@ -30,7 +31,7 @@ void main() {
       await t.pumpWidget(MaterialApp(
         theme: meshSonarTheme(dark ? Brightness.dark : Brightness.light),
         home: Builder(builder: (context) {
-          colours = [...networkBandColors(context), ...rosterBandColors()];
+          colours = [...networkBandColors(context), ...rosterBandColors(context)];
           return const SizedBox();
         }),
       ));
@@ -58,15 +59,15 @@ void main() {
             height: 700,
             child: FlutterMap(
               options: const MapOptions(initialCenter: LatLng(40, -83), initialZoom: 4.5),
-              children: [RepeaterClusterLayer(source: src, layerId: kNetworkLayerId)],
+              children: [RepeaterPainterLayer(sources: [(src, kNetworkLayerId)])],
             ),
           ),
         ),
       ));
       await t.pump();
-      final paint = find.byKey(const ValueKey('layer-network-paint'));
-      final painter = t.widget<CustomPaint>(paint).painter! as ClusteredPointsPainter;
-      final clusters = [for (var k = 0; k < painter.slice.length; k++) if (painter.slice.count[k] > 1) painter.slice.count[k]];
+      final paint = find.byKey(RepeaterPainterLayer.paintKey);
+      final painter = t.widget<CustomPaint>(paint).painter! as RepeaterPainter;
+      final clusters = [for (final c in painter.scene.clusters) c.count];
       expect(clusters, isNotEmpty, reason: 'zoomed out: grouped');
       // One paragraph (the count) per cluster bubble.
       var p = paints;
@@ -76,11 +77,11 @@ void main() {
       expect(t.renderObject(paint), p);
       final labels = <String>[];
       t.getSemantics(paint).visitChildren((n) {
-        labels.add(n.label);
+        if (n.label.endsWith(' repeaters')) labels.add(n.label);
         return true;
       });
       expect(labels.toSet(), {for (final n in clusters) clusterSemanticsLabel(n)}, reason: 'one readable node per visible cluster');
-      final total = clusters.fold<int>(0, (a, b) => a + b) + painter.slice.length - clusters.length;
+      final total = clusters.fold<int>(0, (a, b) => a + b) + painter.scene.singles.length;
       expect(total, lessThanOrEqualTo(600));
       sem.dispose();
       src.dispose();

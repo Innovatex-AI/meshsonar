@@ -1,11 +1,12 @@
 // The "Region repeaters" layer (the viewed region's roster) on CoverageMap. The roster used to be one Marker widget per
-// repeater with a name tooltip; it is now the clustered painter (layer key 'layer-repeaters-paint') and a tap opens the
+// repeater with a name tooltip; it is now the clustered painter (layer key 'repeater-painter-paint') and a tap opens the
 // repeater sheet (name, hash prefix, status). Only positioned rows are drawn.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:meshsonar/core/region_repeaters_api.dart';
 import 'package:meshsonar/ui/map/coverage_map.dart';
+import 'package:meshsonar/ui/map/layers/repeater_painter_layer.dart';
 import 'package:meshsonar/ui/map/map_layers.dart';
 
 RegionRepeater rep(String k, double? lat) => RegionRepeater(
@@ -49,12 +50,12 @@ void main() {
   testWidgets('draws the positioned roster only when the layer is on; a tap opens its sheet', (t) async {
     await t.pumpWidget(map(false));
     await t.pump(const Duration(milliseconds: 100));
-    expect(find.byKey(const ValueKey('layer-repeaters-paint')), findsNothing);
+    expect(find.byKey(RepeaterPainterLayer.paintKey), findsNothing);
 
     await t.pumpWidget(map(true));
     await t.pump();
     await t.pump(const Duration(milliseconds: 100));
-    expect(find.byKey(const ValueKey('layer-repeaters-paint')), findsOneWidget);
+    expect(find.byKey(RepeaterPainterLayer.paintKey), findsOneWidget);
 
     // The map is centred on 40, -83 (the 'aa' repeater): tap the middle of the 400 x 400 map.
     await t.tapAt(const Offset(200, 200));

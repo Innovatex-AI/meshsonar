@@ -343,18 +343,24 @@ class DriveBatch {
   }
 }
 
+/// What a [RepeaterRef] is: a repeater, or a room server (drawn as a rounded square, spoken as "Room server").
+enum RepeaterKind { repeater, room }
+
 /// A repeater from CMAT's drive-repeaters endpoint, for offline names.
 class RepeaterRef {
   final String key; // full hex public key, lower case
   final String name;
   final double lat;
   final double lon;
-  const RepeaterRef({required this.key, required this.name, required this.lat, required this.lon});
-  Map<String, dynamic> toJson() => {'key': key, 'name': name, 'lat': lat, 'lon': lon};
+  final RepeaterKind kind;
+  const RepeaterRef({required this.key, required this.name, required this.lat, required this.lon, this.kind = RepeaterKind.repeater});
+  bool get isRoom => kind == RepeaterKind.room;
+  Map<String, dynamic> toJson() => {'key': key, 'name': name, 'lat': lat, 'lon': lon, if (isRoom) 'kind': 'room'};
   factory RepeaterRef.fromJson(Map<String, dynamic> j) => RepeaterRef(
         key: (j['key'] as String).toLowerCase(),
         name: j['name'] as String? ?? '',
         lat: (j['lat'] as num).toDouble(),
         lon: (j['lon'] as num).toDouble(),
+        kind: j['kind'] == 'room' ? RepeaterKind.room : RepeaterKind.repeater,
       );
 }

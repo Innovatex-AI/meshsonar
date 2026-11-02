@@ -105,6 +105,10 @@ class RepeaterPoints {
   /// Keys left out because [RepeaterPoints.fromRows] was told to skip them (drawn by another layer).
   final int skipped;
 
+  /// What was left out by [skipKeys]: key -> colour bucket and last seen (seconds, NaN unknown), so the layer that
+  /// draws the key instead can still colour and rank it by the list that knew it (heard > roster > network merge).
+  final Map<String, ({int band, double lastSeenS})> skippedInfo;
+
   const RepeaterPoints({
     required this.lat,
     required this.lon,
@@ -115,6 +119,7 @@ class RepeaterPoints {
     required this.name,
     this.dropped = 0,
     this.skipped = 0,
+    this.skippedInfo = const {},
   });
 
   static final RepeaterPoints empty = RepeaterPoints(
@@ -148,6 +153,7 @@ class RepeaterPoints {
     final keep = <String, MapRepeaterRow>{};
     final firstPos = <String, int>{};
     var dropped = 0, skipped = 0, pos = 0;
+    final skippedInfo = <String, ({int band, double lastSeenS})>{};
     for (final r0 in rows) {
       final k = r0.key.toLowerCase();
       final r = k == r0.key
@@ -159,6 +165,8 @@ class RepeaterPoints {
       }
       if (skipKeys.contains(k)) {
         skipped++;
+        final b = r.band ?? advertAgeBand(r.lastSeen, now);
+        skippedInfo.putIfAbsent(k, () => (band: b < 0 ? 0 : (b > 255 ? 255 : b), lastSeenS: r.lastSeen == null ? double.nan : r.lastSeen!.millisecondsSinceEpoch / 1000.0));
         continue;
       }
       final prev = keep[k];
@@ -198,6 +206,7 @@ class RepeaterPoints {
       name: List.unmodifiable(names),
       dropped: dropped,
       skipped: skipped,
+      skippedInfo: skippedInfo,
     );
   }
 }
