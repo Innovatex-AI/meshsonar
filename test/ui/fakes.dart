@@ -641,6 +641,8 @@ class Harness {
   /// Builds the link instead of a plain [FakeLink] (claim tests use one that can log in and sign).
   FakeLink Function(SelfInfo info)? linkMaker;
   final List<File> shared = [];
+  /// When set, the share seam throws it (the report's "Couldn't share" toast).
+  Object? shareError;
   LocationSource? engineLocation;
   int _id = 0;
 
@@ -721,7 +723,10 @@ class Harness {
     openUrl: recordOpenUrl,
     repeaterCache: cache,
     exportDir: () async => Directory.systemTemp,
-    shareFile: (f) async => shared.add(f),
+    shareFile: (f) async {
+      if (shareError != null) throw shareError!;
+      shared.add(f);
+    },
     clock: () => clockNow,
     newId: nextId,
     regionIndexCache: regionIndexCache,
