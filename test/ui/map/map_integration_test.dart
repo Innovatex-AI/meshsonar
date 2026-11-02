@@ -21,6 +21,7 @@ import 'package:meshsonar/ui/map/layers/clustered_points_layer.dart' show Cluste
 import 'package:meshsonar/ui/region/region_common.dart' as region_common;
 
 import '../fakes.dart';
+import '../../support/huge_screen.dart';
 
 const cmh = RegionIndexEntry(code: 'CMH', slug: 'cmh', name: 'Columbus, US', url: 'https://cmh.meshsonar.com', bbox: [-83.5, 39.75, -82.45, 40.65]);
 String k(String c) => c * 64;
@@ -115,7 +116,7 @@ void main() {
 
   group('generated layers sheet', () {
     testWidgets('sections in registry order, one switch per drawn layer, legacy keys kept, no switch for undrawn layers', (t) async {
-      useTallScreen(t);
+      useHugeScreen(t);
       final h = Harness(); // no repeater sync, no region index
       await h.pumpApp(t);
       await t.pumpAndSettle();
@@ -148,7 +149,7 @@ void main() {
     });
 
     testWidgets('measured coverage says how many cells, or that it failed with Retry', (t) async {
-      useTallScreen(t);
+      useHugeScreen(t);
       final h = Harness();
       h.client.publicCoverageError = const CmatException('server error', status: 500);
       await h.pumpApp(t);
@@ -173,7 +174,7 @@ void main() {
   group('global "All MeshCore repeaters" layer', () {
     setUp(networkOn);
     testWidgets('server answers 404: switch disabled with "Not available on this server yet", nothing drawn', (t) async {
-      useTallScreen(t);
+      useHugeScreen(t);
       final srv = FakeMapServer()..networkStatus = 404;
       final h = make(srv);
       await h.pumpApp(t);
@@ -187,7 +188,7 @@ void main() {
     });
 
     testWidgets('server error with nothing stored: failed + Retry; the switch still works', (t) async {
-      useTallScreen(t);
+      useHugeScreen(t);
       final srv = FakeMapServer()..networkStatus = 503;
       final h = make(srv);
       await h.pumpApp(t);
@@ -206,7 +207,7 @@ void main() {
     });
 
     testWidgets('ready: switched on, limited to the phone\'s region + margin, legend + credit; the fullscreen map shares it', (t) async {
-      useTallScreen(t);
+      useHugeScreen(t);
       final srv = FakeMapServer();
       final h = make(srv);
       await h.pumpApp(t);
@@ -245,7 +246,7 @@ void main() {
     });
 
     testWidgets('stale: the stored list stays on, the sheet says it is an offline copy with Retry', (t) async {
-      useTallScreen(t);
+      useHugeScreen(t);
       final srv = FakeMapServer();
       final h = make(srv);
       await h.pumpApp(t);
@@ -263,7 +264,7 @@ void main() {
     });
 
     testWidgets('roster on too: the roster key is drawn once (by the roster layer), the global count drops by one', (t) async {
-      useTallScreen(t);
+      useHugeScreen(t);
       final srv = FakeMapServer();
       final h = make(srv);
       await h.pumpApp(t);
@@ -282,7 +283,7 @@ void main() {
     });
 
     testWidgets('cluster tap zooms in to its members; then a tap on one opens its sheet with the roster-free fields', (t) async {
-      useTallScreen(t);
+      useHugeScreen(t);
       final srv = FakeMapServer();
       final h = make(srv);
       await h.pumpApp(t);
@@ -313,7 +314,7 @@ void main() {
   group('global layer scope', () {
     setUp(networkOn);
     testWidgets('phone outside every region: the whole list (world view, count clusters); picking a region limits it', (t) async {
-      useTallScreen(t);
+      useHugeScreen(t);
       final srv = FakeMapServer();
       final h = make(srv);
       h.location.currentFix = () => GeoFix(lat: 47.6, lon: -122.3, at: DateTime.utc(2026, 10, 16, 17, 59));
@@ -335,7 +336,7 @@ void main() {
 
   group('region roster layer', () {
     testWidgets('from the sync: tap a roster repeater for its sheet with roster fields and "Open repeater page"', (t) async {
-      useTallScreen(t);
+      useHugeScreen(t);
       final h = make(FakeMapServer());
       await h.pumpApp(t);
       await t.pumpAndSettle();
@@ -377,7 +378,7 @@ void main() {
     }
 
     testWidgets('counts only observers with a public position; turning it on draws them', (t) async {
-      useTallScreen(t);
+      useHugeScreen(t);
       serveObservers();
       final h = make(FakeMapServer());
       await h.pumpApp(t);
@@ -399,7 +400,7 @@ void main() {
     });
 
     testWidgets('the fetch fails: failed with Retry, nothing drawn, the rest of the map unaffected', (t) async {
-      useTallScreen(t);
+      useHugeScreen(t);
       serveObservers(fail: true);
       final h = make(FakeMapServer());
       await h.pumpApp(t);

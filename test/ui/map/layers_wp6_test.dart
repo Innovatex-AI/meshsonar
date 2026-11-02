@@ -23,7 +23,6 @@ import 'package:meshsonar/ui/map/layers/registry.dart';
 import 'package:meshsonar/ui/map/legend_sheet.dart';
 import 'package:meshsonar/ui/map/map_layers.dart';
 import 'package:meshsonar/ui/map/parts/range_rings.dart';
-import 'package:meshsonar/ui/theme.dart';
 
 import '../fakes.dart';
 

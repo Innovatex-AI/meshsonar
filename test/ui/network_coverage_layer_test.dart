@@ -6,6 +6,7 @@ import '../support/cell_layers.dart';
 import 'package:meshsonar/core/api.dart';
 
 import 'fakes.dart';
+import '../support/huge_screen.dart';
 
 Future<void> settle(WidgetTester tester) async {
   for (var i = 0; i < 5; i++) {
@@ -39,7 +40,7 @@ void main() {
   });
 
   testWidgets('toggled off and back on from the layers sheet, same as the other layers', (tester) async {
-    useTallScreen(tester); // a small test surface would put the (now 7-row) sheet right under the dismiss tap
+    useHugeScreen(tester); // a small test surface would put the (now 7-row) sheet right under the dismiss tap
     final h = Harness();
     h.client.publicCoverageResult = twoCells();
     await h.pumpApp(tester);
@@ -93,7 +94,7 @@ void main() {
   });
 
   testWidgets('coverage options: source and since chips refetch with the website params', (tester) async {
-    useTallScreen(tester);
+    useHugeScreen(tester);
     final h = Harness();
     h.client.publicCoverageResult = twoCells();
     await h.pumpApp(tester);

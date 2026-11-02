@@ -14,6 +14,7 @@ import 'package:meshsonar/ui/map/map_layers.dart' show PingColorMode;
 import 'package:meshsonar/ui/theme.dart';
 
 import '../fakes.dart';
+import '../../support/huge_screen.dart';
 
 Future<void> pumpLegend(
   WidgetTester tester, {
@@ -235,7 +236,7 @@ void main() {
     // layers sheet in the same app, under each palette.
     for (final pal in ColourPalette.values) {
       testWidgets('on the real map, palette ${pal.id}: polygon colours == legend swatches', (tester) async {
-        useTallScreen(tester);
+        useHugeScreen(tester);
         final h = Harness();
         h.settings.saved = Settings(colourPalette: pal);
         h.client.publicCoverageResult = PublicCoverage(
@@ -270,7 +271,7 @@ void main() {
 
   group('reachable', () {
     testWidgets('from the "What do the symbols mean?" row in the layers sheet; opens on the map\'s current colour mode', (tester) async {
-      useTallScreen(tester);
+      useHugeScreen(tester);
       final h = Harness();
       await h.pumpApp(tester);
       await tester.tap(find.byKey(const Key('drive-map-layers')));
@@ -287,7 +288,7 @@ void main() {
     });
 
     testWidgets('from Settings > About > Map legend', (tester) async {
-      useTallScreen(tester);
+      useHugeScreen(tester);
       final h = Harness();
       await h.pumpApp(tester);
       await openSettingsTab(tester);
