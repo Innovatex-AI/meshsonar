@@ -1,9 +1,4 @@
 # Allow-list of current offenders (see widget_ban_test.dart). It may only shrink. Format: path|pattern|count
-lib/ui/alerts/permission_prompt.dart|AlertDialog(|1
-lib/ui/alerts/permission_prompt.dart|showDialog(|1
-lib/ui/always_location_screen.dart|AlertDialog(|1
-lib/ui/always_location_screen.dart|showDialog(|1
-lib/ui/antenna_sheet.dart|showModalBottomSheet(|1
 lib/ui/chat/channel_detail_screen.dart|AlertDialog(|5
 lib/ui/chat/channel_detail_screen.dart|Card(|1
 lib/ui/chat/channel_detail_screen.dart|CircularProgressIndicator|1
@@ -105,9 +100,6 @@ lib/ui/contacts/qr_scan_screen.dart|Icons.|3
 lib/ui/contacts/radio_list_sheet.dart|FilledButton|2
 lib/ui/contacts/radio_list_sheet.dart|showModalBottomSheet(|1
 lib/ui/contacts/radio_list_sheet.dart|showSnackBar(|1
-lib/ui/drive/drive_controls.dart|AlertDialog(|1
-lib/ui/drive/drive_controls.dart|showDialog(|1
-lib/ui/drive/ping_settings_sheet.dart|showModalBottomSheet(|1
 lib/ui/radios/admin_launcher.dart|FilledButton|2
 lib/ui/radios/admin_launcher.dart|Icons.|2
 lib/ui/radios/admin_launcher.dart|showSnackBar(|2
@@ -191,5 +183,3 @@ lib/ui/report/drive_report_screen.dart|PopupMenuButton|1
 lib/ui/report/drive_report_screen.dart|showSnackBar(|2
 lib/ui/settings/settings_kit.dart|AlertDialog(|2
 lib/ui/settings/settings_kit.dart|showDialog(|2
-lib/ui/shell/home_shell.dart|showSnackBar(|1
-lib/ui/telemetry_sheet.dart|showModalBottomSheet(|1
