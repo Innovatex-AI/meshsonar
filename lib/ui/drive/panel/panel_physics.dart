@@ -12,6 +12,16 @@ const double kPanelHeaderHeight = 16;
 const double kPanelDockRowHeight = 72;
 const double kPanelDockHeight = kPanelHeaderHeight + kPanelDockRowHeight;
 
+/// The dock row at text scale >= 2 (plan 4.13: dock 152 incl. the 16 pt grabber row).
+const double kPanelDockRowAx = 136;
+
+/// Floating card widths: iPad (>= 700 wide, tall) and the side card of a landscape phone.
+const double kCardWidthPad = 380;
+const double kCardWidthLandscape = 300;
+
+/// The reserved GPS / radio strip (plan 4.12), shown above the dock row inside the panel surface.
+const double kPanelStripHeight = 28;
+
 /// A release faster than this (pt/s) moves one detent in its direction; slower releases project 0.15 s ahead.
 const double kFlingVelocity = 700;
 const double kProjectSeconds = 0.15;
@@ -30,16 +40,33 @@ class PanelGeometry {
   /// Device bottom inset (home indicator) that is kept when the bar is hidden.
   final double safeBottom;
   final double mediumHeight;
-  const PanelGeometry({required this.screenHeight, required this.navBar, required this.safeBottom, required this.mediumHeight});
+
+  /// Height of the dock row: 72, or [kPanelDockRowAx] at text scale >= 2 (hero + Ping on one row, Stop / Start on a second).
+  final double dockRow;
+
+  /// iPad / landscape phone (width >= 700): the panel is a floating card at the bottom-left, [navBar] is its bottom margin (16 + inset),
+  /// Immersive moves the card off-screen (only the Start pill remains) and Medium is 0.5h (0.85h on a landscape phone).
+  final bool floating;
+  const PanelGeometry({required this.screenHeight, required this.navBar, required this.safeBottom, required this.mediumHeight, this.dockRow = kPanelDockRowHeight, this.floating = false});
+
+  /// Grabber row + dock row.
+  double get dockHeight => kPanelHeaderHeight + dockRow;
 
   /// Medium: 0.46h (clamp 360..0.55h) on phones; short screens (SE) take 0.5h (table 4.13). [mediumHeightFor] is the one rule.
-  factory PanelGeometry.forScreen({required double screenHeight, required double navBar, required double safeBottom}) =>
-      PanelGeometry(screenHeight: screenHeight, navBar: navBar, safeBottom: safeBottom, mediumHeight: mediumHeightFor(screenHeight));
+  factory PanelGeometry.forScreen({required double screenHeight, required double navBar, required double safeBottom, double dockRow = kPanelDockRowHeight, bool floating = false}) =>
+      PanelGeometry(
+        screenHeight: screenHeight,
+        navBar: navBar,
+        safeBottom: safeBottom,
+        mediumHeight: floating ? (screenHeight < 500 ? 0.85 * screenHeight : 0.5 * screenHeight) : mediumHeightFor(screenHeight),
+        dockRow: dockRow,
+        floating: floating,
+      );
 
   static double mediumHeightFor(double h) => h < 700 ? 0.5 * h : (0.46 * h).clamp(360.0, 0.55 * h);
 
-  double get immersiveExtent => safeBottom + kPanelDockHeight;
-  double get dockExtent => navBar + kPanelDockHeight;
+  double get immersiveExtent => floating ? 0 : safeBottom + dockHeight;
+  double get dockExtent => navBar + dockHeight;
   double get mediumExtent => navBar + mediumHeight;
 
   /// With no tab bar (rail layouts, tests without a shell) Immersive and Dock coincide and Immersive is not offered.
@@ -60,13 +87,13 @@ class PanelGeometry {
   List<PanelDetent> get detents => [if (hasImmersive) PanelDetent.immersive, PanelDetent.dock, PanelDetent.medium];
 
   /// Panel height (the part above the tab bar) at [extent].
-  double panelHeightAt(double extent) => math.max(kPanelDockHeight, extent - navBar);
+  double panelHeightAt(double extent) => math.max(dockHeight, extent - navBar);
 
   @override
   bool operator ==(Object other) =>
-      other is PanelGeometry && other.screenHeight == screenHeight && other.navBar == navBar && other.safeBottom == safeBottom && other.mediumHeight == mediumHeight;
+      other is PanelGeometry && other.screenHeight == screenHeight && other.navBar == navBar && other.safeBottom == safeBottom && other.mediumHeight == mediumHeight && other.dockRow == dockRow && other.floating == floating;
   @override
-  int get hashCode => Object.hash(screenHeight, navBar, safeBottom, mediumHeight);
+  int get hashCode => Object.hash(screenHeight, navBar, safeBottom, mediumHeight, dockRow, floating);
 }
 
 /// The detent a release at [extent] with [velocity] lands on. [velocity] is the extent's rate of change in pt/s: positive

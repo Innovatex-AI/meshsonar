@@ -25,8 +25,17 @@ class DrivePanel extends StatelessWidget {
   /// Any touch on the panel (resets the auto-collapse timer).
   final VoidCallback? onTouch;
 
-  /// Optional strip between the grabber and the dock row content (GPS help, 28 pt; WP3b).
-  const DrivePanel({super.key, required this.controller, required this.dock, this.mediumChildren = const [], this.onTouch});
+  /// The reserved strip (plan 4.12, 28 pt) at the top of the panel surface: GPS / radio / permission help with its one fix.
+  /// Null = no strip. It is part of the surface, so it rides with the panel and never moves the dock buttons.
+  final Widget? strip;
+
+  /// Floating card (iPad / landscape phone): width and left edge. Null = the full-width phone panel.
+  final double? cardWidth;
+  final double cardLeft;
+
+  /// The panel is not drawn (idle Immersive shows only the Start pill); a drag or spring brings it back.
+  final bool hidden;
+  const DrivePanel({super.key, required this.controller, required this.dock, this.mediumChildren = const [], this.onTouch, this.strip, this.cardWidth, this.cardLeft = 16, this.hidden = false});
 
   /// Semantics value for a detent.
   static String detentLabel(PanelDetent d) => switch (d) {
@@ -38,21 +47,23 @@ class DrivePanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final g = controller.geometry;
-    if (g == null) return const SizedBox.shrink();
+    if (g == null || hidden) return const SizedBox.shrink();
     return ValueListenableBuilder<double>(
       valueListenable: controller.extent,
       builder: (context, extent, _) {
         final h = g.panelHeightAt(extent);
+        final stripH = strip == null ? 0.0 : kPanelStripHeight;
         final below = extent - h; // > 0 only while dragged below the dock: the panel rides over the tab bar zone
         return Stack(
           fit: StackFit.expand,
           children: [
             Positioned(
-              left: 0,
-              right: 0,
+              left: cardWidth == null ? 0 : cardLeft,
+              right: cardWidth == null ? 0 : null,
+              width: cardWidth,
               bottom: below,
-              height: h,
-              child: _Surface(controller: controller, dock: dock, mediumChildren: mediumChildren, onTouch: onTouch, height: h),
+              height: h + stripH,
+              child: _Surface(controller: controller, dock: dock, mediumChildren: mediumChildren, onTouch: onTouch, height: h, strip: strip, floating: cardWidth != null),
             ),
           ],
         );
@@ -67,11 +78,14 @@ class _Surface extends StatelessWidget {
   final List<Widget> mediumChildren;
   final VoidCallback? onTouch;
   final double height;
-  const _Surface({required this.controller, required this.dock, required this.mediumChildren, required this.onTouch, required this.height});
+  final Widget? strip;
+  final bool floating;
+  const _Surface({required this.controller, required this.dock, required this.mediumChildren, required this.onTouch, required this.height, this.strip, this.floating = false});
 
   @override
   Widget build(BuildContext context) {
     final c = AppColors.fromTheme(Theme.of(context));
+    final dockH = controller.geometry?.dockHeight ?? kPanelDockHeight;
     return Listener(
       key: const Key('drive-panel'),
       behavior: HitTestBehavior.opaque,
@@ -79,18 +93,20 @@ class _Surface extends StatelessWidget {
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: c.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-          border: Border(top: BorderSide(color: c.outline.withValues(alpha: 0.5))),
+          borderRadius: floating ? BorderRadius.circular(20) : const BorderRadius.vertical(top: Radius.circular(20)),
+          border: floating ? Border.all(color: c.outline.withValues(alpha: 0.5)) : Border(top: BorderSide(color: c.outline.withValues(alpha: 0.5))),
+          boxShadow: floating ? const [BoxShadow(color: Color(0x33000000), blurRadius: 16, offset: Offset(0, 4))] : null,
         ),
         child: ClipRRect(
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          borderRadius: floating ? BorderRadius.circular(20) : const BorderRadius.vertical(top: Radius.circular(20)),
           child: Column(
             children: [
+              if (strip != null) SizedBox(key: const Key('drive-panel-strip'), height: kPanelStripHeight, child: strip),
               _Header(controller: controller, dock: dock),
-              if (height > kPanelDockHeight + 1)
+              if (height > dockH + 1)
                 Expanded(
                   child: Opacity(
-                    opacity: ((height - kPanelDockHeight) / 40).clamp(0.0, 1.0),
+                    opacity: ((height - dockH) / 40).clamp(0.0, 1.0),
                     child: _MediumScroll(controller: controller, children: mediumChildren),
                   ),
                 ),
@@ -140,7 +156,7 @@ class _Header extends StatelessWidget {
         onVerticalDragEnd: (d) => controller.dragEnd(d.velocity.pixelsPerSecond.dy),
         onVerticalDragCancel: controller.dragCancel,
         child: SizedBox(
-          height: kPanelDockHeight,
+          height: g.dockHeight,
           child: Column(
             children: [
               SizedBox(
@@ -154,7 +170,7 @@ class _Header extends StatelessWidget {
                   ),
                 ),
               ),
-              SizedBox(height: kPanelDockRowHeight, child: dock),
+              SizedBox(height: g.dockRow, child: dock),
             ],
           ),
         ),

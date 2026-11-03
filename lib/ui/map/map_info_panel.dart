@@ -1,6 +1,8 @@
 // The map's info panel for a tapped cell or repeater. It replaces the modal bottom sheet: it opens COLLAPSED to one line
 // (what was tapped and what the link lines found) so the map stays the focus, and the person expands it for the figures.
 // The link-line controls (Fit, Clear) live in its header.
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/map_links.dart';
@@ -21,6 +23,13 @@ class MapInfoPanel extends StatefulWidget {
 
   /// A small marker next to the title (the "Owned by you" chip), shown even while the panel is collapsed.
   final Widget? badge;
+
+  /// While the car moves (driving, not Passenger) the panel stays at its one-line peek: tapping it does not expand, Details-style
+  /// content reads "Open when stopped" (Drive plan 4.9, R16, D41).
+  final bool locked;
+
+  /// Clears itself this long after the last touch (12 s while driving); null = stays until closed.
+  final Duration? autoClear;
   const MapInfoPanel({
     super.key,
     required this.title,
@@ -30,6 +39,8 @@ class MapInfoPanel extends StatefulWidget {
     required this.onClose,
     this.onFit,
     this.badge,
+    this.locked = false,
+    this.autoClear,
   });
 
   @override
@@ -38,9 +49,41 @@ class MapInfoPanel extends StatefulWidget {
 
 class _MapInfoPanelState extends State<MapInfoPanel> {
   bool _open = false;
+  Timer? _clear;
+
+  @override
+  void initState() {
+    super.initState();
+    _arm();
+  }
+
+  @override
+  void didUpdateWidget(MapInfoPanel old) {
+    super.didUpdateWidget(old);
+    if (old.autoClear != widget.autoClear) _arm();
+    if (widget.locked && _open) _open = false;
+  }
+
+  void _arm() {
+    _clear?.cancel();
+    final d = widget.autoClear;
+    _clear = d == null ? null : Timer(d, () {
+      if (mounted) widget.onClose();
+    });
+  }
+
+  @override
+  void dispose() {
+    _clear?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    return Listener(behavior: HitTestBehavior.translucent, onPointerDown: (_) => _arm(), child: _panel(context));
+  }
+
+  Widget _panel(BuildContext context) {
     final t = Theme.of(context);
     final maxBody = (MediaQuery.sizeOf(context).height * 0.42).clamp(160.0, 420.0);
     return Material(
@@ -54,7 +97,7 @@ class _MapInfoPanelState extends State<MapInfoPanel> {
         children: [
           InkWell(
             key: const Key('info-panel-header'),
-            onTap: () => setState(() => _open = !_open),
+            onTap: widget.locked ? null : () => setState(() => _open = !_open),
             child: Padding(
               padding: const EdgeInsets.only(left: Gap.m),
               child: Row(
@@ -86,6 +129,8 @@ class _MapInfoPanelState extends State<MapInfoPanel> {
                             ),
                             if (widget.badge != null) ...[const SizedBox(width: 6), widget.badge!],
                           ]),
+                          if (widget.locked)
+                            Text('Open when stopped', key: const Key('info-panel-locked'), style: t.textTheme.labelMedium?.copyWith(color: t.colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
                           Text(
                             widget.summary,
                             key: const Key('info-panel-summary'),
@@ -101,16 +146,14 @@ class _MapInfoPanelState extends State<MapInfoPanel> {
                     IconButton(
                       key: const Key('link-fit'),
                       tooltip: 'Show all links',
-                      visualDensity: VisualDensity.compact,
                       constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                       icon: const Icon(Icons.fit_screen_rounded, size: 20),
                       onPressed: widget.onFit,
                     ),
-                  Icon(_open ? Icons.expand_more_rounded : Icons.expand_less_rounded, size: 22),
+                  if (!widget.locked) Icon(_open ? Icons.expand_more_rounded : Icons.expand_less_rounded, size: 22),
                   IconButton(
                     key: const Key('link-clear'),
                     tooltip: 'Close',
-                    visualDensity: VisualDensity.compact,
                     constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                     icon: const Icon(Icons.close_rounded, size: 20),
                     onPressed: widget.onClose,
@@ -119,7 +162,7 @@ class _MapInfoPanelState extends State<MapInfoPanel> {
               ),
             ),
           ),
-          if (_open)
+          if (_open && !widget.locked)
             ConstrainedBox(
               key: const Key('info-panel-body'),
               constraints: BoxConstraints(maxHeight: maxBody),

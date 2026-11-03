@@ -524,12 +524,15 @@ class AppToastHost extends InheritedWidget {
 
   /// Space to keep clear below the safe area at the top (the chip row) or above the safe area at the bottom (tab bar).
   final double inset;
-  const AppToastHost({super.key, this.anchor = ToastAnchor.bottom, this.inset = 0, required super.child});
+
+  /// The Drive toast band (plan 4.18): left aligned, clear of the control column, at most 380 wide. Top anchor only.
+  final bool band;
+  const AppToastHost({super.key, this.anchor = ToastAnchor.bottom, this.inset = 0, this.band = false, required super.child});
 
   static AppToastHost? maybeOf(BuildContext context) => context.dependOnInheritedWidgetOfExactType<AppToastHost>();
 
   @override
-  bool updateShouldNotify(AppToastHost old) => old.anchor != anchor || old.inset != inset;
+  bool updateShouldNotify(AppToastHost old) => old.anchor != anchor || old.inset != inset || old.band != band;
 }
 
 /// Space the default bottom toast keeps clear for the tab bar when no [AppToastHost] says otherwise.
@@ -575,6 +578,7 @@ void showAppToast(
   final host = AppToastHost.maybeOf(context);
   final anchor = host?.anchor ?? ToastAnchor.bottom;
   final inset = host?.inset ?? (anchor == ToastAnchor.bottom ? kDefaultBottomChrome : 0);
+  final band = host?.band ?? false;
   final theme = Theme.of(context);
   final life = duration ?? (kind == AppToastKind.error || actionLabel != null ? const Duration(seconds: 5) : const Duration(milliseconds: 2500));
   late final OverlayEntry entry;
@@ -585,6 +589,7 @@ void showAppToast(
       kind: kind,
       anchor: anchor,
       inset: inset,
+      band: band,
       actionLabel: actionLabel,
       onAction: onAction == null
           ? null
@@ -611,6 +616,7 @@ class _ToastView extends StatefulWidget {
   final AppToastKind kind;
   final ToastAnchor anchor;
   final double inset;
+  final bool band;
   final String? actionLabel;
   final VoidCallback? onAction;
   final VoidCallback onDismiss;
@@ -620,6 +626,7 @@ class _ToastView extends StatefulWidget {
     required this.kind,
     required this.anchor,
     required this.inset,
+    required this.band,
     required this.actionLabel,
     required this.onAction,
     required this.onDismiss,
@@ -703,12 +710,19 @@ class _ToastViewState extends State<_ToastView> with SingleTickerProviderStateMi
         child: card,
       ),
     );
+    // The top band (Drive, plan 4.18): left aligned at 16, right edge at least 72 pt from the screen edge so it clears the 48 pt
+    // control column, at most 380 wide (iPad), and always in the top half, so it can never reach the dock or the tab bar.
     return Positioned(
       left: Layout.screenMargin,
-      right: Layout.screenMargin,
+      right: top && widget.band ? 72 : Layout.screenMargin,
       top: top ? mq.padding.top + widget.inset + Gap.s : null,
       bottom: top ? null : mq.padding.bottom + mq.viewInsets.bottom + widget.inset + Gap.s,
-      child: Semantics(liveRegion: true, container: true, label: widget.message, child: Center(child: animated)),
+      child: Semantics(
+        liveRegion: true,
+        container: true,
+        label: widget.message,
+        child: top && widget.band ? Align(alignment: Alignment.topLeft, child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 380), child: animated)) : Center(child: animated),
+      ),
     );
   }
 }

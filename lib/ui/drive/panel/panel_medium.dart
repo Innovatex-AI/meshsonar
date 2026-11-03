@@ -9,6 +9,7 @@ import '../../../app/chat_wiring.dart';
 import '../../../core/heard.dart' show haversineM;
 import '../../../app/chat_controller.dart';
 import '../../../core/model.dart';
+import '../../../core/region_repeaters_api.dart' show RegionRepeater;
 import '../../../radio/radio_api.dart' show GeoFix;
 import '../../chat/chat_drive_sheet.dart';
 import '../../design/tokens.dart';
@@ -28,6 +29,25 @@ double _distanceM(List<DrivePing> pings) {
   return d;
 }
 
+/// One row of "Nearby repeaters" (nearest first).
+class NearbyRepeater {
+  final String key, name;
+  final double distanceM;
+  const NearbyRepeater(this.key, this.name, this.distanceM);
+}
+
+/// The [count] nearest placed repeaters or rooms to [here] from the region roster. Pure, so it is tested without a screen.
+List<NearbyRepeater> nearestRepeaters(Iterable<RegionRepeater> roster, double lat, double lon, {int count = 3}) {
+  final out = <NearbyRepeater>[];
+  for (final r in roster) {
+    if (r.lat == null || r.lon == null) continue;
+    if (r.role != 'repeater' && r.role != 'room') continue;
+    out.add(NearbyRepeater(r.key, r.name ?? r.hashPrefix, haversineM(lat, lon, r.lat!, r.lon!)));
+  }
+  out.sort((a, b) => a.distanceM.compareTo(b.distanceM));
+  return out.take(count).toList();
+}
+
 class MediumContent {
   /// Rebuilds on every state change because the panel's builder does (the caller wraps it in a listener).
   static List<Widget> build(
@@ -38,6 +58,8 @@ class MediumContent {
     required bool passenger,
     required ValueChanged<bool> onPassenger,
     required VoidCallback openGuide,
+    List<NearbyRepeater> nearby = const [],
+    ValueChanged<String>? onPickNearby,
   }) {
     final s = state;
     final t = Theme.of(context);
@@ -139,6 +161,23 @@ class MediumContent {
           ...heardRows,
           const Divider(height: 16),
         ],
+      ],
+      if (nearby.isNotEmpty) ...[
+        Text('NEARBY REPEATERS', style: TextStyle(fontSize: 12, letterSpacing: 0.6, color: c.textMuted)),
+        for (final n in nearby)
+          GestureDetector(
+            key: Key('nearby-${n.key}'),
+            behavior: HitTestBehavior.opaque,
+            onTap: onPickNearby == null ? null : () => onPickNearby(n.key),
+            child: SizedBox(
+              height: 44,
+              child: Row(children: [
+                Expanded(child: Text(n.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16))),
+                Text(s.units.distance(n.distanceM), style: numberStyle(context, size: 14, weight: FontWeight.w500)),
+              ]),
+            ),
+          ),
+        const Divider(height: 16),
       ],
       Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [AntennaChip(state: s), PingSettingsChip(state: s), LogButton(state: s)]),
       const SizedBox(height: 4),

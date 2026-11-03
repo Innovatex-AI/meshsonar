@@ -36,8 +36,11 @@ import 'map/repeater_page_link.dart';
 import 'map/coverage_timeline_slider.dart';
 import 'widgets.dart';
 import 'onboarding/ui_prefs.dart';
+import 'drive/dock_strip.dart';
+import 'drive/status_capsule.dart';
 import 'drive/panel/auto_collapse.dart';
 import 'drive/panel/drive_panel.dart';
+import 'drive/panel/immersive_pill.dart';
 import 'drive/panel/drive_panel_controller.dart';
 import 'drive/panel/panel_dock.dart';
 import 'drive/panel/panel_medium.dart';
@@ -240,7 +243,17 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
         builder: (context, box) {
           // The tab bar zone is measured while the bar is shown and remembered while it is hidden (Immersive).
           if (!(_shell?.immersive ?? false)) _navBar = mq.padding.bottom;
-          final g = PanelGeometry.forScreen(screenHeight: box.maxHeight, navBar: _navBar ?? mq.padding.bottom, safeBottom: mq.viewPadding.bottom);
+          // iPad / landscape phone (width >= 700): a floating card, never the full-width phone panel (plan 4.21).
+          final floating = box.maxWidth >= 700;
+          final cardWidth = !floating ? null : (box.maxHeight < 500 ? kCardWidthLandscape : kCardWidthPad);
+          final cardLeft = 16 + mq.viewPadding.left;
+          final g = PanelGeometry.forScreen(
+            screenHeight: box.maxHeight,
+            navBar: floating ? 16 + mq.viewPadding.bottom : (_navBar ?? mq.padding.bottom),
+            safeBottom: mq.viewPadding.bottom,
+            dockRow: DriveDock.isAx(context) ? kPanelDockRowAx : kPanelDockRowHeight,
+            floating: floating,
+          );
           if (panel.geometry == null) {
             panel.setGeometry(g);
             _clearance = panel.extent.value;
@@ -249,16 +262,23 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
               if (mounted) panel.setGeometry(g);
             });
           }
+          final axText = DriveDock.isAx(context); // read outside the clamp below
           final map = MediaQuery(
-            data: mq.copyWith(textScaler: MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.3)),
+            data: mq.copyWith(textScaler: MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.6)),
             child: AnimatedBuilder(
-              animation: model,
+              animation: Listenable.merge([model, s, s.gpsHealth]),
               builder: (context, _) => _MapPane(
                 state: s,
                 model: model,
                 redesign: true,
+                collapseCapsule: axText,
+                inspectorLocked: inspectorLocked(driving: s.driving, moving: _auto.moving, passenger: _auto.passenger),
                 topClearance: mq.padding.top,
-                bottomClearance: _clearance ?? panel.extent.value,
+                // The strip is part of the panel surface, so the overlays sit above it too.
+                // Floating card: it sits bottom-left, the controls and attribution are bottom-right, so only the margin is cleared.
+                bottomClearance: floating
+                    ? 16 + mq.viewPadding.bottom
+                    : (_clearance ?? panel.extent.value) + (stripFor(s, s.gpsHealth.value) == null ? 0 : kPanelStripHeight),
                 rotatable: panel.detent == PanelDetent.immersive,
               ),
             ),
@@ -269,8 +289,16 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
               Positioned.fill(child: map),
               Positioned.fill(
                 child: ListenableBuilder(
-                  listenable: Listenable.merge([s, panel, liveStats]),
-                  builder: (context, _) => DrivePanel(
+                  listenable: Listenable.merge([s, s.gpsHealth, panel, liveStats]),
+                  builder: (context, _) {
+                    final strip = stripFor(s, s.gpsHealth.value);
+                    final idlePill = !s.driving && s.lastFinishedSessionId == null && panel.detent == PanelDetent.immersive && panel.settled;
+                    return Stack(fit: StackFit.expand, children: [
+                      DrivePanel(
+                    hidden: idlePill,
+                    cardWidth: cardWidth,
+                    cardLeft: cardLeft,
+                    strip: strip == null ? null : DockStripView(info: strip),
                     controller: panel,
                     onTouch: () => _auto.touch(s.services.clock()),
                     dock: DriveDock(state: s, debounce: _debounce),
@@ -282,8 +310,22 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
                       passenger: _auto.passenger,
                       onPassenger: (v) => setState(() => _auto.passenger = v),
                       openGuide: () => showMapLegend(context, colorBy: model.colorBy, pingColors: model.pingColors),
+                      nearby: model.position == null ? const [] : nearestRepeaters(model.regionRepeaters, model.position!.latitude, model.position!.longitude),
+                      onPickNearby: (key) {
+                        model.select(key);
+                        panel.settleTo(PanelDetent.dock);
+                      },
                     ),
                   ),
+                      if (idlePill)
+                        Positioned(
+                          left: floating ? cardLeft + (cardWidth! - 64) / 2 : (box.maxWidth - 64) / 2,
+                          bottom: (floating ? 16 : 0) + mq.viewPadding.bottom + 8,
+                          width: 64,
+                          child: ImmersivePill(state: s, controller: panel),
+                        ),
+                    ]);
+                  },
                 ),
               ),
             ],
@@ -457,7 +499,9 @@ class _MapPane extends StatelessWidget {
   final bool redesign;
   final double topClearance, bottomClearance;
   final bool? rotatable;
-  const _MapPane({required this.state, required this.model, this.report, this.redesign = false, this.topClearance = 0, this.bottomClearance = 0, this.rotatable});
+  final bool collapseCapsule;
+  final bool inspectorLocked;
+  const _MapPane({required this.state, required this.model, this.report, this.redesign = false, this.collapseCapsule = false, this.inspectorLocked = false, this.topClearance = 0, this.bottomClearance = 0, this.rotatable});
 
   @override
   Widget build(BuildContext context) {
@@ -504,8 +548,13 @@ class _MapPane extends StatelessWidget {
           fallbackCenter: viewedRegionCenter(s),
           fallbackBounds: viewedRegionBounds(s),
           // GPS trouble (waiting, weak, lost, Precise Location off) as one line over the map's top edge, with the one button that fixes it.
-          banner: GpsBannerSlot(state: s, compact: redesign || expanded || box.maxHeight < kCompactMapHeight),
-          topLeading: showHeard
+          banner: redesign ? null : GpsBannerSlot(state: s, compact: expanded || box.maxHeight < kCompactMapHeight),
+          onLayers: redesign ? () => showGeneratedLayersSheet(context, model) : null,
+          inspectorLocked: redesign && inspectorLocked,
+          inspectorAutoClear: redesign && s.driving ? kInspectorAutoClear : null,
+          topLeading: redesign
+              ? _StateChips(state: s, model: model, maxWidth: box.maxWidth)
+              : showHeard
               ? HeardBox(
                   heard: model.heard,
                   holdPings: s.settings.heardHoldPings,
@@ -518,7 +567,9 @@ class _MapPane extends StatelessWidget {
                 )
               : null,
           // Scales the column down on a short map pane instead of overflowing (the tool buttons add to its height).
-          topTrailing: FittedBox(
+          topTrailing: redesign
+              ? StatusCapsule(state: s, collapsed: collapseCapsule, onPressed: () => openConnect(context))
+              : FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.topRight,
             child: Column(
@@ -526,14 +577,6 @@ class _MapPane extends StatelessWidget {
               children: [
                 // Region awareness lives in this corner, above the icon buttons. Nothing is added here (no chip, no gap) until
                 // there's something real to show.
-                // The connection chip replaces the deleted AppBar's (same tap target); WP3b turns it into the status capsule.
-                if (redesign) ...[
-                  ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: (box.maxWidth - 2 * Gap.s - 46).clamp(80.0, 260.0)),
-                    child: ConnectionChip(state: s, onPressed: () => openConnect(context)),
-                  ),
-                  const SizedBox(height: Gap.s),
-                ],
                 if (s.driving && silentPingStreak(s.drivePings) >= deadAreaPings) ...[
                   ConstrainedBox(
                     constraints: BoxConstraints(maxWidth: (box.maxWidth - 2 * Gap.s - 46).clamp(80.0, 180.0)),
@@ -575,7 +618,9 @@ class _MapPane extends StatelessWidget {
               ],
             ),
           ),
-          bottom: Column(
+          bottom: redesign
+              ? Align(alignment: Alignment.bottomLeft, child: MapHealthOverlay(model: model))
+              : Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -606,6 +651,63 @@ class _MapPane extends StatelessWidget {
 }
 
 /// Radio connection status; tap to connect or change radio. In Simulator mode it says so plainly.
+/// Top-leading stack of the new Drive screen: the always-present RegionChip, then at most two state chips (plan 4.12): offline
+/// data, coverage as-of, dead area, phone-fix note. Each is an opaque pill; further states are dropped (the status capsule's
+/// sheet holds the rest).
+class _StateChips extends StatelessWidget {
+  final AppState state;
+  final DriveMapModel model;
+  final double maxWidth;
+  const _StateChips({required this.state, required this.model, required this.maxWidth});
+
+  @override
+  Widget build(BuildContext context) {
+    final s = state;
+    final w = (maxWidth - 2 * Gap.s - 72).clamp(120.0, 320.0);
+    final chips = <Widget>[
+      if (s.driving && silentPingStreak(s.drivePings) >= deadAreaPings) DeadAreaChip(streak: silentPingStreak(s.drivePings)),
+      if (s.regionDataOfflineLabel != null)
+        _Pill(
+          key: const Key('region-offline-label'),
+          icon: Icons.cloud_off_rounded,
+          text: s.regionDataOfflineLabel!,
+        ),
+      CoverageAsOfBadge(model: model),
+      if (s.phoneFixNote != null && !s.driving && model.pings.isEmpty) PhoneFixNoteChip(state: s),
+    ];
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: w),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          RegionChip(state: s, always: true),
+          for (final c in chips.take(2)) ...[const SizedBox(height: Gap.xs), c],
+        ],
+      ),
+    );
+  }
+}
+
+class _Pill extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  const _Pill({super.key, required this.icon, required this.text});
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(color: t.colorScheme.surface, borderRadius: BorderRadius.circular(16), border: Border.all(color: t.colorScheme.outlineVariant)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 16, color: t.colorScheme.onSurfaceVariant),
+        const SizedBox(width: 6),
+        Flexible(child: Text(text, style: t.textTheme.labelMedium)),
+      ]),
+    );
+  }
+}
+
 class ConnectionChip extends StatelessWidget {
   final AppState state;
   final VoidCallback onPressed;

@@ -1607,12 +1607,28 @@ class AppState extends ChangeNotifier {
   void Function(RadioDevice device, RadioKind kind, SelfInfo info)? onRadioConnected;
   void Function()? onRadioReleased;
 
+  int _connectGen = 0;
+
+  /// Cancel a connect in progress (the Drive dock's Cancel): nothing was recorded, so it goes back to idle at once with no
+  /// error. A late answer from the radio is dropped.
+  void cancelConnect() {
+    if (!_connecting) return;
+    _connectGen++;
+    _connecting = false;
+    _selfInfo = null;
+    _device = null;
+    _radioKind = RadioKind.none;
+    _connectError = null;
+    notifyListeners();
+  }
+
   Future<bool> connect(RadioDevice device, RadioKind kind) async {
     if (driving) {
       _say('Stop the drive before switching radios.');
       return false;
     }
     await disconnect(quiet: true);
+    final gen = ++_connectGen;
     _connecting = true;
     _connectError = null;
     _device = device;
@@ -1620,6 +1636,13 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     try {
       final session = await radioSessions.connect(scannerFor(kind), device);
+      if (gen != _connectGen) {
+        // Cancelled (Drive dock Cancel) while the radio was answering: drop the link, change nothing else.
+        try {
+          await radioSessions.disconnect();
+        } catch (_) {}
+        return false;
+      }
       final link = session.link;
       final info = session.selfInfo!;
       _selfInfo = info;
@@ -1635,6 +1658,7 @@ class AppState extends ChangeNotifier {
       onRadioConnected?.call(device, kind, info);
       return true;
     } catch (e) {
+      if (gen != _connectGen) return false; // cancelled: no error to show
       _connecting = false;
       _selfInfo = null;
       _device = null;

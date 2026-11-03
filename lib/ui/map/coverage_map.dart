@@ -99,6 +99,7 @@ import 'overlays/credits_sheet.dart';
 import 'overlays/map_overlay_host.dart';
 import 'parts/chart_grid.dart';
 import 'parts/map_chips.dart';
+import 'overlays/map_controls.dart';
 import 'parts/map_compass.dart';
 import 'parts/map_markers.dart';
 import 'parts/range_rings.dart';
@@ -300,6 +301,15 @@ class CoverageMap extends StatefulWidget {
   final Widget? topTrailing;
   final Widget? bottom;
 
+  /// New Drive screen: when set, the map's controls slot holds the fixed-slot [MapControlColumn] (Layers + Recenter / heading +
+  /// Compass) and this opens the layers sheet. Null = the older FAB buttons.
+  final VoidCallback? onLayers;
+
+  /// Inspector rules while a drive runs (Drive plan 4.9): [inspectorLocked] keeps it at the one-line peek ("Open when stopped"),
+  /// [inspectorAutoClear] closes it after that long without a touch.
+  final bool inspectorLocked;
+  final Duration? inspectorAutoClear;
+
   /// Overlay clearances (see MapOverlayHost.topClearance / bottomClearance): the full-bleed Drive map keeps its slots out of the
   /// status bar and above the panel without ever being resized.
   final double topClearance;
@@ -356,6 +366,9 @@ class CoverageMap extends StatefulWidget {
     this.topLeading,
     this.topTrailing,
     this.bottom,
+    this.onLayers,
+    this.inspectorLocked = false,
+    this.inspectorAutoClear,
     this.topClearance = 0,
     this.bottomClearance = 0,
     this.baseStyle = BaseMapStyle.chart,
@@ -729,6 +742,8 @@ class _CoverageMapState extends State<CoverageMap> {
         body: PingDetailSheet(ping: ping, lookup: lookup, scrollController: _pingScroll),
         onFit: n > 0 ? _fitLinks : null,
         onClose: _clearLinks,
+        locked: widget.inspectorLocked,
+        autoClear: widget.inspectorAutoClear,
       );
     }
     final set = _currentLinks();
@@ -771,6 +786,8 @@ class _CoverageMapState extends State<CoverageMap> {
       body: body,
       onFit: canFit ? _fitLinks : null,
       onClose: _clearLinks,
+      locked: widget.inspectorLocked,
+      autoClear: widget.inspectorAutoClear,
     );
   }
 
@@ -1664,7 +1681,28 @@ class _CoverageMapState extends State<CoverageMap> {
           ],
         ),
       banner: widget.banner,
-      topLeading: widget.topLeading,
+      // New Drive screen: the "Map offline" state is a pill under the region chip (plan 4.12), never a bottom-left note.
+      topLeading: widget.onLayers != null && !tiles
+          ? Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ?widget.topLeading,
+                const SizedBox(height: Gap.xs),
+                MapPill(
+                  key: const Key('map-offline'),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.cloud_off_rounded, size: 13, color: mc.textMuted),
+                      const SizedBox(width: 4),
+                      const Flexible(child: Text('Offline map', maxLines: 1)),
+                    ],
+                  ),
+                ),
+              ],
+            )
+          : widget.topLeading,
       topTrailing: widget.topTrailing,
       controls: _controls(context, pos, latest),
       bottom: _bottomColumn(context, tiles, mc, t),
@@ -1715,8 +1753,9 @@ class _CoverageMapState extends State<CoverageMap> {
     final children = <Widget>[
       ?widget.bottom,
       if (panel != null) ...[SizedBox(width: double.infinity, child: panel), const SizedBox(height: Gap.xs)],
-      if (widget.simulated) ...[const SimulatedTag(key: Key('map-simulated')), const SizedBox(height: Gap.xs)],
-      if (!tiles)
+      // New Drive screen: SIM is a badge in the status capsule and the offline state is a pill at the top; nothing bottom-left.
+      if (widget.simulated && widget.onLayers == null) ...[const SimulatedTag(key: Key('map-simulated')), const SizedBox(height: Gap.xs)],
+      if (!tiles && widget.onLayers == null)
         MapPill(
           key: const Key('map-offline'),
           child: Row(
@@ -1740,6 +1779,33 @@ class _CoverageMapState extends State<CoverageMap> {
 
   /// The round buttons above the attribution: compass (rotatable), heading-up toggle (live puck), recenter (not following).
   Widget? _controls(BuildContext context, LatLng? pos, DrivePing? latest) {
+    if (widget.onLayers != null) {
+      final havePos = pos != null || latest != null;
+      final mode = !_follow ? RecenterMode.notFollowing : (_prefs.headingUp ? RecenterMode.followingHeadingUp : RecenterMode.followingNorthUp);
+      return ValueListenableBuilder<double>(
+        key: _buttonsKey,
+        valueListenable: _rotationN,
+        builder: (context, rot, _) => MapControlColumn(
+          onLayers: widget.onLayers!,
+          compassVisible: widget.rotatable && rot.abs() >= 0.5,
+          compassRotation: rot,
+          onCompass: _northUp,
+          recenterVisible: havePos,
+          recenterMode: mode,
+          onRecenter: () {
+            switch (mode) {
+              case RecenterMode.notFollowing:
+                _prefs.headingUp = false;
+                _recenter();
+              case RecenterMode.followingNorthUp:
+                _prefs.headingUp = true;
+              case RecenterMode.followingHeadingUp:
+                _prefs.headingUp = false;
+            }
+          },
+        ),
+      );
+    }
     final showHeading = widget.puck != null && widget.interactive;
     final showRecenter = !_follow && (pos != null || latest != null);
     if (!widget.rotatable && !showHeading && !showRecenter) return null;

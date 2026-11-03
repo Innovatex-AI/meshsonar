@@ -19,6 +19,7 @@ import '../chat/chat_drive_sheet.dart';
 import '../app.dart' show AppScope;
 import '../connect_screen.dart';
 import '../design/app_surfaces.dart';
+import '../design/tokens.dart' show AppColors;
 import '../drive_stats.dart' show formatDuration;
 import '../ping_log_screen.dart' show openPingLog;
 import '../region/region_switch_sheet.dart' show showNearestRegionsSheet;
@@ -437,11 +438,16 @@ class AntennaChip extends StatelessWidget {
 ///    note to that effect) in the tooltip.
 class RegionChip extends StatelessWidget {
   final AppState state;
-  const RegionChip({super.key = const Key('region-chip'), required this.state});
+
+  /// New Drive screen (plan 4.20): the chip is rendered in EVERY state. "Locating..." until a fix, the region code, then
+  /// "Choose region" when location is denied / off. Opaque 36 pt chip, 44 pt hit.
+  final bool always;
+  const RegionChip({super.key = const Key('region-chip'), required this.state, this.always = false});
 
   @override
   Widget build(BuildContext context) {
     final s = state;
+    if (always) return _alwaysChip(context);
     if (!s.regionIndexLoaded) return const SizedBox.shrink();
     final t = Theme.of(context);
     final mc = MeshSonarColors.of(context);
@@ -480,6 +486,46 @@ class RegionChip extends StatelessWidget {
               onPressed: () => unawaited(showNearestRegionsSheet(context)),
             )
           : Chip(avatar: avatar, label: text, backgroundColor: color.withValues(alpha: 0.10), side: side),
+    );
+  }
+}
+
+extension on RegionChip {
+  Widget _alwaysChip(BuildContext context) {
+    final s = state;
+    final c = AppColors.fromTheme(Theme.of(context));
+    final region = s.currentRegion;
+    final noFix = !s.regionFixKnown;
+    final choose = noFix && s.locationNote != null;
+    final outside = s.regionFixKnown && region == null;
+    final String label = choose ? 'Choose region' : (noFix || !s.regionIndexLoaded ? 'Locating…' : (region == null ? 'Outside coverage' : region.code));
+    final tappable = choose || outside;
+    final scale = MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.6);
+    final chip = Container(
+      height: 36,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(color: c.surface, borderRadius: BorderRadius.circular(18), border: Border.all(color: c.outline)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(Icons.map_outlined, size: 16, color: region == null ? c.textMuted : c.accent),
+        const SizedBox(width: 6),
+        Flexible(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c.textPrimary))),
+        if (tappable) Icon(Icons.expand_more_rounded, size: 16, color: c.textMuted),
+      ]),
+    );
+    return MediaQuery(
+      data: MediaQuery.of(context).copyWith(textScaler: scale),
+      child: Semantics(
+        button: tappable,
+        label: choose ? 'Choose region' : (noFix ? 'Locating your region' : (region == null ? 'Outside coverage. Tap for the nearest regions' : 'Region ${region.name}')),
+        excludeSemantics: true,
+        onTap: tappable ? () => unawaited(showNearestRegionsSheet(context)) : null,
+        child: GestureDetector(
+          key: const Key('region-chip-hit'),
+          behavior: HitTestBehavior.opaque,
+          onTap: tappable ? () => unawaited(showNearestRegionsSheet(context)) : null,
+          child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 44), child: Center(widthFactor: 1, heightFactor: 1, child: chip)),
+        ),
+      ),
     );
   }
 }
@@ -847,7 +893,7 @@ class MapIconButton extends StatelessWidget {
     return Tooltip(
       message: tooltip,
       child: Material(
-        color: active ? t.colorScheme.primaryContainer : t.colorScheme.surface.withValues(alpha: 0.93),
+        color: active ? t.colorScheme.primaryContainer : t.colorScheme.surface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(Corners.small + 2),
           side: BorderSide(color: t.colorScheme.outlineVariant),
