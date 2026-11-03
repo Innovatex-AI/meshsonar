@@ -7,7 +7,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:meshsonar/core/region_repeaters_api.dart';
 import 'package:meshsonar/ui/map/coverage_map.dart';
 import 'package:meshsonar/ui/map/layers/repeater_painter_layer.dart';
-import 'package:meshsonar/ui/map/map_layers.dart';
+import 'package:meshsonar/ui/map/layers/registry.dart';
 
 RegionRepeater rep(String k, double? lat) => RegionRepeater(
   key: k * 32,
@@ -19,12 +19,9 @@ RegionRepeater rep(String k, double? lat) => RegionRepeater(
 );
 
 void main() {
-  test('MapLayers: regionRepeaters is off by default and part of equality', () {
-    expect(const MapLayers().regionRepeaters, isFalse);
-    expect(
-      const MapLayers().copyWith(regionRepeaters: true),
-      isNot(const MapLayers()),
-    );
+  test('the roster layer is on by default (Drive plan 7.1) and a layer state without it hides it', () {
+    expect(kDefaultLayerState.isOn('repeaters'), isTrue);
+    expect(kDefaultLayerState.toggle('repeaters', false).isOn('repeaters'), isFalse);
   });
 
   final roster = [rep('aa', 40.0), rep('bb', null)];
@@ -39,7 +36,7 @@ void main() {
             pings: const [],
             showTiles: false,
             fallbackCenter: const LatLng(40.0, -83.0),
-            layers: MapLayers(regionRepeaters: on),
+            layerState: on ? kDefaultLayerState : kDefaultLayerState.toggle('repeaters', false),
             regionRepeaters: roster,
           ),
         ),

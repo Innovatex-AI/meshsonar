@@ -48,7 +48,17 @@ RepeaterSceneSource? sceneSource(WidgetTester t, String layerId) {
 }
 
 /// How many points of [layerId] are in the cluster index (what that list draws, clusters included).
-int indexedCountOf(WidgetTester t, String layerId) => sceneSource(t, layerId)?.index.indexedCount ?? 0;
+int indexedCountOf(WidgetTester t, String layerId) {
+  final drawn = sceneSource(t, layerId);
+  if (drawn != null) return drawn.index.indexedCount;
+  // The layer is mounted but nothing is in view (an empty scene draws no paint widget): ask its sources directly.
+  final layer = find.byType(RepeaterPainterLayer);
+  if (layer.evaluate().isEmpty) return 0;
+  for (final (source, id) in t.widget<RepeaterPainterLayer>(layer).sources) {
+    if (id == layerId) return source.indexOf(layerId)?.indexedCount ?? 0;
+  }
+  return 0;
+}
 
 /// The labels of the screen reader proxies the repeater painter exposes (needs `tester.ensureSemantics()`).
 List<String> repeaterSemanticLabels(WidgetTester t) {

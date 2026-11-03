@@ -6,14 +6,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
-import 'package:meshsonar/radio/companion_link.dart';
-import 'package:meshsonar/radio/radio_session_impl.dart';
-import 'package:meshsonar/radio/room_session.dart';
 import 'package:meshsonar/ui/radios/repeater_admin/repeater_admin_screen.dart';
-import 'package:meshsonar/ui/radios/rooms/room_screen.dart';
 
-import '../test/support/repeater_admin_fake.dart';
-import '../test/ui/radios/admin_rig.dart' show app, makeRig, repKey;
+import '../test/ui/radios/admin_rig.dart' show app, makeRig;
 import 'screens.dart';
 
 Future<void> tapTab(WidgetTester t, String name) async {
@@ -94,31 +89,4 @@ void main() {
       await rig.link.close();
     });
   }
-
-  testWidgets('room', (t) async {
-    final room = FakeAdminRepeater(key: repKey(), name: 'Valley Room', role: 'room', adminPassword: 'adminpw', guestPassword: 'roompw');
-    room.roomPosts.addAll([
-      (authorHex: 'cd' * 32, text: 'Net tonight at 8, 146.52 and the mesh', ts: 1793480000),
-      (authorHex: 'ef' * 32, text: 'I can hear the hill repeater from the truck', ts: 1793480600),
-    ]);
-    final radio = AdminFakeTransport({room.keyHex: room});
-    final link = MeshCoreCompanionLink(radio, claimReplyTimeout: const Duration(milliseconds: 500), messagePollInterval: const Duration(milliseconds: 100));
-    final info = await link.start();
-    final session = LinkRadioSession(link, info: info);
-    final c = RoomController(room: RoomSession(radio: session, keyHex: room.keyHex, name: room.name), title: 'Valley Room', nameForPrefix: (p) => p == 'cdcdcdcd' ? 'Hill Walker' : null);
-    await t.pumpWidget(app(RoomScreen(controller: c)));
-    await shot(t, 'room-login');
-    await t.enterText(find.byKey(const Key('room-password')), 'roompw');
-    await t.pump();
-    await t.tap(find.byKey(const Key('room-login-go')));
-    await waitFor(t, find.text('Net tonight at 8, 146.52 and the mesh'));
-    await t.enterText(find.byKey(const Key('room-compose')), 'Copy that, 73');
-    await t.tap(find.byKey(const Key('room-send')));
-    await waitFor(t, find.text('Copy that, 73'));
-    await shot(t, 'room-conversation');
-    await t.pumpWidget(const SizedBox());
-    await link.close();
-    // ignore: avoid_print
-    print('VERIFY_DONE');
-  });
 }

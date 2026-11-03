@@ -16,6 +16,7 @@ import 'package:meshsonar/ui/report/drive_report_screen.dart';
 
 import 'fakes.dart';
 import 'map/repeater_probe.dart';
+import '../support/huge_screen.dart';
 
 Future<void> settle(WidgetTester tester) async {
   for (var i = 0; i < 5; i++) {
@@ -32,7 +33,7 @@ Future<void> drain(WidgetTester tester) async {
 const tower = RepeaterRef(key: 'a1b2c3d4', name: 'Westerville Water Tower', lat: 40.135, lon: -82.92);
 
 Future<Harness> driving(WidgetTester tester, {int hold = 3}) async {
-  useTallScreen(tester);
+  useHugeScreen(tester);
   final h = Harness();
   h.settings.saved = Settings(heardHoldPings: hold);
   h.cache.items = const [tower];
@@ -130,7 +131,7 @@ void main() {
 
   // 0.4.0 (spec m1-app-0.4.0 §4): the Internal/External toggle became the per-radio antenna chip.
   testWidgets('antenna chip: shows the radio\'s antenna, the drive records it, locked while driving', (tester) async {
-    useTallScreen(tester);
+    useHugeScreen(tester);
     final h = Harness(); // the radio's saved antenna is inside car, 1.2 m (fakes.dart)
     await h.pumpApp(tester);
     await h.state.connect(h.bt.devices.first, RadioKind.bluetooth);
@@ -189,7 +190,7 @@ void main() {
     await tester.tap(find.byKey(const Key('layer-color-result')));
     await tester.tap(find.byKey(const Key('layer-repeaters')));
     await settle(tester);
-    await tester.tapAt(const Offset(200, 60)); // dismiss the sheet
+    await tester.tap(find.byKey(const Key('layers-done'))); // dismiss the sheet
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byKey(const Key('layers-sheet')), findsNothing);
@@ -266,7 +267,7 @@ void main() {
   });
 
   testWidgets('simulator mode is labelled on the chip and the map', (tester) async {
-    useTallScreen(tester);
+    useHugeScreen(tester);
     final h = Harness();
     await h.pumpApp(tester);
     expect(find.byKey(const Key('map-simulated')), findsNothing);

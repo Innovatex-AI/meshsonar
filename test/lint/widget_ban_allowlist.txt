@@ -12,7 +12,7 @@ lib/ui/chat/channel_detail_screen.dart|TextField(|2
 lib/ui/chat/channel_flows.dart|TextButton|2
 lib/ui/chat/channel_flows.dart|TextField(|5
 lib/ui/chat/channels_view.dart|FilledButton|4
-lib/ui/chat/channels_view.dart|Icons.|13
+lib/ui/chat/channels_view.dart|Icons.|12
 lib/ui/chat/channels_view.dart|TextButton|2
 lib/ui/chat/chat_banner_host.dart|Icons.|1
 lib/ui/chat/chat_banner_host.dart|InkWell(|1
@@ -26,8 +26,6 @@ lib/ui/chat/chat_tab_provider.dart|Icons.|1
 lib/ui/chat/composer.dart|FilledButton|2
 lib/ui/chat/composer.dart|Icons.|3
 lib/ui/chat/composer.dart|TextField(|1
-lib/ui/chat/contacts_view.dart|Icons.|5
-lib/ui/chat/contacts_view.dart|TextField(|1
 lib/ui/chat/conversation_screen.dart|CircularProgressIndicator|1
 lib/ui/chat/conversation_screen.dart|Divider(|3
 lib/ui/chat/conversation_screen.dart|Icons.|9
@@ -120,7 +118,3 @@ lib/ui/radios/rooms/room_join_header.dart|FilledButton|2
 lib/ui/radios/rooms/room_join_header.dart|Icons.|1
 lib/ui/radios/rooms/room_join_header.dart|TextButton|4
 lib/ui/radios/rooms/room_join_header.dart|TextField(|1
-lib/ui/radios/rooms/room_screen.dart|CircularProgressIndicator|2
-lib/ui/radios/rooms/room_screen.dart|FilledButton|2
-lib/ui/radios/rooms/room_screen.dart|Icons.|2
-lib/ui/radios/rooms/room_screen.dart|TextField(|2

@@ -94,6 +94,11 @@ abstract final class AppSymbols {
   static const gauge = AppSymbol('gauge.with.dots.needle.67percent', CupertinoIcons.gauge, Icons.speed);
   static const bubbles = AppSymbol('bubble.left.and.bubble.right.fill', CupertinoIcons.bubble_left_bubble_right_fill, Icons.forum);
   static const qrcode = AppSymbol('qrcode', CupertinoIcons.qrcode, Icons.qr_code_2);
+  // Chat list (WP2)
+  static const squareAndPencil = AppSymbol('square.and.pencil', CupertinoIcons.square_pencil, Icons.edit_square);
+  static const globe = AppSymbol('globe', CupertinoIcons.globe, Icons.public);
+  static const numberSign = AppSymbol('number', CupertinoIcons.number, Icons.tag);
+  static const exclamationCircleFill = AppSymbol('exclamationmark.circle.fill', CupertinoIcons.exclamationmark_circle_fill, Icons.error);
 
   /// Every symbol, for the manifest test and the gallery.
   static const List<AppSymbol> all = [
@@ -106,6 +111,7 @@ abstract final class AppSymbols {
     gear, //
     location, locationFill, antenna, wifi, bolt, battery, thermometer, tray, waveform, //
     route, gauge, bubbles, qrcode,
+    squareAndPencil, globe, numberSign, exclamationCircleFill,
   ];
 }
 

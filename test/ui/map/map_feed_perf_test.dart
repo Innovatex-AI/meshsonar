@@ -273,7 +273,7 @@ void main() {
 
         // Pan/zoom frames: move the camera through world -> street zoom and repaint each time.
         final pan = Stopwatch()..start();
-        final cam = MapCamera.of(t.element(find.byKey(RepeaterPainterLayer.paintKey)));
+        final cam = MapCamera.of(t.element(find.byType(RepeaterPainterLayer)));
         expect(cam.zoom, closeTo(8, 0.01));
         var frames = 0;
         for (final (lat, lon, z) in [
@@ -284,11 +284,11 @@ void main() {
           (34.05, -118.24, 14.0),
           (34.05, -118.24, 16.0),
         ]) {
-          MapController.maybeOf(t.element(find.byKey(RepeaterPainterLayer.paintKey)))!
+          MapController.maybeOf(t.element(find.byType(RepeaterPainterLayer)))!
               .move(LatLng(lat, lon), z);
           await t.pump();
           frames++;
-          expect(painter().camera.zoom, closeTo(z, 0.01));
+          expect(MapCamera.of(t.element(find.byType(RepeaterPainterLayer))).zoom, closeTo(z, 0.01)); // an empty view draws no paint widget
         }
         pan.stop();
         // ignore: avoid_print

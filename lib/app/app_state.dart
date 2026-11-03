@@ -359,15 +359,15 @@ class AppState extends ChangeNotifier {
   /// The upload server answers `repeater-reach` for an approved driver key (`capabilities.reachDriverKey`).
   bool get serverHasReach => uploadSiteConfig?.reachDriverKey == true;
 
-  /// Reach can be asked now: the server has it and this driver key is approved.
-  bool get reachEnabled => serverHasReach && keyApproved;
+  /// Reach can be asked now: the server has it. `repeater-reach` is a public read (live check, Nov 2 2026: 200 with no key; the
+  /// website draws it for everyone), so no approved driver key is needed (Drive plan 7.3 F8); a key is sent when there is one.
+  bool get reachEnabled => serverHasReach;
 
   /// Reach of [repeaterKey] (full key, hex) from the on-disk cache while fresh. [lat]/[lon] are the REPEATER's position.
   /// Throws [CmatException] (401/403/429, no connection with nothing stored).
   Future<ReachResult> repeaterReach(String repeaterKey, {double? lat, double? lon}) {
     final h3 = uploadSiteConfig?.reachH3 == true; // finest cells (res 11) when the server has them
-    final key = _settings.driverKey;
-    if (key == null || key.isEmpty) return Future.error(const CmatException('no driver key', status: 401));
+    final key = _settings.driverKey ?? '';
     final rc = services.regionCache?.dir;
     final cache = _reachCache ??= RepeaterReachCache(
         dir: rc == null ? null : Directory('${rc.parent.path}${Platform.pathSeparator}repeater_reach'), clock: services.clock);
@@ -379,8 +379,8 @@ class AppState extends ChangeNotifier {
   // ---------- link lines on the map (lib/core/map_links.dart) ----------
   final Map<String, ({DateTime at, CellLinks links})> _cellLinksMem = {};
 
-  /// The server answers `cell-links` for an approved driver key (`capabilities.cellLinks`).
-  bool get cellLinksEnabled => uploadSiteConfig?.cellLinks == true && keyApproved;
+  /// The server answers `cell-links` (`capabilities.cellLinks`). Also a public read, no approved key needed (F8).
+  bool get cellLinksEnabled => uploadSiteConfig?.cellLinks == true;
 
   /// The server takes radio claims (`capabilities.nodeClaims`) and this phone's key is approved. A claim only manages a
   /// radio; recording, uploading and counting never depend on it.
@@ -444,8 +444,7 @@ class AppState extends ChangeNotifier {
 
   /// The repeaters heard in H3 cell [h3], from memory for 10 minutes. Throws [CmatException] (401/403/429, offline).
   Future<CellLinks> cellLinks(String h3) async {
-    final key = _settings.driverKey;
-    if (key == null || key.isEmpty) throw const CmatException('no driver key', status: 401);
+    final key = _settings.driverKey ?? '';
     final id = h3.toLowerCase();
     final hit = _cellLinksMem[id];
     if (hit != null && services.clock().difference(hit.at) < const Duration(minutes: 10)) return hit.links;
@@ -482,6 +481,12 @@ class AppState extends ChangeNotifier {
     if (cachedValue == null) throw failure ?? StateError('cached $key unreadable');
     return (value: cachedValue, meta: got);
   }
+
+  /// The network coverage on screen is the saved copy from the disk cache because the live fetch failed (Drive plan 7.3 F5).
+  bool get networkCoverageFromCache => _coverageMeta?.offline ?? false;
+
+  /// When the saved network coverage copy was fetched; null when it is live.
+  DateTime? get networkCoverageSavedAt => networkCoverageFromCache ? _coverageMeta?.fetchedAt : null;
 
   /// "Offline - as of 3h ago" when the coverage/preset on screen came from the disk cache because the live fetch
   /// failed; null when everything is live (or no cache is in use).

@@ -18,6 +18,7 @@ import 'contacts_controller.dart';
 import 'contacts_settings_sheet.dart';
 import 'qr_scan_screen.dart';
 import 'radio_list_sheet.dart';
+import '../radios/rooms/room_joins.dart';
 
 class ContactsView extends StatefulWidget {
   final ContactsController controller;
@@ -394,10 +395,16 @@ class ContactTile extends StatelessWidget {
   const ContactTile({super.key, required this.row, required this.nowMs, required this.onTap, this.onDetails});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => row.contact.type == ContactType.room
+      ? ValueListenableBuilder<int>(valueListenable: RoomJoins.changes, builder: (ctx, _, _) => _content(ctx))
+      : _content(context);
+
+  Widget _content(BuildContext context) {
     final t = Theme.of(context);
     final c = row.contact;
-    final status = (row.preview != null && row.preview!.isNotEmpty) ? row.preview! : heardText(c.lastHeardMs ?? (c.lastAdvertTs == null ? null : c.lastAdvertTs! * 1000), nowMs);
+    final base = (row.preview != null && row.preview!.isNotEmpty) ? row.preview! : heardText(c.lastHeardMs ?? (c.lastAdvertTs == null ? null : c.lastAdvertTs! * 1000), nowMs);
+    final joined = c.type == ContactType.room ? RoomJoins.label(c.publicKey) : null;
+    final status = joined == null ? base : '$joined - $base';
     final route = routeCaption(c);
     final unread = row.unread;
     final label = '${c.displayName}, ${contactTypeLabel(c.type)}, $status${unread > 0 ? ', $unread unread' : ''}';

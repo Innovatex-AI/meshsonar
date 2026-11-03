@@ -11,13 +11,16 @@ import '../../radio/inbound.dart';
 import '../../radio/protocol.dart' show AdvType;
 import '../../radio/radio_session_impl.dart';
 import '../../radio/repeater_admin.dart';
-import '../../radio/room_session.dart';
+import '../../app/chat_wiring.dart' show ChatWiring;
+import '../../platform/biometric_gate.dart';
 import '../app.dart';
+import '../chat/conversation_screen.dart' show ConversationScreen;
+import '../../chat/models.dart' show ConvKey;
 import '../design/app_surfaces.dart';
 import 'repeater_admin/admin_common.dart' show kTarget;
 import 'repeater_admin/admin_controller.dart';
 import 'repeater_admin/repeater_admin_screen.dart';
-import 'rooms/room_screen.dart';
+import 'rooms/room_join_bar.dart';
 
 /// The one vault of the app run: passwords in memory, and in the Keychain only if the person opts in.
 AdminPasswordVault? _vault;
@@ -29,7 +32,7 @@ AdminPasswordVault adminVault() {
   } catch (_) {
     store = null;
   }
-  return _vault = AdminPasswordVault(store: store);
+  return _vault = AdminPasswordVault(store: store, authenticate: authenticateWithDevice);
 }
 
 /// For tests: replace the vault.
@@ -88,28 +91,25 @@ Future<void> openRepeaterAdmin(BuildContext context, {required String keyHex, re
     nameForPrefix: lookup.name,
     fullKeyForPrefix: lookup.fullKey,
     lastAdvertEpoch: contact?.lastAdvert,
-    vault: adminVault(),
+    vault: adminVault()..radioId = radioIdOf(session.selfPublicKey),
   );
   await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => RepeaterAdminScreen(controller: controller, keyHex: keyHex.toLowerCase())));
 }
 
+/// A room is a conversation: opens it with the join bar (log in to post) above it. The old stand-alone room screen is gone.
 Future<void> openRoom(BuildContext context, {required String keyHex, required String name}) async {
-  final app = AppScope.of(context);
-  final why = adminUnavailableReason(context);
-  if (why != null) {
-    showAppToast(context, why, kind: AppToastKind.error);
+  final chat = ChatWiring.controller.value;
+  if (chat == null) {
+    showAppToast(context, 'Chat is not ready yet. Try again in a moment.', kind: AppToastKind.error);
     return;
   }
-  final session = app.radioSession!;
-  final lookup = await _contacts(session);
-  if (!context.mounted) return;
-  final controller = RoomController(
-    room: RoomSession(radio: session, keyHex: keyHex, name: name),
+  await ConversationScreen.open(
+    context,
+    controller: chat,
+    convKey: ConvKey.room(keyHex.toLowerCase().substring(0, 12)),
     title: name,
-    nameForPrefix: lookup.name,
-    onManage: () => openRepeaterAdmin(context, keyHex: keyHex, name: name, isRoom: true),
+    header: RoomJoinBar(keyHex: keyHex, name: name),
   );
-  await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => RoomScreen(controller: controller)));
 }
 
 /// "Administer this repeater" on a repeater sheet. Hidden when there is no radio connection that can do it.

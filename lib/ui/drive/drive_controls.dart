@@ -689,7 +689,7 @@ class DriveActionButtons extends StatelessWidget {
                   child: ListenableBuilder(
                     listenable: chat,
                     builder: (context, _) {
-                      final n = chat.unreadConversations;
+                      final n = chat.unreadMessages;
                       return Semantics(
                         button: true,
                         label: n > 0 ? 'Messages, $n unread' : 'Messages',

@@ -8,6 +8,9 @@ import 'package:flutter/foundation.dart';
 
 import '../../../core/api.dart' show RadioPreset;
 import '../../../radio/admin_password_vault.dart';
+import '../../../radio/has_connection.dart';
+import '../../../radio/default_passwords.dart';
+import '../../../radio/login_outcome.dart';
 import '../../../radio/repeater_admin.dart';
 import '../../../radio/repeater_health.dart';
 import '../../../radio/repeater_settings.dart';
@@ -40,6 +43,10 @@ class RepeaterAdminController extends ChangeNotifier {
   /// Epoch seconds of the last advert the phone's radio heard from this repeater (contact `lastAdvert`), or 0 / null.
   final int? lastAdvertEpoch;
   final AdminPasswordVault? vault;
+
+  /// Asks the radio whether it still holds a login to this node (HAS_CONNECTION). Null = this build cannot ask, so a session is
+  /// never resumed (a stale one would fail with silence).
+  final Future<bool> Function(String keyHex)? hasConnection;
   final DateTime Function() now;
 
   /// Uptime seen at the previous health check in this app run (to spot a restart in between).
@@ -54,6 +61,7 @@ class RepeaterAdminController extends ChangeNotifier {
     this.fullKeyForPrefix,
     this.lastAdvertEpoch,
     this.vault,
+    this.hasConnection,
     DateTime Function()? clock,
   }) : now = clock ?? DateTime.now {
     _act = session.activity.listen((v) {
@@ -146,27 +154,99 @@ class RepeaterAdminController extends ChangeNotifier {
     _changed();
   }
 
+  /// What the last login attempt ended as (null before the first attempt and while one is running).
+  LoginOutcome? loginOutcome;
+
+  /// Role of the current session once logged in ("Signed in as Admin/Guest").
+  bool get signedInAsGuest => session.loggedIn && !session.isAdmin;
+
+  /// Set after an admin success with a factory password (or guest `hello`): the dashboard offers "Change it now".
+  FactoryPassword? factoryPasswordInUse;
+
+  /// Requests ahead of this login on the radio's remote queue, for the "radio is busy" state.
+  int get queueAhead => session.queueAhead;
+  bool get queueBusy => session.queueBusy;
+
+  /// True when a session is still alive on the radio (resume: skip the login sheet).
+  bool get resumed => stage == AdminStage.ready && _resumed;
+  bool _resumed = false;
+  int _loginSeq = 0;
+
+  /// If this app run already logged in to this node and the radio still holds the connection, go straight to ready.
+  /// Returns true when the session was resumed.
+  Future<bool> resume() async {
+    final known = AdminSessions.of(session.keyHex);
+    final ask = hasConnection;
+    if (known == null || ask == null || stage == AdminStage.ready) return false;
+    bool held;
+    try {
+      held = await ask(session.keyHex);
+    } catch (_) {
+      held = false;
+    }
+    if (!held || _disposed) {
+      if (!held) AdminSessions.drop(session.keyHex);
+      return false;
+    }
+    session.adoptLogin(known);
+    _resumed = true;
+    stage = AdminStage.ready;
+    _changed();
+    unawaited(refreshOverview());
+    return true;
+  }
+
   /// Logs in. On success the password is kept for this run (and in the secure store only if remembering is on).
-  Future<bool> login(String password) async {
+  Future<bool> login(String password, {bool guest = false}) async {
     stage = AdminStage.connecting;
     loginError = null;
+    loginOutcome = null;
     _changed();
+    final started = now();
+    final seq = ++_loginSeq;
     try {
-      await session.login(password);
-      await vault?.keep(session.keyHex, password);
+      final r = await session.login(password);
+      if (seq != _loginSeq) {
+        // cancelled while on the air: do not open the dashboard behind the person's back
+        unawaited(session.logout());
+        return false;
+      }
+      await vault?.keep(session.keyHex, password, guest: !r.isAdmin);
+      factoryPasswordInUse = detectFactoryPassword(password);
+      AdminSessions.set(session.keyHex, r);
+      loginOutcome = LoginOutcome(r.isAdmin ? LoginKind.admin : LoginKind.guest);
       stage = AdminStage.ready;
       _changed();
       unawaited(refreshOverview());
       return true;
     } on AdminException catch (e) {
+      if (seq != _loginSeq) return false;
       loginError = e.message;
+      loginOutcome = classifyLoginError(e, waitedSecs: now().difference(started).inSeconds);
       stage = AdminStage.login;
       _changed();
       return false;
     }
   }
 
+  /// "Log in as guest": the saved guest password, else the factory guest default. The result says which one it tried.
+  Future<bool> loginAsGuest() async {
+    final saved = await vault?.recall(session.keyHex, guest: true);
+    return login(saved ?? factoryGuestPassword, guest: true);
+  }
+
+  void cancelLogin() {
+    // the radio cannot recall a SEND_LOGIN already on the air; the sheet just stops waiting and the queue slot frees on timeout
+    if (stage == AdminStage.connecting) {
+      _loginSeq++;
+      stage = AdminStage.login;
+      loginOutcome = const LoginOutcome(LoginKind.cancelled);
+      _changed();
+    }
+  }
+
   Future<void> logout() async {
+    AdminSessions.drop(session.keyHex);
     await session.logout();
     stage = AdminStage.login;
     snapshot = null;

@@ -30,6 +30,7 @@ import 'contacts_controller.dart';
 import 'profile_sheets.dart';
 import 'profile_tiles.dart';
 import 'profile_widgets.dart';
+import 'user_stats_sheet.dart';
 
 typedef ShareText = Future<void> Function(String text, {String? subject});
 typedef ShareFile = Future<void> Function(String fileName, String text);
@@ -362,9 +363,9 @@ class _ContactProfileScreenState extends State<ContactProfileScreen> {
                 ? 'Ping will look for the best route to ${c.displayName} and time a round trip. It uses a little airtime.'
                 : 'Ping will trace the route to ${c.displayName} and show the signal at every hop. It uses a little airtime.');
       case ProfileTileId.stats:
-        await showComingSoonSheet(context, title: 'Stats', body: 'Stats will show the battery and other readings ${c.displayName} chooses to share.');
+        await showUserStatsSheet(context, contact: c);
       case ProfileTileId.telemetry:
-        await showComingSoonSheet(context, title: 'Telemetry', body: 'Telemetry will show the readings ${c.displayName} reports, with a short history.');
+        await showUserStatsSheet(context, contact: c);
     }
   }
 
