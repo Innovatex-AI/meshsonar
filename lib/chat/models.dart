@@ -345,6 +345,9 @@ class ConversationSummary {
   final int? retentionDays;
   final bool isSystem;
 
+  /// The person chose "Mark unread" (cleared when the conversation is opened). Counts as one unread in the list and badge.
+  final bool markedUnread;
+
   const ConversationSummary({
     required this.key,
     required this.kind,
@@ -358,6 +361,7 @@ class ConversationSummary {
     this.pinned = false,
     this.retentionDays,
     this.isSystem = false,
+    this.markedUnread = false,
   });
 
   bool isMutedAt(int nowMs) => notifyMode == NotifyMode.muted && (mutedUntilMs == null || mutedUntilMs! > nowMs);

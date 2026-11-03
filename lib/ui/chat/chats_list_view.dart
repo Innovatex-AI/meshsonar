@@ -10,14 +10,12 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart' show CustomSemanticsAction;
-import 'package:flutter/services.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 
 import '../../app/chat_controller.dart';
 import '../../chat/contact_manager.dart' show SyncPhase;
 import '../../chat/conversation_row.dart';
 import '../../chat/models.dart';
-import '../design/app_surfaces.dart';
 import '../design/app_symbols.dart';
 import '../design/app_type.dart';
 import '../design/state_views.dart';
@@ -43,6 +41,7 @@ class ChatsListView extends StatefulWidget {
 
   /// "Connect radio" in the no-radio state.
   final VoidCallback? onConnect;
+  final VoidCallback? onNew;
 
   /// Called after the person opens a conversation (the shell clears its search).
   final VoidCallback? onOpened;
@@ -53,6 +52,7 @@ class ChatsListView extends StatefulWidget {
     this.query = '',
     this.selectedKey,
     this.onConnect,
+    this.onNew,
     this.onOpened,
   });
 
@@ -61,7 +61,7 @@ class ChatsListView extends StatefulWidget {
 }
 
 class _ChatsListViewState extends State<ChatsListView> {
-  late final ChatListActions _actions = ChatListActions(widget.controller);
+  late final ChatListActions _actions = ChatListActions(widget.controller, navigator: widget.navigator);
   StreamSubscription<dynamic>? _sync;
   SyncPhase _phase = SyncPhase.offline;
 
@@ -126,7 +126,7 @@ class _ChatsListViewState extends State<ChatsListView> {
     }
     return SliverFillRemaining(
       hasScrollBody: false,
-      child: _NothingYet(controller: _c, connected: connected),
+      child: _NothingYet(controller: _c, connected: connected, onNew: widget.onNew),
     );
   }
 
@@ -239,6 +239,9 @@ class _ChatsListViewState extends State<ChatsListView> {
     final actions = {
       CustomSemanticsAction(label: r.pinned ? 'Unpin' : 'Pin'): () => _actions.togglePin(r),
       CustomSemanticsAction(label: r.muted ? 'Unmute' : 'Mute'): () => _actions.mute(context, r),
+      if (!r.isSystem) CustomSemanticsAction(label: ChatListActions.unreadLabel(r)): () => _actions.toggleUnread(r),
+      if (!r.isSystem && (r.isChannel ? r.channelId != null : r.contactKey != null))
+        CustomSemanticsAction(label: r.isChannel ? 'Channel info' : 'Contact info'): () => _actions.perform(context, r, ChatMenuId.info, open: () => _open(r)),
       if (!r.isSystem) const CustomSemanticsAction(label: 'Delete'): () => _actions.delete(context, r),
     };
     final tile = ConversationTile(
@@ -256,7 +259,7 @@ class _ChatsListViewState extends State<ChatsListView> {
         key: ValueKey('slide-${r.key}'),
         startActionPane: ActionPane(
           motion: const DrawerMotion(),
-          extentRatio: 0.24,
+          extentRatio: 0.48,
           children: [
             _SwipeAction(
               key: Key('swipe-pin-${r.key}'),
@@ -264,6 +267,13 @@ class _ChatsListViewState extends State<ChatsListView> {
               symbol: r.pinned ? AppSymbols.pin : AppSymbols.pinFill,
               label: r.pinned ? 'Unpin' : 'Pin',
               onTap: () => _actions.togglePin(r),
+            ),
+            _SwipeAction(
+              key: Key('swipe-unread-${r.key}'),
+              color: AppColors.of(context).textMuted,
+              symbol: AppSymbols.message,
+              label: ChatListActions.unreadLabel(r),
+              onTap: () => _actions.toggleUnread(r),
             ),
           ],
         ),
@@ -292,60 +302,32 @@ class _ChatsListViewState extends State<ChatsListView> {
     );
   }
 
+  /// Long-press. Apple: the iOS context menu with the last two messages as the preview (spike S6). Elsewhere, or when
+  /// [ChatListActions.useContextMenu] is off: the same entries in an action sheet.
   Widget _contextMenu(ConversationRow r, Widget tile) {
+    final apple = Theme.of(context).platform == TargetPlatform.iOS || Theme.of(context).platform == TargetPlatform.macOS;
+    if (!apple || !ChatListActions.useContextMenu) {
+      return GestureDetector(
+        key: Key('longpress-${r.key}'),
+        behavior: HitTestBehavior.opaque,
+        onLongPress: () => _actions.showMenuSheet(context, r, open: () => _open(r)),
+        child: tile,
+      );
+    }
+    final entries = _actions.menuEntries(r);
     return CupertinoContextMenu.builder(
       enableHapticFeedback: true,
       actions: [
-        CupertinoContextMenuAction(
-          key: Key('menu-open-${r.key}'),
-          trailingIcon: AppSymbols.message.apple,
-          onPressed: () {
-            Navigator.of(context, rootNavigator: true).pop();
-            _open(r);
-          },
-          child: const Text('Open'),
-        ),
-        if (!r.isSystem)
+        for (final e in entries)
           CupertinoContextMenuAction(
-            key: Key('menu-pin-${r.key}'),
-            trailingIcon: r.pinned ? AppSymbols.pinFill.apple : AppSymbols.pin.apple,
+            key: Key('menu-${_menuKeyName(e.id)}-${r.key}'),
+            isDestructiveAction: e.destructive,
+            trailingIcon: e.symbol.apple,
             onPressed: () {
               Navigator.of(context, rootNavigator: true).pop();
-              _actions.togglePin(r);
+              _actions.perform(context, r, e.id, open: () => _open(r));
             },
-            child: Text(r.pinned ? 'Unpin' : 'Pin'),
-          ),
-        if (!r.isSystem)
-          CupertinoContextMenuAction(
-            key: Key('menu-mute-${r.key}'),
-            trailingIcon: r.muted ? AppSymbols.bell.apple : AppSymbols.bellSlash.apple,
-            onPressed: () {
-              Navigator.of(context, rootNavigator: true).pop();
-              _actions.mute(context, r);
-            },
-            child: Text(r.muted ? 'Unmute' : 'Mute'),
-          ),
-        if (r.contactKey != null)
-          CupertinoContextMenuAction(
-            key: Key('menu-copykey-${r.key}'),
-            trailingIcon: AppSymbols.docOnDoc.apple,
-            onPressed: () {
-              Navigator.of(context, rootNavigator: true).pop();
-              Clipboard.setData(ClipboardData(text: r.contactKey!));
-              showAppToast(context, 'Key copied');
-            },
-            child: const Text('Copy key'),
-          ),
-        if (!r.isSystem)
-          CupertinoContextMenuAction(
-            key: Key('menu-delete-${r.key}'),
-            isDestructiveAction: true,
-            trailingIcon: AppSymbols.trash.apple,
-            onPressed: () {
-              Navigator.of(context, rootNavigator: true).pop();
-              _actions.delete(context, r);
-            },
-            child: const Text('Delete'),
+            child: Text(e.label),
           ),
       ],
       // The same builder serves the row in the list (which must keep its height) and the open menu (a PopupRoute): only the
@@ -354,6 +336,12 @@ class _ChatsListViewState extends State<ChatsListView> {
           animation.value >= CupertinoContextMenu.animationOpensAt && ModalRoute.of(context) is PopupRoute ? _Preview(controller: _c, row: r) : tile,
     );
   }
+
+  static String _menuKeyName(ChatMenuId id) => switch (id) {
+        ChatMenuId.copyKey => 'copykey',
+        ChatMenuId.markUnread => 'unread',
+        _ => id.name,
+      };
 }
 
 class _SwipeAction extends StatelessWidget {
@@ -540,7 +528,8 @@ class ChatsSkeleton extends StatelessWidget {
 class _NothingYet extends StatelessWidget {
   final ChatController controller;
   final bool connected;
-  const _NothingYet({required this.controller, required this.connected});
+  final VoidCallback? onNew;
+  const _NothingYet({required this.controller, required this.connected, this.onNew});
 
   @override
   Widget build(BuildContext context) {
@@ -572,8 +561,8 @@ class _NothingYet extends StatelessWidget {
                 minimumSize: const Size(Hit.min, Hit.min),
                 onPressed: connected
                     ? () => runChannelAction(context, controller, () => controller.admin.joinPublic(controller.radioId ?? ''), what: 'Public')
-                    : () => showAddChannelSheet(context, controller),
-                child: Text(connected ? 'Join Public channel' : 'Add a channel'),
+                    : onNew,
+                child: Text(connected ? 'Join Public channel' : 'New chat'),
               ),
               if (connected)
                 CupertinoButton(

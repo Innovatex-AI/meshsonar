@@ -122,13 +122,13 @@ void main() {
       expect(find.byKey(const Key('chat-new')), findsNothing);
     });
 
-    testWidgets('the New button offers a message and a channel; message goes to Contacts', (tester) async {
+    testWidgets('the New button opens the New chat sheet; New message goes to Contacts', (tester) async {
       await seed();
       await pumpTab(tester);
       await tester.tap(find.byKey(const Key('chat-new')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('new-message')), findsOneWidget);
-      expect(find.byKey(const Key('new-channel')), findsOneWidget);
+      expect(find.byKey(const Key('add-hashtag')), findsOneWidget);
       await tester.tap(find.byKey(const Key('new-message')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('contacts-list')), findsWidgets);
@@ -359,7 +359,7 @@ void main() {
       await pumpTab(tester);
       expect(find.byKey(const Key('chats-empty')), findsOneWidget);
       expect(find.text('No conversations yet'), findsOneWidget);
-      expect(find.text('Add a channel'), findsOneWidget);
+      expect(find.text('New chat'), findsOneWidget);
     });
 
     testWidgets('connected, nothing yet: Join Public channel and Announce myself', (tester) async {

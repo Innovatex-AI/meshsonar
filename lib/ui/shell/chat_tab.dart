@@ -115,9 +115,11 @@ class RedesignedChatTabState extends State<RedesignedChatTab> {
             const SingleActivator(LogicalKeyboardKey.digit3, meta: true): () => _select(ChatShellSegment.network),
             const SingleActivator(LogicalKeyboardKey.keyF, meta: true): () => _searchFocus.requestFocus(),
             if (p != null) SingleActivator(LogicalKeyboardKey.keyN, meta: true): () => _new(context, p),
+            // Quick switcher: iPad width only (the split layout), like the other desktop-style shortcuts.
+            if (p != null && MediaQuery.sizeOf(context).width >= splitWidth) SingleActivator(LogicalKeyboardKey.keyK, meta: true): () => p.quickSwitch(context),
           },
           child: Focus(
-            autofocus: false,
+            autofocus: true,
             child: ColoredBox(
               color: c.bg,
               child: p == null ? _noChatYet(context) : _withProvider(context, p),
@@ -193,6 +195,7 @@ class RedesignedChatTabState extends State<RedesignedChatTab> {
       query: _search.text,
       selectedKey: selectedKey,
       onConnect: () => openConnect(context),
+      onNew: () => _new(context, p),
       onOpened: () {
         if (_search.text.isNotEmpty) setState(_search.clear);
       },

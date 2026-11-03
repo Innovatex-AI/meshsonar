@@ -48,19 +48,7 @@ class ChannelsView extends StatelessWidget {
             _NoChannels(controller: controller)
           else
             for (final e in entries) _ChannelRow(controller: controller, channel: e.$1, summary: e.$2, icon: _icon(e.$1.kind)),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(Gap.l, Gap.m, Gap.l, Gap.xl),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: FilledButton.tonalIcon(
-                key: const Key('add-channel'),
-                style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
-                onPressed: () => showAddChannelSheet(context, controller),
-                icon: const Icon(Icons.add_rounded),
-                label: const Text('Add a channel'),
-              ),
-            ),
-          ),
+          const SizedBox(height: Gap.xl),
         ];
         return RefreshIndicator(
           onRefresh: controller.refreshFromRadio,

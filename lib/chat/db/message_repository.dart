@@ -179,6 +179,7 @@ FROM conversations cv
       pinned: (r['pinned'] as int) != 0,
       retentionDays: r['retention_days'] as int?,
       isSystem: r['channel_kind'] == 'system',
+      markedUnread: ((r['marked_unread'] as int?) ?? 0) != 0,
     );
   }
 
@@ -201,7 +202,7 @@ FROM conversations cv
   int unreadConversationCount({required int nowMs}) {
     final r = db.raw.select('''
 SELECT count(*) c FROM conversations cv
-WHERE cv.unread > 0
+WHERE (cv.unread > 0 OR cv.marked_unread = 1)
   AND NOT (cv.notify_mode = 'muted' AND (cv.muted_until_ms IS NULL OR cv.muted_until_ms > ?))
   AND NOT EXISTS (SELECT 1 FROM channels ch WHERE 'c:' || ch.id = cv.conv_key AND ch.kind = 'system')
 ''', [nowMs]);
@@ -211,8 +212,8 @@ WHERE cv.unread > 0
   /// Badge value of the redesigned Chat tab (D19): unread MESSAGES, muted, blocked-contact and system conversations excluded.
   int unreadMessageCount({required int nowMs}) {
     final r = db.raw.select('''
-SELECT coalesce(sum(cv.unread), 0) c FROM conversations cv
-WHERE cv.unread > 0
+SELECT coalesce(sum(max(cv.unread, cv.marked_unread)), 0) c FROM conversations cv
+WHERE (cv.unread > 0 OR cv.marked_unread = 1)
   AND NOT (cv.notify_mode = 'muted' AND (cv.muted_until_ms IS NULL OR cv.muted_until_ms > ?))
   AND NOT EXISTS (SELECT 1 FROM channels ch WHERE 'c:' || ch.id = cv.conv_key AND ch.kind = 'system')
 ''', [nowMs]);
@@ -243,9 +244,15 @@ SELECT cv.conv_key k, m.direction d, m.state s, m.sender_name n FROM conversatio
   int markConversationRead(String convKey) => db.transaction(() {
         db.raw.execute('UPDATE messages SET read = 1 WHERE conv_key = ? AND read = 0', [convKey]);
         final n = db.raw.updatedRows;
-        db.raw.execute('UPDATE conversations SET unread = 0 WHERE conv_key = ?', [convKey]);
+        db.raw.execute('UPDATE conversations SET unread = 0, marked_unread = 0 WHERE conv_key = ?', [convKey]);
         return n;
       });
+
+  /// Manual "Mark unread" (swipe / menu). Opening the conversation clears it again ([markConversationRead]).
+  void setMarkedUnread(String convKey, String radioId, bool marked) {
+    ensureConversation(convKey, radioId);
+    db.raw.execute('UPDATE conversations SET marked_unread = ? WHERE conv_key = ?', [marked ? 1 : 0, convKey]);
+  }
 
   void setNotify(String convKey, String radioId, NotifyMode mode, {int? mutedUntilMs}) {
     ensureConversation(convKey, radioId);
