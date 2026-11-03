@@ -447,6 +447,7 @@ class ChatService {
   MessagePage page(String convKey, {MessageCursor? before, int limit = 50}) => store.messages.page(convKey, before: before, limit: limit);
   List<ChatMessage> search(String query, {String? convKey, int limit = 50, int offset = 0}) => store.messages.search(query, convKey: convKey, limit: limit, offset: offset);
   int unreadBadge() => store.messages.unreadConversationCount(nowMs: nowMs());
+  int unreadMessages() => store.messages.unreadMessageCount(nowMs: nowMs());
 
   void markRead(String convKey) {
     if (store.messages.markConversationRead(convKey) > 0) _emit(ChatEvent.conversation(convKey));

@@ -32,7 +32,7 @@ void main() {
     expect(find.byKey(const Key('unread-marker')), findsOneWidget);
     await tester.pump();
     expect(kit.service.conversation(ch.convKey)!.unread, 0);
-    expect(kit.controller.unreadConversations, 0);
+    expect(kit.controller.unreadMessages, 0);
   });
 
   testWidgets('empty channel explains what to do', (tester) async {
