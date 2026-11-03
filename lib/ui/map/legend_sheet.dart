@@ -14,7 +14,7 @@ import '../claims/claim_widgets.dart' show OwnedByYouChip;
 import '../theme.dart';
 import 'coverage_layer_controls.dart' show colorByLabel, coverageLegend;
 import 'coverage_map.dart' show networkLevelColor;
-import 'layers/layers_sheet.dart' show NetworkAgeLegend;
+import 'layers/layers_sheet.dart' show repeaterFreshnessKey;
 import 'map_layers.dart' show PingColorMode;
 import '../design/app_surfaces.dart';
 
@@ -26,8 +26,8 @@ Future<void> showMapLegend(
 }) {
   return showAppSheet<void>(
     context,
-    detents: const [0.92],
-    builder: (_, c) => SafeArea(child: MapLegendSheet(colorBy: colorBy, pingColors: pingColors)),
+    detents: const [0.6, 0.92],
+    builder: (ctx, c) => SafeArea(child: MapLegendSheet(colorBy: colorBy, pingColors: pingColors, onDone: () => Navigator.of(ctx).pop())),
   );
 }
 
@@ -109,7 +109,8 @@ class _SwatchPainter extends CustomPainter {
 class MapLegendSheet extends StatefulWidget {
   final CoverageColorBy colorBy;
   final PingColorMode pingColors;
-  const MapLegendSheet({super.key, this.colorBy = CoverageColorBy.snr, this.pingColors = PingColorMode.snr});
+  final VoidCallback? onDone;
+  const MapLegendSheet({super.key, this.colorBy = CoverageColorBy.snr, this.pingColors = PingColorMode.snr, this.onDone});
 
   @override
   State<MapLegendSheet> createState() => _MapLegendSheetState();
@@ -129,7 +130,13 @@ class _MapLegendSheetState extends State<MapLegendSheet> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Semantics(header: true, child: Text('Map legend', style: t.textTheme.titleLarge)),
+            Row(
+              children: [
+                Expanded(child: Semantics(header: true, child: Text('Map guide', style: t.textTheme.titleLarge))),
+                if (widget.onDone != null)
+                  TextButton(key: const Key('legend-done'), onPressed: widget.onDone, child: const Text('Done')),
+              ],
+            ),
             const SizedBox(height: Gap.xs),
             Text(
               'What the colours and symbols on the maps mean. Colour palette: ${mc.palette.label}. Change it in Settings, '
@@ -139,6 +146,7 @@ class _MapLegendSheetState extends State<MapLegendSheet> {
             ),
             _section(context, 'pings', Icons.scatter_plot_rounded, 'Your pings', _pings(context, mc)),
             _section(context, 'cells', Icons.hexagon_outlined, 'Network coverage cells', _cells(context, mc)),
+            _section(context, 'yours', Icons.hexagon_rounded, 'Your coverage (hexagons)', _yourHexes(context, mc)),
             _section(context, 'repeaters', Icons.cell_tower_rounded, 'Repeaters', _repeaters(context, mc)),
             _section(context, 'links', Icons.timeline_rounded, 'Link lines', _links(context, mc)),
             _section(context, 'observers', Icons.change_history_rounded, 'Observers', _observers(context, mc)),
@@ -269,7 +277,9 @@ class _MapLegendSheetState extends State<MapLegendSheet> {
           swatch: LegendSwatch(color: networkLevelColor(context, level, mode: _by), silentCell: level == CoverageLevel.none),
           title: _by.isStrength || level == CoverageLevel.none ? _levelTitle(level, text) : 'Ramp step: $text',
           detail: switch (level) {
-            CoverageLevel.none => 'Someone pinged here and nothing answered. Not a strength colour.',
+            CoverageLevel.none => _by == CoverageColorBy.noise
+                ? 'This cell has no noise reading. Not a strength colour.'
+                : 'Someone pinged here and nothing answered. Not a strength colour.',
             CoverageLevel.unknown => 'Something answered but no signal reading came with it.',
             _ => null,
           },
@@ -290,7 +300,7 @@ class _MapLegendSheetState extends State<MapLegendSheet> {
 
   String _levelTitle(CoverageLevel level, String text) => switch (level) {
     CoverageLevel.unknown => 'Purple: heard, signal unknown',
-    CoverageLevel.none => 'Grey: mapped, nothing heard',
+    CoverageLevel.none => _by == CoverageColorBy.noise ? 'Grey: no noise reading' : 'Grey: mapped, nothing heard',
     _ => '${_stepName(level)}: $text',
   };
 
@@ -302,28 +312,38 @@ class _MapLegendSheetState extends State<MapLegendSheet> {
     _ => '',
   };
 
+  /// Your coverage (layer `hexes`, Drive plan 7.3 F3): the drive's own hexagons, coloured like the Pings layer.
+  List<Widget> _yourHexes(BuildContext context, MeshSonarColors mc) {
+    final byResult = widget.pingColors == PingColorMode.result;
+    return [
+      _note(context, 'Your pings rolled up to the same hexagons as the website. This is only what this phone recorded.'),
+      if (byResult) ...[
+        LegendRow(id: 'yours-heard', swatch: LegendSwatch(color: mc.snrStrong), title: 'Green: a ping here was heard', detail: 'The map is set to Heard, so a hexagon is green if any ping in it was heard.'),
+        LegendRow(id: 'yours-silent', swatch: LegendSwatch(color: mc.silent, silentCell: true), title: 'Grey: nothing heard here'),
+      ] else ...[
+        LegendRow(id: 'yours-strong', swatch: LegendSwatch(color: mc.forPing(heard: true, snr: 10)), title: 'Strong, +10 dB or better', detail: 'Coloured by the best SNR of any ping in the hexagon, on the same scale as the pings.'),
+        LegendRow(id: 'yours-weak', swatch: LegendSwatch(color: mc.forPing(heard: true, snr: -10)), title: 'Weak, -10 dB or worse'),
+        LegendRow(id: 'yours-silent', swatch: LegendSwatch(color: mc.silent, silentCell: true), title: 'Grey: nothing heard here'),
+      ],
+    ];
+  }
+
   List<Widget> _repeaters(BuildContext context, MeshSonarColors mc) {
     final t = Theme.of(context);
+    final states = repeaterFreshnessKey(context, hours: true);
+    const details = ['Advertised in the last 24 hours. Region repeaters: active or new.', 'Advertised in the last 7 days. Region repeaters: quiet.', 'Older than 7 days, or never advertised. Region repeaters: stale.'];
+    const titles = ['Solid badge: fresh', 'Tinted badge with a ring: recent', 'Hollow dashed badge: older'];
     return [
+      _note(context, 'A repeater is a tower badge with a white ring. Its colour is how recently it advertised, not its signal: blue and amber here are not the signal colours.', key: const Key('legend-repeater-note')),
+      for (var i = 0; i < states.length; i++)
+        LegendRow(id: 'repeater-${const ['fresh', 'recent', 'older'][i]}', swatch: states[i].swatch, title: titles[i], detail: details[i]),
       LegendRow(
         id: 'repeater-heard',
-        swatch: ExcludeSemantics(child: Icon(Icons.cell_tower_rounded, size: 28, color: mc.beacon)),
-        title: 'Amber tower: a repeater you heard',
-        detail: 'Repeaters this drive heard, with their name when known.',
+        swatch: ExcludeSemantics(child: Icon(Icons.check_circle, size: 22, color: mc.snrStrong)),
+        title: 'Green tick: heard this drive',
+        detail: 'A repeater your pings reached, with its name when known.',
       ),
-      _note(context, 'All-repeaters layer: the colour is how recently the repeater advertised itself.'),
-      for (final (level, label) in NetworkAgeLegend.steps)
-        LegendRow(
-          id: 'age-${level.name}',
-          swatch: LegendSwatch(color: networkLevelColor(context, level), shape: SwatchShape.dot),
-          title: switch (label) {
-            '24 h' => 'Within the last 24 hours',
-            '7 d' => 'Within the last 7 days',
-            '30 d' => 'Within the last 30 days',
-            _ => 'Older than 30 days',
-          },
-        ),
-      Text('Circles with a ring are room servers.', style: t.textTheme.bodySmall),
+      Text('A square badge is a room server.', style: t.textTheme.bodySmall),
     ];
   }
 

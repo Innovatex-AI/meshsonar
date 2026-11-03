@@ -7,7 +7,7 @@
 //     position: LatLng(fix.lat, fix.lon), // optional "you are here"; follow mode keeps it centred
 //     repeaterLabel: state.repeaterLabel, // optional: prefix -> display name for the link labels
 //     heard: heardSnapshot(state.heard),  // optional: live/holding/stale repeaters (Drive screen)
-//     layers: const MapLayers(),          // optional: which layers to draw
+//     layerState: kDefaultLayerState,     // optional: which registry layers are on (and the Pings colour mode)
 //     networkCells: cells,                // optional: network-wide coverage cells (GET public-coverage)
 //   )
 //
@@ -18,7 +18,7 @@
 //   1. A chart grid on the map background (so the map looks intentional with no tiles / no signal).
 //   2. OpenStreetMap tiles (colour-graded to the theme; cached; failures fall back to the grid, never an error).
 //   3. Network-wide measured coverage (every driver, GET /api/cmh/public-coverage, gated by
-//      MapLayers.networkCoverage): a quiet "where hasn't this been driven" background layer. Only cells the
+//      the `measured` layer): a quiet "where hasn't this been driven" background layer. Only cells the
 //      network actually measured are tinted; everywhere else is left blank map — that absence is the gap
 //      indicator, so there is no "no data" placeholder for it.
 //   4. Sonar range rings (1 km / 2 km, or 0.5 mi / 1 mi) around the current position.
@@ -78,6 +78,7 @@ import 'layers/link_lines_layer.dart';
 import 'layers/map_layer.dart';
 import 'layers/observer_layer.dart';
 import 'layers/repeater_cluster_layer.dart';
+import 'layers/registry.dart' show kDefaultLayerState;
 import 'layers/repeater_map_source.dart';
 import 'layers/repeater_name_labels.dart';
 import 'map_info_panel.dart';
@@ -161,6 +162,13 @@ Color pingColor(MeshSonarColors c, DrivePing p, [PingColorMode mode = PingColorM
     ? (p.heardNothing ? c.silent : c.snrStrong)
     : c.forPing(heard: !p.heardNothing, snr: bestSnr(p));
 
+/// The colour of one of the drive's own hexagons ([HexCell]) in [mode] (Drive plan 7.3 F3): By SNR = the best SNR in the hexagon
+/// (heard without a reading is the purple "unknown", nothing heard is grey); Heard / not = the same green the Pings layer uses
+/// when any ping in the hexagon was heard, grey when none was.
+Color hexColor(MeshSonarColors c, HexCell h, PingColorMode mode) => mode == PingColorMode.result
+    ? (h.wasHeard ? c.snrStrong : c.silent)
+    : (h.wasHeard ? c.forPing(heard: true, snr: h.bestSnrDb) : c.silent);
+
 /// Colour for a network-coverage [CoverageLevel]: the website's own discrete `/coverage` legend steps (standard palette:
 /// strong green, likely blue, possible amber, stretch red), not this drive's continuous SNR gradient — the two data sets
 /// are deliberately told apart at a glance. The hex values come from the chosen colour palette
@@ -232,15 +240,12 @@ class CoverageMap extends StatefulWidget {
   /// Who's in range this drive (live first). When set, repeater markers and links follow it.
   final List<HeardView>? heard;
 
-  /// Which layers to draw.
-  final MapLayers layers;
-
   /// Network-wide measured coverage cells (e.g. from `CmatClient.publicCoverage()`), drawn as the background
-  /// "where hasn't this been driven" layer when [MapLayers.networkCoverage] is on. Empty/not-yet-loaded draws
+  /// "where hasn't this been driven" layer when the `measured` layer is on. Empty/not-yet-loaded draws
   /// nothing — there is no placeholder for "no data"; absence of a drawn cell is the point.
   final List<NetworkCell> networkCells;
 
-  /// The region's whole repeater roster, drawn (clustered, tap for a sheet) when [MapLayers.regionRepeaters] is on.
+  /// The region's whole repeater roster, drawn (clustered, tap for a sheet) when the `repeaters` layer is on.
   /// Used only when no [repeaterSource] is given; with one, the roster comes from the source.
   final List<RegionRepeater> regionRepeaters;
 
@@ -248,7 +253,7 @@ class CoverageMap extends StatefulWidget {
   /// (e.g. DriveMapModel); the map never disposes it.
   final RepeaterMapSource? repeaterSource;
 
-  /// Which registry layers are on. Null = derived from [layers] (which has no field for `network` / `observers`).
+  /// Which registry layers are on, plus the Pings colour mode (`modeOf('pings')`). The one layer system (Drive plan 7.1).
   final MapLayerState? layerState;
 
   /// The viewed region's observers with a public position, drawn when the `observers` layer is on.
@@ -326,7 +331,6 @@ class CoverageMap extends StatefulWidget {
     this.fallbackBounds,
     this.overlayPadding = EdgeInsets.zero,
     this.heard,
-    this.layers = const MapLayers(),
     this.networkCells = const [],
     this.regionRepeaters = const [],
     this.repeaterSource,
@@ -461,6 +465,8 @@ class _CoverageMapState extends State<CoverageMap> {
 
   /// The lines at the resolution drawn now (a repeater's reach is re-bucketed when the zoom crosses a band).
   LinkSet? _currentLinks() {
+    // The `links` switch gates every link line, the live puck lines and the ones drawn after a tap (Drive plan 7.3 F9).
+    if (!(widget.layerState ?? kDefaultLayerState).isOn('links')) return null;
     final build = _linkBuild;
     if (build == null) return null;
     final res = hexResolution;
@@ -501,6 +507,8 @@ class _CoverageMapState extends State<CoverageMap> {
     });
   }
 
+  bool _isRefusal(Object e) => e is CmatException && (e.status == 401 || e.status == 403);
+
   String _linkFailure(Object e) => e is CmatException && (e.status == 429)
       ? 'Too many requests. Try again in a minute.'
       : 'Couldn\'t load the links. Check your connection.';
@@ -531,6 +539,12 @@ class _CoverageMapState extends State<CoverageMap> {
       });
     } catch (e) {
       if (!mounted || gen != _linkGen) return;
+      if (_isRefusal(e)) {
+        // The server refused the public read (401/403): fall back to the panel alone, silently (Drive plan 7.3 F8).
+        _clearLinks();
+        setState(() => _panelPoint = p);
+        return;
+      }
       setState(() {
         _linkBusy = false;
         _linkError = _linkFailure(e);
@@ -598,6 +612,11 @@ class _CoverageMapState extends State<CoverageMap> {
       });
     } catch (e) {
       if (!mounted || gen != _linkGen) return;
+      if (_isRefusal(e)) {
+        _clearLinks();
+        setState(() => _panelCell = n);
+        return;
+      }
       setState(() {
         _linkBusy = false;
         _linkError = _linkFailure(e);
@@ -1187,19 +1206,28 @@ class _CoverageMapState extends State<CoverageMap> {
   CellLayerData? _hexLayerData;
   List<HexCell>? _hexLayerSrc;
   MeshSonarColors? _hexLayerMc;
+  PingColorMode? _hexLayerMode;
 
-  CellLayerData _hexData(MeshSonarColors mc) {
+  /// A repeater the `heard` layer draws: heard this drive, lit by the newest ping or selected. A map with no heard list (the
+  /// drive-detail map, which has no roster or network layer) keeps drawing every repeater it was given.
+  bool _drawnAsHeard(String key, Set<String> legacyLit) =>
+      widget.heard == null || _heardByKey.containsKey(key) || legacyLit.contains(key) || key == _selectedRepeater;
+
+  /// The drive's own hexagons (layer `hexes`, "Your coverage"). Coloured like the Pings layer (Drive plan 7.3 F3): by best SNR in
+  /// the By-SNR mode, green when any ping in the hexagon was heard / grey when none was in the Heard mode.
+  CellLayerData _hexData(MeshSonarColors mc, PingColorMode mode) {
     final hexes = _ensureHexes();
     final cur = _hexLayerData;
-    if (cur != null && identical(_hexLayerSrc, hexes) && identical(_hexLayerMc, mc)) return cur;
+    if (cur != null && identical(_hexLayerSrc, hexes) && identical(_hexLayerMc, mc) && _hexLayerMode == mode) return cur;
     final d = CellLayerData.build(hexes.length, (i) => hexes[i].boundary, (i) {
       final h = hexes[i];
-      final c = h.wasHeard ? mc.forPing(heard: true, snr: h.bestSnrDb) : mc.silent;
+      final c = hexColor(mc, h, mode);
       return CellStyle(c.withValues(alpha: h.wasHeard ? 0.34 : 0.22), c.withValues(alpha: 0.75), 1.2);
     });
     _hexLayerData = d;
     _hexLayerSrc = hexes;
     _hexLayerMc = mc;
+    _hexLayerMode = mode;
     return d;
   }
 
@@ -1235,14 +1263,14 @@ class _CoverageMapState extends State<CoverageMap> {
     final wide = MediaQuery.sizeOf(context).shortestSide >= 600;
     // A downloaded region pack covering the map wins over online tiles; no pack (or a corrupt one) means online as before.
     final offlinePack = tiles && style.usesOfflinePack ? _pack.reader : null;
-    final layers = widget.layers;
     _ensureSorted();
     _ensureMarkers();
     final latest = _latestCache;
     final pos = widget.position;
     final heardMode = widget.heard != null;
-    final showLinks = widget.showLinks && layers.links;
-    final layerState = widget.layerState ?? layers.toLayerState().toggle(kLabelsLayerId, true);
+    final layerState = widget.layerState ?? kDefaultLayerState;
+    final showLinks = widget.showLinks && layerState.isOn('links');
+    final pingMode = pingColorModeOf(layerState);
     final networkSource = widget.repeaterSource;
     final rosterSource = layerState.isOn(kRosterLayerId) ? _rosterSource() : null;
     final showNetwork = networkSource != null && layerState.isOn(kNetworkLayerId);
@@ -1307,7 +1335,7 @@ class _CoverageMapState extends State<CoverageMap> {
             onTap: (_, point) {
               // A repeater, ping, observer or cluster drawn on top of a cell gets the tap, not the cell under it: the cell is
               // only one candidate, and the resolver picks the winner by priority once the tap has reached every source.
-              final cell = widget.layers.networkCoverage ? networkCellAt(widget.networkCells, point) : null;
+              final cell = (widget.layerState ?? kDefaultLayerState).isOn('measured') ? networkCellAt(widget.networkCells, point) : null;
               if (cell == null) {
                 _hits.tapReachedMap();
               } else {
@@ -1368,8 +1396,8 @@ class _CoverageMapState extends State<CoverageMap> {
                 dark: style.forcesDark ? true : (style == BaseMapStyle.street ? false : null),
               ),
             if (tiles && style.usesOfflinePack) ..._packOutlines(mc),
-            if (layers.networkCoverage && widget.networkCells.isNotEmpty) CellRasterLayer(key: const Key('network-cells-layer'), data: _networkData(context)),
-            if (widget.showRings && layers.rings && pos != null)
+            if (layerState.isOn('measured') && widget.networkCells.isNotEmpty) CellRasterLayer(key: const Key('network-cells-layer'), data: _networkData(context)),
+            if (widget.showRings && layerState.isOn('rings') && pos != null)
               if (widget.puck case final puck?)
                 ListenableBuilder(
                   listenable: puck,
@@ -1384,7 +1412,7 @@ class _CoverageMapState extends State<CoverageMap> {
                 )
               else
                 RangeRings(center: pos, color: t.colorScheme.primary, ringMetres: AppScope.unitsOf(context).rangeRingMetres),
-            if (widget.showRings && layers.rings && pos != null && _captions)
+            if (widget.showRings && layerState.isOn('rings') && pos != null && _captions)
               MarkerLayer(
                 markers: [
                   for (final (i, ringM) in AppScope.unitsOf(context).rangeRingMetres.indexed)
@@ -1444,11 +1472,11 @@ class _CoverageMapState extends State<CoverageMap> {
                     ),
                 ],
               ),
-            if (layers.hexes)
+            if (layerState.isOn('hexes'))
               KeyedSubtree(
                 // The resolution is in the key so a test (and a screenshot) can see which band is on screen.
                 key: ValueKey('drive-hexes-res-$hexResolution'),
-                child: CellRasterLayer(key: const Key('drive-hexes-layer'), data: _hexData(mc)),
+                child: CellRasterLayer(key: const Key('drive-hexes-layer'), data: _hexData(mc, pingMode)),
               ),
             if (_currentLinks() case final ls?) ...linkLineLayers(context, ls, labels: _captions || hexResolution >= 9),
             if (showNetwork)
@@ -1457,10 +1485,14 @@ class _CoverageMapState extends State<CoverageMap> {
               RepeaterClusterLayer(source: rosterSource, layerId: kRosterLayerId, selectedKey: _selectedRepeater, onHit: _onHit),
             if (layerState.isOn('observers') && widget.observers.isNotEmpty)
               ObserverLayer(observers: widget.observers, regionName: widget.observersRegionName, onHit: _onHit),
-            if (layers.repeaters)
+            if (layerState.isOn('heard'))
               MarkerLayer(
                 markers: [
+                  // "Heard this drive": only repeaters this drive heard (live or holding), the ones the newest ping linked in the
+                  // drive-detail view, and the selected one. Every other known repeater is drawn by `repeaters` / `network`
+                  // (Drive plan 7.3 F2).
                   for (final r in _markerRepeaters)
+                    if (_drawnAsHeard(r.key, legacyLit))
                     Marker(
                       point: LatLng(r.lat, r.lon),
                       width: 56,
@@ -1488,7 +1520,7 @@ class _CoverageMapState extends State<CoverageMap> {
                     ),
                 ],
               ),
-            if (layers.pings)
+            if (layerState.isOn('pings'))
               MarkerLayer(
                 markers: [
                   for (final p in _sorted)
@@ -1502,7 +1534,7 @@ class _CoverageMapState extends State<CoverageMap> {
                         onTap: () => _hits.submit(MapHitCandidate(MapHitKind.ping, () => _showPingLinks(p))),
                         child: PingDot(
                           dotKey: ValueKey('map-ping-${p.id}'),
-                          color: pingColor(mc, p, layers.pingColors),
+                          color: pingColor(mc, p, pingMode),
                           ring: t.colorScheme.surface,
                           pulse: identical(p, latest) || p.id == latest?.id,
                         ),
@@ -1533,7 +1565,7 @@ class _CoverageMapState extends State<CoverageMap> {
                     ),
                 ],
               ),
-            if (layers.repeaters && heardMode && _captions)
+            if (layerState.isOn('heard') && heardMode && _captions)
               MarkerLayer(
                 markers: [
                   for (final h in widget.heard!)
@@ -1578,8 +1610,9 @@ class _CoverageMapState extends State<CoverageMap> {
             if (layerState.isOn(kLabelsLayerId))
               RepeaterNameLabels(
                 markers: [
-                  if (layers.repeaters)
+                  if (layerState.isOn('heard'))
                     for (final r in _markerRepeaters)
+                      if (_drawnAsHeard(r.key, legacyLit))
                       MarkerLabelInput(
                         key: r.key,
                         name: _plainName(r),
@@ -1597,7 +1630,7 @@ class _CoverageMapState extends State<CoverageMap> {
                 origin: origin,
                 blockers: [
                   for (final h in liveLinks) LatLng((origin!.latitude + h.ref!.lat) / 2, (origin.longitude + h.ref!.lon) / 2),
-                  if (widget.showRings && layers.rings && pos != null)
+                  if (widget.showRings && layerState.isOn('rings') && pos != null)
                     for (final m in AppScope.unitsOf(context).rangeRingMetres) _offsetNorth(pos, -m),
                 ],
                 inset: widget.overlayPadding + const EdgeInsets.only(bottom: 30),

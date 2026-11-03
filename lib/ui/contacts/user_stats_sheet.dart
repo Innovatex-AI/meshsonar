@@ -221,7 +221,7 @@ class _UserStatsBodyState extends State<UserStatsBody> {
       rows.add(ProfileRow(
         key: const Key('stats-position'),
         label: 'Position',
-        valueWidget: Text(away == null ? p.text : '${p.text}\n${away.toStringAsFixed(away < 10 ? 1 : 0)} km away',
+        valueWidget: Text(away == null ? p.text : '${p.text}\n${AppScope.unitsOf(context).distance(away * 1000)} away',
             textAlign: TextAlign.end, style: monoStyle.copyWith(color: c.textMuted)),
         semanticsLabel: 'Position, ${p.text}',
       ));

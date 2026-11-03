@@ -1,4 +1,4 @@
-// Map view options and the "who's in range" snapshot the map and the heard box draw from.
+// The Pings colour mode and the "who's in range" snapshot the map and the heard box draw from.
 //
 // HeardView is an immutable copy of one HeardTracker entry, taken once per finished ping (see heardSnapshot), so
 // the map and the heard box never walk the tracker during a frame and never rebuild between pings.
@@ -17,72 +17,8 @@ enum PingColorMode {
   snr,
 }
 
-/// Which layers the map draws. Shared by the Drive screen map and the full-screen map.
-@immutable
-class MapLayers {
-  final bool pings;
-
-  /// The drive's pings rolled up onto the website's H3 hexagons (resolution follows the zoom).
-  final bool hexes;
-  final PingColorMode pingColors;
-  final bool repeaters;
-  final bool links;
-  final bool rings;
-
-  /// Network-wide measured coverage (every driver, not just this one) from `GET /api/cmh/public-coverage`, drawn
-  /// underneath everything else as a quiet "where hasn't this been driven" background layer. On by default: it's
-  /// basic visibility, meant to be there the first time anyone opens the Drive screen, not a layer you have to
-  /// find.
-  final bool networkCoverage;
-
-  /// The selected region's whole repeater roster (`region-repeaters`), not just the ones this drive heard. Off by default.
-  final bool regionRepeaters;
-  const MapLayers({
-    this.pings = true,
-    this.hexes = true,
-    this.pingColors = PingColorMode.snr,
-    this.repeaters = true,
-    this.links = true,
-    this.rings = true,
-    this.networkCoverage = true,
-    this.regionRepeaters = false,
-  });
-
-  MapLayers copyWith({
-    bool? pings,
-    bool? hexes,
-    PingColorMode? pingColors,
-    bool? repeaters,
-    bool? links,
-    bool? rings,
-    bool? networkCoverage,
-    bool? regionRepeaters,
-  }) => MapLayers(
-    pings: pings ?? this.pings,
-    hexes: hexes ?? this.hexes,
-    pingColors: pingColors ?? this.pingColors,
-    repeaters: repeaters ?? this.repeaters,
-    links: links ?? this.links,
-    rings: rings ?? this.rings,
-    networkCoverage: networkCoverage ?? this.networkCoverage,
-    regionRepeaters: regionRepeaters ?? this.regionRepeaters,
-  );
-
-  @override
-  bool operator ==(Object other) =>
-      other is MapLayers &&
-      other.pings == pings &&
-      other.hexes == hexes &&
-      other.pingColors == pingColors &&
-      other.repeaters == repeaters &&
-      other.links == links &&
-      other.rings == rings &&
-      other.networkCoverage == networkCoverage &&
-      other.regionRepeaters == regionRepeaters;
-
-  @override
-  int get hashCode => Object.hash(pings, hexes, pingColors, repeaters, links, rings, networkCoverage, regionRepeaters);
-}
+/// How the Pings and Your-coverage layers colour in [s] (the `pings` mode: `snr`, the default, or `result`).
+PingColorMode pingColorModeOf(MapLayerState s) => s.modeOf('pings') == 'result' ? PingColorMode.result : PingColorMode.snr;
 
 /// Where a heard repeater sits in its hold period.
 enum HeardPhase {
@@ -169,33 +105,3 @@ List<HeardView> heardSnapshot(HeardTracker t) {
 
 /// "+6.5", "-3.0".
 String formatSnrShort(double snr) => '${snr > 0 ? '+' : ''}${snr.toStringAsFixed(1)}';
-
-// ---- MapLayers <-> registry MapLayerState (was layers/map_layers_adapter.dart, folded in here in Drive WP2) ----
-// Id renames: MapLayers.repeaters (heard beacons) -> `heard`, MapLayers.regionRepeaters -> `repeaters` (the website's key),
-// MapLayers.networkCoverage -> `measured`.
-extension MapLayersToState on MapLayers {
-  MapLayerState toLayerState({Map<String, String> mode = const {}}) => MapLayerState(
-    on: Set.unmodifiable({
-      if (networkCoverage) 'measured',
-      if (hexes) 'hexes',
-      if (regionRepeaters) 'repeaters',
-      if (links) 'links',
-      if (repeaters) 'heard',
-      if (pings) 'pings',
-      if (rings) 'rings',
-    }),
-    mode: Map.unmodifiable({...mode, 'pings': pingColors == PingColorMode.result ? 'result' : 'snr'}),
-  );
-}
-
-/// The `MapLayers` for [s]. Layers MapLayers has no field for (network, observers, neighbours) are not represented.
-MapLayers mapLayersFromState(MapLayerState s) => MapLayers(
-  pings: s.isOn('pings'),
-  hexes: s.isOn('hexes'),
-  pingColors: s.modeOf('pings') == 'result' ? PingColorMode.result : PingColorMode.snr,
-  repeaters: s.isOn('heard'),
-  links: s.isOn('links'),
-  rings: s.isOn('rings'),
-  networkCoverage: s.isOn('measured'),
-  regionRepeaters: s.isOn('repeaters'),
-);

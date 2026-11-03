@@ -109,6 +109,9 @@ CoverageLevel levelFor(CoverageCell c, CoverageColorBy by, {DateTime? now, doubl
       return CoverageLevel.weak;
     case CoverageColorBy.heard:
       if (c.pings <= 0 || c.heard <= 0) return CoverageLevel.none; // nothing heard is grey, not the 'weak' colour
+      // Heard but no signal measured: purple "signal unknown" before the percentage rule (PLATFORM_CONTRACT.md:257-259, the
+      // website's cells.ts gate()). Plan 7.3 F1.
+      if (c.bestSnr == null) return CoverageLevel.unknown;
       final pct = 100 * c.heard / c.pings;
       if (pct >= 75) return CoverageLevel.strong;
       if (pct >= 50) return CoverageLevel.good;

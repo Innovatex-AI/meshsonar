@@ -107,7 +107,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byKey(const Key('layers-sheet')), findsOneWidget);
-    await tester.tapAt(const Offset(200, 20));
+    await tester.tap(find.byKey(const Key('layers-done')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byKey(const Key('layers-sheet')), findsNothing);

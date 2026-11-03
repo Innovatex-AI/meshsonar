@@ -12,6 +12,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:meshsonar/core/api.dart';
+import 'package:meshsonar/core/map_prefs.dart';
 import 'package:meshsonar/core/region_lookup.dart';
 import 'package:meshsonar/core/region_overview_api.dart';
 import 'package:meshsonar/radio/radio_api.dart' show GeoFix;
@@ -20,6 +21,7 @@ import 'package:meshsonar/ui/map/layers/clustered_points_layer.dart' show Cluste
 import 'package:meshsonar/ui/region/region_common.dart' as region_common;
 
 import '../fakes.dart';
+import '../../support/huge_screen.dart';
 
 const cmh = RegionIndexEntry(code: 'CMH', slug: 'cmh', name: 'Columbus, US', url: 'https://cmh.meshsonar.com', bbox: [-83.5, 39.75, -82.45, 40.65]);
 String k(String c) => c * 64;
@@ -82,6 +84,13 @@ Harness make(FakeMapServer srv) {
   return h;
 }
 
+/// A few bounded pumps: with cells on a very tall surface the map keeps tile timers alive, so pumpAndSettle never returns.
+Future<void> settleShort(WidgetTester t) async {
+  for (var i = 0; i < 4; i++) {
+    await t.pump(const Duration(milliseconds: 300));
+  }
+}
+
 Future<void> openSheet(WidgetTester t) async {
   await t.tap(find.byKey(const Key('drive-map-layers')));
   await t.pumpAndSettle();
@@ -89,16 +98,19 @@ Future<void> openSheet(WidgetTester t) async {
 }
 
 Future<void> closeSheet(WidgetTester t) async {
-  await t.tapAt(const Offset(200, 40));
+  await t.tap(find.byKey(const Key('layers-done')));
   await t.pumpAndSettle();
   expect(find.byKey(const Key('layers-sheet')), findsNothing);
 }
 
-SwitchListTile sw(WidgetTester t, String key) => t.widget<SwitchListTile>(find.byKey(Key(key)));
+Switch sw(WidgetTester t, String key) => t.widget<Switch>(find.byKey(Key(key)));
+
+/// The person has turned "All MeshCore repeaters" on (it is off by default for a driver, Drive plan 7.1): remembered, as in the app.
+void networkOn() => MapPrefs.shared.setLayerPrefs(kDriveLayerPage, const LayerPrefs(toggles: {'network': true}));
 String statusText(WidgetTester t, String id) => t.widget<Text>(find.byKey(Key('layer-$id-status'))).data!;
 
 Future<void> toggle(WidgetTester t, String key) async {
-  await t.ensureVisible(find.byKey(Key(key)));
+  await revealInLayersSheet(t, find.byKey(Key(key)));
   await t.pumpAndSettle();
   await t.tap(find.byKey(Key(key)));
   await t.pumpAndSettle();
@@ -111,46 +123,46 @@ void main() {
 
   group('generated layers sheet', () {
     testWidgets('sections in registry order, one switch per drawn layer, legacy keys kept, no switch for undrawn layers', (t) async {
-      useTallScreen(t);
+      useHugeScreen(t);
       final h = Harness(); // no repeater sync, no region index
       await h.pumpApp(t);
       await t.pumpAndSettle();
       await openSheet(t);
       final ys = [
-        for (final g in ['drive', 'coverage', 'network', 'context']) t.getTopLeft(find.byKey(Key('layers-group-$g'), skipOffstage: false)).dy,
+        for (final g in ['drive', 'coverage', 'repeaters', 'display']) t.getTopLeft(find.byKey(Key('layers-group-$g'), skipOffstage: false)).dy,
       ];
-      expect(ys, orderedEquals([...ys]..sort()), reason: 'This drive, Coverage, Network, Around you');
+      expect(ys, orderedEquals([...ys]..sort()), reason: 'This drive, Coverage, Repeaters, Display');
       for (final key in [
         'layer-hexes', 'layer-links', 'layer-repeaters', 'layer-pings', 'layer-network-coverage', //
         'layer-network', 'layer-region-repeaters', 'layer-observers', 'layer-rings',
       ]) {
         expect(find.byKey(Key(key), skipOffstage: false), findsOneWidget, reason: key);
       }
-      expect(find.byKey(const Key('layer-neighbours'), skipOffstage: false), findsNothing, reason: 'no renderer yet (WP-M4)');
-      // Defaults: drive layers + coverage + the global layer on (D3); it shows off here because this build cannot
-      // offer it (no sync), and its switch is disabled.
+      expect(find.byKey(const Key('layer-neighbours'), skipOffstage: false), findsNothing, reason: 'the dead entry is gone (D12)');
+      // Defaults: drive layers, coverage, heard and region repeaters on; the global 56,889-point layer is off (D11 revised);
+      // here this build cannot offer it anyway (no sync), so its switch is disabled.
       expect(sw(t, 'layer-repeaters').value, isTrue);
       expect(sw(t, 'layer-network-coverage').value, isTrue);
       expect(h.state.services.repeaterSync, isNull);
       expect(sw(t, 'layer-network').value, isFalse);
-      expect(sw(t, 'layer-region-repeaters').value, isFalse);
+      expect(sw(t, 'layer-region-repeaters').value, isTrue);
       // No sync in this build and no region: honest reasons, switches that cannot work are disabled.
       expect(sw(t, 'layer-network').onChanged, isNull);
       expect(statusText(t, 'network'), 'Not available on this server yet');
       expect(sw(t, 'layer-observers').onChanged, isNull);
       expect(statusText(t, 'observers'), 'Pick a region to see its observers');
-      expect(sw(t, 'layer-region-repeaters').onChanged, isNull);
+      expect(sw(t, 'layer-region-repeaters').onChanged, isNotNull, reason: 'on, so it can always be switched off');
       expect(statusText(t, 'repeaters'), 'Pick a region to see its repeaters');
     });
 
     testWidgets('measured coverage says how many cells, or that it failed with Retry', (t) async {
-      useTallScreen(t);
+      useHugeScreen(t);
       final h = Harness();
       h.client.publicCoverageError = const CmatException('server error', status: 500);
       await h.pumpApp(t);
-      await t.pumpAndSettle();
+      await settleShort(t);
       await openSheet(t);
-      await t.ensureVisible(find.byKey(const Key('layer-measured-status')));
+      await revealInLayersSheet(t, find.byKey(const Key('layer-measured-status')));
       expect(statusText(t, 'measured'), "Couldn't load. Check the connection and retry.");
       h.client.publicCoverageError = null;
       h.client.publicCoverageResult = const PublicCoverage(
@@ -158,17 +170,18 @@ void main() {
         grid: CoverageGrid.square(cellDeg: 0.005),
         cells: [CoverageCell(lat: 40.12, lon: -82.93, pings: 3, heard: 2, bestSnr: 4, medianSnr: 3, repeaters: 1, lastAt: '2026-10-20T11:00:00Z')],
       );
-      await t.ensureVisible(find.byKey(const Key('layer-measured-retry')));
+      await revealInLayersSheet(t, find.byKey(const Key('layer-measured-retry')));
       await t.tap(find.byKey(const Key('layer-measured-retry')));
-      await t.pumpAndSettle();
+      await settleShort(t);
       expect(statusText(t, 'measured'), '1 cell measured');
       expect(find.byKey(const Key('layer-measured-retry')), findsNothing);
     });
   });
 
   group('global "All MeshCore repeaters" layer', () {
+    setUp(networkOn);
     testWidgets('server answers 404: switch disabled with "Not available on this server yet", nothing drawn', (t) async {
-      useTallScreen(t);
+      useHugeScreen(t);
       final srv = FakeMapServer()..networkStatus = 404;
       final h = make(srv);
       await h.pumpApp(t);
@@ -182,7 +195,7 @@ void main() {
     });
 
     testWidgets('server error with nothing stored: failed + Retry; the switch still works', (t) async {
-      useTallScreen(t);
+      useHugeScreen(t);
       final srv = FakeMapServer()..networkStatus = 503;
       final h = make(srv);
       await h.pumpApp(t);
@@ -193,15 +206,15 @@ void main() {
       final calls = srv.networkCalls;
       srv.networkStatus = 200;
       srv.now = srv.now.add(const Duration(seconds: 11));
-      await t.ensureVisible(find.byKey(const Key('layer-network-retry')));
+      await revealInLayersSheet(t, find.byKey(const Key('layer-network-retry')));
       await t.tap(find.byKey(const Key('layer-network-retry')));
       await t.pumpAndSettle();
       expect(srv.networkCalls, calls + 1);
       expect(statusText(t, 'network'), startsWith('3 repeaters in and around Columbus, US'));
     });
 
-    testWidgets('ready: ON by default, limited to the phone\'s region + margin, legend + credit; the fullscreen map shares it', (t) async {
-      useTallScreen(t);
+    testWidgets('ready: switched on, limited to the phone\'s region + margin, legend + credit; the fullscreen map shares it', (t) async {
+      useHugeScreen(t);
       final srv = FakeMapServer();
       final h = make(srv);
       await h.pumpApp(t);
@@ -209,14 +222,13 @@ void main() {
       expect(h.state.currentRegion?.code, 'CMH');
       expect(find.byKey(const ValueKey('layer-network-paint')), findsOneWidget, reason: 'on by default (D3, Andy Oct 24)');
       final painter = t.widget<CustomPaint>(find.byKey(const ValueKey('layer-network-paint'))).painter! as ClusteredPointsPainter;
-      expect(painter.index.indexedCount, 3, reason: 'the Seattle repeater is outside CMH + 40 km');
+      expect(painter.index.indexedCount, 2, reason: 'the Seattle repeater is outside CMH + 40 km; the roster layer (on by default) draws the 3rd one itself');
       await openSheet(t);
       expect(sw(t, 'layer-network').value, isTrue);
       expect(statusText(t, 'network'), '3 repeaters in and around Columbus, US · 4 hidden by their owners · Data: MeshCore Map (map.meshcore.io)');
-      expect(find.byKey(const Key('network-legend')), findsOneWidget);
-      expect(find.textContaining(', as of '), findsOneWidget, reason: 'one credit line: source and age together');
-      for (final l in ['24 h', '7 d', '30 d', 'Older']) {
-        expect(find.descendant(of: find.byKey(const Key('network-legend')), matching: find.text(l)), findsOneWidget);
+      expect(find.byKey(const Key('layer-network-key')), findsOneWidget);
+      for (final l in ['fresh, 24 h', 'recent, 7 d', 'older']) {
+        expect(find.descendant(of: find.byKey(const Key('layer-network-key')), matching: find.text(l)), findsOneWidget);
       }
       await closeSheet(t);
       expect(find.byKey(const ValueKey('layer-network-paint')), findsOneWidget);
@@ -241,7 +253,7 @@ void main() {
     });
 
     testWidgets('stale: the stored list stays on, the sheet says it is an offline copy with Retry', (t) async {
-      useTallScreen(t);
+      useHugeScreen(t);
       final srv = FakeMapServer();
       final h = make(srv);
       await h.pumpApp(t);
@@ -259,15 +271,15 @@ void main() {
     });
 
     testWidgets('roster on too: the roster key is drawn once (by the roster layer), the global count drops by one', (t) async {
-      useTallScreen(t);
+      useHugeScreen(t);
       final srv = FakeMapServer();
       final h = make(srv);
       await h.pumpApp(t);
       await t.pumpAndSettle();
       await openSheet(t);
       expect(statusText(t, 'repeaters'), '1 repeater with a position');
-      await toggle(t, 'layer-region-repeaters');
-      expect(find.byKey(const Key('roster-legend')), findsOneWidget);
+      expect(sw(t, 'layer-region-repeaters').value, isTrue, reason: 'on by default (D11)');
+      expect(find.byKey(const Key('layer-repeaters-key')), findsOneWidget);
       await closeSheet(t);
       final painters = [
         for (final key in ['layer-network-paint', 'layer-repeaters-paint'])
@@ -278,7 +290,7 @@ void main() {
     });
 
     testWidgets('cluster tap zooms in to its members; then a tap on one opens its sheet with the roster-free fields', (t) async {
-      useTallScreen(t);
+      useHugeScreen(t);
       final srv = FakeMapServer();
       final h = make(srv);
       await h.pumpApp(t);
@@ -307,8 +319,9 @@ void main() {
   });
 
   group('global layer scope', () {
+    setUp(networkOn);
     testWidgets('phone outside every region: the whole list (world view, count clusters); picking a region limits it', (t) async {
-      useTallScreen(t);
+      useHugeScreen(t);
       final srv = FakeMapServer();
       final h = make(srv);
       h.location.currentFix = () => GeoFix(lat: 47.6, lon: -122.3, at: DateTime.utc(2026, 10, 16, 17, 59));
@@ -316,7 +329,7 @@ void main() {
       await t.pumpAndSettle();
       expect(h.state.currentRegion, isNull);
       ClusteredPointsPainter painter() => t.widget<CustomPaint>(find.byKey(const ValueKey('layer-network-paint'))).painter! as ClusteredPointsPainter;
-      expect(painter().index.indexedCount, 4, reason: 'no region detected or picked: every repeater');
+      expect(painter().index.indexedCount, 3, reason: 'no region detected or picked: every repeater, minus the roster one the roster layer (on by default) draws');
       await openSheet(t);
       expect(statusText(t, 'network'), startsWith('4 repeaters · '));
       await closeSheet(t);
@@ -324,19 +337,17 @@ void main() {
       await h.state.setViewingRegion('CMH');
       await t.pumpAndSettle();
       expect(h.state.viewingIsManual, isTrue);
-      expect(painter().index.indexedCount, 3, reason: 'picked region: CMH + 40 km only');
+      expect(painter().index.indexedCount, 2, reason: 'picked region: CMH + 40 km only, minus the roster one');
     });
   });
 
   group('region roster layer', () {
     testWidgets('from the sync: tap a roster repeater for its sheet with roster fields and "Open repeater page"', (t) async {
-      useTallScreen(t);
+      useHugeScreen(t);
       final h = make(FakeMapServer());
       await h.pumpApp(t);
       await t.pumpAndSettle();
-      await openSheet(t);
-      await toggle(t, 'layer-region-repeaters');
-      await closeSheet(t);
+      expect(h.state.globalRepeaterSet, isNotNull);
       final paint = find.byKey(const ValueKey('layer-repeaters-paint'));
       final painter = t.widget<CustomPaint>(paint).painter! as ClusteredPointsPainter;
       await t.tapAt(t.getTopLeft(paint) + painter.camera.latLngToScreenOffset(const LatLng(40.13, -82.92)));
@@ -374,7 +385,7 @@ void main() {
     }
 
     testWidgets('counts only observers with a public position; turning it on draws them', (t) async {
-      useTallScreen(t);
+      useHugeScreen(t);
       serveObservers();
       final h = make(FakeMapServer());
       await h.pumpApp(t);
@@ -396,7 +407,7 @@ void main() {
     });
 
     testWidgets('the fetch fails: failed with Retry, nothing drawn, the rest of the map unaffected', (t) async {
-      useTallScreen(t);
+      useHugeScreen(t);
       serveObservers(fail: true);
       final h = make(FakeMapServer());
       await h.pumpApp(t);
@@ -405,7 +416,7 @@ void main() {
       await toggle(t, 'layer-observers');
       expect(statusText(t, 'observers'), "Couldn't load. Check the connection and retry.");
       serveObservers();
-      await t.ensureVisible(find.byKey(const Key('layer-observers-retry')));
+      await revealInLayersSheet(t, find.byKey(const Key('layer-observers-retry')));
       await t.tap(find.byKey(const Key('layer-observers-retry')));
       await t.pumpAndSettle();
       expect(statusText(t, 'observers'), '1 observer with a public position');
