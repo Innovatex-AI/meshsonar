@@ -5,6 +5,8 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- **Clean map corners (Drive redesign WP7).** On the new Drive screen nothing is drawn in the lower-left of the map in any state: the SIMULATED tag is gone (the amber SIM badge lives in the status capsule) and the "Map offline" note is an "Offline map" pill at the top under the region chip. A repeater label pass that met a not-yet-placed camera could crash with an infinity error; it now skips such rectangles.
+
 - **Map inspector rules while driving, Nearby repeaters (Drive redesign WP4).** The panel that opens when you tap a cell, repeater or ping now follows the driving rules: while the car moves (Passenger off) it stays at its one-line peek and says "Open when stopped" instead of expanding, and it closes itself 12 seconds after your last touch so it never lingers over the road. Its close and fit buttons are full 48 pt targets. Medium shows a "Nearby repeaters" list (the three closest on the region roster with distance); tapping one highlights it on the map and drops back to the Dock.
 
 - **Drive on iPad, landscape phones, SE and big text (Drive redesign WP3c).** At width 700 pt and up (iPad portrait and landscape, a landscape phone) the bottom panel is a floating card at the bottom left, 380 pt wide (300 pt on a landscape phone), the only bottom surface: Dock is 88 pt high, Medium is half the screen (85% on a landscape phone) with Start/Stop and Ping pinned in its top row, and the controls and attribution stay at the right. Idle Immersive is now a clean map with a single 56 pt Start button and a nub that brings the Dock back (drag the Dock down to get there). On a 300 pt side card the hero caption scales down instead of overflowing.
