@@ -125,6 +125,8 @@ class RectGrid {
   static int _key(int cx, int cy) => (cx + 4096) * 8192 + (cy + 4096);
 
   void add(Rect r, [String? owner]) {
+    // A non-finite rectangle (a candidate projected before the camera has a size) must never take the label pass down.
+    if (!r.isFinite) return;
     final e = _GridEntry(r, owner);
     final x0 = (r.left / cell).floor(), x1 = (r.right / cell).floor();
     final y0 = (r.top / cell).floor(), y1 = (r.bottom / cell).floor();

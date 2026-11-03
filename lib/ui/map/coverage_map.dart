@@ -1681,7 +1681,28 @@ class _CoverageMapState extends State<CoverageMap> {
           ],
         ),
       banner: widget.banner,
-      topLeading: widget.topLeading,
+      // New Drive screen: the "Map offline" state is a pill under the region chip (plan 4.12), never a bottom-left note.
+      topLeading: widget.onLayers != null && !tiles
+          ? Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ?widget.topLeading,
+                const SizedBox(height: Gap.xs),
+                MapPill(
+                  key: const Key('map-offline'),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.cloud_off_rounded, size: 13, color: mc.textMuted),
+                      const SizedBox(width: 4),
+                      const Flexible(child: Text('Offline map', maxLines: 1)),
+                    ],
+                  ),
+                ),
+              ],
+            )
+          : widget.topLeading,
       topTrailing: widget.topTrailing,
       controls: _controls(context, pos, latest),
       bottom: _bottomColumn(context, tiles, mc, t),
@@ -1732,8 +1753,9 @@ class _CoverageMapState extends State<CoverageMap> {
     final children = <Widget>[
       ?widget.bottom,
       if (panel != null) ...[SizedBox(width: double.infinity, child: panel), const SizedBox(height: Gap.xs)],
-      if (widget.simulated) ...[const SimulatedTag(key: Key('map-simulated')), const SizedBox(height: Gap.xs)],
-      if (!tiles)
+      // New Drive screen: SIM is a badge in the status capsule and the offline state is a pill at the top; nothing bottom-left.
+      if (widget.simulated && widget.onLayers == null) ...[const SimulatedTag(key: Key('map-simulated')), const SizedBox(height: Gap.xs)],
+      if (!tiles && widget.onLayers == null)
         MapPill(
           key: const Key('map-offline'),
           child: Row(
