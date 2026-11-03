@@ -300,6 +300,11 @@ class CoverageMap extends StatefulWidget {
   final Widget? topTrailing;
   final Widget? bottom;
 
+  /// Overlay clearances (see MapOverlayHost.topClearance / bottomClearance): the full-bleed Drive map keeps its slots out of the
+  /// status bar and above the panel without ever being resized.
+  final double topClearance;
+  final double bottomClearance;
+
   /// The base map under the data (street / dark / topo cycler). Offline region packs are drawn for every style that
   /// [BaseMapStyle.usesOfflinePack].
   final BaseMapStyle baseStyle;
@@ -351,6 +356,8 @@ class CoverageMap extends StatefulWidget {
     this.topLeading,
     this.topTrailing,
     this.bottom,
+    this.topClearance = 0,
+    this.bottomClearance = 0,
     this.baseStyle = BaseMapStyle.chart,
     this.onBoundsChanged,
     this.telemetry,
@@ -1369,6 +1376,8 @@ class _CoverageMapState extends State<CoverageMap> {
 
     return MapOverlayHost(
       slotKeys: _slotKeys,
+      topClearance: widget.topClearance,
+      bottomClearance: widget.bottomClearance,
       map: FlutterMap(
           mapController: _controller,
           options: MapOptions(

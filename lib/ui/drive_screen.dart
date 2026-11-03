@@ -10,6 +10,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../app/app_flags.dart';
 import '../app/app_state.dart';
 import '../core/dead_area.dart';
 import 'app.dart';
@@ -34,6 +35,13 @@ import 'ping_cue.dart';
 import 'map/repeater_page_link.dart';
 import 'map/coverage_timeline_slider.dart';
 import 'widgets.dart';
+import 'onboarding/ui_prefs.dart';
+import 'drive/panel/auto_collapse.dart';
+import 'drive/panel/drive_panel.dart';
+import 'drive/panel/drive_panel_controller.dart';
+import 'drive/panel/panel_dock.dart';
+import 'drive/panel/panel_medium.dart';
+import 'drive/panel/panel_physics.dart';
 
 export 'drive/drive_controls.dart' show openConnect;
 
@@ -43,7 +51,7 @@ class DriveScreen extends StatefulWidget {
   State<DriveScreen> createState() => _DriveScreenState();
 }
 
-class _DriveScreenState extends State<DriveScreen> {
+class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin {
   AppState? _state;
   DeviceFeedback? _feedback;
   DriveMapModel? _model;
@@ -56,6 +64,16 @@ class _DriveScreenState extends State<DriveScreen> {
   /// The report card for this drive was closed.
   String? _dismissedReport;
 
+  // New Drive screen (flag driveRedesign): the bottom panel, its auto-collapse and the settled overlay clearance.
+  DrivePanelController? _panel;
+  final PanelAutoCollapse _auto = PanelAutoCollapse();
+  final PingDebounce _debounce = PingDebounce();
+  Timer? _autoTimer;
+  double? _navBar;
+  double? _clearance;
+  bool _wasDriving = false;
+  bool? _remoteWas;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -67,6 +85,8 @@ class _DriveScreenState extends State<DriveScreen> {
       shell?.addListener(_shellChanged);
     }
     final s = AppScope.read(context);
+    _panel ??= _makePanel(s);
+    _panel!.reduceMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
     if (!identical(s, _state)) {
       _state?.removeListener(_onState);
       _model?.removeListener(_syncImmersive);
@@ -91,6 +111,56 @@ class _DriveScreenState extends State<DriveScreen> {
   void _shellChanged() {
     final m = _model;
     if (m != null && m.expanded && _shell != null && !_shell!.immersive) m.toggleExpanded();
+    // Left the tab (or something else brought the tab bar back): the panel cannot stay Immersive without it.
+    final p = _panel;
+    if (p != null && p.detent == PanelDetent.immersive && _shell != null && !_shell!.immersive) p.settleTo(PanelDetent.dock);
+  }
+
+  DrivePanelController _makePanel(AppState s) {
+    final saved = uiPrefsFor(s).drivePanelDetent;
+    final c = DrivePanelController(vsync: this, initial: saved == 'medium' ? PanelDetent.medium : PanelDetent.dock);
+    c.onDetentChanged = (from, to) {
+      // The tab bar follows the panel: Immersive hides it (250 ms, shell), anything else brings it back.
+      _shell?.setImmersive(to == PanelDetent.immersive);
+      if (to == PanelDetent.medium) _auto.touch(s.services.clock());
+      if (to != PanelDetent.immersive) unawaited(uiPrefsFor(s).setDrivePanelDetent(to.name));
+    };
+    c.onSettled = () {
+      // Overlay clearances and MapInsets are written once, here, never per animation frame.
+      if (!mounted) return;
+      final next = c.extent.value;
+      if (_clearance != next) setState(() => _clearance = next);
+    };
+    return c;
+  }
+
+  /// Once a second while driving: feeds speed to the auto-collapse machine and collapses Medium when it says so.
+  void _autoTick() {
+    final s = _state, p = _panel;
+    if (s == null || p == null) return;
+    final now = s.services.clock();
+    _auto.onFix(_model?.fix?.speedMps, now);
+    if (_auto.shouldCollapse(now, p.detent)) p.settleTo(PanelDetent.dock);
+  }
+
+  /// Drive started or ended: the auto-collapse machine, Passenger and the radio queue's background refresh follow it.
+  void _syncDriving(AppState s) {
+    final driving = s.driving;
+    if (driving == _wasDriving) return;
+    _wasDriving = driving;
+    final queue = s.radioSessions.remoteQueue;
+    if (driving) {
+      // Background repeater refreshes would compete with pings for the radio (Chat WP5 note): off while driving.
+      _remoteWas = queue.autoRefreshEnabled;
+      queue.autoRefreshEnabled = false;
+      _autoTimer ??= Timer.periodic(const Duration(seconds: 1), (_) => _autoTick());
+    } else {
+      queue.autoRefreshEnabled = _remoteWas ?? true;
+      _remoteWas = null;
+      _autoTimer?.cancel();
+      _autoTimer = null;
+      _auto.reset();
+    }
   }
 
   void _onState() {
@@ -107,6 +177,8 @@ class _DriveScreenState extends State<DriveScreen> {
       _lastPingId = newest.id;
     }
 
+    _syncDriving(s);
+
     // Keep the screen on while driving.
     if (s.driving != _awake) {
       _awake = s.driving;
@@ -116,6 +188,10 @@ class _DriveScreenState extends State<DriveScreen> {
 
   @override
   void dispose() {
+    _autoTimer?.cancel();
+    final st = _state;
+    if (st != null && _remoteWas != null) st.radioSessions.remoteQueue.autoRefreshEnabled = _remoteWas!;
+    _panel?.dispose();
     _state?.removeListener(_onState);
     _shell?.removeListener(_shellChanged);
     final shellToClear = (_model?.expanded ?? false) ? _shell : null;
@@ -143,9 +219,77 @@ class _DriveScreenState extends State<DriveScreen> {
     final showReport = report != null && report != _dismissedReport;
 
     // The expanded map changes the whole screen (app bar, footer), so the screen listens to the model, not just the map.
-    return AnimatedBuilder(
-      animation: model,
-      builder: (context, _) => _scaffold(context, s, t, model, liveStats, report, showReport),
+    return ValueListenableBuilder<bool>(
+      valueListenable: AppFlags.driveRedesignNotifier,
+      builder: (context, redesign, _) => redesign
+          ? AnimatedBuilder(animation: model, builder: (context, _) => _stage(context, s, model, liveStats))
+          : AnimatedBuilder(
+              animation: model,
+              builder: (context, _) => _scaffold(context, s, t, model, liveStats, report, showReport),
+            ),
+    );
+  }
+
+  /// The new Drive screen (plan 4.1): the map full bleed and never resized, the panel above it, the shell's tab bar below.
+  Widget _stage(BuildContext context, AppState s, DriveMapModel model, DriveLiveStats liveStats) {
+    final panel = _panel!;
+    final mq = MediaQuery.of(context);
+    return Scaffold(
+      resizeToAvoidBottomInset: false,
+      body: LayoutBuilder(
+        builder: (context, box) {
+          // The tab bar zone is measured while the bar is shown and remembered while it is hidden (Immersive).
+          if (!(_shell?.immersive ?? false)) _navBar = mq.padding.bottom;
+          final g = PanelGeometry.forScreen(screenHeight: box.maxHeight, navBar: _navBar ?? mq.padding.bottom, safeBottom: mq.viewPadding.bottom);
+          if (panel.geometry == null) {
+            panel.setGeometry(g);
+            _clearance = panel.extent.value;
+          } else if (panel.geometry != g) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) panel.setGeometry(g);
+            });
+          }
+          final map = MediaQuery(
+            data: mq.copyWith(textScaler: MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.3)),
+            child: AnimatedBuilder(
+              animation: model,
+              builder: (context, _) => _MapPane(
+                state: s,
+                model: model,
+                redesign: true,
+                topClearance: mq.padding.top,
+                bottomClearance: _clearance ?? panel.extent.value,
+                rotatable: panel.detent == PanelDetent.immersive,
+              ),
+            ),
+          );
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              Positioned.fill(child: map),
+              Positioned.fill(
+                child: ListenableBuilder(
+                  listenable: Listenable.merge([s, panel, liveStats]),
+                  builder: (context, _) => DrivePanel(
+                    controller: panel,
+                    onTouch: () => _auto.touch(s.services.clock()),
+                    dock: DriveDock(state: s, debounce: _debounce),
+                    mediumChildren: MediumContent.build(
+                      context,
+                      state: s,
+                      liveStats: liveStats,
+                      fix: model.fix,
+                      passenger: _auto.passenger,
+                      onPassenger: (v) => setState(() => _auto.passenger = v),
+                      openGuide: () => showMapLegend(context, colorBy: model.colorBy, pingColors: model.pingColors),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 
@@ -307,13 +451,19 @@ class _MapPane extends StatelessWidget {
   final AppState state;
   final DriveMapModel model;
   final Widget? report;
-  const _MapPane({required this.state, required this.model, this.report});
+
+  /// New Drive screen: the map is full bleed, the overlays keep out of the status bar and the panel, and the old footer pieces
+  /// (heard box, full-screen button, hint, report card, result flash) are not on the map.
+  final bool redesign;
+  final double topClearance, bottomClearance;
+  final bool? rotatable;
+  const _MapPane({required this.state, required this.model, this.report, this.redesign = false, this.topClearance = 0, this.bottomClearance = 0, this.rotatable});
 
   @override
   Widget build(BuildContext context) {
     final s = state;
     final pings = s.recentPings;
-    final showHeard = pings.isNotEmpty && (s.driving || model.heard.isNotEmpty);
+    final showHeard = !redesign && pings.isNotEmpty && (s.driving || model.heard.isNotEmpty);
     final expanded = model.expanded;
     return LayoutBuilder(
       builder: (context, box) {
@@ -330,7 +480,9 @@ class _MapPane extends StatelessWidget {
           puck: model.puck,
           telemetry: model.telemetry,
           showRings: true, // Range rings draw whenever there is a position, idle too (Drive plan 7.3 F4)
-          rotatable: expanded,
+          rotatable: rotatable ?? expanded,
+          topClearance: topClearance,
+          bottomClearance: bottomClearance,
           repeaterLabel: s.repeaterLabel,
           heard: model.heard,
           networkCells: model.visibleNetworkCells,
@@ -352,7 +504,7 @@ class _MapPane extends StatelessWidget {
           fallbackCenter: viewedRegionCenter(s),
           fallbackBounds: viewedRegionBounds(s),
           // GPS trouble (waiting, weak, lost, Precise Location off) as one line over the map's top edge, with the one button that fixes it.
-          banner: GpsBannerSlot(state: s, compact: expanded || box.maxHeight < kCompactMapHeight),
+          banner: GpsBannerSlot(state: s, compact: redesign || expanded || box.maxHeight < kCompactMapHeight),
           topLeading: showHeard
               ? HeardBox(
                   heard: model.heard,
@@ -374,6 +526,14 @@ class _MapPane extends StatelessWidget {
               children: [
                 // Region awareness lives in this corner, above the icon buttons. Nothing is added here (no chip, no gap) until
                 // there's something real to show.
+                // The connection chip replaces the deleted AppBar's (same tap target); WP3b turns it into the status capsule.
+                if (redesign) ...[
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: (box.maxWidth - 2 * Gap.s - 46).clamp(80.0, 260.0)),
+                    child: ConnectionChip(state: s, onPressed: () => openConnect(context)),
+                  ),
+                  const SizedBox(height: Gap.s),
+                ],
                 if (s.driving && silentPingStreak(s.drivePings) >= deadAreaPings) ...[
                   ConstrainedBox(
                     constraints: BoxConstraints(maxWidth: (box.maxWidth - 2 * Gap.s - 46).clamp(80.0, 180.0)),
@@ -395,13 +555,15 @@ class _MapPane extends StatelessWidget {
                   ),
                   const SizedBox(height: Gap.s),
                 ],
-                MapIconButton(
-                  key: expanded ? const Key('fullscreen-close') : const Key('map-fullscreen'),
-                  icon: expanded ? Icons.close_fullscreen_rounded : Icons.open_in_full_rounded,
-                  tooltip: expanded ? 'Exit full screen' : 'Full-screen map',
-                  onPressed: model.toggleExpanded,
-                ),
-                const SizedBox(height: Gap.s),
+                if (!redesign) ...[
+                  MapIconButton(
+                    key: expanded ? const Key('fullscreen-close') : const Key('map-fullscreen'),
+                    icon: expanded ? Icons.close_fullscreen_rounded : Icons.open_in_full_rounded,
+                    tooltip: expanded ? 'Exit full screen' : 'Full-screen map',
+                    onPressed: model.toggleExpanded,
+                  ),
+                  const SizedBox(height: Gap.s),
+                ],
                 MapIconButton(
                   key: const Key('drive-map-layers'),
                   icon: Icons.layers_rounded,
@@ -432,9 +594,9 @@ class _MapPane extends StatelessWidget {
                     ),
                 ],
               ),
-              if (pings.isEmpty) Align(alignment: Alignment.center, child: IgnorePointer(child: MapHint(state: s))),
+              if (!redesign && pings.isEmpty) Align(alignment: Alignment.center, child: IgnorePointer(child: MapHint(state: s))),
               if (report != null) SizedBox(width: double.infinity, child: report!),
-              if (pings.isNotEmpty && s.driving) Align(alignment: Alignment.center, child: PingResultFlash(ping: pings.first, label: model.labelFor)),
+              if (!redesign && pings.isNotEmpty && s.driving) Align(alignment: Alignment.center, child: PingResultFlash(ping: pings.first, label: model.labelFor)),
             ],
           ),
         );

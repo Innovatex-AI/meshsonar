@@ -18,6 +18,9 @@ class UiPrefs extends ChangeNotifier {
   /// The shell tab last open (AppTab.name), so the app comes back where the person left it. Null = never chosen.
   String? _lastTab;
 
+  /// The Drive panel's resting detent ('dock' or 'medium'; Immersive is never restored). Null = never chosen.
+  String? _drivePanelDetent;
+
   /// The collection disclosure version last seen (0 = never; 1 = the packet-header-only sheet of <= 0.19).
   int _disclosedVersion;
   final Map<String, String> _labels;
@@ -49,6 +52,13 @@ class UiPrefs extends ChangeNotifier {
     _lastTab = name;
     await persist();
   }
+  String? get drivePanelDetent => _drivePanelDetent;
+  Future<void> setDrivePanelDetent(String name) async {
+    if (name == 'immersive' || _drivePanelDetent == name) return;
+    _drivePanelDetent = name;
+    await persist();
+  }
+
   bool get onboardingSeen => _onboardingSeen;
 
   /// True once the person has seen the CURRENT disclosure sheet (whatever they chose). Since stream 7 that is the
@@ -128,6 +138,7 @@ class UiPrefs extends ChangeNotifier {
         'onboarding_seen': _onboardingSeen,
         'telemetry_disclosed': _telemetryDisclosed,
         if (_lastTab != null) 'last_tab': _lastTab,
+        if (_drivePanelDetent != null) 'drive_panel_detent': _drivePanelDetent,
         if (_disclosedVersion > 0) collectionDisclosedKey: _disclosedVersion,
         if (_recentRegions.isNotEmpty) 'recent_regions': _recentRegions,
         'labels': _labels,
@@ -152,6 +163,8 @@ class FileUiPrefs extends UiPrefs {
           _telemetryDisclosed = j['telemetry_disclosed'] == true;
           final lt = j['last_tab'];
           _lastTab = lt is String ? lt : null;
+          final dp = j['drive_panel_detent'];
+          _drivePanelDetent = dp is String ? dp : null;
           final v = j[collectionDisclosedKey];
           _disclosedVersion = v is num ? v.toInt() : (_telemetryDisclosed ? 1 : 0);
           final rr = j['recent_regions'];
