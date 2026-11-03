@@ -177,6 +177,7 @@ void main() {
     await size(t, const Size(375, 667));
     final m = model((pw, {required guest, required route}) async => const LoginOutcome(LoginKind.noReply, '', 24));
     await t.pumpWidget(host(m, scale: 2.35));
+    await t.dragUntilVisible(find.byKey(const Key('login-password')), find.byType(ListView), const Offset(0, -80));
     await typeAndGo(t, 'password');
     await t.pump();
     await t.pump();

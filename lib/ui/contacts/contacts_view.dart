@@ -396,7 +396,7 @@ class ContactTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => row.contact.type == ContactType.room
-      ? ValueListenableBuilder<int>(valueListenable: RoomJoins.changes, builder: (ctx, _, __) => _content(ctx))
+      ? ValueListenableBuilder<int>(valueListenable: RoomJoins.changes, builder: (ctx, _, _) => _content(ctx))
       : _content(context);
 
   Widget _content(BuildContext context) {

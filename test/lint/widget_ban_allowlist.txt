@@ -118,7 +118,3 @@ lib/ui/radios/rooms/room_join_header.dart|FilledButton|2
 lib/ui/radios/rooms/room_join_header.dart|Icons.|1
 lib/ui/radios/rooms/room_join_header.dart|TextButton|4
 lib/ui/radios/rooms/room_join_header.dart|TextField(|1
-lib/ui/radios/rooms/room_screen.dart|CircularProgressIndicator|2
-lib/ui/radios/rooms/room_screen.dart|FilledButton|2
-lib/ui/radios/rooms/room_screen.dart|Icons.|2
-lib/ui/radios/rooms/room_screen.dart|TextField(|2
