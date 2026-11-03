@@ -1054,6 +1054,12 @@ class AppState extends ChangeNotifier {
     _setLocationAccess(a);
   }
 
+  /// Development builds only (screenshot harness): pretend the Location permission is [a], so the denied and granted frames do not
+  /// depend on the simulator's privacy database. No effect in a release build.
+  void debugSetLocationAccess(LocationAccess a) {
+    if (isDevelopmentBuild) _setLocationAccess(a);
+  }
+
   void _setLocationAccess(LocationAccess a) {
     final was = _locationAccess;
     _locationAccess = a;

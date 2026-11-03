@@ -1017,7 +1017,13 @@ class _CoverageMapState extends State<CoverageMap> {
   }
 
   /// The phone's own view of the network closes or opens the tile gate at once (no doomed requests while offline).
+  /// Dev builds only (screenshot harness): switching the forced-offline switch back off re-asks for every tile, like regaining the network.
+  void _onForcedOffline() {
+    if (!TileFetchGate.debugForceOffline.value) _tileReset.add(null);
+  }
+
   void _watchNetwork() {
+    TileFetchGate.debugForceOffline.addListener(_onForcedOffline);
     final net = _pack.basemap.network;
     unawaited(net.current().then((k) => _tiles().gate.setPhoneOnline(k != NetworkKind.offline), onError: (Object _) {}));
     _netSub = net.changes.listen((k) {
@@ -1227,6 +1233,7 @@ class _CoverageMapState extends State<CoverageMap> {
     _boundsTimer?.cancel();
     _prefs.removeListener(_onPrefs);
     unawaited(_netSub?.cancel());
+    TileFetchGate.debugForceOffline.removeListener(_onForcedOffline);
     unawaited(_tileReset.close());
     _tileProvider?.dispose();
     _pingScroll.dispose();

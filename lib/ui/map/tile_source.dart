@@ -28,6 +28,8 @@ import 'package:flutter/painting.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:http/http.dart' as http;
 
+import '../../app/build_flags.dart' show isDevelopmentBuild;
+
 /// What happened to one tile request (for the health recorder and the source indicator).
 enum TileOutcome { cacheHit, networkOk, staleServed, notModified, failed, offlineEmpty, cancelled, packCovered }
 
@@ -133,7 +135,37 @@ class TileFetchGate {
   final int maxWaiting;
   DateTime Function() clock;
   TileFetchGate({this.maxConcurrent = 6, this.failuresToOpen = 3, this.openFor = const Duration(seconds: 15), this.maxWaiting = 48, DateTime Function()? clock})
-    : clock = clock ?? DateTime.now;
+    : clock = clock ?? DateTime.now {
+    _instances.add(this);
+  }
+
+  /// Development builds only (screenshot harness, Settings > Developer later): pretend the phone has no network. Every gate
+  /// closes at once and the map falls back to the disk cache / offline pack, exactly as with real connectivity loss. Always false
+  /// in a release build, whatever is set. `--dart-define=MS_FORCE_OFFLINE=1` starts it on.
+  static final ValueNotifier<bool> debugForceOffline = ValueNotifier<bool>(isDevelopmentBuild && const bool.fromEnvironment('MS_FORCE_OFFLINE'));
+  static bool get _forced => isDevelopmentBuild && debugForceOffline.value;
+
+  static final List<TileFetchGate> _instances = [];
+
+  /// Tile loads in flight on any provider (disk cache read, queue, network), counted for [tilesSettled].
+  static int _pendingLoads = 0;
+
+  /// Completes when no tile request is running or queued on any gate (and stays quiet for [quiet]), or after [cap]. Returns how long
+  /// it waited, for the log. The screenshot harness awaits this before every `SCREEN` marker (plan 22.2 g).
+  static Future<Duration> tilesSettled({Duration cap = const Duration(seconds: 20), Duration quiet = const Duration(milliseconds: 700)}) async {
+    final sw = Stopwatch()..start();
+    var quietSince = sw.elapsed;
+    while (sw.elapsed < cap) {
+      final busy = _pendingLoads > 0 || _instances.any((g) => g._running > 0 || g._waiting.isNotEmpty);
+      if (busy) {
+        quietSince = sw.elapsed;
+      } else if (sw.elapsed - quietSince >= quiet) {
+        break;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    return sw.elapsed;
+  }
 
   int _running = 0;
   final ListQueue<_Waiter> _waiting = ListQueue(); // newest at the end: served first
@@ -147,7 +179,7 @@ class TileFetchGate {
 
   /// True while the breaker is open (no requests are made).
   bool get isOpen {
-    if (_phoneOffline) return true;
+    if (_phoneOffline || _forced) return true;
     final u = _openUntil;
     return u != null && clock().isBefore(u);
   }
@@ -162,11 +194,11 @@ class TileFetchGate {
     }
   }
 
-  bool get phoneOffline => _phoneOffline;
+  bool get phoneOffline => _phoneOffline || _forced;
 
   /// May a request go out now? Open breaker: no, except one probe once [openFor] has passed.
   bool get mayRequest {
-    if (_phoneOffline) return false;
+    if (_phoneOffline || _forced) return false;
     final u = _openUntil;
     if (u == null) return true;
     if (clock().isBefore(u)) return false;
@@ -294,6 +326,15 @@ class MeshTileProvider extends TileProvider {
 
   /// Resolves one tile to image bytes (a transparent PNG when there is nothing to show).
   Future<Uint8List> load(String url, {required bool skip, required Future<void> cancel}) async {
+    TileFetchGate._pendingLoads++;
+    try {
+      return await _load(url, skip: skip, cancel: cancel);
+    } finally {
+      TileFetchGate._pendingLoads--;
+    }
+  }
+
+  Future<Uint8List> _load(String url, {required bool skip, required Future<void> cancel}) async {
     if (skip) {
       stats.record(TileOutcome.packCovered);
       return TileProvider.transparentImage;
