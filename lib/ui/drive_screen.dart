@@ -272,6 +272,7 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
                 model: model,
                 redesign: true,
                 collapseCapsule: axText,
+                inspectorLocked: inspectorLocked(driving: s.driving, moving: _auto.moving, passenger: _auto.passenger),
                 topClearance: mq.padding.top,
                 // The strip is part of the panel surface, so the overlays sit above it too.
                 // Floating card: it sits bottom-left, the controls and attribution are bottom-right, so only the margin is cleared.
@@ -309,6 +310,11 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
                       passenger: _auto.passenger,
                       onPassenger: (v) => setState(() => _auto.passenger = v),
                       openGuide: () => showMapLegend(context, colorBy: model.colorBy, pingColors: model.pingColors),
+                      nearby: model.position == null ? const [] : nearestRepeaters(model.regionRepeaters, model.position!.latitude, model.position!.longitude),
+                      onPickNearby: (key) {
+                        model.select(key);
+                        panel.settleTo(PanelDetent.dock);
+                      },
                     ),
                   ),
                       if (idlePill)
@@ -494,7 +500,8 @@ class _MapPane extends StatelessWidget {
   final double topClearance, bottomClearance;
   final bool? rotatable;
   final bool collapseCapsule;
-  const _MapPane({required this.state, required this.model, this.report, this.redesign = false, this.collapseCapsule = false, this.topClearance = 0, this.bottomClearance = 0, this.rotatable});
+  final bool inspectorLocked;
+  const _MapPane({required this.state, required this.model, this.report, this.redesign = false, this.collapseCapsule = false, this.inspectorLocked = false, this.topClearance = 0, this.bottomClearance = 0, this.rotatable});
 
   @override
   Widget build(BuildContext context) {
@@ -543,6 +550,8 @@ class _MapPane extends StatelessWidget {
           // GPS trouble (waiting, weak, lost, Precise Location off) as one line over the map's top edge, with the one button that fixes it.
           banner: redesign ? null : GpsBannerSlot(state: s, compact: expanded || box.maxHeight < kCompactMapHeight),
           onLayers: redesign ? () => showGeneratedLayersSheet(context, model) : null,
+          inspectorLocked: redesign && inspectorLocked,
+          inspectorAutoClear: redesign && s.driving ? kInspectorAutoClear : null,
           topLeading: redesign
               ? _StateChips(state: s, model: model, maxWidth: box.maxWidth)
               : showHeard

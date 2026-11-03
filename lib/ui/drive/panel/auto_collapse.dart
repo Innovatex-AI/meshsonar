@@ -56,6 +56,13 @@ class PanelAutoCollapse {
   }
 }
 
+/// Inspector rule (plan 4.9, R16): while a drive runs and the car moves, with Passenger off, the inspector stays at its peek and its
+/// heavy actions read "Open when stopped".
+bool inspectorLocked({required bool driving, required bool moving, required bool passenger}) => driving && moving && !passenger;
+
+/// The inspector clears itself this long after the last touch while driving.
+const Duration kInspectorAutoClear = Duration(seconds: 12);
+
 /// Ping debounce: ignored while a ping is in flight and for 2 s after the last accepted tap (airtime protection).
 class PingDebounce {
   static const Duration quiet = Duration(seconds: 2);

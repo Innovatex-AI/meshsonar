@@ -305,6 +305,11 @@ class CoverageMap extends StatefulWidget {
   /// Compass) and this opens the layers sheet. Null = the older FAB buttons.
   final VoidCallback? onLayers;
 
+  /// Inspector rules while a drive runs (Drive plan 4.9): [inspectorLocked] keeps it at the one-line peek ("Open when stopped"),
+  /// [inspectorAutoClear] closes it after that long without a touch.
+  final bool inspectorLocked;
+  final Duration? inspectorAutoClear;
+
   /// Overlay clearances (see MapOverlayHost.topClearance / bottomClearance): the full-bleed Drive map keeps its slots out of the
   /// status bar and above the panel without ever being resized.
   final double topClearance;
@@ -362,6 +367,8 @@ class CoverageMap extends StatefulWidget {
     this.topTrailing,
     this.bottom,
     this.onLayers,
+    this.inspectorLocked = false,
+    this.inspectorAutoClear,
     this.topClearance = 0,
     this.bottomClearance = 0,
     this.baseStyle = BaseMapStyle.chart,
@@ -735,6 +742,8 @@ class _CoverageMapState extends State<CoverageMap> {
         body: PingDetailSheet(ping: ping, lookup: lookup, scrollController: _pingScroll),
         onFit: n > 0 ? _fitLinks : null,
         onClose: _clearLinks,
+        locked: widget.inspectorLocked,
+        autoClear: widget.inspectorAutoClear,
       );
     }
     final set = _currentLinks();
@@ -777,6 +786,8 @@ class _CoverageMapState extends State<CoverageMap> {
       body: body,
       onFit: canFit ? _fitLinks : null,
       onClose: _clearLinks,
+      locked: widget.inspectorLocked,
+      autoClear: widget.inspectorAutoClear,
     );
   }
 
