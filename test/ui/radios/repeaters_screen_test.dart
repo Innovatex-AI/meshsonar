@@ -68,6 +68,9 @@ Future<void> openRepeatersRow(WidgetTester tester) async {
   final row = find.byKey(const Key('more-repeaters'));
   final scrollable = find.descendant(of: find.byKey(const Key('more-list')), matching: find.byType(Scrollable)).first;
   await tester.scrollUntilVisible(row, 150, scrollable: scrollable);
+  // The row can land under the translucent tab bar: bring it clear of it.
+  await Scrollable.ensureVisible(tester.element(row), alignment: 0.3);
+  await tester.pump();
   await tester.tap(row);
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 400));

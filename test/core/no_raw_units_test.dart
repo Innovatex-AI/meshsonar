@@ -19,6 +19,8 @@ const List<String> allowedLines = [
   'm ago',
   r'~/ 60}m',
   r'~ 60}m',
+  // Elapsed time ("1m05s" since a ping), not distance.
+  r"return '${m}m",
   // The fixed ~220 m size of a grid cell, a fact about the map grid rather than a measurement.
   '(≈220 m, the same grid',
   // The fixed ~5 km size of the weather grid cell (0.05 degrees) the server looks up, a fact about the source.
