@@ -5,6 +5,10 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+## [0.27.2+44] — 2026-11-03 — Drive chrome (status capsule, strip, docks, control column), iPad and landscape card, inspector driving rules, clean map corners
+
+What you will notice in this build: the Drive screen's top chrome is a status capsule and an always-on region chip, GPS and radio trouble is one strip with its fix button, the dock has Connecting/idle/big-text layouts, the right-hand buttons are Layers/Recenter/Compass in fixed slots, iPad and landscape phones get a floating card, and nothing sits in the lower-left of the map.
+
 - **Clean map corners (Drive redesign WP7).** On the new Drive screen nothing is drawn in the lower-left of the map in any state: the SIMULATED tag is gone (the amber SIM badge lives in the status capsule) and the "Map offline" note is an "Offline map" pill at the top under the region chip. A repeater label pass that met a not-yet-placed camera could crash with an infinity error; it now skips such rectangles.
 
 - **Map inspector rules while driving, Nearby repeaters (Drive redesign WP4).** The panel that opens when you tap a cell, repeater or ping now follows the driving rules: while the car moves (Passenger off) it stays at its one-line peek and says "Open when stopped" instead of expanding, and it closes itself 12 seconds after your last touch so it never lingers over the road. Its close and fit buttons are full 48 pt targets. Medium shows a "Nearby repeaters" list (the three closest on the region roster with distance); tapping one highlights it on the map and drops back to the Dock.
