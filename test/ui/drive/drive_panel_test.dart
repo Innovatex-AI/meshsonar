@@ -153,10 +153,6 @@ void main() {
     final oldPrint = debugPrint;
     debugPrint = (String? m, {int? wrapWidth}) => lines.add(m ?? '');
     debugPrintLayouts = true;
-    addTearDown(() {
-      debugPrintLayouts = false;
-      debugPrint = oldPrint;
-    });
     final ids = <String>{};
     void walk(RenderObject r) {
       ids.add(describeIdentity(r).split('#').last);
@@ -183,6 +179,7 @@ void main() {
     expect(CellRasterLayer.totalPaints, paints);
     await g.up();
     debugPrintLayouts = false;
+    debugPrint = oldPrint;
     await settleAnim(tester);
     expect(insets.publishCount, before + 1, reason: 'one write at settle');
     expect(insets.value.bottom, greaterThanOrEqualTo(874 - panelTop(tester) - 2), reason: 'bottom inset covers the panel');
@@ -199,13 +196,13 @@ void main() {
     expect(attrDock.dy, lessThanOrEqualTo(680), reason: 'the credit sits above the panel');
     await tester.tapAt(Offset(200, 690));
     await settleAnim(tester);
+    await settleAnim(tester);
     expect(panelTop(tester), closeTo(366, 2), reason: 'the tap opened Medium');
     final attrMed = tester.getBottomRight(find.byType(AttributionLine));
-    // ignore: avoid_print
-    print('DEBUG panelTop=${panelTop(tester)} attrDock=$attrDock attrMed=$attrMed');
     expect(attrMed.dy, lessThanOrEqualTo(366));
     await tester.tapAt(Offset(200, 376));
     await settleAnim(tester);
+    await settleAnim(tester); // the 0.95-ratio spring settles in about 1.5 s; the clearance is written at settle
     expect(tester.getRect(find.byType(CoverageMap)), map);
     expect(tester.getBottomRight(find.byType(AttributionLine)), attrDock);
     await end(tester, h);
