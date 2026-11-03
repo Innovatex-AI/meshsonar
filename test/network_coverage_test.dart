@@ -70,15 +70,15 @@ void main() {
 
   group('levelFor: share heard', () {
     test('no pings is none', () {
-      expect(levelFor(_cell(pings: 0, heard: 0), CoverageColorBy.heard), CoverageLevel.none);
+      expect(levelFor(_cell(pings: 0, heard: 0, bestSnr: 0), CoverageColorBy.heard), CoverageLevel.none);
     });
     test('boundaries: >=75% strong, [50,75) good, [25,50) fair, <25 weak', () {
-      expect(levelFor(_cell(pings: 4, heard: 3), CoverageColorBy.heard), CoverageLevel.strong); // 75%
-      expect(levelFor(_cell(pings: 100, heard: 74), CoverageColorBy.heard), CoverageLevel.good);
-      expect(levelFor(_cell(pings: 4, heard: 2), CoverageColorBy.heard), CoverageLevel.good); // 50%
-      expect(levelFor(_cell(pings: 4, heard: 1), CoverageColorBy.heard), CoverageLevel.fair); // 25%
-      expect(levelFor(_cell(pings: 100, heard: 24), CoverageColorBy.heard), CoverageLevel.weak);
-      expect(levelFor(_cell(pings: 10, heard: 0), CoverageColorBy.heard), CoverageLevel.none); // nothing heard is grey, not red
+      expect(levelFor(_cell(pings: 4, heard: 3, bestSnr: 0), CoverageColorBy.heard), CoverageLevel.strong); // 75%
+      expect(levelFor(_cell(pings: 100, heard: 74, bestSnr: 0), CoverageColorBy.heard), CoverageLevel.good);
+      expect(levelFor(_cell(pings: 4, heard: 2, bestSnr: 0), CoverageColorBy.heard), CoverageLevel.good); // 50%
+      expect(levelFor(_cell(pings: 4, heard: 1, bestSnr: 0), CoverageColorBy.heard), CoverageLevel.fair); // 25%
+      expect(levelFor(_cell(pings: 100, heard: 24, bestSnr: 0), CoverageColorBy.heard), CoverageLevel.weak);
+      expect(levelFor(_cell(pings: 10, heard: 0, bestSnr: 0), CoverageColorBy.heard), CoverageLevel.none); // nothing heard is grey, not red
     });
   });
 

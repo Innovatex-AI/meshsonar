@@ -217,7 +217,14 @@ RepeaterScene buildRepeaterScene({
     ));
   }
   if (selected != null) singles.add(selected!);
-  return RepeaterScene(sources, singles, clusters);
+  // One repeater can arrive from two lists (roster and network) or as a badge too: draw it once, the top-most copy wins
+  // (the semantics tree and hit tests key on the repeater key).
+  final seen = <String>{};
+  final unique = <RepeaterItem>[];
+  for (var i = singles.length - 1; i >= 0; i--) {
+    if (seen.add(singles[i].key)) unique.add(singles[i]);
+  }
+  return RepeaterScene(sources, unique.reversed.toList(growable: false), clusters);
 }
 
 /// What a tap or a VoiceOver activation picked.
