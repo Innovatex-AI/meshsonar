@@ -23,6 +23,7 @@ import 'radio_api.dart';
 import 'radio_health.dart';
 import 'repeater_radio.dart';
 import 'repeater_wire.dart';
+import 'rx_facts.dart';
 import 'scope_guard.dart';
 
 class CompanionException implements Exception {
@@ -81,6 +82,9 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
   /// must not be fed Rx log traffic (remote_request_queue.dart). Set by the session manager from the queue's hook.
   bool rxLogPaused = false;
 
+  /// Remembers recent text packets from the rx log so a message taken off the radio gets its RSSI and hop hashes.
+  final RxCorrelator _rxCorrelator = RxCorrelator();
+
   /// Rx log packets dropped while [rxLogPaused] (shown as the "paused" tag on the Rx log).
   int rxLogDroppedWhilePaused = 0;
 
@@ -114,7 +118,9 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
       this.claimReplyTimeout,
       Duration messagePollInterval = const Duration(seconds: 5)})
       : _clock = clock ?? DateTime.now {
-    sync = MessageSync(this, clock: _clock, pollInterval: messagePollInterval)..onContactText = _onContactText;
+    sync = MessageSync(this, clock: _clock, pollInterval: messagePollInterval)
+      ..onContactText = _onContactText
+      ..rxFacts = (at, snr, hops) => _rxCorrelator.take(at: at, snrDb: snr, hops: hops);
     _sub = _transport.incoming.listen(_onFrame, onDone: _onTransportDone, onError: (Object _) {});
   }
 
@@ -231,6 +237,7 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
     final now = _clock();
     switch (f) {
       case LogRxDataPush():
+        _rxCorrelator.record(now, f.raw, snrDb: f.snrDb, rssiDbm: f.rssiDbm); // for message RSSI, even while the Rx log screen is paused
         if (rxLogPaused) {
           rxLogDroppedWhilePaused++;
           break;

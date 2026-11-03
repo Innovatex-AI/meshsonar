@@ -56,7 +56,7 @@ class _SystemTrafficScreenState extends State<SystemTrafficScreen> {
                 : ListView.builder(
                     key: const Key('traffic-list'),
                     itemCount: page.messages.length,
-                    itemBuilder: (context, i) => MessageBubble(message: page.messages[i], showSender: true),
+                    itemBuilder: (context, i) => MessageBubble.single(message: page.messages[i], showSender: true),
                   ),
           ),
         ]),
