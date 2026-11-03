@@ -40,6 +40,7 @@ import 'drive/dock_strip.dart';
 import 'drive/status_capsule.dart';
 import 'drive/panel/auto_collapse.dart';
 import 'drive/panel/drive_panel.dart';
+import 'drive/panel/immersive_pill.dart';
 import 'drive/panel/drive_panel_controller.dart';
 import 'drive/panel/panel_dock.dart';
 import 'drive/panel/panel_medium.dart';
@@ -242,11 +243,16 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
         builder: (context, box) {
           // The tab bar zone is measured while the bar is shown and remembered while it is hidden (Immersive).
           if (!(_shell?.immersive ?? false)) _navBar = mq.padding.bottom;
+          // iPad / landscape phone (width >= 700): a floating card, never the full-width phone panel (plan 4.21).
+          final floating = box.maxWidth >= 700;
+          final cardWidth = !floating ? null : (box.maxHeight < 500 ? kCardWidthLandscape : kCardWidthPad);
+          final cardLeft = 16 + mq.viewPadding.left;
           final g = PanelGeometry.forScreen(
             screenHeight: box.maxHeight,
-            navBar: _navBar ?? mq.padding.bottom,
+            navBar: floating ? 16 + mq.viewPadding.bottom : (_navBar ?? mq.padding.bottom),
             safeBottom: mq.viewPadding.bottom,
             dockRow: DriveDock.isAx(context) ? kPanelDockRowAx : kPanelDockRowHeight,
+            floating: floating,
           );
           if (panel.geometry == null) {
             panel.setGeometry(g);
@@ -268,7 +274,10 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
                 collapseCapsule: axText,
                 topClearance: mq.padding.top,
                 // The strip is part of the panel surface, so the overlays sit above it too.
-                bottomClearance: (_clearance ?? panel.extent.value) + (stripFor(s, s.gpsHealth.value) == null ? 0 : kPanelStripHeight),
+                // Floating card: it sits bottom-left, the controls and attribution are bottom-right, so only the margin is cleared.
+                bottomClearance: floating
+                    ? 16 + mq.viewPadding.bottom
+                    : (_clearance ?? panel.extent.value) + (stripFor(s, s.gpsHealth.value) == null ? 0 : kPanelStripHeight),
                 rotatable: panel.detent == PanelDetent.immersive,
               ),
             ),
@@ -282,7 +291,12 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
                   listenable: Listenable.merge([s, s.gpsHealth, panel, liveStats]),
                   builder: (context, _) {
                     final strip = stripFor(s, s.gpsHealth.value);
-                    return DrivePanel(
+                    final idlePill = !s.driving && s.lastFinishedSessionId == null && panel.detent == PanelDetent.immersive && panel.settled;
+                    return Stack(fit: StackFit.expand, children: [
+                      DrivePanel(
+                    hidden: idlePill,
+                    cardWidth: cardWidth,
+                    cardLeft: cardLeft,
                     strip: strip == null ? null : DockStripView(info: strip),
                     controller: panel,
                     onTouch: () => _auto.touch(s.services.clock()),
@@ -296,7 +310,15 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
                       onPassenger: (v) => setState(() => _auto.passenger = v),
                       openGuide: () => showMapLegend(context, colorBy: model.colorBy, pingColors: model.pingColors),
                     ),
-                  );
+                  ),
+                      if (idlePill)
+                        Positioned(
+                          left: floating ? cardLeft + (cardWidth! - 64) / 2 : (box.maxWidth - 64) / 2,
+                          bottom: (floating ? 16 : 0) + mq.viewPadding.bottom + 8,
+                          width: 64,
+                          child: ImmersivePill(state: s, controller: panel),
+                        ),
+                    ]);
                   },
                 ),
               ),
