@@ -94,3 +94,12 @@ void testWidgetsT(String description, Future<void> Function(WidgetTester tester)
         dismissAppToast();
       }
     });
+
+/// The redesigned screens hold the iOS 44 pt target (plan 2.2 `Hit.min`), plus labels and contrast.
+Future<void> expectAccessibleIos(WidgetTester tester) async {
+  final handle = tester.ensureSemantics();
+  await expectLater(tester, meetsGuideline(iOSTapTargetGuideline));
+  await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+  await expectLater(tester, meetsGuideline(textContrastGuideline));
+  handle.dispose();
+}

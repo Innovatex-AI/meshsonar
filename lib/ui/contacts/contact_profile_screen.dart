@@ -357,11 +357,7 @@ class _ContactProfileScreenState extends State<ContactProfileScreen> {
       case ProfileTileId.route:
         await _route(c);
       case ProfileTileId.ping:
-        await showComingSoonSheet(context,
-            title: 'Ping ${c.displayName}',
-            body: c.type == ContactType.companion
-                ? 'Ping will look for the best route to ${c.displayName} and time a round trip. It uses a little airtime.'
-                : 'Ping will trace the route to ${c.displayName} and show the signal at every hop. It uses a little airtime.');
+        await showPingSheet(context, c);
       case ProfileTileId.stats:
         await showUserStatsSheet(context, contact: c);
       case ProfileTileId.telemetry:

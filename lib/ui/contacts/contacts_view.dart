@@ -1,24 +1,42 @@
-// The Contacts half of the Chat tab: search, filters, new nodes nearby, favourites and everyone else, with every state
-// (no radio, syncing, failed, full, empty) said in plain words. No Scaffold of its own: it sits inside the Chat tab's.
+// The Contacts segment of the Chat tab (plan 4.5): people only, Favourites then A-Z under sticky letter headers, one
+// collapsed "New nodes nearby" row, one status banner, swipe actions, and a foot with the contact settings. Repeaters,
+// rooms and sensors live in the Network segment. No Scaffold of its own: it sits inside the Chat tab's.
+//
+// Swipe: leading Message and Favourite, trailing Ping and Remove (action sheet). Tap = the Contact profile, always.
 import 'dart:async';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart' show CustomSemanticsAction;
+import 'package:flutter_slidable/flutter_slidable.dart';
 
 import '../../chat/contact_manager.dart';
 import '../../chat/models.dart';
+import '../../radio/caps.dart';
+import '../design/app_haptics.dart';
 import '../design/app_surfaces.dart';
+import '../design/app_symbols.dart';
+import '../design/app_type.dart';
+import '../design/app_widgets.dart';
+import '../design/state_views.dart';
+import '../design/tokens.dart';
 import '../drive/drive_controls.dart' show openConnect;
-import '../theme.dart';
-import '../widgets.dart' show EmptyState;
+import '../tools/adverts_screen.dart';
 import 'add_contact_screen.dart';
 import 'contact_profile_screen.dart';
-import '../design/app_symbols.dart';
+import 'contact_remove.dart';
 import 'contact_widgets.dart';
 import 'contacts_controller.dart';
+import 'contacts_grouping.dart';
 import 'contacts_settings_sheet.dart';
+import 'profile_sheets.dart';
+import 'profile_tiles.dart';
 import 'qr_scan_screen.dart';
 import 'radio_list_sheet.dart';
-import '../radios/rooms/room_joins.dart';
+
+const double kContactAvatar = 52;
+const double _kRowMin = 72;
+const double _kDividerInset = Layout.screenMargin + kContactAvatar + 12;
 
 class ContactsView extends StatefulWidget {
   final ContactsController controller;
@@ -37,10 +55,6 @@ class ContactsView extends StatefulWidget {
 class _ContactsViewState extends State<ContactsView> {
   final _search = TextEditingController();
   StreamSubscription<ContactNotice>? _notices;
-  bool _allNearby = false;
-
-  /// How many new nodes show before "See all": two rows keep the person's own contacts on the first screen.
-  static const int _nearbyFirst = 2;
 
   ContactsController get _c => widget.controller;
   ContactManager get _m => _c.manager;
@@ -64,13 +78,36 @@ class _ContactsViewState extends State<ContactsView> {
 
   void _add() => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AddContactScreen(controller: _c, scannerBuilder: widget.scannerBuilder)));
 
-  void _details(Contact c) =>
+  void _advert() => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const AdvertsScreen()));
+
+  void _profile(Contact c) =>
       Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ContactProfileScreen(controller: _c, publicKey: c.publicKey)));
 
-  /// A person opens their conversation (the thing you came here to do); everything else, and anyone when no conversation
-  /// screen is wired, opens the details. People get an info button for the details.
-  bool _converses(Contact c) => _c.openConversation != null && (c.type == ContactType.companion || (c.type == ContactType.room && _c.canOpenRooms));
-  void _open(Contact c) => _converses(c) ? _c.openConversation!(context, c) : _details(c);
+  void _message(Contact c) => _c.openConversation?.call(context, c);
+
+  void _favourite(Contact c) {
+    AppHaptics.selection();
+    _m.setFavourite(c.publicKey, !c.favourite);
+  }
+
+  Future<void> _ping(Contact c) async {
+    final tile = profileTiles(c, connected: _m.connected, caps: RadioCaps.baseline, canMessage: false, canAdmin: false, redesign: true)
+        .where((t) => t.id == ProfileTileId.ping)
+        .firstOrNull;
+    if (tile != null && !tile.enabled) {
+      showAppToast(context, tile.reason ?? 'Not available right now.');
+      return;
+    }
+    await showPingSheet(context, c);
+  }
+
+  Future<void> _remove(Contact c) => removeContactFlow(context, _c, c);
+
+  void _clearSearch() {
+    _search.clear();
+    _c.setQuery('');
+    setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -81,22 +118,29 @@ class _ContactsViewState extends State<ContactsView> {
         final nearby = _c.nearby;
         final connected = _m.connected;
         if (total == 0 && nearby.isEmpty && !connected) return _noRadio(context);
-        final items = <Widget>[
-          _header(context),
-          ..._banners(context, total, connected),
-          if (_m.shouldOfferAskFirst) _askFirst(context),
-          if (nearby.isNotEmpty) ..._nearbySection(context, nearby),
-          ..._contactSections(context, total, connected),
-        ];
-        return RefreshIndicator(
-          onRefresh: () => _m.syncNow(full: true),
-          child: ListView.builder(
-            key: const Key('contacts-list'),
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.only(bottom: Gap.xl),
-            itemCount: items.length,
-            itemBuilder: (_, i) => items[i],
-          ),
+        final people = _c.peopleCount;
+        final groups = groupContacts(_c.rows);
+        final q = _c.query.trim();
+        final now = _c.nowMs();
+        return CustomScrollView(
+          key: const Key('contacts-list'),
+          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+          slivers: [
+            CupertinoSliverRefreshControl(onRefresh: () => _m.syncNow(full: true)),
+            SliverToBoxAdapter(child: _searchField(people)),
+            SliverToBoxAdapter(child: _banner(context, total, connected)),
+            if (nearby.isNotEmpty) SliverToBoxAdapter(child: _NearbyRow(count: nearby.length, onTap: () => _showNearby(context))),
+            if (people == 0)
+              SliverFillRemaining(hasScrollBody: false, child: _empty(context, hasOthers: total > 0))
+            else if (groups.isEmpty)
+              SliverFillRemaining(hasScrollBody: false, child: _noMatch(context, q))
+            else ...[
+              if (groups.favourites.isNotEmpty) _section('Favourites', const Key('title-favourites'), groups.favourites, now, favouriteGroup: true),
+              for (final g in groups.letters) _section(g.letter, Key('title-letter-${g.letter}'), g.rows, now),
+            ],
+            if (people > 0 && !groups.isEmpty) SliverToBoxAdapter(child: _foot(context)),
+            const SliverToBoxAdapter(child: SizedBox(height: Gap.xl)),
+          ],
         );
       },
     );
@@ -104,380 +148,434 @@ class _ContactsViewState extends State<ContactsView> {
 
   // ------------------------------------------------------------------ pieces
 
-  Widget _noRadio(BuildContext context) => EmptyState(
+  Widget _noRadio(BuildContext context) => AppEmptyView(
         key: const Key('contacts-no-radio'),
-        icon: Icons.people_outline_rounded,
+        symbol: AppSymbols.person2,
         title: 'Your contacts appear here',
-        body: 'Connect your MeshCore radio once. Its contacts are copied to this phone and stay here, even when the radio is off.',
-        action: FilledButton.icon(
-          key: const Key('contacts-connect'),
-          style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
-          onPressed: _connect,
-          icon: const Icon(Icons.bluetooth_searching_rounded),
-          label: const Text('Connect radio'),
+        message: 'Connect your MeshCore radio once. Its contacts are copied to this phone and stay here, even when the radio is off.',
+        actionLabel: 'Connect radio',
+        onAction: _connect,
+      );
+
+  Widget _searchField(int people) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: Layout.screenMargin, vertical: Gap.s),
+        child: CupertinoSearchTextField(
+          key: const Key('contacts-search'),
+          controller: _search,
+          placeholder: 'Search $people ${people == 1 ? 'contact' : 'contacts'}',
+          onChanged: (v) {
+            _c.setQuery(v);
+            setState(() {});
+          },
+          onSuffixTap: _clearSearch,
         ),
       );
 
-  Widget _header(BuildContext context) {
+  /// One banner at a time (failed, then syncing) and one card (table full, else the ask-first offer). Offline is the Chat
+  /// tab's own banner above this segment.
+  Widget _banner(BuildContext context, int total, bool connected) {
     final s = _m.state;
-    final t = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(Gap.l, Gap.s, Gap.l, 0),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        TextField(
-          key: const Key('contacts-search'),
-          controller: _search,
-          onChanged: _c.setQuery,
-          textInputAction: TextInputAction.search,
-          decoration: InputDecoration(
-            hintText: 'Search contacts',
-            prefixIcon: const Icon(Icons.search_rounded),
-            suffixIcon: _search.text.isEmpty
-                ? null
-                : IconButton(
-                    key: const Key('contacts-search-clear'),
-                    tooltip: 'Clear search',
-                    icon: const Icon(Icons.close_rounded),
-                    onPressed: _clearSearch,
-                  ),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(Corners.chip)),
-            isDense: false,
-          ),
+    final col = AppColors.of(context);
+    Widget? banner;
+    if (s.phase == SyncPhase.failed) {
+      banner = ChatStatusBanner(
+        key: const Key('banner-failed'),
+        kind: StatusBannerKind.error,
+        message: s.error ?? 'The contact list could not be read from the radio.',
+        actionLabel: 'Try again',
+        onAction: () => _m.syncNow(),
+      );
+    } else if (s.phase == SyncPhase.syncing) {
+      banner = Column(key: const Key('banner-syncing'), children: [
+        ChatStatusBanner(
+          message: s.total > 0 ? 'Loading contacts from your radio: ${s.received} of ${s.total}' : 'Asking your radio for its contacts',
         ),
-        const SizedBox(height: Gap.s),
-        Row(children: [
-          Expanded(
-            child: FilledButton.icon(
-              key: const Key('contacts-add'),
-              style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
-              onPressed: _add,
-              icon: const Icon(Icons.person_add_alt_1_rounded),
-              label: const Text('Add contact'),
-            ),
-          ),
-          const SizedBox(width: Gap.s),
-          IconButton.outlined(
-            key: const Key('contacts-settings'),
-            tooltip: 'Contact settings',
-            style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
-            icon: const Icon(Icons.tune_rounded),
-            onPressed: () => showContactsSettings(context, _c),
-          ),
-        ]),
-        const SizedBox(height: Gap.s),
-        SingleChildScrollView(
-          key: const Key('contacts-filters'),
-          scrollDirection: Axis.horizontal,
-          child: Row(children: [
-            for (final f in ContactFilter.values)
-              Padding(
-                padding: const EdgeInsets.only(right: Gap.s),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: 48),
-                  child: ChoiceChip(
-                    key: Key('filter-${f.name}'),
-                    materialTapTargetSize: MaterialTapTargetSize.padded,
-                    label: Text(f.label),
-                    selected: _c.filter == f,
-                    onSelected: (_) => _c.setFilter(f),
-                  ),
-                ),
-              ),
-          ]),
-        ),
-        if (_m.connected && s.radioCount != null && s.capacity != null)
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton(
-              key: const Key('contacts-usage'),
-              style: TextButton.styleFrom(minimumSize: const Size(48, 48), padding: EdgeInsets.zero),
-              onPressed: () => showRadioListSheet(context, _c),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                Flexible(child: Text('On your radio: ${s.radioCount} of ${s.capacity} contacts', style: t.textTheme.bodyMedium)),
-                const SizedBox(width: Gap.xs),
-                const Icon(Icons.chevron_right_rounded, size: 20),
-              ]),
-            ),
-          ),
-      ]),
-    );
-  }
-
-  void _clearSearch() {
-    _search.clear();
-    _c.setQuery('');
-    setState(() {});
-  }
-
-  Widget _banner(BuildContext context, {required Key key, required IconData icon, required String text, Color? color, Widget? action, Widget? extra}) {
-    final t = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(Gap.l, Gap.s, Gap.l, 0),
-      child: Card(
-        key: key,
-        color: color ?? t.colorScheme.surfaceContainerHigh,
-        margin: EdgeInsets.zero,
-        child: Padding(
-          padding: const EdgeInsets.all(Gap.m),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Icon(icon, size: 22),
-              const SizedBox(width: Gap.m),
-              Expanded(child: Text(text, style: t.textTheme.bodyMedium)),
-            ]),
-            if (extra != null) ...[const SizedBox(height: Gap.s), extra],
-            if (action != null) Align(alignment: Alignment.centerRight, child: action),
-          ]),
-        ),
-      ),
-    );
-  }
-
-  List<Widget> _banners(BuildContext context, int total, bool connected) {
-    final s = _m.state;
-    final t = Theme.of(context);
-    return [
-      if (!connected)
-        _banner(context,
-            key: const Key('banner-offline'),
-            icon: Icons.bluetooth_disabled_rounded,
-            text: 'Radio not connected. Showing the contacts saved on this phone. Messages wait and send when it is back.',
-            action: TextButton(key: const Key('banner-connect'), style: TextButton.styleFrom(minimumSize: const Size(48, 48)), onPressed: _connect, child: const Text('Connect radio'))),
-      if (s.phase == SyncPhase.syncing)
-        _banner(context,
-            key: const Key('banner-syncing'),
-            icon: Icons.sync_rounded,
-            text: s.total > 0 ? 'Loading contacts from your radio: ${s.received} of ${s.total}' : 'Asking your radio for its contacts',
-            extra: LinearProgressIndicator(value: s.total > 0 ? (s.received / s.total).clamp(0, 1).toDouble() : null)),
-      if (s.phase == SyncPhase.failed)
-        _banner(context,
-            key: const Key('banner-failed'),
-            icon: Icons.error_outline_rounded,
-            color: t.colorScheme.errorContainer,
-            text: s.error ?? 'The contact list could not be read from the radio.',
-            action: FilledButton.tonal(key: const Key('banner-retry'), style: FilledButton.styleFrom(minimumSize: const Size(48, 48)), onPressed: () => _m.syncNow(), child: const Text('Try again'))),
-      if (connected && s.tableFull)
-        _banner(context,
-            key: const Key('banner-full'),
-            icon: Icons.inventory_2_outlined,
-            color: t.colorScheme.errorContainer,
-            text: 'Your radio\'s contact list is full${s.radioCount != null && s.capacity != null ? ' (${s.radioCount} of ${s.capacity})' : ''}. It cannot add new nodes until you free space.',
-            action: FilledButton.tonal(key: const Key('banner-free'), style: FilledButton.styleFrom(minimumSize: const Size(48, 48)), onPressed: () => showRadioListSheet(context, _c), child: const Text('Free up space'))),
-    ];
-  }
-
-  Widget _askFirst(BuildContext context) => _banner(context,
-      key: const Key('ask-first'),
-      icon: Icons.person_search_rounded,
-      text: 'Your radio adds every node it hears. That fills its contact list with strangers. Ask me before adding?',
-      action: Wrap(spacing: Gap.s, children: [
-        TextButton(key: const Key('ask-keep'), style: TextButton.styleFrom(minimumSize: const Size(48, 48)), onPressed: () => _m.answerPolicyPrompt('keep'), child: const Text('Keep automatic')),
-        FilledButton(
-          key: const Key('ask-yes'),
-          style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
-          onPressed: () async {
+        if (s.total > 0)
+          LinearProgressIndicator(value: (s.received / s.total).clamp(0, 1).toDouble(), minHeight: 2, color: col.accent, backgroundColor: col.outline.withValues(alpha: 0.3)),
+      ]);
+    }
+    Widget? card;
+    if (connected && s.tableFull) {
+      card = _Card(
+        key: const Key('banner-full'),
+        symbol: AppSymbols.exclamationTriangle,
+        text: 'Your radio\'s contact list is full${s.radioCount != null && s.capacity != null ? ' (${s.radioCount} of ${s.capacity})' : ''}. It cannot add new nodes until you free space.',
+        actions: [_CardButton(const Key('banner-free'), 'Free up space', () => showRadioListSheet(context, _c))],
+      );
+    } else if (_m.shouldOfferAskFirst) {
+      card = _Card(
+        key: const Key('ask-first'),
+        symbol: AppSymbols.personBadgePlus,
+        text: 'Your radio adds every node it hears. That fills its contact list with strangers. Ask me before adding?',
+        actions: [
+          _CardButton(const Key('ask-keep'), 'Keep automatic', () => _m.answerPolicyPrompt('keep')),
+          _CardButton(const Key('ask-yes'), 'Ask me first', () async {
             try {
               await _m.setPolicy(_m.state.policy!.copyWith(askBeforeAdding: true));
               _m.answerPolicyPrompt('ask');
             } catch (_) {
               if (context.mounted) showAppToast(context, 'The radio did not take that. Try again in a moment.', kind: AppToastKind.error);
             }
-          },
-          child: const Text('Ask me first'),
+          }, bold: true),
+        ],
+      );
+    }
+    if (banner == null && card == null) return const SizedBox.shrink();
+    return Column(children: [?banner, ?card]);
+  }
+
+  Widget _empty(BuildContext context, {required bool hasOthers}) {
+    final col = AppColors.of(context);
+    return Padding(
+      key: const Key('contacts-empty'),
+      padding: const EdgeInsets.all(Gap.xl),
+      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        AppSymbolIcon(AppSymbols.person2, size: 40, color: col.accent),
+        const SizedBox(height: Gap.m),
+        Text('No contacts yet', style: AppType.headline.copyWith(color: col.textPrimary), textAlign: TextAlign.center),
+        const SizedBox(height: Gap.xs),
+        Text(
+          hasOthers
+              ? 'People appear when their radio advertises. Repeaters and rooms are under Network.'
+              : 'People appear when their radio advertises. You can also add one by QR code, link or key.',
+          style: AppType.subhead.copyWith(color: col.textMuted),
+          textAlign: TextAlign.center,
         ),
-      ]));
+        const SizedBox(height: Gap.l),
+        Wrap(alignment: WrapAlignment.center, spacing: Gap.m, runSpacing: Gap.s, children: [
+          _FilledAction(key: const Key('contacts-send-advert'), label: 'Send an advert', onPressed: _advert),
+          _FilledAction(key: const Key('contacts-scan-qr'), label: 'Scan a QR code', onPressed: _add, tinted: true),
+        ]),
+      ]),
+    );
+  }
 
-  // ------------------------------------------------------------------ new nodes nearby
+  Widget _noMatch(BuildContext context, String q) {
+    final col = AppColors.of(context);
+    return Padding(
+      key: const Key('contacts-no-match'),
+      padding: const EdgeInsets.all(Gap.xl),
+      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        Text('No contact matches “$q”', style: AppType.headline.copyWith(color: col.textPrimary), textAlign: TextAlign.center),
+        const SizedBox(height: Gap.s),
+        _FilledAction(key: const Key('contacts-clear-search'), label: 'Clear search', onPressed: _clearSearch, tinted: true),
+      ]),
+    );
+  }
 
-  List<Widget> _nearbySection(BuildContext context, List<AdvertSeen> nearby) {
-    final t = Theme.of(context);
-    final shown = _allNearby ? nearby : nearby.take(_nearbyFirst).toList();
-    return [
-      Padding(
-        padding: const EdgeInsets.fromLTRB(Gap.l, Gap.l, Gap.l, Gap.xs),
-        child: Semantics(header: true, child: Text('New nodes nearby', key: const Key('nearby-title'), style: t.textTheme.titleMedium)),
+  Widget _section(String title, Key key, List<ContactRow> rows, int now, {bool favouriteGroup = false}) {
+    return SliverMainAxisGroup(slivers: [
+      SliverPersistentHeader(pinned: true, delegate: _LetterHeader(title, key: key, extent: _headerExtent(context))),
+      SliverList.builder(
+        itemCount: rows.length,
+        itemBuilder: (context, i) => Column(children: [
+          _tile(rows[i], now),
+          if (i < rows.length - 1) const _Divider(),
+        ]),
       ),
-      for (final a in shown) _NearbyRow(key: Key('nearby-${a.publicKey.substring(0, 8)}'), advert: a, controller: _c),
-      if (nearby.length > _nearbyFirst)
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: Gap.l),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton(
-              key: const Key('nearby-more'),
-              style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
-              onPressed: () => setState(() => _allNearby = !_allNearby),
-              child: Text(_allNearby ? 'Show fewer' : 'See all ${nearby.length}'),
-            ),
+    ]);
+  }
+
+  double _headerExtent(BuildContext context) => MediaQuery.textScalerOf(context).scale(13) * 1.35 + 14;
+
+  Widget _tile(ContactRow r, int now) {
+    final c = r.contact;
+    final col = AppColors.of(context);
+    final canMessage = _c.openConversation != null;
+    void open() => _profile(c);
+    final tile = _ContactTile(key: Key('contact-${c.publicKey.substring(0, 8)}'), row: r, nowMs: now, onTap: open, actions: {
+      if (canMessage) const CustomSemanticsAction(label: 'Message'): () => _message(c),
+      CustomSemanticsAction(label: c.favourite ? 'Remove from favourites' : 'Add to favourites'): () => _favourite(c),
+      const CustomSemanticsAction(label: 'Ping'): () => unawaited(_ping(c)),
+      const CustomSemanticsAction(label: 'Remove'): () => unawaited(_remove(c)),
+    });
+    return Slidable(
+      key: ValueKey('slide-${c.publicKey}'),
+      startActionPane: ActionPane(motion: const DrawerMotion(), extentRatio: canMessage ? 0.5 : 0.28, children: [
+        if (canMessage)
+          _SwipeAction(key: Key('swipe-message-${c.publicKey.substring(0, 8)}'), color: col.accent, symbol: AppSymbols.message, label: 'Message', onTap: () => _message(c)),
+        _SwipeAction(
+          key: Key('swipe-favourite-${c.publicKey.substring(0, 8)}'),
+          color: col.warning,
+          symbol: c.favourite ? AppSymbols.star : AppSymbols.starFill,
+          label: c.favourite ? 'Unfavourite' : 'Favourite',
+          onTap: () => _favourite(c),
+        ),
+      ]),
+      endActionPane: ActionPane(motion: const DrawerMotion(), extentRatio: 0.5, children: [
+        _SwipeAction(key: Key('swipe-ping-${c.publicKey.substring(0, 8)}'), color: col.textMuted, symbol: AppSymbols.antenna, label: 'Ping', onTap: () => unawaited(_ping(c))),
+        _SwipeAction(key: Key('swipe-remove-${c.publicKey.substring(0, 8)}'), color: col.danger, symbol: AppSymbols.trash, label: 'Remove', onTap: () => unawaited(_remove(c))),
+      ]),
+      child: tile,
+    );
+  }
+
+  Widget _foot(BuildContext context) {
+    final s = _m.state;
+    final showUsage = _m.connected && s.radioCount != null && s.capacity != null;
+    return Padding(
+      padding: const EdgeInsets.only(top: Gap.l),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        _FootRow(key: const Key('contacts-manage'), symbol: AppSymbols.person2, label: 'Manage contacts', onTap: () => showContactsSettings(context, _c)),
+        if (showUsage)
+          _FootRow(
+            key: const Key('contacts-usage'),
+            label: '${s.radioCount} of ${s.capacity} on your radio · Manage',
+            onTap: () => showRadioListSheet(context, _c),
           ),
-        ),
-    ];
+      ]),
+    );
   }
 
-  // ------------------------------------------------------------------ contacts
-
-  List<Widget> _contactSections(BuildContext context, int total, bool connected) {
-    final rows = _c.rows;
-    final t = Theme.of(context);
-    if (total == 0) {
-      final s = _m.state;
-      if (s.phase == SyncPhase.syncing || s.phase == SyncPhase.failed || _c.nearby.isNotEmpty) return const [];
-      return [
-        Padding(
-          padding: const EdgeInsets.all(Gap.xl),
-          child: Column(key: const Key('contacts-empty'), children: [
-            Icon(Icons.people_outline_rounded, size: 40, color: t.colorScheme.primary),
-            const SizedBox(height: Gap.m),
-            Text('No contacts yet', style: t.textTheme.titleMedium, textAlign: TextAlign.center),
-            const SizedBox(height: Gap.xs),
-            Text(
-              'Nodes your radio hears will show under New nodes nearby. You can also add one by QR code, link or key.',
-              style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant),
-              textAlign: TextAlign.center,
-            ),
-          ]),
+  Future<void> _showNearby(BuildContext context) => showAppSheet<void>(
+        context,
+        detents: const [0.5, 0.92],
+        builder: (ctx, scroll) => AppSheetScaffold(
+          controller: scroll,
+          title: 'New nodes nearby',
+          children: [NearbyList(controller: _c)],
         ),
-      ];
-    }
-    if (rows.isEmpty) {
-      final q = _c.query.trim();
-      return [
-        Padding(
-          padding: const EdgeInsets.all(Gap.xl),
-          child: Column(key: const Key('contacts-no-match'), children: [
-            Text(q.isNotEmpty ? 'No contact matches \'$q\'' : 'No contacts in ${_c.filter.label}', style: t.textTheme.titleMedium, textAlign: TextAlign.center),
-            const SizedBox(height: Gap.s),
-            OutlinedButton(
-              key: const Key('contacts-clear-filters'),
-              style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
-              onPressed: () {
-                _clearSearch();
-                _c.setFilter(ContactFilter.all);
-              },
-              child: Text(q.isNotEmpty ? 'Clear search' : 'Show all contacts'),
-            ),
-          ]),
-        ),
-      ];
-    }
-    final plain = _c.filter != ContactFilter.all && _c.filter != ContactFilter.people && _c.filter != ContactFilter.repeaters && _c.filter != ContactFilter.rooms && _c.filter != ContactFilter.sensors;
-    final favs = plain ? const <ContactRow>[] : rows.where((r) => r.contact.favourite).toList();
-    final rest = plain ? rows : rows.where((r) => !r.contact.favourite).toList();
-    Widget title(String s, Key k) => Padding(
-          padding: const EdgeInsets.fromLTRB(Gap.l, Gap.l, Gap.l, Gap.xs),
-          child: Semantics(header: true, child: Text(s, key: k, style: t.textTheme.titleMedium)),
-        );
-    return [
-      if (favs.isNotEmpty) ...[title('Favourites', const Key('title-favourites')), for (final r in favs) _tile(r)],
-      if (rest.isNotEmpty) ...[
-        if (!plain) title(favs.isEmpty ? 'Contacts' : 'All contacts', const Key('title-all')),
-        for (final r in rest) _tile(r),
-      ],
-    ];
-  }
-
-  Widget _tile(ContactRow r) => ContactTile(
-      key: Key('contact-${r.contact.publicKey.substring(0, 8)}'),
-      row: r,
-      nowMs: _c.nowMs(),
-      onTap: () => _open(r.contact),
-      onDetails: _converses(r.contact) ? () => _details(r.contact) : null);
+      );
 }
 
-/// One contact in the list.
-class ContactTile extends StatelessWidget {
+// ------------------------------------------------------------------ rows
+
+class _ContactTile extends StatelessWidget {
   final ContactRow row;
   final int nowMs;
   final VoidCallback onTap;
-
-  /// Shown as an info button after the row when tapping the row does something other than open the details.
-  final VoidCallback? onDetails;
-  const ContactTile({super.key, required this.row, required this.nowMs, required this.onTap, this.onDetails});
+  final Map<CustomSemanticsAction, VoidCallback> actions;
+  const _ContactTile({super.key, required this.row, required this.nowMs, required this.onTap, required this.actions});
 
   @override
-  Widget build(BuildContext context) => row.contact.type == ContactType.room
-      ? ValueListenableBuilder<int>(valueListenable: RoomJoins.changes, builder: (ctx, _, _) => _content(ctx))
-      : _content(context);
-
-  Widget _content(BuildContext context) {
-    final t = Theme.of(context);
+  Widget build(BuildContext context) {
+    final col = AppColors.of(context);
     final c = row.contact;
-    final base = (row.preview != null && row.preview!.isNotEmpty) ? row.preview! : heardText(c.lastHeardMs ?? (c.lastAdvertTs == null ? null : c.lastAdvertTs! * 1000), nowMs);
-    final joined = c.type == ContactType.room ? RoomJoins.label(c.publicKey) : null;
-    final status = joined == null ? base : '$joined - $base';
     final route = routeCaption(c);
+    final heard = heardShort(c, nowMs);
+    final bars = heardBars(c, nowMs);
     final unread = row.unread;
-    final label = '${c.displayName}, ${contactTypeLabel(c.type)}, $status${unread > 0 ? ', $unread unread' : ''}';
-    final small = MediaQuery.textScalerOf(context).scale(14) < 14 * 1.6;
-    final main = Semantics(
+    final label = '${c.displayName}, ${contactTypeLabel(c.type)}, $route, ${heard == null ? 'not heard yet' : 'heard $heard ago'}${unread > 0 ? ', $unread unread' : ''}';
+    return Semantics(
       button: true,
+      container: true,
       label: label,
       excludeSemantics: true,
       onTap: onTap,
-      child: InkWell(
+      customSemanticsActions: actions,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: onTap,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 64),
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(Gap.l, Gap.s, onDetails == null ? Gap.l : Gap.xs, Gap.s),
-            child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-              ContactAvatar(c),
-              const SizedBox(width: Gap.m),
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Row(children: [
-                    Flexible(child: Text(c.displayName, maxLines: 2, overflow: TextOverflow.ellipsis, style: t.textTheme.titleSmall)),
-                    if (c.favourite) const Padding(padding: EdgeInsets.only(left: Gap.xs), child: Icon(Icons.star_rounded, size: 16)),
-                  ]),
-                  Text(status, maxLines: 2, overflow: TextOverflow.ellipsis, style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
-                  if (small)
-                    Text('${contactTypeLabel(c.type)} · $route', style: t.textTheme.labelSmall?.copyWith(color: t.colorScheme.onSurfaceVariant))
-                  else
-                    Text(contactTypeLabel(c.type), style: t.textTheme.labelSmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
-                ]),
-              ),
+        child: Container(
+          color: col.bg,
+          constraints: const BoxConstraints(minHeight: _kRowMin),
+          padding: const EdgeInsets.symmetric(horizontal: Layout.screenMargin, vertical: Gap.s),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+            ContactAvatar(c, size: kContactAvatar),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(c.displayName, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.headline.copyWith(color: col.textPrimary)),
+                Text('${contactTypeLabel(c.type)} · $route', maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.subhead.copyWith(color: col.textMuted)),
+              ]),
+            ),
+            const SizedBox(width: Gap.s),
+            Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.end, children: [
+              HeardBars(bars: bars),
+              if (heard != null) Text(heard, maxLines: 1, style: AppType.footnote.copyWith(color: col.textMuted)),
               if (unread > 0)
                 Container(
-                  margin: const EdgeInsets.only(left: Gap.s),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(color: t.colorScheme.primary, borderRadius: BorderRadius.circular(12)),
-                  child: Text('$unread', style: TextStyle(color: t.colorScheme.onPrimary, fontWeight: FontWeight.w600)),
+                  margin: const EdgeInsets.only(top: 2),
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+                  decoration: BoxDecoration(color: col.accent, borderRadius: BorderRadius.circular(10)),
+                  child: Text('$unread', style: AppType.footnote.copyWith(color: col.onAccent, fontWeight: FontWeight.w600)),
                 ),
+            ]),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+/// Three small bars: how fresh the last sign of life is (see [heardBars]). Never the only cue: the text beside it says how long.
+class HeardBars extends StatelessWidget {
+  final int bars;
+  const HeardBars({super.key, required this.bars});
+
+  @override
+  Widget build(BuildContext context) {
+    final col = AppColors.of(context);
+    return ExcludeSemantics(
+      child: SizedBox(
+        key: ValueKey('heard-bars-$bars'),
+        height: 14,
+        child: Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.end, children: [
+          for (var i = 0; i < 3; i++)
+            Container(
+              width: 4,
+              height: 5.0 + i * 4.5,
+              margin: EdgeInsets.only(left: i == 0 ? 0 : 2),
+              decoration: BoxDecoration(color: i < bars ? col.accent : col.textMuted.withValues(alpha: 0.28), borderRadius: BorderRadius.circular(1.5)),
+            ),
+        ]),
+      ),
+    );
+  }
+}
+
+class _Divider extends StatelessWidget {
+  const _Divider();
+  @override
+  Widget build(BuildContext context) {
+    final col = AppColors.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(left: _kDividerInset),
+      child: SizedBox(height: 0.5, child: ColoredBox(color: col.outline.withValues(alpha: 0.35))),
+    );
+  }
+}
+
+class _LetterHeader extends SliverPersistentHeaderDelegate {
+  final String title;
+  final Key key;
+  final double extent;
+  _LetterHeader(this.title, {required this.key, required this.extent});
+
+  @override
+  double get minExtent => extent;
+  @override
+  double get maxExtent => extent;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    final col = AppColors.of(context);
+    return Semantics(
+      header: true,
+      child: Container(
+        key: key,
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.symmetric(horizontal: Layout.screenMargin),
+        color: col.bg,
+        child: Text(title.toUpperCase(), style: AppType.footnote.copyWith(color: col.textMuted, fontWeight: FontWeight.w600, letterSpacing: 0.4)),
+      ),
+    );
+  }
+
+  @override
+  bool shouldRebuild(_LetterHeader old) => old.title != title || old.extent != extent;
+}
+
+class _SwipeAction extends StatelessWidget {
+  final Color color;
+  final AppSymbol symbol;
+  final String label;
+  final VoidCallback onTap;
+  const _SwipeAction({super.key, required this.color, required this.symbol, required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomSlidableAction(
+      onPressed: (_) => onTap(),
+      backgroundColor: color,
+      foregroundColor: Colors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Semantics(
+        label: label,
+        button: true,
+        excludeSemantics: true,
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          AppSymbolIcon(symbol, size: 22, color: Colors.white),
+          const SizedBox(height: 4),
+          Text(label, maxLines: 1, style: AppType.footnote.copyWith(color: Colors.white, fontWeight: FontWeight.w600), textScaler: MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.3)),
+        ]),
+      ),
+    );
+  }
+}
+
+/// The ONE collapsed row for new nodes; the details open in a sheet.
+class _NearbyRow extends StatelessWidget {
+  final int count;
+  final VoidCallback onTap;
+  const _NearbyRow({required this.count, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final col = AppColors.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: Layout.screenMargin, vertical: Gap.xs),
+      child: Semantics(
+        button: true,
+        label: 'New nodes nearby, $count. See all',
+        excludeSemantics: true,
+        onTap: onTap,
+        child: GestureDetector(
+          key: const Key('nearby-row'),
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: Container(
+            constraints: const BoxConstraints(minHeight: Hit.min),
+            padding: const EdgeInsets.symmetric(horizontal: Gap.m, vertical: Gap.s),
+            decoration: BoxDecoration(color: col.surface, borderRadius: BorderRadius.circular(Corners.card)),
+            child: Row(children: [
+              AppSymbolIcon(AppSymbols.antenna, size: 20, color: col.accent),
+              const SizedBox(width: Gap.s),
+              Expanded(child: Text('New nodes nearby ($count)', key: const Key('nearby-title'), maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.body.copyWith(color: col.textPrimary))),
+              // At the largest text sizes the chevron alone says "see all" (the row's label still does).
+              if (MediaQuery.textScalerOf(context).scale(17) <= 17 * 1.6) ...[
+                const SizedBox(width: Gap.xs),
+                Text('See all', key: const Key('nearby-more'), maxLines: 1, style: AppType.body.copyWith(color: col.accent)),
+              ],
+              const SizedBox(width: 2),
+              AppSymbolIcon(AppSymbols.chevronRight, size: 14, color: col.textMuted),
             ]),
           ),
         ),
       ),
     );
-    if (onDetails == null) return main;
-    return Row(children: [
-      Expanded(child: main),
-      IconButton(
-        key: Key('contact-details-${c.publicKey.substring(0, 8)}'),
-        tooltip: 'Details of ${c.displayName}',
-        constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-        icon: const Icon(Icons.info_outline_rounded),
-        onPressed: onDetails,
-      ),
-      const SizedBox(width: Gap.xs),
-    ]);
   }
 }
 
-class _NearbyRow extends StatelessWidget {
+/// The nodes the radio heard that are not contacts yet, each with Add and Ignore (inside the "New nodes nearby" sheet).
+class NearbyList extends StatelessWidget {
+  final ContactsController controller;
+  const NearbyList({super.key, required this.controller});
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: controller,
+        builder: (context, _) {
+          final nearby = controller.nearby;
+          if (nearby.isEmpty) {
+            return Padding(
+              padding: const EdgeInsets.all(Gap.xl),
+              child: Text('Nothing new nearby right now.', key: const Key('nearby-none'), textAlign: TextAlign.center, style: AppType.subhead.copyWith(color: AppColors.of(context).textMuted)),
+            );
+          }
+          return Column(children: [
+            for (final a in nearby) NearbyAdvertRow(key: Key('nearby-${a.publicKey.substring(0, 8)}'), advert: a, controller: controller),
+          ]);
+        },
+      );
+}
+
+class NearbyAdvertRow extends StatelessWidget {
   final AdvertSeen advert;
   final ContactsController controller;
-  const _NearbyRow({super.key, required this.advert, required this.controller});
+  const NearbyAdvertRow({super.key, required this.advert, required this.controller});
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context);
+    final col = AppColors.of(context);
     final a = advert;
     final type = a.type ?? ContactType.companion;
     final hops = (a.pathLen == null || a.pathLen == 0xFF) ? null : a.pathLen! & 63;
     final detail = '${heardText(a.lastTsMs, controller.nowMs()).replaceFirst('Heard ', 'heard ')}${hops == null ? '' : ', $hops ${hops == 1 ? 'hop' : 'hops'}'}';
-    final add = TextButton(
+    final add = CupertinoButton(
       key: Key('nearby-add-${a.publicKey.substring(0, 8)}'),
-      style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+      minimumSize: const Size(Hit.min, Hit.min),
+      padding: const EdgeInsets.symmetric(horizontal: Gap.s),
       onPressed: () async {
         final r = await controller.manager.addNearby(a);
         if (!context.mounted) return;
@@ -486,33 +584,35 @@ class _NearbyRow extends StatelessWidget {
       },
       child: const Text('Add'),
     );
-    final ignore = TextButton(
+    final ignore = CupertinoButton(
       key: Key('nearby-ignore-${a.publicKey.substring(0, 8)}'),
-      style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+      minimumSize: const Size(Hit.min, Hit.min),
+      padding: const EdgeInsets.symmetric(horizontal: Gap.s),
       onPressed: () => controller.manager.ignoreNearby(a.publicKey),
-      child: const Text('Ignore'),
+      child: Text('Ignore', style: TextStyle(color: col.textMuted)),
     );
     final text = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(a.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: t.textTheme.titleSmall),
-      Text('${contactTypeLabel(type)}, $detail', style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+      Text(a.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.headline.copyWith(color: col.textPrimary)),
+      Text('${contactTypeLabel(type)}, $detail', style: AppType.subhead.copyWith(color: col.textMuted)),
     ]);
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: Gap.l, vertical: Gap.xs),
+      padding: const EdgeInsets.symmetric(vertical: Gap.xs),
       child: Semantics(
         container: true,
         label: 'New node ${a.name}, ${contactTypeLabel(type)}, $detail',
         child: LayoutBuilder(builder: (context, box) {
           // Buttons beside the name while there is room; under it at the largest text sizes and on narrow screens.
           final inline = box.maxWidth >= 340 && MediaQuery.textScalerOf(context).scale(14) <= 14 * 1.3;
-          final avatar = ExcludeSemantics(child: CircleAvatar(radius: 20, child: AppSymbolIcon(contactTypeSymbol(type), size: 20)));
+          final avatar = ExcludeSemantics(
+            child: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(color: col.surfaceHigh, shape: BoxShape.circle),
+              child: Center(child: AppSymbolIcon(contactTypeSymbol(type), size: 20, color: col.textMuted)),
+            ),
+          );
           if (inline) {
-            return Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-              avatar,
-              const SizedBox(width: Gap.m),
-              Expanded(child: text),
-              add,
-              ignore,
-            ]);
+            return Row(crossAxisAlignment: CrossAxisAlignment.center, children: [avatar, const SizedBox(width: Gap.m), Expanded(child: text), add, ignore]);
           }
           return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             avatar,
@@ -520,6 +620,93 @@ class _NearbyRow extends StatelessWidget {
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [text, Wrap(spacing: Gap.s, children: [add, ignore])])),
           ]);
         }),
+      ),
+    );
+  }
+}
+
+// ------------------------------------------------------------------ small parts
+
+class _Card extends StatelessWidget {
+  final AppSymbol symbol;
+  final String text;
+  final List<Widget> actions;
+  const _Card({super.key, required this.symbol, required this.text, required this.actions});
+
+  @override
+  Widget build(BuildContext context) {
+    final col = AppColors.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Layout.screenMargin, Gap.s, Layout.screenMargin, 0),
+      child: Container(
+        padding: const EdgeInsets.all(Gap.m),
+        decoration: BoxDecoration(color: col.surface, borderRadius: BorderRadius.circular(Corners.card)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            AppSymbolIcon(symbol, size: 22, color: col.warning),
+            const SizedBox(width: Gap.m),
+            Expanded(child: Text(text, style: AppType.subhead.copyWith(color: col.textPrimary))),
+          ]),
+          Align(alignment: Alignment.centerRight, child: Wrap(spacing: Gap.s, children: actions)),
+        ]),
+      ),
+    );
+  }
+}
+
+class _CardButton extends StatelessWidget {
+  final String label;
+  final VoidCallback onPressed;
+  final bool bold;
+  const _CardButton(Key key, this.label, this.onPressed, {this.bold = false}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) => CupertinoButton(
+        padding: const EdgeInsets.symmetric(horizontal: Gap.s),
+        minimumSize: const Size(Hit.min, Hit.min),
+        onPressed: onPressed,
+        child: Text(label, style: TextStyle(fontWeight: bold ? FontWeight.w600 : FontWeight.w400)),
+      );
+}
+
+class _FilledAction extends StatelessWidget {
+  final String label;
+  final VoidCallback onPressed;
+  final bool tinted;
+  const _FilledAction({super.key, required this.label, required this.onPressed, this.tinted = false});
+
+  @override
+  Widget build(BuildContext context) => tinted
+      ? CupertinoButton.tinted(minimumSize: const Size(Hit.min, Hit.min), onPressed: onPressed, child: Text(label))
+      : CupertinoButton.filled(minimumSize: const Size(Hit.min, Hit.min), onPressed: onPressed, child: Text(label));
+}
+
+class _FootRow extends StatelessWidget {
+  final AppSymbol? symbol;
+  final String label;
+  final VoidCallback onTap;
+  const _FootRow({super.key, this.symbol, required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final col = AppColors.of(context);
+    return Semantics(
+      button: true,
+      label: label,
+      excludeSemantics: true,
+      onTap: onTap,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Container(
+          constraints: const BoxConstraints(minHeight: Hit.min),
+          padding: const EdgeInsets.symmetric(horizontal: Layout.screenMargin, vertical: Gap.s),
+          child: Row(children: [
+            if (symbol != null) ...[AppSymbolIcon(symbol!, size: 20, color: col.accent), const SizedBox(width: Gap.m)],
+            Expanded(child: Text(label, style: AppType.body.copyWith(color: symbol != null ? col.textPrimary : col.accent))),
+            AppSymbolIcon(AppSymbols.chevronRight, size: 14, color: col.textMuted),
+          ]),
+        ),
       ),
     );
   }

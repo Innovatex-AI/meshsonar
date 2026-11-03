@@ -5,6 +5,8 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- **Contacts segment rewrite (Chat redesign WP6b).** Contacts now lists people only, Favourites first then A-Z under sticky letter headers, with no filter chips, one collapsed "New nodes nearby" row, "Search N contacts", and a row of avatar, name, "Person · Via 2 repeaters", heard bars and how long ago. Tap opens the profile; swipe right for Message and Favourite, left for Ping and Remove (with Undo). Add contact moved to the top-right button; contact settings are the "Manage contacts" row and "N of M on your radio" at the foot of the list. Repeaters and rooms are under Network.
+
 - **Clean map corners (Drive redesign WP7).** On the new Drive screen nothing is drawn in the lower-left of the map in any state: the SIMULATED tag is gone (the amber SIM badge lives in the status capsule) and the "Map offline" note is an "Offline map" pill at the top under the region chip. A repeater label pass that met a not-yet-placed camera could crash with an infinity error; it now skips such rectangles.
 
 - **Map inspector rules while driving, Nearby repeaters (Drive redesign WP4).** The panel that opens when you tap a cell, repeater or ping now follows the driving rules: while the car moves (Passenger off) it stays at its one-line peek and says "Open when stopped" instead of expanding, and it closes itself 12 seconds after your last touch so it never lingers over the road. Its close and fit buttons are full 48 pt targets. Medium shows a "Nearby repeaters" list (the three closest on the region roster with distance); tapping one highlights it on the map and drops back to the Dock.
