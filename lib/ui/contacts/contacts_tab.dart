@@ -3,10 +3,12 @@
 // ChatTabProviderImpl.contactsBuilder by lib/app/chat_wiring.dart.
 import 'package:flutter/material.dart';
 
+import '../../app/app_flags.dart';
 import '../../app/chat_controller.dart';
 import '../../chat/models.dart';
 import '../chat/conversation_screen.dart';
 import '../radios/admin_launcher.dart' show openRepeaterAdmin;
+import '../radios/rooms/room_join_bar.dart';
 import '../radios/rooms/room_join_header.dart';
 import 'contact_profile_screen.dart';
 import 'contacts_controller.dart';
@@ -53,7 +55,7 @@ class _ContactsTabState extends State<ContactsTab> {
           onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ContactProfileScreen(controller: _c, publicKey: c.publicKey))),
         ),
       ],
-      header: room ? RoomJoinHeader(keyHex: c.publicKey, name: c.displayName) : DmRouteHeader(controller: _c, publicKey: c.publicKey),
+      header: room ? (AppFlags.chatRedesign ? RoomJoinBar(keyHex: c.publicKey, name: c.displayName) : RoomJoinHeader(keyHex: c.publicKey, name: c.displayName)) : DmRouteHeader(controller: _c, publicKey: c.publicKey),
     );
   }
 
