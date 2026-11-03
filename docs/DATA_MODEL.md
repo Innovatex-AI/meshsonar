@@ -310,7 +310,7 @@ use `sqlite3.openInMemory()`.
 the one byte that is on every packet anyway). `lib/platform/secure_storage.dart` is the Keychain/Keystore implementation
 (`kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`, no iCloud sync). A test greps the database file for the secret bytes.
 
-### Tables (schema v1, `lib/chat/db/migrations.dart`)
+### Tables (schema v3, `lib/chat/db/migrations.dart`; v2 and v3 columns/tables are listed under "Migrations" below the table)
 
 | Table | Key | What |
 |---|---|---|
@@ -325,6 +325,20 @@ the one byte that is on every packet anyway). `lib/platform/secure_storage.dart`
 | `system_stats` | `channel_id` | wardrive channel counters: pings sent, heard from others |
 | `settings` | `key` | `retention_default_days` |
 | `fts_messages` | rowid = `messages.seq` | FTS5 external-content index over text and sender, **trigram** tokenizer with `remove_diacritics 1`; triggers keep it in step |
+
+**Migrations (append-only, one transaction each, `PRAGMA user_version`).**
+
+| Version | What |
+|---|---|
+| v1 | initial schema |
+| v2 | contacts: `on_radio`, `radio_flags`, `last_heard_ms`, `force_flood`; adverts_seen: `advert_ts`, `ignored` |
+| v3 (chat redesign) | `messages`: `rssi`, `path_hashes` (hex of hop hashes, incoming where known), `hash_size`, `air_ms`. `contacts`: `path_mode` (`auto` / `fixed` / `flood`, NOT NULL default `auto`, backfilled `flood` where `force_flood = 1`), `pinned_path` (hex hops for fixed), `pinned_hash_size`, `path_learned_ms`, `last_ping_ms`, `last_ping_rtt_ms`, `last_ping_ok`, `fw_level` (remote firmware level from login), `last_login_role`. `conversations`: `marked_unread` (manual Mark unread; counts as 1 in the badge, cleared by `markConversationRead`), `last_state` (own last message delivery state), `draft_preview` (denormalised from `drafts`). New tables `path_history` (last 20 per contact, trimmed by the writer), `ping_results` (50 per contact), `remote_stats_history` (7 days or 2,000 rows per repeater). Indexes `conversations_last`, `path_history_contact`, `ping_results_contact`, `remote_stats_contact`. |
+
+v3 is idempotent: each column is added only when missing and the `force_flood` backfill runs only when `path_mode` is first
+created, so re-running it (a lost `user_version`) fails nothing and never undoes a later route choice. `test/chat/migration_v3_test.dart`
+covers a v2 fixture, the backfill, the re-run and a crash mid-migration (rolls back to v2). Quick replies live in `settings`
+(JSON key `quick_replies`), not in a table. Nothing writes the v3 radio-fact / route / history columns yet except `marked_unread`
+(WP3); WP4 (message facts), WP7 (route, pings) and WP8 (stats history) fill them.
 
 Conversation keys: `d:<12 hex>` (DM, first 6 bytes of the contact key), `r:<12 hex>` (room server), `c:<channel id>` (channel,
 by the local id so a slot change does not orphan history). Paging is keyset on `(ts_local_ms, seq)`: cost does not grow with depth.

@@ -9,10 +9,8 @@ lib/ui/chat/channel_detail_screen.dart|SegmentedButton|1
 lib/ui/chat/channel_detail_screen.dart|SwitchListTile(|1
 lib/ui/chat/channel_detail_screen.dart|TextButton|2
 lib/ui/chat/channel_detail_screen.dart|TextField(|2
-lib/ui/chat/channel_flows.dart|TextButton|2
-lib/ui/chat/channel_flows.dart|TextField(|5
-lib/ui/chat/channels_view.dart|FilledButton|4
-lib/ui/chat/channels_view.dart|Icons.|12
+lib/ui/chat/channels_view.dart|FilledButton|2
+lib/ui/chat/channels_view.dart|Icons.|11
 lib/ui/chat/channels_view.dart|TextButton|2
 lib/ui/chat/chat_banner_host.dart|Icons.|1
 lib/ui/chat/chat_banner_host.dart|InkWell(|1
@@ -22,7 +20,7 @@ lib/ui/chat/chat_search_screen.dart|Divider(|1
 lib/ui/chat/chat_search_screen.dart|Icons.|2
 lib/ui/chat/chat_search_screen.dart|ListTile(|1
 lib/ui/chat/chat_search_screen.dart|TextField(|1
-lib/ui/chat/chat_tab_provider.dart|Icons.|1
+lib/ui/chat/chat_tab_provider.dart|Icons.|2
 lib/ui/chat/composer.dart|FilledButton|2
 lib/ui/chat/composer.dart|Icons.|3
 lib/ui/chat/composer.dart|TextField(|1

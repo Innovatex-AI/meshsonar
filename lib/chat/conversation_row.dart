@@ -42,6 +42,9 @@ class ConversationRow {
   final bool hasDraft;
   final RowDelivery delivery;
   final int unread;
+
+  /// Unread because the person chose "Mark unread" (shows as one unread; [unread] is then at least 1).
+  final bool markedUnread;
   final bool muted;
   final bool pinned;
   final bool isSystem;
@@ -64,6 +67,7 @@ class ConversationRow {
     this.hasDraft = false,
     this.delivery = RowDelivery.none,
     this.unread = 0,
+    this.markedUnread = false,
     this.muted = false,
     this.pinned = false,
     this.isSystem = false,
@@ -157,7 +161,8 @@ List<ConversationRow> buildConversationRows({
       previewSender: sender,
       hasDraft: hasDraft,
       delivery: hasDraft ? RowDelivery.none : deliveryFor(last, isChannel: isChannel),
-      unread: s?.unread ?? 0,
+      unread: (s?.unread ?? 0) > 0 ? s!.unread : ((s?.markedUnread ?? false) ? 1 : 0),
+      markedUnread: s?.markedUnread ?? false,
       muted: muted,
       pinned: s?.pinned ?? false,
       isSystem: kind == RowKind.system || (s?.isSystem ?? false),
