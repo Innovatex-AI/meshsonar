@@ -1,7 +1,6 @@
 // The Drive panel on the real Drive screen (flag driveRedesign on): panel tops per device, hit zones, drag leaves the map alone,
 // MapInsets are written at settle, dock states, Ping debounce, auto-collapse with the Passenger switch, tab bar hook.
 import 'dart:async';
-import 'dart:ui' show Size;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -12,15 +11,12 @@ import 'package:meshsonar/app/app_state.dart';
 import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/radio/radio_api.dart';
 import 'package:meshsonar/ui/app.dart';
-import 'package:meshsonar/ui/drive/panel/panel_physics.dart';
 import 'package:meshsonar/ui/drive/drive_map_model.dart';
 import 'package:meshsonar/ui/drive_screen.dart';
 import 'package:meshsonar/ui/map/cell_raster_layer.dart';
 import 'package:meshsonar/ui/map/core/map_insets.dart';
 import 'package:meshsonar/ui/map/coverage_map.dart';
 import 'package:meshsonar/ui/map/overlays/attribution_line.dart';
-import 'package:meshsonar/ui/shell/shell_controller.dart';
-import 'package:meshsonar/ui/theme.dart';
 
 import '../fakes.dart';
 

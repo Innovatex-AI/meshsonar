@@ -146,7 +146,7 @@ class MediumContent {
         valueListenable: ChatWiring.controller,
         builder: (context, chat, _) => chat == null
             ? const SizedBox.shrink()
-            : row(Icons.chat_bubble_outline_rounded, chat.unreadConversations > 0 ? 'Messages (${chat.unreadConversations} unread)' : 'Messages', () => showChatDriveSheet(context, chat), key: const Key('drive-chat')),
+            : row(Icons.chat_bubble_outline_rounded, chat.unreadMessages > 0 ? 'Messages (${chat.unreadMessages} unread)' : 'Messages', () => showChatDriveSheet(context, chat), key: const Key('drive-chat')),
       ),
       row(Icons.help_outline_rounded, 'Map guide', openGuide, key: const Key('medium-guide')),
     ];

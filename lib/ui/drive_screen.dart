@@ -281,7 +281,7 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
                       fix: model.fix,
                       passenger: _auto.passenger,
                       onPassenger: (v) => setState(() => _auto.passenger = v),
-                      openGuide: () => showMapLegend(context, colorBy: model.colorBy, pingColors: model.layers.pingColors),
+                      openGuide: () => showMapLegend(context, colorBy: model.colorBy, pingColors: model.pingColors),
                     ),
                   ),
                 ),
