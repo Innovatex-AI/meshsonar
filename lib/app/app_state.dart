@@ -1202,7 +1202,7 @@ class AppState extends ChangeNotifier {
       for (final r in records) {
         for (final x in r.data.rows) {
           if (x.ambiguous) shared.add(x.hashPrefix);
-          if (x.hasPosition) refs.putIfAbsent(x.key, () => RepeaterRef(key: x.key, name: x.name?.trim() ?? '', lat: x.lat!, lon: x.lon!));
+          if (x.hasPosition) refs.putIfAbsent(x.key, () => RepeaterRef(key: x.key, name: x.name?.trim() ?? '', lat: x.lat!, lon: x.lon!, kind: x.role == 'room' ? RepeaterKind.room : RepeaterKind.repeater));
         }
       }
       _lookupRosterSrc = records;

@@ -22,7 +22,9 @@ import '../app.dart';
 import '../design/app_surfaces.dart' show AppAction, AppToastKind, showAppActionSheet, showAppSheet, showAppToast;
 import '../design/app_symbols.dart' show AppSymbols;
 import '../map/coverage_map.dart' show CoverageMap;
-import '../map/layers/repeater_name_labels.dart' show MarkerLabelInput, RepeaterNameLabels;
+import '../map/layers/repeater_name_labels.dart' show RepeaterNameLabels;
+import '../map/layers/repeater_painter_layer.dart' show RepeaterBadge, RepeaterPainterLayer;
+import '../map/layers/repeater_sprites.dart' show RepeaterFreshness;
 import '../onboarding/ui_prefs.dart' show driveLabel;
 import '../widgets.dart';
 import 'drive_context_section.dart';
@@ -528,6 +530,18 @@ class _CellMap extends StatelessWidget {
       for (final x in r.repeaters)
         if (x.match.ref != null) x,
     ];
+    final badges = [
+      for (final x in reps)
+        RepeaterBadge(
+          key: x.match.ref!.key,
+          name: s.repeaterName(x.id) ?? x.label,
+          lat: x.match.ref!.lat,
+          lon: x.match.ref!.lon,
+          isRoom: x.match.ref!.isRoom,
+          freshness: RepeaterFreshness.fresh,
+          heard: true,
+        ),
+    ];
     final tiles = CoverageMap.tilesByDefault;
     return Column(children: [
       ClipRRect(
@@ -562,39 +576,15 @@ class _CellMap extends StatelessWidget {
                     borderStrokeWidth: c.isNew ? 1.6 : 1,
                   ),
               ]),
-              MarkerLayer(markers: [
-                for (final x in reps)
-                  Marker(
-                    point: LatLng(x.match.ref!.lat, x.match.ref!.lon),
-                    width: 26,
-                    height: 26,
-                    child: Tooltip(
-                      message: s.repeaterName(x.id) ?? x.label,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: m.beacon,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: m.onBeacon, width: 2),
-                        ),
-                        child: Icon(Icons.cell_tower, size: 14, color: m.onBeacon),
-                      ),
-                    ),
-                  ),
-              ]),
+              // The repeaters this drive heard: the same badges and names as the Drive map (one painter, plan 6.1).
+              RepeaterPainterLayer(sources: const [], badges: badges),
               // Names beside the repeaters (the "Repeater names" map setting), so none needs a tap to be identified.
               if (s.settings.mapRepeaterLabels)
                 RepeaterNameLabels(
                   inset: const EdgeInsets.only(bottom: 20),
-                  clustered: const [],
-                  markers: [
-                    for (final x in reps)
-                      MarkerLabelInput(
-                        key: x.match.ref!.key,
-                        name: s.repeaterName(x.id) ?? x.label,
-                        point: LatLng(x.match.ref!.lat, x.match.ref!.lon),
-                        heard: true,
-                      ),
-                  ],
+                  sources: const [],
+                  badges: badges,
+                  pill: tiles,
                 ),
               if (tiles)
                 const RichAttributionWidget(

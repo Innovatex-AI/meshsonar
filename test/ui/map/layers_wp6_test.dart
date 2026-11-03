@@ -1,5 +1,6 @@
 // Drive WP6 (plan 7.3): every F-item has a test here or in the file named in its comment, plus layer-sheet rows, persistence
 // across a relaunch and the guide rows.
+import 'repeater_probe.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
@@ -156,10 +157,10 @@ void main() {
 
     testWidgets('F2: "Heard this drive" draws only the repeaters this drive heard; off draws none', (t) async {
       await pumpMap(t, layers: kDefaultLayerState, heard: [heardA], position: const LatLng(40.0, -83.0));
-      expect(find.byKey(const ValueKey('map-repeater-aaaa1111')), findsOneWidget);
-      expect(find.byKey(const ValueKey('map-repeater-bbbb2222')), findsNothing, reason: 'known but not heard: not on this layer');
+      expect(repeaterItem(t, 'aaaa1111'), isNotNull);
+      expect(repeaterItem(t, 'bbbb2222'), isNull, reason: 'known but not heard: not on this layer');
       await pumpMap(t, layers: kDefaultLayerState.toggle('heard', false), heard: [heardA], position: const LatLng(40.0, -83.0));
-      expect(find.byKey(const ValueKey('map-repeater-aaaa1111')), findsNothing);
+      expect(repeaterItem(t, 'aaaa1111'), isNull);
     });
 
     testWidgets('F4: range rings draw as soon as there is a position, idle (no puck, not driving), and the switch turns them off', (t) async {

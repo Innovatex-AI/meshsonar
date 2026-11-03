@@ -19,6 +19,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/map_styles.dart';
 import '../../../core/network_coverage.dart' show CoverageLevel;
+import '../../../core/region_repeaters_api.dart' show RepeaterActivity;
 import '../../../core/units.dart' show Units;
 import '../../app.dart' show AppScope;
 import '../../design/anchored_sheet.dart';
@@ -33,6 +34,8 @@ import '../coverage_layer_controls.dart';
 import '../coverage_map.dart' show networkLevelColor;
 import '../legend_sheet.dart' show LegendSwatch, SwatchShape, showMapLegend;
 import '../map_layers.dart' show PingColorMode;
+import 'repeater_cluster_layer.dart' show regionRepeaterColor;
+import '../sheets/repeater_sheet.dart' show rosterStatusText;
 import '../map_tools.dart' show showMapFilterSheet;
 import '../overlays/credits_sheet.dart' show showMapCredits;
 import 'map_layer.dart';
@@ -669,6 +672,29 @@ class NetworkAgeLegend extends StatelessWidget {
     final l = t.toLocal();
     String two(int v) => v.toString().padLeft(2, '0');
     return '${l.year}-${two(l.month)}-${two(l.day)} ${two(l.hour)}:${two(l.minute)}';
+  }
+}
+
+/// The region roster layer's colour key (roster status, same colours the old pin layer used).
+class RosterStatusLegend extends StatelessWidget {
+  const RosterStatusLegend({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final style = t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant);
+    return Wrap(
+      key: const Key('roster-legend'),
+      spacing: Gap.s,
+      runSpacing: 2,
+      children: [
+        for (final a in RepeaterActivity.values)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [_Dot(color: regionRepeaterColor(a, Theme.of(context).brightness), size: 10), const SizedBox(width: 3), Text(rosterStatusText(a), style: style)],
+          ),
+      ],
+    );
   }
 }
 

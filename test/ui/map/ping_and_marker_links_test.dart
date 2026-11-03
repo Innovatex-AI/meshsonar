@@ -13,6 +13,7 @@ import 'package:meshsonar/ui/app.dart';
 import 'package:meshsonar/ui/map/coverage_map.dart';
 
 import '../fakes.dart';
+import 'repeater_probe.dart';
 
 H3? _load() {
   for (final path in const ['/opt/homebrew/lib/libh3.dylib', '/usr/local/lib/libh3.dylib', 'libh3.so']) {
@@ -101,7 +102,7 @@ void main() {
 
   testWidgets('tap one of the drive\'s repeater markers: its panel and lines to every cell it was heard in', (tester) async {
     final h = await pump(tester);
-    await tester.tap(find.byKey(ValueKey('map-repeater-${k('a')}')));
+    await tester.tapAt(repeaterGlobal(tester, repeaterItem(tester, k('a'))!));
     await tester.pump(const Duration(milliseconds: 400));
     expect(h.c.reachCalls, [k('a')]);
     expect(find.text('Alpha Tower'), findsWidgets);
