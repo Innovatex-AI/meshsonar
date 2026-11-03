@@ -8,7 +8,6 @@ import 'package:meshsonar/ui/chat/channel_flows.dart';
 import 'package:meshsonar/ui/chat/conversation_screen.dart';
 import 'package:meshsonar/ui/contacts/contact_profile_screen.dart';
 import 'package:meshsonar/ui/contacts/contacts_tab.dart';
-import 'package:meshsonar/ui/radios/rooms/room_join_header.dart';
 
 import '../../chat/contact_support.dart';
 import '../chat/chat_kit.dart' as kitlib;

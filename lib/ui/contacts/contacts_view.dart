@@ -159,7 +159,9 @@ class _ContactsViewState extends State<ContactsView> {
 
   Widget _searchField(int people) => Padding(
         padding: const EdgeInsets.symmetric(horizontal: Layout.screenMargin, vertical: Gap.s),
-        child: CupertinoSearchTextField(
+        child: SizedBox(
+          height: Hit.min,
+          child: CupertinoSearchTextField(
           key: const Key('contacts-search'),
           controller: _search,
           placeholder: 'Search $people ${people == 1 ? 'contact' : 'contacts'}',
@@ -168,7 +170,7 @@ class _ContactsViewState extends State<ContactsView> {
             setState(() {});
           },
           onSuffixTap: _clearSearch,
-        ),
+        )),
       );
 
   /// One banner at a time (failed, then syncing) and one card (table full, else the ask-first offer). Offline is the Chat

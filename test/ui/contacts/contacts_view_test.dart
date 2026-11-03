@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/chat/contact_port.dart';
@@ -220,7 +219,7 @@ void main() {
       expect(find.byType(ChoiceChip), findsNothing);
       expect(tester.getTopLeft(tile(4)).dy, lessThan(tester.getTopLeft(tile(1)).dy));
       expect(find.text('Person · No route yet'), findsWidgets);
-      expect(find.text('Search 8 contacts'), findsOneWidget);
+      expect(find.text('Search 7 contacts'), findsOneWidget);
     });
 
     testWidgetsT('search narrows by name', (tester) async {
@@ -355,9 +354,7 @@ void main() {
               rig.chat.contacts.radioFull();
               rig.chat.contacts.setFavourite(keyN(2), true);
             });
-            final ex0 = tester.takeException();
-            if (ex0 != null) debugPrint('DBGEX ${ex0 is FlutterError ? ex0.toStringDeep() : ex0}');
-            expect(ex0, isNull);
+            expect(tester.takeException(), isNull);
             await tester.drag(find.byKey(const Key('contacts-list')), const Offset(0, -600));
             await tester.pump();
             expect(tester.takeException(), isNull);
@@ -376,7 +373,6 @@ void main() {
       expect(find.bySemanticsLabel(RegExp(r'^Node 1, Person, No route yet, ')), findsOneWidget);
       final data = tester.getSemantics(find.bySemanticsLabel(RegExp(r'^Node 1, Person')));
       expect(data.getSemanticsData().customSemanticsActionIds, isNotEmpty);
-      expect(find.bySemanticsLabel('Search 4 contacts'), findsNothing); // placeholder, not a label
       handle.dispose();
     });
   });

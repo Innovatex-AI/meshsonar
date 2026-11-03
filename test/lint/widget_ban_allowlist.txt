@@ -40,12 +40,6 @@ lib/ui/contacts/contacts_settings_sheet.dart|ListTile(|1
 lib/ui/contacts/contacts_settings_sheet.dart|SwitchListTile(|3
 lib/ui/contacts/contacts_settings_sheet.dart|TextButton|2
 lib/ui/contacts/contacts_tab.dart|Icons.|1
-lib/ui/contacts/contacts_view.dart|Card(|1
-lib/ui/contacts/contacts_view.dart|FilledButton|10
-lib/ui/contacts/contacts_view.dart|Icons.|15
-lib/ui/contacts/contacts_view.dart|InkWell(|1
-lib/ui/contacts/contacts_view.dart|TextButton|12
-lib/ui/contacts/contacts_view.dart|TextField(|1
 lib/ui/contacts/dm_route_header.dart|Icons.|5
 lib/ui/contacts/dm_route_header.dart|InkWell(|1
 lib/ui/contacts/message_details.dart|FilledButton|2
