@@ -62,7 +62,10 @@ class DriveDock extends StatelessWidget {
     } else {
       row = _IdleDock(state: s, ax: ax);
     }
-    return Padding(padding: const EdgeInsets.symmetric(horizontal: Layout.screenMargin), child: row);
+    // The 300 pt side card of a landscape phone: tighter margins; the hero caption scales down instead of overflowing.
+    return LayoutBuilder(
+      builder: (context, box) => Padding(padding: EdgeInsets.symmetric(horizontal: box.maxWidth < 340 ? 12 : Layout.screenMargin), child: row),
+    );
   }
 }
 
@@ -311,7 +314,7 @@ class _DrivingDock extends StatelessWidget {
           const SizedBox(width: 12),
           PingCircle(state: s, debounce: debounce, onPing: onPing),
         ],
-        const SizedBox(width: 16),
+        const SizedBox(width: 12),
         _StartStopButton(state: s, busy: s.busy),
       ],
     );
@@ -382,7 +385,11 @@ class _DockHeroState extends State<DockHero> {
               ],
             ),
             const SizedBox(height: 2),
-            Text(none ? 'No echo · $ago' : 'heard · $ago', key: const Key('dock-hero-caption'), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: none ? c.warning : c.textMuted)),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(none ? 'No echo · $ago' : 'heard · $ago', key: const Key('dock-hero-caption'), maxLines: 1, style: TextStyle(fontSize: 12, color: none ? c.warning : c.textMuted)),
+            ),
           ],
         ),
       ),

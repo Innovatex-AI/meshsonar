@@ -28,7 +28,14 @@ class DrivePanel extends StatelessWidget {
   /// The reserved strip (plan 4.12, 28 pt) at the top of the panel surface: GPS / radio / permission help with its one fix.
   /// Null = no strip. It is part of the surface, so it rides with the panel and never moves the dock buttons.
   final Widget? strip;
-  const DrivePanel({super.key, required this.controller, required this.dock, this.mediumChildren = const [], this.onTouch, this.strip});
+
+  /// Floating card (iPad / landscape phone): width and left edge. Null = the full-width phone panel.
+  final double? cardWidth;
+  final double cardLeft;
+
+  /// The panel is not drawn (idle Immersive shows only the Start pill); a drag or spring brings it back.
+  final bool hidden;
+  const DrivePanel({super.key, required this.controller, required this.dock, this.mediumChildren = const [], this.onTouch, this.strip, this.cardWidth, this.cardLeft = 16, this.hidden = false});
 
   /// Semantics value for a detent.
   static String detentLabel(PanelDetent d) => switch (d) {
@@ -40,7 +47,7 @@ class DrivePanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final g = controller.geometry;
-    if (g == null) return const SizedBox.shrink();
+    if (g == null || hidden) return const SizedBox.shrink();
     return ValueListenableBuilder<double>(
       valueListenable: controller.extent,
       builder: (context, extent, _) {
@@ -51,11 +58,12 @@ class DrivePanel extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             Positioned(
-              left: 0,
-              right: 0,
+              left: cardWidth == null ? 0 : cardLeft,
+              right: cardWidth == null ? 0 : null,
+              width: cardWidth,
               bottom: below,
               height: h + stripH,
-              child: _Surface(controller: controller, dock: dock, mediumChildren: mediumChildren, onTouch: onTouch, height: h, strip: strip),
+              child: _Surface(controller: controller, dock: dock, mediumChildren: mediumChildren, onTouch: onTouch, height: h, strip: strip, floating: cardWidth != null),
             ),
           ],
         );
@@ -71,7 +79,8 @@ class _Surface extends StatelessWidget {
   final VoidCallback? onTouch;
   final double height;
   final Widget? strip;
-  const _Surface({required this.controller, required this.dock, required this.mediumChildren, required this.onTouch, required this.height, this.strip});
+  final bool floating;
+  const _Surface({required this.controller, required this.dock, required this.mediumChildren, required this.onTouch, required this.height, this.strip, this.floating = false});
 
   @override
   Widget build(BuildContext context) {
@@ -84,11 +93,12 @@ class _Surface extends StatelessWidget {
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: c.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-          border: Border(top: BorderSide(color: c.outline.withValues(alpha: 0.5))),
+          borderRadius: floating ? BorderRadius.circular(20) : const BorderRadius.vertical(top: Radius.circular(20)),
+          border: floating ? Border.all(color: c.outline.withValues(alpha: 0.5)) : Border(top: BorderSide(color: c.outline.withValues(alpha: 0.5))),
+          boxShadow: floating ? const [BoxShadow(color: Color(0x33000000), blurRadius: 16, offset: Offset(0, 4))] : null,
         ),
         child: ClipRRect(
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          borderRadius: floating ? BorderRadius.circular(20) : const BorderRadius.vertical(top: Radius.circular(20)),
           child: Column(
             children: [
               if (strip != null) SizedBox(key: const Key('drive-panel-strip'), height: kPanelStripHeight, child: strip),
