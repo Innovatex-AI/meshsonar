@@ -3,7 +3,6 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/chat/channel_secret.dart';
-import 'package:meshsonar/chat/mesh_links.dart';
 import 'package:meshsonar/chat/models.dart';
 import 'package:meshsonar/chat/radio_bridge.dart';
 import 'package:meshsonar/radio/inbound.dart' show RadioChannel;
