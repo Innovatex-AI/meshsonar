@@ -99,6 +99,7 @@ import 'overlays/credits_sheet.dart';
 import 'overlays/map_overlay_host.dart';
 import 'parts/chart_grid.dart';
 import 'parts/map_chips.dart';
+import 'overlays/map_controls.dart';
 import 'parts/map_compass.dart';
 import 'parts/map_markers.dart';
 import 'parts/range_rings.dart';
@@ -300,6 +301,10 @@ class CoverageMap extends StatefulWidget {
   final Widget? topTrailing;
   final Widget? bottom;
 
+  /// New Drive screen: when set, the map's controls slot holds the fixed-slot [MapControlColumn] (Layers + Recenter / heading +
+  /// Compass) and this opens the layers sheet. Null = the older FAB buttons.
+  final VoidCallback? onLayers;
+
   /// Overlay clearances (see MapOverlayHost.topClearance / bottomClearance): the full-bleed Drive map keeps its slots out of the
   /// status bar and above the panel without ever being resized.
   final double topClearance;
@@ -356,6 +361,7 @@ class CoverageMap extends StatefulWidget {
     this.topLeading,
     this.topTrailing,
     this.bottom,
+    this.onLayers,
     this.topClearance = 0,
     this.bottomClearance = 0,
     this.baseStyle = BaseMapStyle.chart,
@@ -1740,6 +1746,33 @@ class _CoverageMapState extends State<CoverageMap> {
 
   /// The round buttons above the attribution: compass (rotatable), heading-up toggle (live puck), recenter (not following).
   Widget? _controls(BuildContext context, LatLng? pos, DrivePing? latest) {
+    if (widget.onLayers != null) {
+      final havePos = pos != null || latest != null;
+      final mode = !_follow ? RecenterMode.notFollowing : (_prefs.headingUp ? RecenterMode.followingHeadingUp : RecenterMode.followingNorthUp);
+      return ValueListenableBuilder<double>(
+        key: _buttonsKey,
+        valueListenable: _rotationN,
+        builder: (context, rot, _) => MapControlColumn(
+          onLayers: widget.onLayers!,
+          compassVisible: widget.rotatable && rot.abs() >= 0.5,
+          compassRotation: rot,
+          onCompass: _northUp,
+          recenterVisible: havePos,
+          recenterMode: mode,
+          onRecenter: () {
+            switch (mode) {
+              case RecenterMode.notFollowing:
+                _prefs.headingUp = false;
+                _recenter();
+              case RecenterMode.followingNorthUp:
+                _prefs.headingUp = true;
+              case RecenterMode.followingHeadingUp:
+                _prefs.headingUp = false;
+            }
+          },
+        ),
+      );
+    }
     final showHeading = widget.puck != null && widget.interactive;
     final showRecenter = !_follow && (pos != null || latest != null);
     if (!widget.rotatable && !showHeading && !showRecenter) return null;
