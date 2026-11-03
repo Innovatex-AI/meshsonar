@@ -23,7 +23,10 @@ class ChatTabArgs {
 
   /// A conversation was opened from the list (the host clears the search).
   final VoidCallback? onOpened;
-  const ChatTabArgs({this.query = '', this.selectedKey, this.onConnect, this.onOpened});
+
+  /// Opens the New chat sheet (the empty states offer it).
+  final VoidCallback? onNew;
+  const ChatTabArgs({this.query = '', this.selectedKey, this.onConnect, this.onOpened, this.onNew});
 }
 
 /// What the chat services give the Chat tab. All views are built inside the tab's own scaffold body.
@@ -65,6 +68,9 @@ abstract class ChatTabProvider {
 
   /// Opens the all-messages search.
   void openMessageSearch(BuildContext context);
+
+  /// The Cmd-K quick switcher (iPad). Default: nothing.
+  Future<void> quickSwitch(BuildContext context) async {}
 }
 
 /// Which half of the old Chat tab is showing.
@@ -141,6 +147,9 @@ class DebugFixtureChat implements ChatTabProvider {
 
   @override
   Future<void> newChat(BuildContext context, {required VoidCallback showContacts}) async => showContacts();
+
+  @override
+  Future<void> quickSwitch(BuildContext context) async {}
 
   @override
   void openMessageSearch(BuildContext context) {}

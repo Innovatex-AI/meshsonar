@@ -4,16 +4,12 @@ import 'package:flutter/material.dart';
 import '../../app/chat_controller.dart';
 import '../contacts/contacts_tab.dart';
 import '../shell/chat_tab_host.dart';
-import 'channel_flows.dart';
 import 'channels_view.dart';
 import 'chat_navigation.dart';
 import 'chat_search_screen.dart';
 import 'chats_list_view.dart';
 import 'network_view.dart';
-import '../design/app_surfaces.dart';
-import '../design/app_symbols.dart';
-
-enum _NewChoice { message, channel }
+import 'new_chat_sheet.dart';
 
 class ChatTabProviderImpl implements ChatTabProvider {
   final ChatController controller;
@@ -41,6 +37,13 @@ class ChatTabProviderImpl implements ChatTabProvider {
   @override
   List<Widget> appBarActions(BuildContext context) => [
         IconButton(
+          key: const Key('add-channel'),
+          tooltip: 'Add a channel or contact',
+          constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+          icon: const Icon(Icons.add_rounded),
+          onPressed: () => newChat(context, showContacts: () {}),
+        ),
+        IconButton(
           key: const Key('chat-search'),
           tooltip: 'Search all messages',
           constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
@@ -53,6 +56,7 @@ class ChatTabProviderImpl implements ChatTabProvider {
   @override
   Widget chatsSliver(BuildContext context, ChatTabArgs args) => ChatsListView(
         controller: controller,
+        onNew: args.onNew,
         navigator: navigator,
         query: args.query,
         selectedKey: args.selectedKey,
@@ -70,27 +74,13 @@ class ChatTabProviderImpl implements ChatTabProvider {
   @override
   Future<void> refresh() => controller.refreshFromRadio();
 
-  /// Stub for WP3's New chat sheet: the two things it will offer, as an action sheet.
+  /// The New chat sheet (plan 4.13).
   @override
-  Future<void> newChat(BuildContext context, {required VoidCallback showContacts}) async {
-    final choice = await showAppActionSheet<_NewChoice>(
-      context,
-      title: 'New',
-      actions: const [
-        AppAction('New message', _NewChoice.message, symbol: AppSymbols.squareAndPencil, key: Key('new-message')),
-        AppAction('Join or create a channel', _NewChoice.channel, symbol: AppSymbols.numberSign, key: Key('new-channel')),
-      ],
-    );
-    if (!context.mounted) return;
-    switch (choice) {
-      case _NewChoice.message:
-        showContacts();
-      case _NewChoice.channel:
-        await showAddChannelSheet(context, controller);
-      case null:
-        break;
-    }
-  }
+  Future<void> newChat(BuildContext context, {required VoidCallback showContacts}) =>
+      showNewChatSheet(context, controller, navigator: navigator, showContacts: showContacts);
+
+  @override
+  Future<void> quickSwitch(BuildContext context) => showQuickSwitcher(context, controller, navigator);
 
   @override
   void openMessageSearch(BuildContext context) => ChatSearchScreen.open(context, controller);

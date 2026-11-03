@@ -450,7 +450,14 @@ class ChatService {
   int unreadMessages() => store.messages.unreadMessageCount(nowMs: nowMs());
 
   void markRead(String convKey) {
-    if (store.messages.markConversationRead(convKey) > 0) _emit(ChatEvent.conversation(convKey));
+    final wasMarked = store.messages.conversation(convKey)?.markedUnread ?? false;
+    if (store.messages.markConversationRead(convKey) > 0 || wasMarked) _emit(ChatEvent.conversation(convKey));
+  }
+
+  /// "Mark unread": the list shows the conversation as unread (one) until it is opened.
+  void markUnread(String radioId, String convKey) {
+    store.messages.setMarkedUnread(convKey, radioId, true);
+    _emit(ChatEvent.conversation(convKey));
   }
 
   // ------------------------------------------------------------------ per-conversation settings
