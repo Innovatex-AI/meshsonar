@@ -13,6 +13,7 @@
 // app until that widget lands; each such case prints `NOTE <frame> <what was used>`, and the key table at the top of `main` is
 // the single place to change when the redesign renames a key (new key first, current key as the fallback).
 import 'dart:convert' show utf8;
+import 'dart:math' as math;
 import 'dart:io' show HttpClient, Platform;
 
 import 'package:flutter/material.dart';
@@ -78,6 +79,14 @@ final _shot = <String>{};
 
 /// Waits for the map tiles, logs how long that took, then marks the frame.
 Future<void> frame(WidgetTester t, String name) async {
+  // taps scroll the large-text page (ensureVisible); every frame but the deliberate scrolled one starts from the top of the page
+  final ltScroll = find.byKey(const Key('drive-large-text-scroll'));
+  if (name != '09-driving-medium' && ltScroll.evaluate().isNotEmpty && find.byType(BottomSheet).evaluate().isEmpty) {
+    final st = t.stateList<ScrollableState>(find.descendant(of: ltScroll, matching: find.byType(Scrollable)));
+    for (final sc in st) {
+      sc.position.jumpTo(sc.position.minScrollExtent);
+    }
+  }
   await pumpFor(t, const Duration(milliseconds: 300));
   final ms = await t.runAsync(() => TileFetchGate.tilesSettled()) ?? Duration.zero;
   // ignore: avoid_print
@@ -423,8 +432,9 @@ void main() {
 
     await step('antenna', () async {
       if (await tapKey(t, ['antenna-chip'], wait: const Duration(seconds: 2))) {
-        if (!await waitFor(t, find.byKey(const Key('antenna-sheet')), timeout: const Duration(seconds: 8)))
+        if (!await waitFor(t, find.byKey(const Key('antenna-sheet')), timeout: const Duration(seconds: 8))) {
           throw StateError('antenna sheet did not open');
+        }
         await frame(t, '26-antenna-sheet');
         await dismiss(t);
       }
@@ -478,10 +488,12 @@ void main() {
       dumpDiag(st, 'after-zoom', n: 3);
     });
     await step('cell', () async {
-      final c = _mapRect(t).center;
+      final mr = _mapRect(t);
+      final c = mr.center;
+      final rings = (math.max(mr.width, mr.height) / 2 / 28).ceil();
       final pts = <Offset>[
-        for (var ring = 0; ring <= 9; ring++)
-          for (var k = 0; k < (ring == 0 ? 1 : 10); k++) c + Offset.fromDirection(k * 3.14159 / 5, ring * 30.0),
+        for (var ring = 0; ring <= rings; ring++)
+          for (var k = 0; k < (ring == 0 ? 1 : 12); k++) c + Offset.fromDirection(k * math.pi / 6 + ring * 0.3, ring * 28.0),
       ];
       if (!await tapUntilPanel(t, pts, 'cell-sheet')) throw StateError('no hex under ${pts.length} taps');
       await frame(t, '13-cell-inspector');
@@ -571,8 +583,9 @@ void main() {
     await step('mini-bar', () async {
       await openShellTab(t, 'Chat');
       await pumpFor(t, const Duration(seconds: 2));
-      if (!await waitFor(t, find.byKey(const Key('mini-drive-bar')), timeout: const Duration(seconds: 10)))
+      if (!await waitFor(t, find.byKey(const Key('mini-drive-bar')), timeout: const Duration(seconds: 10))) {
         throw StateError('no mini drive bar on the Chat tab while driving');
+      }
       await frame(t, '25-mini-bar');
       await toMapTab(t);
     });
@@ -591,8 +604,9 @@ void main() {
       TileFetchGate.debugForceOffline.value = true;
       await pumpFor(t, const Duration(seconds: 3));
       // The source pill lives in the credits sheet.
-      if (!await tapKey(t, ['map-attribution-info', 'map-credits-toggle'], wait: const Duration(seconds: 2)))
+      if (!await tapKey(t, ['map-attribution-info', 'map-credits-toggle'], wait: const Duration(seconds: 2))) {
         throw StateError('no credits entry');
+      }
       if (find.byKey(const Key('map-offline')).evaluate().isEmpty) throw StateError('offline pill (map-offline) not shown');
       await frame(t, '17-offline-pill');
       MapTileStats.instance.resetForTest();
