@@ -422,6 +422,9 @@ class FakeScanner implements RadioScanner {
   Object? scanError;
   Object? connectError;
   int connects = 0;
+
+  /// [connect] waits for this first, when set (a radio that is slow to answer: the "Connecting" dock state).
+  Completer<void>? connectGate;
   FakeScanner(this.devices);
   @override
   Stream<List<RadioDevice>> scan({Duration timeout = const Duration(seconds: 8)}) {
@@ -432,6 +435,7 @@ class FakeScanner implements RadioScanner {
   @override
   Future<ByteTransport> connect(RadioDevice device) async {
     connects++;
+    if (connectGate != null) await connectGate!.future;
     if (connectError != null) throw connectError!;
     return FakeTransport();
   }

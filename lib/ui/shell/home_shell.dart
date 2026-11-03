@@ -14,6 +14,7 @@ import '../alerts/in_app_banner.dart';
 import '../always_location_screen.dart';
 import '../antenna_sheet.dart';
 import '../app.dart';
+import '../../app/app_flags.dart';
 import '../design/app_surfaces.dart' show AppToastHost, ToastAnchor, dismissAppToast, showAppToast;
 import '../drive_screen.dart';
 import '../onboarding/ui_prefs.dart';
@@ -160,6 +161,8 @@ class _HomeShellState extends State<HomeShell> {
     if (s.pendingNotice == null) return;
     final msg = s.takeNotice();
     if (msg == null) return;
+    // The finished dock already says "Drive saved" (Drive plan 4.18 rule 3): the same sentence as a toast is deleted.
+    if (AppFlags.driveRedesign && msg.startsWith('Drive saved') && _shell.tab == AppTab.drive) return;
     // Top-anchored on the Drive tab (its bottom is the dock and controls), bottom elsewhere (AppToastHost below).
     showAppToast(_contentKey.currentContext ?? context, msg, duration: const Duration(seconds: 6));
   }
@@ -233,7 +236,9 @@ class _HomeShellState extends State<HomeShell> {
                 final bar = onDrive ? const SizedBox.shrink() : MiniDriveBar(onOpen: _shell.openDrive);
                 final content = AppToastHost(
                   anchor: onDrive ? ToastAnchor.top : ToastAnchor.bottom,
-                  inset: onDrive ? 56 : 72,
+                  // Drive: below the region chip and up to two state chips (plan 4.18); elsewhere above the tab bar.
+                  inset: onDrive ? (AppFlags.driveRedesign ? 96 : 56) : 72,
+                  band: onDrive && AppFlags.driveRedesign,
                   child: InAppBannerHost(
                     child: Column(key: _contentKey, children: [
                       Expanded(child: pages),

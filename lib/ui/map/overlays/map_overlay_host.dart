@@ -179,7 +179,7 @@ class _OverlayLayout extends MultiChildLayoutDelegate {
     put(MapSlot.topTrailing, Offset(w - m - trail.width, topY));
     final trailBottom = trail.height > 0 ? topY + trail.height : topY;
 
-    final ctrl = lay(MapSlot.controls, BoxConstraints(maxWidth: colW, maxHeight: room / 2));
+    final ctrl = lay(MapSlot.controls, BoxConstraints(maxWidth: colW, maxHeight: room));
     final ctrlTop = attrTop - 4 - ctrl.height;
     // A tall column leaves the controls the corner; a column that reaches them moves them left of its buttons.
     final ctrlShift = trailBottom + 4 > ctrlTop && trail.width > 0 ? (trail.width < 52 ? trail.width : 52.0) + 6 : 0.0;
