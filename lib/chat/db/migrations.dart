@@ -44,7 +44,94 @@ int migrateDatabase(Database db, List<Migration> migrations) {
 final List<Migration> chatMigrations = [
   Migration(1, 'initial chat schema', _v1),
   Migration(2, 'contacts: radio cache state, flags, last heard, route choice; adverts: ignore + advert time', _v2),
+  Migration(3, 'chat redesign: message radio facts, path modes, ping history, stats history, manual unread', _v3),
 ];
+
+/// True when [table] already has [column]. Lets v3 be re-run on a database that got part of it some other way (a restored
+/// backup, a build that added a column early) without a "duplicate column" failure.
+bool _hasColumn(Database db, String table, String column) =>
+    db.select('PRAGMA table_info($table)').any((r) => r['name'] == column);
+
+void _addColumn(Database db, String table, String column, String ddl) {
+  if (!_hasColumn(db, table, column)) db.execute('ALTER TABLE $table ADD COLUMN $column $ddl');
+}
+
+/// M3 (chat redesign, plan section 6). One transaction, idempotent (every step checks before it adds).
+///   * messages: what the radio told us about a received message (RSSI, hop hashes, hash size, airtime);
+///   * contacts: route mode (`auto` | `fixed` | `flood`, backfilled from the old `force_flood`), the pinned route, when a
+///     route was learned, the last ping, the remote's firmware level and the role of the last login;
+///   * conversations: manual "Mark unread", the own-last-message delivery state, a denormalised draft preview;
+///   * path_history, ping_results, remote_stats_history (trimmed by their writers) and the indexes the merged Chats list uses.
+void _v3(Database db) {
+  _addColumn(db, 'messages', 'rssi', 'INTEGER');
+  _addColumn(db, 'messages', 'path_hashes', 'TEXT');
+  _addColumn(db, 'messages', 'hash_size', 'INTEGER');
+  _addColumn(db, 'messages', 'air_ms', 'INTEGER');
+
+  final hadPathMode = _hasColumn(db, 'contacts', 'path_mode');
+  _addColumn(db, 'contacts', 'path_mode', "TEXT NOT NULL DEFAULT 'auto'");
+  _addColumn(db, 'contacts', 'pinned_path', 'TEXT');
+  _addColumn(db, 'contacts', 'pinned_hash_size', 'INTEGER');
+  _addColumn(db, 'contacts', 'path_learned_ms', 'INTEGER');
+  _addColumn(db, 'contacts', 'last_ping_ms', 'INTEGER');
+  _addColumn(db, 'contacts', 'last_ping_rtt_ms', 'INTEGER');
+  _addColumn(db, 'contacts', 'last_ping_ok', 'INTEGER');
+  _addColumn(db, 'contacts', 'fw_level', 'INTEGER');
+  _addColumn(db, 'contacts', 'last_login_role', 'TEXT');
+  // Backfill only the first time: a contact that was "always search" stays that way. Re-running must not undo a later choice.
+  if (!hadPathMode) db.execute("UPDATE contacts SET path_mode = 'flood' WHERE force_flood = 1");
+
+  _addColumn(db, 'conversations', 'marked_unread', 'INTEGER NOT NULL DEFAULT 0');
+  _addColumn(db, 'conversations', 'last_state', 'TEXT');
+  _addColumn(db, 'conversations', 'draft_preview', 'TEXT');
+
+  db.execute('''
+CREATE TABLE IF NOT EXISTS path_history (
+  contact_key TEXT NOT NULL,
+  ts_ms INTEGER NOT NULL,
+  kind TEXT NOT NULL,
+  hops TEXT,
+  hash_size INTEGER,
+  rtt_ms INTEGER,
+  ok INTEGER
+);
+CREATE INDEX IF NOT EXISTS path_history_contact ON path_history (contact_key, ts_ms DESC);
+
+CREATE TABLE IF NOT EXISTS ping_results (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  contact_key TEXT NOT NULL,
+  ts_ms INTEGER NOT NULL,
+  kind TEXT NOT NULL,
+  ok INTEGER NOT NULL,
+  rtt_ms INTEGER,
+  hops INTEGER,
+  snr_json TEXT,
+  path_out TEXT,
+  path_back TEXT,
+  fail_reason TEXT
+);
+CREATE INDEX IF NOT EXISTS ping_results_contact ON ping_results (contact_key, ts_ms DESC);
+
+CREATE TABLE IF NOT EXISTS remote_stats_history (
+  contact_key TEXT NOT NULL,
+  ts_ms INTEGER NOT NULL,
+  battery_mv INTEGER,
+  noise_floor INTEGER,
+  uptime_s INTEGER,
+  tx_air_s INTEGER,
+  rx_air_s INTEGER,
+  recv INTEGER,
+  sent INTEGER,
+  last_rssi INTEGER,
+  last_snr_x4 INTEGER,
+  errors INTEGER,
+  queue INTEGER
+);
+CREATE INDEX IF NOT EXISTS remote_stats_contact ON remote_stats_history (contact_key, ts_ms DESC);
+
+CREATE INDEX IF NOT EXISTS conversations_last ON conversations (last_ts_ms DESC);
+''');
+}
 
 /// M2 (contacts and DMs). The phone is the master copy of the contact list; the radio's table is a cache of what is needed,
 /// so each contact remembers whether it is on the radio right now (`on_radio`), the radio's own flag byte (bit 0 =
