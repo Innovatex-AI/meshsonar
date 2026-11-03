@@ -49,7 +49,7 @@ void main() {
   test('wrong password (0x86) is a refusal, silence is a timeout: two different results', () async {
     final wrong = await rig();
     await expectLater(
-        wrong.session.login('nope'), throwsA(isA<AdminException>().having((e) => e.kind, 'kind', AdminErrorKind.radio).having((e) => e.message, 'message', contains('refused'))));
+        wrong.session.login('nope'), throwsA(isA<AdminException>().having((e) => e.kind, 'kind', AdminErrorKind.wrongPassword).having((e) => e.message, 'message', contains('not accepted'))));
     expect(wrong.session.loggedIn, isFalse);
 
     final quiet = await rig(silent: true);

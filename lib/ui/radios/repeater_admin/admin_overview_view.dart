@@ -1,5 +1,6 @@
 // Dashboard: who this is, how it is doing, whether its clock is right, a health check with plain-language findings, and the
 // advert buttons. Reads only; the one write here is "Sync clock" (confirmed).
+import 'package:flutter/cupertino.dart' show CupertinoButton;
 import 'package:flutter/material.dart';
 
 import '../../../radio/repeater_admin.dart';
@@ -7,6 +8,7 @@ import '../../../radio/repeater_health.dart';
 import '../../app.dart' show AppScope;
 import '../../claims/claim_widgets.dart' show ClaimRepeaterAction;
 import '../../theme.dart';
+import '../../../radio/default_passwords.dart';
 import 'admin_common.dart';
 import 'admin_controller.dart';
 
@@ -35,6 +37,7 @@ class AdminOverviewView extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(Gap.l, Gap.s, Gap.l, Gap.xl),
                 children: [
                   if (c.notices['overview'] != null) NoticeBanner(c.notices['overview']!, bannerKey: const Key('overview-notice')),
+                  if (c.isAdmin && c.factoryPasswordInUse != null) _FactoryNag(),
                   if (!c.isAdmin) NoticeBanner(const AdminNotice('Logged in as a guest: you can read status, but settings, the access list and the console need the admin password.', error: false), bannerKey: const Key('guest-note')),
                   _identity(context, s),
                   if (c.loadingOverview && s == null) _loading(context) else ...[
@@ -266,5 +269,33 @@ class AdminOverviewView extends StatelessWidget {
     } on AdminException catch (e) {
       if (context.mounted) showSnack(context, e.message);
     }
+  }
+}
+
+
+/// After an admin login with the factory password: say so, and jump to Settings (where the password is changed).
+class _FactoryNag extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    return Container(
+      key: const Key('factory-nag'),
+      margin: const EdgeInsets.only(bottom: Gap.m),
+      padding: const EdgeInsets.all(Gap.m),
+      decoration: BoxDecoration(color: t.colorScheme.errorContainer, borderRadius: BorderRadius.circular(Corners.chip)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(factoryPasswordWarning, style: TextStyle(color: t.colorScheme.onErrorContainer)),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: CupertinoButton(
+            key: const Key('factory-nag-change'),
+            minimumSize: kTarget,
+            padding: EdgeInsets.zero,
+            onPressed: () => DefaultTabController.maybeOf(context)?.animateTo(1),
+            child: const Text('Change it now'),
+          ),
+        ),
+      ]),
+    );
   }
 }
