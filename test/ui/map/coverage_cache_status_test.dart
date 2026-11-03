@@ -7,7 +7,6 @@ import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/ui/drive/drive_map_model.dart';
 import 'package:meshsonar/ui/map/layers/map_layer.dart';
 
-import '../fakes.dart';
 import '../settings_test_kit.dart';
 
 void main() {

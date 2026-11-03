@@ -274,13 +274,12 @@ void main() {
     expect(lines.polylines.map((p) => p.color).toSet(), {const Color(0xFFFF6D00)});
   }, skip: skip);
 
-  testWidgets('no approved key: nothing is asked and no chip shows', (tester) async {
+  testWidgets('no approved key: the lines are a public read (F8), so the cell is still asked', (tester) async {
     final h = await pump(tester, approved: false);
     await tester.tapAt(screenOf(tester, centre.lat, centre.lon));
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump(const Duration(milliseconds: 50));
-    expect(h.lc.cellCalls, isEmpty);
-    expect(find.byKey(const Key('link-lines')), findsNothing);
+    expect(h.lc.cellCalls, [cellId]);
   }, skip: skip);
 
   testWidgets('a failed ask says so instead of drawing nothing silently', (tester) async {

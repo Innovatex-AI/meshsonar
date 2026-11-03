@@ -19,6 +19,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/map_styles.dart';
 import '../../../core/network_coverage.dart' show CoverageLevel;
+import '../../../core/units.dart' show Units;
 import '../../app.dart' show AppScope;
 import '../../design/anchored_sheet.dart';
 import '../../design/app_surfaces.dart';
@@ -49,9 +50,13 @@ Key layerSwitchKey(String id) => Key(switch (id) {
   _ => 'layer-$id',
 });
 
+String _rings(Units u) {
+  final r = u.rangeRingMetres;
+  return r.length < 2 ? 'Range rings' : '${u.distance(r.first)} and ${u.distance(r.last)}';
+}
+
 /// Title and one-line description per layer (Drive plan 7.1).
 ({String title, String? description}) layerPresentation(BuildContext context, MapLayerSpec spec, {String? regionName, bool hasPosition = true}) {
-  final imperial = AppScope.unitsOf(context).isImperial;
   return switch (spec.id) {
     'pings' => (title: 'Pings', description: 'Each ping you sent.'),
     'hexes' => (title: 'Your coverage', description: "Your pings rolled up to the website's hexagons."),
@@ -70,7 +75,7 @@ Key layerSwitchKey(String id) => Key(switch (id) {
     kLabelsLayerId => (title: 'Repeater names', description: 'Name beside each repeater; fewer when zoomed out.'),
     'rings' => (
       title: 'Range rings',
-      description: '${imperial ? 'Half a mile and 1 mile' : '1 km and 2 km'} around you.${hasPosition ? '' : ' Needs a GPS position.'}',
+      description: '${_rings(AppScope.unitsOf(context))} around you.${hasPosition ? '' : ' Needs a GPS position.'}',
     ),
     _ => (title: spec.label, description: null),
   };

@@ -84,6 +84,13 @@ Harness make(FakeMapServer srv) {
   return h;
 }
 
+/// A few bounded pumps: with cells on a very tall surface the map keeps tile timers alive, so pumpAndSettle never returns.
+Future<void> settleShort(WidgetTester t) async {
+  for (var i = 0; i < 4; i++) {
+    await t.pump(const Duration(milliseconds: 300));
+  }
+}
+
 Future<void> openSheet(WidgetTester t) async {
   await t.tap(find.byKey(const Key('drive-map-layers')));
   await t.pumpAndSettle();
@@ -103,7 +110,7 @@ void networkOn() => MapPrefs.shared.setLayerPrefs(kDriveLayerPage, const LayerPr
 String statusText(WidgetTester t, String id) => t.widget<Text>(find.byKey(Key('layer-$id-status'))).data!;
 
 Future<void> toggle(WidgetTester t, String key) async {
-  await t.ensureVisible(find.byKey(Key(key)));
+  await revealInLayersSheet(t, find.byKey(Key(key)));
   await t.pumpAndSettle();
   await t.tap(find.byKey(Key(key)));
   await t.pumpAndSettle();
@@ -153,9 +160,9 @@ void main() {
       final h = Harness();
       h.client.publicCoverageError = const CmatException('server error', status: 500);
       await h.pumpApp(t);
-      await t.pumpAndSettle();
+      await settleShort(t);
       await openSheet(t);
-      await t.ensureVisible(find.byKey(const Key('layer-measured-status')));
+      await revealInLayersSheet(t, find.byKey(const Key('layer-measured-status')));
       expect(statusText(t, 'measured'), "Couldn't load. Check the connection and retry.");
       h.client.publicCoverageError = null;
       h.client.publicCoverageResult = const PublicCoverage(
@@ -163,9 +170,9 @@ void main() {
         grid: CoverageGrid.square(cellDeg: 0.005),
         cells: [CoverageCell(lat: 40.12, lon: -82.93, pings: 3, heard: 2, bestSnr: 4, medianSnr: 3, repeaters: 1, lastAt: '2026-10-20T11:00:00Z')],
       );
-      await t.ensureVisible(find.byKey(const Key('layer-measured-retry')));
+      await revealInLayersSheet(t, find.byKey(const Key('layer-measured-retry')));
       await t.tap(find.byKey(const Key('layer-measured-retry')));
-      await t.pumpAndSettle();
+      await settleShort(t);
       expect(statusText(t, 'measured'), '1 cell measured');
       expect(find.byKey(const Key('layer-measured-retry')), findsNothing);
     });
@@ -199,7 +206,7 @@ void main() {
       final calls = srv.networkCalls;
       srv.networkStatus = 200;
       srv.now = srv.now.add(const Duration(seconds: 11));
-      await t.ensureVisible(find.byKey(const Key('layer-network-retry')));
+      await revealInLayersSheet(t, find.byKey(const Key('layer-network-retry')));
       await t.tap(find.byKey(const Key('layer-network-retry')));
       await t.pumpAndSettle();
       expect(srv.networkCalls, calls + 1);
@@ -215,7 +222,7 @@ void main() {
       expect(h.state.currentRegion?.code, 'CMH');
       expect(find.byKey(const ValueKey('layer-network-paint')), findsOneWidget, reason: 'on by default (D3, Andy Oct 24)');
       final painter = t.widget<CustomPaint>(find.byKey(const ValueKey('layer-network-paint'))).painter! as ClusteredPointsPainter;
-      expect(painter.index.indexedCount, 3, reason: 'the Seattle repeater is outside CMH + 40 km');
+      expect(painter.index.indexedCount, 2, reason: 'the Seattle repeater is outside CMH + 40 km; the roster layer (on by default) draws the 3rd one itself');
       await openSheet(t);
       expect(sw(t, 'layer-network').value, isTrue);
       expect(statusText(t, 'network'), '3 repeaters in and around Columbus, US · 4 hidden by their owners · Data: MeshCore Map (map.meshcore.io)');
@@ -322,7 +329,7 @@ void main() {
       await t.pumpAndSettle();
       expect(h.state.currentRegion, isNull);
       ClusteredPointsPainter painter() => t.widget<CustomPaint>(find.byKey(const ValueKey('layer-network-paint'))).painter! as ClusteredPointsPainter;
-      expect(painter().index.indexedCount, 4, reason: 'no region detected or picked: every repeater');
+      expect(painter().index.indexedCount, 3, reason: 'no region detected or picked: every repeater, minus the roster one the roster layer (on by default) draws');
       await openSheet(t);
       expect(statusText(t, 'network'), startsWith('4 repeaters · '));
       await closeSheet(t);
@@ -330,7 +337,7 @@ void main() {
       await h.state.setViewingRegion('CMH');
       await t.pumpAndSettle();
       expect(h.state.viewingIsManual, isTrue);
-      expect(painter().index.indexedCount, 3, reason: 'picked region: CMH + 40 km only');
+      expect(painter().index.indexedCount, 2, reason: 'picked region: CMH + 40 km only, minus the roster one');
     });
   });
 
@@ -409,7 +416,7 @@ void main() {
       await toggle(t, 'layer-observers');
       expect(statusText(t, 'observers'), "Couldn't load. Check the connection and retry.");
       serveObservers();
-      await t.ensureVisible(find.byKey(const Key('layer-observers-retry')));
+      await revealInLayersSheet(t, find.byKey(const Key('layer-observers-retry')));
       await t.tap(find.byKey(const Key('layer-observers-retry')));
       await t.pumpAndSettle();
       expect(statusText(t, 'observers'), '1 observer with a public position');

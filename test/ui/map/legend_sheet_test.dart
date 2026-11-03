@@ -43,6 +43,13 @@ Color swatchColor(WidgetTester tester, String id) =>
 
 MeshSonarColors colours(WidgetTester tester) => MeshSonarColors.of(tester.element(find.byKey(const Key('legend-sheet'))));
 
+/// A few bounded pumps: with cells on a very tall surface the map keeps tile timers alive, so pumpAndSettle never returns.
+Future<void> settleShort(WidgetTester t) async {
+  for (var i = 0; i < 4; i++) {
+    await t.pump(const Duration(milliseconds: 300));
+  }
+}
+
 void main() {
   group('sections', () {
     testWidgets('all eight sections are there, in order, with headers', (tester) async {
@@ -257,10 +264,10 @@ void main() {
         final onMap = {solid(polys[0].border), solid(polys[1].border)};
 
         await tester.tap(find.byKey(const Key('drive-map-layers')));
-        await tester.pumpAndSettle();
-        await tester.ensureVisible(find.byKey(const Key('layers-legend')));
+        await settleShort(tester);
+        await revealInLayersSheet(tester, find.byKey(const Key('layers-legend')));
         await tester.tap(find.byKey(const Key('layers-legend')));
-        await tester.pumpAndSettle();
+        await settleShort(tester);
         expect(find.byKey(const Key('legend-sheet')), findsOneWidget);
         expect(onMap, {swatchColor(tester, 'cell-strong'), swatchColor(tester, 'cell-weak')});
         // and the palette note names the palette in use
@@ -276,7 +283,7 @@ void main() {
       await h.pumpApp(tester);
       await tester.tap(find.byKey(const Key('drive-map-layers')));
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.byKey(const Key('layers-legend')));
+      await revealInLayersSheet(tester, find.byKey(const Key('layers-legend')));
       final icon = find.byKey(const Key('layers-legend'));
       expect(icon, findsOneWidget);
       expect(tester.getSize(icon).width, greaterThanOrEqualTo(44));

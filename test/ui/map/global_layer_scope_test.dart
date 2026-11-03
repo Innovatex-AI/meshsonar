@@ -60,11 +60,11 @@ void main() {
     return h;
   }
 
-  test('the registry has the layer on by default', () {
+  test('the registry has the layer off by default', () {
     final spec = kMapLayers.firstWhere((l) => l.id == kNetworkLayerId);
     expect(spec.label, 'All MeshCore repeaters');
-    expect(spec.defaultOn, isTrue);
-    expect(kDefaultLayerState.on, contains(kNetworkLayerId));
+    expect(spec.defaultOn, isFalse); // D11 revised: the network layer starts off
+    expect(kDefaultLayerState.on, isNot(contains(kNetworkLayerId)));
   });
 
   test('a detected region: the box grown by 40 km, nothing beyond (39 km in, 41 km out, other cities out)', () async {
