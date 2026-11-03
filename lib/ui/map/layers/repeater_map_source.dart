@@ -220,6 +220,9 @@ class RepeaterPoint {
 class _Built {
   final List<MapRepeaterRow> rows;
   final bool dedupe;
+
+  /// Version of the claimed-key set the points were built with.
+  final int claimedGen;
   final RepeaterPoints points;
   final ClusterIndex index;
 
@@ -228,7 +231,7 @@ class _Built {
 
   /// When the bands were computed (the clock passed to [RepeaterPoints.fromRows]).
   final DateTime builtAt;
-  _Built(this.rows, this.dedupe, this.points, this.index, this.fetchedAt, this.builtAt);
+  _Built(this.rows, this.dedupe, this.claimedGen, this.points, this.index, this.fetchedAt, this.builtAt);
 }
 
 /// Builds and caches the render-ready form of both lists. Notifies when a new index is ready.
@@ -242,6 +245,8 @@ class RepeaterMapSource extends ChangeNotifier {
   _Built? _global, _roster;
   int _gen = 0;
   bool _dedupe = true;
+  Set<String> _claimed = const {};
+  int _claimedGen = 0;
   bool _disposed = false;
   Future<void>? _pending;
 
@@ -258,6 +263,29 @@ class RepeaterMapSource extends ChangeNotifier {
     _rebuild();
   }
 
+  /// Keys another painter item draws (the drive's heard and known repeaters). They are left out of both lists' points
+  /// and cluster indexes, so one repeater is one badge and cluster counts never include it (merge priority: heard >
+  /// roster > network). Their colour band and last-seen stay available through [claimedInfo].
+  Set<String> get claimedKeys => _claimed;
+  set claimedKeys(Set<String> v) {
+    if (v.length == _claimed.length && _claimed.containsAll(v)) return;
+    _claimed = Set.unmodifiable(v);
+    _claimedGen++;
+    _rebuild();
+  }
+
+  /// What the lists knew about a claimed [key]: the list that owns it (roster before network), its colour band in that
+  /// list's own bands, and its last advert / last heard. Null when no list has the key.
+  ({String layerId, int band, DateTime? lastSeen})? claimedInfo(String key) {
+    final k = key.toLowerCase();
+    DateTime? when(double s) => s.isNaN ? null : DateTime.fromMillisecondsSinceEpoch((s * 1000).round(), isUtc: true);
+    final r = _roster?.points.skippedInfo[k];
+    if (r != null) return (layerId: kRosterLayerId, band: r.band, lastSeen: when(r.lastSeenS));
+    final g = _global?.points.skippedInfo[k];
+    if (g != null) return (layerId: kNetworkLayerId, band: g.band, lastSeen: when(g.lastSeenS));
+    return null;
+  }
+
   RepeaterPoints get globalPoints => _global?.points ?? RepeaterPoints.empty;
   RepeaterPoints get rosterPoints => _roster?.points ?? RepeaterPoints.empty;
   ClusterIndex? get globalIndex => _global?.index;
@@ -265,6 +293,15 @@ class RepeaterMapSource extends ChangeNotifier {
 
   RepeaterPoints pointsOf(String layerId) => layerId == kNetworkLayerId ? globalPoints : rosterPoints;
   ClusterIndex? indexOf(String layerId) => layerId == kNetworkLayerId ? globalIndex : rosterIndex;
+
+  /// Counts every notification: hosts memoise what they derive from the source on it.
+  int revision = 0;
+
+  @override
+  void notifyListeners() {
+    revision++;
+    super.notifyListeners();
+  }
 
   /// Completes when the build started by the latest feed change is done (tests, and a host that wants to wait).
   Future<void> get settled => _pending ?? Future.value();
@@ -284,12 +321,13 @@ class RepeaterMapSource extends ChangeNotifier {
   void _rebuild({bool force = false}) {
     final gs = feed.global, rs = feed.region;
     final g = gs.rows, r = rs.rows;
-    final needRoster = force || _roster == null || !identical(_roster!.rows, r) || _roster!.fetchedAt != rs.fetchedAt;
+    final needRoster = force || _roster == null || !identical(_roster!.rows, r) || _roster!.fetchedAt != rs.fetchedAt || _roster!.claimedGen != _claimedGen;
     final needGlobal = force ||
         _global == null ||
         !identical(_global!.rows, g) ||
         _global!.fetchedAt != gs.fetchedAt ||
         _global!.dedupe != _dedupe ||
+        _global!.claimedGen != _claimedGen ||
         (needRoster && _dedupe);
     if (!needRoster && !needGlobal) {
       // State or labels changed only: availability may differ.
@@ -298,23 +336,32 @@ class RepeaterMapSource extends ChangeNotifier {
     }
     final gen = ++_gen;
     final now = clock();
+    final claimed = _claimed, claimedGen = _claimedGen;
     _pending = () async {
       _Built? roster = _roster;
       if (needRoster) {
-        final (pts, idx) = await _points(r, now, const {});
-        roster = _Built(r, false, pts, idx, rs.fetchedAt, now);
+        final (pts, idx) = await _points(r, now, claimed);
+        roster = _Built(r, false, claimedGen, pts, idx, rs.fetchedAt, now);
       }
       _Built? global = _global;
       if (needGlobal) {
-        final skip = _dedupe ? roster!.points.key.toSet() : const <String>{};
+        final skip = mergeSkipKeys(claimed: claimed, roster: _dedupe ? roster!.points : null);
         final (pts, idx) = await _points(g, now, skip);
-        global = _Built(g, _dedupe, pts, idx, gs.fetchedAt, now);
+        global = _Built(g, _dedupe, claimedGen, pts, idx, gs.fetchedAt, now);
       }
       if (_disposed || gen != _gen) return;
       _roster = roster;
       _global = global;
       notifyListeners();
     }();
+  }
+
+  /// The keys the global list must leave out: everything a painter item draws ([claimed], heard first) and everything
+  /// the roster knows (drawn, or itself claimed). Roster beats network. Pure; tested.
+  @visibleForTesting
+  static Set<String> mergeSkipKeys({required Set<String> claimed, RepeaterPoints? roster}) {
+    if (roster == null) return claimed;
+    return {...claimed, ...roster.key, ...roster.skippedInfo.keys};
   }
 
   /// Rows -> points (validation, dedupe, age bands) -> cluster index. A list of at least [isolateThreshold] rows does

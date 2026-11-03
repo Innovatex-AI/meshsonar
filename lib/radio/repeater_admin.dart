@@ -34,8 +34,12 @@ enum AdminErrorKind {
   notAdmin,
   notLoggedIn,
 
-  /// No answer in time. For a login this is also what a wrong password looks like.
+  /// No answer in time. For a login this can also be a wrong password on firmware that stays silent, which is why the UI lists it
+  /// as one cause and never states which.
   silent,
+
+  /// The repeater answered a login with PUSH 0x86: it heard us and did not accept the password. Different from [silent].
+  wrongPassword,
 
   /// The radio link is gone.
   radioLost,
@@ -64,6 +68,9 @@ class AdminException implements Exception {
   @override
   String toString() => 'AdminException(${kind.name}): $message';
 }
+
+/// The text the companion link puts on a login the repeater answered with PUSH 0x86 (companion_link.dart `login`).
+const String loginRefusedMessage = 'the repeater refused the login';
 
 AdminException _fromRadio(ClaimRadioException e) => switch (e.kind) {
       ClaimRadioError.silent => AdminException(AdminErrorKind.silent, e.message),
@@ -318,6 +325,10 @@ class RepeaterAdminSession {
 
   bool get loggedIn => _loggedIn;
 
+  /// Requests ahead of a new one on the radio's remote queue (0 = free). For the login sheet's "radio is busy" state.
+  int get queueAhead => _queue.requests.value.length;
+  bool get queueBusy => _queue.busy;
+
   /// The login was an admin login; CLI, ACL and every write need this.
   bool get isAdmin => _loggedIn && _isAdmin;
   int? get firmwareLevel => _firmwareLevel;
@@ -442,9 +453,20 @@ class RepeaterAdminSession {
           throw const AdminException(AdminErrorKind.silent,
               'No answer. A wrong password, a repeater out of reach and a busy repeater all look the same from here.');
         }
+        if (e.kind == ClaimRadioError.radio && e.message == loginRefusedMessage) {
+          throw const AdminException(AdminErrorKind.wrongPassword, 'That password was not accepted.');
+        }
         throw _fromRadio(e);
       }
     }, kind: RemoteKind.login);
+  }
+
+  /// Takes over a login this app run already made and the radio still holds (HAS_CONNECTION): no SEND_LOGIN, no password.
+  void adoptLogin(RemoteLogin l) {
+    _loggedIn = true;
+    _isAdmin = l.isAdmin;
+    _firmwareLevel = l.firmwareLevel;
+    _note(AdminLogKind.note, 'resumed session (${l.isAdmin ? 'admin' : 'guest'})');
   }
 
   Future<void> logout() async {

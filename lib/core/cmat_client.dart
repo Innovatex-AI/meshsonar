@@ -119,7 +119,8 @@ class HttpCmatClient implements CmatClient, TelemetryTransport {
     final ep = endpoint(name);
     final req = http.Request(method, query == null || query.isEmpty ? ep : ep.replace(queryParameters: query));
     req.headers['accept'] = 'application/json';
-    if (driverKey != null) req.headers['x-driver-key'] = driverKey;
+    // An empty key means "none": repeater-reach and cell-links are public reads (Drive plan 7.3 F8), the header is not sent.
+    if (driverKey != null && driverKey.isNotEmpty) req.headers['x-driver-key'] = driverKey;
     final bytes = bodyBytes ?? (body == null ? null : utf8.encode(jsonEncode(body)));
     if (bytes != null) {
       req.headers['content-type'] = 'application/json';

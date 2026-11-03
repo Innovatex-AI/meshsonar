@@ -82,6 +82,7 @@ class RadioSessionManager {
     _watch?.cancel();
     _watch = null;
     _session = s;
+    s?.remoteQueue = remoteQueue;
     final l = s?.link;
     if (l is MeshCoreCompanionLink) {
       l.rxLogPaused = remoteQueue.rxPaused;

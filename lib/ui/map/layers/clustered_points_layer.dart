@@ -114,10 +114,10 @@ ClusterSlice visibleSlice(ClusterIndex index, MapCamera camera) {
 /// Hit test from a map-level tap (`MapOptions.onTap` gives the LatLng): the same rule the layer's own tap uses. For
 /// hosts that walk layers top-down instead of letting each layer catch its own taps.
 ClusterTap? clusterTapAt(ClusterIndex index, MapCamera camera, LatLng p, {double tapRadiusPx = 22, double singleRadiusPx = 5}) =>
-    _lod(index.hitTest(mercatorX(p.longitude), mercatorY(p.latitude), camera.zoom, radiusPx: tapRadiusPx, singleRadiusPx: singleRadiusPx), index, camera.zoom);
+    clusterLod(index.hitTest(mercatorX(p.longitude), mercatorY(p.latitude), camera.zoom, radiusPx: tapRadiusPx, singleRadiusPx: singleRadiusPx), index, camera.zoom);
 
 /// Below [kClusterDetailZoom] a single is not opened: it is reported as a one-member cluster (zoom in).
-ClusterTap? _lod(ClusterTap? t, ClusterIndex index, double zoom) {
+ClusterTap? clusterLod(ClusterTap? t, ClusterIndex index, double zoom) {
   if (t == null || zoom >= kClusterDetailZoom || t.isCluster) return t;
   return ClusterTap(id: t.id, count: 1, point: null, lat: t.lat, lon: t.lon, bounds: t.bounds, colocated: t.colocated.isEmpty ? [t.point!] : t.colocated);
 }
@@ -211,7 +211,7 @@ class ClusteredPointsPainter extends CustomPainter {
   ClusterTap? tapAt(Offset local) {
     final s = _scale, o = camera.pixelOrigin;
     final x = (o.dx + local.dx) / s, y = (o.dy + local.dy) / s;
-    return _lod(index.hitTest(x, y, camera.zoom, radiusPx: tapRadiusPx, singleRadiusPx: singleRadiusPx), index, camera.zoom);
+    return clusterLod(index.hitTest(x, y, camera.zoom, radiusPx: tapRadiusPx, singleRadiusPx: singleRadiusPx), index, camera.zoom);
   }
 
   @override

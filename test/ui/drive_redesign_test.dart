@@ -9,11 +9,14 @@ import 'package:meshsonar/core/heard.dart';
 import 'package:meshsonar/core/units.dart';
 import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/radio/radio_api.dart';
+import 'package:meshsonar/ui/map/layers/repeater_sprites.dart';
 import 'package:meshsonar/ui/map/map_layers.dart';
 import 'package:meshsonar/ui/ping_log_screen.dart';
 import 'package:meshsonar/ui/report/drive_report_screen.dart';
 
 import 'fakes.dart';
+import 'map/repeater_probe.dart';
+import '../support/huge_screen.dart';
 
 Future<void> settle(WidgetTester tester) async {
   for (var i = 0; i < 5; i++) {
@@ -30,7 +33,7 @@ Future<void> drain(WidgetTester tester) async {
 const tower = RepeaterRef(key: 'a1b2c3d4', name: 'Westerville Water Tower', lat: 40.135, lon: -82.92);
 
 Future<Harness> driving(WidgetTester tester, {int hold = 3}) async {
-  useTallScreen(tester);
+  useHugeScreen(tester);
   final h = Harness();
   h.settings.saved = Settings(heardHoldPings: hold);
   h.cache.items = const [tower];
@@ -42,7 +45,6 @@ Future<Harness> driving(WidgetTester tester, {int hold = 3}) async {
 }
 
 Finder heardRow(String id) => find.byKey(ValueKey('heard-row-$id'));
-Finder marker(String key, String phase) => find.byKey(ValueKey('map-repeater-state-$key-$phase'));
 
 void main() {
   test('heard snapshot: fresh, holding with pips left, then stale after the hold', () {
@@ -72,16 +74,17 @@ void main() {
     expect(find.descendant(of: heardRow('a1b2'), matching: find.text('+6.5')), findsOneWidget);
     expect(find.descendant(of: heardRow('a1b2'), matching: find.textContaining('km')), findsOneWidget); // distance
     // On the map: the known repeater pops up, with a link and a distance label from here.
-    expect(marker('a1b2c3d4', 'fresh'), findsOneWidget);
-    expect(find.byKey(const ValueKey('map-link-distance-a1b2c3d4')), findsOneWidget);
-    expect(find.byKey(const ValueKey('map-heard-label-a1b2c3d4')), findsOneWidget);
+    expect(repeaterItem(tester, 'a1b2c3d4')!.heard, isTrue);
+    expect(repeaterItem(tester, 'a1b2c3d4')!.variant, SpriteVariant.heard);
+    expect(drawnLabels(tester).where((l) => l.tag && l.text.contains('km')), hasLength(1), reason: 'distance tag on the link');
+    expect(labelContaining(tester, 'Westerville Water Tower'), isNotNull, reason: 'the heard repeater is named, with its SNR');
 
     // Only ff09 heard: the tower holds (still listed, "missed 1", marker still lit but not fresh).
     e.emit(heardPing('p2', const [Echo(repeater: 'ff09', snrDb: -2)]));
     await settle(tester);
     expect(heardRow('a1b2'), findsOneWidget);
     expect(find.descendant(of: heardRow('a1b2'), matching: find.textContaining('missed 1')), findsOneWidget);
-    expect(marker('a1b2c3d4', 'holding'), findsOneWidget);
+    expect(repeaterItem(tester, 'a1b2c3d4')!.heard, isTrue);
 
     e.emit(silentPing('p3'));
     await settle(tester);
@@ -92,8 +95,9 @@ void main() {
     // Missed 3 pings: stale. Out of the live list, folded into "+N earlier", greyed on the map.
     expect(heardRow('a1b2'), findsNothing);
     expect(find.text('+1 earlier'), findsOneWidget);
-    expect(marker('a1b2c3d4', 'stale'), findsOneWidget);
-    expect(find.byKey(const ValueKey('map-link-distance-a1b2c3d4')), findsNothing);
+    expect(repeaterItem(tester, 'a1b2c3d4')!.heard, isTrue, reason: 'still heard this drive');
+    await tester.pump(const Duration(seconds: 1));
+    expect(drawnLabels(tester).where((l) => l.tag), isEmpty, reason: 'no live link, no distance tag');
     expect(find.byKey(const ValueKey('heard-stale-a1b2')), findsNothing);
     await tester.tap(find.byKey(const Key('heard-earlier')));
     await settle(tester);
@@ -103,7 +107,7 @@ void main() {
     e.emit(heardPing('p5', const [Echo(repeater: 'a1b2', snrDb: 1)]));
     await settle(tester);
     expect(heardRow('a1b2'), findsOneWidget);
-    expect(marker('a1b2c3d4', 'fresh'), findsOneWidget);
+    expect(repeaterItem(tester, 'a1b2c3d4')!.heard, isTrue);
     await h.state.stopDrive();
     await drain(tester);
   });
@@ -112,21 +116,22 @@ void main() {
     final h = await driving(tester);
     h.engines.single.emit(heardPing('p1', const [Echo(repeater: 'a1b2', snrDb: 6.5)]));
     await settle(tester);
-    expect(find.byKey(const Key('map-repeater-label')), findsNothing);
+    expect(repeaterItem(tester, 'a1b2c3d4')!.selected, isFalse);
     await tester.tap(heardRow('a1b2'));
     await settle(tester);
-    expect(find.byKey(const Key('map-repeater-label')), findsOneWidget);
-    expect(find.textContaining('Heard now'), findsOneWidget);
+    expect(repeaterItem(tester, 'a1b2c3d4')!.selected, isTrue);
+    expect(repeaterItem(tester, 'a1b2c3d4')!.variant, SpriteVariant.selectedHeard);
+    expect(labelContaining(tester, 'Heard now'), isNotNull, reason: 'second line of the selected label');
     await tester.tap(heardRow('a1b2'));
     await settle(tester);
-    expect(find.byKey(const Key('map-repeater-label')), findsNothing);
+    expect(repeaterItem(tester, 'a1b2c3d4')!.selected, isFalse);
     await h.state.stopDrive();
     await drain(tester);
   });
 
   // 0.4.0 (spec m1-app-0.4.0 §4): the Internal/External toggle became the per-radio antenna chip.
   testWidgets('antenna chip: shows the radio\'s antenna, the drive records it, locked while driving', (tester) async {
-    useTallScreen(tester);
+    useHugeScreen(tester);
     final h = Harness(); // the radio's saved antenna is inside car, 1.2 m (fakes.dart)
     await h.pumpApp(tester);
     await h.state.connect(h.bt.devices.first, RadioKind.bluetooth);
@@ -185,11 +190,11 @@ void main() {
     await tester.tap(find.byKey(const Key('layer-color-result')));
     await tester.tap(find.byKey(const Key('layer-repeaters')));
     await settle(tester);
-    await tester.tapAt(const Offset(200, 60)); // dismiss the sheet
+    await tester.tap(find.byKey(const Key('layers-done'))); // dismiss the sheet
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byKey(const Key('layers-sheet')), findsNothing);
-    expect(marker('a1b2c3d4', 'fresh'), findsNothing);
+    expect(repeaterItem(tester, 'a1b2c3d4'), isNull, reason: 'known-repeaters layer is off');
 
     await tester.tap(find.byKey(const Key('fullscreen-close')));
     await tester.pump();
@@ -198,7 +203,7 @@ void main() {
     expect(find.byKey(const Key('map-fullscreen')), findsOneWidget);
     expect(find.byKey(const Key('drive-map')), findsOneWidget);
     // Layer choices are shared with the Drive screen's map.
-    expect(marker('a1b2c3d4', 'fresh'), findsNothing);
+    expect(repeaterItem(tester, 'a1b2c3d4'), isNull, reason: 'known-repeaters layer is off');
     await h.state.stopDrive();
     await drain(tester);
   });
@@ -262,7 +267,7 @@ void main() {
   });
 
   testWidgets('simulator mode is labelled on the chip and the map', (tester) async {
-    useTallScreen(tester);
+    useHugeScreen(tester);
     final h = Harness();
     await h.pumpApp(tester);
     expect(find.byKey(const Key('map-simulated')), findsNothing);

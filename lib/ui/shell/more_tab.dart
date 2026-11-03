@@ -171,8 +171,8 @@ class MoreList extends StatelessWidget {
               valueListenable: AppFlags.chatRedesignNotifier,
               builder: (context, on, _) => AppSwitchTile(
                 switchKey: const Key('more-chat-redesign'),
-                title: 'New Chat screens (preview)',
-                subtitle: 'Shows the unfinished parts of the Chat redesign. Off by default.',
+                title: 'New Chat design',
+                subtitle: 'The redesigned Chat tab and contact profile. Turn off to go back to the old ones.',
                 value: on,
                 onChanged: (v) {
                   final dir = s.services.uiPrefsFile?.parent;

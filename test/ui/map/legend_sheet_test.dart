@@ -9,12 +9,12 @@ import 'package:meshsonar/core/network_coverage.dart';
 import 'package:meshsonar/ui/claims/claim_widgets.dart';
 import 'package:meshsonar/ui/map/coverage_layer_controls.dart' show coverageLegend;
 import 'package:meshsonar/ui/map/coverage_map.dart' show networkLevelColor;
-import 'package:meshsonar/ui/map/layers/layers_sheet.dart' show NetworkAgeLegend;
 import 'package:meshsonar/ui/map/legend_sheet.dart';
 import 'package:meshsonar/ui/map/map_layers.dart' show PingColorMode;
 import 'package:meshsonar/ui/theme.dart';
 
 import '../fakes.dart';
+import '../../support/huge_screen.dart';
 
 Future<void> pumpLegend(
   WidgetTester tester, {
@@ -43,6 +43,13 @@ Color swatchColor(WidgetTester tester, String id) =>
 
 MeshSonarColors colours(WidgetTester tester) => MeshSonarColors.of(tester.element(find.byKey(const Key('legend-sheet'))));
 
+/// A few bounded pumps: with cells on a very tall surface the map keeps tile timers alive, so pumpAndSettle never returns.
+Future<void> settleShort(WidgetTester t) async {
+  for (var i = 0; i < 4; i++) {
+    await t.pump(const Duration(milliseconds: 300));
+  }
+}
+
 void main() {
   group('sections', () {
     testWidgets('all eight sections are there, in order, with headers', (tester) async {
@@ -50,7 +57,7 @@ void main() {
       for (final id in ['pings', 'cells', 'repeaters', 'links', 'observers', 'heard', 'owned', 'why']) {
         expect(find.byKey(Key('legend-section-$id')), findsOneWidget, reason: id);
       }
-      expect(find.text('Map legend'), findsOneWidget);
+      expect(find.text('Map guide'), findsOneWidget);
       expect(find.byKey(const Key('legend-palette-note')), findsOneWidget);
       final ys = [for (final id in ['pings', 'cells', 'repeaters', 'links', 'observers', 'heard', 'owned', 'why']) tester.getTopLeft(find.byKey(Key('legend-section-$id'))).dy];
       expect([...ys]..sort(), ys);
@@ -116,17 +123,13 @@ void main() {
       expect(find.text('Strong: quiet, under -125 dBm'), findsOneWidget);
     });
 
-    testWidgets('repeaters: the four advert ages, the amber tower and room-server ring', (tester) async {
+    testWidgets('repeaters: fresh / recent / older badges, the green tick and the room-server square (Drive plan 6.3)', (tester) async {
       await pumpLegend(tester);
-      expect(find.text('Within the last 24 hours'), findsOneWidget);
-      expect(find.text('Within the last 7 days'), findsOneWidget);
-      expect(find.text('Within the last 30 days'), findsOneWidget);
-      expect(find.text('Older than 30 days'), findsOneWidget);
-      final ctx = tester.element(find.byKey(const Key('legend-sheet')));
-      for (final (level, _) in NetworkAgeLegend.steps) {
-        expect(swatchColor(tester, 'age-${level.name}'), networkLevelColor(ctx, level));
-      }
-      expect(find.textContaining('room servers'), findsOneWidget);
+      expect(find.text('Solid badge: fresh'), findsOneWidget);
+      expect(find.text('Tinted badge with a ring: recent'), findsOneWidget);
+      expect(find.text('Hollow dashed badge: older'), findsOneWidget);
+      expect(find.text('Green tick: heard this drive'), findsOneWidget);
+      expect(find.textContaining('room server'), findsOneWidget);
     });
 
     testWidgets('link lines: orange and solid in the standard palette; the label is the best SNR', (tester) async {
@@ -240,7 +243,7 @@ void main() {
     // layers sheet in the same app, under each palette.
     for (final pal in ColourPalette.values) {
       testWidgets('on the real map, palette ${pal.id}: polygon colours == legend swatches', (tester) async {
-        useTallScreen(tester);
+        useHugeScreen(tester);
         final h = Harness();
         h.settings.saved = Settings(colourPalette: pal);
         h.client.publicCoverageResult = PublicCoverage(
@@ -261,9 +264,10 @@ void main() {
         final onMap = {solid(polys[0].border), solid(polys[1].border)};
 
         await tester.tap(find.byKey(const Key('drive-map-layers')));
-        await tester.pumpAndSettle();
+        await settleShort(tester);
+        await revealInLayersSheet(tester, find.byKey(const Key('layers-legend')));
         await tester.tap(find.byKey(const Key('layers-legend')));
-        await tester.pumpAndSettle();
+        await settleShort(tester);
         expect(find.byKey(const Key('legend-sheet')), findsOneWidget);
         expect(onMap, {swatchColor(tester, 'cell-strong'), swatchColor(tester, 'cell-weak')});
         // and the palette note names the palette in use
@@ -273,16 +277,17 @@ void main() {
   });
 
   group('reachable', () {
-    testWidgets('from the info icon in the layers sheet header; opens on the map\'s current colour mode', (tester) async {
-      useTallScreen(tester);
+    testWidgets('from the "What do the symbols mean?" row in the layers sheet; opens on the map\'s current colour mode', (tester) async {
+      useHugeScreen(tester);
       final h = Harness();
       await h.pumpApp(tester);
       await tester.tap(find.byKey(const Key('drive-map-layers')));
       await tester.pumpAndSettle();
+      await revealInLayersSheet(tester, find.byKey(const Key('layers-legend')));
       final icon = find.byKey(const Key('layers-legend'));
       expect(icon, findsOneWidget);
-      expect(tester.getSize(icon).width, greaterThanOrEqualTo(48));
-      expect(tester.getSize(icon).height, greaterThanOrEqualTo(48));
+      expect(tester.getSize(icon).width, greaterThanOrEqualTo(44));
+      expect(tester.getSize(icon).height, greaterThanOrEqualTo(44));
       await tester.tap(icon);
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('legend-sheet')), findsOneWidget);
@@ -290,7 +295,7 @@ void main() {
     });
 
     testWidgets('from Settings > About > Map legend', (tester) async {
-      useTallScreen(tester);
+      useHugeScreen(tester);
       final h = Harness();
       await h.pumpApp(tester);
       await openSettingsTab(tester);

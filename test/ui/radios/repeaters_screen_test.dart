@@ -10,6 +10,7 @@ import 'package:meshsonar/radio/admin_password_vault.dart';
 import 'package:meshsonar/radio/companion_link.dart';
 import 'package:meshsonar/radio/radio_api.dart';
 import 'package:meshsonar/ui/app.dart';
+import 'package:meshsonar/ui/design/app_surfaces.dart' show dismissAppToast;
 import 'package:meshsonar/ui/radios/admin_launcher.dart';
 import 'package:meshsonar/ui/radios/rooms/room_join_header.dart';
 
@@ -100,7 +101,7 @@ void main() {
     expect(find.textContaining('Simulator has no repeaters'), findsOneWidget);
   });
 
-  testWidgets('lists repeaters and rooms from the radio; a repeater opens its login, a room opens its login', (tester) async {
+  testWidgets('lists repeaters and rooms from the radio; a repeater opens its login, a room opens its conversation', (tester) async {
     useTallScreen(tester);
     final h = AdminHarness();
     await tester.runAsync(() => h.state.init());
@@ -123,10 +124,10 @@ void main() {
     await tester.tap(find.byType(BackButton).last);
     await frames(tester);
     await tester.tap(find.byKey(Key('rep-${h.room.keyHex}')));
-    await pumpUntilFound(tester, find.byKey(const Key('room-login')));
-    expect(find.text('Join Valley Room'), findsOneWidget);
-    await tester.tap(find.byType(BackButton).last);
-    await frames(tester);
+    // A room is a conversation now (join bar above it). No chat store is wired in this harness, so the honest toast shows.
+    await pumpUntilFound(tester, find.textContaining('Chat is not ready'));
+    expect(find.textContaining('Chat is not ready'), findsOneWidget);
+    dismissAppToast();
     await tester.pumpWidget(const SizedBox());
     await tester.runAsync(() => h.state.radioSession?.close() ?? Future<void>.value());
     await tester.pump(const Duration(seconds: 10));

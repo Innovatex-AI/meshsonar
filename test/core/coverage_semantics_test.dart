@@ -35,7 +35,14 @@ void main() {
     expect(levelFor(cell(heard: 3, best: 1), CoverageColorBy.snr), CoverageLevel.good);
     expect(levelFor(cell(heard: 3, best: -3), CoverageColorBy.snr), CoverageLevel.fair);
     expect(levelFor(cell(heard: 3, best: -9), CoverageColorBy.snr), CoverageLevel.weak);
-    expect(levelFor(cell(heard: 8), CoverageColorBy.heard), CoverageLevel.strong);
+    expect(levelFor(cell(heard: 8, best: 2), CoverageColorBy.heard), CoverageLevel.strong);
+  });
+
+  test('F1: Share heard colours heard-without-SNR cells purple "signal unknown", never by percentage (contract, website gate())', () {
+    expect(levelFor(cell(heard: 8), CoverageColorBy.heard), CoverageLevel.unknown);
+    expect(levelFor(cell(heard: 1), CoverageColorBy.heard), CoverageLevel.unknown, reason: 'even at 10%');
+    expect(levelFor(cell(heard: 0), CoverageColorBy.heard), CoverageLevel.none);
+    expect(levelFor(cell(heard: 5, best: -8), CoverageColorBy.heard), CoverageLevel.good, reason: '50% with a reading still buckets by share');
   });
 
   test('noise colouring is a measurement of its own, independent of hearing', () {

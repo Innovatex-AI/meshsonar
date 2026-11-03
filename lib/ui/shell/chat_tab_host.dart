@@ -5,33 +5,69 @@
 //
 //   ChatTabHost.provider.value = MyChatTabProvider(chatService);
 //
-// A provider supplies the two lists and the unread count; the host adds the app bar, the Contacts | Channels
-// segmented control, the connect call to action and the empty states around them.
+// A provider supplies the lists and the unread count; the host adds the title, the segmented control, search, the New
+// button, the status banner, the connect call to action and the empty states around them.
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+/// What the host passes to the segment views of the redesigned tab.
+class ChatTabArgs {
+  /// Search text (the segment filters its list by it).
+  final String query;
+
+  /// The conversation open in the detail pane of the wide layout, if any.
+  final String? selectedKey;
+
+  /// "Connect radio".
+  final VoidCallback? onConnect;
+
+  /// A conversation was opened from the list (the host clears the search).
+  final VoidCallback? onOpened;
+  const ChatTabArgs({this.query = '', this.selectedKey, this.onConnect, this.onOpened});
+}
+
 /// What the chat services give the Chat tab. All views are built inside the tab's own scaffold body.
 abstract class ChatTabProvider {
-  /// Notifies when [unreadConversations] or the lists change (the tab badge and lists listen to it).
+  /// Notifies when [unreadMessages] or the lists change (the tab badge and lists listen to it).
   Listenable get changes;
 
-  /// Conversations with unread messages, shown as the badge on the Chat tab.
-  int get unreadConversations;
+  /// Unread messages (muted and system conversations excluded), shown as the badge on the Chat tab (D19).
+  int get unreadMessages;
 
+  /// True when there are no conversations at all (the host then shows its own first-run empty state).
+  bool get isEmpty;
+
+  // ---- the old two-segment tab (Contacts | Channels), used while the chatRedesign flag is off
   /// Contacts and direct messages. Return an empty-state widget of your own if there are none.
   Widget contactsView(BuildContext context);
 
   /// Channels (the wardrive channel appears in a pinned System row, per the design doc).
   Widget channelsView(BuildContext context);
 
-  /// True when there are no conversations at all (the host then shows its own first-run empty state).
-  bool get isEmpty;
-
-  /// Extra app-bar buttons for the Chat tab (global search).
+  /// Extra app-bar buttons for the old Chat tab (global search).
   List<Widget> appBarActions(BuildContext context) => const [];
+
+  // ---- the redesigned tab (Chats | Contacts | Network)
+  /// The Chats list, as a sliver.
+  Widget chatsSliver(BuildContext context, ChatTabArgs args);
+
+  /// The Network lists, as a sliver.
+  Widget networkSliver(BuildContext context, ChatTabArgs args);
+
+  /// The Contacts segment (a box widget with its own scrolling until the contacts rewrite lands).
+  Widget contactsSegment(BuildContext context);
+
+  /// Pull to refresh: reads the radio again.
+  Future<void> refresh();
+
+  /// The New (compose) button. [showContacts] switches the tab to its Contacts segment.
+  Future<void> newChat(BuildContext context, {required VoidCallback showContacts});
+
+  /// Opens the all-messages search.
+  void openMessageSearch(BuildContext context);
 }
 
-/// Which half of the Chat tab is showing.
+/// Which half of the old Chat tab is showing.
 enum ChatSegment { contacts, channels }
 
 class ChatTabHost {
@@ -47,7 +83,7 @@ class ChatTabHost {
   /// Debug builds only: show fixture conversations so the structure can be reviewed without a radio.
   static final ValueNotifier<bool> debugFixtures = ValueNotifier<bool>(false);
 
-  static int get unread => provider.value?.unreadConversations ?? 0;
+  static int get unread => provider.value?.unreadMessages ?? 0;
 }
 
 /// Fixture provider for the debug flag. Lists are static text; nothing here is stored or sent.
@@ -55,7 +91,7 @@ class DebugFixtureChat implements ChatTabProvider {
   @override
   Listenable get changes => ChangeNotifier();
   @override
-  int get unreadConversations => 2;
+  int get unreadMessages => 2;
   @override
   bool get isEmpty => false;
   @override
@@ -84,6 +120,30 @@ class DebugFixtureChat implements ChatTabProvider {
         ('Fixture: Public', 'Debug fixture, not a real message', '9:12'),
         ('Fixture: #hamradio', 'Debug fixture, not a real message', 'Sun'),
       ]);
+
+  @override
+  Widget chatsSliver(BuildContext context, ChatTabArgs args) => SliverList(
+        delegate: SliverChildListDelegate([
+          for (final r in const [('Fixture: Alex', '9:41'), ('Fixture: Public', '9:12')])
+            ListTile(title: Text(r.$1), subtitle: const Text('Debug fixture, not a real message'), trailing: Text(r.$2)),
+        ]),
+      );
+
+  @override
+  Widget networkSliver(BuildContext context, ChatTabArgs args) =>
+      const SliverToBoxAdapter(child: ListTile(title: Text('Fixture: North Ridge repeater')));
+
+  @override
+  Widget contactsSegment(BuildContext context) => contactsView(context);
+
+  @override
+  Future<void> refresh() async {}
+
+  @override
+  Future<void> newChat(BuildContext context, {required VoidCallback showContacts}) async => showContacts();
+
+  @override
+  void openMessageSearch(BuildContext context) {}
 }
 
 bool get chatFixturesAllowed => kDebugMode;

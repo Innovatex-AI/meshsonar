@@ -228,11 +228,11 @@ void main() {
       expect(find.byKey(const Key('map-key-pings')), findsOneWidget);
       expect(find.text('+10 dB'), findsOneWidget, reason: 'default ping colours are by SNR');
       expect(find.textContaining('last advert'), findsNothing, reason: 'no repeater layer data: no repeater line');
-      model.layers = model.layers.copyWith(pingColors: PingColorMode.result);
+      model.pingColors = PingColorMode.result;
       await tester.pump();
       expect(find.text('+10 dB'), findsNothing);
       expect(find.text('heard'), findsOneWidget);
-      model.layers = model.layers.copyWith(pings: false);
+      model.setLayer('pings', false);
       await tester.pump();
       expect(find.byKey(const Key('map-key-pings')), findsNothing, reason: 'pings layer off: not in the key');
       await stop(tester, h);

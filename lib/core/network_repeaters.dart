@@ -42,7 +42,7 @@ class NetworkRepeater {
   /// The name, or the first 8 key characters (what the website shows for an unnamed node).
   String get displayName => (name == null || name!.trim().isEmpty) ? key.substring(0, 8) : name!.trim();
 
-  RepeaterRef toRef() => RepeaterRef(key: key, name: name?.trim() ?? '', lat: lat, lon: lon);
+  RepeaterRef toRef() => RepeaterRef(key: key, name: name?.trim() ?? '', lat: lat, lon: lon, kind: isRoom ? RepeaterKind.room : RepeaterKind.repeater);
 
   /// The compact on-disk row: `[key, name, lat, lon, type, lastAdvertEpochS]` (positions to 5 decimals, about 1 m).
   List<Object?> toRow() => [key, name, _round5(lat), _round5(lon), type, lastAdvert == null ? null : lastAdvert!.millisecondsSinceEpoch ~/ 1000];

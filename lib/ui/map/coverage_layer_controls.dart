@@ -36,6 +36,7 @@ List<(CoverageLevel, String)> coverageLegend(CoverageColorBy by) =>
         (CoverageLevel.good, '50-75%'),
         (CoverageLevel.fair, '25-50%'),
         (CoverageLevel.weak, 'under 25%'),
+        (CoverageLevel.unknown, 'heard, signal unknown'),
         (CoverageLevel.none, 'mapped, nothing heard'),
       ],
       CoverageColorBy.noise => const [
@@ -43,6 +44,7 @@ List<(CoverageLevel, String)> coverageLegend(CoverageColorBy by) =>
         (CoverageLevel.good, '-125 to -115'),
         (CoverageLevel.fair, '-115 to -105'),
         (CoverageLevel.weak, 'noisy, above -105'),
+        (CoverageLevel.none, 'no reading'),
       ],
       CoverageColorBy.age => const [
         (CoverageLevel.strong, 'measured in the last 24 hours'),
@@ -60,9 +62,10 @@ List<(CoverageLevel, String)> coverageLegend(CoverageColorBy by) =>
       ],
     };
 
-class CoverageLayerControls extends StatelessWidget {
+/// The options page body of the Network coverage layer: colour by (with its key), detail, window, source and the growth slider.
+class CoverageOptionsBody extends StatelessWidget {
   final DriveMapModel model;
-  const CoverageLayerControls({super.key, required this.model});
+  const CoverageOptionsBody({super.key, required this.model});
 
   @override
   Widget build(BuildContext context) {
@@ -103,19 +106,11 @@ class CoverageLayerControls extends StatelessWidget {
       ],
     );
     final auto = q.res == null;
-    return ExpansionTile(
+    return KeyedSubtree(
       key: const Key('coverage-layer-controls'),
-      leading: const SizedBox(width: 24),
-      title: Text('Coverage options', style: t.textTheme.bodyMedium),
-      subtitle: Text(
-        '${colorByLabel(model.colorBy)} · ${q.res == null ? 'auto detail' : 'res ${q.res}'} · ${q.since.label} · ${q.source.label}',
-        style: t.textTheme.bodySmall,
-      ),
-      shape: const Border(),
-      collapsedShape: const Border(),
-      childrenPadding: const EdgeInsets.fromLTRB(72, 0, Gap.l, Gap.s),
-      expandedCrossAxisAlignment: CrossAxisAlignment.start,
-      children: [
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -192,6 +187,7 @@ class CoverageLayerControls extends StatelessWidget {
           ],
         ),
       ],
+      ),
     );
   }
 }

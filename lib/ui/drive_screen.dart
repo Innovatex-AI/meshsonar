@@ -479,13 +479,12 @@ class _MapPane extends StatelessWidget {
           position: model.position ?? (model.pings.isEmpty ? idleMapPosition(s) : null),
           puck: model.puck,
           telemetry: model.telemetry,
-          showRings: s.driving,
+          showRings: true, // Range rings draw whenever there is a position, idle too (Drive plan 7.3 F4)
           rotatable: rotatable ?? expanded,
           topClearance: topClearance,
           bottomClearance: bottomClearance,
           repeaterLabel: s.repeaterLabel,
           heard: model.heard,
-          layers: model.layers,
           networkCells: model.visibleNetworkCells,
           baseStyle: model.baseStyle,
           onBoundsChanged: model.onMapBounds,
@@ -501,7 +500,7 @@ class _MapPane extends StatelessWidget {
           onZoomChanged: model.onMapZoom,
           hexRes: model.coverageQuery.res,
           mapKey: MapKey(model: model),
-          openLegend: () => showMapLegend(context, colorBy: model.colorBy, pingColors: model.layers.pingColors),
+          openLegend: () => showMapLegend(context, colorBy: model.colorBy, pingColors: model.pingColors),
           fallbackCenter: viewedRegionCenter(s),
           fallbackBounds: viewedRegionBounds(s),
           // GPS trouble (waiting, weak, lost, Precise Location off) as one line over the map's top edge, with the one button that fixes it.

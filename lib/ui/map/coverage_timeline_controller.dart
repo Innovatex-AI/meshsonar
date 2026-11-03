@@ -12,7 +12,9 @@ import '../../core/coverage_query.dart';
 import '../../core/coverage_timeline.dart';
 import '../../core/region_timeline_api.dart';
 
-enum TimelineLoad { idle, loading, ready, unavailable }
+/// [unavailable] = the request failed (or the server has no timeline); [empty] = the region answered with no growth history yet;
+/// [single] = it has data for one day only, so there is nothing to scrub (Drive plan 7.3 F10).
+enum TimelineLoad { idle, loading, ready, unavailable, empty, single }
 
 class CoverageTimelineController extends ChangeNotifier {
   CoverageTimelineController({
@@ -79,7 +81,13 @@ class CoverageTimelineController extends ChangeNotifier {
     _index = sc?.liveIndex ?? 0;
     final q = getQuery();
     if (sc != null && q.until != null) _index = sc.indexOf(q.until);
-    _set(sc == null ? TimelineLoad.unavailable : TimelineLoad.ready);
+    _set(
+      sc != null
+          ? TimelineLoad.ready
+          : tl == null
+          ? TimelineLoad.unavailable
+          : (first == null ? TimelineLoad.empty : TimelineLoad.single),
+    );
   }
 
   /// Forget the loaded region (the viewed region changed): back to live, reload on next [ensureLoaded].

@@ -1,37 +1,51 @@
-// The map layers sheet, generated from the registry (registry.dart): one section per [LayerGroup] in order, one
-// switch per layer that has a renderer, each with its honest status line from [DriveMapModel.statusOf] (count, source,
-// "Not available on this server yet", "Couldn't load" + Retry, "Offline copy"), the layer's controls when it is on
-// (coverage colour-by / detail / since / source; ping colours) and its legend (advert age for the global repeater
-// layer, roster status for the region one). A layer whose data is unsupported or empty is shown with its switch
-// disabled and the reason, never hidden; one that is on can always be switched off. Design: stream-1-maps.md 4.1.
+// The map layers sheet (Drive plan 4.7, wireframe F), generated from the registry (registry.dart): Base map, then one section per
+// [LayerGroup] in order (This drive, Coverage, Repeaters, Display), one switch per layer, each with its honest status line from
+// [DriveMapModel.statusOf] (count, source, "Not available on this server yet", "Couldn't load" + Retry, "Saved copy from ...")
+// and its inline key (the swatches are built from the same colour functions the map paints with, so a key can never disagree
+// with the map). A layer whose data is unsupported or empty is shown with its switch disabled and the reason, never hidden;
+// one that is on can always be switched off.
 //
-// Keys: 'layers-sheet', 'layers-group-<group>', the switch per layer from [layerSwitchKey] (the pre-registry keys are
-// kept for one release: measured = 'layer-network-coverage', heard = 'layer-repeaters', repeaters (roster) =
-// 'layer-region-repeaters'; new layers are 'layer-<id>'), 'layer-<id>-status', 'layer-<id>-retry', 'layer-color-snr',
-// 'layer-color-result', 'network-legend', 'roster-legend'.
+// Non-modal (the map stays live above it, every toggle applies instantly): [showGeneratedLayersSheet] opens it in the Drive tab's
+// anchored host when given one, else as a non-modal app sheet with detents [0.4, 0.75]. "Network coverage options" is a page
+// inside the sheet (colour by, detail, window, source, growth slider), not eight controls inline.
+//
+// Keys: 'layers-sheet', 'layers-done', 'layers-base-map', 'base-map-<id>', 'layers-group-<group>', the switch per layer from
+// [layerSwitchKey] (the pre-registry keys are kept: measured = 'layer-network-coverage', heard = 'layer-repeaters', repeaters
+// (roster) = 'layer-region-repeaters'; the rest are 'layer-<id>'), 'layer-<id>-status', 'layer-<id>-retry', 'layer-<id>-key',
+// 'layer-color-snr', 'layer-color-result', 'layer-measured-options', 'layers-options-page', 'layers-options-back',
+// 'layers-filter', 'layers-credits', 'layers-legend', 'layers-reset', 'network-legend', 'roster-legend'.
+import 'package:flutter/cupertino.dart' show CupertinoButton, CupertinoSlidingSegmentedControl;
 import 'package:flutter/material.dart';
 
+import '../../../core/map_styles.dart';
 import '../../../core/network_coverage.dart' show CoverageLevel;
 import '../../../core/region_repeaters_api.dart' show RepeaterActivity;
+import '../../../core/units.dart' show Units;
 import '../../app.dart' show AppScope;
+import '../../design/anchored_sheet.dart';
+import '../../design/app_surfaces.dart';
+import '../../design/app_symbols.dart';
+import '../../design/app_widgets.dart' show AppSwitchTile;
+import '../../design/map_tokens.dart';
+import '../../design/tokens.dart' show Hit;
 import '../../drive/drive_map_model.dart';
 import '../../theme.dart';
 import '../coverage_layer_controls.dart';
 import '../coverage_map.dart' show networkLevelColor;
-import '../legend_sheet.dart' show showMapLegend;
+import '../legend_sheet.dart' show LegendSwatch, SwatchShape, showMapLegend;
 import '../map_layers.dart' show PingColorMode;
-import '../region_repeater_layer.dart' show regionRepeaterColor;
+import 'repeater_cluster_layer.dart' show regionRepeaterColor;
 import '../sheets/repeater_sheet.dart' show rosterStatusText;
+import '../map_tools.dart' show showMapFilterSheet;
+import '../overlays/credits_sheet.dart' show showMapCredits;
 import 'map_layer.dart';
 import 'registry.dart';
 import 'repeater_map_source.dart';
-import '../../design/app_surfaces.dart';
 
-/// Layers this build draws. `neighbours` is in the registry (website parity, WP-M4) but has no renderer yet, so the
-/// sheet does not offer a switch that would do nothing.
-const Set<String> kDrawnLayerIds = {'measured', 'hexes', kNetworkLayerId, kRosterLayerId, 'observers', 'links', 'heard', 'pings', 'rings', kLabelsLayerId};
+/// Layers this build draws: every registry layer (the dead `neighbours` entry is gone).
+final Set<String> kDrawnLayerIds = {for (final l in kMapLayers) l.id};
 
-/// The widget key of a layer's switch. Pre-registry keys stay for one release (tests and muscle memory).
+/// The widget key of a layer's switch. Pre-registry keys stay (tests and muscle memory).
 Key layerSwitchKey(String id) => Key(switch (id) {
   'measured' => 'layer-network-coverage',
   'heard' => 'layer-repeaters',
@@ -39,172 +53,566 @@ Key layerSwitchKey(String id) => Key(switch (id) {
   _ => 'layer-$id',
 });
 
-/// Icon, title and one-line description per layer.
-({IconData icon, String title, String? description}) layerPresentation(BuildContext context, MapLayerSpec spec) => switch (spec.id) {
-  'measured' => (icon: Icons.public_rounded, title: 'Network coverage', description: "Everyone's measured coverage, not just this drive"),
-  'hexes' => (icon: Icons.hexagon_outlined, title: 'Hex coverage', description: 'Your pings on the same hexagons as the website'),
-  kNetworkLayerId => (icon: Icons.hub_outlined, title: spec.label, description: 'Every repeater with a public position, coloured by last advert'),
-  kRosterLayerId => (icon: Icons.cell_tower_outlined, title: 'Region repeaters', description: 'Every repeater in this region, by activity'),
-  'observers' => (icon: Icons.change_history_rounded, title: 'Observers', description: "The region's observers that share their position"),
-  'links' => (icon: Icons.timeline_rounded, title: 'Links to heard repeaters', description: 'With distance'),
-  'heard' => (icon: Icons.cell_tower_rounded, title: 'Repeaters', description: 'Repeaters this drive heard'),
-  kLabelsLayerId => (icon: Icons.label_outline_rounded, title: 'Repeater names', description: 'Name beside each repeater; fewer as you zoom out'),
-  'pings' => (icon: Icons.scatter_plot_rounded, title: 'Pings', description: null),
-  'rings' => (
-    icon: Icons.radar_rounded,
-    title: 'Range rings',
-    description: AppScope.unitsOf(context).isImperial ? 'Half a mile and 1 mile around you' : '1 km and 2 km around you',
-  ),
-  _ => (icon: Icons.layers_outlined, title: spec.label, description: null),
-};
+String _rings(Units u) {
+  final r = u.rangeRingMetres;
+  return r.length < 2 ? 'Range rings' : '${u.distance(r.first)} and ${u.distance(r.last)}';
+}
 
-/// Opens the sheet for [model] (shared by the Drive screen map and the full-screen map).
-Future<void> showGeneratedLayersSheet(BuildContext context, DriveMapModel model) {
+/// Title and one-line description per layer (Drive plan 7.1).
+({String title, String? description}) layerPresentation(BuildContext context, MapLayerSpec spec, {String? regionName, bool hasPosition = true}) {
+  return switch (spec.id) {
+    'pings' => (title: 'Pings', description: 'Each ping you sent.'),
+    'hexes' => (title: 'Your coverage', description: "Your pings rolled up to the website's hexagons."),
+    'links' => (title: 'Lines to repeaters', description: 'Live lines to repeaters you hear, and lines when you tap a repeater or cell.'),
+    'measured' => (
+      title: 'Network coverage',
+      description: "Everyone's measured coverage in ${regionName ?? 'this region'}.",
+    ),
+    'heard' => (title: 'Heard this drive', description: 'Repeaters your pings reached (highlighted).'),
+    kRosterLayerId => (title: 'Region repeaters', description: 'Every repeater in ${regionName ?? 'this region'}, by last advert.'),
+    kNetworkLayerId => (
+      title: 'All MeshCore repeaters',
+      description: 'Every repeater with a public position (MeshCore Map). Turn on to see every repeater in the country.',
+    ),
+    'observers' => (title: 'Observers', description: 'Observers that share a position.'),
+    kLabelsLayerId => (title: 'Repeater names', description: 'Name beside each repeater; fewer when zoomed out.'),
+    'rings' => (
+      title: 'Range rings',
+      description: '${_rings(AppScope.unitsOf(context))} around you.${hasPosition ? '' : ' Needs a GPS position.'}',
+    ),
+    _ => (title: spec.label, description: null),
+  };
+}
+
+/// Opens the sheet for [model]. With an [anchored] host (the Drive tab's) it sits above the dock; otherwise it is a non-modal
+/// app sheet, so the map behind stays interactive either way.
+Future<void> showGeneratedLayersSheet(BuildContext context, DriveMapModel model, {AnchoredSheetController? anchored}) {
+  if (anchored != null) {
+    anchored.show(
+      id: 'layers',
+      maxFraction: 0.75,
+      builder: (ctx) => MapLayersSheet(model: model, onDone: () => anchored.close('layers')),
+    );
+    return Future.value();
+  }
   return showAppSheet<void>(
     context,
-    detents: const [0.85],
-    builder: (context, c) => SafeArea(child: MapLayersSheet(model: model)),
+    detents: const [0.4, 0.75],
+    modal: false,
+    builder: (ctx, c) => MapLayersSheet(model: model, scroll: c, onDone: () => Navigator.of(ctx).pop()),
   );
 }
 
-class MapLayersSheet extends StatelessWidget {
+class MapLayersSheet extends StatefulWidget {
   final DriveMapModel model;
-  const MapLayersSheet({super.key, required this.model});
+
+  /// The sheet's scroll controller (hands a drag on the list to the sheet); null inside the anchored host.
+  final ScrollController? scroll;
+  final VoidCallback? onDone;
+  const MapLayersSheet({super.key, required this.model, this.scroll, this.onDone});
+
+  @override
+  State<MapLayersSheet> createState() => _MapLayersSheetState();
+}
+
+class _MapLayersSheetState extends State<MapLayersSheet> {
+  bool _options = false;
+
+  DriveMapModel get model => widget.model;
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: Listenable.merge([model, model.repeaterSource]),
-      builder: (context, _) {
-        final t = Theme.of(context);
-        final st = model.layerState;
-        final groups = layersByGroup();
-        return SingleChildScrollView(
-          child: Padding(
-            key: const Key('layers-sheet'),
-            padding: const EdgeInsets.fromLTRB(Gap.s, 0, Gap.s, Gap.m),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(Gap.m, 0, Gap.xs, Gap.xs),
-                  child: Row(
-                    children: [
-                      Expanded(child: Semantics(header: true, child: Text('Map layers', style: t.textTheme.titleLarge))),
-                      IconButton(
-                        key: const Key('layers-legend'),
-                        tooltip: 'Map legend',
-                        icon: const Icon(Icons.info_outline_rounded),
-                        constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-                        onPressed: () => showMapLegend(context, colorBy: model.colorBy, pingColors: model.layers.pingColors),
-                      ),
-                    ],
-                  ),
-                ),
-                for (final g in LayerGroup.values)
-                  if (groups[g]!.any((l) => kDrawnLayerIds.contains(l.id))) ...[
-                    Padding(
-                      key: Key('layers-group-${g.name}'),
-                      padding: const EdgeInsets.fromLTRB(Gap.m, Gap.m, Gap.m, 0),
-                      child: Text(g.label, style: t.textTheme.titleSmall?.copyWith(color: t.colorScheme.primary)),
-                    ),
-                    for (final spec in groups[g]!)
-                      if (kDrawnLayerIds.contains(spec.id)) ..._layer(context, spec, st),
-                  ],
-              ],
-            ),
-          ),
-        );
-      },
+      builder: (context, _) => Column(
+        key: const Key('layers-sheet'),
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: _options ? _optionsPage(context) : _mainPage(context),
+      ),
     );
+  }
+
+  // ------------------------------------------------------------------ the main page
+
+  List<Widget> _mainPage(BuildContext context) {
+    final t = Theme.of(context);
+    final st = model.layerState;
+    final groups = layersByGroup();
+    return [
+      _Header(title: 'Map layers', trailing: _TextAction(key: const Key('layers-done'), label: 'Done', onTap: widget.onDone)),
+      Flexible(
+        child: ListView(
+          controller: widget.scroll,
+          shrinkWrap: true,
+          padding: EdgeInsets.only(bottom: MediaQuery.viewPaddingOf(context).bottom + Gap.m),
+          children: [
+            const _SectionLabel('Base map', key: Key('layers-group-base')),
+            _BaseMapPicker(model: model),
+            for (final g in LayerGroup.values) ...[
+              _SectionLabel(g.label, key: Key('layers-group-${g.name}')),
+              for (final spec in groups[g]!) ..._layer(context, spec, st),
+              if (g == LayerGroup.display) ...[
+                _NavRow(
+                  key: const Key('layers-filter'),
+                  title: 'Filter pings and cells',
+                  trailing: model.filter.activeCount == 0 ? null : '${model.filter.activeCount} active',
+                  onTap: () => showMapFilterSheet(context, model),
+                ),
+              ],
+            ],
+            const _SectionLabel(''),
+            _NavRow(
+              key: const Key('layers-credits'),
+              title: 'Map credits and sources',
+              onTap: () => showMapCredits(
+                context,
+                style: model.baseStyle,
+                meshCoreCredit: st.isOn(kNetworkLayerId) ? model.repeaterFeed.global.attribution : null,
+                openLegend: () => showMapLegend(context, colorBy: model.colorBy, pingColors: model.pingColors),
+              ),
+            ),
+            _NavRow(
+              key: const Key('layers-legend'),
+              title: 'What do the symbols mean?',
+              symbol: AppSymbols.infoCircle,
+              onTap: () => showMapLegend(context, colorBy: model.colorBy, pingColors: model.pingColors),
+            ),
+            _NavRow(key: const Key('layers-reset'), title: 'Reset layers', destructive: true, chevron: false, onTap: () => _confirmReset(context)),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(Gap.l, Gap.s, Gap.l, 0),
+              child: Text(
+                'The base map, filter and timeline position are not layers: Reset leaves them alone.',
+                style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ];
+  }
+
+  Future<void> _confirmReset(BuildContext context) async {
+    final ok = await showAppActionSheet<bool>(
+      context,
+      title: 'Reset layers?',
+      message: 'Layers, ping colours and the network coverage options go back to the defaults.',
+      sheetKey: const Key('layers-reset-sheet'),
+      actions: const [AppAction('Reset layers', true, destructive: true, key: Key('layers-reset-confirm'))],
+    );
+    if (ok == true) model.resetLayers();
   }
 
   List<Widget> _layer(BuildContext context, MapLayerSpec spec, MapLayerState st) {
     final t = Theme.of(context);
-    final p = layerPresentation(context, spec);
+    final p = layerPresentation(context, spec, regionName: model.state.viewingRegion?.name, hasPosition: model.position != null);
     final on = st.isOn(spec.id);
     final status = model.statusOf(spec.id);
     final unsupported = status.availability == LayerAvailability.unsupported;
     // Drive layers draw what this phone recorded: no status line. Server-fed layers always say where they stand.
     final detail = spec.serverFed ? status.detail : null;
-    final subtitle = [?p.description, ?detail];
     return [
-      SwitchListTile(
-        key: layerSwitchKey(spec.id),
-        secondary: Icon(p.icon),
-        title: Text(p.title),
-        subtitle: subtitle.isEmpty
-            ? null
-            : Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (p.description != null) Text(p.description!),
-                  if (detail != null)
-                    Text(
-                      detail,
-                      key: Key('layer-${spec.id}-status'),
-                      style: t.textTheme.bodySmall?.copyWith(
-                        color: status.availability == LayerAvailability.failed ? t.colorScheme.error : t.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                ],
-              ),
+      AppSwitchTile(
+        title: p.title,
+        subtitle: p.description,
+        switchKey: layerSwitchKey(spec.id),
         // A default-on layer the server does not offer shows off and disabled (it cannot draw anything). Otherwise
         // unsupported/empty layers cannot be switched on, and a layer that is on can always be switched off.
         value: on && !unsupported,
         onChanged: unsupported ? null : ((on || status.enabled) ? (v) => model.setLayer(spec.id, v) : null),
       ),
-      if (spec.serverFed && status.canRetry)
+      if (detail != null)
         Padding(
-          padding: const EdgeInsets.only(left: 64),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              key: Key('layer-${spec.id}-retry'),
-              onPressed: () => model.retry(spec.id),
-              icon: const Icon(Icons.refresh, size: 18),
-              label: const Text('Retry'),
-            ),
+          padding: const EdgeInsets.fromLTRB(Gap.l, 0, Gap.l, Gap.xs),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  detail,
+                  key: Key('layer-${spec.id}-status'),
+                  style: t.textTheme.bodySmall?.copyWith(
+                    color: status.availability == LayerAvailability.failed ? t.colorScheme.error : t.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              if (status.canRetry)
+                CupertinoButton(
+                  key: Key('layer-${spec.id}-retry'),
+                  padding: const EdgeInsets.symmetric(horizontal: Gap.s),
+                  minimumSize: const Size(Hit.min, Hit.min),
+                  onPressed: () => model.retry(spec.id),
+                  child: const Text('Retry'),
+                ),
+            ],
           ),
         ),
-      if (spec.id == 'measured' && on) CoverageLayerControls(model: model),
-      if (spec.id == 'pings') _PingColors(model: model),
-      if (spec.id == kNetworkLayerId && on) Padding(padding: const EdgeInsets.fromLTRB(72, 0, Gap.l, Gap.s), child: NetworkAgeLegend(set: model.repeaterFeed.global)),
-      if (spec.id == kRosterLayerId && on) const Padding(padding: EdgeInsets.fromLTRB(72, 0, Gap.l, Gap.s), child: RosterStatusLegend()),
+      if (spec.id == 'pings') _PingModeRow(model: model),
+      if (on && !unsupported) _InlineKey(layerId: spec.id, model: model),
+      if (spec.id == 'measured' && on)
+        _NavRow(
+          key: const Key('layer-measured-options'),
+          title: 'Network coverage options',
+          subtitle: _optionsSummary(),
+          onTap: () => setState(() => _options = true),
+        ),
     ];
   }
+
+  String _optionsSummary() {
+    final q = model.coverageQuery;
+    return 'Colour by ${colorByLabel(model.colorBy)}  ·  Detail ${q.res ?? 'Auto'}  ·  Window ${q.since.label}';
+  }
+
+  // ------------------------------------------------------------------ the network coverage options page
+
+  List<Widget> _optionsPage(BuildContext context) => [
+    _Header(
+      title: 'Network coverage',
+      leading: _TextAction(key: const Key('layers-options-back'), label: 'Layers', onTap: () => setState(() => _options = false), back: true),
+      trailing: _TextAction(key: const Key('layers-done'), label: 'Done', onTap: widget.onDone),
+    ),
+    Flexible(
+      child: ListView(
+        key: const Key('layers-options-page'),
+        controller: widget.scroll,
+        shrinkWrap: true,
+        padding: EdgeInsets.fromLTRB(Gap.l, 0, Gap.l, MediaQuery.viewPaddingOf(context).bottom + Gap.m),
+        children: [CoverageOptionsBody(model: model)],
+      ),
+    ),
+  ];
 }
 
-class _PingColors extends StatelessWidget {
-  final DriveMapModel model;
-  const _PingColors({required this.model});
+// ====================================================================================================== pieces
+
+class _Header extends StatelessWidget {
+  final String title;
+  final Widget? leading, trailing;
+  const _Header({required this.title, this.leading, this.trailing});
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
-    final l = model.layers;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(72, 0, Gap.l, Gap.s),
-      child: SegmentedButton<PingColorMode>(
-        showSelectedIcon: false,
-        style: ButtonStyle(
-          backgroundColor: WidgetStateProperty.resolveWith((st) => st.contains(WidgetState.selected) ? t.colorScheme.primaryContainer : null),
-          foregroundColor: WidgetStateProperty.resolveWith((st) => st.contains(WidgetState.selected) ? t.colorScheme.onPrimaryContainer : null),
-        ),
-        segments: const [
-          ButtonSegment(value: PingColorMode.snr, label: Text('By SNR', key: Key('layer-color-snr'))),
-          ButtonSegment(value: PingColorMode.result, label: Text('Heard / not', key: Key('layer-color-result'))),
+    return SizedBox(
+      height: 52,
+      child: Row(
+        children: [
+          SizedBox(width: 96, child: Align(alignment: Alignment.centerLeft, child: leading)),
+          Expanded(child: Semantics(header: true, child: Text(title, style: t.textTheme.titleMedium, textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis))),
+          SizedBox(width: 96, child: Align(alignment: Alignment.centerRight, child: trailing)),
         ],
-        selected: {l.pingColors},
-        onSelectionChanged: l.pings ? (v) => model.layers = l.copyWith(pingColors: v.first) : null,
       ),
     );
   }
 }
 
+class _TextAction extends StatelessWidget {
+  final String label;
+  final VoidCallback? onTap;
+  final bool back;
+  const _TextAction({super.key, required this.label, required this.onTap, this.back = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    return CupertinoButton(
+      padding: const EdgeInsets.symmetric(horizontal: Gap.m),
+      minimumSize: const Size(Hit.min, Hit.min),
+      onPressed: onTap,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (back) AppSymbolIcon(AppSymbols.chevronLeft, size: 16, color: t.colorScheme.primary),
+          Flexible(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: t.textTheme.bodyLarge?.copyWith(color: t.colorScheme.primary))),
+        ],
+      ),
+    );
+  }
+}
+
+class _SectionLabel extends StatelessWidget {
+  final String text;
+  const _SectionLabel(this.text, {super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Gap.l, Gap.l, Gap.l, Gap.xs),
+      child: Semantics(
+        header: text.isNotEmpty,
+        child: Text(text.toUpperCase(), style: t.textTheme.labelMedium?.copyWith(color: t.colorScheme.onSurfaceVariant, letterSpacing: 0.6)),
+      ),
+    );
+  }
+}
+
+class _NavRow extends StatelessWidget {
+  final String title;
+  final String? subtitle, trailing;
+  final AppSymbol? symbol;
+  final bool destructive, chevron;
+  final VoidCallback onTap;
+  const _NavRow({super.key, required this.title, this.subtitle, this.trailing, this.symbol, this.destructive = false, this.chevron = true, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final ink = destructive ? t.colorScheme.error : null;
+    return Semantics(
+      button: true,
+      label: [title, ?subtitle, ?trailing].join('. '),
+      child: ExcludeSemantics(
+        child: InkWell(
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 52),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: Gap.l, vertical: Gap.s),
+              child: Row(
+                children: [
+                  if (symbol != null) ...[AppSymbolIcon(symbol!, size: 20, color: t.colorScheme.primary), const SizedBox(width: Gap.m)],
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(title, style: t.textTheme.bodyLarge?.copyWith(color: ink)),
+                        if (subtitle != null) Text(subtitle!, style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+                      ],
+                    ),
+                  ),
+                  if (trailing != null) Text(trailing!, style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+                  if (chevron) ...[const SizedBox(width: Gap.xs), AppSymbolIcon(AppSymbols.chevronRight, size: 16, color: t.colorScheme.onSurfaceVariant)],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The four base maps as 72 x 72 tiles (replaces the cycling button and its toast, U10).
+class _BaseMapPicker extends StatelessWidget {
+  final DriveMapModel model;
+  const _BaseMapPicker({required this.model});
+
+  static Color _tint(BaseMapStyle s, Brightness b) => switch (s) {
+    BaseMapStyle.chart => b == Brightness.dark ? const Color(0xFF2B2F36) : MapTokens.landLight,
+    BaseMapStyle.street => const Color(0xFFF2EFE9),
+    BaseMapStyle.dark => const Color(0xFF1B1F24),
+    BaseMapStyle.topo => const Color(0xFFD7E6C6),
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final sel = model.baseStyle;
+    return Padding(
+      key: const Key('layers-base-map'),
+      padding: const EdgeInsets.symmetric(horizontal: Gap.l),
+      child: Wrap(
+        spacing: Gap.m,
+        runSpacing: Gap.s,
+        children: [
+          for (final s in BaseMapStyle.values)
+            Semantics(
+              button: true,
+              selected: s == sel,
+              label: '${s.label} base map. ${s.blurb}',
+              child: ExcludeSemantics(
+                child: GestureDetector(
+                  key: Key('base-map-${s.id}'),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => model.setBaseStyle(s),
+                  child: SizedBox(
+                    width: 72,
+                    child: Column(
+                      children: [
+                        Container(
+                          width: 72,
+                          height: 56,
+                          decoration: BoxDecoration(
+                            color: _tint(s, t.brightness),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: s == sel ? t.colorScheme.primary : t.colorScheme.outlineVariant, width: s == sel ? 3 : 1),
+                          ),
+                          child: Center(
+                            child: s == sel
+                                ? AppSymbolIcon(AppSymbols.checkmarkCircleFill, size: 22, color: t.colorScheme.primary)
+                                : null,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(s.label, style: t.textTheme.labelMedium, maxLines: 1),
+                        if (s == BaseMapStyle.topo) Text('needs signal', style: t.textTheme.labelSmall?.copyWith(color: t.colorScheme.onSurfaceVariant), maxLines: 1),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// By SNR | Heard, under the Pings row. Drives the Pings layer and Your coverage together.
+class _PingModeRow extends StatelessWidget {
+  final DriveMapModel model;
+  const _PingModeRow({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final pingsOn = model.layerState.isOn('pings');
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Gap.l, 0, Gap.l, Gap.s),
+      child: IgnorePointer(
+        ignoring: !pingsOn,
+        child: Opacity(
+          opacity: pingsOn ? 1 : 0.4,
+          child: CupertinoSlidingSegmentedControl<PingColorMode>(
+            groupValue: model.pingColors,
+            children: const {
+              PingColorMode.snr: Padding(padding: EdgeInsets.symmetric(horizontal: Gap.m, vertical: 6), child: Text('By SNR', key: Key('layer-color-snr'))),
+              PingColorMode.result: Padding(padding: EdgeInsets.symmetric(horizontal: Gap.m, vertical: 6), child: Text('Heard', key: Key('layer-color-result'))),
+            },
+            onValueChanged: (v) {
+              if (v != null) model.pingColors = v;
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The inline key under a layer's row: swatches from the colour functions the map paints with.
+class _InlineKey extends StatelessWidget {
+  final String layerId;
+  final DriveMapModel model;
+  const _InlineKey({required this.layerId, required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final items = layerKeyItems(context, layerId, model);
+    if (items.isEmpty) return const SizedBox.shrink();
+    final t = Theme.of(context);
+    final style = t.textTheme.labelSmall?.copyWith(color: t.colorScheme.onSurfaceVariant);
+    return Padding(
+      key: Key('layer-$layerId-key'),
+      padding: const EdgeInsets.fromLTRB(Gap.l, 0, Gap.l, Gap.s),
+      child: Wrap(
+        spacing: Gap.m,
+        runSpacing: 2,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          for (final i in items)
+            Row(mainAxisSize: MainAxisSize.min, children: [i.swatch, const SizedBox(width: 4), Text(i.label, style: style)]),
+        ],
+      ),
+    );
+  }
+}
+
+/// One swatch and its words in an inline key.
+class KeyItem {
+  final Widget swatch;
+  final String label;
+  const KeyItem(this.swatch, this.label);
+}
+
+/// The inline key of layer [layerId] right now (empty when the layer has none). Public so tests and the guide can read the same
+/// rows the sheet shows.
+List<KeyItem> layerKeyItems(BuildContext context, String layerId, DriveMapModel model) {
+  final mc = MeshSonarColors.of(context);
+  Widget dot(Color c) => LegendSwatch(color: c, shape: SwatchShape.dot, size: 16);
+  Widget hex(Color c, {bool none = false}) => LegendSwatch(color: c, size: 18, silentCell: none);
+  switch (layerId) {
+    case 'pings':
+      return model.pingColors == PingColorMode.result
+          ? [KeyItem(dot(mc.snrStrong), 'heard'), KeyItem(dot(mc.silent), 'not heard')]
+          : [
+              KeyItem(dot(mc.forPing(heard: true, snr: -10)), 'weak'),
+              KeyItem(dot(mc.forPing(heard: true, snr: 0)), 'middling'),
+              KeyItem(dot(mc.forPing(heard: true, snr: 10)), 'strong'),
+              KeyItem(dot(mc.heardUnknown), 'no reading'),
+              KeyItem(dot(mc.silent), 'nothing heard'),
+            ];
+    case 'hexes':
+      return model.pingColors == PingColorMode.result
+          ? [KeyItem(hex(mc.snrStrong), 'heard'), KeyItem(hex(mc.silent, none: true), 'not heard')]
+          : [
+              KeyItem(hex(mc.forPing(heard: true, snr: 10)), 'strong'),
+              KeyItem(hex(mc.forPing(heard: true, snr: 3)), 'good'),
+              KeyItem(hex(mc.forPing(heard: true, snr: -3)), 'fair'),
+              KeyItem(hex(mc.forPing(heard: true, snr: -10)), 'weak'),
+            ];
+    case 'measured':
+      return [
+        for (final (level, text) in coverageLegend(model.colorBy))
+          KeyItem(
+            hex(networkLevelColor(context, level, mode: model.colorBy), none: level == CoverageLevel.none),
+            text,
+          ),
+      ];
+    case kRosterLayerId:
+      return repeaterFreshnessKey(context, hours: false);
+    case kNetworkLayerId:
+      return repeaterFreshnessKey(context, hours: true);
+    case 'heard':
+      return [KeyItem(ExcludeSemantics(child: Icon(Icons.check_circle, size: 16, color: mc.snrStrong)), 'green tick = heard this drive')];
+    default:
+      return const [];
+  }
+}
+
+/// The three repeater freshness states (Drive plan 6.3): solid = fresh, tinted ring = recent, hollow dashed = older. The colours are
+/// palette-independent (MapTokens) and differ from the signal ramp. [hours] adds the 24 h / 7 d edges.
+List<KeyItem> repeaterFreshnessKey(BuildContext context, {required bool hours}) {
+  final b = Theme.of(context).brightness;
+  Widget badge(Color c, int state) => ExcludeSemantics(
+    child: CustomPaint(size: const Size(16, 16), painter: _FreshnessBadge(c, state)),
+  );
+  return [
+    KeyItem(badge(MapTokens.repeaterFresh(b), 0), hours ? 'fresh, 24 h' : 'fresh'),
+    KeyItem(badge(MapTokens.repeaterAging(b), 1), hours ? 'recent, 7 d' : 'recent'),
+    KeyItem(badge(MapTokens.repeaterStale(b), 2), 'older'),
+  ];
+}
+
+class _FreshnessBadge extends CustomPainter {
+  final Color color;
+  final int state;
+  _FreshnessBadge(this.color, this.state);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = size.center(Offset.zero);
+    final r = size.shortestSide / 2 - 1.5;
+    switch (state) {
+      case 0:
+        canvas.drawCircle(c, r, Paint()..color = color);
+      case 1:
+        canvas.drawCircle(c, r, Paint()..color = color.withValues(alpha: 0.35));
+        canvas.drawCircle(c, r, Paint()..color = color..style = PaintingStyle.stroke..strokeWidth = 2);
+      default:
+        final p = Paint()..color = color..style = PaintingStyle.stroke..strokeWidth = 1.5;
+        for (var i = 0; i < 8; i++) {
+          canvas.drawArc(Rect.fromCircle(center: c, radius: r), i * 0.785, 0.4, false, p);
+        }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_FreshnessBadge o) => o.color != color || o.state != state;
+}
+
 /// The global layer's colour key (website advert-age bands, `core/repeater_points.dart` advertAgeBand: inclusive
-/// 24 h / 7 d / 30 d edges), the data's own "as of" and its credit line.
+/// 24 h / 7 d / 30 d edges), the data's own "as of" and its credit line. Kept for the compact map key and the guide until
+/// WP7 removes the map key.
 class NetworkAgeLegend extends StatelessWidget {
   final MapRepeaterSet set;
 
@@ -283,7 +691,7 @@ class RosterStatusLegend extends StatelessWidget {
         for (final a in RepeaterActivity.values)
           Row(
             mainAxisSize: MainAxisSize.min,
-            children: [_Dot(color: regionRepeaterColor(a), size: 10), const SizedBox(width: 3), Text(rosterStatusText(a), style: style)],
+            children: [_Dot(color: regionRepeaterColor(a, Theme.of(context).brightness), size: 10), const SizedBox(width: 3), Text(rosterStatusText(a), style: style)],
           ),
       ],
     );

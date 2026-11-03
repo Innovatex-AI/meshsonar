@@ -2,32 +2,38 @@
 import 'package:flutter/material.dart';
 
 import '../../app/chat_controller.dart';
+import '../contacts/contacts_tab.dart';
 import '../shell/chat_tab_host.dart';
+import 'channel_flows.dart';
 import 'channels_view.dart';
+import 'chat_navigation.dart';
 import 'chat_search_screen.dart';
-import 'contacts_view.dart';
+import 'chats_list_view.dart';
+import 'network_view.dart';
+import '../design/app_surfaces.dart';
+import '../design/app_symbols.dart';
 
-/// The Contacts segment builder. The contacts screens replace this (agent 2B: `ChatTabProviderImpl.contactsBuilder = ...`);
-/// the default is the read-only [ContactsView] over the real contacts.
-typedef ContactsBuilder = Widget Function(BuildContext context, ChatController controller);
+enum _NewChoice { message, channel }
 
 class ChatTabProviderImpl implements ChatTabProvider {
   final ChatController controller;
+  late final ChatNavigator navigator = ChatNavigator(controller);
   ChatTabProviderImpl(this.controller);
 
-  static ContactsBuilder? contactsBuilder;
+  void dispose() => navigator.dispose();
 
   @override
   Listenable get changes => controller;
 
   @override
-  int get unreadConversations => controller.unreadConversations;
+  int get unreadMessages => controller.unreadMessages;
 
   @override
   bool get isEmpty => controller.isEmpty;
 
+  // ---- old tab (flag off)
   @override
-  Widget contactsView(BuildContext context) => (contactsBuilder ?? (c, ctl) => ContactsView(controller: ctl))(context, controller);
+  Widget contactsView(BuildContext context) => ContactsTab(chat: controller);
 
   @override
   Widget channelsView(BuildContext context) => ChannelsView(controller: controller);
@@ -42,4 +48,50 @@ class ChatTabProviderImpl implements ChatTabProvider {
           onPressed: () => ChatSearchScreen.open(context, controller),
         ),
       ];
+
+  // ---- redesigned tab (flag on)
+  @override
+  Widget chatsSliver(BuildContext context, ChatTabArgs args) => ChatsListView(
+        controller: controller,
+        navigator: navigator,
+        query: args.query,
+        selectedKey: args.selectedKey,
+        onConnect: args.onConnect,
+        onOpened: args.onOpened,
+      );
+
+  @override
+  Widget networkSliver(BuildContext context, ChatTabArgs args) =>
+      NetworkView(controller: controller, navigator: navigator, query: args.query, onConnect: args.onConnect);
+
+  @override
+  Widget contactsSegment(BuildContext context) => ContactsTab(chat: controller);
+
+  @override
+  Future<void> refresh() => controller.refreshFromRadio();
+
+  /// Stub for WP3's New chat sheet: the two things it will offer, as an action sheet.
+  @override
+  Future<void> newChat(BuildContext context, {required VoidCallback showContacts}) async {
+    final choice = await showAppActionSheet<_NewChoice>(
+      context,
+      title: 'New',
+      actions: const [
+        AppAction('New message', _NewChoice.message, symbol: AppSymbols.squareAndPencil, key: Key('new-message')),
+        AppAction('Join or create a channel', _NewChoice.channel, symbol: AppSymbols.numberSign, key: Key('new-channel')),
+      ],
+    );
+    if (!context.mounted) return;
+    switch (choice) {
+      case _NewChoice.message:
+        showContacts();
+      case _NewChoice.channel:
+        await showAddChannelSheet(context, controller);
+      case null:
+        break;
+    }
+  }
+
+  @override
+  void openMessageSearch(BuildContext context) => ChatSearchScreen.open(context, controller);
 }

@@ -6,6 +6,7 @@ import '../support/cell_layers.dart';
 import 'package:meshsonar/core/api.dart';
 
 import 'fakes.dart';
+import '../support/huge_screen.dart';
 
 Future<void> settle(WidgetTester tester) async {
   for (var i = 0; i < 5; i++) {
@@ -29,6 +30,13 @@ PublicCoverage twoCells() => PublicCoverage(
       ],
     );
 
+/// A few bounded pumps: with cells on the very tall test surface the map keeps tile timers alive, so pumpAndSettle never returns.
+Future<void> settleShort(WidgetTester t) async {
+  for (var i = 0; i < 4; i++) {
+    await t.pump(const Duration(milliseconds: 300));
+  }
+}
+
 void main() {
   testWidgets('drawn by default at startup, underneath the drive map, no manual step needed', (tester) async {
     final h = Harness();
@@ -39,7 +47,7 @@ void main() {
   });
 
   testWidgets('toggled off and back on from the layers sheet, same as the other layers', (tester) async {
-    useTallScreen(tester); // a small test surface would put the (now 7-row) sheet right under the dismiss tap
+    useHugeScreen(tester); // a small test surface would put the (now 7-row) sheet right under the dismiss tap
     final h = Harness();
     h.client.publicCoverageResult = twoCells();
     await h.pumpApp(tester);
@@ -47,24 +55,24 @@ void main() {
     expect(polygonCount(tester), 2);
 
     await tester.tap(find.byKey(const Key('drive-map-layers')));
-    await tester.pumpAndSettle();
+    await settleShort(tester);
     expect(find.byKey(const Key('layers-sheet')), findsOneWidget);
-    final sw = tester.widget<SwitchListTile>(find.byKey(const Key('layer-network-coverage')));
+    final sw = tester.widget<Switch>(find.byKey(const Key('layer-network-coverage')));
     expect(sw.value, isTrue, reason: 'basic visibility: on by default, no extra step to find it');
 
     await tester.tap(find.byKey(const Key('layer-network-coverage')));
     await settle(tester);
-    await tester.tapAt(const Offset(200, 60)); // dismiss the sheet
-    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('layers-done'))); // dismiss the sheet
+    await settleShort(tester);
     expect(find.byKey(const Key('layers-sheet')), findsNothing);
     expect(polygonCount(tester), 0, reason: 'toggled off');
 
     await tester.tap(find.byKey(const Key('drive-map-layers')));
-    await tester.pumpAndSettle();
+    await settleShort(tester);
     await tester.tap(find.byKey(const Key('layer-network-coverage')));
     await settle(tester);
-    await tester.tapAt(const Offset(200, 60));
-    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('layers-done')));
+    await settleShort(tester);
     expect(polygonCount(tester), 2, reason: 'toggled back on');
   });
 
@@ -93,31 +101,31 @@ void main() {
   });
 
   testWidgets('coverage options: source and since chips refetch with the website params', (tester) async {
-    useTallScreen(tester);
+    useHugeScreen(tester);
     final h = Harness();
     h.client.publicCoverageResult = twoCells();
     await h.pumpApp(tester);
     await settle(tester);
     await tester.tap(find.byKey(const Key('drive-map-layers')));
-    await tester.pumpAndSettle();
+    await settleShort(tester);
     // The generated sheet lists "This drive" first, so the coverage controls sit lower: scroll them into view.
-    await tester.ensureVisible(find.byKey(const Key('coverage-layer-controls')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('coverage-layer-controls')));
-    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('layer-measured-options')));
+    await settleShort(tester);
+    await tester.tap(find.byKey(const Key('layer-measured-options')));
+    await settleShort(tester);
     await tester.ensureVisible(find.byKey(const Key('cov-source-MeshMapper')));
-    await tester.pumpAndSettle();
+    await settleShort(tester);
     await tester.tap(find.byKey(const Key('cov-source-MeshMapper')));
     await settle(tester);
     expect(h.client.lastCoverageSource, 'meshmapper');
     expect(h.client.lastCoverageRes, inInclusiveRange(7, 11)); // auto: from the map zoom
     await tester.ensureVisible(find.byKey(const Key('cov-since-24 h')));
-    await tester.pumpAndSettle();
+    await settleShort(tester);
     await tester.tap(find.byKey(const Key('cov-since-24 h')));
     await settle(tester);
     expect(h.client.lastCoverageSince, isNotNull);
     await tester.ensureVisible(find.byKey(const Key('cov-res-11')));
-    await tester.pumpAndSettle();
+    await settleShort(tester);
     await tester.tap(find.byKey(const Key('cov-res-11')));
     await settle(tester);
     expect(h.client.lastCoverageRes, 11);

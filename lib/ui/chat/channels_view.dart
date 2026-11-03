@@ -10,7 +10,7 @@ import 'channel_detail_screen.dart';
 import 'channel_flows.dart';
 import 'chat_row.dart';
 import 'conversation_screen.dart';
-import 'message_bubble.dart';
+import 'system_traffic_screen.dart';
 import 'message_format.dart';
 
 class ChannelsView extends StatelessWidget {
@@ -233,61 +233,5 @@ class _SystemSection extends StatelessWidget {
     if (s < 90) return '${s < 0 ? 0 : s} s';
     if (s < 5400) return '${(s / 60).round()} min';
     return '${(s / 3600).round()} h';
-  }
-}
-
-/// Read-only list of what others posted on the wardrive channel (pings from other MeshSonar and MeshMapper users).
-class SystemTrafficScreen extends StatefulWidget {
-  final ChatController controller;
-  final Channel channel;
-  const SystemTrafficScreen({super.key, required this.controller, required this.channel});
-  @override
-  State<SystemTrafficScreen> createState() => _SystemTrafficScreenState();
-}
-
-class _SystemTrafficScreenState extends State<SystemTrafficScreen> {
-  @override
-  void initState() {
-    super.initState();
-    widget.controller.addListener(_r);
-  }
-
-  @override
-  void dispose() {
-    widget.controller.removeListener(_r);
-    super.dispose();
-  }
-
-  void _r() {
-    if (mounted) setState(() {});
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final page = widget.controller.service.systemTraffic(widget.channel.id!, limit: 100);
-    final t = Theme.of(context);
-    return Scaffold(
-      appBar: AppBar(title: Text('${widget.channel.name} traffic')),
-      body: SafeArea(
-        child: Column(children: [
-          Padding(
-            padding: const EdgeInsets.all(Gap.l),
-            child: Text(
-              'This is the wardrive channel: other people\'s pings land here. It is read-only and kept only on this phone, the newest ${page.messages.length}.',
-              style: t.textTheme.bodyMedium,
-            ),
-          ),
-          Expanded(
-            child: page.messages.isEmpty
-                ? const EmptyState(icon: Icons.sensors_rounded, title: 'Nothing heard yet', body: 'Pings from other drivers on this channel will show up here while your radio is connected.')
-                : ListView.builder(
-                    key: const Key('traffic-list'),
-                    itemCount: page.messages.length,
-                    itemBuilder: (context, i) => MessageBubble(message: page.messages[i], showSender: true),
-                  ),
-          ),
-        ]),
-      ),
-    );
   }
 }

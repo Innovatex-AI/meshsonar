@@ -18,7 +18,6 @@ import '../chat/chat_service.dart';
 import '../core/model.dart' show PingKind;
 import '../ui/chat/chat_tab_provider.dart';
 import '../ui/chat/conversation_screen.dart';
-import '../ui/contacts/contacts_tab.dart';
 import '../ui/shell/chat_tab_host.dart';
 import 'app_state.dart';
 import 'chat_controller.dart';
@@ -32,6 +31,7 @@ class ChatWiring {
   static StreamSubscription<dynamic>? _sessions;
   static VoidCallback? _appListener;
   static AppState? _app;
+  static ChatTabProviderImpl? _provider;
 
   /// Opens chat for [app]. Safe to call once; returns the controller (null when this build has no chat store).
   static Future<ChatController?> attach(AppState app) async {
@@ -92,8 +92,8 @@ class ChatWiring {
         controller: ctl, convKey: convKey, title: service.conversation(convKey)?.title);
 
     controller.value = ctl;
-    ChatTabProviderImpl.contactsBuilder = (context, c) => ContactsTab(chat: c);
-    ChatTabHost.provider.value = ChatTabProviderImpl(ctl);
+    _provider = ChatTabProviderImpl(ctl);
+    ChatTabHost.provider.value = _provider;
     return ctl;
   }
 
@@ -108,7 +108,8 @@ class ChatWiring {
     _app = null;
     ChatTabHost.provider.value = null;
     ChatTabHost.openConversation = null;
-    ChatTabProviderImpl.contactsBuilder = null;
+    _provider?.dispose();
+    _provider = null;
     final c = controller.value;
     controller.value = null;
     c?.dispose();
