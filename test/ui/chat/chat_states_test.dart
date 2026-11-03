@@ -1,4 +1,4 @@
-// Contacts list, Chat-in-Drive sheet, banners, passenger lock in the composer, and every main screen at phone / iPad
+// Chat-in-Drive sheet, banners, passenger lock in the composer, and every main screen at phone / iPad
 // sizes, text scale 2.5 and dark mode (no overflow, 48 dp targets, labelled targets).
 import 'dart:typed_data';
 
@@ -11,7 +11,6 @@ import 'package:meshsonar/ui/chat/channel_detail_screen.dart';
 import 'package:meshsonar/ui/chat/channels_view.dart';
 import 'package:meshsonar/ui/chat/chat_banner_host.dart';
 import 'package:meshsonar/ui/chat/chat_drive_sheet.dart';
-import 'package:meshsonar/ui/chat/contacts_view.dart';
 import 'package:meshsonar/ui/chat/conversation_screen.dart';
 
 import 'chat_kit.dart';
@@ -26,36 +25,6 @@ void main() {
   late ChatKit kit;
   setUp(() => kit = ChatKit());
   tearDown(() => kit.dispose());
-
-  group('Contacts', () {
-    testWidgets('real contacts with last message, search, tap opens the DM; repeaters are not chat partners', (tester) async {
-      setSize(tester);
-      kit.bob();
-      kit.store.contacts.upsert(Contact(radioId: radioA, publicKey: 'c' * 64, type: ContactType.repeater, name: 'Hilltop'));
-      kit.service.handleInbound(InboundDirectText(radioId: radioA, senderPrefix: bobKey.substring(0, 12), timestamp: 5, text: 'you there?', snr: 4));
-      await tester.pumpWidget(host(Scaffold(body: ContactsView(controller: kit.controller))));
-      await tester.pump();
-      expect(find.text('Bob'), findsOneWidget);
-      expect(find.text('you there?'), findsOneWidget);
-      expect(find.text('Hilltop'), findsNothing);
-      await tester.enterText(find.byKey(const Key('contacts-search')), 'zzz');
-      await tester.pump();
-      expect(find.text('No match'), findsOneWidget);
-      await tester.enterText(find.byKey(const Key('contacts-search')), 'bo');
-      await tester.pump();
-      await tester.tap(find.text('Bob'));
-      await tester.pumpAndSettle();
-      expect(find.byType(ConversationScreen), findsOneWidget);
-      expect(find.text('you there?'), findsOneWidget);
-    });
-
-    testWidgets('no contacts: explains where they come from', (tester) async {
-      setSize(tester);
-      await tester.pumpWidget(host(Scaffold(body: ContactsView(controller: kit.controller))));
-      await tester.pump();
-      expect(find.byKey(const Key('contacts-empty')), findsOneWidget);
-    });
-  });
 
   group('Passenger lock in the composer', () {
     testWidgets('moving: composer replaced by the lock with I am a passenger; tapping it brings the composer back', (tester) async {

@@ -50,7 +50,7 @@ void main() {
     h.scanner.injectChannelMessage(0, 'Ann', 'hello from the mesh');
     await until(() => ctl.service.page(pub.convKey).messages.isNotEmpty, what: 'incoming message stored');
     expect(ctl.service.page(pub.convKey).messages.single.text, 'hello from the mesh');
-    expect(ctl.unreadConversations, 1);
+    expect(ctl.unreadMessages, 1);
     expect(ChatTabHost.unread, 1);
 
     final r = ctl.send(pub.convKey, 'hi Ann');

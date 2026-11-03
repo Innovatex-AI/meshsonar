@@ -6,12 +6,14 @@
 // A position in the readings (LPP type 136) is shown to the person who asked and never uploaded or stored.
 // Pure Dart.
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import '../command_queue.dart';
 import '../crypto.dart';
 import '../inbound.dart';
 import '../protocol.dart';
+import '../remote_request_queue.dart';
 import '../tx_arbiter.dart';
 import 'lpp.dart';
 import 'tool_frames.dart';
@@ -35,7 +37,73 @@ class TelemetryResult {
   LppReading? get battery => reading(LppKind.voltage);
   LppReading? get temperature => reading(LppKind.temperature);
   LppReading? get position => reading(LppKind.gps);
+
+  /// What came back, sorted into the groups the Stats sheet shows (see [TelemetrySummary]).
+  TelemetrySummary summary() => TelemetrySummary.of(this);
 }
+
+/// A telemetry answer sorted for people: what the contact shares and (for a person) what their radio withheld. The firmware
+/// answers only what the contact's telemetry permission bits allow (base = battery, location, environment; V S1), so a
+/// missing group means "not shared", never "unknown". Pure.
+class TelemetrySummary {
+  final LppReading? battery;
+  final LppReading? position;
+  final List<LppReading> environment;
+  final List<LppReading> other;
+
+  /// Plain sentences, one per group the contact's radio did not send ("Maya's radio doesn't share location.").
+  final List<String> withheld;
+  const TelemetrySummary(this.battery, this.position, this.environment, this.other, this.withheld);
+
+  bool get isEmpty => battery == null && position == null && environment.isEmpty && other.isEmpty;
+
+  /// [person]: a companion (chat user). Only a person gets "withheld" sentences; a repeater or sensor simply has what it has.
+  static TelemetrySummary of(TelemetryResult r, {bool person = true}) {
+    final env = <LppReading>[];
+    final other = <LppReading>[];
+    for (final x in r.readings) {
+      switch (x.kind) {
+        case LppKind.voltage || LppKind.gps:
+          break;
+        case LppKind.temperature || LppKind.humidity || LppKind.pressure || LppKind.luminosity || LppKind.altitude:
+          env.add(x);
+        default:
+          other.add(x);
+      }
+    }
+    final first = r.who.split(' ').first;
+    final owner = first.isEmpty ? 'This radio' : "$first's radio";
+    final w = <String>[];
+    if (person && r.ok) {
+      final b = r.battery, p = r.position;
+      if (b == null && p == null && env.isEmpty) {
+        w.add("$owner doesn't share anything at all.");
+      } else {
+        if (b == null) w.add("$owner doesn't share battery.");
+        if (p == null) w.add("$owner doesn't share location.");
+        if (env.isEmpty) w.add("$owner doesn't share sensor readings.");
+      }
+    }
+    return TelemetrySummary(r.battery, r.position, env, other, w);
+  }
+}
+
+/// Distance in km between two points (haversine). For "2.4 km away" next to a shared position.
+double distanceKm(double lat1, double lon1, double lat2, double lon2) {
+  const r = 6371.0088;
+  double rad(double d) => d * 3.141592653589793 / 180;
+  final dLat = rad(lat2 - lat1), dLon = rad(lon2 - lon1);
+  final a = math.pow(math.sin(dLat / 2), 2) + math.cos(rad(lat1)) * math.cos(rad(lat2)) * math.pow(math.sin(dLon / 2), 2);
+  return 2 * r * math.asin(math.sqrt(a.toDouble()));
+}
+
+/// The numeric series of [kind] (channel [channel] when given) across [history], oldest first. For the sparkline.
+List<double> seriesOf(Iterable<TelemetryResult> history, LppKind kind, {int? channel}) => [
+      for (final h in history)
+        if (h.ok)
+          for (final x in h.readings)
+            if (x.kind == kind && x.value != null && (channel == null || x.channel == channel)) x.value!
+    ];
 
 class TelemetryTool with ToolChanges {
   final ToolsRadio radio;
@@ -46,6 +114,14 @@ class TelemetryTool with ToolChanges {
   final Duration minWait;
   final Duration maxWait;
   final Map<String, TelemetryResult> _latest = {};
+  final Map<String, List<TelemetryResult>> _history = {};
+
+  /// Keep this many answers per contact for the sparkline (in memory; a session's worth).
+  static const historyLimit = 60;
+
+  /// The radio's shared remote-request queue (one remote request in flight at a time). Set by the session; null in tests
+  /// that do not need it, where [requestContactQueued] runs the request directly.
+  RemoteRequestQueue? queue;
   DateTime? _lastAt;
   bool _busy = false;
 
@@ -59,6 +135,48 @@ class TelemetryTool with ToolChanges {
 
   /// Latest result per contact key (and 'self').
   Map<String, TelemetryResult> get latest => Map.unmodifiable(_latest);
+
+  /// Good answers for [key], oldest first.
+  List<TelemetryResult> historyFor(String key) => List.unmodifiable(_history[key] ?? const []);
+
+  void _remember(String key, TelemetryResult r) {
+    _latest[key] = r;
+    if (!r.ok) return;
+    final h = _history.putIfAbsent(key, () => []);
+    h.add(r);
+    if (h.length > historyLimit) h.removeRange(0, h.length - historyLimit);
+  }
+
+  /// [requestContact] through the shared queue so it never overlaps a login or a repeater refresh. A user tap runs at admin
+  /// priority; [background] (auto refresh) is dropped when anything else is going on. Silence comes back as `silent` and the
+  /// queue entry ends as noReply.
+  Future<TelemetryResult> requestContactQueued(RadioContact c, {bool background = false}) async {
+    final q = queue;
+    if (q == null) return requestContact(c);
+    TelemetryResult? out;
+    final req = q.enqueue<TelemetryResult>(
+      kind: RemoteKind.telemetry,
+      target: c.name.isEmpty ? c.publicKeyHex.substring(0, 8) : c.name,
+      priority: background ? CommandPriority.background : CommandPriority.admin,
+      run: (ctx) async {
+        final r = await requestContact(c);
+        out = r;
+        if (r.status == TelemetryStatus.silent) throw RemoteNoReply(r.detail ?? 'No reply');
+        return r;
+      },
+    );
+    final res = await req.result;
+    final now = _clock();
+    final who = c.name.isEmpty ? c.publicKeyHex.substring(0, 8) : c.name;
+    return switch (res) {
+      RemoteDone<TelemetryResult>(:final value) => value,
+      RemoteNoReplyResult<TelemetryResult>() => out ?? TelemetryResult(TelemetryStatus.silent, who, now, keyHex: c.publicKeyHex, detail: '$who did not answer.'),
+      RemoteDroppedResult<TelemetryResult>() => TelemetryResult(TelemetryStatus.tooSoon, who, now, keyHex: c.publicKeyHex, detail: 'The radio is busy with another request.'),
+      RemoteCancelledResult<TelemetryResult>() => TelemetryResult(TelemetryStatus.tooSoon, who, now, keyHex: c.publicKeyHex, detail: 'Cancelled.'),
+      RemoteRefusedResult<TelemetryResult>() => TelemetryResult(TelemetryStatus.refused, who, now, keyHex: c.publicKeyHex, detail: 'The request was refused.'),
+      RemoteFailedResult<TelemetryResult>() => TelemetryResult(TelemetryStatus.refused, who, now, keyHex: c.publicKeyHex, detail: 'The request failed.'),
+    };
+  }
 
   Duration? cooldown() {
     final at = _lastAt;
@@ -82,7 +200,7 @@ class TelemetryTool with ToolChanges {
       final r = t == null
           ? TelemetryResult(TelemetryStatus.empty, 'This radio', now, isSelf: true, detail: 'This radio did not report any sensor readings.')
           : _fromLpp('This radio', null, true, now, t.lpp);
-      _latest['self'] = r;
+      _remember('self', r);
       return r;
     } finally {
       _busy = false;
@@ -129,7 +247,7 @@ class TelemetryTool with ToolChanges {
       }
       final t = TelemetryPush.tryParse(f)!;
       final r = _fromLpp(who, c.publicKeyHex, false, _clock(), t.lpp);
-      _latest[c.publicKeyHex] = r;
+      _remember(c.publicKeyHex, r);
       return r;
     } finally {
       waiter.cancel();

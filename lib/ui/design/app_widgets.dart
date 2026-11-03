@@ -99,6 +99,7 @@ class ChatStatusBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = AppColors.of(context);
     final t = Theme.of(context);
+    final stacked = MediaQuery.textScalerOf(context).scale(17) > 17 * 1.5;
     final (sym, tint) = switch (kind) {
       StatusBannerKind.info => (AppSymbols.infoCircle, c.accent),
       StatusBannerKind.warning => (AppSymbols.exclamationTriangle, c.warning),
@@ -112,20 +113,44 @@ class ChatStatusBanner extends StatelessWidget {
         constraints: const BoxConstraints(minHeight: Hit.min),
         padding: const EdgeInsets.symmetric(horizontal: Layout.screenMargin, vertical: Gap.s),
         color: Color.alphaBlend(tint.withValues(alpha: 0.14), c.surface),
-        child: Row(
-          children: [
-            AppSymbolIcon(sym, size: 20, color: tint),
-            const SizedBox(width: Gap.s),
-            Expanded(child: Text(message, style: t.textTheme.bodyMedium)),
-            if (actionLabel != null)
-              CupertinoButton(
-                padding: const EdgeInsets.symmetric(horizontal: Gap.s),
-                minimumSize: const Size(Hit.min, Hit.min),
-                onPressed: onAction,
-                child: Text(actionLabel!),
+        child: stacked && actionLabel != null
+            // Large text: the action goes under the message instead of squeezing it (and never overflows).
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(padding: const EdgeInsets.only(top: 2), child: AppSymbolIcon(sym, size: 20, color: tint)),
+                      const SizedBox(width: Gap.s),
+                      Expanded(child: Text(message, style: t.textTheme.bodyMedium)),
+                    ],
+                  ),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: CupertinoButton(
+                      padding: const EdgeInsets.symmetric(horizontal: Gap.s),
+                      minimumSize: const Size(Hit.min, Hit.min),
+                      onPressed: onAction,
+                      child: Text(actionLabel!),
+                    ),
+                  ),
+                ],
+              )
+            : Row(
+                children: [
+                  AppSymbolIcon(sym, size: 20, color: tint),
+                  const SizedBox(width: Gap.s),
+                  Expanded(child: Text(message, style: t.textTheme.bodyMedium)),
+                  if (actionLabel != null)
+                    CupertinoButton(
+                      padding: const EdgeInsets.symmetric(horizontal: Gap.s),
+                      minimumSize: const Size(Hit.min, Hit.min),
+                      onPressed: onAction,
+                      child: Text(actionLabel!),
+                    ),
+                ],
               ),
-          ],
-        ),
       ),
     );
   }

@@ -66,3 +66,7 @@ redistributed.
 | `gauge` | `gauge.with.dots.needle.67percent` | contact profile |
 | `bubbles` | `bubble.left.and.bubble.right.fill` | contact profile |
 | `qrcode` | `qrcode` | contact profile |
+| `squareAndPencil` | `square.and.pencil` | shared |
+| `globe` | `globe` | shared |
+| `numberSign` | `number` | shared |
+| `exclamationCircleFill` | `exclamationmark.circle.fill` | shared |
