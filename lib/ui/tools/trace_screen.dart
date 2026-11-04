@@ -12,25 +12,29 @@ import '../../radio/tools/tool_frames.dart' show maxTraceHops, traceHashSizes;
 import '../../radio/tools/trace_tool.dart';
 import '../app.dart';
 import '../region/routes_panel.dart' show openFloodRoutes;
+import 'contact_ref.dart';
 import 'tool_kit.dart';
 import 'tools_host.dart';
 import '../design/app_surfaces.dart';
 
 class TraceScreen extends StatelessWidget {
-  const TraceScreen({super.key});
+  /// Opens pre-filled with this contact (a repeater or room as the last hop, or the hops of its saved route).
+  final ContactRef? contact;
+  const TraceScreen({super.key, this.contact});
 
   @override
   Widget build(BuildContext context) => ToolPage(
         id: 'trace',
         title: 'Trace path',
-        builder: (context, host, tools) => _TraceBody(key: ValueKey(identityHashCode(tools)), host: host, tools: tools),
+        builder: (context, host, tools) => _TraceBody(key: ValueKey(identityHashCode(tools)), host: host, tools: tools, contact: contact),
       );
 }
 
 class _TraceBody extends StatefulWidget {
   final ToolsHost host;
   final RadioTools tools;
-  const _TraceBody({super.key, required this.host, required this.tools});
+  final ContactRef? contact;
+  const _TraceBody({super.key, required this.host, required this.tools, this.contact});
   @override
   State<_TraceBody> createState() => _TraceBodyState();
 }
@@ -66,6 +70,7 @@ class _TraceBodyState extends State<_TraceBody> {
       setState(() {
         _contacts = list;
         _loading = false;
+        _prefill();
       });
     } catch (_) {
       if (!mounted) return;
@@ -73,6 +78,19 @@ class _TraceBodyState extends State<_TraceBody> {
         _loading = false;
         _loadError = 'Could not read the contact list from the radio. Check the connection and try again.';
       });
+    }
+  }
+
+  /// Contact-aware entry: the saved route's repeaters that are unambiguous on the radio, then the contact itself when it is a repeater/room.
+  void _prefill() {
+    final ref = widget.contact;
+    if (ref == null || _hops.isNotEmpty) return;
+    for (final h in ref.routeHops) {
+      final hits = [for (final c in _contacts) if ((c.type == AdvType.repeater || c.type == AdvType.room) && c.publicKeyHex.startsWith(h)) c];
+      if (hits.length == 1) _hops.add(TraceStop.fromContact(hits.first));
+    }
+    if (ref.type == AdvType.repeater || ref.type == AdvType.room) {
+      _hops.add(TraceStop(name: ref.name, keyHex: ref.keyHex, type: ref.type, lat: ref.lat, lon: ref.lon));
     }
   }
 

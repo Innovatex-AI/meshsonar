@@ -14,7 +14,7 @@ import '../../chat/db/message_repository.dart' show MessageCursor;
 import '../../chat/models.dart';
 import '../design/app_haptics.dart';
 import '../design/app_surfaces.dart';
-import '../contacts/profile_sheets.dart' show showContactRouteSheet;
+import '../contacts/path_manager_screen.dart' show PathManagerScreen;
 import '../design/app_symbols.dart';
 import 'channel_detail_screen.dart';
 import 'chat_navigation.dart';
@@ -118,17 +118,7 @@ class ChatListActions {
   Future<void> openRoute(BuildContext context, String? key) async {
     final radio = chat.radioId;
     if (key == null || radio == null || chat.store.contacts.get(radio, key) == null) return;
-    await showContactRouteSheet(
-      context,
-      current: () => chat.store.contacts.get(radio, key)!,
-      changes: chat,
-      redesign: true,
-      onAlwaysSearch: (v) => chat.service.contacts.setForceFlood(key, v),
-      onReset: () async {
-        await chat.service.contacts.resetPath(key);
-        if (context.mounted) showAppToast(context, 'Route forgotten. The next message searches and finds a new one.');
-      },
-    );
+    await PathManagerScreen.open(context, manager: chat.service.contacts, publicKey: key, changes: chat);
   }
 
   /// The fallback for the long-press menu (Android, or where the context-menu preview is switched off): the same entries as

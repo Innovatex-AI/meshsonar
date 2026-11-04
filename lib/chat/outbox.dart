@@ -3,6 +3,7 @@
 // Deterministic: no timers in here. Call [tick] when [nextDueMs] arrives (ChatService does that), and [onAck] on SEND_CONFIRMED.
 import 'dart:math';
 
+import '../radio/path_tools.dart';
 import 'db/outbox_repository.dart';
 import 'events.dart';
 import 'models.dart';
@@ -70,10 +71,15 @@ class Outbox {
   final RetryPolicy policy;
   final Random rnd;
   final OutboxNotify notify;
+
+  /// Writes the pinned route back to the radio before a send in Keep-this-route mode when the radio no longer holds it
+  /// (spike S13: any incoming PATH packet overwrites it). Null, or returning false, means "cannot": the send goes on as it is.
+  /// Stays null until the set-path radio write is verified on a real radio (AppFlags.routeWriteVerified).
+  final Future<bool> Function(Contact contact)? restorePath;
   int _lastSendMs = 0;
   bool _running = false;
 
-  Outbox({required this.store, required this.sink, required this.nowMs, this.policy = const RetryPolicy(), Random? random, required this.notify})
+  Outbox({required this.store, required this.sink, required this.nowMs, this.policy = const RetryPolicy(), Random? random, required this.notify, this.restorePath})
       : rnd = random ?? Random();
 
   /// Call once at startup (before the first [tick]). A message left in `sending` by a crash may or may not have reached the
@@ -175,10 +181,23 @@ class Outbox {
       contactKey = c.publicKey;
     }
     final attemptNo = m.attempt + 1;
-    final contact = contactKey == null ? null : store.contacts.get(m.radioId, contactKey);
-    // Direct if a path is known, except the last attempt which floods (the path may have gone stale).
+    var contact = contactKey == null ? null : store.contacts.get(m.radioId, contactKey);
+    final mode = contact?.pathMode ?? PathMode.auto;
+    // Keep this route: the pinned route is what the radio must hold. Put it back first when the radio lost or changed it.
+    if (mode == PathMode.fixed && contact != null && restorePath != null) {
+      final pinned = pinnedRouteOf(contact);
+      if (pinned != null && decodePath(contact.outPathLen, contact.outPath ?? const []) != pinned) {
+        try {
+          if (await restorePath!(contact)) contact = store.contacts.get(m.radioId, contactKey!) ?? contact;
+        } catch (_) {}
+      }
+    }
     final hasPath = contact?.hasPath ?? false;
-    final forceFlood = !hasPath || (contact?.forceFlood ?? false) || (attemptNo >= e.maxAttempts && e.maxAttempts > 1 && attemptNo > 1);
+    // Automatic: direct if a path is known, except the last attempt which floods (the path may have gone stale).
+    // Always search: every attempt floods. Keep this route: never the last-try flood, never clears the path.
+    final forceFlood = !hasPath ||
+        mode == PathMode.flood ||
+        (mode == PathMode.auto && attemptNo >= e.maxAttempts && e.maxAttempts > 1 && attemptNo > 1);
     store.messages.update(m.id, state: MessageState.sending, attempt: attemptNo);
     notify(ChatEvent.updated(m.convKey, m.id));
     _lastSendMs = now;
@@ -194,7 +213,7 @@ class Outbox {
             radioId: m.radioId, contactPublicKey: contactKey!, text: m.text, timestamp: m.tsSender, attempt: attemptNo - 1, forceFlood: forceFlood);
         final route = r.flood ? Route.flood : Route.direct;
         store.db.transaction(() {
-          if (forceFlood && hasPath) store.contacts.setPath(m.radioId, contactKey!, null, -1); // the flood relearns the route
+          if (forceFlood && hasPath && mode != PathMode.fixed) store.contacts.setPath(m.radioId, contactKey!, null, -1); // the flood relearns the route
           store.outbox.addAttempt(DeliveryAttempt(
               messageId: m.id, attempt: attemptNo, sentAtMs: now, route: route, expectedAck: r.expectedAck, estTimeoutMs: r.estTimeoutMs));
           store.messages.update(m.id, state: MessageState.sent, route: route, expectedAck: r.expectedAck);
@@ -279,5 +298,16 @@ class Outbox {
       store.outbox.remove(m.id);
     });
     notify(ChatEvent.updated(m.convKey, m.id));
+  }
+}
+
+/// The route Keep-this-route pins for [c], or null when none is stored.
+PathRoute? pinnedRouteOf(Contact c) {
+  final p = c.pinnedPath;
+  if (c.pathMode != PathMode.fixed || p == null || p.isEmpty) return null;
+  try {
+    return PathRoute.fromHex(splitHexHops(p));
+  } catch (_) {
+    return null;
   }
 }

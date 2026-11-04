@@ -19,6 +19,7 @@ import '../core/model.dart' show PingKind;
 import '../ui/chat/chat_tab_provider.dart';
 import '../ui/chat/conversation_screen.dart';
 import '../ui/shell/chat_tab_host.dart';
+import 'app_flags.dart';
 import 'app_state.dart';
 import 'chat_controller.dart';
 
@@ -48,6 +49,8 @@ class ChatWiring {
       nowMs: () => app.services.clock().millisecondsSinceEpoch,
       // A full contact download holds the radio's command queue for its whole length: not while pings are going out.
       deferContactSync: () => app.driving,
+      // The set-path radio write stays off until Andy's real-radio test (AppFlags.routeWriteVerified).
+      routeWriteEnabled: () => AppFlags.routeWriteVerified,
     );
     ctl = ChatController(
       store: store,

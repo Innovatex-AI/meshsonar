@@ -11,9 +11,12 @@
 import 'dart:async';
 import 'dart:convert';
 import '../radio/packet.dart' show decodeAdvertPacket;
+import '../radio/path_tools.dart';
 import 'contact_port.dart';
+import 'db/misc_repositories.dart' show PathHistoryEntry, PingResultRow;
 import 'mesh_links.dart';
 import 'models.dart';
+import 'outbox.dart' show pinnedRouteOf;
 import 'store.dart';
 
 enum SyncPhase {
@@ -337,7 +340,13 @@ class ContactManager {
             customName: ex.customName,
             notes: ex.notes,
             source: ex.source,
-            forceFlood: ex.forceFlood,
+            pathMode: ex.pathMode,
+            pinnedPath: ex.pinnedPath,
+            pinnedHashSize: ex.pinnedHashSize,
+            pathLearnedMs: ex.pathLearnedMs,
+            lastPingMs: ex.lastPingMs,
+            lastPingRttMs: ex.lastPingRttMs,
+            lastPingOk: ex.lastPingOk,
             onRadio: true,
             lastHeardMs: (heard != null && (ex.lastHeardMs == null || heard > ex.lastHeardMs!)) ? heard : ex.lastHeardMs);
     store.contacts.upsert(merged);
@@ -507,7 +516,18 @@ class ContactManager {
   // ------------------------------------------------------------------ radio events
 
   /// PUSH_PATH_UPDATED: the radio learned a route. Read it so the next DM goes direct.
-  Future<void> pathUpdated(String publicKey) => refreshOne(publicKey);
+  Future<void> pathUpdated(String publicKey) async {
+    await refreshOne(publicKey);
+    final id = radioId;
+    if (id == null) return;
+    final c = store.contacts.get(id, publicKey);
+    if (c == null || !c.hasPath) return;
+    final now = nowMs();
+    store.contacts.setPathLearned(id, c.publicKey, now);
+    final r = decodePath(c.outPathLen, c.outPath ?? const []);
+    store.pathHistory.add(PathHistoryEntry(contactKey: c.publicKey, tsMs: now, kind: 'learned', hops: r?.hexHops ?? const [], hashSize: r?.hashSize));
+    _changed();
+  }
 
   /// A known contact advertised (PUSH_ADVERT, key only). Refreshes position and last advert, at most every 10 minutes, and
   /// adds a contact the radio added by itself (auto-add mode).
@@ -729,11 +749,16 @@ class ContactManager {
 
   // ------------------------------------------------------------------ route, share, remove
 
-  /// Forgets the saved route: the next DM floods and the radio learns a fresh one. Phone and radio.
+  /// Forgets the saved route: the next DM floods and the radio learns a fresh one. Phone and radio. A Keep-this-route pin is
+  /// dropped too (back to Automatic): a pinned route that was just cleared on purpose must not be written straight back.
   Future<void> resetPath(String publicKey) async {
     final id = radioId;
     if (id == null) return;
+    final c = store.contacts.get(id, publicKey);
     store.contacts.setPath(id, publicKey, null, -1);
+    if (c != null && c.pathMode == PathMode.fixed) store.contacts.setPathMode(id, publicKey, PathMode.auto);
+    store.contacts.setPathLearned(id, publicKey, null);
+    store.pathHistory.add(PathHistoryEntry(contactKey: publicKey, tsMs: nowMs(), kind: 'reset'));
     _changed();
     final p = _port;
     if (p != null && p.isConnected) {
@@ -741,6 +766,111 @@ class ContactManager {
         await p.resetPath(publicKey);
       } catch (_) {}
     }
+  }
+
+  // ------------------------------------------------------------------ route mode (plan 4.7)
+
+  /// True when the set-path radio write may run (AppFlags.routeWriteVerified in the app; tests force it).
+  bool Function() routeWriteEnabled = () => false;
+
+  /// Automatic / Always search: plain mode change, nothing written to the radio. Returns false when [mode] is Keep this route
+  /// (use [keepCurrentRoute]).
+  bool setRouteMode(String publicKey, PathMode mode) {
+    final id = radioId;
+    if (id == null || mode == PathMode.fixed) return false;
+    store.contacts.setPathMode(id, publicKey, mode);
+    _changed();
+    return true;
+  }
+
+  /// Keep this route: pins the route the contact has now. False when there is none ("Find a route first").
+  bool keepCurrentRoute(String publicKey) {
+    final id = radioId;
+    final c = id == null ? null : store.contacts.get(id, publicKey);
+    if (id == null || c == null || !c.hasPath) return false;
+    final r = decodePath(c.outPathLen, c.outPath ?? const []);
+    if (r == null) return false;
+    store.contacts.setPathMode(id, publicKey, PathMode.fixed, pinnedPath: joinHexHops(r.hexHops), pinnedHashSize: r.hashSize);
+    _changed();
+    return true;
+  }
+
+  /// SET PATH (radio write): ADD_UPDATE_CONTACT with the chosen route, read-modify-write from the radio's own copy so name,
+  /// flags and position survive. Hidden behind [routeWriteEnabled] until a real radio proves it (spike S3). Returns a
+  /// plain-language error, or null on success. After a successful save the contact is in Keep this route mode.
+  Future<String?> setRoute(String publicKey, PathRoute route) async {
+    if (!routeWriteEnabled()) return 'Choosing repeaters yourself is not available yet.';
+    final id = radioId;
+    final p = _port;
+    if (id == null || p == null || !p.isConnected) return 'Connect your radio first.';
+    final key = publicKey.toLowerCase();
+    final ex = store.contacts.get(id, key);
+    if (ex == null) return 'Unknown contact.';
+    try {
+      final onRadio = await p.fetch(key) ?? ex;
+      final enc = encodePath(route);
+      await p.upload(onRadio.copyWith(outPath: enc.path, outPathLen: enc.pathLen));
+      store.contacts.setPath(id, key, enc.path, enc.pathLen);
+      store.contacts.setPathMode(id, key, PathMode.fixed, pinnedPath: joinHexHops(route.hexHops), pinnedHashSize: route.hashSize);
+      store.contacts.setPathLearned(id, key, nowMs());
+      store.pathHistory.add(PathHistoryEntry(contactKey: key, tsMs: nowMs(), kind: 'set', hops: route.hexHops, hashSize: route.hashSize));
+      _changed();
+      return null;
+    } on ContactTableFull {
+      return 'The radio\'s contact list is full.';
+    } catch (_) {
+      return 'The radio did not accept the route. Nothing was changed.';
+    }
+  }
+
+  /// Outbox hook for Keep this route: writes the pinned route back when the radio lost it. Never throws; false = not done.
+  Future<bool> restorePinnedPath(Contact c) async {
+    if (!routeWriteEnabled()) return false;
+    final r = pinnedRouteOf(c);
+    if (r == null) return false;
+    final id = radioId;
+    final p = _port;
+    if (id == null || p == null || !p.isConnected) return false;
+    try {
+      final onRadio = await p.fetch(c.publicKey) ?? c;
+      final enc = encodePath(r);
+      await p.upload(onRadio.copyWith(outPath: enc.path, outPathLen: enc.pathLen));
+      store.contacts.setPath(id, c.publicKey, enc.path, enc.pathLen);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// A finished ping or discovery: remembered on the contact and in the history list.
+  void recordPing(String publicKey, {required String kind, required bool ok, int? rttMs, int? hops, List<double> snr = const [], String? out, String? back, String? failReason}) {
+    final id = radioId;
+    if (id == null) return;
+    final now = nowMs();
+    store.contacts.setLastPing(id, publicKey, tsMs: now, rttMs: rttMs, ok: ok);
+    store.pingResults.add(PingResultRow(
+        contactKey: publicKey, tsMs: now, kind: kind, ok: ok, rttMs: rttMs, hops: hops, snrJson: snr.isEmpty ? null : snr.join(','), pathOut: out, pathBack: back, failReason: failReason));
+    _changed();
+  }
+
+  /// The route found by a discovery adopted as the contact's route: Keep this route (pin) or Automatic. Phone side only;
+  /// the radio already learned it from the same exchange when the firmware stores it, otherwise it is written when the
+  /// set-path write is on.
+  Future<String?> useDiscoveredRoute(String publicKey, PathRoute route, {required bool keep}) async {
+    final id = radioId;
+    if (id == null) return 'Connect your radio first.';
+    if (keep) {
+      if (routeWriteEnabled()) return setRoute(publicKey, route);
+      // Write disabled: pin what the radio holds now if it equals the discovered route, else keep the current mode.
+      final c = store.contacts.get(id, publicKey);
+      final cur = c == null ? null : decodePath(c.outPathLen, c.outPath ?? const []);
+      if (cur == route && keepCurrentRoute(publicKey)) return null;
+      return 'The route was found, but the radio has not stored it. Send a message and it learns one.';
+    }
+    store.contacts.setPathMode(id, publicKey, PathMode.auto);
+    store.pathHistory.add(PathHistoryEntry(contactKey: publicKey, tsMs: nowMs(), kind: 'discovered', hops: route.hexHops, hashSize: route.hashSize));
+    _changed();
+    return null;
   }
 
   /// The link/QR text for a contact (works for any contact, on the radio or not).
