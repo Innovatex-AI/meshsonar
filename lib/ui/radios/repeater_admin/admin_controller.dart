@@ -6,7 +6,9 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../../../chat/db/stats_history_repository.dart';
 import '../../../core/api.dart' show RadioPreset;
+import '../../../radio/caps.dart';
 import '../../../radio/admin_password_vault.dart';
 import '../../../radio/has_connection.dart';
 import '../../../radio/default_passwords.dart';
@@ -49,6 +51,15 @@ class RepeaterAdminController extends ChangeNotifier {
   final Future<bool> Function(String keyHex)? hasConnection;
   final DateTime Function() now;
 
+  /// Where each successful status read is written for the dashboard sparklines (null in builds without a chat store).
+  final RemoteStatsHistoryRepository? historyRepo;
+
+  /// The new dashboard hides settings the repeater's firmware does not have (it reads its version once admin).
+  final bool gateByFirmware;
+
+  /// Auto refresh interval (never below two minutes in the app; tests shorten it).
+  final Duration autoRefreshEvery;
+
   /// Uptime seen at the previous health check in this app run (to spot a restart in between).
   static final Map<String, int> _lastUptime = {};
 
@@ -63,6 +74,9 @@ class RepeaterAdminController extends ChangeNotifier {
     this.vault,
     this.hasConnection,
     DateTime Function()? clock,
+    this.historyRepo,
+    this.gateByFirmware = false,
+    this.autoRefreshEvery = const Duration(minutes: 2),
   }) : now = clock ?? DateTime.now {
     _act = session.activity.listen((v) {
       _airtime = v;
@@ -126,6 +140,7 @@ class RepeaterAdminController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _auto?.cancel();
     unawaited(_act?.cancel());
     session.dispose();
     super.dispose();
@@ -246,6 +261,8 @@ class RepeaterAdminController extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    setAutoRefresh(false);
+    statusAt = null;
     AdminSessions.drop(session.keyHex);
     await session.logout();
     stage = AdminStage.login;
@@ -277,6 +294,7 @@ class RepeaterAdminController extends ChangeNotifier {
   Future<void> refreshOverview() async {
     if (loadingOverview) return;
     loadingOverview = true;
+    loadHistory();
     _notice('overview', null);
     _changed();
     try {
@@ -284,6 +302,8 @@ class RepeaterAdminController extends ChangeNotifier {
         overviewStep = s;
         _changed();
       });
+      final st = snapshot?.stats;
+      if (st != null) _stamp(st);
       if (snapshot!.problems.isNotEmpty) _notice('overview', snapshot!.problems.join('\n'));
       _recomputeFindings();
     } catch (e) {
@@ -294,6 +314,115 @@ class RepeaterAdminController extends ChangeNotifier {
       _changed();
     }
   }
+
+  // ------------------------------------------------------------------ dashboard: status, history, auto refresh
+
+  /// When the last status read succeeded (null before the first).
+  DateTime? statusAt;
+  bool loadingStatus = false;
+
+  /// The stored readings of the last 7 days (oldest first), for the sparklines.
+  List<StatsPoint> history = const [];
+
+  /// False while the app is in the background: auto refresh waits.
+  bool foreground = true;
+
+  void _stamp(RepeaterStats st) {
+    statusAt = now();
+    final repo = historyRepo;
+    if (repo == null) return;
+    try {
+      repo.insert(
+          session.keyHex,
+          StatsPoint(
+              tsMs: statusAt!.millisecondsSinceEpoch,
+              batteryMv: st.battMilliVolts,
+              noiseFloor: st.noiseFloorDbm,
+              uptimeS: st.upTimeSecs,
+              txAirS: st.airTimeSecs,
+              rxAirS: st.rxAirTimeSecs,
+              recv: st.packetsRecv,
+              sent: st.packetsSent,
+              lastRssi: st.lastRssiDbm,
+              lastSnrX4: (st.lastSnrDb * 4).round(),
+              errors: st.errEvents,
+              queue: st.txQueueLen));
+      loadHistory();
+    } catch (_) {
+      // history is a nicety; a database problem never breaks the dashboard
+    }
+  }
+
+  void loadHistory() {
+    final repo = historyRepo;
+    if (repo == null) return;
+    try {
+      history = repo.recent(session.keyHex, nowMs: now().millisecondsSinceEpoch);
+    } catch (_) {}
+  }
+
+  /// Reads the status only (pull to refresh, the menu's Refresh, auto refresh). [background] marks auto refresh: when the radio is
+  /// busy with anything else it is dropped at once, never queued.
+  Future<void> refreshStatus({bool background = false}) async {
+    if (loadingStatus || loadingOverview) return;
+    loadingStatus = true;
+    if (!background) _notice('overview', null);
+    _changed();
+    try {
+      final st = await session.readStatus(background: background);
+      final s = snapshot;
+      snapshot = RepeaterSnapshot(stats: st, telemetry: s?.telemetry, identity: s?.identity ?? const RepeaterIdentity(), clock: s?.clock, problems: s?.problems ?? const []);
+      _stamp(st);
+      _recomputeFindings();
+    } catch (e) {
+      final quiet = e is AdminException && (e.kind == AdminErrorKind.busy || e.kind == AdminErrorKind.cancelled);
+      if (!quiet && !_lostLink(e) && !background) _notice('overview', _msg(e));
+    } finally {
+      loadingStatus = false;
+      _changed();
+    }
+  }
+
+  /// Reads the telemetry block again (the Telemetry page).
+  Future<void> refreshTelemetry() async {
+    if (loadingTelemetry) return;
+    loadingTelemetry = true;
+    _notice('telemetry', null);
+    _changed();
+    try {
+      final t = await session.readTelemetry();
+      final s = snapshot;
+      snapshot = RepeaterSnapshot(stats: s?.stats, telemetry: t, identity: s?.identity ?? const RepeaterIdentity(), clock: s?.clock, problems: s?.problems ?? const []);
+    } catch (e) {
+      if (!_lostLink(e)) _notice('telemetry', _msg(e));
+    } finally {
+      loadingTelemetry = false;
+      _changed();
+    }
+  }
+
+  bool loadingTelemetry = false;
+
+  /// Auto refresh is OFF by default (airtime is shared). On, it asks every [autoRefreshEvery] (two minutes in the app), only while
+  /// the app is in the foreground and the radio's request queue is idle.
+  bool get autoRefresh => _auto != null;
+  Timer? _auto;
+
+  void setAutoRefresh(bool on) {
+    _auto?.cancel();
+    _auto = null;
+    if (on) _auto = Timer.periodic(autoRefreshEvery, (_) => unawaited(autoTick()));
+    _changed();
+  }
+
+  /// One auto refresh tick (public so tests can drive it without waiting).
+  Future<void> autoTick() async {
+    if (_disposed || stage != AdminStage.ready || !foreground || session.queueBusy || !session.queue.autoRefreshEnabled) return;
+    await refreshStatus(background: true);
+  }
+
+  /// "Stay logged in": the login is kept when the dashboard closes (resumed within 10 minutes). Off by default.
+  bool stayLoggedIn = false;
 
   Future<void> loadSettings({bool force = false}) async {
     if (loadingSettings || !session.isAdmin) return;
@@ -321,7 +450,37 @@ class RepeaterAdminController extends ChangeNotifier {
   bool _roomHas(SettingDef d) => d.group == SettingGroup.identity || d.group == SettingGroup.access || d.key == 'radio' || d.key == 'tx';
 
   /// Settings a screen shows for this node.
-  List<SettingDef> get visibleSettings => [for (final d in repeaterSettings) if (!isRoom || _roomHas(d)) d];
+  List<SettingDef> get visibleSettings => [for (final d in repeaterSettings) if ((!isRoom || _roomHas(d)) && _hasFirmwareFor(d.key)) d];
+
+  /// The first firmware version (major, minor) that has each setting (plan 5.3). Unknown keys exist everywhere.
+  static const Map<String, (int, int)> settingMinFirmware = {
+    'path.hash.mode': (1, 14),
+    'loop.detect': (1, 14),
+    'dutycycle': (1, 15),
+    'owner.info': (1, 12),
+  };
+
+  /// The repeater's firmware (major, minor), or null while it is not known (only an admin reads it).
+  (int, int)? get firmware => parseFirmwareVersion(snapshot?.identity.firmware);
+
+  bool _hasFirmwareFor(String key) {
+    if (!gateByFirmware) return true;
+    final need = settingMinFirmware[key], have = firmware;
+    if (need == null || have == null) return true;
+    return have.$1 > need.$1 || (have.$1 == need.$1 && have.$2 >= need.$2);
+  }
+
+  /// Regions need firmware 1.10; shown when the version is not known.
+  bool get hasRegions {
+    final have = firmware;
+    return !isRoom && (!gateByFirmware || have == null || have.$1 > 1 || have.$2 >= 10);
+  }
+
+  /// What this login lets the dashboard show.
+  RemoteCaps get caps => RemoteCaps(isAdmin: session.isAdmin, fwLevel: session.firmwareLevel);
+
+  /// Neighbours exist on repeaters (not rooms) whose protocol level is 2 or more; an unknown level shows them.
+  bool get hasNeighbours => !isRoom && (session.firmwareLevel == null || session.firmwareLevel! >= 2);
 
   Future<void> loadNeighbours() async {
     if (loadingNeighbours) return;

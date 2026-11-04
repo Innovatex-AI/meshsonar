@@ -329,6 +329,9 @@ class RepeaterAdminSession {
   int get queueAhead => _queue.requests.value.length;
   bool get queueBusy => _queue.busy;
 
+  /// The radio-wide remote request queue (the dashboard's strip and "What the radio is doing" sheet read it).
+  RemoteRequestQueue get queue => _queue;
+
   /// The login was an admin login; CLI, ACL and every write need this.
   bool get isAdmin => _loggedIn && _isAdmin;
   int? get firmwareLevel => _firmwareLevel;

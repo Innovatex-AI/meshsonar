@@ -1,9 +1,11 @@
 // Small pieces the repeater admin screens share.
 import 'package:flutter/material.dart';
 
+import '../../../app/app_flags.dart';
 import '../../../radio/repeater_health.dart';
 import '../../../radio/repeater_settings.dart';
 import '../../design/app_surfaces.dart';
+import '../../design/tokens.dart' show AppColors;
 import '../../theme.dart';
 import 'admin_controller.dart';
 
@@ -77,6 +79,31 @@ class AdminCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
+    if (AppFlags.chatRedesign) {
+      // Inset-grouped look of the dashboard: flat rounded block on the page colour, small header.
+      final c = AppColors.of(context);
+      return Padding(
+        key: cardKey,
+        padding: const EdgeInsets.symmetric(vertical: Gap.s),
+        // A Material (not a coloured box) so the ListTile rows inside keep their ink.
+        child: Material(
+          color: c.surface,
+          borderRadius: BorderRadius.circular(10),
+          clipBehavior: Clip.antiAlias,
+          child: Padding(
+            padding: const EdgeInsets.all(Gap.l),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Expanded(child: Semantics(header: true, child: Text(title.toUpperCase(), style: t.textTheme.labelMedium?.copyWith(color: c.textMuted)))),
+            ?trailing,
+          ]),
+          const SizedBox(height: Gap.s),
+          child,
+            ]),
+          ),
+        ),
+      );
+    }
     return Card(
       key: cardKey,
       margin: const EdgeInsets.symmetric(vertical: Gap.s),

@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/chat/db/stats_history_repository.dart';
 import 'package:meshsonar/core/api.dart' show RadioPreset;
 import 'package:meshsonar/radio/companion_link.dart';
 import 'package:meshsonar/radio/repeater_admin.dart';
@@ -25,7 +26,12 @@ class AdminRig {
   AdminRig(this.rep, this.radio, this.link, this.controller);
 }
 
-Future<AdminRig> makeRig({bool room = false, void Function(FakeAdminRepeater)? setup, RadioPreset? regionPreset = preset}) async {
+Future<AdminRig> makeRig(
+    {bool room = false,
+    void Function(FakeAdminRepeater)? setup,
+    RadioPreset? regionPreset = preset,
+    RemoteStatsHistoryRepository? history,
+    bool gateByFirmware = false}) async {
   final rep = FakeAdminRepeater(key: repKey(), role: room ? 'room' : 'repeater', name: room ? 'Valley Room' : 'INNO-OB-2');
   setup?.call(rep);
   final radio = AdminFakeTransport({rep.keyHex: rep});
@@ -42,6 +48,8 @@ Future<AdminRig> makeRig({bool room = false, void Function(FakeAdminRepeater)? s
     nameForPrefix: (p) => names[p] ?? (radio.keyHex.startsWith(p) ? 'My Companion' : null),
     fullKeyForPrefix: (p) => p == 'a9b1acd3a408' ? 'a9b1acd3a408${'11' * 26}' : null,
     lastAdvertEpoch: DateTime.now().millisecondsSinceEpoch ~/ 1000 - 600,
+    historyRepo: history,
+    gateByFirmware: gateByFirmware,
   );
   return AdminRig(rep, radio, link, controller);
 }
