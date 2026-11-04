@@ -5,7 +5,6 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:meshsonar/app/app_flags.dart';
 import 'package:meshsonar/chat/db/stats_history_repository.dart';
 import 'package:meshsonar/chat/store.dart';
 import 'package:meshsonar/radio/command_queue.dart' show CommandPriority;
@@ -39,8 +38,6 @@ Future<Dash> openDash(WidgetTester tester,
     bool gate = true,
     bool owns = false,
     void Function(FakeAdminRepeater)? setup}) async {
-  AppFlags.chatRedesign = true;
-  addTearDown(() => AppFlags.chatRedesign = false);
   sizeScreen(tester, w: w, h: h);
   final store = ChatStore.inMemory();
   addTearDown(store.close);

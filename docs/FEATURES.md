@@ -86,48 +86,81 @@ Shared states: `ui/state_widgets.dart` has `LoadingState` (a spinner that gives 
 
 ## Chat (Chat tab, unreleased)
 
-Files: `ui/chat/*`, `app/chat_controller.dart`, `app/chat_wiring.dart`, `chat/channel_admin.dart`. Chat uses only the radio and the
-on-phone database: no key, no server, no website counterpart. Secrets stay in the Keychain.
+Files: `ui/chat/*`, `ui/contacts/*`, `ui/shell/chat_tab*.dart`, `app/chat_controller.dart`, `app/chat_wiring.dart`, `chat/*`. Chat uses only the
+radio and the on-phone database: no key, no server, no website counterpart (app-only by design; the only website chat content is the
+`/channels` how-to and the airtime policy page). Secrets stay in the Keychain. The redesigned Chat (Chat redesign WP0 to WP15) is the only
+Chat UI: the `chatRedesign` switch in More > Developer and the old Contacts | Channels tab are gone. Plan: `meshsonar-infra/docs/planning/chat-redesign-plan-2026-11-02.md`.
 
-- **Channels**: rows show last message, time, unread, pin, mute, and "Not on your radio right now" for a channel another app
-  removed (channel info offers "Put it back on the radio"). Pull down to read the radio again. Without a radio you can still read
-  what is saved.
-- **System section** (pinned): the wardrive channel with pings sent, last ping, "Paused by the airtime budget" when the arbiter
-  is holding pings back, and read-only View traffic (others' pings). It never counts as unread and never notifies.
-- **Add a channel**: Join Public; Join a # channel (name lower-cased, letters, numbers and dashes); Scan a QR code (camera only
-  on that screen); Paste a link or a name + secret; Create a private channel (random secret, then straight to the share screen).
-  Errors say what to do: radio away, no free slot (all slots used), firmware without channels, bad link or secret, duplicate name.
-- **Channel info**: QR + `meshcore://channel/add` link + copy, secret on request (private only), notifications All / Mentions /
-  Muted (stored now; notifications plug in later), pin, **Region** (limits how far messages are repeated; empty = whole mesh, the
-  default; the key is derived from the name like a # key), rename (private only), clear messages, delete (empties the radio slot).
-- **Conversation** (channels, DMs, rooms): newest at the bottom, day headers, "N new messages" marker, sender name once per run,
-  delivery under your own messages: Waiting for the radio / Queued, sending in N s / Sending / Sent / Heard by N repeaters /
-  Delivered / Not sent (Retry, Delete). Composer: live byte counter against the real limit, drafts saved per conversation,
-  mention button. Long press: copy, open link, retry, cancel, details (time, sender clock, SNR, hops, route), delete.
-- **Safety while driving**: a drive is running and GPS speed above 8 km/h (unlocks below 6): the composer is replaced by
-  "Typing is off while the car is moving" with **I'm a passenger** (lasts for that drive). Reading and incoming banners work.
-  A stale or missing speed never locks.
-- **Chat in Drive**: the Messages button next to Ping now opens a half-height sheet: unread conversations, then a conversation
-  with the same composer and the same lock. Pings are never blocked by it.
-- **Contacts segment**: until the contacts screens ship it is a real read-only list (people and rooms from the chat database,
-  last message, search); tapping opens the conversation.
+- **Shell.** Large "Chat" title with a New button (Cmd-N), a pinned **Chats | Contacts | Network** control (Cmd-1/2/3; a cold launch starts on
+  Chats, the choice is remembered for the session only) and a collapsing search field. One status banner replaces every per-tab offline note.
+  The tab badge counts unread messages (muted and System excluded). From 900 pt of tab width (iPad, Split View) it is two columns: the lists in a
+  380 pt sidebar and the open conversation beside them; Cmd-K is a quick switcher there. Two one-time tips (swipe a conversation, Network).
+- **Chats.** One list of direct messages, channels and rooms, pinned first then newest, the wardrive channel in a System group at the bottom
+  (never unread, never notifies; View traffic is read-only). Row: 52 pt avatar with a type badge, delivery glyph before your own last message,
+  "Draft:" prefix, pin and mute marks, unread pill. Swipe right Pin / Mark unread, left Mute (1 h / 8 h / 24 h / until I unmute / mentions only)
+  and Delete (a DM is cleared with Undo, a channel asks first); long-press previews the last two messages. Pull down reads the radio again.
+- **New chat sheet.** To: field filtering people, recent and favourite people, New message, Join a hashtag channel, Join Public, Create a private
+  channel (QR, link and secret when done), Scan a QR code, Paste a link or key, Add a contact. Failures are one plain sentence inside the form.
+- **Conversation.** Grouped bubbles, five delivery states with a glyph and a word (Waiting, Sent, Heard by N repeaters, Delivered, Not
+  delivered; channels never say Delivered), tap a bubble for how it travelled (route, SNR, RSSI, time on air), long-press for Copy / Open link /
+  Details / Try Again / Delete, Retry all, jump-to-latest capsule. Title is one target to the profile or Channel info with Direct / Via N
+  repeaters / Searching / No route yet; ellipsis menu Search, Route, Mute, Info. Composer: pill, byte ring, quick-reply chips (More > Chat),
+  @mention strip, "Trimmed to fit", offline hint, Cmd-Return. After three messages in a row fail over a saved route the "This route may be broken"
+  card offers Find a route now and Reset route.
+- **Safety while driving**: a drive is running and GPS speed above 8 km/h (unlocks below 6): the composer is replaced by "Typing is off while the
+  car is moving" with **I'm a passenger** (lasts for that drive). Reading and incoming banners work. A stale or missing speed never locks.
+- **Chat in Drive**: the Messages button next to Ping opens a half-height sheet: unread conversations, then a conversation with the same
+  composer and the same lock. Pings are never blocked by it.
+- **Contacts.** People only, Favourites first then A-Z under sticky letter headers; one collapsed "New nodes nearby" row; "Manage contacts" and
+  "N of M on your radio" at the foot; swipe right Message / Favourite, left Ping / Remove (Undo). Add contact is the top-right button. Details in
+  "Contacts and direct messages" below.
+- **Contact profile.** One inset-grouped screen: avatar, "Person · Via 2 repeaters", "Heard 2 min ago", Share and Edit in the nav bar, tiles per kind
+  (Person: Message, Ping, Route, Stats. Repeater: Dashboard, Ping, Route. Room: Open room, Ping, Route. Sensor: Telemetry, Ping, Route), cards for
+  Route, Last delivery, Public key, Location, Notes, Mute and Share. Edit sheet holds name, notes, favourite, keep-on-radio, Block, Remove.
+- **Route and Ping.** Route screen: diagram, **Automatic / Keep this route / Always search** (`path_mode`), Find a route now (path discovery),
+  Test this route, Reset route, Advanced (hash size, recent deliveries, route history, Trace and Discover pre-filled). "Choose repeaters yourself"
+  and the outbox rewrite of a forgotten path are built but hidden behind `AppFlags.routeWriteVerified` (off) until the set-path radio write is
+  proven on a real radio. Ping: a person by route discovery, a repeater, room or sensor by a trace with signal per hop; "Not heard" is its own
+  state; long-press Ping for Direct only and 2 or 3 byte IDs; results are kept in the contact's ping history.
+- **Stats.** The Stats tile (person) and Telemetry tile (sensor) open a sheet fed through the remote request queue; says what the other radio
+  withheld; sensors get a refresh switch and sparklines.
+- **Network.** A radio card (name, battery, firmware, frequency, Announce myself, Tools: Trace, Discover, Rx log, Adverts), Heard nearby with Add /
+  Ignore, then Repeaters, Rooms and Sensors (five each, Show all). Repeaters and rooms swipe to Log in / Ping. More > Radios and tools has one row
+  that leads here; the old Repeaters list, Trace, Discover, Adverts and Rx log rows are gone from More.
+- **Channels.** Rows show last message, time, unread, pin, mute, and "Not on your radio right now" for a channel another app removed (Channel info
+  offers "Put it back on the radio"). Channel info is an inset-grouped page: QR + `meshcore://channel/add` link + copy, secret on request (private
+  only), notifications, pin, **Region** (limits how far messages are repeated), rename (private only), clear, delete; the radio slot sits under
+  Details. Errors say what to do: radio away, no free slot, firmware without channels, bad link or secret, duplicate name.
+- **Device settings** (top of the Radio screen when connected): battery and storage, firmware, auto-add by type, max hops, telemetry permissions,
+  share location in adverts, path hash size, Console, Bluetooth PIN, encrypted backup and restore, Reboot, Factory reset (type RESET). Every write is
+  read back and offers Undo; a row the firmware cannot do is hidden and listed with its reason.
+- **Accessibility and design.** SF Pro only, shared popup helpers (`showAppSheet` / `showAppAlert` / `showAppActionSheet` / `showAppToast`), a
+  widget-ban lint for Chat folders, Dynamic Type through AX5, 44 pt targets, Increase Contrast and Reduce Transparency honoured, VoiceOver actions
+  on every swipe action. Haptics switch in Settings; More > Chat holds Quick replies, Return sends and Haptics.
+- **Parity.** Chat, contacts, path management, ping, repeater login and the repeater dashboard are app-only by design (HANDOFF section 71 D5).
 
 ## Repeater administration and rooms (unreleased)
 
 Free, for the owner of the repeater. Files: `lib/ui/radios/` (`repeaters_screen.dart`, `admin_launcher.dart`, `repeater_admin/*`,
 `rooms/*`), logic in `lib/radio/repeater_*.dart` and `lib/radio/room_session.dart`.
 
-**Where.** More > Radios and tools > Repeaters and rooms (every repeater and room your radio knows, plus the ones you claimed);
-"Administer this repeater" on a repeater's sheet (map and Analyze); a room contact in Chat opens its conversation with a join header.
+**Where.** Chat > Network > Repeaters and Rooms (every repeater and room your radio knows, plus the ones you claimed), or the Dashboard tile on a
+repeater's profile; "Administer this repeater" on a repeater's sheet (map and Analyze); a room contact in Chat opens its conversation with a join bar.
 Needs a connected radio that can do it (the built-in Simulator cannot: it has no repeaters, and the screen says so).
 
-**Login.** The admin password (or the guest or room password). It goes from the phone to your own radio and over the air to the
+**Login.** One sheet over the node: a single password field and "Log in as guest" (the node's reply decides the role), a warning for the factory
+passwords "password" and "hello", and different inline failures: "That password was not accepted." versus "No reply after N s ..." with Search for it /
+Try again. The admin password (or the guest or room password). It goes from the phone to your own radio and over the air to the
 repeater; it is never sent to MeshSonar. It lives in memory for the app run. "Remember passwords on this phone" is a switch,
 off by default, shown only where a secure store exists (iOS Keychain, this device only); turning it off deletes every saved password.
 A blank password is never sent (a blank one re-admits keys already on the list and proves nothing), and passwords over 15 bytes are
 refused (the radio would cut them). A wrong password and a repeater out of reach both get no answer; the screen says so in those words.
 
-| Tab | What it does |
+The repeater opens as one scrolling dashboard (Chat redesign WP10), not tabs: four glance cards (Battery, Uptime, Noise, Airtime) with 7-day
+sparklines, "Updated N s ago", pull down to refresh, then drill-in rows for the sections below. Guests see no admin rows. The ... menu has Refresh,
+Auto-refresh (off by default, every 2 minutes), Stay logged in, Reboot repeater and Log out; leaving logs out unless Stay logged in is on. Each section:
+
+| Section | What it does |
 |---|---|
 | Overview | Name, role, firmware, board, key, last advert you heard; battery, chip temperature, uptime, noise floor, time on air (sending, listening), packets, floods and direct, errors, duplicates, last packet it heard; **clock vs your phone** with a one-tap **Sync clock** (confirmed; only moves a clock forward); **Health check**; **Adverts** (flood or local, confirmed, 30 s cooldown); Claim this repeater. Pull down to refresh. |
 | Settings | Grouped: Identity (name with a 23/31 byte counter, latitude and longitude, owner note, advert intervals), Radio (parameters compared with the region preset, TX power), Routing (repeat, flood hop limits, path hash size, loop detection, extra ACKs), Observer uplink (read only), Advanced (expert settings, **Reboot** behind a typed word). Each row opens one editor. |
@@ -151,9 +184,9 @@ errors (over 40%), and on an observer build the uplink slots, drops, queue and t
 while a request is on the air. Limits per repeater: 45 commands per minute, 3 anonymous requests per 3 minutes (a repeater answers 4 to
 everyone together), writes 2 s apart.
 
-**Rooms.** In Chat a room contact shows a join header: a room only pushes its posts to radios that logged in. With the room password you read
+**Rooms.** In Chat a room contact shows a thin join bar (Log in to post, then Joined / Joined as admin / Joined, read only): a room only pushes its posts to radios that logged in. With the room password you read
 and post; with the admin password you can also manage it (the same admin screens, identity and access only). A read-only guest (the room allows
-guests) reads and sees why the composer is off. Rooms are also under Repeaters and rooms with a minimal conversation screen.
+guests) reads and sees why the composer is off. Rooms open as ordinary conversations from Chat > Network > Rooms.
 
 
 ## First-run intro (onboarding)
@@ -698,9 +731,9 @@ the app's own database on this phone.
 **The idea.** Your phone keeps every contact you have. Your radio keeps a copy of the ones it needs (its list holds 100 by
 default). Taking a contact off the radio never deletes it from the phone, and the app puts one back on the radio before you message it.
 
-**Chat > Contacts.** Search; filter chips All, Favourites, Recent, People, Repeaters, Rooms, Sensors; sections New nodes nearby,
-Favourites, All. Tap a person to open the conversation (a quiet info button opens their details); tap a repeater, room or sensor to
-open its details. Pull down to read the radio's list again. "Add contact" and a settings button sit under the search box.
+**Chat > Contacts.** People only (repeaters, rooms and sensors are under Network): Favourites first, then A-Z under sticky letter headers, a
+collapsed "New nodes nearby" row, "Search N contacts". Tap opens the profile; swipe right Message / Favourite, left Ping / Remove with Undo. "Add
+contact" is the top-right button; contact settings are the "Manage contacts" row at the foot.
 
 | State | What you see |
 |---|---|
@@ -726,14 +759,14 @@ itself and tells you.
 name), or show your own contact QR to someone else. Wrong input is explained under the field in plain words; a channel link says
 "Open Channels to join it". With the radio away the contact is saved and goes onto the radio when it connects.
 
-**Contact details.** Name (rename, reset), type, key with Copy and QR, "on your radio" status, position on a small map with the time of
+**Contact profile** (replaced the old contact details screen). Name (rename, reset), type, key with Copy and QR, "on your radio" status, position on a small map with the time of
 their last advert, route (hops, the repeaters on it, last heard), "Always send by flood", Reset route, notes, favourite, Share
 contact (link, QR, or "Send to radios nearby"), Block, Remove (says what it does; optionally deletes the messages), Message,
 Claim (repeaters) and Admin (repeaters, when the remote-admin screen exists). Rooms show details only: posting to a room needs a
 login that arrives with room support.
 
-**Direct messages.** Written in the shared conversation screen; a strip on top says how the next message travels ("Direct, 2 hops via
-a1b2 then c3d4", or "No saved route yet. The first message floods..."). A new contact is reached by flood; the radio learns the
+**Direct messages.** Written in the shared conversation screen; its title says how the next message travels (Direct, Via N repeaters,
+Searching, No route yet). A new contact is reached by flood; the radio learns the
 route from the reply and later messages go direct. Delivery under each message: Waiting to send, Sending, Sent waiting for the
 reply, Delivered in 2.4 s, Not delivered. Tries: 3 by flood, 5 along a saved route (the last one floods and the saved route is
 cleared). A message that gets no acknowledgement says why ("No acknowledgement after 3 tries ... The repeater path to them may have

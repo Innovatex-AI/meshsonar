@@ -3,9 +3,6 @@
 // content as slivers under them. Chats is the default segment and a cold launch always opens it; the chosen segment is
 // remembered for the session only.
 //
-// Behind the `chatRedesign` flag (AppFlags, More > Developer; ON by default, the switch is the escape hatch): with it off the old Contacts | Channels tab
-// ([LegacyChatTab]) is shown and nothing here runs.
-//
 // Wide screens (>= 900 dp of tab width, Split View and Stage Manager included) keep the two-column layout: this shell in a
 // 380 dp sidebar and the open conversation in a detail column ([ConversationPaneScope]).
 import 'dart:ui' show ImageFilter;
@@ -19,22 +16,17 @@ import '../chat/conversation_screen.dart' show ConversationPaneScope;
 import '../design/app_haptics.dart';
 import '../design/app_symbols.dart';
 import '../design/app_widgets.dart';
-import '../../app/app_flags.dart';
 import '../design/state_views.dart';
 import '../design/tokens.dart';
 import '../drive/drive_controls.dart' show openConnect;
 import 'chat_tab_host.dart';
-import 'chat_tab_legacy.dart';
 
 enum ChatShellSegment { chats, contacts, network }
 
 class ChatTab extends StatelessWidget {
   const ChatTab({super.key});
   @override
-  Widget build(BuildContext context) => ValueListenableBuilder<bool>(
-        valueListenable: AppFlags.chatRedesignNotifier,
-        builder: (context, on, _) => on ? const RedesignedChatTab() : const LegacyChatTab(),
-      );
+  Widget build(BuildContext context) => const RedesignedChatTab();
 }
 
 class RedesignedChatTab extends StatefulWidget {

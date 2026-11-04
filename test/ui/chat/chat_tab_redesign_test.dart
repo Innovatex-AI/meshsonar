@@ -1,5 +1,4 @@
-// The redesigned Chat tab (WP2): shell, Chats list, Network shell. Everything runs with the chatRedesign flag on; the flag-off
-// path is covered by the existing chat tests.
+// The redesigned Chat tab (WP2): shell, Chats list, Network shell.
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart' show CustomSemanticsAction;
@@ -12,7 +11,6 @@ import 'package:meshsonar/ui/chat/chats_list_view.dart' show ChatsSkeleton;
 import 'package:meshsonar/ui/chat/conversation_screen.dart';
 import 'package:meshsonar/ui/design/app_surfaces.dart';
 import 'package:meshsonar/ui/design/app_widgets.dart' show MemoryTipStore, appTipStore;
-import 'package:meshsonar/app/app_flags.dart';
 import 'package:meshsonar/ui/shell/chat_tab.dart';
 import 'package:meshsonar/ui/shell/chat_tab_host.dart';
 import 'package:meshsonar/ui/theme.dart';
@@ -34,7 +32,6 @@ void main() {
   setUp(() {
     kit = ChatKit();
     h = Harness();
-    AppFlags.chatRedesign = true;
     RedesignedChatTabState.resetSession();
     appTipStore = MemoryTipStore();
     ChatWiring.controller.value = kit.controller;
@@ -44,7 +41,6 @@ void main() {
   tearDown(() {
     ChatTabHost.provider.value = null;
     ChatWiring.controller.value = null;
-    AppFlags.chatRedesign = false;
     provider?.dispose();
     kit.dispose();
     dismissAppToast();
@@ -78,10 +74,6 @@ void main() {
     kit.service.send(radioId: radioA, convKey: ConvKey.dm(bobKey), text: 'on my way');
   }
 
-  test('the redesigned Chat tab is the production default (the Developer switch is the escape hatch)', () {
-    expect(AppFlags.chatRedesignDefault, isTrue);
-  });
-
   group('shell', () {
     testWidgets('Chats is the default segment, the title, ✎ and the segments are there; one tap opens a conversation', (tester) async {
       await seed();
@@ -114,14 +106,6 @@ void main() {
       RedesignedChatTabState.resetSession();
       await pumpTab(tester);
       expect(find.text('Ohio'), findsOneWidget);
-    });
-
-    testWidgets('flag off shows the old Contacts | Channels tab', (tester) async {
-      AppFlags.chatRedesign = false;
-      await seed();
-      await pumpTab(tester);
-      expect(find.text('Channels'), findsOneWidget);
-      expect(find.byKey(const Key('chat-new')), findsNothing);
     });
 
     testWidgets('the New button opens the New chat sheet; New message goes to Contacts', (tester) async {

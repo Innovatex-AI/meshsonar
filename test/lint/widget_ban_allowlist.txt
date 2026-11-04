@@ -1,7 +1,4 @@
 # Allow-list of current offenders (see widget_ban_test.dart). It may only shrink. Format: path|pattern|count
-lib/ui/chat/channels_view.dart|FilledButton|2
-lib/ui/chat/channels_view.dart|Icons.|11
-lib/ui/chat/channels_view.dart|TextButton|2
 lib/ui/chat/chat_banner_host.dart|Icons.|1
 lib/ui/chat/chat_banner_host.dart|InkWell(|1
 lib/ui/chat/chat_drive_sheet.dart|Icons.|4
@@ -10,7 +7,6 @@ lib/ui/chat/chat_search_screen.dart|Divider(|1
 lib/ui/chat/chat_search_screen.dart|Icons.|2
 lib/ui/chat/chat_search_screen.dart|ListTile(|1
 lib/ui/chat/chat_search_screen.dart|TextField(|1
-lib/ui/chat/chat_tab_provider.dart|Icons.|2
 lib/ui/contacts/add_contact_screen.dart|Card(|1
 lib/ui/contacts/add_contact_screen.dart|FilledButton|2
 lib/ui/contacts/add_contact_screen.dart|Icons.|6
@@ -40,7 +36,6 @@ lib/ui/radios/repeater_admin/admin_access_view.dart|Icons.|8
 lib/ui/radios/repeater_admin/admin_access_view.dart|ListTile(|4
 lib/ui/radios/repeater_admin/admin_access_view.dart|TextButton|2
 lib/ui/radios/repeater_admin/admin_access_view.dart|TextField(|1
-lib/ui/radios/repeater_admin/admin_common.dart|Card(|1
 lib/ui/radios/repeater_admin/admin_common.dart|FilledButton|2
 lib/ui/radios/repeater_admin/admin_common.dart|Icons.|11
 lib/ui/radios/repeater_admin/admin_common.dart|TextButton|2
@@ -48,11 +43,6 @@ lib/ui/radios/repeater_admin/admin_common.dart|TextField(|1
 lib/ui/radios/repeater_admin/admin_console_view.dart|CircularProgressIndicator|1
 lib/ui/radios/repeater_admin/admin_console_view.dart|Icons.|1
 lib/ui/radios/repeater_admin/admin_console_view.dart|TextField(|1
-lib/ui/radios/repeater_admin/admin_login_view.dart|CircularProgressIndicator|1
-lib/ui/radios/repeater_admin/admin_login_view.dart|FilledButton|2
-lib/ui/radios/repeater_admin/admin_login_view.dart|Icons.|4
-lib/ui/radios/repeater_admin/admin_login_view.dart|SwitchListTile(|1
-lib/ui/radios/repeater_admin/admin_login_view.dart|TextField(|1
 lib/ui/radios/repeater_admin/admin_neighbours_view.dart|Card(|1
 lib/ui/radios/repeater_admin/admin_neighbours_view.dart|CircularProgressIndicator|1
 lib/ui/radios/repeater_admin/admin_neighbours_view.dart|Icons.|3
@@ -69,15 +59,9 @@ lib/ui/radios/repeater_admin/admin_settings_view.dart|FilledButton|2
 lib/ui/radios/repeater_admin/admin_settings_view.dart|Icons.|15
 lib/ui/radios/repeater_admin/admin_settings_view.dart|ListTile(|2
 lib/ui/radios/repeater_admin/admin_settings_view.dart|TextButton|2
-lib/ui/radios/repeater_admin/repeater_admin_screen.dart|Icons.|6
 lib/ui/radios/repeater_admin/setting_editor_sheet.dart|CircularProgressIndicator|2
 lib/ui/radios/repeater_admin/setting_editor_sheet.dart|FilledButton|6
 lib/ui/radios/repeater_admin/setting_editor_sheet.dart|Icons.|10
 lib/ui/radios/repeater_admin/setting_editor_sheet.dart|SwitchListTile(|1
 lib/ui/radios/repeater_admin/setting_editor_sheet.dart|TextButton|2
 lib/ui/radios/repeater_admin/setting_editor_sheet.dart|TextField(|5
-lib/ui/radios/rooms/room_join_header.dart|CircularProgressIndicator|1
-lib/ui/radios/rooms/room_join_header.dart|FilledButton|2
-lib/ui/radios/rooms/room_join_header.dart|Icons.|1
-lib/ui/radios/rooms/room_join_header.dart|TextButton|4
-lib/ui/radios/rooms/room_join_header.dart|TextField(|1

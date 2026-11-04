@@ -1,4 +1,4 @@
-// Replaces RoomJoinHeader when chatRedesign is on (chat plan 4.2 / 4.9). One thin bar above a room's conversation:
+// The room join bar (chat plan 4.2 / 4.9; replaced the old RoomJoinHeader). One thin bar above a room's conversation:
 //   not joined -> [Log in to post]  opens the login sheet (the same sheet as a repeater's)
 //   joined     -> "Joined" / "Joined as admin" / "Joined, read only" and, for an admin, [Manage]
 // A room only pushes its posts to radios that logged in, so the bar says so in one line. Joining is the room login (the room then

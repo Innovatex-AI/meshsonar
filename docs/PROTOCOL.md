@@ -663,6 +663,21 @@ room acknowledges it and echoes it to everyone. The room password gives read and
 on anyone logs in as a read-only guest who gets neither an ack nor the right to post. `RemoteLogin.aclPermissions` carries the stored role
 (login push byte 12).
 
+## 13. Chat redesign frames (Nov 2026)
+
+Firmware-derived, with spikes S1 to S14 recorded in `docs/protocol/chat-spikes-2026-11.md` (captures still pending for those marked so).
+
+- **Path discovery (CMD 52, push 0x8D).** `CMD 52 [0][pubkey 32]` sends a flood telemetry request; reply `RESP_CODE_SENT [flood][tag][est_timeout]`;
+  result push `0x8D [0][pubkey prefix 6][out_path_len][out_path][in_path_len][in_path]`, each length byte packed (hash size in the top two bits).
+  It only matches the pending tag and there is no timeout push, so "no answer" is the app's own timer. Used by Ping on a person and by Find a route now.
+- **Trace ping.** A repeater, room or sensor is pinged by a trace along the saved route; the result carries SNR per hop.
+- **Device settings.** Encoders and decoders for commands 19, 23, 24, 37, 51, 61 and 66 and replies 14 and 29 (auto-add by type, max hops, telemetry
+  permissions, advert location, path hash size, PIN, backup export and import, companion CLI). Every write is read back.
+- **Remote requests.** Login, status, telemetry, neighbours, access list, CLI and anonymous requests share the per-radio `RemoteRequestQueue`
+  (see ARCHITECTURE). A wrong password answers 0x86; a repeater that stays silent is `noReply`, shown as "No reply after N s".
+- **Set path.** ADD_UPDATE_CONTACT with a chosen route and the outbox rewrite of a forgotten path are implemented but gated by
+  `AppFlags.routeWriteVerified` (false) until step 7 of the checklist below passes on a real radio.
+
 ## Hardware checklist: chat redesign
 
 Fourteen steps for a real radio (each says the expected result). Run in subsets at each wave gate; all of them before release.

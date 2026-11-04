@@ -334,7 +334,24 @@ use `settleLive` instead of `pumpAndSettle` on a drive screen.
 kept alive in an `IndexedStack` (Map always, others built on first visit) under one `GlobalKey`d content column so rotating
 between bar and rail keeps every tab's state. The More tab has its own `Navigator` (and corrects `MediaQuery.size` for it).
 `MiniDriveBar` reads `AppState` (status, pingCount, heardCount, recentPings, `pingsPaused`) and nothing else. Chat plugs in
-through `ChatTabHost.provider` (a `ChatTabProvider`); the shell never imports `lib/chat`.
+through `ChatTabHost.provider` (a `ChatTabProvider`); the shell never imports `lib/chat`. The Chat tab (`chat_tab.dart`) is the one redesigned
+shell (Chats | Contacts | Network, two columns from 900 pt); the former `chatRedesign` flag and the old Contacts | Channels tab were deleted in Chat WP15.
+`AppFlags` keeps only `driveRedesign` and `routeWriteVerified`.
+
+#### Chat redesign structure (Nov 2026)
+
+- `lib/ui/design/` is the shared foundation: tokens, `AppType` (SF Pro only), the popup helpers (`showAppSheet`, `showAppAlert`,
+  `showAppActionSheet`, `showAppToast`, with the drive guard), `AppSymbols` (the one icon manifest), `AppHaptics`, state views, `TipCard`,
+  `ChatStatusBanner`, sparkline and hop-chain painters. `test/lint/widget_ban_test.dart` bans `AlertDialog`, `showDialog`, `PopupMenuButton`,
+  `showSnackBar`, `showModalBottomSheet` and Material widgets in Chat folders against `widget_ban_allowlist.txt`, which only shrinks.
+- `lib/radio/remote_request_queue.dart`: every request to another node (login, status, telemetry, neighbours, access list, CLI, anonymous) goes
+  through one queue per radio: one in flight, user requests ahead of background ones (auto-refresh is dropped when busy), silence ends as `noReply`,
+  a login is never auto-retried, the Rx log is paused while a request is out. `lib/radio/caps.dart` (`RadioCaps`, `RemoteCaps`) gates features by
+  firmware and permission; `rx_facts.dart` correlates the 0x88 rx log with incoming messages (RSSI, hop hashes, time on air); `path_tools.dart` and
+  `login_outcome.dart` hold route and login results.
+- Database v3 (see DATA_MODEL): path modes, ping and stats history, message radio facts, manual unread.
+- Routes: `ui/contacts/path_manager_screen.dart` is the Route screen, `route_picker_page.dart` the (hidden) choose-repeaters flow; Ping and Stats
+  sheets are `profile_sheets.dart` and `user_stats_sheet.dart`.
 
 ### Alerts (`lib/alerts/`, `lib/platform/local_notifications*.dart`, wave 2C)
 
@@ -363,7 +380,8 @@ are in `repeater_wire.dart`, the health check in `repeater_health.dart`, rooms i
 `admin_password_vault.dart` (memory, plus the Keychain only on opt-in).
 
 The UI side is one `RepeaterAdminController` (a `ChangeNotifier` holding the session and what each tab last read) behind
-`RepeaterAdminScreen` (login, then Overview / Settings / Neighbours / Regions / Access / Console) and one editor sheet for every change
+`RepeaterDashboardScreen` (one scrolling page; login is the `login_sheet.dart` sheet; the Overview / Settings / Neighbours / Regions / Access / Console
+views are its drill-in pages) and one editor sheet for every change
 (`setting_editor_sheet.dart`). `admin_launcher.dart` builds the controller from `AppState.radioSession`; screens never touch the radio.
 Tests run the whole stack against `test/support/repeater_admin_fake.dart` (a fake companion and repeater that reproduce the measured
 behaviour: silence, the replay rule, loss, caps, prefix matching, the blank-password re-admit, rate limits).
@@ -383,8 +401,8 @@ behaviour: silence, the replay rule, loss, caps, prefix matching, the blank-pass
 | `chat/channel_admin.dart` | chat | Join Public / # / private / link, create, rename, delete, share link, `syncFromRadio` (slot conflicts, wardrive channel -> System). Radio first, phone second; every failure a plain sentence. `ChannelRadio` seam, `SessionChannelRadio` in `session_adapter.dart`. |
 | `chat/passenger_lock.dart` | chat | Composer lock above 8 km/h (unlock below 6) while driving; "I'm a passenger" per drive; stale or missing speed never locks. |
 | `ui/chat/conversation_screen.dart` | ui | `ConversationScreen` for channels, DMs and rooms (paged list, day headers, unread marker, delivery chips, search, long-press actions); `embedded` for the drive sheet. Parts: `composer.dart`, `message_bubble.dart`, `message_sheets.dart`, `message_format.dart`. |
-| `ui/chat/channels_view.dart`, `channel_detail_screen.dart`, `channel_flows.dart`, `qr_widgets.dart` | ui | Channels list + System section + traffic, channel info (QR, link, notify, pin, region, rename, delete), add-channel flows, QR show (`package:qr`) and scan (`mobile_scanner`, camera only on that screen). |
-| `ui/chat/chat_tab_provider.dart`, `contacts_view.dart`, `chat_search_screen.dart`, `chat_drive_sheet.dart`, `chat_banner_host.dart`, `chat_row.dart` | ui | The Chat tab provider (Contacts seam `contactsBuilder`), read-only real contacts, global search, Chat-in-Drive sheet, in-app banners, shared list row. |
+| `ui/chat/channel_detail_screen.dart`, `channel_flows.dart`, `qr_widgets.dart` | ui | Channel info (QR, link, notify, pin, region, rename, delete), add-channel flows, QR show (`package:qr`) and scan (`mobile_scanner`, camera only on that screen). |
+| `ui/chat/chat_tab_provider.dart`, `chats_list_view.dart`, `network_view.dart`, `new_chat_sheet.dart`, `chat_search_screen.dart`, `chat_drive_sheet.dart`, `chat_banner_host.dart`, `chat_row.dart` | ui | The Chat tab provider (Chats / Contacts / Network slivers for the shell), the Chats list, the Network lists and radio card, the New chat sheet, global search, Chat-in-Drive sheet, in-app banners, shared list row. |
 | `chat/models.dart` | chat (pure Dart) | `Contact`, `Channel` (`ChannelKind` public/hashtag/private/system), `ChatMessage` + `MessageState` + `FailReason`, `ConversationSummary`, `ConvKey`, `dedupeKeyFor`, hex helpers. |
 | `chat/chat_service.dart` | chat | `ChatService`: the one API the UI uses. Inbound (persist, then notify; idempotent), send, unread/mute/pin/drafts, search, retention, delete, system-channel stats, link import. |
 | `chat/outbox.dart` | chat | `Outbox` + `RetryPolicy`: queued sends, DM retries (flood/direct), ACK matching, give-up reasons, restart recovery. No timers inside; `ChatService` pumps it. |
@@ -392,7 +410,7 @@ behaviour: silence, the replay rule, loss, caps, prefix matching, the blank-pass
 | `chat/session_adapter.dart` | chat | The small adapter from `RadioSession` (lib/radio) to the bridge and to `ContactRadioPort`; the chat file that talks to lib/radio. |
 | `chat/contact_manager.dart`, `chat/contact_port.dart` | chat | `ContactManager` (`ChatService.contacts`): the phone-is-master contact book, incremental resumable sync, New nodes nearby, table-full handling, `ensureOnRadio` before a DM, add by link / key / nearby, removal that survives an absent radio, the ask-before-adding policy. `ContactRadioPort` is the radio as it needs it. |
 | `chat/delivery_text.dart` | chat | The words for a DM's delivery state, failure reason and route. |
-| `ui/contacts/*` | ui | The Contacts screens: `ContactsController` (lists, filters, search from `ChatService.contacts`), `ContactsView` (+ `ContactTile`, nearby rows), `ContactsTab` (builds the controller, opens a DM in `ConversationScreen` with `DmRouteHeader`), `ContactProfileScreen` (+ `contact_edit_sheet`, `profile_sheets`, `profile_tiles`, `profile_widgets`), `AddContactScreen`, `QrScanScreen` (the one camera screen, channels use it too), `RadioListSheet`, `ContactsSettingsSheet`, `MessageDetails` (long-press > Details for any message). |
+| `ui/contacts/*` | ui | The Contacts screens: `ContactsController` (lists, filters, search from `ChatService.contacts`), `ContactsView` (+ `ContactTile`, nearby rows), `ContactsTab` (builds the controller, opens a DM or room in `ConversationScreen`, rooms with the `RoomJoinBar`), `ContactProfileScreen` (+ `contact_edit_sheet`, `profile_sheets`, `profile_tiles`, `profile_widgets`), `AddContactScreen`, `QrScanScreen` (the one camera screen, channels use it too), `RadioListSheet`, `ContactsSettingsSheet`, `MessageDetails` (long-press > Details for any message). |
 | `chat/store.dart`, `chat/db/*` | chat | `ChatStore` and the repositories over `package:sqlite3`; `migrations.dart` is the versioned schema. |
 | `chat/backup.dart`, `chat/backup_crypto.dart` | chat | `ChatBackup` export/import (JSON, zip, passphrase-encrypted) of the user's own chat data. |
 | `chat/mesh_links.dart`, `chat/channel_secret.dart` | chat | `meshcore://` channel/contact/advert links; Public and hashtag channel keys. |
