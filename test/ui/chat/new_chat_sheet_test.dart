@@ -25,6 +25,7 @@ import 'package:meshsonar/ui/theme.dart';
 
 import '../fakes.dart' show Harness;
 import 'chat_kit.dart';
+import '../../support/semantics_audit.dart';
 
 const Size phone = Size(393, 1700); // tall: the sheet opens at half height and its list builds lazily
 const Size ipad = Size(1024, 768);
@@ -55,7 +56,7 @@ void main() {
     dismissAppToast();
   });
 
-  Future<void> pumpTab(WidgetTester tester, {Size size = phone}) async {
+  Future<void> pumpTab(WidgetTester tester, {Size size = phone, double scale = 1.0}) async {
     tester.view.physicalSize = size * 3;
     tester.view.devicePixelRatio = 3.0;
     addTearDown(tester.view.reset);
@@ -65,6 +66,7 @@ void main() {
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: meshSonarTheme(Brightness.light).copyWith(platform: TargetPlatform.iOS),
+        builder: (context, child) => MediaQuery(data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(scale)), child: child!),
         home: const Scaffold(body: ChatTab()),
       ),
     ));
@@ -81,6 +83,25 @@ void main() {
     await tester.pumpAndSettle();
     await tester.pump(const Duration(seconds: 5));
   }
+
+  // WP14: the sheet at AX2 and AX5 on every shipped width (sheets use the full height at these sizes).
+  group('AX2 / AX5 matrix', () {
+    for (final size in const [Size(393, 852), Size(375, 667), Size(744, 1133), Size(1024, 768)]) {
+      for (final scale in [2.0, 3.1]) {
+        testWidgets('New chat sheet at ${size.width.toInt()} wide, text ${scale}x', (tester) async {
+          final sem = tester.ensureSemantics();
+          await pumpTab(tester, size: size, scale: scale);
+          await openSheet(tester);
+          expect(tester.takeException(), isNull);
+          expect(find.byKey(const Key('new-cancel')), findsOneWidget);
+          expectHeader(tester);
+          sem.dispose();
+          await expectLater(tester, meetsGuideline(iOSTapTargetGuideline));
+          await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+        });
+      }
+    }
+  });
 
   group('sheet', () {
     testWidgets('the New button opens it; every entry is there; Cancel closes it', (tester) async {

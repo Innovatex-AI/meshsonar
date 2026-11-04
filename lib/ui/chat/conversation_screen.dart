@@ -20,6 +20,7 @@ import 'package:flutter/semantics.dart' show SemanticsService;
 
 import '../../app/chat_controller.dart';
 import '../../chat/bubble_grouping.dart';
+import '../../chat/chat_copy.dart';
 import '../../chat/db/message_repository.dart';
 import '../../chat/delivery_state.dart';
 import '../../chat/events.dart';
@@ -694,7 +695,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
       return _Empty(symbol: AppSymbols.magnifyingglass, title: 'Search this conversation', body: 'Type a word to find it in the messages kept on this phone.');
     }
     if (_results.isEmpty) {
-      return _Empty(symbol: AppSymbols.magnifyingglass, title: 'Nothing found', body: 'No message here contains "${_query.text.trim()}". Check the spelling or try a shorter word.');
+      return _Empty(symbol: AppSymbols.magnifyingglass, title: noMatchesTitle(_query.text), body: noMatchesTextBody);
     }
     return ListView.builder(
       key: const Key('conv-search-results'),
@@ -733,7 +734,8 @@ class _ConversationScreenState extends State<ConversationScreen> {
     return Column(
       children: [
         if (widget.header != null) widget.header!,
-        if (_msgs.isNotEmpty)
+        // The tip needs room: not at large text sizes or on short screens, where the composer already takes the height.
+        if (_msgs.isNotEmpty && MediaQuery.textScalerOf(context).scale(17) <= 17 * 1.3 && MediaQuery.sizeOf(context).height >= 600)
           const TipCard(
             tipId: 'conv-details-tip',
             symbol: AppSymbols.infoCircle,

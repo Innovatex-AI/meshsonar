@@ -306,7 +306,7 @@ enum FailReason {
   cancelled;
 
   String describe() => switch (this) {
-        FailReason.noAck => 'No acknowledgement after every try. They may be out of range or switched off, or the repeater path to them may have changed.',
+        FailReason.noAck => 'No acknowledgement after every try. They may be out of range or switched off, or the route to them may have changed.',
         FailReason.radioRejected => 'The radio refused the message.',
         FailReason.radioBusy => 'The radio stayed busy and the message could not be sent.',
         FailReason.notConnected => 'The radio was not connected for too long.',

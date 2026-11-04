@@ -73,7 +73,7 @@ Future<void> handleMeshLink(BuildContext context, ChatController controller, Str
         message:
             '${kind == ChannelKind.private ? 'This is a private channel. Everyone who has this link can read it.' : 'This is an open channel. Anyone who types the same name can read it.'}'
             '${p.regionScope != null ? '\n\nIt is limited to the region "${p.regionScope}".' : ''}'
-            '\n\nIt uses one of your radio\'s channel slots.',
+            '\n\nIt uses up one of the channel spaces on your radio.',
         confirmLabel: 'Join',
         cancelLabel: 'Not now',
         dialogKey: const Key('join-link-dialog'),

@@ -13,6 +13,7 @@ import 'package:flutter/semantics.dart' show CustomSemanticsAction;
 import 'package:flutter_slidable/flutter_slidable.dart';
 
 import '../../app/chat_controller.dart';
+import '../../chat/chat_copy.dart';
 import '../../chat/contact_manager.dart' show SyncPhase;
 import '../../chat/conversation_row.dart';
 import '../../chat/models.dart';
@@ -139,7 +140,7 @@ class _ChatsListViewState extends State<ChatsListView> {
         child: AppEmptyView(
           key: const Key('chats-no-results'),
           symbol: AppSymbols.magnifyingglass,
-          title: 'No matches for “${widget.query.trim()}”',
+          title: noMatchesTitle(widget.query),
           message: 'Try a shorter name, or search the text of every message.',
           actionLabel: 'Search messages instead',
           onAction: () => ChatSearchScreen.open(context, _c),

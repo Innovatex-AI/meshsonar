@@ -15,12 +15,14 @@ import 'package:meshsonar/ui/contacts/path_manager_screen.dart';
 import 'package:meshsonar/ui/contacts/route_picker_page.dart';
 import 'package:meshsonar/ui/design/hop_chain.dart';
 import 'package:meshsonar/ui/theme.dart';
+import 'package:meshsonar/ui/tools/ping_result_sheet.dart' show showPingOptions;
 
 import '../../chat/contact_support.dart';
 import '../../chat/support.dart';
 import '../../support/tools_rig.dart';
 import 'contacts_ui_support.dart' hide testWidgetsT;
 import 'contacts_ui_support.dart' as support show testWidgetsT;
+import '../../support/semantics_audit.dart';
 
 String hashKey(String first) => first + 'ee' * (32 - first.length ~/ 2);
 
@@ -162,7 +164,7 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
       await tester.pump(const Duration(seconds: 50));
       await tester.pump(const Duration(seconds: 1));
-      expect(find.text('Not heard. Out of range, path stale, or the radio is busy.'), findsOneWidget);
+      expect(find.text('Not heard. Out of range, route out of date, or the radio is busy.'), findsOneWidget);
       expect(c(keyN(1)).lastPingOk, isFalse);
       expect(rig.store.pingResults.list(keyN(1)).first.failReason, 'noReply');
     });
@@ -189,6 +191,27 @@ void main() {
       expect(find.text('1 byte'), findsOneWidget);
     });
 
+    // WP14: AX2 and AX5 at 393 / 375 / 744 / 1024 wide: no overflow, iOS tap targets, labelled targets.
+    for (final (w, h) in [(393.0, 852.0), (375.0, 667.0), (744.0, 1133.0), (1024.0, 768.0)]) {
+      for (final scale in [2.0, 3.1]) {
+        testWidgetsT('Route screen at ${w.toInt()} wide, text ${scale}x', (tester) async {
+          await withRoute();
+          final sem = tester.ensureSemantics();
+          setScreen(tester, w: w, h: h, scale: scale);
+          await tester.pumpWidget(MaterialApp(
+            theme: meshSonarTheme(Brightness.light).copyWith(platform: TargetPlatform.iOS),
+            home: PathManagerScreen(manager: rig.chat.contacts, publicKey: keyN(1), changes: rig.controller, tools: tools),
+          ));
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          expectHeader(tester);
+          sem.dispose();
+          await expectLater(tester, meetsGuideline(iOSTapTargetGuideline));
+          await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+        });
+      }
+    }
+
     testWidgetsT('dark and AX text lay out without overflow', (tester) async {
       await withRoute();
       setScreen(tester, scale: 2.0);
@@ -199,6 +222,29 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       expect(find.byType(HopChain), findsOneWidget);
+    });
+  });
+
+  group('Ping options (long press on the Ping tile)', () {
+    testWidgetsT('the sheet offers Ping, Direct only and the 2 and 3 byte ID sizes; a choice runs the ping sheet', (tester) async {
+      rig.store.contacts.upsert(repeater('a1', 'Ridge'));
+      rig.store.db.putSetting('ping_airtime_ack', '1');
+      setScreen(tester);
+      final ridge = c(hashKey('a1'));
+      await tester.pumpWidget(MaterialApp(
+        theme: meshSonarTheme(Brightness.light),
+        home: Builder(builder: (ctx) => Scaffold(body: TextButton(key: const Key('open'), onPressed: () => showPingOptions(ctx, contact: ridge, manager: rig.chat.contacts, tools: tools), child: const Text('x')))),
+      ));
+      await tester.tap(find.byKey(const Key('open')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('ping-options')), findsOneWidget);
+      expect(find.text('Direct only'), findsOneWidget);
+      expect(find.text('Direct only, 2-byte IDs'), findsOneWidget);
+      expect(find.text('Direct only, 3-byte IDs'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('ping-opt-direct-2')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.textContaining('Ping Ridge'), findsWidgets);
     });
   });
 

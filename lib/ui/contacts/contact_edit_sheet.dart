@@ -109,7 +109,7 @@ class _ContactEditSheetState extends State<ContactEditSheet> {
       }
       return null;
     } on ContactTableFull {
-      return 'The radio\'s contact list is full and every contact on it is a favourite or in use. Free a slot in Contacts first.';
+      return 'The radio\'s contact list is full and every contact on it is a favourite or in use. Free some room in Contacts first.';
     } on RadioUnavailable {
       return 'The radio is not connected. Connect it and try again.';
     } catch (_) {

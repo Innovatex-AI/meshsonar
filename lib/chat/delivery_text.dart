@@ -44,21 +44,21 @@ String describeFailure(ChatMessage m, List<DeliveryAttempt> attempts) {
   final n = attempts.isEmpty ? m.attempt : attempts.length;
   final direct = attempts.where((a) => a.route == Route.direct).length;
   if (direct == 0) {
-    return 'No acknowledgement after ${_tries(n)}, each flooded through the mesh. They may be out of range or switched off, '
+    return 'No acknowledgement after ${_tries(n)}, each sent to everyone nearby. They may be out of range or switched off, '
         'or there may be no repeater between you. Try again later, or check the contact is still on air.';
   }
-  return 'No acknowledgement after ${_tries(n)}: $direct along the saved route and the rest flooded. '
-      'The repeater path to them may have changed. The saved route was cleared, so the next message floods and finds a new one.';
+  return 'No acknowledgement after ${_tries(n)}: $direct along the saved route and the rest to everyone nearby. '
+      'The route to them may have changed. The saved route was cleared, so the next message searches for a new one.';
 }
 
 /// "Direct, 2 hops via a1b2 then c3d4" / "Flooded" / "Neighbour (direct, no repeater)".
 String describeRoute(Contact c) {
-  if (!c.hasPath) return 'No saved route: the first message floods, and the radio learns the route from the reply';
+  if (!c.hasPath) return 'No saved route: the first message searches, and the radio learns the route from the reply';
   final hops = c.pathHops ?? 0;
   if (hops == 0) return 'Direct neighbour, no repeater in between';
   final ids = c.routeIds;
   final via = ids.isEmpty ? '' : ' via ${ids.join(' then ')}';
-  return 'Direct, $hops ${hops == 1 ? 'hop' : 'hops'}$via';
+  return 'Via $hops ${hops == 1 ? 'repeater' : 'repeaters'}$via';
 }
 
 String _clock(int ms) {
@@ -71,7 +71,7 @@ String _clock(int ms) {
 /// after 1.8 s". [last] marks the newest try: while the message is still moving it reads "waiting for the reply".
 ({String text, bool acked}) describeAttempt(DeliveryAttempt a, int n, ChatMessage m, {required bool last}) {
   final acked = m.state == MessageState.acked && a.expectedAck != null && a.expectedAck == m.expectedAck;
-  final route = a.route == Route.flood ? 'flooded' : 'saved route';
+  final route = a.route == Route.flood ? 'searched' : 'saved route';
   final String outcome;
   if (acked) {
     outcome = m.ackMs == null ? 'acknowledged' : 'acknowledged after ${_seconds(m.ackMs!)}';

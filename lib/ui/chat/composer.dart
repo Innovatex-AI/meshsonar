@@ -450,10 +450,13 @@ class _LockedComposer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = AppColors.of(context);
+    // At the largest text sizes the notice is taller than the room under the messages: cap it and let it scroll.
     return Container(
       key: const Key('composer-locked'),
       color: c.surfaceHigh,
-      child: SafeArea(
+      constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.45),
+      child: SingleChildScrollView(
+        child: SafeArea(
         top: false,
         child: Padding(
           padding: const EdgeInsets.all(Gap.m),
@@ -476,6 +479,7 @@ class _LockedComposer extends StatelessWidget {
             ],
           ),
         ),
+      ),
       ),
     );
   }

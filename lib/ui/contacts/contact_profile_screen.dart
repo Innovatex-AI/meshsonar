@@ -266,7 +266,7 @@ class _ContactProfileScreenState extends State<ContactProfileScreen> {
       child: Column(children: [
         ContactAvatar(c, size: 88),
         const SizedBox(height: Gap.m),
-        Text(c.displayName, key: const Key('contact-name'), textAlign: TextAlign.center, style: AppType.title2.copyWith(color: col.textPrimary)),
+        Semantics(header: true, child: Text(c.displayName, key: const Key('contact-name'), textAlign: TextAlign.center, style: AppType.title2.copyWith(color: col.textPrimary))),
         if (custom) Text('Advertises as ${c.name}', textAlign: TextAlign.center, style: AppType.footnote.copyWith(color: col.textMuted)),
         const SizedBox(height: 2),
         Text('${contactTypeLabel(c.type)} · ${routeCaption(c)}',
@@ -283,7 +283,7 @@ class _ContactProfileScreenState extends State<ContactProfileScreen> {
       return ProfileRow(key: const Key('contact-no-position'), label: 'Location', value: 'Not shared');
     }
     final coords = '${c.lat!.toStringAsFixed(5)}, ${c.lon!.toStringAsFixed(5)}';
-    final when = adv == null ? 'their last advert' : 'their last advert, ${_ago(now - adv * 1000)}';
+    final when = adv == null ? 'when they last announced themselves' : 'when they last announced themselves, ${_ago(now - adv * 1000)}';
     return Semantics(
       button: true,
       label: 'Location on map. Opens the Map tab. Position from $when',
@@ -423,7 +423,7 @@ class _ContactProfileScreenState extends State<ContactProfileScreen> {
       final ok = await _m.shareToNearbyRadios(c.publicKey);
       _say(ok
           ? 'Sent. Only radios within direct range can hear it.'
-          : 'Your radio has no stored advert for this contact, so it cannot send it. Share the link or QR code instead.');
+          : 'Your radio has no stored announcement from this contact, so it cannot send it. Share the link or QR code instead.');
     } on RadioUnavailable {
       _say('The radio is not connected. Connect it and try again.');
     } catch (_) {
@@ -436,7 +436,7 @@ class _ContactProfileScreenState extends State<ContactProfileScreen> {
       await _m.ensureOnRadio(c.publicKey);
       _say('${c.displayName} is on the radio now.');
     } on ContactTableFull {
-      _say('The radio\'s contact list is full and every contact on it is a favourite or in use. Free a slot in Contacts first.');
+      _say('The radio\'s contact list is full and every contact on it is a favourite or in use. Free some room in Contacts first.');
     } on RadioUnavailable {
       _say('The radio is not connected. Connect it and try again.');
     } catch (_) {

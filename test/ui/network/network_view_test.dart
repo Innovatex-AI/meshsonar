@@ -16,6 +16,7 @@ import 'package:meshsonar/ui/design/app_surfaces.dart';
 import 'package:meshsonar/ui/theme.dart';
 
 import '../chat/chat_kit.dart';
+import '../../support/semantics_audit.dart';
 
 class _Sink extends SwitchableSink {
   bool up = false;
@@ -172,11 +173,11 @@ void main() {
   });
 
   group('empty states', () {
-    testWidgets('connected: No repeaters heard yet with Send an advert and Discover nearby that work', (tester) async {
+    testWidgets('connected: No repeaters heard yet with Announce myself and Discover nearby that work', (tester) async {
       await pump(tester);
       expect(find.byKey(const Key('network-empty')), findsOneWidget);
       expect(find.text('No repeaters heard yet'), findsOneWidget);
-      expect(find.text('They appear after their next advert.'), findsOneWidget);
+      expect(find.text('They appear after they announce themselves.'), findsOneWidget);
       await tester.tap(find.byKey(const Key('network-empty-advert')));
       await tester.pump();
       expect(radio.announces, [false]);
@@ -373,6 +374,24 @@ void main() {
       h.dispose();
     });
   });
+
+  // WP14: AX2 and AX5 at every shipped width.
+  for (final size in const [Size(393, 852), Size(375, 667), Size(744, 1133), Size(1024, 768)]) {
+    for (final scale in [2.0, 3.1]) {
+      testWidgets('Network at ${size.width.toInt()} wide, text ${scale}x: no overflow, 44 pt targets, labelled', (tester) async {
+        node(1, ContactType.repeater, 'North Ridge');
+        node(2, ContactType.room, 'Club room');
+        final sem = tester.ensureSemantics();
+        await pump(tester, scale: scale, size: size);
+        final ex = tester.takeException();
+        expect(ex, isNull, reason: ex is FlutterError ? ex.diagnostics.map((n) => n.toStringDeep()).join('\n') : '$ex');
+        if (scale < 3) expectHeader(tester); // at AX5 the first section header is below the fold of a lazy sliver
+        sem.dispose();
+        await expectLater(tester, meetsGuideline(iOSTapTargetGuideline));
+        await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+      });
+    }
+  }
 
   testWidgets('AX2 text keeps the card readable with no overflow', (tester) async {
     node(1, ContactType.repeater, 'North Ridge');

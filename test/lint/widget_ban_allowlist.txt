@@ -1,14 +1,4 @@
 # Allow-list of current offenders (see widget_ban_test.dart). It may only shrink. Format: path|pattern|count
-lib/ui/chat/channel_detail_screen.dart|Card(|1
-lib/ui/chat/channel_detail_screen.dart|CircularProgressIndicator|1
-lib/ui/chat/channel_detail_screen.dart|Divider(|1
-lib/ui/chat/channel_detail_screen.dart|FilledButton|2
-lib/ui/chat/channel_detail_screen.dart|Icons.|11
-lib/ui/chat/channel_detail_screen.dart|ListTile(|6
-lib/ui/chat/channel_detail_screen.dart|SegmentedButton|1
-lib/ui/chat/channel_detail_screen.dart|SwitchListTile(|1
-lib/ui/chat/channel_detail_screen.dart|TextButton|2
-lib/ui/chat/channel_detail_screen.dart|TextField(|2
 lib/ui/chat/channels_view.dart|FilledButton|2
 lib/ui/chat/channels_view.dart|Icons.|11
 lib/ui/chat/channels_view.dart|TextButton|2

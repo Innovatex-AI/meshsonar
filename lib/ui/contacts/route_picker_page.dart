@@ -21,7 +21,7 @@ import 'profile_widgets.dart';
 import 'route_nodes.dart';
 
 /// The words for the cap line: "At most 32 repeaters with 2-byte hashes."
-String hopCapText(int hashSize) => 'At most ${maxHopsFor(hashSize)} repeaters with $hashSize-byte hashes.';
+String hopCapText(int hashSize) => 'At most ${maxHopsFor(hashSize)} repeaters with $hashSize-byte hashes.'; // copy-ok: Advanced
 
 class RoutePickerPage extends StatefulWidget {
   final ContactManager manager;
@@ -167,7 +167,7 @@ class _RoutePickerPageState extends State<RoutePickerPage> {
                 Padding(
                   padding: const EdgeInsets.all(Layout.screenMargin),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                    Text('Hash size', style: AppType.footnote.copyWith(color: col.textMuted)),
+                    Text('Hash size', style: AppType.footnote.copyWith(color: col.textMuted)), // copy-ok: Advanced
                     const SizedBox(height: Gap.xs),
                     CupertinoSlidingSegmentedControl<int>(
                       key: const Key('picker-hash-size'),
@@ -287,7 +287,7 @@ class _RoutePickerPageState extends State<RoutePickerPage> {
                 Padding(
                   padding: const EdgeInsets.all(Layout.screenMargin),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                    Text('Advanced: type the hashes', style: AppType.footnote.copyWith(color: col.textMuted)),
+                    Text('Advanced: type the hashes', style: AppType.footnote.copyWith(color: col.textMuted)), // copy-ok: Advanced
                     const SizedBox(height: Gap.xs),
                     CupertinoTextField(
                       key: const Key('picker-text'),

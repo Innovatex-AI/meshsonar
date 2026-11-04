@@ -359,9 +359,9 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
                             key: const Key('notify-mode'),
                             groupValue: mode,
                             children: const {
-                              NotifyMode.all: Padding(padding: EdgeInsets.symmetric(vertical: Gap.s), child: Text('All')),
-                              NotifyMode.mentionsOnly: Padding(padding: EdgeInsets.symmetric(vertical: Gap.s), child: Text('Mentions')),
-                              NotifyMode.muted: Padding(padding: EdgeInsets.symmetric(vertical: Gap.s), child: Text('Muted')),
+                              NotifyMode.all: _Seg('All'),
+                              NotifyMode.mentionsOnly: _Seg('Mentions'),
+                              NotifyMode.muted: _Seg('Muted'),
                             },
                             onValueChanged: (v) {
                               if (v == null) return;
@@ -414,7 +414,7 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
                     InsetRow(
                       key: const Key('details-slot'),
                       title: 'On your radio',
-                      value: ch.slot == null ? 'Not on your radio right now' : 'Slot ${ch.slot}',
+                      value: ch.slot == null ? 'Not on your radio right now' : 'Slot ${ch.slot}', // copy-ok: Details disclosure
                       chevron: false,
                     ),
                 ]),
@@ -425,4 +425,12 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
       ),
     );
   }
+}
+
+/// One label of the notification segments: 50 pt tall so each segment is a 48+ pt target.
+class _Seg extends StatelessWidget {
+  final String label;
+  const _Seg(this.label);
+  @override
+  Widget build(BuildContext context) => ConstrainedBox(constraints: const BoxConstraints(minHeight: 50), child: Center(child: Text(label)));
 }

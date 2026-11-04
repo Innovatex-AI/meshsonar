@@ -662,3 +662,22 @@ companion queues it as `CONTACT_MSG_RECV_V3` with the 4-byte signer prefix. A po
 room acknowledges it and echoes it to everyone. The room password gives read and write, the admin password admin, and with `allow.read.only`
 on anyone logs in as a read-only guest who gets neither an ack nor the right to post. `RemoteLogin.aclPermissions` carries the stored role
 (login push byte 12).
+
+## Hardware checklist: chat redesign
+
+Fourteen steps for a real radio (each says the expected result). Run in subsets at each wave gate; all of them before release.
+
+1. Chats list shows the existing DMs and channels; unread counts match the official app; the tab badge counts messages.
+2. Send a channel message: Queued, Sent, Heard (when a repeater echoes it). Delivered is never shown for a channel.
+3. DM to a contact: first a search, then Delivered; the header says "Via N repeaters" (or "Direct") after the reply.
+4. Message details show repeaters, SNR and RSSI (RSSI on incoming) and Time on air, matching the Rx log entry.
+5. Ping a repeater (trace): a result card with per-repeater signal. With the repeater off or out of range: "Not heard" after the wait, never a raw code. Long-press Ping: Direct only and 2/3 byte IDs run.
+6. Ping a person (route search): route out and back shown; Use this route sets Keep this route.
+7. Choose repeaters yourself (Route > Advanced), Test route, Save; send a DM and confirm in the Rx log that only the listed repeaters retransmit; Reset route then send: it searches.
+8. Keep this route survives three failed sends (route not cleared); Automatic clears after a failure; Always search always searches. After three failed sends the card "This route may be broken" appears with Find a route now and Reset route. Back-swipe works from a conversation; photograph AX2 text on the Chats list and a conversation.
+9. Repeater login with the factory password: the warning appears; a wrong password says "not accepted" (or "No reply" on firmware that stays silent); a powered-down repeater says "No reply" after the wait.
+10. Guest login: only Overview, Neighbours, Telemetry. Admin: Settings, Access, Console as well.
+11. Overview numbers match the `get`-style CLI output (battery, uptime, airtime); sparklines grow after three refreshes; Neighbours match the official app.
+12. Person Stats shows battery and withholds location per their telemetry settings.
+13. Radio settings: change the PIN (reconnect with the new one), path hash size 1 to 2 to 1 warns about old repeaters, backup export and import round trip on a spare radio, reboot works, factory reset typed confirm (spare radio only).
+14. Background: a notification arrives with the app suspended (known unproven, HANDOFF section 81.3; record the result, do not claim it).

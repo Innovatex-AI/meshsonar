@@ -154,6 +154,8 @@ void main() {
       await tester.pumpWidget(MaterialApp(navigatorKey: nav, home: ChannelDetailScreen(controller: kit.controller, channelId: j.channel.id!)));
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(find.byKey(const Key('delete-channel')), 300, scrollable: find.byType(Scrollable).first);
+      await tester.ensureVisible(find.byKey(const Key('delete-channel')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('delete-channel')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('delete-channel-dialog')), findsOneWidget);
@@ -171,6 +173,8 @@ void main() {
       await tester.pumpWidget(host(ChannelDetailScreen(controller: kit.controller, channelId: j.channel.id!)));
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(find.byKey(const Key('delete-channel')), 300, scrollable: find.byType(Scrollable).first);
+      await tester.ensureVisible(find.byKey(const Key('delete-channel')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('delete-channel')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('delete-channel-dialog')), findsOneWidget);
@@ -190,6 +194,8 @@ void main() {
       await tester.pumpAndSettle();
       await kit.controller.onSession(null);
       await tester.scrollUntilVisible(find.byKey(const Key('delete-channel')), 300, scrollable: find.byType(Scrollable).first);
+      await tester.ensureVisible(find.byKey(const Key('delete-channel')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('delete-channel')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('delete-channel-confirm')));
@@ -208,7 +214,8 @@ void main() {
       await kit.controller.admin.syncFromRadio(radioA);
       await tester.pumpWidget(host(ChannelDetailScreen(controller: kit.controller, channelId: j.channel.id!)));
       await tester.pumpAndSettle();
-      expect(find.text('Not on your radio right now'), findsOneWidget);
+      expect(find.byKey(const Key('off-radio-card')), findsOneWidget);
+      expect(find.textContaining('slot'), findsNothing); // the slot number stays in Details
       await tester.tap(find.byKey(const Key('put-back')));
       await tester.pumpAndSettle();
       expect(kit.store.channels.getById(j.channel.id!)!.slot, isNotNull);

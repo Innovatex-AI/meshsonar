@@ -38,7 +38,7 @@ String pingHeadline(PingResult r) => switch (r.status) {
 
 /// The sentence under the headline for a failure.
 String pingFailureBody(PingResult r) => switch (r.status) {
-      PingStatus.noReply => 'Not heard. Out of range, path stale, or the radio is busy.',
+      PingStatus.noReply => 'Not heard. Out of range, route out of date, or the radio is busy.',
       PingStatus.unsupported => 'This radio\'s firmware cannot search for a route. Update the radio\'s firmware to use Ping.',
       PingStatus.notConnected => 'Connect your radio to ping.',
       PingStatus.tooSoon => r.detail ?? 'A ping just ran. Try again in a few seconds.',
@@ -264,7 +264,7 @@ class _PingResultBodyState extends State<PingResultBody> {
             ],
             if (r.hopSnrDb.isNotEmpty) ...[
               const SizedBox(height: Gap.m),
-              Text('Signal at each hop: ${r.hopSnrDb.map((s) => '${s >= 0 ? '+' : ''}${s.toStringAsFixed(1)}').join('  ')} dB',
+              Text('Signal at each repeater: ${r.hopSnrDb.map((s) => '${s >= 0 ? '+' : ''}${s.toStringAsFixed(1)}').join('  ')} dB',
                   key: const Key('ping-snr'), style: AppType.subhead.copyWith(color: c.textMuted)),
             ],
           ]),

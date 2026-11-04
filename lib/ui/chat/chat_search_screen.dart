@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/chat_controller.dart';
+import '../../chat/chat_copy.dart';
 import '../../chat/models.dart';
 import '../widgets.dart' show EmptyState;
 import 'conversation_screen.dart';
@@ -55,7 +56,7 @@ class _ChatSearchScreenState extends State<ChatSearchScreen> {
         child: q.isEmpty
             ? const EmptyState(icon: Icons.search_rounded, title: 'Search all messages', body: 'Find a word in any channel or conversation. Only messages kept on this phone are searched.')
             : _results.isEmpty
-                ? EmptyState(icon: Icons.search_off_rounded, title: 'Nothing found', body: 'No message contains "$q". Check the spelling or try a shorter word.')
+                ? EmptyState(icon: Icons.search_off_rounded, title: noMatchesTitle(q), body: noMatchesTextBody)
                 : ListView.separated(
                     key: const Key('global-search-results'),
                     itemCount: _results.length,
