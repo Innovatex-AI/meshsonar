@@ -8,6 +8,7 @@ import 'db/message_repository.dart';
 import 'db/migrations.dart';
 import 'db/misc_repositories.dart';
 import 'db/outbox_repository.dart';
+import 'db/stats_history_repository.dart';
 import 'secret_store.dart';
 
 class ChatStore {
@@ -22,6 +23,7 @@ class ChatStore {
   final SystemStatsRepository systemStats;
   final PathHistoryRepository pathHistory;
   final PingResultRepository pingResults;
+  final RemoteStatsHistoryRepository statsHistory;
 
   ChatStore._(this.db, this.secrets)
       : contacts = ContactRepository(db),
@@ -32,7 +34,8 @@ class ChatStore {
         adverts = AdvertRepository(db),
         systemStats = SystemStatsRepository(db),
         pathHistory = PathHistoryRepository(db),
-        pingResults = PingResultRepository(db);
+        pingResults = PingResultRepository(db),
+        statsHistory = RemoteStatsHistoryRepository(db);
 
   /// Opens (and migrates) [database]. Production passes a file database from lib/platform/chat_database.dart.
   factory ChatStore.open(Database database, SecretStore secrets, {List<Migration>? migrations, bool wal = false}) =>
