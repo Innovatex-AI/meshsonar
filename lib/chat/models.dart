@@ -300,6 +300,14 @@ class ChatMessage {
   final bool read;
   final int txtType;
 
+  /// What the radio told us about an incoming message (migration v3). All null when the frame did not carry it.
+  /// RSSI dBm (from the 0x88 log push correlated with the message), hop hashes (hex, hashSize bytes per hop, first hop
+  /// first), hash size in bytes (1-3) and airtime in ms.
+  final int? rssi;
+  final String? pathHashes;
+  final int? hashSize;
+  final int? airMs;
+
   const ChatMessage({
     required this.id,
     this.seq = 0,
@@ -324,7 +332,19 @@ class ChatMessage {
     required this.dedupeKey,
     this.read = false,
     this.txtType = 0,
+    this.rssi,
+    this.pathHashes,
+    this.hashSize,
+    this.airMs,
   });
+
+  /// The hop hashes as separate hex strings (`a1`, `b2c3`...), empty when unknown.
+  List<String> get hopHashes {
+    final h = pathHashes;
+    final size = (hashSize ?? 1) * 2;
+    if (h == null || h.isEmpty || size <= 0) return const [];
+    return [for (var i = 0; i + size <= h.length; i += size) h.substring(i, i + size)];
+  }
 
   bool get isOutgoing => direction == Direction.outgoing;
   bool get isPending => state == MessageState.queued || state == MessageState.sending || state == MessageState.retrying;

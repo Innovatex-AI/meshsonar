@@ -60,3 +60,25 @@ String describeRoute(Contact c) {
   final via = ids.isEmpty ? '' : ' via ${ids.join(' then ')}';
   return 'Direct, $hops ${hops == 1 ? 'hop' : 'hops'}$via';
 }
+
+String _clock(int ms) {
+  final d = DateTime.fromMillisecondsSinceEpoch(ms);
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${two(d.hour)}:${two(d.minute)}:${two(d.second)}';
+}
+
+/// One line of the attempts list in the message details (outbox attempt text): "Try 2 · saved route · 09:41:19 · acknowledged
+/// after 1.8 s". [last] marks the newest try: while the message is still moving it reads "waiting for the reply".
+({String text, bool acked}) describeAttempt(DeliveryAttempt a, int n, ChatMessage m, {required bool last}) {
+  final acked = m.state == MessageState.acked && a.expectedAck != null && a.expectedAck == m.expectedAck;
+  final route = a.route == Route.flood ? 'flooded' : 'saved route';
+  final String outcome;
+  if (acked) {
+    outcome = m.ackMs == null ? 'acknowledged' : 'acknowledged after ${_seconds(m.ackMs!)}';
+  } else if (last && (m.state == MessageState.sent || m.state == MessageState.retrying || m.state == MessageState.sending)) {
+    outcome = 'waiting for the reply';
+  } else {
+    outcome = 'no reply';
+  }
+  return (text: 'Try $n · $route · ${_clock(a.sentAtMs)} · $outcome', acked: acked);
+}

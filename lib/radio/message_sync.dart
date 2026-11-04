@@ -21,6 +21,7 @@ import 'dart:typed_data';
 
 import 'inbound.dart';
 import 'protocol.dart';
+import 'rx_facts.dart';
 
 /// The one thing MessageSync needs from the link.
 abstract class MessageSource {
@@ -53,6 +54,10 @@ class MessageSync {
   /// of the radio's queue. A drain that finds many frames waiting means the app was away or slow while the radio's small
   /// queue (16 by default) filled, so the oldest may already be gone: the alerts layer warns on it (RadioQueueWatch).
   void Function(int frames)? onDrained;
+
+  /// Finds the logged packet a message came from (RSSI, hop hashes). Null = never correlated. The link wires its
+  /// [RxCorrelator] here.
+  RxFacts? Function(DateTime at, double? snrDb, int? hops)? rxFacts;
 
   final _out = StreamController<InboundMessage>.broadcast();
   final LinkedHashSet<String> _seen = LinkedHashSet<String>();
@@ -180,6 +185,8 @@ class MessageSync {
 
   InboundMessage _fromChannel(ChannelMsgFrame f) {
     final split = splitSenderPrefix(f.text);
+    final at = _clock();
+    final facts = rxFacts?.call(at, f.snrDb, f.pathLen == 0xFF ? null : f.pathLen & 63);
     return InboundMessage(
       kind: InboundKind.channel,
       channelIndex: f.channelIndex,
@@ -188,14 +195,20 @@ class MessageSync {
       fullText: f.text,
       txtType: f.txtType,
       senderTimestamp: f.timestamp,
-      receivedAt: _clock(),
+      receivedAt: at,
       snrDb: f.snrDb,
       pathLen: f.pathLen,
       raw: f.raw ?? Uint8List(0),
+      rssiDbm: facts?.rssiDbm,
+      pathHashesHex: facts?.pathHashes,
+      hashSize: facts?.hashSize ?? (f.pathLen == 0xFF ? null : (f.pathLen >> 6) + 1),
     );
   }
 
-  InboundMessage _fromContact(ContactTextFrame f) => InboundMessage(
+  InboundMessage _fromContact(ContactTextFrame f) {
+    final at = _clock();
+    final facts = rxFacts?.call(at, f.snrDb, f.pathLen == 0xFF ? null : f.pathLen & 63);
+    return InboundMessage(
         kind: InboundKind.contact,
         senderPrefixHex: f.prefixHex,
         signerPrefixHex: f.signerPrefixHex,
@@ -203,11 +216,15 @@ class MessageSync {
         fullText: f.text,
         txtType: f.txtType,
         senderTimestamp: f.timestamp,
-        receivedAt: _clock(),
+        receivedAt: at,
         snrDb: f.snrDb,
         pathLen: f.pathLen,
         raw: f.data,
+        rssiDbm: facts?.rssiDbm,
+        pathHashesHex: facts?.pathHashes,
+        hashSize: facts?.hashSize ?? (f.pathLen == 0xFF ? null : (f.pathLen >> 6) + 1),
       );
+  }
 
   void dispose() {
     _disposed = true;
