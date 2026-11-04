@@ -171,19 +171,6 @@ class MoreList extends StatelessWidget {
             // Kept above the long groups on purpose: rows below it keep their distance from the end of the list.
             header('Developer'),
             ValueListenableBuilder<bool>(
-              valueListenable: AppFlags.chatRedesignNotifier,
-              builder: (context, on, _) => AppSwitchTile(
-                switchKey: const Key('more-chat-redesign'),
-                title: 'New Chat design',
-                subtitle: 'The redesigned Chat tab and contact profile. Turn off to go back to the old ones.',
-                value: on,
-                onChanged: (v) {
-                  final dir = s.services.uiPrefsFile?.parent;
-                  AppFlags.setChatRedesign(v, file: dir == null ? null : File('${dir.path}${Platform.pathSeparator}redesign_flags.json'));
-                },
-              ),
-            ),
-            ValueListenableBuilder<bool>(
               valueListenable: AppFlags.driveRedesignNotifier,
               builder: (context, on, _) => AppSwitchTile(
                 switchKey: const Key('more-drive-redesign'),
@@ -197,22 +184,8 @@ class MoreList extends StatelessWidget {
               ),
             ),
             header('Radios and tools'),
-            ValueListenableBuilder<bool>(
-              valueListenable: AppFlags.chatRedesignNotifier,
-              builder: (context, on, _) => Column(children: [
-                if (on)
-                  row(MoreItem.repeaters, Icons.cell_tower, 'Repeaters, rooms and radio tools',
-                      'In Chat, under Network: repeaters, rooms, sensors, Trace, Discover, Rx log, Adverts', keyName: 'network')
-                else ...[
-                  row(MoreItem.repeaters, Icons.cell_tower, 'Repeaters and rooms',
-                      s.connected ? 'Administer a repeater, read and post in a room' : 'Needs your radio. Free repeater administration'),
-                  row(MoreItem.trace, Icons.route, 'Trace path', 'Test the route through repeaters, hop by hop'),
-                  row(MoreItem.discover, Icons.radar, 'Discover nearby', 'Find repeaters that can hear you, and how well'),
-                  row(MoreItem.adverts, Icons.campaign_outlined, 'Adverts', 'Send yours, see who is advertising'),
-                  row(MoreItem.rxLog, Icons.list_alt, 'Rx log', 'Every packet your radio hears'),
-                ],
-              ]),
-            ),
+            row(MoreItem.repeaters, Icons.cell_tower, 'Repeaters, rooms and radio tools',
+                'In Chat, under Network: repeaters, rooms, sensors, Trace, Discover, Rx log, Adverts', keyName: 'network'),
             row(MoreItem.noiseFloor, Icons.show_chart, 'Noise floor and health', 'Interference and radio counters, live'),
             row(MoreItem.telemetry, Icons.thermostat, 'Telemetry', 'Battery, temperature and position of a node'),
             row(MoreItem.radioSetup, Icons.tune, 'Radio setup', 'Name, position, power and frequency, with checks'),

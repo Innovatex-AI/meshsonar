@@ -11,7 +11,6 @@ import '../../radio/inbound.dart';
 import '../../radio/protocol.dart' show AdvType;
 import '../../radio/radio_session_impl.dart';
 import '../../radio/repeater_admin.dart';
-import '../../app/app_flags.dart';
 import '../../app/chat_wiring.dart' show ChatWiring;
 import '../../platform/biometric_gate.dart';
 import '../app.dart';
@@ -20,7 +19,6 @@ import '../../chat/models.dart' show ConvKey;
 import '../design/app_surfaces.dart';
 import 'repeater_admin/admin_common.dart' show kTarget;
 import 'repeater_admin/admin_controller.dart';
-import 'repeater_admin/repeater_admin_screen.dart';
 import 'repeater_admin/repeater_dashboard_screen.dart';
 import 'rooms/room_join_bar.dart';
 
@@ -94,18 +92,14 @@ Future<void> openRepeaterAdmin(BuildContext context, {required String keyHex, re
     fullKeyForPrefix: lookup.fullKey,
     lastAdvertEpoch: contact?.lastAdvert,
     vault: adminVault()..radioId = radioIdOf(session.selfPublicKey),
-    historyRepo: AppFlags.chatRedesign ? ChatWiring.controller.value?.store.statsHistory : null,
-    gateByFirmware: AppFlags.chatRedesign,
+    historyRepo: ChatWiring.controller.value?.store.statsHistory,
+    gateByFirmware: true,
   );
   final key = keyHex.toLowerCase();
-  if (AppFlags.chatRedesign) {
-    final len = contact?.outPathLen;
-    final hops = len == null || len < 0 || len == 0xFF ? null : len & 63;
-    final route = hops == null ? null : (hops == 0 ? 'Direct' : 'Via $hops');
-    await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => RepeaterDashboardScreen(controller: controller, keyHex: key, routeLine: route)));
-    return;
-  }
-  await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => RepeaterAdminScreen(controller: controller, keyHex: key)));
+  final len = contact?.outPathLen;
+  final hops = len == null || len < 0 || len == 0xFF ? null : len & 63;
+  final route = hops == null ? null : (hops == 0 ? 'Direct' : 'Via $hops');
+  await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => RepeaterDashboardScreen(controller: controller, keyHex: key, routeLine: route)));
 }
 
 /// A room is a conversation: opens it with the join bar (log in to post) above it. The old stand-alone room screen is gone.

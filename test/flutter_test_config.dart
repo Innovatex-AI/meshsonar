@@ -13,7 +13,5 @@ Future<void> testExecutable(FutureOr<void> Function() testMain) async {
   AppFlags.driveRedesign = false;
   // The shared map prefs are a process-wide singleton: no layer choice leaks from one test into the next.
   setUp(() => MapPrefs.shared.setLayerPrefs(kDriveLayerPage, LayerPrefs.empty));
-  // Production default is ON (AppFlags.chatRedesignDefault); the older tests exercise the old Chat UI, redesign tests opt in.
-  AppFlags.chatRedesign = false;
-  await testMain();
+    await testMain();
 }

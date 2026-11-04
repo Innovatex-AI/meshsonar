@@ -4,7 +4,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:meshsonar/app/app_flags.dart';
 import 'package:meshsonar/chat/models.dart';
 import 'package:meshsonar/ui/chat/qr_widgets.dart' show QrView;
 import 'package:meshsonar/ui/contacts/contact_profile_screen.dart';
@@ -71,14 +70,12 @@ void main() {
     shared.clear();
     files.clear();
     clip.clear();
-    AppFlags.chatRedesign = false;
     TestWidgetsFlutterBinding.ensureInitialized().defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
       if (call.method == 'Clipboard.setData') clip.add((call.arguments as Map)['text'] as String);
       return null;
     });
   });
   tearDown(() {
-    AppFlags.chatRedesign = false;
     TestWidgetsFlutterBinding.ensureInitialized().defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null);
     rig.dispose();
   });
@@ -101,8 +98,8 @@ void main() {
       expect(find.textContaining('Heard'), findsOneWidget);
       expect(find.byKey(const Key('tile-message')), findsOneWidget);
       expect(find.byKey(const Key('tile-route')), findsOneWidget);
-      expect(find.byKey(const Key('tile-ping')), findsNothing, reason: 'no dead buttons with the flag off');
-      expect(find.byKey(const Key('tile-stats')), findsNothing);
+      expect(find.byKey(const Key('tile-ping')), findsOneWidget);
+      expect(find.byKey(const Key('tile-stats')), findsOneWidget);
       expect(find.text('On your radio'), findsOneWidget);
       expect(find.text('Danger zone'), findsNothing);
       await tester.tap(find.byKey(const Key('tile-message')));
@@ -175,15 +172,13 @@ void main() {
       expect(withRooms.opened.single.publicKey, keyN(7));
     });
 
-    tw('sensor: only Route with the flag off; Telemetry, Ping, Route with it on', (tester) async {
+    tw('sensor: Telemetry, Ping, Route', (tester) async {
       setScreen(tester);
       rig.port.radioAdd(radioContact(9, type: ContactType.sensor));
       rig.chat.contacts.attach(rig.port);
       await rig.chat.contacts.syncNow();
       await pumpProfile(tester, rig, keyN(9));
       expect(find.byKey(const Key('tile-route')), findsOneWidget);
-      expect(find.byKey(const Key('tile-telemetry')), findsNothing);
-      AppFlags.chatRedesign = true;
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('tile-telemetry')), findsOneWidget);
       expect(find.byKey(const Key('tile-ping')), findsOneWidget);
@@ -263,10 +258,9 @@ void main() {
     });
   });
 
-  group('flag on: tiles that wait for WP7 / WP8', () {
+  group('tiles that wait for their feature', () {
     tw('person gets Ping and Stats; Ping opens the ping sheet after the airtime line', (tester) async {
       setScreen(tester);
-      AppFlags.chatRedesign = true;
       await rig.withContacts(1);
       await pumpProfile(tester, rig, keyN(1));
       expect(find.byKey(const Key('tile-ping')), findsOneWidget);
@@ -281,7 +275,6 @@ void main() {
 
     tw('radio away: Ping is dimmed with the reason, and a tap says why instead of doing nothing', (tester) async {
       setScreen(tester);
-      AppFlags.chatRedesign = true;
       await rig.withContacts(1);
       rig.port.isConnected = false;
       rig.chat.contacts.detach();
@@ -593,9 +586,8 @@ void main() {
       '1024 AX5': (w: 1024, h: 768, scale: 3.1, b: Brightness.dark),
     };
     for (final e in configs.entries) {
-      tw('person with route and flag on, ${e.key}: no overflow, accessible, targets >= 44', (tester) async {
+      tw('person with a route, ${e.key}: no overflow, accessible, targets >= 44', (tester) async {
         setScreen(tester, w: e.value.w, h: e.value.h, scale: e.value.scale);
-        AppFlags.chatRedesign = true;
         rig.port.radioAdd(radioContact(1, name: 'Maya Chen with a rather long display name', path: true));
         rig.chat.contacts.attach(rig.port);
         await rig.chat.contacts.syncNow();
@@ -626,7 +618,6 @@ void main() {
 
     tw('three tiles on a repeater fit one row at 375 pt', (tester) async {
       setScreen(tester, w: 375, h: 667);
-      AppFlags.chatRedesign = true;
       await rig.withContacts(5);
       await pumpProfile(tester, rig, keyN(5));
       final ys = {for (final t in ['dashboard', 'ping', 'route']) tester.getTopLeft(find.byKey(Key('tile-$t'))).dy};
@@ -640,7 +631,6 @@ void main() {
       for (final b in Brightness.values) {
         tw('profile ${e.key} ${b.name}', (tester) async {
           setScreen(tester, w: 393, h: 852);
-          AppFlags.chatRedesign = true;
           final withRooms = ContactsRig(canOpenRooms: true);
           addTearDown(withRooms.dispose);
           withRooms.port.radioAdd(radioContact(1, type: e.value, name: 'Maya Chen', path: true));

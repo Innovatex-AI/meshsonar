@@ -26,7 +26,7 @@ void main() {
     kit.dispose();
   });
 
-  testWidgets('Chat tab: segments are real, Channels lists channels, the badge counts unread conversations, search opens', (tester) async {
+  testWidgets('Chat tab: Chats is the default segment, Contacts is a real list, the badge counts unread messages, search filters', (tester) async {
     setSize(tester);
     final ch = await kit.channel(1, 'Ohio');
     kit.bob();
@@ -38,17 +38,17 @@ void main() {
     expect(find.byKey(const Key('chat-badge')), findsOneWidget);
     await tapTab(tester, 'Chat');
     expect(find.byKey(const Key('chat-segments')), findsOneWidget);
-    expect(find.text('Bob'), findsOneWidget, reason: 'Contacts segment is a real list, not a placeholder');
-    await tester.tap(find.text('Channels'));
-    await tester.pumpAndSettle();
-    expect(find.text('Ohio'), findsOneWidget);
-    expect(find.text('morning all'), findsWidgets, reason: 'the row and the in-app banner');
+    expect(find.text('Ohio'), findsOneWidget, reason: 'Chats lists the channel');
+    expect(find.textContaining('morning all'), findsWidgets, reason: 'the row and the in-app banner');
     await tester.pump(const Duration(seconds: 7)); // the banner has gone
-    await tester.tap(find.byKey(const Key('chat-search')));
+    await tester.tap(find.byKey(const Key('segment-contacts')));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const Key('global-search-field')), 'morning');
+    expect(find.text('Bob'), findsOneWidget, reason: 'Contacts segment is a real list, not a placeholder');
+    await tester.tap(find.byKey(const Key('segment-chats')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('chat-search-field')), 'zzzz');
     await tester.pump();
-    expect(find.byKey(const Key('global-search-results')), findsOneWidget);
+    expect(find.text('Ohio'), findsNothing);
   });
 
   testWidgets('Drive tab has the Messages button; it opens the drive sheet with the unread conversation', (tester) async {
@@ -74,8 +74,6 @@ void main() {
     await tester.tap(find.descendant(of: find.byKey(const Key('shell-rail')), matching: find.text('Chat')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('chat-pane-empty')), findsOneWidget);
-    await tester.tap(find.text('Channels'));
-    await tester.pumpAndSettle();
     await tester.tap(find.text('Ohio'));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('chat-pane-empty')), findsNothing);

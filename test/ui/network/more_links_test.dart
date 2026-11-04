@@ -3,7 +3,6 @@
 // entry the old More list had).
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:meshsonar/app/app_flags.dart';
 import 'package:meshsonar/app/chat_controller.dart';
 import 'package:meshsonar/app/chat_wiring.dart';
 import 'package:meshsonar/ui/chat/chat_tab_provider.dart';
@@ -42,7 +41,6 @@ void main() {
   setUp(() {
     kit = ChatKit();
     h = Harness();
-    AppFlags.chatRedesign = true;
     RedesignedChatTabState.resetSession();
     appTipStore = MemoryTipStore();
     final controller = ChatController(
@@ -59,7 +57,6 @@ void main() {
   tearDown(() {
     ChatTabHost.provider.value = null;
     ChatWiring.controller.value = null;
-    AppFlags.chatRedesign = AppFlags.chatRedesignDefault;
     provider.dispose();
     kit.dispose();
     dismissAppToast();

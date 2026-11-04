@@ -1,5 +1,6 @@
 // Shared by the repeater admin widget tests: a real companion link over the fake radio and repeater, a real admin session,
 // and the controller the screens use.
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -9,7 +10,13 @@ import 'package:meshsonar/core/api.dart' show RadioPreset;
 import 'package:meshsonar/radio/companion_link.dart';
 import 'package:meshsonar/radio/repeater_admin.dart';
 import 'package:meshsonar/ui/radios/repeater_admin/admin_controller.dart';
-import 'package:meshsonar/ui/radios/repeater_admin/repeater_admin_screen.dart';
+import 'package:meshsonar/ui/radios/repeater_admin/admin_access_view.dart';
+import 'package:meshsonar/ui/radios/repeater_admin/admin_common.dart' show AirtimeChip;
+import 'package:meshsonar/ui/radios/repeater_admin/admin_console_view.dart';
+import 'package:meshsonar/ui/radios/repeater_admin/admin_neighbours_view.dart';
+import 'package:meshsonar/ui/radios/repeater_admin/admin_overview_view.dart';
+import 'package:meshsonar/ui/radios/repeater_admin/admin_regions_view.dart';
+import 'package:meshsonar/ui/radios/repeater_admin/admin_settings_view.dart';
 import 'package:meshsonar/ui/theme.dart';
 
 import '../../support/repeater_admin_fake.dart';
@@ -121,15 +128,60 @@ Future<AdminRig> openAdmin(WidgetTester tester,
   addTearDown(() async {
     await tester.runAsync(() => rig.link.close());
   });
-  await tester.pumpWidget(app(RepeaterAdminScreen(controller: rig.controller, keyHex: rig.rep.keyHex, ownsController: false), dark: dark, textScale: textScale));
+  await tester.pumpWidget(app(AdminTabsHarness(controller: rig.controller, keyHex: rig.rep.keyHex), dark: dark, textScale: textScale));
   await tester.pump();
   if (login) {
-    await tester.enterText(find.byKey(const Key('admin-password')), password);
-    await tester.pump();
-    await tester.tap(find.byKey(const Key('admin-login-go')));
+    // The login itself is the login sheet's (login_sheet tests); here the controller signs in and the tabs open.
+    unawaited(rig.controller.login(password));
     await pumpUntil(tester, () => rig.controller.stage == AdminStage.ready);
     await pumpUntil(tester, () => !rig.controller.loadingOverview);
     await tester.pump();
   }
   return rig;
+}
+
+/// Test-only tabbed host for the admin views (Overview / Settings / Neighbours / Regions / Access / Console). The shipped
+/// screen is the single scrolling RepeaterDashboardScreen; this keeps the per-view behaviour tests (measured against the fake
+/// repeater) running one view at a time.
+class AdminTabsHarness extends StatelessWidget {
+  final RepeaterAdminController controller;
+  final String keyHex;
+  const AdminTabsHarness({super.key, required this.controller, required this.keyHex});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = controller;
+    return ListenableBuilder(
+      listenable: c,
+      builder: (context, _) {
+        final tabs = <(String, Widget)>[
+          ('Overview', AdminOverviewView(controller: c, keyHex: keyHex)),
+          ('Settings', AdminSettingsView(controller: c)),
+          if (!c.isRoom) ('Neighbours', AdminNeighboursView(controller: c)),
+          if (!c.isRoom) ('Regions', AdminRegionsView(controller: c)),
+          ('Access', AdminAccessView(controller: c)),
+          ('Console', AdminConsoleView(controller: c)),
+        ];
+        if (c.stage != AdminStage.ready) {
+          return Scaffold(key: const Key('repeater-admin-screen'), body: Center(child: Text(c.loginError ?? 'Logged out', key: const Key('admin-login-error'))));
+        }
+        return DefaultTabController(
+          length: tabs.length,
+          child: Scaffold(
+            key: const Key('repeater-admin-screen'),
+            appBar: AppBar(
+              title: Text(c.snapshot?.identity.name ?? c.title),
+              actions: [AirtimeChip(active: c.usingAirtime)],
+              bottom: TabBar(
+                key: const Key('admin-tabs'),
+                isScrollable: true,
+                tabs: [for (final t in tabs) Tab(key: Key('tab-${t.$1.toLowerCase()}'), text: t.$1)],
+              ),
+            ),
+            body: SafeArea(top: false, child: TabBarView(physics: const NeverScrollableScrollPhysics(), children: [for (final t in tabs) t.$2])),
+          ),
+        );
+      },
+    );
+  }
 }

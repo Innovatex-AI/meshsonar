@@ -7,7 +7,6 @@ import 'package:meshsonar/chat/models.dart';
 import 'package:meshsonar/ui/app.dart' show AppScope;
 import 'package:meshsonar/ui/chat/chat_tab_provider.dart';
 import 'package:meshsonar/ui/design/app_widgets.dart' show MemoryTipStore, appTipStore;
-import 'package:meshsonar/app/app_flags.dart';
 import 'package:meshsonar/ui/shell/chat_tab.dart';
 import 'package:meshsonar/ui/shell/chat_tab_host.dart';
 import 'package:meshsonar/ui/theme.dart';
@@ -23,7 +22,6 @@ void main() {
   setUp(() {
     kit = ChatKit();
     h = Harness();
-    AppFlags.chatRedesign = true;
     RedesignedChatTabState.resetSession();
     appTipStore = MemoryTipStore();
     ChatWiring.controller.value = kit.controller;
@@ -33,7 +31,6 @@ void main() {
   tearDown(() {
     ChatTabHost.provider.value = null;
     ChatWiring.controller.value = null;
-    AppFlags.chatRedesign = false;
     provider.dispose();
     kit.dispose();
   });

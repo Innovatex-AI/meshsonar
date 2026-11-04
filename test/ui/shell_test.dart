@@ -306,28 +306,28 @@ void main() {
       await h.pumpApp(tester);
       await tapShellTab(tester, 'Chat');
       expect(find.text('Messages arrive here once you connect a radio'), findsOneWidget);
-      await tester.tap(find.byKey(const Key('chat-connect')));
+      await tester.tap(find.text('Connect radio'));
       await tester.pumpAndSettle();
       expect(find.text('MeshCore-Truck'), findsOneWidget); // the connect screen
       await drain(tester);
     });
 
-    testWidgets('connected, no chat services yet: says so and points to the map', (tester) async {
+    testWidgets('connected, no chat services yet: says so and points to Drive', (tester) async {
       phone(tester);
       final h = Harness();
       await h.pumpApp(tester);
       await h.state.connectSimulator();
       await tester.pumpAndSettle();
       await tapShellTab(tester, 'Chat');
-      expect(find.text('Chat is coming to this tab'), findsOneWidget);
-      expect(find.byKey(const Key('chat-connect')), findsNothing);
-      await tester.tap(find.byKey(const Key('chat-open-map')));
+      expect(find.text('Chat is getting ready'), findsOneWidget);
+      expect(find.text('Connect radio'), findsNothing);
+      await tester.tap(find.text('Open Drive'));
       await tester.pumpAndSettle();
       expect(find.byType(DriveScreen), findsOneWidget);
       await drain(tester);
     });
 
-    testWidgets('a provider plugged into ChatTabHost shows Contacts | Channels and the unread badge', (tester) async {
+    testWidgets('a provider plugged into ChatTabHost shows Chats | Contacts | Network and the unread badge', (tester) async {
       phone(tester);
       final h = Harness();
       ChatTabHost.provider.value = DebugFixtureChat();
@@ -337,9 +337,10 @@ void main() {
       await tapShellTab(tester, 'Chat');
       expect(find.byKey(const Key('chat-segments')), findsOneWidget);
       expect(find.text('Fixture: Alex'), findsOneWidget);
-      await tester.tap(find.text('Channels'));
-      await tester.pumpAndSettle();
       expect(find.text('Fixture: Public'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('segment-network')));
+      await tester.pumpAndSettle();
+      expect(find.text('Fixture: North Ridge repeater'), findsOneWidget);
       await drain(tester);
     });
   });

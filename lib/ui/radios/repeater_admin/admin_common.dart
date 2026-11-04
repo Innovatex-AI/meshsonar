@@ -1,7 +1,6 @@
 // Small pieces the repeater admin screens share.
 import 'package:flutter/material.dart';
 
-import '../../../app/app_flags.dart';
 import '../../../radio/repeater_health.dart';
 import '../../../radio/repeater_settings.dart';
 import '../../design/app_surfaces.dart';
@@ -79,45 +78,27 @@ class AdminCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
-    if (AppFlags.chatRedesign) {
-      // Inset-grouped look of the dashboard: flat rounded block on the page colour, small header.
-      final c = AppColors.of(context);
-      return Padding(
-        key: cardKey,
-        padding: const EdgeInsets.symmetric(vertical: Gap.s),
-        // A Material (not a coloured box) so the ListTile rows inside keep their ink.
-        child: Material(
-          color: c.surface,
-          borderRadius: BorderRadius.circular(Corners.card),
-          clipBehavior: Clip.antiAlias,
-          child: Padding(
-            padding: const EdgeInsets.all(Gap.l),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Expanded(child: Semantics(header: true, child: Text(title.toUpperCase(), style: t.textTheme.labelMedium?.copyWith(color: c.textMuted)))),
-            ?trailing,
-          ]),
-          const SizedBox(height: Gap.s),
-          child,
-            ]),
-          ),
-        ),
-      );
-    }
-    return Card(
+    // Inset-grouped look of the dashboard: flat rounded block on the page colour, small header.
+    final c = AppColors.of(context);
+    return Padding(
       key: cardKey,
-      margin: const EdgeInsets.symmetric(vertical: Gap.s),
-      child: Padding(
-        padding: const EdgeInsets.all(Gap.l),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            if (icon != null) ...[Icon(icon, size: 20, color: t.colorScheme.primary), const SizedBox(width: Gap.s)],
-            Expanded(child: Semantics(header: true, child: Text(title, style: t.textTheme.titleMedium))),
-            ?trailing,
+      padding: const EdgeInsets.symmetric(vertical: Gap.s),
+      // A Material (not a coloured box) so the ListTile rows inside keep their ink.
+      child: Material(
+        color: c.surface,
+        borderRadius: BorderRadius.circular(Corners.card),
+        clipBehavior: Clip.antiAlias,
+        child: Padding(
+          padding: const EdgeInsets.all(Gap.l),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Expanded(child: Semantics(header: true, child: Text(title.toUpperCase(), style: t.textTheme.labelMedium?.copyWith(color: c.textMuted)))),
+              ?trailing,
+            ]),
+            const SizedBox(height: Gap.s),
+            child,
           ]),
-          const SizedBox(height: Gap.s),
-          child,
-        ]),
+        ),
       ),
     );
   }

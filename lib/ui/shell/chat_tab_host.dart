@@ -40,17 +40,7 @@ abstract class ChatTabProvider {
   /// True when there are no conversations at all (the host then shows its own first-run empty state).
   bool get isEmpty;
 
-  // ---- the old two-segment tab (Contacts | Channels), used while the chatRedesign flag is off
-  /// Contacts and direct messages. Return an empty-state widget of your own if there are none.
-  Widget contactsView(BuildContext context);
-
-  /// Channels (the wardrive channel appears in a pinned System row, per the design doc).
-  Widget channelsView(BuildContext context);
-
-  /// Extra app-bar buttons for the old Chat tab (global search).
-  List<Widget> appBarActions(BuildContext context) => const [];
-
-  // ---- the redesigned tab (Chats | Contacts | Network)
+  // ---- the tab (Chats | Contacts | Network)
   /// The Chats list, as a sliver.
   Widget chatsSliver(BuildContext context, ChatTabArgs args);
 
@@ -76,9 +66,6 @@ abstract class ChatTabProvider {
   /// The Cmd-K quick switcher (iPad). Default: nothing.
   Future<void> quickSwitch(BuildContext context) async {}
 }
-
-/// Which half of the old Chat tab is showing.
-enum ChatSegment { contacts, channels }
 
 class ChatTabHost {
   ChatTabHost._();
@@ -107,33 +94,6 @@ class DebugFixtureChat implements ChatTabProvider {
   @override
   bool get isEmpty => false;
   @override
-  List<Widget> appBarActions(BuildContext context) => const [];
-
-  Widget _list(List<(String, String, String)> rows) => ListView(
-        children: [
-          for (final r in rows)
-            ListTile(
-              leading: CircleAvatar(child: Text(r.$1.characters.first.toUpperCase())),
-              title: Text(r.$1),
-              subtitle: Text(r.$2, maxLines: 1, overflow: TextOverflow.ellipsis),
-              trailing: Text(r.$3),
-            ),
-        ],
-      );
-
-  @override
-  Widget contactsView(BuildContext context) => _list(const [
-        ('Fixture: Alex', 'Debug fixture, not a real message', '9:41'),
-        ('Fixture: Sam', 'Debug fixture, not a real message', 'Mon'),
-      ]);
-
-  @override
-  Widget channelsView(BuildContext context) => _list(const [
-        ('Fixture: Public', 'Debug fixture, not a real message', '9:12'),
-        ('Fixture: #hamradio', 'Debug fixture, not a real message', 'Sun'),
-      ]);
-
-  @override
   Widget chatsSliver(BuildContext context, ChatTabArgs args) => SliverList(
         delegate: SliverChildListDelegate([
           for (final r in const [('Fixture: Alex', '9:41'), ('Fixture: Public', '9:12')])
@@ -146,7 +106,8 @@ class DebugFixtureChat implements ChatTabProvider {
       const SliverToBoxAdapter(child: ListTile(title: Text('Fixture: North Ridge repeater')));
 
   @override
-  Widget contactsSegment(BuildContext context, {VoidCallback? seeNearby}) => contactsView(context);
+  Widget contactsSegment(BuildContext context, {VoidCallback? seeNearby}) =>
+      const Center(child: ListTile(title: Text('Fixture: Alex'), subtitle: Text('Debug fixture, not a real message')));
 
   @override
   Future<void> refresh() async {}
