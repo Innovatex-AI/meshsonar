@@ -42,7 +42,7 @@ void main() {
   setUp(() => kit = kitlib.ChatKit());
   tearDown(() => kit.dispose());
 
-  testWidgets('tapping a person opens the profile; Message (swipe) opens the conversation with the route strip; the strip opens the details', (tester) async {
+  testWidgets('tapping a person opens the profile; Message (swipe) opens the conversation with the route text; the title block opens the profile', (tester) async {
     await boot(tester);
     expect(find.text('Ann'), findsOneWidget);
     await tester.tap(find.text('Ann'));
@@ -52,14 +52,9 @@ void main() {
     await tester.pumpAndSettle();
     await openChat(tester, 'Ann', 1);
     expect(find.byType(ConversationScreen), findsOneWidget);
-    expect(find.byKey(const Key('dm-route-header')), findsOneWidget);
-    expect(find.textContaining('No saved route yet'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('dm-route-header')));
-    await tester.pumpAndSettle();
-    expect(find.byType(ContactProfileScreen), findsOneWidget);
-    await tester.tap(find.byKey(const Key('contact-back')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('dm-contact-info')));
+    expect(find.byKey(const Key('dm-route-text')), findsOneWidget);
+    expect(find.text('No route yet'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('conv-title')));
     await tester.pumpAndSettle();
     expect(find.byType(ContactProfileScreen), findsOneWidget);
   });
@@ -77,32 +72,32 @@ void main() {
     expect(find.text('hello Ann'), findsOneWidget);
   });
 
-  testWidgets('the strip follows the radio: a learned route shows hops and when they were last heard', (tester) async {
+  testWidgets('the route text follows the radio: a learned route says Via N repeaters', (tester) async {
     await boot(tester);
     await openChat(tester, 'Ann', 1);
-    expect(find.textContaining('No saved route yet'), findsOneWidget);
+    expect(find.text('No route yet'), findsOneWidget);
     port.radioAdd(radioContact(1, name: 'Ann', path: true));
     await kit.service.contacts.pathUpdated(keyN(1));
     await tester.pump();
     await tester.pump();
-    expect(find.textContaining('Direct, 1 hop'), findsOneWidget);
-    expect(find.textContaining('No saved route yet'), findsNothing);
+    expect(find.text('Via 1 repeater'), findsOneWidget);
+    expect(find.text('No route yet'), findsNothing);
   });
 
-  testWidgets('radio away: the strip says messages wait', (tester) async {
+  testWidgets('radio away: the composer says messages wait', (tester) async {
     await boot(tester);
     await openChat(tester, 'Ann', 1);
     kit.service.contacts.detach();
     await tester.pump();
     await tester.pump();
-    expect(find.textContaining('Messages wait here and send when it is back'), findsOneWidget);
+    expect(find.text('Will send when radio connects'), findsOneWidget);
   });
 
-  testWidgets('"always flood" is said on the strip', (tester) async {
+  testWidgets('"always search" is said in the subtitle', (tester) async {
     await boot(tester);
     kit.service.contacts.setForceFlood(keyN(1), true);
     await openChat(tester, 'Ann', 1);
-    expect(find.textContaining('Always sent by flood'), findsOneWidget);
+    expect(find.text('Searching'), findsOneWidget);
   });
 
   testWidgets('repeaters and rooms are not in Contacts (they live under Network)', (tester) async {
@@ -168,7 +163,7 @@ void main() {
   });
 
   for (final (w, h, scale, dark) in [(390.0, 844.0, 1.0, false), (390.0, 844.0, 2.5, true), (834.0, 1194.0, 1.0, false)]) {
-    testWidgets('conversation with the strip at ${w.toInt()}x${h.toInt()} x$scale ${dark ? 'dark' : 'light'}: no overflow, accessible', (tester) async {
+    testWidgets('conversation at ${w.toInt()}x${h.toInt()} x$scale ${dark ? 'dark' : 'light'}: no overflow, accessible', (tester) async {
       await boot(tester, w: w, h: h, scale: scale, b: dark ? Brightness.dark : Brightness.light);
       await tester.dragUntilVisible(find.text('Ann'), find.byKey(const Key('contacts-list')), const Offset(0, -120));
       await tester.pump();

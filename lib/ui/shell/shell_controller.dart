@@ -131,6 +131,21 @@ class ShellController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Chat tab, Network segment (repeaters, rooms, sensors and the radio tools live there since the Chat redesign).
+  bool _pendingNetwork = false;
+  bool takePendingNetwork() {
+    final v = _pendingNetwork;
+    _pendingNetwork = false;
+    return v;
+  }
+
+  void openNetwork() {
+    _pendingNetwork = true;
+    final wasChat = _tab == AppTab.chat;
+    select(AppTab.chat);
+    if (wasChat) notifyListeners();
+  }
+
   void openMore(MoreItem item) {
     _pendingMore = item;
     final wasMore = _tab == AppTab.more;

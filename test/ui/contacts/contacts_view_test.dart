@@ -261,7 +261,8 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(Key('swipe-ping-${k(2)}')));
       await tester.pumpAndSettle();
-      expect(find.text('Ping Node 2'), findsOneWidget);
+      // WP7's ping: the first time ever it says it uses airtime, then the result sheet (test/ui/tools/ping_result_sheet_test).
+      expect(find.text('Ping uses radio airtime'), findsOneWidget);
     });
 
     testWidgetsT('swipe left: Ping offline explains', (tester) async {

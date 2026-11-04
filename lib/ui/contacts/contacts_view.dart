@@ -22,6 +22,7 @@ import '../design/state_views.dart';
 import '../design/tokens.dart';
 import '../drive/drive_controls.dart' show openConnect;
 import '../tools/adverts_screen.dart';
+import '../tools/ping_result_sheet.dart' show showPingSheet;
 import 'add_contact_screen.dart';
 import 'contact_profile_screen.dart';
 import 'contact_remove.dart';
@@ -29,7 +30,7 @@ import 'contact_widgets.dart';
 import 'contacts_controller.dart';
 import 'contacts_grouping.dart';
 import 'contacts_settings_sheet.dart';
-import 'profile_sheets.dart';
+import 'path_manager_screen.dart' show offerUseRoute;
 import 'profile_tiles.dart';
 import 'qr_scan_screen.dart';
 import 'radio_list_sheet.dart';
@@ -46,7 +47,9 @@ class ContactsView extends StatefulWidget {
 
   /// Tests inject a fake camera for the Add contact screen.
   final ScannerBuilder? scannerBuilder;
-  const ContactsView({super.key, required this.controller, this.onConnect, this.scannerBuilder});
+  /// "See all" on the New nodes nearby row goes here when the Network segment shows them (Chat redesign); null opens the sheet.
+  final VoidCallback? onSeeAllNearby;
+  const ContactsView({super.key, required this.controller, this.onConnect, this.scannerBuilder, this.onSeeAllNearby});
 
   @override
   State<ContactsView> createState() => _ContactsViewState();
@@ -98,7 +101,7 @@ class _ContactsViewState extends State<ContactsView> {
       showAppToast(context, tile.reason ?? 'Not available right now.');
       return;
     }
-    await showPingSheet(context, c);
+    await showPingSheet(context, contact: c, manager: _m, onUseRoute: (r) => offerUseRoute(context, _m, c, r));
   }
 
   Future<void> _remove(Contact c) => removeContactFlow(context, _c, c);
@@ -129,7 +132,7 @@ class _ContactsViewState extends State<ContactsView> {
             CupertinoSliverRefreshControl(onRefresh: () => _m.syncNow(full: true)),
             SliverToBoxAdapter(child: _searchField(people)),
             SliverToBoxAdapter(child: _banner(context, total, connected)),
-            if (nearby.isNotEmpty) SliverToBoxAdapter(child: _NearbyRow(count: nearby.length, onTap: () => _showNearby(context))),
+            if (nearby.isNotEmpty) SliverToBoxAdapter(child: _NearbyRow(count: nearby.length, onTap: widget.onSeeAllNearby ?? () => _showNearby(context))),
             if (people == 0)
               SliverFillRemaining(hasScrollBody: false, child: _empty(context, hasOthers: total > 0))
             else if (groups.isEmpty)

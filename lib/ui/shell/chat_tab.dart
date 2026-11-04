@@ -83,6 +83,10 @@ class RedesignedChatTabState extends State<RedesignedChatTab> {
       _shell = shell;
       _seenReselect = shell?.reselectCount ?? 0;
     }
+    if (shell != null && shell.tab == AppTab.chat && shell.takePendingNetwork() && _sessionSegment != ChatShellSegment.network) {
+      _sessionSegment = ChatShellSegment.network;
+      _search.clear();
+    }
     if (shell != null && shell.reselectCount != _seenReselect) {
       _seenReselect = shell.reselectCount;
       // Tapping the Chat tab again: back to the top of the list.
@@ -263,7 +267,7 @@ class RedesignedChatTabState extends State<RedesignedChatTab> {
         switch (seg) {
           ChatShellSegment.chats => p.chatsSliver(context, args),
           ChatShellSegment.network => p.networkSliver(context, args),
-          ChatShellSegment.contacts => SliverFillRemaining(hasScrollBody: true, child: p.contactsSegment(context)),
+          ChatShellSegment.contacts => SliverFillRemaining(hasScrollBody: true, child: p.contactsSegment(context, seeNearby: () => _select(ChatShellSegment.network))),
         },
       ],
     );

@@ -14,7 +14,6 @@ import '../map/legend_sheet.dart' show showMapLegend;
 import '../onboarding/onboarding_screen.dart';
 import '../radio/radio_screen.dart';
 import '../radios/observer_join_screen.dart';
-import '../radios/repeaters_screen.dart';
 import '../report_problem_screen.dart' show openReportProblem;
 import '../radios/radio_setup/radio_setup_screen.dart';
 import '../settings_screen.dart';
@@ -64,7 +63,6 @@ class _MoreTabState extends State<MoreTab> {
 
   Widget _screenFor(MoreItem item) => switch (item) {
         MoreItem.radio => const RadioScreen(),
-        MoreItem.repeaters => const RepeatersScreen(),
         MoreItem.myRadios => const SettingsScreen(initialSection: 'my-radios-section'),
         MoreItem.wardriving => const SettingsScreen(initialSection: 'wardriving'),
         MoreItem.notifications => const SettingsScreen(initialSection: 'notifications'),
@@ -83,13 +81,16 @@ class _MoreTabState extends State<MoreTab> {
         MoreItem.devices => const DevicesScreen(),
         MoreItem.myReports => const ReportsHistoryScreen(),
         MoreItem.leaderboard => const LeaderboardScreen(),
-        MoreItem.legend || MoreItem.howItWorks => const SizedBox.shrink(),
+        MoreItem.legend || MoreItem.howItWorks || MoreItem.repeaters => const SizedBox.shrink(),
       };
 
   void _open(MoreItem item) {
     final nav = _nav.currentState;
     if (nav == null) return;
     switch (item) {
+      case MoreItem.repeaters:
+        // Repeaters and rooms live under Chat > Network now (the old list is retired).
+        ShellScope.maybeOf(context)?.openNetwork();
       case MoreItem.legend:
         showMapLegend(nav.context);
       case MoreItem.howItWorks:
@@ -194,12 +195,22 @@ class MoreList extends StatelessWidget {
               ),
             ),
             header('Radios and tools'),
-            row(MoreItem.repeaters, Icons.cell_tower, 'Repeaters and rooms',
-                s.connected ? 'Administer a repeater, read and post in a room' : 'Needs your radio. Free repeater administration'),
-            row(MoreItem.trace, Icons.route, 'Trace path', 'Test the route through repeaters, hop by hop'),
-            row(MoreItem.discover, Icons.radar, 'Discover nearby', 'Find repeaters that can hear you, and how well'),
-            row(MoreItem.adverts, Icons.campaign_outlined, 'Adverts', 'Send yours, see who is advertising'),
-            row(MoreItem.rxLog, Icons.list_alt, 'Rx log', 'Every packet your radio hears'),
+            ValueListenableBuilder<bool>(
+              valueListenable: AppFlags.chatRedesignNotifier,
+              builder: (context, on, _) => Column(children: [
+                if (on)
+                  row(MoreItem.repeaters, Icons.cell_tower, 'Repeaters, rooms and radio tools',
+                      'In Chat, under Network: repeaters, rooms, sensors, Trace, Discover, Rx log, Adverts', keyName: 'network')
+                else ...[
+                  row(MoreItem.repeaters, Icons.cell_tower, 'Repeaters and rooms',
+                      s.connected ? 'Administer a repeater, read and post in a room' : 'Needs your radio. Free repeater administration'),
+                  row(MoreItem.trace, Icons.route, 'Trace path', 'Test the route through repeaters, hop by hop'),
+                  row(MoreItem.discover, Icons.radar, 'Discover nearby', 'Find repeaters that can hear you, and how well'),
+                  row(MoreItem.adverts, Icons.campaign_outlined, 'Adverts', 'Send yours, see who is advertising'),
+                  row(MoreItem.rxLog, Icons.list_alt, 'Rx log', 'Every packet your radio hears'),
+                ],
+              ]),
+            ),
             row(MoreItem.noiseFloor, Icons.show_chart, 'Noise floor and health', 'Interference and radio counters, live'),
             row(MoreItem.telemetry, Icons.thermostat, 'Telemetry', 'Battery, temperature and position of a node'),
             row(MoreItem.radioSetup, Icons.tune, 'Radio setup', 'Name, position, power and frequency, with checks'),

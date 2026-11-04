@@ -58,7 +58,8 @@ abstract class ChatTabProvider {
   Widget networkSliver(BuildContext context, ChatTabArgs args);
 
   /// The Contacts segment (a box widget with its own scrolling until the contacts rewrite lands).
-  Widget contactsSegment(BuildContext context);
+  /// [seeNearby] opens the Network segment, where the nodes heard nearby (Add / Ignore) now live.
+  Widget contactsSegment(BuildContext context, {VoidCallback? seeNearby});
 
   /// Add contact (QR code, link or key), shown as the nav button on the Contacts segment. Null = no such button.
   VoidCallback? addContactAction(BuildContext context) => null;
@@ -145,7 +146,7 @@ class DebugFixtureChat implements ChatTabProvider {
       const SliverToBoxAdapter(child: ListTile(title: Text('Fixture: North Ridge repeater')));
 
   @override
-  Widget contactsSegment(BuildContext context) => contactsView(context);
+  Widget contactsSegment(BuildContext context, {VoidCallback? seeNearby}) => contactsView(context);
 
   @override
   Future<void> refresh() async {}
