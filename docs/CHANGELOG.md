@@ -5,6 +5,10 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+## [0.27.2+44] — 2026-11-03 — Drive chrome (status capsule, strip, docks, control column), iPad and landscape card, inspector driving rules, clean map corners
+
+What you will notice in this build: the Drive screen's top chrome is a status capsule and an always-on region chip, GPS and radio trouble is one strip with its fix button, the dock has Connecting/idle/big-text layouts, the right-hand buttons are Layers/Recenter/Compass in fixed slots, iPad and landscape phones get a floating card, nothing sits in the lower-left of the map, and the base map fills in about twice as fast.
+
 - **Map tiles fill in about twice as fast (fix for the faint, blank base map in 0.27.1+43).** The full-bleed Drive map asked for about 40 tiles (the screen plus a ring of pre-load) through a 6-request limit while OpenStreetMap answers each tile in 2 to 5 seconds, so the visible tiles queued behind tiles nobody could see yet and the map showed only the grid for around 15 seconds; switching the base map restarted the whole fill, which looked like switching did nothing. Phones now load only the viewport (18 requests instead of 31 in the measured case); tablets keep a one-ring pre-load. A test renders the Drive screen with real tile images for every base style, checks the layers-sheet switch and caps the request count.
 
 - **Clean map corners (Drive redesign WP7).** On the new Drive screen nothing is drawn in the lower-left of the map in any state: the SIMULATED tag is gone (the amber SIM badge lives in the status capsule) and the "Map offline" note is an "Offline map" pill at the top under the region chip. A repeater label pass that met a not-yet-placed camera could crash with an infinity error; it now skips such rectangles.
