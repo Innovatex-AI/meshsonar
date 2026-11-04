@@ -112,3 +112,87 @@ ON CONFLICT(channel_id) DO UPDATE SET heard_others = heard_others + 1, last_hear
     return (pingsSent: x['pings_sent'] as int, lastPingMs: x['last_ping_ms'] as int?, heardOthers: x['heard_others'] as int, lastHeardMs: x['last_heard_ms'] as int?);
   }
 }
+
+/// One entry of a contact's route history (plan section 6): learned, set, reset, discovered or tested.
+class PathHistoryEntry {
+  final String contactKey;
+  final int tsMs;
+  final String kind;
+  final List<String> hops;
+  final int? hashSize;
+  final int? rttMs;
+  final bool? ok;
+  const PathHistoryEntry({required this.contactKey, required this.tsMs, required this.kind, this.hops = const [], this.hashSize, this.rttMs, this.ok});
+}
+
+/// `path_history`: last [keep] per contact, trimmed by the writer.
+class PathHistoryRepository {
+  final ChatDatabase db;
+  static const int keep = 20;
+  PathHistoryRepository(this.db);
+
+  void add(PathHistoryEntry e) {
+    final k = e.contactKey.toLowerCase();
+    db.raw.execute('INSERT INTO path_history(contact_key, ts_ms, kind, hops, hash_size, rtt_ms, ok) VALUES (?,?,?,?,?,?,?)',
+        [k, e.tsMs, e.kind, e.hops.join(','), e.hashSize, e.rttMs, e.ok == null ? null : (e.ok! ? 1 : 0)]);
+    db.raw.execute(
+        'DELETE FROM path_history WHERE contact_key = ? AND rowid NOT IN (SELECT rowid FROM path_history WHERE contact_key = ? ORDER BY ts_ms DESC, rowid DESC LIMIT ?)',
+        [k, k, keep]);
+  }
+
+  List<PathHistoryEntry> list(String contactKey, {int limit = keep}) => [
+        for (final r in db.raw.select('SELECT * FROM path_history WHERE contact_key = ? ORDER BY ts_ms DESC, rowid DESC LIMIT ?', [contactKey.toLowerCase(), limit]))
+          PathHistoryEntry(
+              contactKey: r['contact_key'] as String,
+              tsMs: r['ts_ms'] as int,
+              kind: r['kind'] as String,
+              hops: [for (final h in ((r['hops'] as String?) ?? '').split(',')) if (h.isNotEmpty) h],
+              hashSize: r['hash_size'] as int?,
+              rttMs: r['rtt_ms'] as int?,
+              ok: r['ok'] == null ? null : (r['ok'] as int) != 0)
+      ];
+}
+
+class PingResultRow {
+  final String contactKey;
+  final int tsMs;
+  final String kind;
+  final bool ok;
+  final int? rttMs;
+  final int? hops;
+  final String? snrJson;
+  final String? pathOut;
+  final String? pathBack;
+  final String? failReason;
+  const PingResultRow({required this.contactKey, required this.tsMs, required this.kind, required this.ok, this.rttMs, this.hops, this.snrJson, this.pathOut, this.pathBack, this.failReason});
+}
+
+/// `ping_results`: last [keep] per contact.
+class PingResultRepository {
+  final ChatDatabase db;
+  static const int keep = 50;
+  PingResultRepository(this.db);
+
+  void add(PingResultRow r) {
+    final k = r.contactKey.toLowerCase();
+    db.raw.execute(
+        'INSERT INTO ping_results(contact_key, ts_ms, kind, ok, rtt_ms, hops, snr_json, path_out, path_back, fail_reason) VALUES (?,?,?,?,?,?,?,?,?,?)',
+        [k, r.tsMs, r.kind, r.ok ? 1 : 0, r.rttMs, r.hops, r.snrJson, r.pathOut, r.pathBack, r.failReason]);
+    db.raw.execute('DELETE FROM ping_results WHERE contact_key = ? AND id NOT IN (SELECT id FROM ping_results WHERE contact_key = ? ORDER BY ts_ms DESC, id DESC LIMIT ?)', [k, k, keep]);
+  }
+
+  List<PingResultRow> list(String contactKey, {int limit = keep}) => [
+        for (final r in db.raw.select('SELECT * FROM ping_results WHERE contact_key = ? ORDER BY ts_ms DESC, id DESC LIMIT ?', [contactKey.toLowerCase(), limit]))
+          PingResultRow(
+              contactKey: r['contact_key'] as String,
+              tsMs: r['ts_ms'] as int,
+              kind: r['kind'] as String,
+              ok: (r['ok'] as int) != 0,
+              rttMs: r['rtt_ms'] as int?,
+              hops: r['hops'] as int?,
+              snrJson: r['snr_json'] as String?,
+              pathOut: r['path_out'] as String?,
+              pathBack: r['path_back'] as String?,
+              failReason: r['fail_reason'] as String?)
+      ];
+}

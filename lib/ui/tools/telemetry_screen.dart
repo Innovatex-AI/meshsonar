@@ -10,6 +10,7 @@ import '../../radio/tools/lpp.dart';
 import '../../radio/tools/radio_tools.dart';
 import '../../radio/tools/telemetry_tool.dart';
 import '../app.dart';
+import 'contact_ref.dart';
 import 'tool_kit.dart';
 import 'tools_host.dart';
 
@@ -29,20 +30,23 @@ List<RadioContact> telemetryContactOrder(Iterable<RadioContact> all) {
 }
 
 class TelemetryScreen extends StatelessWidget {
-  const TelemetryScreen({super.key});
+  /// Opens with this contact picked ("A contact" tab).
+  final ContactRef? contact;
+  const TelemetryScreen({super.key, this.contact});
 
   @override
   Widget build(BuildContext context) => ToolPage(
         id: 'telemetry',
         title: 'Telemetry',
-        builder: (context, host, tools) => _TelemetryBody(key: ValueKey(identityHashCode(tools)), host: host, tools: tools),
+        builder: (context, host, tools) => _TelemetryBody(key: ValueKey(identityHashCode(tools)), host: host, tools: tools, contact: contact),
       );
 }
 
 class _TelemetryBody extends StatefulWidget {
   final ToolsHost host;
   final RadioTools tools;
-  const _TelemetryBody({super.key, required this.host, required this.tools});
+  final ContactRef? contact;
+  const _TelemetryBody({super.key, required this.host, required this.tools, this.contact});
   @override
   State<_TelemetryBody> createState() => _TelemetryBodyState();
 }
@@ -56,6 +60,19 @@ class _TelemetryBodyState extends State<_TelemetryBody> {
   TelemetryResult? _shown;
 
   TelemetryTool get _t => widget.tools.telemetry;
+
+  @override
+  void initState() {
+    super.initState();
+    final ref = widget.contact;
+    if (ref != null) {
+      _self = false;
+      _picked = ref.keyHex;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _contacts == null) _loadContacts();
+      });
+    }
+  }
 
   Future<void> _loadContacts() async {
     setState(() {

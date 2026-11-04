@@ -8,25 +8,29 @@ import '../../radio/protocol.dart' show AdvType;
 import '../../radio/tools/discover_tool.dart';
 import '../../radio/tools/radio_tools.dart';
 import '../app.dart';
+import 'contact_ref.dart';
 import 'tool_kit.dart';
 import 'tools_host.dart';
 import '../design/app_surfaces.dart';
 
 class DiscoverScreen extends StatelessWidget {
-  const DiscoverScreen({super.key});
+  /// Opens looking for this contact: the screen says whether it answered.
+  final ContactRef? contact;
+  const DiscoverScreen({super.key, this.contact});
 
   @override
   Widget build(BuildContext context) => ToolPage(
         id: 'discover',
         title: 'Discover nearby',
-        builder: (context, host, tools) => _DiscoverBody(key: ValueKey(identityHashCode(tools)), host: host, tools: tools),
+        builder: (context, host, tools) => _DiscoverBody(key: ValueKey(identityHashCode(tools)), host: host, tools: tools, contact: contact),
       );
 }
 
 class _DiscoverBody extends StatefulWidget {
   final ToolsHost host;
   final RadioTools tools;
-  const _DiscoverBody({super.key, required this.host, required this.tools});
+  final ContactRef? contact;
+  const _DiscoverBody({super.key, required this.host, required this.tools, this.contact});
   @override
   State<_DiscoverBody> createState() => _DiscoverBodyState();
 }
@@ -66,6 +70,20 @@ class _DiscoverBodyState extends State<_DiscoverBody> {
     showAppToast(context, text, kind: err == null ? AppToastKind.success : AppToastKind.error);
   }
 
+  Widget _lookingFor(BuildContext context, ContactRef ref, List<DiscoveredNode> results, bool scanning) {
+    final t = Theme.of(context);
+    final heard = results.any((n) => n.keyHex.toLowerCase().startsWith(ref.keyHex.toLowerCase().substring(0, 16)) || ref.keyHex.toLowerCase().startsWith(n.keyHex.toLowerCase()));
+    final text = scanning
+        ? 'Looking for ${ref.name}…'
+        : (results.isEmpty && _d.status != DiscoverStatus.done
+            ? 'Scan to see whether ${ref.name} is in direct range.'
+            : (heard ? '${ref.name} answered: in direct range.' : '${ref.name} did not answer. It may be out of direct range.'));
+    return Padding(
+      padding: const EdgeInsets.only(top: Gap.m),
+      child: Text(text, key: const Key('discover-looking-for'), style: t.textTheme.titleSmall),
+    );
+  }
+
   static String _typeWord(int t) => switch (t) { AdvType.repeater => 'Repeater', AdvType.room => 'Room', AdvType.sensor => 'Sensor', AdvType.chat => 'Chat node', _ => 'Node' };
 
   @override
@@ -87,6 +105,7 @@ class _DiscoverBodyState extends State<_DiscoverBody> {
             ),
             const SizedBox(height: Gap.s),
             Text('Repeaters answer 4 scans every 2 minutes, so MeshSonar counts them for you.', style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+            if (widget.contact != null) _lookingFor(context, widget.contact!, results, scanning),
             const ToolHeading('Look for'),
             Wrap(spacing: Gap.s, runSpacing: Gap.s, children: [
               for (final (type, label) in [(AdvType.repeater, 'Repeaters'), (AdvType.room, 'Rooms'), (AdvType.sensor, 'Sensors')])

@@ -28,23 +28,34 @@ class ContactRepository {
         onRadio: (r['on_radio'] as int) != 0,
         radioFlags: r['radio_flags'] as int,
         lastHeardMs: r['last_heard_ms'] as int?,
-        forceFlood: (r['force_flood'] as int) != 0,
+        pathMode: PathMode.parse(r['path_mode'] as String?) == PathMode.auto && (r['force_flood'] as int) != 0
+            ? PathMode.flood
+            : PathMode.parse(r['path_mode'] as String?),
+        pinnedPath: r['pinned_path'] as String?,
+        pinnedHashSize: r['pinned_hash_size'] as int?,
+        pathLearnedMs: r['path_learned_ms'] as int?,
+        lastPingMs: r['last_ping_ms'] as int?,
+        lastPingRttMs: r['last_ping_rtt_ms'] as int?,
+        lastPingOk: r['last_ping_ok'] == null ? null : (r['last_ping_ok'] as int) != 0,
       );
 
   /// Inserts or replaces by (radioId, publicKey).
   void upsert(Contact c) {
     db.raw.execute('''
 INSERT INTO contacts(radio_id, pubkey, type, name, custom_name, lat, lon, last_advert_ts, lastmod, out_path, out_path_len, favourite, blocked, notes, source,
- on_radio, radio_flags, last_heard_ms, force_flood)
-VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+ on_radio, radio_flags, last_heard_ms, force_flood, path_mode, pinned_path, pinned_hash_size, path_learned_ms, last_ping_ms, last_ping_rtt_ms, last_ping_ok)
+VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 ON CONFLICT(radio_id, pubkey) DO UPDATE SET type=excluded.type, name=excluded.name, custom_name=excluded.custom_name, lat=excluded.lat,
  lon=excluded.lon, last_advert_ts=excluded.last_advert_ts, lastmod=excluded.lastmod, out_path=excluded.out_path,
  out_path_len=excluded.out_path_len, favourite=excluded.favourite, blocked=excluded.blocked, notes=excluded.notes, source=excluded.source,
- on_radio=excluded.on_radio, radio_flags=excluded.radio_flags, last_heard_ms=excluded.last_heard_ms, force_flood=excluded.force_flood
+ on_radio=excluded.on_radio, radio_flags=excluded.radio_flags, last_heard_ms=excluded.last_heard_ms, force_flood=excluded.force_flood,
+ path_mode=excluded.path_mode, pinned_path=excluded.pinned_path, pinned_hash_size=excluded.pinned_hash_size, path_learned_ms=excluded.path_learned_ms,
+ last_ping_ms=excluded.last_ping_ms, last_ping_rtt_ms=excluded.last_ping_rtt_ms, last_ping_ok=excluded.last_ping_ok
 ''', [
       c.radioId, c.publicKey.toLowerCase(), c.type.code, c.name, c.customName, c.lat, c.lon, c.lastAdvertTs, c.lastMod, c.outPath,
       c.outPathLen, c.favourite ? 1 : 0, c.blocked ? 1 : 0, c.notes, c.source.name,
       c.onRadio ? 1 : 0, c.radioFlags, c.lastHeardMs, c.forceFlood ? 1 : 0,
+      c.pathMode.name, c.pinnedPath, c.pinnedHashSize, c.pathLearnedMs, c.lastPingMs, c.lastPingRttMs, c.lastPingOk == null ? null : (c.lastPingOk! ? 1 : 0),
     ]);
   }
 
@@ -94,7 +105,25 @@ ON CONFLICT(radio_id, pubkey) DO UPDATE SET type=excluded.type, name=excluded.na
       db.raw.execute('UPDATE contacts SET out_path = ?, out_path_len = ? WHERE radio_id = ? AND pubkey = ?', [path, pathLen, radioId, key.toLowerCase()]);
 
   void setForceFlood(String radioId, String key, bool v) =>
-      db.raw.execute('UPDATE contacts SET force_flood = ? WHERE radio_id = ? AND pubkey = ?', [v ? 1 : 0, radioId, key.toLowerCase()]);
+      setPathMode(radioId, key, v ? PathMode.flood : PathMode.auto);
+
+  /// Sets the route mode (keeps the legacy `force_flood` column in step) and, for `fixed`, the pinned route.
+  void setPathMode(String radioId, String key, PathMode mode, {String? pinnedPath, int? pinnedHashSize, bool keepPinned = false}) {
+    if (keepPinned) {
+      db.raw.execute('UPDATE contacts SET path_mode = ?, force_flood = ? WHERE radio_id = ? AND pubkey = ?',
+          [mode.name, mode == PathMode.flood ? 1 : 0, radioId, key.toLowerCase()]);
+    } else {
+      db.raw.execute('UPDATE contacts SET path_mode = ?, force_flood = ?, pinned_path = ?, pinned_hash_size = ? WHERE radio_id = ? AND pubkey = ?',
+          [mode.name, mode == PathMode.flood ? 1 : 0, mode == PathMode.fixed ? pinnedPath : null, mode == PathMode.fixed ? pinnedHashSize : null, radioId, key.toLowerCase()]);
+    }
+  }
+
+  void setPathLearned(String radioId, String key, int? ms) =>
+      db.raw.execute('UPDATE contacts SET path_learned_ms = ? WHERE radio_id = ? AND pubkey = ?', [ms, radioId, key.toLowerCase()]);
+
+  void setLastPing(String radioId, String key, {required int tsMs, int? rttMs, required bool ok}) => db.raw.execute(
+      'UPDATE contacts SET last_ping_ms = ?, last_ping_rtt_ms = ?, last_ping_ok = ? WHERE radio_id = ? AND pubkey = ?',
+      [tsMs, rttMs, ok ? 1 : 0, radioId, key.toLowerCase()]);
 
   void setRadioFlags(String radioId, String key, int flags) =>
       db.raw.execute('UPDATE contacts SET radio_flags = ? WHERE radio_id = ? AND pubkey = ?', [flags, radioId, key.toLowerCase()]);

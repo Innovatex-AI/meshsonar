@@ -18,6 +18,11 @@ abstract final class AppFlags {
   static bool get chatRedesign => chatRedesignNotifier.value;
   static set chatRedesign(bool v) => chatRedesignNotifier.value = v;
 
+  /// The set-path radio write (Chat WP7): ADD_UPDATE_CONTACT with a chosen route ("Choose repeaters yourself" > Save) and the
+  /// outbox rewrite of a path the radio forgot in Keep this route. Hidden until Andy's real-radio test passes (spikes S3/S13,
+  /// HANDOFF checklist). Everything else about routes (display, mode, discovery, trace, ping, reset) is live.
+  static const bool routeWriteVerified = false;
+
   /// The new Drive screen (map plus bottom panel, Drive plan WP3). ON by default (Andy, Nov 2): More > Developer keeps a switch
   /// that falls back to the old footer layout as an escape hatch.
   static final ValueNotifier<bool> driveRedesignNotifier = ValueNotifier<bool>(true);

@@ -27,6 +27,15 @@ enum ContactType {
 enum ContactSource { radio, discovered, imported, manual }
 
 /// A person, repeater, room server or sensor.
+/// How DMs to a contact are routed (plan 4.7): `auto` learns and relearns, `fixed` keeps the pinned route, `flood` always searches.
+enum PathMode {
+  auto,
+  fixed,
+  flood;
+
+  static PathMode parse(String? s) => PathMode.values.firstWhere((m) => m.name == s, orElse: () => PathMode.auto);
+}
+
 class Contact {
   final String radioId;
 
@@ -61,8 +70,21 @@ class Contact {
   /// Local time (ms) this phone last heard the contact: an advert, a message or an acknowledgement.
   final int? lastHeardMs;
 
+  /// How DMs are routed (see [PathMode]). `forceFlood` is `pathMode == flood`.
+  final PathMode pathMode;
+
+  /// The route kept by [PathMode.fixed]: comma separated hex hops ("a1,b2"), its hash size, and when a route was last learned.
+  final String? pinnedPath;
+  final int? pinnedHashSize;
+  final int? pathLearnedMs;
+
+  /// The last ping: when, round trip, success (null = never pinged).
+  final int? lastPingMs;
+  final int? lastPingRttMs;
+  final bool? lastPingOk;
+
   /// Send every DM to this contact by flood, never along a saved path.
-  final bool forceFlood;
+  bool get forceFlood => pathMode == PathMode.flood;
 
   const Contact({
     required this.radioId,
@@ -83,8 +105,15 @@ class Contact {
     this.onRadio = false,
     this.radioFlags = 0,
     this.lastHeardMs,
-    this.forceFlood = false,
-  });
+    bool forceFlood = false,
+    PathMode? pathMode,
+    this.pinnedPath,
+    this.pinnedHashSize,
+    this.pathLearnedMs,
+    this.lastPingMs,
+    this.lastPingRttMs,
+    this.lastPingOk,
+  }) : pathMode = pathMode ?? (forceFlood ? PathMode.flood : PathMode.auto);
 
   /// First 6 bytes of the key as 12 hex characters: what DM frames carry.
   String get prefix => publicKey.substring(0, 12);
@@ -110,6 +139,13 @@ class Contact {
     int? radioFlags,
     Object? lastHeardMs = _keep,
     bool? forceFlood,
+    PathMode? pathMode,
+    Object? pinnedPath = _keep,
+    Object? pinnedHashSize = _keep,
+    Object? pathLearnedMs = _keep,
+    Object? lastPingMs = _keep,
+    Object? lastPingRttMs = _keep,
+    Object? lastPingOk = _keep,
   }) =>
       Contact(
         radioId: radioId,
@@ -130,8 +166,25 @@ class Contact {
         onRadio: onRadio ?? this.onRadio,
         radioFlags: radioFlags ?? this.radioFlags,
         lastHeardMs: identical(lastHeardMs, _keep) ? this.lastHeardMs : lastHeardMs as int?,
-        forceFlood: forceFlood ?? this.forceFlood,
+        pathMode: pathMode ??
+            (forceFlood == null ? this.pathMode : (forceFlood ? PathMode.flood : (this.pathMode == PathMode.flood ? PathMode.auto : this.pathMode))),
+        pinnedPath: identical(pinnedPath, _keep) ? this.pinnedPath : pinnedPath as String?,
+        pinnedHashSize: identical(pinnedHashSize, _keep) ? this.pinnedHashSize : pinnedHashSize as int?,
+        pathLearnedMs: identical(pathLearnedMs, _keep) ? this.pathLearnedMs : pathLearnedMs as int?,
+        lastPingMs: identical(lastPingMs, _keep) ? this.lastPingMs : lastPingMs as int?,
+        lastPingRttMs: identical(lastPingRttMs, _keep) ? this.lastPingRttMs : lastPingRttMs as int?,
+        lastPingOk: identical(lastPingOk, _keep) ? this.lastPingOk : lastPingOk as bool?,
       );
+
+  /// This contact with the phone-only route settings of [o] (a fresh copy from the radio does not know them).
+  Contact withRouteOf(Contact o) => copyWith(
+      pathMode: o.pathMode,
+      pinnedPath: o.pinnedPath,
+      pinnedHashSize: o.pinnedHashSize,
+      pathLearnedMs: o.pathLearnedMs,
+      lastPingMs: o.lastPingMs,
+      lastPingRttMs: o.lastPingRttMs,
+      lastPingOk: o.lastPingOk);
 
   /// Hops of the saved route (low 6 bits of the path byte), or null when none is saved.
   int? get pathHops => hasPath ? outPathLen & 63 : null;

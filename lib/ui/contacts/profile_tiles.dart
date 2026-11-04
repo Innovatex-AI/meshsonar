@@ -56,7 +56,6 @@ List<ProfileTile> profileTiles(
       AppSymbols.antenna,
       enabled: connected && fwOk,
       reason: !connected ? needRadio : (!fwOk ? 'This radio\'s firmware cannot search for routes.' : null),
-      comingSoon: true,
     );
   }
 
