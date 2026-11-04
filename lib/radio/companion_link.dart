@@ -12,6 +12,7 @@ import 'dart:typed_data';
 
 import '../core/drive_context.dart';
 import '../core/model.dart';
+import '../core/plan/airtime_calc.dart' show AirRadio, timeOnAir;
 import 'claim_radio.dart';
 import 'caps.dart';
 import 'command_queue.dart';
@@ -120,8 +121,17 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
       : _clock = clock ?? DateTime.now {
     sync = MessageSync(this, clock: _clock, pollInterval: messagePollInterval)
       ..onContactText = _onContactText
-      ..rxFacts = (at, snr, hops) => _rxCorrelator.take(at: at, snrDb: snr, hops: hops);
+      ..rxFacts = ((at, snr, hops) => _rxCorrelator.take(at: at, snrDb: snr, hops: hops))
+      ..airMsFor = _airMsFor;
     _sub = _transport.incoming.listen(_onFrame, onDone: _onTransportDone, onError: (Object _) {});
+  }
+
+  /// Time on air of a packet of [bytes] at this radio's SF / bandwidth / coding rate (from SELF_INFO), or null before it is known.
+  int? _airMsFor(int bytes) {
+    final si = _selfFrame;
+    if (si == null || si.sf <= 0 || si.bwHz <= 0 || si.cr <= 0) return null;
+    final cr = si.cr < 5 ? si.cr + 4 : si.cr; // the radio reports 5..8 (4/5..4/8); tolerate 1..4
+    return timeOnAir(bytes, AirRadio(sf: si.sf, bwKHz: si.bwKhz, cr: cr)).totalMs.round();
   }
 
   void _onContactText(ContactTextFrame f) {

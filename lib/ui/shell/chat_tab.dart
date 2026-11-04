@@ -255,7 +255,18 @@ class RedesignedChatTabState extends State<RedesignedChatTab> {
               ),
             ),
           ),
-        if (seg == ChatShellSegment.chats && _search.text.isEmpty)
+        // Two one-time tips, one at a time: the swipe tip first (only once there is a conversation to swipe), then Network.
+        if (seg == ChatShellSegment.chats && _search.text.isEmpty && !p.isEmpty && !appTipStore.seen('chat-swipe-tip'))
+          SliverToBoxAdapter(
+            child: TipCard(
+              tipId: 'chat-swipe-tip',
+              symbol: AppSymbols.message,
+              title: 'Swipe a conversation',
+              message: 'Swipe right to pin or mark unread. Swipe left to mute or delete.',
+              onDismissed: () => setState(() {}),
+            ),
+          )
+        else if (seg == ChatShellSegment.chats && _search.text.isEmpty)
           const SliverToBoxAdapter(
             child: TipCard(
               tipId: 'chat-network-tip',

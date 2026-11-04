@@ -27,3 +27,11 @@ void saveQuickReplies(ChatStore store, List<String> replies) {
   final same = clean.length == defaultQuickReplies.length && [for (var i = 0; i < clean.length; i++) clean[i] == defaultQuickReplies[i]].every((b) => b);
   store.db.putSetting(quickRepliesKey, same ? null : jsonEncode(clean));
 }
+
+/// "Return sends" (More > Chat): with a hardware keyboard Return sends and Shift-Return starts a new line. Off by default
+/// (Cmd-Return always sends). Stored in the chat `settings` table.
+const String returnSendsKey = 'return_sends';
+
+bool loadReturnSends(ChatStore store) => store.db.setting(returnSendsKey) == '1';
+
+void saveReturnSends(ChatStore store, bool on) => store.db.putSetting(returnSendsKey, on ? '1' : null);

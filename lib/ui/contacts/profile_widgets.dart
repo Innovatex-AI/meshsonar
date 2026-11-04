@@ -1,6 +1,7 @@
 // Building blocks of the contact profile: the inset-grouped card, its rows, the quick-action tile grid and the middle
 // ellipsis for keys. No Material list widgets (the chat lint bans them); everything is plain layout over the shared tokens.
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart' show CustomSemanticsAction;
 
 import '../design/app_haptics.dart';
 import '../design/app_symbols.dart';
@@ -113,7 +114,10 @@ class ProfileRow extends StatelessWidget {
 class ProfileTileGrid extends StatelessWidget {
   final List<ProfileTile> tiles;
   final void Function(ProfileTile) onTap;
-  const ProfileTileGrid({super.key, required this.tiles, required this.onTap});
+
+  /// Long press / VoiceOver "More options" on a tile whose [ProfileTile.hasOptions] is set.
+  final void Function(ProfileTile)? onOptions;
+  const ProfileTileGrid({super.key, required this.tiles, required this.onTap, this.onOptions});
 
   static const double minTile = 72;
   static const double gap = Gap.s;
@@ -141,7 +145,7 @@ class ProfileTileGrid extends StatelessWidget {
           key: const Key('profile-tiles'),
           spacing: gap,
           runSpacing: gap,
-          children: [for (final t in tiles) SizedBox(width: w, child: _TileButton(tile: t, onTap: () => onTap(t)))],
+          children: [for (final t in tiles) SizedBox(width: w, child: _TileButton(tile: t, onTap: () => onTap(t), onOptions: t.hasOptions && t.enabled && onOptions != null ? () => onOptions!(t) : null))],
         );
       }),
     );
@@ -151,7 +155,8 @@ class ProfileTileGrid extends StatelessWidget {
 class _TileButton extends StatefulWidget {
   final ProfileTile tile;
   final VoidCallback onTap;
-  const _TileButton({required this.tile, required this.onTap});
+  final VoidCallback? onOptions;
+  const _TileButton({required this.tile, required this.onTap, this.onOptions});
   @override
   State<_TileButton> createState() => _TileButtonState();
 }
@@ -169,10 +174,20 @@ class _TileButtonState extends State<_TileButton> {
       enabled: t.enabled,
       label: label,
       onTap: widget.onTap,
+      onLongPress: widget.onOptions,
+      customSemanticsActions: {
+        if (widget.onOptions != null) const CustomSemanticsAction(label: 'More ping options'): widget.onOptions!,
+      },
       child: ExcludeSemantics(
         child: GestureDetector(
           key: Key('tile-${t.id.name}'),
           behavior: HitTestBehavior.opaque,
+          onLongPress: widget.onOptions == null
+              ? null
+              : () {
+                  AppHaptics.selection();
+                  widget.onOptions!();
+                },
           onTapDown: (_) => setState(() => _down = true),
           onTapCancel: () => setState(() => _down = false),
           onTapUp: (_) => setState(() => _down = false),

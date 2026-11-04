@@ -59,6 +59,10 @@ class InboundMessage {
   final String? pathHashesHex;
   final int? hashSize;
 
+  /// Time on air of the received packet in ms, from its logged length and the radio's own SF/BW/CR; null when the packet was
+  /// not correlated or the radio's parameters are unknown.
+  final int? airMs;
+
   const InboundMessage({
     required this.kind,
     this.channelIndex,
@@ -76,6 +80,7 @@ class InboundMessage {
     this.rssiDbm,
     this.pathHashesHex,
     this.hashSize,
+    this.airMs,
   });
 
   bool get wasDirect => pathLen == 0xFF;

@@ -244,7 +244,11 @@ class _ComposerState extends State<Composer> {
                   ]),
                 ),
               CallbackShortcuts(
-                bindings: {const SingleActivator(LogicalKeyboardKey.enter, meta: true): () => canSend ? _send() : null},
+                bindings: {
+                  const SingleActivator(LogicalKeyboardKey.enter, meta: true): () => canSend ? _send() : null,
+                  // "Return sends" (More > Chat): a plain Return from a hardware keyboard sends; Shift-Return stays a new line.
+                  if (loadReturnSends(c.store)) const SingleActivator(LogicalKeyboardKey.enter): () => canSend ? _send() : null,
+                },
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [

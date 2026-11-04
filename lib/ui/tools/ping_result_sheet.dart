@@ -90,6 +90,32 @@ Future<PingSheetOutcome?> showPingSheet(
   );
 }
 
+/// Long press on the Ping tile: Ping, Direct only (the node's own radio range, no repeater in between) and the hash size a
+/// ID size a direct or unrouted trace carries (1, 2 or 3 bytes). Each choice runs the ping sheet with those parameters.
+Future<PingSheetOutcome?> showPingOptions(
+  BuildContext context, {
+  required Contact contact,
+  required ContactManager manager,
+  RadioTools? tools,
+  Future<void> Function(PathRoute route)? onUseRoute,
+}) async {
+  final pick = await showAppActionSheet<(bool, int)>(
+    context,
+    title: 'Ping ${contact.displayName}',
+    message: 'Direct only skips every repeater. Longer IDs tell nearby repeaters apart more reliably.',
+    sheetKey: const Key('ping-options'),
+    actions: const [
+      AppAction('Ping', (false, 1), key: Key('ping-opt-normal')),
+      AppAction('Direct only', (true, 1), key: Key('ping-opt-direct')),
+      AppAction('Direct only, 2-byte IDs', (true, 2), key: Key('ping-opt-direct-2')),
+      AppAction('Direct only, 3-byte IDs', (true, 3), key: Key('ping-opt-direct-3')),
+    ],
+  );
+  if (pick == null || !context.mounted) return null;
+  return showPingSheet(context,
+      contact: contact, manager: manager, tools: tools, directOnly: pick.$1, hashSize: pick.$2, onUseRoute: onUseRoute);
+}
+
 class PingResultBody extends StatefulWidget {
   final ScrollController controller;
   final Contact contact;

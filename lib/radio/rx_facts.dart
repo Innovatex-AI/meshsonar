@@ -21,7 +21,10 @@ class RxFacts {
   final int hashSize;
   final int hops;
   final int payloadType;
-  const RxFacts({required this.rssiDbm, required this.snrDb, required this.pathHashes, required this.hashSize, required this.hops, required this.payloadType});
+
+  /// Length of the whole logged packet in bytes (what went on the air), for the airtime of the message.
+  final int rawLength;
+  const RxFacts({required this.rssiDbm, required this.snrDb, required this.pathHashes, required this.hashSize, required this.hops, required this.payloadType, this.rawLength = 0});
 }
 
 /// Mesh packet header (src/Packet.h): [header][transport codes 4 bytes if route type 0 or 3][path_len][path][payload].
@@ -39,7 +42,7 @@ RxFacts? parseRxPacket(Uint8List raw, {required double snrDb, required int rssiD
   final size = (pl >> 6) + 1;
   if (size > 3 || i + hops * size > raw.length) return null;
   final path = raw.sublist(i, i + hops * size);
-  return RxFacts(rssiDbm: rssiDbm, snrDb: snrDb, pathHashes: toHex(path), hashSize: size, hops: hops, payloadType: payloadType);
+  return RxFacts(rssiDbm: rssiDbm, snrDb: snrDb, pathHashes: toHex(path), hashSize: size, hops: hops, payloadType: payloadType, rawLength: raw.length);
 }
 
 class RxCorrelator {

@@ -41,7 +41,10 @@ import 'channel_detail_screen.dart';
 import 'channel_flows.dart';
 import 'chat_list_actions.dart';
 import 'chat_navigation.dart';
+import '../design/app_widgets.dart' show TipCard;
 import 'composer.dart';
+import 'route_broken_card.dart';
+import '../../chat/route_health.dart';
 import 'message_bubble.dart';
 import 'message_format.dart';
 import 'message_menu.dart';
@@ -146,6 +149,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
   Timer? _flash;
   GlobalKey? _anchorKey;
   List<String> _failedIds = const [];
+  bool _routeBroken = false;
   List<Contact> _repeaters = const [];
   ChatNavigator? _navigator;
   final Map<String, MessageBubble> _bubbles = {};
@@ -212,6 +216,12 @@ class _ConversationScreenState extends State<ConversationScreen> {
   void _regroup() {
     _slots = groupMessages(_msgs, showSenders: _kind != ConvKind.dm);
     _failedIds = [for (final m in c.store.messages.byState(const [MessageState.failed]) .where((m) => m.convKey == widget.convKey)) m.id];
+    _refreshRouteHealth();
+  }
+
+  void _refreshRouteHealth() {
+    final contact = _kind == ConvKind.dm ? _contact : null;
+    _routeBroken = contact != null && routeLooksBroken(c.store, contact);
   }
 
   void _refreshRepeaters() {
@@ -226,7 +236,10 @@ class _ConversationScreenState extends State<ConversationScreen> {
     switch (e.kind) {
       case ChatEventKind.contactsChanged:
       case ChatEventKind.channelsChanged:
-        setState(_refreshRepeaters);
+        setState(() {
+          _refreshRepeaters();
+          _refreshRouteHealth();
+        });
       case ChatEventKind.messageUpdated:
         if (e.convKey == widget.convKey && e.messageId != null) _onUpdated(e.messageId!);
       case ChatEventKind.messageAdded:
@@ -720,7 +733,16 @@ class _ConversationScreenState extends State<ConversationScreen> {
     return Column(
       children: [
         if (widget.header != null) widget.header!,
+        if (_msgs.isNotEmpty)
+          const TipCard(
+            tipId: 'conv-details-tip',
+            symbol: AppSymbols.infoCircle,
+            title: 'See how a message travelled',
+            message: 'Tap a message to see its route, signal and time.',
+          ),
         Expanded(child: _list(context)),
+        if (_routeBroken && _contact != null)
+          RouteBrokenCard(contact: _contact!, manager: c.service.contacts, onChanged: () => mounted ? setState(_refreshRouteHealth) : null),
         if (_failedIds.length >= 2)
           Container(
             key: const Key('retry-all-banner'),

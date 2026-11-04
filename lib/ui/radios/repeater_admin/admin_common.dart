@@ -88,7 +88,7 @@ class AdminCard extends StatelessWidget {
         // A Material (not a coloured box) so the ListTile rows inside keep their ink.
         child: Material(
           color: c.surface,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(Corners.card),
           clipBehavior: Clip.antiAlias,
           child: Padding(
             padding: const EdgeInsets.all(Gap.l),

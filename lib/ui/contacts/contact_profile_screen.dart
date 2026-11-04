@@ -31,6 +31,7 @@ import 'contacts_controller.dart';
 import 'path_manager_screen.dart';
 import 'profile_sheets.dart';
 import 'profile_tiles.dart';
+import 'radio_caps_of.dart';
 import 'profile_widgets.dart';
 import 'user_stats_sheet.dart';
 
@@ -136,7 +137,7 @@ class _ContactProfileScreenState extends State<ContactProfileScreen> {
     final redesign = AppFlags.chatRedesign;
     final tiles = profileTiles(c,
         connected: connected,
-        caps: widget.radioCaps?.call() ?? RadioCaps.baseline,
+        caps: widget.radioCaps?.call() ?? radioCapsOf(context),
         canMessage: canMessage,
         canAdmin: canAdmin,
         redesign: redesign);
@@ -199,7 +200,7 @@ class _ContactProfileScreenState extends State<ContactProfileScreen> {
               padding: const EdgeInsets.only(bottom: Gap.xl),
               children: [
                 _header(context, c, now),
-                ProfileTileGrid(tiles: tiles, onTap: (t) => _tapTile(c, t)),
+                ProfileTileGrid(tiles: tiles, onTap: (t) => _tapTile(c, t), onOptions: (t) => _pingOptions(c)),
                 if (disabled.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(Layout.screenMargin + Gap.xs, 0, Layout.screenMargin, Gap.m),
@@ -366,6 +367,9 @@ class _ContactProfileScreenState extends State<ContactProfileScreen> {
         await showUserStatsSheet(context, contact: c);
     }
   }
+
+  Future<void> _pingOptions(Contact c) =>
+      showPingOptions(context, contact: c, manager: _m, onUseRoute: (r) => offerUseRoute(context, _m, c, r));
 
   Future<void> _route(Contact c) => PathManagerScreen.open(context, manager: _m, publicKey: c.publicKey, changes: _c);
 

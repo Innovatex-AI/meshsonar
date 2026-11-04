@@ -12,7 +12,6 @@ import 'package:flutter_slidable/flutter_slidable.dart';
 
 import '../../chat/contact_manager.dart';
 import '../../chat/models.dart';
-import '../../radio/caps.dart';
 import '../design/app_haptics.dart';
 import '../design/app_surfaces.dart';
 import '../design/app_symbols.dart';
@@ -32,6 +31,7 @@ import 'contacts_grouping.dart';
 import 'contacts_settings_sheet.dart';
 import 'path_manager_screen.dart' show offerUseRoute;
 import 'profile_tiles.dart';
+import 'radio_caps_of.dart';
 import 'qr_scan_screen.dart';
 import 'radio_list_sheet.dart';
 
@@ -94,7 +94,7 @@ class _ContactsViewState extends State<ContactsView> {
   }
 
   Future<void> _ping(Contact c) async {
-    final tile = profileTiles(c, connected: _m.connected, caps: RadioCaps.baseline, canMessage: false, canAdmin: false, redesign: true)
+    final tile = profileTiles(c, connected: _m.connected, caps: radioCapsOf(context), canMessage: false, canAdmin: false, redesign: true)
         .where((t) => t.id == ProfileTileId.ping)
         .firstOrNull;
     if (tile != null && !tile.enabled) {
