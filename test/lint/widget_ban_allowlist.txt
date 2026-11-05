@@ -29,12 +29,6 @@ lib/ui/contacts/add_contact_screen.dart|TextField(|2
 lib/ui/contacts/contacts_settings_sheet.dart|ListTile(|1
 lib/ui/contacts/contacts_settings_sheet.dart|SwitchListTile(|3
 lib/ui/contacts/contacts_settings_sheet.dart|TextButton|2
-lib/ui/contacts/contacts_view.dart|Card(|1
-lib/ui/contacts/contacts_view.dart|FilledButton|10
-lib/ui/contacts/contacts_view.dart|Icons.|15
-lib/ui/contacts/contacts_view.dart|InkWell(|1
-lib/ui/contacts/contacts_view.dart|TextButton|12
-lib/ui/contacts/contacts_view.dart|TextField(|1
 lib/ui/contacts/qr_scan_screen.dart|Icons.|3
 lib/ui/contacts/radio_list_sheet.dart|FilledButton|2
 lib/ui/radios/admin_launcher.dart|FilledButton|2
