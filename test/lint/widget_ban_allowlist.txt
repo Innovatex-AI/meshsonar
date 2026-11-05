@@ -86,10 +86,6 @@ lib/ui/radios/repeater_admin/setting_editor_sheet.dart|Icons.|10
 lib/ui/radios/repeater_admin/setting_editor_sheet.dart|SwitchListTile(|1
 lib/ui/radios/repeater_admin/setting_editor_sheet.dart|TextButton|2
 lib/ui/radios/repeater_admin/setting_editor_sheet.dart|TextField(|5
-lib/ui/radios/repeaters_screen.dart|CircularProgressIndicator|1
-lib/ui/radios/repeaters_screen.dart|Icons.|6
-lib/ui/radios/repeaters_screen.dart|ListTile(|1
-lib/ui/radios/repeaters_screen.dart|TextField(|1
 lib/ui/radios/rooms/room_join_header.dart|CircularProgressIndicator|1
 lib/ui/radios/rooms/room_join_header.dart|FilledButton|2
 lib/ui/radios/rooms/room_join_header.dart|Icons.|1

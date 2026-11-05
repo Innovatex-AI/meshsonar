@@ -42,7 +42,7 @@ void main() {
   setUp(() => kit = kitlib.ChatKit());
   tearDown(() => kit.dispose());
 
-  testWidgets('tapping a person opens the profile; Message (swipe) opens the conversation with the route strip; the strip opens the details', (tester) async {
+  testWidgets('tapping a person opens the profile; Message (swipe) opens the conversation with the route text; the title block opens the profile', (tester) async {
     await boot(tester);
     expect(find.text('Ann'), findsOneWidget);
     await tester.tap(find.text('Ann'));

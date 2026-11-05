@@ -1,4 +1,4 @@
-// More > Repeaters and rooms, the launcher, and the "Administer this repeater" button, through the real app state with a real
+// The admin launcher (the Repeaters screen is retired; Chat > Network lists them), and the "Administer this repeater" button, through the real app state with a real
 // companion link over the fake radio (and, for the negative cases, the plain fake link that cannot administer).
 import 'dart:async';
 import 'dart:typed_data';
@@ -10,13 +10,12 @@ import 'package:meshsonar/radio/admin_password_vault.dart';
 import 'package:meshsonar/radio/companion_link.dart';
 import 'package:meshsonar/radio/radio_api.dart';
 import 'package:meshsonar/ui/app.dart';
-import 'package:meshsonar/ui/design/app_surfaces.dart' show dismissAppToast;
 import 'package:meshsonar/ui/radios/admin_launcher.dart';
 import 'package:meshsonar/ui/radios/rooms/room_join_header.dart';
 
 import '../../support/repeater_admin_fake.dart';
 import '../fakes.dart';
-import 'admin_rig.dart' show frames, pumpUntilFound, repKey;
+import 'admin_rig.dart' show pumpUntilFound, repKey;
 
 class _Scanner implements RadioScanner {
   final AdminFakeTransport t;
@@ -59,82 +58,9 @@ class AdminHarness extends Harness {
   }
 }
 
-Future<void> openRepeatersRow(WidgetTester tester) async {
-  await tapShellTab(tester, 'More');
-  for (var i = 0; i < 3 && (find.byType(BottomSheet).evaluate().isNotEmpty || find.byKey(const Key('app-sheet')).evaluate().isNotEmpty); i++) {
-    await tester.tapAt(const Offset(2, 2));
-    await tester.pumpAndSettle();
-  }
-  final row = find.byKey(const Key('more-repeaters'));
-  final scrollable = find.descendant(of: find.byKey(const Key('more-list')), matching: find.byType(Scrollable)).first;
-  await tester.scrollUntilVisible(row, 150, scrollable: scrollable);
-  // The row can land under the translucent tab bar: bring it clear of it.
-  await Scrollable.ensureVisible(tester.element(row), alignment: 0.3);
-  await tester.pump();
-  await tester.tap(row);
-  await tester.pump();
-  await tester.pump(const Duration(milliseconds: 400));
-}
-
 void main() {
   setUp(() => setAdminVaultForTest(AdminPasswordVault()));
   tearDown(() => setAdminVaultForTest(null));
-
-  testWidgets('More has a Radios and tools row; without a radio the screen says to connect it', (tester) async {
-    useTallScreen(tester);
-    final h = Harness();
-    await h.pumpApp(tester);
-    await tapShellTab(tester, 'More');
-    expect(find.text('Radios and tools'), findsOneWidget);
-    expect(find.byKey(const Key('more-repeaters')), findsOneWidget);
-    await openRepeatersRow(tester);
-    expect(find.byKey(const Key('repeaters-screen')), findsOneWidget);
-    expect(find.text('Radio not connected'), findsOneWidget);
-    expect(find.textContaining('Connect your radio first'), findsOneWidget);
-  });
-
-  testWidgets('a connection that cannot administer (the Simulator) says so instead of failing', (tester) async {
-    useTallScreen(tester);
-    final h = Harness();
-    await h.pumpApp(tester);
-    await h.state.connectSimulator();
-    await tester.pumpAndSettle();
-    await openRepeatersRow(tester);
-    expect(find.text('Not available on this connection'), findsOneWidget);
-    expect(find.textContaining('Simulator has no repeaters'), findsOneWidget);
-  });
-
-  testWidgets('lists repeaters and rooms from the radio; a repeater opens its login, a room opens its conversation', (tester) async {
-    useTallScreen(tester);
-    final h = AdminHarness();
-    await tester.runAsync(() => h.state.init());
-    await tester.pumpWidget(MeshSonarApp(state: h.state));
-    await tester.pump();
-    await tester.runAsync(() => h.state.connectSimulator());
-    await tester.pump();
-    expect(h.state.radioSession, isNotNull);
-    await openRepeatersRow(tester);
-    await pumpUntilFound(tester, find.byKey(Key('rep-${h.rep.keyHex}')));
-    expect(find.text('Repeaters'), findsOneWidget);
-    expect(find.text('Room servers'), findsOneWidget);
-    expect(find.text('Hilltop'), findsOneWidget);
-    expect(find.text('Valley Room'), findsOneWidget);
-    expect(find.textContaining('heard 10 min ago'), findsNWidgets(2));
-    await tester.tap(find.byKey(Key('rep-${h.rep.keyHex}')));
-    await pumpUntilFound(tester, find.byKey(const Key('admin-login')));
-    expect(find.text('Log in to Hilltop'), findsOneWidget);
-    expect(find.byKey(const Key('admin-remember')), findsNothing, reason: 'remembering is only offered when a secure store exists');
-    await tester.tap(find.byType(BackButton).last);
-    await frames(tester);
-    await tester.tap(find.byKey(Key('rep-${h.room.keyHex}')));
-    // A room is a conversation now (join bar above it). No chat store is wired in this harness, so the honest toast shows.
-    await pumpUntilFound(tester, find.textContaining('Chat is not ready'));
-    expect(find.textContaining('Chat is not ready'), findsOneWidget);
-    dismissAppToast();
-    await tester.pumpWidget(const SizedBox());
-    await tester.runAsync(() => h.state.radioSession?.close() ?? Future<void>.value());
-    await tester.pump(const Duration(seconds: 10));
-  });
 
   testWidgets('the repeater sheet button is hidden without a capable radio and opens the admin login with one', (tester) async {
     useTallScreen(tester);

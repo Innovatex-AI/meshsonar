@@ -21,9 +21,9 @@ class ChatStore {
   final DraftRepository drafts;
   final AdvertRepository adverts;
   final SystemStatsRepository systemStats;
-  final RemoteStatsHistoryRepository statsHistory;
   final PathHistoryRepository pathHistory;
   final PingResultRepository pingResults;
+  final RemoteStatsHistoryRepository statsHistory;
 
   ChatStore._(this.db, this.secrets)
       : contacts = ContactRepository(db),

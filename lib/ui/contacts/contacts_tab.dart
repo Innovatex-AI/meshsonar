@@ -18,7 +18,9 @@ class ContactsTab extends StatefulWidget {
 
   /// Remote administration of a repeater (agent 2D's screen); null until it exists, and then the button is simply absent.
   final OpenAdmin? openAdmin;
-  const ContactsTab({super.key, required this.chat, this.openAdmin});
+  /// "See all" on the new-nodes row: the Network segment's Heard nearby section (null = the sheet, flag-off Chat).
+  final VoidCallback? onSeeAllNearby;
+  const ContactsTab({super.key, required this.chat, this.openAdmin, this.onSeeAllNearby});
 
   @override
   State<ContactsTab> createState() => _ContactsTabState();
@@ -55,5 +57,5 @@ class _ContactsTabState extends State<ContactsTab> {
   }
 
   @override
-  Widget build(BuildContext context) => ContactsView(controller: _c);
+  Widget build(BuildContext context) => ContactsView(controller: _c, onSeeAllNearby: widget.onSeeAllNearby);
 }

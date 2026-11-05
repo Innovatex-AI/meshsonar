@@ -70,7 +70,7 @@ class ChatTabProviderImpl implements ChatTabProvider {
       NetworkView(controller: controller, navigator: navigator, query: args.query, onConnect: args.onConnect);
 
   @override
-  Widget contactsSegment(BuildContext context) => ContactsTab(chat: controller);
+  Widget contactsSegment(BuildContext context, {VoidCallback? seeNearby}) => ContactsTab(chat: controller, onSeeAllNearby: seeNearby);
 
   @override
   VoidCallback? addContactAction(BuildContext context) => () =>

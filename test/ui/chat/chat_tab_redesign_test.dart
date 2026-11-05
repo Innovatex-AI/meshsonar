@@ -395,6 +395,8 @@ void main() {
       expect(find.text('Ridge 5'), findsNothing);
       expect(find.text('Show all 7'), findsOneWidget);
       expect(find.byKey(const Key('network-showall-repeater')), findsOneWidget);
+      await tester.ensureVisible(find.byKey(const Key('network-showall-repeater')));
+      await tester.pump();
       await tester.tap(find.byKey(const Key('network-showall-repeater')));
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(find.text('Ridge 6'), 200, scrollable: find.byType(Scrollable).first);
