@@ -28,8 +28,8 @@ class MessageRepository {
 
   late final PreparedStatement _insert = db.raw.prepare('''
 INSERT OR IGNORE INTO messages(id, radio_id, conv_kind, conv_key, direction, sender_name, sender_prefix, ts_sender, ts_local_ms, text, snr, path_len,
-  route, state, attempt, expected_ack, ack_ms, repeats_heard, fail_reason, dedupe_key, read, txt_type)
-VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+  route, state, attempt, expected_ack, ack_ms, repeats_heard, fail_reason, dedupe_key, read, txt_type, rssi, path_hashes, hash_size, air_ms)
+VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 ''');
 
   late final PreparedStatement _upsertConv = db.raw.prepare('''
@@ -65,6 +65,10 @@ ON CONFLICT(conv_key) DO UPDATE SET
         dedupeKey: r['dedupe_key'] as String,
         read: (r['read'] as int) != 0,
         txtType: r['txt_type'] as int,
+        rssi: r['rssi'] as int?,
+        pathHashes: r['path_hashes'] as String?,
+        hashSize: r['hash_size'] as int?,
+        airMs: r['air_ms'] as int?,
       );
 
   /// Inserts [m] unless (radioId, dedupeKey) already exists. Returns true when a new row was written.
@@ -74,7 +78,7 @@ ON CONFLICT(conv_key) DO UPDATE SET
       _insert.execute([
         m.id, m.radioId, m.convKind.name, m.convKey, m.isOutgoing ? 'out' : 'in', m.senderName, m.senderPrefix, m.tsSender, m.tsLocalMs, m.text,
         m.snr, m.pathLen, m.route?.name, m.state.name, m.attempt, m.expectedAck, m.ackMs, m.repeatsHeard, m.failReason?.name, m.dedupeKey,
-        m.read ? 1 : 0, m.txtType,
+        m.read ? 1 : 0, m.txtType, m.rssi, m.pathHashes, m.hashSize, m.airMs,
       ]);
       if (db.raw.updatedRows == 0) return false;
       final preview = m.text.length > previewChars ? m.text.substring(0, previewChars) : m.text;
@@ -102,6 +106,30 @@ ON CONFLICT(conv_key) DO UPDATE SET
     final list = rows.take(lim).map(fromRow).toList();
     final more = rows.length > lim;
     return MessagePage(list, more ? MessageCursor(list.last.tsLocalMs, list.last.seq) : null);
+  }
+
+  /// A window of [before] older and [after] newer messages around [anchorId] (newest first, like [page]), for opening a
+  /// conversation on a search hit. [MessagePage.next] pages further back from the oldest returned message; [newerCursor]
+  /// is true when messages newer than the window exist (the caller then reloads the normal page when it scrolls down).
+  /// Null when the message is not in [convKey].
+  ({MessagePage page, bool hasNewer})? pageAround(String convKey, String anchorId, {int before = 20, int after = 20}) {
+    final a = db.raw.select('SELECT ts_local_ms, seq FROM messages WHERE id = ? AND conv_key = ?', [anchorId, convKey]);
+    if (a.isEmpty) return null;
+    final ts = a.first['ts_local_ms'] as int;
+    final seq = a.first['seq'] as int;
+    final newer = db.raw
+        .select('SELECT * FROM messages WHERE conv_key = ? AND (ts_local_ms > ? OR (ts_local_ms = ? AND seq > ?)) ORDER BY ts_local_ms ASC, seq ASC LIMIT ?',
+            [convKey, ts, ts, seq, after + 1])
+        .toList();
+    final hasNewer = newer.length > after;
+    final newerList = newer.take(after).map(fromRow).toList().reversed.toList(); // newest first
+    final older = db.raw.select(
+        'SELECT * FROM messages WHERE conv_key = ? AND (ts_local_ms < ? OR (ts_local_ms = ? AND seq <= ?)) ORDER BY ts_local_ms DESC, seq DESC LIMIT ?',
+        [convKey, ts, ts, seq, before + 2]);
+    final olderList = older.take(before + 1).map(fromRow).toList(); // includes the anchor itself
+    final more = older.length > before + 1;
+    final all = [...newerList, ...olderList];
+    return (page: MessagePage(all, more ? MessageCursor(olderList.last.tsLocalMs, olderList.last.seq) : null), hasNewer: hasNewer);
   }
 
   /// Updates delivery fields of one message. Only passed fields change.

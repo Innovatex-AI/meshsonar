@@ -3,57 +3,6 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
-import '../../chat/models.dart';
-
-/// What a person reads under an outgoing message. [dueInMs] is how long until the outbox tries it again (null if unknown).
-class DeliveryView {
-  final IconData icon;
-  final String label;
-
-  /// Longer sentence for screen readers and the details sheet.
-  final String detail;
-  final bool failed;
-  final bool pending;
-  const DeliveryView(this.icon, this.label, this.detail, {this.failed = false, this.pending = false});
-}
-
-DeliveryView deliveryOf(ChatMessage m, {int? dueInMs, required bool radioConnected}) {
-  final isChannel = m.convKind == ConvKind.channel;
-  switch (m.state) {
-    case MessageState.queued:
-      if (!radioConnected) {
-        return const DeliveryView(Icons.schedule_rounded, 'Waiting for the radio', 'Waiting for the radio to connect. It will be sent when it does.', pending: true);
-      }
-      if (dueInMs != null && dueInMs > 800) {
-        final s = (dueInMs / 1000).ceil();
-        return DeliveryView(Icons.schedule_rounded, 'Queued, sending in $s s', 'Queued. The radio is busy, so this message goes out in about $s seconds.', pending: true);
-      }
-      return const DeliveryView(Icons.schedule_rounded, 'Queued', 'Queued, sending now.', pending: true);
-    case MessageState.sending:
-      return const DeliveryView(Icons.north_east_rounded, 'Sending', 'Sending to the radio.', pending: true);
-    case MessageState.retrying:
-      final s = dueInMs == null ? null : (dueInMs / 1000).ceil();
-      return DeliveryView(Icons.refresh_rounded, s == null || s <= 0 ? 'Trying again' : 'Trying again in $s s',
-          'No confirmation yet. Trying again (attempt ${m.attempt + 1}).',
-          pending: true);
-    case MessageState.sent:
-      return isChannel
-          ? const DeliveryView(Icons.check_rounded, 'Sent', 'Sent by the radio. No repeater has been heard repeating it yet.')
-          : const DeliveryView(Icons.check_rounded, 'Sent, waiting for confirmation', 'Sent by the radio. Waiting for the other side to confirm.');
-    case MessageState.heard:
-      final n = m.repeatsHeard;
-      final lbl = n <= 1 ? 'Heard by 1 repeater' : 'Heard by $n repeaters';
-      return DeliveryView(Icons.cell_tower_rounded, lbl, '$lbl: it is on the air and was repeated.');
-    case MessageState.acked:
-      final ms = m.ackMs;
-      return DeliveryView(Icons.done_all_rounded, 'Delivered', ms == null ? 'Delivered. The other side confirmed.' : 'Delivered. Confirmed after ${(ms / 1000).toStringAsFixed(1)} s.');
-    case MessageState.failed:
-      final why = m.failReason?.describe() ?? 'It could not be sent.';
-      return DeliveryView(Icons.error_outline_rounded, 'Not sent', 'Not sent. $why', failed: true);
-    case MessageState.received:
-      return const DeliveryView(Icons.check_rounded, '', '');
-  }
-}
 
 String two(int n) => n.toString().padLeft(2, '0');
 
@@ -74,6 +23,17 @@ String dayLabel(BuildContext context, int ms, {DateTime? now}) {
 String timeLabel(BuildContext context, int ms) {
   final d = DateTime.fromMillisecondsSinceEpoch(ms);
   return MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(d), alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(context));
+}
+
+/// The centred separator above a group: "Today 9:38", "Yesterday 21:02", "Mon 9:38" within a week, else "Oct 28, 9:38".
+String separatorLabel(BuildContext context, int ms, {DateTime? now}) {
+  final n = now ?? DateTime.now();
+  final diff = dayOf(n.millisecondsSinceEpoch).difference(dayOf(ms)).inDays;
+  final t = timeLabel(context, ms);
+  if (diff <= 0) return 'Today $t';
+  if (diff == 1) return 'Yesterday $t';
+  if (diff < 7) return '${const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][DateTime.fromMillisecondsSinceEpoch(ms).weekday - 1]} $t';
+  return '${MaterialLocalizations.of(context).formatShortDate(DateTime.fromMillisecondsSinceEpoch(ms))}, $t';
 }
 
 /// Short stamp for list rows: time today, "Yesterday", weekday this week, else a date.

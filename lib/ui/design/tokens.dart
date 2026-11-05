@@ -19,6 +19,12 @@ abstract final class Hit {
   static const double min = 44;
   static const double minAndroid = 48;
 
+  /// The target size for the platform: 44 on Apple platforms, 48 elsewhere.
+  static double of(BuildContext context) {
+    final p = Theme.of(context).platform;
+    return p == TargetPlatform.iOS || p == TargetPlatform.macOS ? min : minAndroid;
+  }
+
   /// Wraps [child] so its tappable area is at least [size] x [size] while the visual stays as it is
   /// (segmented control 32 visual / 44 hit, send button 32 visual / 44 hit).
   static Widget pad({required Widget child, VoidCallback? onTap, double size = min, String? semanticsLabel}) {

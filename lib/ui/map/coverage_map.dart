@@ -49,6 +49,7 @@ import 'dart:io' show Platform;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
@@ -378,6 +379,9 @@ class CoverageMap extends StatefulWidget {
   });
 
   /// True unless running under `flutter test`.
+  /// Tests only: the HTTP client the tile provider uses (serves real tile files from disk).
+  static http.Client? debugTileClient;
+
   static bool tilesByDefault = () {
     try {
       return !Platform.environment.containsKey('FLUTTER_TEST');
@@ -1066,7 +1070,7 @@ class _CoverageMapState extends State<CoverageMap> {
 
   bool _headingUpApplied = false;
 
-  MeshTileProvider _tiles() => _tileProvider ??= MeshTileProvider(shouldSkip: _packDraws);
+  MeshTileProvider _tiles() => _tileProvider ??= MeshTileProvider(shouldSkip: _packDraws, client: CoverageMap.debugTileClient);
 
   /// True when the installed pack draws tile z/x/y, so no request is made for it.
   bool _packDraws(int z, int x, int y) {
@@ -1489,8 +1493,12 @@ class _CoverageMapState extends State<CoverageMap> {
                 tileDisplay: const TileDisplay.fadeIn(duration: Duration(milliseconds: 150)),
                 // Wide viewports (iPad, 4.21) keep and pre-load more rings so a pan or a first paint shows tiles, not grey squares;
                 // the chart grid underneath stays as the fallback for any tile that is still on its way.
-                keepBuffer: wide ? 4 : 2,
-                panBuffer: wide ? 2 : 1,
+                // On a phone the map is full bleed (about 40 tiles with a ring of pre-load), and the public tile servers answer in 2-4 s
+                // per tile through the 6-request gate: pre-loading a ring meant the visible tiles waited behind tiles nobody could see
+                // yet and the map stayed blank for ~15 s. Phones load the viewport only (panBuffer 0); keepBuffer 1 keeps the tiles
+                // just left behind.
+                keepBuffer: wide ? 4 : 1,
+                panBuffer: wide ? 1 : 0,
                 // Street and Topo are drawn as the tile server made them; Chart is graded to the theme, Dark to the dark chart.
                 tileBuilder: tileGrading == null
                     ? null

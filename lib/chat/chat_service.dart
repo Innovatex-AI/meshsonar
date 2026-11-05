@@ -250,6 +250,10 @@ class ChatService {
       dedupeKey: dedupeKeyFor(convKey, e.timestamp, raw),
       read: system,
       txtType: e.txtType,
+      rssi: e.rssi,
+      pathHashes: e.pathHashes,
+      hashSize: e.hashSize,
+      airMs: e.airMs,
     );
     if (!store.messages.insert(m)) return; // replay
     if (system) {
@@ -294,6 +298,10 @@ class ChatService {
       dedupeKey: dedupeKeyFor(convKey, e.timestamp, raw),
       read: blocked,
       txtType: e.txtType,
+      rssi: e.rssi,
+      pathHashes: e.pathHashes,
+      hashSize: e.hashSize,
+      airMs: e.airMs,
     );
     if (!store.messages.insert(m)) return; // replay, or a sender retry of a DM we already have
     _emit(ChatEvent.added(m, notify: _shouldNotify(convKey, m, blocked: blocked)));
@@ -445,6 +453,8 @@ class ChatService {
   List<ConversationSummary> conversations({String? radioId, bool includeEmpty = false}) => store.messages.conversations(radioId: radioId, includeEmpty: includeEmpty);
   ConversationSummary? conversation(String convKey) => store.messages.conversation(convKey);
   MessagePage page(String convKey, {MessageCursor? before, int limit = 50}) => store.messages.page(convKey, before: before, limit: limit);
+  ({MessagePage page, bool hasNewer})? pageAround(String convKey, String anchorId, {int before = 20, int after = 20}) =>
+      store.messages.pageAround(convKey, anchorId, before: before, after: after);
   List<ChatMessage> search(String query, {String? convKey, int limit = 50, int offset = 0}) => store.messages.search(query, convKey: convKey, limit: limit, offset: offset);
   int unreadBadge() => store.messages.unreadConversationCount(nowMs: nowMs());
   int unreadMessages() => store.messages.unreadMessageCount(nowMs: nowMs());

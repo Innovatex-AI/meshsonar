@@ -153,7 +153,7 @@ void main() {
         await tester.pumpWidget(host(ConversationScreen(controller: kit.controller, convKey: ch.convKey), brightness: b));
         await tester.pump();
         expect(tester.takeException(), isNull);
-        expect(find.text('Not sent'), findsOneWidget);
+        expect(find.textContaining('Not delivered'), findsOneWidget);
         await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
         await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
         await expectLater(tester, meetsGuideline(textContrastGuideline));

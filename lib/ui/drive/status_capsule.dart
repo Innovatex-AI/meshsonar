@@ -54,7 +54,7 @@ class StatusCapsule extends StatelessWidget {
     if (s.driving) {
       switch (h.kind) {
         case GpsHealthKind.good:
-          gpsWord = h.accuracyM == null ? 'GPS' : 'GPS ${h.accuracyM!.round()} m';
+          gpsWord = h.accuracyM == null ? 'GPS' : 'GPS ${s.units.shortLength(h.accuracyM!)}';
           gps = _Level.ok;
         case GpsHealthKind.weak:
           gpsWord = 'GPS weak';

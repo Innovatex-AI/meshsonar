@@ -112,8 +112,11 @@ class ChatListActions {
     if (c != null) navigator?.openProfile(context, c);
   }
 
-  Future<void> _route(BuildContext context, ConversationRow r) async {
-    final key = r.contactKey, radio = chat.radioId;
+  Future<void> _route(BuildContext context, ConversationRow r) => openRoute(context, r.contactKey);
+
+  /// The Route sheet of the contact with public key [key] (the conversation's menu calls it too).
+  Future<void> openRoute(BuildContext context, String? key) async {
+    final radio = chat.radioId;
     if (key == null || radio == null || chat.store.contacts.get(radio, key) == null) return;
     await showContactRouteSheet(
       context,
@@ -151,9 +154,13 @@ class ChatListActions {
   }
 
   /// Muted -> unmute at once; otherwise ask for how long.
-  Future<void> mute(BuildContext context, ConversationRow r) async {
+  Future<void> mute(BuildContext context, ConversationRow r) => muteConversation(context, key: r.key, title: r.title, muted: r.muted);
+
+  /// [mute] for a conversation that has no list row (the open conversation's menu).
+  Future<void> muteConversation(BuildContext context, {required String key, required String title, required bool muted}) async {
     final id = chat.radioId;
     if (id == null) return;
+    final r = (key: key, title: title, muted: muted);
     if (r.muted) {
       AppHaptics.light();
       chat.service.setNotifyMode(id, r.key, NotifyMode.all);

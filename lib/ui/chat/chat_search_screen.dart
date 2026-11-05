@@ -66,7 +66,7 @@ class _ChatSearchScreenState extends State<ChatSearchScreen> {
                         minTileHeight: 64,
                         title: Text(m.text, maxLines: 2, overflow: TextOverflow.ellipsis),
                         subtitle: Text('${_where(m)}, ${m.isOutgoing ? 'you' : (m.senderName ?? 'unknown')}, ${dayLabel(context, m.tsLocalMs)}', style: t.textTheme.labelMedium),
-                        onTap: () => ConversationScreen.open(context, controller: widget.controller, convKey: m.convKey),
+                        onTap: () => ConversationScreen.open(context, controller: widget.controller, convKey: m.convKey, anchorMessageId: m.id),
                       );
                     },
                   ),

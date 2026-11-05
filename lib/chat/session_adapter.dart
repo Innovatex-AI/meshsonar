@@ -58,7 +58,8 @@ class RadioSessionChatAdapter implements OutboundMessageSink {
   static InboundEvent mapInbound(String radioId, r.InboundMessage m) {
     if (m.kind == r.InboundKind.channel) {
       return InboundChannelText(
-          radioId: radioId, channelSlot: m.channelIndex ?? 0, timestamp: m.senderTimestamp, text: m.fullText, snr: m.snrDb, pathLen: m.hops, txtType: m.txtType);
+          radioId: radioId, channelSlot: m.channelIndex ?? 0, timestamp: m.senderTimestamp, text: m.fullText, snr: m.snrDb, pathLen: m.hops, txtType: m.txtType,
+          rssi: m.rssiDbm, pathHashes: m.pathHashesHex, hashSize: m.hashSize);
     }
     return InboundDirectText(
         radioId: radioId,
@@ -68,7 +69,10 @@ class RadioSessionChatAdapter implements OutboundMessageSink {
         snr: m.snrDb,
         pathLen: m.hops,
         txtType: m.txtType,
-        signerPrefix: m.signerPrefixHex);
+        signerPrefix: m.signerPrefixHex,
+        rssi: m.rssiDbm,
+        pathHashes: m.pathHashesHex,
+        hashSize: m.hashSize);
   }
 
   /// The radio's contact as chat's [Contact]. The saved route is kept only when the radio has one (0xFF = none).
