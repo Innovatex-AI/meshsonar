@@ -411,7 +411,7 @@ class _Preview extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           for (final m in msgs)
-                            IgnorePointer(child: MessageBubble(message: m, showSender: row.isChannel || row.kind == RowKind.room, radioConnected: controller.radioConnected)),
+                            IgnorePointer(child: MessageBubble.single(message: m, showSender: row.isChannel || row.kind == RowKind.room, radioConnected: controller.radioConnected)),
                         ],
                       ),
                     ),

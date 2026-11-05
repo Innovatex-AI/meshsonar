@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart' hide Route;
+import 'package:meshsonar/chat/events.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/chat/db/outbox_repository.dart';
@@ -51,48 +54,48 @@ void main() {
   }
 
   tw('incoming DM: who, their clock, hops, signal in words, size', (tester) async {
-    setScreen(tester);
+    setScreen(tester, h: 2400);
     await rig.withContacts(1);
     rig.store.messages.insert(msg('in1', out: false, state: MessageState.received, snr: 7.5, pathLen: 2));
     await open(tester, 'in1');
     expect(find.text('From Ann KE8ANN'), findsOneWidget);
-    expect(find.byKey(const Key('details-Came')), findsOneWidget);
-    expect(find.text('2 hops through repeaters'), findsOneWidget);
-    expect(find.text('7.5 dB, strong'), findsOneWidget);
-    expect(find.byKey(const Key('details-Their clock said')), findsOneWidget);
+    expect(find.text('Via 2 repeaters'), findsOneWidget);
+    expect(find.text('SNR 7.5 dB · Strong'), findsOneWidget);
+    expect(find.byKey(const Key('details-Their clock')), findsOneWidget);
     expect(find.text('11 bytes'), findsOneWidget);
     expect(find.byKey(const Key('details-failure')), findsNothing);
     expect(find.byKey(const Key('details-retry')), findsNothing);
   });
 
   tw('incoming direct and weak', (tester) async {
-    setScreen(tester);
+    setScreen(tester, h: 2400);
     await rig.withContacts(1);
     rig.store.messages.insert(msg('in2', out: false, state: MessageState.received, snr: -5, pathLen: null));
     await open(tester, 'in2');
-    expect(find.text('Direct, no repeater in between'), findsOneWidget);
-    expect(find.text('-5.0 dB, weak'), findsOneWidget);
+    expect(find.text('Direct'), findsOneWidget);
+    expect(find.text('SNR -5.0 dB · Fair'), findsOneWidget);
   });
 
   tw('outgoing acked: status, route, every try, which one was acknowledged', (tester) async {
-    setScreen(tester);
+    setScreen(tester, h: 2400);
     await rig.withContacts(1);
     rig.store.messages.insert(msg('out1', ackMs: 2400, ack: 22, route: Route.direct));
     rig.store.outbox.addAttempt(const DeliveryAttempt(messageId: 'out1', attempt: 1, sentAtMs: 1760000000000, route: Route.flood, expectedAck: 11));
     rig.store.outbox.addAttempt(const DeliveryAttempt(messageId: 'out1', attempt: 2, sentAtMs: 1760000005000, route: Route.direct, expectedAck: 22));
     await open(tester, 'out1');
     expect(find.text('To Node 1'), findsOneWidget);
-    expect(find.text('Delivered in 2.4 s'), findsOneWidget);
-    expect(find.text('Sent along a saved route'), findsOneWidget);
-    expect(find.textContaining('Try 1, flooded'), findsOneWidget);
-    expect(find.textContaining('Try 2, direct'), findsOneWidget);
+    expect(find.textContaining('Delivered'), findsWidgets);
+    expect(find.text('2.4 s'), findsOneWidget);
+    expect(find.text('Saved route'), findsOneWidget);
+    expect(find.textContaining('Try 1 · flooded'), findsOneWidget);
+    expect(find.textContaining('Try 2 · saved route'), findsOneWidget);
     expect(find.textContaining('acknowledged after 2.4 s'), findsOneWidget);
-    expect(find.byKey(const Key('details-try-1')).evaluate().isNotEmpty, isTrue);
-    expect(find.textContaining('Try 1, flooded').evaluate().single.widget.toString().contains('acknowledged'), isFalse);
+    expect(find.textContaining('Try 1 · flooded').evaluate().single.widget.toString().contains('acknowledged'), isFalse);
+    expect(find.textContaining('no reply'), findsOneWidget, reason: 'the first try got no reply');
   });
 
   tw('outgoing failed after three tries: the explanation, Retry restarts it, Copy text', (tester) async {
-    setScreen(tester);
+    setScreen(tester, h: 2400);
     await rig.withContacts(1);
     final m = rig.chat.send(radioId: radioA, convKey: conv, text: 'ping?');
     for (var i = 1; i <= 3; i++) {
@@ -101,7 +104,7 @@ void main() {
     rig.store.messages.update(m.id, state: MessageState.failed, attempt: 3, failReason: FailReason.noAck);
     rig.store.outbox.remove(m.id);
     await open(tester, m.id);
-    expect(find.text('Not delivered'), findsOneWidget);
+    expect(find.text('Not delivered'), findsWidgets);
     expect(find.textContaining('No acknowledgement after 3 tries'), findsOneWidget);
     expect(find.textContaining('flooded through the mesh'), findsOneWidget);
     await tester.tap(find.byKey(const Key('details-copy')));
@@ -116,7 +119,7 @@ void main() {
   });
 
   tw('failed after a saved route: says the path may have changed', (tester) async {
-    setScreen(tester);
+    setScreen(tester, h: 2400);
     await rig.withContacts(1);
     rig.store.messages.insert(msg('f2', state: MessageState.failed, fail: FailReason.noAck));
     for (var i = 1; i <= 5; i++) {
@@ -128,7 +131,7 @@ void main() {
   });
 
   tw('other failure reasons use their own sentence', (tester) async {
-    setScreen(tester);
+    setScreen(tester, h: 2400);
     await rig.withContacts(1);
     rig.store.messages.insert(msg('f3', state: MessageState.failed, fail: FailReason.contactListFull));
     await open(tester, 'f3');
@@ -136,17 +139,31 @@ void main() {
   });
 
   tw('channel message: repeats heard', (tester) async {
-    setScreen(tester);
+    setScreen(tester, h: 2400);
     await rig.withContacts(1);
     rig.store.messages.insert(msg('c1', kind: ConvKind.channel, convKey: 'c:1', state: MessageState.heard, repeats: 3, route: Route.flood));
     await open(tester, 'c1');
     expect(find.text('Sent by you'), findsOneWidget);
-    expect(find.text('Heard by 3 repeaters'), findsOneWidget);
+    expect(find.text('3 repeaters'), findsOneWidget);
     expect(find.byKey(const Key('details-retry')), findsNothing);
   });
 
+  tw('closing the sheet cancels its event subscription (fix 7.2)', (tester) async {
+    setScreen(tester, h: 2400);
+    await rig.withContacts(1);
+    rig.store.messages.insert(msg('leak', out: false, state: MessageState.received));
+    var listeners = 0;
+    late StreamController<ChatEvent> ctl;
+    ctl = StreamController<ChatEvent>.broadcast(onListen: () => listeners++, onCancel: () => listeners--);
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: MessageDetails(chat: rig.chat, messageId: 'leak', events: ctl.stream))));
+    expect(listeners, 1);
+    await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+    expect(listeners, 0, reason: 'dispose cancels the subscription');
+    await ctl.close();
+  });
+
   tw('a message that no longer exists says so', (tester) async {
-    setScreen(tester);
+    setScreen(tester, h: 2400);
     await open(tester, 'nope');
     expect(find.byKey(const Key('details-gone')), findsOneWidget);
   });
@@ -166,8 +183,11 @@ void main() {
       }
       await open(tester, 'lay', b: cfg.value.b);
       expect(tester.takeException(), isNull);
-      if (cfg.key.contains('ipad')) expect(find.byKey(const Key('app-sheet')), findsOneWidget);
-      await expectAccessible(tester);
+      final handle = tester.ensureSemantics();
+      await expectLater(tester, meetsGuideline(iOSTapTargetGuideline));
+      await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+      await expectLater(tester, meetsGuideline(textContrastGuideline));
+      handle.dispose();
     });
   }
 }

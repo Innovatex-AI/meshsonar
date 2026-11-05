@@ -44,7 +44,7 @@ StripInfo? stripFor(AppState s, GpsHealth h) {
     if (s.unsavedCount > 0) return StripInfo(StripKind.unsynced, '${s.unsavedCount} ping${s.unsavedCount == 1 ? '' : 's'} not saved yet - retrying');
     if (h.kind == GpsHealthKind.weak) {
       final acc = h.accuracyM;
-      return StripInfo(StripKind.gpsWeak, acc == null ? 'GPS signal weak' : 'GPS signal weak (+/-${acc.round()} m)',
+      return StripInfo(StripKind.gpsWeak, acc == null ? 'GPS signal weak' : 'GPS signal weak (+/-${s.units.shortLength(acc)})',
           actionLabel: h.action == GpsHealthAction.none ? null : 'Open Settings', action: gpsAction());
     }
     // GpsHealthKind.waiting is not trouble yet: the capsule says "GPS..." and the strip stays hidden (the panel does not jump at every start).

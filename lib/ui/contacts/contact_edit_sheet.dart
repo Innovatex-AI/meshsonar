@@ -14,6 +14,7 @@ import '../design/app_surfaces.dart';
 import '../design/app_type.dart';
 import '../design/app_widgets.dart';
 import '../design/tokens.dart';
+import 'contact_remove.dart';
 import 'contacts_controller.dart';
 import 'profile_widgets.dart';
 
@@ -140,51 +141,9 @@ class _ContactEditSheetState extends State<ContactEditSheet> {
   }
 
   Future<void> _remove(Contact c) async {
-    final conv = c.type == ContactType.room ? ConvKey.room(c.prefix) : ConvKey.dm(c.prefix);
-    final hasMessages = _c.chat.page(conv, limit: 1).messages.isNotEmpty;
-    final choice = await showAppActionSheet<int>(
-      context,
-      title: 'Remove ${c.displayName}?',
-      message: 'This removes the contact from this phone and from your radio. If you meet them on air again, the radio may offer them as a new node.',
-      actions: [
-        const AppAction('Remove contact', 1, destructive: true, key: Key('remove-confirm')),
-        if (hasMessages) const AppAction('Remove contact and delete conversation', 2, destructive: true, key: Key('remove-delete-messages')),
-      ],
-      cancelKey: const Key('remove-cancel'),
-    );
-    if (choice == null || !mounted) return;
-    final snapshot = c;
-    final manager = _m;
-    final deleted = choice == 2;
-    if (deleted) _c.chat.deleteHistory(conv);
-    unawaited(manager.remove(c.publicKey));
-    showAppToast(
-      context,
-      deleted ? '${c.displayName} and the conversation were removed.' : '${c.displayName} was removed.',
-      actionLabel: deleted ? null : 'Undo',
-      onAction: deleted ? null : () => unawaited(_restore(manager, snapshot)),
-    );
+    final ok = await removeContactFlow(context, _c, c);
+    if (!ok || !mounted) return;
     Navigator.of(context).pop(ContactEditOutcome.removed);
-  }
-
-  /// Undo of a remove: the contact comes back with its name, notes, favourite and last position (the conversation was kept).
-  static Future<void> _restore(ContactManager m, Contact s) async {
-    await m.addByKey(s.publicKey, name: s.name, type: s.type);
-    final cur = m.store.contacts.get(s.radioId, s.publicKey);
-    if (cur == null) return;
-    m.store.contacts.upsert(cur.copyWith(
-      customName: s.customName,
-      notes: s.notes,
-      favourite: s.favourite,
-      blocked: s.blocked,
-      pathMode: s.pathMode,
-      pinnedPath: s.pinnedPath,
-      pinnedHashSize: s.pinnedHashSize,
-      lat: s.lat,
-      lon: s.lon,
-      lastAdvertTs: s.lastAdvertTs,
-    ));
-    m.setNotes(s.publicKey, s.notes); // fires the change notification the upsert alone does not
   }
 
   // ------------------------------------------------------------------ build

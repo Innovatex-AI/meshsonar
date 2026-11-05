@@ -21,7 +21,15 @@ class InboundChannelText extends InboundEvent {
   /// Hops; null when it arrived direct / unknown (0xFF on the wire).
   final int? pathLen;
   final int txtType;
-  const InboundChannelText({required String radioId, required this.channelSlot, required this.timestamp, required this.text, this.snr, this.pathLen, this.txtType = 0}) : super(radioId);
+  /// Radio facts (migration v3) when the receive path could correlate them: RSSI dBm, hop hashes as hex (hashSize bytes per
+  /// hop), hash size in bytes, airtime ms. Null otherwise; the UI then shows what it has.
+  final int? rssi;
+  final String? pathHashes;
+  final int? hashSize;
+  final int? airMs;
+  const InboundChannelText(
+      {required String radioId, required this.channelSlot, required this.timestamp, required this.text, this.snr, this.pathLen, this.txtType = 0, this.rssi, this.pathHashes, this.hashSize, this.airMs})
+      : super(radioId);
 }
 
 /// A direct or room message (RESP_CONTACT_MSG_RECV). [senderPrefix] is 12 hex characters.
@@ -36,8 +44,25 @@ class InboundDirectText extends InboundEvent {
 
   /// 8 hex characters of the author for a signed room post.
   final String? signerPrefix;
+  /// Radio facts (migration v3) when the receive path could correlate them: RSSI dBm, hop hashes as hex (hashSize bytes per
+  /// hop), hash size in bytes, airtime ms. Null otherwise; the UI then shows what it has.
+  final int? rssi;
+  final String? pathHashes;
+  final int? hashSize;
+  final int? airMs;
   const InboundDirectText(
-      {required String radioId, required this.senderPrefix, required this.timestamp, required this.text, this.snr, this.pathLen, this.txtType = 0, this.signerPrefix})
+      {required String radioId,
+      required this.senderPrefix,
+      required this.timestamp,
+      required this.text,
+      this.snr,
+      this.pathLen,
+      this.txtType = 0,
+      this.signerPrefix,
+      this.rssi,
+      this.pathHashes,
+      this.hashSize,
+      this.airMs})
       : super(radioId);
 }
 

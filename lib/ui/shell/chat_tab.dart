@@ -213,13 +213,23 @@ class RedesignedChatTabState extends State<RedesignedChatTab> {
           backgroundColor: translucent ? c.bg.withValues(alpha: Blur.backgroundOpacity) : c.bg,
           enableBackgroundFilterBlur: translucent,
           border: Border(bottom: BorderSide(color: c.outline.withValues(alpha: 0.35), width: 0.5)),
-          trailing: CupertinoButton(
-            key: const Key('chat-new'),
-            padding: EdgeInsets.zero,
-            minimumSize: const Size(Hit.min, Hit.min),
-            onPressed: () => _new(context, p),
-            child: Semantics(label: 'New message', button: true, excludeSemantics: true, child: AppSymbolIcon(AppSymbols.squareAndPencil, size: 22, color: c.accent)),
-          ),
+          trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+            if (seg == ChatShellSegment.contacts && p.addContactAction(context) != null)
+              CupertinoButton(
+                key: const Key('chat-add-contact'),
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(Hit.min, Hit.min),
+                onPressed: p.addContactAction(context),
+                child: Semantics(label: 'Add contact', button: true, excludeSemantics: true, child: AppSymbolIcon(AppSymbols.personBadgePlus, size: 22, color: c.accent)),
+              ),
+            CupertinoButton(
+              key: const Key('chat-new'),
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(Hit.min, Hit.min),
+              onPressed: () => _new(context, p),
+              child: Semantics(label: 'New message', button: true, excludeSemantics: true, child: AppSymbolIcon(AppSymbols.squareAndPencil, size: 22, color: c.accent)),
+            ),
+          ]),
         ),
         if (seg != ChatShellSegment.contacts) CupertinoSliverRefreshControl(onRefresh: p.refresh),
         SliverPersistentHeader(

@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/chat_controller.dart';
+import '../contacts/add_contact_screen.dart';
 import '../contacts/contacts_tab.dart';
 import '../shell/chat_tab_host.dart';
 import 'channels_view.dart';
@@ -70,6 +71,10 @@ class ChatTabProviderImpl implements ChatTabProvider {
 
   @override
   Widget contactsSegment(BuildContext context) => ContactsTab(chat: controller);
+
+  @override
+  VoidCallback? addContactAction(BuildContext context) => () =>
+      Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AddContactScreen(controller: navigator.contacts)));
 
   @override
   Future<void> refresh() => controller.refreshFromRadio();

@@ -60,6 +60,9 @@ abstract class ChatTabProvider {
   /// The Contacts segment (a box widget with its own scrolling until the contacts rewrite lands).
   Widget contactsSegment(BuildContext context);
 
+  /// Add contact (QR code, link or key), shown as the nav button on the Contacts segment. Null = no such button.
+  VoidCallback? addContactAction(BuildContext context) => null;
+
   /// Pull to refresh: reads the radio again.
   Future<void> refresh();
 
@@ -94,6 +97,8 @@ class ChatTabHost {
 
 /// Fixture provider for the debug flag. Lists are static text; nothing here is stored or sent.
 class DebugFixtureChat implements ChatTabProvider {
+  @override
+  VoidCallback? addContactAction(BuildContext context) => null;
   @override
   Listenable get changes => ChangeNotifier();
   @override

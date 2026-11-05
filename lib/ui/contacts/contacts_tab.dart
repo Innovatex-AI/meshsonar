@@ -10,10 +10,8 @@ import '../chat/conversation_screen.dart';
 import '../radios/admin_launcher.dart' show openRepeaterAdmin;
 import '../radios/rooms/room_join_bar.dart';
 import '../radios/rooms/room_join_header.dart';
-import 'contact_profile_screen.dart';
 import 'contacts_controller.dart';
 import 'contacts_view.dart';
-import 'dm_route_header.dart';
 
 class ContactsTab extends StatefulWidget {
   final ChatController chat;
@@ -46,16 +44,7 @@ class _ContactsTabState extends State<ContactsTab> {
       controller: widget.chat,
       convKey: room ? ConvKey.room(c.prefix) : ConvKey.dm(c.prefix),
       title: c.displayName,
-      actions: [
-        IconButton(
-          key: const Key('dm-contact-info'),
-          tooltip: 'Contact details',
-          constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-          icon: const Icon(Icons.info_outline_rounded),
-          onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ContactProfileScreen(controller: _c, publicKey: c.publicKey))),
-        ),
-      ],
-      header: room ? (AppFlags.chatRedesign ? RoomJoinBar(keyHex: c.publicKey, name: c.displayName) : RoomJoinHeader(keyHex: c.publicKey, name: c.displayName)) : DmRouteHeader(controller: _c, publicKey: c.publicKey),
+      header: room ? (AppFlags.chatRedesign ? RoomJoinBar(keyHex: c.publicKey, name: c.displayName) : RoomJoinHeader(keyHex: c.publicKey, name: c.displayName)) : null,
     );
   }
 
