@@ -60,7 +60,7 @@ Future<void> offerUseRoute(BuildContext context, ContactManager m, Contact c, Pa
   );
   if (keep == null) return;
   final err = await m.useDiscoveredRoute(c.publicKey, route, keep: keep);
-  AppHaptics.selection();
+  if (err == null) AppHaptics.success(); // route set (plan 2.2)
   if (context.mounted) showAppToast(context, err ?? (keep ? 'Keeping this route.' : 'Automatic: MeshSonar picks the route.'));
 }
 
@@ -406,7 +406,7 @@ class RouteAdvancedPage extends StatelessWidget {
                         onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
                             fullscreenDialog: true, builder: (_) => RoutePickerPage(manager: manager, publicKey: c.publicKey, tools: tools))),
                       ),
-                    ProfileRow(key: const Key('adv-hash'), label: 'Hash size', value: size == null ? '1 byte (radio default)' : '$size ${size == 1 ? 'byte' : 'bytes'}'),
+                    ProfileRow(key: const Key('adv-hash'), label: 'Hash size', value: size == null ? '1 byte (radio default)' : '$size ${size == 1 ? 'byte' : 'bytes'}'), // copy-ok: Advanced
                     ProfileRow(
                       key: const Key('adv-copy'),
                       label: 'Copy route as text',
@@ -419,7 +419,7 @@ class RouteAdvancedPage extends StatelessWidget {
                             },
                       value: route == null ? 'No route saved' : null,
                     ),
-                  ], footer: 'The hash size is set in Radio settings.'),
+                  ], footer: 'The hash size is set in Radio settings.'), // copy-ok: Advanced
                   if (manager.connected)
                     ProfileGroup(rows: [
                       ProfileRow(
@@ -441,7 +441,7 @@ class RouteAdvancedPage extends StatelessWidget {
                     for (final m in deliveries)
                       ProfileRow(
                         label: agoText(now, m.tsLocalMs),
-                        value: '${m.state == MessageState.acked ? 'Delivered' : 'Failed'}${m.state == MessageState.acked && m.ackMs != null ? ' · ${formatRtt(m.ackMs!)}' : ''}${m.pathLen != null ? ' · ${m.pathLen! & 63} hops' : ''}',
+                        value: '${m.state == MessageState.acked ? 'Delivered' : 'Failed'}${m.state == MessageState.acked && m.ackMs != null ? ' · ${formatRtt(m.ackMs!)}' : ''}${m.pathLen != null ? ' · via ${m.pathLen! & 63} ${(m.pathLen! & 63) == 1 ? 'repeater' : 'repeaters'}' : ''}',
                       ),
                   ]),
                   if (history.isNotEmpty) ...[

@@ -123,6 +123,7 @@ class _MessageDetailsState extends State<MessageDetails> {
       if (info.hops.isNotEmpty || (!m.isOutgoing && (m.pathLen ?? 0) > 0)) ('Repeaters', info.hops.isNotEmpty ? info.hops.join(', ') : '${m.pathLen}'),
       if (!m.isOutgoing && (m.snr != null || m.rssi != null))
         ('Signal', [if (m.snr != null) 'SNR ${m.snr!.toStringAsFixed(1)} dB', if (m.rssi != null) 'RSSI ${m.rssi}', if (m.snr != null) signalWord(m.snr!)].join(' · ')),
+      if (!m.isOutgoing && m.airMs != null) ('Time on air', m.airMs! < 1000 ? '${m.airMs} ms' : '${(m.airMs! / 1000).toStringAsFixed(2)} s'),
       if (m.isOutgoing && m.ackMs != null) ('Round trip', _secs(m.ackMs!)),
       if (m.convKind == ConvKind.channel && m.isOutgoing) ('Heard by', m.repeatsHeard == 0 ? 'No repeater yet' : '${m.repeatsHeard} ${m.repeatsHeard == 1 ? 'repeater' : 'repeaters'}'),
       ('Size', '${utf8.encode(m.text).length} bytes'),

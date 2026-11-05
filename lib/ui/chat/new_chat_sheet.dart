@@ -67,7 +67,8 @@ Future<void> showNewChatSheet(
 }) async {
   final out = await showAppSheet<_Outcome>(
     context,
-    detents: const [0.5, 0.92],
+    // Large text needs the room: open at the tall detent only.
+    detents: MediaQuery.textScalerOf(context).scale(17) > 17 * 1.5 ? const [0.92] : const [0.5, 0.92],
     builder: (ctx, scroll) => _NewChatBody(controller: controller, scroll: scroll),
   );
   if (out == null || !context.mounted) return;
@@ -488,7 +489,7 @@ class _NewChatBodyState extends State<_NewChatBody> {
     final action = _page == _Page.create ? 'Create' : 'Join';
     final intro = switch (_page) {
       _Page.hashtag =>
-        'The key is made from the name, so anyone who types the same name lands in the same channel. It is the first 16 bytes of a hash of the name, in lower case. Capitals are turned into lower case.',
+        'The key is made from the name, so anyone who types the same name lands in the same channel. Capitals are turned into lower case.',
       _Page.create => 'MeshSonar makes a random secret. Only people you give the QR code or link to can read this channel.',
       _ => 'Paste a meshcore:// link, or type a channel name with its secret.',
     };

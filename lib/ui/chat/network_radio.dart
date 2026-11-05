@@ -3,6 +3,7 @@
 // its own.
 import '../../app/app_state.dart';
 import '../../radio/protocol.dart' show BattAndStorageFrame;
+import '../../chat/chat_copy.dart';
 import '../../radio/tools/advert_tool.dart' show AdvertSendStatus;
 import '../../radio/tools/discover_tool.dart' show DiscoverStatus;
 import '../tools/tools_host.dart' show AppStateToolsHost;
@@ -45,7 +46,7 @@ class AppNetworkRadio implements NetworkRadio {
   @override
   Future<({bool ok, String message})> announce({required bool wide}) async {
     final tools = AppStateToolsHost.of(app).tools;
-    if (tools == null) return (ok: false, message: 'Connect your radio first.');
+    if (tools == null) return (ok: false, message: connectRadioFirst);
     final r = await tools.adverts.send(flood: wide);
     return (ok: r.status == AdvertSendStatus.sent, message: r.message);
   }
@@ -53,7 +54,7 @@ class AppNetworkRadio implements NetworkRadio {
   @override
   Future<({bool ok, String message})> discover() async {
     final tools = AppStateToolsHost.of(app).tools;
-    if (tools == null) return (ok: false, message: 'Connect your radio first.');
+    if (tools == null) return (ok: false, message: connectRadioFirst);
     final found = await tools.discover.scan();
     final msg = tools.discover.message;
     if (tools.discover.status != DiscoverStatus.done) return (ok: false, message: msg ?? 'The scan did not run.');

@@ -25,7 +25,10 @@ class ProfileTile {
 
   /// True for a tile whose feature is not built yet (flag on only); it opens a "coming" sheet.
   final bool comingSoon;
-  const ProfileTile(this.id, this.label, this.symbol, {this.enabled = true, this.reason, this.comingSoon = false});
+
+  /// True when a long press (and a VoiceOver custom action) offers more choices (Ping: Direct only, hash size).
+  final bool hasOptions;
+  const ProfileTile(this.id, this.label, this.symbol, {this.enabled = true, this.reason, this.comingSoon = false, this.hasOptions = false});
 
   @override
   String toString() => '${id.name}${enabled ? '' : '(off: $reason)'}${comingSoon ? '(soon)' : ''}';
@@ -56,6 +59,7 @@ List<ProfileTile> profileTiles(
       AppSymbols.antenna,
       enabled: connected && fwOk,
       reason: !connected ? needRadio : (!fwOk ? 'This radio\'s firmware cannot search for routes.' : null),
+      hasOptions: !person,
     );
   }
 

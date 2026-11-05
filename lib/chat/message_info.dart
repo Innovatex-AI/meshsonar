@@ -138,7 +138,7 @@ MessageInfo messageInfo(ChatMessage m, {required Iterable<Contact> repeaters, St
   final word2 = 'Via $hops ${hops == 1 ? 'repeater' : 'repeaters'}';
   if (named.isEmpty) {
     // Hash unknown (the radio gave only the hop count): say how many, name none.
-    return MessageInfo(kind: TravelKind.viaRepeaters, routeWord: word2, chips: [other, '$hops ${hops == 1 ? 'hop' : 'hops'}', selfLabel], hops: const [], signalText: signal, signalWord: word, signalBars: bars);
+    return MessageInfo(kind: TravelKind.viaRepeaters, routeWord: word2, chips: [other, '$hops ${hops == 1 ? 'repeater' : 'repeaters'}', selfLabel], hops: const [], signalText: signal, signalWord: word, signalBars: bars);
   }
   return MessageInfo(kind: TravelKind.viaRepeaters, routeWord: word2, chips: _cap([other, ...named, selfLabel]), hops: named, signalText: signal, signalWord: word, signalBars: bars);
 }

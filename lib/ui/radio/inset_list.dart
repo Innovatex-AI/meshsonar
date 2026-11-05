@@ -64,7 +64,7 @@ class InsetRow extends StatelessWidget {
     final c = t.colorScheme;
     final color = destructive ? c.error : c.onSurface;
     final body = ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: Hit.min),
+      constraints: BoxConstraints(minHeight: Hit.of(context)),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: Layout.screenMargin, vertical: Gap.s + 2),
         child: Row(children: [

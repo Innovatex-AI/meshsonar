@@ -16,6 +16,7 @@ import 'package:flutter/services.dart';
 
 import '../app.dart';
 import '../chat/conversation_screen.dart' show ConversationPaneScope;
+import '../design/app_haptics.dart';
 import '../design/app_symbols.dart';
 import '../design/app_widgets.dart';
 import '../../app/app_flags.dart';
@@ -98,6 +99,7 @@ class RedesignedChatTabState extends State<RedesignedChatTab> {
 
   void _select(ChatShellSegment s) {
     if (s == _sessionSegment) return;
+    AppHaptics.selection(); // segment change (plan 2.2)
     setState(() {
       _sessionSegment = s;
       _search.clear();
@@ -219,19 +221,31 @@ class RedesignedChatTabState extends State<RedesignedChatTab> {
           border: Border(bottom: BorderSide(color: c.outline.withValues(alpha: 0.35), width: 0.5)),
           trailing: Row(mainAxisSize: MainAxisSize.min, children: [
             if (seg == ChatShellSegment.contacts && p.addContactAction(context) != null)
-              CupertinoButton(
-                key: const Key('chat-add-contact'),
+              Semantics(
+                label: 'Add contact',
+                button: true,
+                excludeSemantics: true,
+                onTap: p.addContactAction(context),
+                child: CupertinoButton(
+                  key: const Key('chat-add-contact'),
+                  padding: EdgeInsets.zero,
+                  minimumSize: const Size(Hit.min, Hit.min),
+                  onPressed: p.addContactAction(context),
+                  child: AppSymbolIcon(AppSymbols.personBadgePlus, size: 22, color: c.accent),
+                ),
+              ),
+            Semantics(
+              label: 'New message',
+              button: true,
+              excludeSemantics: true,
+              onTap: () => _new(context, p),
+              child: CupertinoButton(
+                key: const Key('chat-new'),
                 padding: EdgeInsets.zero,
                 minimumSize: const Size(Hit.min, Hit.min),
-                onPressed: p.addContactAction(context),
-                child: Semantics(label: 'Add contact', button: true, excludeSemantics: true, child: AppSymbolIcon(AppSymbols.personBadgePlus, size: 22, color: c.accent)),
+                onPressed: () => _new(context, p),
+                child: AppSymbolIcon(AppSymbols.squareAndPencil, size: 22, color: c.accent),
               ),
-            CupertinoButton(
-              key: const Key('chat-new'),
-              padding: EdgeInsets.zero,
-              minimumSize: const Size(Hit.min, Hit.min),
-              onPressed: () => _new(context, p),
-              child: Semantics(label: 'New message', button: true, excludeSemantics: true, child: AppSymbolIcon(AppSymbols.squareAndPencil, size: 22, color: c.accent)),
             ),
           ]),
         ),
@@ -255,7 +269,18 @@ class RedesignedChatTabState extends State<RedesignedChatTab> {
               ),
             ),
           ),
-        if (seg == ChatShellSegment.chats && _search.text.isEmpty)
+        // Two one-time tips, one at a time: the swipe tip first (only once there is a conversation to swipe), then Network.
+        if (seg == ChatShellSegment.chats && _search.text.isEmpty && !p.isEmpty && !appTipStore.seen('chat-swipe-tip'))
+          SliverToBoxAdapter(
+            child: TipCard(
+              tipId: 'chat-swipe-tip',
+              symbol: AppSymbols.message,
+              title: 'Swipe a conversation',
+              message: 'Swipe right to pin or mark unread. Swipe left to mute or delete.',
+              onDismissed: () => setState(() {}),
+            ),
+          )
+        else if (seg == ChatShellSegment.chats && _search.text.isEmpty)
           const SliverToBoxAdapter(
             child: TipCard(
               tipId: 'chat-network-tip',
@@ -281,7 +306,7 @@ class _SegmentHeader extends SliverPersistentHeaderDelegate {
   final bool translucent;
   const _SegmentHeader({required this.selected, required this.onChanged, required this.translucent});
 
-  static const double extent = 56;
+  static const double extent = 60;
   @override
   double get minExtent => extent;
   @override
@@ -292,7 +317,7 @@ class _SegmentHeader extends SliverPersistentHeaderDelegate {
     final c = AppColors.of(context);
     final bar = Container(
       height: extent,
-      padding: const EdgeInsets.symmetric(horizontal: Layout.screenMargin, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: Layout.screenMargin, vertical: 4),
       decoration: BoxDecoration(
         color: translucent && overlapsContent ? c.bg.withValues(alpha: Blur.backgroundOpacity) : c.bg,
         border: overlapsContent ? Border(bottom: BorderSide(color: c.outline.withValues(alpha: 0.35), width: 0.5)) : null,
@@ -310,9 +335,9 @@ class _SegmentHeader extends SliverPersistentHeaderDelegate {
             backgroundColor: c.textMuted.withValues(alpha: 0.16),
             padding: const EdgeInsets.all(2),
             children: const {
-              ChatShellSegment.chats: Padding(padding: EdgeInsets.symmetric(vertical: 6), child: Text('Chats', key: Key('segment-chats'))),
-              ChatShellSegment.contacts: Padding(padding: EdgeInsets.symmetric(vertical: 6), child: Text('Contacts', key: Key('segment-contacts'))),
-              ChatShellSegment.network: Padding(padding: EdgeInsets.symmetric(vertical: 6), child: Text('Network', key: Key('segment-network'))),
+              ChatShellSegment.chats: _SegmentLabel('Chats', key: Key('segment-chats')),
+              ChatShellSegment.contacts: _SegmentLabel('Contacts', key: Key('segment-contacts')),
+              ChatShellSegment.network: _SegmentLabel('Network', key: Key('segment-network')),
             },
             onValueChanged: (v) {
               if (v != null) onChanged(v);
@@ -352,4 +377,12 @@ class _StatusBanner extends StatelessWidget {
       onAction: onConnect,
     );
   }
+}
+
+/// One segment label: at least 44 pt tall so the segment is a full-size target (the label stays 13 pt).
+class _SegmentLabel extends StatelessWidget {
+  final String label;
+  const _SegmentLabel(this.label, {super.key});
+  @override
+  Widget build(BuildContext context) => ConstrainedBox(constraints: const BoxConstraints(minHeight: Hit.min), child: Center(child: Text(label)));
 }

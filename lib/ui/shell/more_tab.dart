@@ -27,6 +27,7 @@ import '../tools/noise_screen.dart';
 import '../tools/rx_log_screen.dart';
 import '../tools/telemetry_screen.dart';
 import '../tools/trace_screen.dart';
+import '../chat/chat_settings_screen.dart';
 
 class MoreTab extends StatefulWidget {
   const MoreTab({super.key});
@@ -81,6 +82,7 @@ class _MoreTabState extends State<MoreTab> {
         MoreItem.devices => const DevicesScreen(),
         MoreItem.myReports => const ReportsHistoryScreen(),
         MoreItem.leaderboard => const LeaderboardScreen(),
+        MoreItem.chat => const ChatSettingsScreen(),
         MoreItem.legend || MoreItem.howItWorks || MoreItem.repeaters => const SizedBox.shrink(),
       };
 
@@ -217,6 +219,7 @@ class MoreList extends StatelessWidget {
             row(MoreItem.observerJoin, Icons.visibility_outlined, 'Become an observer',
                 'Step by step: make your repeater report to MeshSonar. Free'),
             header('App'),
+            row(MoreItem.chat, Icons.chat_bubble_outline, 'Chat', 'Quick replies, Return key, haptics'),
             row(MoreItem.wardriving, Icons.radar, 'Wardriving settings',
                 'Send pings, channel, interval, distance, listen window'),
             row(MoreItem.notifications, Icons.notifications_outlined, 'Notifications',

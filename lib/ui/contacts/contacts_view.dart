@@ -10,9 +10,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart' show CustomSemanticsAction;
 import 'package:flutter_slidable/flutter_slidable.dart';
 
+import '../../chat/chat_copy.dart';
 import '../../chat/contact_manager.dart';
 import '../../chat/models.dart';
-import '../../radio/caps.dart';
 import '../design/app_haptics.dart';
 import '../design/app_surfaces.dart';
 import '../design/app_symbols.dart';
@@ -32,6 +32,7 @@ import 'contacts_grouping.dart';
 import 'contacts_settings_sheet.dart';
 import 'path_manager_screen.dart' show offerUseRoute;
 import 'profile_tiles.dart';
+import 'radio_caps_of.dart';
 import 'qr_scan_screen.dart';
 import 'radio_list_sheet.dart';
 
@@ -94,7 +95,7 @@ class _ContactsViewState extends State<ContactsView> {
   }
 
   Future<void> _ping(Contact c) async {
-    final tile = profileTiles(c, connected: _m.connected, caps: RadioCaps.baseline, canMessage: false, canAdmin: false, redesign: true)
+    final tile = profileTiles(c, connected: _m.connected, caps: radioCapsOf(context), canMessage: false, canAdmin: false, redesign: true)
         .where((t) => t.id == ProfileTileId.ping)
         .firstOrNull;
     if (tile != null && !tile.enabled) {
@@ -248,7 +249,7 @@ class _ContactsViewState extends State<ContactsView> {
         ),
         const SizedBox(height: Gap.l),
         Wrap(alignment: WrapAlignment.center, spacing: Gap.m, runSpacing: Gap.s, children: [
-          _FilledAction(key: const Key('contacts-send-advert'), label: 'Send an advert', onPressed: _advert),
+          _FilledAction(key: const Key('contacts-send-advert'), label: announceMyself, onPressed: _advert),
           _FilledAction(key: const Key('contacts-scan-qr'), label: 'Scan a QR code', onPressed: _add, tinted: true),
         ]),
       ]),
@@ -576,7 +577,7 @@ class NearbyAdvertRow extends StatelessWidget {
     final a = advert;
     final type = a.type ?? ContactType.companion;
     final hops = (a.pathLen == null || a.pathLen == 0xFF) ? null : a.pathLen! & 63;
-    final detail = '${heardText(a.lastTsMs, controller.nowMs()).replaceFirst('Heard ', 'heard ')}${hops == null ? '' : ', $hops ${hops == 1 ? 'hop' : 'hops'}'}';
+    final detail = '${heardText(a.lastTsMs, controller.nowMs()).replaceFirst('Heard ', 'heard ')}${hops == null || hops == 0 ? '' : ', via $hops ${hops == 1 ? 'repeater' : 'repeaters'}'}';
     final add = CupertinoButton(
       key: Key('nearby-add-${a.publicKey.substring(0, 8)}'),
       minimumSize: const Size(Hit.min, Hit.min),

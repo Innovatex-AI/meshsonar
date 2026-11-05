@@ -14,6 +14,7 @@ import 'package:meshsonar/ui/theme.dart';
 import '../../chat/contact_support.dart';
 import '../../chat/support.dart';
 import 'contacts_ui_support.dart';
+import '../../support/semantics_audit.dart';
 
 Widget fakeMap(BuildContext c, double lat, double lon) => SizedBox(height: 120, key: const Key('fake-map'), child: Text('map $lat $lon'));
 
@@ -394,7 +395,7 @@ void main() {
       await tester.tap(find.byKey(const Key('contact-share-nearby')));
       await tester.pumpAndSettle();
       await tester.pumpAndSettle();
-      expect(find.textContaining('has no stored advert'), findsOneWidget);
+      expect(find.textContaining('has no stored announcement'), findsOneWidget);
       rig.port.hasAdvert = {keyN(1)};
       await tester.pump(const Duration(seconds: 5));
       await tester.tap(find.byKey(const Key('contact-share-nearby')));
@@ -581,6 +582,15 @@ void main() {
       'iPad 1024': (w: 1024, h: 768, scale: 1.0, b: Brightness.light),
       'AX3 text 2.35': (w: 393, h: 852, scale: 2.35, b: Brightness.light),
       'dark': (w: 393, h: 852, scale: 1.0, b: Brightness.dark),
+      // WP14: AX2 (2.0) and AX5 (3.1) at every shipped width.
+      '393 AX2': (w: 393, h: 852, scale: 2.0, b: Brightness.light),
+      '393 AX5': (w: 393, h: 852, scale: 3.1, b: Brightness.light),
+      '375 AX2': (w: 375, h: 667, scale: 2.0, b: Brightness.light),
+      '375 AX5': (w: 375, h: 667, scale: 3.1, b: Brightness.dark),
+      '744 AX2': (w: 744, h: 1133, scale: 2.0, b: Brightness.light),
+      '744 AX5': (w: 744, h: 1133, scale: 3.1, b: Brightness.light),
+      '1024 AX2': (w: 1024, h: 768, scale: 2.0, b: Brightness.light),
+      '1024 AX5': (w: 1024, h: 768, scale: 3.1, b: Brightness.dark),
     };
     for (final e in configs.entries) {
       tw('person with route and flag on, ${e.key}: no overflow, accessible, targets >= 44', (tester) async {
@@ -603,6 +613,10 @@ void main() {
         } else {
           expect(ys.length, 1, reason: 'four tiles in one row, also at 375 pt');
         }
+        final sem = tester.ensureSemantics();
+        await tester.pump();
+        expectHeader(tester);
+        sem.dispose();
         await expectAccessible(tester);
         await scrollTo(tester, find.byKey(const Key('contact-share')));
         expect(tester.takeException(), isNull);

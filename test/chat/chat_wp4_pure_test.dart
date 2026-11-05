@@ -188,7 +188,7 @@ void main() {
       expect(i.signalWord, 'Weak');
       expect(i.signalBars, 0);
       final none = messageInfo(msg('b', 0, pathLen: 3, kind: ConvKind.dm), repeaters: const [], peer: 'Maya');
-      expect(none.chips, ['Maya', '3 hops', 'You']);
+      expect(none.chips, ['Maya', '3 repeaters', 'You']);
       expect(none.hops, isEmpty);
       expect(none.signalText, isNull, reason: 'no SNR and no RSSI known: no signal line');
     });

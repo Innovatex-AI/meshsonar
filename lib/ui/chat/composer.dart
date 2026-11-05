@@ -244,7 +244,11 @@ class _ComposerState extends State<Composer> {
                   ]),
                 ),
               CallbackShortcuts(
-                bindings: {const SingleActivator(LogicalKeyboardKey.enter, meta: true): () => canSend ? _send() : null},
+                bindings: {
+                  const SingleActivator(LogicalKeyboardKey.enter, meta: true): () => canSend ? _send() : null,
+                  // "Return sends" (More > Chat): a plain Return from a hardware keyboard sends; Shift-Return stays a new line.
+                  if (loadReturnSends(c.store)) const SingleActivator(LogicalKeyboardKey.enter): () => canSend ? _send() : null,
+                },
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
@@ -446,10 +450,13 @@ class _LockedComposer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = AppColors.of(context);
+    // At the largest text sizes the notice is taller than the room under the messages: cap it and let it scroll.
     return Container(
       key: const Key('composer-locked'),
       color: c.surfaceHigh,
-      child: SafeArea(
+      constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.45),
+      child: SingleChildScrollView(
+        child: SafeArea(
         top: false,
         child: Padding(
           padding: const EdgeInsets.all(Gap.m),
@@ -472,6 +479,7 @@ class _LockedComposer extends StatelessWidget {
             ],
           ),
         ),
+      ),
       ),
     );
   }

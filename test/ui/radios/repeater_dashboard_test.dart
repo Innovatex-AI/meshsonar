@@ -19,6 +19,7 @@ import 'package:meshsonar/ui/radios/repeater_admin/repeater_dashboard_screen.dar
 
 import '../../support/repeater_admin_fake.dart';
 import 'admin_rig.dart';
+import '../../support/semantics_audit.dart';
 
 class Dash {
   final AdminRig rig;
@@ -369,6 +370,21 @@ void main() {
   });
 
   group('large text and iPad', () {
+    // WP14: AX2 and AX5 at 393 / 375 / 744 / 1024 wide.
+    for (final (w, h) in [(393.0, 852.0), (375.0, 667.0), (744.0, 1133.0), (1024.0, 768.0)]) {
+      for (final scale in [2.0, 3.1]) {
+        adminTest('dashboard at ${w.toInt()} wide, text ${scale}x: no overflow, tap targets, labels', (tester) async {
+          final sem = tester.ensureSemantics();
+          await openDash(tester, w: w, h: h * 4, textScale: scale);
+          expect(tester.takeException(), isNull);
+          expectHeader(tester);
+          sem.dispose();
+          await expectLater(tester, meetsGuideline(iOSTapTargetGuideline));
+          await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+        });
+      }
+    }
+
     adminTest('at 2x text the glance grid is one column', (tester) async {
       await openDash(tester, textScale: 2.0, h: 6000);
       expect(find.byKey(const Key('glance-one-column')), findsOneWidget);
