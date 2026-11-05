@@ -88,6 +88,14 @@ class RepeaterStats {
   final int rxAirTimeSecs;
   final int recvErrors;
 
+  /// How many bytes the repeater sent (56 on current firmware; older builds send a prefix). Fields past the end read 0 and
+  /// the dashboard shows them as n/a.
+  final int bytes;
+
+  bool get hasErrEvents => bytes >= 42;
+  bool get hasSnr => bytes >= 44;
+  bool get hasRxAir => bytes >= 52;
+
   const RepeaterStats({
     required this.battMilliVolts,
     required this.txQueueLen,
@@ -107,6 +115,7 @@ class RepeaterStats {
     this.floodDups = 0,
     this.rxAirTimeSecs = 0,
     this.recvErrors = 0,
+    this.bytes = 56,
   });
 
   /// Parses the 56-byte block (extra zero padding is fine). Older builds send a prefix of it: later fields read 0. Null
@@ -135,6 +144,7 @@ class RepeaterStats {
       floodDups: u16(46),
       rxAirTimeSecs: u32(48),
       recvErrors: u32(52),
+      bytes: b.length,
     );
   }
 
