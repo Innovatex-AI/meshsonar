@@ -261,7 +261,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(Key('swipe-ping-${k(2)}')));
       await tester.pumpAndSettle();
-      expect(find.text('Ping Node 2'), findsOneWidget);
+      expect(find.text('Ping uses radio airtime'), findsOneWidget);
     });
 
     testWidgetsT('swipe left: Ping offline explains', (tester) async {
