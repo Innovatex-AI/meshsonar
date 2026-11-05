@@ -822,6 +822,8 @@ class SimulatedTransport implements ByteTransport {
         _onSelfAdvert(frame.length >= 2 && frame[1] == 1);
       case ToolCmd.sendTracePath:
         _onTrace(frame);
+      case ToolCmd.sendPathDiscovery:
+        _onPathDiscovery(frame);
       case ToolCmd.setAdvertName:
         if (frame.length < 2) return _emit(encodeErr(ErrCode.illegalArg));
         _name = utf8.decode(frame.sublist(1, math.min(frame.length, 32)), allowMalformed: true);
@@ -1136,6 +1138,30 @@ class SimulatedTransport implements ByteTransport {
     final back = _linkSnr(_kmTo(chain.last, me)) + 2.0;
     if (!_decodes(back)) return;
     _emit(encodeTraceDataPush(tag, path, snrs, _reportSnr(back), hashSize: sz), Duration(milliseconds: 250 + 250 * hops + _rng.nextInt(200)));
+  }
+
+  /// False: the firmware does not know CMD 52 (ERR 1), the way an old companion answers.
+  bool pathDiscoverySupported = true;
+
+  /// Contacts (key hex) that never answer a path discovery: out of reach.
+  final Set<String> pathDiscoverySilent = {};
+
+  /// Repeaters on the discovered route, 1-byte hashes (first N simulated repeaters).
+  int pathDiscoveryHops = 2;
+
+  /// CMD_SEND_PATH_DISCOVERY_REQ (spike S12): SENT (flood), then PUSH 0x8D with the out and return route.
+  void _onPathDiscovery(Uint8List f) {
+    if (!pathDiscoverySupported) return _emit(encodeErr(ErrCode.unsupportedCmd));
+    if (f.length < 34) return _emit(encodeErr(ErrCode.illegalArg));
+    final key = f.sublist(2, 34);
+    final c = _contactByPrefix(key, 32);
+    if (c == null) return _emit(encodeErr(ErrCode.notFound));
+    _emit(encodeSent(tag: 0x5201, estTimeoutMs: 2400, flood: true));
+    _sent++;
+    _txAirMs += _airMsPerPacket;
+    if (pathDiscoverySilent.contains(toHex(c.key))) return;
+    final hops = repeaters.take(pathDiscoveryHops).map((r) => r.publicKey[0]).toList();
+    _emit(encodePathDiscoveryPush(c.key, hops.length, hops, hops.length, hops.reversed.toList()), Duration(milliseconds: 600 + 300 * hops.length));
   }
 
   void _onTelemetryFor(List<int> key) {

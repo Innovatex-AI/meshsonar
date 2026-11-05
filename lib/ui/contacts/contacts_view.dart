@@ -22,6 +22,7 @@ import '../design/state_views.dart';
 import '../design/tokens.dart';
 import '../drive/drive_controls.dart' show openConnect;
 import '../tools/adverts_screen.dart';
+import '../tools/ping_result_sheet.dart';
 import 'add_contact_screen.dart';
 import 'contact_profile_screen.dart';
 import 'contact_remove.dart';
@@ -29,7 +30,7 @@ import 'contact_widgets.dart';
 import 'contacts_controller.dart';
 import 'contacts_grouping.dart';
 import 'contacts_settings_sheet.dart';
-import 'profile_sheets.dart';
+import 'path_manager_screen.dart';
 import 'profile_tiles.dart';
 import 'qr_scan_screen.dart';
 import 'radio_list_sheet.dart';
@@ -98,7 +99,7 @@ class _ContactsViewState extends State<ContactsView> {
       showAppToast(context, tile.reason ?? 'Not available right now.');
       return;
     }
-    await showPingSheet(context, c);
+    await showPingSheet(context, contact: c, manager: _m, onUseRoute: (r) => offerUseRoute(context, _m, c, r));
   }
 
   Future<void> _remove(Contact c) => removeContactFlow(context, _c, c);

@@ -17,6 +17,7 @@ abstract final class ToolCmd {
   static const setRadioTxPower = 12;
   static const setAdvertLatLon = 14;
   static const sendTracePath = 36;
+  static const sendPathDiscovery = 52;
   static const getAdvertPath = 42;
 }
 
@@ -225,3 +226,46 @@ Uint8List encodeTelemetryResponsePush(List<int> prefix6, List<int> lpp) => Uint8
 
 /// An OK reply (re-exported for fakes that only import this file).
 Uint8List toolOk() => Uint8List.fromList([Resp.ok]);
+
+
+// ------------------------------------------------------------------ path discovery (spike S12, firmware source)
+
+/// CMD_SEND_PATH_DISCOVERY_REQ: [52][0][pub_key x32] -> SENT [6][flood][tag][est_timeout], later PUSH 0x8D. It floods a
+/// telemetry request so the answer teaches both sides a fresh route; ERR 1 when the firmware does not know the command.
+Uint8List encodePathDiscoveryReq(List<int> pubKey32) {
+  if (pubKey32.length != 32) throw ArgumentError('a MeshCore public key is 32 bytes');
+  return Uint8List.fromList([ToolCmd.sendPathDiscovery, 0, ...pubKey32]);
+}
+
+/// PUSH_CODE_PATH_DISCOVERY_RESPONSE: [0x8D][0][pubkey prefix x6][out_path_len][out_path][in_path_len][in_path]. Each length
+/// byte is packed (`((size-1)<<6)|hops`). No tag: it matches the contact by key prefix.
+class PathDiscoveryPush {
+  final String prefixHex;
+  final int outPathLen;
+  final Uint8List outPath;
+  final int inPathLen;
+  final Uint8List inPath;
+  const PathDiscoveryPush(this.prefixHex, this.outPathLen, this.outPath, this.inPathLen, this.inPath);
+
+  static int _bytes(int pl) => pl == 0xFF ? 0 : (pl & 63) * ((pl >> 6) + 1);
+
+  /// Null for a short or inconsistent frame (trailing unknown bytes are ignored).
+  static PathDiscoveryPush? tryParse(Uint8List f) {
+    if (f.length < 9 || f[0] != Push.pathDiscoveryResponse) return null;
+    final sb = StringBuffer();
+    for (var i = 2; i < 8; i++) {
+      sb.write(f[i].toRadixString(16).padLeft(2, '0'));
+    }
+    final ol = f[8];
+    final on = _bytes(ol);
+    if (9 + on + 1 > f.length) return null;
+    final il = f[9 + on];
+    final inn = _bytes(il);
+    if (10 + on + inn > f.length) return null;
+    return PathDiscoveryPush(sb.toString(), ol, Uint8List.fromList(f.sublist(9, 9 + on)), il, Uint8List.fromList(f.sublist(10 + on, 10 + on + inn)));
+  }
+}
+
+/// Radio side of the discovery answer (simulator and tests).
+Uint8List encodePathDiscoveryPush(List<int> prefix6, int outPathLen, List<int> outPath, int inPathLen, List<int> inPath) =>
+    Uint8List.fromList([Push.pathDiscoveryResponse, 0, ...prefix6.take(6), outPathLen, ...outPath, inPathLen, ...inPath]);
