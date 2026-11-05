@@ -23,10 +23,12 @@ import '../design/app_type.dart';
 import '../design/app_widgets.dart';
 import '../design/tokens.dart';
 import '../shell/shell_controller.dart';
+import '../tools/ping_result_sheet.dart';
 import 'contact_edit_sheet.dart';
 import 'contact_map.dart';
 import 'contact_widgets.dart';
 import 'contacts_controller.dart';
+import 'path_manager_screen.dart';
 import 'profile_sheets.dart';
 import 'profile_tiles.dart';
 import 'profile_widgets.dart';
@@ -357,11 +359,7 @@ class _ContactProfileScreenState extends State<ContactProfileScreen> {
       case ProfileTileId.route:
         await _route(c);
       case ProfileTileId.ping:
-        await showComingSoonSheet(context,
-            title: 'Ping ${c.displayName}',
-            body: c.type == ContactType.companion
-                ? 'Ping will look for the best route to ${c.displayName} and time a round trip. It uses a little airtime.'
-                : 'Ping will trace the route to ${c.displayName} and show the signal at every hop. It uses a little airtime.');
+        await showPingSheet(context, contact: c, manager: _m, onUseRoute: (r) => offerUseRoute(context, _m, c, r));
       case ProfileTileId.stats:
         await showUserStatsSheet(context, contact: c);
       case ProfileTileId.telemetry:
@@ -369,17 +367,7 @@ class _ContactProfileScreenState extends State<ContactProfileScreen> {
     }
   }
 
-  Future<void> _route(Contact c) => showContactRouteSheet(
-        context,
-        current: () => _c.contact(widget.publicKey) ?? c,
-        changes: _c,
-        redesign: AppFlags.chatRedesign,
-        onAlwaysSearch: (v) => _m.setForceFlood(c.publicKey, v),
-        onReset: () async {
-          await _m.resetPath(c.publicKey);
-          _say('Route forgotten. The next message searches and finds a new one.');
-        },
-      );
+  Future<void> _route(Contact c) => PathManagerScreen.open(context, manager: _m, publicKey: c.publicKey, changes: _c);
 
   Future<void> _edit(Contact c) async {
     final r = await showContactEditSheet(context, controller: _c, publicKey: c.publicKey);

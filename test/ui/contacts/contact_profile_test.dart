@@ -108,8 +108,8 @@ void main() {
       expect(rig.opened.single.publicKey, keyN(1));
       await tester.tap(find.byKey(const Key('tile-route')));
       await tester.pumpAndSettle();
-      expect(find.byKey(const Key('route-sheet-hops')), findsOneWidget);
-      expect(find.text('01'), findsOneWidget);
+      expect(find.byKey(const Key('route-chain')), findsOneWidget, reason: 'the Route screen, not a sheet');
+      expect(find.text('Route to Ann KE8ANN'), findsOneWidget);
     });
 
     tw('person without a route: says so', (tester) async {
@@ -263,7 +263,7 @@ void main() {
   });
 
   group('flag on: tiles that wait for WP7 / WP8', () {
-    tw('person gets Ping and Stats; each opens a labelled "coming" sheet', (tester) async {
+    tw('person gets Ping and Stats; Ping opens the ping sheet after the airtime line', (tester) async {
       setScreen(tester);
       AppFlags.chatRedesign = true;
       await rig.withContacts(1);
@@ -271,8 +271,11 @@ void main() {
       expect(find.byKey(const Key('tile-ping')), findsOneWidget);
       await tester.tap(find.byKey(const Key('tile-ping')));
       await tester.pumpAndSettle();
-      expect(find.byKey(const Key('coming-soon-title')), findsOneWidget);
-      expect(find.byKey(const Key('coming-soon-body')), findsOneWidget);
+      expect(find.byKey(const Key('ping-airtime-confirm')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('ping-airtime-confirm')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('ping-headline')), findsOneWidget);
+      expect(find.byKey(const Key('coming-soon-title')), findsNothing);
     });
 
     tw('radio away: Ping is dimmed with the reason, and a tap says why instead of doing nothing', (tester) async {
@@ -286,12 +289,12 @@ void main() {
       await tester.tap(find.byKey(const Key('tile-ping')));
       await tester.pumpAndSettle();
       expect(find.text('Connect your radio to use this.'), findsWidgets);
-      expect(find.byKey(const Key('coming-soon-title')), findsNothing);
+      expect(find.byKey(const Key('ping-headline')), findsNothing);
     });
   });
 
   group('route, share, mute, copy', () {
-    tw('Always search switch and Reset route (confirm first)', (tester) async {
+    tw('Route screen: Always search is a checkmark row; Reset route asks first', (tester) async {
       setScreen(tester);
       rig.port.radioAdd(radioContact(1, path: true));
       rig.chat.contacts.attach(rig.port);
@@ -299,10 +302,10 @@ void main() {
       await pumpProfile(tester, rig, keyN(1));
       await tester.tap(find.byKey(const Key('contact-route-row')));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('contact-force-flood')));
+      await tester.tap(find.byKey(const Key('mode-flood')));
       await tester.pumpAndSettle();
       expect(c(keyN(1)).forceFlood, isTrue);
-      await tester.tap(find.byKey(const Key('contact-reset-route')));
+      await tester.tap(find.byKey(const Key('route-reset')));
       await tester.pumpAndSettle();
       expect(c(keyN(1)).hasPath, isTrue, reason: 'nothing happens until confirmed');
       await tester.tap(find.byKey(const Key('reset-route-confirm')));
@@ -319,7 +322,7 @@ void main() {
       await tester.tap(find.byKey(const Key('tile-route')));
       await tester.pumpAndSettle();
       expect(find.text('No route saved'), findsOneWidget);
-      await tester.tap(find.byKey(const Key('contact-reset-route')));
+      await tester.tap(find.byKey(const Key('route-reset')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('reset-route-confirm')), findsNothing);
     });

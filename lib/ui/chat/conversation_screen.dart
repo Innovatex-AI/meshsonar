@@ -2,35 +2,49 @@
 //
 //   ConversationScreen.open(context, controller: chat, convKey: ConvKey.channel(3));
 //   ConversationScreen.open(context, controller: chat, convKey: ConvKey.dm(prefix12), title: contact.displayName,
-//       actions: [IconButton(...contact info...)]);          // the DM / contacts screens add their own app-bar actions
+//       anchorMessageId: hit.id);                          // a search hit: lands on that message and flashes it
 //
 // It reads and writes only through [ChatController] (so: the local chat database and the radio, never the network). The
-// title is looked up from the conversation when not given. Embedded (`embedded: true`) it has no app bar, for the
-// Chat-in-Drive sheet.
+// title is looked up from the conversation when not given. Embedded (`embedded: true`) it has no bar, for the Chat-in-Drive
+// sheet.
 //
-// What it shows: pages of messages (newest at the bottom, grouped by day, older ones load as you scroll up), an unread
-// marker, delivery state under your own messages with Retry / Cancel, long-press actions, message details, search in
-// the conversation, and the composer (byte counter, draft, passenger lock).
+// Chat plan 4.2: navigation bar with ONE 44 pt title block (avatar, name, route text) that opens the profile / Channel info
+// and an ellipsis menu (Search, Route, Mute, Info); grouped bubbles with the time under the last bubble of a run; five
+// delivery states as glyph + word; tap a bubble for the info strip; long-press for the context menu; a jump-to-latest capsule;
+// a "Retry all" banner for two or more failed; and the composer.
 import 'dart:async';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart' show SemanticsService;
 
 import '../../app/chat_controller.dart';
+import '../../chat/bubble_grouping.dart';
 import '../../chat/db/message_repository.dart';
+import '../../chat/delivery_state.dart';
 import '../../chat/events.dart';
+import '../../chat/message_info.dart';
 import '../../chat/models.dart';
+import '../../chat/models.dart' as models show Route;
 import '../app.dart' show AppScope;
-import '../state_widgets.dart';
+import '../contacts/dm_route_text.dart';
+import '../contacts/message_details.dart' as details;
+import '../design/app_haptics.dart';
 import '../design/app_surfaces.dart';
-import '../theme.dart';
-import '../widgets.dart' show EmptyState;
+import '../design/app_symbols.dart';
+import '../design/app_type.dart';
+import '../design/avatar_style.dart';
+import '../design/tokens.dart';
+import '../radios/rooms/room_joins.dart';
+import '../state_widgets.dart';
 import 'channel_detail_screen.dart';
 import 'channel_flows.dart';
+import 'chat_list_actions.dart';
+import 'chat_navigation.dart';
 import 'composer.dart';
 import 'message_bubble.dart';
 import 'message_format.dart';
-import '../contacts/message_details.dart' as details;
-import 'message_sheets.dart';
+import 'message_menu.dart';
 
 /// Wide Chat tab (two columns): lists inside it open conversations in the right-hand pane through this.
 class ConversationPaneScope extends InheritedWidget {
@@ -45,18 +59,23 @@ class ConversationScreen extends StatefulWidget {
   final ChatController controller;
   final String convKey;
 
-  /// Shown in the app bar. Null: looked up from the conversation (channel name, contact name).
+  /// Shown in the bar. Null: looked up from the conversation (channel name, contact name).
   final String? title;
+
+  /// Under the title. Null: filled in (DM route text, channel kind and region, room joined state).
   final String? subtitle;
 
-  /// Extra app-bar buttons (the contacts screens add "contact info").
+  /// Extra bar buttons (kept for callers that add their own).
   final List<Widget> actions;
 
-  /// A widget above the message list (the DM screen shows the route state there).
+  /// A widget above the message list (the room screen shows the join bar there).
   final Widget? header;
 
-  /// No Scaffold or app bar (Chat-in-Drive sheet).
+  /// No bar (Chat-in-Drive sheet).
   final bool embedded;
+
+  /// Open scrolled to this message and flash it (search hits).
+  final String? anchorMessageId;
 
   const ConversationScreen({
     super.key,
@@ -67,6 +86,7 @@ class ConversationScreen extends StatefulWidget {
     this.actions = const [],
     this.header,
     this.embedded = false,
+    this.anchorMessageId,
   });
 
   static Future<void> open(
@@ -77,16 +97,25 @@ class ConversationScreen extends StatefulWidget {
     String? subtitle,
     List<Widget> actions = const [],
     Widget? header,
+    String? anchorMessageId,
   }) {
     // Two-column Chat on a wide screen: show it in the right-hand pane instead of pushing a page.
     final pane = ConversationPaneScope.maybeOf(context);
     if (pane != null) {
       pane.show(ConversationScreen(
-          key: ValueKey('pane-$convKey'), controller: controller, convKey: convKey, title: title, subtitle: subtitle, actions: actions, header: header));
+          key: ValueKey('pane-$convKey'),
+          controller: controller,
+          convKey: convKey,
+          title: title,
+          subtitle: subtitle,
+          actions: actions,
+          header: header,
+          anchorMessageId: anchorMessageId));
       return Future<void>.value();
     }
     return Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (_) => ConversationScreen(controller: controller, convKey: convKey, title: title, subtitle: subtitle, actions: actions, header: header),
+      builder: (_) => ConversationScreen(
+          controller: controller, convKey: convKey, title: title, subtitle: subtitle, actions: actions, header: header, anchorMessageId: anchorMessageId),
     ));
   }
 
@@ -96,20 +125,30 @@ class ConversationScreen extends StatefulWidget {
 
 class _ConversationScreenState extends State<ConversationScreen> {
   static const int _pageSize = 40;
-  final List<ChatMessage> _msgs = []; // newest first
+  List<ChatMessage> _msgs = []; // newest first
+  List<BubbleSlot> _slots = const [];
   MessageCursor? _next;
+  bool _hasNewer = false;
   bool _loading = true;
   bool _loadingMore = false;
   Object? _error;
   String? _unreadFromId;
   int _unreadCount = 0;
+  int _newAway = 0;
   StreamSubscription<ChatEvent>? _sub;
-  Timer? _ticker;
   final ScrollController _scroll = ScrollController();
   bool _showJump = false;
   bool _searching = false;
   final TextEditingController _query = TextEditingController();
   List<ChatMessage> _results = const [];
+  String? _expandedId;
+  String? _highlightId;
+  Timer? _flash;
+  GlobalKey? _anchorKey;
+  List<String> _failedIds = const [];
+  List<Contact> _repeaters = const [];
+  ChatNavigator? _navigator;
+  final Map<String, MessageBubble> _bubbles = {};
 
   ChatController get c => widget.controller;
 
@@ -119,14 +158,22 @@ class _ConversationScreenState extends State<ConversationScreen> {
     _scroll.addListener(_onScroll);
     c.addListener(_onController);
     _sub = c.events.listen(_onEvent);
+    _refreshRepeaters();
     _initialLoad();
   }
 
   void _initialLoad() {
     try {
       final unread = c.service.conversation(widget.convKey)?.unread ?? 0;
-      _reload(initial: true);
-      if (unread > 0) {
+      final anchor = widget.anchorMessageId;
+      final around = anchor == null ? null : c.service.pageAround(widget.convKey, anchor);
+      if (around != null) {
+        _setWindow(around.page, hasNewer: around.hasNewer);
+        _highlight(anchor!);
+      } else {
+        _reload(initial: true);
+      }
+      if (unread > 0 && around == null) {
         // The oldest unread message among those loaded: the marker goes above it.
         final incomingUnread = _msgs.where((m) => !m.isOutgoing && !m.read).toList();
         if (incomingUnread.isNotEmpty) {
@@ -136,51 +183,110 @@ class _ConversationScreenState extends State<ConversationScreen> {
       }
       c.setActiveConversation(widget.convKey);
       c.service.markRead(widget.convKey);
+      if (around != null) WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToAnchor(0));
     } catch (e) {
       _error = e;
       _loading = false;
     }
+  }
+
+  void _setWindow(MessagePage page, {bool hasNewer = false}) {
+    _msgs = List.of(page.messages);
+    _next = page.next;
+    _hasNewer = hasNewer;
+    _error = null;
+    _loading = false;
+    _regroup();
   }
 
   void _reload({bool initial = false}) {
     try {
       final want = initial ? _pageSize : (_msgs.length < _pageSize ? _pageSize : (_msgs.length > 500 ? 500 : _msgs.length));
-      final page = c.service.page(widget.convKey, limit: want);
-      _msgs
-        ..clear()
-        ..addAll(page.messages);
-      _next = page.next;
-      _error = null;
-      _loading = false;
+      _setWindow(c.service.page(widget.convKey, limit: want));
     } catch (e) {
       _error = e;
       _loading = false;
     }
-    _syncTicker();
   }
+
+  void _regroup() {
+    _slots = groupMessages(_msgs, showSenders: _kind != ConvKind.dm);
+    _failedIds = [for (final m in c.store.messages.byState(const [MessageState.failed]) .where((m) => m.convKey == widget.convKey)) m.id];
+  }
+
+  void _refreshRepeaters() {
+    final radio = c.radioId;
+    _repeaters = radio == null ? const [] : c.store.contacts.list(radio, type: ContactType.repeater);
+  }
+
+  // ------------------------------------------------------------------ events
 
   void _onEvent(ChatEvent e) {
     if (!mounted) return;
-    final mine = e.convKey == widget.convKey || e.kind == ChatEventKind.historyDeleted && e.convKey == null;
-    if (!mine) return;
-    if (e.kind == ChatEventKind.conversationChanged) return; // unread / draft bookkeeping, not content
-    setState(() => _reload());
+    switch (e.kind) {
+      case ChatEventKind.contactsChanged:
+      case ChatEventKind.channelsChanged:
+        setState(_refreshRepeaters);
+      case ChatEventKind.messageUpdated:
+        if (e.convKey == widget.convKey && e.messageId != null) _onUpdated(e.messageId!);
+      case ChatEventKind.messageAdded:
+        if (e.convKey == widget.convKey && e.message != null) _onAdded(e.message!);
+      case ChatEventKind.historyDeleted:
+        if (e.convKey == widget.convKey || e.convKey == null) {
+          setState(() {
+            _expandedId = null;
+            _reload();
+          });
+        }
+      case ChatEventKind.conversationChanged:
+      case ChatEventKind.systemChanged:
+        break;
+    }
+  }
+
+  void _onUpdated(String id) {
+    final i = _msgs.indexWhere((m) => m.id == id);
+    if (i < 0) return;
+    final fresh = c.store.messages.get(id);
+    if (fresh == null) return;
+    final old = _msgs[i];
+    setState(() {
+      _msgs[i] = fresh;
+      _regroup();
+    });
+    if (old.state != fresh.state && fresh.isOutgoing) {
+      final say = switch (fresh.state) {
+        MessageState.acked => 'Delivered',
+        MessageState.failed => 'Not delivered',
+        _ => null,
+      };
+      if (say != null) {
+        if (fresh.state == MessageState.failed) AppHaptics.error();
+        SemanticsService.sendAnnouncement(View.of(context), say, Directionality.of(context));
+      }
+    }
+  }
+
+  void _onAdded(ChatMessage m) {
+    if (_msgs.any((x) => x.id == m.id)) return;
+    if (_hasNewer) {
+      // The window sits in the past: the capsule counts what arrived and takes the person back to the latest.
+      setState(() => _newAway += m.isOutgoing ? 0 : 1);
+      return;
+    }
+    setState(() {
+      _msgs.insert(0, m);
+      _regroup();
+      if (!m.isOutgoing && _showJump) _newAway++;
+    });
+    if (!m.isOutgoing && !_showJump) {
+      AppHaptics.soft();
+      SemanticsService.sendAnnouncement(View.of(context), '${m.senderName ?? 'New message'}: ${m.text}', Directionality.of(context));
+    }
   }
 
   void _onController() {
     if (mounted) setState(() {});
-  }
-
-  void _syncTicker() {
-    final pending = _msgs.any((m) => m.isOutgoing && (m.state == MessageState.queued || m.state == MessageState.retrying));
-    if (pending && _ticker == null) {
-      _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
-        if (mounted) setState(() {});
-      });
-    } else if (!pending) {
-      _ticker?.cancel();
-      _ticker = null;
-    }
   }
 
   void _onScroll() {
@@ -188,7 +294,9 @@ class _ConversationScreenState extends State<ConversationScreen> {
     final p = _scroll.position;
     final far = p.pixels > 400;
     if (far != _showJump) setState(() => _showJump = far);
+    if (!far && _newAway > 0 && !_hasNewer) setState(() => _newAway = 0);
     if (p.pixels > p.maxScrollExtent - 300) _loadOlder();
+    if (_hasNewer && p.pixels < 300) _loadNewer();
   }
 
   void _loadOlder() {
@@ -200,6 +308,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
       setState(() {
         _msgs.addAll(page.messages);
         _next = page.next;
+        _regroup();
       });
     } catch (_) {
       // leave the cursor: the next scroll tries again
@@ -208,14 +317,41 @@ class _ConversationScreenState extends State<ConversationScreen> {
     }
   }
 
+  void _loadNewer() {
+    if (_loadingMore || _msgs.isEmpty) return;
+    _loadingMore = true;
+    try {
+      final r = c.service.pageAround(widget.convKey, _msgs.first.id, before: 0, after: _pageSize);
+      if (r == null) return;
+      final fresh = [for (final m in r.page.messages) if (m.id != _msgs.first.id) m];
+      setState(() {
+        _msgs.insertAll(0, fresh);
+        _hasNewer = r.hasNewer;
+        if (!_hasNewer) _newAway = 0;
+        _regroup();
+      });
+    } finally {
+      _loadingMore = false;
+    }
+  }
+
+  @override
+  void didUpdateWidget(ConversationScreen old) {
+    super.didUpdateWidget(old);
+    // The wide pane re-uses this state when a different search hit of the same conversation is opened.
+    final a = widget.anchorMessageId;
+    if (a != null && a != old.anchorMessageId) WidgetsBinding.instance.addPostFrameCallback((_) => mounted ? _focusMessage(a) : null);
+  }
+
   @override
   void dispose() {
     _sub?.cancel();
-    _ticker?.cancel();
+    _flash?.cancel();
     c.removeListener(_onController);
     if (c.activeConversation == widget.convKey) c.setActiveConversation(null);
     _scroll.dispose();
     _query.dispose();
+    _navigator?.dispose();
     super.dispose();
   }
 
@@ -236,17 +372,91 @@ class _ConversationScreenState extends State<ConversationScreen> {
 
   Channel? get _channel => _kind == ConvKind.channel ? c.store.channels.getById(int.tryParse(ConvKey.body(widget.convKey)) ?? -1) : null;
 
+  Contact? get _contact {
+    final radio = c.radioId;
+    if (_kind == ConvKind.channel || radio == null) return null;
+    return c.store.contacts.byPrefix(radio, ConvKey.body(widget.convKey));
+  }
+
+  double? get _lastSnr {
+    for (final m in _msgs) {
+      if (!m.isOutgoing && m.snr != null) return m.snr;
+    }
+    return null;
+  }
+
+  Widget _subtitle() {
+    if (widget.subtitle != null) {
+      return Text(widget.subtitle!, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.footnote.copyWith(color: AppColors.of(context).textMuted));
+    }
+    switch (_kind) {
+      case ConvKind.dm:
+        return DmRouteText(contact: _contact, lastSnr: _lastSnr);
+      case ConvKind.channel:
+        return Text(channelSubtitle(_channel), key: const Key('conv-subtitle'), maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.footnote.copyWith(color: AppColors.of(context).textMuted));
+      case ConvKind.room:
+        final key = _contact?.publicKey;
+        final joined = key != null && RoomJoins.of(key) != null;
+        return Text(roomSubtitle(joined: joined), key: const Key('conv-subtitle'), maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.footnote.copyWith(color: AppColors.of(context).textMuted));
+    }
+  }
+
   List<String> get _mentionNames {
     if (_kind != ConvKind.channel) return const [];
     final seen = <String>{};
     for (final m in _msgs) {
       if (!m.isOutgoing && m.senderName != null) seen.add(m.senderName!);
-      if (seen.length >= 12) break;
+      if (seen.length >= 8) break;
     }
     return seen.toList();
   }
 
   // ------------------------------------------------------------------ actions
+
+  ChatNavigator get _nav => _navigator ??= ChatNavigator(c);
+
+  /// Title block tap and the ellipsis "Contact info" / "Channel info".
+  void _openInfo() {
+    final ch = _channel;
+    if (ch != null) {
+      ChannelDetailScreen.open(context, controller: c, channelId: ch.id!);
+      return;
+    }
+    final contact = _contact;
+    if (contact != null) _nav.openProfile(context, contact);
+  }
+
+  Future<void> _ellipsis() async {
+    final contact = _contact;
+    final row = c.conversationRows().where((r) => r.key == widget.convKey).firstOrNull;
+    final muted = row?.muted ?? false;
+    final choice = await showAppActionSheet<_Menu>(
+      context,
+      sheetKey: const Key('conv-menu'),
+      actions: [
+        const AppAction('Search in conversation', _Menu.search, symbol: AppSymbols.magnifyingglass, key: Key('menu-search')),
+        if (_kind == ConvKind.dm && contact != null) const AppAction('Route', _Menu.route, symbol: AppSymbols.route, key: Key('menu-route')),
+        AppAction(muted ? 'Unmute' : 'Mute', _Menu.mute, symbol: muted ? AppSymbols.bell : AppSymbols.bellSlash, key: const Key('menu-mute')),
+        AppAction(_kind == ConvKind.channel ? 'Channel info' : 'Contact info', _Menu.info, symbol: AppSymbols.infoCircle, key: const Key('menu-info')),
+      ],
+    );
+    if (choice == null || !mounted) return;
+    switch (choice) {
+      case _Menu.search:
+        setState(() {
+          _searching = true;
+          _query.clear();
+          _results = const [];
+        });
+      case _Menu.route:
+        await ChatListActions(c, navigator: _nav).openRoute(context, contact?.publicKey);
+      case _Menu.mute:
+        await ChatListActions(c, navigator: _nav).muteConversation(context, key: widget.convKey, title: _title, muted: muted);
+        if (mounted) setState(() {});
+      case _Menu.info:
+        _openInfo();
+    }
+  }
 
   Future<void> _openUrl(String url) async {
     final uri = Uri.tryParse(url);
@@ -259,22 +469,25 @@ class _ConversationScreenState extends State<ConversationScreen> {
     }
   }
 
-  Future<void> _actions(ChatMessage m) async {
-    final r = await showMessageActions(context, m);
-    if (r == null || !mounted) return;
-    switch (r.$1) {
-      case MessageAction.copy:
+  ChatMessage? _byId(String id) => _msgs.where((m) => m.id == id).firstOrNull;
+
+  Future<void> _perform(String id, MessageMenuEntry e) async {
+    final m = _byId(id) ?? c.store.messages.get(id);
+    if (m == null || !mounted) return;
+    switch (e.id) {
+      case MessageMenuId.copy:
         await copyText(context, m.text);
-      case MessageAction.retry:
+      case MessageMenuId.retry:
+        AppHaptics.light();
         c.service.retryFailed(m.id);
-      case MessageAction.cancel:
+      case MessageMenuId.cancel:
         c.service.cancel(m.id);
-      case MessageAction.delete:
+      case MessageMenuId.delete:
         if (await confirmDeleteMessage(context)) c.service.deleteMessage(m.id);
-      case MessageAction.details:
+      case MessageMenuId.details:
         await details.showMessageDetails(context, chat: c.service, messageId: m.id);
-      case MessageAction.openLink:
-        final l = r.$2;
+      case MessageMenuId.openLink:
+        final l = e.link;
         if (l == null) return;
         if (l.toLowerCase().startsWith('meshcore://')) {
           await handleMeshLink(context, c, l);
@@ -284,85 +497,212 @@ class _ConversationScreenState extends State<ConversationScreen> {
     }
   }
 
+  /// Long-press without the context menu: the same entries as an action sheet.
+  Future<void> _longPressSheet(String id) async {
+    final m = _byId(id);
+    if (m == null) return;
+    final r = await MessageMenu.showSheet(context, m);
+    if (r != null && mounted) await _perform(id, r);
+  }
+
+  Future<void> _failedTap(String id) async {
+    final choice = await showFailedSheet(context);
+    if (choice == null || !mounted) return;
+    switch (choice) {
+      case FailedChoice.retry:
+        AppHaptics.light();
+        c.service.retryFailed(id);
+      case FailedChoice.details:
+        await details.showMessageDetails(context, chat: c.service, messageId: id);
+      case FailedChoice.delete:
+        if (await confirmDeleteMessage(context)) c.service.deleteMessage(id);
+    }
+  }
+
+  void _toggleInfo(String id) {
+    AppHaptics.selection();
+    setState(() => _expandedId = _expandedId == id ? null : id);
+  }
+
+  void _retryAll() {
+    AppHaptics.light();
+    for (final id in List.of(_failedIds)) {
+      c.service.retryFailed(id);
+    }
+  }
+
   void _runSearch(String q) {
     final t = q.trim();
     setState(() => _results = t.isEmpty ? const [] : c.service.search(t, convKey: widget.convKey, limit: 100));
   }
 
   void _jumpToLatest() {
-    if (_scroll.hasClients) _scroll.animateTo(0, duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
+    AppHaptics.selection();
+    if (_hasNewer) {
+      setState(() {
+        _newAway = 0;
+        _reload(initial: true);
+      });
+    }
+    if (_scroll.hasClients) {
+      final d = Motion.reduced(context) ? Duration.zero : const Duration(milliseconds: 250);
+      if (d == Duration.zero) {
+        _scroll.jumpTo(0);
+      } else {
+        _scroll.animateTo(0, duration: d, curve: Curves.easeOut);
+      }
+    }
+  }
+
+  // ------------------------------------------------------------------ anchor
+
+  void _highlight(String id) {
+    _highlightId = id;
+    _anchorKey = GlobalKey();
+    _flash?.cancel();
+    _flash = Timer(const Duration(milliseconds: 1800), () {
+      if (mounted) setState(() => _highlightId = null);
+    });
+  }
+
+  /// Lands on [id] in context (search hit): loads the window around it, scrolls there and flashes it.
+  void _focusMessage(String id) {
+    final r = c.service.pageAround(widget.convKey, id);
+    if (r == null) {
+      showAppToast(context, 'That message is no longer on this phone.', kind: AppToastKind.error);
+      return;
+    }
+    setState(() {
+      _searching = false;
+      _setWindow(r.page, hasNewer: r.hasNewer);
+      _expandedId = null;
+      _highlight(id);
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToAnchor(0));
+  }
+
+  void _scrollToAnchor(int attempt) {
+    if (!mounted) return;
+    final ctx = _anchorKey?.currentContext;
+    if (ctx != null) {
+      Scrollable.ensureVisible(ctx, alignment: 0.5, duration: Duration.zero);
+      return;
+    }
+    if (attempt > 8 || !_scroll.hasClients) return;
+    final id = _highlightId;
+    final idx = id == null ? -1 : _slots.indexWhere((s) => s.message.id == id);
+    if (idx < 0) return;
+    // The row is not built yet (the list is lazy): jump near it, then look again next frame.
+    _scroll.jumpTo((idx * 84.0).clamp(0.0, _scroll.position.maxScrollExtent));
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToAnchor(attempt + 1));
   }
 
   // ------------------------------------------------------------------ build
 
   @override
   Widget build(BuildContext context) {
-    final body = _searching ? _searchBody(context) : _chatBody(context);
-    if (widget.embedded) return Material(child: Column(children: [Expanded(child: body)]));
-    final ch = _channel;
-    return Scaffold(
-      appBar: AppBar(
-        titleSpacing: 0,
-        title: _searching
-            ? TextField(
-                key: const Key('conv-search-field'),
-                controller: _query,
-                autofocus: true,
-                textInputAction: TextInputAction.search,
-                decoration: const InputDecoration(hintText: 'Search this conversation', border: InputBorder.none),
-                onChanged: _runSearch,
-              )
-            : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(_title, maxLines: 1, overflow: TextOverflow.ellipsis),
-                if (widget.subtitle != null)
-                  Text(widget.subtitle!, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.labelMedium),
-              ]),
-        actions: [
-          IconButton(
-            key: const Key('conv-search'),
-            tooltip: _searching ? 'Close search' : 'Search this conversation',
-            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-            icon: Icon(_searching ? Icons.close_rounded : Icons.search_rounded),
-            onPressed: () => setState(() {
-              _searching = !_searching;
-              _query.clear();
-              _results = const [];
-            }),
-          ),
-          if (!_searching) ...widget.actions,
-          if (!_searching && ch != null)
-            IconButton(
-              key: const Key('conv-channel-info'),
-              tooltip: 'Channel info',
-              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-              icon: const Icon(Icons.info_outline_rounded),
-              onPressed: () => ChannelDetailScreen.open(context, controller: c, channelId: ch.id!),
-            ),
-        ],
-      ),
-      body: SafeArea(bottom: false, child: body),
+    final colors = AppColors.of(context);
+    final body = _searching ? _searchBody(context, colors) : _chatBody(context);
+    if (widget.embedded) return ColoredBox(color: colors.surface, child: Column(children: [Expanded(child: body)]));
+    return CupertinoPageScaffold(
+      backgroundColor: colors.surface,
+      navigationBar: _bar(context, colors),
+      child: body,
     );
   }
 
-  Widget _searchBody(BuildContext context) {
-    final t = Theme.of(context);
+  CupertinoNavigationBar _bar(BuildContext context, AppColors colors) {
+    if (_searching) {
+      return CupertinoNavigationBar(
+        backgroundColor: colors.surface,
+        automaticallyImplyLeading: false,
+        middle: CupertinoSearchTextField(
+          key: const Key('conv-search-field'),
+          controller: _query,
+          autofocus: true,
+          placeholder: 'Search this conversation',
+          onChanged: _runSearch,
+        ),
+        trailing: CupertinoButton(
+          key: const Key('conv-search-cancel'),
+          padding: EdgeInsets.zero,
+          minimumSize: Size.square(Hit.of(context)),
+          onPressed: () => setState(() {
+            _searching = false;
+            _query.clear();
+            _results = const [];
+          }),
+          child: const Text('Cancel'),
+        ),
+      );
+    }
+    final ch = _channel;
+    final hasInfo = ch != null || _contact != null;
+    final canPop = Navigator.canPop(context);
+    return CupertinoNavigationBar(
+      backgroundColor: colors.surface,
+      automaticallyImplyLeading: false,
+      leading: canPop
+          ? Semantics(
+              container: true,
+              button: true,
+              label: 'Back',
+              excludeSemantics: true,
+              onTap: () => Navigator.of(context).maybePop(),
+              child: CupertinoNavigationBarBackButton(key: const Key('conv-back'), onPressed: () => Navigator.of(context).maybePop()),
+            )
+          : null,
+      border: Border(bottom: BorderSide(color: colors.outline.withValues(alpha: 0.3), width: 0.5)),
+      middle: MediaQuery.withClampedTextScaling(
+        maxScaleFactor: 1.3,
+        child: _TitleBlock(
+          title: _title,
+          seed: ch != null ? 'c:${ch.id}' : (_contact?.publicKey ?? widget.convKey),
+          square: _kind != ConvKind.dm,
+          subtitle: _subtitle(),
+          onTap: hasInfo ? _openInfo : null,
+        ),
+      ),
+      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+        ...widget.actions,
+        CupertinoButton(
+          key: const Key('conv-menu-button'),
+          padding: EdgeInsets.zero,
+          minimumSize: Size.square(Hit.of(context)),
+          onPressed: _ellipsis,
+          child: Semantics(label: 'More', child: const AppSymbolIcon(AppSymbols.ellipsisCircle, size: 24)),
+        ),
+      ]),
+    );
+  }
+
+  Widget _searchBody(BuildContext context, AppColors colors) {
     if (_query.text.trim().isEmpty) {
-      return const EmptyState(icon: Icons.search_rounded, title: 'Search this conversation', body: 'Type a word to find it in the messages kept on this phone.');
+      return _Empty(symbol: AppSymbols.magnifyingglass, title: 'Search this conversation', body: 'Type a word to find it in the messages kept on this phone.');
     }
     if (_results.isEmpty) {
-      return EmptyState(icon: Icons.search_off_rounded, title: 'Nothing found', body: 'No message here contains "${_query.text.trim()}". Check the spelling or try a shorter word.');
+      return _Empty(symbol: AppSymbols.magnifyingglass, title: 'Nothing found', body: 'No message here contains "${_query.text.trim()}". Check the spelling or try a shorter word.');
     }
-    return ListView.separated(
+    return ListView.builder(
       key: const Key('conv-search-results'),
       itemCount: _results.length,
-      separatorBuilder: (_, _) => const Divider(height: 1),
       itemBuilder: (context, i) {
         final m = _results[i];
-        return ListTile(
-          minTileHeight: 56,
-          title: Text(m.text, maxLines: 2, overflow: TextOverflow.ellipsis),
-          subtitle: Text('${m.isOutgoing ? 'You' : (m.senderName ?? 'Unknown')}, ${dayLabel(context, m.tsLocalMs, now: c.now())} ${timeLabel(context, m.tsLocalMs)}', style: t.textTheme.labelMedium),
-          onTap: () => details.showMessageDetails(context, chat: c.service, messageId: m.id),
+        return GestureDetector(
+          key: Key('conv-result-${m.id}'),
+          behavior: HitTestBehavior.opaque,
+          onTap: () => _focusMessage(m.id),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 56),
+            padding: const EdgeInsets.symmetric(horizontal: Layout.screenMargin, vertical: Gap.s),
+            decoration: BoxDecoration(border: Border(bottom: BorderSide(color: colors.outline.withValues(alpha: 0.2), width: 0.5))),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(m.text, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.body.copyWith(color: colors.textPrimary)),
+              const SizedBox(height: 2),
+              Text('${m.isOutgoing ? 'You' : (m.senderName ?? 'Unknown')}, ${dayLabel(context, m.tsLocalMs, now: c.now())} ${timeLabel(context, m.tsLocalMs)}',
+                  style: AppType.footnote.copyWith(color: colors.textMuted)),
+            ]),
+          ),
         );
       },
     );
@@ -374,16 +714,39 @@ class _ConversationScreenState extends State<ConversationScreen> {
   }
 
   Widget _chatColumn(BuildContext context) {
+    final colors = AppColors.of(context);
+    final ch = _channel;
+    final offRadio = ch != null && ch.slot == null;
     return Column(
       children: [
         if (widget.header != null) widget.header!,
         Expanded(child: _list(context)),
+        if (_failedIds.length >= 2)
+          Container(
+            key: const Key('retry-all-banner'),
+            color: colors.surfaceHigh,
+            padding: const EdgeInsets.symmetric(horizontal: Layout.screenMargin),
+            constraints: BoxConstraints(minHeight: Hit.of(context)),
+            child: Row(children: [
+              AppSymbolIcon(AppSymbols.exclamationCircleFill, size: 18, color: colors.danger),
+              const SizedBox(width: Gap.s),
+              Expanded(child: Text('${_failedIds.length} not delivered', style: AppType.subhead.copyWith(color: colors.textPrimary))),
+              CupertinoButton(
+                key: const Key('retry-all'),
+                padding: EdgeInsets.zero,
+                minimumSize: Size.square(Hit.of(context)),
+                onPressed: _retryAll,
+                child: const Text('Retry all'),
+              ),
+            ]),
+          ),
         Composer(
           controller: c,
           convKey: widget.convKey,
           hint: _kind == ConvKind.channel ? 'Message ${_title.length > 24 ? '${_title.substring(0, 24)}…' : _title}' : 'Message',
           mentionNames: _mentionNames,
           onSent: _jumpToLatest,
+          onChannelInfoWhenOffRadio: offRadio ? _openInfo : null,
         ),
       ],
     );
@@ -408,61 +771,90 @@ class _ConversationScreenState extends State<ConversationScreen> {
       );
     }
 
-    final items = <Widget>[];
-    final me = c.selfName;
-    for (var i = 0; i < _msgs.length; i++) {
-      final m = _msgs[i];
-      final older = i + 1 < _msgs.length ? _msgs[i + 1] : null;
-      final sameDay = older != null && dayOf(older.tsLocalMs) == dayOf(m.tsLocalMs);
-      final showSender = !m.isOutgoing &&
-          _kind != ConvKind.dm &&
-          (older == null || !sameDay || older.isOutgoing || older.senderName != m.senderName);
-      final due = m.state == MessageState.queued || m.state == MessageState.retrying ? c.store.outbox.get(m.id)?.dueAtMs : null;
-      final dueIn = due == null ? null : due - c.now().millisecondsSinceEpoch;
-      items.add(MessageBubble(
-        key: ValueKey(m.id),
-        message: m,
-        showSender: showSender,
-        selfName: me,
-        radioConnected: c.radioConnected,
-        dueInMs: dueIn,
-        onUrl: _openUrl,
-        onMeshLink: (l) => handleMeshLink(context, c, l),
-        onRetry: () => c.service.retryFailed(m.id),
-        onCancel: () => m.state == MessageState.failed ? _deleteFailed(m) : c.service.cancel(m.id),
-        onLongPress: () => _actions(m),
-      ));
-      if (m.id == _unreadFromId) items.add(_UnreadMarker(count: _unreadCount));
-      if (older == null || !sameDay) items.add(_DayHeader(label: dayLabel(context, m.tsLocalMs, now: c.now())));
-    }
-    if (_next != null) items.add(const Padding(padding: EdgeInsets.all(Gap.l), child: Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)))));
+    final wide = MediaQuery.sizeOf(context).width >= 700;
+    final now = c.now();
+    final avatars = _kind != ConvKind.dm;
+    final contact = _contact;
+    final peerName = contact?.displayName ?? (_kind == ConvKind.dm ? _title : null);
+    final extra = _next != null ? 1 : 0;
 
     return Stack(
       children: [
-        ListView(
+        ListView.builder(
           key: const Key('conv-list'),
           controller: _scroll,
           reverse: true,
           padding: const EdgeInsets.only(top: Gap.s, bottom: Gap.s),
-          children: items,
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+          itemCount: _slots.length + extra,
+          findChildIndexCallback: (key) {
+            if (key is ValueKey<String>) {
+              final i = _slots.indexWhere((s) => s.message.id == key.value);
+              return i < 0 ? null : i;
+            }
+            return null;
+          },
+          itemBuilder: (context, i) {
+            if (i >= _slots.length) {
+              return const Padding(padding: EdgeInsets.all(Gap.l), child: Center(child: CupertinoActivityIndicator()));
+            }
+            final slot = _slots[i];
+            final m = slot.message;
+            DeliveryUi? d;
+            if (m.isOutgoing) {
+              final maxAttempts = (m.state == MessageState.sent || m.state == MessageState.retrying) && m.convKind != ConvKind.channel ? c.store.outbox.get(m.id)?.maxAttempts : null;
+              d = deliveryUi(m,
+                  radioConnected: c.radioConnected,
+                  maxAttempts: maxAttempts,
+                  nowMs: now.millisecondsSinceEpoch,
+                  viaText: m.state == MessageState.acked && m.convKind != ConvKind.channel ? (m.route == models.Route.flood ? 'searched' : dmRouteText(contact).toLowerCase()) : null);
+            }
+            final expanded = _expandedId == m.id;
+            final bubble = MessageBubble(
+              key: ValueKey(m.id),
+              slot: slot,
+              delivery: d,
+              showStatus: m.isOutgoing && d != null && (slot.lastOfRun || d.alwaysVisible),
+              selfName: c.selfName,
+              radioConnected: c.radioConnected,
+              avatars: avatars,
+              wide: wide,
+              expanded: expanded,
+              info: expanded ? messageInfo(m, repeaters: _repeaters, peer: peerName, contact: contact) : null,
+              highlighted: _highlightId == m.id,
+              separatorText: slot.separatorAbove ? separatorLabel(context, m.tsLocalMs, now: now) : '',
+              onUrl: _openUrl,
+              onMeshLink: (l) => handleMeshLink(context, c, l),
+              onTap: _toggleInfo,
+              onFailedTap: _failedTap,
+              onMenu: _perform,
+              onLongPress: _longPressSheet,
+              onDetails: (id) => details.showMessageDetails(context, chat: c.service, messageId: id),
+            );
+            final cached = _bubbles[m.id];
+            final MessageBubble shown = cached != null && cached.signature == bubble.signature ? cached : (_bubbles[m.id] = bubble);
+            final marked = m.id == _unreadFromId;
+            final anchored = m.id == _highlightId && _anchorKey != null;
+            if (!marked && !anchored) return shown;
+            return Column(
+              key: ValueKey('wrap-${m.id}'),
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (marked) _UnreadMarker(count: _unreadCount),
+                if (anchored) KeyedSubtree(key: _anchorKey, child: shown) else shown,
+              ],
+            );
+          },
         ),
-        if (_showJump)
+        if (_showJump || _hasNewer)
           Positioned(
-            right: Gap.m,
+            right: Layout.screenMargin,
             bottom: Gap.m,
-            child: FloatingActionButton.small(
-              key: const Key('conv-jump'),
-              tooltip: 'Jump to the latest message',
-              onPressed: _jumpToLatest,
-              child: const Icon(Icons.arrow_downward_rounded),
-            ),
+            child: _JumpCapsule(count: _newAway, onTap: _jumpToLatest),
           ),
       ],
     );
-  }
-
-  Future<void> _deleteFailed(ChatMessage m) async {
-    if (await confirmDeleteMessage(context)) c.service.deleteMessage(m.id);
   }
 
   Widget _empty(BuildContext context) {
@@ -470,38 +862,134 @@ class _ConversationScreenState extends State<ConversationScreen> {
       case ConvKind.channel:
         final ch = _channel;
         final off = ch != null && ch.slot == null;
-        return EmptyState(
+        return _Empty(
           key: const Key('conv-empty'),
-          icon: Icons.tag_rounded,
+          symbol: AppSymbols.numberSign,
           title: 'No messages in $_title yet',
           body: off
               ? 'This channel is not on your radio right now, so nothing can arrive or be sent. Open Channel info to put it back on the radio.'
               : 'Everyone who has this channel on their radio and is in range of a repeater will see what you write here. Say hello.',
         );
       case ConvKind.room:
-        return EmptyState(key: const Key('conv-empty'), icon: Icons.forum_outlined, title: 'No posts in $_title yet', body: 'Posts to the room are kept by the room server. Write the first one.');
+        return _Empty(key: const Key('conv-empty'), symbol: AppSymbols.bubbles, title: 'No posts in $_title yet', body: 'Posts to the room are kept by the room server. Write the first one.');
       case ConvKind.dm:
-        return EmptyState(key: const Key('conv-empty'), icon: Icons.chat_bubble_outline_rounded, title: 'No messages with $_title yet', body: 'Say hello. You get a Delivered mark when their radio confirms it arrived.');
+        return _Empty(key: const Key('conv-empty'), symbol: AppSymbols.message, title: 'No messages with $_title yet', body: 'Say hello. You get a Delivered mark when their radio confirms it arrived.');
     }
   }
 }
 
-class _DayHeader extends StatelessWidget {
-  final String label;
-  const _DayHeader({required this.label});
+enum _Menu { search, route, mute, info }
+
+/// Avatar 32 + name (headline) with a small chevron + the subtitle, as ONE 44 pt target.
+class _TitleBlock extends StatelessWidget {
+  final String title;
+  final String seed;
+  final bool square;
+  final Widget subtitle;
+  final VoidCallback? onTap;
+  const _TitleBlock({required this.title, required this.seed, required this.square, required this.subtitle, this.onTap});
+
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context);
+    final c = AppColors.of(context);
+    final style = avatarStyle(seed, c);
+    final ch = title.trim().isEmpty ? '?' : String.fromCharCode(title.trim().runes.first).toUpperCase();
+    final avatar = Container(
+      width: 32,
+      height: 32,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(color: style.fill, shape: square ? BoxShape.rectangle : BoxShape.circle, borderRadius: square ? BorderRadius.circular(9) : null),
+      child: Text(ch, style: AppType.subhead.copyWith(color: style.initials, fontWeight: FontWeight.w600)),
+    );
+    final content = ConstrainedBox(
+      constraints: BoxConstraints(minHeight: Hit.of(context), maxWidth: 260),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        ExcludeSemantics(child: avatar),
+        const SizedBox(width: Gap.s),
+        Flexible(
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(mainAxisSize: MainAxisSize.min, children: [
+              Flexible(child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.headline.copyWith(color: c.textPrimary))),
+              if (onTap != null) Padding(padding: const EdgeInsets.only(left: 2), child: AppSymbolIcon(AppSymbols.chevronRight, size: 12, color: c.textMuted)),
+            ]),
+            subtitle,
+          ]),
+        ),
+      ]),
+    );
+    if (onTap == null) return Semantics(container: true, header: true, child: content);
     return Semantics(
-      header: true,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: Gap.s),
-        child: Center(
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: Gap.m, vertical: Gap.xs),
-            decoration: BoxDecoration(color: t.colorScheme.surfaceContainerHigh, borderRadius: BorderRadius.circular(Corners.chip)),
-            child: Text(label, style: t.textTheme.labelMedium),
+      button: true,
+      container: true,
+      label: title,
+      hint: 'Opens details',
+      excludeSemantics: true,
+      onTap: onTap,
+      child: GestureDetector(key: const Key('conv-title'), behavior: HitTestBehavior.opaque, onTap: onTap, child: content),
+    );
+  }
+}
+
+/// The jump-to-latest capsule (44 pt tall) with the count of messages that arrived meanwhile.
+class _JumpCapsule extends StatelessWidget {
+  final int count;
+  final VoidCallback onTap;
+  const _JumpCapsule({required this.count, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AppColors.of(context);
+    return Semantics(
+      button: true,
+      label: count > 0 ? 'Jump to the latest message, $count new' : 'Jump to the latest message',
+      excludeSemantics: true,
+      onTap: onTap,
+      child: GestureDetector(
+        key: const Key('conv-jump'),
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Container(
+          constraints: BoxConstraints(minHeight: Hit.of(context), minWidth: Hit.of(context)),
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            color: c.surfaceHigh,
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: c.outline.withValues(alpha: 0.4), width: 0.5),
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 8, offset: const Offset(0, 2))],
           ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            AppSymbolIcon(AppSymbols.chevronDown, size: 16, color: c.accent),
+            if (count > 0) ...[
+              const SizedBox(width: 6),
+              Text(count > 99 ? '99+' : '$count', key: const Key('conv-jump-count'), style: AppType.num(15).copyWith(color: c.textPrimary)),
+            ],
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+class _Empty extends StatelessWidget {
+  final AppSymbol symbol;
+  final String title;
+  final String body;
+  const _Empty({super.key, required this.symbol, required this.title, required this.body});
+  @override
+  Widget build(BuildContext context) {
+    final c = AppColors.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(Gap.xl),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            AppSymbolIcon(symbol, size: 48, color: c.textMuted),
+            const SizedBox(height: Gap.m),
+            Text(title, textAlign: TextAlign.center, style: AppType.headline.copyWith(color: c.textPrimary)),
+            const SizedBox(height: Gap.s),
+            Text(body, textAlign: TextAlign.center, style: AppType.subhead.copyWith(color: c.textMuted)),
+          ]),
         ),
       ),
     );
@@ -513,21 +1001,24 @@ class _UnreadMarker extends StatelessWidget {
   const _UnreadMarker({required this.count});
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context);
+    final c = AppColors.of(context);
     return Semantics(
       container: true,
       label: count == 1 ? '1 new message below' : '$count new messages below',
       child: ExcludeSemantics(
         child: Padding(
           key: const Key('unread-marker'),
-          padding: const EdgeInsets.symmetric(horizontal: Gap.m, vertical: Gap.s),
+          padding: const EdgeInsets.symmetric(horizontal: Layout.screenMargin, vertical: Gap.s),
           child: Row(children: [
-            Expanded(child: Divider(color: t.colorScheme.primary)),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: Gap.s),
-              child: Text(count == 1 ? '1 new message' : '$count new messages', style: t.textTheme.labelMedium?.copyWith(color: t.colorScheme.primary, fontWeight: FontWeight.w700)),
+            Expanded(child: Container(height: 1, color: c.accent)),
+            Flexible(
+              flex: 4,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: Gap.s),
+                child: Text(count == 1 ? '1 new message' : '$count new messages', textAlign: TextAlign.center, style: AppType.footnote.copyWith(color: c.accent, fontWeight: FontWeight.w700)),
+              ),
             ),
-            Expanded(child: Divider(color: t.colorScheme.primary)),
+            Expanded(child: Container(height: 1, color: c.accent)),
           ]),
         ),
       ),

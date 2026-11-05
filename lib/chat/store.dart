@@ -22,6 +22,8 @@ class ChatStore {
   final AdvertRepository adverts;
   final SystemStatsRepository systemStats;
   final RemoteStatsHistoryRepository statsHistory;
+  final PathHistoryRepository pathHistory;
+  final PingResultRepository pingResults;
 
   ChatStore._(this.db, this.secrets)
       : contacts = ContactRepository(db),
@@ -31,6 +33,8 @@ class ChatStore {
         drafts = DraftRepository(db),
         adverts = AdvertRepository(db),
         systemStats = SystemStatsRepository(db),
+        pathHistory = PathHistoryRepository(db),
+        pingResults = PingResultRepository(db),
         statsHistory = RemoteStatsHistoryRepository(db);
 
   /// Opens (and migrates) [database]. Production passes a file database from lib/platform/chat_database.dart.

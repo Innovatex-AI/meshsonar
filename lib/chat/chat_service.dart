@@ -65,7 +65,9 @@ class ChatService {
   final InboundMessageSource? source;
   final RetryPolicy policy;
   final Random? _random;
-  late final Outbox? _ob = sink == null ? null : Outbox(store: store, sink: sink!, nowMs: nowMs, policy: policy, random: _random, notify: _emit);
+  late final Outbox? _ob = sink == null
+      ? null
+      : Outbox(store: store, sink: sink!, nowMs: nowMs, policy: policy, random: _random, notify: _emit, restorePath: (c) => contacts.restorePinnedPath(c));
 
   /// Longest text the radio carries (MAX_TEXT_LEN = 10 * 16, firmware).
   static const int maxPacketTextBytes = 160;
@@ -99,12 +101,14 @@ class ChatService {
     this.autoTimer = true,
     ContactManager? contactManager,
     bool Function()? deferContactSync,
+    bool Function()? routeWriteEnabled,
   })  : nowMs = nowMs ?? (() => DateTime.now().millisecondsSinceEpoch),
         selfName = selfName ?? (() => null),
         newId = newId ?? _randomId,
         // ignore: prefer_initializing_formals
         _random = random {
     contacts = contactManager ?? ContactManager(store: store, nowMs: this.nowMs, onChanged: () => _emit(const ChatEvent.contacts()), shouldDefer: deferContactSync);
+    if (routeWriteEnabled != null) contacts.routeWriteEnabled = routeWriteEnabled;
   }
 
   static final Random _rng = Random.secure();
@@ -250,6 +254,10 @@ class ChatService {
       dedupeKey: dedupeKeyFor(convKey, e.timestamp, raw),
       read: system,
       txtType: e.txtType,
+      rssi: e.rssi,
+      pathHashes: e.pathHashes,
+      hashSize: e.hashSize,
+      airMs: e.airMs,
     );
     if (!store.messages.insert(m)) return; // replay
     if (system) {
@@ -294,6 +302,10 @@ class ChatService {
       dedupeKey: dedupeKeyFor(convKey, e.timestamp, raw),
       read: blocked,
       txtType: e.txtType,
+      rssi: e.rssi,
+      pathHashes: e.pathHashes,
+      hashSize: e.hashSize,
+      airMs: e.airMs,
     );
     if (!store.messages.insert(m)) return; // replay, or a sender retry of a DM we already have
     _emit(ChatEvent.added(m, notify: _shouldNotify(convKey, m, blocked: blocked)));
@@ -337,7 +349,7 @@ class ChatService {
         final ex = store.contacts.get(radioId, c.publicKey);
         store.contacts.upsert(ex == null
             ? c
-            : c.copyWith(favourite: ex.favourite, blocked: ex.blocked, customName: ex.customName, notes: ex.notes, source: ex.source));
+            : c.withRouteOf(ex).copyWith(favourite: ex.favourite, blocked: ex.blocked, customName: ex.customName, notes: ex.notes, source: ex.source));
       }
     });
     _emit(const ChatEvent.contacts());
@@ -445,6 +457,8 @@ class ChatService {
   List<ConversationSummary> conversations({String? radioId, bool includeEmpty = false}) => store.messages.conversations(radioId: radioId, includeEmpty: includeEmpty);
   ConversationSummary? conversation(String convKey) => store.messages.conversation(convKey);
   MessagePage page(String convKey, {MessageCursor? before, int limit = 50}) => store.messages.page(convKey, before: before, limit: limit);
+  ({MessagePage page, bool hasNewer})? pageAround(String convKey, String anchorId, {int before = 20, int after = 20}) =>
+      store.messages.pageAround(convKey, anchorId, before: before, after: after);
   List<ChatMessage> search(String query, {String? convKey, int limit = 50, int offset = 0}) => store.messages.search(query, convKey: convKey, limit: limit, offset: offset);
   int unreadBadge() => store.messages.unreadConversationCount(nowMs: nowMs());
   int unreadMessages() => store.messages.unreadMessageCount(nowMs: nowMs());

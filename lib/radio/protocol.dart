@@ -97,6 +97,7 @@ abstract final class Push {
   static const logRxData = 0x88;
   static const traceData = 0x89;
   static const newAdvert = 0x8A;
+  static const pathDiscoveryResponse = 0x8D; // [0x8D][0][pubkey prefix x6][out_path_len][out_path][in_path_len][in_path] (spike S12)
   static const controlData = 0x8E; // v8+
   static const telemetryResponse = 0x8B;
   static const binaryResponse = 0x8C; // [0x8C][0][tag u32][data...] (answers 50 and 57; research packet section B)

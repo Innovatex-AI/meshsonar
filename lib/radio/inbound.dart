@@ -53,6 +53,12 @@ class InboundMessage {
   /// The whole frame as received (code byte included).
   final Uint8List raw;
 
+  /// Correlated from the radio's rx log (RxCorrelator): RSSI dBm, hop hashes (hex), hash size in bytes. Null when no logged
+  /// packet matched.
+  final int? rssiDbm;
+  final String? pathHashesHex;
+  final int? hashSize;
+
   const InboundMessage({
     required this.kind,
     this.channelIndex,
@@ -67,6 +73,9 @@ class InboundMessage {
     this.snrDb,
     required this.pathLen,
     required this.raw,
+    this.rssiDbm,
+    this.pathHashesHex,
+    this.hashSize,
   });
 
   bool get wasDirect => pathLen == 0xFF;
