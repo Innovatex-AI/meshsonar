@@ -8,11 +8,10 @@ import 'package:meshsonar/ui/chat/channel_flows.dart';
 import 'package:meshsonar/ui/chat/conversation_screen.dart';
 import 'package:meshsonar/ui/contacts/contact_profile_screen.dart';
 import 'package:meshsonar/ui/contacts/contacts_tab.dart';
-import 'package:meshsonar/ui/radios/rooms/room_join_header.dart';
 
 import '../../chat/contact_support.dart';
 import '../chat/chat_kit.dart' as kitlib;
-import 'contacts_ui_support.dart' show expectAccessible;
+import 'contacts_ui_support.dart' show expectAccessibleIos;
 
 void main() {
   late kitlib.ChatKit kit;
@@ -32,14 +31,26 @@ void main() {
     await tester.pump();
   }
 
+  /// Tap on a person opens the profile now; Message is the leading swipe action.
+  Future<void> openChat(WidgetTester tester, String name, int n) async {
+    await tester.drag(find.text(name), const Offset(300, 0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(Key('swipe-message-${keyN(n).substring(0, 8)}')));
+    await tester.pumpAndSettle();
+  }
+
   setUp(() => kit = kitlib.ChatKit());
   tearDown(() => kit.dispose());
 
-  testWidgets('tapping a person opens the conversation with the route text; the title block opens the profile', (tester) async {
+  testWidgets('tapping a person opens the profile; Message (swipe) opens the conversation with the route strip; the strip opens the details', (tester) async {
     await boot(tester);
     expect(find.text('Ann'), findsOneWidget);
     await tester.tap(find.text('Ann'));
     await tester.pumpAndSettle();
+    expect(find.byType(ContactProfileScreen), findsOneWidget, reason: 'tap = profile');
+    await tester.tap(find.byKey(const Key('contact-back')));
+    await tester.pumpAndSettle();
+    await openChat(tester, 'Ann', 1);
     expect(find.byType(ConversationScreen), findsOneWidget);
     expect(find.byKey(const Key('dm-route-text')), findsOneWidget);
     expect(find.text('No route yet'), findsOneWidget);
@@ -50,8 +61,7 @@ void main() {
 
   testWidgets('a message written in the conversation goes out through the chat service', (tester) async {
     await boot(tester);
-    await tester.tap(find.text('Ann'));
-    await tester.pumpAndSettle();
+    await openChat(tester, 'Ann', 1);
     await tester.enterText(find.byKey(const Key('composer-field')), 'hello Ann');
     await tester.pump();
     await tester.tap(find.byKey(const Key('composer-send')));
@@ -64,8 +74,7 @@ void main() {
 
   testWidgets('the route text follows the radio: a learned route says Via N repeaters', (tester) async {
     await boot(tester);
-    await tester.tap(find.text('Ann'));
-    await tester.pumpAndSettle();
+    await openChat(tester, 'Ann', 1);
     expect(find.text('No route yet'), findsOneWidget);
     port.radioAdd(radioContact(1, name: 'Ann', path: true));
     await kit.service.contacts.pathUpdated(keyN(1));
@@ -77,8 +86,7 @@ void main() {
 
   testWidgets('radio away: the composer says messages wait', (tester) async {
     await boot(tester);
-    await tester.tap(find.text('Ann'));
-    await tester.pumpAndSettle();
+    await openChat(tester, 'Ann', 1);
     kit.service.contacts.detach();
     await tester.pump();
     await tester.pump();
@@ -88,35 +96,18 @@ void main() {
   testWidgets('"always search" is said in the subtitle', (tester) async {
     await boot(tester);
     kit.service.contacts.setForceFlood(keyN(1), true);
-    await tester.tap(find.text('Ann'));
-    await tester.pumpAndSettle();
+    await openChat(tester, 'Ann', 1);
     expect(find.text('Searching'), findsOneWidget);
   });
 
-  testWidgets('a repeater opens its details, not a conversation (it has no inbox)', (tester) async {
-    await boot(tester);
-    await tester.tap(find.text('Tower'));
-    await tester.pumpAndSettle();
-    expect(find.byType(ContactProfileScreen), findsOneWidget);
-    expect(find.byType(ConversationScreen), findsNothing);
-  });
-
-  testWidgets('a room opens as a conversation with the room login header; a repeater\'s details carry Admin', (tester) async {
+  testWidgets('repeaters and rooms are not in Contacts (they live under Network)', (tester) async {
     await boot(tester);
     port.radioAdd(radioContact(3, name: 'Lounge', type: ContactType.room));
     await kit.service.contacts.syncNow();
     await tester.pump();
-    await tester.tap(find.text('Lounge'));
-    await tester.pumpAndSettle();
-    expect(find.byType(ConversationScreen), findsOneWidget);
-    expect(find.byType(RoomJoinHeader), findsOneWidget);
-    expect(find.byKey(const Key('dm-route-text')), findsNothing);
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Tower'));
-    await tester.pumpAndSettle();
-    expect(find.byType(ContactProfileScreen), findsOneWidget);
-    expect(find.byKey(const Key('tile-dashboard')), findsOneWidget);
+    expect(find.text('Ann'), findsOneWidget);
+    expect(find.text('Tower'), findsNothing);
+    expect(find.text('Lounge'), findsNothing);
   });
 
   group('a tapped or scanned meshcore:// link', () {
@@ -176,10 +167,9 @@ void main() {
       await boot(tester, w: w, h: h, scale: scale, b: dark ? Brightness.dark : Brightness.light);
       await tester.dragUntilVisible(find.text('Ann'), find.byKey(const Key('contacts-list')), const Offset(0, -120));
       await tester.pump();
-      await tester.tap(find.text('Ann'));
-      await tester.pumpAndSettle();
+      await openChat(tester, 'Ann', 1);
       expect(tester.takeException(), isNull);
-      await expectAccessible(tester);
+      await expectAccessibleIos(tester);
     });
   }
 }

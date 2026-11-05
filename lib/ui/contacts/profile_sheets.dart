@@ -154,3 +154,10 @@ Future<void> showComingSoonSheet(BuildContext context, {required String title, r
     },
   );
 }
+
+/// Ping from the Contacts list swipe and the profile tile: the same "coming" sheet until WP7's result sheet lands.
+Future<void> showPingSheet(BuildContext context, Contact c) => showComingSoonSheet(context,
+    title: 'Ping ${c.displayName}',
+    body: c.type == ContactType.companion
+        ? 'Ping will look for the best route to ${c.displayName} and time a round trip. It uses a little airtime.'
+        : 'Ping will trace the route to ${c.displayName} and show the signal at every hop. It uses a little airtime.');

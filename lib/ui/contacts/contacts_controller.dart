@@ -60,6 +60,7 @@ class ContactsController extends ChangeNotifier {
   List<ContactRow> _rows = const [];
   List<AdvertSeen> _nearby = const [];
   int _total = 0;
+  int _people = 0;
   bool _disposed = false;
 
   ContactsController({required this.chat, this.openConversation, this.openAdmin, this.canOpenRooms = false, int Function()? nowMs})
@@ -111,6 +112,12 @@ class ContactsController extends ChangeNotifier {
     return _total;
   }
 
+  /// People (type 1) in the book whatever the search says: the N in "Search N contacts".
+  int get peopleCount {
+    _recompute();
+    return _people;
+  }
+
   /// "New nodes nearby".
   List<AdvertSeen> get nearby {
     _recompute();
@@ -144,10 +151,12 @@ class ContactsController extends ChangeNotifier {
       _rows = const [];
       _nearby = const [];
       _total = 0;
+      _people = 0;
       return;
     }
     final all = chat.store.contacts.list(id, includeBlocked: false);
     _total = all.length;
+    _people = all.where((c) => c.type == ContactType.companion).length;
     final convs = <String, ConversationSummary>{
       for (final s in chat.conversations(radioId: id))
         if (s.key.startsWith('d:') || s.key.startsWith('r:')) ConvKey.body(s.key): s,
