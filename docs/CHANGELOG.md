@@ -5,6 +5,8 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- **Contacts and Channels are separate (chat + radio round, CR1).** Chat is now Chats | Contacts | Channels | Network. The Chats inbox shows Direct messages, Channels and Rooms in their own labelled sections instead of one mixed list, and the new Channels tab lists every channel (Public first, sort by Recent or A–Z, search by name). Segment labels never wrap on small phones.
+
 ## [0.27.3+45] — 2026-11-07 — the new Chat (Chats, Contacts, Network), repeater dashboard, Route screen and Ping; iOS 18 or later
 
 - **iOS 18 or later.** The minimum is now iOS 18 (iPhone XS / XR and newer; was iOS 15). Phones that cannot run iOS 18 keep the build they have.

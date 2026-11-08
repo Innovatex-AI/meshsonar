@@ -1,5 +1,5 @@
 // The Chat tab shell (chat plan 3 and 4.1): large title "Chat" with the New button, a pinned sliding segmented control
-// Chats | Contacts | Network, a collapsing search field, a status banner only when something is wrong, and the segment's
+// Chats | Contacts | Channels | Network, a collapsing search field, a status banner only when something is wrong, and the segment's
 // content as slivers under them. Chats is the default segment and a cold launch always opens it; the chosen segment is
 // remembered for the session only.
 //
@@ -21,7 +21,7 @@ import '../design/tokens.dart';
 import '../drive/drive_controls.dart' show openConnect;
 import 'chat_tab_host.dart';
 
-enum ChatShellSegment { chats, contacts, network }
+enum ChatShellSegment { chats, contacts, channels, network }
 
 class ChatTab extends StatelessWidget {
   const ChatTab({super.key});
@@ -110,7 +110,8 @@ class RedesignedChatTabState extends State<RedesignedChatTab> {
           bindings: {
             const SingleActivator(LogicalKeyboardKey.digit1, meta: true): () => _select(ChatShellSegment.chats),
             const SingleActivator(LogicalKeyboardKey.digit2, meta: true): () => _select(ChatShellSegment.contacts),
-            const SingleActivator(LogicalKeyboardKey.digit3, meta: true): () => _select(ChatShellSegment.network),
+            const SingleActivator(LogicalKeyboardKey.digit3, meta: true): () => _select(ChatShellSegment.channels),
+            const SingleActivator(LogicalKeyboardKey.digit4, meta: true): () => _select(ChatShellSegment.network),
             const SingleActivator(LogicalKeyboardKey.keyF, meta: true): () => _searchFocus.requestFocus(),
             if (p != null) SingleActivator(LogicalKeyboardKey.keyN, meta: true): () => _new(context, p),
             // Quick switcher: iPad width only (the split layout), like the other desktop-style shortcuts.
@@ -255,7 +256,11 @@ class RedesignedChatTabState extends State<RedesignedChatTab> {
                 key: const Key('chat-search-field'),
                 controller: _search,
                 focusNode: _searchFocus,
-                placeholder: seg == ChatShellSegment.chats ? 'Search chats and messages' : 'Search the network',
+                placeholder: switch (seg) {
+                  ChatShellSegment.chats => 'Search chats and messages',
+                  ChatShellSegment.channels => 'Search channels',
+                  _ => 'Search the network',
+                },
                 onChanged: (_) => setState(() {}),
                 onSuffixTap: () => setState(_search.clear),
               ),
@@ -283,6 +288,7 @@ class RedesignedChatTabState extends State<RedesignedChatTab> {
           ),
         switch (seg) {
           ChatShellSegment.chats => p.chatsSliver(context, args),
+          ChatShellSegment.channels => p.channelsSliver(context, args),
           ChatShellSegment.network => p.networkSliver(context, args),
           ChatShellSegment.contacts => SliverFillRemaining(hasScrollBody: true, child: p.contactsSegment(context, seeNearby: () => _select(ChatShellSegment.network))),
         },
@@ -329,6 +335,7 @@ class _SegmentHeader extends SliverPersistentHeaderDelegate {
             children: const {
               ChatShellSegment.chats: _SegmentLabel('Chats', key: Key('segment-chats')),
               ChatShellSegment.contacts: _SegmentLabel('Contacts', key: Key('segment-contacts')),
+              ChatShellSegment.channels: _SegmentLabel('Channels', key: Key('segment-channels')),
               ChatShellSegment.network: _SegmentLabel('Network', key: Key('segment-network')),
             },
             onValueChanged: (v) {
@@ -376,5 +383,14 @@ class _SegmentLabel extends StatelessWidget {
   final String label;
   const _SegmentLabel(this.label, {super.key});
   @override
-  Widget build(BuildContext context) => ConstrainedBox(constraints: const BoxConstraints(minHeight: Hit.min), child: Center(child: Text(label)));
+  // Four segments on a 320-375 pt phone leave about 80 pt each: one line, shrunk to fit rather than wrapped.
+  Widget build(BuildContext context) => ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: Hit.min),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            child: FittedBox(fit: BoxFit.scaleDown, child: Text(label, maxLines: 1, softWrap: false)),
+          ),
+        ),
+      );
 }

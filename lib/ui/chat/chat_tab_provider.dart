@@ -27,10 +27,22 @@ class ChatTabProviderImpl implements ChatTabProvider {
   @override
   bool get isEmpty => controller.isEmpty;
 
-  // ---- the tab (Chats | Contacts | Network)
+  // ---- the tab (Chats | Contacts | Channels | Network)
   @override
   Widget chatsSliver(BuildContext context, ChatTabArgs args) => ChatsListView(
         controller: controller,
+        onNew: args.onNew,
+        navigator: navigator,
+        query: args.query,
+        selectedKey: args.selectedKey,
+        onConnect: args.onConnect,
+        onOpened: args.onOpened,
+      );
+
+  @override
+  Widget channelsSliver(BuildContext context, ChatTabArgs args) => ChatsListView(
+        controller: controller,
+        mode: ChatsListMode.channels,
         onNew: args.onNew,
         navigator: navigator,
         query: args.query,
