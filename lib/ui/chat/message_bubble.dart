@@ -220,7 +220,6 @@ class _MessageBubbleState extends State<MessageBubble> {
     final body = Container(
       key: Key('bubble-${m.id}'),
       constraints: BoxConstraints(maxWidth: maxW, minHeight: Hit.of(context)),
-      alignment: Alignment.centerLeft,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: w.highlighted ? Color.alphaBlend(c.accent.withValues(alpha: 0.35), bg) : bg,
@@ -331,20 +330,35 @@ class _MessageBubbleState extends State<MessageBubble> {
         : null;
 
     final showAvatar = w.avatars && !mine;
+    // The sender's name sits right above the first bubble of their run, and their avatar sits beside that name and bubble,
+    // top-aligned, so the two always read together (iOS group chats). Later bubbles of the run keep the avatar's column empty.
+    final senderLabel = (s.showSender && m.senderName != null)
+        ? Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 2),
+            child: Text(m.senderName!, key: Key('sender-${m.id}'), maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: AppType.footnote.copyWith(color: c.textMuted)),
+          )
+        : null;
     final row = Row(
       mainAxisAlignment: mine ? MainAxisAlignment.end : MainAxisAlignment.start,
-      crossAxisAlignment: CrossAxisAlignment.end,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (showAvatar) ...[
           SizedBox(
             width: kBubbleAvatar,
             height: kBubbleAvatar,
-            child: s.lastOfRun ? ExcludeSemantics(child: _Initials(name: m.senderName ?? '?', fill: style.fill, ink: style.initials)) : null,
+            child: s.firstOfRun ? ExcludeSemantics(child: _Initials(key: Key('avatar-${m.id}'), name: m.senderName ?? '?', fill: style.fill, ink: style.initials)) : null,
           ),
           const SizedBox(width: 6),
         ],
         ?failedGlyph,
-        Flexible(child: bubbleSemantics),
+        Flexible(
+          child: Column(
+            crossAxisAlignment: mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [?senderLabel, bubbleSemantics],
+          ),
+        ),
       ],
     );
 
@@ -357,11 +371,6 @@ class _MessageBubbleState extends State<MessageBubble> {
         crossAxisAlignment: mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
           if (s.separatorAbove) _Separator(text: w.separatorText),
-          if (s.showSender && m.senderName != null)
-            Padding(
-              padding: EdgeInsets.only(left: showAvatar ? kBubbleAvatar + 6 + 4 : 4, bottom: 2),
-              child: Text(m.senderName!, style: AppType.footnote.copyWith(fontWeight: FontWeight.w600, color: style.name)),
-            ),
           row,
           if (meta != null) Padding(padding: EdgeInsets.only(top: 2, left: showAvatar ? kBubbleAvatar + 6 + 4 : 4, right: 4), child: meta),
           if (w.expanded && w.info != null) _InfoStrip(info: w.info!, mine: mine, onDetails: w.onDetails == null ? null : () => w.onDetails!(m.id)),
@@ -454,7 +463,7 @@ class SignalBars extends StatelessWidget {
 class _Initials extends StatelessWidget {
   final String name;
   final Color fill, ink;
-  const _Initials({required this.name, required this.fill, required this.ink});
+  const _Initials({super.key, required this.name, required this.fill, required this.ink});
   @override
   Widget build(BuildContext context) {
     final t = name.trim();

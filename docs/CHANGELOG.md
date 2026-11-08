@@ -5,6 +5,8 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- **Conversation screens look like an iPhone app again.** Message text no longer shows a yellow double underline (the thread had no text style, so Flutter's debug fallback showed in every build); bubbles hug their text instead of stretching across the screen; a sender's avatar now sits beside their name, top-aligned, on the first message of their run; names are quiet grey with the colour kept in the avatar; the thread header uses the same avatar colour as the Chats list; the "new messages" divider is centred. The Route on map screen had the same underline and is fixed too.
+
 ## [0.28.0+46] — 2026-11-08 — Contacts and Channels apart, long-press any message for how it travelled, Resend, auto-connect setting, saved radios, private-channel privacy fix
 
 - **Privacy fix: private channels are never shared (CR7).** "Share packet headers" promised that private-channel traffic was never recorded, but the headers of private-channel messages (route, signal, time; never their text) were recorded and sent. Now a channel packet is shared only when it provably belongs to the Public channel or a # channel on your phone, and anything queued under the old rule is dropped. The settings now say plainly that the routes of your Public and # channel messages are part of what is shared; direct-message routes stay on the phone.

@@ -699,7 +699,9 @@ class _ConversationScreenState extends State<ConversationScreen> {
       if (mounted) _armDeliveryTick();
     });
     final colors = AppColors.of(context);
-    final body = _searching ? _searchBody(context, colors) : _chatBody(context);
+    // CupertinoPageScaffold gives no Material text style: without this, every Text in the thread fell back to Flutter's
+    // debug style (yellow double underline), in release builds too.
+    final body = Material(type: MaterialType.transparency, child: _searching ? _searchBody(context, colors) : _chatBody(context));
     if (widget.embedded) return ColoredBox(color: colors.surface, child: Column(children: [Expanded(child: body)]));
     return CupertinoPageScaffold(
       backgroundColor: colors.surface,
@@ -754,7 +756,8 @@ class _ConversationScreenState extends State<ConversationScreen> {
         maxScaleFactor: 1.3,
         child: _TitleBlock(
           title: _title,
-          seed: ch != null ? 'c:${ch.id}' : (_contact?.publicKey ?? widget.convKey),
+          // Same seed as the Chats list row (conversation_row.dart avatarSeed), so a conversation has one colour everywhere.
+          seed: ch != null ? '${ch.id}' : (_contact?.publicKey ?? ConvKey.body(widget.convKey)),
           square: _kind != ConvKind.dm,
           subtitle: _subtitle(),
           onTap: hasInfo ? _openInfo : null,
@@ -1120,17 +1123,22 @@ class _UnreadMarker extends StatelessWidget {
         child: Padding(
           key: const Key('unread-marker'),
           padding: const EdgeInsets.symmetric(horizontal: Layout.screenMargin, vertical: Gap.s),
-          child: Row(children: [
-            Expanded(child: Container(height: 1, color: c.accent)),
-            Flexible(
-              flex: 4,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: Gap.s),
-                child: Text(count == 1 ? '1 new message' : '$count new messages', textAlign: TextAlign.center, style: AppType.footnote.copyWith(color: c.accent, fontWeight: FontWeight.w700)),
+          // The label takes only its own width (capped, and wrapping at large text sizes), so the two lines share the rest equally
+          // and the label sits centred (a loose Flexible slot used to leave its unused width on the right).
+          child: LayoutBuilder(
+            builder: (context, box) => Row(children: [
+              Expanded(child: Container(height: 1, color: c.accent)),
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: box.maxWidth * 0.7),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: Gap.s),
+                  child: Text(count == 1 ? '1 new message' : '$count new messages',
+                      textAlign: TextAlign.center, style: AppType.footnote.copyWith(color: c.accent, fontWeight: FontWeight.w700)),
+                ),
               ),
-            ),
-            Expanded(child: Container(height: 1, color: c.accent)),
-          ]),
+              Expanded(child: Container(height: 1, color: c.accent)),
+            ]),
+          ),
         ),
       ),
     );
