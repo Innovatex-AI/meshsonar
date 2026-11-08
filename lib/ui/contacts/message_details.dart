@@ -12,12 +12,15 @@ import '../../chat/db/outbox_repository.dart';
 import '../../chat/delivery_state.dart';
 import '../../chat/delivery_text.dart';
 import '../../chat/events.dart';
+import '../../chat/hop_resolver.dart';
 import '../../chat/message_info.dart';
 import '../../chat/models.dart';
 import '../design/app_surfaces.dart';
 import '../design/app_symbols.dart';
 import '../design/app_type.dart';
 import '../design/tokens.dart';
+import '../chat/hop_names.dart';
+import '../chat/message_info_card.dart';
 import '../chat/message_menu.dart' show confirmDeleteMessage;
 
 /// Opens the details of one message as a sheet (detents 0.5 / 0.92; on an iPad it is the centred form sheet of showAppSheet).
@@ -110,22 +113,39 @@ class _MessageDetailsState extends State<MessageDetails> {
     final store = widget.chat.store;
     final isDm = m.convKind == ConvKind.dm || m.convKind == ConvKind.room;
     final contact = isDm ? store.contacts.byPrefix(m.radioId, ConvKey.body(m.convKey)) : null;
-    final repeaters = store.contacts.list(m.radioId).where((x) => x.type == ContactType.repeater).toList();
+    final resolver = hopResolverFor(store, m.radioId, rosterOf(context));
     final who = m.isOutgoing ? (isDm ? 'To ${contact?.displayName ?? 'unknown contact'}' : 'Sent by you') : 'From ${m.senderName ?? contact?.displayName ?? 'unknown sender'}';
     final attempts = m.isOutgoing && isDm ? store.outbox.attemptsFor(m.id) : const <DeliveryAttempt>[];
     final maxAttempts = store.outbox.get(m.id)?.maxAttempts;
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     final d = deliveryUi(m, radioConnected: true, maxAttempts: maxAttempts, nowMs: nowMs);
-    final info = messageInfo(m, repeaters: repeaters, peer: contact?.displayName ?? m.senderName, contact: contact);
+    final info = messageInfo(m, resolver: resolver, peer: contact?.displayName ?? m.senderName, contact: contact);
+    final isChannel = m.convKind == ConvKind.channel;
+    final repeats = isChannel ? repeatViews(m, store.messages.repeatsFor(m.id), resolver) : const <RepeatView>[];
+    final peer = m.isOutgoing ? (contact?.displayName ?? 'Them') : (m.senderName ?? contact?.displayName ?? 'Them');
+    final mapNodes = <HopNode>[];
+    if (isChannel && m.isOutgoing) {
+      final seen = <String>{};
+      for (final v in repeats) {
+        for (final n in v.path) {
+          if (seen.add(n.hash)) mapNodes.add(n);
+        }
+      }
+    } else {
+      mapNodes.addAll(info.nodes);
+    }
+    final canMap = mapNodes.any((n) => n.known && n.hasPosition);
     final rows = <(String, String)>[
       if (m.isOutgoing) ('Status', m.state == MessageState.acked ? 'Delivered ${_clock(m.tsLocalMs)}' : d.word),
-      ('Route', info.routeWord + (m.isOutgoing && info.kind == TravelKind.viaRepeaters ? ' (saved)' : '')),
-      if (info.hops.isNotEmpty || (!m.isOutgoing && (m.pathLen ?? 0) > 0)) ('Repeaters', info.hops.isNotEmpty ? info.hops.join(', ') : '${m.pathLen}'),
+      ('Route', info.routeWord + (m.isOutgoing && info.kind == TravelKind.viaRepeaters && !info.routeIsActual ? ' (saved)' : '')),
+      if (info.nodes.isNotEmpty || (!m.isOutgoing && (m.pathLen ?? 0) > 0))
+        ('Repeaters', info.nodes.isNotEmpty ? info.nodes.map((n) => n.description).join(', ') : '${m.pathLen}'),
       if (!m.isOutgoing && (m.snr != null || m.rssi != null))
         ('Signal', [if (m.snr != null) 'SNR ${m.snr!.toStringAsFixed(1)} dB', if (m.rssi != null) 'RSSI ${m.rssi}', if (m.snr != null) signalWord(m.snr!)].join(' · ')),
       if (!m.isOutgoing && m.airMs != null) ('Time on air', m.airMs! < 1000 ? '${m.airMs} ms' : '${(m.airMs! / 1000).toStringAsFixed(2)} s'),
       if (m.isOutgoing && m.ackMs != null) ('Round trip', _secs(m.ackMs!)),
-      if (m.convKind == ConvKind.channel && m.isOutgoing) ('Heard by', m.repeatsHeard == 0 ? 'No repeater yet' : '${m.repeatsHeard} ${m.repeatsHeard == 1 ? 'repeater' : 'repeaters'}'),
+      if (isChannel && m.isOutgoing) ('Heard by', m.repeatsHeard == 0 ? 'No repeater yet' : '${m.repeatsHeard} ${m.repeatsHeard == 1 ? 'repeater' : 'repeaters'}'),
+      if (isChannel && !m.isOutgoing && repeats.length > 1) ('Arrived by', '${repeats.length} routes'),
       ('Size', '${utf8.encode(m.text).length} bytes'),
       (m.isOutgoing ? 'Sent' : 'Received', _day(m.tsLocalMs)),
       if (!m.isOutgoing) ('Their clock', _clock(m.tsSender * 1000)),
@@ -140,8 +160,28 @@ class _MessageDetailsState extends State<MessageDetails> {
         const SizedBox(height: Gap.xs),
         Text('“${m.text}”', key: const Key('details-text'), style: AppType.body.copyWith(color: c.textPrimary)),
         const SizedBox(height: Gap.m),
-        if (info.chips.length > 1) _HopDiagram(info: info),
-        if (info.chips.length > 1) const SizedBox(height: Gap.m),
+        if (info.nodes.isNotEmpty)
+          (m.isOutgoing ? HopChain(first: 'You', nodes: info.nodes, last: peer) : HopChain(first: peer, nodes: info.nodes, last: 'You'))
+        else if (info.chips.length > 1)
+          _HopDiagram(info: info),
+        if (info.nodes.isNotEmpty || info.chips.length > 1) const SizedBox(height: Gap.m),
+        if (canMap) ...[
+          CupertinoButton(
+            key: const Key('details-map'),
+            padding: EdgeInsets.zero,
+            minimumSize: Size.square(Hit.of(context)),
+            onPressed: () => MessagePathMapScreen.open(context,
+                title: isChannel && m.isOutgoing ? 'Repeaters that relayed it' : (m.isOutgoing ? 'Route it took' : 'How it reached you'),
+                nodes: mapNodes,
+                connect: !(isChannel && m.isOutgoing)),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              AppSymbolIcon(AppSymbols.map, size: 18, color: c.accent),
+              const SizedBox(width: Gap.xs),
+              Text('Route on map', style: AppType.body.copyWith(color: c.accent)),
+            ]),
+          ),
+          const SizedBox(height: Gap.s),
+        ],
         Container(
           decoration: BoxDecoration(color: c.surfaceHigh, borderRadius: BorderRadius.circular(Corners.card)),
           child: Column(children: [
@@ -151,6 +191,15 @@ class _MessageDetailsState extends State<MessageDetails> {
             ],
           ]),
         ),
+        if (repeats.isNotEmpty) ...[
+          const SizedBox(height: Gap.l),
+          Semantics(
+            header: true,
+            child: Text(m.isOutgoing ? 'REPEATS (${repeats.length})' : 'ARRIVALS (${repeats.length})',
+                key: const Key('details-repeats-header'), style: AppType.footnote.copyWith(color: c.textMuted, fontWeight: FontWeight.w600)),
+          ),
+          RepeatsList(message: m, repeats: repeats),
+        ],
         if (attempts.isNotEmpty) ...[
           const SizedBox(height: Gap.l),
           Semantics(header: true, child: Text('ATTEMPTS', style: AppType.footnote.copyWith(color: c.textMuted, fontWeight: FontWeight.w600))),
