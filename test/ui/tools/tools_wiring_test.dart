@@ -23,13 +23,15 @@ Future<void> showRow(WidgetTester tester, String key) async {
 }
 
 void main() {
-  testWidgets('More has a "Radios and tools" group with every tool, in order', (tester) async {
+  // Chat WP11 moved Trace, Discover, Adverts and Rx log to Chat > Network > Tools; More keeps one "network" row that leads there
+  // (reachability of the moved tools: test/ui/network/more_links_test.dart).
+  testWidgets('More has a "Radios and tools" group: the Network row, then the tools that stayed, in order', (tester) async {
     useTallScreen(tester);
     final h = Harness();
     await h.pumpApp(tester);
     await openMore(tester);
     expect(find.text('Radios and tools'), findsOneWidget);
-    final keys = ['trace', 'discover', 'adverts', 'rxLog', 'noiseFloor', 'telemetry', 'radioSetup'];
+    final keys = ['network', 'noiseFloor', 'telemetry', 'radioSetup'];
     // The list is lazy: scroll to each row, and check the order by the row's place in the list's scroll space.
     final list = find.byKey(const Key('more-list'));
     final top = tester.getTopLeft(list).dy;
@@ -44,10 +46,6 @@ void main() {
   });
 
   for (final (item, id, title) in [
-    ('trace', 'trace', 'Trace path'),
-    ('discover', 'discover', 'Discover nearby'),
-    ('adverts', 'adverts', 'Adverts'),
-    ('rxLog', 'rx-log', 'Rx log'),
     ('noiseFloor', 'noise', 'Noise floor and health'),
     ('telemetry', 'telemetry', 'Telemetry'),
     ('radioSetup', 'radio-setup', 'Radio setup'),

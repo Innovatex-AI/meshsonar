@@ -1,6 +1,7 @@
 // Real tile pixels on the real Drive screen: serves real OSM / OpenTopoMap tiles (fetched once into TILE_DIR, default
-// /Volumes/MSDEV/tmp/tiles; any z/x/y gets the nearest real tile so the camera position does not matter), renders the Drive screen
+// <system temp>/meshsonar-tiles; any z/x/y gets the nearest real tile so the camera position does not matter), renders the Drive screen
 // at 393x852 for every base style and writes PNGs to TILE_OUT. Asserts the map area shows tile colours (not a flat fill).
+// Without real tiles in TILE_DIR every test returns at once (nothing to render), like the other environment-dependent tests.
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -19,11 +20,13 @@ import 'package:meshsonar/ui/map/coverage_map.dart';
 
 import '../fakes.dart';
 
-final tileDir = Platform.environment['TILE_DIR'] ?? '/Volumes/MSDEV/tmp/tiles';
+final _tmp = Directory.systemTemp.path;
+final tileDir = Platform.environment['TILE_DIR'] ?? '$_tmp/meshsonar-tiles';
 String cacheDir = '';
-final outDir = Platform.environment['TILE_OUT'] ?? '/Volumes/MSDEV/tmp/tilepng/final';
+final outDir = Platform.environment['TILE_OUT'] ?? '$_tmp/meshsonar-tilepng';
 
 File? tileFor(String kind) {
+  if (!Directory(tileDir).existsSync()) return null;
   final files = Directory(tileDir).listSync().whereType<File>().where((f) => f.path.contains('/${kind}_14_') && f.lengthSync() > 2000).toList()..sort((a, b) => a.path.compareTo(b.path));
   return files.isEmpty ? null : files[files.length ~/ 2];
 }
@@ -34,7 +37,7 @@ void main() {
     testWidgets('inside the real app shell: $style', (tester) async {
       final osm = tileFor('osm');
       if (osm == null) return;
-      cacheDir = '/Volumes/MSDEV/tmp/tilecache-${DateTime.now().microsecondsSinceEpoch}';
+      cacheDir = '$_tmp/meshsonar-tilecache-${DateTime.now().microsecondsSinceEpoch}';
       final m = tester.binding.defaultBinaryMessenger;
       m.setMockMethodCallHandler(const MethodChannel('plugins.flutter.io/path_provider'), (c) async {
         Directory(cacheDir).createSync(recursive: true);
@@ -82,7 +85,7 @@ void main() {
   testWidgets('switching the base map from the layers sheet changes the tiles', (tester) async {
     final osm = tileFor('osm'), topo = tileFor('topo');
     if (osm == null || topo == null) return;
-    cacheDir = '/Volumes/MSDEV/tmp/tilecache-${DateTime.now().microsecondsSinceEpoch}';
+    cacheDir = '$_tmp/meshsonar-tilecache-${DateTime.now().microsecondsSinceEpoch}';
       final m = tester.binding.defaultBinaryMessenger;
     m.setMockMethodCallHandler(const MethodChannel('plugins.flutter.io/path_provider'), (c) async {
       Directory(cacheDir).createSync(recursive: true);
@@ -168,7 +171,7 @@ void main() {
           markTestSkipped('no tiles in $tileDir');
           return;
         }
-        cacheDir = '/Volumes/MSDEV/tmp/tilecache-${DateTime.now().microsecondsSinceEpoch}';
+        cacheDir = '$_tmp/meshsonar-tilecache-${DateTime.now().microsecondsSinceEpoch}';
       final m = tester.binding.defaultBinaryMessenger;
         m.setMockMethodCallHandler(const MethodChannel('plugins.flutter.io/path_provider'), (c) async {
           Directory(cacheDir).createSync(recursive: true);
