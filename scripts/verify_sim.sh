@@ -25,7 +25,9 @@ set -euo pipefail
 # are created in the set on demand (runtime RUNTIME, default iOS-26-5).
 SIMSET=()
 [ -n "${SIM_SET:-}" ] && { mkdir -p "$SIM_SET"; SIMSET=(--set "$SIM_SET"); }
-RUNTIME="${RUNTIME:-com.apple.CoreSimulator.SimRuntime.iOS-26-5}"
+# Default: the newest installed iOS simulator runtime (a pinned iOS-26-5 silently skipped the SE on a Mac with only 27.x).
+RUNTIME="${RUNTIME:-$(xcrun simctl list runtimes available 2>/dev/null | grep -oE 'com\.apple\.CoreSimulator\.SimRuntime\.iOS-[0-9-]+' | sort -t- -k2,2n -k3,3n | tail -1)}"
+[ -n "$RUNTIME" ] || { echo "!! no iOS simulator runtime installed"; exit 2; }
 sim() { xcrun simctl ${SIMSET[@]+"${SIMSET[@]}"} "$@"; }  # the +-expansion keeps bash 3.2 (macOS) happy under set -u with no SIM_SET
 
 SRC="${1:?usage: verify_sim.sh <checkout> [out-dir]}"
