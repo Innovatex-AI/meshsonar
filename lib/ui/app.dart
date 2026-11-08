@@ -33,6 +33,22 @@ class AppScope extends InheritedNotifier<AppState> {
       (context.getElementForInheritedWidgetOfExactType<AppScope>()!.widget as AppScope).notifier!;
 }
 
+/// `MaterialApp.builder` for every MaterialApp in the app: one app-wide text style under the Navigator.
+///
+/// MaterialApp's own default text style (above the Navigator) is Flutter's debug fallback: red monospace with a yellow
+/// double underline, meant to flag Text outside a Material. Release builds draw it too. A Scaffold or Material supplies the
+/// real style, but plenty of text is drawn with neither above it: CupertinoPageScaffold pages, the long-press context menu
+/// (a PopupRoute: the lifted bubble and its info card), the nav-bar hero that flies the title and back label between pages
+/// during a push or pop, overlay toasts, Cupertino popups. This DefaultTextStyle sits under MaterialApp's and above the
+/// Navigator and its Overlay, so all of those get the same style a Material would give (`textTheme.bodyMedium`) instead.
+/// Pinned by test/ui/no_debug_underline_test.dart.
+Widget meshSonarAppBuilder(BuildContext context, Widget? child) {
+  return DefaultTextStyle(
+    style: Theme.of(context).textTheme.bodyMedium ?? const TextStyle(),
+    child: child ?? const SizedBox.shrink(),
+  );
+}
+
 class MeshSonarApp extends StatefulWidget {
   final AppState state;
   const MeshSonarApp({super.key, required this.state});
@@ -72,6 +88,7 @@ class _MeshSonarAppState extends State<MeshSonarApp> {
           theme: meshSonarTheme(Brightness.light, palette: palette),
           darkTheme: meshSonarTheme(Brightness.dark, palette: palette),
           themeMode: meshSonarThemeMode(),
+          builder: meshSonarAppBuilder,
           home: FirstRunGate(builder: () => const HomeShell()),
         );
       }),
@@ -89,6 +106,7 @@ class StartupErrorApp extends StatelessWidget {
       title: 'MeshSonar',
       theme: meshSonarTheme(Brightness.light),
       darkTheme: meshSonarTheme(Brightness.dark),
+      builder: meshSonarAppBuilder,
       home: Scaffold(
         body: SafeArea(
           child: Padding(
