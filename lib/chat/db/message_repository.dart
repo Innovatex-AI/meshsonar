@@ -69,7 +69,53 @@ ON CONFLICT(conv_key) DO UPDATE SET
         pathHashes: r['path_hashes'] as String?,
         hashSize: r['hash_size'] as int?,
         airMs: r['air_ms'] as int?,
+        sentPath: r['sent_path'] as String?,
+        sentHashSize: r['sent_hash_size'] as int?,
       );
+
+  // ------------------------------------------------------------- repeats (v4)
+
+  /// Records one heard copy of message [messageId]. The same path heard again is not a new copy: returns false then.
+  bool addRepeat(MessageRepeat x) {
+    db.raw.execute(
+        'INSERT OR IGNORE INTO message_repeats (message_id, heard_ms, path_hashes, hash_size, hops, snr, rssi) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [x.messageId, x.heardMs, x.pathHashes, x.hashSize, x.hops, x.snr, x.rssi]);
+    return db.raw.updatedRows > 0;
+  }
+
+  /// Every distinct copy of [messageId], first heard first.
+  List<MessageRepeat> repeatsFor(String messageId) => db.raw
+      .select('SELECT * FROM message_repeats WHERE message_id = ? ORDER BY heard_ms, id', [messageId])
+      .map((r) => MessageRepeat(
+            messageId: r['message_id'] as String,
+            heardMs: r['heard_ms'] as int,
+            pathHashes: r['path_hashes'] as String,
+            hashSize: r['hash_size'] as int,
+            hops: r['hops'] as int,
+            snr: (r['snr'] as num?)?.toDouble(),
+            rssi: r['rssi'] as int?,
+          ))
+      .toList();
+
+  int repeatCount(String messageId) =>
+      db.raw.select('SELECT count(*) AS n FROM message_repeats WHERE message_id = ?', [messageId]).first['n'] as int;
+
+  /// The newest channel message in [convKey] (either direction) that a heard group text with this sender [tsSender] and
+  /// on-air [airText] (`<name>: <body>`) is a copy of. Outgoing rows store the body without the name; incoming rows store
+  /// the name and the body apart.
+  ChatMessage? findChannelCopyTarget(String convKey, int tsSender, String airText) {
+    final rows = db.raw.select('SELECT * FROM messages WHERE conv_key = ? AND ts_sender = ? ORDER BY seq DESC LIMIT 8', [convKey, tsSender]);
+    for (final r in rows) {
+      final m = fromRow(r);
+      if (m.isOutgoing) {
+        if (airText == m.text || airText.endsWith(': ${m.text}')) return m;
+      } else {
+        final name = m.senderName;
+        if (airText == m.text || (name != null && airText == '$name: ${m.text}')) return m;
+      }
+    }
+    return null;
+  }
 
   /// Inserts [m] unless (radioId, dedupeKey) already exists. Returns true when a new row was written.
   /// The conversation row is updated in the same transaction.
@@ -133,7 +179,18 @@ ON CONFLICT(conv_key) DO UPDATE SET
   }
 
   /// Updates delivery fields of one message. Only passed fields change.
-  void update(String id, {MessageState? state, int? attempt, Route? route, int? expectedAck, int? ackMs, int? repeatsHeard, FailReason? failReason, bool clearFailReason = false}) {
+  void update(String id,
+      {MessageState? state,
+      int? attempt,
+      Route? route,
+      int? expectedAck,
+      int? ackMs,
+      int? repeatsHeard,
+      FailReason? failReason,
+      bool clearFailReason = false,
+      String? sentPath,
+      int? sentHashSize,
+      bool clearSentPath = false}) {
     final sets = <String>[];
     final args = <Object?>[];
     void add(String col, Object? v) {
@@ -149,6 +206,12 @@ ON CONFLICT(conv_key) DO UPDATE SET
     if (repeatsHeard != null) add('repeats_heard', repeatsHeard);
     if (failReason != null) add('fail_reason', failReason.name);
     if (clearFailReason) add('fail_reason', null);
+    if (sentPath != null) add('sent_path', sentPath);
+    if (sentHashSize != null) add('sent_hash_size', sentHashSize);
+    if (clearSentPath) {
+      add('sent_path', null);
+      add('sent_hash_size', null);
+    }
     if (sets.isEmpty) return;
     args.add(id);
     db.raw.execute('UPDATE messages SET ${sets.join(', ')} WHERE id = ?', args);

@@ -45,7 +45,36 @@ final List<Migration> chatMigrations = [
   Migration(1, 'initial chat schema', _v1),
   Migration(2, 'contacts: radio cache state, flags, last heard, route choice; adverts: ignore + advert time', _v2),
   Migration(3, 'chat redesign: message radio facts, path modes, ping history, stats history, manual unread', _v3),
+  Migration(4, 'message repeats (every heard copy of a channel message), route actually used by a sent DM', _v4),
 ];
+
+/// M4 (chat + radio round, CR3). Idempotent like M3.
+///   * message_repeats: one row per distinct copy of a channel message the radio heard on the air, with the path it took.
+///     For a message we sent these are the repeats ("heard by N", which repeater relayed it); for one we received, the
+///     different paths it arrived by. Same path heard twice = one row. Deleted with the message (trigger).
+///   * messages.sent_path / sent_hash_size: for a DM sent direct, the route the radio held at that moment (hex hop hashes),
+///     so details show the route that message used, not whatever the contact's route is later.
+void _v4(Database db) {
+  db.execute('''
+CREATE TABLE IF NOT EXISTS message_repeats (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  message_id TEXT NOT NULL,
+  heard_ms INTEGER NOT NULL,
+  path_hashes TEXT NOT NULL,
+  hash_size INTEGER NOT NULL,
+  hops INTEGER NOT NULL,
+  snr REAL,
+  rssi INTEGER,
+  UNIQUE (message_id, path_hashes)
+);
+CREATE INDEX IF NOT EXISTS message_repeats_msg ON message_repeats (message_id, heard_ms);
+CREATE TRIGGER IF NOT EXISTS message_repeats_gc AFTER DELETE ON messages BEGIN
+  DELETE FROM message_repeats WHERE message_id = OLD.id;
+END;
+''');
+  _addColumn(db, 'messages', 'sent_path', 'TEXT');
+  _addColumn(db, 'messages', 'sent_hash_size', 'INTEGER');
+}
 
 /// True when [table] already has [column]. Lets v3 be re-run on a database that got part of it some other way (a restored
 /// backup, a build that added a column early) without a "duplicate column" failure.

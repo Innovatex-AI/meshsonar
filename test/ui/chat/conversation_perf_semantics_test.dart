@@ -51,7 +51,7 @@ void main() {
 
     // a delivery change on one message
     MessageBubble.debugBuilds = 0;
-    kit.service.handleInbound(InboundRepeatHeard(radioId: radioA, channelSlot: 1, timestamp: last.tsSender, text: 'Me: on my way'));
+    kit.service.handleInbound(InboundRepeatHeard(radioId: radioA, channelSlot: 1, timestamp: last.tsSender, text: 'Me: on my way', pathHashes: 'a1', hops: 1));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
     expect(find.textContaining('Heard by 1 repeater'), findsOneWidget);

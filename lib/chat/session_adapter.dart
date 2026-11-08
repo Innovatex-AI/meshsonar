@@ -6,8 +6,10 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import '../radio/inbound.dart' as r;
+import '../radio/radio_api.dart' show RxPacket;
 import '../radio/session.dart' as r;
 import 'channel_admin.dart';
+import 'channel_copy_listener.dart';
 import 'channel_secret.dart';
 import 'chat_service.dart';
 import 'contact_manager.dart';
@@ -25,6 +27,7 @@ class RadioSessionChatAdapter implements OutboundMessageSink {
   /// like a hashtag key; the session sets it on the radio right before the flood and clears it afterwards (ScopeGuard).
   final String? Function(int slot)? regionScopeForSlot;
   StreamSubscription<r.RadioEvent>? _sub;
+  StreamSubscription<RxPacket>? _rxSub;
   ChatService? _chat;
 
   RadioSessionChatAdapter(this.session, {this.lookupContact, this.regionScopeForSlot});
@@ -42,6 +45,14 @@ class RadioSessionChatAdapter implements OutboundMessageSink {
       chat.handleInbound(mapInbound(id, m));
     });
     _sub = session.events.listen(_onEvent);
+    // Every heard copy of a channel message: repeats of ours, extra paths of theirs (CR3).
+    final copies = ChannelCopyListener(
+      radioId: () => radioId ?? '',
+      channels: (id) => id.isEmpty ? const [] : chat.store.channels.list(id, includeSystem: false),
+      secretOf: chat.store.channels.secretOf,
+      emit: chat.handleInbound,
+    );
+    _rxSub = session.rxPackets.listen((rx) => unawaited(copies.onPacket(rx).catchError((Object _) {})), onError: (Object _) {});
     chat.contacts.attach(SessionContactPort(session));
     unawaited(chat.contacts.syncNow(auto: true));
   }
@@ -49,6 +60,8 @@ class RadioSessionChatAdapter implements OutboundMessageSink {
   Future<void> dispose() async {
     unawaited(_sub?.cancel());
     _sub = null;
+    unawaited(_rxSub?.cancel());
+    _rxSub = null;
     _chat?.contacts.detach();
     session.setInboundPersister(null);
   }

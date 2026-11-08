@@ -209,11 +209,17 @@ void main() {
       final ch = await h.channel(1, 'Ohio', ChannelKind.private);
       final m = h.service.send(radioId: radioA, convKey: ch.convKey, text: 'hello all');
       await h.service.pump();
+      // Our own transmission (no path) is not a repeat.
       h.service.handleInbound(InboundRepeatHeard(radioId: radioA, channelSlot: 1, timestamp: m.tsSender, text: 'Me: hello all'));
-      h.service.handleInbound(InboundRepeatHeard(radioId: radioA, channelSlot: 1, timestamp: m.tsSender, text: 'Me: hello all'));
+      expect(h.store.messages.get(m.id)!.repeatsHeard, 0);
+      h.service.handleInbound(InboundRepeatHeard(radioId: radioA, channelSlot: 1, timestamp: m.tsSender, text: 'Me: hello all', pathHashes: 'a1', hops: 1));
+      h.service.handleInbound(InboundRepeatHeard(radioId: radioA, channelSlot: 1, timestamp: m.tsSender, text: 'Me: hello all', pathHashes: 'b2', hops: 1));
+      // The same path heard again is the same copy.
+      h.service.handleInbound(InboundRepeatHeard(radioId: radioA, channelSlot: 1, timestamp: m.tsSender, text: 'Me: hello all', pathHashes: 'a1', hops: 1));
       final got = h.store.messages.get(m.id)!;
       expect(got.state, MessageState.heard);
       expect(got.repeatsHeard, 2);
+      expect(h.store.messages.repeatsFor(m.id).map((r) => r.firstHop), ['a1', 'b2']);
       expect(h.store.messages.count(), 1);
     });
   });
