@@ -56,7 +56,7 @@ ON CONFLICT(conv_key) DO UPDATE SET
         snr: (r['snr'] as num?)?.toDouble(),
         pathLen: r['path_len'] as int?,
         route: r['route'] == null ? null : Route.values.firstWhere((x) => x.name == r['route']),
-        state: MessageState.values.firstWhere((s) => s.name == r['state']),
+        state: MessageState.values.firstWhere((s) => s.name == r['state'], orElse: () => MessageState.failed),
         attempt: r['attempt'] as int,
         expectedAck: r['expected_ack'] as int?,
         ackMs: r['ack_ms'] as int?,

@@ -5,6 +5,15 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- **Direct-message delivery fix round (Andy's 0.29.0+49 field report: messages 511 answered showed Not delivered).** A late
+  confirmation always upgrades to Delivered, including while a manual Retry is queued (it was ignored there, and the retry sent
+  a duplicate) and while the next try is being handed to the radio (it was overwritten with "sent" and left waiting forever).
+  New state **Probably delivered (they replied)**: a DM from the contact after ours went out stops the tries and replaces the
+  red failure (Retry all skips it). Path-aware waits: a flood try waits at least 12 s (was ~5-7 s, three floods gave up in
+  ~20 s while the ack was still crossing the mesh) and the last try at least 30 s; a wait that ends while the phone is not
+  linked to the radio no longer counts as "no ack". Wording: Sending, then Waiting for confirmation. Details show which try was
+  confirmed and the radio's own round trip.
+
 ## [0.29.0+49] — 2026-11-08 — new coverage map: average signal per cell, Measured and Predicted layers
 
 - **New coverage map (dark mode: Predicted drawn quieter so the streets stay readable).** Every cell is one fixed size (about 50 m) at every zoom and shows the AVERAGE signal of the pings sent from it, in five bands from Edge to Excellent plus No reply; Predicted coverage fills in the undriven cells near drives; tap a cell for its average, replies, failures and the repeaters that heard it. Needs the server's coverage v2 (live on meshsonar.com); an older server keeps the earlier map.

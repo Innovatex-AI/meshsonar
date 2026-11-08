@@ -21,7 +21,7 @@ String deliveryLabel(ChatMessage m, {int? maxAttempts}) {
       return m.attempt > 1 ? 'Sending, try ${m.attempt}' : 'Sending';
     case MessageState.sent:
       final of = maxAttempts == null ? '' : ' of $maxAttempts';
-      return m.attempt > 1 ? 'Sent, waiting for the reply (try ${m.attempt}$of)' : 'Sent, waiting for the reply';
+      return m.attempt > 1 ? 'Waiting for confirmation (try ${m.attempt}$of)' : 'Waiting for confirmation';
     case MessageState.retrying:
       return 'Trying again';
     case MessageState.acked:
@@ -29,6 +29,8 @@ String deliveryLabel(ChatMessage m, {int? maxAttempts}) {
       return 'Delivered$t';
     case MessageState.heard:
       return m.repeatsHeard == 1 ? 'Heard once' : 'Heard ${m.repeatsHeard} times';
+    case MessageState.likelyDelivered:
+      return 'Probably delivered (they replied)';
     case MessageState.failed:
       return 'Not delivered';
     case MessageState.received:
@@ -68,7 +70,7 @@ String _clock(int ms) {
 }
 
 /// One line of the attempts list in the message details (outbox attempt text): "Try 2 · saved route · 09:41:19 · acknowledged
-/// after 1.8 s". [last] marks the newest try: while the message is still moving it reads "waiting for the reply".
+/// after 1.8 s". [last] marks the newest try: while the message is still moving it reads "waiting for confirmation".
 ({String text, bool acked}) describeAttempt(DeliveryAttempt a, int n, ChatMessage m, {required bool last}) {
   final acked = m.state == MessageState.acked && a.expectedAck != null && a.expectedAck == m.expectedAck;
   final route = a.route == Route.flood ? 'searched' : 'saved route';
@@ -76,7 +78,9 @@ String _clock(int ms) {
   if (acked) {
     outcome = m.ackMs == null ? 'acknowledged' : 'acknowledged after ${_seconds(m.ackMs!)}';
   } else if (last && (m.state == MessageState.sent || m.state == MessageState.retrying || m.state == MessageState.sending)) {
-    outcome = 'waiting for the reply';
+    outcome = 'waiting for confirmation';
+  } else if (m.state == MessageState.likelyDelivered) {
+    outcome = 'no confirmation (they replied)';
   } else {
     outcome = 'no reply';
   }

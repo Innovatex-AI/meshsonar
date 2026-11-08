@@ -385,14 +385,28 @@ replayed after a reconnect both land on the existing row. Two identical texts se
 different timestamps (`send` bumps by one second), because receivers dedupe the same way.
 
 **Message states.** Outgoing: `queued -> sending -> sent -> acked` (DM, on `SEND_CONFIRMED`) or `-> heard` (channel, once a
-repeat of it is heard; `repeats_heard` counts them) or `-> failed` with a `FailReason` (`noAck`, `radioRejected`, `radioBusy`,
-`notConnected`, `expired`, `textTooLong`, `unknownContact`, `unknownChannel`, `cancelled`); `retrying` = a previous attempt got
-no ack and the next one is waiting (radio busy or disconnected). Incoming: `received`.
+repeat of it is heard; `repeats_heard` counts them) or `-> likelyDelivered` (DM: no ack, but the contact sent us a DM after it
+went out) or `-> failed` with a `FailReason` (`noAck`, `radioRejected`, `radioBusy`, `notConnected`, `expired`, `textTooLong`,
+`unknownContact`, `unknownChannel`, `cancelled`); `retrying` = a previous attempt got no ack and the next one is waiting (radio
+busy or disconnected). Incoming: `received`.
+
+**DM acks (fix round Nov 8 2026).** Every try is logged in `delivery_attempts` with its `expected_ack` (RESP_CODE_SENT bytes
+2-5; the firmware hashes timestamp + attempt&3 + text + our key, so each try has its own code and a manual Retry reuses the same
+codes). `SEND_CONFIRMED` matches ANY try of ANY unconfirmed outgoing message, whatever its state (`queued` after Retry,
+`sending`, `sent`, `retrying`, `failed`, `likelyDelivered`): a confirmation always upgrades to `acked`, records the try that
+got through in `messages.expected_ack` and the radio's trip time in `ack_ms`. A try being handed to the radio never overwrites
+a state an ack/reply/cancel set meanwhile. A DM from the contact within 30 min after our first try turns our unconfirmed DMs
+(at least one try out; failed only for `noAck`/`expired`) into `likelyDelivered`: no further tries, excluded from Retry all.
+Firmware limits we cannot fix: the radio pushes SEND_CONFIRMED only while an app is connected (dropped otherwise, and when its
+BLE frame queue is full) and remembers only the last 8 expected acks; an ack lost on the air never arrives.
 
 **Outbox retry policy** (`RetryPolicy`): DMs 3 attempts by flood, 5 with a known path (direct first, the last attempt floods
-and clears the stale path); ack wait = radio's `est_timeout` x 1.25 + 0.8 s + jitter (3 s..90 s); busy back-off 2 s doubling to
-30 s, 8 tries; not connected = recheck every 10 s without using attempts; give up after 6 h; at least 1 s between sends. Channel
-messages are sent once (no ACK exists). A restart requeues anything left in `sending` with its original timestamp.
+and clears the stale path); ack wait per try = radio's `est_timeout` x 2.0 (flood) or x 1.5 (direct) + 1.5 s + jitter, at
+least 12 s flood / 6 s direct; after the LAST try at least twice that and 30 s before Not delivered; cap 120 s. A wait that
+ends while the phone is not linked to the radio is not counted as "no ack": the message waits for the link and gets one more
+try. Busy back-off 2 s doubling to 30 s, 8 tries; not connected = recheck every 10 s without using attempts; give up after
+6 h; at least 1 s between sends. Channel messages are sent once (no ACK exists). A restart requeues anything left in
+`sending` with its original timestamp.
 
 **The wardrive channel (`kind = system`)** is stored like any channel but is never chat: its inbound traffic is saved read,
 counted in `system_stats`, capped at 500 rows, announced only as `ChatEventKind.systemChanged`, excluded from the conversation

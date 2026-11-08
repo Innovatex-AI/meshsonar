@@ -152,7 +152,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
   String? _highlightId;
   Timer? _flash;
 
-  /// Wakes the screen once when a visible message's status changes by the clock alone (Mesh is slow; No repeater heard it).
+  /// Wakes the screen once when a visible message's status changes by the clock alone (Waiting for confirmation gains its try count; No repeater heard it).
   Timer? _deliveryTick;
   int? _deliveryTickAt;
   GlobalKey? _anchorKey;
@@ -320,6 +320,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
     if (old.state != fresh.state && fresh.isOutgoing) {
       final say = switch (fresh.state) {
         MessageState.acked => 'Delivered',
+        MessageState.likelyDelivered => 'Probably delivered, they replied',
         MessageState.failed => 'Not delivered',
         _ => null,
       };

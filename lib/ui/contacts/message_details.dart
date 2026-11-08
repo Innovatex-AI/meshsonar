@@ -215,6 +215,19 @@ class _MessageDetailsState extends State<MessageDetails> {
             child: Text(describeFailure(m, attempts), style: AppType.callout.copyWith(color: c.textPrimary)),
           ),
         ],
+        if (m.state == MessageState.likelyDelivered) ...[
+          const SizedBox(height: Gap.m),
+          Container(
+            key: const Key('details-likely'),
+            padding: const EdgeInsets.all(Gap.m),
+            decoration: BoxDecoration(border: Border.all(color: c.accent), borderRadius: BorderRadius.circular(Corners.small)),
+            child: Text(
+                'No delivery confirmation came back, but they replied after you sent it, so they most likely have it. '
+                'Confirmations travel back over the mesh and can be lost on the way. It is not sent again, so they will not '
+                'see it twice.',
+                style: AppType.callout.copyWith(color: c.textPrimary)),
+          ),
+        ],
         const SizedBox(height: Gap.l),
         Wrap(spacing: Gap.s, runSpacing: Gap.s, children: [
           if (m.state == MessageState.failed)
