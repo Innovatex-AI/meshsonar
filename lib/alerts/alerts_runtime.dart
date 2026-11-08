@@ -5,9 +5,10 @@
 //   main.dart:         final alerts = await AlertsRuntime.createReal(); AlertsHost.runtime.value = alerts; alerts.bindApp(state);
 //   chat wiring (2A):  AlertsHost.runtime.value?.bindChat(chatService);   // once the ChatService exists
 //
-// What bindApp does: remembers the Bluetooth radio on connect and forgets it on a deliberate disconnect; logs the link's
-// lifecycle for the S1 test matrix; hooks the radio's drain count to the queue warning; arms/disarms the iOS wake keeper
-// (experiment) and the Android foreground service; reconnects to the remembered radio shortly after launch.
+// What bindApp does: saves the Bluetooth radio on connect (saved radios list) and holds auto-connect on a deliberate
+// disconnect; logs the link's lifecycle for the S1 test matrix; hooks the radio's drain count to the queue warning;
+// arms/disarms the iOS wake keeper (experiment) and the Android foreground service; reconnects to the starred saved radio
+// shortly after launch, as Settings > Radio > Auto-connect allows.
 import 'dart:async';
 import 'dart:io';
 
@@ -26,9 +27,9 @@ import '../radio/radio_session_impl.dart';
 import 'alert_coordinator.dart';
 import 'alert_prefs.dart';
 import 'ble_lifecycle_log.dart';
-import 'last_radio_store.dart';
 import 'launch_reconnect.dart';
 import 'radio_queue_watch.dart';
+import 'saved_radios_store.dart';
 
 class AlertsHost {
   AlertsHost._();
@@ -43,7 +44,7 @@ class AlertsRuntime with WidgetsBindingObserver {
   final AlertCoordinator coordinator;
   final BleLifecycleLog log;
   final RadioQueueWatch queue;
-  final LastRadioStore lastRadio;
+  final SavedRadiosStore savedRadios;
   final IosWakeKeeper keeper;
   final BackgroundLinkService backgroundLink;
 
@@ -55,7 +56,7 @@ class AlertsRuntime with WidgetsBindingObserver {
     required this.coordinator,
     required this.log,
     required this.queue,
-    required this.lastRadio,
+    required this.savedRadios,
     this.keeper = const NoWakeKeeper(),
     this.backgroundLink = const NoBackgroundLinkService(),
   });
@@ -75,7 +76,7 @@ class AlertsRuntime with WidgetsBindingObserver {
       coordinator: AlertCoordinator(notifications: const UnavailableLocalNotifications(), prefs: prefs),
       log: BleLifecycleLog(),
       queue: RadioQueueWatch(),
-      lastRadio: MemoryLastRadioStore(),
+      savedRadios: SavedRadiosStore(),
     );
   }
 
@@ -99,10 +100,14 @@ class AlertsRuntime with WidgetsBindingObserver {
       coordinator: AlertCoordinator(notifications: notifications, prefs: prefs),
       log: log,
       queue: RadioQueueWatch(),
-      lastRadio: FileLastRadioStore(File(p.join(root.path, 'last_radio.json'))),
+      savedRadios: SavedRadiosStore(
+        file: File(p.join(root.path, 'saved_radios.json')),
+        legacyFile: File(p.join(root.path, 'last_radio.json')),
+      ),
       keeper: Platform.isIOS ? MethodChannelIosWakeKeeper() : const NoWakeKeeper(),
       backgroundLink: Platform.isAndroid ? AndroidBackgroundLinkService() : const NoBackgroundLinkService(),
     );
+    await rt.savedRadios.load();
     await rt.start();
     return rt;
   }
@@ -155,15 +160,16 @@ class AlertsRuntime with WidgetsBindingObserver {
     _sessions = app.radioSessions.sessions.listen(_onSession);
     _links = app.radioSessions.linkStates.listen((s) => log.add('link', s.name));
     reconnect = LaunchReconnect(
-      store: lastRadio,
+      store: savedRadios,
       connect: (d) => app.connect(d, RadioKind.bluetooth),
       isConnected: () => app.connected,
       blocked: () => app.driving || app.connecting || app.reconnecting,
+      mode: () => prefs.autoConnect,
       log: log,
     );
   }
 
-  /// Call right after `AppState.init()`: tries the remembered radio (first try after one second, so the Bluetooth stack has
+  /// Call right after `AppState.init()`: tries the starred saved radio (first try after one second, so the Bluetooth stack has
   /// powered on).
   void startLaunchReconnect() => unawaited(reconnect?.run(reason: 'launch'));
 
@@ -177,7 +183,11 @@ class AlertsRuntime with WidgetsBindingObserver {
   void _onConnected(RadioDevice device, RadioKind kind, SelfInfo info) {
     if (kind != RadioKind.bluetooth) return;
     log.add('connect', 'connected to "${info.name}"');
-    unawaited(lastRadio.save(LastRadio(device.id, info.name, publicKeyHex: info.publicKey)));
+    String? model;
+    try {
+      model = _app?.radioSessions.session?.companionDetails?.model;
+    } catch (_) {}
+    unawaited(savedRadios.recordConnect(id: device.id, name: info.name, publicKeyHex: info.publicKey, model: model));
     if (prefs.iosWakeKeeper) unawaited(keeper.arm(device.id));
     if (prefs.enabled && backgroundLink.supported) unawaited(backgroundLink.start(radioName: info.name));
   }
@@ -185,7 +195,7 @@ class AlertsRuntime with WidgetsBindingObserver {
   void _onReleased() {
     log.add('connect', 'released by the person (no automatic reconnect)');
     reconnect?.cancel();
-    unawaited(lastRadio.clear());
+    unawaited(savedRadios.holdAutoConnect());
     unawaited(keeper.disarm());
     unawaited(backgroundLink.stop());
   }
@@ -201,10 +211,17 @@ class AlertsRuntime with WidgetsBindingObserver {
     _inbound = s.inbound.listen((_) => log.add('inbound', 'message persisted'));
   }
 
+  /// Settings > Radio > Auto-connect.
+  Future<void> setAutoConnect(AutoConnectMode m) async {
+    await prefs.setAutoConnect(m);
+    reconnect?.modeChanged();
+    log.add('reconnect', 'auto-connect set to ${m.label}');
+  }
+
   /// The Diagnostics switch for the iOS wake keeper experiment.
   Future<void> setIosWakeKeeper(bool on) async {
     await prefs.setIosWakeKeeper(on);
-    final id = (await lastRadio.load())?.id;
+    final id = _app?.device?.id ?? savedRadios.autoConnectTarget?.id;
     if (on && id != null && (_app?.connected ?? false)) {
       await keeper.arm(id);
     } else if (!on) {

@@ -1,4 +1,4 @@
-// Settings > My radios: the radios this driver key manages. List, give up a radio, change its name / whether its
+// Settings > Claimed radios: the radios this driver key manages. List, give up a radio, change its name / whether its
 // position is public / notes; start "Claim my radio" or "Claim a repeater"; finish a name restore still owed. The full
 // same list is on the website (/me/radios). Observer claims show their health (hearing, quiet, deaf, offline) and battery.
 // Nothing here decides whether a radio's data counts.
@@ -83,7 +83,7 @@ class _MyRadiosScreenState extends State<MyRadiosScreen> {
     final t = Theme.of(context);
     final enabled = s.nodeClaimsEnabled;
     return Scaffold(
-      appBar: AppBar(title: const Text('My radios')),
+      appBar: AppBar(title: const Text('Claimed radios')),
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: c.refresh,

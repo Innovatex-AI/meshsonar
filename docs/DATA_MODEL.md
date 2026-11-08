@@ -169,6 +169,9 @@ Root: `getApplicationSupportDirectory()/meshsonar/` (falls back to the Documents
 ├── node_directory.json        DirectorySnapshot from map.meshcore.io (atomic)
 ├── ui_prefs.json              {"onboarding_seen": bool, "labels": {}, "recent_regions": [code, ...]} (atomic; labels only from 0.2.x, migrated away; recent_regions = the last 3 regions switched to by hand, most recent first)
 ├── privacy_zones.json         PrivacyZoneState: {zones: [{lat, lon, radiusM, label}], trimM, pending, scope, syncedAt} (atomic). At most 10 zones, lat/lon already rounded to 4 decimals, radius 50-5000 m. `pending` = a change not yet sent to the server (no driver key yet, offline); while it is true the phone's list wins over the server's.
+├── alert_prefs.json           AlertPrefs: notification choices, `iosWakeKeeper`, `autoConnect` ("always" default | "launch" | "off") (atomic)
+├── saved_radios.json          Saved radios (atomic, format below)
+├── last_radio.json            0.27 and older: {id, name, key} of the one remembered radio. Read once to create saved_radios.json, then left untouched
 └── sessions/
     └── <session id>/          id must match ^[A-Za-z0-9_-]{1,100}$ (path-like ids refused)
         ├── session.json       DriveSession JSON; rewritten atomically at start, rename and end
@@ -182,6 +185,35 @@ Root: `getApplicationSupportDirectory()/meshsonar/` (falls back to the Documents
 ```
 
 `node_directory.json` holds `{v: 1, source, fetched_at, center: {lat, lon}, radius_km, total_nodes, repeaters[]}`.
+
+`saved_radios.json` (`lib/alerts/saved_radios_store.dart`; rules in FEATURES.md "Saved radios"):
+
+```json
+{
+  "version": 1,
+  "radios": [
+    {"id": "4C2A…-UUID", "name": "MeshCore-1a2b", "key": "abcdef…", "nickname": "Truck", "model": "Heltec V3",
+     "last_connected": "2026-11-07T17:02:11.000Z"}
+  ],
+  "starred": "4C2A…-UUID",
+  "star_pinned": false,
+  "auto_connect_held": false
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `radios[].id` | Bluetooth id (iOS peripheral UUID, Android MAC); what a connect uses. Required. |
+| `radios[].name` | The name the radio reports (SELF_INFO). |
+| `radios[].key` | Public key, lower-case hex, when known. Matching uses it first. Optional. |
+| `radios[].nickname` | The person's name for it. Optional; absent = the radio's name. |
+| `radios[].model` | DEVICE_INFO manufacturer string (the board model). Optional. |
+| `radios[].last_connected` | UTC ISO 8601 of the last connect. Optional (absent only in a hand-edited file). |
+| `starred` | `id` of the auto-connect radio. Missing or unknown = the most recently connected radio. |
+| `star_pinned` | true = the person chose the star; false = it follows the most recent connect. |
+| `auto_connect_held` | true after a deliberate disconnect or hand-over: no automatic connect until the next connect. |
+
+Unknown fields are ignored; a damaged file loads as an empty list (it is rewritten on the next connect) and is not re-migrated.
 
 ### Derived per-drive numbers (`SessionSummary`)
 

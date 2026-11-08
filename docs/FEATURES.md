@@ -45,9 +45,14 @@ builds an alert from a message its radio handed over; no server, no remote push,
   not allowed yet, blocked in iOS Settings (with a button there), restricted, "You will not get messages while your radio is not
   connected", and "iOS can pause MeshSonar when it is not in front, so alerts are not guaranteed". Never time-sensitive: Focus and Do Not
   Disturb apply as the person set them.
-* **After the app was closed:** the radio that was in use is remembered (erased when you disconnect or hand it over on purpose) and
-  reconnected within about a second of a start or of coming back to the front, with a strip "Reconnecting to <radio>…" and a Reconnect
-  button if it gave up after about two minutes.
+* **After the app was closed:** the auto-connect radio (the starred one under [Saved radios](#saved-radios)) is reconnected within
+  about a second of a start or of coming back to the front, with a strip "Reconnecting to <radio>…" and a Reconnect button if it gave
+  up after about two minutes (1, 3, 6, 10, 15, 20, 30, 30 s). **Settings > Radio > Auto-connect** decides when: **Always** (default, at
+  launch and on every return to the front), **At launch only** (the launch retries run; a return to the front does nothing) or **Off**
+  (never by itself; tap a radio to connect). Switching to Off stops a running try and clears a "Could not reach" line, so the strip
+  never nags. The Reconnect button always works (you asked). Disconnecting or handing the radio to another app on purpose holds
+  auto-connect (the radio stays saved) until your next connect. **Mid-drive reconnect is not governed by the setting**: while driving,
+  a dropped radio is always reconnected (`AppState._reconnectRadio`).
 * **Radio queue warning:** the radio keeps about 16 waiting messages. A drain that finds 12 or more shows a warning on every tab; at 16 it
   says some may have been dropped.
 * **What is NOT claimed:** delivery while MeshSonar is in the background or closed. Whether iOS keeps the link is the open spike S1
@@ -69,7 +74,7 @@ on Drive; a saved `map` from before the rename still restores Drive). Tapping th
 | Analyze | Segmented Region (the Region hub) \| Drives (drive list, reports, progress). |
 | Plan | Native tools (`ui/plan/*`, `core/plan/*`): Airtime and load (calculator offline; 24 h channel load and what-if from `airtime-load`, last result cached), Radio presets (offline; the website's link-survival columns need its terrain grid and are not shown), Point-to-point link (ground profile from `score-link`, then line of sight, Fresnel clearance, odds and margin on the phone; offline for a pair already checked), Coverage painter (`coverage`, footprint on a map, last result cached), Coverage check (from the cached measured cells; offline), Field data. Planner, Recommended build and Site explorer open the website until their native twins land. |
 | Plan | Planner, Recommended build, Site explorer (dossier, link profile, compare), Scenarios and Build tracker run in the app on the website's planning engine (`plan-native`), with the last results cached for offline. The other tools (point-to-point link, coverage painter, airtime, radio presets, coverage check) open the real page in the browser until they are converted. In-app tools that do not exist yet are listed once as "Coming next", with no button. |
-| More | Radio, My radios and claims, Settings, Colour legend, How it works (replays the tour), Privacy and data sharing, Report a problem, About, Privacy policy. Opens inside the tab (own Navigator), so the bars stay. |
+| More | Radio, Claimed radios, Settings, Colour legend, How it works (replays the tour), Privacy and data sharing, Report a problem, About, Privacy policy. Opens inside the tab (own Navigator), so the bars stay. |
 
 Old tab names: Drive = Map (renamed in the Drive redesign); Region and Drives = Analyze; Radio and Settings = More. `HomeShell(legacyTab: n)` maps the old
 indexes 0..4 (`LegacyTab.fromIndex`).
@@ -513,6 +518,9 @@ radio at a time".
 - If a scan stream never closes, the screen stops showing "Scanning" after 15 s.
 - A connected radio shows a card with its firmware and **Disconnect**. You can't disconnect or switch radios while
   driving.
+- **Saved radios** (when there are any) sit above Nearby radios: tap one to connect without waiting for the scan; a saved
+  radio the scan finds reads "In range" there and is not listed again under Nearby radios. Swipe, hold and the info
+  button work as described under [Saved radios](#saved-radios).
 - Connect timeouts: transport 25 s, `start()` 20 s → "The radio didn't answer…".
 
 ## Simulator (debug builds only)
@@ -712,6 +720,8 @@ use it."); `test/ui/settings_no_dead_end_test.dart` enforces it.
 | | **Listen window** | 4–20 s, default 10 s (MeshMapper's); capped at the interval less 1 s. Same three sliders open from the Drive tab's ping chip. |
 | | **This drive** (`wardrive-counters`) | Pings sent, repeaters that heard them, pings held back by the arbiter (if any) and `Observers confirmed X of Y uploaded pings` from `GET drive-status` (or why there is no number: waiting for the first upload, no driver key, server without the route). |
 | Radio (`radio`) | **Radio details** | Opens the Radio tab's read-only screen. |
+| | **Auto-connect** (`auto-connect`) | **Always** (default) / **At launch only** / **Off**, with the footer "While driving, a dropped radio is always reconnected." Stored as `autoConnect` (`always` / `launch` / `off`) in `alert_prefs.json`. See [Alerts](#alerts-notifications-banners-reconnect-m3-wave-2c). |
+| | **Saved radios** (`saved-radios`) | "N radios. Auto-connect: <name>"; opens the [Saved radios](#saved-radios) page (the same list as the connect screen; tapping a radio there connects and stays on the page). |
 | | **Each saved radio** (`antenna-profile-<key>`) | Mount, gain and height; tap to edit; **Forget** asks. Locked for the radio in use while driving. |
 | Drives & uploads (`drives`) | **Upload at end of drive**, **Upload during the drive**, **Upload interval** (1–30 min), last upload line | As before; during-drive needs end-of-drive. |
 | Data & storage (`storage`) | **Drives on this phone** | Count and bytes; "N fully uploaded, M not fully uploaded". **Remove uploaded drives** removes only ended drives whose every ping the server confirmed (none waiting, none rejected, no rename pending) and never the drive being recorded; the dialog says what stays and how many pings the server lacks. Others are deleted one by one from Drives. |
@@ -777,13 +787,38 @@ reply, Delivered in 2.4 s, Not delivered. Tries: 3 by flood, 5 along a saved rou
 cleared). A message that gets no acknowledgement says why ("No acknowledgement after 3 tries ... The repeater path to them may have
 changed") and offers Retry. Long-press a message > Details shows each try, the route, hops, signal, and the explanation.
 
-## My radios and claims (unreleased)
+## Saved radios
+
+(`alerts/saved_radios_store.dart`, `ui/saved_radios_screen.dart`) Every Bluetooth radio this phone has connected to (never the
+Simulator), saved on each connect with its Bluetooth id, public key, the name it reports, the board model from DEVICE_INFO when the
+firmware reports it, and the time of the connect. Shown on the connect screen above the scan and under Settings > Radio > Saved radios.
+
+- **Card:** nickname (or the radio's own name), a star on the auto-connect radio, "Connected" / "Connecting…" / "In range ·" and
+  "Last connected 5 min ago / yesterday / 12 days ago / on 3 Mar 2026", the radio's own name under a nickname, and the model.
+- **Tap** connects (through the normal connect path, so antenna prompt, claims and chat binding behave as after a scan). Disabled
+  while driving.
+- **Swipe left** to **Forget**, after "Forget <name>?" (it says chat history, contacts and the antenna setup stay and that the radio
+  comes back on its next connect). Forget removes the entry only.
+- **Hold, or the info button:** Add / Change nickname (up to 40 characters, empty = the radio's own name; nothing is written to the
+  radio), **Use for auto-connect** (star it), **Follow the most recent radio** (on a starred radio you chose), Forget.
+- **The star rule:** auto-connect goes to the starred radio. By default the star follows the most recently connected radio. Starring
+  one yourself pins it: later connects to other radios do not move it, until you star another, choose Follow the most recent radio,
+  or forget it (the star then goes to the most recent radio left).
+- **Order:** the starred radio first, then most recently connected first.
+- **Matching:** by public key first, then Bluetooth id, so a radio that comes back at a new Bluetooth id keeps its nickname and star.
+  The same Bluetooth id with a different public key is a different radio and replaces the old entry.
+- **Deliberate disconnect / hand-over** keeps the radio and holds auto-connect until the next connect (by hand or a tap here).
+- **Upgrade from 0.27:** the single remembered radio (`last_radio.json`) becomes the first saved radio, starred, with that file's time
+  as its last connect (the file was written on every connect). The old file is left in place and never read again once
+  `saved_radios.json` exists. File format: DATA_MODEL.md section 2.
+
+## Claimed radios (unreleased; was "My radios and claims")
 
 Needs a server that lists `nodeClaims` in its site-config capabilities and an approved driver key; otherwise the three rows
-under Settings > My radios say why they cannot be used. **A claim only manages a radio** (its name, whether its position is
+under Settings > Claimed radios say why they cannot be used. **A claim only manages a radio** (its name, whether its position is
 public, notes, giving it up). Recording, uploading and counting never check it: every radio and every driver keeps feeding data.
 
-- **Settings > My radios** lists the radios this key manages (from `my-radios`): type, how it was verified (radio signature, or an
+- **Settings > Claimed radios** (and More > Claimed radios) lists the radios this key manages (from `my-radios`): type, how it was verified (radio signature, or an
   observer hearing the code), position public / hidden / server default, a short key. Edit sends only the changed fields
   (`PATCH claim`); Give up asks first and says the data keeps counting (`DELETE claim`). A link opens the website's `/me/radios`.
 - **Claim my radio** (needs a connected radio): `claim-start(sign)` with the radio's own public key, the radio signs the
@@ -793,7 +828,7 @@ public, notes, giving it up). Recording, uploading and counting never check it: 
   then ALWAYS `set name <original>`, `advert`, `get name` to confirm (four tries). The code stays on the name for at most 90 s
   (one extra advert halfway); after the name is back the app keeps listening until the code expires, because an observer's
   report can arrive late. The screen cannot be left while the name is at risk. If the name cannot be confirmed, the two
-  commands are shown with copy buttons and a reminder (name only, never the password) stays in My radios with a
+  commands are shown with copy buttons and a reminder (name only, never the password) stays in Claimed radios with a
   "Put the name back" button.
 - Said on the screen: "Your repeater's name will show a short code for about a minute; we restore it automatically; we never
   see or store your admin password; claiming only lets you manage this radio, it never affects whether its data counts."

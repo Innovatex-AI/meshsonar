@@ -424,7 +424,7 @@ class AppState extends ChangeNotifier {
   @visibleForTesting
   Future<void> Function(Duration d)? claimWait;
 
-  /// My radios, the running claim flow and the name restores still owed (lib/app/claims.dart).
+  /// Claimed radios, the running claim flow and the name restores still owed (lib/app/claims.dart).
   ClaimController get claims => _claims ??= ClaimController(
         client: () => client,
         driverKey: () => _settings.driverKey,
