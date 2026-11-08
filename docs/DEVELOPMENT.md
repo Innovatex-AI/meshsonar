@@ -220,4 +220,8 @@ Then add a section to [CHANGELOG.md](CHANGELOG.md).
 - [ ] `THIRD_PARTY_NOTICES.md` up to date for any newly ported code. Bluetooth package licence still permissive (flutter_reactive_ble, BSD-3-Clause).
 - [ ] No personal data committed: no `DEVELOPMENT_TEAM`, driver keys, or local bundle-id changes.
 - [ ] iOS: `flutter build ios --release` and install (§2.3). Remember the 7-day expiry for free-team builds.
+- [ ] TestFlight: `scripts/release_ios.sh --upload` (archive, sign and upload once; removes `build/ios` after a successful upload).
+      It authenticates with the App Store Connect API key when `~/.appstoreconnect/meshsonar.env` (`ASC_KEY_ID`, `ASC_ISSUER_ID`)
+      and `~/.appstoreconnect/private_keys/AuthKey_<ASC_KEY_ID>.p8` exist (Admin key "MeshSonar uploads (Andy Mac)", created
+      Nov 8 2026; the .p8 is never committed and can be downloaded only once), so Xcode losing the Apple ID no longer blocks uploads.
 - [ ] Tag and push (the maintainer commits; agents working on this repo don't run git).
