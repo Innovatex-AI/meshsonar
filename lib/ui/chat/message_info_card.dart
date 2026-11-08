@@ -2,6 +2,7 @@
 // the details sheet, and the path map. Names come from HopResolver (radio contacts, then the network roster); a prefix two
 // known repeaters share is shown in the warning colour with "2 possible", like the official app's red prefix.
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart' show Material, MaterialType;
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
@@ -211,7 +212,10 @@ class MessagePathMapScreen extends StatelessWidget {
       key: const Key('path-map-screen'),
       backgroundColor: c.bg,
       navigationBar: CupertinoNavigationBar(middle: Text(title)),
-      child: SafeArea(
+      // CupertinoPageScaffold has no Material text style; without this the labels get Flutter's debug underline.
+      child: Material(
+        type: MaterialType.transparency,
+        child: SafeArea(
         child: Column(children: [
           Expanded(
             child: placed.isEmpty
@@ -235,6 +239,7 @@ class MessagePathMapScreen extends StatelessWidget {
               ),
             ),
         ]),
+        ),
       ),
     );
   }
