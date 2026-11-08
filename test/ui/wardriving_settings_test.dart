@@ -46,7 +46,12 @@ void main() {
     final h = Harness();
     await h.pumpApp(tester);
     await tapShellTab(tester, 'More');
-    await tester.scrollUntilVisible(find.byKey(const Key('more-wardriving')), 200, scrollable: find.byType(Scrollable).first);
+    // Scroll the More list itself: with the Chat redesign always on, the first Scrollable on screen is no longer the More list.
+    await tester.scrollUntilVisible(find.byKey(const Key('more-wardriving')), 200,
+        scrollable: find.descendant(of: find.byKey(const Key('more-list')), matching: find.byType(Scrollable)).first);
+    // ...and centre the row: the translucent tab bar covers the bottom edge, where scrollUntilVisible leaves it.
+    await Scrollable.ensureVisible(tester.element(find.byKey(const Key('more-wardriving'))), alignment: 0.5);
+    await tester.pumpAndSettle();
     expect(find.byKey(const Key('more-wardriving')), findsOneWidget);
     await tester.tap(find.byKey(const Key('more-wardriving')));
     await tester.pumpAndSettle();
