@@ -49,6 +49,9 @@ import '../../chat/route_health.dart';
 import 'message_bubble.dart';
 import 'message_format.dart';
 import 'message_menu.dart';
+import 'hop_names.dart';
+import 'message_info_card.dart';
+import '../../chat/hop_resolver.dart';
 
 /// Wide Chat tab (two columns): lists inside it open conversations in the right-hand pane through this.
 class ConversationPaneScope extends InheritedWidget {
@@ -151,7 +154,10 @@ class _ConversationScreenState extends State<ConversationScreen> {
   GlobalKey? _anchorKey;
   List<String> _failedIds = const [];
   bool _routeBroken = false;
-  List<Contact> _repeaters = const [];
+  // Hop names (CR4): the radio's repeaters and rooms, then the network roster. Rebuilt when either changes.
+  List<RosterNode> _roster = const [];
+  HopResolver? _resolverCache;
+  HopResolver get _resolver => _resolverCache ??= hopResolverFor(c.store, c.radioId, _roster);
   ChatNavigator? _navigator;
   final Map<String, MessageBubble> _bubbles = {};
 
@@ -225,9 +231,48 @@ class _ConversationScreenState extends State<ConversationScreen> {
     _routeBroken = contact != null && routeLooksBroken(c.store, contact);
   }
 
-  void _refreshRepeaters() {
-    final radio = c.radioId;
-    _repeaters = radio == null ? const [] : c.store.contacts.list(radio, type: ContactType.repeater);
+  /// Contacts changed (a repeater named, moved, added): hop names are worked out again.
+  void _refreshRepeaters() => _resolverCache = null;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final roster = rosterOf(context);
+    if (roster.length != _roster.length) {
+      _roster = roster;
+      _resolverCache = null;
+    }
+  }
+
+  /// A hop of how [m] travelled has a known position (the menu then offers Path on map).
+  bool _hasMap(ChatMessage m, MessageInfo info) {
+    if (info.nodes.any((n) => n.known && n.hasPosition)) return true;
+    if (m.convKind == ConvKind.channel && m.repeatsHeard > 0) {
+      return repeatViews(m, c.store.messages.repeatsFor(m.id), _resolver).any((v) => v.path.any((n) => n.known && n.hasPosition));
+    }
+    return false;
+  }
+
+  /// The card under a long-pressed bubble; repeats are read only now, when the menu opens.
+  Widget _infoCard(ChatMessage m, MessageInfo info, String? peerName) {
+    final repeats = m.convKind == ConvKind.channel ? repeatViews(m, c.store.messages.repeatsFor(m.id), _resolver) : const <RepeatView>[];
+    return MessageInfoCard(message: m, info: info, repeats: repeats, peer: m.isOutgoing ? (peerName ?? 'Them') : (m.senderName ?? peerName ?? 'Them'));
+  }
+
+  Future<void> _openPathMap(ChatMessage m) async {
+    final info = messageInfo(m, resolver: _resolver, contact: _kind == ConvKind.dm ? _contact : null);
+    if (m.convKind == ConvKind.channel && m.isOutgoing) {
+      // Each repeater relayed it on its own: show them as points, no line.
+      final seen = <String>{};
+      final nodes = <HopNode>[
+        for (final v in repeatViews(m, c.store.messages.repeatsFor(m.id), _resolver))
+          for (final n in v.path)
+            if (seen.add(n.hash)) n,
+      ];
+      await MessagePathMapScreen.open(context, title: 'Repeaters that relayed it', nodes: nodes, connect: false);
+      return;
+    }
+    await MessagePathMapScreen.open(context, title: m.isOutgoing ? 'Route it took' : 'How it reached you', nodes: info.nodes);
   }
 
   // ------------------------------------------------------------------ events
@@ -500,6 +545,8 @@ class _ConversationScreenState extends State<ConversationScreen> {
         if (await confirmDeleteMessage(context)) c.service.deleteMessage(m.id);
       case MessageMenuId.details:
         await details.showMessageDetails(context, chat: c.service, messageId: m.id);
+      case MessageMenuId.pathMap:
+        await _openPathMap(m);
       case MessageMenuId.openLink:
         final l = e.link;
         if (l == null) return;
@@ -515,7 +562,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
   Future<void> _longPressSheet(String id) async {
     final m = _byId(id);
     if (m == null) return;
-    final r = await MessageMenu.showSheet(context, m);
+    final r = await MessageMenu.showSheet(context, m, hasMap: _hasMap(m, messageInfo(m, resolver: _resolver, contact: _kind == ConvKind.dm ? _contact : null)));
     if (r != null && mounted) await _perform(id, r);
   }
 
@@ -835,6 +882,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
                   viaText: m.state == MessageState.acked && m.convKind != ConvKind.channel ? (m.route == models.Route.flood ? 'searched' : dmRouteText(contact).toLowerCase()) : null);
             }
             final expanded = _expandedId == m.id;
+            final info = messageInfo(m, resolver: _resolver, peer: peerName, contact: contact);
             final bubble = MessageBubble(
               key: ValueKey(m.id),
               slot: slot,
@@ -845,7 +893,9 @@ class _ConversationScreenState extends State<ConversationScreen> {
               avatars: avatars,
               wide: wide,
               expanded: expanded,
-              info: expanded ? messageInfo(m, repeaters: _repeaters, peer: peerName, contact: contact) : null,
+              info: expanded ? info : null,
+              hasMap: _hasMap(m, info),
+              infoCard: () => _infoCard(m, info, peerName),
               highlighted: _highlightId == m.id,
               separatorText: slot.separatorAbove ? separatorLabel(context, m.tsLocalMs, now: now) : '',
               onUrl: _openUrl,

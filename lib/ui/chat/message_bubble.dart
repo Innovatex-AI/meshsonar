@@ -65,6 +65,12 @@ class MessageBubble extends StatefulWidget {
   final void Function(String id)? onLongPress;
   final void Function(String id)? onDetails;
 
+  /// The info card shown under the bubble while its long-press menu is open (CR4); built only then. Null = bubble only.
+  final Widget Function()? infoCard;
+
+  /// A hop of the message's path has a known position: the menu offers "Path on map".
+  final bool hasMap;
+
   const MessageBubble({
     super.key,
     required this.slot,
@@ -85,6 +91,8 @@ class MessageBubble extends StatefulWidget {
     this.onMenu,
     this.onLongPress,
     this.onDetails,
+    this.infoCard,
+    this.hasMap = false,
   });
 
   /// A lone bubble (previews, the System traffic list): no grouping, no status line, no menu.
@@ -105,7 +113,9 @@ class MessageBubble extends StatefulWidget {
         onFailedTap = null,
         onMenu = null,
         onLongPress = null,
-        onDetails = null;
+        onDetails = null,
+        infoCard = null,
+        hasMap = false;
 
   ChatMessage get message => slot.message;
 
@@ -113,7 +123,7 @@ class MessageBubble extends StatefulWidget {
   String get signature {
     final m = slot.message;
     return [
-      m.id, m.state.name, m.attempt, m.repeatsHeard, m.ackMs, m.failReason?.name, m.text.length, m.snr, m.rssi, m.pathLen, m.route?.name, //
+      m.id, m.state.name, m.attempt, m.repeatsHeard, hasMap, m.ackMs, m.failReason?.name, m.text.length, m.snr, m.rssi, m.pathLen, m.route?.name, //
       slot.joinsOlder, slot.joinsNewer, slot.separatorAbove, slot.showSender, //
       delivery?.word, delivery?.detail, showStatus, radioConnected, avatars, wide, expanded, info?.sentence, highlighted, separatorText, selfName,
     ].join('|');
@@ -221,24 +231,45 @@ class _MessageBubbleState extends State<MessageBubble> {
       onTap: () => failed ? w.onFailedTap?.call(m.id) : w.onTap?.call(m.id),
       child: body,
     );
-    final menuEntries = MessageMenu.entries(m);
+    final menuEntries = MessageMenu.entries(m, hasMap: w.hasMap);
     final Widget withMenu = (MessageMenu.apple(context) && MessageMenu.useContextMenu)
         ? CupertinoContextMenu.builder(
             enableHapticFeedback: true,
             actions: [
               for (final e in menuEntries)
-                CupertinoContextMenuAction(
-                  key: Key('menu-${MessageMenu.keyName(e.id)}-${m.id}'),
-                  isDestructiveAction: e.destructive,
-                  trailingIcon: e.symbol.apple,
-                  onPressed: () {
-                    Navigator.of(context, rootNavigator: true).pop();
-                    w.onMenu?.call(m.id, e);
-                  },
-                  child: Text(e.label),
+                Builder(
+                  builder: (menuContext) => CupertinoContextMenuAction(
+                    key: Key('menu-${MessageMenu.keyName(e.id)}-${m.id}'),
+                    isDestructiveAction: e.destructive,
+                    trailingIcon: e.symbol.apple,
+                    onPressed: () {
+                      // Act once the menu has finished closing: opening a screen or sheet while the menu still flies the
+                      // bubble back into the list breaks the bubble's render tree (Path on map, Full details).
+                      final menu = ModalRoute.of(menuContext);
+                      Navigator.of(context, rootNavigator: true).pop();
+                      if (menu != null) {
+                        menu.completed.then((_) => w.onMenu?.call(m.id, e));
+                      } else {
+                        w.onMenu?.call(m.id, e);
+                      }
+                    },
+                    child: Text(e.label),
+                  ),
                 ),
             ],
-            builder: (context, animation) => ConstrainedBox(constraints: BoxConstraints(maxWidth: maxW), child: body),
+            // The same builder draws the bubble in the list and in the open menu (a PopupRoute): only the open menu adds the card.
+            builder: (context, animation) {
+              final bubble = ConstrainedBox(constraints: BoxConstraints(maxWidth: maxW), child: body);
+              final card = w.infoCard;
+              if (card == null || animation.value < CupertinoContextMenu.animationOpensAt || ModalRoute.of(context) is! PopupRoute) return bubble;
+              return SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                  children: [bubble, const SizedBox(height: Gap.s), card()],
+                ),
+              );
+            },
           )
         : GestureDetector(behavior: HitTestBehavior.opaque, onLongPress: () => w.onLongPress?.call(m.id), child: tappable);
     // The context menu builder child has no tap handler of its own; the outer detector carries the tap.

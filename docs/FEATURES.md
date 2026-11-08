@@ -102,11 +102,22 @@ Chat UI: the `chatRedesign` switch in More > Developer and the old Contacts | Ch
 - **New chat sheet.** To: field filtering people, recent and favourite people, New message, Join a hashtag channel, Join Public, Create a private
   channel (QR, link and secret when done), Scan a QR code, Paste a link or key, Add a contact. Failures are one plain sentence inside the form.
 - **Conversation.** Grouped bubbles, five delivery states with a glyph and a word (Waiting, Sent, Heard by N repeaters, Delivered, Not
-  delivered; channels never say Delivered), tap a bubble for how it travelled (route, SNR, RSSI, time on air), long-press for Copy / Open link /
-  Details / Try Again / Delete, Retry all, jump-to-latest capsule. Title is one target to the profile or Channel info with Direct / Via N
+  delivered; channels never say Delivered), tap a bubble for how it travelled (route, SNR, RSSI, time on air), long-press for the info card and Copy / Open link /
+  Route on map / Full details / Try Again / Delete (see "Message info" below), Retry all, jump-to-latest capsule. Title is one target to the profile or Channel info with Direct / Via N
   repeaters / Searching / No route yet; ellipsis menu Search, Route, Mute, Info. Composer: pill, byte ring, quick-reply chips (More > Chat),
   @mention strip, "Trimmed to fit", offline hint, Cmd-Return. After three messages in a row fail over a saved route the "This route may be broken"
   card offers Find a route now and Reset route.
+- **Message info (chat + radio round CR4).** Long-press any message, sent or received: the bubble lifts with an **info card** under it:
+  the route as a chain (You › Ridge › Hill › Maya, or the sender › hops › you), hops, SNR and RSSI, time on air, for a sent channel
+  message "Heard by N repeaters" and "Relayed by Ridge, Hill +1", for a received one "Arrived by N routes", and the times (sent,
+  delivered with the round trip; received and the sender's clock). Actions under it: Copy, Route on map (when a hop has a known position),
+  Full details, Try Again, Cancel, Delete; an action runs once the menu has closed. **Hop names**: the repeaters and rooms on your radio
+  first, then the network roster (MeshSonar plus the public MeshCore map); a prefix two known repeaters share shows in the warning colour
+  with "2 possible" and the candidates; an unknown one shows as ?a1. A sent DM shows the route it actually used (recorded at send; older
+  messages show the saved route, marked "(saved)"). **Full details** adds the chain, Route on map, and REPEATS (each: who relayed it, the
+  full path, signal, seconds after sending) or ARRIVALS for a received channel message. **Route on map**: the hops with a known position in
+  order, joined by a line for one route; the repeaters of a sent channel message are separate points (each relayed it on its own); hops
+  without a position are listed under the map.
 - **Safety while driving**: a drive is running and GPS speed above 8 km/h (unlocks below 6): the composer is replaced by "Typing is off while the
   car is moving" with **I'm a passenger** (lasts for that drive). Reading and incoming banners work. A stale or missing speed never locks.
 - **Chat in Drive**: the Messages button next to Ping opens a half-height sheet: unread conversations, then a conversation with the same

@@ -1,5 +1,6 @@
 // What a message can tell about how it travelled: the inline info strip under a tapped bubble, the message details sheet and
 // the DM route subtitle (chat plan 4.2 / 4.4, vocabulary 2.1). Pure Dart.
+import 'hop_resolver.dart';
 import 'models.dart';
 
 /// "Strong" / "Good" / "Fair" / "Weak" from SNR in dB (ramp from the theme: >= +5, 0..+5, -5..0, < -5).
@@ -59,6 +60,13 @@ class MessageInfo {
   /// Every hop named, uncapped (the details sheet and the VoiceOver value).
   final List<String> hops;
 
+  /// The hops resolved (name, ambiguity, position), first hop first; empty when unknown or direct.
+  final List<HopNode> nodes;
+
+  /// For a sent DM: true when [nodes] is the route this message actually used (recorded at send), false when it is only the
+  /// contact's saved route (messages sent before that was recorded).
+  final bool routeIsActual;
+
   /// "SNR 6.5 dB · RSSI -92 dBm" (parts that are unknown are left out), or null when neither is known.
   final String? signalText;
   final String? signalWord;
@@ -69,6 +77,8 @@ class MessageInfo {
     required this.routeWord,
     required this.chips,
     required this.hops,
+    this.nodes = const [],
+    this.routeIsActual = true,
     this.signalText,
     this.signalWord,
     this.signalBars,
@@ -90,9 +100,13 @@ List<String> _cap(List<String> nodes) {
   return [nodes.first, nodes[1], '+${nodes.length - 3}', nodes.last];
 }
 
-/// Builds the strip for [m]. [repeaters] are the known repeater contacts (to name hop hashes); [peer] is the other side's
-/// name; for your own message [contact] supplies the saved route.
-MessageInfo messageInfo(ChatMessage m, {required Iterable<Contact> repeaters, String? peer, Contact? contact, String selfLabel = 'You'}) {
+/// Builds the strip for [m]. Hop names come from [resolver] when given, else from the radio's [repeaters]; [peer] is the other
+/// side's name. For your own DM the route is the one recorded when it was sent ([ChatMessage.sentPath]); for a message sent
+/// before that existed, [contact]'s saved route stands in (and [MessageInfo.routeIsActual] is false). For a channel
+/// message [repeatsHeard] (sent) or the arrivals (received) are counted from [ChatMessage.repeatsHeard].
+MessageInfo messageInfo(ChatMessage m,
+    {Iterable<Contact> repeaters = const [], HopResolver? resolver, String? peer, Contact? contact, String selfLabel = 'You'}) {
+  final res = resolver ?? HopResolver(contacts: repeaters);
   final other = peer ?? m.senderName ?? 'Them';
   String? signal;
   String? word;
@@ -108,24 +122,42 @@ MessageInfo messageInfo(ChatMessage m, {required Iterable<Contact> repeaters, St
     }
   }
 
+  String via(int n) => 'Via $n ${n == 1 ? 'repeater' : 'repeaters'}';
+
   if (m.isOutgoing) {
     if (m.convKind == ConvKind.channel) {
-      return const MessageInfo(kind: TravelKind.searching, routeWord: 'Sent to everyone nearby', chips: [], hops: []);
+      final n = m.repeatsHeard;
+      return MessageInfo(
+          kind: TravelKind.searching,
+          routeWord: n == 0 ? 'Sent to everyone nearby' : 'Heard by $n ${n == 1 ? 'repeater' : 'repeaters'}',
+          chips: const [],
+          hops: const []);
     }
     if (m.route == Route.flood) return const MessageInfo(kind: TravelKind.searching, routeWord: 'Searching', chips: [], hops: []);
-    if (contact == null || !contact.hasPath) {
+    // The route this message used (v4), else the contact's saved route for older messages.
+    final List<String> ids;
+    final bool actual;
+    if (m.sentPath != null) {
+      ids = m.sentHops;
+      actual = true;
+    } else if (contact != null && contact.hasPath) {
+      ids = contact.routeIds;
+      actual = false;
+    } else {
       return MessageInfo(kind: TravelKind.unknown, routeWord: m.route == Route.direct ? 'Saved route' : 'Route unknown', chips: const [], hops: const []);
     }
-    final ids = contact.routeIds;
-    final names = [for (final h in ids) hopName(h, repeaters)];
-    if (names.isEmpty) {
-      return MessageInfo(kind: TravelKind.direct, routeWord: 'Direct', chips: [selfLabel, other], hops: const []);
+    final nodes = res.resolveAll(ids);
+    if (nodes.isEmpty) {
+      return MessageInfo(kind: TravelKind.direct, routeWord: 'Direct', chips: [selfLabel, other], hops: const [], routeIsActual: actual);
     }
+    final names = [for (final n in nodes) n.label];
     return MessageInfo(
         kind: TravelKind.viaRepeaters,
-        routeWord: 'Via ${names.length} ${names.length == 1 ? 'repeater' : 'repeaters'}',
+        routeWord: via(nodes.length),
         chips: _cap([selfLabel, ...names, other]),
-        hops: names);
+        hops: names,
+        nodes: nodes,
+        routeIsActual: actual);
   }
 
   // Incoming. pathLen null = it arrived direct; otherwise hops = pathLen (already masked to the low 6 bits).
@@ -134,11 +166,63 @@ MessageInfo messageInfo(ChatMessage m, {required Iterable<Contact> repeaters, St
     return MessageInfo(kind: TravelKind.direct, routeWord: 'Direct', chips: [other, selfLabel], hops: const [], signalText: signal, signalWord: word, signalBars: bars);
   }
   final hashes = m.hopHashes;
-  final named = hashes.length == hops ? [for (final h in hashes) hopName(h, repeaters)] : <String>[];
-  final word2 = 'Via $hops ${hops == 1 ? 'repeater' : 'repeaters'}';
-  if (named.isEmpty) {
+  final nodes = hashes.length == hops ? res.resolveAll(hashes) : <HopNode>[];
+  if (nodes.isEmpty) {
     // Hash unknown (the radio gave only the hop count): say how many, name none.
-    return MessageInfo(kind: TravelKind.viaRepeaters, routeWord: word2, chips: [other, '$hops ${hops == 1 ? 'repeater' : 'repeaters'}', selfLabel], hops: const [], signalText: signal, signalWord: word, signalBars: bars);
+    return MessageInfo(
+        kind: TravelKind.viaRepeaters,
+        routeWord: via(hops),
+        chips: [other, '$hops ${hops == 1 ? 'repeater' : 'repeaters'}', selfLabel],
+        hops: const [],
+        signalText: signal,
+        signalWord: word,
+        signalBars: bars);
   }
-  return MessageInfo(kind: TravelKind.viaRepeaters, routeWord: word2, chips: _cap([other, ...named, selfLabel]), hops: named, signalText: signal, signalWord: word, signalBars: bars);
+  final named = [for (final n in nodes) n.label];
+  return MessageInfo(
+      kind: TravelKind.viaRepeaters,
+      routeWord: via(hops),
+      chips: _cap([other, ...named, selfLabel]),
+      hops: named,
+      nodes: nodes,
+      signalText: signal,
+      signalWord: word,
+      signalBars: bars);
+}
+
+/// One heard copy of a channel message, resolved for display (CR4). For a message you sent, [relayedBy] is the repeater
+/// that heard you and passed it on; for one you received it is the first repeater after the sender.
+class RepeatView {
+  final MessageRepeat repeat;
+  final List<HopNode> path;
+
+  /// Milliseconds after the message was sent (sent) or first received (received); null when unknown.
+  final int? afterMs;
+  const RepeatView({required this.repeat, required this.path, this.afterMs});
+
+  HopNode? get relayedBy => path.isEmpty ? null : path.first;
+  HopNode? get heardFrom => path.isEmpty ? null : path.last;
+  int get hops => repeat.hops;
+
+  /// "SNR 6.5 · RSSI -92" (parts that are unknown are left out), or null.
+  String? get signal {
+    final bits = [if (repeat.snr != null) 'SNR ${repeat.snr!.toStringAsFixed(1)}', if (repeat.rssi != null) 'RSSI ${repeat.rssi}'];
+    return bits.isEmpty ? null : bits.join(' · ');
+  }
+}
+
+List<RepeatView> repeatViews(ChatMessage m, List<MessageRepeat> repeats, HopResolver resolver) => [
+      for (final r in repeats)
+        RepeatView(repeat: r, path: resolver.resolveAll(r.hopHashes), afterMs: r.heardMs >= m.tsLocalMs ? r.heardMs - m.tsLocalMs : null),
+    ];
+
+/// "Ridge, Hill +2": the repeaters that relayed a sent message, distinct, first heard first, at most [max] named.
+String relayedBySummary(List<RepeatView> views, {int max = 2}) {
+  final names = <String>[];
+  for (final v in views) {
+    final n = v.relayedBy?.label;
+    if (n != null && !names.contains(n)) names.add(n);
+  }
+  if (names.length <= max) return names.join(', ');
+  return '${names.take(max).join(', ')} +${names.length - max}';
 }

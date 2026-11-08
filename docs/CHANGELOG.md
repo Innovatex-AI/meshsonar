@@ -5,6 +5,8 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- **Long-press any message for how it travelled (chat + radio round, CR4).** The bubble lifts with a card: the route with repeater names, hops, SNR/RSSI, "Relayed by" for your channel messages, the paths a received one came by, and the times with the round trip. Route on map shows the repeaters on a map. Repeater names now also come from the network roster, and a prefix two repeaters share is flagged with the candidates. A sent direct message shows the route it actually took. Full details lists every repeat. Menu actions now wait for the menu to close (opening Details from the menu could glitch).
+
 - **Repeats and paths are recorded (chat + radio round, CR3).** Every copy of a channel message the radio hears is now decrypted and kept with its message: for a message you sent, which repeater relayed it, by which path, with SNR, RSSI and time ("Heard by N" now really counts repeats; before this nothing fed it); for one you received, every path it arrived by. A direct message sent along a known route now keeps the route it actually used. Chat database v4.
 
 ## [0.27.3+45] — 2026-11-07 — the new Chat (Chats, Contacts, Network), repeater dashboard, Route screen and Ping; iOS 18 or later
