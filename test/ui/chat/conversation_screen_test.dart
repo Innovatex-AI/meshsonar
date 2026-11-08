@@ -141,7 +141,7 @@ void main() {
     await tester.pump();
     expect(kit.sink.channels.single.text, 'on my way');
     expect(find.textContaining('Sent'), findsOneWidget);
-    kit.service.handleInbound(InboundRepeatHeard(radioId: radioA, channelSlot: 1, timestamp: kit.sink.channels.single.ts, text: 'Me: on my way'));
+    kit.service.handleInbound(InboundRepeatHeard(radioId: radioA, channelSlot: 1, timestamp: kit.sink.channels.single.ts, text: 'Me: on my way', pathHashes: 'a1', hops: 1));
     await tester.pump();
     expect(find.textContaining('Heard by 1 repeater'), findsOneWidget);
     expect(ch.id, isNotNull);

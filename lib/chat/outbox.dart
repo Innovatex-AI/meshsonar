@@ -205,18 +205,28 @@ class Outbox {
       if (m.convKind == ConvKind.channel) {
         final usedTs = await sink.sendChannel(radioId: m.radioId, slot: slot!, text: m.text, timestamp: m.tsSender);
         if (usedTs != m.tsSender) store.messages.retimestamp(m.id, usedTs, dedupeKeyFor(m.convKey, usedTs, m.text));
-        store.messages.update(m.id, state: MessageState.sent, route: Route.flood, repeatsHeard: 0);
+        // repeats_heard is the count of message_repeats rows (ChatService._applyCopy); a resend keeps the copies heard so far.
+        store.messages.update(m.id, state: MessageState.sent, route: Route.flood);
         store.outbox.remove(m.id);
         store.outbox.addAttempt(DeliveryAttempt(messageId: m.id, attempt: attemptNo, sentAtMs: now, route: Route.flood));
       } else {
         final r = await sink.sendDirect(
             radioId: m.radioId, contactPublicKey: contactKey!, text: m.text, timestamp: m.tsSender, attempt: attemptNo - 1, forceFlood: forceFlood);
         final route = r.flood ? Route.flood : Route.direct;
+        // Sent direct: the radio used the route it held, which the phone mirrors in the contact. Keep it with the message so
+        // details show the route this message took, not whatever the contact's route is later. A flood has no route.
+        final used = (route == Route.direct && contact != null && contact.hasPath) ? contact : null;
         store.db.transaction(() {
           if (forceFlood && hasPath && mode != PathMode.fixed) store.contacts.setPath(m.radioId, contactKey!, null, -1); // the flood relearns the route
           store.outbox.addAttempt(DeliveryAttempt(
               messageId: m.id, attempt: attemptNo, sentAtMs: now, route: route, expectedAck: r.expectedAck, estTimeoutMs: r.estTimeoutMs));
-          store.messages.update(m.id, state: MessageState.sent, route: route, expectedAck: r.expectedAck);
+          store.messages.update(m.id,
+              state: MessageState.sent,
+              route: route,
+              expectedAck: r.expectedAck,
+              sentPath: used?.routeIds.join(),
+              sentHashSize: used?.pathHashBytes,
+              clearSentPath: used == null);
           store.outbox.reschedule(m.id, now + policy.ackWaitMs(r.estTimeoutMs, rnd), busyRetries: 0);
         });
       }

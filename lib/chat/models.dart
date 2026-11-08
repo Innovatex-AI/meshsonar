@@ -361,6 +361,11 @@ class ChatMessage {
   final int? hashSize;
   final int? airMs;
 
+  /// For a DM sent direct: the route the radio held when it sent (hex hop hashes, [sentHashSize] bytes per hop), migration
+  /// v4. Null when it went by flood or was sent before v4.
+  final String? sentPath;
+  final int? sentHashSize;
+
   const ChatMessage({
     required this.id,
     this.seq = 0,
@@ -389,18 +394,44 @@ class ChatMessage {
     this.pathHashes,
     this.hashSize,
     this.airMs,
+    this.sentPath,
+    this.sentHashSize,
   });
 
   /// The hop hashes as separate hex strings (`a1`, `b2c3`...), empty when unknown.
-  List<String> get hopHashes {
-    final h = pathHashes;
-    final size = (hashSize ?? 1) * 2;
-    if (h == null || h.isEmpty || size <= 0) return const [];
-    return [for (var i = 0; i + size <= h.length; i += size) h.substring(i, i + size)];
-  }
+  List<String> get hopHashes => splitHops(pathHashes, hashSize);
+
+  /// The route a sent DM used, as separate hex hop hashes; empty for flood or unknown.
+  List<String> get sentHops => splitHops(sentPath, sentHashSize);
 
   bool get isOutgoing => direction == Direction.outgoing;
   bool get isPending => state == MessageState.queued || state == MessageState.sending || state == MessageState.retrying;
+}
+
+/// Splits packed hex hop hashes into one string per hop ([hashSize] bytes each, default 1).
+List<String> splitHops(String? hex, int? hashSize) {
+  final size = (hashSize ?? 1) * 2;
+  if (hex == null || hex.isEmpty || size <= 0) return const [];
+  return [for (var i = 0; i + size <= hex.length; i += size) hex.substring(i, i + size)];
+}
+
+/// One distinct copy of a channel message heard on the air (migration v4, table message_repeats). For a message we sent it
+/// is a repeat: [firstHop] is the repeater that heard us and relayed it, [lastHop] the one our radio heard it from. For one
+/// we received it is one of the paths it arrived by.
+class MessageRepeat {
+  final String messageId;
+  final int heardMs;
+  final String pathHashes;
+  final int hashSize;
+  final int hops;
+  final double? snr;
+  final int? rssi;
+  const MessageRepeat(
+      {required this.messageId, required this.heardMs, required this.pathHashes, required this.hashSize, required this.hops, this.snr, this.rssi});
+
+  List<String> get hopHashes => splitHops(pathHashes, hashSize);
+  String? get firstHop => hopHashes.isEmpty ? null : hopHashes.first;
+  String? get lastHop => hopHashes.isEmpty ? null : hopHashes.last;
 }
 
 /// Row of the conversation list.
