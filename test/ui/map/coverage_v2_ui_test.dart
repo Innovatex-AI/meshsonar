@@ -102,6 +102,54 @@ void main() {
     });
   });
 
+  group('tile stand-ins', () {
+    // Andy's field shot (dark, z14, Polaris, Nov 8): a z12 point tile stood in for the z13/z14 tiles still loading and drew a
+    // fine dot-matrix over the whole area. At a hexagon zoom only hexagon tiles may stand in.
+    Future<CoverageTilesLayerState> pumpAt(WidgetTester t, CoverageTileStore store, LatLng at, double zoom) async {
+      t.view.physicalSize = const Size(400, 800);
+      t.view.devicePixelRatio = 1;
+      addTearDown(t.view.reset);
+      await t.pumpWidget(MaterialApp(
+        home: FlutterMap(
+          key: UniqueKey(),
+          options: MapOptions(initialCenter: at, initialZoom: zoom),
+          children: [
+            CoverageTilesLayer(
+              layer: CoverageTileLayer.measured,
+              store: store,
+              meta: _meta,
+              colors: CoverageBandColors.of(ColourPalette.standard, Brightness.dark),
+            ),
+          ],
+        ),
+      ));
+      await t.pump();
+      return t.state<CoverageTilesLayerState>(find.byType(CoverageTilesLayer));
+    }
+
+    testWidgets('z14 with only a z12 point tile loaded draws nothing; a z13 hexagon tile stands in', (t) async {
+      final d13 = decodeCoverageTile(_bytes('measured-13-2207-3102.mvt'), CoverageTileLayer.measured, 13, 2207, 3102);
+      var lat = 0.0, lon = 0.0;
+      for (var v = d13.starts[0]; v < d13.starts[1]; v++) {
+        lat += d13.latLon[2 * v] / 6;
+        lon += d13.latLon[2 * v + 1] / 6;
+      }
+      final store = CoverageTileStore(CoverageV2Client(Uri.parse('https://x.test')), decode: (b, l, z, x, y) async => decodeCoverageTile(b, l, z, x, y));
+      final (tx, ty) = tileOf(lat, lon, 12);
+      store.debugPut(
+        coverageTileKey(CoverageTileLayer.measured, _meta.defaultPreset, _meta.version, 12, tx, ty),
+        CoverageTileData(Float64List.fromList([lat, lon]), Int32List.fromList([0, 1]), Uint8List.fromList([4]), Int32List.fromList([5]), Float32List(1), const ['']),
+      );
+      var s = await pumpAt(t, store, LatLng(lat, lon), 14.2);
+      expect(s.cellCount, 0, reason: 'no z12 points at z14');
+      s = await pumpAt(t, store, LatLng(lat, lon), 12.5);
+      expect(s.cellCount, 1, reason: 'zoomed out the point tile is the right kind');
+      store.debugPut(coverageTileKey(CoverageTileLayer.measured, _meta.defaultPreset, _meta.version, 13, 2207, 3102), d13);
+      s = await pumpAt(t, store, LatLng(lat, lon), 14.2);
+      expect(s.cellCount, greaterThan(0), reason: 'the z13 hexagon tile stands in for z14');
+    });
+  });
+
   group('inspector', () {
     final measured = CoverageCellInfo.fromJson(_json('cell-measured.json'));
     final predicted = CoverageCellInfo.fromJson(_json('cell-predicted.json'));

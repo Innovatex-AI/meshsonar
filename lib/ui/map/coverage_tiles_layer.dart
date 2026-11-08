@@ -9,7 +9,8 @@
 // The plan's own fallback (viewport GeoJSON at z >= 13) was not needed: the tile path works at every zoom.
 //
 // Tiles: integer zoom, at most 16 (z16 hexagons are exact deeper in); predicted from meta.predictedFromZoom (8). A tile not
-// in memory yet is stood in for by its nearest loaded ancestor, so a pan or zoom never blanks the layer.
+// in memory yet is stood in for by its nearest loaded ancestor of the same kind (hexagons by hexagons from meta.hexFromZoom,
+// points by points below it), so a pan or zoom rarely blanks the layer and never shows dots where hexagons belong.
 import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
@@ -95,7 +96,12 @@ class CoverageTilesLayerState extends State<CoverageTilesLayer> {
     final version = meta.version;
     final used = <String>[];
     final parts = <List<CellShape>>[];
-    final minZ = measured ? 0 : meta.predictedFromZoom;
+    // Stand-ins come only from tiles of the same kind: at a hexagon zoom (>= meta.hexFromZoom) never from a point tile below it.
+    // Andy's field shot (dark, z14, Polaris, Nov 8): while the big z13/z14 Predicted tiles were still loading over cellular, the
+    // z12 Predicted tile (a grid of points) stood in for them and drew a fine dot-matrix over the whole area. A gap that fills in
+    // as the hexagon tile lands is honest; dots at a hexagon zoom are not.
+    final hexes = z >= meta.hexFromZoom;
+    final minZ = hexes ? meta.hexFromZoom : (measured ? 0 : meta.predictedFromZoom);
     for (final (x, y) in tilesCovering(b.south, b.west, b.north, b.east, z)) {
       final key = coverageTileKey(widget.layer, preset, version, z, x, y);
       final d = widget.store.peek(key);

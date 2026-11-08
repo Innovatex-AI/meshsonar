@@ -77,6 +77,20 @@ void main() {
     big.dispose();
   });
 
+  test('renderCovers: crossing the dots / hexagons switch always repaints (no dots at a hexagon zoom)', () {
+    final base = ring(const LatLng(40, -83), n: 3);
+    final data = CellLayerData(base.shapes, base.styles, dotBelowZoom: 13);
+    final dots = paintCells(data, const LatLng(40, -83), 12.75, 1200, 1200, 1);
+    expect(renderCovers(dots, cam(zoom: 12.9), data), isTrue, reason: 'still a dot zoom');
+    expect(renderCovers(dots, cam(zoom: 13.1), data), isFalse, reason: 'hexagon zoom: the dot picture must not stand in');
+    final hexes = paintCells(data, const LatLng(40, -83), 13.25, 1200, 1200, 1);
+    expect(renderCovers(hexes, cam(zoom: 12.95), data), isFalse, reason: 'and the reverse');
+    expect(data.dotsAt(12.99), isTrue);
+    expect(data.dotsAt(13), isFalse);
+    dots.dispose();
+    hexes.dispose();
+  });
+
   test('paintCells culls cells outside the painted area', () {
     final data = ring(const LatLng(40, -83), n: 20); // 41 x 41 cells
     final far = paintCells(data, const LatLng(40, -83), 17, 600, 600, 1);

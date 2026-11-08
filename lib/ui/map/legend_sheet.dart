@@ -14,6 +14,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../core/colour_palette.dart';
 import '../../core/coverage_v2.dart';
 import '../../core/network_coverage.dart';
 import '../app.dart' show AppScope;
@@ -320,7 +321,9 @@ class _MapLegendSheetState extends State<MapLegendSheet> {
         id: 'cell-band-0',
         swatch: CoverageBandSwatch(band: 0, colors: c, size: 26),
         title: meta.labelOf(0),
-        detail: 'Pinged here and nothing answered: no coverage. Grey with a red outline.',
+        detail: mc.palette == ColourPalette.standard
+            ? 'Pinged here and nothing answered: no coverage. Dark red, the bottom of the red to green scale.'
+            : 'Pinged here and nothing answered: no coverage. Drawn with a red outline.',
       ),
       LegendRow(
         id: 'cell-band-6',
@@ -352,7 +355,7 @@ class _MapLegendSheetState extends State<MapLegendSheet> {
         id: 'predicted-none',
         swatch: CoverageBandSwatch(band: 0, colors: c, predicted: true, size: 26),
         title: 'Predicted: no coverage',
-        detail: 'A thin grey hatch. Not drawn when zoomed out.',
+        detail: 'A thin hatch in the No reply colour, no fill. Not drawn when zoomed out.',
       ),
     ];
   }
@@ -488,8 +491,8 @@ class _MapLegendSheetState extends State<MapLegendSheet> {
   List<Widget> _why(BuildContext context) => [
     _Why('What is a hexagon?', 'The map is cut into small hexagonal cells of equal shape. Each cell collects every ping that landed in it, '
         'so you can compare places fairly. Zoom in and the cells get smaller.', 'hexagon'),
-    _Why('Why is a cell grey?', 'Grey means someone pinged there and no repeater answered, which is useful because it marks a gap. '
-        'It is different from no hexagon at all, which means nobody has tried.', 'grey'),
+    _Why('What does No reply mean?', 'No reply (dark red in the standard colours) means someone pinged there and no repeater answered, which is useful because '
+        'it marks a gap. It is different from no hexagon at all, which means nobody has tried.', 'grey'),
     _Why('What is SNR?', 'Signal-to-noise ratio, in dB: how far the signal stood above the radio noise. Above 0 dB is clear, '
         'and a LoRa radio can still decode a little below 0. Higher is better.', 'snr'),
     _Why('Why are some colours faded?', 'A cell with fewer than $kMinCellPings pings is drawn fainter because one lucky or unlucky ping '
