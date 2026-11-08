@@ -76,6 +76,14 @@ class OutboxRepository {
     return db.raw.updatedRows;
   }
 
+  /// Raises the number of tries for [messageId] to [maxAttempts] (one more try after a wait the phone could not hear).
+  void setMaxAttempts(String messageId, int maxAttempts) =>
+      db.raw.execute('UPDATE outbox SET max_attempts = ? WHERE message_id = ?', [maxAttempts, messageId]);
+
+  /// When the first try of [messageId] went out, or null when it never went out.
+  int? firstSentMs(String messageId) =>
+      db.raw.select('SELECT min(sent_at_ms) t FROM delivery_attempts WHERE message_id = ?', [messageId]).first['t'] as int?;
+
   void remove(String messageId) => db.raw.execute('DELETE FROM outbox WHERE message_id = ?', [messageId]);
 
   void addAttempt(DeliveryAttempt a) => db.raw.execute(
@@ -93,12 +101,13 @@ class OutboxRepository {
           estTimeoutMs: r['est_timeout_ms'] as int?))
       .toList();
 
-  /// Finds the attempt an ACK code belongs to: the newest attempt with this code on a message that is still waiting
-  /// (or failed for want of an ack: a late ack still counts).
+  /// Finds the attempt an ACK code belongs to: the newest attempt with this code on an outgoing message that has not been
+  /// confirmed yet. Any state counts except acked: waiting, between tries, queued again after a manual Retry (the retry reuses
+  /// the same codes), failed (a late ack still counts) and likely-delivered (a real ack upgrades it).
   DeliveryAttempt? findByAck(String radioId, int ack) {
     final r = db.raw.select('''
 SELECT a.* FROM delivery_attempts a JOIN messages m ON m.id = a.message_id
-WHERE a.expected_ack = ? AND m.radio_id = ? AND m.direction = 'out' AND m.state IN ('sending','sent','retrying','failed')
+WHERE a.expected_ack = ? AND m.radio_id = ? AND m.direction = 'out' AND m.state IN ('queued','sending','sent','retrying','failed','likelyDelivered')
 ORDER BY a.id DESC LIMIT 1
 ''', [ack, radioId]);
     if (r.isEmpty) return null;

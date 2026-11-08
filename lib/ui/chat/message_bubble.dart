@@ -384,7 +384,9 @@ class _MessageBubbleState extends State<MessageBubble> {
     final m = widget.message;
     final muted = AppType.caption.copyWith(color: c.textMuted);
     if (mine && d != null && widget.showStatus) {
-      final color = failed ? c.danger : (d.stage == DeliveryStage.delivered ? c.accent : (d.canResend ? c.warning : c.textMuted));
+      final color = failed
+          ? c.danger
+          : ((d.stage == DeliveryStage.delivered || d.stage == DeliveryStage.likely) ? c.accent : (d.canResend ? c.warning : c.textMuted));
       final status = ExcludeSemantics(
         child: Row(
           mainAxisSize: MainAxisSize.min,

@@ -87,8 +87,8 @@ void main() {
         final d = ui(msg('a', 0, out: true, state: s));
         expect(d.stage, DeliveryStage.queued);
         expect(d.glyph, DeliveryGlyph.clock);
-        expect(d.word, 'Waiting');
-        expect(d.detail, 'Waiting for the radio');
+        expect(d.word, s == MessageState.queued ? 'Waiting' : 'Sending');
+        expect(d.detail, s == MessageState.queued ? 'Waiting for the radio' : 'Handing it to the radio');
         expect(d.pending, isTrue);
       }
       expect(ui(msg('a', 0, out: true, state: MessageState.queued), connected: false).detail, 'Will send when your radio connects');
@@ -96,10 +96,10 @@ void main() {
 
     test('DM: sent, slow after 20 s or a retry, final try widens the search, acked is Delivered', () {
       final m = msg('a', 0, out: true, state: MessageState.sent, kind: ConvKind.dm, attempt: 1);
-      expect(ui(m, max: 3).word, 'Sent');
-      expect(ui(m, max: 3, now: 25000).word, 'Mesh is slow, still trying (try 1 of 3)');
-      expect(ui(msg('a', 0, out: true, state: MessageState.retrying, kind: ConvKind.dm, attempt: 2), max: 3).word, 'Mesh is slow, still trying (try 2 of 3)');
-      expect(ui(msg('a', 0, out: true, state: MessageState.retrying, kind: ConvKind.dm, attempt: 3), max: 3).word, 'Trying a wider search');
+      expect(ui(m, max: 3).word, 'Waiting for confirmation');
+      expect(ui(m, max: 3, now: 25000).word, 'Waiting for confirmation (try 1 of 3)');
+      expect(ui(msg('a', 0, out: true, state: MessageState.retrying, kind: ConvKind.dm, attempt: 2), max: 3).word, 'Waiting for confirmation (try 2 of 3)');
+      expect(ui(msg('a', 0, out: true, state: MessageState.retrying, kind: ConvKind.dm, attempt: 3), max: 3).word, 'Waiting for confirmation (last try, wider search)');
       final ok = ui(msg('a', 0, out: true, state: MessageState.acked, kind: ConvKind.dm, ackMs: 1800), now: 0);
       expect(ok.stage, DeliveryStage.delivered);
       expect(ok.glyph, DeliveryGlyph.checkmarkCircleFill);

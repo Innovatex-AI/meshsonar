@@ -66,10 +66,12 @@ class InboundDirectText extends InboundEvent {
       : super(radioId);
 }
 
-/// PUSH_CODE_SEND_CONFIRMED: the ack for an earlier DM. [ackCode] is the 4-byte code from the SENT reply.
+/// PUSH_CODE_SEND_CONFIRMED: the ack for an earlier DM. [ackCode] is the 4-byte code from the SENT reply; [tripMs] the radio's
+/// own round trip for that try (null when unknown).
 class InboundAck extends InboundEvent {
   final int ackCode;
-  const InboundAck({required String radioId, required this.ackCode}) : super(radioId);
+  final int? tripMs;
+  const InboundAck({required String radioId, required this.ackCode, this.tripMs}) : super(radioId);
 }
 
 /// The radio heard a copy of a channel message on the air (a group text on one of our channels, decrypted from the radio's

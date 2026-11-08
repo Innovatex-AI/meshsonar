@@ -288,7 +288,10 @@ enum Direction { incoming, outgoing }
 
 /// queued -> sending -> sent (radio accepted, expected ack known) -> acked (DM) | heard (channel: >= 1 repeat) | failed.
 /// retrying: an ack did not arrive in time and another attempt is scheduled.
-enum MessageState { queued, sending, sent, retrying, heard, acked, failed, received }
+/// [likelyDelivered]: a DM that got no acknowledgement (or not yet), but the contact sent us a direct message after it was sent,
+/// so they almost certainly have it. A real acknowledgement still upgrades it to [acked]; it is never retried (DM delivery fix,
+/// Nov 8 2026).
+enum MessageState { queued, sending, sent, retrying, heard, acked, likelyDelivered, failed, received }
 
 enum Route { flood, direct }
 

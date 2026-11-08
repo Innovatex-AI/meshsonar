@@ -202,7 +202,7 @@ class ChatService {
       case InboundDirectText():
         _onDirectText(e);
       case InboundAck():
-        _ob?.onAck(e.radioId, e.ackCode);
+        _ob?.onAck(e.radioId, e.ackCode, tripMs: e.tripMs);
       case InboundRepeatHeard():
         _onRepeatHeard(e);
       case InboundAdvert():
@@ -314,6 +314,9 @@ class ChatService {
     );
     if (!store.messages.insert(m)) return; // replay, or a sender retry of a DM we already have
     _emit(ChatEvent.added(m, notify: _shouldNotify(convKey, m, blocked: blocked)));
+    // They wrote to us after our unconfirmed DMs went out: those almost certainly arrived (the ack was lost on the way back,
+    // or while the phone was not linked). Stop retrying them and do not show them as failed.
+    if (!isRoom && e.txtType == 0) _ob?.onReply(e.radioId, convKey, now);
   }
 
   bool _shouldNotify(String convKey, ChatMessage m, {required bool blocked}) {

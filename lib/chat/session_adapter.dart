@@ -125,7 +125,7 @@ class RadioSessionChatAdapter implements OutboundMessageSink {
     if (chat == null || id == null) return;
     switch (e) {
       case r.SendConfirmedEvent():
-        chat.handleInbound(InboundAck(radioId: id, ackCode: e.ack));
+        chat.handleInbound(InboundAck(radioId: id, ackCode: e.ack, tripMs: e.tripMs));
         final k = e.contactKeyHex;
         if (k != null) chat.contacts.heardNow(k);
       case r.PathUpdatedEvent():
