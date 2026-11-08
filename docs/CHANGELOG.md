@@ -5,6 +5,8 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+## [0.28.1+47] — 2026-11-08 — conversation screens cleaned up: no underline, bubbles fit their text, avatar beside the name
+
 - **Conversation screens look like an iPhone app again.** Message text no longer shows a yellow double underline (the thread had no text style, so Flutter's debug fallback showed in every build); bubbles hug their text instead of stretching across the screen; a sender's avatar now sits beside their name, top-aligned, on the first message of their run; names are quiet grey with the colour kept in the avatar; the thread header uses the same avatar colour as the Chats list; the "new messages" divider is centred. The Route on map screen had the same underline and is fixed too.
 
 ## [0.28.0+46] — 2026-11-08 — Contacts and Channels apart, long-press any message for how it travelled, Resend, auto-connect setting, saved radios, private-channel privacy fix
