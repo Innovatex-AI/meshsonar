@@ -6,7 +6,11 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'dart:math' as math;
+
+import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:h3_ffi/h3_ffi.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/colour_palette.dart';
@@ -15,7 +19,9 @@ import 'package:meshsonar/core/coverage_v2.dart';
 import 'package:meshsonar/core/hex_cells.dart' show HexCell, HexPoint;
 import 'package:meshsonar/ui/drive/drive_map_model.dart';
 import 'package:meshsonar/ui/map/cell_raster_layer.dart';
+import 'package:meshsonar/ui/map/core/map_view_controller.dart';
 import 'package:meshsonar/ui/map/coverage_bands.dart';
+import 'package:meshsonar/ui/map/coverage_map.dart';
 import 'package:meshsonar/ui/map/coverage_tiles_layer.dart';
 import 'package:meshsonar/ui/map/legend_sheet.dart';
 import 'package:meshsonar/ui/map/sheets/coverage_cell_sheet.dart';
@@ -40,6 +46,7 @@ Future<void> _pump(WidgetTester t, Widget child, {Brightness b = Brightness.ligh
 }
 
 void main() {
+  tapGroup();
   group('painter', () {
     const style = CellStyle(Color(0xFF00FF00), Color(0x00000000), 0);
     const hidden = CellStyle(Color(0x00000000), Color(0x00000000), 0, Color(0x55000000), Color(0x00000000), 1);
@@ -174,5 +181,93 @@ void main() {
       await m.retry('predicted');
       expect(h.state.coverageTiles.offline, isFalse);
     });
+  });
+}
+
+// ---------------------------------------------------------------------------------------------- tap -> inspector, real H3
+H3? _loadH3() {
+  for (final path in const ['/opt/homebrew/lib/libh3.dylib', '/usr/local/lib/libh3.dylib']) {
+    if (!File(path).existsSync()) continue;
+    try {
+      return const H3FfiFactory().byPath(path);
+    } catch (_) {}
+  }
+  return null;
+}
+
+void tapGroup() {
+  final h3 = _loadH3();
+  group('tap a v2 cell (libh3 by path, as the app loads it on iOS)', () {
+    late H3? saved;
+    setUp(() {
+      saved = CoverageMap.hexEngine;
+      CoverageMap.hexEngine = h3;
+    });
+    tearDown(() => CoverageMap.hexEngine = saved);
+
+    for (final z in [13.6, 12.2]) {
+      testWidgets('a measured cell under the finger opens the v2 inspector at zoom $z', (t) async {
+        final d13 = decodeCoverageTile(_bytes('measured-13-2207-3102.mvt'), CoverageTileLayer.measured, 13, 2207, 3102);
+        final d12 = decodeCoverageTile(_bytes('measured-9-137-193.mvt'), CoverageTileLayer.measured, 9, 137, 193);
+        final store = CoverageTileStore(CoverageV2Client(Uri.parse('https://x.test')), decode: (b, l, z, x, y) async => decodeCoverageTile(b, l, z, x, y));
+        store.debugPut(coverageTileKey(CoverageTileLayer.measured, _meta.defaultPreset, _meta.version, 13, 2207, 3102), d13);
+        // the z12 tile for the zoomed-out case: re-key the z9 points under every z12 tile around them is overkill; use z13 points
+        // through the z13 hexagons' centroids instead (same cells, as dots).
+        var lat = 0.0, lon = 0.0;
+        for (var v = d13.starts[0]; v < d13.starts[1]; v++) {
+          lat += d13.latLon[2 * v] / 6;
+          lon += d13.latLon[2 * v + 1] / 6;
+        }
+        if (z < 13) {
+          final pts = Float64List.fromList([lat, lon]);
+          final (tx, ty) = tileOf(lat, lon, 12);
+          store.debugPut(
+            coverageTileKey(CoverageTileLayer.measured, _meta.defaultPreset, _meta.version, 12, tx, ty),
+            CoverageTileData(pts, Int32List.fromList([0, 1]), Uint8List.fromList([4]), Int32List.fromList([5]), Float32List(1), const ['']),
+          );
+        }
+        expect(d12.length, greaterThan(0));
+        final asked = <String>[];
+        t.view.physicalSize = const Size(400, 800);
+        t.view.devicePixelRatio = 1;
+        addTearDown(t.view.reset);
+        final vc = MapViewController();
+        addTearDown(vc.dispose);
+        // Camera 120 px north of the cell, so the tap is not on the position puck.
+        final centre = LatLng(lat + 120 * 360 / (256 * math.pow(2, z)) * math.cos(lat * math.pi / 180), lon);
+        await t.pumpWidget(MaterialApp(
+          theme: meshSonarTheme(Brightness.light),
+          home: Scaffold(
+            body: CoverageMap(
+              viewController: vc,
+              pings: const [],
+              repeaters: const [],
+              follow: false,
+              showTiles: false,
+              fallbackCenter: centre,
+              coverageV2: CoverageV2Inputs(
+                tiles: store,
+                meta: _meta,
+                fetchCell: (id) async {
+                  asked.add(id);
+                  return CoverageCellInfo.fromJson({..._json('cell-measured.json'), 'h3': id});
+                },
+              ),
+            ),
+          ),
+        ));
+        await t.pump(const Duration(milliseconds: 200));
+        vc.map.move(centre, z);
+        await t.pump(const Duration(milliseconds: 200));
+        final cam = MapCamera.of(t.element(find.byType(CoverageTilesLayer).first));
+        final at = t.getTopLeft(find.byType(FlutterMap)) + cam.latLngToScreenOffset(LatLng(lat, lon));
+        await t.tapAt(at);
+        await t.pump(const Duration(milliseconds: 300));
+        await t.pump(const Duration(milliseconds: 300));
+        expect(asked, hasLength(1), reason: 'the inspector read the tapped cell');
+        expect(asked.single, d13.h[0], reason: 'the res-11 cell of that hexagon');
+        expect(find.byKey(const Key('info-panel-header')), findsOneWidget);
+      }, skip: h3 == null);
+    }
   });
 }

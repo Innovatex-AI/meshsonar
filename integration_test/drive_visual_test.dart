@@ -246,11 +246,16 @@ List<Rect> _overlayRects(WidgetTester t, Rect r) {
 Future<bool> tapUntilPanel(WidgetTester t, List<Offset> pts, String bodyKey) async {
   final r = _mapRect(t);
   final avoid = _overlayRects(t, r);
+  var tried = 0, panels = 0;
+  // ignore: avoid_print
+  print('DIAG tapUntilPanel $bodyKey map=$r points=${pts.length} zoom=${find.byType(FlutterMap).evaluate().isEmpty ? '-' : MapCamera.of(find.byType(TileLayer).evaluate().first).zoom.toStringAsFixed(2)}');
   for (final p in pts) {
     if (!r.deflate(20).contains(p) || avoid.any((a) => a.contains(p))) continue;
     await t.tapAt(p);
+    tried++;
     await pumpFor(t, const Duration(milliseconds: 900));
     if (find.byKey(const Key('info-panel-header')).evaluate().isEmpty) continue;
+    panels++;
     await t.tap(find.byKey(const Key('info-panel-header')), warnIfMissed: false);
     await pumpFor(t, const Duration(milliseconds: 600));
     if (find.byKey(Key(bodyKey)).evaluate().isNotEmpty) {
@@ -258,8 +263,12 @@ Future<bool> tapUntilPanel(WidgetTester t, List<Offset> pts, String bodyKey) asy
       await pumpFor(t, const Duration(milliseconds: 600));
       return true;
     }
+    // ignore: avoid_print
+    print('DIAG panel without $bodyKey: ${[for (final e in find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key as ValueKey<String>).value.startsWith('info-panel')).evaluate()) (e.widget.key as ValueKey<String>).value].take(4)}');
     await tapKey(t, ['link-clear'], quiet: true);
   }
+  // ignore: avoid_print
+  print('DIAG tapUntilPanel $bodyKey: $tried taps inside the map, $panels opened a panel');
   return false;
 }
 
