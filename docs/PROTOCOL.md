@@ -531,6 +531,9 @@ a waiting DM. A `queued` send result (no answer from the radio in time) is retri
 receivers dedupe on (conversation, timestamp, text). The last DM attempt floods: the adapter writes the contact back with an
 unknown path (`ADD_UPDATE_CONTACT`, out_path_len 0xFF) first. DM frames of text type 1 (CLI data) are not chat and are ignored.
 
+### 10.1 Heard copies of channel messages (CR3, Nov 2026)
+`lib/chat/channel_copy_listener.dart` listens to every packet the radio logs (PUSH_CODE_LOG_RX_DATA 0x88, `RadioSession.rxPackets`). A flood GRP_TXT whose channel hash byte matches one of our chat channels (not the System/wardrive channel) is decrypted with that channel's key (`decryptGroupText`, the same check as the wardrive echo matcher in section 5.2), giving the sender timestamp and the on-air text `<name>: <body>`. It becomes `InboundRepeatHeard` with the path (hex, first hop first), hash size, hops, SNR, RSSI and the time heard. `ChatService` attaches it to the channel message with that timestamp and text (`findChannelCopyTarget`): for a sent message a copy with no path is our own transmission and ignored, any other path is a repeat and moves Sent to Heard; for a received message it is an arrival path. The radio logs a packet just BEFORE it hands the message over, and a sent message is re-stamped with the radio's timestamp after the send, so a copy that matches nothing yet is held for 60 s (max 64) and retried whenever a message is added or updated. Stored in `message_repeats` (DATA_MODEL section 7, v4). Direct messages are not covered: their TXT_MSG copies cannot be decrypted by the phone (the shared secret stays on the radio).
+
 ### Region scope per channel (chat UI)
 
 A channel's `region_scope` (from a `meshcore://channel/add?...&region_scope=` link or the Region row of channel info) is sent

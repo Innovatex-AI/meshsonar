@@ -13,6 +13,7 @@ import 'package:meshsonar/chat/radio_bridge.dart';
 import 'package:meshsonar/chat/store.dart';
 import 'package:meshsonar/radio/inbound.dart' as r;
 import 'package:meshsonar/radio/radio_api.dart' as r show SelfInfo;
+import 'package:meshsonar/radio/radio_api.dart' show RxPacket;
 import 'package:meshsonar/radio/session.dart' as r;
 import 'package:meshsonar/ui/theme.dart';
 
@@ -140,6 +141,10 @@ class FakeRadioSession implements r.RadioSession {
 
   @override
   Stream<r.RadioEvent> get events => events_.stream;
+  /// Packets the radio heard (0x88 rx log); the chat adapter listens for copies of channel messages (CR3).
+  final rxC = StreamController<RxPacket>.broadcast();
+  @override
+  Stream<RxPacket> get rxPackets => rxC.stream;
   @override
   Stream<r.LinkState> get linkStates => const Stream.empty();
   @override
