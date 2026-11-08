@@ -347,7 +347,7 @@ class _ClaimRepeaterScreenState extends State<ClaimRepeaterScreen> {
               const SizedBox(height: Gap.s),
               for (final c in _st.restoreCommands) _CommandBox(command: c),
               const SizedBox(height: Gap.xs),
-              Text('We also keep a reminder in My radios until you finish this.', style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onErrorContainer)),
+              Text('We also keep a reminder in Claimed radios until you finish this.', style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onErrorContainer)),
             ]),
           ),
         ),

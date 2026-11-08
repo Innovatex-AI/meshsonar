@@ -69,7 +69,7 @@ dependency (`pubspec.yaml`, `lib/radio/ble_transport_universal.dart`, the wiring
 ## 4. What shipped in this branch (all unit-tested except native code)
 
 * `lib/platform/local_notifications.dart` interface (+ plugin `local_notifications_plugin.dart` on `flutter_local_notifications 22.3.3`, BSD-3, the same plugin the official app and MeshCore Open ship). Permission is never requested at init.
-* `lib/alerts/` : `AlertCoordinator` (chat event to notification / banner / nothing), `AlertPrefs`, `RadioQueueWatch`, `LaunchReconnect`, `LastRadioStore`, `BleLifecycleLog`, `AlertsRuntime`.
+* `lib/alerts/` : `AlertCoordinator` (chat event to notification / banner / nothing), `AlertPrefs`, `RadioQueueWatch`, `LaunchReconnect`, `SavedRadiosStore`, `BleLifecycleLog`, `AlertsRuntime`.
 * UI: Settings > Notifications, the pre-prompt, in-app banner, status strip ("Reconnecting to <radio>…", queue warning), Diagnostics > Background Bluetooth test.
 * Native: `ios/Runner/BleWakeKeeper.swift` (experiment) and badge channel in `AppDelegate.swift`; Android manifest + `MainActivity.kt` + `background_link_service.dart` (foreground service, **not compiled here: the Android toolchain is not installed**).
 * Compile evidence: `flutter build ios --release --no-codesign` succeeded with all of the above (Runner.app 34.6 MB with the notification plugin and keeper; size with `universal_ble` in HANDOFF).

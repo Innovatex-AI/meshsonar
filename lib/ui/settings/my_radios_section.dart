@@ -1,4 +1,4 @@
-// Settings > My radios: the radios you manage (name, whether the position is public, giving one up), "Claim my radio"
+// Settings > Claimed radios: the radios you manage (name, whether the position is public, giving one up), "Claim my radio"
 // and "Claim a repeater". A claim only manages a radio; it never decides whether its data is recorded or counted.
 import 'package:flutter/material.dart';
 

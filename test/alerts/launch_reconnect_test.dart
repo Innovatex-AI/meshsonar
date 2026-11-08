@@ -3,12 +3,13 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/alerts/alert_prefs.dart';
 import 'package:meshsonar/alerts/ble_lifecycle_log.dart';
-import 'package:meshsonar/alerts/last_radio_store.dart';
 import 'package:meshsonar/alerts/launch_reconnect.dart';
+import 'package:meshsonar/alerts/saved_radios_store.dart';
 import 'package:meshsonar/radio/radio_api.dart';
 
 class Rig {
-  final store = MemoryLastRadioStore(const LastRadio('uuid-1', 'Radio One'));
+  final store = SavedRadiosStore(initial: const [SavedRadio(id: 'uuid-1', name: 'Radio One')]);
+  AutoConnectMode mode = AutoConnectMode.always;
   final waits = <Duration>[];
   final tried = <String>[];
   final results = <bool>[];
@@ -25,6 +26,7 @@ class Rig {
     },
     isConnected: () => connected,
     blocked: () => blocked,
+    mode: () => mode,
     log: log,
     wait: (d) async => waits.add(d),
   );
@@ -61,19 +63,125 @@ void main() {
     expect(r.lr.state, LaunchReconnectState.connected);
   });
 
-  test('nothing remembered -> does nothing', () async {
+  test('nothing saved -> does nothing', () async {
     final r = Rig();
-    r.store.value = null;
+    await r.store.forget('uuid-1');
     await r.lr.run();
     expect(r.tried, isEmpty);
     expect(r.lr.state, LaunchReconnectState.idle);
   });
 
-  test('radio released on purpose (store cleared) -> no automatic reconnect', () async {
+  test('radio released on purpose (auto-connect held) -> no automatic reconnect; the radio stays saved', () async {
     final r = Rig();
-    await r.store.clear();
+    await r.store.holdAutoConnect();
     await r.lr.run(reason: 'foreground');
+    await r.lr.run();
     expect(r.tried, isEmpty);
+    expect(r.store.radios, hasLength(1));
+    expect(r.log.entries.map((e) => e.detail), contains('skip (launch): released on purpose'));
+  });
+
+  test('a nickname is what the status line says', () async {
+    final r = Rig();
+    await r.store.setNickname('uuid-1', 'Truck');
+    final texts = <String?>[];
+    r.lr.addListener(() => texts.add(r.lr.statusText));
+    await r.lr.run();
+    expect(texts, contains('Reconnecting to Truck…'));
+  });
+
+  test('connects to the starred radio, not merely the most recent one', () async {
+    final r = Rig()..results.add(true);
+    await r.store.recordConnect(id: 'uuid-2', name: 'Radio Two');
+    await r.store.pinStar('uuid-1');
+    await r.lr.run();
+    expect(r.tried, ['uuid-1']);
+  });
+
+  group('Auto-connect modes', () {
+    test('Always: launch connects; foreground connects after a drop', () async {
+      final r = Rig()..results.addAll([true, true]);
+      await r.lr.run(reason: 'launch');
+      expect(r.tried, ['uuid-1']);
+      r.connected = false;
+      await r.lr.onForeground();
+      expect(r.tried, ['uuid-1', 'uuid-1']);
+    });
+
+    test('At launch only: launch connects; foreground does nothing, even after it gave up', () async {
+      final r = Rig()..mode = AutoConnectMode.launchOnly;
+      r.results.add(true);
+      await r.lr.run(reason: 'launch');
+      expect(r.tried, ['uuid-1']);
+      r.connected = false;
+      await r.lr.onForeground();
+      await r.lr.run(reason: 'foreground');
+      expect(r.tried, ['uuid-1'], reason: 'no connect on a return to the front');
+      final g = Rig()..mode = AutoConnectMode.launchOnly;
+      await g.lr.run();
+      expect(g.lr.state, LaunchReconnectState.gaveUp);
+      final before = g.tried.length;
+      await g.lr.onForeground();
+      expect(g.tried.length, before);
+    });
+
+    test('Off: neither launch nor foreground connects, and nothing is shown', () async {
+      final r = Rig()..mode = AutoConnectMode.off;
+      r.results.add(true);
+      final states = <LaunchReconnectState>[];
+      r.lr.addListener(() => states.add(r.lr.state));
+      await r.lr.run(reason: 'launch');
+      await r.lr.onForeground();
+      expect(r.tried, isEmpty);
+      expect(states, isEmpty);
+      expect(r.lr.statusText, isNull);
+      expect(r.log.entries.map((e) => e.detail), contains('skip (launch): auto-connect Off'));
+    });
+
+    test('Off: the Reconnect button still works (the person asked)', () async {
+      final r = Rig()..mode = AutoConnectMode.off;
+      r.results.add(true);
+      await r.lr.run(reason: 'button');
+      expect(r.tried, ['uuid-1']);
+      expect(r.lr.state, LaunchReconnectState.connected);
+    });
+
+    test('switching to Off clears "Could not reach" and stops a running loop', () async {
+      final r = Rig();
+      await r.lr.run();
+      expect(r.lr.state, LaunchReconnectState.gaveUp);
+      r.mode = AutoConnectMode.off;
+      r.lr.modeChanged();
+      expect(r.lr.state, LaunchReconnectState.idle);
+      expect(r.lr.statusText, isNull);
+
+      final b = Rig();
+      var waits = 0;
+      late LaunchReconnect lr;
+      lr = LaunchReconnect(
+        store: b.store,
+        connect: (d) async => false,
+        isConnected: () => false,
+        mode: () => b.mode,
+        wait: (d) async {
+          if (++waits == 2) {
+            b.mode = AutoConnectMode.off;
+            lr.modeChanged();
+          }
+        },
+      );
+      await lr.run();
+      expect(waits, 2);
+      expect(lr.state, LaunchReconnectState.idle);
+    });
+
+    test('switching to At launch only or Always leaves a running loop alone', () async {
+      final r = Rig();
+      await r.lr.run();
+      r.mode = AutoConnectMode.launchOnly;
+      r.lr.modeChanged();
+      expect(r.lr.state, LaunchReconnectState.gaveUp);
+    });
   });
 
   test('already connected, or blocked (driving / manual connect running) -> does not try', () async {
@@ -180,9 +288,12 @@ void main() {
       await a.setQuiet(const QuietHours(enabled: true, startMinute: 60, endMinute: 120));
       await a.markAsked();
       await a.setIosWakeKeeper(true);
+      expect(a.autoConnect, AutoConnectMode.always, reason: 'default: the behaviour before the setting existed');
+      await a.setAutoConnect(AutoConnectMode.launchOnly);
       final b = AlertPrefs(f);
       await b.load();
       expect(b.showText && b.asked && b.iosWakeKeeper, isTrue);
+      expect(b.autoConnect, AutoConnectMode.launchOnly);
       expect(b.quiet.enabled, isTrue);
       expect(b.quiet.startMinute, 60);
     });
@@ -203,21 +314,11 @@ void main() {
       expect(day.contains(DateTime(2026, 1, 1, 15)), isFalse);
       expect(const QuietHours(startMinute: 0, endMinute: 1439).contains(DateTime(2026, 1, 1, 5)), isFalse, reason: 'disabled');
     });
-  });
 
-  group('last radio file', () {
-    test('round trip and clear', () async {
-      final dir = await Directory.systemTemp.createTemp('lastradio');
-      addTearDown(() => dir.delete(recursive: true));
-      final s = FileLastRadioStore(File('${dir.path}/l.json'));
-      expect(await s.load(), isNull);
-      await s.save(const LastRadio('id9', 'Mine', publicKeyHex: 'ab'));
-      final l = await s.load();
-      expect(l!.id, 'id9');
-      expect(l.name, 'Mine');
-      expect(l.publicKeyHex, 'ab');
-      await s.clear();
-      expect(await s.load(), isNull);
+    test('an unknown auto-connect value falls back to Always', () {
+      expect(AutoConnectMode.fromId('bogus'), AutoConnectMode.always);
+      expect(AutoConnectMode.fromId('off'), AutoConnectMode.off);
+      expect(AutoConnectMode.fromId('launch'), AutoConnectMode.launchOnly);
     });
   });
 }

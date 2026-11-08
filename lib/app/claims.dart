@@ -1,4 +1,4 @@
-// App-side owner of radio claims: "My radios" (the server's list for this driver key), the running claim flow, and the
+// App-side owner of radio claims: "Claimed radios" (the server's list for this driver key), the running claim flow, and the
 // name restores still owed to repeaters. A plain ChangeNotifier like AppState; AppState owns one (AppState.claims).
 //
 // Policy (Andy): a claim only MANAGES a radio. Nothing here is ever consulted before recording, uploading or counting a
@@ -33,7 +33,7 @@ class ClaimController extends ChangeNotifier {
     this.wait,
   }) : clock = clock ?? DateTime.now;
 
-  // ---------------------------------------------------------------- my radios
+  // ---------------------------------------------------------------- claimed radios
 
   List<NodeClaim> _claims = const [];
   List<NodeClaim> get claims => _claims;

@@ -5,6 +5,10 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- **Auto-connect setting (CR5).** Settings > Radio > Auto-connect: **Always** (default, as before: at launch and whenever you come back to the app), **At launch only** (coming back to the app does not reconnect) or **Off** (never by itself; tap a radio to connect). Switching to Off stops a running try and clears the "Could not reach" strip. While driving, a dropped radio is always reconnected, whatever the setting. Stored as `autoConnect` in `alert_prefs.json`.
+- **Saved radios (CR6).** Every Bluetooth radio you connect to is saved (name, nickname, board model, last connected). The connect screen lists them above the scan: tap to connect without waiting for a scan, swipe left to forget (asks; chat history, contacts and antenna setup stay), hold or tap the info button for a nickname or to star the auto-connect radio. The star follows your most recent radio unless you star one yourself. Settings > Radio > Saved radios opens the same list. Disconnecting on purpose no longer forgets the radio; it only pauses auto-connect until your next connect. The one remembered radio of earlier versions (`last_radio.json`) becomes the first saved radio on the first launch (the old file stays). New file `saved_radios.json` (DATA_MODEL.md).
+- **"My radios" is now "Claimed radios"** (More, Settings and the screen title), so it is not confused with Saved radios. Server claims work as before.
+
 ## [0.27.3+45] — 2026-11-07 — the new Chat (Chats, Contacts, Network), repeater dashboard, Route screen and Ping; iOS 18 or later
 
 - **iOS 18 or later.** The minimum is now iOS 18 (iPhone XS / XR and newer; was iOS 15). Phones that cannot run iOS 18 keep the build they have.

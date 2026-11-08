@@ -6,7 +6,7 @@ import 'package:meshsonar/alerts/alert_coordinator.dart';
 import 'package:meshsonar/alerts/alert_prefs.dart';
 import 'package:meshsonar/alerts/alerts_runtime.dart';
 import 'package:meshsonar/alerts/ble_lifecycle_log.dart';
-import 'package:meshsonar/alerts/last_radio_store.dart';
+import 'package:meshsonar/alerts/saved_radios_store.dart';
 import 'package:meshsonar/alerts/radio_queue_watch.dart';
 import 'package:meshsonar/platform/local_notifications.dart';
 import 'package:meshsonar/ui/chat/conversation_screen.dart';
@@ -27,7 +27,7 @@ void main() {
     fake = FakeLocalNotifications();
     final prefs = AlertPrefs();
     coordinator = AlertCoordinator(notifications: fake, prefs: prefs);
-    runtime = AlertsRuntime(prefs: prefs, coordinator: coordinator, log: BleLifecycleLog(), queue: RadioQueueWatch(), lastRadio: MemoryLastRadioStore());
+    runtime = AlertsRuntime(prefs: prefs, coordinator: coordinator, log: BleLifecycleLog(), queue: RadioQueueWatch(), savedRadios: SavedRadiosStore());
     old = AlertsHost.runtime.value;
     AlertsHost.runtime.value = runtime;
     coordinator.attachChat(kit.service);

@@ -358,8 +358,9 @@ shell (Chats | Contacts | Network, two columns from 900 pt); the former `chatRed
 `AlertsHost.runtime` holds one `AlertsRuntime` (an inert memory-only one until `main.dart` swaps in the real one). It owns:
 `AlertCoordinator` (listens to `ChatService.events`; `messageAdded` + `notify` + incoming becomes an OS notification via the
 `LocalNotifications` interface, an in-app banner while in front, or nothing; rules and order in the file header), `AlertPrefs` (JSON
-file), `RadioQueueWatch` (fed by `MessageSync.onDrained` through `LinkRadioSession.onQueueDrained`), `LastRadioStore` +
-`LaunchReconnect` (retry loop through `AppState.connect`), `BleLifecycleLog` (file-backed, survives a kill), and optional
+file), `RadioQueueWatch` (fed by `MessageSync.onDrained` through `LinkRadioSession.onQueueDrained`), `SavedRadiosStore` (saved radios, the auto-connect star and
+the deliberate-release hold; `saved_radios.json`) + `LaunchReconnect` (retry loop through `AppState.connect`, gated by
+`AlertPrefs.autoConnect`: Always / At launch only / Off), `BleLifecycleLog` (file-backed, survives a kill), and optional
 `IosWakeKeeper` / `BackgroundLinkService`. `AppState` has two plain callbacks (`onRadioConnected`, `onRadioReleased`); `lib/alerts`
 imports `AppState`, never the other way. Persist-first is unchanged and is what makes a short background wake safe: `MessageSync`
 awaits the persister (`RadioSessionChatAdapter.bind` installs `ChatService.handleInbound`, which commits to SQLite) before the next
@@ -481,8 +482,8 @@ behaviour: silence, the replay rule, loss, caps, prefix matching, the blank-pass
 | `ui/radios/*` | ui | Repeaters list, launcher, `repeater_admin/*` screens and editor sheet, `rooms/*` (room screen, join header). |
 | `core/node_claim.dart` | core | `NodeClaim`, `ClaimChallenge`, `ClaimStatus`, public-key helpers; the claim wire contract. |
 | `core/claim_flow.dart` | core | `OwnRadioClaimFlow` (sign) and `RepeaterClaimFlow` (login, name + code, advert, poll, ALWAYS restore), `composeClaimName`, `ClaimRestoreStore` (pending name restores on disk, never a password). |
-| `app/claims.dart` | app | `ClaimController`: My radios list, the running flow, pending restores; `AppState.claims`. |
-| `ui/claims/*.dart` | ui | My radios, Claim my radio, Claim a repeater screens; "Claim this repeater" / "Owned by you" widgets. |
+| `app/claims.dart` | app | `ClaimController`: Claimed radios list (server claims), the running flow, pending restores; `AppState.claims`. |
+| `ui/claims/*.dart` | ui | Claimed radios (`my_radios_screen.dart`), Claim my radio, Claim a repeater screens; "Claim this repeater" / "Owned by you" widgets. |
 | `radio/radio_health.dart` | radio | `RadioStatsSource`, `radioSampleFrom` (frames to a `DriveSample`, unmeasured = null), `RadioHealthPoller` (every 60 s, never while a ping is in flight; injectable clock + timer). |
 | `radio/wardrive_engine.dart` | radio | `DefaultWardriveEngine`: cadence, one ping at a time, listen window, echo building, optional neighbour discovery; `formatPingText`. |
 | `radio/simulator.dart` | radio | `SimulatedLocationSource` (Westerville loop), `SimulatedTransport` (speaks real frames and real encrypted packets), `SimulatedRadioScanner`, simulated repeaters. |
@@ -530,7 +531,8 @@ behaviour: silence, the replay rule, loss, caps, prefix matching, the blank-pass
 | `ui/map/layers/repeater_cluster_layer.dart` | ui | `RepeaterClusterLayer` for `network` (advert-age colours, website tokens) and `repeaters` (roster status colours); `repeaterHitFor`. |
 | `ui/map/sheets/repeater_sheet.dart` | ui | Repeater detail sheet (name, role, copyable key, last advert/heard, distance via Units, roster figures, source line, "Open repeater page") and the co-located list sheet. |
 | `ui/map/sheets/map_hit_sheet.dart` | ui | `showMapHitSheet`: cell -> cell sheet, repeater -> repeater sheet, observer -> observer sheet, stack -> list, cluster -> camera fit. |
-| `ui/connect_screen.dart` | ui | Scan for radios, connect/disconnect, Simulator entry. |
+| `ui/connect_screen.dart` | ui | Saved radios above the scan, scan for radios, connect/disconnect, Simulator entry. |
+| `ui/saved_radios_screen.dart` | ui | Saved radios list (tap to connect, swipe to forget, nickname, auto-connect star), shared by the connect screen and Settings > Radio > Saved radios. |
 | `ui/ping_log_screen.dart` | ui | Ping log (live or saved): summary, filters, pings / repeaters tabs; `aggregateRepeaters`. |
 | `ui/ping_detail_sheet.dart` | ui | One ping: facts, echoes, neighbour, ambiguous-prefix candidates, "Copy as text" (`pingAsText`). |
 | `ui/repeater_detail_sheet.dart` | ui | One repeater on a drive: key, position, distance, times heard, SNR sparkline; `hearingsOf`. |
