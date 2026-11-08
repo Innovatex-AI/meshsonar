@@ -67,7 +67,7 @@ device testing, so treat it as untested.
 
 ### iOS / iPadOS
 
-This is the platform it's developed on (see [DEVELOPMENT.md](DEVELOPMENT.md)). Deployment target is 15.0 and the
+This is the platform it's developed on (see [DEVELOPMENT.md](DEVELOPMENT.md)). Deployment target is iOS 18.0 (iPhone XS / XR and newer) and the
 bundle id is `com.meshsonar.app`.
 
 - [x] `Info.plist`: `NSBluetoothAlwaysUsageDescription`, `NSBluetoothPeripheralUsageDescription`,
