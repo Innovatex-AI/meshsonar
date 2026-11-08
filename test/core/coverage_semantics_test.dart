@@ -59,19 +59,38 @@ void main() {
     test('predicted styles: fill o x 0.35 with a 2 px hatch at o x 0.6; band 0 is a 1 px grey hatch only and no dot', () {
       final c = CoverageBandColors.of(ColourPalette.standard, Brightness.light);
       final st = predictedStyles(c);
-      expect(st, hasLength(36));
+      expect(st, hasLength(60));
       final good = st[predictedStyleIndex(4, 0.6)];
-      expect(good.fill.a, closeTo(0.21, 0.01));
-      expect(good.hatch!.a, closeTo(0.36, 0.01));
+      expect(good.fill.a, closeTo(0.6 * 0.35, 0.01));
+      expect(good.hatch!.a, closeTo(0.6 * 0.6, 0.01));
       expect(good.hatchWidth, 2);
       final none = st[predictedStyleIndex(0, 0.4)];
       expect(none.fill.a, 0);
-      expect(none.hatch!.a, closeTo(0.2, 0.01));
+      expect(none.hatch!.a, closeTo(0.4 * 0.5, 0.01));
       expect(none.hatchWidth, 1);
       expect(none.dot!.a, 0, reason: 'predicted band 0 is not drawn zoomed out');
-      expect(predictedOpacityStep(0.15), 1);
-      expect(predictedOpacityStep(0.57), 5);
+      expect(predictedOpacityOfStep(predictedOpacityStep(0.15)), closeTo(0.15, 1e-9), reason: 'the faintest cells are not rounded up');
+      expect(predictedOpacityOfStep(predictedOpacityStep(0.57)), closeTo(0.55, 1e-9));
+      expect(predictedOpacityOfStep(predictedOpacityStep(0.6)), closeTo(0.6, 1e-9));
+      for (var o = 0.15; o <= 0.6; o += 0.01) {
+        expect((predictedOpacityOfStep(predictedOpacityStep(o)) - o).abs(), lessThanOrEqualTo(0.0251), reason: '$o');
+      }
     });
+  });
+
+  test('DARK predicted is quieter (doc be25f1e): fill o x 0.2, hatch o x 0.4, band-0 hatch o x 0.3; light unchanged', () {
+    for (final p in ColourPalette.values) {
+      final d = predictedStyles(CoverageBandColors.of(p, Brightness.dark));
+      expect(d[predictedStyleIndex(3, 0.5)].fill.a, closeTo(0.5 * 0.2, 0.005), reason: p.id);
+      expect(d[predictedStyleIndex(3, 0.5)].hatch!.a, closeTo(0.5 * 0.4, 0.005), reason: p.id);
+      expect(d[predictedStyleIndex(0, 0.5)].hatch!.a, closeTo(0.5 * 0.3, 0.005), reason: p.id);
+      final l = predictedStyles(CoverageBandColors.of(p, Brightness.light));
+      expect(l[predictedStyleIndex(3, 0.5)].fill.a, closeTo(0.5 * 0.35, 0.005), reason: p.id);
+      expect(l[predictedStyleIndex(3, 0.5)].hatch!.a, closeTo(0.5 * 0.6, 0.005), reason: p.id);
+      expect(l[predictedStyleIndex(0, 0.5)].hatch!.a, closeTo(0.5 * 0.5, 0.005), reason: p.id);
+      // Measured is the same in both themes' multipliers.
+      expect(measuredStyles(CoverageBandColors.of(p, Brightness.dark))[measuredStyleIndex(4, false)].fill.a, closeTo(0.85, 0.005));
+    }
   });
 
   group('old path (no coverageV2): best-SNR steps', () {

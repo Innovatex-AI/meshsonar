@@ -445,7 +445,12 @@ class _BaseMapPicker extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(s.label, style: t.textTheme.labelMedium, maxLines: 1),
-                        if (s == BaseMapStyle.topo) Text('needs signal', style: t.textTheme.labelSmall?.copyWith(color: t.colorScheme.onSurfaceVariant), maxLines: 1),
+                        // Scaled to the tile's width: at the default text size "needs signal" is wider than the tile and was cut to "needs".
+                        if (s == BaseMapStyle.topo)
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text('needs signal', style: t.textTheme.labelSmall?.copyWith(color: t.colorScheme.onSurfaceVariant), maxLines: 1, softWrap: false),
+                          ),
                       ],
                     ),
                   ),

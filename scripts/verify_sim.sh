@@ -26,7 +26,7 @@ set -euo pipefail
 SIMSET=()
 [ -n "${SIM_SET:-}" ] && { mkdir -p "$SIM_SET"; SIMSET=(--set "$SIM_SET"); }
 RUNTIME="${RUNTIME:-com.apple.CoreSimulator.SimRuntime.iOS-26-5}"
-sim() { xcrun simctl "${SIMSET[@]}" "$@"; }
+sim() { xcrun simctl ${SIMSET[@]+"${SIMSET[@]}"} "$@"; }  # the +-expansion keeps bash 3.2 (macOS) happy under set -u with no SIM_SET
 
 SRC="${1:?usage: verify_sim.sh <checkout> [out-dir]}"
 SRC="$(cd "$SRC" && pwd)"

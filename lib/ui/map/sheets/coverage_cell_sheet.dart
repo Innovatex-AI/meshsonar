@@ -174,11 +174,12 @@ class _SwatchPainter extends CustomPainter {
     if (predicted) {
       // The legend shows a mid opacity (o = 0.6, the nearest predicted cells).
       const o = 0.6;
-      if (band != 0) canvas.drawPath(path, Paint()..color = c[band].withValues(alpha: o * 0.35));
+      final k = PredictedOpacity.of(c);
+      if (band != 0) canvas.drawPath(path, Paint()..color = c[band].withValues(alpha: o * k.fill));
       canvas.save();
       canvas.clipPath(path);
       final paint = Paint()
-        ..color = band == 0 ? c.noReplyPoint.withValues(alpha: o * 0.5) : c[band].withValues(alpha: o * 0.6)
+        ..color = band == 0 ? c.noReplyPoint.withValues(alpha: o * k.noneHatch) : c[band].withValues(alpha: o * k.hatch)
         ..strokeWidth = band == 0 ? 1 : 2;
       for (var k = -2; k < 6; k++) {
         final x = k * 6.0;
