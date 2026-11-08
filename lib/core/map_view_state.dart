@@ -23,10 +23,10 @@ import 'dart:convert' show Utf8Codec;
 
 /// Layer keys the website's coverage page knows (its `LAYERS`, in its order). `model` and `reach` are shelved there and
 /// have no app layer; they are kept so a website link survives a round trip through the app.
-const List<String> kWebsiteShowKeys = ['measured', 'repeaters', 'observers', 'model', 'reach', 'regions', 'network'];
+const List<String> kWebsiteShowKeys = ['measured', 'repeaters', 'observers', 'model', 'reach', 'regions', 'network', 'predicted'];
 
 /// Layer keys only the app draws (its own drive layers). Written in `meshsonar://` links, never in https links.
-const List<String> kAppOnlyShowKeys = ['hexes', 'links', 'heard', 'pings', 'rings', 'labels'];
+const List<String> kAppOnlyShowKeys = ['hexes', 'links', 'heard', 'pings', 'labels'];
 
 const Set<String> kColorKeys = {'snr', 'heard', 'noise'};
 const Set<String> kSinceKeys = {'7d', '24h', '1h'};

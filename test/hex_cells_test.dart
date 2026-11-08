@@ -87,4 +87,39 @@ void main() {
   test('no pings, no cells', () {
     expect(buildHexCells(const [], h3!), isEmpty);
   }, skip: skip);
+
+  group('This drive (coverage v2): res-11 cells, mean SNR, server bands', () {
+    test('mean of the ping results; failures count as sent but never in the mean; rx and relayed echoes ignored', () {
+      final cells = buildDriveCells([
+        _tx('a', 39.9612, -82.9988, echoes: const [Echo(repeater: 'aa', snrDb: 4, hops: 1), Echo(repeater: 'bb', snrDb: 9, hops: 2)]),
+        _tx('b', 39.9612, -82.9988, echoes: const [Echo(repeater: 'aa', snrDb: 8)]),
+        _tx('c', 39.9612, -82.9988), // heard nothing
+        _tx('d', 39.9612, -82.9988, kind: PingKind.rx, echoes: const [Echo(repeater: 'aa', snrDb: -20)]),
+      ], h3!);
+      expect(cells, hasLength(1));
+      final c = cells.single;
+      expect(c.sent, 3);
+      expect(c.heard, 2);
+      expect(c.nSnr, 2);
+      expect(c.snrMeanDb, 6); // (4 + 8) / 2: the 9 dB echo was a relay
+      expect(c.band, 4); // +2.5..+7.5 at SF7
+      expect(c.boundary, hasLength(6));
+      // A res-11 cell whose res-9 parent is the reference cell (same cell the server keys the ping by).
+      expect(hexId(h3.cellToParent(BigInt.parse(c.id, radix: 16), 9)), '892a956a94bffff');
+      expect(c.center!.lat, closeTo(39.9612, 0.001));
+    }, skip: skip);
+
+    test('no reply is band 0, heard through a relay only is band 6, discover answer gives the local SNR', () {
+      final none = buildDriveCells([_tx('a', 39.97, -83.01)], h3!).single;
+      expect(none.band, 0);
+      expect(none.snrMeanDb, isNull);
+      final relay = buildDriveCells([_tx('a', 39.97, -83.01, echoes: const [Echo(repeater: 'aa', snrDb: 5, hops: 2)])], h3).single;
+      expect(relay.band, 6);
+      final disc = buildDriveCells([
+        DrivePing(id: 'n', ts: DateTime.utc(2026, 11, 8), lat: 39.97, lon: -83.01, neighbor: const Neighbor(repeater: 'aa', localSnrDb: -9)),
+      ], h3).single;
+      expect(disc.snrMeanDb, -9);
+      expect(disc.band, 1);
+    }, skip: skip);
+  });
 }

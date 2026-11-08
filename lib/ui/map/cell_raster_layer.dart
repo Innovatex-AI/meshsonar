@@ -28,14 +28,33 @@ class CellStyle {
   final Color fill;
   final Color border;
   final double borderWidth;
-  const CellStyle(this.fill, this.border, [this.borderWidth = 1.0]);
+
+  /// Diagonal hatch lines drawn inside the cells (the Predicted coverage layer); null = none.
+  final Color? hatch;
+
+  final double hatchWidth;
+
+  /// The colour of the cell as a dot ([CellLayerData.dotBelowZoom], or a single-vertex shape); null = [fill]. Transparent =
+  /// left out there (predicted "no coverage" is not drawn zoomed out).
+  final Color? dot;
+  const CellStyle(this.fill, this.border, [this.borderWidth = 1.0, this.hatch, this.dot, this.hatchWidth = 2]);
 
   @override
-  bool operator ==(Object other) => other is CellStyle && other.fill == fill && other.border == border && other.borderWidth == borderWidth;
+  bool operator ==(Object other) =>
+      other is CellStyle &&
+      other.fill == fill &&
+      other.border == border &&
+      other.borderWidth == borderWidth &&
+      other.hatch == hatch &&
+      other.hatchWidth == hatchWidth &&
+      other.dot == dot;
 
   @override
-  int get hashCode => Object.hash(fill, border, borderWidth);
+  int get hashCode => Object.hash(fill, border, borderWidth, hatch, hatchWidth, dot);
 }
+
+/// Repeat of the hatch lines, logical px (coverage-v2-colours.md: 8 px, 45 degrees rising left to right).
+const double kHatchSpacing = 8;
 
 /// One cell: its outline as lat/lon pairs and a bounding box for culling.
 class CellShape {
@@ -59,6 +78,20 @@ class CellShape {
     return CellShape._(ll, minLat, maxLat, minLon, maxLon, style);
   }
 
+  /// A shape from flat lat/lon pairs ([from], [to]) vertex indexes into [src]: one vertex = a point (drawn as a dot).
+  factory CellShape.slice(Float64List src, int from, int to, int style) {
+    final ll = Float64List.sublistView(src, 2 * from, 2 * to);
+    var minLat = 90.0, maxLat = -90.0, minLon = 180.0, maxLon = -180.0;
+    for (var i = 0; i < ll.length; i += 2) {
+      final la = ll[i], lo = ll[i + 1];
+      if (la < minLat) minLat = la;
+      if (la > maxLat) maxLat = la;
+      if (lo < minLon) minLon = lo;
+      if (lo > maxLon) maxLon = lo;
+    }
+    return CellShape._(ll, minLat, maxLat, minLon, maxLon, style);
+  }
+
   int get points => ll.length ~/ 2;
 }
 
@@ -66,7 +99,12 @@ class CellShape {
 class CellLayerData {
   final List<CellShape> shapes;
   final List<CellStyle> styles;
-  const CellLayerData(this.shapes, this.styles);
+
+  /// Below this zoom every cell is drawn as a [dotPx] square at its centre (coverage v2 D11: a res-11 cell is under ~2 px
+  /// there); null = always outlines. Single-vertex shapes are dots at every zoom.
+  final double? dotBelowZoom;
+  final double dotPx;
+  const CellLayerData(this.shapes, this.styles, {this.dotBelowZoom, this.dotPx = 2.5});
   static const CellLayerData empty = CellLayerData([], []);
 
   /// Builds the data from [count] cells: [boundary] gives each outline, [styleOf] each cell's look (equal looks share one entry).
@@ -125,13 +163,23 @@ CellRender paintCells(CellLayerData data, LatLng center, double zoom, double wid
   final west = unmercLon(cx - width / 2, zoom), east = unmercLon(cx + width / 2, zoom);
   final north = unmercLat(cy - height / 2, zoom), south = unmercLat(cy + height / 2, zoom);
   final fills = List<ui.Path?>.filled(data.styles.length, null);
+  final dots = List<ui.Path?>.filled(data.styles.length, null);
+  final dotMode = data.dotBelowZoom != null && zoom < data.dotBelowZoom!;
+  final half = data.dotPx / 2;
   var drawn = 0;
   for (final s in data.shapes) {
     if (s.maxLat < south || s.minLat > north || s.maxLon < west || s.minLon > east) continue;
+    final n = s.points;
+    if (n == 0) continue;
+    if (dotMode || n < 3) {
+      if ((data.styles[s.style].dot ?? data.styles[s.style].fill).a == 0) continue;
+      drawn++;
+      final x = mercX((s.minLon + s.maxLon) / 2, zoom) - cx, y = mercY((s.minLat + s.maxLat) / 2, zoom) - cy;
+      (dots[s.style] ??= ui.Path()).addRect(Rect.fromLTRB(x - half, y - half, x + half, y + half));
+      continue;
+    }
     drawn++;
     final path = fills[s.style] ??= ui.Path();
-    final n = s.points;
-    if (n < 3) continue;
     path.moveTo(mercX(s.ll[1], zoom) - cx, mercY(s.ll[0], zoom) - cy);
     for (var i = 1; i < n; i++) {
       path.lineTo(mercX(s.ll[2 * i + 1], zoom) - cx, mercY(s.ll[2 * i], zoom) - cy);
@@ -146,15 +194,40 @@ CellRender paintCells(CellLayerData data, LatLng center, double zoom, double wid
     final p = fills[i];
     if (p == null) continue;
     final st = data.styles[i];
-    canvas.drawPath(p, Paint()..color = st.fill);
-    canvas.drawPath(
-      p,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = st.borderWidth
-        ..strokeJoin = StrokeJoin.round
-        ..color = st.border,
-    );
+    if (st.fill.a > 0) canvas.drawPath(p, Paint()..color = st.fill);
+    final hatch = st.hatch;
+    if (hatch != null) {
+      canvas.save();
+      canvas.clipPath(p);
+      final b = p.getBounds();
+      final paint = Paint()
+        ..color = hatch
+        ..strokeWidth = st.hatchWidth;
+      // 45 degree lines rising left to right (screen y grows down: x + y = k * spacing) on a fixed grid, so neighbouring
+      // cells line up into one pattern.
+      final k0 = ((b.left + b.top) / kHatchSpacing).floor(), k1 = ((b.right + b.bottom) / kHatchSpacing).ceil();
+      for (var k = k0; k <= k1; k++) {
+        final c = k * kHatchSpacing; // x = c - y
+        canvas.drawLine(Offset(c - b.top, b.top), Offset(c - b.bottom, b.bottom), paint);
+      }
+      canvas.restore();
+    }
+    if (st.borderWidth > 0 && st.border.a > 0) {
+      canvas.drawPath(
+        p,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = st.borderWidth
+          ..strokeJoin = StrokeJoin.round
+          ..color = st.border,
+      );
+    }
+  }
+  for (var i = 0; i < dots.length; i++) {
+    final p = dots[i];
+    if (p == null) continue;
+    final st = data.styles[i];
+    canvas.drawPath(p, Paint()..color = st.dot ?? st.fill);
   }
   return CellRender(rec.endRecording(), center, zoom, width, height, ratio, data, drawn);
 }

@@ -9,7 +9,8 @@ import 'package:flutter/material.dart';
 
 import '../drive/drive_map_model.dart';
 import '../theme.dart';
-import 'coverage_layer_controls.dart' show coverageLegend, colorByLabel;
+import 'coverage_bands.dart';
+import 'coverage_layer_controls.dart' show coverageLegend;
 import 'coverage_map.dart' show networkLevelColor;
 import 'layers/layers_sheet.dart' show NetworkAgeLegend;
 import 'layers/repeater_map_source.dart' show kNetworkLayerId;
@@ -26,7 +27,7 @@ class MapKeyParts {
 }
 
 MapKeyParts mapKeyParts(DriveMapModel m) => MapKeyParts(
-  cells: m.layerState.isOn('measured') && m.networkCells.isNotEmpty,
+  cells: m.layerState.isOn('measured') && (m.networkCells.isNotEmpty || m.drawTiles),
   pings: m.layerState.isOn('pings') && m.visiblePings.isNotEmpty,
   repeaters: m.layerState.isOn(kNetworkLayerId) && m.repeaterSource.globalPoints.length > 0,
 );
@@ -65,7 +66,6 @@ class MapKey extends StatelessWidget {
           ),
         );
 
-        final by = model.colorBy;
         final byResult = model.pingColors == PingColorMode.result;
         final set = model.repeaterSource.feed.global;
         return Column(
@@ -73,9 +73,17 @@ class MapKey extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (parts.cells)
-              line(const Key('map-key-cells'), 'Coverage cells · ${colorByLabel(by)}:', [
-                for (final (level, label) in coverageLegend(by)) (networkLevelColor(context, level, mode: by), label),
-              ]),
+              model.coverageV2
+                  ? () {
+                      final meta = model.state.coverageMeta;
+                      final c = CoverageBandColors.of(mc.palette, Theme.of(context).brightness);
+                      return line(const Key('map-key-cells'), 'Measured coverage · mean SNR:', [
+                        for (final b in const [5, 4, 3, 2, 1, 0]) (c[b], meta.labelOf(b).toLowerCase()),
+                      ]);
+                    }()
+                  : line(const Key('map-key-cells'), 'Coverage cells · best SNR:', [
+                      for (final (level, label) in coverageLegend()) (networkLevelColor(context, level), label),
+                    ]),
             if (parts.pings)
               line(const Key('map-key-pings'), 'Your pings:', byResult
                   ? [(mc.snrStrong, 'heard'), (mc.silent, 'nothing heard')]

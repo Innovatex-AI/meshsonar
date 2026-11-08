@@ -1,0 +1,95 @@
+{
+  "cellDeg": 0.005,
+  "cells": [
+    {
+      "h3": "8b2a9084b222fff",
+      "nOk": 0,
+      "band": 0,
+      "nSnr": 0,
+      "heard": 0,
+      "nFail": 1,
+      "pings": 1,
+      "lastAt": "2026-10-20T23:00:00.000Z",
+      "preset": "sf7bw62.5",
+      "snrMax": null,
+      "snrMin": null,
+      "bestSnr": null,
+      "snrMean": null,
+      "sources": {
+        "meshsonar": 1,
+        "meshmapper": 0
+      },
+      "medianSnr": null,
+      "repeaters": 0,
+      "noiseFloor": -95,
+      "lat": 40.255446,
+      "lon": -83.451017
+    },
+    {
+      "h3": "8b2a9084b4cdfff",
+      "nOk": 0,
+      "band": 0,
+      "nSnr": 0,
+      "heard": 0,
+      "nFail": 1,
+      "pings": 1,
+      "lastAt": "2026-10-20T23:00:00.000Z",
+      "preset": "sf7bw62.5",
+      "snrMax": null,
+      "snrMin": null,
+      "bestSnr": null,
+      "snrMean": null,
+      "sources": {
+        "meshsonar": 1,
+        "meshmapper": 0
+      },
+      "medianSnr": null,
+      "repeaters": 0,
+      "noiseFloor": -94,
+      "lat": 40.259796,
+      "lon": -83.466706
+    },
+    {
+      "h3": "8b2a9084b770fff",
+      "nOk": 0,
+      "band": 0,
+      "nSnr": 0,
+      "heard": 0,
+      "nFail": 1,
+      "pings": 1,
+      "lastAt": "2026-10-20T23:00:00.000Z",
+      "preset": "sf7bw62.5",
+      "snrMax": null,
+      "snrMin": null,
+      "bestSnr": null,
+      "snrMean": null,
+      "sources": {
+        "meshsonar": 1,
+        "meshmapper": 0
+      },
+      "medianSnr": null,
+      "repeaters": 0,
+      "noiseFloor": -96,
+      "lat": 40.257621,
+      "lon": -83.458861
+    }
+  ],
+  "totals": {
+    "km": 2267.6,
+    "pings": 6404,
+    "drives": 170,
+    "drivers": 11,
+    "heardPct": 59.8,
+    "cellsGrid": "h3",
+    "lastDriveAt": "2026-11-08T17:00:00.000Z",
+    "cellsHeardPct": 47.6,
+    "repeatersHeard": 54
+  },
+  "asOf": "2026-11-08T17:01:41.574Z",
+  "grid": {
+    "kind": "h3",
+    "res": 11,
+    "pending": 0
+  },
+  "metric": "mean"
+}

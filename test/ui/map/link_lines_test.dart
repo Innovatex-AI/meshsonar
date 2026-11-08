@@ -132,7 +132,6 @@ void main() {
         grid: CoverageGrid.h3(res: 9, cellDeg: 0.005, pending: 0),
       ),
       h3,
-      CoverageColorBy.snr,
     );
     await tester.pumpWidget(
       AppScope(

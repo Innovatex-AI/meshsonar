@@ -593,9 +593,11 @@ class HttpCmatClient implements CmatClient, TelemetryTransport {
   }
 
   @override
-  Future<PublicCoverage> publicCoverage({int? res, DateTime? since, DateTime? until, String? source}) async {
-    // Public endpoint: no x-driver-key. Params are the website's own layer filters; omitted = server defaults.
+  Future<PublicCoverage> publicCoverage({int? res, DateTime? since, DateTime? until, String? source, String? metric}) async {
+    // Public endpoint: no x-driver-key. Params are the website's own layer filters; omitted = server defaults. metric=mean
+    // (coverage v2, res 11 only) adds snrMean / nOk / nFail / band per cell.
     final q = <String, String>{
+      'metric': ?metric,
       if (res != null) 'res': '$res',
       if (since != null) 'since': since.toUtc().toIso8601String(),
       if (until != null) 'until': until.toUtc().toIso8601String(),
@@ -641,6 +643,10 @@ class HttpCmatClient implements CmatClient, TelemetryTransport {
         lastAt: c['lastAt'] as String? ?? '',
         h3: c['h3'] as String?,
         noiseFloor: asNum(c['noiseFloor'])?.toDouble(),
+        snrMean: asNum(c['snrMean'])?.toDouble(),
+        nOk: asNum(c['nOk'])?.toInt(),
+        nFail: asNum(c['nFail'])?.toInt(),
+        band: asNum(c['band'])?.toInt(),
       ));
     }
     return PublicCoverage(cells: cells, asOf: asOf, grid: grid);

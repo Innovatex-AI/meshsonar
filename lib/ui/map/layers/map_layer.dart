@@ -10,15 +10,13 @@ import '../../../core/network_coverage.dart' show NetworkCell;
 import '../../../core/region_overview_api.dart' show RegionObserver;
 import 'repeater_map_source.dart' show RepeaterPoint;
 
-/// Sections of the layers sheet after the base map picker, in this order (Drive plan 4.7: This drive, Coverage, Repeaters, Display).
-enum LayerGroup { drive, coverage, repeaters, display }
+/// Sections of the layers sheet after the base map picker, in this order (coverage plan section 5: Coverage, Network).
+enum LayerGroup { coverage, network }
 
 extension LayerGroupLabel on LayerGroup {
   String get label => switch (this) {
-    LayerGroup.drive => 'This drive',
     LayerGroup.coverage => 'Coverage',
-    LayerGroup.repeaters => 'Repeaters',
-    LayerGroup.display => 'Display',
+    LayerGroup.network => 'Network',
   };
 }
 

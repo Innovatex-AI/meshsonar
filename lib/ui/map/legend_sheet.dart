@@ -4,30 +4,41 @@
 // can never disagree with the map, and it follows the chosen colour palette and light/dark.
 //
 // Keys: 'legend-sheet', 'legend-section-<id>' (pings, cells, repeaters, links, observers, heard, owned, why),
-// 'legend-swatch-<id>' on every swatch (a [LegendSwatch] whose `color` is the map colour), 'legend-colour-by-<mode>'.
+// 'legend-swatch-<id>' on every swatch (a [LegendSwatch] whose `color` is the map colour).
+//
+// Coverage v2 (server capability coverageV2): the coverage section is built from `/api/coverage/meta` (band labels and dB
+// ranges, saved for offline use) with the colours of coverage-v2-colours.md: five bands, No reply, Heard no direct signal,
+// Faint = under 3 pings, and the hatched Predicted swatch. Without v2 the old Best-SNR steps show (one colour metric: the
+// colour-by modes are gone).
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../core/coverage_v2.dart';
 import '../../core/network_coverage.dart';
+import '../app.dart' show AppScope;
 import '../claims/claim_widgets.dart' show OwnedByYouChip;
 import '../theme.dart';
-import 'coverage_layer_controls.dart' show colorByLabel, coverageLegend;
+import 'coverage_bands.dart';
+import 'coverage_layer_controls.dart' show coverageLegend;
 import 'coverage_map.dart' show networkLevelColor;
+import 'sheets/coverage_cell_sheet.dart' show CoverageBandSwatch;
 import 'layers/layers_sheet.dart' show repeaterFreshnessKey;
 import 'map_layers.dart' show PingColorMode;
 import '../design/app_surfaces.dart';
 
-/// Opens the legend. [colorBy] and [pingColors] are the map's current choices so the legend opens on what the person sees.
-Future<void> showMapLegend(
-  BuildContext context, {
-  CoverageColorBy colorBy = CoverageColorBy.snr,
-  PingColorMode pingColors = PingColorMode.snr,
-}) {
+/// Opens the legend. [pingColors] is the map's current choice so the legend opens on what the person sees. Coverage v2 and its
+/// meta are read from the app (null [v2] = ask the app).
+Future<void> showMapLegend(BuildContext context, {PingColorMode pingColors = PingColorMode.snr}) {
+  final app = AppScope.maybeOf(context);
+  final v2 = app?.coverageV2 ?? false;
+  final meta = app?.coverageMeta;
   return showAppSheet<void>(
     context,
     detents: const [0.6, 0.92],
-    builder: (ctx, c) => SafeArea(child: MapLegendSheet(colorBy: colorBy, pingColors: pingColors, onDone: () => Navigator.of(ctx).pop())),
+    builder: (ctx, c) => SafeArea(
+      child: MapLegendSheet(pingColors: pingColors, coverageV2: v2, meta: meta, onDone: () => Navigator.of(ctx).pop()),
+    ),
   );
 }
 
@@ -107,17 +118,19 @@ class _SwatchPainter extends CustomPainter {
 }
 
 class MapLegendSheet extends StatefulWidget {
-  final CoverageColorBy colorBy;
   final PingColorMode pingColors;
   final VoidCallback? onDone;
-  const MapLegendSheet({super.key, this.colorBy = CoverageColorBy.snr, this.pingColors = PingColorMode.snr, this.onDone});
+
+  /// Draw the coverage v2 legend (from [meta], [CoverageMeta.fallback] when none was read yet).
+  final bool coverageV2;
+  final CoverageMeta? meta;
+  const MapLegendSheet({super.key, this.pingColors = PingColorMode.snr, this.onDone, this.coverageV2 = false, this.meta});
 
   @override
   State<MapLegendSheet> createState() => _MapLegendSheetState();
 }
 
 class _MapLegendSheetState extends State<MapLegendSheet> {
-  late CoverageColorBy _by = widget.colorBy;
 
   @override
   Widget build(BuildContext context) {
@@ -145,8 +158,14 @@ class _MapLegendSheetState extends State<MapLegendSheet> {
               style: t.textTheme.bodyMedium,
             ),
             _section(context, 'pings', Icons.scatter_plot_rounded, 'Your pings', _pings(context, mc)),
-            _section(context, 'cells', Icons.hexagon_outlined, 'Network coverage cells', _cells(context, mc)),
-            _section(context, 'yours', Icons.hexagon_rounded, 'Your coverage (hexagons)', _yourHexes(context, mc)),
+            if (widget.coverageV2) ...[
+              _section(context, 'cells', Icons.hexagon_outlined, 'Measured coverage', _cellsV2(context, mc)),
+              _section(context, 'predicted', Icons.texture_rounded, 'Predicted coverage', _predictedV2(context, mc)),
+              _section(context, 'yours', Icons.hexagon_rounded, 'This drive', _yoursV2(context, mc)),
+            ] else ...[
+              _section(context, 'cells', Icons.hexagon_outlined, 'Network coverage cells', _cells(context, mc)),
+              _section(context, 'yours', Icons.hexagon_rounded, 'Your coverage (hexagons)', _yourHexes(context, mc)),
+            ],
             _section(context, 'repeaters', Icons.cell_tower_rounded, 'Repeaters', _repeaters(context, mc)),
             _section(context, 'links', Icons.timeline_rounded, 'Link lines', _links(context, mc)),
             _section(context, 'observers', Icons.change_history_rounded, 'Observers', _observers(context, mc)),
@@ -245,41 +264,16 @@ class _MapLegendSheetState extends State<MapLegendSheet> {
   }
 
   List<Widget> _cells(BuildContext context, MeshSonarColors mc) {
-    final steps = coverageLegend(_by);
+    final steps = coverageLegend();
     return [
       _note(context, 'Hexagons show what everyone has measured, not just this drive.'),
-      if (!_by.isStrength)
-        _note(
-          context,
-          _by == CoverageColorBy.age
-              ? 'Ping age is about freshness, not signal: its own indigo ramp, newest darkest. Green, blue, amber and red are only used for measured signal.'
-              : 'Noise against typical compares each cell with the median of the cells loaded. Its own teal-to-rust ramp, not a signal-strength colour.',
-          key: const Key('legend-ramp-note'),
-        ),
-      Wrap(
-        spacing: Gap.s,
-        children: [
-          for (final by in CoverageColorBy.values)
-            ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 48),
-              child: ChoiceChip(
-                key: Key('legend-colour-by-${by.name}'),
-                label: Text(colorByLabel(by)),
-                selected: by == _by,
-                onSelected: (_) => setState(() => _by = by),
-              ),
-            ),
-        ],
-      ),
       for (final (level, text) in steps)
         LegendRow(
           id: 'cell-${level.name}',
-          swatch: LegendSwatch(color: networkLevelColor(context, level, mode: _by), silentCell: level == CoverageLevel.none),
-          title: _by.isStrength || level == CoverageLevel.none ? _levelTitle(level, text) : 'Ramp step: $text',
+          swatch: LegendSwatch(color: networkLevelColor(context, level), silentCell: level == CoverageLevel.none),
+          title: _levelTitle(level, text),
           detail: switch (level) {
-            CoverageLevel.none => _by == CoverageColorBy.noise
-                ? 'This cell has no noise reading. Not a strength colour.'
-                : 'Someone pinged here and nothing answered. Not a strength colour.',
+            CoverageLevel.none => 'Someone pinged here and nothing answered. Not a strength colour.',
             CoverageLevel.unknown => 'Something answered but no signal reading came with it.',
             _ => null,
           },
@@ -290,17 +284,91 @@ class _MapLegendSheetState extends State<MapLegendSheet> {
         title: 'Faded: fewer than $kMinCellPings pings',
         detail: 'Too little data to trust yet. Any colour above can appear faded.',
       ),
-      if (_by == CoverageColorBy.noise)
-        _note(context, 'Noise is the background radio level a repeater hears with nothing on air: quieter is better.',
-            key: const Key('legend-noise-note'))
-      else
-        const SizedBox.shrink(),
     ];
   }
 
+  // ---------- coverage v2 ----------
+  CoverageMeta get _meta => widget.meta ?? CoverageMeta.fallback;
+  CoverageBandColors _bands(BuildContext context, MeshSonarColors mc) => CoverageBandColors.of(mc.palette, Theme.of(context).brightness);
+
+  List<Widget> _bandRows(BuildContext context, MeshSonarColors mc, String prefix, {bool predicted = false}) {
+    final meta = _meta;
+    final c = _bands(context, mc);
+    final sf = presetSf(meta.defaultPreset);
+    return [
+      for (final b in [5, 4, 3, 2, 1])
+        LegendRow(
+          id: '$prefix-band-$b',
+          swatch: CoverageBandSwatch(band: b, colors: c, predicted: predicted, size: 26),
+          title: '${meta.labelOf(b)}, ${meta.rangeText(b, sf: sf)}',
+        ),
+    ];
+  }
+
+  List<Widget> _cellsV2(BuildContext context, MeshSonarColors mc) {
+    final meta = _meta;
+    final c = _bands(context, mc);
+    return [
+      _note(
+        context,
+        'Everyone\'s drives. Each cell is about ${AppScope.unitsOf(context).distance(50, approx: true)} across, the same size at '
+        'every zoom. Its colour is the average SNR of every ping that was heard there. Zoomed out, each cell is a dot.',
+        key: const Key('legend-v2-note'),
+      ),
+      ..._bandRows(context, mc, 'cell'),
+      LegendRow(
+        id: 'cell-band-0',
+        swatch: CoverageBandSwatch(band: 0, colors: c, size: 26),
+        title: meta.labelOf(0),
+        detail: 'Pinged here and nothing answered: no coverage. Grey with a red outline.',
+      ),
+      LegendRow(
+        id: 'cell-band-6',
+        swatch: CoverageBandSwatch(band: 6, colors: c, size: 26),
+        title: meta.labelOf(6),
+        detail: 'Heard only through a relay, or with no signal reading. Not a strength colour.',
+      ),
+      LegendRow(
+        id: 'cell-faded',
+        swatch: CoverageBandSwatch(band: 4, colors: c, faint: true, size: 26),
+        title: 'Faint = under ${meta.faintBelow} pings',
+        detail: 'Too little data to trust yet. Any colour above can appear faint.',
+      ),
+    ];
+  }
+
+  List<Widget> _predictedV2(BuildContext context, MeshSonarColors mc) {
+    final c = _bands(context, mc);
+    return [
+      _note(
+        context,
+        'An estimate for cells nobody has driven, from the measured cells within ${AppScope.unitsOf(context).distance(1000, approx: true)}. '
+        'Same colours, hatched and lighter; '
+        'the further from a measurement, the fainter. Always drawn under measured cells.',
+        key: const Key('legend-predicted-note'),
+      ),
+      LegendRow(id: 'predicted-sample', swatch: CoverageBandSwatch(band: 4, colors: c, predicted: true, size: 26), title: 'Predicted coverage'),
+      LegendRow(
+        id: 'predicted-none',
+        swatch: CoverageBandSwatch(band: 0, colors: c, predicted: true, size: 26),
+        title: 'Predicted: no coverage',
+        detail: 'A thin grey hatch. Not drawn when zoomed out.',
+      ),
+    ];
+  }
+
+  List<Widget> _yoursV2(BuildContext context, MeshSonarColors mc) => [
+    _note(
+      context,
+      'Your pings this session in the same cells and colours, with a solid outline so they stand out. Built on this phone '
+      'as you drive.',
+      key: const Key('legend-yours-note'),
+    ),
+  ];
+
   String _levelTitle(CoverageLevel level, String text) => switch (level) {
     CoverageLevel.unknown => 'Purple: heard, signal unknown',
-    CoverageLevel.none => _by == CoverageColorBy.noise ? 'Grey: no noise reading' : 'Grey: mapped, nothing heard',
+    CoverageLevel.none => 'Grey: mapped, nothing heard',
     _ => '${_stepName(level)}: $text',
   };
 

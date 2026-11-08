@@ -1,18 +1,20 @@
-// The map layers sheet (Drive plan 4.7, wireframe F), generated from the registry (registry.dart): Base map, then one section per
-// [LayerGroup] in order (This drive, Coverage, Repeaters, Display), one switch per layer, each with its honest status line from
+// The map layers sheet (Drive plan 4.7, wireframe F; sections per the coverage redesign plan section 5, Nov 8 2026), generated
+// from the registry (registry.dart, [kSheetRows]): Base map, then Coverage (Measured coverage, Predicted coverage, This drive
+// with its Ping dots) and Network (Repeaters with a This region / All MeshCore scope and a Names sub-switch, Observers, Lines
+// to repeaters), one switch per row, each with its honest status line from
 // [DriveMapModel.statusOf] (count, source, "Not available on this server yet", "Couldn't load" + Retry, "Saved copy from ...")
 // and its inline key (the swatches are built from the same colour functions the map paints with, so a key can never disagree
 // with the map). A layer whose data is unsupported or empty is shown with its switch disabled and the reason, never hidden;
 // one that is on can always be switched off.
 //
 // Non-modal (the map stays live above it, every toggle applies instantly): [showGeneratedLayersSheet] opens it in the Drive tab's
-// anchored host when given one, else as a non-modal app sheet with detents [0.4, 0.75]. "Network coverage options" is a page
-// inside the sheet (colour by, detail, window, source, growth slider), not eight controls inline.
+// anchored host when given one, else as a non-modal app sheet with detents [0.4, 0.75]. "Coverage options" is a page inside the
+// sheet (window, growth slider, source). The colour-by selector, detail chips and range rings are gone (plan D1, D9).
 //
 // Keys: 'layers-sheet', 'layers-done', 'layers-base-map', 'base-map-<id>', 'layers-group-<group>', the switch per layer from
 // [layerSwitchKey] (the pre-registry keys are kept: measured = 'layer-network-coverage', heard = 'layer-repeaters', repeaters
 // (roster) = 'layer-region-repeaters'; the rest are 'layer-<id>'), 'layer-<id>-status', 'layer-<id>-retry', 'layer-<id>-key',
-// 'layer-color-snr', 'layer-color-result', 'layer-measured-options', 'layers-options-page', 'layers-options-back',
+// 'layer-color-snr', 'layer-color-result', 'layer-repeaters-scope', 'layer-measured-options', 'layers-options-page', 'layers-options-back',
 // 'layers-filter', 'layers-credits', 'layers-legend', 'layers-reset', 'network-legend', 'roster-legend'.
 import 'package:flutter/cupertino.dart' show CupertinoButton, CupertinoSlidingSegmentedControl;
 import 'package:flutter/material.dart';
@@ -20,8 +22,6 @@ import 'package:flutter/material.dart';
 import '../../../core/map_styles.dart';
 import '../../../core/network_coverage.dart' show CoverageLevel;
 import '../../../core/region_repeaters_api.dart' show RepeaterActivity;
-import '../../../core/units.dart' show Units;
-import '../../app.dart' show AppScope;
 import '../../design/anchored_sheet.dart';
 import '../../design/app_surfaces.dart';
 import '../../design/app_symbols.dart';
@@ -30,8 +30,11 @@ import '../../design/map_tokens.dart';
 import '../../design/tokens.dart' show Hit;
 import '../../drive/drive_map_model.dart';
 import '../../theme.dart';
+import '../../../core/coverage_v2.dart' show CoverageMeta;
+import '../coverage_bands.dart';
 import '../coverage_layer_controls.dart';
 import '../coverage_map.dart' show networkLevelColor;
+import '../sheets/coverage_cell_sheet.dart' show CoverageBandSwatch;
 import '../legend_sheet.dart' show LegendSwatch, SwatchShape, showMapLegend;
 import '../map_layers.dart' show PingColorMode;
 import 'repeater_cluster_layer.dart' show regionRepeaterColor;
@@ -53,33 +56,22 @@ Key layerSwitchKey(String id) => Key(switch (id) {
   _ => 'layer-$id',
 });
 
-String _rings(Units u) {
-  final r = u.rangeRingMetres;
-  return r.length < 2 ? 'Range rings' : '${u.distance(r.first)} and ${u.distance(r.last)}';
-}
-
 /// Title and one-line description per layer (Drive plan 7.1).
 ({String title, String? description}) layerPresentation(BuildContext context, MapLayerSpec spec, {String? regionName, bool hasPosition = true}) {
   return switch (spec.id) {
-    'pings' => (title: 'Pings', description: 'Each ping you sent.'),
-    'hexes' => (title: 'Your coverage', description: "Your pings rolled up to the website's hexagons."),
+    'pings' => (title: 'Ping dots', description: 'Each ping you sent.'),
+    'hexes' => (title: 'This drive', description: 'Your pings this session, in the same cells and colours.'),
     'links' => (title: 'Lines to repeaters', description: 'Live lines to repeaters you hear, and lines when you tap a repeater or cell.'),
-    'measured' => (
-      title: 'Network coverage',
-      description: "Everyone's measured coverage in ${regionName ?? 'this region'}.",
-    ),
+    'measured' => (title: 'Measured coverage', description: "Everyone's drives: the average signal in each cell."),
+    'predicted' => (title: 'Predicted coverage', description: 'An estimate near measured cells, hatched.'),
     'heard' => (title: 'Heard this drive', description: 'Repeaters your pings reached (highlighted).'),
-    kRosterLayerId => (title: 'Region repeaters', description: 'Every repeater in ${regionName ?? 'this region'}, by last advert.'),
+    kRosterLayerId => (title: 'Repeaters', description: 'By last advert. Repeaters your pings reached are lit.'),
     kNetworkLayerId => (
       title: 'All MeshCore repeaters',
       description: 'Every repeater with a public position (MeshCore Map). Turn on to see every repeater in the country.',
     ),
     'observers' => (title: 'Observers', description: 'Observers that share a position.'),
-    kLabelsLayerId => (title: 'Repeater names', description: 'Name beside each repeater; fewer when zoomed out.'),
-    'rings' => (
-      title: 'Range rings',
-      description: '${_rings(AppScope.unitsOf(context))} around you.${hasPosition ? '' : ' Needs a GPS position.'}',
-    ),
+    kLabelsLayerId => (title: 'Names', description: 'Name beside each repeater; fewer when zoomed out.'),
     _ => (title: spec.label, description: null),
   };
 }
@@ -138,7 +130,6 @@ class _MapLayersSheetState extends State<MapLayersSheet> {
   List<Widget> _mainPage(BuildContext context) {
     final t = Theme.of(context);
     final st = model.layerState;
-    final groups = layersByGroup();
     return [
       _Header(title: 'Map layers', trailing: _TextAction(key: const Key('layers-done'), label: 'Done', onTap: widget.onDone)),
       Flexible(
@@ -151,16 +142,21 @@ class _MapLayersSheetState extends State<MapLayersSheet> {
             _BaseMapPicker(model: model),
             for (final g in LayerGroup.values) ...[
               _SectionLabel(g.label, key: Key('layers-group-${g.name}')),
-              for (final spec in groups[g]!) ..._layer(context, spec, st),
-              if (g == LayerGroup.display) ...[
+              for (final row in kSheetRows[g]!) ..._layer(context, layerSpec(row.id)!, st, sub: row.parent != null),
+              if (g == LayerGroup.coverage)
                 _NavRow(
-                  key: const Key('layers-filter'),
-                  title: 'Filter pings and cells',
-                  trailing: model.filter.activeCount == 0 ? null : '${model.filter.activeCount} active',
-                  onTap: () => showMapFilterSheet(context, model),
+                  key: const Key('layer-measured-options'),
+                  title: 'Coverage options',
+                  subtitle: _optionsSummary(),
+                  onTap: () => setState(() => _options = true),
                 ),
-              ],
             ],
+            _NavRow(
+              key: const Key('layers-filter'),
+              title: 'Filter pings and cells',
+              trailing: model.filter.activeCount == 0 ? null : '${model.filter.activeCount} active',
+              onTap: () => showMapFilterSheet(context, model),
+            ),
             const _SectionLabel(''),
             _NavRow(
               key: const Key('layers-credits'),
@@ -169,14 +165,14 @@ class _MapLayersSheetState extends State<MapLayersSheet> {
                 context,
                 style: model.baseStyle,
                 meshCoreCredit: st.isOn(kNetworkLayerId) ? model.repeaterFeed.global.attribution : null,
-                openLegend: () => showMapLegend(context, colorBy: model.colorBy, pingColors: model.pingColors),
+                openLegend: () => showMapLegend(context, pingColors: model.pingColors),
               ),
             ),
             _NavRow(
               key: const Key('layers-legend'),
               title: 'What do the symbols mean?',
               symbol: AppSymbols.infoCircle,
-              onTap: () => showMapLegend(context, colorBy: model.colorBy, pingColors: model.pingColors),
+              onTap: () => showMapLegend(context, pingColors: model.pingColors),
             ),
             _NavRow(key: const Key('layers-reset'), title: 'Reset layers', destructive: true, chevron: false, onTap: () => _confirmReset(context)),
             Padding(
@@ -196,31 +192,39 @@ class _MapLayersSheetState extends State<MapLayersSheet> {
     final ok = await showAppActionSheet<bool>(
       context,
       title: 'Reset layers?',
-      message: 'Layers, ping colours and the network coverage options go back to the defaults.',
+      message: 'Layers, ping colours and the coverage options go back to the defaults.',
       sheetKey: const Key('layers-reset-sheet'),
       actions: const [AppAction('Reset layers', true, destructive: true, key: Key('layers-reset-confirm'))],
     );
     if (ok == true) model.resetLayers();
   }
 
-  List<Widget> _layer(BuildContext context, MapLayerSpec spec, MapLayerState st) {
+  List<Widget> _layer(BuildContext context, MapLayerSpec spec, MapLayerState st, {bool sub = false}) {
     final t = Theme.of(context);
     final p = layerPresentation(context, spec, regionName: model.state.viewingRegion?.name, hasPosition: model.position != null);
-    final on = st.isOn(spec.id);
-    final status = model.statusOf(spec.id);
+    // The Repeaters row is the roster and the all-MeshCore layers together: its status is the scope's.
+    final isRepeaters = spec.id == kRosterLayerId;
+    final on = isRepeaters ? repeatersOn(st) : st.isOn(spec.id);
+    final statusId = isRepeaters && model.repeatersAll ? kNetworkLayerId : spec.id;
+    final status = model.statusOf(statusId);
+    // A sub-switch (Ping dots, Names) works only while its parent is on.
+    final parentOff = sub && !(spec.id == kLabelsLayerId ? repeatersOn(st) : st.isOn('hexes'));
     final unsupported = status.availability == LayerAvailability.unsupported;
     // Drive layers draw what this phone recorded: no status line. Server-fed layers always say where they stand.
     final detail = spec.serverFed ? status.detail : null;
+    final tile = AppSwitchTile(
+      title: p.title,
+      subtitle: p.description,
+      switchKey: layerSwitchKey(spec.id),
+      // A default-on layer the server does not offer shows off and disabled (it cannot draw anything). Otherwise
+      // unsupported/empty layers cannot be switched on, and a layer that is on can always be switched off.
+      // The Repeaters switch shows what the person chose: a scope the server lacks says so on the status line, and the switch
+      // can still be turned off.
+      value: on && (isRepeaters || !unsupported),
+      onChanged: parentOff || (unsupported && !(isRepeaters && on)) ? null : ((on || status.enabled) ? (v) => model.setLayer(spec.id, v) : null),
+    );
     return [
-      AppSwitchTile(
-        title: p.title,
-        subtitle: p.description,
-        switchKey: layerSwitchKey(spec.id),
-        // A default-on layer the server does not offer shows off and disabled (it cannot draw anything). Otherwise
-        // unsupported/empty layers cannot be switched on, and a layer that is on can always be switched off.
-        value: on && !unsupported,
-        onChanged: unsupported ? null : ((on || status.enabled) ? (v) => model.setLayer(spec.id, v) : null),
-      ),
+      if (sub) Padding(padding: const EdgeInsets.only(left: Gap.l), child: tile) else tile,
       if (detail != null)
         Padding(
           padding: const EdgeInsets.fromLTRB(Gap.l, 0, Gap.l, Gap.xs),
@@ -240,34 +244,29 @@ class _MapLayersSheetState extends State<MapLayersSheet> {
                   key: Key('layer-${spec.id}-retry'),
                   padding: const EdgeInsets.symmetric(horizontal: Gap.s),
                   minimumSize: const Size(Hit.min, Hit.min),
-                  onPressed: () => model.retry(spec.id),
+                  onPressed: () => model.retry(statusId),
                   child: const Text('Retry'),
                 ),
             ],
           ),
         ),
       if (spec.id == 'pings') _PingModeRow(model: model),
-      if (on && !unsupported) _InlineKey(layerId: spec.id, model: model),
-      if (spec.id == 'measured' && on)
-        _NavRow(
-          key: const Key('layer-measured-options'),
-          title: 'Network coverage options',
-          subtitle: _optionsSummary(),
-          onTap: () => setState(() => _options = true),
-        ),
+      if (isRepeaters) _RepeaterScopeRow(model: model),
+      if (on && !unsupported) _InlineKey(layerId: isRepeaters && model.repeatersAll ? kNetworkLayerId : spec.id, model: model),
     ];
   }
 
   String _optionsSummary() {
     final q = model.coverageQuery;
-    return 'Colour by ${colorByLabel(model.colorBy)}  ·  Detail ${q.res ?? 'Auto'}  ·  Window ${q.since.label}';
+    final when = q.until == null ? 'Live' : 'As of ${q.until!.toLocal().year}-${q.until!.toLocal().month.toString().padLeft(2, '0')}-${q.until!.toLocal().day.toString().padLeft(2, '0')}';
+    return 'Window ${q.since.label}  ·  Source ${q.source.label}  ·  $when';
   }
 
   // ------------------------------------------------------------------ the network coverage options page
 
   List<Widget> _optionsPage(BuildContext context) => [
     _Header(
-      title: 'Network coverage',
+      title: 'Coverage options',
       leading: _TextAction(key: const Key('layers-options-back'), label: 'Layers', onTap: () => setState(() => _options = false), back: true),
       trailing: _TextAction(key: const Key('layers-done'), label: 'Done', onTap: widget.onDone),
     ),
@@ -459,7 +458,35 @@ class _BaseMapPicker extends StatelessWidget {
   }
 }
 
-/// By SNR | Heard, under the Pings row. Drives the Pings layer and Your coverage together.
+/// This region | All MeshCore, under the Repeaters row (plan section 5: one switch, a scope).
+class _RepeaterScopeRow extends StatelessWidget {
+  final DriveMapModel model;
+  const _RepeaterScopeRow({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final on = repeatersOn(model.layerState);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Gap.l, 0, Gap.l, Gap.s),
+      child: Opacity(
+        opacity: on ? 1 : 0.4,
+        child: CupertinoSlidingSegmentedControl<bool>(
+          key: const Key('layer-repeaters-scope'),
+          groupValue: model.repeatersAll,
+          children: const {
+            false: Padding(padding: EdgeInsets.symmetric(horizontal: Gap.m, vertical: 6), child: Text('This region', key: Key('layer-scope-region'))),
+            true: Padding(padding: EdgeInsets.symmetric(horizontal: Gap.m, vertical: 6), child: Text('All MeshCore', key: Key('layer-scope-all'))),
+          },
+          onValueChanged: (v) {
+            if (v != null) model.repeatersAll = v;
+          },
+        ),
+      ),
+    );
+  }
+}
+
+/// By SNR | Heard, under the Ping dots row (the dots' colours; This drive's cells always use the coverage bands with v2).
 class _PingModeRow extends StatelessWidget {
   final DriveMapModel model;
   const _PingModeRow({required this.model});
@@ -542,6 +569,7 @@ List<KeyItem> layerKeyItems(BuildContext context, String layerId, DriveMapModel 
               KeyItem(dot(mc.silent), 'nothing heard'),
             ];
     case 'hexes':
+      if (model.coverageV2) return const [KeyItem(SizedBox.shrink(), 'same colours as Measured coverage, outlined')];
       return model.pingColors == PingColorMode.result
           ? [KeyItem(hex(mc.snrStrong), 'heard'), KeyItem(hex(mc.silent, none: true), 'not heard')]
           : [
@@ -551,12 +579,17 @@ List<KeyItem> layerKeyItems(BuildContext context, String layerId, DriveMapModel 
               KeyItem(hex(mc.forPing(heard: true, snr: -10)), 'weak'),
             ];
     case 'measured':
+      if (model.coverageV2) return coverageBandKey(context, model.state.coverageMeta);
       return [
-        for (final (level, text) in coverageLegend(model.colorBy))
-          KeyItem(
-            hex(networkLevelColor(context, level, mode: model.colorBy), none: level == CoverageLevel.none),
-            text,
-          ),
+        for (final (level, text) in coverageLegend())
+          KeyItem(hex(networkLevelColor(context, level), none: level == CoverageLevel.none), text),
+      ];
+    case 'predicted':
+      if (!model.coverageV2) return const [];
+      final c = CoverageBandColors.of(mc.palette, Theme.of(context).brightness);
+      return [
+        KeyItem(CoverageBandSwatch(band: 4, colors: c, predicted: true, size: 16), 'estimate, same colours'),
+        KeyItem(CoverageBandSwatch(band: 0, colors: c, predicted: true, size: 16), 'no coverage'),
       ];
     case kRosterLayerId:
       return repeaterFreshnessKey(context, hours: false);
@@ -567,6 +600,14 @@ List<KeyItem> layerKeyItems(BuildContext context, String layerId, DriveMapModel 
     default:
       return const [];
   }
+}
+
+/// The coverage v2 bands as inline key items (strongest first, then No reply), from [meta]'s labels.
+List<KeyItem> coverageBandKey(BuildContext context, CoverageMeta meta) {
+  final c = CoverageBandColors.of(MeshSonarColors.of(context).palette, Theme.of(context).brightness);
+  return [
+    for (final b in const [5, 4, 3, 2, 1, 0]) KeyItem(CoverageBandSwatch(band: b, colors: c, size: 16), meta.labelOf(b).toLowerCase()),
+  ];
 }
 
 /// The three repeater freshness states (Drive plan 6.3): solid = fresh, tinted ring = recent, hollow dashed = older. The colours are

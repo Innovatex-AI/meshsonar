@@ -1,15 +1,11 @@
-// Map-tab quick wins, pure logic: base-map styles, the ping-age and noise-delta coverage modes (and the colour contract
-// around them), the filter drawer's rules, and the coverage % of the view.
-import 'package:flutter/material.dart';
+// Map-tab quick wins, pure logic: base-map styles, the filter drawer's rules, and the coverage % of the view. (The ping-age and
+// noise-delta colour modes were removed with the coverage redesign, plan D9.)
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/core/api.dart';
-import 'package:meshsonar/core/colour_palette.dart';
 import 'package:meshsonar/core/map_filter.dart';
 import 'package:meshsonar/core/map_styles.dart';
 import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/core/network_coverage.dart';
-import 'package:meshsonar/ui/map/coverage_ramps.dart';
-import 'package:meshsonar/ui/theme.dart';
 
 final now = DateTime.utc(2026, 11, 1, 12);
 
@@ -42,8 +38,7 @@ DrivePing ping(String id, {List<String> heardBy = const [], Duration age = Durat
   echoes: [for (final r in heardBy) Echo(repeater: r, snrDb: 2)],
 );
 
-NetworkCell ncell(CoverageCell c, [CoverageColorBy by = CoverageColorBy.snr]) =>
-    NetworkCell(id: '${c.lat},${c.lon}', boundary: const [], level: levelFor(c, by, now: now), cell: c, mode: by);
+NetworkCell ncell(CoverageCell c) => NetworkCell(id: '${c.lat},${c.lon}', boundary: const [], level: levelFor(c), cell: c);
 
 void main() {
   group('base map styles', () {
@@ -86,100 +81,6 @@ void main() {
       expect(j['base_map_style'], 'topo');
       expect(Settings.fromJson(j).baseMapStyle, 'topo');
       expect(Settings.fromJson(const {}).baseMapStyle, 'chart');
-    });
-  });
-
-  group('ping age mode', () {
-    CoverageLevel lv(Duration age, {int heard = 4}) => levelFor(cell(age: age, heard: heard), CoverageColorBy.age, now: now);
-    test('buckets: 24 h, 7 d, 30 d, older', () {
-      expect(lv(const Duration(hours: 23)), CoverageLevel.strong);
-      expect(lv(const Duration(hours: 24)), CoverageLevel.strong);
-      expect(lv(const Duration(hours: 25)), CoverageLevel.good);
-      expect(lv(const Duration(days: 7)), CoverageLevel.good);
-      expect(lv(const Duration(days: 8)), CoverageLevel.fair);
-      expect(lv(const Duration(days: 30)), CoverageLevel.fair);
-      expect(lv(const Duration(days: 31)), CoverageLevel.weak);
-    });
-    test('mapped, nothing heard stays grey however fresh; an undated cell is grey too', () {
-      expect(lv(const Duration(hours: 1), heard: 0), CoverageLevel.none);
-      final undated = CoverageCell(lat: 1, lon: 1, pings: 5, heard: 3, bestSnr: 1, medianSnr: 1, repeaters: 1, lastAt: 'not a date');
-      expect(levelFor(undated, CoverageColorBy.age, now: now), CoverageLevel.none);
-    });
-    test('never purple: purple means heard-signal-unknown and age has nothing to say about signal', () {
-      final noSnr = cell(bestSnr: null, heard: 3);
-      expect(levelFor(noSnr, CoverageColorBy.age, now: now), CoverageLevel.strong);
-    });
-  });
-
-  group('noise vs typical mode', () {
-    test('median needs 3 readings; ignores cells without one', () {
-      expect(medianNoiseFloor([cell(noise: -110), cell(noise: -112), cell()]), isNull);
-      expect(medianNoiseFloor([cell(noise: -110), cell(noise: -112), cell(noise: -90), cell()]), -110);
-      expect(medianNoiseFloor([cell(noise: -100), cell(noise: -110), cell(noise: -120), cell(noise: -130)]), -115);
-    });
-    CoverageLevel lv(double noise, {int heard = 4, double base = -115}) =>
-        levelFor(cell(noise: noise, heard: heard), CoverageColorBy.noiseDelta, now: now, noiseBaseline: base);
-    test('buckets against the baseline: quieter by 3, within 3, up to 8 noisier, much noisier', () {
-      expect(lv(-118), CoverageLevel.strong); // -3
-      expect(lv(-117.9), CoverageLevel.good);
-      expect(lv(-113), CoverageLevel.good); // +2
-      expect(lv(-112), CoverageLevel.fair); // +3
-      expect(lv(-108), CoverageLevel.fair); // +7
-      expect(lv(-107), CoverageLevel.weak); // +8
-    });
-    test('no reading, no baseline, or nothing heard is grey', () {
-      expect(levelFor(cell(noise: null), CoverageColorBy.noiseDelta, now: now, noiseBaseline: -115), CoverageLevel.none);
-      expect(levelFor(cell(noise: -110), CoverageColorBy.noiseDelta, now: now), CoverageLevel.none);
-      expect(lv(-110, heard: 0), CoverageLevel.none);
-    });
-    test('buildNetworkCells computes the baseline from the answer and stamps the mode on every cell', () {
-      final cov = PublicCoverage(
-        asOf: '2026-11-01T12:00:00Z',
-        grid: const CoverageGrid.square(cellDeg: 0.01),
-        cells: [
-          cell(lat: 40.00, noise: -120),
-          cell(lat: 40.01, noise: -115),
-          cell(lat: 40.02, noise: -110),
-          cell(lat: 40.03, noise: -100),
-        ],
-      );
-      final cells = buildNetworkCells(cov, null, CoverageColorBy.noiseDelta, now: now);
-      expect(cells.map((c) => c.mode).toSet(), {CoverageColorBy.noiseDelta});
-      // median is -112.5: -120 is 7.5 quieter, -100 is 12.5 noisier.
-      expect(cells.first.level, CoverageLevel.strong);
-      expect(cells.last.level, CoverageLevel.weak);
-    });
-  });
-
-  group('colour contract', () {
-    test('strength modes are flagged as strength; age and noise-vs-typical are not', () {
-      expect({for (final m in CoverageColorBy.values) if (m.isStrength) m}, {CoverageColorBy.snr, CoverageColorBy.heard, CoverageColorBy.noise});
-    });
-    test('ramps never reuse a strength step, and grey and purple come from the palette in every mode', () {
-      for (final b in Brightness.values) {
-        for (final p in ColourPalette.values) {
-          final mc = MeshSonarColors.forPalette(p, b);
-          final strength = {mc.levelStrong, mc.levelGood, mc.levelFair, mc.levelWeak, mc.silent, mc.heardUnknown};
-          for (final mode in [CoverageColorBy.age, CoverageColorBy.noiseDelta]) {
-            for (final l in [CoverageLevel.strong, CoverageLevel.good, CoverageLevel.fair, CoverageLevel.weak]) {
-              final c = rampColor(mode, l, b)!;
-              expect(strength.contains(c), isFalse, reason: '$mode $l in $b collides with a strength colour');
-            }
-            expect(rampColor(mode, CoverageLevel.none, b), isNull);
-            expect(rampColor(mode, CoverageLevel.unknown, b), isNull);
-          }
-        }
-      }
-      expect(rampColor(CoverageColorBy.snr, CoverageLevel.strong, Brightness.light), isNull);
-    });
-    test('the age ramp is monotone in lightness (newest strongest), so it reads as one sequence', () {
-      for (final b in Brightness.values) {
-        final l = [for (final lv in [CoverageLevel.strong, CoverageLevel.good, CoverageLevel.fair, CoverageLevel.weak]) HSLColor.fromColor(rampColor(CoverageColorBy.age, lv, b)!).lightness];
-        final increasing = b == Brightness.light;
-        for (var i = 1; i < l.length; i++) {
-          expect(increasing ? l[i] > l[i - 1] : l[i] < l[i - 1], isTrue, reason: '$b $l');
-        }
-      }
     });
   });
 

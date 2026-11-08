@@ -1,0 +1,17 @@
+{
+    "h3": "8b2a956a9483fff",
+    "res": 11,
+    "preset": "sf7bw62.5",
+    "measured": null,
+    "predicted": {
+        "band": 4,
+        "model": 1,
+        "region": 1,
+        "snrEst": 6.55,
+        "builtAt": "2026-11-08T16:28:53.945Z",
+        "opacity": 0.15,
+        "dNearestM": 976,
+        "contributors": 2
+    },
+    "version": 101
+}

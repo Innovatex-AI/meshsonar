@@ -1261,7 +1261,7 @@ packages:
     source: hosted
     version: "2.4.0"
   vector_tile:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: vector_tile
       sha256: "7ae290246e3a8734422672dbe791d3f7b8ab631734489fc6d405f1cc2080e38c"

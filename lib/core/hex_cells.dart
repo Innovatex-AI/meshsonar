@@ -8,6 +8,7 @@
 // Pure logic over an injected [H3] so tests can load libh3 by path; the app loads it with [loadHexEngine].
 import 'package:h3_flutter/h3_flutter.dart';
 
+import 'coverage_v2.dart' show coverageBandOf, kCoverageV2Res;
 import 'model.dart';
 
 /// Display resolution, the same as the site's default (about 350 m across).
@@ -38,12 +39,25 @@ class HexCell {
 
   /// Strongest SNR heard from inside it (dB), null when nothing was heard or no SNR was reported.
   final double? bestSnrDb;
+
+  /// Coverage v2 ("This drive", [buildDriveCells]): the MEAN of the ping results that carry an SNR (dB), how many do, and the
+  /// cell's band (lib/core/coverage_v2.dart, the server's rule). Null / 0 on cells from [buildHexCells].
+  final double? snrMeanDb;
+  final int nSnr;
+  final int? band;
+
+  /// The cell's centre (v2 cells only; used for the zoomed-out dots and the inspector).
+  final HexPoint? center;
   const HexCell({
     required this.id,
     required this.boundary,
     required this.sent,
     required this.heard,
     this.bestSnrDb,
+    this.snrMeanDb,
+    this.nSnr = 0,
+    this.band,
+    this.center,
   });
 
   bool get wasHeard => heard > 0;
@@ -111,3 +125,64 @@ List<HexCell> buildHexCells(
 /// "12 of 31 hexagons heard" style summary numbers for a list of cells.
 ({int cells, int heardCells}) hexTotals(List<HexCell> cells) =>
     (cells: cells.length, heardCells: cells.where((c) => c.wasHeard).length);
+
+/// The result of one tx ping for coverage v2 (plan D2): heard or not, and its SNR. The SNR is the best DIRECT echo (hops 1, or
+/// unknown hops as the server counts them), else the local SNR of the discover answer folded into the same attempt; null when
+/// it was heard only through a relay or without a reading. Null for rx pings and unusable positions.
+({bool ok, double? snr})? pingResult(DrivePing p) {
+  if (p.kind != PingKind.tx) return null;
+  if (!p.lat.isFinite || !p.lon.isFinite || p.lat.abs() > 90 || p.lon.abs() > 180) return null;
+  if (p.heardNothing) return (ok: false, snr: null);
+  double? best;
+  for (final e in p.echoes) {
+    final s = e.snrDb;
+    if (s == null || !s.isFinite || (e.hops != null && e.hops != 1)) continue;
+    if (best == null || s > best) best = s;
+  }
+  best ??= p.neighbor?.localSnrDb;
+  return (ok: true, snr: best != null && best.isFinite ? best : null);
+}
+
+/// "This drive" (coverage v2, plan 5): this session's pings as res-11 cells, each with the MEAN SNR of its results and the
+/// same band the server gives a measured cell ([sf] picks the floor). Failed pings count in [HexCell.sent] but never in the
+/// mean (D4). Stable order (by id).
+List<HexCell> buildDriveCells(Iterable<DrivePing> pings, H3 h3, {int sf = 7}) {
+  final sent = <BigInt, int>{};
+  final ok = <BigInt, int>{};
+  final nSnr = <BigInt, int>{};
+  final sum = <BigInt, double>{};
+  final best = <BigInt, double>{};
+  for (final p in pings) {
+    final r = pingResult(p);
+    if (r == null) continue;
+    final c = h3.geoToCell(GeoCoord(lon: p.lon, lat: p.lat), kCoverageV2Res);
+    sent[c] = (sent[c] ?? 0) + 1;
+    if (!r.ok) continue;
+    ok[c] = (ok[c] ?? 0) + 1;
+    final s = r.snr;
+    if (s == null) continue;
+    nSnr[c] = (nSnr[c] ?? 0) + 1;
+    sum[c] = (sum[c] ?? 0) + s;
+    if (best[c] == null || s > best[c]!) best[c] = s;
+  }
+  final out = <HexCell>[
+    for (final e in sent.entries)
+      () {
+        final n = nSnr[e.key] ?? 0;
+        final mean = n == 0 ? null : sum[e.key]! / n;
+        final ctr = h3.cellToGeo(e.key);
+        return HexCell(
+          id: hexId(e.key),
+          boundary: [for (final g in h3.cellToBoundary(e.key)) HexPoint(g.lat, g.lon)],
+          sent: e.value,
+          heard: ok[e.key] ?? 0,
+          bestSnrDb: best[e.key],
+          snrMeanDb: mean,
+          nSnr: n,
+          band: coverageBandOf(snrMean: mean, nOk: ok[e.key] ?? 0, nSnr: n, sf: sf),
+          center: HexPoint(ctr.lat, ctr.lon),
+        );
+      }(),
+  ]..sort((a, b) => a.id.compareTo(b.id));
+  return out;
+}

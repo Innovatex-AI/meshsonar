@@ -53,7 +53,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
-import 'package:h3_flutter/h3_flutter.dart' show H3;
+import 'package:h3_flutter/h3_flutter.dart' show GeoCoord, H3;
 
 import '../../core/heard.dart' show RepeaterLookup, haversineM;
 import '../../core/coverage_query.dart' show coverageResForZoom;
@@ -65,6 +65,10 @@ import '../../core/model.dart';
 import '../../core/region_overview_api.dart' show RegionObserver;
 import '../../core/region_repeaters_api.dart' show RegionRepeater;
 import '../../core/network_coverage.dart';
+import '../../core/coverage_v2.dart';
+import 'coverage_bands.dart';
+import 'coverage_tiles_layer.dart';
+import 'sheets/coverage_cell_sheet.dart';
 import '../../core/camera_follow.dart';
 import '../../core/heading.dart' show shortestArc;
 import '../../core/map_health.dart' show CameraTelemetry;
@@ -87,7 +91,6 @@ import 'map_info_panel.dart';
 import '../../core/map_filter.dart' show GeoBounds;
 import '../../core/map_styles.dart';
 import 'cell_raster_layer.dart';
-import 'coverage_ramps.dart';
 import 'tile_source.dart';
 import '../../core/offline_packs.dart' show NetworkKind;
 import '../../platform/map_prefs_store.dart' show openSharedMapPrefs;
@@ -103,7 +106,6 @@ import 'parts/map_chips.dart';
 import 'overlays/map_controls.dart';
 import 'parts/map_compass.dart';
 import 'parts/map_markers.dart';
-import 'parts/range_rings.dart';
 import 'parts/simulated_tag.dart';
 import 'parts/source_chip.dart';
 
@@ -172,16 +174,11 @@ Color hexColor(MeshSonarColors c, HexCell h, PingColorMode mode) => mode == Ping
     ? (h.wasHeard ? c.snrStrong : c.silent)
     : (h.wasHeard ? c.forPing(heard: true, snr: h.bestSnrDb) : c.silent);
 
-/// Colour for a network-coverage [CoverageLevel]: the website's own discrete `/coverage` legend steps (standard palette:
-/// strong green, likely blue, possible amber, stretch red), not this drive's continuous SNR gradient — the two data sets
-/// are deliberately told apart at a glance. The hex values come from the chosen colour palette
-/// ([MeshSonarColors.levelColor]). [CoverageLevel.none] (nothing heard) is grey and [CoverageLevel.unknown] (heard,
-/// signal unknown) is purple in every palette.
-///
-/// [mode] picks the ramp for the two non-strength modes (ping age, noise against typical): those draw in their own colours
-/// (coverage_ramps.dart); grey and purple stay the palette's in every mode.
-Color networkLevelColor(BuildContext context, CoverageLevel level, {CoverageColorBy mode = CoverageColorBy.snr}) =>
-    rampColor(mode, level, Theme.of(context).brightness) ?? MeshSonarColors.of(context).levelColor(level);
+/// Colour for a network-coverage [CoverageLevel] on the old path (a server without coverage v2): the website's former discrete
+/// `/coverage` steps (standard palette: strong green, likely blue, possible amber, stretch red), from the chosen colour palette
+/// ([MeshSonarColors.levelColor]). [CoverageLevel.none] (nothing heard) is grey and [CoverageLevel.unknown] (heard, signal
+/// unknown) is purple in every palette.
+Color networkLevelColor(BuildContext context, CoverageLevel level) => MeshSonarColors.of(context).levelColor(level);
 
 /// The colour matrix [style]'s online tiles are drawn through: Chart follows the theme's [themeMatrix], Dark is always the dark
 /// chart grading, Street and Topo are shown as the tile server made them (null).
@@ -190,6 +187,20 @@ List<double>? tileMatrixFor(BaseMapStyle style, List<double> themeMatrix) =>
 
 /// Below this pane height the map's compass / heading / recenter buttons move left of the tool column.
 const double kCompactMapHeight = 380;
+
+/// What a map needs to draw coverage v2 (see [CoverageMap.coverageV2]).
+@immutable
+class CoverageV2Inputs {
+  final CoverageTileStore tiles;
+  final CoverageMeta meta;
+
+  /// Tiles draw (live, unfiltered, online); false = the measured layer draws the JSON cells and the predicted layer hides.
+  final bool drawTiles;
+
+  /// The inspector read (`/api/coverage/cell/{h3}`); null = the panel shows what the tap knows.
+  final Future<CoverageCellInfo> Function(String h3)? fetchCell;
+  const CoverageV2Inputs({required this.tiles, required this.meta, this.drawTiles = true, this.fetchCell});
+}
 
 class CoverageMap extends StatefulWidget {
   /// Pings to draw. Order doesn't matter; the newest (by timestamp) gets the links and the pulse.
@@ -285,6 +296,10 @@ class CoverageMap extends StatefulWidget {
   /// so the drive's cells rescale as you zoom.
   final int? hexRes;
 
+  /// Coverage v2 (server capability `coverageV2`): the tile store and meta for the Measured / Predicted layers, whether the tiles
+  /// draw now, and the cell inspector read. Also switches "This drive" to res-11 mean-SNR cells. Null = the old path.
+  final CoverageV2Inputs? coverageV2;
+
   /// The colour key for what this map is drawing (see map_key.dart): shown in the Credits sheet, not on the map. Null = none.
   final Widget? mapKey;
 
@@ -359,6 +374,7 @@ class CoverageMap extends StatefulWidget {
     this.onSelectRepeater,
     this.simulated = false,
     this.onZoomChanged,
+    this.coverageV2,
     this.hexRes,
     this.mapKey,
     this.openLegend,
@@ -537,6 +553,10 @@ class _CoverageMapState extends State<CoverageMap> {
   LinkSet? _linkSet;
   int _linkSetRes = -1;
   NetworkCell? _panelCell;
+
+  /// Coverage v2 inspector: the tapped res-11 cell and its answer (null while loading or when the read failed).
+  ({String h3, double lat, double lon})? _panelV2;
+  CoverageCellInfo? _v2Info;
   DrivePing? _panelPing;
   final ScrollController _pingScroll = ScrollController();
   RepeaterPoint? _panelPoint;
@@ -563,7 +583,7 @@ class _CoverageMapState extends State<CoverageMap> {
 
 
   void _clearLinks() {
-    if (_linkId == null && _panelCell == null && _panelPoint == null && _panelPing == null) return;
+    if (_linkId == null && _panelCell == null && _panelPoint == null && _panelPing == null && _panelV2 == null) return;
     _linkGen++;
     setState(() {
       _linkId = null;
@@ -573,10 +593,113 @@ class _CoverageMapState extends State<CoverageMap> {
       _linkError = null;
       _linkUnplaced = 0;
       _panelCell = null;
+      _panelV2 = null;
+      _v2Info = null;
       _panelPoint = null;
       _panelPing = null;
       _reachTotals = null;
     });
+  }
+
+  /// What a tap at [p] hits on the coverage v2 layers, top first: this drive's cells, measured (tiles or saved cells), then
+  /// predicted. Zoomed in (hexagons) it is the res-11 cell under the finger; zoomed out (dots) the nearest dot within 12 px.
+  ({String h3, double lat, double lon})? _coverageHit(CoverageV2Inputs v2, MapLayerState ls, LatLng p) {
+    final h3 = CoverageMap.hexEngine;
+    if (h3 == null) return null;
+    final zoom = _controller.camera.zoom;
+    String cellOf(double lat, double lon) => hexId(h3.geoToCell(GeoCoord(lon: lon, lat: lat), kCoverageV2Res));
+    final dots = zoom < v2.meta.hexFromZoom;
+    final tz = coverageTileZoom(zoom);
+    if (!dots) {
+      final id = cellOf(p.latitude, p.longitude);
+      final drawn = (ls.isOn('hexes') && _ensureHexes().any((h) => h.id == id)) ||
+          (ls.isOn('measured') &&
+              (v2.drawTiles
+                  ? coverageTileHit(v2.tiles, CoverageTileLayer.measured, v2.meta, p.latitude, p.longitude, tz) != null
+                  : widget.networkCells.any((n) => n.cell?.h3 == id))) ||
+          (ls.isOn('predicted') && v2.drawTiles && coverageTileHit(v2.tiles, CoverageTileLayer.predicted, v2.meta, p.latitude, p.longitude, tz) != null);
+      return drawn ? (h3: id, lat: p.latitude, lon: p.longitude) : null;
+    }
+    // Dots: 12 px in degrees of longitude at this zoom (latitude is close enough at these sizes).
+    final r = 12 * 360 / (256 * math.pow(2, zoom));
+    ({double lat, double lon})? best;
+    var bestD = r * r;
+    void consider(double lat, double lon) {
+      final d = (lat - p.latitude) * (lat - p.latitude) + (lon - p.longitude) * (lon - p.longitude);
+      if (d <= bestD) {
+        bestD = d;
+        best = (lat: lat, lon: lon);
+      }
+    }
+
+    if (ls.isOn('hexes')) {
+      for (final h in _ensureHexes()) {
+        if (h.center != null) consider(h.center!.lat, h.center!.lon);
+      }
+    }
+    if (best == null && ls.isOn('measured')) {
+      if (v2.drawTiles) {
+        final h = coverageTileHit(v2.tiles, CoverageTileLayer.measured, v2.meta, p.latitude, p.longitude, tz, radiusDeg: r);
+        if (h != null) consider(h.lat, h.lon);
+      } else {
+        for (final n in widget.networkCells) {
+          if (n.cell != null) consider(n.cell!.lat, n.cell!.lon);
+        }
+      }
+    }
+    if (best == null && ls.isOn('predicted') && v2.drawTiles && zoom >= v2.meta.predictedFromZoom) {
+      final h = coverageTileHit(v2.tiles, CoverageTileLayer.predicted, v2.meta, p.latitude, p.longitude, tz, radiusDeg: r);
+      if (h != null) consider(h.lat, h.lon);
+    }
+    final b = best;
+    return b == null ? null : (h3: cellOf(b.lat, b.lon), lat: b.lat, lon: b.lon);
+  }
+
+  /// Opens the inspector for one res-11 cell and draws lines to the repeaters that served it (keys resolved to names the same
+  /// way cell-links does: an exact key, else a unique prefix among the drawn repeaters).
+  Future<void> _showCoverageCell(CoverageV2Inputs v2, String id, double lat, double lon) async {
+    final h3 = CoverageMap.hexEngine;
+    var cLat = lat, cLon = lon;
+    if (h3 != null) {
+      final g = h3.cellToGeo(BigInt.parse(id, radix: 16));
+      cLat = g.lat;
+      cLon = g.lon;
+    }
+    _beginLinks('cell:$id', 'This cell');
+    setState(() {
+      _panelV2 = (h3: id, lat: cLat, lon: cLon);
+      _v2Info = null;
+      _panelCell = null;
+      _panelPoint = null;
+      _panelPing = null;
+    });
+    final fetch = v2.fetchCell;
+    if (fetch == null) {
+      setState(() => _linkBusy = false);
+      return;
+    }
+    final gen = _linkGen;
+    try {
+      final info = await fetch(id);
+      if (!mounted || gen != _linkGen) return;
+      final reps = info.measured?.repeaters ?? const <CoverageCellRepeater>[];
+      final placed = cellEnds(
+        CellLinks(h3: id, links: [for (final r in reps) CellLink(key: r.key, pings: r.n, bestSnr: r.snrMax, medianSnr: r.snrMean)]),
+        _placeRepeater,
+      );
+      setState(() {
+        _v2Info = info;
+        _linkBusy = false;
+        _linkUnplaced = placed.unplaced;
+        _linkBuild = (_) => LinkSet(id: 'cell:$id', lat: cLat, lon: cLon, title: 'This cell', ends: placed.ends, unplaced: placed.unplaced);
+      });
+    } catch (e) {
+      if (!mounted || gen != _linkGen) return;
+      setState(() {
+        _linkBusy = false;
+        _linkError = "Couldn't load this cell. Check your connection.";
+      });
+    }
   }
 
   void _beginLinks(String id, String title) {
@@ -726,8 +849,35 @@ class _CoverageMapState extends State<CoverageMap> {
   static String roleLine(RepeaterPoint p) => p.isRoom ? 'Room server' : 'Repeater';
 
   Widget? _panel(BuildContext context) {
-    final p = _panelPoint, cell = _panelCell, ping = _panelPing;
-    if (p == null && cell == null && ping == null) return null;
+    final p = _panelPoint, cell = _panelCell, ping = _panelPing, v2 = _panelV2;
+    if (p == null && cell == null && ping == null && v2 == null) return null;
+    if (v2 != null && p == null && ping == null) {
+      final set = _currentLinks();
+      final info = _v2Info;
+      final mine = _ensureHexes().where((h) => h.id == v2.h3).firstOrNull;
+      final meta = widget.coverageV2?.meta ?? CoverageMeta.fallback;
+      return MapInfoPanel(
+        key: ValueKey('info-panel-v2-${v2.h3}'),
+        title: info?.measured != null ? 'Measured cell' : (info?.predicted != null ? 'Predicted cell' : 'Coverage cell'),
+        summary: _linkBusy
+            ? 'Loading…'
+            : (_linkError ?? coverageCellSummary(info, meta, mine: mine, unplaced: _linkUnplaced)),
+        busy: _linkBusy,
+        body: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CoverageCellSheet(info: info, meta: meta, mine: mine, h3: v2.h3, repeaterName: (k) => _placeRepeater(k)?.name),
+              if (!_linkBusy && _linkError == null && (set?.ends.isNotEmpty ?? false)) CellRepeaterList(ends: set!.ends),
+            ],
+          ),
+        ),
+        onFit: !_linkBusy && (set?.ends.isNotEmpty ?? false) ? _fitLinks : null,
+        onClose: _clearLinks,
+        locked: widget.inspectorLocked,
+        autoClear: widget.inspectorAutoClear,
+      );
+    }
     if (ping != null) {
       final set = _currentLinks();
       final lookup = _appOrNull()?.lookup ?? RepeaterLookup.empty;
@@ -916,13 +1066,14 @@ class _CoverageMapState extends State<CoverageMap> {
   List<HexCell> _ensureHexes() {
     final h3 = CoverageMap.hexEngine;
     if (h3 == null) return const [];
-    final res = hexResolution;
+    final v2 = widget.coverageV2 != null;
+    final res = v2 ? 11 : hexResolution;
     if (identical(_hexSrc, widget.pings) && _hexSrcLen == widget.pings.length && _hexSrcRes == res) return _hexCells;
     _hexSrc = widget.pings;
     _hexSrcLen = widget.pings.length;
     _hexSrcRes = res;
     try {
-      _hexCells = buildHexCells(widget.pings, h3, res: res);
+      _hexCells = v2 ? buildDriveCells(widget.pings, h3, sf: presetSf(widget.coverageV2!.meta.defaultPreset)) : buildHexCells(widget.pings, h3, res: res);
     } catch (_) {
       _hexCells = const [];
     }
@@ -1296,9 +1447,23 @@ class _CoverageMapState extends State<CoverageMap> {
     final br = Theme.of(context).brightness;
     final cur = _netData;
     if (cur != null && identical(_netSrc, cells) && identical(_netMc, mc) && _netBr == br) return cur;
+    final v2 = widget.coverageV2;
+    if (v2 != null) {
+      // Coverage v2 cells from public-coverage?metric=mean (time travel, filters, offline): the same styles as the tiles.
+      final shapes = <CellShape>[
+        for (final n in cells)
+          if (n.cell != null) CellShape(n.boundary, measuredStyleIndex(n.cell!.band ?? 0, n.cell!.attempts < v2.meta.faintBelow)),
+      ];
+      final d = CellLayerData(shapes, measuredStyles(CoverageBandColors.of(mc.palette, br)), dotBelowZoom: v2.meta.hexFromZoom.toDouble(), dotPx: 3);
+      _netData = d;
+      _netSrc = cells;
+      _netMc = mc;
+      _netBr = br;
+      return d;
+    }
     final colours = <int, Color>{};
     Color colourOf(NetworkCell n) =>
-        colours.putIfAbsent(n.level.index * 16 + n.mode.index, () => networkLevelColor(context, n.level, mode: n.mode));
+        colours.putIfAbsent(n.level.index, () => networkLevelColor(context, n.level));
     final d = CellLayerData.build(cells.length, (i) => cells[i].boundary, (i) {
       final n = cells[i];
       final c = colourOf(n);
@@ -1329,6 +1494,26 @@ class _CoverageMapState extends State<CoverageMap> {
     final hexes = _ensureHexes();
     final cur = _hexLayerData;
     if (cur != null && identical(_hexLayerSrc, hexes) && identical(_hexLayerMc, mc) && _hexLayerMode == mode) return cur;
+    final v2 = widget.coverageV2;
+    if (v2 != null) {
+      // Coverage v2 "This drive": the measured look (same bands, same faint rule) with a solid outline in the band colour so the
+      // drive's own cells stand out on top of everyone's; dots when zoomed out (D11).
+      final bands = CoverageBandColors.of(mc.palette, Theme.of(context).brightness);
+      final base = measuredStyles(bands);
+      final styles = [
+        for (var i = 0; i < base.length; i++)
+          CellStyle(base[i].fill, i ~/ 2 == 0 ? base[i].border : bands[i ~/ 2], 1.2, null, base[i].dot),
+      ];
+      final shapes = [
+        for (final h in hexes) CellShape(h.boundary, measuredStyleIndex(h.band ?? 0, h.sent < v2.meta.faintBelow)),
+      ];
+      final d = CellLayerData(shapes, styles, dotBelowZoom: v2.meta.hexFromZoom.toDouble(), dotPx: 3);
+      _hexLayerData = d;
+      _hexLayerSrc = hexes;
+      _hexLayerMc = mc;
+      _hexLayerMode = mode;
+      return d;
+    }
     final d = CellLayerData.build(hexes.length, (i) => hexes[i].boundary, (i) {
       final h = hexes[i];
       final c = hexColor(mc, h, mode);
@@ -1447,7 +1632,17 @@ class _CoverageMapState extends State<CoverageMap> {
             onTap: (_, point) {
               // A repeater, ping, observer or cluster drawn on top of a cell gets the tap, not the cell under it: the cell is
               // only one candidate, and the resolver picks the winner by priority once the tap has reached every source.
-              final cell = (widget.layerState ?? kDefaultLayerState).isOn('measured') ? networkCellAt(widget.networkCells, point) : null;
+              final ls = widget.layerState ?? kDefaultLayerState;
+              if (widget.coverageV2 case final v2?) {
+                final h = _coverageHit(v2, ls, point);
+                if (h == null) {
+                  _hits.tapReachedMap();
+                } else {
+                  _hits.submit(MapHitCandidate(MapHitKind.cell, () => _showCoverageCell(v2, h.h3, h.lat, h.lon)));
+                }
+                return;
+              }
+              final cell = ls.isOn('measured') ? networkCellAt(widget.networkCells, point) : null;
               if (cell == null) {
                 _hits.tapReachedMap();
               } else {
@@ -1512,42 +1707,26 @@ class _CoverageMapState extends State<CoverageMap> {
                 dark: style.forcesDark ? true : (style == BaseMapStyle.street ? false : null),
               ),
             if (tiles && style.usesOfflinePack) ..._packOutlines(mc),
-            if (layerState.isOn('measured') && widget.networkCells.isNotEmpty) CellRasterLayer(key: const Key('network-cells-layer'), data: _networkData(context)),
-            if (widget.showRings && layerState.isOn('rings') && pos != null)
-              if (widget.puck case final puck?)
-                ListenableBuilder(
-                  listenable: puck,
-                  builder: (context, _) {
-                    final p = puck.pose;
-                    return RangeRings(
-                      center: p == null ? pos : LatLng(p.lat, p.lon),
-                      color: t.colorScheme.primary,
-                      ringMetres: AppScope.unitsOf(context).rangeRingMetres,
-                    );
-                  },
-                )
-              else
-                RangeRings(center: pos, color: t.colorScheme.primary, ringMetres: AppScope.unitsOf(context).rangeRingMetres),
-            if (widget.showRings && layerState.isOn('rings') && pos != null && _captions)
-              MarkerLayer(
-                markers: [
-                  for (final (i, ringM) in AppScope.unitsOf(context).rangeRingMetres.indexed)
-                    Marker(
-                      point: _offsetNorth(pos, -ringM),
-                      width: 44,
-                      height: 18,
-                      child: Center(
-                        child: Text(
-                          AppScope.unitsOf(context).rangeRingLabels[i],
-                          style: t.textTheme.labelSmall?.copyWith(
-                            color: t.colorScheme.primary.withValues(alpha: 0.8),
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
+            if (widget.coverageV2 case final v2? when v2.drawTiles) ...[
+              if (layerState.isOn('predicted'))
+                CoverageTilesLayer(
+                  key: const Key('coverage-predicted-layer'),
+                  layer: CoverageTileLayer.predicted,
+                  store: v2.tiles,
+                  meta: v2.meta,
+                  colors: CoverageBandColors.of(mc.palette, t.brightness),
+                ),
+              if (layerState.isOn('measured'))
+                CoverageTilesLayer(
+                  key: const Key('coverage-measured-layer'),
+                  layer: CoverageTileLayer.measured,
+                  store: v2.tiles,
+                  meta: v2.meta,
+                  colors: CoverageBandColors.of(mc.palette, t.brightness),
+                  faintBelow: v2.meta.faintBelow,
+                ),
+            ] else if (layerState.isOn('measured') && widget.networkCells.isNotEmpty)
+              CellRasterLayer(key: const Key('network-cells-layer'), data: _networkData(context)),
             if (links.isNotEmpty)
               TweenAnimationBuilder<double>(
                 key: ValueKey('links-${latest!.id}'),
@@ -1591,7 +1770,7 @@ class _CoverageMapState extends State<CoverageMap> {
             if (layerState.isOn('hexes'))
               KeyedSubtree(
                 // The resolution is in the key so a test (and a screenshot) can see which band is on screen.
-                key: ValueKey('drive-hexes-res-$hexResolution'),
+                key: ValueKey('drive-hexes-res-${widget.coverageV2 != null ? 11 : hexResolution}'),
                 child: CellRasterLayer(key: const Key('drive-hexes-layer'), data: _hexData(mc, pingMode)),
               ),
             if (_currentLinks() case final ls?) ...linkLineLayers(context, ls, labels: _captions || hexResolution >= 9),
@@ -1678,10 +1857,7 @@ class _CoverageMapState extends State<CoverageMap> {
                           color: h.phase == HeardPhase.fresh ? mc.beacon : t.colorScheme.outline,
                         ),
                   ],
-                  blockers: [
-                    if (widget.showRings && layerState.isOn('rings') && pos != null)
-                      for (final m in AppScope.unitsOf(context).rangeRingMetres) _offsetNorth(pos, -m),
-                  ],
+                  blockers: const [],
                   inset: widget.overlayPadding + const EdgeInsets.only(bottom: 30),
                   avoid: (size) => _overlayRects(),
                 ),
@@ -1901,5 +2077,4 @@ class _CoverageMapState extends State<CoverageMap> {
     return parts.isEmpty ? null : parts.join(' · ');
   }
 
-  static LatLng _offsetNorth(LatLng p, double metres) => LatLng(p.latitude + metres / 111320.0, p.longitude);
 }

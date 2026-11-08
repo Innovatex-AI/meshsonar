@@ -16,6 +16,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../../app/app_state.dart';
 import '../../core/api.dart' show PublicCoverage;
+import '../../core/coverage_v2.dart' show CoverageTileStore;
 import '../../core/coverage_query.dart';
 import '../../core/heard.dart';
 import '../../core/hex_cells.dart' show loadHexEngine;
@@ -72,7 +73,6 @@ class DriveMapModel extends ChangeNotifier {
     // there is no flash of defaults. Repeater names fall back to the old Settings.mapRepeaterLabels key until chosen here.
     _lp = _prefs.layerPrefs(pageId);
     _layerState = layerStateFromPrefs(_lp, labelsFallback: state.settings.mapRepeaterLabels);
-    _colorBy = _colorByFromPrefs(_lp);
     _query = _queryFromPrefs(_lp);
     repeaterFeed = AppStateRepeaterFeed(state, fallbackRoster: _fallbackRoster);
     repeaterSource = RepeaterMapSource(repeaterFeed, clock: state.services.clock, isolateThreshold: repeaterIsolateThreshold)
@@ -88,15 +88,8 @@ class DriveMapModel extends ChangeNotifier {
   final MapPrefs _prefs;
   late LayerPrefs _lp;
 
-  static CoverageColorBy _colorByFromPrefs(LayerPrefs p) {
-    for (final c in CoverageColorBy.values) {
-      if (c.name == p.colorBy) return c;
-    }
-    return CoverageColorBy.snr;
-  }
-
+  // The remembered "Detail" pin (p.res) is no longer read: the chips are gone (coverage v2 D1; the old path is automatic by zoom).
   static CoverageQuery _queryFromPrefs(LayerPrefs p) => CoverageQuery(
-    res: p.res,
     since: CoverageSince.values.where((e) => e.name == p.since).firstOrNull ?? CoverageSince.all,
     source: CoverageSource.values.where((e) => e.name == p.source).firstOrNull ?? CoverageSource.all,
   );
@@ -249,8 +242,12 @@ class DriveMapModel extends ChangeNotifier {
     if (turnedOn('observers')) unawaited(loadObservers());
   }
 
-  /// Turns one registry layer on or off.
-  void setLayer(String id, bool on) => layerState = _layerState.toggle(id, on);
+  /// Turns one registry layer on or off. The roster id stands for the whole Repeaters switch (plan section 5).
+  void setLayer(String id, bool on) => layerState = id == kRosterLayerId ? withRepeaters(_layerState, on) : _layerState.toggle(id, on);
+
+  /// The Repeaters scope: This region (false) / All MeshCore (true).
+  bool get repeatersAll => repeatersAllScope(_layerState);
+  set repeatersAll(bool all) => layerState = withRepeaterScope(_layerState, all: all);
 
   /// How the Pings and Your-coverage layers colour (By SNR / Heard).
   PingColorMode get pingColors => pingColorModeOf(_layerState);
@@ -260,7 +257,6 @@ class DriveMapModel extends ChangeNotifier {
   /// choices. The base map, the filter and the timeline position are not layers and stay.
   void resetLayers() {
     _saveLayerPrefs(LayerPrefs.empty);
-    _colorBy = CoverageColorBy.snr;
     final was = _layerState;
     _layerState = kDefaultLayerState;
     repeaterSource.dedupeAgainstRoster = _layerState.isOn(kRosterLayerId);
@@ -394,6 +390,9 @@ class DriveMapModel extends ChangeNotifier {
       coverageState: _coverageState,
       coverageCells: _networkCells.length,
       coverageSavedAt: state.networkCoverageSavedAt,
+      coverageV2: coverageV2,
+      tilesOffline: coverageV2 && state.coverageTiles.offline,
+      coverageFiltered: coverageFiltered,
       observersState: _observersSlug == state.viewingRegion?.slug ? _observersState : MapFeedState.idle,
       observersWithPosition: _observers.length,
       regionName: state.viewingRegion?.name,
@@ -405,6 +404,12 @@ class DriveMapModel extends ChangeNotifier {
   Future<void> retry(String id) async {
     switch (id) {
       case 'measured':
+      case 'predicted':
+        if (coverageV2) {
+          state.coverageTiles.networkFailures = 0;
+          notifyListeners();
+          unawaited(state.refreshCoverageMeta());
+        }
         await state.refreshNetworkCoverage();
       case 'observers':
         await loadObservers(force: true);
@@ -440,20 +445,18 @@ class DriveMapModel extends ChangeNotifier {
       _networkCells = const [];
       return true;
     }
-    final by = _colorBy;
-    final now = state.services.clock();
     if (src.cells.length < cellIsolateThreshold) {
-      _networkCells = buildNetworkCells(src, _h3, by, now: now);
+      _networkCells = buildNetworkCells(src, _h3);
       return true;
     }
     unawaited(
-      Isolate.run(() => buildNetworkCells(src, loadHexEngine(), by, now: now)).then<void>((r) {
+      Isolate.run(() => buildNetworkCells(src, loadHexEngine())).then<void>((r) {
         if (_disposed || seq != _cellsSeq) return;
         _networkCells = r;
         notifyListeners();
       }, onError: (Object _) {
         if (_disposed || seq != _cellsSeq) return;
-        _networkCells = buildNetworkCells(src, _h3, by, now: now); // no isolate here: do it in place
+        _networkCells = buildNetworkCells(src, _h3); // no isolate here: do it in place
         notifyListeners();
       }),
     );
@@ -598,6 +601,8 @@ class DriveMapModel extends ChangeNotifier {
       if (!first) timeline.regionChanged();
       if (!first && _layerState.isOn('observers')) unawaited(loadObservers());
     }
+
+    _watchTiles();
 
     // Network-wide coverage: a new fetch (initial, or after a server change) redraws the background layer even
     // if nothing else about the drive changed (most often: the fetch lands before anyone has started driving).
@@ -744,15 +749,33 @@ class DriveMapModel extends ChangeNotifier {
     });
   }
 
-  // ---------- network-coverage layer controls (res by zoom, colour-by, since, source) ----------
-  late CoverageColorBy _colorBy;
-  CoverageColorBy get colorBy => _colorBy;
-  set colorBy(CoverageColorBy v) {
-    if (v == _colorBy) return;
-    _colorBy = v;
-    _saveLayerPrefs(v == CoverageColorBy.snr ? _lp.copyWith(clearColorBy: true) : _lp.copyWith(colorBy: v.name));
-    _rebuildNetworkCells();
-    notifyListeners();
+  // ---------- coverage v2 (tiles + This drive + inspector) and the network-coverage filters (since, source, timeline) ----------
+  /// The server offers coverage v2 (site-config capability); otherwise the old public-coverage path draws (D12).
+  bool get coverageV2 => state.coverageV2;
+
+  /// The window, source or timeline looks at something other than "everything, now". Tiles have no time or source filter, so
+  /// then the measured layer draws the `metric=mean` cells for that query and the predicted layer (today's estimate) hides.
+  bool get coverageFiltered => _query.until != null || _query.since != CoverageSince.all || _query.source != CoverageSource.all;
+
+  /// The coverage layers come from the tiles (live, unfiltered, reachable); false = from the saved / filtered JSON cells.
+  bool get drawTiles => coverageV2 && !coverageFiltered && !state.coverageTiles.offline;
+
+  CoverageTileStore? _tilesListened;
+  bool _tilesOffline = false;
+  void _watchTiles() {
+    if (!coverageV2) return;
+    final t = state.coverageTiles;
+    if (identical(t, _tilesListened)) return;
+    _tilesListened?.removeListener(_onTiles);
+    _tilesListened = t..addListener(_onTiles);
+  }
+
+  void _onTiles() {
+    final off = _tilesListened?.offline ?? false;
+    if (off != _tilesOffline && !_disposed) {
+      _tilesOffline = off;
+      notifyListeners();
+    }
   }
 
   late CoverageQuery _query;
@@ -763,12 +786,11 @@ class DriveMapModel extends ChangeNotifier {
     if (q == _query) return;
     final was = _query;
     _query = q;
-    // Detail, window and source are remembered; the timeline's "as of" is not (always Live on launch).
-    if (q.res != was.res || q.since != was.since || q.source != was.source) {
+    // Window and source are remembered; the timeline's "as of" is not (always Live on launch).
+    if (q.since != was.since || q.source != was.source) {
       _saveLayerPrefs(
         _lp.copyWith(
-          res: q.res,
-          clearRes: q.res == null,
+          clearRes: true,
           since: q.since.name,
           clearSince: q.since == CoverageSince.all,
           source: q.source.name,
@@ -796,13 +818,14 @@ class DriveMapModel extends ChangeNotifier {
 
   double? _zoom;
 
-  /// The resolution actually requested: the pinned one, else the one for the map's zoom (res 9 until the map reports).
-  int get effectiveRes => _query.res ?? (_zoom == null ? 9 : coverageResForZoom(_zoom!));
+  /// The resolution actually requested: res 11 with coverage v2 (one cell size, D1); on the old path the one for the map's
+  /// zoom (res 9 until the map reports).
+  int get effectiveRes => coverageV2 ? 11 : (_zoom == null ? 9 : coverageResForZoom(_zoom!));
 
-  /// Called by the map as it zooms; in automatic mode a new resolution band re-fetches (debounced).
+  /// Called by the map as it zooms; on the old path a new resolution band re-fetches (debounced). v2 never refetches on zoom.
   void onMapZoom(double zoom) {
     _zoom = zoom;
-    if (_query.res == null) _scheduleCoverageFetch();
+    if (!coverageV2) _scheduleCoverageFetch();
   }
 
   Timer? _fetchTimer;
@@ -813,7 +836,7 @@ class DriveMapModel extends ChangeNotifier {
       final res = effectiveRes;
       final shown = state.networkCoverage?.grid.res;
       final asked = state.coverageQuery;
-      if (!immediate && shown == res && asked.since == _query.since && asked.source == _query.source && asked.until == _query.until) return;
+      if (!immediate && (coverageV2 || shown == res) && asked.since == _query.since && asked.source == _query.source && asked.until == _query.until) return;
       unawaited(state.refreshNetworkCoverage(query: CoverageQuery(res: res, since: _query.since, source: _query.source, until: _query.until)));
     }
 
@@ -834,6 +857,7 @@ class DriveMapModel extends ChangeNotifier {
     timeline.dispose();
     mapView.dispose();
     state.removeListener(_onState);
+    _tilesListened?.removeListener(_onTiles);
     repeaterSource.dispose();
     repeaterFeed.dispose();
     unawaited(_fixSub?.cancel());

@@ -1,0 +1,42 @@
+{
+    "h3": "8b2a95620b46fff",
+    "res": 11,
+    "preset": "sf7bw62.5",
+    "measured": {
+        "nOk": 5,
+        "band": 4,
+        "nSnr": 5,
+        "nFail": 0,
+        "snrSd": 1.01,
+        "lastAt": "2026-11-08T15:00:00.000Z",
+        "snrMax": 7.5,
+        "snrMin": 4.75,
+        "firstAt": "2026-10-23T00:00:00.000Z",
+        "regions": [
+            1
+        ],
+        "snrMean": 6.35,
+        "sources": {
+            "meshsonar": 1,
+            "meshmapper": 4
+        },
+        "repeaters": [
+            {
+                "n": 3,
+                "key": "297d",
+                "snrMax": 7.5,
+                "snrMean": 6.83
+            },
+            {
+                "n": 3,
+                "key": "da5d",
+                "snrMax": 6.5,
+                "snrMean": 5.17
+            }
+        ],
+        "replyRate": 1,
+        "noiseFloor": -103.8
+    },
+    "predicted": null,
+    "version": 101
+}

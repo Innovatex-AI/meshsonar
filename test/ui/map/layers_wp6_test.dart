@@ -12,7 +12,6 @@ import 'package:meshsonar/core/map_links.dart';
 import 'package:meshsonar/core/map_prefs.dart';
 import 'package:meshsonar/core/repeater_reach.dart';
 import 'package:meshsonar/core/model.dart';
-import 'package:meshsonar/core/network_coverage.dart';
 import 'package:meshsonar/ui/app.dart';
 import 'package:meshsonar/ui/drive/drive_map_model.dart';
 import 'package:meshsonar/ui/map/coverage_layer_controls.dart';
@@ -23,7 +22,6 @@ import 'package:meshsonar/ui/map/layers/map_layer.dart';
 import 'package:meshsonar/ui/map/layers/registry.dart';
 import 'package:meshsonar/ui/map/legend_sheet.dart';
 import 'package:meshsonar/ui/map/map_layers.dart';
-import 'package:meshsonar/ui/map/parts/range_rings.dart';
 
 import '../fakes.dart';
 
@@ -78,7 +76,7 @@ void main() {
   });
 
   group('F11 persistence across a relaunch', () {
-    testWidgets('switches, Pings mode, colour-by, detail, window and source come back; Reset forgets; the filter does not persist', (t) async {
+    testWidgets('switches, Pings mode, Repeaters scope, window and source come back; Reset forgets; the filter does not persist', (t) async {
       final h = Harness();
       await h.state.init();
       final prefs = _openPrefs();
@@ -86,9 +84,8 @@ void main() {
       expect(a.layerState, kDefaultLayerState);
       a.setLayer('measured', false);
       a.setLayer('network', true);
-      a.setLayer('rings', false);
+      a.setLayer('predicted', false);
       a.pingColors = PingColorMode.result;
-      a.colorBy = CoverageColorBy.noise;
       a.coverageQuery = const CoverageQuery(res: 10, since: CoverageSince.week, source: CoverageSource.meshsonar);
       a.timeline.scrubTo(0); // not a layer: never remembered
       await t.pump(const Duration(milliseconds: 1));
@@ -101,18 +98,16 @@ void main() {
       addTearDown(b.dispose);
       expect(b.layerState.isOn('measured'), isFalse);
       expect(b.layerState.isOn('network'), isTrue);
-      expect(b.layerState.isOn('rings'), isFalse);
+      expect(b.layerState.isOn('predicted'), isFalse);
       expect(b.layerState.isOn('pings'), isTrue, reason: 'untouched layers keep their default');
       expect(b.pingColors, PingColorMode.result);
-      expect(b.colorBy, CoverageColorBy.noise);
-      expect(b.coverageQuery.res, 10);
+      expect(b.coverageQuery.res, isNull, reason: 'the detail chips are gone: a pinned resolution is never remembered (D1)');
       expect(b.coverageQuery.since, CoverageSince.week);
       expect(b.coverageQuery.source, CoverageSource.meshsonar);
       expect(b.coverageQuery.until, isNull, reason: 'the timeline is always Live on launch');
 
       b.resetLayers();
       expect(b.layerState, kDefaultLayerState);
-      expect(b.colorBy, CoverageColorBy.snr);
       expect(b.coverageQuery.res, isNull);
       expect(b.coverageQuery.since, CoverageSince.all);
       expect(b.coverageQuery.source, CoverageSource.all);
@@ -135,7 +130,7 @@ void main() {
     });
   });
 
-  group('F2 / F9 / F4 on the map', () {
+  group('F2 / F9 on the map (F4 range rings were removed with the coverage redesign)', () {
     const a = RepeaterRef(key: 'aaaa1111', name: 'Alpha', lat: 40.01, lon: -83.0);
     const b = RepeaterRef(key: 'bbbb2222', name: 'Bravo', lat: 40.02, lon: -83.0);
     final heardA = HeardView(id: 'aa', label: 'Alpha', ref: a, snrDb: 4);
@@ -161,15 +156,6 @@ void main() {
       expect(repeaterItem(t, 'bbbb2222'), isNull, reason: 'known but not heard: not on this layer');
       await pumpMap(t, layers: kDefaultLayerState.toggle('heard', false), heard: [heardA], position: const LatLng(40.0, -83.0));
       expect(repeaterItem(t, 'aaaa1111'), isNull);
-    });
-
-    testWidgets('F4: range rings draw as soon as there is a position, idle (no puck, not driving), and the switch turns them off', (t) async {
-      await pumpMap(t, layers: kDefaultLayerState, position: const LatLng(40.0, -83.0));
-      expect(find.byType(RangeRings), findsOneWidget);
-      await pumpMap(t, layers: kDefaultLayerState.toggle('rings', false), position: const LatLng(40.0, -83.0));
-      expect(find.byType(RangeRings), findsNothing);
-      await pumpMap(t, layers: kDefaultLayerState);
-      expect(find.byType(RangeRings), findsNothing, reason: 'no position, nothing to draw');
     });
 
     testWidgets('F9: the Lines switch gates the lines drawn after a tap', (t) async {
@@ -257,40 +243,51 @@ void main() {
       return model;
     }
 
-    testWidgets('sections in order: Base map, This drive, Coverage, Repeaters, Display; ten layer switches; no neighbours', (t) async {
+    testWidgets('sections in order: Base map, Coverage, Network; the plan section 5 rows; no rings, no neighbours', (t) async {
       await openSheet(t);
       final ys = [
-        for (final g in ['base', 'drive', 'coverage', 'repeaters', 'display']) t.getTopLeft(find.byKey(Key('layers-group-$g'), skipOffstage: false)).dy,
+        for (final g in ['base', 'coverage', 'network']) t.getTopLeft(find.byKey(Key('layers-group-$g'), skipOffstage: false)).dy,
       ];
       expect([...ys]..sort(), ys);
-      for (final id in ['layer-pings', 'layer-hexes', 'layer-links', 'layer-network-coverage', 'layer-repeaters', 'layer-region-repeaters', 'layer-network', 'layer-observers', 'layer-labels', 'layer-rings']) {
-        expect(find.byKey(Key(id), skipOffstage: false), findsOneWidget, reason: id);
+      final rows = ['layer-network-coverage', 'layer-predicted', 'layer-hexes', 'layer-pings', 'layer-region-repeaters', 'layer-labels', 'layer-observers', 'layer-links'];
+      final rowY = [for (final id in rows) t.getTopLeft(find.byKey(Key(id), skipOffstage: false)).dy];
+      expect([...rowY]..sort(), rowY, reason: 'Measured, Predicted, This drive, Ping dots, Repeaters, Names, Observers, Lines');
+      for (final id in ['layer-rings', 'layer-neighbours', 'layer-network', 'layer-repeaters']) {
+        expect(find.byKey(Key(id), skipOffstage: false), findsNothing, reason: '$id is not a row of its own');
       }
-      expect(find.byKey(const Key('layer-neighbours'), skipOffstage: false), findsNothing);
-      expect(find.text('Your coverage'), findsOneWidget);
-      expect(find.text('Lines to repeaters'), findsOneWidget);
-      expect(find.text('Heard this drive'), findsOneWidget);
+      for (final text in ['Measured coverage', 'Predicted coverage', 'This drive', 'Ping dots', 'Repeaters', 'Names', 'Observers', 'Lines to repeaters']) {
+        expect(find.text(text), findsWidgets, reason: text);
+      }
+      expect(find.text('Colour by'), findsNothing);
+      expect(find.textContaining('Range rings'), findsNothing);
     });
 
-    testWidgets('F7: Network coverage says whose coverage and where', (t) async {
+    testWidgets('F7: Measured coverage says whose coverage it is; Predicted says it is not on an old server', (t) async {
       await openSheet(t);
-      expect(find.text('Network coverage'), findsWidgets);
-      expect(find.text("Everyone's measured coverage in this region."), findsOneWidget);
+      expect(find.text("Everyone's drives: the average signal in each cell."), findsOneWidget);
+      expect(find.text('Not available on this server yet'), findsOneWidget, reason: 'the fake server has no coverageV2');
+      expect(t.widget<Switch>(find.byKey(const Key('layer-predicted'))).onChanged, isNull);
     });
 
-    testWidgets('F4: the ring row stays enabled and says it needs GPS when there is no position', (t) async {
-      await openSheet(t);
-      expect(find.textContaining('Needs a GPS position'), findsOneWidget);
-      final sw = t.widget<Switch>(find.byKey(const Key('layer-rings')));
-      expect(sw.onChanged, isNotNull);
+    testWidgets('Repeaters: one switch with a This region / All MeshCore scope; Names is under it', (t) async {
+      final m = await openSheet(t);
+      expect(t.widget<Switch>(find.byKey(const Key('layer-region-repeaters'))).value, isTrue);
+      expect(m.repeatersAll, isFalse);
+      await t.tap(find.byKey(const Key('layer-scope-all')));
+      await t.pumpAndSettle();
+      expect(m.layerState.isOn('network'), isTrue);
+      expect(m.layerState.isOn('repeaters'), isFalse);
+      expect(t.widget<Switch>(find.byKey(const Key('layer-region-repeaters'))).value, isTrue, reason: 'still on, other scope');
+      await t.tap(find.byKey(const Key('layer-region-repeaters')));
+      await t.pumpAndSettle();
+      expect(repeatersOn(m.layerState), isFalse);
+      expect(t.widget<Switch>(find.byKey(const Key('layer-labels'))).onChanged, isNull, reason: 'Names needs Repeaters on');
     });
 
-    testWidgets('inline keys sit under the rows and follow the Pings mode; the network layer is off by default', (t) async {
+    testWidgets('inline keys sit under the rows and follow the Pings mode', (t) async {
       final m = await openSheet(t);
       expect(find.byKey(const Key('layer-pings-key')), findsOneWidget);
       expect(find.byKey(const Key('layer-hexes-key')), findsOneWidget);
-      expect(find.byKey(const Key('layer-network-key'), skipOffstage: false), findsNothing, reason: 'off: no key');
-      expect(t.widget<Switch>(find.byKey(const Key('layer-network'))).value, isFalse);
       expect(find.text('no reading'), findsWidgets, reason: 'purple row in the SNR key');
       await t.tap(find.byKey(const Key('layer-color-result')));
       await t.pumpAndSettle();
@@ -298,32 +295,33 @@ void main() {
       expect(find.text('not heard'), findsWidgets);
     });
 
-    testWidgets('Network coverage options is a page inside the sheet: colour by, detail, window, source, growth slider, back', (t) async {
+    testWidgets('Coverage options is a page inside the sheet: window, growth slider, source, back; no colour by or detail', (t) async {
       final m = await openSheet(t);
       await t.ensureVisible(find.byKey(const Key('layer-measured-options')));
       await t.tap(find.byKey(const Key('layer-measured-options')));
       await t.pumpAndSettle();
       expect(find.byKey(const Key('layers-options-page')), findsOneWidget);
       expect(find.byType(CoverageOptionsBody), findsOneWidget);
-      await t.tap(find.byKey(const Key('cov-color-Share heard')));
+      expect(find.byKey(const Key('cov-color-Share heard')), findsNothing);
+      expect(find.byKey(const Key('cov-res-Auto')), findsNothing);
+      await t.tap(find.byKey(const Key('cov-since-7 d')));
       await t.pump();
-      expect(m.colorBy, CoverageColorBy.heard);
-      expect(find.text('heard, signal unknown'), findsWidgets, reason: 'F1: the purple row in the Share-heard key');
+      expect(m.coverageQuery.since, CoverageSince.week);
       await t.tap(find.byKey(const Key('layers-options-back')));
       await t.pumpAndSettle();
       expect(find.byKey(const Key('layers-options-page')), findsNothing);
-      expect(find.textContaining('Colour by Share heard'), findsOneWidget);
+      expect(find.textContaining('Window 7 d'), findsOneWidget);
     });
 
     testWidgets('Reset asks first, then restores the defaults', (t) async {
       final m = await openSheet(t);
-      m.setLayer('rings', false);
+      m.setLayer('observers', true);
       await t.pumpAndSettle();
       await t.ensureVisible(find.byKey(const Key('layers-reset')));
       await t.tap(find.byKey(const Key('layers-reset')));
       await t.pumpAndSettle();
       expect(find.byKey(const Key('layers-reset-confirm')), findsOneWidget);
-      expect(m.layerState.isOn('rings'), isFalse, reason: 'nothing changed before the confirmation');
+      expect(m.layerState.isOn('observers'), isTrue, reason: 'nothing changed before the confirmation');
       await t.tap(find.byKey(const Key('layers-reset-confirm')));
       await t.pumpAndSettle();
       expect(m.layerState, kDefaultLayerState);
@@ -342,11 +340,14 @@ void main() {
   });
 
   group('the guide', () {
-    Future<void> pumpGuide(WidgetTester t, {CoverageColorBy by = CoverageColorBy.snr, PingColorMode ping = PingColorMode.snr}) async {
+    Future<void> pumpGuide(WidgetTester t, {PingColorMode ping = PingColorMode.snr, bool v2 = false}) async {
       t.view.physicalSize = const Size(420, 5000);
       t.view.devicePixelRatio = 1;
       addTearDown(t.view.reset);
-      await t.pumpWidget(MaterialApp(theme: meshSonarTheme(Brightness.light), home: Scaffold(body: MapLegendSheet(key: ValueKey('${by.name}${ping.name}'), colorBy: by, pingColors: ping))));
+      await t.pumpWidget(MaterialApp(
+        theme: meshSonarTheme(Brightness.light),
+        home: Scaffold(body: MapLegendSheet(key: ValueKey('${ping.name}$v2'), pingColors: ping, coverageV2: v2)),
+      ));
       await t.pumpAndSettle();
     }
 
@@ -363,12 +364,24 @@ void main() {
       expect(find.textContaining('Amber tower'), findsNothing);
     });
 
-    testWidgets('F1: Share heard has the purple row; Noise floor has the grey "no reading" row', (t) async {
-      await pumpGuide(t, by: CoverageColorBy.heard);
+    testWidgets('F1: the old best-SNR key keeps the purple "heard, signal unknown" and the grey rows', (t) async {
+      await pumpGuide(t);
       expect(find.byKey(const Key('legend-row-cell-unknown')), findsOneWidget);
-      await pumpGuide(t, by: CoverageColorBy.noise);
       expect(find.byKey(const Key('legend-row-cell-none')), findsOneWidget);
-      expect(find.text('Grey: no noise reading'), findsOneWidget);
+      expect(find.byKey(const Key('legend-colour-by-heard')), findsNothing, reason: 'no colour-by modes (D9)');
+    });
+
+    testWidgets('coverage v2: five bands with dB ranges, No reply, Heard no direct signal, Faint, hatched Predicted', (t) async {
+      await pumpGuide(t, v2: true);
+      expect(find.text('Measured coverage'), findsOneWidget);
+      expect(find.text('Predicted coverage'), findsWidgets);
+      for (final id in ['cell-band-5', 'cell-band-4', 'cell-band-3', 'cell-band-2', 'cell-band-1', 'cell-band-0', 'cell-band-6', 'cell-faded', 'predicted-sample', 'predicted-none']) {
+        expect(find.byKey(Key('legend-row-$id')), findsOneWidget, reason: id);
+      }
+      expect(find.text('Excellent, above +7.5 dB'), findsOneWidget);
+      expect(find.text('Fair, \u22122.5 to +2.5 dB'), findsOneWidget);
+      expect(find.text('Edge, below \u22127.5 dB'), findsOneWidget);
+      expect(find.text('Faint = under 3 pings'), findsOneWidget);
     });
   });
 }

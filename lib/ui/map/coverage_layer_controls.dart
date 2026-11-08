@@ -1,68 +1,29 @@
-// The network-coverage layer's controls (the website /coverage layer panel): colour-by (best SNR / share heard /
-// noise floor), detail (automatic H3 resolution by zoom, or pinned 7-11), a "since" window and a source filter.
-// Lives in the map-layers sheet under the "Network coverage" switch; all state is on [DriveMapModel].
+// The coverage layers' options (the website /coverage layer panel): a "measured in the last" window, the source filter and
+// the coverage-growth timeline ("as of" slider, coverage_timeline_slider.dart, re-queries public-coverage with `until`).
+// The colour-by modes and the detail (H3 resolution) chips were removed with the coverage redesign (plan D1, D9): one colour
+// metric and one cell size. Lives in the map-layers sheet under "Coverage options"; all state is on [DriveMapModel].
 //
-// Coverage-growth timeline: the "as of" slider (coverage_timeline_slider.dart) re-queries public-coverage with `until`.
+// With coverage v2 any of these filters switches the measured layer from the tiles to the `metric=mean` cells for that query,
+// and hides the predicted layer (an estimate for today).
 import 'package:flutter/material.dart';
 
 import '../../core/coverage_query.dart';
 import '../../core/network_coverage.dart';
 import '../drive/drive_map_model.dart';
 import '../theme.dart';
-import 'coverage_map.dart' show networkLevelColor;
 import 'coverage_timeline_slider.dart';
 
-String colorByLabel(CoverageColorBy by) => switch (by) {
-  CoverageColorBy.snr => 'Best SNR',
-  CoverageColorBy.heard => 'Share heard',
-  CoverageColorBy.noise => 'Noise floor',
-  CoverageColorBy.age => 'Ping age',
-  CoverageColorBy.noiseDelta => 'Noise vs typical',
-};
+/// The old (pre-v2) best-SNR legend steps, strongest first (same thresholds as [levelFor]).
+List<(CoverageLevel, String)> coverageLegend() => const [
+  (CoverageLevel.strong, '+5 dB or better'),
+  (CoverageLevel.good, '0 to +5'),
+  (CoverageLevel.fair, '-5 to 0'),
+  (CoverageLevel.weak, 'below -5'),
+  (CoverageLevel.unknown, 'heard, signal unknown'),
+  (CoverageLevel.none, 'mapped, nothing heard'),
+];
 
-/// Legend steps for a colour-by mode, strongest first (same thresholds as [levelFor]).
-List<(CoverageLevel, String)> coverageLegend(CoverageColorBy by) =>
-    switch (by) {
-      CoverageColorBy.snr => const [
-        (CoverageLevel.strong, '+5 dB or better'),
-        (CoverageLevel.good, '0 to +5'),
-        (CoverageLevel.fair, '-5 to 0'),
-        (CoverageLevel.weak, 'below -5'),
-        (CoverageLevel.unknown, 'heard, signal unknown'),
-        (CoverageLevel.none, 'mapped, nothing heard'),
-      ],
-      CoverageColorBy.heard => const [
-        (CoverageLevel.strong, '75%+ heard'),
-        (CoverageLevel.good, '50-75%'),
-        (CoverageLevel.fair, '25-50%'),
-        (CoverageLevel.weak, 'under 25%'),
-        (CoverageLevel.unknown, 'heard, signal unknown'),
-        (CoverageLevel.none, 'mapped, nothing heard'),
-      ],
-      CoverageColorBy.noise => const [
-        (CoverageLevel.strong, 'quiet, under -125 dBm'),
-        (CoverageLevel.good, '-125 to -115'),
-        (CoverageLevel.fair, '-115 to -105'),
-        (CoverageLevel.weak, 'noisy, above -105'),
-        (CoverageLevel.none, 'no reading'),
-      ],
-      CoverageColorBy.age => const [
-        (CoverageLevel.strong, 'measured in the last 24 hours'),
-        (CoverageLevel.good, '1 to 7 days ago'),
-        (CoverageLevel.fair, '7 to 30 days ago'),
-        (CoverageLevel.weak, 'older than 30 days'),
-        (CoverageLevel.none, 'mapped, nothing heard'),
-      ],
-      CoverageColorBy.noiseDelta => const [
-        (CoverageLevel.strong, 'quieter than typical (3 dB or more)'),
-        (CoverageLevel.good, 'typical (within 3 dB)'),
-        (CoverageLevel.fair, 'noisier (3 to 8 dB above)'),
-        (CoverageLevel.weak, 'much noisier (over 8 dB above)'),
-        (CoverageLevel.none, 'nothing heard, or no noise reading'),
-      ],
-    };
-
-/// The options page body of the Network coverage layer: colour by (with its key), detail, window, source and the growth slider.
+/// The options page body of the coverage layers: window, growth slider and source.
 class CoverageOptionsBody extends StatelessWidget {
   final DriveMapModel model;
   const CoverageOptionsBody({super.key, required this.model});
@@ -105,7 +66,6 @@ class CoverageOptionsBody extends StatelessWidget {
           ),
       ],
     );
-    final auto = q.res == null;
     return KeyedSubtree(
       key: const Key('coverage-layer-controls'),
       child: Column(
@@ -114,55 +74,6 @@ class CoverageOptionsBody extends StatelessWidget {
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            row(
-              'Colour by',
-              chips<CoverageColorBy>(
-                'cov-color',
-                CoverageColorBy.values,
-                model.colorBy,
-                colorByLabel,
-                (v) => model.colorBy = v,
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(bottom: Gap.s),
-              child: Wrap(
-                spacing: Gap.m,
-                runSpacing: 2,
-                children: [
-                  for (final (lvl, text) in coverageLegend(model.colorBy))
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 10,
-                          height: 10,
-                          decoration: BoxDecoration(
-                            color: networkLevelColor(context, lvl, mode: model.colorBy),
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(text, style: t.textTheme.labelSmall),
-                      ],
-                    ),
-                ],
-              ),
-            ),
-            row(
-              auto
-                  ? 'Detail (auto: H3 res ${model.effectiveRes})'
-                  : 'Detail (H3 res ${q.res})',
-              chips<int>(
-                'cov-res',
-                [0, for (var r = coverageMinRes; r <= coverageMaxRes; r++) r],
-                q.res ?? 0,
-                (v) => v == 0 ? 'Auto' : '$v',
-                (v) => model.coverageQuery = v == 0
-                    ? q.copyWith(autoRes: true)
-                    : q.copyWith(res: v),
-              ),
-            ),
             row(
               'Measured in the last',
               chips<CoverageSince>(

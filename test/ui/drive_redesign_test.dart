@@ -188,7 +188,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byKey(const Key('layers-sheet')), findsOneWidget);
     await tester.tap(find.byKey(const Key('layer-color-result')));
-    await tester.tap(find.byKey(const Key('layer-repeaters')));
+    // The one Repeaters switch (coverage plan section 5): off hides the roster and the heard highlight together.
+    await tester.ensureVisible(find.byKey(const Key('layer-region-repeaters')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('layer-region-repeaters')));
     await settle(tester);
     await tester.tap(find.byKey(const Key('layers-done'))); // dismiss the sheet
     await tester.pump();

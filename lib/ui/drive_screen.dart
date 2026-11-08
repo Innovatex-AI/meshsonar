@@ -309,7 +309,7 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
                       fix: model.fix,
                       passenger: _auto.passenger,
                       onPassenger: (v) => setState(() => _auto.passenger = v),
-                      openGuide: () => showMapLegend(context, colorBy: model.colorBy, pingColors: model.pingColors),
+                      openGuide: () => showMapLegend(context, pingColors: model.pingColors),
                       nearby: model.position == null ? const [] : nearestRepeaters(model.regionRepeaters, model.position!.latitude, model.position!.longitude),
                       onPickNearby: (key) {
                         model.select(key);
@@ -542,9 +542,11 @@ class _MapPane extends StatelessWidget {
           onSelectRepeater: model.select,
           simulated: model.simulated,
           onZoomChanged: model.onMapZoom,
-          hexRes: model.coverageQuery.res,
+          coverageV2: model.coverageV2
+              ? CoverageV2Inputs(tiles: s.coverageTiles, meta: s.coverageMeta, drawTiles: model.drawTiles, fetchCell: s.coverageCell)
+              : null,
           mapKey: MapKey(model: model),
-          openLegend: () => showMapLegend(context, colorBy: model.colorBy, pingColors: model.pingColors),
+          openLegend: () => showMapLegend(context, pingColors: model.pingColors),
           fallbackCenter: viewedRegionCenter(s),
           fallbackBounds: viewedRegionBounds(s),
           // GPS trouble (waiting, weak, lost, Precise Location off) as one line over the map's top edge, with the one button that fixes it.

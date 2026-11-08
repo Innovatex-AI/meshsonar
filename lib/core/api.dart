@@ -196,6 +196,9 @@ class SiteConfig {
   /// [telemetryFormats].
   final Set<String> capabilities;
 
+  /// Coverage v2 (`capabilities.coverageV2`): `/api/coverage/{tiles,cell,meta}` and `public-coverage?metric=mean`.
+  bool get coverageV2 => capabilities.contains('coverageV2');
+
   /// `capabilities.driveFormats`: the drive upload format ids this server accepts (e.g. `meshsonar.drive.v1.2`).
   /// Empty = not advertised (an older server): the app then sends the baseline format only.
   final List<String> driveFormats;
@@ -298,6 +301,11 @@ class CoverageCell {
   /// Mean noise floor (dBm) of the cell's attempts; null with no readings, absent from servers before migration
   /// 0025.
   final double? noiseFloor;
+
+  /// Coverage v2 (`metric=mean`, res 11): the MEAN SNR of the successful results, how many succeeded / failed, and the band
+  /// (0-6, lib/core/coverage_v2.dart). Null on an answer without `metric=mean`.
+  final double? snrMean;
+  final int? nOk, nFail, band;
   const CoverageCell({
     required this.lat,
     required this.lon,
@@ -309,7 +317,14 @@ class CoverageCell {
     required this.lastAt,
     this.h3,
     this.noiseFloor,
+    this.snrMean,
+    this.nOk,
+    this.nFail,
+    this.band,
   });
+
+  /// Attempts in the cell: n_ok + n_fail on a v2 answer, else the pings.
+  int get attempts => nOk == null ? pings : nOk! + (nFail ?? 0);
 }
 
 /// Which grid [PublicCoverage.cells] sit on. Squares were the only grid before the H3 migration (still the
@@ -392,7 +407,7 @@ abstract class CmatClient {
   /// Network-wide measured coverage cells (the website's `/coverage` map data). Public: no driver key needed.
   /// [res] (H3 7..11), [since] (only cells measured after it) and [source] (`all`, `meshsonar`, `meshmapper`) are the
   /// website's own layer filters ([until] = coverage as of that instant, exclusive); all optional, the server defaults apply when omitted.
-  Future<PublicCoverage> publicCoverage({int? res, DateTime? since, DateTime? until, String? source});
+  Future<PublicCoverage> publicCoverage({int? res, DateTime? since, DateTime? until, String? source, String? metric});
 
   /// Every MeshSonar region this server (or federation) knows about (`GET /api/cmh/regions-index`): code, slug,
   /// name, URL, bbox and boundary — used entirely on-device for live, local region awareness (lib/core/
