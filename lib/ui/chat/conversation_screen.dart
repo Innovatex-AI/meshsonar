@@ -151,6 +151,10 @@ class _ConversationScreenState extends State<ConversationScreen> {
   String? _expandedId;
   String? _highlightId;
   Timer? _flash;
+
+  /// Wakes the screen once when a visible message's status changes by the clock alone (Mesh is slow; No repeater heard it).
+  Timer? _deliveryTick;
+  int? _deliveryTickAt;
   GlobalKey? _anchorKey;
   List<String> _failedIds = const [];
   bool _routeBroken = false;
@@ -406,6 +410,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
   void dispose() {
     _sub?.cancel();
     _flash?.cancel();
+    _deliveryTick?.cancel();
     c.removeListener(_onController);
     if (c.activeConversation == widget.convKey) c.setActiveConversation(null);
     _scroll.dispose();
@@ -539,6 +544,8 @@ class _ConversationScreenState extends State<ConversationScreen> {
       case MessageMenuId.retry:
         AppHaptics.light();
         c.service.retryFailed(m.id);
+      case MessageMenuId.resend:
+        _resend(m.id);
       case MessageMenuId.cancel:
         c.service.cancel(m.id);
       case MessageMenuId.delete:
@@ -562,7 +569,9 @@ class _ConversationScreenState extends State<ConversationScreen> {
   Future<void> _longPressSheet(String id) async {
     final m = _byId(id);
     if (m == null) return;
-    final r = await MessageMenu.showSheet(context, m, hasMap: _hasMap(m, messageInfo(m, resolver: _resolver, contact: _kind == ConvKind.dm ? _contact : null)));
+    final canResend = deliveryUi(m, radioConnected: c.radioConnected, nowMs: c.now().millisecondsSinceEpoch).canResend;
+    final r = await MessageMenu.showSheet(context, m,
+        hasMap: _hasMap(m, messageInfo(m, resolver: _resolver, contact: _kind == ConvKind.dm ? _contact : null)), canResend: canResend);
     if (r != null && mounted) await _perform(id, r);
   }
 
@@ -660,8 +669,35 @@ class _ConversationScreenState extends State<ConversationScreen> {
 
   // ------------------------------------------------------------------ build
 
+  /// Schedules one redraw at the next moment a loaded message's status words change by the clock (nothing else would
+  /// redraw a quiet conversation). Only the newest 50 messages are looked at.
+  void _armDeliveryTick() {
+    final now = c.now().millisecondsSinceEpoch;
+    int? next;
+    for (final m in _msgs.take(50)) {
+      final t = nextDeliveryChangeMs(m);
+      if (t != null && t > now && (next == null || t < next)) next = t;
+    }
+    if (next == _deliveryTickAt) return;
+    _deliveryTick?.cancel();
+    _deliveryTickAt = next;
+    if (next == null) return;
+    _deliveryTick = Timer(Duration(milliseconds: next - now + 50), () {
+      _deliveryTickAt = null;
+      if (mounted) setState(() {});
+    });
+  }
+
+  void _resend(String id) {
+    AppHaptics.light();
+    c.service.resendChannel(id);
+  }
+
   @override
   Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _armDeliveryTick();
+    });
     final colors = AppColors.of(context);
     final body = _searching ? _searchBody(context, colors) : _chatBody(context);
     if (widget.embedded) return ColoredBox(color: colors.surface, child: Column(children: [Expanded(child: body)]));
@@ -896,6 +932,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
               info: expanded ? info : null,
               hasMap: _hasMap(m, info),
               infoCard: () => _infoCard(m, info, peerName),
+              onResend: _resend,
               highlighted: _highlightId == m.id,
               separatorText: slot.separatorAbove ? separatorLabel(context, m.tsLocalMs, now: now) : '',
               onUrl: _openUrl,

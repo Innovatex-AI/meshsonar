@@ -434,7 +434,8 @@ class ChatService {
 
   /// Stores an outgoing message and queues it. Returns at once; delivery state arrives as events.
   /// Throws [MessageTooLong] or [ArgumentError] (empty text, unknown conversation).
-  ChatMessage send({required String radioId, required String convKey, required String text}) {
+  /// [forceFlood]: the person chose "Send by flood" for this one direct message (long-press Send): every try floods.
+  ChatMessage send({required String radioId, required String convKey, required String text, bool forceFlood = false}) {
     final body = text.trim();
     if (body.isEmpty) throw ArgumentError('empty message');
     final bytes = utf8.encode(body).length;
@@ -478,7 +479,7 @@ class ChatService {
     );
     store.db.transaction(() {
       store.messages.insert(m);
-      ob.enqueue(m, hasPath: hasPath);
+      ob.enqueue(m, hasPath: hasPath, forceFlood: forceFlood);
       store.drafts.clear(convKey);
     });
     _emit(ChatEvent.added(m, notify: false));
@@ -497,6 +498,13 @@ class ChatService {
   }
 
   bool cancel(String messageId) => _ob?.cancel(messageId) ?? false;
+
+  /// Sends again a channel message no repeater relayed (CR2 Resend).
+  bool resendChannel(String messageId) {
+    final ok = _ob?.resendChannel(messageId) ?? false;
+    if (ok) _kick();
+    return ok;
+  }
 
   // ------------------------------------------------------------------ reading
 

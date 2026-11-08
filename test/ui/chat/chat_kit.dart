@@ -25,13 +25,13 @@ class KitSink implements OutboundMessageSink {
   bool connected = true;
   Object? failNext;
   final channels = <({int slot, String text, int ts})>[];
-  final directs = <({String key, String text})>[];
+  final directs = <({String key, String text, bool forceFlood})>[];
   @override
   bool get canSend => connected;
   @override
   Future<SendReceipt> sendDirect({required String radioId, required String contactPublicKey, required String text, required int timestamp, required int attempt, required bool forceFlood}) async {
     if (!connected) throw const RadioNotConnected();
-    directs.add((key: contactPublicKey, text: text));
+    directs.add((key: contactPublicKey, text: text, forceFlood: forceFlood));
     return const SendReceipt(flood: true, expectedAck: 1, estTimeoutMs: 4000);
   }
 

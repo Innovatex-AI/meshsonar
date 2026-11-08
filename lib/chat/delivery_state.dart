@@ -22,10 +22,13 @@ class DeliveryUi {
   /// Still moving (queued, sending, between retries): can be cancelled.
   final bool pending;
 
-  /// Queued and Failed are shown on any bubble; the others only on the last own message of a run.
-  bool get alwaysVisible => stage == DeliveryStage.queued || stage == DeliveryStage.failed;
+  /// A channel message no repeater relayed within [resendAfterMs]: the status offers Resend (CR2).
+  final bool canResend;
 
-  const DeliveryUi(this.stage, this.glyph, this.word, this.detail, {this.pending = false});
+  /// Queued, Failed and "No repeater heard it" are shown on any bubble; the others only on the last own message of a run.
+  bool get alwaysVisible => stage == DeliveryStage.queued || stage == DeliveryStage.failed || canResend;
+
+  const DeliveryUi(this.stage, this.glyph, this.word, this.detail, {this.pending = false, this.canResend = false});
 }
 
 String _repeaters(int n) => n == 1 ? '1 repeater' : '$n repeaters';
@@ -38,6 +41,21 @@ String _seconds(int ms) {
 
 /// After this long in Sent the caption admits the mesh is slow.
 const int slowAfterMs = 20000;
+
+/// A sent channel message that no repeater relayed after this long offers Resend (CR2; repeats normally come back within a
+/// few seconds).
+const int resendAfterMs = 30000;
+
+/// The next time (unix ms) [m]'s status words change by the clock alone (Sent > Mesh is slow; channel Sent > No repeater
+/// heard it), or null when nothing more will change without an event. The conversation screen wakes once at that time.
+int? nextDeliveryChangeMs(ChatMessage m) {
+  if (!m.isOutgoing) return null;
+  if (m.convKind == ConvKind.channel) {
+    return m.state == MessageState.sent && m.repeatsHeard == 0 ? m.tsLocalMs + resendAfterMs : null;
+  }
+  if (m.state == MessageState.sent || m.state == MessageState.retrying) return m.tsLocalMs + slowAfterMs;
+  return null;
+}
 
 /// [maxAttempts] is how many tries the outbox makes for this message (3 flood, 5 with a saved route); [nowMs] the clock.
 /// [viaText] is the optional "via 2 repeaters" tail for Delivered.
@@ -83,6 +101,11 @@ DeliveryUi _heard(ChatMessage m) {
 
 DeliveryUi _sent(ChatMessage m, {required bool channel, int? maxAttempts, required int nowMs}) {
   if (channel) {
+    if (m.state == MessageState.sent && m.repeatsHeard == 0 && nowMs - m.tsLocalMs >= resendAfterMs) {
+      return const DeliveryUi(DeliveryStage.sent, DeliveryGlyph.exclamationCircleFill, 'No repeater heard it',
+          'No repeater relayed it within 30 seconds. Resend sends it again.',
+          canResend: true);
+    }
     return const DeliveryUi(DeliveryStage.sent, DeliveryGlyph.checkmark, 'Sent', 'Sent over the air. Channels have no delivery receipts.');
   }
   final tries = m.attempt < 1 ? 1 : m.attempt;

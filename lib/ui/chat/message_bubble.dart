@@ -68,8 +68,11 @@ class MessageBubble extends StatefulWidget {
   /// The info card shown under the bubble while its long-press menu is open (CR4); built only then. Null = bubble only.
   final Widget Function()? infoCard;
 
-  /// A hop of the message's path has a known position: the menu offers "Path on map".
+  /// A hop of the message's path has a known position: the menu offers "Route on map".
   final bool hasMap;
+
+  /// Resend a channel message no repeater relayed (shown when [delivery] says it can be resent, CR2).
+  final void Function(String id)? onResend;
 
   const MessageBubble({
     super.key,
@@ -93,6 +96,7 @@ class MessageBubble extends StatefulWidget {
     this.onDetails,
     this.infoCard,
     this.hasMap = false,
+    this.onResend,
   });
 
   /// A lone bubble (previews, the System traffic list): no grouping, no status line, no menu.
@@ -115,7 +119,8 @@ class MessageBubble extends StatefulWidget {
         onLongPress = null,
         onDetails = null,
         infoCard = null,
-        hasMap = false;
+        hasMap = false,
+        onResend = null;
 
   ChatMessage get message => slot.message;
 
@@ -231,7 +236,7 @@ class _MessageBubbleState extends State<MessageBubble> {
       onTap: () => failed ? w.onFailedTap?.call(m.id) : w.onTap?.call(m.id),
       child: body,
     );
-    final menuEntries = MessageMenu.entries(m, hasMap: w.hasMap);
+    final menuEntries = MessageMenu.entries(m, hasMap: w.hasMap, canResend: (w.delivery?.canResend ?? false) && w.onResend != null);
     final Widget withMenu = (MessageMenu.apple(context) && MessageMenu.useContextMenu)
         ? CupertinoContextMenu.builder(
             enableHapticFeedback: true,
@@ -370,8 +375,8 @@ class _MessageBubbleState extends State<MessageBubble> {
     final m = widget.message;
     final muted = AppType.caption.copyWith(color: c.textMuted);
     if (mine && d != null && widget.showStatus) {
-      final color = failed ? c.danger : (d.stage == DeliveryStage.delivered ? c.accent : c.textMuted);
-      return ExcludeSemantics(
+      final color = failed ? c.danger : (d.stage == DeliveryStage.delivered ? c.accent : (d.canResend ? c.warning : c.textMuted));
+      final status = ExcludeSemantics(
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -381,6 +386,20 @@ class _MessageBubbleState extends State<MessageBubble> {
           ],
         ),
       );
+      final resend = widget.onResend;
+      if (!d.canResend || resend == null) return status;
+      // Nobody relayed it: one tap sends it again (official app: resend when no repeats were heard; here it is offered by itself).
+      return Row(mainAxisSize: MainAxisSize.min, children: [
+        Flexible(child: status),
+        const SizedBox(width: Gap.s),
+        CupertinoButton(
+          key: Key('resend-${m.id}'),
+          padding: const EdgeInsets.symmetric(horizontal: Gap.xs),
+          minimumSize: Size(Hit.min, Hit.of(context) * 0.75),
+          onPressed: () => resend(m.id),
+          child: Text('Resend', style: AppType.caption.copyWith(color: c.accent, fontWeight: FontWeight.w600)),
+        ),
+      ]);
     }
     // Incoming time line (and the quiet time of an own message that needs no status): the weak-signal anomaly rides along.
     final snr = m.snr;

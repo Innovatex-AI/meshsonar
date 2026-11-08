@@ -10,7 +10,7 @@ import '../design/app_surfaces.dart';
 import '../design/app_symbols.dart';
 import 'message_format.dart';
 
-enum MessageMenuId { copy, openLink, pathMap, details, retry, cancel, delete }
+enum MessageMenuId { copy, openLink, pathMap, details, retry, resend, cancel, delete }
 
 class MessageMenuEntry {
   final MessageMenuId id;
@@ -40,12 +40,13 @@ abstract final class MessageMenu {
   /// Copy, Open link(s), Route on map (when a hop of its path has a known position, [hasMap]), Full details, Try Again
   /// (failed), Cancel sending (pending), Delete from this phone (last, destructive). The info card above the menu (CR4) is
   /// the summary; Full details is the whole story.
-  static List<MessageMenuEntry> entries(ChatMessage m, {bool hasMap = false}) => [
+  static List<MessageMenuEntry> entries(ChatMessage m, {bool hasMap = false, bool canResend = false}) => [
         const MessageMenuEntry(MessageMenuId.copy, 'Copy', AppSymbols.docOnDoc),
         for (final l in linksOf(m)) MessageMenuEntry(MessageMenuId.openLink, l.length > 36 ? 'Open ${l.substring(0, 33)}…' : 'Open $l', AppSymbols.globe, link: l),
         if (hasMap) const MessageMenuEntry(MessageMenuId.pathMap, 'Route on map', AppSymbols.map),
         const MessageMenuEntry(MessageMenuId.details, 'Full details', AppSymbols.infoCircle),
         if (m.state == MessageState.failed) const MessageMenuEntry(MessageMenuId.retry, 'Try Again', AppSymbols.arrowUpCircleFill),
+        if (canResend) const MessageMenuEntry(MessageMenuId.resend, 'Resend', AppSymbols.arrowUpCircleFill),
         if (m.isPending) const MessageMenuEntry(MessageMenuId.cancel, 'Cancel sending', AppSymbols.xmarkCircleFill),
         if (!m.isPending) const MessageMenuEntry(MessageMenuId.delete, 'Delete from this phone', AppSymbols.trash, destructive: true, group: 1),
       ];
@@ -53,11 +54,11 @@ abstract final class MessageMenu {
   static String keyName(MessageMenuId id) => id.name;
 
   /// The action-sheet form of the menu; returns the chosen entry.
-  static Future<MessageMenuEntry?> showSheet(BuildContext context, ChatMessage m, {bool hasMap = false}) {
+  static Future<MessageMenuEntry?> showSheet(BuildContext context, ChatMessage m, {bool hasMap = false, bool canResend = false}) {
     return showAppActionSheet<MessageMenuEntry>(
       context,
       actions: [
-        for (final e in entries(m, hasMap: hasMap))
+        for (final e in entries(m, hasMap: hasMap, canResend: canResend))
           AppAction<MessageMenuEntry>(e.label, e, destructive: e.destructive, symbol: e.symbol, key: Key('act-${keyName(e.id)}')),
       ],
     );

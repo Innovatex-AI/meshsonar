@@ -9,7 +9,11 @@ class OutboxEntry {
   final int maxAttempts;
   final int busyRetries;
   final int createdMs;
-  const OutboxEntry({required this.messageId, required this.dueAtMs, required this.maxAttempts, this.busyRetries = 0, required this.createdMs});
+
+  /// Every try of this message floods (the person chose "Send by flood", migration v5).
+  final bool forceFlood;
+  const OutboxEntry(
+      {required this.messageId, required this.dueAtMs, required this.maxAttempts, this.busyRetries = 0, required this.createdMs, this.forceFlood = false});
 }
 
 class DeliveryAttempt {
@@ -28,8 +32,8 @@ class OutboxRepository {
   OutboxRepository(this.db);
 
   void enqueue(OutboxEntry e) => db.raw.execute(
-      'INSERT OR REPLACE INTO outbox(message_id, due_at_ms, max_attempts, busy_retries, created_ms) VALUES (?,?,?,?,?)',
-      [e.messageId, e.dueAtMs, e.maxAttempts, e.busyRetries, e.createdMs]);
+      'INSERT OR REPLACE INTO outbox(message_id, due_at_ms, max_attempts, busy_retries, created_ms, force_flood) VALUES (?,?,?,?,?,?)',
+      [e.messageId, e.dueAtMs, e.maxAttempts, e.busyRetries, e.createdMs, e.forceFlood ? 1 : 0]);
 
   OutboxEntry? get(String messageId) {
     final r = db.raw.select('SELECT * FROM outbox WHERE message_id = ?', [messageId]);
@@ -41,7 +45,8 @@ class OutboxRepository {
       dueAtMs: r['due_at_ms'] as int,
       maxAttempts: r['max_attempts'] as int,
       busyRetries: r['busy_retries'] as int,
-      createdMs: r['created_ms'] as int);
+      createdMs: r['created_ms'] as int,
+      forceFlood: (r['force_flood'] as int? ?? 0) != 0);
 
   /// Entries due at [nowMs], oldest message first (so a conversation keeps its order).
   List<OutboxEntry> due(int nowMs, {int limit = 20}) => db.raw

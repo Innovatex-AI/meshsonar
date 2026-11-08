@@ -123,6 +123,13 @@ Chat UI: the `chatRedesign` switch in More > Developer and the old Contacts | Ch
   full path, signal, seconds after sending) or ARRIVALS for a received channel message. **Route on map**: the hops with a known position in
   order, joined by a line for one route; the repeaters of a sent channel message are separate points (each relayed it on its own); hops
   without a position are listed under the map.
+- **Delivery clarity and sending choices (chat + radio round CR2).** A channel message no repeater relayed within 30 s says **No
+  repeater heard it** (warning colour, shown on any bubble) with a **Resend** button beside the status and in the long-press menu; Resend
+  sends the same text again (refused once a repeater has relayed it). The conversation redraws by itself at the moment a status changes
+  by time alone ("Mesh is slow" after 20 s, "No repeater heard it" after 30 s), so a quiet conversation never shows a stale word.
+  **Long-press Send** on a direct message (person or room): **Send** (the saved route, searching on the last try) or **Send and search
+  for a new route** (every try searches; like the official app's long-press Send). Channels have no such choice (they always reach
+  everyone nearby).
 - **Safety while driving**: a drive is running and GPS speed above 8 km/h (unlocks below 6): the composer is replaced by "Typing is off while the
   car is moving" with **I'm a passenger** (lasts for that drive). Reading and incoming banners work. A stale or missing speed never locks.
 - **Chat in Drive**: the Messages button next to Ping opens a half-height sheet: unread conversations, then a conversation with the same
