@@ -10,6 +10,7 @@ import '../../radio/path_tools.dart';
 import '../../radio/tools/radio_tools.dart';
 import '../../radio/tools/tool_frames.dart' show maxTraceHops;
 import '../../radio/tools/trace_tool.dart';
+import '../app.dart' show AppScope;
 import '../design/app_haptics.dart';
 import '../design/app_surfaces.dart';
 import '../design/app_symbols.dart';
@@ -312,7 +313,7 @@ class _RoutePickerPageState extends State<RoutePickerPage> {
     final t = _target;
     final parts = <String>[r.publicKey.substring(0, _hashSize * 2)];
     if (r.lat != null && r.lon != null && t.lat != null && t.lon != null) {
-      parts.add('${(haversineM(t.lat!, t.lon!, r.lat!, r.lon!) / 1000).toStringAsFixed(1)} km');
+      parts.add(AppScope.unitsOf(context).distance(haversineM(t.lat!, t.lon!, r.lat!, r.lon!)));
     }
     parts.add(heardText(r.lastHeardMs, _m.nowMs()).replaceFirst('Heard ', ''));
     return parts.join(' · ');
