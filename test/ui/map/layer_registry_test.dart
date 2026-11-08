@@ -30,26 +30,47 @@ void main() {
       expect(kWebsiteKeysNotDrawn, {'model', 'reach', 'regions'}, reason: 'the app dropped the neighbouring-regions pointers (0.26.1)');
     });
 
-    test('the final ten layers (Drive plan 7.1): the dead neighbours entry is gone', () {
-      expect(kMapLayers.map((l) => l.id).toSet(), {'pings', 'hexes', 'links', 'measured', 'heard', 'repeaters', 'network', 'observers', 'labels', 'rings'});
+    test('coverage redesign layers (plan section 5): rings gone, predicted added, under measured', () {
+      expect(kMapLayers.map((l) => l.id).toSet(), {'predicted', 'measured', 'hexes', 'pings', 'links', 'heard', 'repeaters', 'network', 'observers', 'labels'});
       expect(kMapLayers, hasLength(10));
+      expect(layerSpec('rings'), isNull);
       expect(layerSpec('neighbours'), isNull);
-      expect(kAppOnlyShowKeys, isNot(contains('neighbours')));
+      expect(kAppOnlyShowKeys, isNot(contains('rings')));
+      expect(layerSpec('predicted')!.z, lessThan(layerSpec('measured')!.z), reason: 'predicted is drawn UNDER measured (D8)');
     });
 
-    test('defaults: network (56,889 points) is OFF, region and heard repeaters stay on (D11 revised); observers off', () {
-      expect(kDefaultLayerState.on, {'measured', 'hexes', 'links', 'heard', 'pings', 'rings', 'repeaters', 'labels'});
+    test('defaults: both coverage layers and This drive on; network (56,889 points) and observers off', () {
+      expect(kDefaultLayerState.on, {'predicted', 'measured', 'hexes', 'links', 'heard', 'pings', 'repeaters', 'labels'});
+      expect(kDefaultLayerState.mode, {'pings': 'snr'}, reason: 'no colour-by mode any more (D9)');
       expect(layerSpec('network')!.label, 'All MeshCore repeaters');
       expect(layerSpec('network')!.defaultOn, isFalse);
       expect(layerSpec('nope'), isNull);
-      final groups = layersByGroup();
-      expect(groups[LayerGroup.drive]!.map((l) => l.id), ['hexes', 'links', 'pings']);
-      expect(groups[LayerGroup.repeaters]!.map((l) => l.id), ['network', 'repeaters', 'observers', 'heard']);
-      expect(groups[LayerGroup.coverage]!.map((l) => l.id), ['measured']);
-      expect(groups[LayerGroup.display]!.map((l) => l.id), ['labels', 'rings']);
-      expect(LayerGroup.values.map((g) => g.label), ['This drive', 'Coverage', 'Repeaters', 'Display']);
-      expect([for (final id in ['hexes', 'links', 'measured', 'heard', 'repeaters']) layerSpec(id)!.label],
-          ['Your coverage', 'Lines to repeaters', 'Network coverage', 'Heard this drive', 'Region repeaters']);
+      expect(LayerGroup.values.map((g) => g.label), ['Coverage', 'Network']);
+      // The sheet's rows, website names for the two coverage layers (parity rule).
+      expect([for (final r in kSheetRows[LayerGroup.coverage]!) r.id], ['measured', 'predicted', 'hexes', 'pings']);
+      expect([for (final r in kSheetRows[LayerGroup.network]!) r.id], ['repeaters', 'labels', 'observers', 'links']);
+      expect([for (final id in ['measured', 'predicted', 'hexes', 'pings', 'repeaters', 'labels', 'links']) layerSpec(id)!.label],
+          ['Measured coverage', 'Predicted coverage', 'This drive', 'Ping dots', 'Repeaters', 'Names', 'Lines to repeaters']);
+    });
+
+    test('one Repeaters switch with a scope: region by default, All MeshCore remembered while off', () {
+      var s = kDefaultLayerState;
+      expect(repeatersOn(s), isTrue);
+      expect(repeatersAllScope(s), isFalse);
+      s = withRepeaterScope(s, all: true);
+      expect(s.isOn('network'), isTrue);
+      expect(s.isOn('repeaters'), isFalse);
+      s = withRepeaters(s, false);
+      expect(repeatersOn(s), isFalse);
+      expect(s.isOn('heard'), isFalse);
+      expect(repeatersAllScope(s), isTrue, reason: 'the scope survives the switch being off');
+      s = withRepeaters(s, true);
+      expect(s.isOn('network'), isTrue);
+      expect(s.isOn('heard'), isTrue);
+      s = withRepeaterScope(s, all: false);
+      expect(s.isOn('repeaters'), isTrue);
+      expect(s.isOn('network'), isFalse);
+      expect(layerStateFromPrefs(const LayerPrefs(modes: {'repeaters': 'all'})).modeOf('repeaters'), 'all');
     });
 
     test('LayerPrefs: only the person\'s choices are applied on top of the defaults; unknown ids and modes are ignored', () {
@@ -68,13 +89,13 @@ void main() {
 
   group('MapLayerState', () {
     test('toggle, mode, equality', () {
-      final s = kDefaultLayerState.toggle('observers', true).withMode('measured', 'noise');
+      final s = kDefaultLayerState.toggle('observers', true).withMode('pings', 'result');
       expect(s.isOn('observers'), isTrue);
-      expect(s.modeOf('measured'), 'noise');
+      expect(s.modeOf('pings'), 'result');
       expect(s.toggle('observers', true), same(s));
-      expect(s.withMode('measured', 'noise'), same(s));
-      expect(s.toggle('observers', false).withMode('measured', 'snr'), kDefaultLayerState);
-      expect(s.hashCode, kDefaultLayerState.toggle('observers', true).withMode('measured', 'noise').hashCode);
+      expect(s.withMode('pings', 'result'), same(s));
+      expect(s.toggle('observers', false).withMode('pings', 'snr'), kDefaultLayerState);
+      expect(s.hashCode, kDefaultLayerState.toggle('observers', true).withMode('pings', 'result').hashCode);
     });
 
     test('toShow: website keys only and in the website order for web; app keys after for app links', () {
@@ -86,19 +107,20 @@ void main() {
     test('fromShow: null = defaults; website link keeps the drive layers; app link sets them', () {
       expect(MapLayerState.fromShow(null, defaults: kDefaultLayerState, known: kMapLayerIds), kDefaultLayerState);
       final web = MapLayerState.fromShow(const ['repeaters', 'network'], defaults: kDefaultLayerState, known: kMapLayerIds);
-      expect(web.on, {'repeaters', 'network', 'hexes', 'links', 'heard', 'pings', 'rings', 'labels'}, reason: 'measured off: not listed');
+      expect(web.on, {'repeaters', 'network', 'hexes', 'links', 'heard', 'pings', 'labels'}, reason: 'measured and predicted off: not listed');
       final app = MapLayerState.fromShow(const ['measured', 'pings'], defaults: kDefaultLayerState, known: kMapLayerIds, appLink: true);
       expect(app.on, {'measured', 'pings'});
       final none = MapLayerState.fromShow(const [], defaults: kDefaultLayerState, known: kMapLayerIds);
-      expect(none.on, {'hexes', 'links', 'heard', 'pings', 'rings', 'labels'});
+      expect(none.on, {'hexes', 'links', 'heard', 'pings', 'labels'});
     });
 
-    test('layerStateForLink applies show and color from a parsed link', () {
-      final link = MapViewState.fromUri(Uri.parse('https://cmh.meshsonar.com/coverage?show=measured,network&color=noise'))!;
+    test('layerStateForLink applies show; an old link\'s color= is ignored (one colour metric, D9)', () {
+      final link = MapViewState.fromUri(Uri.parse('https://cmh.meshsonar.com/coverage?show=measured,predicted,network&color=noise'))!;
       final s = layerStateForLink(link);
       expect(s.isOn('network'), isTrue);
+      expect(s.isOn('predicted'), isTrue);
       expect(s.isOn('repeaters'), isFalse);
-      expect(s.modeOf('measured'), 'noise');
+      expect(s.modeOf('measured'), isNull);
       expect(layerStateForLink(MapViewState.empty), kDefaultLayerState);
     });
   });
@@ -120,6 +142,15 @@ void main() {
       expect(st(MapFeedState.loading, 0).enabled, isTrue);
     });
 
+    test('predicted: not on an old server; failed offline; hidden while looking back; ready', () {
+      expect(layerStatus('predicted', const MapLayerInputs()), const LayerStatus(LayerAvailability.unsupported, detail: 'Not available on this server yet'));
+      final off = layerStatus('predicted', const MapLayerInputs(coverageV2: true, tilesOffline: true));
+      expect(off.availability, LayerAvailability.failed);
+      expect(off.canRetry, isTrue);
+      expect(layerStatus('predicted', const MapLayerInputs(coverageV2: true, coverageFiltered: true)).detail, 'Hidden while looking back: the estimate is for today');
+      expect(layerStatus('predicted', const MapLayerInputs(coverageV2: true)).detail, 'Estimated from nearby measured cells');
+    });
+
     test('observers: no region, none with a position, some', () {
       expect(layerStatus('observers', const MapLayerInputs()).detail, 'Pick a region to see its observers');
       expect(
@@ -136,7 +167,7 @@ void main() {
       final saved = layerStatus('measured', MapLayerInputs(coverageState: MapFeedState.stale, coverageCells: 10, coverageSavedAt: DateTime(2026, 11, 1, 9)));
       expect(saved.detail, '10 cells measured · Saved copy from Nov 1');
       expect(saved.canRetry, isTrue);
-      for (final id in ['hexes', 'links', 'heard', 'pings', 'rings', 'labels']) {
+      for (final id in ['hexes', 'links', 'heard', 'pings', 'labels']) {
         expect(layerStatus(id, const MapLayerInputs()), const LayerStatus(LayerAvailability.ready), reason: id);
       }
       expect(layerStatus('network', const MapLayerInputs()).availability, LayerAvailability.loading, reason: 'no source yet');

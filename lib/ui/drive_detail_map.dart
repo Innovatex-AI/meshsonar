@@ -1,4 +1,5 @@
-// Map for the drive detail screen: the shared CoverageMap framed on the whole drive (no live position or rings).
+// Map for the drive detail screen: the shared CoverageMap framed on the whole drive (no live position). With coverage v2 the
+// drive's cells are res-11 cells with the mean SNR in the coverage bands, and a tap opens the server's cell inspector.
 import 'package:flutter/material.dart';
 
 import '../core/model.dart';
@@ -22,6 +23,7 @@ class DriveDetailMap extends StatelessWidget {
       showRings: false,
       showLinks: false,
       fallbackCenter: viewedRegionCenter(s),
+      coverageV2: s.coverageV2 ? CoverageV2Inputs(tiles: s.coverageTiles, meta: s.coverageMeta, drawTiles: false, fetchCell: s.coverageCell) : null,
     );
   }
 }

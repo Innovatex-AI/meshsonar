@@ -51,55 +51,25 @@ void main() {
 
   group('levelFor: best SNR (the website\'s own 4-step thresholds)', () {
     test('nothing heard is none, regardless of other fields', () {
-      expect(levelFor(_cell(heard: 0, bestSnr: 9), CoverageColorBy.snr), CoverageLevel.none);
+      expect(levelFor(_cell(heard: 0, bestSnr: 9)), CoverageLevel.none);
     });
     test('heard but no SNR reading is unknown (its own colour), never a strength guess', () {
-      expect(levelFor(_cell(heard: 3, bestSnr: null), CoverageColorBy.snr), CoverageLevel.unknown);
+      expect(levelFor(_cell(heard: 3, bestSnr: null)), CoverageLevel.unknown);
     });
     test('boundaries: >=5 strong, [0,5) good, [-5,0) fair, <-5 weak', () {
-      expect(levelFor(_cell(bestSnr: 5.0), CoverageColorBy.snr), CoverageLevel.strong);
-      expect(levelFor(_cell(bestSnr: 12.0), CoverageColorBy.snr), CoverageLevel.strong);
-      expect(levelFor(_cell(bestSnr: 4.9), CoverageColorBy.snr), CoverageLevel.good);
-      expect(levelFor(_cell(bestSnr: 0.0), CoverageColorBy.snr), CoverageLevel.good);
-      expect(levelFor(_cell(bestSnr: -0.1), CoverageColorBy.snr), CoverageLevel.fair);
-      expect(levelFor(_cell(bestSnr: -5.0), CoverageColorBy.snr), CoverageLevel.fair);
-      expect(levelFor(_cell(bestSnr: -5.1), CoverageColorBy.snr), CoverageLevel.weak);
-      expect(levelFor(_cell(bestSnr: -40.0), CoverageColorBy.snr), CoverageLevel.weak);
-    });
-  });
-
-  group('levelFor: share heard', () {
-    test('no pings is none', () {
-      expect(levelFor(_cell(pings: 0, heard: 0, bestSnr: 0), CoverageColorBy.heard), CoverageLevel.none);
-    });
-    test('boundaries: >=75% strong, [50,75) good, [25,50) fair, <25 weak', () {
-      expect(levelFor(_cell(pings: 4, heard: 3, bestSnr: 0), CoverageColorBy.heard), CoverageLevel.strong); // 75%
-      expect(levelFor(_cell(pings: 100, heard: 74, bestSnr: 0), CoverageColorBy.heard), CoverageLevel.good);
-      expect(levelFor(_cell(pings: 4, heard: 2, bestSnr: 0), CoverageColorBy.heard), CoverageLevel.good); // 50%
-      expect(levelFor(_cell(pings: 4, heard: 1, bestSnr: 0), CoverageColorBy.heard), CoverageLevel.fair); // 25%
-      expect(levelFor(_cell(pings: 100, heard: 24, bestSnr: 0), CoverageColorBy.heard), CoverageLevel.weak);
-      expect(levelFor(_cell(pings: 10, heard: 0, bestSnr: 0), CoverageColorBy.heard), CoverageLevel.none); // nothing heard is grey, not red
-    });
-  });
-
-  group('levelFor: noise floor', () {
-    test('no reading is none', () {
-      expect(levelFor(_cell(noiseFloor: null), CoverageColorBy.noise), CoverageLevel.none);
-    });
-    test('boundaries: <-125 strong (quiet), [-125,-115) good, [-115,-105) fair, >=-105 weak (noisy)', () {
-      expect(levelFor(_cell(noiseFloor: -130), CoverageColorBy.noise), CoverageLevel.strong);
-      expect(levelFor(_cell(noiseFloor: -125.1), CoverageColorBy.noise), CoverageLevel.strong);
-      expect(levelFor(_cell(noiseFloor: -125), CoverageColorBy.noise), CoverageLevel.good);
-      expect(levelFor(_cell(noiseFloor: -116), CoverageColorBy.noise), CoverageLevel.good);
-      expect(levelFor(_cell(noiseFloor: -115), CoverageColorBy.noise), CoverageLevel.fair);
-      expect(levelFor(_cell(noiseFloor: -106), CoverageColorBy.noise), CoverageLevel.fair);
-      expect(levelFor(_cell(noiseFloor: -105), CoverageColorBy.noise), CoverageLevel.weak);
-      expect(levelFor(_cell(noiseFloor: -60), CoverageColorBy.noise), CoverageLevel.weak);
+      expect(levelFor(_cell(bestSnr: 5.0)), CoverageLevel.strong);
+      expect(levelFor(_cell(bestSnr: 12.0)), CoverageLevel.strong);
+      expect(levelFor(_cell(bestSnr: 4.9)), CoverageLevel.good);
+      expect(levelFor(_cell(bestSnr: 0.0)), CoverageLevel.good);
+      expect(levelFor(_cell(bestSnr: -0.1)), CoverageLevel.fair);
+      expect(levelFor(_cell(bestSnr: -5.0)), CoverageLevel.fair);
+      expect(levelFor(_cell(bestSnr: -5.1)), CoverageLevel.weak);
+      expect(levelFor(_cell(bestSnr: -40.0)), CoverageLevel.weak);
     });
   });
 
   group('buildNetworkCells: square grid (no H3 engine needed)', () {
-    test('boxes the cell\'s centre +/- half the cell size, bucketed by the chosen dimension', () {
+    test('boxes the cell\'s centre +/- half the cell size, bucketed by best SNR', () {
       final coverage = PublicCoverage(
         asOf: '2026-10-18T12:00:00Z',
         grid: const CoverageGrid.square(cellDeg: 0.01),
@@ -108,7 +78,7 @@ void main() {
           _cell(lat: 40.1, lon: -83.1, bestSnr: -9.0, heard: 1, pings: 5),
         ],
       );
-      final cells = buildNetworkCells(coverage, null, CoverageColorBy.snr);
+      final cells = buildNetworkCells(coverage, null);
       expect(cells, hasLength(2));
       final a = cells.first;
       expect(a.id, '40.0,-83.0');
@@ -127,12 +97,12 @@ void main() {
         grid: const CoverageGrid.square(cellDeg: 0.01),
         cells: [_cell(lat: double.nan, lon: -83.0), _cell(lat: 40.0, lon: 200.0), _cell(lat: 40.0, lon: -83.0)],
       );
-      expect(buildNetworkCells(coverage, null, CoverageColorBy.snr), hasLength(1));
+      expect(buildNetworkCells(coverage, null), hasLength(1));
     });
 
     test('no cells, no network cells', () {
       final coverage = PublicCoverage(asOf: '2026-10-18T12:00:00Z', grid: const CoverageGrid.square(cellDeg: 0.01), cells: const []);
-      expect(buildNetworkCells(coverage, null, CoverageColorBy.snr), isEmpty);
+      expect(buildNetworkCells(coverage, null), isEmpty);
     });
   });
 
@@ -144,9 +114,9 @@ void main() {
         cells: [_cell(lat: 39.9612, lon: -82.9988, bestSnr: 7.0, h3: '892a956a94bffff')],
       );
       // No engine: skipped rather than guessed at (same philosophy as a ping with an unusable position).
-      expect(buildNetworkCells(coverage, null, CoverageColorBy.snr), isEmpty);
+      expect(buildNetworkCells(coverage, null), isEmpty);
 
-      final cells = buildNetworkCells(coverage, h3, CoverageColorBy.snr);
+      final cells = buildNetworkCells(coverage, h3);
       expect(cells, hasLength(1), skip: skip);
       if (h3 != null) {
         expect(cells.single.id, '892a956a94bffff');
@@ -163,7 +133,7 @@ void main() {
         grid: const CoverageGrid.h3(res: 9, cellDeg: 0.005),
         cells: [_cell(h3: null)],
       );
-      expect(buildNetworkCells(coverage, h3, CoverageColorBy.snr), isEmpty);
+      expect(buildNetworkCells(coverage, h3), isEmpty);
     }, skip: skip);
 
     test('an unparsable h3 id is skipped, not thrown', () {
@@ -172,7 +142,7 @@ void main() {
         grid: const CoverageGrid.h3(res: 9, cellDeg: 0.005),
         cells: [_cell(h3: 'not-hex!')],
       );
-      expect(buildNetworkCells(coverage, h3, CoverageColorBy.snr), isEmpty);
+      expect(buildNetworkCells(coverage, h3), isEmpty);
     }, skip: skip);
   });
 }

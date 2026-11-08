@@ -1,0 +1,158 @@
+{
+    "v": 1,
+    "res": 11,
+    "windowDays": 365,
+    "faintBelow": 3,
+    "bands": [
+        {
+            "band": 0,
+            "key": "noReply",
+            "label": "No reply",
+            "marginMin": null,
+            "marginMax": null,
+            "token": "coverage-band-0"
+        },
+        {
+            "band": 1,
+            "key": "edge",
+            "label": "Edge",
+            "marginMin": null,
+            "marginMax": 0,
+            "token": "coverage-band-1"
+        },
+        {
+            "band": 2,
+            "key": "weak",
+            "label": "Weak",
+            "marginMin": 0,
+            "marginMax": 5,
+            "token": "coverage-band-2"
+        },
+        {
+            "band": 3,
+            "key": "fair",
+            "label": "Fair",
+            "marginMin": 5,
+            "marginMax": 10,
+            "token": "coverage-band-3"
+        },
+        {
+            "band": 4,
+            "key": "good",
+            "label": "Good",
+            "marginMin": 10,
+            "marginMax": 15,
+            "token": "coverage-band-4"
+        },
+        {
+            "band": 5,
+            "key": "excellent",
+            "label": "Excellent",
+            "marginMin": 15,
+            "marginMax": null,
+            "token": "coverage-band-5"
+        },
+        {
+            "band": 6,
+            "key": "heardNoSnr",
+            "label": "Heard, no direct signal",
+            "marginMin": null,
+            "marginMax": null,
+            "token": "coverage-band-6"
+        }
+    ],
+    "floorsDb": {
+        "sf7": -7.5,
+        "sf8": -10,
+        "sf9": -12.5,
+        "sf10": -15,
+        "sf11": -17.5,
+        "sf12": -20
+    },
+    "edgesDb": {
+        "sf7": [
+            -7.5,
+            -2.5,
+            2.5,
+            7.5
+        ],
+        "sf8": [
+            -10,
+            -5,
+            0,
+            5
+        ],
+        "sf9": [
+            -12.5,
+            -7.5,
+            -2.5,
+            2.5
+        ],
+        "sf10": [
+            -15,
+            -10,
+            -5,
+            0
+        ],
+        "sf11": [
+            -17.5,
+            -12.5,
+            -7.5,
+            -2.5
+        ],
+        "sf12": [
+            -20,
+            -15,
+            -10,
+            -5
+        ]
+    },
+    "tiles": {
+        "url": "/api/coverage/tiles/{layer}/{z}/{x}/{y}.mvt?preset={preset}",
+        "layers": [
+            "measured",
+            "predicted"
+        ],
+        "maxZoom": 22,
+        "hexFromZoom": 13,
+        "extent": {
+            "hex": 4096,
+            "points": 128
+        },
+        "predictedFromZoom": 8,
+        "properties": {
+            "measured": {
+                "band": "0-6",
+                "n": "attempts in the cell",
+                "h": "H3 id (hex), z >= 13 only"
+            },
+            "predicted": {
+                "band": "0-5 (0 = predicted no coverage)",
+                "o": "opacity 0.15-0.6 (fades with distance from the nearest measurement)",
+                "h": "H3 id (hex), z >= 13 only"
+            }
+        }
+    },
+    "predicted": {
+        "radiusM": 1000,
+        "minSources": 2,
+        "weight": "1/d^2",
+        "deadValueDb": "floor - 3",
+        "noCoverageBelowDb": "floor - 1.5",
+        "model": 1
+    },
+    "version": 101,
+    "measuredBuild": 101,
+    "predictedBuild": 96,
+    "measuredAt": "2026-11-08T17:00:02.659Z",
+    "predictedAt": "2026-11-08T16:30:59.413Z",
+    "presets": [
+        {
+            "sf": 7,
+            "cells": 6445,
+            "preset": "sf7bw62.5"
+        }
+    ],
+    "predictedCells": 1257240,
+    "defaultPreset": "sf7bw62.5"
+}

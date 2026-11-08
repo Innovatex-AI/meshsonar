@@ -5,9 +5,10 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/cell_layers.dart';
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/colour_palette.dart';
-import 'package:meshsonar/core/network_coverage.dart';
 import 'package:meshsonar/ui/claims/claim_widgets.dart';
+import 'package:meshsonar/ui/map/coverage_bands.dart';
 import 'package:meshsonar/ui/map/coverage_layer_controls.dart' show coverageLegend;
+import 'package:meshsonar/ui/map/sheets/coverage_cell_sheet.dart' show CoverageBandSwatch;
 import 'package:meshsonar/ui/map/coverage_map.dart' show networkLevelColor;
 import 'package:meshsonar/ui/map/legend_sheet.dart';
 import 'package:meshsonar/ui/map/map_layers.dart' show PingColorMode;
@@ -20,8 +21,8 @@ Future<void> pumpLegend(
   WidgetTester tester, {
   Brightness brightness = Brightness.dark,
   ColourPalette palette = ColourPalette.standard,
-  CoverageColorBy colorBy = CoverageColorBy.snr,
   PingColorMode pingColors = PingColorMode.snr,
+  bool v2 = false,
   double textScale = 1.0,
   Size size = const Size(420, 4000),
 }) async {
@@ -32,7 +33,7 @@ Future<void> pumpLegend(
     theme: meshSonarTheme(brightness, palette: palette),
     home: MediaQuery(
       data: MediaQueryData(size: size, textScaler: TextScaler.linear(textScale)),
-      child: Scaffold(body: MapLegendSheet(colorBy: colorBy, pingColors: pingColors)),
+      child: Scaffold(body: MapLegendSheet(pingColors: pingColors, coverageV2: v2)),
     ),
   ));
   await tester.pumpAndSettle();
@@ -85,43 +86,39 @@ void main() {
       expect(find.byKey(const Key('legend-ping-gradient')), findsNothing);
     });
 
-    for (final by in CoverageColorBy.values) {
-      testWidgets('network cells follow the colour mode: ${by.name}', (tester) async {
-        await pumpLegend(tester, colorBy: by);
-        final expected = coverageLegend(by);
-        for (final (level, _) in expected) {
-          expect(find.byKey(Key('legend-row-cell-${level.name}')), findsOneWidget, reason: '${by.name} ${level.name}');
-        }
-        // levels this mode never uses are not listed
-        for (final level in CoverageLevel.values) {
-          if (!expected.any((e) => e.$1 == level)) expect(find.byKey(Key('legend-row-cell-${level.name}')), findsNothing);
-        }
-        expect(find.byKey(const Key('legend-row-cell-faded')), findsOneWidget);
-        expect(find.textContaining('fewer than 3 pings'), findsWidgets);
-        if (by == CoverageColorBy.snr) {
-          expect(find.text('Strong: +5 dB or better'), findsOneWidget);
-          expect(find.text('Good: 0 to +5'), findsOneWidget);
-          expect(find.text('Fair: -5 to 0'), findsOneWidget);
-          expect(find.text('Weak: below -5'), findsOneWidget);
-          expect(find.text('Purple: heard, signal unknown'), findsOneWidget);
-          expect(find.text('Grey: mapped, nothing heard'), findsOneWidget);
-        }
-        if (by == CoverageColorBy.heard) expect(find.text('Strong: 75%+ heard'), findsOneWidget);
-        if (by == CoverageColorBy.noise) {
-          expect(find.text('Strong: quiet, under -125 dBm'), findsOneWidget);
-          expect(find.byKey(const Key('legend-noise-note')), findsOneWidget);
-        }
-      });
-    }
-
-    testWidgets('the colour-by chips switch the cell legend in place', (tester) async {
+    testWidgets('old path (no coverageV2): the best-SNR steps, purple, grey and faded; no colour-by chips', (tester) async {
       await pumpLegend(tester);
+      for (final (level, _) in coverageLegend()) {
+        expect(find.byKey(Key('legend-row-cell-${level.name}')), findsOneWidget, reason: level.name);
+      }
+      expect(find.byKey(const Key('legend-row-cell-faded')), findsOneWidget);
       expect(find.text('Strong: +5 dB or better'), findsOneWidget);
-      await tester.tap(find.byKey(const Key('legend-colour-by-noise')));
-      await tester.pumpAndSettle();
-      expect(find.text('Strong: +5 dB or better'), findsNothing);
-      expect(find.text('Strong: quiet, under -125 dBm'), findsOneWidget);
+      expect(find.text('Good: 0 to +5'), findsOneWidget);
+      expect(find.text('Fair: -5 to 0'), findsOneWidget);
+      expect(find.text('Weak: below -5'), findsOneWidget);
+      expect(find.text('Purple: heard, signal unknown'), findsOneWidget);
+      expect(find.text('Grey: mapped, nothing heard'), findsOneWidget);
+      expect(find.byKey(const Key('legend-colour-by-noise')), findsNothing);
     });
+
+    for (final b in Brightness.values) {
+      for (final pal in ColourPalette.values) {
+        testWidgets('coverage v2 legend ${pal.id} ${b.name}: band swatches are the coverage-v2-colours.md values', (tester) async {
+          await pumpLegend(tester, v2: true, brightness: b, palette: pal);
+          final c = CoverageBandColors.of(pal, b);
+          for (var band = 0; band <= 6; band++) {
+            final sw = tester.widget<CoverageBandSwatch>(
+              find.descendant(of: find.byKey(Key('legend-swatch-cell-band-$band')), matching: find.byType(CoverageBandSwatch)),
+            );
+            expect(sw.band, band);
+            expect(sw.colors, c);
+          }
+          expect(find.text('Faint = under 3 pings'), findsOneWidget);
+          expect(find.byKey(const Key('legend-row-predicted-sample')), findsOneWidget);
+          expect(find.byKey(const Key('legend-section-predicted')), findsOneWidget);
+        });
+      }
+    }
 
     testWidgets('repeaters: fresh / recent / older badges, the green tick and the room-server square (Drive plan 6.3)', (tester) async {
       await pumpLegend(tester);
@@ -228,7 +225,7 @@ void main() {
           final ctx = tester.element(find.byKey(const Key('legend-sheet')));
           final mc = MeshSonarColors.of(ctx);
           expect(mc.palette, pal);
-          for (final (level, _) in coverageLegend(CoverageColorBy.snr)) {
+          for (final (level, _) in coverageLegend()) {
             expect(swatchColor(tester, 'cell-${level.name}'), networkLevelColor(ctx, level), reason: level.name);
           }
           expect(swatchColor(tester, 'cell-none'), mc.silent);

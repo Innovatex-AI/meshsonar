@@ -15,6 +15,7 @@ import '../core/antenna_profile.dart';
 import '../core/api.dart';
 import '../core/claim_flow.dart';
 import '../core/coverage_query.dart';
+import '../core/coverage_v2.dart';
 import '../core/diagnostics.dart';
 import '../core/data_categories.dart' show CategoryId, dataCategories;
 import '../core/drive_context.dart' show ContextSyncLedger, stripContextCategories, stripUnsentContextCategories;
@@ -523,10 +524,74 @@ class AppState extends ChangeNotifier {
       _siteConfig = r.value;
       _siteConfigMeta = r.meta;
       notifyListeners();
+      // Coverage v2 switches on this flag: the coverage fetched before site-config answered used the old path, so ask again.
+      if (coverageV2 != _coverageFetchedV2) unawaited(refreshNetworkCoverage());
+      if (coverageV2 && _coverageMetaV2 == null) unawaited(refreshCoverageMeta());
     } catch (e) {
       _logError('Fetching site-config failed', e);
     }
   }
+
+  // ---------- coverage v2 (plan coverage-redesign-plan-2026-11-08.md): tiles, meta, inspector ----------
+  /// The server offers coverage v2 (`site-config.capabilities.coverageV2`). Without it every map keeps the old public-coverage
+  /// path (D12).
+  bool get coverageV2 => _siteConfig?.coverageV2 ?? false;
+  bool? _coverageFetchedV2;
+
+  /// Test seam: how the coverage v2 client is made for the server's origin.
+  @visibleForTesting
+  CoverageV2Client Function(Uri origin) coverageV2ClientFactory = (u) => CoverageV2Client(u);
+  CoverageV2Client? _cv2;
+  CoverageTileStore? _tileStore;
+  String? _cv2Server;
+
+  /// The coverage v2 reads for the configured server (global: every host answers the same).
+  CoverageV2Client get coverageV2Client {
+    final server = _settings.serverUrl;
+    if (_cv2 == null || _cv2Server != server) {
+      _cv2?.close();
+      _cv2 = coverageV2ClientFactory(client.baseUrl);
+      _cv2Server = server;
+      _tileStore = null;
+    }
+    return _cv2!;
+  }
+
+  /// Decoded coverage tiles, shared by every map of the app.
+  CoverageTileStore get coverageTiles => _tileStore ??= CoverageTileStore(coverageV2Client);
+
+  CoverageMeta? _coverageMetaV2;
+
+  /// The coverage legend and tile rules (`/api/coverage/meta`), saved for offline use; [CoverageMeta.fallback] until read.
+  CoverageMeta get coverageMeta => _coverageMetaV2 ?? CoverageMeta.fallback;
+
+  /// True once a real meta answer (live or saved) is in hand.
+  bool get hasCoverageMeta => _coverageMetaV2 != null;
+
+  /// Reads the meta (and keeps the saved copy when offline). A new data version empties the tile memory so tiles of the new
+  /// build are fetched.
+  Future<void> refreshCoverageMeta() async {
+    if (!coverageV2) return;
+    final server = _settings.serverUrl;
+    try {
+      final r = await _cachedFetch<CoverageMeta>(
+        'coverage_v2_meta',
+        () => coverageV2Client.meta(),
+        (m) => m.toJsonString(),
+        CoverageMeta.fromJsonString,
+      );
+      if (_settings.serverUrl != server) return;
+      final was = _coverageMetaV2?.version;
+      _coverageMetaV2 = r.value;
+      if (was != null && was != r.value.version) _tileStore?.clear();
+      notifyListeners();
+    } catch (e) {
+      _logError('Fetching coverage meta failed', e);
+    }
+  }
+
+  /// The inspector answer for one res-11 cell.
+  Future<CoverageCellInfo> coverageCell(String h3) => coverageV2Client.cell(h3, preset: coverageMeta.defaultPreset);
 
   // ---------- network coverage (the website's /coverage cells, network-wide) ----------
   PublicCoverage? _networkCoverage;
@@ -558,17 +623,23 @@ class AppState extends ChangeNotifier {
     if (query != null) _coverageQuery = query;
     final q = _coverageQuery;
     final seq = ++_coverageSeq;
+    // The meta carries the data version the tiles are keyed by: re-read it with every coverage refresh so new drives show.
+    if (coverageV2) unawaited(refreshCoverageMeta());
     _coverageLoading = true;
     notifyListeners();
     try {
       final viewing = viewingRegion;
       final until = q.until;
-      final key = 'coverage_${viewing?.code ?? 'default'}_r${q.res ?? 'd'}_${q.since.name}_${q.source.name}'
+      // Coverage v2: always res 11 with the mean (the zoom never changes the cell, D1); the old path keeps res by zoom.
+      final v2 = coverageV2;
+      _coverageFetchedV2 = v2;
+      final key = 'coverage_${viewing?.code ?? 'default'}_${v2 ? 'v2' : 'r${q.res ?? 'd'}'}_${q.since.name}_${q.source.name}'
           '${until == null ? '' : '_u${until.toUtc().millisecondsSinceEpoch ~/ 1000}'}';
       final r = await _cachedFetch<PublicCoverage>(
         key,
         () => _coverageClient(viewing).publicCoverage(
-          res: q.res,
+          res: v2 ? kCoverageV2Res : q.res,
+          metric: v2 ? 'mean' : null,
           // "Measured in the last X" is relative to the as-of instant when the timeline is scrubbed back.
           since: q.since.window == null ? null : (until ?? DateTime.now().toUtc()).subtract(q.since.window!),
           until: until,
@@ -2867,6 +2938,8 @@ class AppState extends ChangeNotifier {
     if (serverChanged) {
       _networkCoverage = null;
       _coverageMeta = null;
+      _coverageMetaV2 = null;
+      _coverageFetchedV2 = null;
       _siteConfigMeta = null;
       _tracker.reset();
     }

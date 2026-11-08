@@ -6,6 +6,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/cupertino.dart' show CupertinoSlidingSegmentedControl;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -124,33 +125,32 @@ void main() {
   tearDown(() => region_common.regionApiFactory = savedFactory);
 
   group('generated layers sheet', () {
-    testWidgets('sections in registry order, one switch per drawn layer, legacy keys kept, no switch for undrawn layers', (t) async {
+    testWidgets('sections in plan order, one switch per sheet row, legacy keys kept, no switch for undrawn layers', (t) async {
       useHugeScreen(t);
       final h = Harness(); // no repeater sync, no region index
       await h.pumpApp(t);
       await t.pumpAndSettle();
       await openSheet(t);
       final ys = [
-        for (final g in ['drive', 'coverage', 'repeaters', 'display']) t.getTopLeft(find.byKey(Key('layers-group-$g'), skipOffstage: false)).dy,
+        for (final g in ['coverage', 'network']) t.getTopLeft(find.byKey(Key('layers-group-$g'), skipOffstage: false)).dy,
       ];
-      expect(ys, orderedEquals([...ys]..sort()), reason: 'This drive, Coverage, Repeaters, Display');
+      expect(ys, orderedEquals([...ys]..sort()), reason: 'Coverage, Network');
       for (final key in [
-        'layer-hexes', 'layer-links', 'layer-repeaters', 'layer-pings', 'layer-network-coverage', //
-        'layer-network', 'layer-region-repeaters', 'layer-observers', 'layer-rings',
+        'layer-network-coverage', 'layer-predicted', 'layer-hexes', 'layer-pings', //
+        'layer-region-repeaters', 'layer-labels', 'layer-observers', 'layer-links',
       ]) {
         expect(find.byKey(Key(key), skipOffstage: false), findsOneWidget, reason: key);
       }
-      expect(find.byKey(const Key('layer-neighbours'), skipOffstage: false), findsNothing, reason: 'the dead entry is gone (D12)');
-      // Defaults: drive layers, coverage, heard and region repeaters on; the global 56,889-point layer is off (D11 revised);
-      // here this build cannot offer it anyway (no sync), so its switch is disabled.
-      expect(sw(t, 'layer-repeaters').value, isTrue);
+      for (final gone in ['layer-neighbours', 'layer-rings', 'layer-network', 'layer-repeaters']) {
+        expect(find.byKey(Key(gone), skipOffstage: false), findsNothing, reason: '$gone is not a row (dead, removed, or part of Repeaters)');
+      }
+      // Defaults: coverage, this drive, region repeaters (with heard lit) on; the global 56,889-point scope is off (D11 revised).
       expect(sw(t, 'layer-network-coverage').value, isTrue);
       expect(h.state.services.repeaterSync, isNull);
-      expect(sw(t, 'layer-network').value, isFalse);
       expect(sw(t, 'layer-region-repeaters').value, isTrue);
-      // No sync in this build and no region: honest reasons, switches that cannot work are disabled.
-      expect(sw(t, 'layer-network').onChanged, isNull);
-      expect(statusText(t, 'network'), 'Not available on this server yet');
+      expect(h.state.coverageV2, isFalse);
+      expect(sw(t, 'layer-predicted').onChanged, isNull, reason: 'no coverageV2 on this server');
+      // No region: honest reasons, switches that cannot work are disabled.
       expect(sw(t, 'layer-observers').onChanged, isNull);
       expect(statusText(t, 'observers'), 'Pick a region to see its observers');
       expect(sw(t, 'layer-region-repeaters').onChanged, isNotNull, reason: 'on, so it can always be switched off');
@@ -190,9 +190,9 @@ void main() {
       await t.pumpAndSettle();
       expect(h.state.globalRepeaterSet.state, SyncState.unsupported);
       await openSheet(t);
-      expect(sw(t, 'layer-network').onChanged, isNull);
-      expect(sw(t, 'layer-network').value, isFalse, reason: 'default on, but shown off: the server cannot offer it');
-      expect(statusText(t, 'network'), 'Not available on this server yet');
+      expect(sw(t, 'layer-region-repeaters').value, isTrue, reason: 'the person chose All MeshCore: shown as chosen, with the reason');
+      expect(sw(t, 'layer-region-repeaters').onChanged, isNotNull, reason: 'on, so it can always be switched off');
+      expect(statusText(t, 'repeaters'), 'Not available on this server yet');
       expect(indexedCountOf(t, kNetworkLayerId), 0);
     });
 
@@ -203,16 +203,16 @@ void main() {
       await h.pumpApp(t);
       await t.pumpAndSettle();
       await openSheet(t);
-      expect(statusText(t, 'network'), "Couldn't load. Check the connection and retry.");
-      expect(sw(t, 'layer-network').onChanged, isNotNull);
+      expect(statusText(t, 'repeaters'), "Couldn't load. Check the connection and retry.");
+      expect(sw(t, 'layer-region-repeaters').onChanged, isNotNull);
       final calls = srv.networkCalls;
       srv.networkStatus = 200;
       srv.now = srv.now.add(const Duration(seconds: 11));
-      await revealInLayersSheet(t, find.byKey(const Key('layer-network-retry')));
-      await t.tap(find.byKey(const Key('layer-network-retry')));
+      await revealInLayersSheet(t, find.byKey(const Key('layer-repeaters-retry')));
+      await t.tap(find.byKey(const Key('layer-repeaters-retry')));
       await t.pumpAndSettle();
       expect(srv.networkCalls, calls + 1);
-      expect(statusText(t, 'network'), startsWith('3 repeaters in and around Columbus, US'));
+      expect(statusText(t, 'repeaters'), startsWith('3 repeaters in and around Columbus, US'));
     });
 
     testWidgets('ready: switched on, limited to the phone\'s region + margin, legend + credit; the fullscreen map shares it', (t) async {
@@ -225,8 +225,9 @@ void main() {
       expect(find.byKey(RepeaterPainterLayer.paintKey), findsOneWidget, reason: 'on by default (D3, Andy Oct 24)');
       expect(indexedCountOf(t, kNetworkLayerId), 2, reason: 'the Seattle repeater is outside CMH + 40 km; the roster layer (on by default) draws the 3rd one itself');
       await openSheet(t);
-      expect(sw(t, 'layer-network').value, isTrue);
-      expect(statusText(t, 'network'), '3 repeaters in and around Columbus, US · 4 hidden by their owners · Data: MeshCore Map (map.meshcore.io)');
+      expect(sw(t, 'layer-region-repeaters').value, isTrue);
+      expect(t.widget<CupertinoSlidingSegmentedControl<bool>>(find.byKey(const Key('layer-repeaters-scope'))).groupValue, isTrue, reason: 'All MeshCore');
+      expect(statusText(t, 'repeaters'), '3 repeaters in and around Columbus, US · 4 hidden by their owners · Data: MeshCore Map (map.meshcore.io)');
       expect(find.byKey(const Key('layer-network-key')), findsOneWidget);
       for (final l in ['fresh, 24 h', 'recent, 7 d', 'older']) {
         expect(find.descendant(of: find.byKey(const Key('layer-network-key')), matching: find.text(l)), findsOneWidget);
@@ -265,8 +266,8 @@ void main() {
       await t.pumpAndSettle();
       expect(h.state.globalRepeaterSet.state, SyncState.stale);
       await openSheet(t);
-      expect(statusText(t, 'network'), startsWith('3 repeaters in and around Columbus, US · 4 hidden by their owners · Data: MeshCore Map (map.meshcore.io) · Offline'));
-      expect(find.byKey(const Key('layer-network-retry')), findsOneWidget);
+      expect(statusText(t, 'repeaters'), startsWith('3 repeaters in and around Columbus, US · 4 hidden by their owners · Data: MeshCore Map (map.meshcore.io) · Offline'));
+      expect(find.byKey(const Key('layer-repeaters-retry')), findsOneWidget);
       await closeSheet(t);
       expect(find.byKey(RepeaterPainterLayer.paintKey), findsOneWidget, reason: 'offline copy still drawn');
     });
@@ -277,11 +278,8 @@ void main() {
       final h = make(srv);
       await h.pumpApp(t);
       await t.pumpAndSettle();
-      await openSheet(t);
-      expect(statusText(t, 'repeaters'), '1 repeater with a position');
-      expect(sw(t, 'layer-region-repeaters').value, isTrue, reason: 'on by default (D11)');
-      expect(find.byKey(const Key('layer-repeaters-key')), findsOneWidget);
-      await closeSheet(t);
+      // A remembered "network on" from an older build leaves the roster on too: both draw, the roster key once.
+      expect(h.state.services.repeaterSync, isNotNull);
       expect(indexedCountOf(t, kNetworkLayerId), 2, reason: 'global without the roster key');
       expect(indexedCountOf(t, kRosterLayerId), 1);
     });
@@ -327,7 +325,7 @@ void main() {
       expect(h.state.currentRegion, isNull);
       expect(indexedCountOf(t, kNetworkLayerId), 3, reason: 'no region detected or picked: every repeater, minus the roster one the roster layer (on by default) draws');
       await openSheet(t);
-      expect(statusText(t, 'network'), startsWith('4 repeaters · '));
+      expect(statusText(t, 'repeaters'), startsWith('4 repeaters · '));
       await closeSheet(t);
 
       await h.state.setViewingRegion('CMH');

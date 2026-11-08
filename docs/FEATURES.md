@@ -376,13 +376,30 @@ ping positions all share one filter instance.
 
 (`ui/map/coverage_map.dart`; used on the Drive screen, in full-screen, in drive detail; the report has its own cell map)
 
+**Coverage v2 (coverage redesign, Nov 8 2026; when the server advertises `coverageV2`).** Plan:
+meshsonar-infra `docs/planning/coverage-redesign-plan-2026-11-08.md`; colours: `coverage-v2-colours.md`.
+- **One cell size** at every zoom: H3 res 11 (about 50 m across). Zoomed out (below zoom 13) every cell is a 2-3 px dot.
+- **Colour = the mean SNR** of every ping result in the cell, in five bands by margin over the LoRa floor (SF7: Edge below
+  −7.5, Weak −7.5..−2.5, Fair −2.5..+2.5, Good +2.5..+7.5, Excellent above +7.5 dB), plus **No reply** (quiet grey with a red
+  outline) and **Heard, no direct signal** (grey). Under 3 pings a cell is faint. Colours follow the chosen palette.
+- **Measured coverage**: the server's MVT tiles (`/api/coverage/tiles/measured/...`), drawn by the app's cell painter.
+- **Predicted coverage**: the server's estimate near measured cells, same colours, lighter and hatched, always under measured;
+  "predicted no coverage" is a thin grey hatch and is not drawn zoomed out.
+- **This drive**: your pings this session as res-11 cells with the same mean and bands, built on the phone, with a solid outline.
+- **Timeline / window / source**: measured is drawn from `public-coverage?metric=mean&res=11` for that query and Predicted
+  hides (it is today's estimate). With no tiles (offline) measured falls back to the saved cells.
+- **Tap a cell**: the inspector (`/api/coverage/cell/{h3}`): band and dB range, mean, lowest/highest, spread, replies and reply
+  rate, noise floor, first/last measured, sources, and the repeaters that served it by name (with lines to them); a
+  predicted cell shows its estimate, the distance to the nearest measured cell and how many cells it came from.
+- **Legend** from `/api/coverage/meta` (saved for offline use).
+- Without `coverageV2` (an older server) the map keeps the earlier behaviour below, minus the removed controls.
+
 Layers, bottom to top: a chart grid (visible with no tiles), a downloaded **offline region pack** where one covers the
 view (see [Offline maps](#offline-maps-region-packs)), otherwise **OpenStreetMap tiles** (colour-graded to the theme; after
 two tile errors a "Map offline. Pings still record." pill appears), **network coverage** (every driver's measured
 cells from `GET /api/cmh/public-coverage`, squares or H3 hexagons depending on the region's grid, coloured by best
 SNR on the website's own 4-step legend — a quiet "where hasn't this been driven" background layer; an area nobody
-has measured is simply left blank, which is itself the gap indicator, so there's no "no data" placeholder), **range
-rings** at 1 km and 2 km, **links** to every live heard repeater with a known position (solid for fresh, dashed for
+has measured is simply left blank, which is itself the gap indicator, so there's no "no data" placeholder), **links** to every live heard repeater with a known position (solid for fresh, dashed for
 holding, each with a distance label), **repeater markers** (amber diamonds that pop and glow when fresh, stay lit
 while holding and grey out when stale; the CMAT list plus heard repeaters found in the public directory, plus the
 simulator's repeaters in Simulator mode), **ping dots**, and the current **position**.
@@ -396,13 +413,14 @@ simulator's repeaters in Simulator mode), **ping dots**, and the current **posit
 - **Repeater names** are written beside every repeater marker (layers sheet > Network > Repeater names, on by default and
   remembered): collision-avoided, zoom-dependent (none below zoom 9; heard-this-drive from 9; the rest from 11; at most 8/14/24/36/60
   labels by zoom), heard first then nearest, with a halo for contrast. Names also appear on the drive report map.
-- **Grid resolution follows the zoom** for both the drive's hexagons and the network layer: res 7 (zoom < 11.5), 8 (< 12.5), 9 (< 14),
-  10 (< 15.5), 11. A resolution pinned in Coverage options applies to both.
+- **Grid resolution** (older servers only): follows the zoom for both the drive's hexagons and the network layer: res 7 (zoom
+  < 11.5), 8 (< 12.5), 9 (< 14), 10 (< 15.5), 11. With coverage v2 it is always res 11. The Detail chips were removed.
 - Tap a repeater to see its name, a short key, "Heard N pings ago", SNR and distance.
-- **Layers sheet** (`layers-sheet`), generated from the layer registry, in four sections: **This drive** (Hex
-  coverage, Links to heard repeaters, Repeaters heard, Pings with colour by SNR / heard-not), **Coverage** (Network
-  coverage with its colour-by / detail / since / source controls), **Network** (All MeshCore repeaters, Region repeaters, Observers, Repeater names) and **Around you** (Range rings). Drive layers, Network coverage, All MeshCore repeaters and Repeater names are on by
-  default; Region repeaters and Observers are off. A default-on layer the server cannot offer shows off and disabled. Every server-fed layer says where it stands under its switch: a count and source ("3
+- **Layers sheet** (`layers-sheet`), generated from the layer registry, in two sections (coverage plan section 5):
+  **Coverage** (Measured coverage, Predicted coverage, This drive with its Ping dots sub-switch and SNR / heard-not colours,
+  then "Coverage options": window, growth timeline, source) and **Network** (one **Repeaters** switch with a This region /
+  All MeshCore scope and a Names sub-switch, Observers, Lines to repeaters). The colour-by selector, the Detail chips and
+  range rings were removed (Nov 8 2026). Everything is on by default except the All MeshCore scope and Observers. A default-on layer the server cannot offer shows off and disabled. Every server-fed layer says where it stands under its switch: a count and source ("3
   repeaters · 4 hidden by their owners · Data: MeshCore Map (map.meshcore.io)", "1 observer with a public position",
   "753 cells measured"), "Loading…", "Couldn't load. Check the connection and retry." with **Retry**, "… · Offline - as
   of 2h ago" for a stored copy (with Retry), or a reason with the switch disabled: "Not available on this server yet"

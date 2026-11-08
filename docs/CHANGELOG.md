@@ -5,6 +5,17 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- **Coverage redesign, app (WP5; plan meshsonar-infra `docs/planning/coverage-redesign-plan-2026-11-08.md`).** When the
+  server advertises `coverageV2`: one cell size (H3 res 11) at every zoom, coloured by the MEAN SNR of the cell's ping
+  results in five bands plus No reply and Heard-no-direct-signal (colours from `coverage-v2-colours.md`, every palette, light
+  and dark); **Measured coverage** and **Predicted coverage** from the server's MVT tiles (decoded and drawn by the cell
+  painter: zoomed-out dots, predicted hatch, under measured); **This drive** as res-11 mean cells built on the phone; a cell
+  inspector from `/api/coverage/cell/{h3}` with repeater names and lines; the legend from `/api/coverage/meta` (saved for
+  offline); the timeline / window / source use `public-coverage?metric=mean&res=11`. Layers sheet is now Coverage (Measured,
+  Predicted, This drive + Ping dots) and Network (one Repeaters switch with a This region / All MeshCore scope and Names,
+  Observers, Lines). Removed: the colour-by modes, the Detail (hexagon size) chips, range rings. An older server keeps the
+  earlier path.
+
 ## [0.28.2+48] — 2026-11-08 — no yellow-underlined text anywhere
 
 - **No yellow-underlined text anywhere (app-wide fix).** 0.28.1 fixed the conversation thread only; the long-press message card, Full details, Path on map, and text flashing during page transitions still showed Flutter's debug fallback style (yellow double underline). Cause: MaterialApp's own default text style is that fallback, and text drawn outside a Material/Scaffold got it (the context menu popup, CupertinoPageScaffold pages, nav-bar title/back-label flights between pages, overlays, Cupertino popups). Fix: `meshSonarAppBuilder` (`lib/ui/app.dart`) gives every MaterialApp the Material body text style under the Navigator and its Overlay. Test: `test/ui/no_debug_underline_test.dart` checks every text on every frame of those transitions (4 tests, all failing on the old code).

@@ -100,7 +100,7 @@ class CellSheet extends StatelessWidget {
                 width: 14,
                 height: 14,
                 decoration: BoxDecoration(
-                  color: networkLevelColor(context, cell.level, mode: cell.mode),
+                  color: networkLevelColor(context, cell.level),
                   shape: BoxShape.circle,
                 ),
               ),

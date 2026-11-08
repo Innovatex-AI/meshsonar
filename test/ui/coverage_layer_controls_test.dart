@@ -16,7 +16,7 @@ NetworkCell square(double lat, double lon, double half, CoverageCell c) => Netwo
     HexPoint(lat + half, lon + half),
     HexPoint(lat + half, lon - half),
   ],
-  level: levelFor(c, CoverageColorBy.snr),
+  level: levelFor(c),
   cell: c,
 );
 

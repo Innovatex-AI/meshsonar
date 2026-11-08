@@ -215,7 +215,7 @@ String publicCoverageToJson(PublicCoverage c) => jsonEncode({
       'grid': {'kind': c.grid.kind == CoverageGridKind.h3 ? 'h3' : 'square', 'cellDeg': c.grid.cellDeg, 'res': c.grid.res, 'pending': c.grid.pending},
       'cells': [
         for (final x in c.cells)
-          [x.lat, x.lon, x.pings, x.heard, x.bestSnr, x.medianSnr, x.repeaters, x.lastAt, x.h3, x.noiseFloor],
+          [x.lat, x.lon, x.pings, x.heard, x.bestSnr, x.medianSnr, x.repeaters, x.lastAt, x.h3, x.noiseFloor, x.snrMean, x.nOk, x.nFail, x.band],
       ],
     });
 
@@ -239,6 +239,11 @@ PublicCoverage? publicCoverageFromJson(String s) {
           lastAt: c[7] as String,
           h3: c[8] as String?,
           noiseFloor: (c[9] as num?)?.toDouble(),
+          // v2 fields (absent from copies saved by older builds)
+          snrMean: c.length > 10 ? (c[10] as num?)?.toDouble() : null,
+          nOk: c.length > 11 ? (c[11] as num?)?.toInt() : null,
+          nFail: c.length > 12 ? (c[12] as num?)?.toInt() : null,
+          band: c.length > 13 ? (c[13] as num?)?.toInt() : null,
         ),
     ];
     return PublicCoverage(cells: cells, asOf: j['asOf'] as String, grid: grid);

@@ -1,9 +1,16 @@
 // The network-coverage background map layer (GET /api/cmh/public-coverage, the website's own measured cells —
 // not just this drive's pings): on by default, drawn under everything else, toggled with the other layers.
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import '../support/cell_layers.dart';
 import 'package:meshsonar/core/api.dart';
+import 'package:meshsonar/core/coverage_v2.dart';
+import 'package:meshsonar/ui/app.dart' show MeshSonarApp;
 
 import 'fakes.dart';
 import '../support/huge_screen.dart';
@@ -124,10 +131,53 @@ void main() {
     await tester.tap(find.byKey(const Key('cov-since-24 h')));
     await settle(tester);
     expect(h.client.lastCoverageSince, isNotNull);
-    await tester.ensureVisible(find.byKey(const Key('cov-res-11')));
-    await settleShort(tester);
-    await tester.tap(find.byKey(const Key('cov-res-11')));
-    await settle(tester);
-    expect(h.client.lastCoverageRes, 11);
+    expect(find.byKey(const Key('cov-res-11')), findsNothing, reason: 'the detail chips are gone (coverage plan D1)');
+    expect(h.client.lastCoverageMetric, isNull, reason: 'no coverageV2 on this server: the old path');
+  });
+
+  group('coverage v2 (site-config capability coverageV2)', () {
+    Uint8List fx(String n) => File('test/fixtures/coverage_v2/$n').readAsBytesSync();
+    Harness v2Harness(List<String> asked) {
+      final h = Harness();
+      h.client.siteConfigResult = const SiteConfig(region: RegionInfo(slug: 'cmh', url: 'https://cmh.meshsonar.com'), capabilities: {'coverageV2'});
+      h.client.publicCoverageResult = twoCells();
+      h.state.coverageV2ClientFactory = (u) => CoverageV2Client(u, client: MockClient((r) async {
+        asked.add(r.url.path);
+        final path = r.url.path;
+        if (path.endsWith('/meta')) return http.Response.bytes(fx('meta.json'), 200);
+        if (path.contains('/cell/')) return http.Response.bytes(fx('cell-measured.json'), 200);
+        // Every measured tile answers with the Columbus z13 fixture's cells, every predicted tile with the z16 one: enough to see
+        // that features reach the painter and are styled per band.
+        if (path.contains('/tiles/measured/')) return http.Response.bytes(fx('measured-13-2207-3102.mvt'), 200);
+        if (path.contains('/tiles/predicted/')) return http.Response.bytes(fx('predicted-16-17658-24819.mvt'), 200);
+        return http.Response('', 404);
+      }));
+      return h;
+    }
+
+    testWidgets('the cells are fetched with metric=mean at res 11, the meta is read, and the tile layers draw', (tester) async {
+      final asked = <String>[];
+      final h = v2Harness(asked);
+      await tester.runAsync(() async {
+        await h.state.init();
+        await h.state.refreshSiteConfig();
+        await h.state.refreshNetworkCoverage();
+        await h.state.refreshCoverageMeta();
+      });
+      expect(h.state.coverageV2, isTrue);
+      expect(h.client.lastCoverageMetric, 'mean');
+      expect(h.client.lastCoverageRes, 11);
+      expect(h.state.coverageMeta.version, 101);
+      await tester.pumpWidget(MeshSonarApp(state: h.state));
+      await tester.pump();
+      for (var i = 0; i < 6; i++) {
+        await tester.runAsync(() => h.state.coverageTiles.idle());
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(asked.any((p) => p.contains('/tiles/measured/')), isTrue);
+      expect(find.byKey(const Key('coverage-measured-layer')), findsOneWidget);
+      expect(find.byKey(const Key('network-cells-layer')), findsNothing, reason: 'live and unfiltered: the tiles draw, not the JSON cells');
+      expect(drawnCellCount(tester), greaterThan(0));
+    });
   });
 }
