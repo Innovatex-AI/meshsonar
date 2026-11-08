@@ -20,14 +20,20 @@ VALUES ('m1', 'r1', 'dm', 'd:aaaaaaaaaaaa', 'in', 1, 1000, 'hello', 'received', 
   return raw;
 }
 
+/// The newest schema version: v3's checks must hold for every later version too.
+final int latest = chatMigrations.last.version;
+
 void main() {
-  test('chatMigrations ends at v3', () => expect(chatMigrations.last.version, 3));
+  test('chatMigrations includes v3 and later versions build on it', () {
+    expect(chatMigrations[2].version, 3);
+    expect(chatMigrations.last.version, greaterThanOrEqualTo(3));
+  });
 
   test('v2 database upgrades to v3: new columns, tables, indexes, and old data intact', () {
     final raw = v2Fixture();
     expect(raw.select('PRAGMA user_version').first.values.first, 2);
-    expect(migrateDatabase(raw, chatMigrations), 3);
-    expect(raw.select('PRAGMA user_version').first.values.first, 3);
+    expect(migrateDatabase(raw, chatMigrations), latest);
+    expect(raw.select('PRAGMA user_version').first.values.first, latest);
 
     expect(cols(raw, 'messages'), containsAll(['rssi', 'path_hashes', 'hash_size', 'air_ms']));
     expect(cols(raw, 'contacts'),
@@ -60,13 +66,13 @@ void main() {
     final before = raw.select("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY name").map((r) => r['sql']).toList();
     // The user_version is lost (restore, manual reset): v3 must apply again without a duplicate-column failure.
     raw.execute('PRAGMA user_version = 2');
-    expect(migrateDatabase(raw, chatMigrations), 3);
+    expect(migrateDatabase(raw, chatMigrations), latest);
     final after = raw.select("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY name").map((r) => r['sql']).toList();
     expect(after.length, before.length);
     final maya = raw.select("SELECT path_mode, pinned_path FROM contacts WHERE name = 'Maya'").first;
     expect([maya['path_mode'], maya['pinned_path']], ['fixed', 'aabb']);
     // and a plain reopen at v3 is a no-op
-    expect(migrateDatabase(raw, chatMigrations), 3);
+    expect(migrateDatabase(raw, chatMigrations), latest);
   });
 
   test('a crash in the middle of v3 rolls back everything and leaves v2 intact', () {
@@ -85,13 +91,13 @@ void main() {
     expect(objects(raw, 'table').contains('path_history'), isFalse);
     expect(objects(raw, 'index').contains('conversations_last'), isFalse);
     // then the real migration succeeds from there
-    expect(migrateDatabase(raw, chatMigrations), 3);
+    expect(migrateDatabase(raw, chatMigrations), latest);
     expect(raw.select("SELECT path_mode FROM contacts WHERE name = 'Maya'").first['path_mode'], 'flood');
   });
 
-  test('a fresh database opens at v3 through ChatDatabase', () {
+  test('a fresh database opens at the latest version through ChatDatabase', () {
     final db = ChatDatabase.inMemory();
-    expect(db.schemaVersion, 3);
+    expect(db.schemaVersion, latest);
     expect(cols(db.raw, 'conversations'), contains('marked_unread'));
   });
 }

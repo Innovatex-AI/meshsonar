@@ -8,6 +8,8 @@ import 'package:meshsonar/chat/outbox.dart';
 import 'package:meshsonar/chat/radio_bridge.dart';
 import 'package:meshsonar/chat/session_adapter.dart';
 import 'package:meshsonar/radio/inbound.dart' as r;
+import 'package:meshsonar/radio/packet.dart';
+import 'package:meshsonar/radio/radio_api.dart' show RxPacket;
 import 'package:meshsonar/radio/session.dart' as r;
 
 import 'support.dart';
@@ -37,6 +39,10 @@ class FakeSession implements r.RadioSession {
 
   @override
   Stream<r.RadioEvent> get events => eventsC.stream;
+  /// Packets the radio heard (0x88 rx log); the chat adapter listens for copies of channel messages (CR3).
+  final rxC = StreamController<RxPacket>.broadcast();
+  @override
+  Stream<RxPacket> get rxPackets => rxC.stream;
   @override
   void setInboundPersister(Future<void> Function(r.InboundMessage message)? persist) => persister = persist;
   @override
@@ -112,6 +118,30 @@ void main() {
     h.bob(path: true);
     a.bind(h.service);
     await Future<void>.delayed(Duration.zero);
+  });
+
+  test('a received channel message gets every path it arrived by from the radio rx log (CR3 wiring)', () async {
+    final ch = h.store.channels.bySlot(radioA, 1)!;
+    final secret = (await h.store.channels.secretOf(ch))!;
+    Uint8List pkt(List<int> hops) => MeshPacket(
+          header: makeHeader(RouteType.flood, PayloadType.grpTxt),
+          pathLenByte: hops.length,
+          path: [for (final x in hops) Uint8List.fromList([x])],
+          payload: buildGroupTextPayload(secret, 300, 'Ann', 'over here'),
+        ).toBytes();
+    // The radio logs the packet first, then hands the message over; a second copy comes by another path.
+    s.rxC.add(RxPacket(at: DateTime.now(), raw: pkt([0xa1, 0xb2]), snrDb: 4.5, rssiDbm: -99));
+    await Future<void>.delayed(Duration.zero);
+    await s.persister!(chanMsg(300, 'Ann: over here'));
+    s.rxC.add(RxPacket(at: DateTime.now(), raw: pkt([0xc3]), snrDb: 1, rssiDbm: -108));
+    await Future<void>.delayed(Duration.zero);
+    final m = h.store.messages.page(ch.convKey).messages.single;
+    expect(h.store.messages.repeatsFor(m.id).map((r) => r.pathHashes), ['a1b2', 'c3']);
+    // After dispose the adapter no longer listens.
+    await a.dispose();
+    s.rxC.add(RxPacket(at: DateTime.now(), raw: pkt([0xd4]), snrDb: 1, rssiDbm: -108));
+    await Future<void>.delayed(Duration.zero);
+    expect(h.store.messages.repeatsFor(m.id), hasLength(2));
   });
 
   test('bind installs a persister that stores before returning, and does NOT make pings count as chatting', () async {
@@ -204,7 +234,7 @@ void main() {
     await svc2.pump();
     final got = h2.store.messages.get(m2.id)!;
     expect(got.tsSender, 999999);
-    h2.service.handleInbound(InboundRepeatHeard(radioId: radioA, channelSlot: 1, timestamp: 999999, text: 'Me: stamped'));
+    h2.service.handleInbound(InboundRepeatHeard(radioId: radioA, channelSlot: 1, timestamp: 999999, text: 'Me: stamped', pathHashes: 'c3', hops: 1));
     expect(h2.store.messages.get(m2.id)!.repeatsHeard, 1);
   });
 

@@ -72,12 +72,34 @@ class InboundAck extends InboundEvent {
   const InboundAck({required String radioId, required this.ackCode}) : super(radioId);
 }
 
-/// The radio heard a repeater rebroadcast one of our channel messages (echo recognised by the radio layer).
+/// The radio heard a copy of a channel message on the air (a group text on one of our channels, decrypted from the radio's
+/// rx log). For a message we sent it is a repeat; for one we received, one of the paths it came by. [text] is the on-air
+/// text (`<sender name>: <body>`). [pathHashes] is hex, [hashSize] bytes per hop, first hop first; empty = heard direct
+/// from the sender (our own transmission, for a message we sent: not a repeat).
 class InboundRepeatHeard extends InboundEvent {
   final int channelSlot;
   final int timestamp;
   final String text;
-  const InboundRepeatHeard({required String radioId, required this.channelSlot, required this.timestamp, required this.text}) : super(radioId);
+  final String pathHashes;
+  final int hashSize;
+  final int hops;
+  final double? snr;
+  final int? rssi;
+
+  /// When the radio heard it, unix ms (0 = now).
+  final int heardMs;
+  const InboundRepeatHeard(
+      {required String radioId,
+      required this.channelSlot,
+      required this.timestamp,
+      required this.text,
+      this.pathHashes = '',
+      this.hashSize = 1,
+      this.hops = 0,
+      this.snr,
+      this.rssi,
+      this.heardMs = 0})
+      : super(radioId);
 }
 
 /// A node advertised (PUSH_CODE_ADVERT / NEW_ADVERT), already decoded.

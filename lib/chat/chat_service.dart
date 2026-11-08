@@ -122,7 +122,12 @@ class ChatService {
   void _emit(ChatEvent e) {
     if (_disposed || _events.isClosed) return;
     _events.add(e);
-    if (e.kind == ChatEventKind.messageUpdated || e.kind == ChatEventKind.messageAdded) _rearm();
+    if (e.kind == ChatEventKind.messageUpdated || e.kind == ChatEventKind.messageAdded) {
+      _rearm();
+      // A copy heard before its message existed (the radio logs a packet just before it hands the message over; our own
+      // send is stamped after the radio answers) may match now.
+      if (_heldCopies.isNotEmpty) _retryHeldCopies();
+    }
   }
 
   // ------------------------------------------------------------------ lifecycle
@@ -323,22 +328,63 @@ class ChatService {
     return true;
   }
 
+  /// Copies of channel messages heard before the message itself was in the store, kept for [heldCopyMs].
+  final List<InboundRepeatHeard> _heldCopies = [];
+  static const int heldCopyMs = 60000;
+  static const int _heldCopyMax = 64;
+  bool _retryingCopies = false;
+
   void _onRepeatHeard(InboundRepeatHeard e) {
-    final ch = store.channels.bySlot(e.radioId, e.channelSlot);
-    if (ch == null) return;
-    final candidates = store.db.raw.select(
-        "SELECT id, text, repeats_heard, state FROM messages WHERE conv_key = ? AND direction = 'out' AND ts_sender = ? ORDER BY seq DESC LIMIT 5", [ch.convKey, e.timestamp]);
-    for (final r in candidates) {
-      final t = r['text'] as String;
-      if (e.text == t || e.text.endsWith(': $t')) {
-        final n = (r['repeats_heard'] as int) + 1;
-        final st = r['state'] as String;
-        store.messages.update(r['id'] as String,
-            repeatsHeard: n, state: (st == 'sent' || st == 'heard') ? MessageState.heard : null);
-        _emit(ChatEvent.updated(ch.convKey, r['id'] as String));
-        return;
+    final at = e.heardMs == 0 ? nowMs() : e.heardMs;
+    final ev = e.heardMs == 0
+        ? InboundRepeatHeard(
+            radioId: e.radioId,
+            channelSlot: e.channelSlot,
+            timestamp: e.timestamp,
+            text: e.text,
+            pathHashes: e.pathHashes,
+            hashSize: e.hashSize,
+            hops: e.hops,
+            snr: e.snr,
+            rssi: e.rssi,
+            heardMs: at)
+        : e;
+    if (_applyCopy(ev)) return;
+    _heldCopies.add(ev);
+    if (_heldCopies.length > _heldCopyMax) _heldCopies.removeAt(0);
+  }
+
+  void _retryHeldCopies() {
+    if (_retryingCopies) return;
+    _retryingCopies = true;
+    try {
+      final cutoff = nowMs() - heldCopyMs;
+      _heldCopies.removeWhere((c) => c.heardMs < cutoff);
+      for (final c in List.of(_heldCopies)) {
+        if (_applyCopy(c)) _heldCopies.remove(c);
       }
+    } finally {
+      _retryingCopies = false;
     }
+  }
+
+  /// Attaches a heard copy to its message. True when it was handled (attached, a duplicate, our own transmission, or for a
+  /// channel we do not know); false when its message is not in the store yet.
+  bool _applyCopy(InboundRepeatHeard e) {
+    final ch = store.channels.bySlot(e.radioId, e.channelSlot);
+    if (ch == null) return true;
+    final m = store.messages.findChannelCopyTarget(ch.convKey, e.timestamp, e.text);
+    if (m == null) return false;
+    // Our own transmission heard with no path is not a repeat.
+    if (m.isOutgoing && e.pathHashes.isEmpty) return true;
+    final added = store.messages.addRepeat(MessageRepeat(
+        messageId: m.id, heardMs: e.heardMs, pathHashes: e.pathHashes, hashSize: e.hashSize, hops: e.hops, snr: e.snr, rssi: e.rssi));
+    if (!added) return true;
+    final n = store.messages.repeatCount(m.id);
+    final heard = m.isOutgoing && (m.state == MessageState.sent || m.state == MessageState.heard);
+    store.messages.update(m.id, repeatsHeard: n, state: heard ? MessageState.heard : null);
+    _emit(ChatEvent.updated(ch.convKey, m.id));
+    return true;
   }
 
   /// Merges contacts read from the radio. The radio's fields (name, type, position, path, last advert) win; the phone's own
