@@ -3,13 +3,11 @@
 // ChatTabProviderImpl.contactsBuilder by lib/app/chat_wiring.dart.
 import 'package:flutter/material.dart';
 
-import '../../app/app_flags.dart';
 import '../../app/chat_controller.dart';
 import '../../chat/models.dart';
 import '../chat/conversation_screen.dart';
 import '../radios/admin_launcher.dart' show openRepeaterAdmin;
 import '../radios/rooms/room_join_bar.dart';
-import '../radios/rooms/room_join_header.dart';
 import 'contacts_controller.dart';
 import 'contacts_view.dart';
 
@@ -46,7 +44,7 @@ class _ContactsTabState extends State<ContactsTab> {
       controller: widget.chat,
       convKey: room ? ConvKey.room(c.prefix) : ConvKey.dm(c.prefix),
       title: c.displayName,
-      header: room ? (AppFlags.chatRedesign ? RoomJoinBar(keyHex: c.publicKey, name: c.displayName) : RoomJoinHeader(keyHex: c.publicKey, name: c.displayName)) : null,
+      header: room ? RoomJoinBar(keyHex: c.publicKey, name: c.displayName) : null,
     );
   }
 

@@ -95,7 +95,7 @@ class _ContactsViewState extends State<ContactsView> {
   }
 
   Future<void> _ping(Contact c) async {
-    final tile = profileTiles(c, connected: _m.connected, caps: radioCapsOf(context), canMessage: false, canAdmin: false, redesign: true)
+    final tile = profileTiles(c, connected: _m.connected, caps: radioCapsOf(context), canMessage: false, canAdmin: false)
         .where((t) => t.id == ProfileTileId.ping)
         .firstOrNull;
     if (tile != null && !tile.enabled) {

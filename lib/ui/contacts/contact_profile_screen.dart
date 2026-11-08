@@ -10,7 +10,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../../app/app_flags.dart';
 import '../../chat/contact_manager.dart';
 import '../../chat/contact_port.dart';
 import '../../chat/models.dart';
@@ -95,7 +94,7 @@ class _ContactProfileScreenState extends State<ContactProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: Listenable.merge([_c, AppFlags.chatRedesignNotifier]),
+      listenable: _c,
       builder: (context, _) {
         final c = _c.contact(widget.publicKey);
         if (c == null) return _gone(context);
@@ -134,13 +133,11 @@ class _ContactProfileScreenState extends State<ContactProfileScreen> {
     // Rooms need a login before the server takes a post; until it exists there is no button to a conversation that cannot work.
     final canMessage = _c.openConversation != null && (c.type == ContactType.companion || (c.type == ContactType.room && _c.canOpenRooms));
     final canAdmin = _c.openAdmin != null && (c.type == ContactType.repeater || c.type == ContactType.room);
-    final redesign = AppFlags.chatRedesign;
     final tiles = profileTiles(c,
         connected: connected,
         caps: widget.radioCaps?.call() ?? radioCapsOf(context),
         canMessage: canMessage,
-        canAdmin: canAdmin,
-        redesign: redesign);
+        canAdmin: canAdmin);
     final disabled = [for (final t in tiles) if (!t.enabled && t.reason != null) t.reason!];
     final conv = c.type == ContactType.room ? ConvKey.room(c.prefix) : ConvKey.dm(c.prefix);
     final summary = _c.conversationOf(c);

@@ -8,7 +8,6 @@ import 'package:meshsonar/app/chat_controller.dart';
 import 'package:meshsonar/chat/models.dart';
 import 'package:meshsonar/chat/radio_bridge.dart';
 import 'package:meshsonar/ui/chat/channel_detail_screen.dart';
-import 'package:meshsonar/ui/chat/channels_view.dart';
 import 'package:meshsonar/ui/chat/chat_banner_host.dart';
 import 'package:meshsonar/ui/chat/chat_drive_sheet.dart';
 import 'package:meshsonar/ui/chat/conversation_screen.dart';
@@ -147,15 +146,6 @@ void main() {
 
     for (final e in configs.entries) {
       final (w, h, scale, b) = e.value;
-      testWidgets('${e.key}: channels list', (tester) async {
-        setSize(tester, w: w, h: h, scale: scale);
-        await seed();
-        await tester.pumpWidget(host(Scaffold(body: ChannelsView(controller: kit.controller)), brightness: b));
-        await tester.pump();
-        expect(tester.takeException(), isNull);
-        await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
-        await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
-      });
       testWidgets('${e.key}: conversation with a failed message and long text', (tester) async {
         setSize(tester, w: w, h: h, scale: scale);
         await seed();

@@ -11,7 +11,6 @@ import 'package:integration_test/integration_test.dart';
 import 'package:meshsonar/main.dart' as app;
 import 'package:meshsonar/radio/simulator.dart';
 import 'package:meshsonar/ui/app.dart';
-import 'package:meshsonar/app/app_flags.dart';
 
 import 'screens.dart';
 
@@ -32,7 +31,6 @@ void main() {
       await t.tap(keep);
       await pumpFor(t, const Duration(seconds: 1));
     }
-    AppFlags.chatRedesign = true;
 
     final state = AppScope.of(t.element(find.byType(Scaffold).first));
     final scanner = state.services.simulatorScanner as SimulatedRadioScanner;

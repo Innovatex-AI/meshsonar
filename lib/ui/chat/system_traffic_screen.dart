@@ -1,5 +1,5 @@
 // Read-only traffic of the System (wardrive) channel: what other drivers' pings put on it. Opened from the System row of
-// the Chats list (and from the old Channels list while the chatRedesign flag exists).
+// the Chats list.
 import 'package:flutter/material.dart';
 
 import '../../app/chat_controller.dart';

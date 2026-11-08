@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart' show CustomSemanticsAction;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:meshsonar/app/app_flags.dart';
 import 'package:meshsonar/app/chat_wiring.dart';
 import 'package:meshsonar/chat/channel_secret.dart';
 import 'package:meshsonar/chat/mesh_links.dart';
@@ -38,7 +37,6 @@ void main() {
   setUp(() {
     kit = ChatKit();
     h = Harness();
-    AppFlags.chatRedesign = true;
     RedesignedChatTabState.resetSession();
     appTipStore = MemoryTipStore();
     ChatWiring.controller.value = kit.controller;
@@ -50,7 +48,6 @@ void main() {
     ChatListActions.useContextMenu = true;
     ChatTabHost.provider.value = null;
     ChatWiring.controller.value = null;
-    AppFlags.chatRedesign = false;
     provider.dispose();
     kit.dispose();
     dismissAppToast();

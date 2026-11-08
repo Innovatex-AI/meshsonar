@@ -129,7 +129,7 @@ void main() {
       Widget grid(ContactType type) => host(Scaffold(
             body: ProfileTileGrid(
               tiles: profileTiles(Contact(radioId: radioA, publicKey: bobKey, type: type, name: 'X'),
-                  connected: true, caps: RadioCaps.baseline, canMessage: true, canAdmin: true, redesign: true),
+                  connected: true, caps: RadioCaps.baseline, canMessage: true, canAdmin: true),
               onTap: (_) {},
               onOptions: (t) => seen.add(t.id),
             ),

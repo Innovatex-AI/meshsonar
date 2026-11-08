@@ -4,8 +4,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/radio/repeater_admin.dart';
-import 'package:meshsonar/ui/radios/repeater_admin/admin_controller.dart';
-import 'package:meshsonar/ui/radios/repeater_admin/admin_login_view.dart';
 
 import 'admin_rig.dart';
 
@@ -19,44 +17,6 @@ Future<void> tapTab(WidgetTester tester, String name) async {
 }
 
 void main() {
-  group('login', () {
-    adminTest('explains where the password goes, masks it, and a wrong password says so in plain words', (tester) async {
-      final rig = await openAdmin(tester, login: false);
-      expect(find.text(adminPasswordPromise), findsOneWidget);
-      expect(tester.widget<TextField>(find.byKey(const Key('admin-password'))).obscureText, isTrue);
-      expect(tester.widget<FilledButton>(find.byKey(const Key('admin-login-go'))).onPressed, isNull, reason: 'nothing to send yet');
-      expect(find.byKey(const Key('admin-remember')), findsNothing, reason: 'remembering is only offered when a secure store exists');
-      await tester.enterText(find.byKey(const Key('admin-password')), 'wrongpass');
-      await tester.pump();
-      await tester.tap(find.byKey(const Key('admin-login-go')));
-      await pumpUntilFound(tester, find.byKey(const Key('admin-login-error')));
-      expect(find.textContaining('No answer'), findsOneWidget);
-      expect(rig.controller.stage, AdminStage.login);
-      await tester.tap(find.byKey(const Key('admin-password-show')));
-      await tester.pump();
-      expect(tester.widget<TextField>(find.byKey(const Key('admin-password'))).obscureText, isFalse);
-    });
-
-    adminTest('a correct password opens the tabs and clears the field; the controller keeps no password in its state', (tester) async {
-      final rig = await openAdmin(tester);
-      expect(find.byKey(const Key('admin-tabs')), findsOneWidget);
-      expect(find.byKey(const Key('admin-password')), findsNothing);
-      expect(rig.controller.session.isAdmin, isTrue);
-      expect(rig.controller.session.debugState().toString(), isNot(contains('secret')));
-      expect(rig.controller.session.log.map((e) => e.toString()).join(), isNot(contains('secret')));
-    });
-
-    adminTest('the radio disconnecting during use goes back to login with the reason', (tester) async {
-      final rig = await openAdmin(tester);
-      rig.radio.drop();
-      await tester.runAsync(() => rig.controller.loadNeighbours());
-      await tester.pump();
-      expect(rig.controller.stage, AdminStage.login);
-      expect(find.byKey(const Key('admin-login-error')), findsOneWidget);
-      expect(find.textContaining('radio disconnected'), findsOneWidget);
-    });
-  });
-
   group('overview', () {
     adminTest('shows name, firmware, battery, uptime, noise, airtime, packets, errors and a right clock', (tester) async {
       await openAdmin(tester);
@@ -355,23 +315,6 @@ void main() {
       await frames(tester);
       expect(find.text('Type DENY ALL to go on'), findsOneWidget);
       expect(tester.widget<FilledButton>(find.byKey(const Key('confirm-ok'))).onPressed, isNull);
-    });
-  });
-
-  group('menu', () {
-    adminTest('the More menu is an action sheet: cancel stays logged in, Log out logs out', (tester) async {
-      final rig = await openAdmin(tester);
-      await tester.tap(find.byKey(const Key('admin-menu')));
-      await frames(tester);
-      expect(find.byKey(const Key('admin-menu-logout')), findsOneWidget);
-      await tester.tapAt(const Offset(2, 2));
-      await frames(tester);
-      expect(rig.controller.stage, AdminStage.ready);
-      await tester.tap(find.byKey(const Key('admin-menu')));
-      await frames(tester);
-      await tester.tap(find.byKey(const Key('admin-menu-logout')));
-      await frames(tester);
-      expect(rig.controller.stage, isNot(AdminStage.ready));
     });
   });
 

@@ -1,4 +1,4 @@
-// The tile matrix of the contact profile (chat plan 4.6): contact type x radio connected x firmware x chatRedesign flag.
+// The tile matrix of the contact profile (chat plan 4.6): contact type x radio connected x firmware x firmware.
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/chat/models.dart';
 import 'package:meshsonar/radio/caps.dart';
@@ -11,13 +11,13 @@ const _noDiscovery = RadioCaps(fwCode: 8, pathDiscovery: PathDiscoverySupport.no
 const _modern = RadioCaps(fwCode: 10, pathDiscovery: PathDiscoverySupport.yes);
 
 List<ProfileTile> tiles(ContactType t,
-        {bool connected = true, RadioCaps caps = _modern, bool msg = true, bool admin = true, bool redesign = true}) =>
-    profileTiles(radioContact(1, type: t), connected: connected, caps: caps, canMessage: msg, canAdmin: admin, redesign: redesign);
+        {bool connected = true, RadioCaps caps = _modern, bool msg = true, bool admin = true}) =>
+    profileTiles(radioContact(1, type: t), connected: connected, caps: caps, canMessage: msg, canAdmin: admin);
 
 List<ProfileTileId> ids(List<ProfileTile> l) => [for (final t in l) t.id];
 
 void main() {
-  group('order and count per type (flag on)', () {
+  group('order and count per type ', () {
     test('person: Message, Ping, Route, Stats', () {
       expect(ids(tiles(ContactType.companion)), [ProfileTileId.message, ProfileTileId.ping, ProfileTileId.route, ProfileTileId.stats]);
     });
@@ -29,18 +29,6 @@ void main() {
     });
     test('sensor: Telemetry, Ping, Route', () {
       expect(ids(tiles(ContactType.sensor)), [ProfileTileId.telemetry, ProfileTileId.ping, ProfileTileId.route]);
-    });
-  });
-
-  group('flag off: only tiles that work today, never a dead button', () {
-    test('person: Message and Route', () => expect(ids(tiles(ContactType.companion, redesign: false)), [ProfileTileId.message, ProfileTileId.route]));
-    test('repeater: Dashboard and Route', () => expect(ids(tiles(ContactType.repeater, redesign: false)), [ProfileTileId.dashboard, ProfileTileId.route]));
-    test('room: Open room and Route', () => expect(ids(tiles(ContactType.room, redesign: false)), [ProfileTileId.openRoom, ProfileTileId.route]));
-    test('sensor: Route only', () => expect(ids(tiles(ContactType.sensor, redesign: false)), [ProfileTileId.route]));
-    test('nothing flagged "coming soon" is shown', () {
-      for (final t in ContactType.values) {
-        expect(tiles(t, redesign: false).where((x) => x.comingSoon), isEmpty, reason: t.name);
-      }
     });
   });
 

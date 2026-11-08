@@ -9,7 +9,7 @@ import '../../chat/models.dart';
 import '../contacts/contact_profile_screen.dart';
 import '../contacts/contacts_controller.dart';
 import '../radios/admin_launcher.dart' show openRepeaterAdmin;
-import '../radios/rooms/room_join_header.dart';
+import '../radios/rooms/room_join_bar.dart';
 import 'conversation_screen.dart';
 import 'system_traffic_screen.dart';
 
@@ -65,7 +65,7 @@ class ChatNavigator {
       controller: chat,
       convKey: room ? ConvKey.room(c.prefix) : ConvKey.dm(c.prefix),
       title: c.displayName,
-      header: room ? RoomJoinHeader(keyHex: c.publicKey, name: c.displayName) : null,
+      header: room ? RoomJoinBar(keyHex: c.publicKey, name: c.displayName) : null,
     );
   }
 
