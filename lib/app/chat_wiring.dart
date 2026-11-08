@@ -16,7 +16,9 @@ import 'package:flutter/foundation.dart';
 import '../chat/tip_store.dart';
 import '../ui/design/app_widgets.dart' show appTipStore;
 import '../alerts/alerts_runtime.dart';
+import '../chat/channel_secret.dart' show hashtagSecret16;
 import '../chat/chat_service.dart';
+import '../chat/models.dart' show ChannelKind;
 import '../core/model.dart' show PingKind;
 import '../ui/chat/chat_tab_provider.dart';
 import '../ui/chat/conversation_screen.dart';
@@ -65,6 +67,13 @@ class ChatWiring {
     service.start();
     service.applyRetention();
     _app = app;
+    // Telemetry may share a group packet's header only for a channel anyone can read: Public (AppState knows it) and the #
+    // channels on this radio, whose keys come from their names. Private channels are never offered here.
+    app.hashtagChannelKeys = () {
+      final id = ctl.radioId;
+      if (id == null) return const [];
+      return [for (final c in store.channels.list(id)) if (c.kind == ChannelKind.hashtag) hashtagSecret16(c.name)];
+    };
 
     ctl.updateDrive(driving: app.driving);
     _appListener = () {

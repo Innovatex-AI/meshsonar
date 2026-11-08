@@ -1,5 +1,7 @@
+import 'dart:typed_data';
 // Chat wiring against the simulated radio and an in-memory database.
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/chat/channel_secret.dart';
 import 'package:meshsonar/app/chat_wiring.dart';
 import 'package:meshsonar/chat/models.dart';
 import 'package:meshsonar/radio/tx_arbiter.dart';
@@ -58,6 +60,17 @@ void main() {
     await until(() => h.scanner.lastTransport!.sentChannel.isNotEmpty, what: 'channel send reached the radio');
     expect(h.scanner.lastTransport!.sentChannel.single, (slot: 0, text: 'hi Ann'));
     await until(() => ctl.service.page(pub.convKey).messages.first.state != MessageState.queued, what: 'state moved on');
+  });
+
+  test('telemetry learns the # channel keys this radio holds, and never a private one (Nov 8 privacy fix)', () async {
+    final ctl = (await ChatWiring.attach(h.state))!;
+    expect(await h.state.connectSimulator(), isTrue);
+    await until(() => ctl.radioId != null && ctl.store.channels.list(ctl.radioId!).isNotEmpty, what: 'Public channel row');
+    final id = ctl.radioId!;
+    await ctl.store.channels.save(Channel(radioId: id, slot: 5, name: '#cmh', kind: ChannelKind.hashtag), secret: hashtagSecret16('#cmh'));
+    await ctl.store.channels.save(Channel(radioId: id, slot: 6, name: 'Family', kind: ChannelKind.private), secret: Uint8List.fromList(List.filled(16, 9)));
+    final keys = h.state.hashtagChannelKeys!();
+    expect(keys.map((k) => k.toString()), [hashtagSecret16('#cmh').toString()]);
   });
 
   test('outbox resumes: a message written while the radio is away goes out after the reconnect', () async {

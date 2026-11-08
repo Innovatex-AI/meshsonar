@@ -60,7 +60,7 @@ void main() {
       );
 
   TelemetryRecord rec({int salt = 0, String? region = 'CMH', DateTime? at}) =>
-      TelemetryRecord.fromRx(_rx(at ?? clock.subtract(const Duration(seconds: 5)), salt: salt), region: region)!;
+      TelemetryRecord.fromRx(_rx(at ?? clock.subtract(const Duration(seconds: 5)), salt: salt), region: region, shareableChannel: (_) => true)!;
 
   setUp(() {
     clock = DateTime.utc(2026, 10, 24, 12);

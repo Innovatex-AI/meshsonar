@@ -153,6 +153,7 @@ const DataCategory telemetryCategory = DataCategory(
   shared: [
     'Packet type and route type',
     'The repeaters it passed through (their short path codes)',
+    'For channel messages, yours included: only the Public channel and # channels, after checking the packet really belongs to one',
     'Signal strength: SNR and RSSI',
     'The time it was heard and your region code (for example CMH), never your position',
     'A fingerprint of the packet (a hash, not its content), so copies heard by others are counted once',

@@ -9,6 +9,8 @@ import 'package:meshsonar/app/services.dart';
 import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/core/telemetry.dart';
 import 'package:meshsonar/core/telemetry_uploader.dart';
+import 'package:meshsonar/chat/channel_secret.dart';
+import 'package:meshsonar/radio/packet.dart';
 import 'package:meshsonar/radio/radio_api.dart';
 
 import '../ui/fakes.dart';
@@ -68,8 +70,17 @@ class _H extends Harness {
   _TeleClient get tele => state.client as _TeleClient;
 }
 
-RxPacket _pkt(DateTime at, int salt) => RxPacket(
-    at: at, raw: Uint8List.fromList([0x15, 0x01, 0xA1, 0xDE, 0xAD, 0xBE, 0xEF, salt]), snrDb: 5, rssiDbm: -90);
+/// A real flood group text, one hop (a1), encrypted with [key] (default: the well-known Public channel).
+RxPacket _pkt(DateTime at, int salt, {List<int>? key}) => RxPacket(
+    at: at,
+    raw: MeshPacket(
+      header: makeHeader(RouteType.flood, PayloadType.grpTxt),
+      pathLenByte: 1,
+      path: [Uint8List.fromList([0xa1])],
+      payload: buildGroupTextPayload(key ?? publicChannelSecret16, 1000 + salt, 'Ann', 'secret words $salt'),
+    ).toBytes(),
+    snrDb: 5,
+    rssiDbm: -90);
 
 Future<_H> _ready() async {
   final h = _H()..approveKey();
@@ -88,7 +99,8 @@ void main() {
     h.now = h.now.add(const Duration(minutes: 2));
     await h.state.flushTelemetry();
     expect(h.tele.bodies, hasLength(1));
-    expect(h.tele.bodies.single.toLowerCase().contains('deadbeef'), isFalse);
+    expect(h.tele.bodies.single.contains('secret words'), isFalse);
+    expect(h.tele.bodies.single.contains('Ann'), isFalse);
     final j = jsonDecode(h.tele.bodies.single) as Map;
     expect(j['format'], 'meshsonar-telemetry/1');
     expect((j['packets'] as List).single['path'], ['a1']);
@@ -111,12 +123,34 @@ void main() {
     final p = _pkt(h.now, 3);
     h.link.rx.add(p);
     await Future<void>.delayed(Duration.zero);
-    final hash = TelemetryRecord.fromRx(p)!.packetHash!;
+    final hash = TelemetryRecord.fromRx(p, shareableChannel: (_) => true)!.packetHash!;
     // The engine reports the ping afterwards, with its packet hash.
     h.state.debugOnPing(DrivePing(id: 'p1', ts: h.now, lat: 0, lon: 0, pktHash: hash));
     h.now = h.now.add(const Duration(minutes: 2));
     await h.state.flushTelemetry();
     expect(h.tele.bodies, isEmpty);
+  });
+
+  test('a private channel packet is never uploaded (Nov 8 fix: the disclosure promised it, the app recorded it)', () async {
+    final h = await _ready();
+    h.link.rx.add(_pkt(h.now, 4, key: List.generate(16, (i) => 200 - i)));
+    await Future<void>.delayed(Duration.zero);
+    h.now = h.now.add(const Duration(minutes: 2));
+    await h.state.flushTelemetry();
+    expect(h.tele.bodies, isEmpty);
+    expect(h.state.telemetryQueued, 0);
+  });
+
+  test('a # channel packet is shared only when this phone holds that channel', () async {
+    final h = await _ready();
+    final cmh = hashtagSecret16('#cmh');
+    h.link.rx.add(_pkt(h.now, 5, key: cmh));
+    await Future<void>.delayed(Duration.zero);
+    expect(h.state.telemetryQueued, 0, reason: 'unknown channel: it could be private');
+    h.state.hashtagChannelKeys = () => [cmh];
+    h.link.rx.add(_pkt(h.now, 6, key: cmh));
+    await Future<void>.delayed(Duration.zero);
+    expect(h.state.telemetryQueued, 1);
   });
 
   test('erase calls DELETE on the server', () async {
