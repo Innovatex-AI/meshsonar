@@ -495,7 +495,9 @@ void main() {
         for (var ring = 0; ring <= rings; ring++)
           for (var k = 0; k < (ring == 0 ? 1 : 12); k++) c + Offset.fromDirection(k * math.pi / 6 + ring * 0.3, ring * 28.0),
       ];
-      if (!await tapUntilPanel(t, pts, 'cell-sheet')) throw StateError('no hex under ${pts.length} taps');
+      // Coverage v2 (server capability coverageV2): the inspector body is the v2 cell sheet.
+      final body = st.coverageV2 ? 'coverage-cell-sheet' : 'cell-sheet';
+      if (!await tapUntilPanel(t, pts, body)) throw StateError('no cell under ${pts.length} taps');
       await frame(t, '13-cell-inspector');
       await t.tap(find.byKey(const Key('info-panel-header')), warnIfMissed: false);
       await pumpFor(t, const Duration(seconds: 1));
