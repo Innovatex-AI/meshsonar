@@ -190,7 +190,7 @@ const _standardLight = _Strength(
   // no blue (see _standardDark): coverage_bands.dart _standardLight Excellent, Good, Fair, Edge
   strong: Color(0xFF18631D),
   good: Color(0xFF749119),
-  fair: Color(0xFFE9B907),
+  fair: Color(0xFFB07D16), // dark gold: the band's E9B907 yellow is 1.6:1 on the light map, under the 3:1 these small marks need
   weak: Color(0xFFB80321),
   // red -> yellow -> green like the coverage bands (Edge, Fair, Excellent; Andy, Nov 8 2026: no blue in the signal scale)
   stops: [Color(0xFFB80321), Color(0xFFE9B907), Color(0xFF18631D)],
