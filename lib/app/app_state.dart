@@ -45,6 +45,7 @@ import '../core/startup_location.dart';
 import '../core/report_body.dart';
 import '../core/server_url.dart';
 import '../core/sync_service.dart' show DefaultSyncService;
+import '../chat/channel_secret.dart' show publicChannelSecret16;
 import '../core/telemetry.dart';
 import '../core/telemetry_uploader.dart';
 import '../core/phone_sensors.dart';
@@ -1354,9 +1355,14 @@ class AppState extends ChangeNotifier {
     return false;
   }
 
+  /// The # channel keys this phone holds (set by the chat wiring); with them and the Public key, a group packet's channel
+  /// is proven readable by anyone before its header may be shared. Without chat, only Public.
+  List<List<int>> Function()? hashtagChannelKeys;
+  late final ShareableChannels _shareable = ShareableChannels(() => [publicChannelSecret16, ...?hashtagChannelKeys?.call()]);
+
   void _onTelemetryRx(RxPacket rx) {
     if (!_settings.telemetryEnabled) return;
-    final r = TelemetryRecord.fromRx(rx, region: _currentRegion?.code);
+    final r = TelemetryRecord.fromRx(rx, region: _currentRegion?.code, shareableChannel: _shareable.call);
     if (r != null) _tele.add(r);
   }
 

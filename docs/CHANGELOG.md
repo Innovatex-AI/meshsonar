@@ -5,6 +5,8 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- **Privacy fix: private channels are never shared (CR7).** "Share packet headers" promised that private-channel traffic was never recorded, but the headers of private-channel messages (route, signal, time; never their text) were recorded and sent. Now a channel packet is shared only when it provably belongs to the Public channel or a # channel on your phone, and anything queued under the old rule is dropped. The settings now say plainly that the routes of your Public and # channel messages are part of what is shared; direct-message routes stay on the phone.
+
 - **Know when nobody heard you, and choose how to send (chat + radio round, CR2).** A channel message no repeater relayed within 30 seconds now says "No repeater heard it" with a Resend button. Long-press Send on a direct message to search for a new route. Status words that change with time ("Mesh is slow", "No repeater heard it") now appear on their own instead of waiting for something else to redraw the screen. Chat database v5.
 
 - **Long-press any message for how it travelled (chat + radio round, CR4).** The bubble lifts with a card: the route with repeater names, hops, SNR/RSSI, "Relayed by" for your channel messages, the paths a received one came by, and the times with the round trip. Route on map shows the repeaters on a map. Repeater names now also come from the network roster, and a prefix two repeaters share is flagged with the candidates. A sent direct message shows the route it actually took. Full details lists every repeat. Menu actions now wait for the menu to close (opening Details from the menu could glitch).

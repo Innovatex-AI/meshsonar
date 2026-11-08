@@ -14,9 +14,12 @@ RxPacket _rx() => RxPacket(
       rssiDbm: -97,
     );
 
+/// Stands in for the channel check where a test is about something else (a shareable group packet).
+bool _anyChannel(List<int> _) => true;
+
 void main() {
   test('record keeps header metadata and no payload', () {
-    final r = TelemetryRecord.fromRx(_rx(), region: 'CMH')!;
+    final r = TelemetryRecord.fromRx(_rx(), region: 'CMH', shareableChannel: _anyChannel)!;
     expect(r.payloadType, 5);
     expect(r.routeType, 1);
     expect(r.pathHashes, ['a1', 'b2']);
@@ -45,7 +48,7 @@ void main() {
   });
 
   test('out-of-range signal values are dropped, not sent', () {
-    final r = TelemetryRecord.fromRx(RxPacket(at: DateTime.utc(2026), raw: _rx().raw, snrDb: 99, rssiDbm: 12))!;
+    final r = TelemetryRecord.fromRx(RxPacket(at: DateTime.utc(2026), raw: _rx().raw, snrDb: 99, rssiDbm: 12), shareableChannel: _anyChannel)!;
     expect(r.snrDb, isNull);
     expect(r.rssiDbm, isNull);
   });

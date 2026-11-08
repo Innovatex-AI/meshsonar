@@ -186,7 +186,7 @@ class TelemetryUploader {
       return false;
     }
     if ((driverKey() ?? '').isEmpty) return false; // nothing can be uploaded without a key; do not hoard
-    if (telemetryPrivateTypes.contains(r.payloadType)) return false;
+    if (!r.mayLeavePhone) return false; // private types, and group packets whose channel was not checked
     final h = r.packetHash;
     if (h != null && _ownHashes.contains(h)) return false;
     final t = now();
@@ -383,7 +383,7 @@ class TelemetryUploader {
             'v': 1,
             'pending_erase': _pendingErase,
             'records': [
-              for (final r in _queue) {...r.toJson(), 'region': r.region},
+              for (final r in _queue) r.toQueueJson(),
             ],
           }),
           flush: true);
