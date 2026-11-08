@@ -1,6 +1,7 @@
-// The Chats segment (plan 4.1): one merged list of direct messages, channels and rooms, pinned first then newest, with the
-// System (wardrive) group last. It is a SLIVER so the Chat tab shell can scroll it under the large title, the pinned
-// segment control and the collapsing search field.
+// The Chats inbox and the Channels list (plan 4.1; chat + radio round CR1). Chats is the inbox: Direct messages, Channels,
+// Rooms and System in labelled sections, each pinned first then newest. Channels lists every channel (also ones with no
+// messages yet): Public first, then by recent activity or by name, the System (wardrive) channel last. Both are SLIVERS so
+// the Chat tab shell can scroll them under the large title, the pinned segment control and the collapsing search field.
 //
 // Swipe (flutter_slidable): trailing Mute and Delete, leading Pin. Long-press: the iOS context menu with the last two
 // messages as the preview. Screen readers get the same three actions. States: no radio, nothing yet, reading from the radio,
@@ -30,9 +31,23 @@ import 'conversation_tile.dart';
 import 'message_bubble.dart';
 import 'message_format.dart';
 
+/// Which list [ChatsListView] draws.
+enum ChatsListMode { inbox, channels }
+
+/// How the Channels list is ordered (remembered for the session).
+enum ChannelSort { recent, name }
+
+/// The Channels sort for this session; a cold launch is Recent.
+ChannelSort _channelSort = ChannelSort.recent;
+
+/// Back to a cold launch (tests).
+@visibleForTesting
+void resetChannelSort() => _channelSort = ChannelSort.recent;
+
 class ChatsListView extends StatefulWidget {
   final ChatController controller;
   final ChatNavigator navigator;
+  final ChatsListMode mode;
 
   /// Search text from the shell; empty = the whole list.
   final String query;
@@ -50,6 +65,7 @@ class ChatsListView extends StatefulWidget {
     super.key,
     required this.controller,
     required this.navigator,
+    this.mode = ChatsListMode.inbox,
     this.query = '',
     this.selectedKey,
     this.onConnect,
@@ -62,6 +78,7 @@ class ChatsListView extends StatefulWidget {
 }
 
 class _ChatsListViewState extends State<ChatsListView> {
+  bool get _channels => widget.mode == ChatsListMode.channels;
   late final ChatListActions _actions = ChatListActions(widget.controller, navigator: widget.navigator);
   StreamSubscription<dynamic>? _sync;
   SyncPhase _phase = SyncPhase.offline;
@@ -96,6 +113,13 @@ class _ChatsListViewState extends State<ChatsListView> {
       builder: (context, _) {
         final all = _c.conversationRows();
         final q = widget.query.trim().toLowerCase();
+        if (_channels) {
+          final chans = all.where((r) => r.isChannel).toList();
+          if (chans.isEmpty) return all.isEmpty ? _emptyState() : _noChannels();
+          final hits = q.isEmpty ? chans : chans.where((r) => r.title.toLowerCase().contains(q)).toList();
+          if (hits.isEmpty) return _noChannelMatch();
+          return _channelList(hits, filtered: q.isNotEmpty);
+        }
         final rows = q.isEmpty ? all : all.where((r) => _matches(r, q)).toList();
         if (all.isEmpty) return _emptyState();
         if (q.isNotEmpty) return _searchResults(rows, all, q);
@@ -190,50 +214,122 @@ class _ChatsListViewState extends State<ChatsListView> {
 
   // ------------------------------------------------------------------ the list
 
+  /// The inbox: one labelled section per kind of conversation, so people, channels and rooms never mix. Each keeps the
+  /// list's order (pinned first, then newest).
   Widget _list(List<ConversationRow> rows) {
-    final normal = rows.where((r) => !r.isSystem).toList();
+    final direct = rows.where((r) => !r.isSystem && r.convKind == ConvKind.dm).toList();
+    final channels = rows.where((r) => !r.isSystem && r.isChannel).toList();
+    final rooms = rows.where((r) => !r.isSystem && r.convKind == ConvKind.room).toList();
     final system = rows.where((r) => r.isSystem).toList();
-    final proto = ConversationRow(
-      key: 'proto',
-      convKind: ConvKind.dm,
-      kind: RowKind.person,
-      title: 'Prototype',
-      avatarSeed: 'proto',
-      preview: 'Prototype',
-    );
     return SliverMainAxisGroup(
       slivers: [
-        if (normal.isNotEmpty)
-          SliverPrototypeExtentList(
-            // Every row has the same height (fixed two-line preview slot), so 500 rows cost nothing off screen.
-            prototypeItem: Column(children: [ConversationTile(row: proto, stamp: '9:41'), const RowDivider()]),
-            delegate: SliverChildBuilderDelegate(
-              (context, i) => Column(children: [_tile(normal[i]), const RowDivider()]),
-              childCount: normal.length,
-              findChildIndexCallback: (key) {
-                if (key is ValueKey<String>) {
-                  final k = key.value;
-                  final i = normal.indexWhere((r) => 'row-${r.key}' == k);
-                  return i < 0 ? null : i;
-                }
-                return null;
-              },
-            ),
-          ),
-        if (system.isNotEmpty)
-          SliverToBoxAdapter(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const _SectionHeader('System'),
-                for (final r in system) ...[_tile(r), const RowDivider()],
-              ],
-            ),
-          ),
+        if (direct.isNotEmpty) ..._section('Direct messages', 'direct', direct),
+        if (channels.isNotEmpty) ..._section('Channels', 'channels', channels),
+        if (rooms.isNotEmpty) ..._section('Rooms', 'rooms', rooms),
+        if (system.isNotEmpty) ..._section('System', 'system', system),
         const SliverToBoxAdapter(child: SizedBox(height: Gap.xl)),
       ],
     );
   }
+
+  /// A header and its rows. Every row has the same height (fixed two-line preview slot), so long sections cost nothing
+  /// off screen.
+  List<Widget> _section(String title, String id, List<ConversationRow> rows) {
+    final proto = ConversationRow(key: 'proto', convKind: ConvKind.dm, kind: RowKind.person, title: 'Prototype', avatarSeed: 'proto', preview: 'Prototype');
+    return [
+      SliverToBoxAdapter(child: _SectionHeader(title, key: Key('section-$id'))),
+      SliverPrototypeExtentList(
+        prototypeItem: Column(children: [ConversationTile(row: proto, stamp: '9:41'), const RowDivider()]),
+        delegate: SliverChildBuilderDelegate(
+          (context, i) => Column(children: [_tile(rows[i]), const RowDivider()]),
+          childCount: rows.length,
+          findChildIndexCallback: (key) {
+            if (key is ValueKey<String>) {
+              final i = rows.indexWhere((r) => 'row-${r.key}' == key.value);
+              return i < 0 ? null : i;
+            }
+            return null;
+          },
+        ),
+      ),
+    ];
+  }
+
+  // ------------------------------------------------------------------ channels
+
+  /// Public first, then the others by the chosen sort, the System (wardrive) channel last. While searching the sort
+  /// control is hidden (the matches keep the chosen order).
+  Widget _channelList(List<ConversationRow> rows, {required bool filtered}) {
+    final public = rows.where((r) => r.kind == RowKind.publicChannel).toList();
+    final system = rows.where((r) => r.isSystem).toList();
+    final rest = rows.where((r) => r.kind != RowKind.publicChannel && !r.isSystem).toList();
+    if (_channelSort == ChannelSort.name) {
+      rest.sort((a, b) {
+        final c = a.title.toLowerCase().compareTo(b.title.toLowerCase());
+        return c != 0 ? c : a.key.compareTo(b.key);
+      });
+    }
+    return SliverMainAxisGroup(
+      slivers: [
+        if (!filtered)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(Layout.screenMargin, Gap.xs, Layout.screenMargin, 0),
+              child: Row(children: [
+                Expanded(
+                  child: Text('${rows.where((r) => !r.isSystem).length} ${rows.where((r) => !r.isSystem).length == 1 ? 'channel' : 'channels'}',
+                      style: AppType.footnote.copyWith(color: AppColors.of(context).textMuted)),
+                ),
+                MediaQuery(
+                  data: MediaQuery.of(context).copyWith(textScaler: TextScaler.noScaling),
+                  child: CupertinoSlidingSegmentedControl<ChannelSort>(
+                    key: const Key('channels-sort'),
+                    groupValue: _channelSort,
+                    children: const {
+                      ChannelSort.recent: Padding(padding: EdgeInsets.symmetric(horizontal: Gap.s), child: Text('Recent', key: Key('channels-sort-recent'))),
+                      ChannelSort.name: Padding(padding: EdgeInsets.symmetric(horizontal: Gap.s), child: Text('A–Z', key: Key('channels-sort-name'))),
+                    },
+                    onValueChanged: (v) {
+                      if (v != null && v != _channelSort) setState(() => _channelSort = v);
+                    },
+                  ),
+                ),
+              ]),
+            ),
+          ),
+        if (public.isNotEmpty || rest.isNotEmpty) ..._section('Channels', 'channel-list', [...public, ...rest]),
+        if (system.isNotEmpty) ..._section('System', 'system', system),
+        const SliverToBoxAdapter(child: SizedBox(height: Gap.xl)),
+      ],
+    );
+  }
+
+  Widget _noChannels() {
+    final connected = _c.radioConnected;
+    return SliverFillRemaining(
+      hasScrollBody: false,
+      child: AppEmptyView(
+        key: const Key('channels-empty'),
+        symbol: AppSymbols.message,
+        title: 'No channels yet',
+        message: 'Join the Public channel to talk with everyone in range, or join a # channel your community uses.',
+        actionLabel: connected ? 'Join Public channel' : 'New channel',
+        onAction: connected
+            ? () => runChannelAction(context, _c, () => _c.admin.joinPublic(_c.radioId ?? ''), what: 'Public')
+            : widget.onNew,
+      ),
+    );
+  }
+
+  Widget _noChannelMatch() => SliverFillRemaining(
+        hasScrollBody: false,
+        child: AppEmptyView(
+          key: const Key('channels-no-results'),
+          symbol: AppSymbols.magnifyingglass,
+          title: noMatchesTitle(widget.query),
+          message: 'Channel names only. To join a new channel, tap the compose button.',
+        ),
+      );
 
   Widget _tile(ConversationRow r) {
     final stamp = listStamp(context, r.lastTsMs, now: _c.now());
@@ -426,7 +522,7 @@ class _Preview extends StatelessWidget {
 
 class _SectionHeader extends StatelessWidget {
   final String text;
-  const _SectionHeader(this.text);
+  const _SectionHeader(this.text, {super.key});
   @override
   Widget build(BuildContext context) {
     final c = AppColors.of(context);

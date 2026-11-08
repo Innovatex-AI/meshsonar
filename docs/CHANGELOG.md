@@ -5,6 +5,7 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- **Contacts and Channels are separate (chat + radio round, CR1).** Chat is now Chats | Contacts | Channels | Network. The Chats inbox shows Direct messages, Channels and Rooms in their own labelled sections instead of one mixed list, and the new Channels tab lists every channel (Public first, sort by Recent or A–Z, search by name). Segment labels never wrap on small phones.
 - **Repeats and paths are recorded (chat + radio round, CR3).** Every copy of a channel message the radio hears is now decrypted and kept with its message: for a message you sent, which repeater relayed it, by which path, with SNR, RSSI and time ("Heard by N" now really counts repeats; before this nothing fed it); for one you received, every path it arrived by. A direct message sent along a known route now keeps the route it actually used. Chat database v4.
 
 ## [0.27.3+45] — 2026-11-07 — the new Chat (Chats, Contacts, Network), repeater dashboard, Route screen and Ping; iOS 18 or later
