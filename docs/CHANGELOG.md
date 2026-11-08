@@ -5,6 +5,10 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+## [0.29.2+51] — 2026-11-08 — no blue left in the standard signal colours
+
+- **No blue anywhere in the standard palette's signal scale** (Andy, field report on build 50). The older four-step network colours still had blue for "good"; they are used before the server confirms the new coverage map (offline, right after launch), for the tapped cell's dot, the map key and the repeater "last advert" dots. They now use the same red -> yellow -> green as the coverage map. A test fails if blue ever comes back. The Colour-blind safe and High contrast palettes keep blue on purpose (it is the colour-blind-safe strong end).
+
 ## [0.29.1+50] — 2026-11-08 — coverage colours red to green, messages no longer show Not delivered when they arrived
 
 - **Coverage colours: red (no reply / bad) through yellow to green (strong), no blue** in the standard palette (Andy's field feedback on build 49). The fine dot texture at street zoom is gone.
