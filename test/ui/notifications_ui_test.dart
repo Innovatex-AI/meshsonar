@@ -8,7 +8,7 @@ import 'package:meshsonar/alerts/alert_coordinator.dart';
 import 'package:meshsonar/alerts/alert_prefs.dart';
 import 'package:meshsonar/alerts/alerts_runtime.dart';
 import 'package:meshsonar/alerts/ble_lifecycle_log.dart';
-import 'package:meshsonar/alerts/last_radio_store.dart';
+import 'package:meshsonar/alerts/saved_radios_store.dart';
 import 'package:meshsonar/alerts/launch_reconnect.dart';
 import 'package:meshsonar/alerts/radio_queue_watch.dart';
 import 'package:meshsonar/chat/models.dart';
@@ -32,9 +32,9 @@ class Setup {
   final prefs = AlertPrefs();
   final log = BleLifecycleLog(clock: () => DateTime(2026, 11, 1, 10, 0, 0));
   final queue = RadioQueueWatch();
-  final store = MemoryLastRadioStore(const LastRadio('id-1', 'Radio One'));
+  final store = SavedRadiosStore(initial: const [SavedRadio(id: 'id-1', name: 'Radio One')]);
   late final AlertCoordinator coordinator = AlertCoordinator(notifications: fake, prefs: prefs);
-  late final AlertsRuntime runtime = AlertsRuntime(prefs: prefs, coordinator: coordinator, log: log, queue: queue, lastRadio: store);
+  late final AlertsRuntime runtime = AlertsRuntime(prefs: prefs, coordinator: coordinator, log: log, queue: queue, savedRadios: store);
 }
 
 Future<Setup> install(WidgetTester tester) async {
@@ -438,7 +438,7 @@ void main() {
       await tester.pump();
       expect(clip, isNotNull);
       expect(clip, startsWith('MeshSonar BLE background test'));
-      expect(clip, contains('remembered radio: Radio One'));
+      expect(clip, contains('starred radio: Radio One'));
       expect(clip, contains('bg lifecycle paused'));
       await tester.pump(const Duration(seconds: 5));
       await tester.tap(find.byKey(const Key('ble-clear')));

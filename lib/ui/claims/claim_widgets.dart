@@ -42,7 +42,7 @@ class OwnedByYouChip extends StatelessWidget {
   }
 }
 
-/// "Owned by you" (tap: My radios) when this key has claimed [keyHex]; else "Claim this repeater"; nothing when claims
+/// "Owned by you" (tap: Claimed radios) when this key has claimed [keyHex]; else "Claim this repeater"; nothing when claims
 /// are not available. [isRoom] repeaters are left out: the login for a room server differs and is not supported yet.
 class ClaimRepeaterAction extends StatelessWidget {
   final String keyHex;
