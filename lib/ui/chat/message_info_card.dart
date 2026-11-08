@@ -32,6 +32,7 @@ String messageTimesLine(ChatMessage m) {
   if (m.isOutgoing) {
     final parts = ['Sent ${_clock(m.tsLocalMs)}'];
     if (m.state == MessageState.acked) parts.add(m.ackMs == null ? 'Delivered' : 'Delivered (round trip ${_secs(m.ackMs!)})');
+    if (m.state == MessageState.likelyDelivered) parts.add('Probably delivered (they replied)');
     return parts.join(' · ');
   }
   return 'Received ${_clock(m.tsLocalMs)} · their clock ${_clock(m.tsSender * 1000)}';

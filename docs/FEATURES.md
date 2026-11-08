@@ -818,9 +818,12 @@ login that arrives with room support.
 
 **Direct messages.** Written in the shared conversation screen; its title says how the next message travels (Direct, Via N repeaters,
 Searching, No route yet). A new contact is reached by flood; the radio learns the
-route from the reply and later messages go direct. Delivery under each message: Waiting to send, Sending, Sent waiting for the
-reply, Delivered in 2.4 s, Not delivered. Tries: 3 by flood, 5 along a saved route (the last one floods and the saved route is
-cleared). A message that gets no acknowledgement says why ("No acknowledgement after 3 tries ... The repeater path to them may have
+route from the reply and later messages go direct. Delivery under each message: Waiting, Sending, Waiting for confirmation (with
+the try count once it retries), Delivered in 2.4 s, Probably delivered (they replied), Not delivered. Tries: 3 by flood, 5 along
+a saved route (the last one floods and the saved route is cleared); a flood try waits at least 12 s and the last try at least
+30 s before Not delivered. A confirmation that arrives late always turns the message Delivered, even after Not delivered or a
+Retry. When no confirmation came but the contact wrote back after it went out, it shows Probably delivered (they replied), is
+not sent again, and Retry all skips it. A message that gets no acknowledgement says why ("No acknowledgement after 3 tries ... The repeater path to them may have
 changed") and offers Retry. Long-press a message > Details shows each try, the route, hops, signal, and the explanation.
 
 ## Saved radios

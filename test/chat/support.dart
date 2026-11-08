@@ -72,14 +72,16 @@ class FakeSource implements InboundMessageSource {
 /// Deterministic ids and clock; no timer.
 class Harness {
   final clock = FakeClock();
-  final sink = FakeSink();
+  final FakeSink sink;
   final source = FakeSource();
   final secrets = InMemorySecretStore();
   late final ChatStore store = ChatStore.inMemory(secrets: secrets);
   late final ChatService service;
   var _id = 0;
 
-  Harness({RetryPolicy policy = const RetryPolicy(jitterMs: 0, minGapMs: 0)}) {
+  Harness({RetryPolicy policy = const RetryPolicy(jitterMs: 0, minGapMs: 0)}) : this.withSink(FakeSink(), policy: policy);
+
+  Harness.withSink(this.sink, {RetryPolicy policy = const RetryPolicy(jitterMs: 0, minGapMs: 0)}) {
     service = ChatService(
       store: store,
       source: source,

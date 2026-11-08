@@ -106,6 +106,7 @@ AppSymbol? deliverySymbol(RowDelivery d) => switch (d) {
       RowDelivery.sent => AppSymbols.checkmark,
       RowDelivery.heard => AppSymbols.antenna,
       RowDelivery.delivered => AppSymbols.checkmarkCircleFill,
+      RowDelivery.likely => AppSymbols.checkmark,
       RowDelivery.failed => AppSymbols.exclamationCircleFill,
     };
 
@@ -115,6 +116,7 @@ String deliveryWord(RowDelivery d) => switch (d) {
       RowDelivery.sent => 'Sent',
       RowDelivery.heard => 'Heard by a repeater',
       RowDelivery.delivered => 'Delivered',
+      RowDelivery.likely => 'Probably delivered',
       RowDelivery.failed => 'Not delivered',
     };
 
