@@ -5,6 +5,9 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+## [0.29.0+49] — 2026-11-08 — new coverage map: average signal per cell, Measured and Predicted layers
+
+- **New coverage map (dark mode: Predicted drawn quieter so the streets stay readable).** Every cell is one fixed size (about 50 m) at every zoom and shows the AVERAGE signal of the pings sent from it, in five bands from Edge to Excellent plus No reply; Predicted coverage fills in the undriven cells near drives; tap a cell for its average, replies, failures and the repeaters that heard it. Needs the server's coverage v2 (live on meshsonar.com); an older server keeps the earlier map.
 - **Coverage redesign, app (WP5; plan meshsonar-infra `docs/planning/coverage-redesign-plan-2026-11-08.md`).** When the
   server advertises `coverageV2`: one cell size (H3 res 11) at every zoom, coloured by the MEAN SNR of the cell's ping
   results in five bands plus No reply and Heard-no-direct-signal (colours from `coverage-v2-colours.md`, every palette, light
