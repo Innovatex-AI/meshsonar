@@ -172,10 +172,12 @@ class _Strength {
 const _linkOrange = Color(0xFFFF6D00);
 
 const _standardDark = _Strength(
-  strong: Color(0xFF79BE69),
-  good: Color(0xFF6AAEE0),
-  fair: Color(0xFFE2B04A),
-  weak: Color(0xFFF07B6B),
+  // Andy, Nov 8 2026 (field, build 50): NO blue anywhere in the standard signal scale. The older 4-step network colours now use
+  // the coverage ramp (coverage_bands.dart _standardDark: Excellent, Good, Fair, Edge) so every map, key and dot agrees.
+  strong: Color(0xFF0AA349),
+  good: Color(0xFF8DCE3C),
+  fair: Color(0xFFFCE738),
+  weak: Color(0xFFF63647),
   // red -> yellow -> green like the coverage bands (Edge, Fair, Excellent; Andy, Nov 8 2026: no blue in the signal scale)
   stops: [Color(0xFFF63647), Color(0xFFFCE738), Color(0xFF0AA349)],
   silent: Color(0xFF8D99A6),
@@ -185,10 +187,11 @@ const _standardDark = _Strength(
   linkDashed: false,
 );
 const _standardLight = _Strength(
-  strong: Color(0xFF2F7A3B),
-  good: Color(0xFF2A6B9C),
-  fair: Color(0xFFB07D16),
-  weak: Color(0xFFB23B2E),
+  // no blue (see _standardDark): coverage_bands.dart _standardLight Excellent, Good, Fair, Edge
+  strong: Color(0xFF18631D),
+  good: Color(0xFF749119),
+  fair: Color(0xFFB07D16), // dark gold: the band's E9B907 yellow is 1.6:1 on the light map, under the 3:1 these small marks need
+  weak: Color(0xFFB80321),
   // red -> yellow -> green like the coverage bands (Edge, Fair, Excellent; Andy, Nov 8 2026: no blue in the signal scale)
   stops: [Color(0xFFB80321), Color(0xFFE9B907), Color(0xFF18631D)],
   silent: Color(0xFF8795A1),

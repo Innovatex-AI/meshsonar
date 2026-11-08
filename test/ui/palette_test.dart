@@ -19,7 +19,7 @@ typedef Spec = ({List<String> steps, List<String> stops, String link, bool dashe
 
 const dark = <ColourPalette, Spec>{
   ColourPalette.standard: (
-    steps: ['79BE69', '6AAEE0', 'E2B04A', 'F07B6B', '8D99A6', 'B59AE0'],
+    steps: ['0AA349', '8DCE3C', 'FCE738', 'F63647', '8D99A6', 'B59AE0'], // no blue (Andy, Nov 8): the coverage ramp
     stops: ['F63647', 'FCE738', '0AA349'], // red -> yellow -> green (Nov 8 2026, coverage-v2-colours.md)
     link: 'FF6D00',
     dashed: false,
@@ -39,7 +39,7 @@ const dark = <ColourPalette, Spec>{
 };
 const light = <ColourPalette, Spec>{
   ColourPalette.standard: (
-    steps: ['2F7A3B', '2A6B9C', 'B07D16', 'B23B2E', '8795A1', '8A63C9'],
+    steps: ['18631D', '749119', 'B07D16', 'B80321', '8795A1', '8A63C9'], // no blue (Andy, Nov 8): the coverage ramp, gold for fair
     stops: ['B80321', 'E9B907', '18631D'], // red -> yellow -> green (Nov 8 2026, coverage-v2-colours.md)
     link: 'FF6D00',
     dashed: false,
@@ -161,7 +161,7 @@ void main() {
     final t = meshSonarTheme(Brightness.light, palette: ColourPalette.colourBlind);
     expect(t.extension<MeshSonarColors>()!.palette, ColourPalette.colourBlind);
     expect(t.extension<MeshSonarColors>()!.levelStrong, hex('0A4FA0'));
-    expect(meshSonarTheme(Brightness.dark).extension<MeshSonarColors>()!.levelStrong, hex('79BE69'));
+    expect(meshSonarTheme(Brightness.dark).extension<MeshSonarColors>()!.levelStrong, hex('0AA349'));
   });
 
   test('lerp keeps the stops list valid between palettes of different length', () {
