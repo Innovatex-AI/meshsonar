@@ -335,7 +335,7 @@ kept alive in an `IndexedStack` (Map always, others built on first visit) under 
 between bar and rail keeps every tab's state. The More tab has its own `Navigator` (and corrects `MediaQuery.size` for it).
 `MiniDriveBar` reads `AppState` (status, pingCount, heardCount, recentPings, `pingsPaused`) and nothing else. Chat plugs in
 through `ChatTabHost.provider` (a `ChatTabProvider`); the shell never imports `lib/chat`. The Chat tab (`chat_tab.dart`) is the one redesigned
-shell (Chats | Contacts | Network, two columns from 900 pt); the former `chatRedesign` flag and the old Contacts | Channels tab were deleted in Chat WP15.
+shell (Chats | Contacts | Channels | Network since CR1, two columns from 900 pt); the former `chatRedesign` flag and the old Contacts | Channels tab were deleted in Chat WP15.
 `AppFlags` keeps only `driveRedesign` and `routeWriteVerified`.
 
 #### Chat redesign structure (Nov 2026)

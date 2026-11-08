@@ -40,9 +40,12 @@ abstract class ChatTabProvider {
   /// True when there are no conversations at all (the host then shows its own first-run empty state).
   bool get isEmpty;
 
-  // ---- the tab (Chats | Contacts | Network)
-  /// The Chats list, as a sliver.
+  // ---- the tab (Chats | Contacts | Channels | Network)
+  /// The Chats inbox, as a sliver: Direct messages, Channels, Rooms and System in labelled sections.
   Widget chatsSliver(BuildContext context, ChatTabArgs args);
+
+  /// The Channels list, as a sliver: every channel (Public first), sorted by recent activity or by name.
+  Widget channelsSliver(BuildContext context, ChatTabArgs args);
 
   /// The Network lists, as a sliver.
   Widget networkSliver(BuildContext context, ChatTabArgs args);
@@ -100,6 +103,10 @@ class DebugFixtureChat implements ChatTabProvider {
             ListTile(title: Text(r.$1), subtitle: const Text('Debug fixture, not a real message'), trailing: Text(r.$2)),
         ]),
       );
+
+  @override
+  Widget channelsSliver(BuildContext context, ChatTabArgs args) =>
+      const SliverToBoxAdapter(child: ListTile(title: Text('Fixture: Public'), subtitle: Text('Debug fixture, not a real channel')));
 
   @override
   Widget networkSliver(BuildContext context, ChatTabArgs args) =>

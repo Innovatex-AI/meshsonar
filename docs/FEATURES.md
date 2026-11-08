@@ -96,10 +96,15 @@ radio and the on-phone database: no key, no server, no website counterpart (app-
 `/channels` how-to and the airtime policy page). Secrets stay in the Keychain. The redesigned Chat (Chat redesign WP0 to WP15) is the only
 Chat UI: the `chatRedesign` switch in More > Developer and the old Contacts | Channels tab are gone. Plan: `meshsonar-infra/docs/planning/chat-redesign-plan-2026-11-02.md`.
 
-- **Shell.** Large "Chat" title with a New button (Cmd-N), a pinned **Chats | Contacts | Network** control (Cmd-1/2/3; a cold launch starts on
-  Chats, the choice is remembered for the session only) and a collapsing search field. One status banner replaces every per-tab offline note.
+- **Shell.** Large "Chat" title with a New button (Cmd-N), a pinned **Chats | Contacts | Channels | Network** control (Cmd-1/2/3/4; a cold launch starts
+  on Chats, the choice is remembered for the session only; the labels stay on one line, shrunk to fit on small phones) and a collapsing search field. One status banner replaces every per-tab offline note.
   The tab badge counts unread messages (muted and System excluded). From 900 pt of tab width (iPad, Split View) it is two columns: the lists in a
   380 pt sidebar and the open conversation beside them; Cmd-K is a quick switcher there. Two one-time tips (swipe a conversation, Network).
+- **Chats inbox and Channels (chat + radio round CR1).** Chats is the inbox in labelled sections: **Direct messages**, **Channels**,
+  **Rooms**, **System** (an empty section has no header), each pinned first then newest, with the same swipe and long-press actions.
+  **Channels** lists every channel, also one with no messages yet: Public first, then the others by **Recent** activity or **A–Z** (a
+  sort control above the list, remembered for the session), the System channel last, a count of channels, search by name, and "No
+  channels yet" with Join Public when there are none. New channels come from the compose button (join Public, # channel, link, create).
 - **Chats.** One list of direct messages, channels and rooms, pinned first then newest, the wardrive channel in a System group at the bottom
   (never unread, never notifies; View traffic is read-only). Row: 52 pt avatar with a type badge, delivery glyph before your own last message,
   "Draft:" prefix, pin and mute marks, unread pill. Swipe right Pin / Mark unread, left Mute (1 h / 8 h / 24 h / until I unmute / mentions only)
