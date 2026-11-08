@@ -1,14 +1,18 @@
 // Pick a radio: scan Bluetooth for MeshCore companions (and, in debug builds only, the Simulator).
-// Sections: current radio, nearby radios (signal bars, a spinner on the one being connected), the Simulator, a tip.
+// Sections: current radio, saved radios (tap to connect without a scan, swipe to forget, hold for nickname / auto-connect
+// star: saved_radios_screen.dart), nearby radios (signal bars, a spinner on the one being connected), the Simulator, a tip.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../alerts/alerts_runtime.dart';
+import '../alerts/saved_radios_store.dart';
 import '../app/app_state.dart';
 import '../app/build_flags.dart';
 import '../radio/radio_api.dart';
 import '../platform/open_url.dart' show openAppSettingsPage;
 import 'app.dart';
+import 'saved_radios_screen.dart';
 import 'widgets.dart';
 
 class ConnectScreen extends StatefulWidget {
@@ -43,9 +47,16 @@ class _ConnectScreenState extends State<ConnectScreen> {
 
   StreamSubscription<List<RadioDevice>>? _sub;
 
+  /// The saved radios list, watched so a forget or a new nickname redraws both sections.
+  SavedRadiosStore? _saved;
+  void _savedChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void initState() {
     super.initState();
+    _saved = AlertsHost.runtime.value?.savedRadios?..addListener(_savedChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && !AppScope.read(context).connected) _scan();
     });
@@ -110,6 +121,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
 
   @override
   void dispose() {
+    _saved?.removeListener(_savedChanged);
     _scanGuard?.cancel();
     _sub?.cancel();
     super.dispose();
@@ -140,6 +152,10 @@ class _ConnectScreenState extends State<ConnectScreen> {
     final s = AppScope.of(context);
     final t = Theme.of(context);
     final busy = s.connecting || _connectingId != null;
+    final saved = _saved;
+    final savedIds = {for (final r in saved?.radios ?? const []) r.id};
+    // A saved radio the scan finds is shown once, in Saved radios ("In range"), not again below.
+    final others = _found.where((d) => !savedIds.contains(d.id)).toList();
     return Scaffold(
       appBar: AppBar(title: const Text('Connect a radio')),
       body: SafeArea(
@@ -148,6 +164,22 @@ class _ConnectScreenState extends State<ConnectScreen> {
           children: [
             if (s.connected) _ConnectedCard(state: s),
             if (s.connectError != null) ErrorBanner(s.connectError!),
+            if (saved != null && !saved.isEmpty)
+              Column(
+                key: const Key('saved-radios-section'),
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SectionLabel('Saved radios'),
+                  SavedRadiosList(
+                    store: saved,
+                    onConnect: (r) => _connect(r.device, RadioKind.bluetooth),
+                    connectingId: s.connecting ? _connectingId : null,
+                    connectedId: s.connected ? s.device?.id : null,
+                    enabled: !busy && !s.driving,
+                    inRange: {for (final d in _found) d.id},
+                  ),
+                ],
+              ),
             SectionLabel(
               'Nearby radios',
               trailing: _scanning
@@ -211,7 +243,14 @@ class _ConnectScreenState extends State<ConnectScreen> {
                 title: 'Looking for radios…',
                 body: 'Keep the radio close to the phone.',
               ),
-            for (final d in _found)
+            if (_found.isNotEmpty && others.isEmpty)
+              const _InfoCard(
+                key: Key('only-saved-in-range'),
+                icon: Icons.bluetooth_connected_rounded,
+                title: 'Only your saved radios are in range',
+                body: 'They are marked "In range" under Saved radios. Tap one to connect.',
+              ),
+            for (final d in others)
               _DeviceCard(
                 key: ValueKey('device-${d.id}'),
                 device: d,
@@ -357,7 +396,7 @@ class _InfoCard extends StatelessWidget {
   final IconData icon;
   final String title;
   final String body;
-  const _InfoCard({required this.icon, required this.title, required this.body});
+  const _InfoCard({super.key, required this.icon, required this.title, required this.body});
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);

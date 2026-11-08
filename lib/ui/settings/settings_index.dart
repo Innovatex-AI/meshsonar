@@ -24,7 +24,7 @@ const List<SettingsSectionInfo> settingsSections = [
   SettingsSectionInfo('notifications', 'Notifications', Icons.notifications_outlined),
   SettingsSectionInfo('wardriving', 'Wardriving', Icons.radar),
   SettingsSectionInfo('radio', 'Radio', Icons.settings_input_antenna),
-  SettingsSectionInfo('my-radios-section', 'My radios', Icons.verified_user_outlined),
+  SettingsSectionInfo('my-radios-section', 'Claimed radios', Icons.verified_user_outlined),
   SettingsSectionInfo('drives', 'Drives & uploads', Icons.cloud_sync_outlined),
   SettingsSectionInfo('storage', 'Data & storage', Icons.storage_outlined),
   SettingsSectionInfo('diagnostics', 'Diagnostics', Icons.bug_report_outlined),
@@ -163,6 +163,12 @@ const List<SettingsEntry> settingsEntries = [
   SettingsEntry('radio-tab', 'radio', 'Radio details',
       'What the connected radio reports, compared with the region\'s preset. Read-only.',
       keywords: ['radio', 'firmware', 'battery', 'companion', 'preset', 'connect']),
+  SettingsEntry('auto-connect', 'radio', 'Auto-connect',
+      'When MeshSonar connects to your auto-connect radio by itself: always, only at launch, or never.',
+      keywords: ['auto connect', 'autoconnect', 'reconnect', 'automatic', 'launch', 'startup', 'bluetooth', 'connect', 'off']),
+  SettingsEntry('saved-radios', 'radio', 'Saved radios',
+      'Every radio you have connected to: tap to connect, give it a nickname, star the auto-connect radio, or forget it.',
+      keywords: ['saved', 'radios', 'devices', 'nickname', 'forget', 'star', 'favourite', 'favorite', 'bluetooth', 'paired', 'remembered', 'connect']),
   // Wardriving
   SettingsEntry('channel', 'wardriving', 'Wardrive channel',
       'The channel pings are sent on (default #wardriving). The key comes from the name in lower case.',
@@ -194,8 +200,8 @@ const List<SettingsEntry> settingsEntries = [
   SettingsEntry('antenna', 'radio', 'Antenna',
       'Each radio\'s antenna setup, saved with every drive so coverage compares like with like.',
       keywords: ['antenna', 'gain', 'dbi', 'height', 'mount', 'mast', 'mag-mount']),
-  // My radios
-  SettingsEntry('my-radios', 'my-radios-section', 'My radios',
+  // Claimed radios (server ownership claims; code ids keep the old "my-radios" name)
+  SettingsEntry('my-radios', 'my-radios-section', 'Claimed radios',
       'The radios you manage: change a name, hide a position, give one up. Managing never changes whether a radio\'s data counts.',
       keywords: ['claim', 'own', 'owner', 'repeater', 'observer', 'manage', 'radios', 'release', 'position', 'hide']),
   SettingsEntry('claim-my-radio', 'my-radios-section', 'Claim my radio',

@@ -1,4 +1,5 @@
-// The person's notification choices, kept in one small JSON file (never in the chat database: a backup/restore of chat
+// The person's notification choices, and how the app brings the radio link back (auto-connect, the iOS wake keeper
+// experiment), kept in one small JSON file (never in the chat database: a backup/restore of chat
 // must not change how this phone alerts). Per-conversation modes live on the conversation (ChatService.setNotifyMode),
 // not here.
 //
@@ -8,6 +9,8 @@
 //  * showText = false: a lock screen is a public place. A notification then reads "Alex: New message" (who and where
 //    help triage; the words stay private). Turn it on to see the text. We choose the safe side and say so in Settings.
 //  * quiet hours off. When on, alerts still arrive and count, silently.
+//  * autoConnect = always: the behaviour before the setting existed (reconnect at launch and on coming back to the front).
+//    Mid-drive reconnect is not governed by it and always runs.
 import 'dart:convert';
 import 'dart:io';
 
@@ -38,6 +41,28 @@ class QuietHours {
   }
 }
 
+/// Settings > Radio > Auto-connect: when the app connects to the starred saved radio by itself.
+enum AutoConnectMode {
+  /// At launch and every time the app comes back to the front with the link gone (default).
+  always('always', 'Always', 'At launch and whenever you come back to the app.'),
+
+  /// Only right after the app starts.
+  launchOnly('launch', 'At launch only', 'Only when the app starts. Coming back to the app does not reconnect.'),
+
+  /// Never by itself: tap a radio to connect.
+  off('off', 'Off', 'Never by itself. Tap a radio to connect.');
+
+  final String id;
+  final String label;
+  final String summary;
+  const AutoConnectMode(this.id, this.label, this.summary);
+
+  bool get atLaunch => this != off;
+  bool get onForeground => this == always;
+
+  static AutoConnectMode fromId(Object? id) => values.firstWhere((m) => m.id == id, orElse: () => always);
+}
+
 class AlertPrefs extends ChangeNotifier {
   final File? _file;
   bool _enabled = true;
@@ -47,6 +72,7 @@ class AlertPrefs extends ChangeNotifier {
   bool _asked = false;
   bool _prePromptSeen = false;
   bool _keepAliveIos = false;
+  AutoConnectMode _autoConnect = AutoConnectMode.always;
   QuietHours _quiet = const QuietHours();
 
   AlertPrefs([this._file]);
@@ -70,6 +96,9 @@ class AlertPrefs extends ChangeNotifier {
   /// Not proven to work; see docs/BACKGROUND_BLE_SPIKE.md. Surfaced only in Diagnostics.
   bool get iosWakeKeeper => _keepAliveIos;
 
+  /// Settings > Radio > Auto-connect. Default [AutoConnectMode.always].
+  AutoConnectMode get autoConnect => _autoConnect;
+
   Future<void> load() async {
     final f = _file;
     if (f == null) return;
@@ -84,6 +113,7 @@ class AlertPrefs extends ChangeNotifier {
       _asked = j['asked'] == true;
       _prePromptSeen = j['prePromptSeen'] == true;
       _keepAliveIos = j['iosWakeKeeper'] == true;
+      _autoConnect = AutoConnectMode.fromId(j['autoConnect']);
       _quiet = QuietHours.fromJson(j['quiet']);
       notifyListeners();
     } catch (_) {
@@ -107,6 +137,7 @@ class AlertPrefs extends ChangeNotifier {
             'asked': _asked,
             'prePromptSeen': _prePromptSeen,
             'iosWakeKeeper': _keepAliveIos,
+            'autoConnect': _autoConnect.id,
             'quiet': _quiet.toJson(),
           }),
           flush: true);
@@ -151,6 +182,11 @@ class AlertPrefs extends ChangeNotifier {
 
   Future<void> setIosWakeKeeper(bool v) async {
     _keepAliveIos = v;
+    await _save();
+  }
+
+  Future<void> setAutoConnect(AutoConnectMode m) async {
+    _autoConnect = m;
     await _save();
   }
 }

@@ -1,4 +1,4 @@
-// The claim screens: Settings > My radios, Claim my radio, Claim a repeater, the repeater sheet button and the
+// The claim screens: Settings > Claimed radios, Claim my radio, Claim a repeater, the repeater sheet button and the
 // "Owned by you" chip, with a fake server and a scripted radio. Also large text and dark mode, and the promise copy.
 import 'dart:typed_data';
 
@@ -204,7 +204,7 @@ Future<void> pumpUntil(WidgetTester tester, bool Function() done, {int rounds = 
 }
 
 void main() {
-  group('Settings > My radios section', () {
+  group('Settings > Claimed radios section', () {
     testWidgets('without the server capability every row says why it cannot be used', (tester) async {
       await open(tester, caps: false);
       await openSettingsTab(tester);
@@ -236,7 +236,7 @@ void main() {
     });
   });
 
-  group('My radios screen', () {
+  group('Claimed radios screen', () {
     testWidgets('lists claims with type, how it was verified, position state; website link opens /me/radios', (tester) async {
       final h = await open(tester);
       h.claims.claims.addAll([
@@ -357,7 +357,7 @@ void main() {
       expect(find.text('Needs a connected radio.'), findsOneWidget);
     });
 
-    testWidgets('connected radio: claim it, see the result, it shows in My radios; the promise is on the screen', (tester) async {
+    testWidgets('connected radio: claim it, see the result, it shows in Claimed radios; the promise is on the screen', (tester) async {
       final h = await open(tester);
       await openScreen(tester, const ClaimRadioScreen());
       expect(find.text('Truck Radio'), findsOneWidget);

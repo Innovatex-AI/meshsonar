@@ -46,12 +46,14 @@ class _BleDiagnosticsScreenState extends State<BleDiagnosticsScreen> {
 
   Future<String> _header(AlertsRuntime rt, {required String version}) async {
     final k = await rt.keeper.report();
-    final radio = await rt.lastRadio.load();
+    await rt.savedRadios.load();
+    final radio = rt.savedRadios.starred;
     return [
       'MeshSonar BLE background test',
       'app $version, ${Platform.operatingSystem} ${Platform.operatingSystemVersion}',
       'exported ${DateTime.now().toIso8601String()}',
-      'remembered radio: ${radio?.name ?? 'none'}',
+      'auto-connect: ${rt.prefs.autoConnect.label}; starred radio: ${radio?.name ?? 'none'}'
+          '${rt.savedRadios.autoConnectHeld ? ' (held: released on purpose)' : ''}; saved radios: ${rt.savedRadios.radios.length}',
       'bluetooth engine: ${BleEngineChoice.universal ? 'universal_ble (experiment)' : 'flutter_reactive_ble'}',
       'wake keeper experiment: ${rt.prefs.iosWakeKeeper ? 'ON' : 'off'}; native armed=${k.armed}, started by restoration=${k.launchedByRestore}, '
           'notifications while away=${k.notificationsWhileAway}',
