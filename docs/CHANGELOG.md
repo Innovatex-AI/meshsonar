@@ -5,6 +5,8 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- **No yellow-underlined text anywhere (app-wide fix).** 0.28.1 fixed the conversation thread only; the long-press message card, Full details, Path on map, and text flashing during page transitions still showed Flutter's debug fallback style (yellow double underline). Cause: MaterialApp's own default text style is that fallback, and text drawn outside a Material/Scaffold got it (the context menu popup, CupertinoPageScaffold pages, nav-bar title/back-label flights between pages, overlays, Cupertino popups). Fix: `meshSonarAppBuilder` (`lib/ui/app.dart`) gives every MaterialApp the Material body text style under the Navigator and its Overlay. Test: `test/ui/no_debug_underline_test.dart` checks every text on every frame of those transitions (4 tests, all failing on the old code).
+
 ## [0.28.1+47] — 2026-11-08 — conversation screens cleaned up: no underline, bubbles fit their text, avatar beside the name
 
 - **Conversation screens look like an iPhone app again.** Message text no longer shows a yellow double underline (the thread had no text style, so Flutter's debug fallback showed in every build); bubbles hug their text instead of stretching across the screen; a sender's avatar now sits beside their name, top-aligned, on the first message of their run; names are quiet grey with the colour kept in the avatar; the thread header uses the same avatar colour as the Chats list; the "new messages" divider is centred. The Route on map screen had the same underline and is fixed too.
