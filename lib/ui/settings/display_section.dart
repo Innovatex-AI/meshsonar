@@ -5,10 +5,10 @@ import 'package:flutter/material.dart';
 
 import '../design/app_surfaces.dart';
 import '../../core/colour_palette.dart';
-import '../../core/network_coverage.dart' show CoverageLevel;
 import '../../core/units.dart';
 import '../app.dart';
 import '../design/app_symbols.dart';
+import '../map/coverage_bands.dart' show CoverageBandColors;
 import '../design/app_widgets.dart';
 import 'settings_index.dart';
 import 'settings_kit.dart';
@@ -279,32 +279,22 @@ Future<String?> pickUnit(BuildContext context, UnitQuantity q) {
 
 /// What each palette is for, in one line (the only wording for it).
 String paletteSummary(ColourPalette p) => switch (p) {
-  ColourPalette.standard => 'Blue, teal and green for your pings; green, blue, amber and red for network coverage.',
+  ColourPalette.standard => 'Red to yellow to green: dark red where nothing answered, green for the strongest signal.',
   ColourPalette.colourBlind => 'Blue to yellow to orange. Safe for red-green and blue-yellow colour blindness. Link lines turn dashed.',
   ColourPalette.highContrast =>
     'Brighter on the dark map and deeper on the light map, for strong separation from the map. Link lines turn dashed.',
 };
 
-/// The strength colours of [p] as a strip: strongest to weakest, then "nothing heard" (grey) and "heard, signal unknown"
-/// (purple). Shown beside each choice so the person sees the palette before picking it.
+/// The coverage colours of [p] as a strip (the same preview as the website's palette picker): Excellent to Edge, then
+/// No reply and Heard, no direct signal. Shown beside each choice so the person sees the palette before picking it.
 class PaletteStrip extends StatelessWidget {
   final ColourPalette palette;
   const PaletteStrip({super.key, required this.palette});
 
   @override
   Widget build(BuildContext context) {
-    final mc = MeshSonarColors.forPalette(palette, Theme.of(context).brightness);
-    final colours = [
-      for (final l in [
-        CoverageLevel.strong,
-        CoverageLevel.good,
-        CoverageLevel.fair,
-        CoverageLevel.weak,
-        CoverageLevel.none,
-        CoverageLevel.unknown,
-      ])
-        mc.levelColor(l),
-    ];
+    final c = CoverageBandColors.of(palette, Theme.of(context).brightness);
+    final colours = [for (final b in const [5, 4, 3, 2, 1, 0, 6]) c[b]];
     return ExcludeSemantics(
       child: Row(
         mainAxisSize: MainAxisSize.min,

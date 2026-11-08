@@ -1,8 +1,10 @@
 // Andy's colour contract, coverage redesign (Nov 8 2026, plan D4-D6, coverage-v2-colours.md):
 // - v2 cells are coloured by BAND (mean SNR); No reply (band 0) and Heard-no-direct-signal (band 6) are grey, never a strength
-//   colour; No reply carries the red outline; faint (under 3 pings) is drawn at 55%; predicted is hatched and lighter.
+//   colour (No reply is a red: dark red in standard, Andy Nov 8; band 6 grey); No reply carries the red outline; faint (under 3 pings) is drawn at 55%; predicted is hatched and lighter.
 // - The old path (a server without coverage v2): mapped with nothing heard is grey, heard without a reading is purple.
 // - Ping colours: nothing heard is grey, unknown SNR is never a strength colour.
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/core/api.dart';
@@ -26,17 +28,32 @@ void main() {
   group('coverage v2 bands', () {
     for (final p in ColourPalette.values) {
       for (final b in Brightness.values) {
-        test('${p.id} ${b.name}: greys are greys, strength bands are coloured and all distinct', () {
+        test('${p.id} ${b.name}: band 6 is grey, No reply is a red, strength bands are coloured and all distinct', () {
           final c = CoverageBandColors.of(p, b);
-          for (final g in [c[0], c[6], c.noReplyPoint]) {
-            expect(HSLColor.fromColor(g).saturation, lessThan(0.05), reason: 'No reply / heard-no-SNR are never a strength colour');
-          }
+          expect(HSLColor.fromColor(c[6]).saturation, lessThan(0.05), reason: 'heard-no-SNR is never a strength colour');
+          // Andy, Nov 8 2026: none / bad is red. No reply is a red in every palette (dark red in standard).
+          expect(HSLColor.fromColor(c[0]).hue, anyOf(lessThan(12), greaterThan(345)), reason: 'No reply is a red: ${c[0]}');
+          expect({for (var i = 0; i <= 6; i++) c[i]}, hasLength(7));
           final strength = [for (var i = 1; i <= 5; i++) c[i]];
           expect(strength.toSet(), hasLength(5));
           for (final s in strength) {
             expect(HSLColor.fromColor(s).saturation, greaterThan(0.2), reason: '$s');
           }
           expect(HSLColor.fromColor(c.noReplyOutline).hue, anyOf(lessThan(10), greaterThan(350)), reason: 'the No-reply outline is red');
+          if (p == ColourPalette.standard) {
+            // red -> yellow -> green, no blue: every band 0-5 has blue as its lowest channel, hue runs 0..150 bad to good.
+            for (var i = 0; i <= 5; i++) {
+              expect(c[i].b, lessThan(math.max(c[i].r, c[i].g)), reason: 'no blue in the standard ramp: ${c[i]}');
+            }
+            final hues = [for (var i = 1; i <= 5; i++) HSLColor.fromColor(c[i]).hue];
+            for (var i = 1; i < hues.length; i++) {
+              expect(hues[i], greaterThan(hues[i - 1] > 300 ? hues[i - 1] - 360 : hues[i - 1]), reason: 'hue rises red -> green: $hues');
+            }
+            expect(c.noReplyOutline, c[0]);
+            expect(c.noReplyPoint, c[0]);
+          } else {
+            expect(HSLColor.fromColor(c.noReplyPoint).saturation, lessThan(0.05), reason: 'accessible palettes keep the grey No-reply point');
+          }
         });
       }
     }

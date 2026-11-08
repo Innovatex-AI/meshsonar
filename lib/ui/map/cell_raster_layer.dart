@@ -105,6 +105,9 @@ class CellLayerData {
   final double? dotBelowZoom;
   final double dotPx;
   const CellLayerData(this.shapes, this.styles, {this.dotBelowZoom, this.dotPx = 2.5});
+
+  /// True when every cell is drawn as a dot at [zoom].
+  bool dotsAt(double zoom) => dotBelowZoom != null && zoom < dotBelowZoom!;
   static const CellLayerData empty = CellLayerData([], []);
 
   /// Builds the data from [count] cells: [boundary] gives each outline, [styleOf] each cell's look (equal looks share one entry).
@@ -164,7 +167,7 @@ CellRender paintCells(CellLayerData data, LatLng center, double zoom, double wid
   final north = unmercLat(cy - height / 2, zoom), south = unmercLat(cy + height / 2, zoom);
   final fills = List<ui.Path?>.filled(data.styles.length, null);
   final dots = List<ui.Path?>.filled(data.styles.length, null);
-  final dotMode = data.dotBelowZoom != null && zoom < data.dotBelowZoom!;
+  final dotMode = data.dotsAt(zoom);
   final half = data.dotPx / 2;
   var drawn = 0;
   for (final s in data.shapes) {
@@ -236,6 +239,9 @@ CellRender paintCells(CellLayerData data, LatLng center, double zoom, double wid
 bool renderCovers(CellRender render, MapCamera camera, CellLayerData data, {double rezoomLevels = 0.45, double inset = 0.06}) {
   if (!identical(render.data, data)) return false;
   if ((camera.zoom - render.zoom).abs() > rezoomLevels) return false;
+  // Crossing the dots / hexagons switch always repaints: a dot picture must never stand in at a hexagon zoom (Andy's z14 field
+  // shot, Nov 8: a fine dot-matrix where hexagons belong), nor the reverse.
+  if (data.dotsAt(camera.zoom) != data.dotsAt(render.zoom)) return false;
   final s = math.pow(2, camera.zoom - render.zoom).toDouble();
   final o = camera.latLngToScreenOffset(render.center);
   final rot = camera.rotationRad;
@@ -327,7 +333,10 @@ class CellRasterLayerState extends State<CellRasterLayer> {
     final side = (diag * 1.5).clamp(300.0, 4000.0);
     var ratio = math.min(dpr, 1.5);
     ratio = math.min(ratio, math.sqrt(widget.maxPixels / (side * side)));
-    final zoom = (camera.zoom * 4).round() / 4;
+    var zoom = (camera.zoom * 4).round() / 4;
+    // Keep the painted zoom on the camera's side of the dots / hexagons switch (12.9 must not round up to hexagons, 13.1 down to dots).
+    if (data.dotsAt(zoom) != data.dotsAt(camera.zoom)) zoom = data.dotsAt(camera.zoom) ? (camera.zoom * 4).floor() / 4 : (camera.zoom * 4).ceil() / 4;
+    if (data.dotsAt(zoom) != data.dotsAt(camera.zoom)) zoom = camera.zoom;
     final r = paintCells(data, camera.center, zoom, side, side, ratio);
     final old = _render;
     _render = r;

@@ -20,7 +20,7 @@ typedef Spec = ({List<String> steps, List<String> stops, String link, bool dashe
 const dark = <ColourPalette, Spec>{
   ColourPalette.standard: (
     steps: ['79BE69', '6AAEE0', 'E2B04A', 'F07B6B', '8D99A6', 'B59AE0'],
-    stops: ['3B8FD6', '3EE0CF', '8CF58A'],
+    stops: ['F63647', 'FCE738', '0AA349'], // red -> yellow -> green (Nov 8 2026, coverage-v2-colours.md)
     link: 'FF6D00',
     dashed: false,
   ),
@@ -40,7 +40,7 @@ const dark = <ColourPalette, Spec>{
 const light = <ColourPalette, Spec>{
   ColourPalette.standard: (
     steps: ['2F7A3B', '2A6B9C', 'B07D16', 'B23B2E', '8795A1', '8A63C9'],
-    stops: ['2468B8', '00897B', '2E9E3A'],
+    stops: ['B80321', 'E9B907', '18631D'], // red -> yellow -> green (Nov 8 2026, coverage-v2-colours.md)
     link: 'FF6D00',
     dashed: false,
   ),

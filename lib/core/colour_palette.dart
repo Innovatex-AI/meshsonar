@@ -2,7 +2,7 @@
 // lib/ui/theme.dart (MeshSonarColors) and are written down in docs/FEATURES.md and the infra colour-palettes note, which
 // the website copies.
 enum ColourPalette {
-  /// Blue / teal / green SNR scale for your pings; green / blue / amber / red for network coverage steps.
+  /// Red -> yellow -> green for coverage and your pings (Nov 8 2026); the older network steps keep green / blue / amber / red.
   standard('standard', 'Standard'),
 
   /// Safe for deuteranopia, protanopia and tritanopia: blue to yellow to orange, never red against green.
