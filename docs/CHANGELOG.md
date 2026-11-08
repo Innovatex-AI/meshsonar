@@ -5,6 +5,11 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+## [0.29.1+50] — 2026-11-08 — coverage colours red to green, messages no longer show Not delivered when they arrived
+
+- **Coverage colours: red (no reply / bad) through yellow to green (strong), no blue** in the standard palette (Andy's field feedback on build 49). The fine dot texture at street zoom is gone.
+- **Direct messages:** a late confirmation now turns a message Delivered, a reply from the contact shows "Probably delivered (they replied)" instead of a red failure, waits are longer on flood routes, and Retry all no longer re-sends messages that arrived.
+
 - **Direct-message delivery fix round (Andy's 0.29.0+49 field report: messages 511 answered showed Not delivered).** A late
   confirmation always upgrades to Delivered, including while a manual Retry is queued (it was ignored there, and the retry sent
   a duplicate) and while the next try is being handed to the radio (it was overwritten with "sent" and left waiting forever).
