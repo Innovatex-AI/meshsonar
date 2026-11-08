@@ -100,14 +100,31 @@ class Outbox {
     return n;
   }
 
-  /// Registers a freshly stored outgoing message for sending.
-  void enqueue(ChatMessage m, {required bool hasPath}) {
+  /// Registers a freshly stored outgoing message for sending. [forceFlood]: the person chose "Send by flood" for this one
+  /// message, so every try floods (a flood also lets the radio learn a fresh route).
+  void enqueue(ChatMessage m, {required bool hasPath, bool forceFlood = false}) {
     final now = nowMs();
+    final flood = forceFlood && m.convKind != ConvKind.channel;
     store.outbox.enqueue(OutboxEntry(
         messageId: m.id,
         dueAtMs: now,
-        maxAttempts: m.convKind == ConvKind.channel ? 1 : policy.attemptsFor(hasPath: hasPath),
-        createdMs: now));
+        maxAttempts: m.convKind == ConvKind.channel ? 1 : policy.attemptsFor(hasPath: hasPath && !flood),
+        createdMs: now,
+        forceFlood: flood));
+  }
+
+  /// Sends a channel message again that no repeater relayed (Resend). Same text; the radio stamps the time. The copies heard
+  /// so far (none) stay with it.
+  bool resendChannel(String messageId) {
+    final m = store.messages.get(messageId);
+    if (m == null || !m.isOutgoing || m.convKind != ConvKind.channel || m.isPending || m.repeatsHeard > 0) return false;
+    if (m.state != MessageState.sent && m.state != MessageState.failed) return false;
+    store.db.transaction(() {
+      store.messages.update(m.id, state: MessageState.queued, attempt: 0, clearFailReason: true);
+      enqueue(m, hasPath: false);
+    });
+    notify(ChatEvent.updated(m.convKey, m.id));
+    return true;
   }
 
   int? get nextDueMs => store.outbox.nextDueMs();
@@ -195,7 +212,8 @@ class Outbox {
     final hasPath = contact?.hasPath ?? false;
     // Automatic: direct if a path is known, except the last attempt which floods (the path may have gone stale).
     // Always search: every attempt floods. Keep this route: never the last-try flood, never clears the path.
-    final forceFlood = !hasPath ||
+    final forceFlood = e.forceFlood ||
+        !hasPath ||
         mode == PathMode.flood ||
         (mode == PathMode.auto && attemptNo >= e.maxAttempts && e.maxAttempts > 1 && attemptNo > 1);
     store.messages.update(m.id, state: MessageState.sending, attempt: attemptNo);

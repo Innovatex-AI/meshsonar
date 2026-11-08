@@ -232,8 +232,9 @@ class ChatController extends ChangeNotifier {
 
   // ------------------------------------------------------------------ sending
 
-  /// Queues [text] in [convKey]. Never throws; the composer shows [SendAttempt.error].
-  SendAttempt send(String convKey, String text) {
+  /// Queues [text] in [convKey]. Never throws; the composer shows [SendAttempt.error]. [forceFlood]: long-press Send >
+  /// "Send by flood" on a direct message.
+  SendAttempt send(String convKey, String text, {bool forceFlood = false}) {
     if (composerLocked) {
       return const SendAttempt.failed('Sending is off while the car is moving. Tap "I\'m a passenger" if someone else is typing.');
     }
@@ -242,7 +243,7 @@ class ChatController extends ChangeNotifier {
       return const SendAttempt.failed('Connect your radio once so MeshSonar knows which radio these messages belong to.');
     }
     try {
-      return SendAttempt.ok(service.send(radioId: id, convKey: convKey, text: text));
+      return SendAttempt.ok(service.send(radioId: id, convKey: convKey, text: text, forceFlood: forceFlood));
     } on MessageTooLong catch (e) {
       return SendAttempt.failed('That message is ${e.actualBytes} bytes; one message can carry ${e.maxBytes}. Shorten it or split it in two.');
     } on ArgumentError catch (e) {

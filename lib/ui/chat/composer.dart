@@ -11,7 +11,9 @@ import 'package:flutter/semantics.dart' show SemanticsService;
 import 'package:flutter/services.dart';
 
 import '../../app/chat_controller.dart';
+import '../../chat/models.dart' show ConvKey, ConvKind;
 import '../../chat/quick_replies.dart';
+import '../design/app_surfaces.dart';
 import '../../chat/send_budget.dart';
 import '../alerts/permission_prompt.dart';
 import '../design/app_haptics.dart';
@@ -131,8 +133,29 @@ class _ComposerState extends State<Composer> {
     });
   }
 
-  void _send() {
-    final res = c.send(widget.convKey, _text.text);
+  /// A direct message (person or room): long-press Send offers the choice of route (CR2).
+  bool get _direct => ConvKey.kindOf(widget.convKey) != ConvKind.channel;
+
+  /// Long-press Send on a direct message: send normally (the saved route, searching on the last try) or flood every try
+  /// (searches for a new route, like the official app's long-press Send).
+  Future<void> _chooseRoute() async {
+    AppHaptics.selection();
+    final flood = await showAppActionSheet<bool>(
+      context,
+      sheetKey: const Key('send-route-sheet'),
+      title: 'How should this message go?',
+      message: 'Searching asks every repeater to pass it on. It finds a new route when the saved one stopped working, '
+          'but uses more of the mesh.',
+      actions: const [
+        AppAction('Send', false, isDefault: true, key: Key('send-normal')),
+        AppAction('Send and search for a new route', true, key: Key('send-flood')),
+      ],
+    );
+    if (flood != null && mounted) _send(forceFlood: flood);
+  }
+
+  void _send({bool forceFlood = false}) {
+    final res = c.send(widget.convKey, _text.text, forceFlood: forceFlood);
     if (res.ok) {
       AppHaptics.light();
       _text.clear();
@@ -282,7 +305,7 @@ class _ComposerState extends State<Composer> {
                         ),
                       ),
                     ),
-                    _SendButton(budget: b, enabled: canSend, offline: !c.radioConnected, onTap: _send),
+                    _SendButton(budget: b, enabled: canSend, offline: !c.radioConnected, onTap: _send, onLongPress: _direct ? _chooseRoute : null),
                   ],
                 ),
               ),
@@ -372,7 +395,10 @@ class _SendButton extends StatelessWidget {
   final bool enabled;
   final bool offline;
   final VoidCallback onTap;
-  const _SendButton({required this.budget, required this.enabled, required this.offline, required this.onTap});
+
+  /// Direct messages only: choose direct or flood (CR2).
+  final VoidCallback? onLongPress;
+  const _SendButton({required this.budget, required this.enabled, required this.offline, required this.onTap, this.onLongPress});
 
   @override
   Widget build(BuildContext context) {
@@ -399,6 +425,7 @@ class _SendButton extends StatelessWidget {
         key: const Key('composer-send'),
         behavior: HitTestBehavior.opaque,
         onTap: enabled ? onTap : null,
+        onLongPress: enabled ? onLongPress : null,
         child: SizedBox(
           width: Hit.of(context),
           height: Hit.of(context),

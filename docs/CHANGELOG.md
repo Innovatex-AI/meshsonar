@@ -5,6 +5,8 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- **Know when nobody heard you, and choose how to send (chat + radio round, CR2).** A channel message no repeater relayed within 30 seconds now says "No repeater heard it" with a Resend button. Long-press Send on a direct message to search for a new route. Status words that change with time ("Mesh is slow", "No repeater heard it") now appear on their own instead of waiting for something else to redraw the screen. Chat database v5.
+
 - **Long-press any message for how it travelled (chat + radio round, CR4).** The bubble lifts with a card: the route with repeater names, hops, SNR/RSSI, "Relayed by" for your channel messages, the paths a received one came by, and the times with the round trip. Route on map shows the repeaters on a map. Repeater names now also come from the network roster, and a prefix two repeaters share is flagged with the candidates. A sent direct message shows the route it actually took. Full details lists every repeat. Menu actions now wait for the menu to close (opening Details from the menu could glitch).
 
 - **Auto-connect setting (CR5).** Settings > Radio > Auto-connect: **Always** (default, as before: at launch and whenever you come back to the app), **At launch only** (coming back to the app does not reconnect) or **Off** (never by itself; tap a radio to connect). Switching to Off stops a running try and clears the "Could not reach" strip. While driving, a dropped radio is always reconnected, whatever the setting. Stored as `autoConnect` in `alert_prefs.json`.

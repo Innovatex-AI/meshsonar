@@ -27,13 +27,13 @@ void main() {
   group('migration v4', () {
     test('adds message_repeats (deleted with its message) and the sent route columns; re-running is harmless', () {
       final db = sqlite3.openInMemory();
-      expect(migrateDatabase(db, chatMigrations), 4);
+      expect(migrateDatabase(db, chatMigrations), chatMigrations.last.version);
       final cols = db.select('PRAGMA table_info(messages)').map((r) => r['name']).toSet();
       expect(cols, containsAll(['sent_path', 'sent_hash_size']));
       expect(db.select("SELECT name FROM sqlite_master WHERE name = 'message_repeats'"), isNotEmpty);
       // Idempotent: a database that already has v4 parts migrates cleanly.
       db.execute('PRAGMA user_version = 3');
-      expect(migrateDatabase(db, chatMigrations), 4);
+      expect(migrateDatabase(db, chatMigrations), chatMigrations.last.version);
       db.close();
     });
 

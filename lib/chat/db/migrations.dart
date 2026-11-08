@@ -46,7 +46,11 @@ final List<Migration> chatMigrations = [
   Migration(2, 'contacts: radio cache state, flags, last heard, route choice; adverts: ignore + advert time', _v2),
   Migration(3, 'chat redesign: message radio facts, path modes, ping history, stats history, manual unread', _v3),
   Migration(4, 'message repeats (every heard copy of a channel message), route actually used by a sent DM', _v4),
+  Migration(5, 'outbox: send this message by flood (long-press Send)', _v5),
 ];
+
+/// M5 (chat + radio round, CR2): the person chose "Send by flood" for this one message (long-press Send). Idempotent.
+void _v5(Database db) => _addColumn(db, 'outbox', 'force_flood', 'INTEGER NOT NULL DEFAULT 0');
 
 /// M4 (chat + radio round, CR3). Idempotent like M3.
 ///   * message_repeats: one row per distinct copy of a channel message the radio heard on the air, with the path it took.
