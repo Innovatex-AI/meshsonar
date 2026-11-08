@@ -19,10 +19,12 @@ import 'package:meshsonar/ui/theme.dart';
 
 import '../fakes.dart' show Harness;
 import 'chat_kit.dart';
+import '../../support/semantics_audit.dart';
 
 const Size phone = Size(393, 852);
 const Size se = Size(375, 667);
 const Size ipad = Size(1024, 768);
+const Size ipadPortrait = Size(744, 1133);
 
 void main() {
   late ChatKit kit;
@@ -141,6 +143,25 @@ void main() {
       expect(find.textContaining('Radio not connected'), findsOneWidget);
       expect(find.text('Connect'), findsOneWidget);
     });
+  });
+
+  // WP14: every width the app ships on at AX2 (2.0) and AX5 (3.1): no overflow, tap targets (iOS 44, Android 48), labelled targets.
+  group('AX2 / AX5 matrix', () {
+    for (final (name, size) in [('393', phone), ('375', se), ('744', ipadPortrait), ('1024', ipad)]) {
+      for (final scale in [2.0, 3.1]) {
+        testWidgets('Chats list at $name wide, text ${scale}x', (tester) async {
+          await seed();
+          final sem = tester.ensureSemantics();
+          await pumpTab(tester, size: size, scale: scale);
+          final ex = tester.takeException();
+          expect(ex, isNull, reason: ex is FlutterError ? ex.diagnostics.map((n) => n.toStringDeep()).join('\n') : '$ex');
+          expectHeader(tester);
+          sem.dispose();
+          await expectLater(tester, meetsGuideline(iOSTapTargetGuideline));
+          await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+        });
+      }
+    }
   });
 
   group('layouts', () {

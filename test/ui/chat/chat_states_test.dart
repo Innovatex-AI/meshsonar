@@ -14,6 +14,7 @@ import 'package:meshsonar/ui/chat/chat_drive_sheet.dart';
 import 'package:meshsonar/ui/chat/conversation_screen.dart';
 
 import 'chat_kit.dart';
+import '../../support/semantics_audit.dart';
 
 /// The chat streams were made outside the test's fake-async zone: let the real event loop deliver, then build.
 Future<void> flush(WidgetTester tester) async {
@@ -118,6 +119,15 @@ void main() {
       'iPhone 2.5x dark': (390, 844, 2.5, Brightness.dark),
       'iPad light': (820, 1180, 1.0, Brightness.light),
       'iPad landscape 1.5x dark': (1180, 820, 1.5, Brightness.dark),
+      // WP14: AX2 (2.0) and AX5 (3.1) at every shipped width.
+      '393 AX2': (393, 852, 2.0, Brightness.light),
+      '393 AX5': (393, 852, 3.1, Brightness.light),
+      '375 AX2': (375, 667, 2.0, Brightness.light),
+      '375 AX5': (375, 667, 3.1, Brightness.dark),
+      '744 AX2': (744, 1133, 2.0, Brightness.light),
+      '744 AX5': (744, 1133, 3.1, Brightness.light),
+      '1024 AX2': (1024, 768, 2.0, Brightness.light),
+      '1024 AX5': (1024, 768, 3.1, Brightness.dark),
     };
 
     Future<void> seed() async {
@@ -154,6 +164,10 @@ void main() {
         await tester.pump();
         expect(tester.takeException(), isNull);
         expect(find.textContaining('Not delivered'), findsOneWidget);
+        final sem = tester.ensureSemantics();
+        await tester.pump();
+        expectHeader(tester);
+        sem.dispose();
         await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
         await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
         await expectLater(tester, meetsGuideline(textContrastGuideline));
@@ -173,9 +187,12 @@ void main() {
         setSize(tester, w: w, h: h, scale: scale);
         await seed();
         final ch = kit.store.channels.bySlot(radioA, 1)!;
+        final sem = tester.ensureSemantics();
         await tester.pumpWidget(host(ChannelDetailScreen(controller: kit.controller, channelId: ch.id!), brightness: b));
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
+        expectHeader(tester);
+        sem.dispose();
         await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
         await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
       });

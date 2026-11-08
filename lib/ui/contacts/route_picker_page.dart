@@ -10,6 +10,7 @@ import '../../radio/path_tools.dart';
 import '../../radio/tools/radio_tools.dart';
 import '../../radio/tools/tool_frames.dart' show maxTraceHops;
 import '../../radio/tools/trace_tool.dart';
+import '../app.dart' show AppScope;
 import '../design/app_haptics.dart';
 import '../design/app_surfaces.dart';
 import '../design/app_symbols.dart';
@@ -21,7 +22,7 @@ import 'profile_widgets.dart';
 import 'route_nodes.dart';
 
 /// The words for the cap line: "At most 32 repeaters with 2-byte hashes."
-String hopCapText(int hashSize) => 'At most ${maxHopsFor(hashSize)} repeaters with $hashSize-byte hashes.';
+String hopCapText(int hashSize) => 'At most ${maxHopsFor(hashSize)} repeaters with $hashSize-byte hashes.'; // copy-ok: Advanced
 
 class RoutePickerPage extends StatefulWidget {
   final ContactManager manager;
@@ -167,7 +168,7 @@ class _RoutePickerPageState extends State<RoutePickerPage> {
                 Padding(
                   padding: const EdgeInsets.all(Layout.screenMargin),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                    Text('Hash size', style: AppType.footnote.copyWith(color: col.textMuted)),
+                    Text('Hash size', style: AppType.footnote.copyWith(color: col.textMuted)), // copy-ok: Advanced
                     const SizedBox(height: Gap.xs),
                     CupertinoSlidingSegmentedControl<int>(
                       key: const Key('picker-hash-size'),
@@ -287,7 +288,7 @@ class _RoutePickerPageState extends State<RoutePickerPage> {
                 Padding(
                   padding: const EdgeInsets.all(Layout.screenMargin),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                    Text('Advanced: type the hashes', style: AppType.footnote.copyWith(color: col.textMuted)),
+                    Text('Advanced: type the hashes', style: AppType.footnote.copyWith(color: col.textMuted)), // copy-ok: Advanced
                     const SizedBox(height: Gap.xs),
                     CupertinoTextField(
                       key: const Key('picker-text'),
@@ -312,7 +313,7 @@ class _RoutePickerPageState extends State<RoutePickerPage> {
     final t = _target;
     final parts = <String>[r.publicKey.substring(0, _hashSize * 2)];
     if (r.lat != null && r.lon != null && t.lat != null && t.lon != null) {
-      parts.add('${(haversineM(t.lat!, t.lon!, r.lat!, r.lon!) / 1000).toStringAsFixed(1)} km');
+      parts.add(AppScope.unitsOf(context).distance(haversineM(t.lat!, t.lon!, r.lat!, r.lon!)));
     }
     parts.add(heardText(r.lastHeardMs, _m.nowMs()).replaceFirst('Heard ', ''));
     return parts.join(' · ');

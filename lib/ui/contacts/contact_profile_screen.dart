@@ -31,6 +31,7 @@ import 'contacts_controller.dart';
 import 'path_manager_screen.dart';
 import 'profile_sheets.dart';
 import 'profile_tiles.dart';
+import 'radio_caps_of.dart';
 import 'profile_widgets.dart';
 import 'user_stats_sheet.dart';
 
@@ -136,7 +137,7 @@ class _ContactProfileScreenState extends State<ContactProfileScreen> {
     final redesign = AppFlags.chatRedesign;
     final tiles = profileTiles(c,
         connected: connected,
-        caps: widget.radioCaps?.call() ?? RadioCaps.baseline,
+        caps: widget.radioCaps?.call() ?? radioCapsOf(context),
         canMessage: canMessage,
         canAdmin: canAdmin,
         redesign: redesign);
@@ -199,7 +200,7 @@ class _ContactProfileScreenState extends State<ContactProfileScreen> {
               padding: const EdgeInsets.only(bottom: Gap.xl),
               children: [
                 _header(context, c, now),
-                ProfileTileGrid(tiles: tiles, onTap: (t) => _tapTile(c, t)),
+                ProfileTileGrid(tiles: tiles, onTap: (t) => _tapTile(c, t), onOptions: (t) => _pingOptions(c)),
                 if (disabled.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(Layout.screenMargin + Gap.xs, 0, Layout.screenMargin, Gap.m),
@@ -265,7 +266,7 @@ class _ContactProfileScreenState extends State<ContactProfileScreen> {
       child: Column(children: [
         ContactAvatar(c, size: 88),
         const SizedBox(height: Gap.m),
-        Text(c.displayName, key: const Key('contact-name'), textAlign: TextAlign.center, style: AppType.title2.copyWith(color: col.textPrimary)),
+        Semantics(header: true, child: Text(c.displayName, key: const Key('contact-name'), textAlign: TextAlign.center, style: AppType.title2.copyWith(color: col.textPrimary))),
         if (custom) Text('Advertises as ${c.name}', textAlign: TextAlign.center, style: AppType.footnote.copyWith(color: col.textMuted)),
         const SizedBox(height: 2),
         Text('${contactTypeLabel(c.type)} · ${routeCaption(c)}',
@@ -282,7 +283,7 @@ class _ContactProfileScreenState extends State<ContactProfileScreen> {
       return ProfileRow(key: const Key('contact-no-position'), label: 'Location', value: 'Not shared');
     }
     final coords = '${c.lat!.toStringAsFixed(5)}, ${c.lon!.toStringAsFixed(5)}';
-    final when = adv == null ? 'their last advert' : 'their last advert, ${_ago(now - adv * 1000)}';
+    final when = adv == null ? 'when they last announced themselves' : 'when they last announced themselves, ${_ago(now - adv * 1000)}';
     return Semantics(
       button: true,
       label: 'Location on map. Opens the Map tab. Position from $when',
@@ -367,6 +368,9 @@ class _ContactProfileScreenState extends State<ContactProfileScreen> {
     }
   }
 
+  Future<void> _pingOptions(Contact c) =>
+      showPingOptions(context, contact: c, manager: _m, onUseRoute: (r) => offerUseRoute(context, _m, c, r));
+
   Future<void> _route(Contact c) => PathManagerScreen.open(context, manager: _m, publicKey: c.publicKey, changes: _c);
 
   Future<void> _edit(Contact c) async {
@@ -419,7 +423,7 @@ class _ContactProfileScreenState extends State<ContactProfileScreen> {
       final ok = await _m.shareToNearbyRadios(c.publicKey);
       _say(ok
           ? 'Sent. Only radios within direct range can hear it.'
-          : 'Your radio has no stored advert for this contact, so it cannot send it. Share the link or QR code instead.');
+          : 'Your radio has no stored announcement from this contact, so it cannot send it. Share the link or QR code instead.');
     } on RadioUnavailable {
       _say('The radio is not connected. Connect it and try again.');
     } catch (_) {
@@ -432,7 +436,7 @@ class _ContactProfileScreenState extends State<ContactProfileScreen> {
       await _m.ensureOnRadio(c.publicKey);
       _say('${c.displayName} is on the radio now.');
     } on ContactTableFull {
-      _say('The radio\'s contact list is full and every contact on it is a favourite or in use. Free a slot in Contacts first.');
+      _say('The radio\'s contact list is full and every contact on it is a favourite or in use. Free some room in Contacts first.');
     } on RadioUnavailable {
       _say('The radio is not connected. Connect it and try again.');
     } catch (_) {

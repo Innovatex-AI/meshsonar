@@ -87,10 +87,10 @@ void main() {
     expect(find.textContaining('Delivered'), findsWidgets);
     expect(find.text('2.4 s'), findsOneWidget);
     expect(find.text('Saved route'), findsOneWidget);
-    expect(find.textContaining('Try 1 · flooded'), findsOneWidget);
+    expect(find.textContaining('Try 1 · searched'), findsOneWidget);
     expect(find.textContaining('Try 2 · saved route'), findsOneWidget);
     expect(find.textContaining('acknowledged after 2.4 s'), findsOneWidget);
-    expect(find.textContaining('Try 1 · flooded').evaluate().single.widget.toString().contains('acknowledged'), isFalse);
+    expect(find.textContaining('Try 1 · searched').evaluate().single.widget.toString().contains('acknowledged'), isFalse);
     expect(find.textContaining('no reply'), findsOneWidget, reason: 'the first try got no reply');
   });
 
@@ -106,7 +106,7 @@ void main() {
     await open(tester, m.id);
     expect(find.text('Not delivered'), findsWidgets);
     expect(find.textContaining('No acknowledgement after 3 tries'), findsOneWidget);
-    expect(find.textContaining('flooded through the mesh'), findsOneWidget);
+    expect(find.textContaining('sent to everyone nearby'), findsOneWidget);
     await tester.tap(find.byKey(const Key('details-copy')));
     await tester.pump();
     expect(clip.single, 'ping?');
@@ -127,7 +127,7 @@ void main() {
     }
     await open(tester, 'f2');
     expect(find.textContaining('4 along the saved route'), findsOneWidget);
-    expect(find.textContaining('repeater path to them may have changed'), findsOneWidget);
+    expect(find.textContaining('route to them may have changed'), findsOneWidget);
   });
 
   tw('other failure reasons use their own sentence', (tester) async {

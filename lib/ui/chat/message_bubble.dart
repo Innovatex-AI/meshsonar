@@ -209,7 +209,8 @@ class _MessageBubbleState extends State<MessageBubble> {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: w.highlighted ? Color.alphaBlend(c.accent.withValues(alpha: 0.35), bg) : bg,
-        border: failed ? Border.all(color: c.danger, width: 1.5) : null,
+        // Increase Contrast: a hairline edge on every bubble (the fill alone may be too close to the page colour).
+        border: failed ? Border.all(color: c.danger, width: 1.5) : ((MediaQuery.maybeHighContrastOf(context) ?? false) ? Border.all(color: c.textMuted, width: 1) : null),
         borderRadius: _radius(mine),
       ),
       child: Text.rich(TextSpan(style: base, children: _spans(mine ? c.bubbleOutText : c.accent, mine ? c.bubbleOutText : c.accent, mine ? c.bubbleOutText : c.warning))),

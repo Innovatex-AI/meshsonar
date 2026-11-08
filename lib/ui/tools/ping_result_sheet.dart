@@ -38,7 +38,7 @@ String pingHeadline(PingResult r) => switch (r.status) {
 
 /// The sentence under the headline for a failure.
 String pingFailureBody(PingResult r) => switch (r.status) {
-      PingStatus.noReply => 'Not heard. Out of range, path stale, or the radio is busy.',
+      PingStatus.noReply => 'Not heard. Out of range, route out of date, or the radio is busy.',
       PingStatus.unsupported => 'This radio\'s firmware cannot search for a route. Update the radio\'s firmware to use Ping.',
       PingStatus.notConnected => 'Connect your radio to ping.',
       PingStatus.tooSoon => r.detail ?? 'A ping just ran. Try again in a few seconds.',
@@ -88,6 +88,32 @@ Future<PingSheetOutcome?> showPingSheet(
       onUseRoute: onUseRoute,
     ),
   );
+}
+
+/// Long press on the Ping tile: Ping, Direct only (the node's own radio range, no repeater in between) and the hash size a
+/// ID size a direct or unrouted trace carries (1, 2 or 3 bytes). Each choice runs the ping sheet with those parameters.
+Future<PingSheetOutcome?> showPingOptions(
+  BuildContext context, {
+  required Contact contact,
+  required ContactManager manager,
+  RadioTools? tools,
+  Future<void> Function(PathRoute route)? onUseRoute,
+}) async {
+  final pick = await showAppActionSheet<(bool, int)>(
+    context,
+    title: 'Ping ${contact.displayName}',
+    message: 'Direct only skips every repeater. Longer IDs tell nearby repeaters apart more reliably.',
+    sheetKey: const Key('ping-options'),
+    actions: const [
+      AppAction('Ping', (false, 1), key: Key('ping-opt-normal')),
+      AppAction('Direct only', (true, 1), key: Key('ping-opt-direct')),
+      AppAction('Direct only, 2-byte IDs', (true, 2), key: Key('ping-opt-direct-2')),
+      AppAction('Direct only, 3-byte IDs', (true, 3), key: Key('ping-opt-direct-3')),
+    ],
+  );
+  if (pick == null || !context.mounted) return null;
+  return showPingSheet(context,
+      contact: contact, manager: manager, tools: tools, directOnly: pick.$1, hashSize: pick.$2, onUseRoute: onUseRoute);
 }
 
 class PingResultBody extends StatefulWidget {
@@ -238,7 +264,7 @@ class _PingResultBodyState extends State<PingResultBody> {
             ],
             if (r.hopSnrDb.isNotEmpty) ...[
               const SizedBox(height: Gap.m),
-              Text('Signal at each hop: ${r.hopSnrDb.map((s) => '${s >= 0 ? '+' : ''}${s.toStringAsFixed(1)}').join('  ')} dB',
+              Text('Signal at each repeater: ${r.hopSnrDb.map((s) => '${s >= 0 ? '+' : ''}${s.toStringAsFixed(1)}').join('  ')} dB',
                   key: const Key('ping-snr'), style: AppType.subhead.copyWith(color: c.textMuted)),
             ],
           ]),

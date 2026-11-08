@@ -226,7 +226,7 @@ class _TipCardState extends State<TipCard> {
           CupertinoButton(
             key: const Key('tip-dismiss'),
             padding: EdgeInsets.zero,
-            minimumSize: const Size(Hit.min, Hit.min),
+            minimumSize: Size.square(Hit.of(context)),
             onPressed: () {
               appTipStore.markSeen(widget.tipId);
               setState(() => _hidden = true);

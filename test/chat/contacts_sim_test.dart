@@ -345,7 +345,7 @@ void main() {
       expect(rig.radio.sentDirect.map((d) => d.attempt), [0, 1, 2]);
       expect(rig.radio.sentDirect.map((d) => d.timestamp).toSet(), hasLength(1));
       expect(rig.store.outbox.attemptsFor(m.id), hasLength(3));
-      expect(describeFailure(got, rig.store.outbox.attemptsFor(m.id)), allOf(contains('3 tries'), contains('flooded')));
+      expect(describeFailure(got, rig.store.outbox.attemptsFor(m.id)), allOf(contains('3 tries'), contains('everyone nearby')));
       // Retry starts again from zero and, once acks flow, completes; the receiver sees one message (same timestamp)
       rig.radio.dropAcks = false;
       expect(rig.chat.retryFailed(m.id), isTrue);

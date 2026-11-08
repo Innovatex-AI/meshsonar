@@ -13,6 +13,8 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../chat/tip_store.dart';
+import '../ui/design/app_widgets.dart' show appTipStore;
 import '../alerts/alerts_runtime.dart';
 import '../chat/chat_service.dart';
 import '../core/model.dart' show PingKind;
@@ -59,6 +61,7 @@ class ChatWiring {
       wardriveChannelName: () => app.settings.channel,
       now: app.services.clock,
     );
+    appTipStore = ChatDbTipStore(store); // one-time tips are remembered across launches
     service.start();
     service.applyRetention();
     _app = app;

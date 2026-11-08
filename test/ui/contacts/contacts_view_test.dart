@@ -9,6 +9,7 @@ import 'package:meshsonar/ui/contacts/contacts_view.dart';
 import '../../chat/contact_support.dart';
 import '../../chat/support.dart';
 import 'contacts_ui_support.dart';
+import '../../support/semantics_audit.dart';
 
 /// A radio that sends a few contacts, then waits for [gate]: the list is "in progress" for as long as the test wants.
 class SlowPort extends FakeRadioPort {
@@ -52,7 +53,7 @@ void main() {
       expect(connects, 1);
     });
 
-    testWidgetsT('(b) connected, nothing yet: empty state with Send an advert and Scan a QR code', (tester) async {
+    testWidgetsT('(b) connected, nothing yet: empty state with Announce myself and Scan a QR code', (tester) async {
       await pumpView(tester, contacts: 0);
       expect(find.byKey(const Key('contacts-empty')), findsOneWidget);
       expect(find.text('No contacts yet'), findsOneWidget);
@@ -319,7 +320,7 @@ void main() {
       await tester.tap(find.byKey(const Key('nearby-row')));
       await tester.pumpAndSettle();
       expect(find.byKey(Key('nearby-${keyN(101).substring(0, 8)}')), findsOneWidget);
-      expect(find.textContaining('heard 5 min ago, 2 hops'), findsWidgets);
+      expect(find.textContaining('heard 5 min ago, via 2 repeaters'), findsWidgets);
       await tester.tap(find.byKey(Key('nearby-ignore-${keyN(101).substring(0, 8)}')));
       await tester.pump();
       await tester.pump();
@@ -337,15 +338,15 @@ void main() {
       await pumpView(tester, contacts: 1, before: (rig) => advert(rig, 1, name: 'Hilltop'));
       await tester.tap(find.byKey(const Key('nearby-row')));
       await tester.pumpAndSettle();
-      expect(find.bySemanticsLabel(RegExp('New node Hilltop, Repeater, heard 5 min ago, 2 hops')), findsOneWidget);
+      expect(find.bySemanticsLabel(RegExp('New node Hilltop, Repeater, heard 5 min ago, via 2 repeaters')), findsOneWidget);
       handle.dispose();
     });
   });
 
   group('accessibility and layout matrix', () {
-    final sizes = [(w: 393.0, h: 852.0), (w: 375.0, h: 667.0), ipadSize];
+    final sizes = [(w: 393.0, h: 852.0), (w: 375.0, h: 667.0), (w: 744.0, h: 1133.0), ipadSize];
     for (final size in sizes) {
-      for (final scale in [1.0, 3.1]) {
+      for (final scale in [1.0, 2.0, 3.1]) {
         for (final dark in [false, true]) {
           testWidgetsT('everything at once: ${size.w.toInt()}x${size.h.toInt()} text x$scale ${dark ? 'dark' : 'light'}', (tester) async {
             final rig = await pumpView(tester, contacts: 14, w: size.w, h: size.h, scale: scale, b: dark ? Brightness.dark : Brightness.light, before: (rig) {
@@ -361,6 +362,10 @@ void main() {
             expect(tester.takeException(), isNull);
             await tester.drag(find.byKey(const Key('contacts-list')), const Offset(0, 600));
             await tester.pump();
+            final sem = tester.ensureSemantics();
+            await tester.pump();
+            if (scale < 2.0) expectHeader(tester); // sticky letter headers are below the fold at large text
+            sem.dispose();
             await expectAccessibleIos(tester);
             expect(rig.chat.contacts.state.tableFull, isTrue);
           });

@@ -156,7 +156,7 @@ class LoginSheetModel extends ChangeNotifier {
     } else {
       phase = LoginPhase.failed;
       if (o.kind == LoginKind.noReply && !searched) routeStale = true;
-      if (o.kind == LoginKind.wrongPassword) AppHaptics.warning();
+      AppHaptics.error(); // login failed or no reply (plan 2.2)
     }
     _notify();
     return o;

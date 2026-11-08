@@ -10,6 +10,7 @@ import 'package:flutter/semantics.dart' show CustomSemanticsAction;
 import 'package:flutter_slidable/flutter_slidable.dart';
 
 import '../../app/chat_controller.dart';
+import '../../chat/chat_copy.dart';
 import '../../chat/conversation_row.dart';
 import '../../chat/models.dart';
 import '../../chat/network_model.dart';
@@ -197,10 +198,10 @@ class _NetworkViewState extends State<NetworkView> with WidgetsBindingObserver {
       sheetKey: const Key('tools-sheet'),
       title: 'Radio tools',
       actions: const [
-        AppAction('Trace a path', NetworkTool.trace, key: Key('tools-trace'), symbol: AppSymbols.route),
+        AppAction('Trace a route', NetworkTool.trace, key: Key('tools-trace'), symbol: AppSymbols.route),
         AppAction('Discover nearby', NetworkTool.discover, key: Key('tools-discover'), symbol: AppSymbols.antenna),
         AppAction('Rx log', NetworkTool.rxLog, key: Key('tools-rxlog'), symbol: AppSymbols.waveform),
-        AppAction('Adverts', NetworkTool.adverts, key: Key('tools-adverts'), symbol: AppSymbols.bell),
+        AppAction('Adverts', NetworkTool.adverts, key: Key('tools-adverts'), symbol: AppSymbols.bell), // copy-ok: Tools list, like Rx log
       ],
     );
     if (t == null || !mounted) return;
@@ -301,7 +302,7 @@ class _NetworkViewState extends State<NetworkView> with WidgetsBindingObserver {
   Widget _noMatches(String q) => AppEmptyView(
         key: const Key('network-no-results'),
         symbol: AppSymbols.magnifyingglass,
-        title: 'No matches for “$q”',
+        title: noMatchesTitle(q),
         message: 'Nothing on the network has that name.',
       );
 
@@ -312,7 +313,7 @@ class _NetworkViewState extends State<NetworkView> with WidgetsBindingObserver {
             key: Key('network-empty'),
             symbol: AppSymbols.antenna,
             title: 'No repeaters heard yet',
-            message: 'They appear after their next advert.',
+            message: 'They appear after they announce themselves.',
           ),
           if (connected)
             Wrap(alignment: WrapAlignment.center, spacing: Gap.s, children: [
@@ -323,7 +324,7 @@ class _NetworkViewState extends State<NetworkView> with WidgetsBindingObserver {
                   final res = await _radio?.announce(wide: false);
                   if (res != null && mounted) _toast(res.message, ok: res.ok);
                 },
-                child: const Text('Send an advert'),
+                child: const Text(announceMyself),
               ),
               CupertinoButton.tinted(
                 key: const Key('network-empty-discover'),
@@ -586,7 +587,7 @@ class _BatteryChip extends StatelessWidget {
       child: Row(key: Key('battery-chip-${state.kind.name}'), mainAxisSize: MainAxisSize.min, children: [
         AppSymbolIcon(AppSymbols.battery, size: 15, color: col),
         const SizedBox(width: 3),
-        Text(state.label, style: AppType.subhead.copyWith(color: col, fontWeight: low ? FontWeight.w600 : FontWeight.w400)),
+        Flexible(child: Text(state.label, style: AppType.subhead.copyWith(color: col, fontWeight: low ? FontWeight.w600 : FontWeight.w400))),
       ]),
     );
   }
@@ -631,7 +632,7 @@ class _NodeRow extends StatelessWidget {
       ContactType.companion => RowKind.person,
     };
     final hops = contact.pathHops;
-    final route = hops == null ? null : (hops == 0 ? 'Direct' : '$hops ${hops == 1 ? 'hop' : 'hops'}');
+    final route = hops == null ? null : (hops == 0 ? 'Direct' : 'Via $hops ${hops == 1 ? 'repeater' : 'repeaters'}');
     final sub = [agoText(contact.lastHeardMs, now), ?route].join(' · ');
     final avatar = ConversationRow(
       key: contact.prefix,

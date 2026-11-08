@@ -59,6 +59,11 @@ class MessageSync {
   /// [RxCorrelator] here.
   RxFacts? Function(DateTime at, double? snrDb, int? hops)? rxFacts;
 
+  /// Time on air in ms of a packet of [bytes] on this radio's settings; null when unknown. The link wires it.
+  int? Function(int bytes)? airMsFor;
+
+  int? _air(RxFacts? f) => f == null || f.rawLength <= 0 ? null : airMsFor?.call(f.rawLength);
+
   final _out = StreamController<InboundMessage>.broadcast();
   final LinkedHashSet<String> _seen = LinkedHashSet<String>();
   static const int _seenMax = 512;
@@ -202,6 +207,7 @@ class MessageSync {
       rssiDbm: facts?.rssiDbm,
       pathHashesHex: facts?.pathHashes,
       hashSize: facts?.hashSize ?? (f.pathLen == 0xFF ? null : (f.pathLen >> 6) + 1),
+      airMs: _air(facts),
     );
   }
 
@@ -223,6 +229,7 @@ class MessageSync {
         rssiDbm: facts?.rssiDbm,
         pathHashesHex: facts?.pathHashes,
         hashSize: facts?.hashSize ?? (f.pathLen == 0xFF ? null : (f.pathLen >> 6) + 1),
+        airMs: _air(facts),
       );
   }
 

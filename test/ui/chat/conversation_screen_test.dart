@@ -262,7 +262,7 @@ void main() {
     expect(find.byKey(const Key('conv-search-results')), findsOneWidget);
     await tester.enterText(find.byKey(const Key('conv-search-field')), 'zzzz');
     await tester.pump();
-    expect(find.text('Nothing found'), findsOneWidget);
+    expect(find.textContaining('No matches for'), findsOneWidget);
     await tester.enterText(find.byKey(const Key('conv-search-field')), 'needle');
     await tester.pump();
     await tester.tap(find.text('needle in the haystack'));
