@@ -61,6 +61,8 @@ void main() {
         'raw': 'public packets in full',
         'channel': 'public channel and # channel',
         'cell': '~5 km area',
+        'pos': 'exact position during a drive',
+        'own': 'repeats of your own pings',
       };
       expect(words.keys, unorderedEquals(TelemetryRecord.wireKeysV2), reason: 'a new wire key needs a disclosure line');
       for (final e in words.entries) {

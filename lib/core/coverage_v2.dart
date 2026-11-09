@@ -305,8 +305,9 @@ class CoverageCellInfo {
 
 // ---------------------------------------------------------------------------------------------------------- tiles
 
-/// The two tile layers (`source-layer` = the layer name).
-enum CoverageTileLayer { measured, predicted }
+/// The tile layers (`source-layer` = the layer name). `heard` = passive Heard evidence (phone observer contract section
+/// 8.5; shape in meshsonar-infra coverage-v2-api-contract.md "Heard layer"), behind `capabilities.coverageHeard`.
+enum CoverageTileLayer { measured, predicted, heard }
 
 /// A decoded coverage tile, flat (cheap to send between isolates): feature f has vertices [starts[f], starts[f+1]) in
 /// [latLon] (lat, lon pairs). One vertex = a point (zoom <= 12, D11), more = a hexagon's outer ring (not closed).

@@ -155,12 +155,34 @@ class CoverageBandSwatch extends StatelessWidget {
   final bool predicted;
   final bool faint;
   final double size;
-  const CoverageBandSwatch({super.key, required this.band, required this.colors, this.predicted = false, this.faint = false, this.size = 18});
+
+  /// The Heard (no ping) look: light fill under a solid outline in the band colour (coverage-v2-api-contract "Heard layer").
+  final bool heard;
+  const CoverageBandSwatch({super.key, required this.band, required this.colors, this.predicted = false, this.faint = false, this.size = 18, this.heard = false});
 
   @override
   Widget build(BuildContext context) => ExcludeSemantics(
-    child: CustomPaint(size: Size.square(size), painter: _SwatchPainter(band, colors, predicted, faint)),
+    child: CustomPaint(size: Size.square(size), painter: heard ? _HeardSwatchPainter(band, colors) : _SwatchPainter(band, colors, predicted, faint)),
   );
+}
+
+class _HeardSwatchPainter extends CustomPainter {
+  final int band;
+  final CoverageBandColors c;
+  _HeardSwatchPainter(this.band, this.c);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final r = RRect.fromRectAndRadius((Offset.zero & size).deflate(0.75), Radius.circular(size.width * 0.2));
+    canvas.drawRRect(r, Paint()..color = c[band].withValues(alpha: 0.25));
+    canvas.drawRRect(r, Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5
+      ..color = c[band].withValues(alpha: 0.9));
+  }
+
+  @override
+  bool shouldRepaint(_HeardSwatchPainter old) => old.band != band || old.c != c;
 }
 
 class _SwatchPainter extends CustomPainter {

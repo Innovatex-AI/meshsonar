@@ -56,6 +56,11 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
   final Duration? claimReplyTimeout;
 
   final _rx = StreamController<RxPacket>.broadcast();
+
+  /// Every received packet for the phone observer (telemetry), never paused (contract section 8.2, Nov 9 2026: observing
+  /// must not stop while a remote request, a ping, chat or a map is busy). Dropping a push here would not spare the
+  /// radio's push queue anyway; only the in-app consumers of [rxPackets] pause.
+  final _observerRx = StreamController<RxPacket>.broadcast();
   final _control = StreamController<ControlPacket>.broadcast();
 
   /// Every push frame (code >= 0x80) as received, except the high-volume RX log: the Tools wait on trace, telemetry and
@@ -248,11 +253,13 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
     switch (f) {
       case LogRxDataPush():
         _rxCorrelator.record(now, f.raw, snrDb: f.snrDb, rssiDbm: f.rssiDbm); // for message RSSI, even while the Rx log screen is paused
+        final pkt = RxPacket(at: now, raw: f.raw, snrDb: f.snrDb, rssiDbm: f.rssiDbm.toDouble());
+        if (!_observerRx.isClosed) _observerRx.add(pkt);
         if (rxLogPaused) {
           rxLogDroppedWhilePaused++;
           break;
         }
-        if (!_rx.isClosed) _rx.add(RxPacket(at: now, raw: f.raw, snrDb: f.snrDb, rssiDbm: f.rssiDbm.toDouble()));
+        if (!_rx.isClosed) _rx.add(pkt);
       case ControlDataPush():
         if (!_control.isClosed) _control.add(ControlPacket(now, f.snrDb, f.rssiDbm, f.pathLen, f.payload));
       case LoginSuccessPush() || LoginFailPush() || StatusResponsePush() || BinaryResponsePush():
@@ -287,6 +294,7 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
     if (m != null) m(const ErrFrame(null)); // fails a running GET_CONTACTS at once
     sync.dispose();
     _rx.close();
+    _observerRx.close();
     _control.close();
     _rawPushes.close();
     _unsolicited.close();
@@ -468,6 +476,9 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
 
   @override
   Stream<RxPacket> get rxPackets => _rx.stream;
+
+  /// [rxPackets] for the phone observer: never paused by [rxLogPaused].
+  Stream<RxPacket> get observerRxPackets => _observerRx.stream;
 
   @override
   Future<double?> noiseFloor() async {

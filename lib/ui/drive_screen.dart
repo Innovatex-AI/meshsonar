@@ -543,7 +543,8 @@ class _MapPane extends StatelessWidget {
           simulated: model.simulated,
           onZoomChanged: model.onMapZoom,
           coverageV2: model.coverageV2
-              ? CoverageV2Inputs(tiles: s.coverageTiles, meta: s.coverageMeta, drawTiles: model.drawTiles, fetchCell: s.coverageCell)
+              ? CoverageV2Inputs(
+                  tiles: s.coverageTiles, meta: s.coverageMeta, drawTiles: model.drawTiles, fetchCell: s.coverageCell, heard: s.coverageHeard)
               : null,
           mapKey: MapKey(model: model),
           openLegend: () => showMapLegend(context, pingColors: model.pingColors),

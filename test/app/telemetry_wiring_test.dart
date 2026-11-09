@@ -11,6 +11,7 @@ import 'package:meshsonar/app/services.dart';
 import 'package:h3_ffi/h3_ffi.dart';
 import 'package:meshsonar/core/home_observer.dart';
 import 'package:meshsonar/core/model.dart';
+import 'package:meshsonar/core/privacy_zones.dart';
 import 'package:meshsonar/radio/protocol.dart' show AdvType;
 import 'package:meshsonar/radio/tools/advert_decode.dart' show buildAdvertPayload;
 import 'package:meshsonar/core/telemetry.dart';
@@ -33,8 +34,8 @@ class _TeleClient extends FakeCmatClient implements TelemetryTransport, HomeObse
   }
 
   @override
-  Future<HomeObserverHttpResult> heartbeat(String driverKey, String observerId) async {
-    homeCalls.add('HEARTBEAT $observerId');
+  Future<HomeObserverHttpResult> heartbeat(String driverKey, Map<String, dynamic> body) async {
+    homeCalls.add('HEARTBEAT ${jsonEncode(body)}');
     return const HomeObserverHttpResult(200);
   }
 
@@ -180,7 +181,7 @@ void main() {
     expect(h.tele.bodies, isEmpty);
   });
 
-  test('a ping we sent is never uploaded', () async {
+  test('an echo of a ping we sent goes as own: true, header only when the ping is not public (section 8.1)', () async {
     final h = await _ready();
     final p = _pkt(h.now, 3);
     h.link.rx.add(p);
@@ -190,7 +191,9 @@ void main() {
     h.state.debugOnPing(DrivePing(id: 'p1', ts: h.now, lat: 0, lon: 0, pktHash: hash));
     h.now = h.now.add(const Duration(minutes: 2));
     await h.state.flushTelemetry();
-    expect(h.tele.bodies, isEmpty);
+    final pk = ((jsonDecode(h.tele.bodies.single) as Map)['packets'] as List).single as Map;
+    expect(pk['own'], isTrue);
+    expect(pk.containsKey('raw'), isFalse, reason: 'no drive uploads it publicly (no position, no drive): header only');
   });
 
   test('a private channel packet is never uploaded (Nov 8 fix: the disclosure promised it, the app recorded it)', () async {
@@ -316,6 +319,115 @@ void main() {
       expect(h.state.observerIdentity.id, isNot(before));
       expect(h.state.observerIdentity.id, matches(RegExp(r'^[0-9a-f]{32}$')));
       expect(h.state.homeObserverActive, isFalse);
+    });
+  });
+
+  group('always-on observer, contract section 8 (Nov 9 2026)', () {
+    final h3 = _loadH3();
+
+    Future<_H> drivingReady() async {
+      final h = _H()..approveKey();
+      h.settings.saved = h.settings.saved.copyWith(syncEveryMin: 5);
+      await h.state.init();
+      h.state.debugHexEngine = h3;
+      expect(await h.state.connect(const RadioDevice(id: 'aa:bb', name: 'MeshCore-Truck'), RadioKind.bluetooth), isTrue);
+      await h.state.privacyZones.setTrim(0);
+      await h.state.startDrive();
+      expect(h.state.driving, isTrue);
+      return h;
+    }
+
+    Future<Map> flushOne(_H h) async {
+      h.now = h.now.add(const Duration(minutes: 2));
+      await h.state.flushTelemetry();
+      return jsonDecode(h.tele.bodies.last) as Map;
+    }
+
+    test('while a drive records: mode drive, exact pos from the drive fix nearest rx_ts (<= 10 s), no cell', () async {
+      final h = await drivingReady();
+      expect(h.state.observerMode, ObserverMode.drive);
+      h.state.debugDriveFix(GeoFix(lat: 39.961234, lon: -82.998765, accuracyM: 5, at: h.now.subtract(const Duration(seconds: 30))));
+      h.state.debugDriveFix(GeoFix(lat: 39.970001, lon: -82.990002, accuracyM: 6, at: h.now.subtract(const Duration(seconds: 2))));
+      h.link.rx.add(_advert(h.now, List.filled(32, 0x61)));
+      await Future<void>.delayed(Duration.zero);
+      final j = await flushOne(h);
+      expect((j['observer'] as Map)['mode'], 'drive');
+      final pk = (j['packets'] as List).single as Map;
+      expect(pk['pos'], {'lat': 39.970001, 'lon': -82.990002, 'acc_m': 6.0});
+      expect(pk.containsKey('cell'), isFalse);
+    });
+
+    test('no drive fix within 10 s: the cell instead (or nothing for Region only)', () async {
+      final h = await drivingReady();
+      h.state.debugDriveFix(GeoFix(lat: 39.96, lon: -83.0, at: h.now.subtract(const Duration(seconds: 40))));
+      h.location.currentFix = () => GeoFix(lat: 39.96, lon: -83.0, at: h.now);
+      h.link.rx.add(_advert(h.now, List.filled(32, 0x62)));
+      await Future<void>.delayed(Duration.zero);
+      final pk = ((await flushOne(h))['packets'] as List).single as Map;
+      expect(pk.containsKey('pos'), isFalse);
+    });
+
+    test('drive privacy first: a fix inside a privacy zone or the start trim gives no pos', () async {
+      final h = await drivingReady();
+      await h.state.privacyZones.setZones([PrivacyZone.normalized(lat: 39.97, lon: -82.99, radiusM: 300)]);
+      h.state.debugDriveFix(GeoFix(lat: 39.9701, lon: -82.9901, at: h.now));
+      h.link.rx.add(_advert(h.now, List.filled(32, 0x63)));
+      await Future<void>.delayed(Duration.zero);
+      expect((((await flushOne(h))['packets'] as List).single as Map).containsKey('pos'), isFalse, reason: 'privacy zone');
+      await h.state.privacyZones.setZones(const []);
+      await h.state.privacyZones.setTrim(500);
+      h.state.debugDriveFix(GeoFix(lat: 39.9705, lon: -82.9905, at: h.now)); // 50 m from the first (start) fix
+      h.link.rx.add(_advert(h.now, List.filled(32, 0x64)));
+      await Future<void>.delayed(Duration.zero);
+      expect((((await flushOne(h))['packets'] as List).last as Map).containsKey('pos'), isFalse, reason: 'start trim');
+    });
+
+    test('Region only: a drive sends neither pos nor cell', () async {
+      final h = await drivingReady();
+      await h.state.updateSettings(h.state.settings.copyWith(telemetryRegionOnly: true));
+      h.state.debugDriveFix(GeoFix(lat: 39.97, lon: -82.99, at: h.now));
+      h.link.rx.add(_advert(h.now, List.filled(32, 0x65)));
+      await Future<void>.delayed(Duration.zero);
+      final pk = ((await flushOne(h))['packets'] as List).single as Map;
+      expect(pk.containsKey('pos'), isFalse);
+      expect(pk.containsKey('cell'), isFalse);
+    });
+
+    test('an echo of a public drive ping goes own: true WITH raw; inside a zone, header only', () async {
+      final h = await drivingReady();
+      final p1 = _advert(h.now, List.filled(32, 0x66));
+      final p2 = _advert(h.now, List.filled(32, 0x67));
+      h.link.rx.add(p1);
+      h.link.rx.add(p2);
+      await Future<void>.delayed(Duration.zero);
+      final h1 = TelemetryRecord.fromRx(p1)!.packetHash!, h2 = TelemetryRecord.fromRx(p2)!.packetHash!;
+      await h.state.privacyZones.setZones([PrivacyZone.normalized(lat: 40.5, lon: -83.5, radiusM: 500)]);
+      h.state.debugOnPing(DrivePing(id: 'a', ts: h.now, lat: 39.97, lon: -82.99, pktHash: h1));
+      h.state.debugOnPing(DrivePing(id: 'b', ts: h.now, lat: 40.5, lon: -83.5, pktHash: h2));
+      final ps = [for (final p in (await flushOne(h))['packets'] as List) p as Map];
+      final a = ps.firstWhere((p) => p['pkt_hash'] == h1), b = ps.firstWhere((p) => p['pkt_hash'] == h2);
+      expect(a['own'], isTrue);
+      expect(a['raw'], isA<String>());
+      expect(b['own'], isTrue);
+      expect(b.containsKey('raw'), isFalse);
+    });
+
+    test('status heartbeat for every connected phone: once at connect, with mode and radio (section 8.3)', () async {
+      final h = await _ready();
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+      final hb = h.tele.homeCalls.where((c) => c.startsWith('HEARTBEAT ')).toList();
+      expect(hb, isNotEmpty);
+      final body = jsonDecode(hb.first.substring('HEARTBEAT '.length)) as Map;
+      expect(body['id'], h.state.observerIdentity.id);
+      expect(body['mode'], 'background');
+      expect((body['radio'] as Map)['sf'], 7);
+      expect(h.state.homeObserverService.heartbeatRunning, isTrue);
+      expect(hb, hasLength(1), reason: 'once at connect (the 5-minute timer runs only in the app wiring)');
+      await h.state.updateSettings(h.state.settings.copyWith(telemetryEnabled: false));
+      final n = h.tele.homeCalls.length;
+      expect(await h.state.homeObserverService.heartbeatNow(), isNull, reason: 'sharing off: no heartbeat');
+      expect(h.tele.homeCalls.length, n);
     });
   });
 }

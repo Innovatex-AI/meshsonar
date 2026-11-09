@@ -5,7 +5,8 @@
 //
 // Calls, all with `x-driver-key`:
 //  * `PUT  /api/cmh/observer/home`       {"id", "lat", "lon", "location_public": "exact" | "rounded_1km"}
-//  * `POST /api/cmh/observer/heartbeat`  {"id"} every 5 min while home mode is on and the radio is connected
+//  * `POST /api/cmh/observer/heartbeat`  {"id", "mode", "radio"} every 5 min while a radio is connected and sharing is on,
+//    in every mode, and once at connect (contract section 8.3, Nov 9 2026: the phone is always an observer)
 //  * `DELETE /api/cmh/observer/home?id=..` back to a mobile observer, the home position hidden
 //  * `GET  /api/cmh/observer/me`         this driver's phone observers
 //
@@ -86,8 +87,8 @@ abstract class HomeObserverTransport {
   /// `PUT /api/cmh/observer/home` with [body].
   Future<HomeObserverHttpResult> putHome(String driverKey, Map<String, dynamic> body);
 
-  /// `POST /api/cmh/observer/heartbeat` {"id": [observerId]}.
-  Future<HomeObserverHttpResult> heartbeat(String driverKey, String observerId);
+  /// `POST /api/cmh/observer/heartbeat` [body] = {"id", "mode", "radio"} (contract section 8.3).
+  Future<HomeObserverHttpResult> heartbeat(String driverKey, Map<String, dynamic> body);
 
   /// `DELETE /api/cmh/observer/home?id=[observerId]`.
   Future<HomeObserverHttpResult> deleteHome(String driverKey, String observerId);
@@ -202,8 +203,12 @@ class HomeObserverService {
   final String? Function() driverKey;
   final Future<String> Function() observerId;
 
-  /// Home mode is on (saved choice).
+  /// A heartbeat may go: sharing is on (and a real radio). Every mode, not only home (section 8.3).
   final bool Function() active;
+
+  /// The observer mode right now (`background` / `drive` / `home`) and the radio block (same as a batch's), for the body.
+  final String Function()? mode;
+  final Map<String, dynamic> Function()? radio;
 
   /// The radio is connected (no heartbeat without it: the server measures uptime by it).
   final bool Function() connected;
@@ -222,6 +227,8 @@ class HomeObserverService {
     required this.active,
     required this.connected,
     this.config,
+    this.mode,
+    this.radio,
     this.heartbeatEvery = const Duration(minutes: 5),
     this.autoTimer = true,
   });
@@ -237,7 +244,7 @@ class HomeObserverService {
   PhoneObserverInfo? status;
   DateTime? statusAt;
 
-  bool get heartbeatRunning => _timer != null;
+  bool get heartbeatRunning => _started;
 
   Future<HomeCallOutcome> _call(Future<HomeObserverHttpResult> Function(HomeObserverTransport tx, String key) f,
       {bool notFoundIsOk = false, void Function(HomeObserverHttpResult r)? seen}) async {
@@ -270,31 +277,42 @@ class HomeObserverService {
     return _call((tx, key) => tx.deleteHome(key, id), notFoundIsOk: true);
   }
 
-  /// One heartbeat, only while home mode is on and the radio is connected. Returns null when it was not due.
+  /// The heartbeat body (contract section 8.3).
+  Map<String, dynamic> heartbeatBody(String id) {
+    final r = radio?.call() ?? const <String, dynamic>{};
+    return {'id': id, 'mode': mode?.call() ?? 'background', if (r.isNotEmpty) 'radio': r};
+  }
+
+  /// One heartbeat, only while sharing is on and the radio is connected. Returns null when it was not due.
   Future<HomeCallOutcome?> heartbeatNow() async {
     if (!active() || !connected()) return null;
     final id = await observerId();
     var notFound = false;
-    var o = await _call((tx, key) => tx.heartbeat(key, id), seen: (r) => notFound = r.status == 404);
+    var o = await _call((tx, key) => tx.heartbeat(key, heartbeatBody(id)), seen: (r) => notFound = r.status == 404);
     // 404 = the server does not know this id (contract section 7): register the saved home again, then beat once more.
     final c = config?.call();
     if (notFound && c != null && c.on) {
-      if (await register(c) == HomeCallOutcome.ok) o = await _call((tx, key) => tx.heartbeat(key, id));
+      if (await register(c) == HomeCallOutcome.ok) o = await _call((tx, key) => tx.heartbeat(key, heartbeatBody(id)));
     }
     if (o == HomeCallOutcome.ok) heartbeatsSent++;
     return o;
   }
 
   /// Starts (or keeps) the heartbeat: one now, then every [heartbeatEvery]. Each tick checks home mode and the radio.
+  ///
+  /// Without [autoTimer] (tests) only the one heartbeat at start goes.
+  bool _started = false;
   void startHeartbeat() {
-    if (!autoTimer || _timer != null) return;
+    if (_started) return;
+    _started = true;
     unawaited(heartbeatNow());
-    _timer = Timer.periodic(heartbeatEvery, (_) => unawaited(heartbeatNow()));
+    if (autoTimer) _timer = Timer.periodic(heartbeatEvery, (_) => unawaited(heartbeatNow()));
   }
 
   void stopHeartbeat() {
     _timer?.cancel();
     _timer = null;
+    _started = false;
   }
 
   /// `GET /observer/me`, then picks this phone's entry ([id] / [key]).

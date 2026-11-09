@@ -31,8 +31,12 @@ void main() {
     });
 
     test('coverage redesign layers (plan section 5): rings gone, predicted added, under measured', () {
-      expect(kMapLayers.map((l) => l.id).toSet(), {'predicted', 'measured', 'hexes', 'pings', 'links', 'heard', 'repeaters', 'network', 'observers', 'labels'});
-      expect(kMapLayers, hasLength(10));
+      // Nov 9 2026: + 'heardcells', the Heard (no ping) layer (phone observer contract section 8.5), between predicted and measured.
+      expect(kMapLayers.map((l) => l.id).toSet(),
+          {'predicted', 'heardcells', 'measured', 'hexes', 'pings', 'links', 'heard', 'repeaters', 'network', 'observers', 'labels'});
+      expect(kMapLayers, hasLength(11));
+      expect(layerSpec('heardcells')!.z, greaterThan(layerSpec('predicted')!.z));
+      expect(layerSpec('heardcells')!.z, lessThan(layerSpec('measured')!.z), reason: 'a pinged cell shows its Measured colour');
       expect(layerSpec('rings'), isNull);
       expect(layerSpec('neighbours'), isNull);
       expect(kAppOnlyShowKeys, isNot(contains('rings')));
@@ -40,14 +44,14 @@ void main() {
     });
 
     test('defaults: both coverage layers and This drive on; network (56,889 points) and observers off', () {
-      expect(kDefaultLayerState.on, {'predicted', 'measured', 'hexes', 'links', 'heard', 'pings', 'repeaters', 'labels'});
+      expect(kDefaultLayerState.on, {'predicted', 'heardcells', 'measured', 'hexes', 'links', 'heard', 'pings', 'repeaters', 'labels'});
       expect(kDefaultLayerState.mode, {'pings': 'snr'}, reason: 'no colour-by mode any more (D9)');
       expect(layerSpec('network')!.label, 'All MeshCore repeaters');
       expect(layerSpec('network')!.defaultOn, isFalse);
       expect(layerSpec('nope'), isNull);
       expect(LayerGroup.values.map((g) => g.label), ['Coverage', 'Network']);
       // The sheet's rows, website names for the two coverage layers (parity rule).
-      expect([for (final r in kSheetRows[LayerGroup.coverage]!) r.id], ['measured', 'predicted', 'hexes', 'pings']);
+      expect([for (final r in kSheetRows[LayerGroup.coverage]!) r.id], ['measured', 'predicted', 'heardcells', 'hexes', 'pings']);
       expect([for (final r in kSheetRows[LayerGroup.network]!) r.id], ['repeaters', 'labels', 'observers', 'links']);
       expect([for (final id in ['measured', 'predicted', 'hexes', 'pings', 'repeaters', 'labels', 'links']) layerSpec(id)!.label],
           ['Measured coverage', 'Predicted coverage', 'This drive', 'Ping dots', 'Repeaters', 'Names', 'Lines to repeaters']);

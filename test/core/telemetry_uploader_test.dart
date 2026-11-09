@@ -180,14 +180,14 @@ void main() {
     expect(tx.posts, hasLength(1));
   });
 
-  test('our own TX pings (and their echoes) are never uploaded', () async {
+  test('v1 (no observer block): echoes of our own TX pings stay out of the batch (section 8.1 sends them only in v2)', () async {
     final u = make(config: const TelemetryConfig(holdFor: Duration(seconds: 90), minGap: Duration.zero));
     final echo = rec();
     u.add(echo);
     u.add(rec(salt: 1));
-    u.excludeHash(echo.packetHash!); // the ping's hash becomes known after its echoes were heard
-    expect(u.queued, 1);
-    expect(u.add(rec()), isFalse); // a later echo of the same transmission
+    u.markOwn(echo.packetHash!, publicRaw: true); // the ping's hash becomes known after its echoes were heard
+    expect(u.queued, 2, reason: 'kept, marked own');
+    expect(u.add(rec()), isFalse); // the same echo again (same path) is a duplicate
     clock = clock.add(const Duration(seconds: 120));
     await u.flush();
     final packets = (jsonDecode(tx.posts.single.body)['packets'] as List);

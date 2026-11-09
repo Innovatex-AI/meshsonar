@@ -5,7 +5,8 @@
 // Website layers deliberately NOT ported (planner/GIS, shelved or token-gated there): model, reach, sites, candidates,
 // population, gaps, hillshade. `model`/`reach` links still parse (core/map_view_state.dart) and are ignored here.
 import '../../../core/map_prefs.dart' show LayerPrefs;
-import '../../../core/map_view_state.dart' show MapViewState, kAppOnlyShowKeys, kWebsiteShowKeys;
+import '../../../core/map_view_state.dart' show MapViewState, kAppOnlyShowKeys, kHeardCellsLayerId, kWebsiteShowKeys;
+export '../../../core/map_view_state.dart' show kHeardCellsLayerId;
 import 'map_layer.dart';
 import 'repeater_map_source.dart';
 
@@ -16,6 +17,8 @@ import 'repeater_map_source.dart';
 // is [kSheetRows].
 const List<MapLayerSpec> kMapLayers = [
   MapLayerSpec(id: 'predicted', label: 'Predicted coverage', group: LayerGroup.coverage, z: 5, defaultOn: true, onWebsite: true, serverFed: true),
+  // Heard (no ping), phone observer contract section 8.5: passive evidence, its own layer, painted between the two.
+  MapLayerSpec(id: kHeardCellsLayerId, label: 'Heard (no ping)', group: LayerGroup.coverage, z: 7, defaultOn: true, onWebsite: true, serverFed: true),
   MapLayerSpec(id: 'measured', label: 'Measured coverage', group: LayerGroup.coverage, z: 10, defaultOn: true, onWebsite: true, serverFed: true),
   MapLayerSpec(id: 'hexes', label: 'This drive', group: LayerGroup.coverage, z: 20, defaultOn: true, onWebsite: false, serverFed: false),
   // The Repeaters switch is these three ids together: `repeaters` (the viewed region's roster, scope This region) or `network`
@@ -39,6 +42,7 @@ const Map<LayerGroup, List<SheetRow>> kSheetRows = {
   LayerGroup.coverage: [
     (id: 'measured', parent: null),
     (id: 'predicted', parent: null),
+    (id: kHeardCellsLayerId, parent: null),
     (id: 'hexes', parent: null),
     (id: 'pings', parent: 'hexes'),
   ],
@@ -141,11 +145,15 @@ class MapLayerInputs {
   /// Coverage v2 is on for this server, the tiles could not be read (offline), and the timeline / window / source filter looks
   /// at the past (tiles have no time filter, so measured is drawn from the saved cells and predicted is hidden then).
   final bool coverageV2;
+
+  /// The server has the Heard (no ping) layer (`capabilities.coverageHeard`).
+  final bool coverageHeard;
   final bool tilesOffline;
   final bool coverageFiltered;
 
   const MapLayerInputs({
     this.coverageV2 = false,
+    this.coverageHeard = false,
     this.tilesOffline = false,
     this.coverageFiltered = false,
     this.coverageState = MapFeedState.idle,
@@ -180,6 +188,12 @@ LayerStatus layerStatus(String id, MapLayerInputs inputs, {RepeaterMapSource? re
       }
       if (inputs.coverageFiltered) return const LayerStatus(LayerAvailability.ready, detail: 'Hidden while looking back: the estimate is for today');
       return const LayerStatus(LayerAvailability.ready, detail: 'Estimated from nearby measured cells');
+    case kHeardCellsLayerId:
+      if (!inputs.coverageHeard) return const LayerStatus(LayerAvailability.unsupported, detail: 'Not available on this server yet');
+      if (inputs.tilesOffline) {
+        return const LayerStatus(LayerAvailability.failed, detail: "Couldn't load. Check the connection and retry.", canRetry: true);
+      }
+      return const LayerStatus(LayerAvailability.ready, detail: 'Where a phone heard a repeater without pinging');
     case 'observers':
       if (inputs.regionName == null) {
         return const LayerStatus(LayerAvailability.empty, detail: 'Pick a region to see its observers');
@@ -217,7 +231,7 @@ LayerStatus _feedStatus(MapFeedState s, int count, {required String Function(int
 }
 
 /// Sanity: the registry's website ids are exactly the website keys the app draws (asserted by tests).
-const Set<String> kWebsiteKeysDrawn = {'measured', 'predicted', 'repeaters', 'observers', 'network'};
+const Set<String> kWebsiteKeysDrawn = {'measured', 'predicted', 'repeaters', 'observers', 'network', kHeardCellsLayerId};
 
 /// App-only ids, the same list the URL code writes in `meshsonar://` links.
 const List<String> kAppOnlyIds = kAppOnlyShowKeys;

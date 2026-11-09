@@ -9,6 +9,10 @@
 //  * `cell`: the H3 resolution-7 cell (~5 km) the phone was in when it heard the packet; never latitude/longitude. Left
 //    out when the person chose "Region only", when there is no recent fix, and always in Home observer mode.
 //
+// Section 8 (Andy, Nov 9 2026: "the phone is always the observer"): `own` marks a repeat of this phone's own ping (raw only
+// if that ping was uploaded publicly); mode `drive` packets may carry the exact `pos` from the drive GPS (privacy rules
+// applied by the caller) instead of `cell`.
+//
 // Guarantees, pinned by test/core/telemetry_test.dart and test/core/telemetry_uploader_test.dart:
 //  * [TelemetryRecord] has no field that can hold a payload (no bytes, no text, no raw packet, no names, no GPS).
 //  * [TelemetryRecord.fromRx] reads the packet header, path hashes and radio metrics only; the payload is dropped.
@@ -49,11 +53,45 @@ final RegExp telemetryCellRe = RegExp(r'^87[0-9a-f]{13}$');
 
 final RegExp _rawRe = RegExp(r'^[0-9a-f]+$');
 
+/// The exact position of a drive-mode packet (contract section 8.2): 6 decimals at most, accuracy 0..500 m.
+class TelemetryPos {
+  final double lat;
+  final double lon;
+  final double? accM;
+  const TelemetryPos(this.lat, this.lon, {this.accM});
+
+  bool get valid =>
+      lat.isFinite && lon.isFinite && lat.abs() <= 90 && lon.abs() <= 180 && !(lat == 0 && lon == 0) &&
+      (accM == null || (accM!.isFinite && accM! >= 0 && accM! <= 500));
+
+  static double _r6(double v) => (v * 1e6).roundToDouble() / 1e6;
+
+  Map<String, dynamic> toJson() => {'lat': _r6(lat), 'lon': _r6(lon), if (accM != null) 'acc_m': (accM! * 10).roundToDouble() / 10};
+
+  static TelemetryPos? tryFromJson(Object? j) {
+    if (j is! Map) return null;
+    final la = j['lat'], lo = j['lon'], a = j['acc_m'];
+    if (la is! num || lo is! num) return null;
+    final p = TelemetryPos(la.toDouble(), lo.toDouble(), accM: a is num ? a.toDouble() : null);
+    return p.valid ? p : null;
+  }
+
+  @override
+  bool operator ==(Object other) => other is TelemetryPos && other.lat == lat && other.lon == lon && other.accM == accM;
+  @override
+  int get hashCode => Object.hash(lat, lon, accM);
+}
+
 /// Where the phone was when it heard packets: `background` (in a pocket, moving, the default) or `home` (a fixed home
 /// observer at a registered position, contract section 4).
 enum ObserverMode {
   background('background'),
+
+  /// A drive is recording (contract section 8.2): packets may carry the exact `pos` from the drive's GPS.
+  drive('drive'),
   home('home');
+
+  static ObserverMode parse(Object? v) => v == home.wire ? home : (v == drive.wire ? drive : background);
 
   final String wire;
   const ObserverMode(this.wire);
@@ -133,8 +171,15 @@ class TelemetryRecord {
   /// v2: the H3 resolution-7 cell (15 hex) the phone was in; null when not shared. Never in [ObserverMode.home].
   final String? cell;
 
-  /// Background (moving phone) or home observer. Batches are sent per mode (the batch's `observer.mode`).
+  /// Background (moving phone), drive (a drive is recording) or home observer. Batches are sent per mode.
   final ObserverMode mode;
+
+  /// v2 section 8.2: the exact drive position at [at], drive mode only, privacy rules already applied by the caller; sent
+  /// INSTEAD of [cell]. Null otherwise.
+  final TelemetryPos? pos;
+
+  /// v2 section 8.1: a repeat of one of this phone's own transmissions (its ping heard back through a repeater).
+  final bool own;
 
   /// A group packet that was not checked must never be queued or sent.
   bool get mayLeavePhone => !telemetryPrivateTypes.contains(payloadType) && (!telemetryGroupTypes.contains(payloadType) || channelChecked);
@@ -160,7 +205,10 @@ class TelemetryRecord {
     String? channel,
     String? cell,
     this.mode = ObserverMode.background,
-  })  : pathHashes = List.unmodifiable(pathHashes),
+    TelemetryPos? pos,
+    this.own = false,
+  })  : pos = (mode == ObserverMode.drive && pos != null && pos.valid) ? pos : null,
+        pathHashes = List.unmodifiable(pathHashes),
         // The privacy rules hold whatever a caller passes: raw only for a public type (a group one only with its proven
         // channel), the channel only with raw, the cell only as an H3 res-7 index and never for a home observer.
         raw = (raw != null && raw.length <= telemetryMaxRawBytes * 2 && raw.length.isEven && _rawRe.hasMatch(raw) &&
@@ -171,13 +219,57 @@ class TelemetryRecord {
                 telemetryChannelRe.hasMatch(channel) && raw.length <= telemetryMaxRawBytes * 2 && _rawRe.hasMatch(raw))
             ? channel
             : null,
-        cell = (mode == ObserverMode.background && cell != null && telemetryCellRe.hasMatch(cell)) ? cell : null;
+        // The cell: never for a home observer, and not next to an exact drive position (pos replaces it).
+        cell = (mode != ObserverMode.home && !(mode == ObserverMode.drive && pos != null && pos.valid) && cell != null &&
+                telemetryCellRe.hasMatch(cell))
+            ? cell
+            : null;
+
+  /// This record as one of the phone's own echoes (section 8.1): [keepRaw] = the ping itself was uploaded publicly;
+  /// otherwise header only.
+  TelemetryRecord asOwn({required bool keepRaw}) => TelemetryRecord(
+        at: at,
+        region: region,
+        payloadType: payloadType,
+        routeType: routeType,
+        hashSize: hashSize,
+        pathHashes: pathHashes,
+        snrDb: snrDb,
+        rssiDbm: rssiDbm,
+        packetHash: packetHash,
+        channelChecked: channelChecked,
+        raw: keepRaw ? raw : null,
+        channel: keepRaw ? channel : null,
+        cell: cell,
+        mode: mode,
+        pos: pos,
+        own: true,
+      );
+
+  /// This record with its exact position replaced by [cell] (end-of-drive trim, section 8.2).
+  TelemetryRecord withoutPos(String? cell) => TelemetryRecord(
+        at: at,
+        region: region,
+        payloadType: payloadType,
+        routeType: routeType,
+        hashSize: hashSize,
+        pathHashes: pathHashes,
+        snrDb: snrDb,
+        rssiDbm: rssiDbm,
+        packetHash: packetHash,
+        channelChecked: channelChecked,
+        raw: raw,
+        channel: channel,
+        cell: cell,
+        mode: mode,
+        own: own,
+      );
 
   /// Keys of [toJson], in order: the packet object of `meshsonar-telemetry/1`. The privacy contract: nothing else is sent.
   static const List<String> wireKeys = ['rx_ts', 'type', 'route', 'hash_size', 'path', 'snr', 'rssi', 'pkt_hash'];
 
   /// Every key [toJsonV2] may write (`meshsonar-telemetry/2`): the v1 keys plus the three optional ones. Nothing else.
-  static const List<String> wireKeysV2 = [...wireKeys, 'raw', 'channel', 'cell'];
+  static const List<String> wireKeysV2 = [...wireKeys, 'raw', 'channel', 'cell', 'pos', 'own'];
 
   /// Builds a record from a received packet, keeping header/metadata only. Null if the bytes are not a packet or it is
   /// a private packet type.
@@ -197,6 +289,7 @@ class TelemetryRecord {
     String? cell,
     ObserverMode mode = ObserverMode.background,
     String? ownPublicKey,
+    TelemetryPos? pos,
   }) {
     final p = MeshPacket.tryParse(rx.raw);
     if (p == null) return null;
@@ -233,6 +326,7 @@ class TelemetryRecord {
       channel: rawOk ? channel : null,
       cell: cell,
       mode: mode,
+      pos: pos,
     );
   }
 
@@ -254,7 +348,8 @@ class TelemetryRecord {
         ...toJson(),
         if (raw != null) 'raw': raw,
         if (raw != null && channel != null) 'channel': channel,
-        if (cell != null && mode == ObserverMode.background) 'cell': cell,
+        if (pos != null && mode == ObserverMode.drive) 'pos': pos!.toJson() else if (cell != null && mode != ObserverMode.home) 'cell': cell,
+        if (own) 'own': true,
       };
 
   /// Reads a record back from the on-disk queue (the region rides beside the packet there). Null if malformed.
@@ -285,7 +380,9 @@ class TelemetryRecord {
       raw: j['raw'] is String ? j['raw'] as String : null,
       channel: j['channel'] is String ? j['channel'] as String : null,
       cell: j['cell'] is String ? j['cell'] as String : null,
-      mode: j['mode'] == ObserverMode.home.wire ? ObserverMode.home : ObserverMode.background,
+      mode: ObserverMode.parse(j['mode']),
+      pos: TelemetryPos.tryFromJson(j['pos']),
+      own: j['own'] == true,
     );
   }
 

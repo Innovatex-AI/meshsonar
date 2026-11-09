@@ -51,6 +51,7 @@ import '../chat/channel_secret.dart' show hashtagSecret16, publicChannelSecret16
 import '../core/home_observer.dart';
 import '../core/hex_cells.dart' show hexCellOf, hexId, loadHexEngine;
 import '../core/observer_identity.dart';
+import '../core/privacy_zones.dart' show distanceM;
 import '../core/telemetry.dart';
 import '../core/telemetry_uploader.dart';
 import '../core/phone_sensors.dart';
@@ -542,6 +543,9 @@ class AppState extends ChangeNotifier {
   /// The server offers coverage v2 (`site-config.capabilities.coverageV2`). Without it every map keeps the old public-coverage
   /// path (D12).
   bool get coverageV2 => _siteConfig?.coverageV2 ?? false;
+
+  /// The server draws the Heard (no ping) coverage layer (`capabilities.coverageHeard`, contract section 8.5).
+  bool get coverageHeard => _siteConfig?.coverageHeard ?? false;
   bool? _coverageFetchedV2;
 
   /// Test seam: how the coverage v2 client is made for the server's origin.
@@ -1516,10 +1520,101 @@ class AppState extends ChangeNotifier {
     },
     driverKey: () => keyApproved ? _settings.driverKey : null,
     observerId: observerIdentity.load,
-    active: () => homeObserverActive,
+    // Every connected phone sends a status heartbeat while sharing is on (contract section 8.3), not only a home observer.
+    active: () => observerSharing,
     connected: () => connected,
-    config: () => _settings.homeObserver,
+    config: () => homeObserverActive ? _settings.homeObserver : null,
+    mode: () => observerMode.wire,
+    radio: () => _telemetryObserver()?.radio.toJson() ?? const <String, dynamic>{},
+    autoTimer: services.observerHeartbeatTimer,
   );
+
+  /// Sharing is on for a real radio, the disclosure was seen and the server took the key: this phone is an observer now.
+  bool get observerSharing =>
+      _settings.telemetryEnabled && _radioKind != RadioKind.simulator && _telemetryDisclosed() && keyApproved;
+
+  /// What this phone is right now (contract section 8): `drive` while a drive records, `home` with Home observer on,
+  /// else `background`.
+  ObserverMode get observerMode =>
+      driving ? ObserverMode.drive : (homeObserverActive ? ObserverMode.home : ObserverMode.background);
+
+  // ---------- drive position for observer packets (contract section 8.2) ----------
+  final List<GeoFix> _driveFixes = [];
+  GeoFix? _driveStartFix;
+
+  void _noteDriveFix(GeoFix f) {
+    _driveStartFix ??= f;
+    _driveFixes.add(f);
+    final cut = f.at.subtract(const Duration(minutes: 2));
+    _driveFixes.removeWhere((x) => x.at.isBefore(cut));
+  }
+
+  /// For tests: a drive GPS fix as the engine's monitor would report it.
+  @visibleForTesting
+  void debugDriveFix(GeoFix f) => _noteDriveFix(f);
+
+  /// The drive's own pings go to the server publicly (uploads on, key accepted): only then may observer packets carry the
+  /// exact drive position or own echoes their raw bytes.
+  bool get _driveUploadsPublic => driving && _settings.autoSync && keyApproved;
+
+  /// A position is protected by the drive privacy rules: inside a privacy zone, or within the start trim of this drive.
+  bool _privacyProtected(double lat, double lon) {
+    final z = _privacyZones;
+    final zones = z?.zones ?? const [];
+    for (final zone in zones) {
+      if (distanceM(lat, lon, zone.lat, zone.lon) <= zone.radiusM) return true;
+    }
+    final start = _driveStartFix;
+    final trim = (z?.trimM ?? 0).toDouble();
+    if (start != null && trim > 0 && distanceM(lat, lon, start.lat, start.lon) <= trim) return true;
+    return false;
+  }
+
+  /// The exact position of a packet heard at [at] during a drive: the drive fix nearest [at] within 10 s, unless the
+  /// person chose Region only, the drive is not uploaded publicly, the fix is poor (> 500 m) or the drive privacy rules
+  /// protect it. Null = fall back to the cell (or nothing for Region only).
+  TelemetryPos? _drivePos(DateTime at) {
+    if (!_driveUploadsPublic || _settings.telemetryRegionOnly) return null;
+    GeoFix? best;
+    var bestD = const Duration(seconds: 11);
+    for (final f in _driveFixes) {
+      final d = f.at.toUtc().difference(at.toUtc()).abs();
+      if (d <= const Duration(seconds: 10) && d < bestD) {
+        best = f;
+        bestD = d;
+      }
+    }
+    if (best == null) return null;
+    final acc = best.accuracyM;
+    if (acc != null && (acc > 500 || !acc.isFinite)) return null;
+    if (_privacyProtected(best.lat, best.lon)) return null;
+    final p = TelemetryPos(best.lat, best.lon, accM: acc != null && acc > 0 ? acc : null);
+    return p.valid ? p : null;
+  }
+
+  /// A ping of ours was uploaded publicly: it has a position, the drive goes up and no privacy rule hides it. Only then
+  /// do its echoes carry their raw bytes (section 8.1).
+  bool _pingPublic(DrivePing ping) {
+    if (!_driveUploadsPublic) return false;
+    final la = ping.lat, lo = ping.lon;
+    if (!la.isFinite || !lo.isFinite || (la == 0 && lo == 0)) return false;
+    return !_privacyProtected(la, lo);
+  }
+
+  String? _cellAt(double lat, double lon) {
+    if (_settings.telemetryRegionOnly) return null;
+    if (!_h3Tried) {
+      _h3Tried = true;
+      _h3 = loadHexEngine();
+    }
+    final h = _h3;
+    if (h == null) return null;
+    try {
+      return hexId(hexCellOf(h, lat, lon, res: 7));
+    } catch (_) {
+      return null;
+    }
+  }
 
   /// The home observer service (status, heartbeat count).
   HomeObserverService get homeObserverService => _home;
@@ -1568,7 +1663,7 @@ class AppState extends ChangeNotifier {
   /// Heartbeat, keep-awake and auto-reconnect follow home mode and the radio link.
   void _applyHomeMode() {
     final on = homeObserverActive;
-    if (on && connected) {
+    if (observerSharing && connected) {
       _home.startHeartbeat();
     } else {
       _home.stopHeartbeat();
@@ -1602,7 +1697,7 @@ class AppState extends ChangeNotifier {
         onConnected: (session) async {
           _selfInfo = session.selfInfo;
           unawaited(_telemetrySub?.cancel());
-          _telemetrySub = session.link.rxPackets.listen(_onTelemetryRx, onError: (Object _) {});
+          _telemetrySub = _observerStream(session.link).listen(_onTelemetryRx, onError: (Object _) {});
         },
       );
       if (session != null) diagnostics.add('Home observer: radio reconnected');
@@ -1636,7 +1731,11 @@ class AppState extends ChangeNotifier {
     () => [publicChannelSecret16, ...?hashtagChannelKeys?.call()],
     named: () => [
       (name: 'public', key: publicChannelSecret16),
-      for (final n in hashtagChannelNames?.call() ?? const <String>[])
+      for (final n in {
+        ...?hashtagChannelNames?.call(),
+        // The wardrive channel (our own pings): its packets are proven like any # channel the phone holds.
+        if (_settings.channel.trim().startsWith('#')) _settings.channel,
+      })
         (name: _channelLabel(n), key: hashtagSecret16(n)),
     ],
   );
@@ -1646,15 +1745,21 @@ class AppState extends ChangeNotifier {
     return t.startsWith('#') ? t : '#$t';
   }
 
+  /// The link's packets for the observer: the never-paused stream of a real MeshCore link (section 8.2).
+  static Stream<RxPacket> _observerStream(CompanionLink link) =>
+      link is MeshCoreCompanionLink ? link.observerRxPackets : link.rxPackets;
+
   void _onTelemetryRx(RxPacket rx) {
     if (!_settings.telemetryEnabled) return;
-    final home = homeObserverActive;
+    final mode = observerMode;
+    final pos = mode == ObserverMode.drive ? _drivePos(rx.at) : null;
     final r = TelemetryRecord.fromRx(
       rx,
       region: _currentRegion?.code,
       channelMatch: _shareable.match,
-      cell: home ? null : _telemetryCell(rx.at),
-      mode: home ? ObserverMode.home : ObserverMode.background,
+      cell: mode == ObserverMode.home || pos != null ? null : _telemetryCell(rx.at),
+      mode: mode,
+      pos: pos,
       ownPublicKey: _selfInfo?.publicKey,
     );
     if (r != null) _tele.add(r);
@@ -1947,7 +2052,7 @@ class AppState extends ChangeNotifier {
       final info = session.selfInfo!;
       _selfInfo = info;
       unawaited(_telemetrySub?.cancel());
-      _telemetrySub = link.rxPackets.listen(_onTelemetryRx, onError: (Object _) {});
+      _telemetrySub = _observerStream(link).listen(_onTelemetryRx, onError: (Object _) {});
       _connecting = false;
       _claims?.radioChanged();
       // A radio used for the first time is asked once how its antenna is set up (the UI opens the sheet).
@@ -2028,7 +2133,7 @@ class AppState extends ChangeNotifier {
           _selfInfo = session.selfInfo;
           _claims?.radioChanged();
           unawaited(_telemetrySub?.cancel());
-          _telemetrySub = link.rxPackets.listen(_onTelemetryRx, onError: (Object _) {});
+          _telemetrySub = _observerStream(link).listen(_onTelemetryRx, onError: (Object _) {});
           _attachGate(engine);
           await engine.resumeOnLink(link);
           // Radio-health sampling follows the new link (the old one is gone).
@@ -2463,7 +2568,10 @@ class AppState extends ChangeNotifier {
         location: location,
         clock: services.clock,
         sink: _healthSink,
-        onFix: _rawFixes.add,
+        onFix: (f) {
+          _noteDriveFix(f); // drive position for observer packets (section 8.2)
+          _rawFixes.add(f);
+        },
         onHealth: (h) => gpsHealth.value = h,
         access: services.locationAccess?.check,
         background: services.backgroundLocation,
@@ -2523,6 +2631,12 @@ class AppState extends ChangeNotifier {
       _stopDriveContext();
       await _teardownEngine();
       await _flushWrites();
+      // The drive's end trim (section 8.2): exact positions still waiting near where the drive ended go out as their cell.
+      final end = _driveFixes.isNotEmpty ? _driveFixes.last : null;
+      final trim = (_privacyZones?.trimM ?? 0).toDouble();
+      if (end != null && trim > 0) _telemetry?.trimDriveEnd(end.lat, end.lon, trim, _cellAt);
+      _driveFixes.clear();
+      _driveStartFix = null;
       if (sid != null) {
         try {
           final saved = await services.store.pings(sid);
@@ -2557,7 +2671,9 @@ class AppState extends ChangeNotifier {
   void _onPing(DrivePing ping) {
     if (!_seenPingIds.add(ping.id)) return;
     // Our own transmission (and so its echoes) is never telemetry.
-    if (ping.pktHash != null) _telemetry?.excludeHash(ping.pktHash!);
+    // Our own transmission: its echoes are observer packets too, marked own (contract section 8.1); raw only when this
+    // ping itself goes up publicly.
+    if (ping.pktHash != null) _telemetry?.markOwn(ping.pktHash!, publicRaw: _pingPublic(ping));
     final sid = _session?.id;
     if (sid == null) return;
     _pingCount++;

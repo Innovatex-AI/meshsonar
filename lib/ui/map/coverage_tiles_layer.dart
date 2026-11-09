@@ -74,10 +74,13 @@ class CoverageTilesLayerState extends State<CoverageTilesLayer> {
     final got = _shapes[key];
     if (got != null) return got;
     final measured = widget.layer == CoverageTileLayer.measured;
+    final heard = widget.layer == CoverageTileLayer.heard;
     final out = <CellShape>[];
     for (var f = 0; f < d.length; f++) {
       final band = d.band[f];
-      final style = measured ? measuredStyleIndex(band, d.n[f] < widget.faintBelow) : predictedStyleIndex(band, d.o[f]);
+      final style = heard
+          ? band.clamp(0, 6)
+          : (measured ? measuredStyleIndex(band, d.n[f] < widget.faintBelow) : predictedStyleIndex(band, d.o[f]));
       out.add(CellShape.slice(d.latLon, d.starts[f], d.starts[f + 1], style));
     }
     if (_shapes.length > 600) _shapes.remove(_shapes.keys.first);
@@ -88,7 +91,7 @@ class CoverageTilesLayerState extends State<CoverageTilesLayer> {
   Widget build(BuildContext context) {
     final camera = MapCamera.of(context);
     final meta = widget.meta;
-    final measured = widget.layer == CoverageTileLayer.measured;
+    final measured = widget.layer != CoverageTileLayer.predicted; // measured and heard follow the measured zoom rules
     if (!measured && camera.zoom < meta.predictedFromZoom) return const SizedBox.shrink();
     final z = coverageTileZoom(camera.zoom);
     final b = camera.visibleBounds;
@@ -125,7 +128,11 @@ class CoverageTilesLayerState extends State<CoverageTilesLayer> {
     }
     final sig = used.join(',');
     if (_stylesFor != widget.colors || _styles == null) {
-      _styles = measured ? measuredStyles(widget.colors) : predictedStyles(widget.colors);
+      _styles = switch (widget.layer) {
+        CoverageTileLayer.measured => measuredStyles(widget.colors),
+        CoverageTileLayer.predicted => predictedStyles(widget.colors),
+        CoverageTileLayer.heard => heardStyles(widget.colors),
+      };
       _stylesFor = widget.colors;
       _usedSig = '';
     }
