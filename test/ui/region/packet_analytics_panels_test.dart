@@ -1,5 +1,5 @@
-// Region tabs Hops, Silent and Wardrive (website vertical W): states (loading, ready, empty window, pending with the server's reason,
-// error + Retry, 404), the sample line with data age on every tab, window change re-asks, the group-text switch, the silent search and
+// Region tabs Silent and Wardrive (website vertical W): states (loading, ready, empty window, pending with the server's reason,
+// error + Retry, 404), the sample line with data age on every tab, window change re-asks, the silent search and
 // checklist, "Yours" marking, and the wardrive note that pings cannot be told from group text.
 import 'dart:convert';
 
@@ -15,19 +15,6 @@ final _now = DateTime.utc(2026, 11, 1, 12);
 Widget _app(Widget child) => MaterialApp(theme: meshSonarTheme(Brightness.light), home: Scaffold(body: child));
 const _status = {'state': 'ready', 'reason': null, 'computedAt': '2026-11-01T11:59:00Z', 'source': 'ext_packet'};
 final _sample = {'windowHours': 24, 'observations': 130, 'packets': 90, 'observers': 4, 'oldest': '2026-11-01T00:00:00Z', 'newest': '2026-11-01T11:58:00Z'};
-
-Map<String, dynamic> _hop() => {
-      'status': _status,
-      ..._sample,
-      'all': [
-        {'hops': 0, 'flood': 10, 'direct': 4, 'other': 0},
-        {'hops': 3, 'flood': 50, 'direct': 0, 'other': 0},
-        {'hops': 4, 'flood': 0, 'direct': 20, 'other': 0},
-      ],
-      'group': [
-        {'hops': 3, 'flood': 8, 'direct': 0, 'other': 0},
-      ],
-    };
 
 Map<String, dynamic> _silent({List<Map<String, dynamic>>? rows, Map<String, dynamic>? status}) => {
       'status': status ?? _status,
@@ -80,62 +67,6 @@ MockClient _c(Object Function(Uri) body, {List<Uri>? log, int code = 200}) => Mo
     });
 
 void main() {
-  group('Hops', () {
-    testWidgets('ready: finding, figures, sample line with data age, query carries the window', (tester) async {
-      final log = <Uri>[];
-      await tester.pumpWidget(_app(HopsPanel(baseUrl: 'https://cmh.meshsonar.com', regionSlug: 'cmh', client: _c((_) => _hop(), log: log), now: () => _now)));
-      await tester.pumpAndSettle();
-      expect(log.single.path, '/api/cmh/region-hop-route');
-      expect(log.single.queryParameters, {'hours': '24'});
-      expect(find.textContaining('of packets heard here were flood-routed'), findsOneWidget);
-      expect(find.textContaining('Most arrive after 3 hops'), findsOneWidget);
-      final line = tester.widget<Text>(find.byKey(const Key('sample-line'))).data!;
-      expect(line, contains('Last 24 h'));
-      expect(line, contains('130 observations'));
-      expect(line, contains('90 distinct packets'));
-      expect(line, contains('4 observers'));
-      expect(line, contains('newest packet 2 min ago'));
-    });
-
-    testWidgets('changing the window asks again; Group text narrows the figures', (tester) async {
-      final log = <Uri>[];
-      await tester.pumpWidget(_app(HopsPanel(baseUrl: 'https://cmh.meshsonar.com', regionSlug: 'cmh', client: _c((_) => _hop(), log: log), now: () => _now)));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('48 h'));
-      await tester.pumpAndSettle();
-      expect(log.last.queryParameters, {'hours': '48'});
-      await tester.tap(find.text('Group text'));
-      await tester.pumpAndSettle();
-      expect(find.textContaining('of group texts heard here were flood-routed'), findsOneWidget);
-    });
-
-    testWidgets('no observations: honest empty text, no chart', (tester) async {
-      await tester.pumpWidget(_app(HopsPanel(
-          baseUrl: 'https://cmh.meshsonar.com',
-          regionSlug: 'cmh',
-          client: _c((_) => {'status': _status, 'windowHours': 24, 'observations': 0, 'packets': 0, 'observers': 0, 'newest': null, 'all': [], 'group': []}),
-          now: () => _now)));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('hops-empty')), findsOneWidget);
-      expect(find.byKey(const Key('chart-hops-hist')), findsNothing);
-    });
-
-    testWidgets('error then Retry recovers; 404 says not published', (tester) async {
-      var fail = true;
-      final c = MockClient((_) async => fail ? http.Response('down', 503) : http.Response(jsonEncode(_hop()), 200));
-      await tester.pumpWidget(_app(HopsPanel(baseUrl: 'https://cmh.meshsonar.com', regionSlug: 'cmh', client: c, now: () => _now)));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('hops-error')), findsOneWidget);
-      fail = false;
-      await tester.tap(find.text('Retry'));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('hops-finding')), findsOneWidget);
-      await tester.pumpWidget(_app(HopsPanel(baseUrl: 'https://old.meshsonar.com', regionSlug: 'old', client: _c((_) => {}, code: 404), now: () => _now)));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('hops-notfound')), findsOneWidget);
-    });
-  });
-
   group('Silent repeaters', () {
     testWidgets('lists them with the hint and checklist; Yours is marked; the caveats and evidence show', (tester) async {
       await tester.pumpWidget(_app(SilentRepeatersPanel(

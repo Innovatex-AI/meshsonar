@@ -11,7 +11,6 @@ import '../../radio/tools/radio_tools.dart';
 import '../../radio/tools/tool_frames.dart' show maxTraceHops, traceHashSizes;
 import '../../radio/tools/trace_tool.dart';
 import '../app.dart';
-import '../region/routes_panel.dart' show openFloodRoutes;
 import 'contact_ref.dart';
 import 'tool_kit.dart';
 import 'tools_host.dart';
@@ -139,14 +138,6 @@ class _TraceBodyState extends State<_TraceBody> {
     setState(() => _comparison = compareTraces(a, b));
   }
 
-  /// The network-wide flood route analysis (all observers of the region), native: same data as the website's routes page.
-  void _openNetworkRoutes() {
-    final site = widget.host.regionSite;
-    if (site == null) return;
-    final base = site.replace(path: '', query: '', fragment: '').toString().replaceAll(RegExp(r'/+$'), '');
-    openFloodRoutes(context, baseUrl: base, regionSlug: site.host.split('.').first);
-  }
-
   @override
   Widget build(BuildContext context) {
     final tools = widget.tools;
@@ -264,16 +255,6 @@ class _TraceBodyState extends State<_TraceBody> {
                           if (mounted) setState(() {});
                         },
                 ),
-              if (widget.host.regionSite != null) ...[
-                const SizedBox(height: Gap.m),
-                OutlinedButton.icon(
-                  key: const Key('trace-network-routes'),
-                  style: OutlinedButton.styleFrom(minimumSize: const Size(kToolTarget, kToolTarget)),
-                  onPressed: _openNetworkRoutes,
-                  icon: const Icon(Icons.hub_outlined),
-                  label: const Text('Network flood routes (all observers)'),
-                ),
-              ],
               ..._savedSection(context),
             ]),
           ),

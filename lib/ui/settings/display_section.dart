@@ -281,8 +281,6 @@ Future<String?> pickUnit(BuildContext context, UnitQuantity q) {
 String paletteSummary(ColourPalette p) => switch (p) {
   ColourPalette.standard => 'Red to yellow to green: dark red where nothing answered, green for the strongest signal.',
   ColourPalette.colourBlind => 'Blue to yellow to orange. Safe for red-green and blue-yellow colour blindness. Link lines turn dashed.',
-  ColourPalette.highContrast =>
-    'Brighter on the dark map and deeper on the light map, for strong separation from the map. Link lines turn dashed.',
 };
 
 /// The coverage colours of [p] as a strip (the same preview as the website's palette picker): Excellent to Edge, then
@@ -312,7 +310,7 @@ class PaletteStrip extends StatelessWidget {
   }
 }
 
-/// Settings > Units & display > Colour palette: Standard, Colour-blind safe, High contrast. Applies to every strength
+/// Settings > Units & display > Colour palette: Standard or Colour-blind safe. Applies to every strength
 /// colour at once (hexes, ping dots, network cells, SNR pills, link lines, charts, the legend).
 class ColourPaletteTile extends StatelessWidget {
   const ColourPaletteTile({super.key});
@@ -332,7 +330,7 @@ class ColourPaletteTile extends StatelessWidget {
           title: Text(e.title),
           subtitle: Text(
             'How signal strength is coloured on every map and chart. Grey (nothing heard) and purple (heard, signal unknown) '
-            'stay distinct in all three.',
+            'stay distinct in both.',
             key: const Key('colour-palette-explanation'),
           ),
         ),

@@ -503,7 +503,7 @@ class _Highlights extends StatelessWidget {
   }
 }
 
-/// Heard fraction 0..1 → colour: silent red at 0, then weak blue → teal → green.
+/// Heard fraction 0..1 → colour: grey (silent) at 0, then the palette's ramp (red → yellow → green on Standard).
 Color heardColor(MeshSonarColors m, ReportCell c) {
   if (c.heard == 0) return m.silent;
   final f = c.heardFraction;

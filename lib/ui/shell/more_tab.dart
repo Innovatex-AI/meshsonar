@@ -20,6 +20,7 @@ import '../settings_screen.dart';
 import '../tools/adverts_screen.dart';
 import '../tools/discover_screen.dart';
 import '../account/devices_screen.dart';
+import '../design/app_surfaces.dart' show showAppToast;
 import '../design/app_widgets.dart' show AppSwitchTile;
 import '../account/leaderboard_screen.dart';
 import '../account/reports_history_screen.dart';
@@ -128,12 +129,27 @@ class _MoreTabState extends State<MoreTab> {
   }
 }
 
-class MoreList extends StatelessWidget {
+class MoreList extends StatefulWidget {
   final void Function(MoreItem) onOpen;
   const MoreList({super.key, required this.onOpen});
 
   @override
+  State<MoreList> createState() => _MoreListState();
+}
+
+class _MoreListState extends State<MoreList> {
+  /// The Developer section is hidden until a long-press on the version row (About MeshSonar). Not remembered: it hides
+  /// again when the app restarts. The switches inside keep their own saved values.
+  bool _developer = false;
+
+  void _toggleDeveloper() {
+    setState(() => _developer = !_developer);
+    showAppToast(context, _developer ? 'Developer options shown at the end of the list.' : 'Developer options hidden.');
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final onOpen = widget.onOpen;
     final s = AppScope.of(context);
     final t = Theme.of(context);
     Widget row(MoreItem item, IconData icon, String title, String subtitle, {String? keyName, bool external = false}) =>
@@ -166,29 +182,14 @@ class MoreList extends StatelessWidget {
             row(MoreItem.myRadios, Icons.verified_user_outlined, 'Claimed radios',
                 'Radios and repeaters you claimed and manage'),
             row(MoreItem.devices, Icons.key_outlined, 'Devices and keys', 'Your driver key, other phones, MeshMapper forwarding'),
-            row(MoreItem.leaderboard, Icons.emoji_events_outlined, 'Leaderboard', 'Drivers who opted in, this region or every region'),
-            row(MoreItem.myReports, Icons.report_gmailerrorred_outlined, 'My reports', 'Problem reports you sent and where they stand'),
-            // Kept above the long groups on purpose: rows below it keep their distance from the end of the list.
-            header('Developer'),
-            ValueListenableBuilder<bool>(
-              valueListenable: AppFlags.driveRedesignNotifier,
-              builder: (context, on, _) => AppSwitchTile(
-                switchKey: const Key('more-drive-redesign'),
-                title: 'New Drive screen',
-                subtitle: 'The map with the bottom panel. Turn off to go back to the old footer layout.',
-                value: on,
-                onChanged: (v) {
-                  final dir = s.services.uiPrefsFile?.parent;
-                  AppFlags.setDriveRedesign(v, file: dir == null ? null : File('${dir.path}${Platform.pathSeparator}redesign_flags.json'));
-                },
-              ),
-            ),
             header('Radios and tools'),
             row(MoreItem.repeaters, Icons.cell_tower, 'Repeaters, rooms and radio tools',
                 'In Chat, under Network: repeaters, rooms, sensors, Trace, Discover, Rx log, Adverts', keyName: 'network'),
             row(MoreItem.noiseFloor, Icons.show_chart, 'Noise floor and health', 'Interference and radio counters, live'),
             row(MoreItem.telemetry, Icons.thermostat, 'Telemetry', 'Battery, temperature and position of a node'),
             row(MoreItem.radioSetup, Icons.tune, 'Radio setup', 'Name, position, power and frequency, with checks'),
+            header('Community'),
+            row(MoreItem.leaderboard, Icons.emoji_events_outlined, 'Leaderboard', 'Drivers who opted in, this region or every region'),
             row(MoreItem.observerJoin, Icons.visibility_outlined, 'Become an observer',
                 'Step by step: make your repeater report to MeshSonar. Free'),
             header('App'),
@@ -199,9 +200,9 @@ class MoreList extends StatelessWidget {
                 'Message alerts, previews, quiet hours, per-conversation mute'),
             row(MoreItem.settings, Icons.settings, 'Settings', 'Units, maps, uploads, storage, diagnostics, your driver key'),
             row(MoreItem.legend, Icons.palette_outlined, 'Colour legend', 'What the map colours mean'),
-            row(MoreItem.howItWorks, Icons.explore_outlined, 'How it works', 'From a ping to a square on the map, and a tour of the tabs'),
+            row(MoreItem.howItWorks, Icons.explore_outlined, 'How it works', 'From a ping to a coloured hexagon on the map, and a tour of the tabs'),
             row(MoreItem.method, Icons.menu_book_outlined, 'Method', 'How the figures are made, and what they cannot say'),
-            header('About'),
+            header('Help and about'),
             row(MoreItem.privacy, Icons.privacy_tip_outlined, 'Privacy and data sharing', 'What is shared, and how to stop it'),
             ListTile(
               key: const Key('more-report'),
@@ -211,8 +212,18 @@ class MoreList extends StatelessWidget {
               trailing: const Icon(Icons.chevron_right),
               onTap: () => openReportProblem(context),
             ),
-            row(MoreItem.about, Icons.info_outline, 'About MeshSonar',
-                'Version ${s.services.appInfo.version ?? ''}, licence, credits'),
+            row(MoreItem.myReports, Icons.report_gmailerrorred_outlined, 'My reports', 'Problem reports you sent and where they stand'),
+            ListTile(
+              key: const Key('more-about'),
+              minVerticalPadding: Gap.s,
+              leading: const Icon(Icons.info_outline),
+              title: const Text('About MeshSonar'),
+              subtitle: Text('Version ${s.services.appInfo.version ?? ''}, licence, credits'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => onOpen(MoreItem.about),
+              // Developer options: a long-press on the version row shows (or hides) them.
+              onLongPress: _toggleDeveloper,
+            ),
             ListTile(
               key: const Key('more-privacy-policy'),
               leading: const Icon(Icons.policy_outlined),
@@ -221,6 +232,22 @@ class MoreList extends StatelessWidget {
               trailing: const Icon(Icons.open_in_new, size: 18),
               onTap: () => s.services.openUrl(Uri.parse(privacyPolicyUrl)),
             ),
+            if (_developer) ...[
+              header('Developer'),
+              ValueListenableBuilder<bool>(
+                valueListenable: AppFlags.driveRedesignNotifier,
+                builder: (context, on, _) => AppSwitchTile(
+                  switchKey: const Key('more-drive-redesign'),
+                  title: 'New Drive screen',
+                  subtitle: 'The map with the bottom panel. Turn off to go back to the old footer layout.',
+                  value: on,
+                  onChanged: (v) {
+                    final dir = s.services.uiPrefsFile?.parent;
+                    AppFlags.setDriveRedesign(v, file: dir == null ? null : File('${dir.path}${Platform.pathSeparator}redesign_flags.json'));
+                  },
+                ),
+              ),
+            ],
             const SizedBox(height: Gap.xl),
           ],
         ),

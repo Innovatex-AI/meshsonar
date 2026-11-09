@@ -2,6 +2,7 @@
 // palette, is reachable from the layers sheet and Settings > About, and its swatch colours equal the colours the maps draw.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/app/app_flags.dart';
 import '../../support/cell_layers.dart';
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/colour_palette.dart';
@@ -138,7 +139,7 @@ void main() {
       expect(p.dashed, isFalse);
     });
 
-    for (final pal in [ColourPalette.colourBlind, ColourPalette.highContrast]) {
+    for (final pal in [ColourPalette.colourBlind]) {
       testWidgets('link lines in ${pal.id}: dashed, not orange', (tester) async {
         await pumpLegend(tester, palette: pal);
         expect(find.text('Dashed line: who heard what'), findsOneWidget);
@@ -157,7 +158,19 @@ void main() {
       expect(tri.where((n) => n == '_TriPainter'), hasLength(2));
     });
 
-    testWidgets('heard box: bright, dimmer and faint bars', (tester) async {
+    testWidgets('no heard box section on the redesigned Drive screen (the default)', (tester) async {
+      final was = AppFlags.driveRedesign;
+      AppFlags.driveRedesign = true;
+      addTearDown(() => AppFlags.driveRedesign = was);
+      await pumpLegend(tester);
+      expect(find.byKey(const Key('legend-section-heard')), findsNothing);
+      expect(find.text('The heard box'), findsNothing);
+    });
+
+    testWidgets('heard box (old Drive layout only): bright, dimmer and faint bars', (tester) async {
+      final was = AppFlags.driveRedesign;
+      AppFlags.driveRedesign = false;
+      addTearDown(() => AppFlags.driveRedesign = was);
       await pumpLegend(tester);
       expect(find.text('Bright bar: heard recently'), findsOneWidget);
       expect(find.text('Dimmer bar: missed a ping or two'), findsOneWidget);

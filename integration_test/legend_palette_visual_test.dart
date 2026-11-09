@@ -56,7 +56,7 @@ void main() {
       await pumpFor(t, const Duration(seconds: 8));
     }
 
-    for (final p in ['standard', 'colour_blind', 'high_contrast']) {
+    for (final p in ['standard', 'colour_blind']) {
       // Settings tile
       await openTab(t, 'Settings');
       final opt = find.byKey(Key('colour-palette-$p'));

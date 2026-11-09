@@ -1,4 +1,4 @@
-// More > Radios and tools > Become an observer: the wizard walks the existing claim flow; it adds no new network call.
+// More > Community > Become an observer: the wizard walks the existing claim flow; it adds no new network call.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/ui/claims/claim_repeater_screen.dart';
@@ -28,7 +28,7 @@ void main() {
     expect(find.byType(ClaimRepeaterScreen), findsOneWidget);
   });
 
-  testWidgets('More lists the wizard under Radios and tools', (tester) async {
+  testWidgets('More lists the wizard under Community', (tester) async {
     useTallScreen(tester);
     await Harness().pumpApp(tester);
     await tapShellTab(tester, 'More');

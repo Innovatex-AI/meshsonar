@@ -10,7 +10,7 @@
 //                   the display's refresh rate (60 or 120 Hz) while anything moves and sleeps when nothing does.
 //
 // Direction: a navigation arrow (chevron), not a dot. It points along the course while the car moves (above ~1.5 m/s) and along
-// the compass when stopped; the angle is eased along the shortest arc, so it never spins at north. Sonar rings are thin circles
+// the compass when stopped; the angle is eased along the shortest arc, so it never spins at north. Ping rings are thin circles
 // that pulse out of it on each ping, so the two never look alike. GPS weak (no fix for 2.5 s): the arrow dims, its ring grows
 // and a "GPS weak" tag appears; after 5 s it stops coasting and holds.
 //

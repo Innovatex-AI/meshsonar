@@ -21,7 +21,6 @@
 //      the `measured` layer): a quiet "where hasn't this been driven" background layer. Only cells the
 //      network actually measured are tinted; everywhere else is left blank map — that absence is the gap
 //      indicator, so there is no "no data" placeholder for it.
-//   4. Sonar range rings (1 km / 2 km, or 0.5 mi / 1 mi) around the current position.
 //   5. Links. With [heard]: from the current position to every LIVE heard repeater with a known location, solid
 //      when heard on the latest ping, dashed while it is holding, each with a distance label. Without [heard]:
 //      from the latest ping to each repeater it heard; they fade over ~15 s.
@@ -30,8 +29,9 @@
 //      the viewed region's observers with a public position (`observers`). Taps open detail sheets through
 //      showMapHitSheet (sheets/map_hit_sheet.dart); a cluster zooms to its members.
 //   6. Repeaters (amber beacons). Heard ones pop up and glow while live, then grey out when stale. Tap for the name.
-//   7. Ping dots: heard = blue→teal→green by best SNR (-10 → +10 dB) or plain green in "result" mode; heard nothing
-//      = red. The newest dot pulses once.
+//   7. Ping dots: heard = the palette's SNR ramp by best SNR (-10 → +10 dB; red → yellow → green on Standard) or plain green
+//      in "result" mode; heard nothing = grey. The newest dot pulses once.
+//   (Measured / Predicted coverage v2 are MVT tiles coloured by the mean-SNR band, coverage_bands.dart.)
 //   8. Current position.
 //
 // Efficiency: inputs are snapshots taken once per ping (the heard list, the ping list); derived lists (sorted pings,
@@ -175,7 +175,7 @@ Color hexColor(MeshSonarColors c, HexCell h, PingColorMode mode) => mode == Ping
     : (h.wasHeard ? c.forPing(heard: true, snr: h.bestSnrDb) : c.silent);
 
 /// Colour for a network-coverage [CoverageLevel] on the old path (a server without coverage v2): the website's former discrete
-/// `/coverage` steps (standard palette: strong green, likely blue, possible amber, stretch red), from the chosen colour palette
+/// `/coverage` steps (standard palette: red -> yellow -> green, no blue since build 51), from the chosen colour palette
 /// ([MeshSonarColors.levelColor]). [CoverageLevel.none] (nothing heard) is grey and [CoverageLevel.unknown] (heard, signal
 /// unknown) is purple in every palette.
 Color networkLevelColor(BuildContext context, CoverageLevel level) => MeshSonarColors.of(context).levelColor(level);
@@ -210,10 +210,10 @@ class CoverageMap extends StatefulWidget {
   final List<RepeaterRef> repeaters;
 
   /// Current position, if known. With a [puck] this is the slow position (it refreshes every ~20 m or 2 s, enough for
-  /// labels and the first zoom-in); the dot, the rings and the camera follow the puck itself, frame by frame.
+  /// labels and the first zoom-in); the dot and the camera follow the puck itself, frame by frame.
   final LatLng? position;
 
-  /// The live puck (lib/ui/map/live_puck.dart): when set, the dot, range rings, heading cone, ping rings and the lines
+  /// The live puck (lib/ui/map/live_puck.dart): when set, the dot, heading cone, ping rings and the lines
   /// to the repeaters that heard the latest ping are drawn from it without rebuilding the map on each GPS fix.
   final PuckController? puck;
 
@@ -226,8 +226,9 @@ class CoverageMap extends StatefulWidget {
   /// Draw links from the newest ping to the repeaters it heard.
   final bool showLinks;
 
-  /// Sonar range rings around [position].
-  final bool showRings;
+  /// While following, keep the position two thirds down the map (more road ahead) instead of centred. No ring is drawn:
+  /// the only rings on the map are the animated ping rings of the live puck.
+  final bool lookAhead;
 
   /// Allow pan/zoom.
   final bool interactive;
@@ -354,7 +355,7 @@ class CoverageMap extends StatefulWidget {
     this.puck,
     this.fitToPings = false,
     this.showLinks = true,
-    this.showRings = true,
+    this.lookAhead = true,
     this.interactive = true,
     this.rotatable = false,
     this.showTiles,
@@ -1355,7 +1356,7 @@ class _CoverageMapState extends State<CoverageMap> {
       top: pad.top,
       right: pad.right,
       bottom: pad.bottom,
-      fromTop: widget.showRings ? 0.66 : 0.5,
+      fromTop: widget.lookAhead ? 0.66 : 0.5,
     );
     final r = rot * math.pi / 180;
     final rx = a.dx * math.cos(r) + a.dy * math.sin(r);

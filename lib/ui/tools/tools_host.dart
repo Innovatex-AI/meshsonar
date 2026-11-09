@@ -33,10 +33,9 @@ abstract class ToolsHost implements Listenable {
   /// Stops the drive and saves it.
   Future<void> stopDrive();
 
-  /// The viewed region's suggested radio preset (null when none or not loaded), the region's name, its website address.
+  /// The viewed region's suggested radio preset (null when none or not loaded) and the region's name.
   RadioPreset? get regionPreset;
   String? get regionName;
-  Uri? get regionSite;
 
   /// Region scope names to test scoped adverts against ("#cmh").
   List<String> get scopeNames;
@@ -122,12 +121,6 @@ class AppStateToolsHost implements ToolsHost {
   RadioPreset? get regionPreset => s.viewingPreset;
   @override
   String? get regionName => s.viewingRegion?.name;
-  @override
-  Uri? get regionSite {
-    final u = s.viewingRegion?.url;
-    return u == null ? null : Uri.tryParse(u);
-  }
-
   @override
   List<String> get scopeNames {
     final slug = s.viewingRegion?.slug;

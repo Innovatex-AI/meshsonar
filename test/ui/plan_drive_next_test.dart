@@ -30,7 +30,9 @@ void main() {
     expect(find.byKey(const Key('plan-drive-next')), findsOneWidget);
     expect(find.text('Where to drive next'), findsOneWidget);
     expect(find.byKey(const Key('fake-map')), findsOneWidget);
-    expect(find.textContaining('Silent area'), findsOneWidget);
+    expect(find.textContaining('No reply ('), findsOneWidget);
+    expect(find.textContaining('Grey means'), findsNothing);
+    expect(find.textContaining('Pick a place'), findsNothing);
     expect(find.textContaining('N'), findsWidgets);
     await tester.tap(find.byKey(const Key('plan-navigate-0')));
     await tester.pump();
@@ -48,7 +50,7 @@ void main() {
     await h.pumpApp(tester);
     await tapShellTab(tester, 'Plan');
     await tester.pumpAndSettle();
-    expect(find.textContaining('No silent or unmapped areas'), findsOneWidget);
+    expect(find.textContaining('Nothing to drive to within'), findsOneWidget);
     expect(find.byKey(const Key('plan-navigate-0')), findsNothing);
     await drain(tester);
   });

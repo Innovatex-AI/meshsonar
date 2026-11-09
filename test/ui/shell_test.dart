@@ -265,6 +265,8 @@ void main() {
         final r = find.byKey(Key(key));
         await tester.scrollUntilVisible(r, 120,
             scrollable: find.descendant(of: find.byKey(const Key('more-list')), matching: find.byType(Scrollable)).first);
+        Scrollable.ensureVisible(tester.element(r), alignment: 0.4); // clear of the tab bar
+        await tester.pumpAndSettle();
         await tester.tap(r);
         await tester.pumpAndSettle();
       }
@@ -346,7 +348,7 @@ void main() {
   });
 
   group('Plan tab', () {
-    testWidgets('native tools open a screen (no browser, no external-link icon); the rest open the website page for the region', (tester) async {
+    testWidgets('every tool opens its native screen (no browser, no external-link icon); the removed tools are gone', (tester) async {
       phone(tester);
       final h = Harness();
       await h.pumpApp(tester);
@@ -359,11 +361,8 @@ void main() {
         }
       }
 
-      final web = planTools.where((t) => t.native == null).toList();
-      final native = planTools.where((t) => t.native != null).toList();
-      expect(native.map((t) => t.id), containsAll(['planner', 'recommended', 'sites', 'scenarios', 'tracker', 'link', 'painter', 'airtime', 'presets', 'check', 'field']));
-      expect(plannedInApp, isEmpty, reason: 'every planned in-app tool is now native');
-      for (final t in native) {
+      expect(planTools.map((t) => t.id), ['link', 'painter', 'airtime', 'presets', 'check']);
+      for (final t in planTools) {
         await tester.scrollUntilVisible(find.byKey(Key('plan-${t.id}')), 120, scrollable: list);
         await clearBar(find.byKey(Key('plan-${t.id}')));
         final tile = find.byKey(Key('plan-${t.id}'));
@@ -371,20 +370,15 @@ void main() {
         await tester.tap(tile);
         await tester.pumpAndSettle();
         expect(find.byKey(const Key('plan-list')), findsNothing, reason: '${t.id} opened a screen over the Plan tab');
-        if (const ['link', 'painter', 'airtime', 'presets', 'check', 'field'].contains(t.id)) {
-          expect(find.byKey(Key('plan-page-${t.id}')), findsOneWidget, reason: t.id);
-        }
+        expect(find.byKey(Key('plan-page-${t.id}')), findsOneWidget, reason: t.id);
         await tester.pageBack();
         await tester.pumpAndSettle();
       }
-      for (final t in web) {
-        await tester.scrollUntilVisible(find.byKey(Key('plan-${t.id}')), 120, scrollable: list);
-        await clearBar(find.byKey(Key('plan-${t.id}'))); // clear the bottom bar
-        await tester.tap(find.byKey(Key('plan-${t.id}')));
-        await tester.pump();
-        expect(h.openedUrls.last.path, t.path, reason: t.id);
+      for (final gone in const ['planner', 'recommended', 'sites', 'scenarios', 'tracker', 'field']) {
+        expect(find.byKey(Key('plan-$gone')), findsNothing, reason: '$gone was removed (M0)');
       }
-      expect(h.openedUrls.length, web.length, reason: 'a native tool never opens the browser');
+      expect(h.openedUrls, isEmpty, reason: 'a native tool never opens the browser');
+      expect(find.text('Plan on the website'), findsNothing);
       expect(find.text('Coming next, inside the app'), findsNothing);
       await drain(tester);
     });

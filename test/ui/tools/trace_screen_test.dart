@@ -214,7 +214,7 @@ void main() {
     final k = key('df01', 1);
     final second = key('ab02', 2);
 
-    testWidgets('saved list, open one, native network routes screen, delete', (tester) async {
+    testWidgets('saved list, open one, no flood routes button, delete', (tester) async {
       final (tools, _) = fakeTools(store: [saved('02', 'Hill', k, 2.0, 1.0, lat: 40.13, lon: -82.97), saved('01', 'Hill', k, 4.0, 3.0)]);
       final host = FakeToolsHost()..toolsValue = tools;
       await pumpTool(tester, const TraceScreen(), host);
@@ -227,15 +227,7 @@ void main() {
       expect(find.byKey(const Key('trace-result')), findsOneWidget);
       expect(find.byKey(const Key('tool-map')), findsOneWidget, reason: 'hop with a position and an origin');
       expect(find.byKey(const Key('trace-saved-note')), findsOneWidget);
-      await tester.ensureVisible(find.byKey(const Key('trace-network-routes')));
-      await tapKey(tester, 'trace-network-routes');
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 400));
-      expect(host.openedUrls, isEmpty, reason: 'native, not a browser hop');
-      expect(find.byKey(const Key('routes-list')), findsOneWidget);
-      await tester.pageBack();
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byKey(const Key('trace-network-routes')), findsNothing, reason: 'flood routes were removed (M0)');
 
       await tester.ensureVisible(find.byKey(const Key('trace-saved-02-delete')));
       await tester.tap(find.byKey(const Key('trace-saved-02-delete')));

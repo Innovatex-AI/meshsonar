@@ -15,13 +15,12 @@
 // [layerSwitchKey] (the pre-registry keys are kept: measured = 'layer-network-coverage', heard = 'layer-repeaters', repeaters
 // (roster) = 'layer-region-repeaters'; the rest are 'layer-<id>'), 'layer-<id>-status', 'layer-<id>-retry', 'layer-<id>-key',
 // 'layer-color-snr', 'layer-color-result', 'layer-repeaters-scope', 'layer-measured-options', 'layers-options-page', 'layers-options-back',
-// 'layers-filter', 'layers-credits', 'layers-legend', 'layers-reset', 'network-legend', 'roster-legend'.
+// 'layers-filter', 'layers-credits', 'layers-legend', 'layers-reset', 'network-legend'.
 import 'package:flutter/cupertino.dart' show CupertinoButton, CupertinoSlidingSegmentedControl;
 import 'package:flutter/material.dart';
 
 import '../../../core/map_styles.dart';
 import '../../../core/network_coverage.dart' show CoverageLevel;
-import '../../../core/region_repeaters_api.dart' show RepeaterActivity;
 import '../../design/anchored_sheet.dart';
 import '../../design/app_surfaces.dart';
 import '../../design/app_symbols.dart';
@@ -37,8 +36,6 @@ import '../coverage_map.dart' show networkLevelColor;
 import '../sheets/coverage_cell_sheet.dart' show CoverageBandSwatch;
 import '../legend_sheet.dart' show LegendSwatch, SwatchShape, showMapLegend;
 import '../map_layers.dart' show PingColorMode;
-import 'repeater_cluster_layer.dart' show regionRepeaterColor;
-import '../sheets/repeater_sheet.dart' show rosterStatusText;
 import '../map_tools.dart' show showMapFilterSheet;
 import '../overlays/credits_sheet.dart' show showMapCredits;
 import 'map_layer.dart';
@@ -656,22 +653,16 @@ class _FreshnessBadge extends CustomPainter {
   bool shouldRepaint(_FreshnessBadge o) => o.color != color || o.state != state;
 }
 
-/// The global layer's colour key (website advert-age bands, `core/repeater_points.dart` advertAgeBand: inclusive
-/// 24 h / 7 d / 30 d edges), the data's own "as of" and its credit line. Kept for the compact map key and the guide until
-/// WP7 removes the map key.
+/// The repeater layer's key in the Credits sheet's map key and the guide: the SAME three freshness badges and colours the
+/// repeater markers are painted with (repeater_sprites.dart freshnessOfAge: <= 24 h fresh, <= 7 d recent, older), never the
+/// signal colours (audit 03 §4.1 item 12: this key used green/yellow/grey steps while the markers are blue/amber/grey), plus
+/// the data's own "as of" and its credit line.
 class NetworkAgeLegend extends StatelessWidget {
   final MapRepeaterSet set;
 
   /// One compact row for the map overlay (no as-of / credit lines).
   final bool dense;
   const NetworkAgeLegend({super.key, required this.set, this.dense = false});
-
-  static const List<(CoverageLevel, String)> steps = [
-    (CoverageLevel.strong, '24 h'),
-    (CoverageLevel.good, '7 d'),
-    (CoverageLevel.fair, '30 d'),
-    (CoverageLevel.none, 'Older'),
-  ];
 
   @override
   Widget build(BuildContext context) {
@@ -683,13 +674,13 @@ class NetworkAgeLegend extends StatelessWidget {
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         if (!dense) Text('Last advert:', style: style),
-        for (final (level, label) in steps)
+        for (final item in repeaterFreshnessKey(context, hours: true))
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _Dot(color: networkLevelColor(context, level), size: dense ? 8 : 10),
+              SizedBox(width: dense ? 10 : 14, height: dense ? 10 : 14, child: FittedBox(child: item.swatch)),
               const SizedBox(width: 3),
-              Text(label, style: style),
+              Text(item.label, style: style),
             ],
           ),
         if (!dense) ...[
@@ -719,37 +710,6 @@ class NetworkAgeLegend extends StatelessWidget {
     String two(int v) => v.toString().padLeft(2, '0');
     return '${l.year}-${two(l.month)}-${two(l.day)} ${two(l.hour)}:${two(l.minute)}';
   }
-}
-
-/// The region roster layer's colour key (roster status, same colours the old pin layer used).
-class RosterStatusLegend extends StatelessWidget {
-  const RosterStatusLegend({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    final style = t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant);
-    return Wrap(
-      key: const Key('roster-legend'),
-      spacing: Gap.s,
-      runSpacing: 2,
-      children: [
-        for (final a in RepeaterActivity.values)
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [_Dot(color: regionRepeaterColor(a, Theme.of(context).brightness), size: 10), const SizedBox(width: 3), Text(rosterStatusText(a), style: style)],
-          ),
-      ],
-    );
-  }
-}
-
-class _Dot extends StatelessWidget {
-  final Color color;
-  final double size;
-  const _Dot({required this.color, required this.size});
-  @override
-  Widget build(BuildContext context) => Container(width: size, height: size, decoration: BoxDecoration(color: color, shape: BoxShape.circle));
 }
 
 class _Ring extends StatelessWidget {

@@ -14,6 +14,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../app/app_flags.dart';
 import '../../core/colour_palette.dart';
 import '../../core/coverage_v2.dart';
 import '../../core/network_coverage.dart';
@@ -170,7 +171,8 @@ class _MapLegendSheetState extends State<MapLegendSheet> {
             _section(context, 'repeaters', Icons.cell_tower_rounded, 'Repeaters', _repeaters(context, mc)),
             _section(context, 'links', Icons.timeline_rounded, 'Link lines', _links(context, mc)),
             _section(context, 'observers', Icons.change_history_rounded, 'Observers', _observers(context, mc)),
-            _section(context, 'heard', Icons.list_alt_rounded, 'The heard box', _heard(context, mc)),
+            // The heard box exists only on the old Drive layout (Developer > New Drive screen off); the redesigned screen has none.
+            if (!AppFlags.driveRedesign) _section(context, 'heard', Icons.list_alt_rounded, 'The heard box', _heard(context, mc)),
             _section(context, 'owned', Icons.verified_outlined, 'Owned by you', _owned(context)),
             _section(context, 'why', Icons.help_outline_rounded, 'Why', _why(context)),
           ],

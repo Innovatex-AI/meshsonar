@@ -12,8 +12,15 @@ import '../../core/hex_cells.dart' show loadHexEngine;
 import '../../core/startup_location.dart' show LocationAction;
 import '../../core/units.dart' show Units;
 import '../app.dart';
+import '../../core/coverage_v2.dart' show CoverageBand;
+import '../map/coverage_bands.dart' show CoverageBandColors;
 import '../map/coverage_map.dart' show CoverageMap;
 import '../design/app_surfaces.dart';
+import '../map/overlays/mini_map_credit.dart';
+
+/// The colour the coverage map draws a "No reply" cell in (band 0), so a target dot matches the map and its key.
+Color _noReply(BuildContext context) =>
+    CoverageBandColors.of(MeshSonarColors.of(context).palette, Theme.of(context).brightness)[CoverageBand.noReply];
 
 typedef DriveNextMapBuilder = Widget Function(
   BuildContext context,
@@ -115,7 +122,7 @@ class _DriveNextCardState extends State<DriveNextCard> {
           note == null
               ? 'MeshSonar needs your location to find coverage gaps near you. No account needed.'
               : note.action == LocationAction.ask
-                  ? 'Allow location and MeshSonar lists the silent and unmapped areas near you. No account needed.'
+                  ? 'Allow location and MeshSonar lists the places near you where no repeater answered and the areas nobody has mapped yet. No account needed.'
                   : 'Location is off for MeshSonar. Turn it on in Settings to find coverage gaps near you.',
           action: note?.actionLabel == null
               ? null
@@ -166,8 +173,8 @@ class _DriveNextCardState extends State<DriveNextCard> {
         context,
         _note(
           context,
-          'No silent or unmapped areas within ${units.distance(15000)} of you in the data we have'
-          '. Pick a place on the Drive tab to look elsewhere.',
+          'Nothing to drive to within ${units.distance(15000)} of you in the coverage we have: no cells without a reply '
+          'and no unmapped areas.',
         ),
       );
     }
@@ -178,8 +185,8 @@ class _DriveNextCardState extends State<DriveNextCard> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Grey means someone drove there and the mesh heard nothing. Unmapped means nobody has logged a ping yet '
-            '(it may not be a road). Within ${units.distance(15000)} of you.',
+            'Filled dots are No reply: someone drove there and no repeater answered. Rings are unmapped: nobody has '
+            'logged a ping there yet (it may not be a road). Within ${units.distance(15000)} of you.',
             style: t.textTheme.bodySmall?.copyWith(
               color: t.colorScheme.onSurfaceVariant,
             ),
@@ -213,7 +220,7 @@ class _DriveNextCardState extends State<DriveNextCard> {
       bearingDegrees(me.latitude, me.longitude, x.lat, x.lon),
     );
     final what = silent
-        ? 'Silent area (${x.pings} ping${x.pings == 1 ? '' : 's'}, none heard)'
+        ? 'No reply (${x.pings} ping${x.pings == 1 ? '' : 's'}, no repeater answered)'
         : 'Unmapped area';
     return ListTile(
       key: Key('plan-target-$i'),
@@ -221,7 +228,7 @@ class _DriveNextCardState extends State<DriveNextCard> {
       minVerticalPadding: Gap.s,
       leading: Icon(
         silent ? Icons.circle : Icons.circle_outlined,
-        color: silent ? m.silent : Theme.of(context).colorScheme.primary,
+        color: silent ? _noReply(context) : Theme.of(context).colorScheme.primary,
       ),
       title: Text('${units.distance(x.distanceM)} $dir'),
       subtitle: Text(what),
@@ -288,7 +295,7 @@ class _DriveNextCardState extends State<DriveNextCard> {
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: x.kind == DriveTargetKind.silent
-                            ? m.silent
+                            ? _noReply(context)
                             : Colors.transparent,
                         border: Border.all(
                           color: x.kind == DriveTargetKind.silent
@@ -315,6 +322,7 @@ class _DriveNextCardState extends State<DriveNextCard> {
                 ),
               ],
             ),
+            const MiniMapCredit(),
           ],
         ),
       ),

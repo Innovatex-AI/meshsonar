@@ -51,7 +51,7 @@ class Rig {
           puck: puck,
           prefs: prefs,
           position: const LatLng(40, -83),
-          showRings: true,
+          lookAhead: true,
           showTiles: false,
           networkCells: cells,
           rotatable: rotatable,

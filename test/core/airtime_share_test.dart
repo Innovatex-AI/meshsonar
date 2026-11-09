@@ -41,33 +41,6 @@ void main() {
     expect([m.groupTextTxShare, m.groupTextAirtimeShare, m.transmissions], [null, null, 0]);
   });
 
-  test('parsers: hop bins fill 0..16, unknown fields tolerated, nothing invented', () {
-    final h = HopRoute.parse({
-      'status': {'state': 'ready'},
-      'windowHours': 6,
-      'observations': 12,
-      'packets': 9,
-      'observers': 2,
-      'newest': '2026-11-01T12:00:00Z',
-      'all': [
-        {'hops': 0, 'flood': 4, 'direct': 1, 'other': 0},
-        {'hops': 3, 'flood': 6, 'direct': 0, 'other': 0},
-        {'hops': 99, 'flood': 5}
-      ],
-      'group': [],
-    });
-    expect(h.all.length, 17);
-    expect(HopRoute.totalOf(h.all), 11); // the out-of-range bin is dropped
-    expect(HopRoute.peakOf(h.all)!.hops, 3);
-    expect(HopRoute.meanOf(h.all), closeTo((0 * 5 + 3 * 6) / 11, 1e-9));
-    expect(HopRoute.meanOf(h.group), isNull);
-    expect(h.sample.windowHours, 6);
-    expect(h.sample.newest, DateTime.utc(2026, 11, 1, 12));
-    final empty = HopRoute.parse({});
-    expect(empty.sample.observations, isNull);
-    expect(empty.status.state.name, 'unavailable');
-  });
-
   test('silent repeater search matches name, key start and code, case-insensitively', () {
     const r = SilentRepeater(key: 'abcd1234', hashPrefix: 'ab12', hintCode: 'x', hintText: '', checks: [], name: 'North Hill');
     expect([r.matches('north'), r.matches('AB1'), r.matches('cd'), r.matches('')], [true, true, false, true]);

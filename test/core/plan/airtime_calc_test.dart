@@ -68,7 +68,7 @@ void main() {
     }
   });
 
-  test('raw header parsing, duty cycle, ALOHA and observation bytes match', () {
+  test('raw header parsing, duty cycle and observation bytes match', () {
     for (final r in (a['raws'] as List).cast<Map<String, dynamic>>()) {
       final h = parseRawHeader(r['hex'] as String);
       final want = r['header'] as Map<String, dynamic>?;
@@ -82,32 +82,7 @@ void main() {
     for (final d in (a['duty'] as List).cast<Map<String, dynamic>>()) {
       expect(dutyCyclePct((d['af'] as num).toDouble()), closeTo((d['pct'] as num).toDouble(), 1e-12));
     }
-    for (final d in (a['aloha'] as List).cast<Map<String, dynamic>>()) {
-      expect(alohaCollision((d['g'] as num).toDouble()), closeTo((d['p'] as num).toDouble(), 1e-12));
-    }
     expect(observationBytes(const RawHeader(bytes: 80, routeType: 1, payloadType: 5, hashSize: 1, hopCount: 2), 4, 1), a['observation']);
-  });
-
-  test('the load what-if (projectLoad) matches the website for five scenarios', () {
-    final cases = (a['whatIfs'] as List).cast<Map<String, dynamic>>();
-    expect(cases.length, 5);
-    for (final c in cases) {
-      final m = c['mix'] as Map<String, dynamic>;
-      final w = c['w'] as Map<String, dynamic>;
-      final r = projectLoad(
-        LoadMix(fixedS: (m['fixedS'] as num).toDouble(), floodByHopS: [for (final v in m['floodByHopS'] as List) (v as num).toDouble()], advertByHopS: [for (final v in m['advertByHopS'] as List) (v as num).toDouble()]),
-        WhatIf(
-            repeaters: w['repeaters'] as int,
-            links: w['links'] as int,
-            addRepeaters: w['addRepeaters'] as int,
-            floodMax: w['floodMax'] as int,
-            advertIntervalH: (w['advertIntervalH'] as num).toDouble(),
-            baselineAdvertIntervalH: (w['baselineAdvertIntervalH'] as num).toDouble()),
-      );
-      for (final (name, got) in [('k', r.k), ('kNew', r.kNew), ('rho', r.rho), ('total', r.total), ('flood', r.flood), ('advert', r.advert), ('fixed', r.fixed)]) {
-        expect(got, closeTo((c[name] as num).toDouble(), 1e-9), reason: '$name for $w');
-      }
-    }
   });
 
   test('sensitivity and budget change match the website for every BW x SF', () {

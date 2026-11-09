@@ -12,6 +12,7 @@ import '../../radio/tools/radio_tools.dart';
 import '../map/coverage_map.dart' show CoverageMap;
 import '../theme.dart';
 import 'tools_host.dart';
+import '../map/overlays/mini_map_credit.dart';
 
 /// Smallest tap target (logical px).
 const double kToolTarget = 48;
@@ -477,6 +478,7 @@ class ToolMap extends StatelessWidget {
                     child: p.child ?? Icon(p.icon, color: p.color ?? m.beacon, size: 28),
                   ),
               ]),
+              const MiniMapCredit(),
             ],
           ),
         ),

@@ -114,7 +114,7 @@ class RepeaterSpriteSpec {
 class RepeaterSpriteTheme {
   final Brightness brightness;
 
-  /// High contrast palette setting: keyline at 100% alpha and a 3 pt ring.
+  /// The system's Increase Contrast setting (MediaQuery.highContrast): keyline at 100% alpha and a 3 pt ring.
   final bool highContrast;
 
   /// Selection halo colour and the heard tick colour.

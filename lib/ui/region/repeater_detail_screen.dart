@@ -20,6 +20,7 @@ import '../repeater_reach_section.dart';
 import '../your_drives_section.dart';
 import 'snr_trend_card.dart';
 import '../design/app_surfaces.dart';
+import '../map/overlays/mini_map_credit.dart';
 
 /// Pushes the detail screen for one repeater of the region served at [baseUrl].
 Future<void> openRepeaterDetail(
@@ -485,6 +486,7 @@ class _RepeaterDetailScreenState extends State<RepeaterDetailScreen> {
                       ),
                     ],
                   ),
+                  const MiniMapCredit(),
                 ],
               ),
             ),

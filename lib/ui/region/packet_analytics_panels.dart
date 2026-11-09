@@ -1,4 +1,4 @@
-// Region tabs of vertical W (website /analysis tabs "Hops and routes", "Silent repeaters", "Wardrive share"): native, same data
+// Region tabs of vertical W (website /analysis tabs "Silent repeaters", "Wardrive share"): native, same data
 // (lib/core/region_packet_analytics_api.dart). Every tab shows its window, the age of the newest packet and the sample size;
 // an empty window is said plainly and nothing is drawn. The source holds no packet text: the wardrive view reports the group-text
 // share (the ceiling for the wardrive share) and says why. Airtime is modelled on the phone with the region's radio preset
@@ -16,7 +16,6 @@ import 'region_common.dart';
 import 'region_dataset_view.dart';
 
 String _pct(double v, [int digits = 0]) => '${(v * 100).toStringAsFixed(digits)}%';
-String _hopLabel(int h) => h >= 16 ? '16+' : '$h';
 
 /// "Last 24 h - 130 observations - 90 distinct packets - 4 observers - newest packet 2 min ago".
 String sampleLine(PacketSample s, {DateTime? now, String? extra}) {
@@ -61,104 +60,6 @@ class _HoursPicker extends StatelessWidget {
           onSelectionChanged: (v) => onChanged(v.first),
         ),
       );
-}
-
-// ---------------------------------------------------------------- hops and routes
-class HopsPanel extends StatefulWidget {
-  final String baseUrl;
-  final String regionSlug;
-  final http.Client? client;
-  final DateTime Function() now;
-  const HopsPanel({super.key, required this.baseUrl, required this.regionSlug, this.client, this.now = DateTime.now});
-  @override
-  State<HopsPanel> createState() => _HopsPanelState();
-}
-
-class _HopsPanelState extends State<HopsPanel> {
-  int _hours = 24;
-  bool _groupOnly = false;
-
-  @override
-  Widget build(BuildContext context) => Column(children: [
-        _HoursPicker(value: _hours, onChanged: (h) => setState(() => _hours = h)),
-        Expanded(
-          child: RegionDatasetView<HopRoute>(
-            id: 'hops',
-            title: 'Hops and routes',
-            reloadKey: '${widget.baseUrl}|${widget.regionSlug}|$_hours',
-            now: widget.now,
-            load: () => PacketAnalyticsApi(widget.baseUrl, client: widget.client).hopRoute(hours: _hours),
-            status: (d) => d.status,
-            isEmpty: (d) => (d.sample.observations ?? 0) == 0 || d.status.state.name == 'pending' || d.status.state.name == 'unavailable',
-            emptyText: 'No packets in this window. Hop and route figures come from packets outside live feeds heard in this region.',
-            build: (context, d) => _body(context, d),
-          ),
-        ),
-      ]);
-
-  List<Widget> _body(BuildContext context, HopRoute d) {
-    final t = Theme.of(context);
-    final m = MeshSonarColors.of(context);
-    final bins = d.bins(_groupOnly);
-    final n = HopRoute.totalOf(bins);
-    final flood = HopRoute.floodOf(bins), direct = HopRoute.directOf(bins);
-    final peak = HopRoute.peakOf(bins);
-    final mean = HopRoute.meanOf(bins);
-    final what = _groupOnly ? 'group texts' : 'packets';
-    return [
-      SegmentedButton<bool>(
-        key: const Key('hops-scope'),
-        showSelectedIcon: false,
-        segments: const [ButtonSegment(value: false, label: Text('All packets')), ButtonSegment(value: true, label: Text('Group text'))],
-        selected: {_groupOnly},
-        onSelectionChanged: (v) => setState(() => _groupOnly = v.first),
-      ),
-      const SizedBox(height: Gap.m),
-      if (n > 0 && peak != null)
-        Padding(
-          padding: const EdgeInsets.only(bottom: Gap.m),
-          child: Text(
-            '${_pct(flood / n)} of $what heard here were flood-routed. Most arrive after '
-            '${peak.hops >= 16 ? '16 or more' : '${peak.hops}'} hop${peak.hops == 1 ? '' : 's'} (${_pct(peak.total / n)}), '
-            'on average ${mean!.toStringAsFixed(1)}.',
-            key: const Key('hops-finding'),
-            style: t.textTheme.bodyLarge,
-          ),
-        ),
-      FigureStrip([
-        ('Observations', groupInt(n), 'A packet heard by 3 observers counts 3 times'),
-        ('Flood', n == 0 ? '-' : _pct(flood / n), 'Repeated by every repeater that hears it'),
-        ('Direct', n == 0 ? '-' : _pct(direct / n), 'Follow a known path'),
-        ('Average hops', mean == null ? '-' : mean.toStringAsFixed(1), '16+ counts as 16'),
-      ]),
-      const SizedBox(height: Gap.m),
-      _SampleText(sampleLine(d.sample, now: widget.now())),
-      if (n == 0)
-        const DatasetCard(child: Text('No group text was heard in this window.', key: Key('hops-group-empty')))
-      else
-        DatasetCard(
-          child: ChartFrame(
-            id: 'hops-hist',
-            title: 'Observations by hop count',
-            summary: '${groupInt(n)} observations of $what: ${groupInt(flood)} flood, ${groupInt(direct)} direct. '
-                '${peak == null ? '' : 'Most at ${_hopLabel(peak.hops)} hops.'}',
-            caption: 'How many repeaters had relayed a packet when an outside observer heard it, by route type.',
-            height: 200,
-            table: ChartTable(head: const ['Hops', 'Flood', 'Direct', 'Other'], rows: [
-              for (final b in bins) [_hopLabel(b.hops), groupInt(b.flood), groupInt(b.direct), groupInt(b.other)],
-            ]),
-            chart: BarChart(
-              labels: [for (final b in bins) _hopLabel(b.hops)],
-              series: [
-                BarSeries(name: 'Flood', values: [for (final b in bins) b.flood.toDouble()], color: t.colorScheme.primary),
-                BarSeries(name: 'Direct', values: [for (final b in bins) b.direct.toDouble()], color: m.snrStrong),
-              ],
-              legend: true,
-            ),
-          ),
-        ),
-    ];
-  }
 }
 
 // ---------------------------------------------------------------- silent repeaters

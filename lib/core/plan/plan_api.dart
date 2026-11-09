@@ -1,7 +1,7 @@
-// The three server calls the Plan tools make, all on the website's own public endpoints (no driver key, no account):
+// The two server calls the Plan tools make, both on the website's own public endpoints (no driver key, no account):
 //   POST /api/cmh/score-link   {a,b,haM,hbM}  -> elevation profile + terrain odds   (capability `linkScore`)
 //   POST /api/cmh/coverage     {mode:"coverage",lat,lon,antennaFt,...} -> modelled footprint (capability `coveragePainter`)
-//   GET  /api/cmh/airtime-load ?hours=        -> the region's observed channel load (capability `airtimeLoad`)
+// (The airtime-load read left the app in M0, Nov 8 2026: no region served it.)
 // Each goes through [planCall]: a good answer is stored (PlanStore) and a network failure or a 5xx serves the stored
 // answer for the same request flagged `offline`; a 4xx (bad input, "no boundary") is the server's sentence and never
 // falls back. Sent: coordinates the person typed or picked on the tool, never their drive position, never an identifier.
@@ -12,7 +12,6 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
-import 'airtime_calc.dart' show LoadMix;
 import 'plan_store.dart';
 
 /// An answer (or the sentence explaining why not), with the time a stored copy was fetched when it is one.
@@ -316,132 +315,6 @@ class CoveragePainterApi {
               headers: const {'content-type': 'application/json', 'accept': 'application/json'}, body: jsonEncode(p.toJson()))
           .timeout(timeout),
       parse: PainterResult.parse,
-    ).whenComplete(c.close);
-  }
-}
-
-// ================================================================ airtime load
-class ObserverLoadRow {
-  final String id, name;
-  final int observations;
-  final double airtimeS, meanPct, peakPct;
-  final int hoursOver;
-  final String? peakHour;
-
-  /// The observer's airtime split the what-if scales (null when an older server sends none).
-  final LoadMix? mix;
-  const ObserverLoadRow(this.id, this.name, this.observations, this.airtimeS, this.meanPct, this.peakPct, this.hoursOver, this.peakHour, [this.mix]);
-}
-
-LoadMix? _mix(Object? v) {
-  if (v is! Map<String, dynamic>) return null;
-  List<double> arr(Object? a) => a is List ? [for (final x in a) x is num ? x.toDouble() : 0.0] : const [];
-  final fixed = _n(v['fixedS']);
-  if (fixed == null) return null;
-  return LoadMix(fixedS: fixed, floodByHopS: arr(v['floodByHopS']), advertByHopS: arr(v['advertByHopS']));
-}
-
-class TypeLoadRow {
-  final String type;
-  final int transmissions;
-  final double airtimeS;
-  const TypeLoadRow(this.type, this.transmissions, this.airtimeS);
-}
-
-class TalkerRow {
-  final String key;
-  final String? name;
-  final int transmissions;
-  final double airtimeS, originatedS, relayedS;
-  const TalkerRow(this.key, this.name, this.transmissions, this.airtimeS, this.originatedS, this.relayedS);
-}
-
-class FloodHopRow {
-  final int hops, transmissions;
-  final double airtimeS;
-  const FloodHopRow(this.hops, this.transmissions, this.airtimeS);
-}
-
-class AirtimeLoad {
-  final String region;
-  final int hours;
-  final double flagPct;
-  final int sf, cr, packets, observations, transmissions, lastHourTransmissions;
-  final double bwKHz;
-  final List<ObserverLoadRow> observers;
-  final List<TypeLoadRow> byType;
-  final List<TalkerRow> talkers;
-  final List<FloodHopRow> floodHops;
-  final DateTime? generatedAt;
-  final bool truncated;
-  const AirtimeLoad({
-    required this.region,
-    required this.hours,
-    required this.flagPct,
-    required this.sf,
-    required this.bwKHz,
-    required this.cr,
-    required this.packets,
-    required this.observations,
-    required this.transmissions,
-    required this.lastHourTransmissions,
-    required this.observers,
-    required this.byType,
-    required this.talkers,
-    required this.floodHops,
-    required this.truncated,
-    this.generatedAt,
-  });
-
-  static AirtimeLoad parse(Map<String, dynamic> j) {
-    final r = _m(j['radio']);
-    final c = _m(j['counts']);
-    return AirtimeLoad(
-      region: _s(j['region']) ?? '',
-      hours: _i(j['hours']) ?? 24,
-      flagPct: _n(j['flagPct']) ?? 10,
-      sf: _i(r['sf'])!,
-      bwKHz: _n(r['bwKHz'])!,
-      cr: _i(r['cr'])!,
-      packets: _i(c['packets']) ?? 0,
-      observations: _i(c['observations']) ?? 0,
-      transmissions: _i(c['transmissions']) ?? 0,
-      lastHourTransmissions: _i(j['lastHourTransmissions']) ?? 0,
-      observers: [
-        for (final o in _ms(j['observers']))
-          ObserverLoadRow(_s(o['id']) ?? '', _s(o['name']) ?? 'Observer', _i(o['observations']) ?? 0, _n(o['airtimeS']) ?? 0, _n(o['meanPct']) ?? 0,
-              _n(o['peakPct']) ?? 0, _i(o['hoursOver']) ?? 0, _s(o['peakHour']), _mix(o['mix'])),
-      ],
-      byType: [for (final t in _ms(j['byType'])) TypeLoadRow(_s(t['type']) ?? '?', _i(t['transmissions']) ?? 0, _n(t['airtimeS']) ?? 0)],
-      talkers: [
-        for (final t in _ms(j['talkers']))
-          TalkerRow(_s(t['key']) ?? '', _s(t['name']), _i(t['transmissions']) ?? 0, _n(t['airtimeS']) ?? 0, _n(t['originatedS']) ?? 0, _n(t['relayedS']) ?? 0),
-      ],
-      floodHops: [for (final h in _ms(j['floodHops'])) FloodHopRow(_i(h['hops']) ?? 0, _i(h['transmissions']) ?? 0, _n(h['airtimeS']) ?? 0)],
-      generatedAt: DateTime.tryParse('${j['generatedAt']}')?.toUtc(),
-      truncated: _m(j['fetch'])['truncated'] == true,
-    );
-  }
-}
-
-class AirtimeLoadApi {
-  final String baseUrl;
-  final PlanStore store;
-  final http.Client Function() newClient;
-  final Duration timeout;
-  AirtimeLoadApi(this.baseUrl, this.store, {http.Client Function()? client, this.timeout = const Duration(seconds: 75)}) : newClient = client ?? http.Client.new;
-
-  String keyFor(int hours) => 'airtimeload_${Uri.tryParse(baseUrl)?.host ?? ''}_$hours';
-
-  Future<PlanResult<AirtimeLoad>?> stored({int hours = 24}) => planStored(store, keyFor(hours), AirtimeLoad.parse);
-
-  Future<PlanResult<AirtimeLoad>> load({int hours = 24}) {
-    final c = newClient();
-    return planCall<AirtimeLoad>(
-      store: store,
-      cacheKey: keyFor(hours),
-      send: () => c.get(planEndpoint(baseUrl, 'airtime-load', {'hours': '$hours'}), headers: const {'accept': 'application/json'}).timeout(timeout),
-      parse: AirtimeLoad.parse,
     ).whenComplete(c.close);
   }
 }

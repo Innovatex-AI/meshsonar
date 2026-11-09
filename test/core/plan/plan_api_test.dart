@@ -180,26 +180,6 @@ void main() {
     expect(() => PainterResult.parse({'mode': 'best-pole'}), throwsFormatException);
   });
 
-  test('airtime load: observers, types, talkers and hop rows parse; a region without it gets the server sentence', () async {
-    final api = AirtimeLoadApi('https://cmh.meshsonar.com', PlanStore(), client: () => MockClient((r) async {
-          expect(r.url.queryParameters['hours'], '24');
-          return _json(loadBody());
-        }));
-    final d = (await api.load()).data!;
-    expect((d.sf, d.bwKHz, d.cr), (7, 62.5, 5));
-    expect(d.observers.single.name, 'INNO-OB-1');
-    expect(d.observers.single.peakPct, 2.5);
-    expect(d.observers.single.mix!.floodByHopS, [1.0, 2.0]);
-    expect(d.byType.single.type, 'ADVERT');
-    expect(d.talkers.single.relayedS, 6.0);
-    expect(d.floodHops.single.transmissions, 2);
-    expect(d.lastHourTransmissions, 5);
-    expect(d.truncated, isFalse);
-
-    final none = AirtimeLoadApi('https://x.test', PlanStore(), client: () => MockClient((r) async => _json({'error': 'Live channel load is not available in this region yet', 'unavailable': true}, 404)));
-    expect((await none.load()).error, 'Live channel load is not available in this region yet');
-  });
-
   test('PlanStore round-trips through disk and evicts the oldest beyond its cap', () async {
     final dir = await Directory.systemTemp.createTemp('planstore');
     addTearDown(() async { if (await dir.exists()) await dir.delete(recursive: true); });

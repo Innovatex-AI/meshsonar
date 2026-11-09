@@ -41,10 +41,7 @@ void main() {
     expect(Units.imperial.heightNumber(1.8288), '6');
   });
 
-  test('rings, slider stops and labels follow the system', () {
-    expect(Units.metric.rangeRingLabels, ['1 km', '2 km']);
-    expect(Units.imperial.rangeRingLabels, ['0.5 mi', '1 mi']);
-    expect(Units.imperial.rangeRingMetres, [804.672, 1609.344]);
+  test('slider stops and labels follow the system', () {
     const metric = [15, 25, 50, 75, 100, 125, 150, 200, 250, 300, 400, 500];
     expect(Units.metric.minDistanceStops(metric), metric);
     final imp = Units.imperial.minDistanceStops(metric);

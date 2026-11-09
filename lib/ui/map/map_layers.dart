@@ -13,7 +13,7 @@ enum PingColorMode {
   /// Heard by a repeater (green) or heard nothing (grey): the "did it reach the mesh" view.
   result,
 
-  /// Heard pings by their best SNR (blue → teal → green); heard nothing stays grey.
+  /// Heard pings by their best SNR (the palette's ramp: red → yellow → green on Standard); heard nothing stays grey.
   snr,
 }
 

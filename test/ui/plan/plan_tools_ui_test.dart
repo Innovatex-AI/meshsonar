@@ -45,10 +45,10 @@ Map<String, dynamic> _score({double hill = 215}) => {
 
 void main() {
   group('Airtime and load', () {
-    testWidgets('calculator runs on the phone, matches the formula, and reacts to the packet kind', (tester) async {
+    testWidgets('calculator runs on the phone, matches the formula, and reacts to the packet kind; no live-load card', (tester) async {
       phone(tester, h: 4500);
       final h = Harness();
-      await open(tester, h, AirtimeScreen(store: PlanStore(), client: () => MockClient((r) async => _json({'error': 'down'}, 503))));
+      await open(tester, h, const AirtimeScreen());
       final want = fmtMs(timeOnAir(packetBytes(const PacketSpec(PayloadKind.group, chars: 40, hops: 2)).total, meshcoreUs).totalMs);
       expect(tester.widget<Text>(find.byKey(const Key('airtime-toa'))).data, want);
       await tester.tap(find.byKey(const Key('airtime-kind-ack')));
@@ -56,52 +56,12 @@ void main() {
       final ack = fmtMs(timeOnAir(packetBytes(const PacketSpec(PayloadKind.ack, hops: 2)).total, meshcoreUs).totalMs);
       expect(tester.widget<Text>(find.byKey(const Key('airtime-toa'))).data, ack);
       expect(ack, isNot(want));
+      expect(find.byKey(const Key('airtime-live')), findsNothing, reason: 'the dead live-load half was removed (M0)');
+      expect(find.byKey(const Key('airtime-whatif')), findsNothing);
+      expect(h.openedUrls, isEmpty);
       await drain(tester);
     });
 
-    testWidgets('live load is shown from the server; offline it is the stored copy labelled with its age', (tester) async {
-      phone(tester, h: 4500);
-      final h = Harness();
-      final store = PlanStore(clock: () => DateTime.utc(2026, 11, 1, 6));
-      var online = true;
-      final body = {
-        'hours': 24, 'flagPct': 10, 'radio': {'sf': 7, 'bwKHz': 62.5, 'cr': 5}, 'counts': {'packets': 1, 'observations': 2, 'transmissions': 2},
-        'observers': [
-          {'id': 'o1', 'name': 'INNO-OB-1', 'observations': 2, 'airtimeS': 5.0, 'meanPct': 0.01, 'peakPct': 12.0, 'hoursOver': 1, 'mix': {'fixedS': 1.0, 'floodByHopS': [1.0], 'advertByHopS': []}}
-        ],
-        'byType': [{'type': 'ADVERT', 'transmissions': 2, 'airtimeS': 5.0}], 'talkers': [], 'floodHops': [], 'lastHourTransmissions': 1, 'region': 'CMH', 'fetch': {},
-      };
-      MockClient mk() => MockClient((r) async {
-            if (!online) throw http.ClientException('offline');
-            return _json(body);
-          });
-      await open(tester, h, AirtimeScreen(store: store, client: mk));
-      expect(find.textContaining('INNO-OB-1'), findsWidgets);
-      expect(find.byKey(const Key('airtime-summary')), findsOneWidget);
-      expect(find.textContaining('crossed 10 %'), findsOneWidget);
-      expect(find.textContaining('Offline'), findsNothing);
-      await drain(tester);
-      // second visit, no network
-      online = false;
-      await tester.pageBack();
-      await tester.pumpAndSettle();
-      final ctx = tester.element(find.byKey(const Key('plan-list')));
-      Navigator.of(ctx).push(MaterialPageRoute<void>(builder: (_) => AirtimeScreen(store: store, client: mk)));
-      await tester.pumpAndSettle();
-      expect(find.textContaining('Offline'), findsOneWidget);
-      expect(find.textContaining('INNO-OB-1'), findsWidgets);
-      await drain(tester);
-    });
-
-    testWidgets('a region without the feed shows the server sentence, the calculator still works', (tester) async {
-      phone(tester, h: 4500);
-      final h = Harness();
-      await open(tester, h, AirtimeScreen(store: PlanStore(), client: () => MockClient((r) async => _json({'error': 'Live channel load is not available in this region yet'}, 404))));
-      expect(find.byKey(const Key('plan-error')), findsOneWidget);
-      expect(find.textContaining('not available in this region'), findsOneWidget);
-      expect(find.byKey(const Key('airtime-toa')), findsOneWidget);
-      await drain(tester);
-    });
   });
 
   group('Radio presets', () {
@@ -277,7 +237,7 @@ void main() {
 
   group('small screens and big text', () {
     final screens = <String, Widget Function()>{
-      'airtime': () => AirtimeScreen(store: PlanStore(), client: () => MockClient((r) async => _json({'error': 'x'}, 503))),
+      'airtime': () => const AirtimeScreen(),
       'baseline': () => const Scaffold(body: SizedBox()),
       'presets': () => const PresetsScreen(),
       'link': () => LinkScreen(store: PlanStore(), client: () => MockClient((r) async => _json(_score())), initialA: const LatLng(39.96, -82.99), initialB: const LatLng(40.0, -82.93)),

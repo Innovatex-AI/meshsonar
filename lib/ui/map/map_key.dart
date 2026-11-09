@@ -1,7 +1,7 @@
-// The key on the Drive and full-screen maps: one line for each thing the map is drawing right now, in the colours it is
-// drawing them in. It follows the map: change "colour by" (Best SNR, Share heard, Noise floor, Ping age, Noise vs typical),
-// the ping colours (Heard / not, or by SNR) or switch a layer off and the key changes with it. The repeater dots carry their
-// own line, named as what it is (the age of a repeater's last advert), so it can never be read as a signal scale.
+// The key in the map's Credits sheet: one line for each thing the map is drawing right now, in the colours it is drawing
+// them in. It follows the map: the coverage bands (mean SNR, coverage v2), the ping colours (Heard / not, or by SNR), or a
+// layer switched off, and the key changes with it. The repeater dots carry their own line with the same blue / amber / grey
+// freshness badges the markers use (NetworkAgeLegend), so it can never be read as a signal scale.
 //
 // Keys: 'map-key-cells', 'map-key-pings', 'map-key-repeaters' (the line), plus the dense NetworkAgeLegend's own
 // 'map-network-legend' and the credit 'map-network-attribution'.

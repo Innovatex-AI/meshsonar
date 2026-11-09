@@ -1,6 +1,8 @@
 // "How it works" and "Method" as readable native pages: the website's /how-it-works and the generic /method (hub-pages.tsx
 // HowPage and HubMethodPage), so nothing about how MeshSonar measures needs the browser. Text only, no data, works offline.
-// A region's own analysis method (calibration, downloads) is data and lives in the Region tab's Analysis and Findings panels.
+// A region's own analysis method (calibration, downloads) is data and lives in the Region tab's Analysis panels. The coverage
+// text follows coverage v2 (Nov 8 2026): one fixed H3 res-11 cell, mean SNR of the answered pings, five bands, No reply,
+// Predicted (lib/core/coverage_v2.dart, meshsonar-infra docs/planning/coverage-redesign-plan-2026-11-08.md).
 import 'package:flutter/material.dart';
 
 import '../theme.dart';
@@ -21,7 +23,11 @@ const howSteps = <(String, String)>[
     'The app records who heard you.',
     'Each ping becomes a point: where you were and which repeaters answered, or that none did. "Heard nothing" is data too.',
   ),
-  ('The region\'s map fills in.', 'Uploaded pings are summed into squares on the coverage map of the region they were sent from.'),
+  (
+    'The region\'s map fills in.',
+    'Uploaded pings are averaged into small hexagons, about 50 metres across, on the coverage map of the region they were sent from. '
+        'Each hexagon is coloured by the average signal of its answered pings, from red (weak) through yellow to green (strong).',
+  ),
 ];
 
 const _howSections = <_Section>[
@@ -35,7 +41,7 @@ const _howSections = <_Section>[
   _Section('Go deeper', [
     <String>[
       'Method (More > Method): how the figures are made and what they can and cannot say.',
-      'Analyze > Region: repeaters, observers, packets, flood routes, findings, RF, growth, reports and stats for the region.',
+      'Analyze > Region: repeaters, observers, packets, analysis, RF, growth, reports and stats for the region.',
       'More > Become an observer: make your own repeater report to MeshSonar.',
     ],
   ]),
@@ -46,15 +52,25 @@ const _methodSections = <_Section>[
     'A ping is a short message sent from a phone-paired radio at a known place and time. A ping is heard when at least one repeater echoes it back to the radio. '
         'Only repeaters that answered directly (one hop) count. The app also records the signal-to-noise ratio of each echo. A ping nobody answered is kept: it is how a dead zone shows.',
   ]),
-  _Section('Squares', [
-    'Public maps do not show pings. They show squares a few hundred metres across, each with how many pings were sent in it, how many were heard, the best and median '
-        'signal and how many different repeaters answered. The hub\'s totals count a square once if it has at least one public ping, however many regions or drivers measured it.',
+  _Section('Cells', [
+    'Public maps do not show pings. They show cells: hexagons about 50 metres across (H3 resolution 11), the same size at every zoom; zoomed out, each '
+        'cell is drawn as a dot. Pings from the last 365 days count.',
+    'A cell\'s colour is the average signal-to-noise ratio (SNR) of the pings in it that a repeater answered. It is shown in five bands, red through '
+        'yellow to green: Edge, Weak, Fair, Good and Excellent, by the margin over the weakest signal LoRa can decode at the region\'s radio setting '
+        '(-7.5 dB at SF7; each band is 5 dB wide). Pings nobody answered do not pull the average down: a cell where pings were sent and no repeater '
+        'answered any of them is shown as No reply. A cell with answers but no signal reading is shown as heard, without a band. A cell with fewer '
+        'than 3 pings is drawn faint.',
+  ]),
+  _Section('Predicted coverage', [
+    'Predicted coverage fills the gaps between measured cells with an estimate made from the measured cells around them (within about a kilometre, at least '
+        'two of them, nearer cells counting more). It is drawn hatched, under the measured cells, and fades with distance. It is a guess from real '
+        'drives, never a measurement: drive there to replace it with one.',
   ]),
   _Section('What it cannot say', [
     <String>[
-      'A square with no pings is unmeasured, not dead. Coverage depends on the phone\'s antenna and radio, so one drive is one sample.',
-      'GPS error and the radio\'s listening window mean a ping can land in a neighbouring square.',
-      'Counts are not weighted by time. A square measured once last year and one measured daily look the same except for their count and last-heard date.',
+      'A cell with no pings is unmeasured, not dead. Coverage depends on the phone\'s antenna and radio, so one drive is one sample.',
+      'GPS error and the radio\'s listening window mean a ping can land in a neighbouring cell.',
+      'Pings are not weighted by time: inside the 365-day window a ping from last year counts the same as one from yesterday.',
     ],
   ]),
   _Section('Privacy rules applied before anything is public', [
@@ -160,7 +176,7 @@ class HowItWorksScreen extends StatelessWidget {
   Widget build(BuildContext context) => _InfoPage(
         title: 'How it works',
         keyPrefix: 'howitworks',
-        lead: 'From a phone in a car to a square on a map, in four steps.',
+        lead: 'From a phone in a car to a coloured hexagon on the map, in four steps.',
         sections: _howSections,
         footer: [
           if (onReplayTour != null)

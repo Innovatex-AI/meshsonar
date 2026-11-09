@@ -1,15 +1,13 @@
 // "Packet detail": the website's packet page as a phone screen. Data: `region-packet` (lib/core/region_packet_detail_api.dart),
 // what this region's own observers heard: who heard it, when, at what signal, the path each took and the merged tree of hops.
-// A flood packet also offers "Trace the flood route", which opens the native flood routes view on the same hash.
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import '../../core/region_packet_detail_api.dart';
 import '../../core/region_packets_api.dart' show packetRouteName, packetTypeName;
 import '../theme.dart';
-import 'flood_trace_view.dart' show clockUtc, dayUtc;
+import 'region_common.dart' show clockUtc, dayUtc;
 import 'region_dataset_view.dart';
-import 'routes_panel.dart' show openFloodRoutes;
 
 Future<void> openPacketDetail(BuildContext context, {required String baseUrl, required String regionSlug, required String hash}) =>
     Navigator.of(context).push<void>(MaterialPageRoute(builder: (_) => PacketDetailScreen(baseUrl: baseUrl, regionSlug: regionSlug, hash: hash)));
@@ -39,7 +37,6 @@ class PacketDetailScreen extends StatelessWidget {
   List<Widget> _body(BuildContext context, PacketDetailData d) {
     final t = Theme.of(context);
     final m = MeshSonarColors.of(context);
-    final flood = d.route == 0 || d.route == 1;
     String snr(double? v) => v == null ? 'no reading' : '${v.toStringAsFixed(v.truncateToDouble() == v ? 0 : 1)} dB';
     final rows = <Widget>[];
     void walk(PacketTreeNodeData n, int level) {
@@ -75,18 +72,6 @@ class PacketDetailScreen extends StatelessWidget {
         ('Fewest hops', d.minHops == 0 ? 'direct' : '${d.minHops}', null),
         ('Best SNR', snr(d.bestSnrDb), null),
       ]),
-      if (flood) ...[
-        const SizedBox(height: Gap.m),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: OutlinedButton.icon(
-            key: const Key('pktdetail-trace'),
-            onPressed: () => openFloodRoutes(context, baseUrl: baseUrl, regionSlug: regionSlug, hash: d.hash ?? hash),
-            icon: const Icon(Icons.alt_route),
-            label: const Text('Trace the flood route'),
-          ),
-        ),
-      ],
       const SizedBox(height: Gap.l),
       Text('Who heard it (${d.observations.length})', style: t.textTheme.titleMedium),
       const SizedBox(height: Gap.xs),
