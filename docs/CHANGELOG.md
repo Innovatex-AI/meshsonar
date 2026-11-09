@@ -5,6 +5,11 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+## [0.29.3+52] — 2026-11-08 — cleanup: dead and frozen tools removed, texts made true (map system plan, phase M0)
+
+- **Removed:** Plan > Planner, Recommended build, Site explorer, Scenarios, Build tracker, Field data; the Airtime live-load half; Analyze > Routes (flood routes), Findings and the duplicate Hops tab; the High contrast palette (a saved High contrast becomes Colour-blind safe). These were frozen since mid-October, Columbus-only, or dead since the okimesh feed closed; the new Find a site and Analyze come in later phases.
+- **Fixed:** Method and How it works describe the new coverage map; Where to drive texts; the Credits repeater key; map credits on every mini map; the Developer switch is hidden (long-press About); Leaderboard moved to Community and My reports to Help and about.
+
 ### M0 app cleanup (unified map plan, Nov 8 2026; ships in the coordinator's next TestFlight build)
 
 - **Removed (screens, routes, API calls and tests, not hidden):** Plan > Planner, Recommended build, Site explorer (site
