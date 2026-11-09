@@ -107,6 +107,26 @@ void main() {
     expect(q.sent, 0);
   });
 
+  test('waits for its drive to be uploaded (8.7a: an unknown drive_ref hides all), at most 11 h after the stop', () async {
+    var now = _t0.add(const Duration(minutes: 10));
+    final q = DriveEndQueue(now: () => now);
+    await q.add(_rec());
+    final tx = _Tx();
+    var up = false;
+    await q.flush(tx, 'key', uploaded: (_) async => up);
+    expect(tx.bodies, isEmpty, reason: 'the drive is not on the server yet');
+    up = true;
+    await q.flush(tx, 'key', uploaded: (_) async => up);
+    expect(tx.bodies, hasLength(1));
+    // Never uploaded: it goes after 11 h anyway (the server drops pending positions at 12 h either way).
+    await q.add(_rec(ref: 'never'));
+    up = false;
+    now = _t0.add(const Duration(hours: 11, minutes: 6));
+    await q.flush(tx, 'key', uploaded: (_) async => up);
+    expect(tx.bodies.last['drive_ref'], 'never');
+    expect(q.pending, isEmpty);
+  });
+
   test('a drive hidden or deleted before its confirmation went keeps nothing', () async {
     final q = DriveEndQueue(now: () => _t0.add(const Duration(hours: 1)));
     await q.add(_rec());

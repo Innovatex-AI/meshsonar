@@ -139,6 +139,9 @@ class DriveEndQueue {
   bool _loaded = false;
   bool _flushing = false;
 
+  /// How long a confirmation waits for its drive's upload (the server drops pending positions after 12 h).
+  static const Duration waitForDrive = Duration(hours: 11);
+
   List<DriveEndRecord> get pending => List.unmodifiable(_items);
   int sent = 0;
 
@@ -196,7 +199,11 @@ class DriveEndQueue {
 
   /// Sends every due confirmation; keeps what fails (network, 5xx, 429, 401/403, 404 = server without 8.7 yet) for the
   /// next try. A 400 (the server will never take it) is dropped.
-  Future<void> flush(DriveEndTransport? tx, String? driverKey) async {
+  ///
+  /// [uploaded]: the drive [DriveEndRecord.driveRef] is on the server (the server hides the whole window for a drive_ref it
+  /// does not know as this driver's, contract 8.7a), so a confirmation waits for its drive's upload, at most until
+  /// [waitForDrive] after the stop (then it goes anyway: the server's 12 h rule drops the positions either way).
+  Future<void> flush(DriveEndTransport? tx, String? driverKey, {Future<bool> Function(String driveRef)? uploaded}) async {
     await load();
     if (tx == null || driverKey == null || driverKey.isEmpty || _flushing) return;
     _flushing = true;
@@ -204,6 +211,14 @@ class DriveEndQueue {
       final t = now();
       for (final r in [..._items]) {
         if (t.isBefore(r.notBefore)) continue;
+        final ref = r.driveRef;
+        if (ref != null && !r.hidden && uploaded != null && t.isBefore(r.endedAt.add(waitForDrive))) {
+          var ok = false;
+          try {
+            ok = await uploaded(ref);
+          } catch (_) {}
+          if (!ok) continue;
+        }
         int status;
         try {
           status = await tx.driveEnd(driverKey, r.toWire());
