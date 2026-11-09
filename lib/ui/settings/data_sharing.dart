@@ -164,8 +164,10 @@ const DataCategory telemetryCategory = DataCategory(
         'packet really belongs to Public or a # channel',
     'Your region code (for example CMH) and, unless you choose "Region only", the ~5 km area (a hexagon about '
         '5 km across) your phone was in. Never your exact position',
-    'While a drive is recording: the exact position during a drive (from the drive\'s GPS, the same as its pings), after '
-        'your drive privacy (privacy zones and start / end trim); with Region only, no position at all',
+    'While a drive is recording: the exact position during a drive (from the drive\'s GPS, the same as its pings), never '
+        'inside your privacy zones. The server holds it until the drive ends, then keeps only the part your drive keeps '
+        '(start and end trimmed) and drops it for a drive you hide or delete, or that is not uploaded; it is never shown '
+        'finer than the ~5 km area. With Region only, no position at all',
     'The repeats of your own pings that your radio hears back, marked as yours (their raw bytes only when the ping itself '
         'is shared on the map)',
     'Your radio\'s settings: board model, firmware, frequency, bandwidth, spreading factor, coding rate and how its '

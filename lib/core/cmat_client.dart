@@ -39,6 +39,7 @@ import 'node_claim.dart';
 import 'privacy_zones.dart';
 import 'repeater_reach.dart';
 import 'report_body.dart' show problemReportMaxBytes;
+import 'drive_end.dart';
 import 'home_observer.dart';
 import 'telemetry_uploader.dart';
 
@@ -85,7 +86,7 @@ DriverKeyStatus parseDriverKeyStatus(Object? s) => switch (s) {
       _ => DriverKeyStatus.unknown,
     };
 
-class HttpCmatClient implements CmatClient, TelemetryTransport, HomeObserverTransport {
+class HttpCmatClient implements CmatClient, TelemetryTransport, HomeObserverTransport, DriveEndTransport {
   @override
   final Uri baseUrl;
   final http.Client _http;
@@ -200,6 +201,11 @@ class HttpCmatClient implements CmatClient, TelemetryTransport, HomeObserverTran
   @override
   Future<HomeObserverHttpResult> deleteHome(String driverKey, String observerId) =>
       _observer('DELETE', endpoint('observer/home').replace(queryParameters: {'id': observerId}), driverKey, null);
+
+  /// `POST /api/cmh/observer/drive-end` (contract section 8.7, lib/core/drive_end.dart).
+  @override
+  Future<int> driveEnd(String driverKey, Map<String, dynamic> body) async =>
+      (await _raw('POST', endpoint('observer/drive-end'), driverKey, homeObserverJson(body))).status;
 
   @override
   Future<HomeObserverHttpResult> me(String driverKey) => _observer('GET', endpoint('observer/me'), driverKey, null);

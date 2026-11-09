@@ -127,6 +127,9 @@ class AppServices {
   /// behind; the app's wiring turns it on. The heartbeat at connect goes either way.
   final bool observerHeartbeatTimer;
 
+  /// Where drive-end confirmations wait until the server took them (contract section 8.7). Null = memory only.
+  final File? driveEndQueueFile;
+
   /// Repeaters whose name still has to be put back after a claim (names only, never a password). Null = memory only.
   final ClaimRestoreStore? claimRestoreStore;
 
@@ -195,6 +198,7 @@ class AppServices {
     this.telemetryQueueFile,
     this.observerIdentity,
     this.observerHeartbeatTimer = false,
+    this.driveEndQueueFile,
     this.privacyZoneStore,
     this.claimRestoreStore,
     this.directory,
