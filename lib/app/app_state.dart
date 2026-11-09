@@ -48,6 +48,7 @@ import '../core/report_body.dart';
 import '../core/server_url.dart';
 import '../core/sync_service.dart' show DefaultSyncService;
 import '../chat/channel_secret.dart' show hashtagSecret16, publicChannelSecret16;
+import '../core/drive_end.dart';
 import '../core/home_observer.dart';
 import '../core/hex_cells.dart' show hexCellOf, hexId, loadHexEngine;
 import '../core/observer_identity.dart';
@@ -256,11 +257,14 @@ class AppState extends ChangeNotifier {
   Future<ServerDriveDetail> loadServerDrive(String sessionId) => client.driverDrive(_requireKey(), sessionId);
 
   Future<void> updateServerDrive(String sessionId, {String? label, bool clearLabel = false, bool? hidden}) async {
+    // Hidden: a confirmation still waiting keeps nothing; the server drops the drive's positions by drive_ref (section 8.7).
+    if (hidden == true) await driveEnds.hide(sessionId);
     await client.updateServerDrive(_requireKey(), sessionId, label: label, clearLabel: clearLabel, hidden: hidden);
     await clearDriverSummaryCache(); // the list shows the new name / state on the next read
   }
 
   Future<void> deleteServerDrive(String sessionId) async {
+    await driveEnds.hide(sessionId);
     await client.deleteServerDrive(_requireKey(), sessionId);
     await clearDriverSummaryCache();
   }
@@ -1238,6 +1242,7 @@ class AppState extends ChangeNotifier {
   void _onForeground(bool fg) {
     _telemetry?.foreground = fg; // 5 s batches in front, 60 s or 50 packets behind (contract section 6)
     if (!fg) return;
+    unawaited(flushDriveEnds());
     _claims?.appResumed();
     unawaited(refreshLocationAccess());
     unawaited(ensureKey());
@@ -1542,7 +1547,46 @@ class AppState extends ChangeNotifier {
   final List<GeoFix> _driveFixes = [];
   GeoFix? _driveStartFix;
 
+  /// The whole drive's track, one point per 5 s at most, for the trim window at the end (section 8.7).
+  final List<TrackPoint> _driveTrack = [];
+
+  // ---------- drive-end confirmation (contract section 8.7, lib/core/drive_end.dart) ----------
+  late final DriveEndQueue driveEnds = DriveEndQueue(file: services.driveEndQueueFile, now: () => services.clock().toUtc());
+  Timer? _driveEndTimer;
+
+  /// Sends the drive-end confirmations that are due (also called at launch, on coming back to the front and on a timer).
+  Future<void> flushDriveEnds() {
+    final c = client;
+    return driveEnds.flush(c is DriveEndTransport ? c as DriveEndTransport : null, keyApproved ? _settings.driverKey : null);
+  }
+
+  /// The drive just stopped: confirm which part of its exact observer positions may be kept (the trimmed window), or none.
+  Future<void> _queueDriveEnd(DriveSession session, DateTime endedAt) async {
+    final id = observerIdentity.id ?? await observerIdentity.load();
+    final uploaded = _settings.autoSync && keyApproved;
+    final trim = (_privacyZones?.trimM ?? 0).toDouble();
+    final keep = uploaded ? driveKeepWindow(_driveTrack, trim) : null;
+    await driveEnds.add(DriveEndRecord(
+      observerId: id,
+      driveRef: uploaded ? session.id : null,
+      startedAt: session.startedAt.toUtc(),
+      endedAt: endedAt.toUtc(),
+      keepFrom: keep?.from,
+      keepUntil: keep?.until,
+      hidden: false,
+      // After the drive's last held packets (90 s hold + a minute to be sent) so none of them arrives after the confirmation.
+      notBefore: endedAt.toUtc().add(const Duration(minutes: 3)),
+    ));
+    if (services.observerHeartbeatTimer) {
+      _driveEndTimer?.cancel();
+      _driveEndTimer = Timer(const Duration(minutes: 3, seconds: 5), () => unawaited(flushDriveEnds()));
+    }
+  }
+
   void _noteDriveFix(GeoFix f) {
+    if (_driveTrack.isEmpty || f.at.difference(_driveTrack.last.at).abs() >= const Duration(seconds: 5)) {
+      _driveTrack.add(TrackPoint(f.at.toUtc(), f.lat, f.lon));
+    }
     _driveStartFix ??= f;
     _driveFixes.add(f);
     final cut = f.at.subtract(const Duration(minutes: 2));
@@ -2631,11 +2675,8 @@ class AppState extends ChangeNotifier {
       _stopDriveContext();
       await _teardownEngine();
       await _flushWrites();
-      // The drive's end trim (section 8.2): exact positions still waiting near where the drive ended go out as their cell.
-      final end = _driveFixes.isNotEmpty ? _driveFixes.last : null;
-      final trim = (_privacyZones?.trimM ?? 0).toDouble();
-      if (end != null && trim > 0) _telemetry?.trimDriveEnd(end.lat, end.lon, trim, _cellAt);
       _driveFixes.clear();
+      _driveTrack.clear();
       _driveStartFix = null;
       if (sid != null) {
         try {
@@ -2770,6 +2811,19 @@ class AppState extends ChangeNotifier {
       await Future<void>.microtask(() {});
       await _teardownEngine();
       await _flushWrites();
+      // The drive's end trim (section 8.2): exact positions still waiting near where the drive ended go out as their cell.
+      final end = _driveFixes.isNotEmpty ? _driveFixes.last : null;
+      final trim = (_privacyZones?.trimM ?? 0).toDouble();
+      if (end != null && trim > 0) _telemetry?.trimDriveEnd(end.lat, end.lon, trim, _cellAt);
+      // Section 8.7: the server holds this drive's exact positions until it hears which window the drive keeps.
+      try {
+        await _queueDriveEnd(session, services.clock().toUtc());
+      } catch (e) {
+        _logError('Queueing the drive-end confirmation failed', e);
+      }
+      _driveFixes.clear();
+      _driveTrack.clear();
+      _driveStartFix = null;
       _stopDriveContext();
       try {
         await services.store.endSession(session.id, services.clock().toUtc());
@@ -3154,6 +3208,10 @@ class AppState extends ChangeNotifier {
       if (!quiet) _say('Stop the drive before deleting it.');
       return false;
     }
+    // A confirmation still waiting for this drive keeps nothing now (section 8.7, fail closed).
+    try {
+      await driveEnds.hide(sessionId);
+    } catch (_) {}
     try {
       await services.store.deleteSession(sessionId);
       if (_lastFinishedSessionId == sessionId) _lastFinishedSessionId = null;
@@ -3236,6 +3294,7 @@ class AppState extends ChangeNotifier {
     }
     unawaited(observerIdentity.load());
     _applyHomeMode();
+    unawaited(flushDriveEnds()); // confirmations left from a previous run (killed app, no signal)
     if (keyApproved) unawaited(refreshRepeaters(quiet: true));
     unawaited(ensureKey().then((ok) {
       if (ok && _settings.autoSync && keyApproved && orphans.isNotEmpty) unawaited(_syncClosedQuietly(orphans));
@@ -3745,6 +3804,7 @@ class AppState extends ChangeNotifier {
     _telemetrySub?.cancel();
     unawaited(_telemetry?.dispose());
     _homeLinkSub?.cancel();
+    _driveEndTimer?.cancel();
     _home.dispose();
     if (_homeAwake) keepAwakeHook?.call(false);
     super.dispose();

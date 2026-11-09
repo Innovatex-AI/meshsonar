@@ -114,6 +114,7 @@ Future<AppServices> buildRealServices() async {
     telemetryQueueFile: File('${root.path}${Platform.pathSeparator}telemetry_queue.json'),
     // Phone observer id: random per install, in the Keychain (this device only), never derived from the person or radio.
     observerHeartbeatTimer: true,
+    driveEndQueueFile: File('${root.path}${Platform.pathSeparator}drive_end_queue.json'),
     observerIdentity: () {
       final kc = KeychainSecretStore();
       return ObserverIdentity(read: () => kc.read(observerIdSlot), write: (b) => kc.write(observerIdSlot, b));

@@ -9,6 +9,7 @@ import 'package:meshsonar/app/app_state.dart';
 import 'package:meshsonar/app/services.dart';
 
 import 'package:h3_ffi/h3_ffi.dart';
+import 'package:meshsonar/core/drive_end.dart';
 import 'package:meshsonar/core/home_observer.dart';
 import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/core/privacy_zones.dart';
@@ -22,8 +23,15 @@ import 'package:meshsonar/radio/radio_api.dart';
 
 import '../ui/fakes.dart';
 
-class _TeleClient extends FakeCmatClient implements TelemetryTransport, HomeObserverTransport {
+class _TeleClient extends FakeCmatClient implements TelemetryTransport, HomeObserverTransport, DriveEndTransport {
   _TeleClient(super.baseUrl);
+  final driveEnds = <Map<String, dynamic>>[];
+  @override
+  Future<int> driveEnd(String driverKey, Map<String, dynamic> body) async {
+    driveEnds.add(body);
+    return 200;
+  }
+
   final bodies = <String>[];
   int deletes = 0;
   final homeCalls = <String>[];
@@ -428,6 +436,75 @@ void main() {
       final n = h.tele.homeCalls.length;
       expect(await h.state.homeObserverService.heartbeatNow(), isNull, reason: 'sharing off: no heartbeat');
       expect(h.tele.homeCalls.length, n);
+    });
+  });
+
+  group('drive privacy for exact positions, contract section 8.7', () {
+    Future<_H> drivingReady() async {
+      final h = _H()..approveKey();
+      await h.state.init();
+      expect(await h.state.connect(const RadioDevice(id: 'aa:bb', name: 'MeshCore-Truck'), RadioKind.bluetooth), isTrue);
+      await h.state.privacyZones.setTrim(500);
+      await h.state.startDrive();
+      return h;
+    }
+
+    test('stop queues drive-end: id, drive_ref = the drive id, the trimmed keep window, after the last packets', () async {
+      final h = await drivingReady();
+      final sid = h.state.currentSession!.id;
+      final start = h.now;
+      for (var i = 0; i < 30; i++) {
+        h.state.debugDriveFix(GeoFix(lat: 39.9 + 0.001 * i, lon: -83.0, at: start.add(Duration(seconds: 10 * i))));
+      }
+      h.now = start.add(const Duration(minutes: 5));
+      await h.state.stopDrive();
+      final r = h.state.driveEnds.pending.single;
+      expect(r.observerId, h.state.observerIdentity.id);
+      expect(r.driveRef, sid);
+      expect(r.keepFrom, start.add(const Duration(seconds: 50)));
+      expect(r.keepUntil, start.add(const Duration(seconds: 240)));
+      expect(r.hidden, isFalse);
+      expect(r.notBefore.isAfter(r.endedAt), isTrue);
+      // Deleting the drive on this phone before the confirmation went: nothing kept.
+      await h.state.deleteSession(sid, quiet: true);
+      expect(h.state.driveEnds.pending.single.toWire()['keep_from'], isNull);
+      expect(h.state.driveEnds.pending.single.hidden, isTrue);
+    });
+
+    test('a drive that is not uploaded keeps nothing (drive_ref null, keep null)', () async {
+      final h = await drivingReady();
+      await h.state.updateSettings(h.state.settings.copyWith(autoSync: false));
+      h.state.debugDriveFix(GeoFix(lat: 39.9, lon: -83.0, at: h.now));
+      await h.state.stopDrive();
+      final w = h.state.driveEnds.pending.single.toWire();
+      expect(w['drive_ref'], isNull);
+      expect(w['keep_from'], isNull);
+    });
+
+    test('regression (build 55): the end trim really runs at stop: a waiting pos near the end becomes the cell', () async {
+      final h = await drivingReady();
+      await h.state.privacyZones.setTrim(0); // no start trim, so the pos is sent ...
+      h.state.debugDriveFix(GeoFix(lat: 39.95, lon: -83.0, at: h.now));
+      h.link.rx.add(_advert(h.now, List.filled(32, 0x71)));
+      await Future<void>.delayed(Duration.zero);
+      await h.state.privacyZones.setTrim(500); // ... and the end trim (500 m) covers it at stop
+      await h.state.stopDrive();
+      h.now = h.now.add(const Duration(minutes: 2));
+      await h.state.flushTelemetry();
+      final pk = ((jsonDecode(h.tele.bodies.last) as Map)['packets'] as List).single as Map;
+      expect(pk.containsKey('pos'), isFalse);
+    });
+
+    test('flushDriveEnds sends it once due (POST observer/drive-end)', () async {
+      final h = await drivingReady();
+      h.state.debugDriveFix(GeoFix(lat: 39.9, lon: -83.0, at: h.now));
+      await h.state.stopDrive();
+      await h.state.flushDriveEnds();
+      expect(h.tele.driveEnds, isEmpty, reason: 'not yet: the last packets go first');
+      h.now = h.now.add(const Duration(minutes: 4));
+      await h.state.flushDriveEnds();
+      expect(h.tele.driveEnds, hasLength(1));
+      expect(h.state.driveEnds.pending, isEmpty);
     });
   });
 }

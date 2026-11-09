@@ -5,6 +5,20 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+## [0.31.1+56] — 2026-11-09 — drive positions kept only for the part your drive keeps (contract 8.7)
+
+- **Privacy fix (fail closed):** the exact observer positions sent during a drive are now held by the server until the
+  drive ends. At stop the app sends `POST /api/cmh/observer/drive-end` with the window the drive keeps after its start and
+  end trim (`keep_from` / `keep_until`), the drive's id (`drive_ref`, null when the drive is not uploaded) and `hidden`;
+  everything outside the window is dropped (the ~5 km cell stays), and unconfirmed positions are dropped after 12 hours.
+  The confirmation is queued on the phone (survives the app being closed) and retried until the server takes it; it is sent
+  ~3 minutes after the stop so the drive's last packets arrive first. A drive deleted on this phone, or hidden / deleted on
+  the server from the app, before its confirmation went keeps nothing; hiding or deleting it later is handled by the server
+  through `drive_ref`. Privacy zones are still applied on the phone before anything is sent.
+- **Fixed (build 55):** the end trim of exact positions still waiting on the phone ran only when a drive failed to start,
+  never at a normal stop. It now runs at every stop.
+- Disclosure text says how drive positions are held, trimmed and dropped.
+
 ## [0.31.0+55] — 2026-11-09 — the phone is always an observer (contract section 8)
 
 Andy, Nov 9: "the phone is always the observer, even during the drive or app use, and our system treats it like an
