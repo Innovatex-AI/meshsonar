@@ -44,10 +44,9 @@ void main() {
       expect(v.description, 'imperial, with height in m and temperature in °C');
     });
 
-    test('distance override drives every distance helper (rings, slider, short lengths) and isImperial', () {
+    test('distance override drives every distance helper (slider, short lengths) and isImperial', () {
       const u = Units(UnitSystem.metric, UnitOverrides(distance: UnitChoice.imperial));
-      expect(u.isImperial, isTrue, reason: 'isImperial is the distance wording ("Miles driven", ring labels)');
-      expect(u.rangeRingLabels, ['0.5 mi', '1 mi']);
+      expect(u.isImperial, isTrue, reason: 'isImperial is the distance wording ("Miles driven")');
       expect(u.shortLength(12.4), '41 ft');
       expect(u.lengthUnit, 'ft');
       expect(u.longDistanceUnit, 'mi');

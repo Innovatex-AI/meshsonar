@@ -523,7 +523,7 @@ class _MapPane extends StatelessWidget {
           position: model.position ?? (model.pings.isEmpty ? idleMapPosition(s) : null),
           puck: model.puck,
           telemetry: model.telemetry,
-          showRings: true, // Range rings draw whenever there is a position, idle too (Drive plan 7.3 F4)
+          lookAhead: true, // follow with more road ahead (the position sits two thirds down)
           rotatable: rotatable ?? expanded,
           topClearance: topClearance,
           bottomClearance: bottomClearance,

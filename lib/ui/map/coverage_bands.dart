@@ -28,7 +28,6 @@ class CoverageBandColors {
     return switch (palette) {
       ColourPalette.standard => dark ? _standardDark : _standardLight,
       ColourPalette.colourBlind => dark ? _cbDark : _cbLight,
-      ColourPalette.highContrast => dark ? _hcDark : _hcLight,
     };
   }
 }
@@ -39,14 +38,12 @@ const _outlineDark = Color(0xFFFF4D4D), _outlineLight = Color(0xFFC4161C);
 const _pointDark = Color(0xFF7A7A7A), _pointLight = Color(0xFF6A6A6A);
 
 // Standard is red -> yellow -> green, bad to good, no blue (Andy, Nov 8 2026, field feedback on build 49: "the blue is misleading").
-// Not promised colour-blind safe: colour-blind users pick colour_blind / high_contrast (warm = bad, cool = good, CVD-safe on all pairs).
+// Not promised colour-blind safe: colour-blind users pick colour_blind (warm = bad, cool = good, CVD-safe on all pairs).
 //                                     0 No reply        1 Edge            2 Weak            3 Fair            4 Good            5 Excellent       6 heard, no SNR
 const _standardDark = CoverageBandColors([Color(0xFFA6302F), Color(0xFFF63647), Color(0xFFFB8F41), Color(0xFFFCE738), Color(0xFF8DCE3C), Color(0xFF0AA349), Color(0xFF6E6E6E)], Color(0xFFA6302F), Color(0xFFA6302F), dark: true);
 const _standardLight = CoverageBandColors([Color(0xFF68050F), Color(0xFFB80321), Color(0xFFD36C1D), Color(0xFFE9B907), Color(0xFF749119), Color(0xFF18631D), Color(0xFF707070)], Color(0xFF68050F), Color(0xFF68050F));
 const _cbDark = CoverageBandColors([Color(0xFF472024), Color(0xFFE14C33), Color(0xFFF4993C), Color(0xFFF7E555), Color(0xFF86DBFD), Color(0xFF438AF1), Color(0xFF6E6E6E)], _outlineDark, _pointDark, dark: true);
 const _cbLight = CoverageBandColors([Color(0xFFEA7267), Color(0xFF592B21), Color(0xFFB63202), Color(0xFF9D8904), Color(0xFF3887B8), Color(0xFF2A3EAD), Color(0xFFA0A0A0)], _outlineLight, _pointLight);
-const _hcDark = CoverageBandColors([Color(0xFF472024), Color(0xFFFF828D), Color(0xFFFDD3AC), Color(0xFFFAFF04), Color(0xFF53F8F8), Color(0xFF95B2F7), Color(0xFF6E6E6E)], _outlineDark, _pointDark, dark: true);
-const _hcLight = CoverageBandColors([Color(0xFFB8636B), Color(0xFF481A1E), Color(0xFF8E2A01), Color(0xFF776E04), Color(0xFF296288), Color(0xFF1E1E86), Color(0xFFBCBCBC)], _outlineLight, _pointLight);
 
 /// Measured cells: style index = band * 2 + (faint ? 1 : 0); 14 styles. Faint = under `meta.faintBelow` (3) attempts.
 int measuredStyleIndex(int band, bool faint) => band.clamp(0, 6) * 2 + (faint ? 1 : 0);

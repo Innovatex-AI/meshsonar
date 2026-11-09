@@ -25,8 +25,6 @@ class FakeToolsHost extends ChangeNotifier implements ToolsHost {
   @override
   String? regionName = 'Columbus';
   @override
-  Uri? regionSite = Uri.parse('https://cmh.meshsonar.com');
-  @override
   List<String> scopeNames = const ['#cmh'];
   List<KnownChannel> channels = const [];
   ({double lat, double lon})? phone = (lat: 40.1258, lon: -82.9312);

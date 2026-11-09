@@ -71,10 +71,9 @@ on Drive; a saved `map` from before the rename still restores Drive). Tapping th
 |---|---|
 | Chat | Contacts \| Channels through the `ChatTabHost` seam (see Contacts and direct messages, below). Without a chat store: "Messages arrive here once you connect a radio". Unread badge on the tab icon. |
 | Drive | The coverage map and the drive controls (called Map before the redesign). Start drive is the big button. The tab runs behind the translucent, blurred tab bar (opaque under Reduce Transparency); `ShellController.immersive` hides the bar, the rail and the mini drive bar for the full-screen map. Icon: car. |
-| Analyze | Segmented Region (the Region hub) \| Drives (drive list, reports, progress). |
-| Plan | Native tools (`ui/plan/*`, `core/plan/*`): Airtime and load (calculator offline; 24 h channel load and what-if from `airtime-load`, last result cached), Radio presets (offline; the website's link-survival columns need its terrain grid and are not shown), Point-to-point link (ground profile from `score-link`, then line of sight, Fresnel clearance, odds and margin on the phone; offline for a pair already checked), Coverage painter (`coverage`, footprint on a map, last result cached), Coverage check (from the cached measured cells; offline), Field data. Planner, Recommended build and Site explorer open the website until their native twins land. |
-| Plan | Planner, Recommended build, Site explorer (dossier, link profile, compare), Scenarios and Build tracker run in the app on the website's planning engine (`plan-native`), with the last results cached for offline. The other tools (point-to-point link, coverage painter, airtime, radio presets, coverage check) open the real page in the browser until they are converted. In-app tools that do not exist yet are listed once as "Coming next", with no button. |
-| More | Radio, Claimed radios, Settings, Colour legend, How it works (replays the tour), Privacy and data sharing, Report a problem, About, Privacy policy. Opens inside the tab (own Navigator), so the bars stay. |
+| Analyze | Segmented Region (the Region hub) \| Drives (drive list, reports, progress). Region hub tabs: Overview, Repeaters, Observers, Packets, Analysis, RF, Growth, Reports, Stats, Live, Silent, Wardrive. **Removed in M0 (Nov 8 2026):** Routes (flood routes: one packet / all floods, and the "Trace the flood route" / "Network flood routes" buttons), Findings (frozen Oct 15) and the Hops tab (the hop chart now appears once, in Analysis > Hops and top repeaters). |
+| Plan | Where to drive next, then five native tools (`ui/plan/*`, `core/plan/*`): Point-to-point link (ground profile from `score-link`, then line of sight, Fresnel clearance, odds and margin on the phone; offline for a pair already checked), Coverage painter (`coverage`, footprint on a map, last result cached), Airtime and load (calculator on the phone, offline: time on air, one flood, repeater duty cycle), Radio presets (offline; the website's link-survival columns need its terrain grid and are not shown), Coverage check (from the cached measured cells; offline). **Removed in M0 (Nov 8 2026, unified map plan §4):** Planner, Recommended build, Site explorer, Scenarios and Build tracker (CMH-only, frozen Oct 15; "Find a site" replaces the planner in phase P), Field data (only pointed at the Drive tab), and the Airtime live channel load + what-if (`airtime-load`, served by no region). |
+| More | Groups: Your radio (Radio, Claimed radios, Devices and keys), Radios and tools, Community (Leaderboard, Become an observer), App (Chat, Wardriving, Notifications, Settings, Colour legend, How it works, Method), Help and about (Privacy, Report a problem, My reports, About MeshSonar, Privacy policy). The Developer section (New Drive screen switch) is hidden until a long-press on About MeshSonar (the version row) and hides again on a second long-press or a restart. Opens inside the tab (own Navigator), so the bars stay. The full More + Settings merge is phase X. |
 
 Old tab names: Drive = Map (renamed in the Drive redesign); Region and Drives = Analyze; Radio and Settings = More. `HomeShell(legacyTab: n)` maps the old
 indexes 0..4 (`LegacyTab.fromIndex`).
@@ -508,14 +507,14 @@ the Map layers sheet header (`layers-legend`, so from the Drive map and the full
 and wrap at the largest Dynamic Type.
 
 **Colour palette** (Settings > Units & display > Colour palette, `colour-palette`; setting `colour_palette` in settings.json,
-default `standard`, an unknown or missing value reads as standard). One choice recolours every strength colour at once:
+default `standard`, an unknown or missing value reads as standard; the retired `high_contrast` (removed Nov 8 2026, M0) reads as colour-blind safe and is saved back as `colour_blind`). Two choices only: Standard (red -> yellow -> green) and Colour-blind safe. One choice recolours every strength colour at once:
 your hexes and ping dots, network coverage cells and repeater age dots, link-line labels, heard-box SNR, ping log and
 ping sheets, drive report charts and the legend. Every call site reads the colours from `MeshSonarColors` (a theme
 extension rebuilt when the setting changes: `levelStrong/Good/Fair/Weak`, `snrStops`, `silent`, `heardUnknown`,
 `linkLine`); no screen hardcodes a strength hex. The meaning never changes: grey = mapped, nothing heard; purple = heard,
 signal unknown; strength colours only for a measured SNR; cells with fewer than 3 pings are fainter (`cellAlphas`).
 
-Link lines: the standard palette keeps orange `#FF6D00`, solid, with a dark casing. Colour-blind safe and High contrast use
+Link lines: the standard palette keeps orange `#FF6D00`, solid, with a dark casing. Colour-blind safe uses
 orange and yellow for strength, so their link lines are **achromatic and dashed** (9 on, 5 off, 3 px, with a contrasting
 casing): near-white on the dark map, near-black on the light map, at least 12:1 against the tiles.
 
@@ -525,20 +524,18 @@ run evenly from -10 to +10 dB.
 
 | palette / theme | strong | good | fair | weak | grey | purple | ping scale stops | link line |
 |---|---|---|---|---|---|---|---|---|
-| standard dark | `79BE69` | `6AAEE0` | `E2B04A` | `F07B6B` | `8D99A6` | `B59AE0` | `3B8FD6 3EE0CF 8CF58A` | `FF6D00` solid |
-| standard light | `2F7A3B` | `2A6B9C` | `B07D16` | `B23B2E` | `8795A1` | `8A63C9` | `2468B8 00897B 2E9E3A` | `FF6D00` solid |
+| standard dark | `0AA349` | `8DCE3C` | `FCE738` | `F63647` | `8D99A6` | `B59AE0` | `F63647 FCE738 0AA349` | `FF6D00` solid |
+| standard light | `18631D` | `749119` | `B07D16` | `B80321` | `8795A1` | `8A63C9` | `B80321 E9B907 18631D` | `FF6D00` solid |
 | colour-blind dark | `2B8CE0` | `8EDBFF` | `EDDD55` | `D25637` | `8D99A6` | `B356A4` | `D25637 EDDD55 8EDBFF 2B8CE0` | `F4F7F9` dashed, casing `0D1B26` 85% |
 | colour-blind light | `0A4FA0` | `1E88C8` | `9C7F06` | `762608` | `8795A1` | `8E5A8A` | `762608 9C7F06 004E66 0A4FA0` | `0C1E28` dashed, casing `FFFFFF` 85% |
-| high contrast dark | `86CAFE` | `BDE8F2` | `FEE405` | `FE831A` | `A3AEBA` | `D68BD0` | `FE831A FEE405 BDE8F2 86CAFE` | as colour-blind dark |
-| high contrast light | `001365` | `0A58C4` | `8B640C` | `7F2606` | `5F6C78` | `6E5C91` | `7F2606 8B640C 004E66 001365` | as colour-blind light |
 
 Validation (`test/ui/palette_test.dart`, `test/support/colour_science.dart`, run on every `flutter test`): each colour goes
 sRGB to linear RGB, through the Machado, Oliveira and Fernandes (2009) severity-1.0 matrices for protanopia, deuteranopia and
 tritanopia, to CIE Lab (D65), and pairs are compared with CIEDE2000. Asserted: all pairs among the six colours >= 10 under
-normal vision (all palettes); >= 10 under each deficiency for Colour-blind safe and >= 8 for High contrast (standard is
-reported, not guaranteed: its worst pair is 1.3 under deuteranopia, which is why the other palettes exist); the blended
-ping scale never comes within 8 of grey or purple in the two accessible palettes; strength colours reach 3:1 against the
-map tiles (7:1 dark / 4.5:1 light for High contrast). The accessible palettes' light-mode ping scale runs brown, gold,
+normal vision (both palettes); >= 10 under each deficiency for Colour-blind safe (standard is
+reported, not guaranteed, which is why the colour-blind palette exists); the blended
+ping scale never comes within 8 of grey or purple in the colour-blind palette; strength colours reach 3:1 against the
+map tiles. The colour-blind palette's light-mode ping scale runs brown, gold,
 dark teal, blue because a light-blue middle would blend to grey. Repeater roster status colours (active, quiet, new, stale)
 are activity states, not signal strength, and are not part of the palette.
 
@@ -738,7 +735,7 @@ use it."); `test/ui/settings_no_dead_end_test.dart` enforces it.
 | | **Connected to** (`site-region`), **Radio preset** (`site-radio-preset`) | From `GET /api/cmh/site-config`, shown only once it has answered. The preset row compares the region's suggested preset with the connected radio's own ("Yours"); states: no preset, preset with no radio, both. Information only: the app never writes to the radio. |
 | Units & display (`display`) | **Units** | Auto / Metric / Imperial with the explanation of what Auto resolves to on this phone ("Auto follows your phone's region: imperial in the US, Liberia and Myanmar, metric elsewhere. Showing imperial (ft, mi, mph)."). Stored data never changes. With any per-quantity unit set it says which ("Own choice below: speed in mph") and offers **Make every quantity follow Units** (Undo in the snackbar). |
 | | **Distance**, **Speed**, **Height and altitude**, **Temperature**, **Air pressure** (`unit-*`) | Each "Follows Units" by default; tap for a picker: Follow / Metric / Imperial (temperature °C / °F; pressure hPa / inHg / mmHg). Applies everywhere numbers are shown (all formatting goes through `core/units.dart`; reports say e.g. "Units: metric, with speed in mph"). Saved as `unit_overrides` in settings.json. |
-| | **Colour palette** | Standard, Colour-blind safe, High contrast, each with a strip of its real colours; applies everywhere at once (see [Map legend and colour palettes](#map-legend-and-colour-palettes)). |
+| | **Colour palette** | Standard or Colour-blind safe, each with a strip of its real colours; applies everywhere at once (see [Map legend and colour palettes](#map-legend-and-colour-palettes)). |
 | | **Heard list hold** | 1–10 pings (default 3). |
 | Map & offline maps (`maps`) | **Offline maps** | Opens the offline map packs screen (download, update, delete per region). |
 | Privacy & data sharing (`privacy`) | **One switch per data category** | From the registry in `ui/settings/data_sharing.dart`; today only **Share packet headers** (`telemetry-toggle`). On by default (opt-out). The row shows its state: off, on but waiting for a key, or N headers waiting on the phone. Turning it **on** asks first and lists exactly what is shared and never shared. Turning it **off** stops collection at once and deletes the unsent queue; with a key it then offers to erase the server copy (`DELETE /api/cmh/telemetry`). **What is recorded (fixed Nov 8 2026, CR7):** never direct messages or other private point-to-point types; a channel packet only when its MAC verifies under the Public key or the key of a # channel this phone holds (a private channel, or one the phone cannot identify, fails closed, even when its one-byte hash matches Public's). This is also how Chat's routing reaches the network map: the repeats and arrival routes of Public and # channel messages, yours included, are packet headers. Direct-message routes are never shared (decision Nov 8). Group records queued before the fix carry no "checked" mark and are dropped on update. |
@@ -893,7 +890,7 @@ queue at a class below chat and pings, so tool traffic can never hold up a messa
   coloured lines. A 1-byte hash that another known repeater shares is flagged by name. A missing or out-of-range hop is silence from the radio:
   the screen waits the radio's own estimate plus 2 s and then says "No answer" with what to try (the last hop must be one this radio hears
   directly). Save a trace (kept on the phone, newest 40), compare two saved traces or one against the latest (per-hop change in words),
-  link out to the website's `/tools/routes` for the viewed region.
+  (the "Network flood routes" link was removed with flood routes in M0, Nov 8 2026).
 - **Discover nearby** (`discover`). One zero-hop request; repeaters, rooms and sensors answer with their key and the SNR at which they heard
   the request; this radio measures the SNR of each answer, so every result has both directions plus RSSI, sorted by the weaker direction.
   Repeaters answer 4 requests per 2 minutes, so the app does the same: after 4 scans the button counts down. Results on a map, "In your

@@ -3,7 +3,9 @@
 // the region is chosen by HOST, a `?region=` query is ignored): region-activity (hourly packets by type),
 // region-hash-stats (hash-size mix + prefix collisions), region-path-stats (hop histogram, flood share, top carriers),
 // region-repeaters (role + status mix). Every payload carries `status {state, reason, computedAt, source}`;
-// unknown is null, never 0. Firmware mix has no public endpoint yet (region-ext-growth is not served), so it is not shown.
+// unknown is null, never 0. Firmware mix is not shown here (the Growth tab reads region-ext-growth, lib/ui/region/growth_panel.dart).
+// The hop histogram here is the app's ONE hop chart (Analysis > Hops and top repeaters); the duplicate Hops tab and the flood
+// routes histogram were removed in M0 (Nov 8 2026).
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';

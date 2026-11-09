@@ -19,6 +19,23 @@ String agoText(DateTime? t, {DateTime? now}) {
   return '${d.inDays} d ago';
 }
 
+/// A time as HH:MM:SS UTC (packet times are shown in UTC, like the website).
+String clockUtc(DateTime? t) {
+  if (t == null) return 'unknown';
+  final u = t.toUtc();
+  String p(int n) => n.toString().padLeft(2, '0');
+  return '${p(u.hour)}:${p(u.minute)}:${p(u.second)} UTC';
+}
+
+const _monthsShort = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/// A date and time in UTC, "Nov 8 14:03:09 UTC".
+String dayUtc(DateTime? t) {
+  if (t == null) return 'unknown';
+  final u = t.toUtc();
+  return '${_monthsShort[u.month - 1]} ${u.day} ${clockUtc(u)}';
+}
+
 String groupInt(int n) {
   final s = n.abs().toString();
   final b = StringBuffer();

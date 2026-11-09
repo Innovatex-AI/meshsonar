@@ -1,4 +1,4 @@
-// The three colour palettes: exact hex values (the website copies them), colour-blind separation measured by simulating
+// The two colour palettes (Standard, Colour-blind safe; High contrast was removed in M0, Nov 8 2026): exact hex values (the website copies them), colour-blind separation measured by simulating
 // protanopia / deuteranopia / tritanopia and comparing with CIEDE2000, contrast against the map, link-line style, and
 // the setting's persistence. Values are written in docs/FEATURES.md and meshsonar-infra/docs/planning/colour-palettes-2026-10-31.md.
 import 'dart:ui';
@@ -30,12 +30,6 @@ const dark = <ColourPalette, Spec>{
     link: 'F4F7F9',
     dashed: true,
   ),
-  ColourPalette.highContrast: (
-    steps: ['86CAFE', 'BDE8F2', 'FEE405', 'FE831A', 'A3AEBA', 'D68BD0'],
-    stops: ['FE831A', 'FEE405', 'BDE8F2', '86CAFE'],
-    link: 'F4F7F9',
-    dashed: true,
-  ),
 };
 const light = <ColourPalette, Spec>{
   ColourPalette.standard: (
@@ -47,12 +41,6 @@ const light = <ColourPalette, Spec>{
   ColourPalette.colourBlind: (
     steps: ['0A4FA0', '1E88C8', '9C7F06', '762608', '8795A1', '8E5A8A'],
     stops: ['762608', '9C7F06', '004E66', '0A4FA0'],
-    link: '0C1E28',
-    dashed: true,
-  ),
-  ColourPalette.highContrast: (
-    steps: ['001365', '0A58C4', '8B640C', '7F2606', '5F6C78', '6E5C91'],
-    stops: ['7F2606', '8B640C', '004E66', '001365'],
     link: '0C1E28',
     dashed: true,
   ),
@@ -96,9 +84,8 @@ void main() {
 
         for (final v in [Vision.protan, Vision.deutan, Vision.tritan]) {
           test('separation under ${v.name}', () {
-            // standard is documented, not guaranteed; the other two must hold. High contrast trades a little separation
-            // for contrast against the map.
-            final need = switch (p) { ColourPalette.standard => 0.0, ColourPalette.colourBlind => 10.0, ColourPalette.highContrast => 8.0 };
+            // standard is documented, not guaranteed; colour-blind safe must hold.
+            final need = switch (p) { ColourPalette.standard => 0.0, ColourPalette.colourBlind => 10.0 };
             var worst = double.infinity;
             String where = '';
             for (var i = 0; i < steps.length; i++) {
@@ -128,10 +115,7 @@ void main() {
         });
 
         test('contrast against the map tiles', () {
-          final need = switch (p) {
-            ColourPalette.standard || ColourPalette.colourBlind => 3.0,
-            ColourPalette.highContrast => b == Brightness.dark ? 7.0 : 4.5,
-          };
+          const need = 3.0;
           for (final i in [0, 1, 2, 3, 5]) {
             expect(contrastRatio(steps[i], tiles), greaterThanOrEqualTo(need), reason: '${names[i]} ${contrastRatio(steps[i], tiles)}');
           }
@@ -187,7 +171,14 @@ void main() {
       }
       expect(Settings.fromJson(const {'colour_palette': 'rainbow'}).colourPalette, ColourPalette.standard);
       expect(Settings.fromJson(const {'colour_palette': 7}).colourPalette, ColourPalette.standard);
-      expect(ColourPalette.values.map((p) => p.id), ['standard', 'colour_blind', 'high_contrast']);
+      expect(ColourPalette.values.map((p) => p.id), ['standard', 'colour_blind']);
+    });
+
+    test('a settings file that still says high_contrast (retired) loads as colour-blind safe and saves back as colour_blind', () {
+      final s = Settings.fromJson(const {'colour_palette': 'high_contrast'});
+      expect(s.colourPalette, ColourPalette.colourBlind);
+      expect(s.toJson()['colour_palette'], 'colour_blind');
+      expect(ColourPalette.parse('high_contrast'), ColourPalette.colourBlind);
     });
   });
 

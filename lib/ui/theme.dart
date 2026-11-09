@@ -224,37 +224,11 @@ const _colourBlindLight = _Strength(
   linkCasing: Color(0xD9FFFFFF),
   linkDashed: true,
 );
-const _highContrastDark = _Strength(
-  strong: Color(0xFF86CAFE),
-  good: Color(0xFFBDE8F2),
-  fair: Color(0xFFFEE405),
-  weak: Color(0xFFFE831A),
-  stops: [Color(0xFFFE831A), Color(0xFFFEE405), Color(0xFFBDE8F2), Color(0xFF86CAFE)],
-  silent: Color(0xFFA3AEBA),
-  heardUnknown: Color(0xFFD68BD0),
-  link: Color(0xFFF4F7F9),
-  linkCasing: Color(0xD90D1B26),
-  linkDashed: true,
-);
-const _highContrastLight = _Strength(
-  strong: Color(0xFF001365),
-  good: Color(0xFF0A58C4),
-  fair: Color(0xFF8B640C),
-  weak: Color(0xFF7F2606),
-  stops: [Color(0xFF7F2606), Color(0xFF8B640C), Color(0xFF004E66), Color(0xFF001365)],
-  silent: Color(0xFF5F6C78),
-  heardUnknown: Color(0xFF6E5C91),
-  link: Color(0xFF0C1E28),
-  linkCasing: Color(0xD9FFFFFF),
-  linkDashed: true,
-);
-
 _Strength _strengthFor(ColourPalette p, Brightness b) {
   final dark = b == Brightness.dark;
   return switch (p) {
     ColourPalette.standard => dark ? _standardDark : _standardLight,
     ColourPalette.colourBlind => dark ? _colourBlindDark : _colourBlindLight,
-    ColourPalette.highContrast => dark ? _highContrastDark : _highContrastLight,
   };
 }
 
@@ -289,7 +263,7 @@ class MeshSonarColors extends ThemeExtension<MeshSonarColors> {
   /// Map canvas under the tiles (what you see offline).
   final Color mapBackground;
 
-  /// Range rings and grid on the map.
+  /// The chart grid drawn on the map background.
   final Color mapGrid;
 
   /// Applied to OSM tiles so the base map sits quietly under the data.

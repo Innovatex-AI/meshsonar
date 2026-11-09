@@ -7,6 +7,7 @@ import 'package:latlong2/latlong.dart';
 import '../design/app_symbols.dart';
 import '../map/coverage_map.dart' show CoverageMap;
 import '../theme.dart';
+import '../map/overlays/mini_map_credit.dart';
 
 typedef ContactMapBuilder = Widget Function(BuildContext context, double lat, double lon);
 
@@ -33,6 +34,7 @@ Widget defaultContactMap(BuildContext context, double lat, double lon) {
             tileBuilder: (context, tile, _) => ColorFiltered(colorFilter: ColorFilter.matrix(m.tileMatrix), child: tile),
           ),
           MarkerLayer(markers: [Marker(point: at, width: 28, height: 28, child: AppSymbolIcon(AppSymbols.locationFill, color: m.beacon, size: 28, scaleWithText: false))]),
+          const MiniMapCredit(),
         ],
       ),
     ),

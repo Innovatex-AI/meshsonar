@@ -1,4 +1,4 @@
-// Settings > Units & display > Colour palette: three choices, persisted, applied to the whole app at once (the theme's
+// Settings > Units & display > Colour palette: two choices (High contrast removed in M0), persisted, applied to the whole app at once (the theme's
 // MeshSonarColors changes and the network cells on the real map are redrawn in the new colours without a restart).
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -12,7 +12,7 @@ import 'fakes.dart';
 import 'settings_controls_test.dart' show openSettings, show;
 
 void main() {
-  testWidgets('three options, standard selected by default, strips show the real colours', (tester) async {
+  testWidgets('two options, standard selected by default, strips show the real colours', (tester) async {
     await openSettings(tester);
     await show(tester, 'colour-palette-standard');
     for (final p in ColourPalette.values) {
@@ -20,9 +20,9 @@ void main() {
       expect(tester.getSize(find.byKey(Key('colour-palette-${p.id}'))).height, greaterThanOrEqualTo(56));
     }
     expect(find.text('Colour-blind safe'), findsOneWidget);
-    expect(find.text('High contrast'), findsOneWidget);
+    expect(find.text('High contrast'), findsNothing);
     expect(tester.widget<ListTile>(find.byKey(const Key('colour-palette-standard'))).selected, isTrue);
-    expect(find.byType(PaletteStrip), findsNWidgets(3));
+    expect(find.byType(PaletteStrip), findsNWidgets(2));
   });
 
   testWidgets('picking a palette is saved and recolours the map cells at once', (tester) async {

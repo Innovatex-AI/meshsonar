@@ -1031,6 +1031,8 @@ Future<void> _openMoreRow(WidgetTester tester, String key) async {
   final row = find.byKey(Key(key));
   final scrollable = find.descendant(of: find.byKey(const Key('more-list')), matching: find.byType(Scrollable)).first;
   await tester.scrollUntilVisible(row, 120, scrollable: scrollable, maxScrolls: 200);
+  // Centre it: a row that only just scrolled into view can sit under the tab bar / mini drive bar and the tap would miss.
+  Scrollable.ensureVisible(tester.element(row), alignment: 0.4);
   await tester.pumpAndSettle();
   await tester.tap(row);
   await tester.pumpAndSettle();

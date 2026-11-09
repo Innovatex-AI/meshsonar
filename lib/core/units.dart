@@ -73,7 +73,7 @@ enum PressureChoice {
 /// that do not follow the Units setting (`{"speed": "imperial", "pressure": "mmHg"}`); missing keys, unknown keys
 /// and unknown values all mean "follow", so old and newer files load.
 class UnitOverrides {
-  /// Distances and short lengths (km/mi, m/ft): drive distance, GPS accuracy, "move N more", range rings.
+  /// Distances and short lengths (km/mi, m/ft): drive distance, GPS accuracy, "move N more".
   final UnitChoice distance;
   final UnitChoice speed;
 
@@ -351,9 +351,6 @@ class Units {
     return '$n ${temperatureImperial ? '°F' : '°C'}';
   }
 
-  /// Range rings drawn around the phone: 1 km and 2 km, or half a mile and a mile.
-  List<double> get rangeRingMetres => distanceImperial ? const [metresPerMile / 2, metresPerMile] : const [1000, 2000];
-  List<String> get rangeRingLabels => distanceImperial ? const ['0.5 mi', '1 mi'] : const ['1 km', '2 km'];
 
   /// The min-distance slider's stops, in whole metres: metric as-is, imperial as the nearest metre to round feet.
   List<int> minDistanceStops(List<int> metricStops) => distanceImperial

@@ -5,6 +5,27 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+### M0 app cleanup (unified map plan, Nov 8 2026; ships in the coordinator's next TestFlight build)
+
+- **Removed (screens, routes, API calls and tests, not hidden):** Plan > Planner, Recommended build, Site explorer (site
+  detail, compare, site link), Scenarios and Build tracker (the frozen Oct 15 CMH planning bundle; its "Live on okimesh" texts
+  go with it); Plan > Field data (it only pointed at the Drive tab and said untrue things); the Airtime tool's live channel
+  load and load what-if (`airtime-load`, no region served it); Analyze > Region > Routes (flood routes: one packet, all floods,
+  and the "Trace the flood route" / "Network flood routes" buttons), Findings (frozen) and the Hops tab. The hop chart now
+  appears once, in Analysis > Hops and top repeaters.
+- **Texts made true:** Method and How it works describe coverage v2 (one ~50 m hexagon cell at every zoom, the average SNR of
+  the answered pings, five bands red to yellow to green, No reply, Predicted coverage); Where to drive next (No reply instead of
+  "grey", no "pick a place on the Drive tab"); the repeater key in the map's Credits sheet now uses the same blue / amber / grey
+  freshness badges as the markers; the map guide shows "The heard box" only on the old Drive layout; range-ring claims removed
+  (the camera option is now `lookAhead`, the unused ring helpers are gone).
+- **More:** the Developer section (New Drive screen) is hidden behind a long-press on About MeshSonar; Leaderboard moved to a new
+  Community group (with Become an observer) and My reports to Help and about.
+- **Map credits:** every mini map without one now shows "© OpenStreetMap contributors" (Where to drive, repeater position /
+  reach / your drives, contact, radio tools, live packets); the Live mini map is graded to the theme like the others. A lint test
+  keeps every `FlutterMap` credited.
+- **Colour palettes:** High contrast removed (Standard and Colour-blind safe only); a saved `high_contrast` loads as
+  Colour-blind safe.
+
 ## [0.29.2+51] — 2026-11-08 — no blue left in the standard signal colours
 
 - **No blue anywhere in the standard palette's signal scale** (Andy, field report on build 50). The older four-step network colours still had blue for "good"; they are used before the server confirms the new coverage map (offline, right after launch), for the tapped cell's dot, the map key and the repeater "last advert" dots. They now use the same red -> yellow -> green as the coverage map. A test fails if blue ever comes back. The Colour-blind safe and High contrast palettes keep blue on purpose (it is the colour-blind-safe strong end).
