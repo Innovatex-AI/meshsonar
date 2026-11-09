@@ -517,8 +517,21 @@ class ChatService {
   ({MessagePage page, bool hasNewer})? pageAround(String convKey, String anchorId, {int before = 20, int after = 20}) =>
       store.messages.pageAround(convKey, anchorId, before: before, after: after);
   List<ChatMessage> search(String query, {String? convKey, int limit = 50, int offset = 0}) => store.messages.search(query, convKey: convKey, limit: limit, offset: offset);
-  int unreadBadge() => store.messages.unreadConversationCount(nowMs: nowMs());
-  int unreadMessages() => store.messages.unreadMessageCount(nowMs: nowMs());
+  /// The radio whose Chats list is on screen: the connected one, else the last one used (ChatController keeps it in the
+  /// settings table). Badges count only its conversations: exactly what the list shows.
+  static const String lastRadioSetting = 'last_radio_id';
+  String? get listRadioId => store.db.setting(lastRadioSetting);
+  int unreadBadge() => store.messages.unreadConversationCount(radioId: listRadioId, nowMs: nowMs());
+  int unreadMessages() => store.messages.unreadMessageCount(radioId: listRadioId, nowMs: nowMs());
+
+  /// "Mark all as read" on the radio whose list is on screen.
+  void markAllRead() {
+    final id = listRadioId;
+    if (id == null) return;
+    for (final k in store.messages.markAllRead(id)) {
+      _emit(ChatEvent.conversation(k));
+    }
+  }
 
   void markRead(String convKey) {
     final wasMarked = store.messages.conversation(convKey)?.markedUnread ?? false;

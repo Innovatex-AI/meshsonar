@@ -5,6 +5,11 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+## [0.29.4+53] — 2026-11-08 — the Chat badge counts only what you can see
+
+- **Unread badge fixed** (Andy: "shows 17, I have no unread"). The Chats list shows the radio you're on; the badge counted unread messages from every radio this phone has ever been connected to, so they could never be found or cleared. The badge, the tab, the app icon and each row now count exactly the conversations the list shows: the radio on screen, never muted, system or blocked-contact conversations, counted from the messages themselves so an old stored counter cannot inflate it.
+- **Mark all as read**: a button in the Chats header (shown when something is unread) clears every conversation of the radio on screen.
+
 ## [0.29.3+52] — 2026-11-08 — cleanup: dead and frozen tools removed, texts made true (map system plan, phase M0)
 
 - **Removed:** Plan > Planner, Recommended build, Site explorer, Scenarios, Build tracker, Field data; the Airtime live-load half; Analyze > Routes (flood routes), Findings and the duplicate Hops tab; the High contrast palette (a saved High contrast becomes Colour-blind safe). These were frozen since mid-October, Columbus-only, or dead since the okimesh feed closed; the new Find a site and Analyze come in later phases.

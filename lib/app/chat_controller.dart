@@ -55,7 +55,7 @@ class SendAttempt {
 }
 
 class ChatController extends ChangeNotifier {
-  static const String _lastRadioKey = 'last_radio_id';
+  static const String _lastRadioKey = ChatService.lastRadioSetting;
 
   final ChatStore store;
   final ChatService service;

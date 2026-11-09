@@ -28,6 +28,7 @@ abstract final class AppSymbols {
   static const car = AppSymbol('car', CupertinoIcons.car, Icons.directions_car_outlined);
   static const carFill = AppSymbol('car.fill', CupertinoIcons.car_fill, Icons.directions_car);
   static const message = AppSymbol('message', CupertinoIcons.chat_bubble, Icons.chat_bubble_outline);
+  static const checkmarkBubble = AppSymbol('checkmark.bubble', CupertinoIcons.checkmark_alt_circle, Icons.mark_chat_read_outlined);
   static const messageFill = AppSymbol('message.fill', CupertinoIcons.chat_bubble_fill, Icons.chat_bubble);
   static const chartBar = AppSymbol('chart.bar', CupertinoIcons.chart_bar, Icons.bar_chart);
   static const ellipsisCircle = AppSymbol('ellipsis.circle', CupertinoIcons.ellipsis_circle, Icons.more_horiz);
@@ -111,7 +112,7 @@ abstract final class AppSymbols {
     gear, //
     location, locationFill, antenna, wifi, bolt, battery, thermometer, tray, waveform, //
     route, gauge, bubbles, qrcode,
-    squareAndPencil, globe, numberSign, exclamationCircleFill,
+    squareAndPencil, globe, numberSign, exclamationCircleFill, checkmarkBubble,
   ];
 }
 

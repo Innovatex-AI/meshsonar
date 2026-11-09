@@ -27,6 +27,9 @@ class ChatTabProviderImpl implements ChatTabProvider {
   @override
   bool get isEmpty => controller.isEmpty;
 
+  @override
+  void markAllRead() => controller.service.markAllRead();
+
   // ---- the tab (Chats | Contacts | Channels | Network)
   @override
   Widget chatsSliver(BuildContext context, ChatTabArgs args) => ChatsListView(

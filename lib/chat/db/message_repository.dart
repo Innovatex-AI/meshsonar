@@ -250,7 +250,8 @@ ON CONFLICT(conv_key) DO UPDATE SET
 SELECT cv.*,
   CASE WHEN cv.kind = 'channel' THEN (SELECT name FROM channels WHERE 'c:' || id = cv.conv_key)
        ELSE (SELECT coalesce(nullif(custom_name, ''), name) FROM contacts WHERE radio_id = cv.radio_id AND substr(pubkey, 1, 12) = substr(cv.conv_key, 3) LIMIT 1) END AS title,
-  (SELECT kind FROM channels WHERE 'c:' || id = cv.conv_key) AS channel_kind
+  (SELECT kind FROM channels WHERE 'c:' || id = cv.conv_key) AS channel_kind,
+  (SELECT count(*) FROM messages m WHERE m.conv_key = cv.conv_key AND m.read = 0 AND m.direction = 'in') AS unread_live
 FROM conversations cv
 ''';
 
@@ -264,7 +265,7 @@ FROM conversations cv
       title: (r['title'] as String?) ?? (kind == ConvKind.channel ? 'Channel ${ConvKey.body(key)}' : ConvKey.body(key)),
       lastPreview: r['last_preview'] as String?,
       lastTsMs: r['last_ts_ms'] as int?,
-      unread: r['unread'] as int,
+      unread: (r['unread_live'] as int?) ?? (r['unread'] as int),
       notifyMode: NotifyMode.values.firstWhere((n) => n.name == r['notify_mode'], orElse: () => NotifyMode.all),
       mutedUntilMs: r['muted_until_ms'] as int?,
       pinned: (r['pinned'] as int) != 0,
@@ -289,25 +290,31 @@ FROM conversations cv
     return r.isEmpty ? null : _summary(r.first);
   }
 
-  /// Badge value: number of conversations with unread messages, excluding muted, blocked-contact and system ones.
-  int unreadConversationCount({required int nowMs}) {
-    final r = db.raw.select('''
-SELECT count(*) c FROM conversations cv
-WHERE (cv.unread > 0 OR cv.marked_unread = 1)
+  /// The conversations a badge may count (Andy, Nov 8 2026: the badge showed 17 with nothing unread in the list).
+  /// The SAME rules as the Chats list: only the radio whose list is on screen ([radioId]; null = every radio, tests and
+  /// the backup tools only), never muted (while muted), system or blocked-contact conversations. The unread figure is
+  /// counted from the messages themselves (incoming, not read), so a stale denormalised counter can never inflate it.
+  static const String _countable = '''
+FROM conversations cv
+WHERE (? IS NULL OR cv.radio_id = ?)
   AND NOT (cv.notify_mode = 'muted' AND (cv.muted_until_ms IS NULL OR cv.muted_until_ms > ?))
   AND NOT EXISTS (SELECT 1 FROM channels ch WHERE 'c:' || ch.id = cv.conv_key AND ch.kind = 'system')
-''', [nowMs]);
+  AND NOT EXISTS (SELECT 1 FROM contacts ct WHERE cv.kind <> 'channel' AND ct.radio_id = cv.radio_id AND ct.blocked = 1
+                  AND substr(ct.pubkey, 1, 12) = substr(cv.conv_key, 3))
+''';
+  static const String _liveUnread = "(SELECT count(*) FROM messages m WHERE m.conv_key = cv.conv_key AND m.read = 0 AND m.direction = 'in')";
+
+  /// Badge value: number of conversations with unread messages (or marked unread) the list would show for [radioId].
+  int unreadConversationCount({String? radioId, required int nowMs}) {
+    final r = db.raw.select('SELECT count(*) c $_countable AND ($_liveUnread > 0 OR cv.marked_unread = 1)', [radioId, radioId, nowMs]);
     return r.first['c'] as int;
   }
 
-  /// Badge value of the redesigned Chat tab (D19): unread MESSAGES, muted, blocked-contact and system conversations excluded.
-  int unreadMessageCount({required int nowMs}) {
-    final r = db.raw.select('''
-SELECT coalesce(sum(max(cv.unread, cv.marked_unread)), 0) c FROM conversations cv
-WHERE (cv.unread > 0 OR cv.marked_unread = 1)
-  AND NOT (cv.notify_mode = 'muted' AND (cv.muted_until_ms IS NULL OR cv.muted_until_ms > ?))
-  AND NOT EXISTS (SELECT 1 FROM channels ch WHERE 'c:' || ch.id = cv.conv_key AND ch.kind = 'system')
-''', [nowMs]);
+  /// Badge value of the Chat tab (D19): unread MESSAGES in the conversations the list shows for [radioId]; a conversation
+  /// marked unread with nothing unread counts one.
+  int unreadMessageCount({String? radioId, required int nowMs}) {
+    final r = db.raw.select('SELECT coalesce(sum(CASE WHEN u > 0 THEN u WHEN mu = 1 THEN 1 ELSE 0 END), 0) c '
+        'FROM (SELECT $_liveUnread AS u, cv.marked_unread AS mu $_countable)', [radioId, radioId, nowMs]);
     return (r.first['c'] as num).toInt();
   }
 
@@ -339,6 +346,18 @@ SELECT cv.conv_key k, m.direction d, m.state s, m.sender_name n FROM conversatio
         return n;
       });
 
+  /// "Mark all as read" for the radio whose list is on screen: every incoming message read, every mark cleared.
+  /// Returns the conversations that changed.
+  List<String> markAllRead(String radioId) => db.transaction(() {
+        final keys = db.raw
+            .select("SELECT conv_key FROM conversations cv WHERE radio_id = ? AND (marked_unread = 1 OR EXISTS (SELECT 1 FROM messages m WHERE m.conv_key = cv.conv_key AND m.read = 0))", [radioId])
+            .map((r) => r['conv_key'] as String)
+            .toList();
+        db.raw.execute('UPDATE messages SET read = 1 WHERE radio_id = ? AND read = 0', [radioId]);
+        db.raw.execute('UPDATE conversations SET unread = 0, marked_unread = 0 WHERE radio_id = ?', [radioId]);
+        return keys;
+      });
+
   /// Manual "Mark unread" (swipe / menu). Opening the conversation clears it again ([markConversationRead]).
   void setMarkedUnread(String convKey, String radioId, bool marked) {
     ensureConversation(convKey, radioId);
@@ -364,7 +383,7 @@ SELECT cv.conv_key k, m.direction d, m.state s, m.sender_name n FROM conversatio
   /// Recomputes last message and unread from the messages table (after deletes, or as a repair).
   void rebuildConversation(String convKey) {
     final last = db.raw.select('SELECT id, ts_local_ms, text FROM messages WHERE conv_key = ? ORDER BY ts_local_ms DESC, seq DESC LIMIT 1', [convKey]);
-    final unread = db.raw.select('SELECT count(*) c FROM messages WHERE conv_key = ? AND read = 0', [convKey]).first['c'] as int;
+    final unread = db.raw.select("SELECT count(*) c FROM messages WHERE conv_key = ? AND read = 0 AND direction = 'in'", [convKey]).first['c'] as int;
     if (last.isEmpty) {
       db.raw.execute('UPDATE conversations SET last_msg_id = NULL, last_ts_ms = NULL, last_preview = NULL, unread = 0 WHERE conv_key = ?', [convKey]);
     } else {

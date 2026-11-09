@@ -43,7 +43,9 @@ class CoverageCellSheet extends StatelessWidget {
 
   /// Name of a repeater key (a prefix of the full key); null = not resolvable, the key is shown.
   final String? Function(String key)? repeaterName;
-  const CoverageCellSheet({super.key, required this.info, required this.meta, required this.h3, this.mine, this.repeaterName});
+  /// Clock for the "First / Last measured" ages; null = the real clock (tests pin it).
+  final DateTime? now;
+  const CoverageCellSheet({super.key, required this.info, required this.meta, required this.h3, this.mine, this.repeaterName, this.now});
 
   @override
   Widget build(BuildContext context) {
@@ -105,8 +107,8 @@ class CoverageCellSheet extends StatelessWidget {
       if (m.attempts < meta.faintBelow) rows.add(Text('Drawn faint: under ${meta.faintBelow} pings here.', style: muted));
       rows
         ..add(stat('Noise floor', m.noiseFloor == null ? '-' : '${m.noiseFloor!.round()} dBm'))
-        ..add(stat('First measured', m.firstAt == null ? '-' : lastSeenText(m.firstAt!)))
-        ..add(stat('Last measured', m.lastAt == null ? '-' : lastSeenText(m.lastAt!)));
+        ..add(stat('First measured', m.firstAt == null ? '-' : lastSeenText(m.firstAt!, now: now)))
+        ..add(stat('Last measured', m.lastAt == null ? '-' : lastSeenText(m.lastAt!, now: now)));
       final src = [for (final e in m.sources.entries) if (e.value > 0) '${e.key == 'meshsonar' ? 'MeshSonar' : (e.key == 'meshmapper' ? 'MeshMapper' : e.key)} ${e.value}'];
       if (src.isNotEmpty) rows.add(stat('Sources', src.join(', ')));
       if (m.repeaters.isNotEmpty) {
