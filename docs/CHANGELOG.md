@@ -15,6 +15,8 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
   ~3 minutes after the stop so the drive's last packets arrive first. A drive deleted on this phone, or hidden / deleted on
   the server from the app, before its confirmation went keeps nothing; hiding or deleting it later is handled by the server
   through `drive_ref`. Privacy zones are still applied on the phone before anything is sent.
+  The confirmation of an uploaded drive waits until the drive itself is on the server (an unknown `drive_ref` would hide the
+  whole window), at most 11 hours after the stop.
 - **Fixed (build 55):** the end trim of exact positions still waiting on the phone ran only when a drive failed to start,
   never at a normal stop. It now runs at every stop.
 - Disclosure text says how drive positions are held, trimmed and dropped.

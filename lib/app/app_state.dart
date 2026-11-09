@@ -1557,7 +1557,12 @@ class AppState extends ChangeNotifier {
   /// Sends the drive-end confirmations that are due (also called at launch, on coming back to the front and on a timer).
   Future<void> flushDriveEnds() {
     final c = client;
-    return driveEnds.flush(c is DriveEndTransport ? c as DriveEndTransport : null, keyApproved ? _settings.driverKey : null);
+    return driveEnds.flush(
+      c is DriveEndTransport ? c as DriveEndTransport : null,
+      keyApproved ? _settings.driverKey : null,
+      // The drive must be on the server first (8.7a: an unknown drive_ref hides the whole window).
+      uploaded: (ref) async => (await services.store.unsyncedPings(ref)).isEmpty,
+    );
   }
 
   /// The drive just stopped: confirm which part of its exact observer positions may be kept (the trimmed window), or none.
@@ -2850,6 +2855,7 @@ class AppState extends ChangeNotifier {
     await refreshSessions();
     if (_settings.autoSync && keyApproved) {
       await syncSession(session.id, quietIfNothing: true);
+      unawaited(flushDriveEnds()); // goes once it is due and the drive is up (section 8.7)
     } else if (_settings.autoSync && hasKey && !keyApproved) {
       _say('Drive saved. It will upload once your driver key is ready.');
     } else {
