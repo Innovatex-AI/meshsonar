@@ -20,8 +20,8 @@ export 'settings/data_sharing.dart' show telemetryHelp;
 const String disclosureHeading = 'What MeshSonar collects';
 
 /// Under the heading.
-const String disclosureLead = 'Everything below is on unless you turn it off here or later. No message text, no '
-    'private messages, and nothing about other apps, ever.';
+const String disclosureLead = 'Everything below is on unless you turn it off here or later. No direct messages, no '
+    'private channels, never your exact position, and nothing about other apps, ever.';
 
 Future<void> showTelemetryDisclosure(BuildContext context) {
   // Raised by the phone on first run: the drive guard holds it while a drive is active. Only the two buttons close it.

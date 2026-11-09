@@ -45,8 +45,9 @@ void main() {
       }
     });
 
-    test('the packet-header disclosure names every field the record sends', () {
-      // TelemetryRecord.wireKeys is the privacy contract; each key must be covered by a disclosed item.
+    test('the observer disclosure names every field the record sends (v1 and v2)', () {
+      // TelemetryRecord.wireKeysV2 is the privacy contract (Nov 8 2026: v2 adds raw, channel, cell); each key must be
+      // covered by a disclosed item.
       final shared = telemetryCategory.shared.join(' ').toLowerCase();
       final words = {
         'rx_ts': 'time',
@@ -57,13 +58,24 @@ void main() {
         'snr': 'snr',
         'rssi': 'rssi',
         'pkt_hash': 'fingerprint',
+        'raw': 'public packets in full',
+        'channel': 'public channel and # channel',
+        'cell': '~5 km area',
       };
-      expect(words.keys, unorderedEquals(TelemetryRecord.wireKeys), reason: 'a new wire key needs a disclosure line');
+      expect(words.keys, unorderedEquals(TelemetryRecord.wireKeysV2), reason: 'a new wire key needs a disclosure line');
       for (final e in words.entries) {
         expect(shared, contains(e.value), reason: '${e.key} is sent but not disclosed');
       }
       expect(shared, contains('region code'));
       expect(shared, contains('app version'));
+      // The observer block: random id, radio model / firmware / preset / antenna; the home position.
+      for (final w in ['random observer number', 'board model', 'firmware', 'frequency', 'antenna', 'home position']) {
+        expect(shared, contains(w), reason: 'observer field "$w" not disclosed');
+      }
+      final never = telemetryCategory.neverShared.join(' ').toLowerCase();
+      for (final w in ['direct messages', 'private channels', 'public key', 'exact position']) {
+        expect(never, contains(w));
+      }
     });
   });
 
@@ -103,7 +115,7 @@ void main() {
     await tester.tap(find.byKey(const Key('telemetry-toggle')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('telemetry-on-dialog')), findsOneWidget);
-    expect(find.textContaining('Never shared: Message text'), findsOneWidget);
+    expect(find.textContaining('Never shared: Direct messages and private channels'), findsOneWidget);
     await tester.tap(find.byKey(const Key('telemetry-on-dialog-cancel')));
     await tester.pumpAndSettle();
     expect(h.state.settings.telemetryEnabled, isFalse, reason: 'nothing changes without the confirmation');
@@ -127,7 +139,7 @@ void main() {
     await tester.tap(find.byKey(const Key('telemetry-erase-yes')));
     await settleIo(tester, until: () => h.tele.deletes == 1);
     expect(h.tele.deletes, 1);
-    expect(find.text('Erased 7 shared packet headers.'), findsOneWidget);
+    expect(find.text('Erased 7 shared observer packets.'), findsOneWidget);
   });
 
   testWidgetsT('turning it off and keeping the server copy sends no DELETE', (tester) async {
@@ -150,7 +162,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('telemetry-erase-dialog')), findsNothing);
     expect(h.state.settings.telemetryEnabled, isFalse);
-    expect(find.textContaining('Share packet headers is off.'), findsOneWidget);
+    expect(find.textContaining('Share what my radio hears (observer) is off.'), findsOneWidget);
   });
 
   testWidgetsT('erase without turning sharing off: destructive confirm, then DELETE', (tester) async {
@@ -180,7 +192,7 @@ void main() {
     await tester.pumpAndSettle();
     final list = find.byKey(const Key('what-shared-screen'));
     final scroll = find.descendant(of: list, matching: find.byType(Scrollable)).first;
-    expect(find.text('Share packet headers: on'), findsOneWidget);
+    expect(find.text('Share what my radio hears (observer): on'), findsOneWidget);
     for (final t in [
       ...telemetryCategory.shared,
       for (final f in otherDataFlows) f.body,

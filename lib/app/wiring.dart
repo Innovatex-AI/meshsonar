@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
 import 'app_flags.dart';
+import '../core/observer_identity.dart';
 import '../core/claim_flow.dart' show FileClaimRestoreStore;
 import '../core/cmat_client.dart';
 import '../core/drive_store.dart';
@@ -111,6 +112,11 @@ Future<AppServices> buildRealServices() async {
     appInfo: app,
     uiPrefsFile: File('${root.path}${Platform.pathSeparator}ui_prefs.json'),
     telemetryQueueFile: File('${root.path}${Platform.pathSeparator}telemetry_queue.json'),
+    // Phone observer id: random per install, in the Keychain (this device only), never derived from the person or radio.
+    observerIdentity: () {
+      final kc = KeychainSecretStore();
+      return ObserverIdentity(read: () => kc.read(observerIdSlot), write: (b) => kc.write(observerIdSlot, b));
+    }(),
     privacyZoneStore: FilePrivacyZoneStore(File('${root.path}${Platform.pathSeparator}privacy_zones.json')),
     claimRestoreStore: FileClaimRestoreStore(File('${root.path}${Platform.pathSeparator}claim_restore.json')),
     // The one problem report that couldn't be sent yet, next to settings.json.

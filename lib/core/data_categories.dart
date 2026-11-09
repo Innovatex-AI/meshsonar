@@ -15,7 +15,8 @@
 
 /// Where a category's data goes once collected.
 enum CategoryDestination {
-  /// The shared live packet feed (`POST /api/cmh/telemetry`). Never carries coordinates.
+  /// The shared live packet feed (`POST /api/cmh/telemetry`). Never carries coordinates (an H3 res-7 cell at most; the
+  /// home observer position goes separately, only when the person turns Home observer on).
   telemetryFeed,
 
   /// Recorded with the driver's own drive on this phone; uploaded with that drive only when the server advertises
@@ -98,11 +99,13 @@ const String collectionDisclosureHeading =
 const List<DataCategory> dataCategories = [
   DataCategory(
     id: CategoryId.packetHeaders,
-    title: 'Share packet headers',
-    // Same facts as lib/ui/telemetry_sheet.dart (telemetryHelp and its "Shared" / "Never shared" bullets).
-    disclosure: 'Packet headers your radio hears: packet type, the repeaters it passed through, signal strength '
-        '(SNR, RSSI), time and region. Shared to the live packet feed. Never message text or any message content, '
-        'never private channels or direct messages, never your location.',
+    title: 'Share what my radio hears (observer)',
+    // Same facts as lib/ui/settings/data_sharing.dart telemetryCategory ("Shared" / "Never shared" bullets).
+    disclosure: 'What your radio hears, as an observer: packet type, the repeaters it passed through, signal strength '
+        '(SNR, RSSI), time, region and (unless you choose Region only) the ~5 km area you were in; public packets '
+        '(adverts, path, trace, Public and # channel messages) in full; your radio\'s settings; a random observer '
+        'number; with Home observer on, the home position you place. Shared to the live map. Never direct messages or '
+        'private channels, never your name or radio key, never your exact position.',
     fields: [],
     destination: CategoryDestination.telemetryFeed,
     availability: CategoryAvailability.live,

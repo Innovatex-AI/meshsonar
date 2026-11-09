@@ -336,6 +336,6 @@ void main() {
 
   test('disclosure heading constants', () {
     expect(disclosureHeading, 'What MeshSonar collects');
-    expect(disclosureLead, contains('No message text'));
+    expect(disclosureLead, contains('No direct messages, no private channels'));
   });
 }

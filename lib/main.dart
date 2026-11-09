@@ -9,6 +9,7 @@ import 'app/chat_wiring.dart';
 import 'app/wiring.dart';
 import 'platform/map_prefs_store.dart' show openSharedMapPrefs;
 import 'ui/app.dart';
+import 'ui/device_feedback.dart' show PlatformDeviceFeedback;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,6 +18,8 @@ Future<void> main() async {
     // The map's remembered choices (layers, follow options) are read before the first frame so the Drive map never flashes defaults.
     await openSharedMapPrefs();
     final state = AppState(services);
+    // Home observer keeps the screen awake while it is on (lib/app/app_state.dart _applyHomeMode).
+    state.keepAwakeHook = (on) => unawaited(const PlatformDeviceFeedback().keepAwake(on));
     AlertsRuntime? alerts;
     try {
       // Notifications, the link's lifecycle log and reconnect-on-launch. Never prompts at launch. A failure here must not

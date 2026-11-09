@@ -5,6 +5,29 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+## [0.30.0+54] — 2026-11-08 — your phone becomes an observer (phone observer O2/O3)
+
+- **"Share packet headers" is now "Share what my radio hears (observer)"** (on by default, as before). The phone now sends
+  the new `meshsonar-telemetry/2` (contract meshsonar-infra `docs/planning/phone-observer-contract-v2-2026-11-08.md`):
+  - **Public packets in full**: adverts, path and trace packets, and Public / # channel packets, only after the packet's
+    MAC proves its channel (fail closed, as since 0.28.0). Direct messages and private channels are still never recorded.
+  - **Location: Approximate (~5 km, the default) or Region only.** Approximate adds the H3 resolution-7 hexagon the phone
+    was in; never coordinates.
+  - **Observer block:** a random per-install observer number kept in the Keychain (new after an erase), the radio's board
+    model, firmware, frequency, bandwidth, SF, CR and antenna mount. Never names or the radio's public key; the connected
+    radio's own advert heard back is never shared.
+  - **Faster:** a batch every 5 s while the app is open, every 60 s or 50 packets in the background; the 90 s hold-back
+    that keeps your own pings and their echoes out is unchanged; at most 180 batches an hour.
+  - **Works with any server:** a server that does not know v2 answers 400 about the format; the app then sends v1 headers
+    for the rest of the run.
+- **Home observer** (Settings > Privacy & data sharing, and More > Radios and tools): place the radio on a map, choose
+  exact or ~1 km for the public map, turn it on. While on, the screen stays awake, the radio reconnects by itself, a
+  heartbeat goes every 5 minutes while connected, and packets are shared from the home position (no moving cell). Shows
+  packets heard in the last 24 h from the server. Turn off deletes the home position on the server. The website shows home
+  observers on the Observers layer.
+- Disclosure, data categories, "What MeshSonar shares", Delete my data, Download my data and Delete my account texts
+  updated for every new field. Erase covers observer packets and the home observer.
+
 ## [0.29.4+53] — 2026-11-08 — the Chat badge counts only what you can see
 
 - **Unread badge fixed** (Andy: "shows 17, I have no unread"). The Chats list shows the radio you're on; the badge counted unread messages from every radio this phone has ever been connected to, so they could never be found or cleared. The badge, the tab, the app icon and each row now count exactly the conversations the list shows: the radio on screen, never muted, system or blocked-contact conversations, counted from the messages themselves so an old stored counter cannot inflate it.
