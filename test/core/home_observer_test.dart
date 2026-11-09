@@ -23,7 +23,7 @@ class _Tx implements HomeObserverTransport {
   @override
   Future<HomeObserverHttpResult> putHome(String driverKey, Map<String, dynamic> body) => _r('PUT $driverKey ${jsonEncode(body)}');
   @override
-  Future<HomeObserverHttpResult> heartbeat(String driverKey, String observerId) => _r('HB $observerId');
+  Future<HomeObserverHttpResult> heartbeat(String driverKey, Map<String, dynamic> body) => _r('HB ${body['id']} ${jsonEncode(body)}');
   @override
   Future<HomeObserverHttpResult> deleteHome(String driverKey, String observerId) => _r('DEL $observerId');
   @override
@@ -48,7 +48,7 @@ class _Seq implements HomeObserverTransport {
   @override
   Future<HomeObserverHttpResult> putHome(String k, Map<String, dynamic> b) => _r(inner.putHome(k, b));
   @override
-  Future<HomeObserverHttpResult> heartbeat(String k, String id) => _r(inner.heartbeat(k, id));
+  Future<HomeObserverHttpResult> heartbeat(String k, Map<String, dynamic> b) => _r(inner.heartbeat(k, b));
   @override
   Future<HomeObserverHttpResult> deleteHome(String k, String id) => _r(inner.deleteHome(k, id));
   @override
@@ -91,7 +91,7 @@ void main() {
     connected = true;
     active = false;
     expect(await s.heartbeatNow(), isNull);
-    expect(tx.calls, ['HB $_id']);
+    expect(tx.calls.single.startsWith('HB $_id '), isTrue);
     expect(s.heartbeatsSent, 1);
   });
 
@@ -109,6 +109,25 @@ void main() {
     await s.unregister();
     expect(s.heartbeatRunning, isFalse);
     expect(tx.calls.last, 'DEL $_id');
+  });
+
+  test('the timer beats again every period, in every mode, with mode and radio in the body (section 8.3)', () async {
+    final s = HomeObserverService(
+      transport: () => tx,
+      driverKey: () => key,
+      observerId: () async => _id,
+      active: () => active,
+      connected: () => connected,
+      mode: () => 'drive',
+      radio: () => {'model': 'Heltec V3', 'sf': 7},
+      heartbeatEvery: const Duration(milliseconds: 20),
+    );
+    s.startHeartbeat();
+    await Future<void>.delayed(const Duration(milliseconds: 75));
+    s.stopHeartbeat();
+    final hb = tx.calls.where((c) => c.startsWith('HB ')).toList();
+    expect(hb.length, greaterThanOrEqualTo(3), reason: 'once at start, then every period');
+    expect(jsonDecode(hb.first.split(' ').sublist(2).join(' ')), {'id': _id, 'mode': 'drive', 'radio': {'model': 'Heltec V3', 'sf': 7}});
   });
 
   test('outcomes are said in words: no key, not on the server, refused key, offline', () async {
@@ -222,7 +241,7 @@ void main() {
       return http.Response('{"ok":true}', 200);
     }));
     await c.putHome('k1', {'id': _id, 'lat': 1.5, 'lon': 2.5, 'location_public': 'exact'});
-    await c.heartbeat('k1', _id);
+    await c.heartbeat('k1', {'id': _id, 'mode': 'drive', 'radio': {'sf': 7}});
     await c.deleteHome('k1', _id);
     final me = await c.me('k1');
     expect([for (final r in seen) '${r.method} ${r.url}'], [
@@ -233,7 +252,7 @@ void main() {
     ]);
     expect(seen.every((r) => r.headers['x-driver-key'] == 'k1'), isTrue);
     expect(jsonDecode(seen[0].body), {'id': _id, 'lat': 1.5, 'lon': 2.5, 'location_public': 'exact'});
-    expect(jsonDecode(seen[1].body), {'id': _id});
+    expect(jsonDecode(seen[1].body), {'id': _id, 'mode': 'drive', 'radio': {'sf': 7}});
     expect(seen[2].bodyBytes, isEmpty);
     expect(parsePhoneObservers(me.body).single.fixed, isTrue);
   });

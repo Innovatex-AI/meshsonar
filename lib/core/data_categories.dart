@@ -103,9 +103,10 @@ const List<DataCategory> dataCategories = [
     // Same facts as lib/ui/settings/data_sharing.dart telemetryCategory ("Shared" / "Never shared" bullets).
     disclosure: 'What your radio hears, as an observer: packet type, the repeaters it passed through, signal strength '
         '(SNR, RSSI), time, region and (unless you choose Region only) the ~5 km area you were in; public packets '
-        '(adverts, path, trace, Public and # channel messages) in full; your radio\'s settings; a random observer '
-        'number; with Home observer on, the home position you place. Shared to the live map. Never direct messages or '
-        'private channels, never your name or radio key, never your exact position.',
+        '(adverts, path, trace, Public and # channel messages) in full; repeats of your own pings; during a drive the '
+        'drive\'s exact position after your drive privacy; your radio\'s settings and a status every 5 minutes; a random '
+        'observer number; with Home observer on, the home position you place. Shared to the live map. Never direct messages or '
+        'private channels, never your name or radio key, never your exact position outside a drive.',
     fields: [],
     destination: CategoryDestination.telemetryFeed,
     availability: CategoryAvailability.live,

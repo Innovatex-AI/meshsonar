@@ -151,8 +151,8 @@ const DataCategory telemetryCategory = DataCategory(
   id: 'telemetry',
   toggleKey: 'telemetry-toggle',
   title: 'Share what my radio hears (observer)',
-  summary: 'Your phone acts as an observer: public packets, signal strength, time, region and your ~5 km area. '
-      'Never private messages or private channels.',
+  summary: 'Your phone is always an observer, also during drives: public packets, signal strength, time, region and '
+      'your ~5 km area (the drive position during a drive). Never private messages or private channels.',
   disclosureTitle: 'Make your phone an observer',
   disclosureLead: 'MeshSonar can share what your radio overhears on the mesh, so everyone gets a live view of the '
       'network: which repeaters are heard where, and how well. This is on unless you turn it off.',
@@ -164,8 +164,12 @@ const DataCategory telemetryCategory = DataCategory(
         'packet really belongs to Public or a # channel',
     'Your region code (for example CMH) and, unless you choose "Region only", the ~5 km area (a hexagon about '
         '5 km across) your phone was in. Never your exact position',
+    'While a drive is recording: the exact position during a drive (from the drive\'s GPS, the same as its pings), after '
+        'your drive privacy (privacy zones and start / end trim); with Region only, no position at all',
+    'The repeats of your own pings that your radio hears back, marked as yours (their raw bytes only when the ping itself '
+        'is shared on the map)',
     'Your radio\'s settings: board model, firmware, frequency, bandwidth, spreading factor, coding rate and how its '
-        'antenna is mounted',
+        'antenna is mounted, and every 5 minutes while connected that this phone is still listening',
     'A random observer number made on this phone (not linked to you, your radio or your driver key; a new one after an '
         'erase), the app version and phone platform (iOS or Android)',
     'Home observer only, if you turn it on: the home position you place on the map. The public map shows it exactly or '
@@ -174,7 +178,7 @@ const DataCategory telemetryCategory = DataCategory(
   neverShared: [
     'Direct messages and private channels (those packets are never recorded at all)',
     'Your name, your radio\'s name or public key, and adverts your own radio sends',
-    'Your exact position (only the ~5 km area, or the region; the home position only in Home observer mode)',
+    'Your exact position outside a drive (only the ~5 km area, or the region; the home position only in Home observer mode)',
     'Your own pings and their echoes',
   ],
   destination: 'Collected only while this phone has a driver key, and sent only to your server '

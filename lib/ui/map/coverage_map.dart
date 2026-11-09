@@ -84,7 +84,7 @@ import 'layers/map_layer.dart';
 import 'layers/observer_layer.dart';
 import 'layers/repeater_painter_layer.dart';
 import 'layers/repeater_sprites.dart' show RepeaterFreshness, freshnessOfAdvertBand, freshnessOfRosterBand;
-import 'layers/registry.dart' show kDefaultLayerState;
+import 'layers/registry.dart' show kDefaultLayerState, kHeardCellsLayerId;
 import 'layers/repeater_map_source.dart';
 import 'layers/repeater_name_labels.dart';
 import 'map_info_panel.dart';
@@ -199,7 +199,10 @@ class CoverageV2Inputs {
 
   /// The inspector read (`/api/coverage/cell/{h3}`); null = the panel shows what the tap knows.
   final Future<CoverageCellInfo> Function(String h3)? fetchCell;
-  const CoverageV2Inputs({required this.tiles, required this.meta, this.drawTiles = true, this.fetchCell});
+
+  /// The server has the Heard (no ping) layer (`capabilities.coverageHeard`).
+  final bool heard;
+  const CoverageV2Inputs({required this.tiles, required this.meta, this.drawTiles = true, this.fetchCell, this.heard = false});
 }
 
 class CoverageMap extends StatefulWidget {
@@ -1713,6 +1716,15 @@ class _CoverageMapState extends State<CoverageMap> {
                 CoverageTilesLayer(
                   key: const Key('coverage-predicted-layer'),
                   layer: CoverageTileLayer.predicted,
+                  store: v2.tiles,
+                  meta: v2.meta,
+                  colors: CoverageBandColors.of(mc.palette, t.brightness),
+                ),
+              // Heard (no ping): over Predicted, under Measured, so a pinged cell always shows its Measured colour (§8.5).
+              if (v2.heard && layerState.isOn(kHeardCellsLayerId))
+                CoverageTilesLayer(
+                  key: const Key('coverage-heard-layer'),
+                  layer: CoverageTileLayer.heard,
                   store: v2.tiles,
                   meta: v2.meta,
                   colors: CoverageBandColors.of(mc.palette, t.brightness),

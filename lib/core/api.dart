@@ -200,6 +200,9 @@ class SiteConfig {
   /// Coverage v2 (`capabilities.coverageV2`): `/api/coverage/{tiles,cell,meta}` and `public-coverage?metric=mean`.
   bool get coverageV2 => capabilities.contains('coverageV2');
 
+  /// The coverage v2 Heard layer (`capabilities.coverageHeard`, phone observer contract section 8.5).
+  bool get coverageHeard => coverageV2 && capabilities.contains('coverageHeard');
+
   /// `capabilities.driveFormats`: the drive upload format ids this server accepts (e.g. `meshsonar.drive.v1.2`).
   /// Empty = not advertised (an older server): the app then sends the baseline format only.
   final List<String> driveFormats;

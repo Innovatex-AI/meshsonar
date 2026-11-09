@@ -194,8 +194,8 @@ class HttpCmatClient implements CmatClient, TelemetryTransport, HomeObserverTran
       _observer('PUT', endpoint('observer/home'), driverKey, homeObserverJson(body));
 
   @override
-  Future<HomeObserverHttpResult> heartbeat(String driverKey, String observerId) =>
-      _observer('POST', endpoint('observer/heartbeat'), driverKey, homeObserverJson({'id': observerId}));
+  Future<HomeObserverHttpResult> heartbeat(String driverKey, Map<String, dynamic> body) =>
+      _observer('POST', endpoint('observer/heartbeat'), driverKey, homeObserverJson(body));
 
   @override
   Future<HomeObserverHttpResult> deleteHome(String driverKey, String observerId) =>

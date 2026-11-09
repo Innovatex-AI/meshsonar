@@ -64,6 +64,12 @@ List<CellStyle> measuredStyles(CoverageBandColors c) => [
           : CellStyle(c[b].withValues(alpha: faint ? 0.55 : 0.85), const Color(0x00000000), 0, null, c[b].withValues(alpha: faint ? 0.55 : 0.9)),
 ];
 
+/// The Heard (no ping) styles (meshsonar-infra coverage-v2-api-contract.md "Heard layer"): the band colour as a light fill
+/// 0.25 under a 1.5 px outline 0.9 in the same colour, dots 0.7; never mixed with Measured. Index = band 0..6.
+List<CellStyle> heardStyles(CoverageBandColors c) => [
+  for (var b = 0; b <= 6; b++) CellStyle(c[b].withValues(alpha: 0.25), c[b].withValues(alpha: 0.9), 1.5, null, c[b].withValues(alpha: 0.7)),
+];
+
 /// The predicted multipliers on `o` (coverage-v2-colours.md "Predicted"): light fill 0.35 / hatch 0.6 / band-0 hatch 0.5; the
 /// DARK theme is quieter (coordinator decision with Andy's authority, Nov 8, both platforms, doc be25f1e): fill 0.2 / hatch 0.4 /
 /// band-0 hatch 0.3, because the bright dark ramp buried the streets in the field shots.

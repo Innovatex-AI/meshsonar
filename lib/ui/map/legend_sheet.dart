@@ -10,6 +10,7 @@
 // ranges, saved for offline use) with the colours of coverage-v2-colours.md: five bands, No reply, Heard no direct signal,
 // Faint = under 3 pings, and the hatched Predicted swatch. Without v2 the old Best-SNR steps show (one colour metric: the
 // colour-by modes are gone).
+import 'layers/observer_layer.dart' show MobileObserverPainter;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -163,6 +164,7 @@ class _MapLegendSheetState extends State<MapLegendSheet> {
             if (widget.coverageV2) ...[
               _section(context, 'cells', Icons.hexagon_outlined, 'Measured coverage', _cellsV2(context, mc)),
               _section(context, 'predicted', Icons.texture_rounded, 'Predicted coverage', _predictedV2(context, mc)),
+              _section(context, 'heardcells', Icons.hearing_rounded, 'Heard (no ping)', _heardCellsV2(context, mc)),
               _section(context, 'yours', Icons.hexagon_rounded, 'This drive', _yoursV2(context, mc)),
             ] else ...[
               _section(context, 'cells', Icons.hexagon_outlined, 'Network coverage cells', _cells(context, mc)),
@@ -362,6 +364,25 @@ class _MapLegendSheetState extends State<MapLegendSheet> {
     ];
   }
 
+  List<Widget> _heardCellsV2(BuildContext context, MeshSonarColors mc) {
+    final c = _bands(context, mc);
+    return [
+      _note(
+        context,
+        'Cells where a MeshSonar phone heard a repeater while driving, without pinging: passive evidence, kept apart from '
+        'Measured coverage. Same signal colours as a light fill under a solid outline; a measured cell always shows its '
+        'Measured colour on top.',
+        key: const Key('legend-heardcells-note'),
+      ),
+      LegendRow(id: 'heardcells-sample', swatch: CoverageBandSwatch(band: 4, colors: c, heard: true, size: 26), title: 'Heard (no ping)'),
+      LegendRow(
+        id: 'heardcells-nosnr',
+        swatch: CoverageBandSwatch(band: CoverageBand.heardNoSnr, colors: c, heard: true, size: 26),
+        title: 'Heard, no signal reading',
+      ),
+    ];
+  }
+
   List<Widget> _yoursV2(BuildContext context, MeshSonarColors mc) => [
     _note(
       context,
@@ -450,6 +471,19 @@ class _MapLegendSheetState extends State<MapLegendSheet> {
         id: 'observer-offline',
         swatch: ExcludeSemantics(child: _Triangle(color: mc.silent, filled: false, halo: t.colorScheme.surface)),
         title: 'Hollow grey triangle: offline',
+      ),
+      LegendRow(
+        id: 'observer-mobile',
+        swatch: ExcludeSemantics(
+          child: SizedBox(
+            width: 18,
+            height: 18,
+            child: CustomPaint(painter: MobileObserverPainter(fill: t.colorScheme.primary, glyph: t.colorScheme.onPrimary, halo: t.colorScheme.surface)),
+          ),
+        ),
+        title: 'Circle with a phone: MeshSonar phone on the move',
+        detail: 'A phone listening as an observer right now, shown at the middle of its ~5 km area (never its exact place). '
+            'It fades out over 10 minutes after it was last heard from.',
       ),
     ];
   }

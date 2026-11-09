@@ -9,8 +9,9 @@
 //    queue (memory and disk) at once. A server-side erase is a separate, remembered request ([eraseServerData]).
 //  * Only [TelemetryRecord]s exist here: raw bytes only of public packet types (the record enforces it), an H3 res-7 cell at
 //    most, never coordinates, names or the radio's public key; the observer id is random per install.
-//  * Our own TX pings (and their echoes) are never uploaded: records are held [TelemetryConfig.holdFor] before sending and
-//    dropped if their packet hash was one of our transmissions ([excludeHash]).
+//  * Echoes of our own TX pings are observer packets too (contract section 8.1, Nov 9 2026): records are held
+//    [TelemetryConfig.holdFor] so the ping's hash is known, then sent with `own: true` ([markOwn]); raw only when that ping
+//    was uploaded publicly. A v1 batch (no `own` field) still leaves them out, as before.
 //  * Cadence (contract section 6): in the foreground a batch at most every [TelemetryConfig.minGap] (5 s); in the background
 //    every [TelemetryConfig.backgroundGap] (60 s) or as soon as [TelemetryConfig.backgroundBatch] (50) packets are ready.
 //  * Rate caps: intake per minute/hour, at most [TelemetryConfig.maxBatchesPerHour] batches per hour (the server allows
@@ -22,6 +23,7 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'telemetry.dart';
 
@@ -242,7 +244,9 @@ class TelemetryUploader {
   }) : now = now ?? DateTime.now;
 
   final List<TelemetryRecord> _queue = [];
-  final LinkedHashSet<String> _ownHashes = LinkedHashSet();
+
+  /// Hashes of this phone's own transmissions -> whether the ping was uploaded publicly (raw may go with its echoes).
+  final LinkedHashMap<String, bool> _ownHashes = LinkedHashMap();
   final LinkedHashSet<String> _seen = LinkedHashSet();
   final List<DateTime> _batchTimes = [];
   DateTime? _nextAttempt;
@@ -299,20 +303,48 @@ class TelemetryUploader {
     }
   }
 
-  /// A hash of one of our own transmissions (a ping). Packets with it, our echoes, are never uploaded.
-  void excludeHash(String hash) {
+  /// A hash of one of our own transmissions (a ping): its echoes are sent as `own: true`, with their raw bytes only when
+  /// [publicRaw] (the ping was uploaded publicly: not hidden, not in a privacy zone, not trimmed).
+  void markOwn(String hash, {required bool publicRaw}) {
     if (hash.isEmpty) return;
-    _ownHashes.add(hash.toLowerCase());
+    final h = hash.toLowerCase();
+    _ownHashes[h] = publicRaw;
     while (_ownHashes.length > 2048) {
-      _ownHashes.remove(_ownHashes.first);
+      _ownHashes.remove(_ownHashes.keys.first);
     }
-    final before = _queue.length;
-    _queue.removeWhere((r) => r.packetHash == hash.toLowerCase());
-    if (_queue.length != before) _dirty = true;
+    for (var i = 0; i < _queue.length; i++) {
+      final r = _queue[i];
+      if (r.packetHash == h && !r.own) {
+        _queue[i] = r.asOwn(keepRaw: publicRaw);
+        _dirty = true;
+      }
+    }
+  }
+
+  /// The drive ended at [lat]/[lon]: exact positions still waiting within [trimM] of it go out as their cell instead
+  /// (the drive's end trim, section 8.2). [cellOf] gives the cell for a position (null = none).
+  void trimDriveEnd(double lat, double lon, double trimM, String? Function(double lat, double lon) cellOf) {
+    for (var i = 0; i < _queue.length; i++) {
+      final p = _queue[i].pos;
+      if (p == null) continue;
+      if (_metres(p.lat, p.lon, lat, lon) <= trimM) {
+        _queue[i] = _queue[i].withoutPos(cellOf(p.lat, p.lon));
+        _dirty = true;
+      }
+    }
+  }
+
+  static double _metres(double la1, double lo1, double la2, double lo2) {
+    const r = 6371000.0;
+    final p1 = la1 * math.pi / 180, p2 = la2 * math.pi / 180;
+    final dp = p2 - p1, dl = (lo2 - lo1) * math.pi / 180;
+    final a = math.sin(dp / 2) * math.sin(dp / 2) + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) * math.sin(dl / 2);
+    return 2 * r * math.asin(math.min(1, math.sqrt(a)));
   }
 
   /// Queues [r] if telemetry is on and there is a driver key; returns whether it was kept.
-  bool add(TelemetryRecord r) {
+  bool add(TelemetryRecord rec) {
+    var r = rec;
     if (!enabled()) {
       discard();
       return false;
@@ -320,7 +352,7 @@ class TelemetryUploader {
     if ((driverKey() ?? '').isEmpty) return false; // nothing can be uploaded without a key; do not hoard
     if (!r.mayLeavePhone) return false; // private types, and group packets whose channel was not checked
     final h = r.packetHash;
-    if (h != null && _ownHashes.contains(h)) return false;
+    if (h != null && _ownHashes.containsKey(h) && !r.own) r = r.asOwn(keepRaw: _ownHashes[h]!);
     final t = now();
     if (_minuteStart == null || t.difference(_minuteStart!) >= const Duration(minutes: 1)) {
       _minuteStart = t;
@@ -475,7 +507,7 @@ class TelemetryUploader {
       return;
     }
     final t = now();
-    _queue.removeWhere((r) => r.at.isBefore(t.subtract(config.maxAge)) || (r.packetHash != null && _ownHashes.contains(r.packetHash)));
+    _queue.removeWhere((r) => r.at.isBefore(t.subtract(config.maxAge)));
     if (_queue.isEmpty) {
       await _save();
       return;
@@ -504,9 +536,15 @@ class TelemetryUploader {
     final key = driverKey()!;
     final obs = _v1Only ? null : observer?.call();
     final v2 = obs != null && obs.valid;
+    // v1 has no `own` field: our own echoes stay out of a v1 batch (the pre-section-8 rule).
     List<int> bodyFor(bool asV2) => utf8.encode(asV2
         ? buildTelemetryBodyV2(batch, observer: obs!, mode: mode, region: region, appVersion: appVersion, platform: platform)
-        : buildTelemetryBody(batch, region: region, appVersion: appVersion, platform: platform));
+        : buildTelemetryBody([for (final r in batch) if (!r.own) r], region: region, appVersion: appVersion, platform: platform));
+    if (!v2 && batch.every((r) => r.own)) {
+      _removeBatch(batch); // only our own echoes, which v1 cannot carry
+      await _save();
+      return;
+    }
     _lastSend = t;
     _batchTimes.add(t);
     TelemetryHttpResult res;
@@ -515,7 +553,7 @@ class TelemetryUploader {
       if (v2 && isFormatRefusal(res)) {
         // A server without v2 (contract section 1): the same batch again as v1 now, and v1 for the rest of this run.
         _v1Only = true;
-        res = await tx.postTelemetry(key, bodyFor(false));
+        res = batch.every((r) => r.own) ? const TelemetryHttpResult(200) : await tx.postTelemetry(key, bodyFor(false));
       }
     } catch (_) {
       _failures++;

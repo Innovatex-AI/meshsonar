@@ -120,6 +120,20 @@ void main() {
     await r.link.close();
   });
 
+  test('the phone observer stream is never paused (contract section 8.2): it gets every packet while the Rx log is paused',
+      () async {
+    final r = await rig();
+    final log = <Object>[], observer = <Object>[];
+    r.link.rxPackets.listen(log.add);
+    r.link.observerRxPackets.listen(observer.add);
+    r.link.rxLogPaused = true;
+    r.radio.injectChatter('Bob', 'hello');
+    await Future<void>.delayed(const Duration(milliseconds: 60));
+    expect(log, isEmpty);
+    expect(observer, isNotEmpty);
+    await r.link.close();
+  });
+
   test('status auto refresh is dropped while a login is out, runs when idle', () async {
     final r = await rig();
     await r.session.login('adminpw');

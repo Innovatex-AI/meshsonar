@@ -265,8 +265,10 @@ void main() {
     testWidgets('F7: Measured coverage says whose coverage it is; Predicted says it is not on an old server', (t) async {
       await openSheet(t);
       expect(find.text("Everyone's drives: the average signal in each cell."), findsOneWidget);
-      expect(find.text('Not available on this server yet'), findsOneWidget, reason: 'the fake server has no coverageV2');
+      // Predicted and Heard (no ping, Nov 9) both say so: the fake server has neither coverageV2 nor coverageHeard.
+      expect(find.text('Not available on this server yet'), findsNWidgets(2), reason: 'the fake server has no coverageV2');
       expect(t.widget<Switch>(find.byKey(const Key('layer-predicted'))).onChanged, isNull);
+      expect(t.widget<Switch>(find.byKey(const Key('layer-heardcells'))).onChanged, isNull, reason: 'Heard needs coverageHeard');
     });
 
     testWidgets('Repeaters: one switch with a This region / All MeshCore scope; Names is under it', (t) async {

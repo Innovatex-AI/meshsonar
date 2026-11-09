@@ -21,7 +21,7 @@ import 'settings_kit.dart';
 const String deleteMyDataLead =
     'This deletes what MeshSonar collected alongside your driving: the drive context (air '
     'pressure, altitude and direction, phone and radio readings, phone and app details, the weather lookup for your '
-    'drives) and the observer packets this phone shared (with its home observer). Your drives themselves (where each ping was sent and what '
+    'drives) and the observer packets this phone shared (with their drive positions and its home observer). Your drives themselves (where each ping was sent and what '
     'it heard) are not touched here: delete a drive from its own screen. Collection continues as the switches in '
     'Privacy & data sharing say; turn a switch off to stop it.';
 
@@ -37,7 +37,8 @@ const String deleteAccountText =
 /// What the person is told before "Download my data".
 const String exportText =
     'Download my data saves everything the server holds for your account (your keys, every drive '
-    'with each ping, the packets this phone shared as an observer and its home observer position, and your reports) as '
+    'with each ping, the packets this phone shared as an observer with their drive positions and its home observer '
+    'position, and your reports) as '
     'one file you can keep or share.';
 
 class DeleteMyDataScreen extends StatefulWidget {

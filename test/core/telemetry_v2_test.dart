@@ -59,9 +59,9 @@ void main() {
   );
   final unnamedOnly = ShareableChannels(() => [publicChannelSecret16]);
 
-  test('the v2 wire keys are pinned: v1 keys plus raw, channel, cell; nothing else', () {
+  test('the v2 wire keys are pinned: v1 keys plus raw, channel, cell (and pos, own since section 8); nothing else', () {
     expect(TelemetryRecord.wireKeys, ['rx_ts', 'type', 'route', 'hash_size', 'path', 'snr', 'rssi', 'pkt_hash']);
-    expect(TelemetryRecord.wireKeysV2, [...TelemetryRecord.wireKeys, 'raw', 'channel', 'cell']);
+    expect(TelemetryRecord.wireKeysV2, [...TelemetryRecord.wireKeys, 'raw', 'channel', 'cell', 'pos', 'own']);
   });
 
   test('private types (REQ, RESPONSE, TXT_MSG, ANON_REQ) never become a record, whatever is passed', () {

@@ -123,6 +123,10 @@ class AppServices {
   /// only, stable for the run (tests).
   final ObserverIdentity? observerIdentity;
 
+  /// Run the 5-minute observer heartbeat timer (contract section 8.3). Off by default so tests never leave a periodic timer
+  /// behind; the app's wiring turns it on. The heartbeat at connect goes either way.
+  final bool observerHeartbeatTimer;
+
   /// Repeaters whose name still has to be put back after a claim (names only, never a password). Null = memory only.
   final ClaimRestoreStore? claimRestoreStore;
 
@@ -190,6 +194,7 @@ class AppServices {
     this.uiPrefsFile,
     this.telemetryQueueFile,
     this.observerIdentity,
+    this.observerHeartbeatTimer = false,
     this.privacyZoneStore,
     this.claimRestoreStore,
     this.directory,

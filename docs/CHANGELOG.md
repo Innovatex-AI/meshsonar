@@ -5,6 +5,30 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+## [0.31.0+55] — 2026-11-09 — the phone is always an observer (contract section 8)
+
+Andy, Nov 9: "the phone is always the observer, even during the drive or app use, and our system treats it like an
+observer." meshsonar-infra `docs/planning/phone-observer-contract-v2-2026-11-08.md` section 8.
+- **Own echoes are observer packets (8.1):** repeats of your own pings are no longer dropped; they go as `own: true` after
+  the same 90 s hold, with their raw bytes only when the ping itself is uploaded publicly (a drive with uploads on, outside
+  your privacy zones and start trim), else header only. Your radio's own advert is still never sent. The wardrive channel
+  counts as a provable # channel. A v1 batch still leaves own echoes out.
+- **Drive mode (8.2):** while a drive records, batches say `mode: drive` and packets carry the exact `pos` (the drive GPS fix
+  nearest the packet, within 10 s, 6 decimals, accuracy) instead of the ~5 km cell, after the drive privacy rules: inside a
+  privacy zone or the start trim -> the cell; at the end of the drive, positions still waiting near the end are turned
+  into cells (end trim); Region only -> no position at all; a drive whose uploads are off -> the cell.
+- **Observing never pauses:** the observer now reads its own copy of every received packet, so a remote request (repeater
+  login / status), a ping, chat or a map no longer drops packets from the observer stream (the Rx log screen still pauses).
+- **Heartbeat for every connected phone (8.3):** once at connect and every 5 minutes while sharing is on, in every mode,
+  with the mode and the radio settings.
+- **Moving phones on the Observers layer (8.4):** online MeshSonar phones on the move are drawn at the centre of their
+  ~5 km cell with their own marker (a circle with a phone), fading out over 10 minutes; legend entry added (website parity).
+- **Heard (no ping) layer (8.5):** a new coverage layer and legend section for cells where a phone heard a repeater without
+  pinging: the signal colours as a light fill under a solid outline, between Predicted and Measured, shown when the server
+  offers it (`capabilities.coverageHeard`).
+- Disclosure, data categories, Delete my data and Download my data say what is new: the exact drive position during a drive
+  (after drive privacy), repeats of your own pings, the status every 5 minutes.
+
 ## [0.30.0+54] — 2026-11-08 — your phone becomes an observer (phone observer O2/O3)
 
 - **"Share packet headers" is now "Share what my radio hears (observer)"** (on by default, as before). The phone now sends

@@ -22,7 +22,7 @@ class _HomeClient extends FakeCmatClient implements HomeObserverTransport {
   }
 
   @override
-  Future<HomeObserverHttpResult> heartbeat(String driverKey, String observerId) async {
+  Future<HomeObserverHttpResult> heartbeat(String driverKey, Map<String, dynamic> body) async {
     calls.add('HB');
     return const HomeObserverHttpResult(200);
   }

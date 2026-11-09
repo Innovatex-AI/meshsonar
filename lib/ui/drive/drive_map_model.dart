@@ -391,6 +391,7 @@ class DriveMapModel extends ChangeNotifier {
       coverageCells: _networkCells.length,
       coverageSavedAt: state.networkCoverageSavedAt,
       coverageV2: coverageV2,
+      coverageHeard: state.coverageHeard,
       tilesOffline: coverageV2 && state.coverageTiles.offline,
       coverageFiltered: coverageFiltered,
       observersState: _observersSlug == state.viewingRegion?.slug ? _observersState : MapFeedState.idle,
