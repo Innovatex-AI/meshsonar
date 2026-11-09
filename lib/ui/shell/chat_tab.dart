@@ -213,6 +213,20 @@ class RedesignedChatTabState extends State<RedesignedChatTab> {
           enableBackgroundFilterBlur: translucent,
           border: Border(bottom: BorderSide(color: c.outline.withValues(alpha: 0.35), width: 0.5)),
           trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+            if (seg == ChatShellSegment.chats && p.unreadMessages > 0)
+              Semantics(
+                label: 'Mark all as read',
+                button: true,
+                excludeSemantics: true,
+                onTap: p.markAllRead,
+                child: CupertinoButton(
+                  key: const Key('chat-mark-all-read'),
+                  padding: EdgeInsets.zero,
+                  minimumSize: const Size(Hit.min, Hit.min),
+                  onPressed: p.markAllRead,
+                  child: AppSymbolIcon(AppSymbols.checkmarkBubble, size: 22, color: c.accent),
+                ),
+              ),
             if (seg == ChatShellSegment.contacts && p.addContactAction(context) != null)
               Semantics(
                 label: 'Add contact',

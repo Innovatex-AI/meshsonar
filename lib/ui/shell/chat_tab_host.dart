@@ -40,6 +40,9 @@ abstract class ChatTabProvider {
   /// True when there are no conversations at all (the host then shows its own first-run empty state).
   bool get isEmpty;
 
+  /// Marks every conversation of the radio on screen read (the Chats header's "Mark all as read").
+  void markAllRead() {}
+
   // ---- the tab (Chats | Contacts | Channels | Network)
   /// The Chats inbox, as a sliver: Direct messages, Channels, Rooms and System in labelled sections.
   Widget chatsSliver(BuildContext context, ChatTabArgs args);
@@ -94,6 +97,8 @@ class DebugFixtureChat implements ChatTabProvider {
   Listenable get changes => ChangeNotifier();
   @override
   int get unreadMessages => 2;
+  @override
+  void markAllRead() {}
   @override
   bool get isEmpty => false;
   @override
