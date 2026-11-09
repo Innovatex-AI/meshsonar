@@ -55,7 +55,9 @@ void main() {
     await shot(t, 'm0-analyze-region');
     final analysisTab = find.widgetWithText(Tab, 'Analysis');
     if (await waitFor(t, analysisTab, timeout: const Duration(seconds: 5))) {
-      await t.tap(analysisTab);
+      await t.ensureVisible(analysisTab);
+      await pumpFor(t, const Duration(milliseconds: 600));
+      await t.tap(analysisTab, warnIfMissed: false);
       await pumpFor(t, const Duration(seconds: 6));
       await shot(t, 'm0-analyze-analysis');
     }
@@ -89,5 +91,7 @@ void main() {
     final method = find.descendant(of: find.byKey(const Key('method-list')), matching: find.byType(Scrollable)).first;
     await t.scrollUntilVisible(find.text('Predicted coverage'), 200, scrollable: method);
     await shot(t, 'm0-method-cells');
+    // ignore: avoid_print
+    print('VERIFY_DONE');
   });
 }

@@ -122,7 +122,7 @@ class _DriveNextCardState extends State<DriveNextCard> {
           note == null
               ? 'MeshSonar needs your location to find coverage gaps near you. No account needed.'
               : note.action == LocationAction.ask
-                  ? 'Allow location and MeshSonar lists the silent and unmapped areas near you. No account needed.'
+                  ? 'Allow location and MeshSonar lists the places near you where no repeater answered and the areas nobody has mapped yet. No account needed.'
                   : 'Location is off for MeshSonar. Turn it on in Settings to find coverage gaps near you.',
           action: note?.actionLabel == null
               ? null
