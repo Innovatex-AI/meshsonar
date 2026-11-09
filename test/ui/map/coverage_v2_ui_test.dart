@@ -151,7 +151,7 @@ void main() {
   });
 
   // Pinned clock: the inspector's ages are relative, so a real clock made the golden drift hourly.
-  final _goldenNow = DateTime.utc(2026, 11, 8, 17);
+  final goldenNow = DateTime.utc(2026, 11, 8, 17);
 
   group('inspector', () {
     final measured = CoverageCellInfo.fromJson(_json('cell-measured.json'));
@@ -189,7 +189,7 @@ void main() {
 
     for (final b in Brightness.values) {
       testWidgets('golden: measured inspector ${b.name}', (t) async {
-        await _pump(t, CoverageCellSheet(info: measured, meta: _meta, h3: measured.h3, mine: mine, repeaterName: (k) => k == '297d' ? 'Alpha Tower' : null, now: _goldenNow), b: b);
+        await _pump(t, CoverageCellSheet(info: measured, meta: _meta, h3: measured.h3, mine: mine, repeaterName: (k) => k == '297d' ? 'Alpha Tower' : null, now: goldenNow), b: b);
         await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/coverage_inspector_measured_${b.name}.png'));
       });
       testWidgets('golden: coverage v2 legend ${b.name}', (t) async {
