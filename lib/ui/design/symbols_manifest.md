@@ -70,3 +70,4 @@ redistributed.
 | `globe` | `globe` | shared |
 | `numberSign` | `number` | shared |
 | `exclamationCircleFill` | `exclamationmark.circle.fill` | shared |
+| `checkmarkBubble` | `checkmark.bubble` | Chats: Mark all as read |

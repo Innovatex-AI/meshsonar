@@ -112,7 +112,7 @@ abstract final class AppSymbols {
     gear, //
     location, locationFill, antenna, wifi, bolt, battery, thermometer, tray, waveform, //
     route, gauge, bubbles, qrcode,
-    squareAndPencil, globe, numberSign, exclamationCircleFill,
+    squareAndPencil, globe, numberSign, exclamationCircleFill, checkmarkBubble,
   ];
 }
 
