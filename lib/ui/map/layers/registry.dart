@@ -18,7 +18,7 @@ import 'repeater_map_source.dart';
 const List<MapLayerSpec> kMapLayers = [
   MapLayerSpec(id: 'predicted', label: 'Predicted coverage', group: LayerGroup.coverage, z: 5, defaultOn: true, onWebsite: true, serverFed: true),
   // Heard (no ping), phone observer contract section 8.5: passive evidence, its own layer, painted between the two.
-  MapLayerSpec(id: kHeardCellsLayerId, label: 'Heard (no ping)', group: LayerGroup.coverage, z: 7, defaultOn: true, onWebsite: true, serverFed: true),
+  MapLayerSpec(id: kHeardCellsLayerId, label: 'Heard by phones', group: LayerGroup.coverage, z: 7, defaultOn: true, onWebsite: true, serverFed: true),
   MapLayerSpec(id: 'measured', label: 'Measured coverage', group: LayerGroup.coverage, z: 10, defaultOn: true, onWebsite: true, serverFed: true),
   MapLayerSpec(id: 'hexes', label: 'This drive', group: LayerGroup.coverage, z: 20, defaultOn: true, onWebsite: false, serverFed: false),
   // The Repeaters switch is these three ids together: `repeaters` (the viewed region's roster, scope This region) or `network`
@@ -193,7 +193,7 @@ LayerStatus layerStatus(String id, MapLayerInputs inputs, {RepeaterMapSource? re
       if (inputs.tilesOffline) {
         return const LayerStatus(LayerAvailability.failed, detail: "Couldn't load. Check the connection and retry.", canRetry: true);
       }
-      return const LayerStatus(LayerAvailability.ready, detail: 'Where a phone heard a repeater without pinging');
+      return const LayerStatus(LayerAvailability.ready, detail: 'Where a phone heard a repeater without pinging (not a measurement)');
     case 'observers':
       if (inputs.regionName == null) {
         return const LayerStatus(LayerAvailability.empty, detail: 'Pick a region to see its observers');

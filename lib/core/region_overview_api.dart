@@ -165,6 +165,9 @@ class RegionObserver {
   final int? packets10m;
 
   bool get mobile => kind == 'mobile';
+
+  /// A MeshSonar phone (`phone: true`), fixed at home or moving.
+  final bool phone;
   const RegionObserver({
     required this.key,
     this.name,
@@ -183,6 +186,7 @@ class RegionObserver {
     this.source = 'corescope',
     this.kind,
     this.packets10m,
+    this.phone = false,
   });
 
   /// Most recent sign of life (packet or status report).
@@ -214,9 +218,11 @@ class RegionObserver {
       trusted: v['trusted'] == true,
       source: _str(v['source']) ?? 'corescope',
       kind: _str(v['kind']),
+      phone: v['phone'] == true,
       packets10m: _int(v['packets10m'] ?? v['packetsLast10m'] ?? v['packets_10m']),
       // Mobile rows may say when they were last seen in one field.
-      lastPacketAt: _time(v['lastPacketAt']) ?? _time(v['lastSeen']) ?? _time(v['last_seen']),
+      // Phones (server 0116): `lastSeenAt` = heartbeat or packet, whichever is newer.
+      lastPacketAt: _time(v['lastPacketAt']) ?? _time(v['lastSeenAt']) ?? _time(v['lastSeen']),
     );
   }
 }

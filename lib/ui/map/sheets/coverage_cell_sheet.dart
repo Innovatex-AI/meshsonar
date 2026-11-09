@@ -29,6 +29,8 @@ String coverageCellSummary(CoverageCellInfo? info, CoverageMeta meta, {HexCell? 
     if (p.band == 0) return 'Predicted: no coverage';
     return 'Predicted ${meta.labelOf(p.band).toLowerCase()}${p.snrEst == null ? '' : '  ·  about ${_db(p.snrEst!)}'}';
   }
+  final hd = info?.heard;
+  if (hd != null) return 'Heard by phones  ·  ${hd.r} ${hd.r == 1 ? 'repeater' : 'repeaters'}${hd.snrMean == null ? '' : '  ·  mean ${_db(hd.snrMean!)}'}';
   if (mine != null) return 'Your pings here: ${mine.sent}';
   return info == null ? 'Coverage cell' : 'Nothing measured here yet';
 }
@@ -129,8 +131,31 @@ class CoverageCellSheet extends StatelessWidget {
         ..add(stat('Nearest measured cell', p.dNearestM == null ? '-' : AppScope.unitsOf(context).distance(p.dNearestM!)))
         ..add(stat('Estimated from', '${p.contributors} measured ${p.contributors == 1 ? 'cell' : 'cells'}'))
         ..add(Text('An estimate from nearby drives, not a measurement. Drive here to measure it.', style: muted));
-    } else if (info != null) {
+    } else if (info != null && info!.heard == null) {
       rows.add(Text('Nothing measured or predicted here yet.', style: muted));
+    }
+    final hd = info?.heard;
+    if (hd != null) {
+      final range = meta.rangeText(hd.band, sf: sf);
+      rows
+        ..add(header('Heard by phones'))
+        ..add(Padding(
+          padding: const EdgeInsets.only(bottom: Gap.xs),
+          child: Row(children: [
+            CoverageBandSwatch(band: hd.band, colors: bands, heard: true, size: 16),
+            const SizedBox(width: Gap.s),
+            Expanded(child: Text('${meta.labelOf(hd.band)}${range == null ? '' : '  ($range)'}', key: const Key('coverage-cell-heard-band'))),
+          ]),
+        ))
+        ..add(stat('Heard', '${hd.n} ${hd.n == 1 ? 'time' : 'times'} from ${hd.r} ${hd.r == 1 ? 'repeater' : 'repeaters'}', key: const Key('coverage-cell-heard')))
+        ..add(stat('Mean / best SNR', '${hd.snrMean == null ? '-' : _db(hd.snrMean!)} / ${hd.snrMax == null ? '-' : _db(hd.snrMax!)}'))
+        ..add(stat('Last heard', hd.lastAt == null ? '-' : lastSeenText(hd.lastAt!, now: now)));
+      for (final r in hd.repeaters) {
+        final name = repeaterName?.call(r.key);
+        rows.add(stat(name ?? '${r.key.substring(0, r.key.length < 8 ? r.key.length : 8)}…',
+            '${r.n}×${r.snrMean == null ? '' : '  ·  ${_db(r.snrMean!)}'}', key: Key('coverage-cell-heard-repeater-${r.key}')));
+      }
+      rows.add(Text('A phone heard these repeaters here without pinging. Not a measurement.', style: muted));
     }
     if (my != null) {
       rows
@@ -156,7 +181,7 @@ class CoverageBandSwatch extends StatelessWidget {
   final bool faint;
   final double size;
 
-  /// The Heard (no ping) look: light fill under a solid outline in the band colour (coverage-v2-api-contract "Heard layer").
+  /// The Heard-by-phones look: an outline in the band colour, no fill (coverage-v2-colours.md "Heard").
   final bool heard;
   const CoverageBandSwatch({super.key, required this.band, required this.colors, this.predicted = false, this.faint = false, this.size = 18, this.heard = false});
 
@@ -173,11 +198,11 @@ class _HeardSwatchPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final r = RRect.fromRectAndRadius((Offset.zero & size).deflate(0.75), Radius.circular(size.width * 0.2));
-    canvas.drawRRect(r, Paint()..color = c[band].withValues(alpha: 0.25));
+    // Outline only, never a fill (coverage-v2-colours.md "Heard").
+    final r = RRect.fromRectAndRadius((Offset.zero & size).deflate(1), Radius.circular(size.width * 0.2));
     canvas.drawRRect(r, Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5
+      ..strokeWidth = 1.6
       ..color = c[band].withValues(alpha: 0.9));
   }
 

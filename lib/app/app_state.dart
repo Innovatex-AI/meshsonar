@@ -545,7 +545,7 @@ class AppState extends ChangeNotifier {
   bool get coverageV2 => _siteConfig?.coverageV2 ?? false;
 
   /// The server draws the Heard (no ping) coverage layer (`capabilities.coverageHeard`, contract section 8.5).
-  bool get coverageHeard => _siteConfig?.coverageHeard ?? false;
+  bool get coverageHeard => coverageV2 && ((_siteConfig?.coverageHeard ?? false) || coverageMeta.heard);
   bool? _coverageFetchedV2;
 
   /// Test seam: how the coverage v2 client is made for the server's origin.

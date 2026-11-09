@@ -621,7 +621,9 @@ class _CoverageMapState extends State<CoverageMap> {
               (v2.drawTiles
                   ? coverageTileHit(v2.tiles, CoverageTileLayer.measured, v2.meta, p.latitude, p.longitude, tz) != null
                   : widget.networkCells.any((n) => n.cell?.h3 == id))) ||
-          (ls.isOn('predicted') && v2.drawTiles && coverageTileHit(v2.tiles, CoverageTileLayer.predicted, v2.meta, p.latitude, p.longitude, tz) != null);
+          (ls.isOn('predicted') && v2.drawTiles && coverageTileHit(v2.tiles, CoverageTileLayer.predicted, v2.meta, p.latitude, p.longitude, tz) != null) ||
+          (v2.heard && ls.isOn(kHeardCellsLayerId) && v2.drawTiles &&
+              coverageTileHit(v2.tiles, CoverageTileLayer.heard, v2.meta, p.latitude, p.longitude, tz) != null);
       return drawn ? (h3: id, lat: p.latitude, lon: p.longitude) : null;
     }
     // Dots: 12 px in degrees of longitude at this zoom (latitude is close enough at these sizes).
@@ -650,6 +652,10 @@ class _CoverageMapState extends State<CoverageMap> {
           if (n.cell != null) consider(n.cell!.lat, n.cell!.lon);
         }
       }
+    }
+    if (best == null && v2.heard && ls.isOn(kHeardCellsLayerId) && v2.drawTiles) {
+      final h = coverageTileHit(v2.tiles, CoverageTileLayer.heard, v2.meta, p.latitude, p.longitude, tz, radiusDeg: r);
+      if (h != null) consider(h.lat, h.lon);
     }
     if (best == null && ls.isOn('predicted') && v2.drawTiles && zoom >= v2.meta.predictedFromZoom) {
       final h = coverageTileHit(v2.tiles, CoverageTileLayer.predicted, v2.meta, p.latitude, p.longitude, tz, radiusDeg: r);

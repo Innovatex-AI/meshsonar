@@ -27,7 +27,8 @@ bool observerHasPosition(RegionObserver o) {
 /// How long a moving phone stays on the map after it was last seen (contract section 8.4).
 const Duration kMobileObserverFade = Duration(minutes: 10);
 
-/// 1 = just seen, falling to 0.25 at [kMobileObserverFade]; 0 = past it (not drawn). Fixed observers are always 1.
+/// 1 = just seen, falling to 0.2 at [kMobileObserverFade] (the website's fade); 0 = past it (not drawn). Fixed observers are
+/// always 1.
 double observerOpacity(RegionObserver o, DateTime now) {
   if (!o.mobile) return 1;
   final seen = o.lastSeen;
@@ -35,7 +36,7 @@ double observerOpacity(RegionObserver o, DateTime now) {
   final age = now.difference(seen);
   if (age.isNegative) return 1;
   if (age >= kMobileObserverFade) return 0;
-  return 1 - 0.75 * (age.inSeconds / kMobileObserverFade.inSeconds);
+  return 1 - 0.8 * (age.inSeconds / kMobileObserverFade.inSeconds);
 }
 
 /// The observers of [rows] that can be drawn.

@@ -164,7 +164,7 @@ class _MapLegendSheetState extends State<MapLegendSheet> {
             if (widget.coverageV2) ...[
               _section(context, 'cells', Icons.hexagon_outlined, 'Measured coverage', _cellsV2(context, mc)),
               _section(context, 'predicted', Icons.texture_rounded, 'Predicted coverage', _predictedV2(context, mc)),
-              _section(context, 'heardcells', Icons.hearing_rounded, 'Heard (no ping)', _heardCellsV2(context, mc)),
+              _section(context, 'heardcells', Icons.hearing_rounded, 'Heard by phones', _heardCellsV2(context, mc)),
               _section(context, 'yours', Icons.hexagon_rounded, 'This drive', _yoursV2(context, mc)),
             ] else ...[
               _section(context, 'cells', Icons.hexagon_outlined, 'Network coverage cells', _cells(context, mc)),
@@ -369,12 +369,11 @@ class _MapLegendSheetState extends State<MapLegendSheet> {
     return [
       _note(
         context,
-        'Cells where a MeshSonar phone heard a repeater while driving, without pinging: passive evidence, kept apart from '
-        'Measured coverage. Same signal colours as a light fill under a solid outline; a measured cell always shows its '
-        'Measured colour on top.',
+        'An outlined cell where a MeshSonar phone heard a repeater without pinging, in the colour of the average SNR it '
+        'heard. Not a measurement: never filled, and a measured cell shows its Measured colour instead.',
         key: const Key('legend-heardcells-note'),
       ),
-      LegendRow(id: 'heardcells-sample', swatch: CoverageBandSwatch(band: 4, colors: c, heard: true, size: 26), title: 'Heard (no ping)'),
+      LegendRow(id: 'heardcells-sample', swatch: CoverageBandSwatch(band: 4, colors: c, heard: true, size: 26), title: 'Heard by phones'),
       LegendRow(
         id: 'heardcells-nosnr',
         swatch: CoverageBandSwatch(band: CoverageBand.heardNoSnr, colors: c, heard: true, size: 26),

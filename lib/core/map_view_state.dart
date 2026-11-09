@@ -25,8 +25,16 @@ import 'dart:convert' show Utf8Codec;
 /// have no app layer; they are kept so a website link survives a round trip through the app.
 const List<String> kWebsiteShowKeys = ['measured', 'repeaters', 'observers', 'model', 'reach', 'regions', 'network', 'predicted', 'heardcells'];
 
-/// The Heard (no ping) coverage layer's id and website `show=` key (coverage-v2-api-contract.md "Heard layer").
+/// The Heard-by-phones coverage layer's id in the app and in `meshsonar://` links (coverage-v2-api-contract.md "Heard
+/// layer"). On the website the same layer is `show=heard`, which in app links means "Heard this drive": https links are
+/// translated both ways ([webShowKey], [fromWebShowKey]).
 const String kHeardCellsLayerId = 'heardcells';
+
+/// The website's `show=` key for the app layer id [k].
+String webShowKey(String k) => k == kHeardCellsLayerId ? 'heard' : k;
+
+/// The app layer id for a website `show=` key.
+String fromWebShowKey(String k) => k == 'heard' ? kHeardCellsLayerId : k;
 
 /// Layer keys only the app draws (its own drive layers). Written in `meshsonar://` links, never in https links.
 const List<String> kAppOnlyShowKeys = ['hexes', 'links', 'heard', 'pings', 'labels'];
@@ -153,17 +161,17 @@ class MapViewState {
     }
     final path = uri.path.endsWith('/') && uri.path.length > 1 ? uri.path.substring(0, uri.path.length - 1) : uri.path;
     if (path != '/coverage') return null;
-    final s = fromParameters(queryOf(uri), allowRegionParam: false);
+    final s = fromParameters(queryOf(uri), allowRegionParam: false, web: true);
     return region == null ? s : s.copyWith(region: region);
   }
 
   /// Parses query parameters (already decoded). [allowRegionParam]: read `region=` (app links only; on https the host
   /// says the region).
-  static MapViewState fromParameters(Map<String, String> q, {bool allowRegionParam = false}) {
+  static MapViewState fromParameters(Map<String, String> q, {bool allowRegionParam = false, bool web = false}) {
     List<String>? show;
     final rawShow = q['show'];
     if (rawShow != null) {
-      final want = rawShow.split(',').map((e) => e.trim()).toSet();
+      final want = rawShow.split(',').map((e) => e.trim()).map((k) => web ? fromWebShowKey(k) : k).toSet();
       final keys = [
         for (final k in kWebsiteShowKeys)
           if (want.contains(k)) k,
@@ -211,7 +219,7 @@ class MapViewState {
     if (show != null) {
       out['show'] = [
         for (final k in show!)
-          if (!web || kWebsiteShowKeys.contains(k)) k,
+          if (!web || kWebsiteShowKeys.contains(k)) web ? webShowKey(k) : k,
       ].join(',');
     }
     if (color != null) out['color'] = color!;
