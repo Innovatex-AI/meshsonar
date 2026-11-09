@@ -185,7 +185,7 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
     // Keep the screen on while driving.
     if (s.driving != _awake) {
       _awake = s.driving;
-      unawaited(_feedback?.keepAwake(_awake));
+      unawaited(_feedback?.keepAwake(_awake || s.homeObserverActive)); // home observer keeps it awake too
     }
   }
 
@@ -208,7 +208,7 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
     _model?.removeListener(_syncImmersive);
     _model?.dispose();
     _liveStats?.dispose();
-    if (_awake) unawaited(_feedback?.keepAwake(false));
+    if (_awake && !(_state?.homeObserverActive ?? false)) unawaited(_feedback?.keepAwake(false));
     super.dispose();
   }
 

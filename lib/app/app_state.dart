@@ -10,6 +10,7 @@ import 'dart:io' show Directory, File, Platform;
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:h3_flutter/h3_flutter.dart' show H3;
 
 import '../core/antenna_profile.dart';
 import '../core/api.dart';
@@ -46,7 +47,10 @@ import '../core/startup_location.dart';
 import '../core/report_body.dart';
 import '../core/server_url.dart';
 import '../core/sync_service.dart' show DefaultSyncService;
-import '../chat/channel_secret.dart' show publicChannelSecret16;
+import '../chat/channel_secret.dart' show hashtagSecret16, publicChannelSecret16;
+import '../core/home_observer.dart';
+import '../core/hex_cells.dart' show hexCellOf, hexId, loadHexEngine;
+import '../core/observer_identity.dart';
 import '../core/telemetry.dart';
 import '../core/telemetry_uploader.dart';
 import '../core/phone_sensors.dart';
@@ -55,6 +59,8 @@ import 'build_flags.dart';
 import '../platform/app_lifecycle_bridge.dart';
 import '../radio/radio_api.dart';
 import '../radio/radio_session_impl.dart';
+import '../radio/companion_link.dart' show MeshCoreCompanionLink;
+import '../radio/session.dart' show LinkState;
 import '../radio/session_manager.dart';
 import '../radio/wardrive_engine.dart' show DefaultWardriveEngine;
 import 'gps_monitor.dart';
@@ -1226,6 +1232,7 @@ class AppState extends ChangeNotifier {
   void debugOnForeground() => _onForeground(true);
 
   void _onForeground(bool fg) {
+    _telemetry?.foreground = fg; // 5 s batches in front, 60 s or 50 packets behind (contract section 6)
     if (!fg) return;
     _claims?.appResumed();
     unawaited(refreshLocationAccess());
@@ -1413,7 +1420,200 @@ class AppState extends ChangeNotifier {
         platform: services.appInfo.platform,
         queueFile: services.telemetryQueueFile,
         now: () => services.clock().toUtc(),
+        observer: _telemetryObserver,
+        onServerErased: () => unawaited(_afterServerErase()),
+        onObserver: (o) {
+          final k = o['key'];
+          if (k is String && RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(k)) _observerKey = k.toLowerCase();
+        },
       );
+
+  // ---------- phone observer (contract meshsonar-infra docs/planning/phone-observer-contract-v2-2026-11-08.md) ----------
+  late final ObserverIdentity observerIdentity = services.observerIdentity ?? ObserverIdentity.memory();
+  String? _observerKey;
+
+  /// The server's 64-hex key for this phone's observer (from the last v2 answer); null until one came back.
+  String? get observerKey => _observerKey ?? _home.lastKey;
+
+  /// The observer block of a v2 batch: random id + the connected radio's context. Null until the id is loaded.
+  TelemetryObserver? _telemetryObserver() {
+    final id = observerIdentity.id;
+    if (id == null) return null;
+    final info = _selfInfo;
+    final r = info?.radio;
+    final profile = antennaProfile;
+    return TelemetryObserver(
+      id: id,
+      radio: TelemetryRadio(
+        model: radioSessions.link is MeshCoreCompanionLink ? (radioSessions.link as MeshCoreCompanionLink).companionDetails?.model : null,
+        firmware: info?.firmware,
+        freqMhz: r?.freqMhz,
+        bwKhz: r?.bwKhz,
+        sf: r?.sf,
+        cr: r?.cr,
+        antenna: profile == null ? null : antennaToken(profile.mount),
+      ),
+    );
+  }
+
+  /// The antenna mount as a contract token (`^[a-z0-9_-]{1,24}$`): insideCar -> inside_car.
+  @visibleForTesting
+  static String antennaToken(AntennaMount m) => m.name.replaceAllMapped(RegExp('[A-Z]'), (x) => '_${x[0]!.toLowerCase()}');
+
+  H3? _h3;
+  bool _h3Tried = false;
+
+  /// For tests: the H3 engine the cell is computed with (the app loads libh3 itself).
+  @visibleForTesting
+  set debugHexEngine(H3? h) {
+    _h3 = h;
+    _h3Tried = true;
+  }
+
+  /// The H3 res-7 cell (~5 km) the phone was in at [at], per the person's choice: null for "Region only", in home mode,
+  /// or without a fix from within 10 minutes of [at]. Never coordinates.
+  String? _telemetryCell(DateTime at) {
+    if (_settings.telemetryRegionOnly) return null;
+    final f = _phoneFix;
+    if (f == null || !f.live) return null;
+    if (f.fix.at.toUtc().difference(at.toUtc()).abs() > const Duration(minutes: 10)) return null;
+    if (!_h3Tried) {
+      _h3Tried = true;
+      _h3 = loadHexEngine();
+    }
+    final h = _h3;
+    if (h == null) return null;
+    try {
+      return hexId(hexCellOf(h, f.fix.lat, f.fix.lon, res: 7));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// The person erased what the server holds: a new observer id from now on, and home mode is over (the server's erase
+  /// removed the home observer too).
+  Future<void> _afterServerErase() async {
+    await observerIdentity.rotate();
+    _observerKey = null;
+    _home.stopHeartbeat();
+    _home.status = null;
+    final h = _settings.homeObserver;
+    if (h != null && h.on) {
+      _settings = _settings.copyWith(homeObserver: h.copyWith(on: false));
+      try {
+        await services.settingsStore.save(_settings);
+      } catch (_) {}
+      _applyHomeMode();
+    }
+    notifyListeners();
+  }
+
+  // ---------- home observer (step O3; lib/core/home_observer.dart, lib/ui/settings/home_observer_screen.dart) ----------
+  late final HomeObserverService _home = HomeObserverService(
+    transport: () {
+      final c = client;
+      return c is HomeObserverTransport ? c as HomeObserverTransport : null;
+    },
+    driverKey: () => keyApproved ? _settings.driverKey : null,
+    observerId: observerIdentity.load,
+    active: () => homeObserverActive,
+    connected: () => connected,
+    config: () => _settings.homeObserver,
+  );
+
+  /// The home observer service (status, heartbeat count).
+  HomeObserverService get homeObserverService => _home;
+
+  /// Home mode is on (saved), sharing is on and this is a real radio: packets go as `observer.mode = home`, no cell.
+  bool get homeObserverActive =>
+      (_settings.homeObserver?.on ?? false) && _settings.telemetryEnabled && _radioKind != RadioKind.simulator;
+
+  /// Keeps the screen awake while home mode is on (set by the UI root; wakelock).
+  void Function(bool on)? keepAwakeHook;
+  bool _homeAwake = false;
+  bool _homeUserDisconnect = false;
+  bool _homeReconnecting = false;
+  StreamSubscription<LinkState>? _homeLinkSub;
+
+  /// Turns home mode on at [lat]/[lon] (or moves it): saves the choice, registers it with the server (`PUT`), keeps the
+  /// screen awake, reconnects the radio by itself and sends the heartbeat. Returns what the server said.
+  Future<HomeCallOutcome> startHomeObserver(double lat, double lon, HomeLocationPublic p) async {
+    final cfg = HomeObserverConfig(on: true, lat: lat, lon: lon, locationPublic: p);
+    await updateSettings(_settings.copyWith(homeObserver: cfg, telemetryEnabled: true));
+    final o = await _home.register(cfg);
+    _applyHomeMode();
+    unawaited(refreshHomeObserverStatus());
+    notifyListeners();
+    return o;
+  }
+
+  /// Turns home mode off: `DELETE` on the server (back to a mobile observer, home position hidden), heartbeat and keep-awake
+  /// stop. The position stays saved on this phone for next time.
+  Future<HomeCallOutcome> stopHomeObserver() async {
+    final h = _settings.homeObserver;
+    if (h != null) await updateSettings(_settings.copyWith(homeObserver: h.copyWith(on: false)));
+    final o = await _home.unregister();
+    _applyHomeMode();
+    notifyListeners();
+    return o;
+  }
+
+  /// Reads `GET /observer/me` for the status card.
+  Future<HomeCallOutcome> refreshHomeObserverStatus() async {
+    final o = await _home.refreshStatus(key: _observerKey ?? _home.lastKey, now: services.clock().toUtc());
+    notifyListeners();
+    return o;
+  }
+
+  /// Heartbeat, keep-awake and auto-reconnect follow home mode and the radio link.
+  void _applyHomeMode() {
+    final on = homeObserverActive;
+    if (on && connected) {
+      _home.startHeartbeat();
+    } else {
+      _home.stopHeartbeat();
+    }
+    if (on != _homeAwake) {
+      _homeAwake = on;
+      keepAwakeHook?.call(on);
+    }
+    _homeLinkSub ??= radioSessions.linkStates.listen(_onHomeLink);
+  }
+
+  void _onHomeLink(LinkState st) {
+    if (st == LinkState.disconnected && homeObserverActive && !_homeUserDisconnect && !driving) unawaited(_reconnectHome());
+    _applyHomeMode();
+  }
+
+  /// Home mode: the radio dropped (out of range, rebooted, Bluetooth hiccup). Keep trying until it is back, home mode is
+  /// turned off or the person disconnects.
+  Future<void> _reconnectHome() async {
+    final device = _device, kind = _radioKind, expected = _radioKey;
+    if (_homeReconnecting || device == null || kind == RadioKind.none) return;
+    _homeReconnecting = true;
+    diagnostics.add('Home observer: the radio dropped; reconnecting');
+    try {
+      final session = await radioSessions.reconnect(
+        scannerFor(kind),
+        device,
+        keepGoing: () => homeObserverActive && !_homeUserDisconnect && !driving && identical(_device, device),
+        delay: (n) => Duration(seconds: n <= 1 ? 2 : math.min(60, 5 * n)),
+        expectedKeyHex: expected,
+        onConnected: (session) async {
+          _selfInfo = session.selfInfo;
+          unawaited(_telemetrySub?.cancel());
+          _telemetrySub = session.link.rxPackets.listen(_onTelemetryRx, onError: (Object _) {});
+        },
+      );
+      if (session != null) diagnostics.add('Home observer: radio reconnected');
+    } catch (e) {
+      _logError('Home observer reconnect failed', e);
+    } finally {
+      _homeReconnecting = false;
+      _applyHomeMode();
+      notifyListeners();
+    }
+  }
 
   bool _telemetryDisclosed() {
     if (_telemetryDisclosedSeen) return true;
@@ -1429,11 +1629,34 @@ class AppState extends ChangeNotifier {
   /// The # channel keys this phone holds (set by the chat wiring); with them and the Public key, a group packet's channel
   /// is proven readable by anyone before its header may be shared. Without chat, only Public.
   List<List<int>> Function()? hashtagChannelKeys;
-  late final ShareableChannels _shareable = ShareableChannels(() => [publicChannelSecret16, ...?hashtagChannelKeys?.call()]);
+  ///
+  /// [hashtagChannelNames] names the # channels too, so their packets (and Public's) may carry raw bytes in v2.
+  List<String> Function()? hashtagChannelNames;
+  late final ShareableChannels _shareable = ShareableChannels(
+    () => [publicChannelSecret16, ...?hashtagChannelKeys?.call()],
+    named: () => [
+      (name: 'public', key: publicChannelSecret16),
+      for (final n in hashtagChannelNames?.call() ?? const <String>[])
+        (name: _channelLabel(n), key: hashtagSecret16(n)),
+    ],
+  );
+
+  static String _channelLabel(String n) {
+    final t = n.trim().toLowerCase();
+    return t.startsWith('#') ? t : '#$t';
+  }
 
   void _onTelemetryRx(RxPacket rx) {
     if (!_settings.telemetryEnabled) return;
-    final r = TelemetryRecord.fromRx(rx, region: _currentRegion?.code, shareableChannel: _shareable.call);
+    final home = homeObserverActive;
+    final r = TelemetryRecord.fromRx(
+      rx,
+      region: _currentRegion?.code,
+      channelMatch: _shareable.match,
+      cell: home ? null : _telemetryCell(rx.at),
+      mode: home ? ObserverMode.home : ObserverMode.background,
+      ownPublicKey: _selfInfo?.publicKey,
+    );
     if (r != null) _tele.add(r);
   }
 
@@ -1733,6 +1956,8 @@ class AppState extends ChangeNotifier {
           'firmware ${info.firmware ?? 'unknown'}');
       notifyListeners();
       onRadioConnected?.call(device, kind, info);
+      _homeUserDisconnect = false;
+      _applyHomeMode();
       return true;
     } catch (e) {
       if (gen != _connectGen) return false; // cancelled: no error to show
@@ -1871,6 +2096,8 @@ class AppState extends ChangeNotifier {
 
   Future<void> disconnect({bool quiet = false}) async {
     if (driving) await stopDrive();
+    _homeUserDisconnect = true; // the person ended the link: home mode does not pull it back
+    _home.stopHeartbeat();
     final hadRadio = radioSessions.session != null;
     unawaited(_telemetrySub?.cancel());
     _telemetrySub = null;
@@ -2891,6 +3118,8 @@ class AppState extends ChangeNotifier {
       await _tele.load();
       unawaited(_tele.flush());
     }
+    unawaited(observerIdentity.load());
+    _applyHomeMode();
     if (keyApproved) unawaited(refreshRepeaters(quiet: true));
     unawaited(ensureKey().then((ok) {
       if (ok && _settings.autoSync && keyApproved && orphans.isNotEmpty) unawaited(_syncClosedQuietly(orphans));
@@ -2950,6 +3179,7 @@ class AppState extends ChangeNotifier {
         if (c.id != CategoryId.packetHeaders && _settings.collectionOn(c.id) && !s.collectionOn(c.id)) c.id,
     ];
     _settings = s;
+    if (_loaded) _applyHomeMode(); // sharing or home mode switched: heartbeat and keep-awake follow at once
     if (switchedOff.isNotEmpty) unawaited(_contextCategoriesOff(switchedOff)); // unsent context is stripped, weather erased
     // Weather switched on or off: drives the server holds with the other choice get the new one (one small request each).
     if (s.collectionOn(CategoryId.weather) != prevWeather) unawaited(_weatherChoiceChanged());
@@ -3398,6 +3628,9 @@ class AppState extends ChangeNotifier {
     _statusSub?.cancel();
     _telemetrySub?.cancel();
     unawaited(_telemetry?.dispose());
+    _homeLinkSub?.cancel();
+    _home.dispose();
+    if (_homeAwake) keepAwakeHook?.call(false);
     super.dispose();
   }
 }

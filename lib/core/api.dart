@@ -8,6 +8,7 @@ import 'colour_palette.dart';
 import 'drive_context_wire.dart' show ContextUploadResult, DriveContextBatch;
 import 'driver_account.dart';
 import 'driver_summary.dart' show DriverSummary;
+import 'home_observer.dart' show HomeObserverConfig;
 import 'model.dart';
 import 'map_links.dart';
 import 'node_claim.dart';
@@ -697,6 +698,14 @@ class Settings {
   /// this is the opt-out. See lib/core/telemetry.dart.
   final bool telemetryEnabled;
 
+  /// Phone observer location choice (contract section 6): false = "Approximate (~5 km)", the default (each packet carries
+  /// the H3 res-7 cell the phone was in); true = "Region only" (no cell). Written only when true.
+  final bool telemetryRegionOnly;
+
+  /// Home observer (lib/core/home_observer.dart): where the phone sits at home and how the public map shows it; null =
+  /// never set up. Written only when set.
+  final HomeObserverConfig? homeObserver;
+
   /// Map: write each repeater's name next to its marker (the "Repeater names" map layer). On by default; the layers
   /// sheet switch persists here.
   final bool mapRepeaterLabels;
@@ -769,6 +778,8 @@ class Settings {
     this.units = UnitsPreference.auto,
     this.unitOverrides = const UnitOverrides(),
     this.telemetryEnabled = true,
+    this.telemetryRegionOnly = false,
+    this.homeObserver,
     this.mapRepeaterLabels = true,
     this.colourPalette = ColourPalette.standard,
     this.baseMapStyle = 'chart',
@@ -803,6 +814,9 @@ class Settings {
     UnitsPreference? units,
     UnitOverrides? unitOverrides,
     bool? telemetryEnabled,
+    bool? telemetryRegionOnly,
+    HomeObserverConfig? homeObserver,
+    bool clearHomeObserver = false,
     bool? mapRepeaterLabels,
     ColourPalette? colourPalette,
     String? baseMapStyle,
@@ -836,6 +850,8 @@ class Settings {
         units: units ?? this.units,
         unitOverrides: unitOverrides ?? this.unitOverrides,
         telemetryEnabled: telemetryEnabled ?? this.telemetryEnabled,
+        telemetryRegionOnly: telemetryRegionOnly ?? this.telemetryRegionOnly,
+        homeObserver: clearHomeObserver ? null : (homeObserver ?? this.homeObserver),
         mapRepeaterLabels: mapRepeaterLabels ?? this.mapRepeaterLabels,
         colourPalette: colourPalette ?? this.colourPalette,
         baseMapStyle: baseMapStyle ?? this.baseMapStyle,
@@ -870,6 +886,8 @@ class Settings {
         if (units != UnitsPreference.auto) 'units': units.name,
         if (!unitOverrides.isEmpty) 'unit_overrides': unitOverrides.toJson(),
         if (!telemetryEnabled) 'telemetry_enabled': false,
+        if (telemetryRegionOnly) 'telemetry_location': 'region',
+        if (homeObserver != null) 'home_observer': homeObserver!.toJson(),
         if (!mapRepeaterLabels) 'map_repeater_labels': false,
         if (colourPalette != ColourPalette.standard) 'colour_palette': colourPalette.id,
         if (baseMapStyle != 'chart') 'base_map_style': baseMapStyle,
@@ -905,6 +923,8 @@ class Settings {
         units: UnitsPreference.parse(j['units']),
         unitOverrides: UnitOverrides.fromJson(j['unit_overrides']),
         telemetryEnabled: j['telemetry_enabled'] is bool ? j['telemetry_enabled'] as bool : true,
+        telemetryRegionOnly: j['telemetry_location'] == 'region',
+        homeObserver: HomeObserverConfig.fromJson(j['home_observer']),
         mapRepeaterLabels: j['map_repeater_labels'] is bool ? j['map_repeater_labels'] as bool : true,
         colourPalette: ColourPalette.parse(j['colour_palette']),
         baseMapStyle: _str(j['base_map_style']) ?? 'chart',

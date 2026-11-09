@@ -17,6 +17,7 @@ import '../radios/observer_join_screen.dart';
 import '../report_problem_screen.dart' show openReportProblem;
 import '../radios/radio_setup/radio_setup_screen.dart';
 import '../settings_screen.dart';
+import '../settings/home_observer_screen.dart';
 import '../tools/adverts_screen.dart';
 import '../tools/discover_screen.dart';
 import '../account/devices_screen.dart';
@@ -84,6 +85,7 @@ class _MoreTabState extends State<MoreTab> {
         MoreItem.myReports => const ReportsHistoryScreen(),
         MoreItem.leaderboard => const LeaderboardScreen(),
         MoreItem.chat => const ChatSettingsScreen(),
+        MoreItem.homeObserver => const HomeObserverScreen(),
         MoreItem.legend || MoreItem.howItWorks || MoreItem.repeaters => const SizedBox.shrink(),
       };
 
@@ -188,6 +190,8 @@ class _MoreListState extends State<MoreList> {
             row(MoreItem.noiseFloor, Icons.show_chart, 'Noise floor and health', 'Interference and radio counters, live'),
             row(MoreItem.telemetry, Icons.thermostat, 'Telemetry', 'Battery, temperature and position of a node'),
             row(MoreItem.radioSetup, Icons.tune, 'Radio setup', 'Name, position, power and frequency, with checks'),
+            row(MoreItem.homeObserver, Icons.home_work_outlined, 'Home observer',
+                s.homeObserverActive ? 'On: this phone listens at home as a fixed observer' : 'Leave the phone at home as a fixed observer'),
             header('Community'),
             row(MoreItem.leaderboard, Icons.emoji_events_outlined, 'Leaderboard', 'Drivers who opted in, this region or every region'),
             row(MoreItem.observerJoin, Icons.visibility_outlined, 'Become an observer',

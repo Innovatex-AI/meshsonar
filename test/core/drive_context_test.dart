@@ -69,9 +69,11 @@ void main() {
       expect(dataCategory('nope'), isNull);
     });
 
-    test('packet_headers wording matches the live disclosure: no message text, no location', () {
+    test('packet_headers (observer) wording matches the live disclosure: no private messages, no exact location', () {
+      // Nov 8 2026 (phone observer v2): public packets in full and a ~5 km area are now shared; private traffic and the exact
+      // position never are.
       final d = dataCategory(CategoryId.packetHeaders)!.disclosure;
-      for (final w in ['packet type', 'repeaters', 'SNR, RSSI', 'time and region', 'Never message text', 'never your location']) {
+      for (final w in ['packet type', 'repeaters', 'SNR, RSSI', 'time, region', 'in full', 'Never direct messages or private channels', 'never your exact position']) {
         expect(d, contains(w));
       }
       expect(dataCategory(CategoryId.packetHeaders)!.destination, CategoryDestination.telemetryFeed);

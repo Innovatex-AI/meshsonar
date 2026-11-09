@@ -74,6 +74,12 @@ class ChatWiring {
       if (id == null) return const [];
       return [for (final c in store.channels.list(id)) if (c.kind == ChannelKind.hashtag) hashtagSecret16(c.name)];
     };
+    // The same # channels by name: a packet proven under one may carry its raw bytes (telemetry v2 `channel`).
+    app.hashtagChannelNames = () {
+      final id = ctl.radioId;
+      if (id == null) return const [];
+      return [for (final c in store.channels.list(id)) if (c.kind == ChannelKind.hashtag) c.name];
+    };
 
     ctl.updateDrive(driving: app.driving);
     _appListener = () {

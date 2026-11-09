@@ -39,6 +39,7 @@ import 'node_claim.dart';
 import 'privacy_zones.dart';
 import 'repeater_reach.dart';
 import 'report_body.dart' show problemReportMaxBytes;
+import 'home_observer.dart';
 import 'telemetry_uploader.dart';
 
 /// One rejected ping, as reported by the server (only the first 20 are listed).
@@ -84,7 +85,7 @@ DriverKeyStatus parseDriverKeyStatus(Object? s) => switch (s) {
       _ => DriverKeyStatus.unknown,
     };
 
-class HttpCmatClient implements CmatClient, TelemetryTransport {
+class HttpCmatClient implements CmatClient, TelemetryTransport, HomeObserverTransport {
   @override
   final Uri baseUrl;
   final http.Client _http;
@@ -187,8 +188,34 @@ class HttpCmatClient implements CmatClient, TelemetryTransport {
   @override
   Future<TelemetryHttpResult> deleteTelemetry(String driverKey) => _telemetry('DELETE', driverKey, null);
 
-  Future<TelemetryHttpResult> _telemetry(String method, String driverKey, List<int>? body) async {
-    final req = http.Request(method, endpoint('telemetry'));
+  // ---------- home observer (lib/core/home_observer.dart; contract section 4) ----------
+  @override
+  Future<HomeObserverHttpResult> putHome(String driverKey, Map<String, dynamic> body) =>
+      _observer('PUT', endpoint('observer/home'), driverKey, homeObserverJson(body));
+
+  @override
+  Future<HomeObserverHttpResult> heartbeat(String driverKey, String observerId) =>
+      _observer('POST', endpoint('observer/heartbeat'), driverKey, homeObserverJson({'id': observerId}));
+
+  @override
+  Future<HomeObserverHttpResult> deleteHome(String driverKey, String observerId) =>
+      _observer('DELETE', endpoint('observer/home').replace(queryParameters: {'id': observerId}), driverKey, null);
+
+  @override
+  Future<HomeObserverHttpResult> me(String driverKey) => _observer('GET', endpoint('observer/me'), driverKey, null);
+
+  Future<HomeObserverHttpResult> _observer(String method, Uri url, String driverKey, List<int>? body) async {
+    final r = await _raw(method, url, driverKey, body);
+    return HomeObserverHttpResult(r.status, body: r.body);
+  }
+
+  Future<TelemetryHttpResult> _telemetry(String method, String driverKey, List<int>? body) =>
+      _raw(method, endpoint('telemetry'), driverKey, body);
+
+  /// One request with `x-driver-key` that returns the status (and JSON body) instead of throwing on a refusal; network
+  /// failures throw [CmatException].
+  Future<TelemetryHttpResult> _raw(String method, Uri url, String driverKey, List<int>? body) async {
+    final req = http.Request(method, url);
     req.headers['accept'] = 'application/json';
     req.headers['x-driver-key'] = driverKey;
     if (body != null) {
@@ -201,6 +228,7 @@ class HttpCmatClient implements CmatClient, TelemetryTransport {
       try {
         final d = res.body.isEmpty ? null : jsonDecode(res.body);
         if (d is Map) j = d.cast<String, dynamic>();
+        if (d is List) j = {'observers': d};
       } catch (_) {}
       return TelemetryHttpResult(res.statusCode, retryAfterSec: int.tryParse(res.headers['retry-after'] ?? ''), body: j);
     } on TimeoutException {

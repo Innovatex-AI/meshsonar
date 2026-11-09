@@ -137,48 +137,70 @@ bool _telemetryErasePending(AppState s) => s.telemetryErasePending;
 String? _telemetryStatus(AppState s) {
   final waiting = s.telemetryQueued;
   if (!s.hasKey) return 'On, but nothing is collected until this phone has a driver key.';
-  return waiting > 0 ? '$waiting waiting on this phone to be sent.' : null;
+  final parts = [
+    if (waiting > 0) '$waiting waiting on this phone to be sent.',
+    if (s.homeObserverActive) 'Home observer is on.',
+  ];
+  return parts.isEmpty ? null : parts.join(' ');
 }
 
-/// Packet-header telemetry (lib/core/telemetry.dart is the record; its wire keys are pinned by a test). Changing what
-/// the record holds means changing [shared] here in the same commit.
+/// The phone observer (lib/core/telemetry.dart is the record; its wire keys are pinned by a test; contract meshsonar-infra
+/// docs/planning/phone-observer-contract-v2-2026-11-08.md). Changing what the record holds means changing [shared] here in
+/// the same commit.
 const DataCategory telemetryCategory = DataCategory(
   id: 'telemetry',
   toggleKey: 'telemetry-toggle',
-  title: 'Share packet headers',
-  summary: 'Type, path, signal strength, time and region. Never message content.',
-  disclosureTitle: 'Help build the live packet feed',
+  title: 'Share what my radio hears (observer)',
+  summary: 'Your phone acts as an observer: public packets, signal strength, time, region and your ~5 km area. '
+      'Never private messages or private channels.',
+  disclosureTitle: 'Make your phone an observer',
   disclosureLead: 'MeshSonar can share what your radio overhears on the mesh, so everyone gets a live view of the '
-      'network. This is on unless you turn it off.',
+      'network: which repeaters are heard where, and how well. This is on unless you turn it off.',
   shared: [
-    'Packet type and route type',
-    'The repeaters it passed through (their short path codes)',
-    'For channel messages, yours included: only the Public channel and # channels, after checking the packet really belongs to one',
-    'Signal strength: SNR and RSSI',
-    'The time it was heard and your region code (for example CMH), never your position',
-    'A fingerprint of the packet (a hash, not its content), so copies heard by others are counted once',
-    'The app version and phone platform (iOS or Android)',
+    'For every packet: its packet type, route type, the repeaters it passed through (short path codes), signal strength (SNR, '
+        'RSSI), the time it was heard and a fingerprint (a hash) so copies heard by others are counted once',
+    'Public packets in full: adverts (what repeaters and radios announce about themselves), path and trace packets, and '
+        'Public channel and # channel messages, which anyone with a radio can already read. Only after checking the '
+        'packet really belongs to Public or a # channel',
+    'Your region code (for example CMH) and, unless you choose "Region only", the ~5 km area (a hexagon about '
+        '5 km across) your phone was in. Never your exact position',
+    'Your radio\'s settings: board model, firmware, frequency, bandwidth, spreading factor, coding rate and how its '
+        'antenna is mounted',
+    'A random observer number made on this phone (not linked to you, your radio or your driver key; a new one after an '
+        'erase), the app version and phone platform (iOS or Android)',
+    'Home observer only, if you turn it on: the home position you place on the map. The public map shows it exactly or '
+        'rounded to about 1 km, as you choose',
   ],
   neverShared: [
-    'Message text or any message content',
-    'Private channels and direct messages (those packets are never recorded at all)',
-    'Your name, or your location attached to packets',
+    'Direct messages and private channels (those packets are never recorded at all)',
+    'Your name, your radio\'s name or public key, and adverts your own radio sends',
+    'Your exact position (only the ~5 km area, or the region; the home position only in Home observer mode)',
     'Your own pings and their echoes',
   ],
   destination: 'Collected only while this phone has a driver key, and sent only to your server '
-      '(the Server URL in Settings) once the server has accepted the key.',
-  offEffect: 'Turning it off stops collection at once and deletes the headers still waiting on this phone.',
-  keepLabel: 'Share headers',
+      '(the Server URL in Settings) once the server has accepted the key: every few seconds while the app is open, about '
+      'once a minute in the background.',
+  offEffect: 'Turning it off stops collection at once and deletes what is still waiting on this phone.',
+  keepLabel: 'Share',
   offLabel: 'Turn off',
   isOn: _telemetryOn,
   set: _setTelemetry,
   eraseFromServer: _eraseTelemetry,
-  erasedNoun: 'packet headers',
+  erasedNoun: 'observer packets',
   queued: _telemetryQueued,
   erasePending: _telemetryErasePending,
   coreId: core.CategoryId.packetHeaders,
   onStatus: _telemetryStatus,
 );
+
+/// The location sub-choice of [telemetryCategory] (contract section 6).
+const String telemetryLocationTitle = 'Location';
+const String telemetryLocationApproxLabel = 'Approximate (~5 km)';
+const String telemetryLocationRegionLabel = 'Region only';
+const String telemetryLocationApproxHelp =
+    'Each packet carries the ~5 km hexagon your phone was in, so the map can tell where it was heard. Never your exact '
+    'position.';
+const String telemetryLocationRegionHelp = 'Only your region code (for example CMH) goes with the packets.';
 
 /// Where every drive-context category's data goes for a server that does not accept it (stream 7 section 4.2/4.4:
 /// local first). [ownDriveDestinationNow] is the live version, for the server the app really uploads to.
@@ -371,9 +393,10 @@ final List<DataCategory> driveContextCategories = [
 /// comment); weather is listed because the person can already choose, and says plainly that it is not active yet.
 final List<DataCategory> dataCategories = [telemetryCategory, ...driveContextCategories];
 
-/// Kept for callers of the old constant: one-line help for the packet-header switch.
+/// Kept for callers of the old constant: one-line help for the observer switch.
 const String telemetryHelp =
-    'Shares packet headers and signal strength your radio hears, to build the live packet feed. Never message text.';
+    'Shares what your radio hears (public packets, signal strength, your ~5 km area) to build the live map. Never private '
+    'messages or private channels.';
 
 /// "Change your mind any time in Settings, under Privacy & data sharing."
 const String changeYourMindLine = 'Change your mind any time in Settings, under $privacySectionTitle.';

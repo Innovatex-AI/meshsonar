@@ -13,6 +13,7 @@ import '../always_location_screen.dart';
 import '../app.dart';
 import 'data_sharing.dart';
 import 'delete_my_data.dart';
+import 'home_observer_screen.dart';
 import 'privacy_zones_screen.dart';
 import 'settings_index.dart';
 import 'settings_kit.dart';
@@ -24,11 +25,26 @@ const String privacyHelp =
 List<Widget> privacySectionRows(BuildContext context) {
   final s = AppScope.of(context);
   return [
-    for (final c in dataCategories)
+    for (final c in dataCategories) ...[
       SettingsAnchor(
         id: c.toggleKey,
         child: DataCategoryTile(category: c),
       ),
+      if (identical(c, telemetryCategory)) ...[
+        const SettingsAnchor(id: 'telemetry-location', child: TelemetryLocationTile()),
+        SettingsAnchor(
+          id: 'home-observer',
+          child: ListTile(
+            key: const Key('home-observer'),
+            leading: const Icon(Icons.home_work_outlined),
+            title: Text(settingsEntry('home-observer').title),
+            subtitle: Text(s.homeObserverActive ? 'On: this phone is a fixed observer at home.' : settingsEntry('home-observer').summary),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const HomeObserverScreen())),
+          ),
+        ),
+      ],
+    ],
     if (s.hasKey)
       for (final c in dataCategories)
         if (c.eraseFromServer != null)
@@ -116,6 +132,47 @@ List<Widget> privacySectionRows(BuildContext context) {
       ),
     ),
   ];
+}
+
+/// The observer's location choice (contract section 6): Approximate (~5 km, the default) or Region only.
+class TelemetryLocationTile extends StatelessWidget {
+  const TelemetryLocationTile({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final s = AppScope.of(context);
+    final t = Theme.of(context);
+    final regionOnly = s.settings.telemetryRegionOnly;
+    final enabled = s.settings.telemetryEnabled;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Gap.l, Gap.xs, Gap.l, Gap.s),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(telemetryLocationTitle, style: t.textTheme.titleMedium),
+          const SizedBox(height: Gap.xs),
+          SegmentedButton<bool>(
+            key: const Key('telemetry-location-selector'),
+            showSelectedIcon: false,
+            segments: const [
+              ButtonSegment(value: true, label: Text(telemetryLocationRegionLabel)),
+              ButtonSegment(value: false, label: Text(telemetryLocationApproxLabel)),
+            ],
+            selected: {regionOnly},
+            onSelectionChanged: enabled ? (v) => s.updateSettings(s.settings.copyWith(telemetryRegionOnly: v.first)) : null,
+          ),
+          const SizedBox(height: Gap.xs),
+          Text(
+            !enabled
+                ? 'Sharing is off, so nothing is sent.'
+                : (regionOnly ? telemetryLocationRegionHelp : telemetryLocationApproxHelp),
+            key: const Key('telemetry-location-help'),
+            style: t.textTheme.bodySmall,
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// One collection switch: title, what it shares, and what is waiting on the phone.

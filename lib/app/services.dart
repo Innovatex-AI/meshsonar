@@ -4,6 +4,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '../core/observer_identity.dart';
 import '../core/api.dart';
 import 'build_flags.dart' show mayAutoCreateDriverKey;
 import '../core/gps_health.dart' show BackgroundLocation;
@@ -118,6 +119,10 @@ class AppServices {
   /// Where the unsent telemetry headers wait (lib/core/telemetry_uploader.dart). Null = memory only.
   final File? telemetryQueueFile;
 
+  /// The phone observer's random per-install id, kept in the Keychain (lib/core/observer_identity.dart). Null = memory
+  /// only, stable for the run (tests).
+  final ObserverIdentity? observerIdentity;
+
   /// Repeaters whose name still has to be put back after a claim (names only, never a password). Null = memory only.
   final ClaimRestoreStore? claimRestoreStore;
 
@@ -184,6 +189,7 @@ class AppServices {
     this.appInfo = const AppInfo(name: 'MeshSonar'),
     this.uiPrefsFile,
     this.telemetryQueueFile,
+    this.observerIdentity,
     this.privacyZoneStore,
     this.claimRestoreStore,
     this.directory,
