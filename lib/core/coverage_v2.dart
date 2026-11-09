@@ -92,6 +92,12 @@ class CoverageMeta {
   /// Band edges in dB per SF key (`sf7` -> [edge|weak, weak|fair, fair|good, good|excellent]).
   final Map<String, List<double>> edgesDb;
   final String? measuredAt, predictedAt;
+
+  /// The Heard layer (phone observer contract 8.5, server 0116): `tiles.layers` lists `heard`; its tiles are versioned by
+  /// [heardVersion] (it changes with phone batches; [version] does not).
+  final bool heard;
+  final int heardVersion;
+  final int heardCells;
   const CoverageMeta({
     this.raw = const {},
     this.bands = kDefaultCoverageBands,
@@ -108,7 +114,13 @@ class CoverageMeta {
     },
     this.measuredAt,
     this.predictedAt,
+    this.heard = false,
+    this.heardVersion = 0,
+    this.heardCells = 0,
   });
+
+  /// The version a tile URL / cache key of [layer] carries.
+  int versionFor(CoverageTileLayer layer) => layer == CoverageTileLayer.heard ? heardVersion : version;
 
   /// What the app uses before it has ever read the meta (same numbers as the server today).
   static const CoverageMeta fallback = CoverageMeta();
@@ -147,6 +159,9 @@ class CoverageMeta {
       edgesDb: edges.isEmpty ? const {'sf7': [-7.5, -2.5, 2.5, 7.5]} : edges,
       measuredAt: j['measuredAt'] as String?,
       predictedAt: j['predictedAt'] as String?,
+      heard: tiles['layers'] is List && (tiles['layers'] as List).contains('heard'),
+      heardVersion: i(j['heardVersion'], 0),
+      heardCells: i(j['heardCells'], 0),
     );
   }
 
@@ -237,6 +252,18 @@ class PredictedCellInfo {
   const PredictedCellInfo({required this.band, this.snrEst, this.dNearestM, this.opacity, this.contributors = 0, this.builtAt});
 }
 
+/// The inspector's `heard` block (server 0116, contract 8.5): phones heard repeaters here without pinging. Repeater keys
+/// are FULL public keys (64 hex).
+class HeardCellInfo {
+  final int band;
+  final int n;
+  final int r;
+  final double? snrMean, snrMax;
+  final String? lastAt;
+  final List<CoverageCellRepeater> repeaters;
+  const HeardCellInfo({required this.band, this.n = 0, this.r = 0, this.snrMean, this.snrMax, this.lastAt, this.repeaters = const []});
+}
+
 /// `GET /api/coverage/cell/{h3}`: the inspector. At most one of [measured] / [predicted] is set (a measured cell is never
 /// predicted); both null = nothing known there.
 class CoverageCellInfo {
@@ -244,10 +271,13 @@ class CoverageCellInfo {
   final String preset;
   final MeasuredCellInfo? measured;
   final PredictedCellInfo? predicted;
-  final int version;
-  const CoverageCellInfo({required this.h3, required this.preset, this.measured, this.predicted, this.version = 0});
 
-  bool get isEmpty => measured == null && predicted == null;
+  /// Heard by phones there (may come with either of the others); null = none.
+  final HeardCellInfo? heard;
+  final int version;
+  const CoverageCellInfo({required this.h3, required this.preset, this.measured, this.predicted, this.heard, this.version = 0});
+
+  bool get isEmpty => measured == null && predicted == null && heard == null;
 
   /// Throws [FormatException] when [j] is not an inspector answer.
   factory CoverageCellInfo.fromJson(Map<String, dynamic> j) {
@@ -299,7 +329,26 @@ class CoverageCellInfo {
         builtAt: pj['builtAt'] as String?,
       );
     }
-    return CoverageCellInfo(h3: h3.toLowerCase(), preset: '${j['preset'] ?? kDefaultCoveragePreset}', measured: m, predicted: p, version: i(j['version']));
+    HeardCellInfo? hd;
+    final hj = j['heard'];
+    if (hj is Map) {
+      hd = HeardCellInfo(
+        band: i(hj['band']),
+        n: i(hj['n']),
+        r: i(hj['r']),
+        snrMean: d(hj['snrMean']),
+        snrMax: d(hj['snrMax']),
+        lastAt: hj['lastAt'] as String?,
+        repeaters: [
+          if (hj['repeaters'] is List)
+            for (final x in hj['repeaters'] as List)
+              if (x is Map && x['key'] is String)
+                CoverageCellRepeater(key: (x['key'] as String).toLowerCase(), n: i(x['n']), snrMean: d(x['snrMean']), snrMax: d(x['snrMax'])),
+        ],
+      );
+    }
+    return CoverageCellInfo(
+        h3: h3.toLowerCase(), preset: '${j['preset'] ?? kDefaultCoveragePreset}', measured: m, predicted: p, heard: hd, version: i(j['version']));
   }
 }
 

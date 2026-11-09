@@ -62,8 +62,8 @@ Key layerSwitchKey(String id) => Key(switch (id) {
     'measured' => (title: 'Measured coverage', description: "Everyone's drives: the average signal in each cell."),
     'predicted' => (title: 'Predicted coverage', description: 'An estimate near measured cells, hatched.'),
     kHeardCellsLayerId => (
-      title: 'Heard (no ping)',
-      description: 'Cells where a phone heard a repeater without pinging, outlined in the signal colours.',
+      title: 'Heard by phones',
+      description: 'Outlined cells where a phone heard a repeater without pinging, in the colour of the average signal it heard.',
     ),
     'heard' => (title: 'Heard this drive', description: 'Repeaters your pings reached (highlighted).'),
     kRosterLayerId => (title: 'Repeaters', description: 'By last advert. Repeaters your pings reached are lit.'),

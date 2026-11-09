@@ -37,7 +37,10 @@ class CellStyle {
   /// The colour of the cell as a dot ([CellLayerData.dotBelowZoom], or a single-vertex shape); null = [fill]. Transparent =
   /// left out there (predicted "no coverage" is not drawn zoomed out).
   final Color? dot;
-  const CellStyle(this.fill, this.border, [this.borderWidth = 1.0, this.hatch, this.dot, this.hatchWidth = 2]);
+
+  /// > 0: the dot is a hollow ring of this stroke width (the Heard layer, coverage-v2-colours.md "Heard"), not a filled square.
+  final double dotRing;
+  const CellStyle(this.fill, this.border, [this.borderWidth = 1.0, this.hatch, this.dot, this.hatchWidth = 2, this.dotRing = 0]);
 
   @override
   bool operator ==(Object other) =>
@@ -47,10 +50,11 @@ class CellStyle {
       other.borderWidth == borderWidth &&
       other.hatch == hatch &&
       other.hatchWidth == hatchWidth &&
-      other.dot == dot;
+      other.dot == dot &&
+      other.dotRing == dotRing;
 
   @override
-  int get hashCode => Object.hash(fill, border, borderWidth, hatch, hatchWidth, dot);
+  int get hashCode => Object.hash(fill, border, borderWidth, hatch, hatchWidth, dot, dotRing);
 }
 
 /// Repeat of the hatch lines, logical px (coverage-v2-colours.md: 8 px, 45 degrees rising left to right).
@@ -178,7 +182,12 @@ CellRender paintCells(CellLayerData data, LatLng center, double zoom, double wid
       if ((data.styles[s.style].dot ?? data.styles[s.style].fill).a == 0) continue;
       drawn++;
       final x = mercX((s.minLon + s.maxLon) / 2, zoom) - cx, y = mercY((s.minLat + s.maxLat) / 2, zoom) - cy;
-      (dots[s.style] ??= ui.Path()).addRect(Rect.fromLTRB(x - half, y - half, x + half, y + half));
+      final r = Rect.fromLTRB(x - half, y - half, x + half, y + half);
+      if (data.styles[s.style].dotRing > 0) {
+        (dots[s.style] ??= ui.Path()).addOval(r);
+      } else {
+        (dots[s.style] ??= ui.Path()).addRect(r);
+      }
       continue;
     }
     drawn++;
@@ -230,7 +239,13 @@ CellRender paintCells(CellLayerData data, LatLng center, double zoom, double wid
     final p = dots[i];
     if (p == null) continue;
     final st = data.styles[i];
-    canvas.drawPath(p, Paint()..color = st.dot ?? st.fill);
+    final paint = Paint()..color = st.dot ?? st.fill;
+    if (st.dotRing > 0) {
+      paint
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = st.dotRing;
+    }
+    canvas.drawPath(p, paint);
   }
   return CellRender(rec.endRecording(), center, zoom, width, height, ratio, data, drawn);
 }

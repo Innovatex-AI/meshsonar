@@ -96,7 +96,7 @@ class CoverageTilesLayerState extends State<CoverageTilesLayer> {
     final z = coverageTileZoom(camera.zoom);
     final b = camera.visibleBounds;
     final preset = meta.defaultPreset;
-    final version = meta.version;
+    final version = meta.versionFor(widget.layer);
     final used = <String>[];
     final parts = <List<CellShape>>[];
     // Stand-ins come only from tiles of the same kind: at a hexagon zoom (>= meta.hexFromZoom) never from a point tile below it.
@@ -139,7 +139,8 @@ class CoverageTilesLayerState extends State<CoverageTilesLayer> {
     if (sig != _usedSig) {
       _usedSig = sig;
       final all = parts.length == 1 ? parts.single : [for (final p in parts) ...p];
-      _data = CellLayerData(all, _styles!, dotBelowZoom: meta.hexFromZoom.toDouble(), dotPx: measured ? 3 : 2);
+      _data = CellLayerData(all, _styles!,
+          dotBelowZoom: meta.hexFromZoom.toDouble(), dotPx: widget.layer == CoverageTileLayer.heard ? kHeardDotPx : (measured ? 3 : 2));
     }
     if (_data.isEmpty) return const SizedBox.shrink();
     return CellRasterLayer(key: ValueKey('coverage-tiles-${widget.layer.name}'), data: _data);
@@ -159,7 +160,7 @@ class CoverageTilesLayerState extends State<CoverageTilesLayer> {
   double radiusDeg = 0,
 }) {
   final (x, y) = tileOf(lat, lon, z);
-  final d = store.peek(coverageTileKey(layer, meta.defaultPreset, meta.version, z, x, y));
+  final d = store.peek(coverageTileKey(layer, meta.defaultPreset, meta.versionFor(layer), z, x, y));
   if (d == null) return null;
   ({String? h3, double lat, double lon})? best;
   var bestD = double.infinity;

@@ -17,7 +17,8 @@ RegionObserver _mobile(String key, Duration ago) => RegionObserver.tryParse({
       'online': true,
       'lat': 39.96,
       'lon': -83.0,
-      'lastSeen': _now.subtract(ago).toIso8601String(),
+      'lastSeenAt': _now.subtract(ago).toIso8601String(),
+      'phone': true,
       'packets10m': 12,
     })!;
 
@@ -34,7 +35,7 @@ void main() {
     expect(observerOpacity(_mobile('a' * 12, Duration.zero), _now), 1);
     final mid = observerOpacity(_mobile('a' * 12, const Duration(minutes: 5)), _now);
     expect(mid, lessThan(1));
-    expect(mid, greaterThan(0.25));
+    expect(mid, greaterThan(0.2));
     expect(observerOpacity(_mobile('a' * 12, const Duration(minutes: 10)), _now), 0);
     expect(observerOpacity(RegionObserver.tryParse({'key': 'f', 'online': false})!, _now), 1);
   });

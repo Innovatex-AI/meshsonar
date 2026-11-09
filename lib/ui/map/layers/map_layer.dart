@@ -5,7 +5,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../../../core/cluster_index.dart' show ClusterTap;
-import '../../../core/map_view_state.dart' show kAppOnlyShowKeys, kWebsiteShowKeys;
+import '../../../core/map_view_state.dart' show kAppOnlyShowKeys, kWebsiteShowKeys, webShowKey;
 import '../../../core/network_coverage.dart' show NetworkCell;
 import '../../../core/region_overview_api.dart' show RegionObserver;
 import 'repeater_map_source.dart' show RepeaterPoint;
@@ -123,7 +123,7 @@ class MapLayerState {
   /// The `show=` value: website keys in the website's order, then the app's own (only when [web] is false).
   String toShow({bool web = true}) => [
     for (final k in kWebsiteShowKeys)
-      if (on.contains(k)) k,
+      if (on.contains(k)) web ? webShowKey(k) : k,
     if (!web)
       for (final k in kAppOnlyShowKeys)
         if (on.contains(k)) k,
