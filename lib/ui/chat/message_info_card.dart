@@ -1,8 +1,7 @@
 // How a message travelled, at a glance (chat + radio round, CR4): the card under a long-pressed bubble, the repeats list of
 // the details sheet, and the path map. Names come from HopResolver (radio contacts, then the network roster); a prefix two
 // known repeaters share is shown in the warning colour with "2 possible", like the official app's red prefix.
-import '../map/overlays/mini_map_credit.dart';
-import '../map/basemap_layer.dart' show BasemapLayer;
+import '../map/map_preview.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Material, MaterialType;
 import 'package:flutter_map/flutter_map.dart';
@@ -249,16 +248,15 @@ class MessagePathMapScreen extends StatelessWidget {
   static Widget _defaultMap(BuildContext context, List<HopNode> placed, bool connect) {
     final m = MeshSonarColors.of(context);
     final pts = [for (final n in placed) LatLng(n.lat!, n.lon!)];
-    final fit = pts.length == 1
-        ? MapOptions(initialCenter: pts.single, initialZoom: 12, backgroundColor: m.mapBackground)
-        : MapOptions(
-            initialCameraFit: CameraFit.coordinates(coordinates: pts, padding: const EdgeInsets.all(48)), backgroundColor: m.mapBackground);
     return Stack(children: [
-      FlutterMap(
-        key: const Key('path-map'),
-        options: fit,
-        children: [
-          const BasemapLayer(),
+      MapPreview(
+        mapKey: const Key('path-map'),
+        center: pts.length == 1 ? pts.single : null,
+        zoom: 12,
+        fit: pts.length == 1 ? null : CameraFit.coordinates(coordinates: pts, padding: const EdgeInsets.all(48)),
+        interaction: MapPreviewInteraction.edit,
+        coverage: kPreviewCoverage,
+        overlays: [
           if (connect && pts.length > 1) PolylineLayer(polylines: [Polyline(points: pts, strokeWidth: 3, color: m.beacon)]),
           MarkerLayer(markers: [
             for (var i = 0; i < placed.length; i++)
@@ -272,7 +270,6 @@ class MessagePathMapScreen extends StatelessWidget {
                 ]),
               ),
           ]),
-          const MiniMapCredit(),
         ],
       ),
     ]);

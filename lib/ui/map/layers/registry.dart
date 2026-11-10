@@ -4,55 +4,90 @@
 //
 // Website layers deliberately NOT ported (planner/GIS, shelved or token-gated there): model, reach, sites, candidates,
 // population, gaps, hillshade. `model`/`reach` links still parse (core/map_view_state.dart) and are ignored here.
+import '../../../core/map_definition.dart' show MapDefinition, MapGroupDef;
 import '../../../core/map_prefs.dart' show LayerPrefs;
+import '../active_map_definition.dart';
 import '../../../core/map_view_state.dart' show MapViewState, kAppOnlyShowKeys, kHeardCellsLayerId, kWebsiteShowKeys;
 export '../../../core/map_view_state.dart' show kHeardCellsLayerId;
 import 'map_layer.dart';
 import 'repeater_map_source.dart';
 
-// Coverage redesign (plan coverage-redesign-plan-2026-11-08.md section 5, Nov 8 2026): two sections, Coverage (Measured
-// coverage, Predicted coverage, This drive + its Ping dots) and Network (one Repeaters switch with a This region / All
-// MeshCore scope and a Names sub-switch, Observers, Lines to repeaters). Range rings, the colour-by modes and the detail /
-// hexagon-size chips are gone. The order here is the PAINT order (predicted under measured, D8); the sheet's own row order
-// is [kSheetRows].
+// The layers are the Map Definition's (plan unified-map-system §2.4, phase M2): ids, names, groups, defaults and the paint
+// order come from `layers[]` ([definitionLayerIds], [layerLabel], [defaultLayerState]). The app keeps four layers of its own
+// that belong to its drive panel (the definition's panel-only `drive` layer): This drive (`hexes`) with its Ping dots, the
+// highlight of repeaters heard this drive (`heard`) and repeater Names. The [kMapLayers] z values only break ties for those;
+// the map paints in the definition's order (coverage_map.dart `_paintOrder`).
 const List<MapLayerSpec> kMapLayers = [
+  MapLayerSpec(id: 'borders', label: 'Region borders', group: LayerGroup.context, z: 2, defaultOn: true, onWebsite: true, serverFed: false),
   MapLayerSpec(id: 'predicted', label: 'Predicted coverage', group: LayerGroup.coverage, z: 5, defaultOn: true, onWebsite: true, serverFed: true),
-  // Heard (no ping), phone observer contract section 8.5: passive evidence, its own layer, painted between the two.
   MapLayerSpec(id: kHeardCellsLayerId, label: 'Heard by phones', group: LayerGroup.coverage, z: 7, defaultOn: true, onWebsite: true, serverFed: true),
   MapLayerSpec(id: 'measured', label: 'Measured coverage', group: LayerGroup.coverage, z: 10, defaultOn: true, onWebsite: true, serverFed: true),
   MapLayerSpec(id: 'hexes', label: 'This drive', group: LayerGroup.coverage, z: 20, defaultOn: true, onWebsite: false, serverFed: false),
-  // The Repeaters switch is these three ids together: `repeaters` (the viewed region's roster, scope This region) or `network`
-  // (every MeshCore repeater with a public position, scope All MeshCore), plus `heard` (the ones this drive reached, lit).
+  MapLayerSpec(id: 'links', label: 'Link lines', group: LayerGroup.network, z: 25, defaultOn: true, onWebsite: false, serverFed: false),
   MapLayerSpec(id: kNetworkLayerId, label: 'All MeshCore repeaters', group: LayerGroup.network, z: 30, defaultOn: false, onWebsite: true, serverFed: true),
   MapLayerSpec(id: kRosterLayerId, label: 'Repeaters', group: LayerGroup.network, z: 40, defaultOn: true, onWebsite: true, serverFed: true),
-  MapLayerSpec(id: 'observers', label: 'Observers', group: LayerGroup.network, z: 45, defaultOn: false, onWebsite: true, serverFed: true),
-  MapLayerSpec(id: 'links', label: 'Lines to repeaters', group: LayerGroup.network, z: 50, defaultOn: true, onWebsite: false, serverFed: false),
+  MapLayerSpec(id: 'observers', label: 'Observers', group: LayerGroup.network, z: 45, defaultOn: true, onWebsite: true, serverFed: true),
+  MapLayerSpec(id: 'phones', label: 'Moving phones', group: LayerGroup.network, z: 47, defaultOn: true, onWebsite: true, serverFed: true),
   MapLayerSpec(id: 'heard', label: 'Heard this drive', group: LayerGroup.network, z: 60, defaultOn: true, onWebsite: false, serverFed: false),
   MapLayerSpec(id: 'pings', label: 'Ping dots', group: LayerGroup.coverage, z: 70, defaultOn: true, onWebsite: false, serverFed: false),
-  // Repeater names beside the markers (Andy, Oct 30 2026): the Repeaters switch's "Names" sub-switch.
+  // Repeater names beside the markers (Andy, Oct 30 2026): a sub-switch under Repeaters (the definition's label rule: from z14
+  // with collision; the switch lets a driver turn them off).
   MapLayerSpec(id: kLabelsLayerId, label: 'Names', group: LayerGroup.network, z: 75, defaultOn: true, onWebsite: false, serverFed: false),
 ];
+
+/// The app id of a definition layer id (the definition's `heard` is the app's `heardcells`, its `drive` the app's `hexes`;
+/// `live` has no map layer in the app yet: null).
+String? appLayerId(String defId) => switch (defId) {
+  'heard' => kHeardCellsLayerId,
+  'drive' => 'hexes',
+  'live' => null,
+  _ => kMapLayerIds.contains(defId) ? defId : null,
+};
+
+/// The definition layer id of an app id (inverse of [appLayerId]); null for the app's own drive extras.
+String? definitionLayerId(String appId) => switch (appId) {
+  kHeardCellsLayerId => 'heard',
+  'hexes' => 'drive',
+  'pings' || 'heard' || kLabelsLayerId => null,
+  _ => appId,
+};
+
+/// The app ids of the definition's layers, in its drawing order (bottom to top).
+List<String> definitionLayerIds(MapDefinition def) => [for (final l in def.layerDefs) ?appLayerId(l.id)];
+
+/// The layer's name: the definition's, else the app's own label.
+String layerLabel(String appId, [MapDefinition? def]) {
+  final d = def ?? ActiveMapDefinition.current;
+  final defId = definitionLayerId(appId);
+  return (defId == null ? null : d.layerDef(defId)?.name) ?? layerSpec(appId)?.label ?? appId;
+}
 
 /// One row of the layers sheet: a layer switch, or a sub-switch indented under its parent.
 typedef SheetRow = ({String id, String? parent});
 
-/// The layers sheet, section by section, in the plan's order (sub-switches under their parent). The Repeaters row stands for
-/// `repeaters` + `network` + `heard` ([repeatersOn]).
-const Map<LayerGroup, List<SheetRow>> kSheetRows = {
-  LayerGroup.coverage: [
-    (id: 'measured', parent: null),
-    (id: 'predicted', parent: null),
-    (id: kHeardCellsLayerId, parent: null),
-    (id: 'hexes', parent: null),
-    (id: 'pings', parent: 'hexes'),
-  ],
-  LayerGroup.network: [
-    (id: kRosterLayerId, parent: null),
-    (id: kLabelsLayerId, parent: kRosterLayerId),
-    (id: 'observers', parent: null),
-    (id: 'links', parent: null),
-  ],
-};
+/// The layers sheet, group by group, from the definition (the website's Layers panel: groups in `groups` order; inside a group
+/// the layers that are not panel-only, top of the map first). The app's drive panel adds This drive (the definition's
+/// panel-only `drive` layer) with Ping dots under Coverage, and Names under Repeaters.
+List<(MapGroupDef, List<SheetRow>)> sheetRows([MapDefinition? def]) {
+  final d = def ?? ActiveMapDefinition.current;
+  return [
+    for (final g in d.groups)
+      (
+        g,
+        <SheetRow>[
+          for (final l in d.layerDefs.reversed)
+            if (l.group == g.id && appLayerId(l.id) != null && (!l.panelOnly || l.id == 'drive')) ...[
+              (id: appLayerId(l.id)!, parent: null),
+              if (l.id == 'drive') (id: 'pings', parent: 'hexes'),
+              if (l.id == 'repeaters') (id: kLabelsLayerId, parent: kRosterLayerId),
+            ],
+        ],
+      ),
+  ];
+}
+
+/// The section a layer belongs to (from the definition's group; the app's extras follow their parent).
+LayerGroup layerGroupOf(String appId) => layerSpec(appId)?.group ?? LayerGroup.coverage;
 
 /// The Repeaters switch is on (either scope).
 bool repeatersOn(MapLayerState s) => s.isOn(kRosterLayerId) || s.isOn(kNetworkLayerId);
@@ -92,10 +127,20 @@ Map<LayerGroup, List<MapLayerSpec>> layersByGroup() => {
 
 /// The default state: every `defaultOn` layer on (both coverage layers, this drive and its ping dots, region and heard
 /// repeaters with names, lines; NOT the 56,889-point `network` scope or observers); pings coloured by SNR.
-final MapLayerState kDefaultLayerState = MapLayerState(
-  on: Set.unmodifiable({for (final l in kMapLayers) if (l.defaultOn) l.id}),
-  mode: const {'pings': 'snr'},
-);
+final MapLayerState kDefaultLayerState = defaultLayerState(MapDefinition.bundled);
+
+/// The definition's defaults (`layers[].defaultOn`, panel-only layers count as on: they draw only while their panel is open)
+/// plus the app's drive extras (on).
+MapLayerState defaultLayerState([MapDefinition? def]) {
+  final d = def ?? ActiveMapDefinition.current;
+  final on = <String>{};
+  for (final l in kMapLayers) {
+    final defId = definitionLayerId(l.id);
+    final defOn = defId == null ? null : d.layerDef(defId)?.defaultOn;
+    if (defOn ?? l.defaultOn) on.add(l.id);
+  }
+  return MapLayerState(on: Set.unmodifiable(on), mode: const {'pings': 'snr'});
+}
 
 /// Pings colour modes the registry knows.
 const Set<String> kPingModes = {'snr', 'result'};
@@ -231,7 +276,7 @@ LayerStatus _feedStatus(MapFeedState s, int count, {required String Function(int
 }
 
 /// Sanity: the registry's website ids are exactly the website keys the app draws (asserted by tests).
-const Set<String> kWebsiteKeysDrawn = {'measured', 'predicted', 'repeaters', 'observers', 'network', kHeardCellsLayerId};
+const Set<String> kWebsiteKeysDrawn = {'measured', 'predicted', 'repeaters', 'observers', 'network', kHeardCellsLayerId, 'borders', 'phones'};
 
 /// App-only ids, the same list the URL code writes in `meshsonar://` links.
 const List<String> kAppOnlyIds = kAppOnlyShowKeys;

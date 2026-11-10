@@ -36,11 +36,13 @@ import '../../core/region_repeaters_api.dart';
 import '../../core/repeater_sync.dart' show SyncTrigger;
 import '../../radio/radio_api.dart';
 import '../../radio/simulator.dart' show defaultSimulatedRepeaters;
+import '../map/active_map_definition.dart';
 import '../map/coverage_timeline_controller.dart';
 import '../map/layers/app_repeater_feed.dart';
 import '../map/layers/map_layer.dart';
 import '../map/layers/observer_layer.dart' show positionedObservers;
 import '../map/layers/registry.dart';
+import '../map/layers/region_borders_layer.dart' show regionBorderRings;
 import '../map/layers/repeater_map_source.dart';
 import '../map/cell_raster_layer.dart' show CellRasterLayer;
 import '../map/live_puck.dart';
@@ -215,6 +217,20 @@ class DriveMapModel extends ChangeNotifier {
   // Which layers are on (registry ids, lib/ui/map/layers/registry.dart) plus their modes: the one layer system. Every change is
   // remembered (LayerPrefs, Drive plan 7.2); the filter drawer, the timeline position and the selection are not.
   late MapLayerState _layerState;
+  String? _definitionScope;
+
+  String? _bordersCode;
+  List<List<LatLng>> _borders = const [];
+
+  /// The viewed region's border rings (the Region borders layer), parsed once per region.
+  List<List<LatLng>> get regionBorders {
+    final r = state.viewingRegion;
+    if (r?.code != _bordersCode) {
+      _bordersCode = r?.code;
+      _borders = regionBorderRings(r);
+    }
+    return _borders;
+  }
   MapLayerState get layerState => _layerState;
   set layerState(MapLayerState n) {
     if (n == _layerState) return;
@@ -239,11 +255,17 @@ class DriveMapModel extends ChangeNotifier {
     bool turnedOn(String id) => n.isOn(id) && !was.isOn(id);
     if (turnedOn(kRosterLayerId) || turnedOn(kNetworkLayerId)) repeaterSource.refreshAges();
     if (turnedOn(kRosterLayerId) && _regionRepeaters.isEmpty && repeaterFeed.region.rows.isEmpty) unawaited(loadRegionRepeaters());
-    if (turnedOn('observers')) unawaited(loadObservers());
+    if (turnedOn('observers') || turnedOn('phones')) unawaited(loadObservers());
   }
 
-  /// Turns one registry layer on or off. The roster id stands for the whole Repeaters switch (plan section 5).
-  void setLayer(String id, bool on) => layerState = id == kRosterLayerId ? withRepeaters(_layerState, on) : _layerState.toggle(id, on);
+  /// Turns one registry layer on or off (each definition layer is its own switch, as on the website: Repeaters and All
+  /// MeshCore repeaters are two layers).
+  /// The app's "heard this drive" highlight follows them: on while either repeater layer is on.
+  void setLayer(String id, bool on) {
+    var n = _layerState.toggle(id, on);
+    if (id == kRosterLayerId || id == kNetworkLayerId) n = n.toggle('heard', n.isOn(kRosterLayerId) || n.isOn(kNetworkLayerId));
+    layerState = n;
+  }
 
   /// The Repeaters scope: This region (false) / All MeshCore (true).
   bool get repeatersAll => repeatersAllScope(_layerState);
@@ -258,7 +280,7 @@ class DriveMapModel extends ChangeNotifier {
   void resetLayers() {
     _saveLayerPrefs(LayerPrefs.empty);
     final was = _layerState;
-    _layerState = kDefaultLayerState;
+    _layerState = defaultLayerState();
     repeaterSource.dedupeAgainstRoster = _layerState.isOn(kRosterLayerId);
     if (_layerState.isOn(kLabelsLayerId) != state.settings.mapRepeaterLabels) {
       unawaited(state.updateSettings(state.settings.copyWith(mapRepeaterLabels: _layerState.isOn(kLabelsLayerId))));
@@ -594,13 +616,21 @@ class DriveMapModel extends ChangeNotifier {
       changed = true;
     }
 
+    // Every map renders from the viewed scope's Map Definition (its layers, names and defaults; the hub's has no observers).
+    final scope = s.viewingRegion?.slug ?? '';
+    if (scope != _definitionScope) {
+      _definitionScope = scope;
+      unawaited(ActiveMapDefinition.follow(scope));
+    }
+
     // The viewed region changed: the timeline's first-data date is per region, so go back to live and reload it.
     final rc = s.viewingRegion?.code;
     if (rc != _timelineRegion) {
       final first = _timelineRegion == null;
       _timelineRegion = rc;
       if (!first) timeline.regionChanged();
-      if (!first && _layerState.isOn('observers')) unawaited(loadObservers());
+      // On by default now (the definition): loaded for the first region too, not only after a change.
+      if (_layerState.isOn('observers') || _layerState.isOn('phones')) unawaited(loadObservers());
     }
 
     _watchTiles();

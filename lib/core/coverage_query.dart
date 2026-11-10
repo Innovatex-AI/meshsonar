@@ -4,14 +4,27 @@ import 'package:flutter/foundation.dart' show immutable;
 
 /// The "since" chips: only cells measured inside the window. [all] sends no `since`.
 enum CoverageSince {
+  /// Not offered any more (the Map Definition's time filter is All / 30 days / 7 days / 24 h); a remembered choice still works.
   hour('1 h', Duration(hours: 1)),
   day('24 h', Duration(hours: 24)),
   week('7 d', Duration(days: 7)),
+  month('30 d', Duration(days: 30)),
   all('All', null);
 
   final String label;
   final Duration? window;
   const CoverageSince(this.label, this.window);
+
+  /// The Map Definition's `filters.time` option id (`t=` on web and app): all / 30d / 7d / 24h.
+  String get definitionId => switch (this) {
+    CoverageSince.all => 'all',
+    CoverageSince.month => '30d',
+    CoverageSince.week => '7d',
+    CoverageSince.day => '24h',
+    CoverageSince.hour => '1h',
+  };
+
+  static CoverageSince? ofDefinitionId(String id) => CoverageSince.values.where((e) => e.definitionId == id).firstOrNull;
 }
 
 /// The `source` filter: MeshSonar drives, MeshMapper forwards, or both merged (the server default).

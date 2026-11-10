@@ -37,6 +37,9 @@ void main() {
     final hosts = <String, String>{};
     final clients = <String>{};
     for (final f in Directory('lib').listSync(recursive: true).whereType<File>().where((f) => f.path.endsWith('.dart'))) {
+      // The generated bundled Map Definition is data (the website's definition, incl. hillshade/sprite URLs the app never
+      // fetches); the app reads only its basemap tile URL, which is pinned to OurBasemap by test/core/map_definition_test.dart.
+      if (f.path.endsWith('map_definition_bundled.g.dart')) continue;
       final src = f.readAsStringSync();
       for (final m in hostRe.allMatches(src)) {
         hosts[m.group(1)!.toLowerCase()] = f.path;

@@ -18,6 +18,8 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 
+import 'map_definition_bundled.g.dart';
+
 /// The schema version this app reads. A definition with a higher `v` is refused (contract rule).
 const supportedMapDefinitionV = 1;
 
@@ -40,6 +42,89 @@ class MapDefinition {
   Map<String, dynamic> get coverage => json['coverage'] as Map<String, dynamic>;
   Map<String, dynamic>? basemap(String id) => basemaps.where((b) => b['id'] == id).firstOrNull;
   Map<String, dynamic>? layer(String id) => layers.where((l) => l['id'] == id).firstOrNull;
+
+  static MapDefinition? _bundled;
+
+  /// The bundled copy (the M1 fixture, generated into map_definition_bundled.g.dart), parsed once. Always available, with no
+  /// I/O, so the first frame and every test render from the definition.
+  static MapDefinition get bundled => _bundled ??= MapDefinition.parse(kBundledMapDefinitionJson);
+
+  // ------------------------------------------------------------------------------------------------ typed reading (M2)
+  // Everything a map draws comes from these readers: no colour, name, order or default is copied into the app.
+
+  /// The Layers panel groups, in panel order.
+  List<MapGroupDef> get groups => [
+    for (final g in (json['groups'] as List? ?? const []).cast<Map<String, dynamic>>()) MapGroupDef(g['id'] as String, g['name'] as String? ?? g['id'] as String),
+  ];
+
+  /// Every layer, in drawing order (bottom to top).
+  List<MapLayerDef> get layerDefs => _layerDefs ??= [for (final l in layers) MapLayerDef.fromJson(l)];
+  List<MapLayerDef>? _layerDefs;
+  MapLayerDef? layerDef(String id) => layerDefs.where((l) => l.id == id).firstOrNull;
+
+  /// The palettes the reader can pick (Standard, Colour-blind safe), in the definition's order.
+  List<PaletteDef> get paletteDefs => [
+    for (final p in palettes) PaletteDef(p['id'] as String, p['name'] as String? ?? p['id'] as String, p['blurb'] as String? ?? ''),
+  ];
+  String get defaultPalette => json['defaultPalette'] as String? ?? palettes.first['id'] as String;
+  String get defaultBasemap => json['defaultBasemap'] as String? ?? basemaps.first['id'] as String;
+
+  Map<String, dynamic> _palette(String id) => palettes.where((p) => p['id'] == id).firstOrNull ?? palettes.first;
+
+  /// The signal colours of palette [paletteId] on the light or dark theme (contract `palettes[].themes[theme]`). An unknown
+  /// palette falls back to the first one (the website's `signalColours`).
+  SignalColoursDef signal(String paletteId, {required bool dark}) {
+    final t = ((_palette(paletteId)['themes'] as Map)[dark ? 'dark' : 'light'] as Map).cast<String, dynamic>();
+    final link = (t['link'] as Map).cast<String, dynamic>();
+    final dash = link['dash'];
+    return SignalColoursDef(
+      bands: [for (final h in (t['bands'] as List)) parseHexColour(h as String)],
+      noReplyOutline: parseHexColour(t['noReplyOutline'] as String),
+      noReplyPoint: parseHexColour(t['noReplyPoint'] as String),
+      link: LinkStyleDef(
+        color: parseHexColour(link['color'] as String),
+        casing: parseHexColour(link['casing'] as String),
+        casingOpacity: (link['casingOpacity'] as num?)?.toDouble() ?? 1,
+        width: (link['width'] as num?)?.toDouble() ?? 2,
+        dash: dash is List ? [for (final d in dash) (d as num).toDouble()] : null,
+      ),
+    );
+  }
+
+  /// The predicted multipliers of the tile's `o` (`palettes[].predicted[theme]`).
+  ({double fill, double hatch, double none}) predicted(String paletteId, {required bool dark}) {
+    final m = (((_palette(paletteId)['predicted'] as Map)[dark ? 'dark' : 'light']) as Map).cast<String, dynamic>();
+    return (fill: (m['fill'] as num).toDouble(), hatch: (m['hatch'] as num).toDouble(), none: (m['none'] as num).toDouble());
+  }
+
+  /// Absolute opacities, radii and hatch sizes (`drawing`).
+  Map<String, dynamic> get drawing => (json['drawing'] as Map? ?? const {}).cast<String, dynamic>();
+  double drawingValue(String key, double fallback) => (drawing[key] as num?)?.toDouble() ?? fallback;
+  double heardValue(String key, double fallback) => ((drawing['heard'] as Map?)?[key] as num?)?.toDouble() ?? fallback;
+  double hatchValue(String key, double fallback) => ((drawing['hatch'] as Map?)?[key] as num?)?.toDouble() ?? fallback;
+
+  /// Band labels by band number (0 No reply .. 5 Excellent, 6 Heard, no direct signal).
+  Map<int, String> get bandLabels => {
+    for (final b in (json['bands'] as List? ?? const []).cast<Map<String, dynamic>>()) b['band'] as int: b['label'] as String,
+  };
+
+  /// `symbols.<name>` as a map (repeater, observer, phone, cluster, drivePing, link, border, selection).
+  Map<String, dynamic> symbol(String name) => ((json['symbols'] as Map?)?[name] as Map? ?? const {}).cast<String, dynamic>();
+
+  /// `symbols.<name>.colours.<theme>.<key>` as an ARGB int, or [fallback].
+  int symbolColour(String name, String key, {required bool dark, int fallback = 0xFF808080}) {
+    final c = symbol(name)['colours'];
+    final t = c is Map ? c[dark ? 'dark' : 'light'] : null;
+    final v = t is Map ? t[key] : (c is Map ? c[dark ? 'dark' : 'light'] : null);
+    return v is String ? parseHexColour(v) : fallback;
+  }
+
+  /// `filters.time` / `filters.source`.
+  MapFilterDef filter(String id) => MapFilterDef.fromJson(((json['filters'] as Map?)?[id] as Map? ?? const {}).cast<String, dynamic>());
+
+  /// `labels`, `limits`.
+  Map<String, dynamic> get labels => (json['labels'] as Map? ?? const {}).cast<String, dynamic>();
+  int limit(String key, int fallback) => ((json['limits'] as Map?)?[key] as num?)?.toInt() ?? fallback;
 
   /// Throws [FormatException] for anything the contract calls unusable: not JSON, `v` missing or higher than
   /// [supportedMapDefinitionV], no `version`, empty `layers` / `palettes` / `basemaps`, no `coverage` object, or a layer /
@@ -210,4 +295,122 @@ class MapDefinitionStore {
   }
 
   void dispose() => _changes.close();
+}
+
+// ------------------------------------------------------------------------------------------------------------------ typed parts
+
+/// `#RRGGBB` (or `#RRGGBBAA`) as an ARGB int. Throws [FormatException] for anything else.
+int parseHexColour(String hex) {
+  final h = hex.startsWith('#') ? hex.substring(1) : hex;
+  if (h.length == 6) return 0xFF000000 | int.parse(h, radix: 16);
+  if (h.length == 8) {
+    final v = int.parse(h, radix: 16);
+    return ((v & 0xFF) << 24) | (v >> 8);
+  }
+  throw FormatException('not a colour: $hex');
+}
+
+class MapGroupDef {
+  final String id, name;
+  const MapGroupDef(this.id, this.name);
+}
+
+class PaletteDef {
+  final String id, name, blurb;
+  const PaletteDef(this.id, this.name, this.blurb);
+}
+
+class LinkStyleDef {
+  final int color, casing;
+  final double casingOpacity, width;
+  final List<double>? dash;
+  const LinkStyleDef({required this.color, required this.casing, required this.casingOpacity, required this.width, this.dash});
+}
+
+/// One palette in one theme: `bands[0..6]` (0 = No reply fill, 1-5 Edge..Excellent, 6 = heard, no SNR) as ARGB ints.
+class SignalColoursDef {
+  final List<int> bands;
+  final int noReplyOutline, noReplyPoint;
+  final LinkStyleDef link;
+  const SignalColoursDef({required this.bands, required this.noReplyOutline, required this.noReplyPoint, required this.link});
+}
+
+/// One legend entry of a layer (`layers[].legend[]`): kind band / bands / hatch / outline / faint / symbol.
+class LegendEntryDef {
+  final String kind;
+  final int? band, from, to;
+  final String? label, note, symbol, state;
+  const LegendEntryDef({required this.kind, this.band, this.from, this.to, this.label, this.note, this.symbol, this.state});
+  factory LegendEntryDef.fromJson(Map<String, dynamic> j) => LegendEntryDef(
+    kind: j['kind'] as String? ?? 'symbol',
+    band: (j['band'] as num?)?.toInt(),
+    from: (j['from'] as num?)?.toInt(),
+    to: (j['to'] as num?)?.toInt(),
+    label: j['label'] as String?,
+    note: j['note'] as String?,
+    symbol: j['symbol'] as String?,
+    state: j['state'] as String?,
+  );
+}
+
+/// One layer (`layers[]`).
+class MapLayerDef {
+  final String id, name, group, style, tap;
+  final bool defaultOn, hidesWithTime, panelOnly;
+  final double minZoom, maxZoom;
+  final String? hint;
+  final List<LegendEntryDef> legend;
+  const MapLayerDef({
+    required this.id,
+    required this.name,
+    required this.group,
+    required this.style,
+    required this.tap,
+    required this.defaultOn,
+    this.hidesWithTime = false,
+    this.panelOnly = false,
+    this.minZoom = 0,
+    this.maxZoom = 22,
+    this.hint,
+    this.legend = const [],
+  });
+  factory MapLayerDef.fromJson(Map<String, dynamic> j) => MapLayerDef(
+    id: j['id'] as String,
+    name: j['name'] as String? ?? j['id'] as String,
+    group: j['group'] as String? ?? '',
+    style: j['style'] as String? ?? '',
+    tap: j['tap'] as String? ?? 'none',
+    defaultOn: j['defaultOn'] == true,
+    hidesWithTime: j['hidesWithTime'] == true,
+    panelOnly: j['panelOnly'] == true,
+    minZoom: (j['minZoom'] as num?)?.toDouble() ?? 0,
+    maxZoom: (j['maxZoom'] as num?)?.toDouble() ?? 22,
+    hint: j['hint'] as String?,
+    legend: [for (final e in (j['legend'] as List? ?? const [])) if (e is Map) LegendEntryDef.fromJson(e.cast<String, dynamic>())],
+  );
+}
+
+class MapFilterOptionDef {
+  final String id, label;
+  final int ms;
+  const MapFilterOptionDef(this.id, this.label, this.ms);
+}
+
+/// `filters.time` / `filters.source`.
+class MapFilterDef {
+  final String key, defaultId;
+  final bool available;
+  final String? note;
+  final List<MapFilterOptionDef> options;
+  const MapFilterDef({required this.key, required this.defaultId, required this.available, this.note, this.options = const []});
+  factory MapFilterDef.fromJson(Map<String, dynamic> j) => MapFilterDef(
+    key: j['key'] as String? ?? '',
+    defaultId: j['default'] as String? ?? 'all',
+    available: j['available'] != false,
+    note: j['note'] as String?,
+    options: [
+      for (final o in (j['options'] as List? ?? const []).cast<Map<String, dynamic>>())
+        MapFilterOptionDef(o['id'] as String, o['label'] as String? ?? o['id'] as String, (o['ms'] as num?)?.toInt() ?? 0),
+    ],
+  );
 }

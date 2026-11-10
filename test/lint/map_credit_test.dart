@@ -18,7 +18,7 @@ void main() {
       maps++;
       if (!credit.hasMatch(src)) missing.add(f.path);
     }
-    expect(maps, greaterThan(5), reason: 'the scan found the maps');
+    expect(maps, greaterThanOrEqualTo(2), reason: 'the scan found the maps');
     expect(missing, isEmpty, reason: 'maps without a visible credit');
   });
 
@@ -32,6 +32,15 @@ void main() {
       raster.add(f.path);
     }
     expect(raster, isEmpty, reason: 'maps with their own raster tile layer');
+  });
+
+  test('one shared map component (plan §2.1, M2): only the main map and its preview build a FlutterMap', () {
+    final maps = [
+      for (final f in Directory('lib').listSync(recursive: true).whereType<File>().where((f) => f.path.endsWith('.dart')))
+        if (f.readAsStringSync().contains('FlutterMap(')) f.path.replaceAll('\\', '/'),
+    ]..sort();
+    expect(maps, ['lib/ui/map/coverage_map.dart', 'lib/ui/map/map_preview.dart'], reason: 'small maps are MapPreview (map_preview.dart), never a FlutterMap of their own');
+    expect(File('lib/ui/map/map_preview.dart').readAsStringSync(), contains('const MiniMapCredit()'));
   });
 
   test('the mini map credit follows the source drawn', () {

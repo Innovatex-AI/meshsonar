@@ -5,7 +5,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../app/messages.dart';
+import '../../core/basemap.dart' show OurBasemap;
 import '../../core/offline_packs.dart';
+import '../app.dart' show AppScope;
 import '../design/app_surfaces.dart';
 import '../map/offline_basemap.dart';
 import '../region/region_common.dart' show agoText;
@@ -260,6 +262,7 @@ class _OfflinePacksScreenState extends State<OfflinePacksScreen> {
                     _PackTile(key: Key('pack-${ip.code}'), manager: m, entry: null, installed: ip, onDisk: _byPack[ip.code], onStart: _start, onDelete: _confirmDelete),
                   if (mf != null && entries.isEmpty && orphans.isEmpty)
                     const ListTile(key: Key('pack-none'), title: Text('No map packs are published yet.')),
+                  if (mf != null) ?_viewedRegionNote(context, entries),
                   const Divider(),
                   Row(
                     children: [
@@ -281,6 +284,27 @@ class _OfflinePacksScreenState extends State<OfflinePacksScreen> {
       ),
     );
   }
+}
+
+/// The viewed region has no pack (Nov 10, plan §8d: packs are built for every region with coverage inside our North America
+/// extract; elsewhere the online map falls back to OpenFreeMap). Said plainly instead of leaving the person to look for it.
+Widget? _viewedRegionNote(BuildContext context, List<PackManifestEntry> entries) {
+  final r = AppScope.maybeOf(context)?.viewingRegion;
+  if (r == null || entries.any((e) => e.code.toLowerCase() == r.code.toLowerCase() || e.code.toLowerCase() == r.slug.toLowerCase())) return null;
+  final b = r.bbox;
+  final ob = OurBasemap.bounds;
+  final insideExtract = b != null && b.length == 4 && (b[0] + b[2]) / 2 >= ob[0] && (b[0] + b[2]) / 2 <= ob[2] && (b[1] + b[3]) / 2 >= ob[1] && (b[1] + b[3]) / 2 <= ob[3];
+  return ListTile(
+    key: const Key('pack-region-none'),
+    contentPadding: EdgeInsets.zero,
+    leading: const Icon(Icons.info_outline),
+    title: Text('No offline pack for ${r.name}'),
+    subtitle: Text(
+      insideExtract
+          ? 'A pack is built once the region has coverage. The online map works here.'
+          : 'Offline packs cover North America only. The online map works here (OpenFreeMap).',
+    ),
+  );
 }
 
 class _PackTile extends StatelessWidget {

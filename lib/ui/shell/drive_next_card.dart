@@ -1,7 +1,7 @@
 // Plan tab, "Where to drive next": measured-coverage gaps near the phone, from the network coverage the app already holds
 // (lib/core/drive_next.dart). A small map, a list with distance and direction, and "Navigate" into Apple Maps. Every state
 // says what to do: no location, loading, failed, nothing to find.
-import '../map/basemap_layer.dart' show BasemapLayer;
+import '../map/map_preview.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:h3_flutter/h3_flutter.dart' show H3;
@@ -16,7 +16,6 @@ import '../app.dart';
 import '../../core/coverage_v2.dart' show CoverageBand;
 import '../map/coverage_bands.dart' show CoverageBandColors;
 import '../design/app_surfaces.dart';
-import '../map/overlays/mini_map_credit.dart';
 
 /// The colour the coverage map draws a "No reply" cell in (band 0), so a target dot matches the map and its key.
 Color _noReply(BuildContext context) =>
@@ -254,7 +253,6 @@ class _DriveNextCardState extends State<DriveNextCard> {
     LatLng me,
     List<DriveTarget> targets,
   ) {
-    final m = MeshSonarColors.of(context);
     final cs = Theme.of(context).colorScheme;
     final pts = [me, for (final x in targets) LatLng(x.lat, x.lon)];
     return ClipRRect(
@@ -262,20 +260,16 @@ class _DriveNextCardState extends State<DriveNextCard> {
       borderRadius: BorderRadius.circular(Corners.small),
       child: SizedBox(
         height: 200,
-        child: FlutterMap(
-          options: MapOptions(
-            initialCameraFit: CameraFit.coordinates(
-              coordinates: pts,
-              padding: const EdgeInsets.all(36),
-              maxZoom: 14,
-            ),
-            backgroundColor: m.mapBackground,
-            interactionOptions: const InteractionOptions(
-              flags: InteractiveFlag.none,
-            ),
+        child: MapPreview(
+          fit: CameraFit.coordinates(
+            coordinates: pts,
+            padding: const EdgeInsets.all(36),
+            maxZoom: 14,
           ),
-          children: [
-            const BasemapLayer(),
+          coverage: kPreviewCoverage,
+          openAt: me,
+          openZoom: 12,
+          overlays: [
             MarkerLayer(
               markers: [
                 for (final x in targets)
@@ -314,7 +308,6 @@ class _DriveNextCardState extends State<DriveNextCard> {
                 ),
               ],
             ),
-            const MiniMapCredit(),
           ],
         ),
       ),

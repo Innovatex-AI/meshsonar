@@ -115,20 +115,16 @@ void main() {
     await settle(tester);
     await tester.tap(find.byKey(const Key('drive-map-layers')));
     await settleShort(tester);
-    // The generated sheet lists "This drive" first, so the coverage controls sit lower: scroll them into view.
-    await tester.ensureVisible(find.byKey(const Key('layer-measured-options')));
+    // The Filters section is on the sheet's main page (the website's Layers panel): scroll it into view.
+    await tester.ensureVisible(find.byKey(const Key('cov-source-meshmapper')));
     await settleShort(tester);
-    await tester.tap(find.byKey(const Key('layer-measured-options')));
-    await settleShort(tester);
-    await tester.ensureVisible(find.byKey(const Key('cov-source-MeshMapper')));
-    await settleShort(tester);
-    await tester.tap(find.byKey(const Key('cov-source-MeshMapper')));
+    await tester.tap(find.byKey(const Key('cov-source-meshmapper')));
     await settle(tester);
     expect(h.client.lastCoverageSource, 'meshmapper');
     expect(h.client.lastCoverageRes, inInclusiveRange(7, 11)); // auto: from the map zoom
-    await tester.ensureVisible(find.byKey(const Key('cov-since-24 h')));
+    await tester.ensureVisible(find.byKey(const Key('cov-since-24h')));
     await settleShort(tester);
-    await tester.tap(find.byKey(const Key('cov-since-24 h')));
+    await tester.tap(find.byKey(const Key('cov-since-24h')));
     await settle(tester);
     expect(h.client.lastCoverageSince, isNotNull);
     expect(find.byKey(const Key('cov-res-11')), findsNothing, reason: 'the detail chips are gone (coverage plan D1)');

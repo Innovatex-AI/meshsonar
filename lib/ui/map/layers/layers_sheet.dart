@@ -1,21 +1,18 @@
-// The map layers sheet (Drive plan 4.7, wireframe F; sections per the coverage redesign plan section 5, Nov 8 2026), generated
-// from the registry (registry.dart, [kSheetRows]): Base map, then Coverage (Measured coverage, Predicted coverage, This drive
-// with its Ping dots) and Network (Repeaters with a This region / All MeshCore scope and a Names sub-switch, Observers, Lines
-// to repeaters), one switch per row, each with its honest status line from
-// [DriveMapModel.statusOf] (count, source, "Not available on this server yet", "Couldn't load" + Retry, "Saved copy from ...")
-// and its inline key (the swatches are built from the same colour functions the map paints with, so a key can never disagree
-// with the map). A layer whose data is unsupported or empty is shown with its switch disabled and the reason, never hidden;
-// one that is on can always be switched off.
+// The map Layers sheet = the website's Layers panel (plan unified-map-system §2.4-2.5, phase M2), generated from the Map
+// Definition (registry.dart [sheetRows]): Basemap, then the definition's groups (Coverage, Network, Context) with its layers,
+// names and hints (top of the map first: Measured, Heard by phones, Predicted; Moving phones, Observers, Repeaters, All MeshCore
+// repeaters, Link lines; Region borders), Filters ("Measured in" / "Drives from" from `filters`, plus the app's growth
+// timeline), Palette (Standard / Colour-blind safe from `palettes`), then credits, the guide and Reset. The app's drive panel
+// adds This drive (the definition's panel-only `drive` layer) with Ping dots, and Names under Repeaters. Each row keeps its
+// honest status line from [DriveMapModel.statusOf] and its inline key (drawn with the colour functions the map paints with).
 //
 // Non-modal (the map stays live above it, every toggle applies instantly): [showGeneratedLayersSheet] opens it in the Drive tab's
-// anchored host when given one, else as a non-modal app sheet with detents [0.4, 0.75]. "Coverage options" is a page inside the
-// sheet (window, growth slider, source). The colour-by selector, detail chips and range rings are gone (plan D1, D9).
+// anchored host when given one, else as a non-modal app sheet with detents [0.4, 0.75].
 //
-// Keys: 'layers-sheet', 'layers-done', 'layers-base-map', 'base-map-<id>', 'layers-group-<group>', the switch per layer from
-// [layerSwitchKey] (the pre-registry keys are kept: measured = 'layer-network-coverage', heard = 'layer-repeaters', repeaters
-// (roster) = 'layer-region-repeaters'; the rest are 'layer-<id>'), 'layer-<id>-status', 'layer-<id>-retry', 'layer-<id>-key',
-// 'layer-color-snr', 'layer-color-result', 'layer-repeaters-scope', 'layer-measured-options', 'layers-options-page', 'layers-options-back',
-// 'layers-filter', 'layers-credits', 'layers-legend', 'layers-reset', 'network-legend'.
+// Keys: 'layers-sheet', 'layers-done', 'layers-base-map', 'base-map-<id>', 'layers-group-<groupId>' (+ 'layers-group-filters',
+// 'layers-group-palette'), the switch per layer from [layerSwitchKey], 'layer-<id>-status', 'layer-<id>-retry', 'layer-<id>-key',
+// 'layer-color-snr', 'layer-color-result', 'layers-palette-<paletteId>', 'layers-filter', 'layers-credits', 'layers-legend',
+// 'layers-reset', 'network-legend'.
 import 'package:flutter/cupertino.dart' show CupertinoButton, CupertinoSlidingSegmentedControl;
 import 'package:flutter/material.dart';
 
@@ -35,6 +32,8 @@ import '../coverage_layer_controls.dart';
 import '../coverage_map.dart' show networkLevelColor;
 import '../sheets/coverage_cell_sheet.dart' show CoverageBandSwatch;
 import '../legend_sheet.dart' show LegendSwatch, SwatchShape, showMapLegend;
+import '../legend_card.dart' show PaletteSwitch, RepeaterRingKey;
+import '../active_map_definition.dart';
 import '../map_layers.dart' show PingColorMode;
 import '../map_tools.dart' show showMapFilterSheet;
 import '../overlays/credits_sheet.dart' show showMapCredits;
@@ -53,28 +52,20 @@ Key layerSwitchKey(String id) => Key(switch (id) {
   _ => 'layer-$id',
 });
 
-/// Title and one-line description per layer (Drive plan 7.1).
-({String title, String? description}) layerPresentation(BuildContext context, MapLayerSpec spec, {String? regionName, bool hasPosition = true}) {
-  return switch (spec.id) {
-    'pings' => (title: 'Ping dots', description: 'Each ping you sent.'),
-    'hexes' => (title: 'This drive', description: 'Your pings this session, in the same cells and colours.'),
-    'links' => (title: 'Lines to repeaters', description: 'Live lines to repeaters you hear, and lines when you tap a repeater or cell.'),
-    'measured' => (title: 'Measured coverage', description: "Everyone's drives: the average signal in each cell."),
-    'predicted' => (title: 'Predicted coverage', description: 'An estimate near measured cells, hatched.'),
-    kHeardCellsLayerId => (
-      title: 'Heard by phones',
-      description: 'Outlined cells where a phone heard a repeater without pinging, in the colour of the average signal it heard.',
-    ),
-    'heard' => (title: 'Heard this drive', description: 'Repeaters your pings reached (highlighted).'),
-    kRosterLayerId => (title: 'Repeaters', description: 'By last advert. Repeaters your pings reached are lit.'),
-    kNetworkLayerId => (
-      title: 'All MeshCore repeaters',
-      description: 'Every repeater with a public position (MeshCore Map). Turn on to see every repeater in the country.',
-    ),
-    'observers' => (title: 'Observers', description: 'Observers that share a position.'),
-    kLabelsLayerId => (title: 'Names', description: 'Name beside each repeater; fewer when zoomed out.'),
-    _ => (title: spec.label, description: null),
+/// Title and the line under it. Definition layers: the definition's name, and its hint while the layer is off (the website's
+/// panel). The app's drive extras keep their own words.
+({String title, String? description}) layerPresentation(BuildContext context, MapLayerSpec spec, {String? regionName, bool hasPosition = true, bool on = false}) {
+  final defId = definitionLayerId(spec.id);
+  final def = ActiveMapDefinition.current;
+  final l = defId == null ? null : def.layerDef(defId);
+  final own = switch (spec.id) {
+    'pings' => 'Each ping you sent.',
+    'hexes' => 'Your pings this session, in the same cells and colours.',
+    'heard' => 'Repeaters your pings reached (highlighted).',
+    kLabelsLayerId => 'Name beside each repeater, from street zoom; fewer when crowded.',
+    _ => null,
   };
+  return (title: layerLabel(spec.id, def), description: l == null ? own : (on ? null : l.hint));
 }
 
 /// Opens the sheet for [model]. With an [anchored] host (the Drive tab's) it sits above the dock; otherwise it is a non-modal
@@ -109,8 +100,6 @@ class MapLayersSheet extends StatefulWidget {
 }
 
 class _MapLayersSheetState extends State<MapLayersSheet> {
-  bool _options = false;
-
   DriveMapModel get model => widget.model;
 
   @override
@@ -121,7 +110,7 @@ class _MapLayersSheetState extends State<MapLayersSheet> {
         key: const Key('layers-sheet'),
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: _options ? _optionsPage(context) : _mainPage(context),
+        children: _mainPage(context),
       ),
     );
   }
@@ -132,32 +121,31 @@ class _MapLayersSheetState extends State<MapLayersSheet> {
     final t = Theme.of(context);
     final st = model.layerState;
     return [
-      _Header(title: 'Map layers', trailing: _TextAction(key: const Key('layers-done'), label: 'Done', onTap: widget.onDone)),
+      _Header(title: 'Layers', trailing: _TextAction(key: const Key('layers-done'), label: 'Done', onTap: widget.onDone)),
       Flexible(
         child: ListView(
           controller: widget.scroll,
           shrinkWrap: true,
           padding: EdgeInsets.only(bottom: MediaQuery.viewPaddingOf(context).bottom + Gap.m),
           children: [
-            const _SectionLabel('Base map', key: Key('layers-group-base')),
+            const _SectionLabel('Basemap', key: Key('layers-group-base')),
             _BaseMapPicker(model: model),
-            for (final g in LayerGroup.values) ...[
-              _SectionLabel(g.label, key: Key('layers-group-${g.name}')),
-              for (final row in kSheetRows[g]!) ..._layer(context, layerSpec(row.id)!, st, sub: row.parent != null),
-              if (g == LayerGroup.coverage)
-                _NavRow(
-                  key: const Key('layer-measured-options'),
-                  title: 'Coverage options',
-                  subtitle: _optionsSummary(),
-                  onTap: () => setState(() => _options = true),
-                ),
-            ],
+            // The definition's groups and layers, in the website's panel order (top of the map first).
+            for (final (g, rows) in sheetRows())
+              if (rows.isNotEmpty) ...[
+                _SectionLabel(g.name, key: Key('layers-group-${g.id}')),
+                for (final row in rows) ..._layer(context, layerSpec(row.id)!, st, sub: row.parent != null),
+              ],
+            const _SectionLabel('Filters', key: Key('layers-group-filters')),
+            Padding(padding: const EdgeInsets.symmetric(horizontal: Gap.l), child: CoverageOptionsBody(model: model)),
             _NavRow(
               key: const Key('layers-filter'),
               title: 'Filter pings and cells',
               trailing: model.filter.activeCount == 0 ? null : '${model.filter.activeCount} active',
               onTap: () => showMapFilterSheet(context, model),
             ),
+            const _SectionLabel('Palette', key: Key('layers-group-palette')),
+            const Padding(padding: EdgeInsets.symmetric(horizontal: Gap.l), child: Align(alignment: Alignment.centerLeft, child: PaletteSwitch(keyPrefix: 'layers-palette'))),
             const _SectionLabel(''),
             _NavRow(
               key: const Key('layers-credits'),
@@ -202,11 +190,9 @@ class _MapLayersSheetState extends State<MapLayersSheet> {
 
   List<Widget> _layer(BuildContext context, MapLayerSpec spec, MapLayerState st, {bool sub = false}) {
     final t = Theme.of(context);
-    final p = layerPresentation(context, spec, regionName: model.state.viewingRegion?.name, hasPosition: model.position != null);
-    // The Repeaters row is the roster and the all-MeshCore layers together: its status is the scope's.
-    final isRepeaters = spec.id == kRosterLayerId;
-    final on = isRepeaters ? repeatersOn(st) : st.isOn(spec.id);
-    final statusId = isRepeaters && model.repeatersAll ? kNetworkLayerId : spec.id;
+    final on = st.isOn(spec.id);
+    final p = layerPresentation(context, spec, regionName: model.state.viewingRegion?.name, hasPosition: model.position != null, on: on);
+    final statusId = spec.id;
     final status = model.statusOf(statusId);
     // A sub-switch (Ping dots, Names) works only while its parent is on.
     final parentOff = sub && !(spec.id == kLabelsLayerId ? repeatersOn(st) : st.isOn('hexes'));
@@ -219,10 +205,8 @@ class _MapLayersSheetState extends State<MapLayersSheet> {
       switchKey: layerSwitchKey(spec.id),
       // A default-on layer the server does not offer shows off and disabled (it cannot draw anything). Otherwise
       // unsupported/empty layers cannot be switched on, and a layer that is on can always be switched off.
-      // The Repeaters switch shows what the person chose: a scope the server lacks says so on the status line, and the switch
-      // can still be turned off.
-      value: on && (isRepeaters || !unsupported),
-      onChanged: parentOff || (unsupported && !(isRepeaters && on)) ? null : ((on || status.enabled) ? (v) => model.setLayer(spec.id, v) : null),
+      value: on && !unsupported,
+      onChanged: parentOff || unsupported ? null : ((on || status.enabled) ? (v) => model.setLayer(spec.id, v) : null),
     );
     return [
       if (sub) Padding(padding: const EdgeInsets.only(left: Gap.l), child: tile) else tile,
@@ -252,43 +236,18 @@ class _MapLayersSheetState extends State<MapLayersSheet> {
           ),
         ),
       if (spec.id == 'pings') _PingModeRow(model: model),
-      if (isRepeaters) _RepeaterScopeRow(model: model),
-      if (on && !unsupported) _InlineKey(layerId: isRepeaters && model.repeatersAll ? kNetworkLayerId : spec.id, model: model),
+      if (on && !unsupported) _InlineKey(layerId: spec.id, model: model),
     ];
   }
 
-  String _optionsSummary() {
-    final q = model.coverageQuery;
-    final when = q.until == null ? 'Live' : 'As of ${q.until!.toLocal().year}-${q.until!.toLocal().month.toString().padLeft(2, '0')}-${q.until!.toLocal().day.toString().padLeft(2, '0')}';
-    return 'Window ${q.since.label}  ·  Source ${q.source.label}  ·  $when';
-  }
-
-  // ------------------------------------------------------------------ the network coverage options page
-
-  List<Widget> _optionsPage(BuildContext context) => [
-    _Header(
-      title: 'Coverage options',
-      leading: _TextAction(key: const Key('layers-options-back'), label: 'Layers', onTap: () => setState(() => _options = false), back: true),
-      trailing: _TextAction(key: const Key('layers-done'), label: 'Done', onTap: widget.onDone),
-    ),
-    Flexible(
-      child: ListView(
-        key: const Key('layers-options-page'),
-        controller: widget.scroll,
-        shrinkWrap: true,
-        padding: EdgeInsets.fromLTRB(Gap.l, 0, Gap.l, MediaQuery.viewPaddingOf(context).bottom + Gap.m),
-        children: [CoverageOptionsBody(model: model)],
-      ),
-    ),
-  ];
 }
 
 // ====================================================================================================== pieces
 
 class _Header extends StatelessWidget {
   final String title;
-  final Widget? leading, trailing;
-  const _Header({required this.title, this.leading, this.trailing});
+  final Widget? trailing;
+  const _Header({required this.title, this.trailing});
 
   @override
   Widget build(BuildContext context) {
@@ -297,7 +256,7 @@ class _Header extends StatelessWidget {
       height: 52,
       child: Row(
         children: [
-          SizedBox(width: 96, child: Align(alignment: Alignment.centerLeft, child: leading)),
+          const SizedBox(width: 96),
           Expanded(child: Semantics(header: true, child: Text(title, style: t.textTheme.titleMedium, textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis))),
           SizedBox(width: 96, child: Align(alignment: Alignment.centerRight, child: trailing)),
         ],
@@ -309,8 +268,7 @@ class _Header extends StatelessWidget {
 class _TextAction extends StatelessWidget {
   final String label;
   final VoidCallback? onTap;
-  final bool back;
-  const _TextAction({super.key, required this.label, required this.onTap, this.back = false});
+  const _TextAction({super.key, required this.label, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -322,7 +280,6 @@ class _TextAction extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (back) AppSymbolIcon(AppSymbols.chevronLeft, size: 16, color: t.colorScheme.primary),
           Flexible(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: t.textTheme.bodyLarge?.copyWith(color: t.colorScheme.primary))),
         ],
       ),
@@ -349,11 +306,11 @@ class _SectionLabel extends StatelessWidget {
 
 class _NavRow extends StatelessWidget {
   final String title;
-  final String? subtitle, trailing;
+  final String? trailing;
   final AppSymbol? symbol;
   final bool destructive, chevron;
   final VoidCallback onTap;
-  const _NavRow({super.key, required this.title, this.subtitle, this.trailing, this.symbol, this.destructive = false, this.chevron = true, required this.onTap});
+  const _NavRow({super.key, required this.title, this.trailing, this.symbol, this.destructive = false, this.chevron = true, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -361,7 +318,7 @@ class _NavRow extends StatelessWidget {
     final ink = destructive ? t.colorScheme.error : null;
     return Semantics(
       button: true,
-      label: [title, ?subtitle, ?trailing].join('. '),
+      label: [title, ?trailing].join('. '),
       child: ExcludeSemantics(
         child: InkWell(
           onTap: onTap,
@@ -377,7 +334,6 @@ class _NavRow extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(title, style: t.textTheme.bodyLarge?.copyWith(color: ink)),
-                        if (subtitle != null) Text(subtitle!, style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
                       ],
                     ),
                   ),
@@ -459,34 +415,6 @@ class _BaseMapPicker extends StatelessWidget {
               ),
             ),
         ],
-      ),
-    );
-  }
-}
-
-/// This region | All MeshCore, under the Repeaters row (plan section 5: one switch, a scope).
-class _RepeaterScopeRow extends StatelessWidget {
-  final DriveMapModel model;
-  const _RepeaterScopeRow({required this.model});
-
-  @override
-  Widget build(BuildContext context) {
-    final on = repeatersOn(model.layerState);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(Gap.l, 0, Gap.l, Gap.s),
-      child: Opacity(
-        opacity: on ? 1 : 0.4,
-        child: CupertinoSlidingSegmentedControl<bool>(
-          key: const Key('layer-repeaters-scope'),
-          groupValue: model.repeatersAll,
-          children: const {
-            false: Padding(padding: EdgeInsets.symmetric(horizontal: Gap.m, vertical: 6), child: Text('This region', key: Key('layer-scope-region'))),
-            true: Padding(padding: EdgeInsets.symmetric(horizontal: Gap.m, vertical: 6), child: Text('All MeshCore', key: Key('layer-scope-all'))),
-          },
-          onValueChanged: (v) {
-            if (v != null) model.repeatersAll = v;
-          },
-        ),
       ),
     );
   }
@@ -616,46 +544,13 @@ List<KeyItem> coverageBandKey(BuildContext context, CoverageMeta meta) {
   ];
 }
 
-/// The three repeater freshness states (Drive plan 6.3): solid = fresh, tinted ring = recent, hollow dashed = older. The colours are
-/// palette-independent (MapTokens) and differ from the signal ramp. [hours] adds the 24 h / 7 d edges.
-List<KeyItem> repeaterFreshnessKey(BuildContext context, {required bool hours}) {
-  final b = Theme.of(context).brightness;
-  Widget badge(Color c, int state) => ExcludeSemantics(
-    child: CustomPaint(size: const Size(16, 16), painter: _FreshnessBadge(c, state)),
-  );
-  return [
-    KeyItem(badge(MapTokens.repeaterFresh(b), 0), hours ? 'fresh, 24 h' : 'fresh'),
-    KeyItem(badge(MapTokens.repeaterAging(b), 1), hours ? 'recent, 7 d' : 'recent'),
-    KeyItem(badge(MapTokens.repeaterStale(b), 2), 'older'),
-  ];
-}
-
-class _FreshnessBadge extends CustomPainter {
-  final Color color;
-  final int state;
-  _FreshnessBadge(this.color, this.state);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final c = size.center(Offset.zero);
-    final r = size.shortestSide / 2 - 1.5;
-    switch (state) {
-      case 0:
-        canvas.drawCircle(c, r, Paint()..color = color);
-      case 1:
-        canvas.drawCircle(c, r, Paint()..color = color.withValues(alpha: 0.35));
-        canvas.drawCircle(c, r, Paint()..color = color..style = PaintingStyle.stroke..strokeWidth = 2);
-      default:
-        final p = Paint()..color = color..style = PaintingStyle.stroke..strokeWidth = 1.5;
-        for (var i = 0; i < 8; i++) {
-          canvas.drawArc(Rect.fromCircle(center: c, radius: r), i * 0.785, 0.4, false, p);
-        }
-    }
-  }
-
-  @override
-  bool shouldRepaint(_FreshnessBadge o) => o.color != color || o.state != state;
-}
+/// The three repeater states as the map draws them (the Map Definition's `symbols.repeater`: the neutral tower with a solid ring,
+/// a dashed ring, or no ring and faded). [hours] adds the 24 h / 7 d edges.
+List<KeyItem> repeaterFreshnessKey(BuildContext context, {required bool hours}) => [
+  KeyItem(const RepeaterRingKey(state: 'fresh'), hours ? 'heard in 24 h (solid ring)' : 'fresh'),
+  KeyItem(const RepeaterRingKey(state: 'recent'), hours ? 'heard in 7 d (dashed ring)' : 'recent'),
+  KeyItem(const RepeaterRingKey(state: 'stale'), 'older (faded)'),
+];
 
 /// The repeater layer's key in the Credits sheet's map key and the guide: the SAME three freshness badges and colours the
 /// repeater markers are painted with (repeater_sprites.dart freshnessOfAge: <= 24 h fresh, <= 7 d recent, older), never the

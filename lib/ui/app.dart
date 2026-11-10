@@ -1,4 +1,7 @@
 // Root widget, theme wiring (see theme.dart) and AppScope (how screens reach AppState). The tab shell is in shell/.
+import '../core/map_definition.dart' show MapDefinition;
+import 'map/active_map_definition.dart';
+
 import 'package:flutter/material.dart';
 
 import '../app/app_state.dart';
@@ -18,19 +21,16 @@ export 'theme.dart' show meshSonarTheme, meshSonarThemeMode, MeshSonarColors, Ga
 class AppScope extends InheritedNotifier<AppState> {
   const AppScope({super.key, required AppState state, required super.child}) : super(notifier: state);
 
-  static AppState of(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<AppScope>()!.notifier!;
+  static AppState of(BuildContext context) => context.dependOnInheritedWidgetOfExactType<AppScope>()!.notifier!;
 
   /// The state when there is an AppScope above (rebuilds on change), else null (isolated widget tests).
   static AppState? maybeOf(BuildContext context) => context.dependOnInheritedWidgetOfExactType<AppScope>()?.notifier;
 
   /// The Units for the current Settings (rebuilds on change); metric when there is no AppScope (isolated widget tests).
-  static Units unitsOf(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<AppScope>()?.notifier?.units ?? Units.metric;
+  static Units unitsOf(BuildContext context) => context.dependOnInheritedWidgetOfExactType<AppScope>()?.notifier?.units ?? Units.metric;
 
   /// Read without subscribing (for callbacks).
-  static AppState read(BuildContext context) =>
-      (context.getElementForInheritedWidgetOfExactType<AppScope>()!.widget as AppScope).notifier!;
+  static AppState read(BuildContext context) => (context.getElementForInheritedWidgetOfExactType<AppScope>()!.widget as AppScope).notifier!;
 }
 
 /// `MaterialApp.builder` for every MaterialApp in the app: one app-wide text style under the Navigator.
@@ -43,10 +43,7 @@ class AppScope extends InheritedNotifier<AppState> {
 /// Navigator and its Overlay, so all of those get the same style a Material would give (`textTheme.bodyMedium`) instead.
 /// Pinned by test/ui/no_debug_underline_test.dart.
 Widget meshSonarAppBuilder(BuildContext context, Widget? child) {
-  return DefaultTextStyle(
-    style: Theme.of(context).textTheme.bodyMedium ?? const TextStyle(),
-    child: child ?? const SizedBox.shrink(),
-  );
+  return DefaultTextStyle(style: Theme.of(context).textTheme.bodyMedium ?? const TextStyle(), child: child ?? const SizedBox.shrink());
 }
 
 class MeshSonarApp extends StatefulWidget {
@@ -71,27 +68,33 @@ class _MeshSonarAppState extends State<MeshSonarApp> {
     return AppScope(
       state: state,
       // Builder so the theme follows Settings > Colour palette (the strength colours live in the theme extension).
-      child: Builder(builder: (context) {
-        final scope = AppScope.of(context);
-        final palette = scope.settings.colourPalette;
-        // Foundation wiring (WP0): the Haptics setting, and the drive guard that holds self-raised prompts while driving.
-        AppHaptics.enabled = scope.settings.haptics;
-        final driving = scope.driving;
-        WidgetsBinding.instance.addPostFrameCallback((_) => DriveGuard.instance.setDriving(driving));
-        return MaterialApp(
-          // Screens pushed for one AppState (a report form, its review) belong to it. Without this key, giving the app
-          // a new AppState (a restart in the same engine, as widget tests do) would keep the old screen stack and Navigator
-          // over the new state.
-          key: ObjectKey(state),
-          title: 'MeshSonar',
-          debugShowCheckedModeBanner: false,
-          theme: meshSonarTheme(Brightness.light, palette: palette),
-          darkTheme: meshSonarTheme(Brightness.dark, palette: palette),
-          themeMode: meshSonarThemeMode(),
-          builder: meshSonarAppBuilder,
-          home: FirstRunGate(builder: () => const HomeShell()),
-        );
-      }),
+      child: Builder(
+        builder: (context) {
+          final scope = AppScope.of(context);
+          final palette = scope.settings.colourPalette;
+          // Foundation wiring (WP0): the Haptics setting, and the drive guard that holds self-raised prompts while driving.
+          AppHaptics.enabled = scope.settings.haptics;
+          final driving = scope.driving;
+          WidgetsBinding.instance.addPostFrameCallback((_) => DriveGuard.instance.setDriving(driving));
+          // ...and the active Map Definition (its palettes are the signal colours; a server copy can change them).
+          return ValueListenableBuilder<MapDefinition>(
+            valueListenable: ActiveMapDefinition.notifier,
+            builder: (context, def, _) => MaterialApp(
+              // Screens pushed for one AppState (a report form, its review) belong to it. Without this key, giving the app
+              // a new AppState (a restart in the same engine, as widget tests do) would keep the old screen stack and Navigator
+              // over the new state.
+              key: ObjectKey(state),
+              title: 'MeshSonar',
+              debugShowCheckedModeBanner: false,
+              theme: meshSonarTheme(Brightness.light, palette: palette, definition: def),
+              darkTheme: meshSonarTheme(Brightness.dark, palette: palette, definition: def),
+              themeMode: meshSonarThemeMode(),
+              builder: meshSonarAppBuilder,
+              home: FirstRunGate(builder: () => const HomeShell()),
+            ),
+          );
+        },
+      ),
     );
   }
 }

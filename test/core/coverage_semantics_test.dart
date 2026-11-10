@@ -7,6 +7,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/core/map_definition.dart';
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/colour_palette.dart';
 import 'package:meshsonar/core/network_coverage.dart';
@@ -127,12 +128,14 @@ void main() {
   });
 
   for (final b in Brightness.values) {
-    test('ping colours (${b.name}): nothing heard is grey, unknown SNR is not a green/teal strength colour', () {
+    test('ping colours (${b.name}): nothing heard is the No-reply band, unknown SNR is the heard-no-SNR grey, never a strength', () {
       final mc = b == Brightness.dark ? MeshSonarColors.dark : MeshSonarColors.light;
+      final sig = MapDefinition.bundled.signal('standard', dark: b == Brightness.dark);
       final grey = mc.forPing(heard: false);
-      final hsl = HSLColor.fromColor(grey);
-      expect(hsl.saturation, lessThan(0.2), reason: 'grey');
+      expect(grey, Color(sig.bands[0]), reason: 'a ping nobody answered = No reply (the definition drive layer legend)');
       final unknown = mc.forPing(heard: true);
+      expect(HSLColor.fromColor(unknown).saturation, lessThan(0.2), reason: 'heard, no direct signal is grey');
+      expect(unknown, Color(sig.bands[6]));
       expect(unknown, mc.heardUnknown);
       expect(unknown, isNot(mc.snrMid));
       expect(unknown, isNot(mc.snrStrong));

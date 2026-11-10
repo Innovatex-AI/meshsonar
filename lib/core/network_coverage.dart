@@ -41,7 +41,7 @@ class NetworkCell {
 /// `src/components/coverage/cells.ts`). Only the old path (a server without coverage v2) colours by this; v2 cells carry their
 /// band (mean SNR, lib/core/coverage_v2.dart). The colour-by modes (share heard, noise floor, ping age, noise vs typical) were
 /// removed with the coverage redesign (plan D9). Nothing heard = [CoverageLevel.none] (grey); heard without a reading =
-/// [CoverageLevel.unknown] (purple).
+/// [CoverageLevel.unknown] (band 6, heard, no direct signal).
 CoverageLevel levelFor(CoverageCell c) {
   if (c.heard <= 0) return CoverageLevel.none;
   final s = c.bestSnr;

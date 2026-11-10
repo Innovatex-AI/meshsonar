@@ -84,7 +84,10 @@ import 'layers/map_layer.dart';
 import 'layers/observer_layer.dart';
 import 'layers/repeater_painter_layer.dart';
 import 'layers/repeater_sprites.dart' show RepeaterFreshness, freshnessOfAdvertBand, freshnessOfRosterBand;
-import 'layers/registry.dart' show kDefaultLayerState, kHeardCellsLayerId;
+import 'layers/registry.dart' show definitionLayerIds, kDefaultLayerState, kHeardCellsLayerId;
+import 'layers/region_borders_layer.dart';
+import 'active_map_definition.dart';
+import 'main_map_focus.dart';
 import 'layers/repeater_map_source.dart';
 import 'layers/repeater_name_labels.dart';
 import 'map_info_panel.dart';
@@ -170,7 +173,7 @@ Color pingColor(MeshSonarColors c, DrivePing p, [PingColorMode mode = PingColorM
     : c.forPing(heard: !p.heardNothing, snr: bestSnr(p));
 
 /// The colour of one of the drive's own hexagons ([HexCell]) in [mode] (Drive plan 7.3 F3): By SNR = the best SNR in the hexagon
-/// (heard without a reading is the purple "unknown", nothing heard is grey); Heard / not = the same green the Pings layer uses
+/// (heard without a reading is band 6 grey, nothing heard is the No-reply colour); Heard / not = the same green the Pings layer uses
 /// when any ping in the hexagon was heard, grey when none was.
 Color hexColor(MeshSonarColors c, HexCell h, PingColorMode mode) => mode == PingColorMode.result
     ? (h.wasHeard ? c.snrStrong : c.silent)
@@ -178,8 +181,8 @@ Color hexColor(MeshSonarColors c, HexCell h, PingColorMode mode) => mode == Ping
 
 /// Colour for a network-coverage [CoverageLevel] on the old path (a server without coverage v2): the website's former discrete
 /// `/coverage` steps (standard palette: red -> yellow -> green, no blue since build 51), from the chosen colour palette
-/// ([MeshSonarColors.levelColor]). [CoverageLevel.none] (nothing heard) is grey and [CoverageLevel.unknown] (heard, signal
-/// unknown) is purple in every palette.
+/// ([MeshSonarColors.levelColor]). [CoverageLevel.none] (nothing heard) is the No-reply colour and [CoverageLevel.unknown] (heard,
+/// signal unknown) is band 6 in every palette.
 Color networkLevelColor(BuildContext context, CoverageLevel level) => MeshSonarColors.of(context).levelColor(level);
 
 /// The colour matrix [style]'s online raster tiles are drawn through. Since M2 none: Chart / Light / Dark are our vector
@@ -309,6 +312,15 @@ class CoverageMap extends StatefulWidget {
   /// The colour key for what this map is drawing (see map_key.dart): shown in the Credits sheet, not on the map. Null = none.
   final Widget? mapKey;
 
+  /// The viewed region's border rings (the definition's `borders` layer, region_borders_layer.dart); empty = none.
+  final List<List<LatLng>> regionBorders;
+
+  /// The legend card (legend_card.dart), shown under the top-leading chips; null = none.
+  final Widget? legend;
+
+  /// This is the main map (the Drive tab's): it answers "Open the map here" from previews (main_map_focus.dart).
+  final bool takesFocusRequests;
+
   /// "What do the colours mean?" in the Credits sheet. Null = no button.
   final VoidCallback? openLegend;
 
@@ -383,6 +395,9 @@ class CoverageMap extends StatefulWidget {
     this.coverageV2,
     this.hexRes,
     this.mapKey,
+    this.regionBorders = const [],
+    this.legend,
+    this.takesFocusRequests = false,
     this.openLegend,
     this.viewController,
     this.banner,
@@ -1188,6 +1203,7 @@ class _CoverageMapState extends State<CoverageMap> {
       if (!widget.follow) _fc.userMoved(_now());
     }
     _hits.onNothing = _clearLinks; // a tap on nothing puts the lines away
+    if (widget.takesFocusRequests) MainMapFocus.notifier.addListener(_onFocusRequest);
     _applyPrefs();
     _prefs.addListener(_onPrefs);
     if (widget.puck != null) unawaited(openSharedMapPrefs());
@@ -1307,6 +1323,16 @@ class _CoverageMapState extends State<CoverageMap> {
     return null;
   }
 
+  /// "Open the map here" from a preview (map_preview.dart): look at that spot and stop following until Recenter.
+  void _onFocusRequest() {
+    final r = MainMapFocus.notifier.value;
+    if (r == null || !_ready || !mounted) return;
+    MainMapFocus.taken(r);
+    _fc.userMoved(_now());
+    _controller.move(r.at, r.zoom);
+    setState(() {});
+  }
+
   /// Frames the repeater together with where we are (stops following until Recenter).
   void _focusRepeater(String key) {
     final r = _refFor(key);
@@ -1412,6 +1438,7 @@ class _CoverageMapState extends State<CoverageMap> {
 
   @override
   void dispose() {
+    MainMapFocus.notifier.removeListener(_onFocusRequest);
     _hits.dispose();
     _boundsTimer?.cancel();
     _prefs.removeListener(_onPrefs);
@@ -1559,6 +1586,28 @@ class _CoverageMapState extends State<CoverageMap> {
     ];
   }
 
+  /// The app layer slots in the active Map Definition's drawing order. Predicted / Heard / Measured are one slot (`measured`,
+  /// drawn in the definition's order inside it); Repeaters and All MeshCore repeaters are one painter, placed at the lower of
+  /// the two; Observers and Moving phones one marker layer at the lower of the two.
+  List<String> _paintOrder() {
+    final out = <String>[];
+    for (final id in definitionLayerIds(ActiveMapDefinition.current)) {
+      final slot = switch (id) {
+        'predicted' || kHeardCellsLayerId || 'measured' => 'measured',
+        kRosterLayerId || kNetworkLayerId => kNetworkLayerId,
+        'phones' => 'observers',
+        _ => id,
+      };
+      if (!out.contains(slot)) out.add(slot);
+    }
+    for (final slot in const ['borders', 'measured', 'hexes', 'links', kNetworkLayerId, 'observers']) {
+      if (!out.contains(slot)) out.add(slot); // a definition without the layer still gets the app's drawing (switch is off)
+    }
+    return out;
+  }
+
+  static List<Widget>? _layerWidgets(String slot, Map<String, List<Widget> Function()> build) => build[slot]?.call();
+
   @override
   Widget build(BuildContext context) {
     final mc = MeshSonarColors.of(context);
@@ -1621,6 +1670,9 @@ class _CoverageMapState extends State<CoverageMap> {
             onPointerCancel: (_, _) => _fc.pointerUp(_now()),
             onMapReady: () {
               _ready = true;
+              if (widget.takesFocusRequests && MainMapFocus.notifier.value != null) {
+                WidgetsBinding.instance.addPostFrameCallback((_) => _onFocusRequest());
+              }
               _userZoom = _controller.camera.zoom;
               _headingUpApplied = _prefs.headingUp;
               _reportBounds(force: true);
@@ -1715,6 +1767,14 @@ class _CoverageMapState extends State<CoverageMap> {
                 dark: style.darkLook,
               ),
             if (tiles && style.usesOfflinePack) ..._packOutlines(mc),
+            // The definition's layers, in its drawing order (bottom to top: borders, predicted, heard, measured, drive, links,
+            // network, live, repeaters, observers, phones). The app's drive extras (ping dots, the position, names) stay on top.
+            for (final id in _paintOrder()) ...?_layerWidgets(id, {
+              'borders': () => [
+                if (layerState.isOn('borders') && widget.regionBorders.isNotEmpty)
+                  RegionBordersLayer(key: const Key('region-borders-layer'), rings: widget.regionBorders),
+              ],
+              'measured': () => [
             if (widget.coverageV2 case final v2? when v2.drawTiles) ...[
               if (layerState.isOn('predicted'))
                 CoverageTilesLayer(
@@ -1744,6 +1804,16 @@ class _CoverageMapState extends State<CoverageMap> {
                 ),
             ] else if (layerState.isOn('measured') && widget.networkCells.isNotEmpty)
               CellRasterLayer(key: const Key('network-cells-layer'), data: _networkData(context)),
+            ],
+              'hexes': () => [
+            if (layerState.isOn('hexes'))
+              KeyedSubtree(
+                // The resolution is in the key so a test (and a screenshot) can see which band is on screen.
+                key: ValueKey('drive-hexes-res-${widget.coverageV2 != null ? 11 : hexResolution}'),
+                child: CellRasterLayer(key: const Key('drive-hexes-layer'), data: _hexData(mc, pingMode)),
+              ),
+            ],
+              'links': () => [
             if (links.isNotEmpty)
               TweenAnimationBuilder<double>(
                 key: ValueKey('links-${latest!.id}'),
@@ -1784,13 +1854,9 @@ class _CoverageMapState extends State<CoverageMap> {
                     ),
                 ],
               ),
-            if (layerState.isOn('hexes'))
-              KeyedSubtree(
-                // The resolution is in the key so a test (and a screenshot) can see which band is on screen.
-                key: ValueKey('drive-hexes-res-${widget.coverageV2 != null ? 11 : hexResolution}'),
-                child: CellRasterLayer(key: const Key('drive-hexes-layer'), data: _hexData(mc, pingMode)),
-              ),
             if (_currentLinks() case final ls?) ...linkLineLayers(context, ls, labels: _captions || hexResolution >= 9),
+            ],
+              kNetworkLayerId: () => [
             if (showNetwork || rosterSource != null || layerState.isOn('heard'))
               ListenableBuilder(
                 listenable: Listenable.merge([?rosterSource, ?networkSource]),
@@ -1805,8 +1871,18 @@ class _CoverageMapState extends State<CoverageMap> {
                   onBadgeTap: _onBadgeTap,
                 ),
               ),
-            if (layerState.isOn('observers') && widget.observers.isNotEmpty)
-              ObserverLayer(observers: widget.observers, regionName: widget.observersRegionName, onHit: _onHit),
+            ],
+              'observers': () => [
+                if ((layerState.isOn('observers') || layerState.isOn('phones')) && widget.observers.isNotEmpty)
+                  ObserverLayer(
+                    observers: widget.observers,
+                    regionName: widget.observersRegionName,
+                    onHit: _onHit,
+                    showFixed: layerState.isOn('observers'),
+                    showMobile: layerState.isOn('phones'),
+                  ),
+              ],
+            }),
             if (layerState.isOn('pings'))
               MarkerLayer(
                 markers: [
@@ -1883,7 +1959,8 @@ class _CoverageMapState extends State<CoverageMap> {
         ),
       banner: widget.banner,
       // New Drive screen: the "Map offline" state is a pill under the region chip (plan 4.12), never a bottom-left note.
-      topLeading: widget.onLayers != null && !tiles
+      topLeading: _withLegend(
+        widget.onLayers != null && !tiles
           ? Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1904,6 +1981,7 @@ class _CoverageMapState extends State<CoverageMap> {
               ],
             )
           : widget.topLeading,
+      ),
       topTrailing: widget.topTrailing,
       controls: _controls(context, pos, latest),
       bottom: _bottomColumn(context, tiles, mc, t),
@@ -1928,6 +2006,18 @@ class _CoverageMapState extends State<CoverageMap> {
                 );
         },
       ),
+    );
+  }
+
+  /// The top-leading slot's content with the legend card under it (the app keeps the lower-left corner free, Drive plan 9.3, so
+  /// the card sits under the chips and opens downward).
+  Widget? _withLegend(Widget? top) {
+    final legend = widget.legend;
+    if (legend == null) return top;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [?top, if (top != null) const SizedBox(height: Gap.xs), legend],
     );
   }
 

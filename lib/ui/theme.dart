@@ -12,8 +12,10 @@ import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
 
 import '../core/colour_palette.dart';
+import '../core/map_definition.dart' show MapDefinition;
 import '../core/network_coverage.dart' show CoverageLevel;
 import 'design/app_type.dart';
+import 'map/active_map_definition.dart';
 
 /// Spacing scale (logical px). Use these instead of ad-hoc numbers.
 abstract final class Gap {
@@ -140,10 +142,10 @@ const _light = _Palette(
 );
 
 // ------------------------------------------------------- strength palettes
-// The colours that mean "how strong was the signal", per ColourPalette and brightness. Hex values are copied to the
-// website from docs/FEATURES.md ("Colour palettes") and meshsonar-infra/docs/planning/colour-palettes-2026-10-31.md;
-// test/ui/palette_test.dart pins them and checks colour-blind separation. Grey (silent) and purple (heardUnknown) are
-// part of each set so they stay distinguishable from the steps.
+// The colours that mean "how strong was the signal", per ColourPalette and brightness. They come from the Map Definition
+// (`palettes[].themes[theme]`, served by /api/map/definition, bundled copy = the M1 fixture); no hex is written here.
+// test/lint/no_signal_colours_test.dart fails if any signal colour of the definition appears in lib/ outside the generated
+// bundled copy.
 class _Strength {
   /// Network coverage steps (CoverageLevel.strong/good/fair/weak).
   final Color strong, good, fair, weak;
@@ -169,67 +171,26 @@ class _Strength {
   });
 }
 
-const _linkOrange = Color(0xFFFF6D00);
-
-const _standardDark = _Strength(
-  // Andy, Nov 8 2026 (field, build 50): NO blue anywhere in the standard signal scale. The older 4-step network colours now use
-  // the coverage ramp (coverage_bands.dart _standardDark: Excellent, Good, Fair, Edge) so every map, key and dot agrees.
-  strong: Color(0xFF0AA349),
-  good: Color(0xFF8DCE3C),
-  fair: Color(0xFFFCE738),
-  weak: Color(0xFFF63647),
-  // red -> yellow -> green like the coverage bands (Edge, Fair, Excellent; Andy, Nov 8 2026: no blue in the signal scale)
-  stops: [Color(0xFFF63647), Color(0xFFFCE738), Color(0xFF0AA349)],
-  silent: Color(0xFF8D99A6),
-  heardUnknown: Color(0xFFB59AE0),
-  link: _linkOrange,
-  linkCasing: Color(0x8C000000),
-  linkDashed: false,
-);
-const _standardLight = _Strength(
-  // no blue (see _standardDark): coverage_bands.dart _standardLight Excellent, Good, Fair, Edge
-  strong: Color(0xFF18631D),
-  good: Color(0xFF749119),
-  fair: Color(0xFFB07D16), // dark gold: the band's E9B907 yellow is 1.6:1 on the light map, under the 3:1 these small marks need
-  weak: Color(0xFFB80321),
-  // red -> yellow -> green like the coverage bands (Edge, Fair, Excellent; Andy, Nov 8 2026: no blue in the signal scale)
-  stops: [Color(0xFFB80321), Color(0xFFE9B907), Color(0xFF18631D)],
-  silent: Color(0xFF8795A1),
-  heardUnknown: Color(0xFF8A63C9),
-  link: _linkOrange,
-  linkCasing: Color(0x8C000000),
-  linkDashed: false,
-);
-const _colourBlindDark = _Strength(
-  strong: Color(0xFF2B8CE0),
-  good: Color(0xFF8EDBFF),
-  fair: Color(0xFFEDDD55),
-  weak: Color(0xFFD25637),
-  stops: [Color(0xFFD25637), Color(0xFFEDDD55), Color(0xFF8EDBFF), Color(0xFF2B8CE0)],
-  silent: Color(0xFF8D99A6),
-  heardUnknown: Color(0xFFB356A4),
-  link: Color(0xFFF4F7F9),
-  linkCasing: Color(0xD90D1B26),
-  linkDashed: true,
-);
-const _colourBlindLight = _Strength(
-  strong: Color(0xFF0A4FA0),
-  good: Color(0xFF1E88C8),
-  fair: Color(0xFF9C7F06),
-  weak: Color(0xFF762608),
-  stops: [Color(0xFF762608), Color(0xFF9C7F06), Color(0xFF004E66), Color(0xFF0A4FA0)],
-  silent: Color(0xFF8795A1),
-  heardUnknown: Color(0xFF8E5A8A),
-  link: Color(0xFF0C1E28),
-  linkCasing: Color(0xD9FFFFFF),
-  linkDashed: true,
-);
-_Strength _strengthFor(ColourPalette p, Brightness b) {
-  final dark = b == Brightness.dark;
-  return switch (p) {
-    ColourPalette.standard => dark ? _standardDark : _standardLight,
-    ColourPalette.colourBlind => dark ? _colourBlindDark : _colourBlindLight,
-  };
+/// The strength colours of [p] on [b], read from the Map Definition (plan unified-map-system §2.2, M2: no signal colour is
+/// hand-copied into the app). One 5-band SNR scale everywhere (§2.5): the older 4-step network levels are the bands
+/// Excellent / Good / Fair / Edge, the ping SNR ramp runs Edge -> Excellent over -10..+10 dB, a ping nobody answered is the
+/// No-reply colour and a heard ping without an SNR is band 6 ("Heard, no direct signal"); link lines are the palette's link
+/// style (orange and solid in Standard, achromatic and dashed in Colour-blind safe).
+_Strength _strengthFor(ColourPalette p, Brightness b, MapDefinition def) {
+  final s = def.signal(p.id, dark: b == Brightness.dark);
+  Color band(int i) => Color(s.bands[i.clamp(0, s.bands.length - 1)]);
+  return _Strength(
+    strong: band(5),
+    good: band(4),
+    fair: band(3),
+    weak: band(1),
+    stops: [band(1), band(2), band(3), band(4), band(5)],
+    silent: band(0),
+    heardUnknown: band(6),
+    link: Color(s.link.color),
+    linkCasing: Color(s.link.casing).withValues(alpha: s.link.casingOpacity),
+    linkDashed: s.link.dash != null,
+  );
 }
 
 /// Colours beyond the Material scheme: signal quality, repeaters, and the map. The strength colours follow the chosen
@@ -249,7 +210,7 @@ class MeshSonarColors extends ThemeExtension<MeshSonarColors> {
   /// Network coverage steps (CoverageLevel.strong/good/fair/weak): SNR >= +5, 0 to +5, -5 to 0, below -5 dB.
   final Color levelStrong, levelGood, levelFair, levelWeak;
 
-  /// A ping that heard nothing: grey (mapped, no signal).
+  /// A ping that heard nothing: the definition's No-reply colour (band 0).
   final Color silent;
 
   /// A ping that was heard but whose signal strength is unknown.
@@ -294,7 +255,7 @@ class MeshSonarColors extends ThemeExtension<MeshSonarColors> {
 
   /// Weakest, a middle and strongest anchor of the SNR scale (charts and gradients that want three colours).
   Color get snrWeak => snrStops.first;
-  Color get snrMid => snrStops[1];
+  Color get snrMid => snrStops[snrStops.length ~/ 2];
   Color get snrStrong => snrStops.last;
 
   static MeshSonarColors of(BuildContext context) =>
@@ -305,8 +266,8 @@ class MeshSonarColors extends ThemeExtension<MeshSonarColors> {
   static final MeshSonarColors light = forPalette(ColourPalette.standard, Brightness.light);
 
   /// The colours for [palette] on the dark or light theme.
-  static MeshSonarColors forPalette(ColourPalette palette, Brightness b) =>
-      _fromPalette(b == Brightness.dark ? _dark : _light, _strengthFor(palette, b), palette);
+  static MeshSonarColors forPalette(ColourPalette palette, Brightness b, {MapDefinition? definition}) =>
+      _fromPalette(b == Brightness.dark ? _dark : _light, _strengthFor(palette, b, definition ?? ActiveMapDefinition.current), palette);
 
   static MeshSonarColors _fromPalette(_Palette p, _Strength st, ColourPalette palette) => MeshSonarColors(
     palette: palette,
@@ -414,9 +375,9 @@ TextStyle numberStyle(BuildContext context, {double size = 30, Color? color, Fon
       fontFeatures: const [FontFeature.tabularFigures()],
     );
 
-ThemeData meshSonarTheme(Brightness b, {ColourPalette palette = ColourPalette.standard}) {
+ThemeData meshSonarTheme(Brightness b, {ColourPalette palette = ColourPalette.standard, MapDefinition? definition}) {
   final p = b == Brightness.dark ? _dark : _light;
-  final mc = MeshSonarColors.forPalette(palette, b);
+  final mc = MeshSonarColors.forPalette(palette, b, definition: definition);
   final scheme = ColorScheme(
     brightness: b,
     primary: p.accent,

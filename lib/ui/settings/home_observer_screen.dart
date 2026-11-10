@@ -4,7 +4,7 @@
 // The owner chooses how the public map shows it: exact, or rounded to about 1 km. While it is on, the screen stays awake,
 // the radio is reconnected by itself, and a heartbeat goes to the server every 5 minutes so the Observers layer on the
 // website shows it as up. Turning it off deletes the home position on the server (back to a moving observer).
-import '../map/basemap_layer.dart' show BasemapLayer;
+import '../map/map_preview.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -17,7 +17,6 @@ import '../app.dart';
 import '../design/app_surfaces.dart' show showAppToast;
 import '../design/app_symbols.dart';
 import '../map/coverage_map.dart' show CoverageMap;
-import '../map/overlays/mini_map_credit.dart';
 import '../map/region_center.dart';
 
 /// The lead paragraph.
@@ -218,21 +217,16 @@ class _HomeObserverScreenState extends State<HomeObserverScreen> {
           label: pin == null
               ? 'Map. No home position yet. Tap to place it, or use where this phone is now.'
               : 'Map. Home position placed.',
-          child: FlutterMap(
-            key: const Key('home-observer-map'),
-            mapController: _map,
-            options: MapOptions(
-              initialCenter: _center(s),
-              initialZoom: pin == null ? 11 : 15,
-              minZoom: 3,
-              maxZoom: 18,
-              backgroundColor: mc.mapBackground,
-              interactionOptions: const InteractionOptions(flags: InteractiveFlag.all & ~InteractiveFlag.rotate),
-              onTap: _busy ? null : (_, p) => setState(() => _pin = p),
-            ),
-            children: [
-              if (_tiles)
-                const BasemapLayer(),
+          child: MapPreview(
+            mapKey: const Key('home-observer-map'),
+            controller: _map,
+            center: _center(s),
+            zoom: pin == null ? 11 : 15,
+            minZoom: 3,
+            interaction: MapPreviewInteraction.edit,
+            tiles: _tiles,
+            onTap: _busy ? null : (_, p) => setState(() => _pin = p),
+            overlays: [
               if (pin != null && pub != null && _public == HomeLocationPublic.rounded1km)
                 CircleLayer(circles: [
                   CircleMarker(
@@ -253,7 +247,6 @@ class _HomeObserverScreenState extends State<HomeObserverScreen> {
                     child: AppSymbolIcon(AppSymbols.locationFill, key: const Key('home-observer-pin'), color: mc.beacon, size: 32, scaleWithText: false),
                   ),
                 ]),
-              const MiniMapCredit(),
             ],
           ),
         ),

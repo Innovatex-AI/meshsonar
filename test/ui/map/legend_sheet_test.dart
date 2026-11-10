@@ -73,8 +73,8 @@ void main() {
       expect(swatchColor(tester, 'ping-weak'), mc.forPing(heard: true, snr: -10));
       expect(swatchColor(tester, 'ping-silent'), mc.silent);
       expect(swatchColor(tester, 'ping-unknown'), mc.heardUnknown);
-      expect(find.text('Grey: nothing heard'), findsOneWidget);
-      expect(find.text('Purple: heard, no signal reading'), findsOneWidget);
+      expect(find.text('No reply: nothing heard'), findsOneWidget);
+      expect(find.text('Grey: heard, no signal reading'), findsOneWidget);
       expect(find.byKey(const Key('legend-ping-gradient')), findsOneWidget);
     });
 
@@ -97,8 +97,8 @@ void main() {
       expect(find.text('Good: 0 to +5'), findsOneWidget);
       expect(find.text('Fair: -5 to 0'), findsOneWidget);
       expect(find.text('Weak: below -5'), findsOneWidget);
-      expect(find.text('Purple: heard, signal unknown'), findsOneWidget);
-      expect(find.text('Grey: mapped, nothing heard'), findsOneWidget);
+      expect(find.text('Grey: heard, signal unknown'), findsOneWidget);
+      expect(find.text('No reply: mapped, nothing heard'), findsOneWidget);
       expect(find.byKey(const Key('legend-colour-by-noise')), findsNothing);
     });
 
@@ -199,8 +199,8 @@ void main() {
     testWidgets('every row is one spoken item that says what the colour means', (tester) async {
       final handle = tester.ensureSemantics();
       await pumpLegend(tester);
-      expect(tester.getSemantics(find.byKey(const Key('legend-row-ping-silent'))).label, contains('Grey: nothing heard'));
-      expect(tester.getSemantics(find.byKey(const Key('legend-row-cell-unknown'))).label, contains('Purple: heard, signal unknown'));
+      expect(tester.getSemantics(find.byKey(const Key('legend-row-ping-silent'))).label, contains('No reply: nothing heard'));
+      expect(tester.getSemantics(find.byKey(const Key('legend-row-cell-unknown'))).label, contains('Grey: heard, signal unknown'));
       expect(tester.getSemantics(find.byKey(const Key('legend-row-cell-faded'))).label, contains('fewer than 3 pings'));
       handle.dispose();
     });
@@ -219,7 +219,7 @@ void main() {
     testWidgets('largest Dynamic Type: nothing overflows, text wraps', (tester) async {
       await pumpLegend(tester, textScale: 2.5, size: const Size(360, 6000));
       expect(tester.takeException(), isNull);
-      expect(find.text('Grey: mapped, nothing heard'), findsOneWidget);
+      expect(find.text('No reply: mapped, nothing heard'), findsOneWidget);
     });
 
     testWidgets('section headers are headers', (tester) async {

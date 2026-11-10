@@ -183,7 +183,10 @@ Future<void> toMapTab(WidgetTester t) => goTab(t, 'Drive', 'drive-map', alt: 'Ma
 
 /// Makes Columbus (CMH) the viewing region through the region switcher like a person would (the Region screen loads that
 /// region's cells and repeaters), then waits for the data.
-Future<void> pickColumbus(WidgetTester t, AppState st) async {
+Future<void> pickColumbus(WidgetTester t, AppState st) => pickRegion(t, st, query: 'columbus', code: 'CMH');
+
+/// Picks the region [code] in the Analyze region switcher (search [query]) and waits until it is the viewed region.
+Future<void> pickRegion(WidgetTester t, AppState st, {required String query, required String code}) async {
   await goTab(t, 'Analyze', 'analyze-segments');
   final seg = find.descendant(of: find.byKey(const Key('analyze-segments')), matching: find.text('Region'));
   if (seg.evaluate().isNotEmpty) await t.tap(seg.first, warnIfMissed: false);
@@ -191,19 +194,19 @@ Future<void> pickColumbus(WidgetTester t, AppState st) async {
   final chip = find.byKey(const Key('region-switch-chip'));
   if (!await waitFor(t, chip, timeout: const Duration(seconds: 30))) throw StateError('region-switch-chip never appeared');
   final label = (t.widget(chip) as ActionChip).label;
-  if (label is Text && (label.data ?? '').startsWith('CMH')) return;
+  if (label is Text && (label.data ?? '').startsWith(code)) return;
   await t.tap(chip);
   await pumpFor(t, const Duration(seconds: 2));
   final search = find.byKey(const Key('region-search'));
   if (await waitFor(t, search, timeout: const Duration(seconds: 15))) {
-    await t.enterText(search, 'columbus');
+    await t.enterText(search, query);
     await pumpFor(t, const Duration(seconds: 2));
   }
-  final row = _byKeyRe(RegExp(r'^region-(near|recent|option)-CMH$'));
-  if (!await waitFor(t, row, timeout: const Duration(seconds: 20))) throw StateError('no CMH row in the region switcher');
+  final row = _byKeyRe(RegExp('^region-(near|recent|option)-$code\$'));
+  if (!await waitFor(t, row, timeout: const Duration(seconds: 20))) throw StateError('no $code row in the region switcher');
   await t.tap(row.first);
   await pumpFor(t, const Duration(seconds: 10));
-  if (st.viewingRegion?.code != 'CMH') throw StateError('viewing region is ${st.viewingRegion?.code} after picking Columbus');
+  if (st.viewingRegion?.code != code) throw StateError('viewing region is ${st.viewingRegion?.code} after picking $code');
 }
 
 /// Pinch the map out by about [levels] zoom levels (two fingers moving together).
