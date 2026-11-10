@@ -174,10 +174,16 @@ void main() {
           }
         }
         final sheetTop = t.getTopLeft(find.byKey(const Key('layers-sheet'))).dy;
+        // A point of the list that is on screen (the sheet can run past the bottom edge at its first detent).
+        Offset visibleIn(Finder f) {
+          final r = t.getRect(f);
+          final y = math.min(r.center.dy, mq.size.height - 140).clamp(r.top + 40, r.bottom - 10).toDouble();
+          return Offset(r.center.dx, y);
+        }
         var shotNetwork = false;
         collect();
-        for (var i = 0; i < 16 && find.byKey(const Key('layers-palette')).evaluate().isEmpty; i++) {
-          await t.drag(list, const Offset(0, -200), warnIfMissed: false);
+        for (var i = 0; i < 16 && (seen.length < names.length || !shotNetwork); i++) {
+          await t.dragFrom(visibleIn(list), const Offset(0, -200));
           await pumpFor(t, const Duration(milliseconds: 700));
           collect();
           final net = find.byKey(const Key('layers-group-network'));
@@ -187,7 +193,7 @@ void main() {
           }
         }
         if (!shotNetwork) await mdframe(t, 'md-03b-layers-network');
-        await t.drag(list, const Offset(0, -400), warnIfMissed: false);
+        await t.dragFrom(visibleIn(list), const Offset(0, -400));
         await pumpFor(t, const Duration(seconds: 1));
         collect();
         final missing = names.where((n) => !seen.contains(n)).toList();
