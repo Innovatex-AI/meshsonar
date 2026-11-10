@@ -10,6 +10,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:meshsonar/core/offline_packs.dart';
+import 'package:meshsonar/core/region_lookup.dart';
+import 'package:meshsonar/ui/settings/offline_packs_screen.dart' show noPackNote;
 
 final newManifest = Uri.parse(defaultPackManifestUrl);
 final basemap = Uint8List.fromList(List.generate(4000, (i) => i % 251));
@@ -35,6 +37,29 @@ Map<String, dynamic> m2Entry({Uint8List? cov, int covVersion = 227, String? covS
 String manifest(List<Map<String, dynamic>> packs) => jsonEncode({'attribution': 'Protomaps © OpenStreetMap contributors', 'packs': packs});
 
 void main() {
+  // Plan §8d (Nov 10 2026): packs build automatically for every region with coverage inside the NA extract (24 that day). The
+  // live manifest parses whole (every entry protomaps, with coverage); a region outside it (SEA, AAH) has no entry and the app
+  // keeps the online map there.
+  test('the all-regions manifest (24 packs, Nov 10) parses whole; regions without a pack have no entry', () {
+    final m = PackManifest.parse(
+      File('test/fixtures/packs/manifest-2026-11-10.json').readAsStringSync(),
+      Uri.parse('https://api.meshsonar.com/basemap/packs/manifest.json'),
+    );
+    expect(m.packs, hasLength(24));
+    expect(m.packs.every((p) => p.schema == PackSchema.protomaps && p.coverage != null), isTrue);
+    expect(m.packs.map((p) => p.code), containsAll(['CMH', 'DAY', 'CVG', 'ORD', 'PHX']));
+    expect(m.packs.map((p) => p.code), isNot(contains('SEA')));
+    expect(m.packs.map((p) => p.code), isNot(contains('AAH')));
+    final codes = [for (final p in m.packs) p.code];
+    const cmh = RegionIndexEntry(code: 'CMH', slug: 'cmh', name: 'Columbus, US', url: 'https://cmh.meshsonar.com', bbox: [-83.65, 39.36, -82.02, 40.71]);
+    const sea = RegionIndexEntry(code: 'SEA', slug: 'sea', name: 'Seattle, US', url: 'https://sea.meshsonar.com', bbox: [-124.85, 46.23, -121.07, 48.5]);
+    const aah = RegionIndexEntry(code: 'AAH', slug: 'aah', name: 'Aachen, DE', url: 'https://aah.meshsonar.com', bbox: [5.97, 50.49, 6.42, 50.95]);
+    expect(noPackNote(cmh, codes), isNull, reason: 'CMH has a pack');
+    expect(noPackNote(sea, codes), contains('built once the region has coverage'), reason: 'inside the NA extract, no coverage yet');
+    expect(noPackNote(aah, codes), contains('North America only'));
+    expect(noPackNote(null, codes), isNull);
+  });
+
   late Directory tmp;
   setUp(() => tmp = Directory.systemTemp.createTempSync('packs-m2'));
   tearDown(() => tmp.deleteSync(recursive: true));

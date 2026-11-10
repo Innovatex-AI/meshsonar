@@ -1,0 +1,630 @@
+{
+ "attribution": "Protomaps \u00a9 OpenStreetMap contributors",
+ "archive": "na-20261108",
+ "packs": [
+  {
+   "code": "CMH",
+   "name": "Columbus, US",
+   "url": "https://api.meshsonar.com/basemap/packs/CMH-p261108.pmtiles",
+   "bytes": 45909781,
+   "sha256": "e997034734bd159ba07171462b5ebafb849160588c19d1e7d0dd3a639b72e991",
+   "version": 261108,
+   "bbox": [
+    -83.6534,
+    39.3613,
+    -82.0242,
+    40.7127
+   ],
+   "min_zoom": 0,
+   "max_zoom": 14,
+   "schema": "protomaps",
+   "coverage": {
+    "url": "https://api.meshsonar.com/basemap/packs/CMH-cov-sf7bw62_5-v259.pmtiles",
+    "bytes": 6487813,
+    "sha256": "b7c4cf4115a353a838fdfb22f8f5f66e1c320805e7c01af4fe7b3c55074ddcf1",
+    "version": 259,
+    "preset": "sf7bw62.5",
+    "fingerprint": "4268-7081-1794253019",
+    "built_at": "2026-11-10T02:14:09Z"
+   }
+  },
+  {
+   "code": "DAY",
+   "name": "Dayton, US",
+   "url": "https://api.meshsonar.com/basemap/packs/DAY-p261108.pmtiles",
+   "bytes": 32362082,
+   "sha256": "2bb0f6c6b8fcc538193b08ada35f4fd9cc47c80a8956f2f6fffed4152b4f2eaf",
+   "version": 261108,
+   "bbox": [
+    -85.3016,
+    39.3774,
+    -83.2524,
+    40.5722
+   ],
+   "min_zoom": 0,
+   "max_zoom": 14,
+   "schema": "protomaps",
+   "coverage": {
+    "url": "https://api.meshsonar.com/basemap/packs/DAY-cov-sf7bw62_5-v259.pmtiles",
+    "bytes": 1774420,
+    "sha256": "2c475b86d96d0b1f4d5716daa4ac627289439a8792f3b5dc6a491f716d72ae43",
+    "version": 259,
+    "preset": "sf7bw62.5",
+    "fingerprint": "150-157-1793245895",
+    "built_at": "2026-11-10T02:14:09Z"
+   }
+  },
+  {
+   "code": "CVG",
+   "name": "Cincinnati, US",
+   "url": "https://api.meshsonar.com/basemap/packs/CVG-p261108.pmtiles",
+   "bytes": 62972251,
+   "sha256": "385815e5b16c0beead81c7a15f43db19a5dc35dc39ed7948bcea9d1c7356dbe9",
+   "version": 261108,
+   "bbox": [
+    -85.7998,
+    38.3387,
+    -83.2676,
+    39.591
+   ],
+   "min_zoom": 0,
+   "max_zoom": 14,
+   "schema": "protomaps",
+   "coverage": {
+    "url": "https://api.meshsonar.com/basemap/packs/CVG-cov-sf7bw62_5-v259.pmtiles",
+    "bytes": 12861,
+    "sha256": "4801f0de0d16b42f36f05c3d8a0ba4d85e8442be9a1bea7cfb9e8bab139bd852",
+    "version": 259,
+    "preset": "sf7bw62.5",
+    "fingerprint": "none",
+    "built_at": "2026-11-10T02:14:09Z"
+   }
+  },
+  {
+   "code": "IND",
+   "name": "Indianapolis, US",
+   "url": "https://api.meshsonar.com/basemap/packs/IND-p261108.pmtiles",
+   "bytes": 90300310,
+   "sha256": "ea5bc8947d829a7b6cb483672a892170f375357d1db699815becdda368cf3870",
+   "version": 261108,
+   "bbox": [
+    -87.6587,
+    38.3941,
+    -85.2003,
+    41.2864
+   ],
+   "min_zoom": 0,
+   "max_zoom": 14,
+   "schema": "protomaps",
+   "coverage": {
+    "url": "https://api.meshsonar.com/basemap/packs/IND-cov-sf7bw62_5-v259.pmtiles",
+    "bytes": 2867853,
+    "sha256": "edfdd906c5d5abd53e3c9f879370254dde5e5e74b05a96699423d815d0af8157",
+    "version": 259,
+    "preset": "sf7bw62.5",
+    "fingerprint": "446-458-1793242410",
+    "built_at": "2026-11-10T02:16:12Z"
+   }
+  },
+  {
+   "code": "AOH",
+   "name": "Lima, US",
+   "url": "https://api.meshsonar.com/basemap/packs/AOH-p261108.pmtiles",
+   "bytes": 17981712,
+   "sha256": "4a48c1dafd6ec97812e6a619d42dd48145bae22acdc2ed73185c8ae04d95f329",
+   "version": 261108,
+   "bbox": [
+    -84.8042,
+    40.2294,
+    -83.4154,
+    41.1678
+   ],
+   "min_zoom": 0,
+   "max_zoom": 14,
+   "schema": "protomaps",
+   "coverage": {
+    "url": "https://api.meshsonar.com/basemap/packs/AOH-cov-sf7bw62_5-v259.pmtiles",
+    "bytes": 1978039,
+    "sha256": "18554de5c657641b9fe4591f2e86a65f05b4df67d52780e95e521c97b36a8694",
+    "version": 259,
+    "preset": "sf7bw62.5",
+    "fingerprint": "241-241-1792545093",
+    "built_at": "2026-11-10T02:18:18Z"
+   }
+  },
+  {
+   "code": "ORD",
+   "name": "Chicago, US",
+   "url": "https://api.meshsonar.com/basemap/packs/ORD-p261108.pmtiles",
+   "bytes": 82990382,
+   "sha256": "393acba07b58193751c9c5d795b3bbb912481ea8e05c54d2e21ab83fb3ef5d66",
+   "version": 261108,
+   "bbox": [
+    -88.7074,
+    40.9946,
+    -87.2189,
+    42.4962
+   ],
+   "min_zoom": 0,
+   "max_zoom": 14,
+   "schema": "protomaps",
+   "coverage": {
+    "url": "https://api.meshsonar.com/basemap/packs/ORD-cov-sf7bw62_5-v259.pmtiles",
+    "bytes": 1736595,
+    "sha256": "ade8bef287d5c2c1ff7c4ef70f5788e9e0fa6aa67dc34c728210171214ebe7b9",
+    "version": 259,
+    "preset": "sf7bw62.5",
+    "fingerprint": "215-216-1792561454",
+    "built_at": "2026-11-10T02:20:18Z"
+   }
+  },
+  {
+   "code": "MSN",
+   "name": "Madison, US",
+   "url": "https://api.meshsonar.com/basemap/packs/MSN-p261108.pmtiles",
+   "bytes": 49138467,
+   "sha256": "e5741eb0fce7acbfec1d33bf2efb7a76b62b7179fedb7e368474329375aa11e8",
+   "version": 261108,
+   "bbox": [
+    -91.215,
+    42.492,
+    -88.7762,
+    43.6436
+   ],
+   "min_zoom": 0,
+   "max_zoom": 14,
+   "schema": "protomaps",
+   "coverage": {
+    "url": "https://api.meshsonar.com/basemap/packs/MSN-cov-sf7bw62_5-v259.pmtiles",
+    "bytes": 1620893,
+    "sha256": "a71a9694d96c6f3ffbe1609e20d1cb81feb8fbc33daaf1346486a280d25c4327",
+    "version": 259,
+    "preset": "sf7bw62.5",
+    "fingerprint": "198-199-1792568689",
+    "built_at": "2026-11-10T02:22:11Z"
+   }
+  },
+  {
+   "code": "SBN",
+   "name": "South Bend, US",
+   "url": "https://api.meshsonar.com/basemap/packs/SBN-p261108.pmtiles",
+   "bytes": 23601429,
+   "sha256": "3ccb47dfe43243f577eeb1d631693feb0e8ea8d336778cd7e5ffbcb12f899aff",
+   "version": 261108,
+   "bbox": [
+    -86.9328,
+    41.0419,
+    -85.6519,
+    42.2434
+   ],
+   "min_zoom": 0,
+   "max_zoom": 14,
+   "schema": "protomaps",
+   "coverage": {
+    "url": "https://api.meshsonar.com/basemap/packs/SBN-cov-sf7bw62_5-v259.pmtiles",
+    "bytes": 1436276,
+    "sha256": "445dfd2a4522842206533a6f43efebd5259b5c62412075f468e36b98e56be53f",
+    "version": 259,
+    "preset": "sf7bw62.5",
+    "fingerprint": "181-184-1792554311",
+    "built_at": "2026-11-10T02:23:10Z"
+   }
+  },
+  {
+   "code": "FWA",
+   "name": "Fort Wayne, US",
+   "url": "https://api.meshsonar.com/basemap/packs/FWA-p261108.pmtiles",
+   "bytes": 18110395,
+   "sha256": "29499f302b29007f10bba870bfe97d5552642fe7e724cd960b61c6cfe13c935e",
+   "version": 261108,
+   "bbox": [
+    -85.9464,
+    40.5668,
+    -84.8021,
+    41.7602
+   ],
+   "min_zoom": 0,
+   "max_zoom": 14,
+   "schema": "protomaps",
+   "coverage": {
+    "url": "https://api.meshsonar.com/basemap/packs/FWA-cov-sf7bw62_5-v259.pmtiles",
+    "bytes": 1048206,
+    "sha256": "8e93da6381e7753be618a5a919275595ba5b6aec127e3be56d969eb0d46e03ac",
+    "version": 259,
+    "preset": "sf7bw62.5",
+    "fingerprint": "133-134-1792549211",
+    "built_at": "2026-11-10T02:23:37Z"
+   }
+  },
+  {
+   "code": "PHX",
+   "name": "Southern Arizona, US",
+   "url": "https://api.meshsonar.com/basemap/packs/PHX-p261108.pmtiles",
+   "bytes": 141252464,
+   "sha256": "b6fad066ddf3f401a777f1c4857d039f8282f0ef8302686a174132cff8a7ed78",
+   "version": 261108,
+   "bbox": [
+    -114.8161,
+    31.3323,
+    -109.0467,
+    34.4987
+   ],
+   "min_zoom": 0,
+   "max_zoom": 14,
+   "schema": "protomaps",
+   "coverage": {
+    "url": "https://api.meshsonar.com/basemap/packs/PHX-cov-sf7bw62_5-v259.pmtiles",
+    "bytes": 64686,
+    "sha256": "954b5d309ca0ded4da22d08b27fa5e48ffbc7bc0ccebfe0d4ece017c5663d9de",
+    "version": 259,
+    "preset": "sf7bw62.5",
+    "fingerprint": "127-128-1793294802",
+    "built_at": "2026-11-10T02:31:49Z"
+   }
+  },
+  {
+   "code": "MSP",
+   "name": "Twin Cities, US",
+   "url": "https://api.meshsonar.com/basemap/packs/MSP-p261108.pmtiles",
+   "bytes": 55873222,
+   "sha256": "a45d86c2fcefb297c0439c2750670fdb3c52b4e01333a4e8c30caf6695d9b1be",
+   "version": 261108,
+   "bbox": [
+    -94.0252,
+    44.1958,
+    -92.732,
+    45.4148
+   ],
+   "min_zoom": 0,
+   "max_zoom": 14,
+   "schema": "protomaps",
+   "coverage": {
+    "url": "https://api.meshsonar.com/basemap/packs/MSP-cov-sf7bw62_5-v259.pmtiles",
+    "bytes": 507046,
+    "sha256": "a6d0cd85e9feb5f6b7fab2d876ef82855d5e3eeb30c80d02f47ffa8cdb631f14",
+    "version": 259,
+    "preset": "sf7bw62.5",
+    "fingerprint": "115-118-1792868412",
+    "built_at": "2026-11-10T02:32:01Z"
+   }
+  },
+  {
+   "code": "PIA",
+   "name": "Peoria, US",
+   "url": "https://api.meshsonar.com/basemap/packs/PIA-p261108.pmtiles",
+   "bytes": 44012541,
+   "sha256": "7f6153b9a961a27459ed5fa3598196645f33bce4bb8bf06193a155b9b7eb501c",
+   "version": 261108,
+   "bbox": [
+    -89.989,
+    40.2811,
+    -87.5257,
+    41.6315
+   ],
+   "min_zoom": 0,
+   "max_zoom": 14,
+   "schema": "protomaps",
+   "coverage": {
+    "url": "https://api.meshsonar.com/basemap/packs/PIA-cov-sf7bw62_5-v259.pmtiles",
+    "bytes": 152345,
+    "sha256": "c5b13fd4a7c61eae21b2939d3507649a5d3207f88350961301104c59ba4af39c",
+    "version": 259,
+    "preset": "sf7bw62.5",
+    "fingerprint": "96-96-1793230084",
+    "built_at": "2026-11-10T02:33:07Z"
+   }
+  },
+  {
+   "code": "CLE",
+   "name": "Cleveland, US",
+   "url": "https://api.meshsonar.com/basemap/packs/CLE-p261108.pmtiles",
+   "bytes": 138874336,
+   "sha256": "64e5da8feac5c62e5392953870034ebd47857fad2548698bdc55f1f765484159",
+   "version": 261108,
+   "bbox": [
+    -83.8832,
+    40.1517,
+    -80.519,
+    42.3247
+   ],
+   "min_zoom": 0,
+   "max_zoom": 14,
+   "schema": "protomaps",
+   "coverage": {
+    "url": "https://api.meshsonar.com/basemap/packs/CLE-cov-sf7bw62_5-v259.pmtiles",
+    "bytes": 778391,
+    "sha256": "d3340470187b4437bc6a4b68ec9c01c5515d2b565c962eec11cfa2f654b1558d",
+    "version": 259,
+    "preset": "sf7bw62.5",
+    "fingerprint": "92-92-1793556935",
+    "built_at": "2026-11-10T02:34:24Z"
+   }
+  },
+  {
+   "code": "RFD",
+   "name": "Rockford, US",
+   "url": "https://api.meshsonar.com/basemap/packs/RFD-p261108.pmtiles",
+   "bytes": 18838548,
+   "sha256": "4b5c8312fc77dfbf6f7838d5b708139cf8de457231aa30c2ab2aceb2c96ff990",
+   "version": 261108,
+   "bbox": [
+    -89.927,
+    41.585,
+    -88.5883,
+    42.5058
+   ],
+   "min_zoom": 0,
+   "max_zoom": 14,
+   "schema": "protomaps",
+   "coverage": {
+    "url": "https://api.meshsonar.com/basemap/packs/RFD-cov-sf7bw62_5-v259.pmtiles",
+    "bytes": 805628,
+    "sha256": "cc194e37885418d2b3356c082fd81e5fbb1e485b0808e0647dd1fce2f0dd625f",
+    "version": 259,
+    "preset": "sf7bw62.5",
+    "fingerprint": "88-88-1793223821",
+    "built_at": "2026-11-10T02:35:11Z"
+   }
+  },
+  {
+   "code": "ELP",
+   "name": "El Paso, US",
+   "url": "https://api.meshsonar.com/basemap/packs/ELP-p261108.pmtiles",
+   "bytes": 14638574,
+   "sha256": "1b880149d87f2ee8b16f5b2b877111ac6211bef884de5004bbe5c87f55389971",
+   "version": 261108,
+   "bbox": [
+    -106.6458,
+    30.6292,
+    -104.0245,
+    32.0024
+   ],
+   "min_zoom": 0,
+   "max_zoom": 14,
+   "schema": "protomaps",
+   "coverage": {
+    "url": "https://api.meshsonar.com/basemap/packs/ELP-cov-sf7bw62_5-v259.pmtiles",
+    "bytes": 32796,
+    "sha256": "090ed144d36e727cae13f987b3b9ab1561cfa67e1d8ad19af4bf12724872a3a9",
+    "version": 259,
+    "preset": "sf7bw62.5",
+    "fingerprint": "86-87-1793315577",
+    "built_at": "2026-11-10T02:39:06Z"
+   }
+  },
+  {
+   "code": "SJT",
+   "name": "San Angelo, US",
+   "url": "https://api.meshsonar.com/basemap/packs/SJT-p261108.pmtiles",
+   "bytes": 49766962,
+   "sha256": "53b9ff17c186aaf6c21443fbf1458a8889848c1845273d3ec7450673682ccb0f",
+   "version": 261108,
+   "bbox": [
+    -102.3888,
+    29.2376,
+    -98.4145,
+    32.0873
+   ],
+   "min_zoom": 0,
+   "max_zoom": 14,
+   "schema": "protomaps",
+   "coverage": {
+    "url": "https://api.meshsonar.com/basemap/packs/SJT-cov-sf7bw62_5-v259.pmtiles",
+    "bytes": 61904,
+    "sha256": "852c6efee82f114f5080ffeb70a72ff78dcc20def339beb4ffc58a92f1623229",
+    "version": 259,
+    "preset": "sf7bw62.5",
+    "fingerprint": "76-76-1793375202",
+    "built_at": "2026-11-10T02:41:08Z"
+   }
+  },
+  {
+   "code": "MAF",
+   "name": "Midland/Odessa, US",
+   "url": "https://api.meshsonar.com/basemap/packs/MAF-p261108.pmtiles",
+   "bytes": 35842049,
+   "sha256": "52d9d163ad080a76796cdb1422706676a8395dc3e392d382d8a0f37bd6eee0ac",
+   "version": 261108,
+   "bbox": [
+    -104.9808,
+    28.9716,
+    -101.1745,
+    32.5252
+   ],
+   "min_zoom": 0,
+   "max_zoom": 14,
+   "schema": "protomaps",
+   "coverage": {
+    "url": "https://api.meshsonar.com/basemap/packs/MAF-cov-sf7bw62_5-v259.pmtiles",
+    "bytes": 19993,
+    "sha256": "8a95a48fa1363c2536e2a9fd79cd770648e52584fa4387a2f3d1de754ee01f7a",
+    "version": 259,
+    "preset": "sf7bw62.5",
+    "fingerprint": "71-71-1793367404",
+    "built_at": "2026-11-10T02:42:52Z"
+   }
+  },
+  {
+   "code": "VPZ",
+   "name": "Valparaiso, US",
+   "url": "https://api.meshsonar.com/basemap/packs/VPZ-p261108.pmtiles",
+   "bytes": 5747465,
+   "sha256": "fe1cedb15c482009f3714a8b72855f5cb9e8f1331a84c56144ff2645bbe48131",
+   "version": 261108,
+   "bbox": [
+    -87.2229,
+    41.2197,
+    -86.928,
+    41.7629
+   ],
+   "min_zoom": 0,
+   "max_zoom": 14,
+   "schema": "protomaps",
+   "coverage": {
+    "url": "https://api.meshsonar.com/basemap/packs/VPZ-cov-sf7bw62_5-v259.pmtiles",
+    "bytes": 509132,
+    "sha256": "9eec395b8d38385bb4f247982f765f3fce04dc0bb22ab532fcd3c6ad60ad834e",
+    "version": 259,
+    "preset": "sf7bw62.5",
+    "fingerprint": "63-63-1792555917",
+    "built_at": "2026-11-10T02:43:05Z"
+   }
+  },
+  {
+   "code": "CMI",
+   "name": "Champaign, US",
+   "url": "https://api.meshsonar.com/basemap/packs/CMI-p261108.pmtiles",
+   "bytes": 18224151,
+   "sha256": "618cc39ff8362e7e5a6b416b15a14c34c023044cf284c235a4b9c93569265523",
+   "version": 261108,
+   "bbox": [
+    -88.746,
+    39.6516,
+    -87.5264,
+    40.4912
+   ],
+   "min_zoom": 0,
+   "max_zoom": 14,
+   "schema": "protomaps",
+   "coverage": {
+    "url": "https://api.meshsonar.com/basemap/packs/CMI-cov-sf7bw62_5-v259.pmtiles",
+    "bytes": 225181,
+    "sha256": "5fb5dfa41b306fbd1f3597ccc14a7ae801933642fab4af38adbb968a356a6225",
+    "version": 259,
+    "preset": "sf7bw62.5",
+    "fingerprint": "57-57-1793233880",
+    "built_at": "2026-11-10T02:43:33Z"
+   }
+  },
+  {
+   "code": "SAT",
+   "name": "San Antonio, US",
+   "url": "https://api.meshsonar.com/basemap/packs/SAT-p261108.pmtiles",
+   "bytes": 69818283,
+   "sha256": "de3c06bfc1aa64ee0a787fe7a3d373da3e4c29f2c2abf1396ec977ba4dd43545",
+   "version": 261108,
+   "bbox": [
+    -100.797,
+    27.8038,
+    -96.3092,
+    30.2907
+   ],
+   "min_zoom": 0,
+   "max_zoom": 14,
+   "schema": "protomaps",
+   "coverage": {
+    "url": "https://api.meshsonar.com/basemap/packs/SAT-cov-sf7bw62_5-v259.pmtiles",
+    "bytes": 73936,
+    "sha256": "87c962b06658baa36088a58ce32bcf2e44f994eefa1a8bc16d44f607b5c7c9c5",
+    "version": 259,
+    "preset": "sf7bw62.5",
+    "fingerprint": "57-57-1793405165",
+    "built_at": "2026-11-10T02:45:03Z"
+   }
+  },
+  {
+   "code": "SVC",
+   "name": "Silver City, US",
+   "url": "https://api.meshsonar.com/basemap/packs/SVC-p261108.pmtiles",
+   "bytes": 18623434,
+   "sha256": "2427fa1a127b82cdaa98fb8631690febc1b750422483f6ce9d7e2d92c3786870",
+   "version": 261108,
+   "bbox": [
+    -109.0502,
+    31.3322,
+    -107.2965,
+    34.581
+   ],
+   "min_zoom": 0,
+   "max_zoom": 14,
+   "schema": "protomaps",
+   "coverage": {
+    "url": "https://api.meshsonar.com/basemap/packs/SVC-cov-sf7bw62_5-v259.pmtiles",
+    "bytes": 29739,
+    "sha256": "a023d46ca79049dbc78b232a7993e19d7f517d881fc948886c74c8eba9147481",
+    "version": 259,
+    "preset": "sf7bw62.5",
+    "fingerprint": "56-57-1793301417",
+    "built_at": "2026-11-10T02:45:50Z"
+   }
+  },
+  {
+   "code": "LRU",
+   "name": "Las Cruces, US",
+   "url": "https://api.meshsonar.com/basemap/packs/LRU-p261108.pmtiles",
+   "bytes": 49917393,
+   "sha256": "ec229a553e69673477367931b078a42e080d16283e554efd125672f0544434ed",
+   "version": 261108,
+   "bbox": [
+    -108.0006,
+    31.7832,
+    -103.0426,
+    34.9542
+   ],
+   "min_zoom": 0,
+   "max_zoom": 14,
+   "schema": "protomaps",
+   "coverage": {
+    "url": "https://api.meshsonar.com/basemap/packs/LRU-cov-sf7bw62_5-v259.pmtiles",
+    "bytes": 21882,
+    "sha256": "dc66af7754f6166a2bf374928d1bbaf84fcd3bd44e55ea9c5eed96244060d37d",
+    "version": 259,
+    "preset": "sf7bw62.5",
+    "fingerprint": "27-27-1793304637",
+    "built_at": "2026-11-10T02:46:17Z"
+   }
+  },
+  {
+   "code": "DEC",
+   "name": "Long Creek, US",
+   "url": "https://api.meshsonar.com/basemap/packs/DEC-p261108.pmtiles",
+   "bytes": 4342958,
+   "sha256": "38e5098228213bb23400c6daa60eda8546214eebad07e57d5983de5648719e06",
+   "version": 261108,
+   "bbox": [
+    -89.2178,
+    39.6527,
+    -88.5747,
+    40.2832
+   ],
+   "min_zoom": 0,
+   "max_zoom": 14,
+   "schema": "protomaps",
+   "coverage": {
+    "url": "https://api.meshsonar.com/basemap/packs/DEC-cov-sf7bw62_5-v259.pmtiles",
+    "bytes": 10700,
+    "sha256": "9900cf23ef1826a90dda095bf215bbdc249ccc78a0e5175f58fdacd71680f996",
+    "version": 259,
+    "preset": "sf7bw62.5",
+    "fingerprint": "4-4-1793230469",
+    "built_at": "2026-11-10T02:46:19Z"
+   }
+  },
+  {
+   "code": "AUS",
+   "name": "Austin, US",
+   "url": "https://api.meshsonar.com/basemap/packs/AUS-p261108.pmtiles",
+   "bytes": 93959903,
+   "sha256": "8f29ea3eca67b0cac8735c4d41ec14e08a2f2e01810679975701a9170c55ddee",
+   "version": 261108,
+   "bbox": [
+    -99.304,
+    29.6281,
+    -95.6555,
+    32.2668
+   ],
+   "min_zoom": 0,
+   "max_zoom": 14,
+   "schema": "protomaps",
+   "coverage": {
+    "url": "https://api.meshsonar.com/basemap/packs/AUS-cov-sf7bw62_5-v259.pmtiles",
+    "bytes": 3453,
+    "sha256": "915a7d5cf9a12c9f8a6d4d41496bf739f42d637d6ad24a9494af30a260247f9f",
+    "version": 259,
+    "preset": "sf7bw62.5",
+    "fingerprint": "3-3-1793376290",
+    "built_at": "2026-11-10T02:46:23Z"
+   }
+  }
+ ]
+}

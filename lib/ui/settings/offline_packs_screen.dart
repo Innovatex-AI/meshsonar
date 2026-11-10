@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../../app/messages.dart';
 import '../../core/basemap.dart' show OurBasemap;
 import '../../core/offline_packs.dart';
+import '../../core/region_lookup.dart' show RegionIndexEntry;
 import '../app.dart' show AppScope;
 import '../design/app_surfaces.dart';
 import '../map/offline_basemap.dart';
@@ -286,24 +287,30 @@ class _OfflinePacksScreenState extends State<OfflinePacksScreen> {
   }
 }
 
-/// The viewed region has no pack (Nov 10, plan §8d: packs are built for every region with coverage inside our North America
-/// extract; elsewhere the online map falls back to OpenFreeMap). Said plainly instead of leaving the person to look for it.
-Widget? _viewedRegionNote(BuildContext context, List<PackManifestEntry> entries) {
-  final r = AppScope.maybeOf(context)?.viewingRegion;
-  if (r == null || entries.any((e) => e.code.toLowerCase() == r.code.toLowerCase() || e.code.toLowerCase() == r.slug.toLowerCase())) return null;
+/// The line under "No offline pack for (region)" when [r] has no entry among [codes] (Nov 10, plan §8d: packs are built for
+/// every region with coverage inside our North America extract; elsewhere the online map falls back to OpenFreeMap). Null when
+/// there is no viewed region or it has a pack.
+String? noPackNote(RegionIndexEntry? r, Iterable<String> codes) {
+  if (r == null || codes.any((c) => c.toLowerCase() == r.code.toLowerCase() || c.toLowerCase() == r.slug.toLowerCase())) return null;
   final b = r.bbox;
   final ob = OurBasemap.bounds;
-  final insideExtract = b != null && b.length == 4 && (b[0] + b[2]) / 2 >= ob[0] && (b[0] + b[2]) / 2 <= ob[2] && (b[1] + b[3]) / 2 >= ob[1] && (b[1] + b[3]) / 2 <= ob[3];
+  final inside = b != null && b.length == 4 && (b[0] + b[2]) / 2 >= ob[0] && (b[0] + b[2]) / 2 <= ob[2] && (b[1] + b[3]) / 2 >= ob[1] && (b[1] + b[3]) / 2 <= ob[3];
+  return inside
+      ? 'A pack is built once the region has coverage. The online map works here.'
+      : 'Offline packs cover North America only. The online map works here (OpenFreeMap).';
+}
+
+/// Says plainly that the viewed region has no pack instead of leaving the person to look for it.
+Widget? _viewedRegionNote(BuildContext context, List<PackManifestEntry> entries) {
+  final r = AppScope.maybeOf(context)?.viewingRegion;
+  final note = noPackNote(r, [for (final e in entries) e.code]);
+  if (r == null || note == null) return null;
   return ListTile(
     key: const Key('pack-region-none'),
     contentPadding: EdgeInsets.zero,
     leading: const Icon(Icons.info_outline),
     title: Text('No offline pack for ${r.name}'),
-    subtitle: Text(
-      insideExtract
-          ? 'A pack is built once the region has coverage. The online map works here.'
-          : 'Offline packs cover North America only. The online map works here (OpenFreeMap).',
-    ),
+    subtitle: Text(note),
   );
 }
 
