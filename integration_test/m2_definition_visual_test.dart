@@ -163,21 +163,35 @@ void main() {
       try {
         if (find.byKey(const Key('layers-group-coverage')).evaluate().isEmpty) throw StateError('no coverage group');
         await mdframe(t, 'md-03-layers-top');
-        // The sheet's list is lazy: scroll each later group into view (the website panel's order).
+        // The sheet's list is lazy: drag it up step by step, noting every website row seen, and shoot the Network part and
+        // the Filters + Palette part on the way.
         final list = find.descendant(of: find.byKey(const Key('layers-sheet')), matching: find.byType(Scrollable)).first;
-        // Every website row exists (each scrolled into view in turn), then back up to the Network header for the frame.
-        for (final key in ['layer-phones', 'layer-observers', 'layer-region-repeaters', 'layer-network', 'layer-links', 'layers-group-context', 'layer-borders']) {
-          await t.scrollUntilVisible(find.byKey(Key(key)), 160, scrollable: list, maxScrolls: 40);
+        const names = ['Measured coverage', 'Heard by phones', 'Predicted coverage', 'Moving phones', 'Observers', 'Repeaters', 'All MeshCore repeaters', 'Link lines', 'Region borders', 'Measured in', 'Drives from'];
+        final seen = <String>{};
+        void collect() {
+          for (final n in names) {
+            if (find.text(n).evaluate().isNotEmpty) seen.add(n);
+          }
         }
-        await t.scrollUntilVisible(find.byKey(const Key('layers-group-network')), -160, scrollable: list, maxScrolls: 40);
-        await pumpFor(t, const Duration(seconds: 1));
-        await mdframe(t, 'md-03b-layers-network');
-        for (final key in ['layers-group-filters', 'layers-group-palette', 'layers-palette']) {
-          await t.scrollUntilVisible(find.byKey(Key(key)), 160, scrollable: list, maxScrolls: 40);
+        final sheetTop = t.getTopLeft(find.byKey(const Key('layers-sheet'))).dy;
+        var shotNetwork = false;
+        collect();
+        for (var i = 0; i < 16 && find.byKey(const Key('layers-palette')).evaluate().isEmpty; i++) {
+          await t.drag(list, const Offset(0, -200), warnIfMissed: false);
+          await pumpFor(t, const Duration(milliseconds: 700));
+          collect();
+          final net = find.byKey(const Key('layers-group-network'));
+          if (!shotNetwork && net.evaluate().isNotEmpty && t.getTopLeft(net).dy < sheetTop + 160) {
+            await mdframe(t, 'md-03b-layers-network');
+            shotNetwork = true;
+          }
         }
+        if (!shotNetwork) await mdframe(t, 'md-03b-layers-network');
+        await t.drag(list, const Offset(0, -400), warnIfMissed: false);
         await pumpFor(t, const Duration(seconds: 1));
-        expectText('layers', 'Measured in');
-        expectText('layers', 'Drives from');
+        collect();
+        final missing = names.where((n) => !seen.contains(n)).toList();
+        if (missing.isNotEmpty) throw StateError('Layers sheet never showed: $missing');
         await mdframe(t, 'md-04-layers-filters');
       } finally {
         await dismiss(t);
