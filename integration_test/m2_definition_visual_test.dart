@@ -10,6 +10,7 @@
 // America (AAH, Aachen: OpenFreeMap fallback, no offline pack), and a preview (Plan > Where to drive) with "Open the map".
 // Each step also checks what the frame shows comes from the definition (layer names, legend entries, palette names).
 import 'dart:io' show HttpClient, Platform;
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -111,10 +112,16 @@ void main() {
     });
 
     /// Shows the viewed region on the Drive map (its bbox centre) through the same channel "Open the map" uses.
-    Future<void> lookAtRegion({double zoom = 9}) async {
+    Future<void> lookAtRegion({double? zoom}) async {
       final b = st.viewingRegion?.bbox;
       await toMapTab(t);
-      if (b != null && b.length == 4) MainMapFocus.request(LatLng((b[1] + b[3]) / 2, (b[0] + b[2]) / 2), zoom);
+      if (b != null && b.length == 4) {
+        // Fit the region (its border in view): the zoom at which its bbox spans the screen width, a little under.
+        final w = mq.size.width;
+        final span = math.max(b[2] - b[0], (b[3] - b[1]) * 1.6);
+        final fit = math.log(w * 360 / (256 * span)) / math.ln2 - 0.4;
+        MainMapFocus.request(LatLng((b[1] + b[3]) / 2, (b[0] + b[2]) / 2), zoom ?? fit);
+      }
       await pumpFor(t, const Duration(seconds: 10));
     }
 
@@ -130,7 +137,7 @@ void main() {
     await step('cmh', () async {
       await pickColumbus(t, st);
       await waitDefinition('cmh');
-      await lookAtRegion(zoom: 9);
+      await lookAtRegion();
       if (find.byKey(const Key('legend-card')).evaluate().isEmpty) throw StateError('no legend card on the Drive map');
       expectText('legend', 'Weak → strong signal');
       await mdframe(t, 'md-01-cmh-map');
@@ -158,13 +165,12 @@ void main() {
         await mdframe(t, 'md-03-layers-top');
         // The sheet's list is lazy: scroll each later group into view (the website panel's order).
         final list = find.descendant(of: find.byKey(const Key('layers-sheet')), matching: find.byType(Scrollable)).first;
-        for (final key in ['layers-group-network', 'layer-network', 'layers-group-context']) {
+        // Every website row exists (each scrolled into view in turn), then back up to the Network header for the frame.
+        for (final key in ['layer-phones', 'layer-observers', 'layer-region-repeaters', 'layer-network', 'layer-links', 'layers-group-context', 'layer-borders']) {
           await t.scrollUntilVisible(find.byKey(Key(key)), 160, scrollable: list, maxScrolls: 40);
         }
+        await t.scrollUntilVisible(find.byKey(const Key('layers-group-network')), -160, scrollable: list, maxScrolls: 40);
         await pumpFor(t, const Duration(seconds: 1));
-        for (final name in ['Moving phones', 'Observers', 'All MeshCore repeaters', 'Link lines', 'Region borders']) {
-          expectText('layers network', name);
-        }
         await mdframe(t, 'md-03b-layers-network');
         for (final key in ['layers-group-filters', 'layers-group-palette', 'layers-palette']) {
           await t.scrollUntilVisible(find.byKey(Key(key)), 160, scrollable: list, maxScrolls: 40);
@@ -187,13 +193,13 @@ void main() {
     await step('sea', () async {
       await pickRegion(t, st, query: 'seattle', code: 'SEA');
       await waitDefinition('sea');
-      await lookAtRegion(zoom: 9);
+      await lookAtRegion();
       await mdframe(t, 'md-07-sea');
     });
     await step('aah', () async {
       await pickRegion(t, st, query: 'aachen', code: 'AAH');
       await waitDefinition('aah');
-      await lookAtRegion(zoom: 10);
+      await lookAtRegion();
       await mdframe(t, 'md-08-aah');
     });
     await step('preview', () async {
