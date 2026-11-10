@@ -48,6 +48,8 @@ class CreditsSheet extends StatelessWidget {
   static final Uri _topo = Uri.parse('https://opentopomap.org');
   static final Uri _ccBySa = Uri.parse('https://creativecommons.org/licenses/by-sa/3.0/');
   static final Uri _meshcore = Uri.parse('https://map.meshcore.io');
+  static final Uri _protomaps = Uri.parse('https://protomaps.com');
+  static final Uri _openfreemap = Uri.parse('https://openfreemap.org');
 
   @override
   Widget build(BuildContext context) {
@@ -101,8 +103,18 @@ class CreditsSheet extends StatelessWidget {
             ],
           ),
         ],
+        head('Base map'),
+        Text(
+          'Road and dark maps: MeshSonar\'s own vector tiles built by Protomaps from OpenStreetMap data. When they cannot be '
+          'reached, or outside North America, the map comes from OpenFreeMap (also OpenStreetMap data). The credit line '
+          'on the map names the one you are looking at.',
+          key: const Key('credits-basemap'),
+          style: t.textTheme.bodyMedium,
+        ),
+        link('protomaps.com', _protomaps),
+        link('openfreemap.org', _openfreemap),
         head('Offline maps'),
-        Text('Offline region maps are built from OpenStreetMap data and served from tiles.meshsonar.com, with the same credit.', style: t.textTheme.bodyMedium?.copyWith(color: mc.textMuted)),
+        Text('Offline region maps are the same Protomaps map, served by MeshSonar, with the same credit.', style: t.textTheme.bodyMedium?.copyWith(color: mc.textMuted)),
         if (colourKey != null) ...[head('What the colours mean'), KeyedSubtree(key: const Key('credits-key'), child: colourKey!)],
         if (openLegend != null)
           Padding(

@@ -11,7 +11,8 @@ import 'package:flutter/rendering.dart';
 import '../../../core/map_styles.dart';
 import '../../theme.dart';
 
-/// The text of the credit line for [style]. Street, Chart and Dark are OSM tiles; Topo adds OpenTopoMap and SRTM.
+/// The default text of the credit line for [style]. Chart, Light and Dark are our Protomaps tiles (the map passes the
+/// OpenFreeMap credit while the fallback draws); Topo adds OpenTopoMap and SRTM.
 String attributionText(BaseMapStyle style) => style.attribution;
 
 class AttributionLine extends StatelessWidget {
@@ -22,12 +23,16 @@ class AttributionLine extends StatelessWidget {
 
   /// Opens the Credits sheet.
   final VoidCallback? onInfo;
-  const AttributionLine({super.key, required this.style, this.showMeshCore = false, this.onInfo});
+
+  /// The credit of the source drawn right now (ours, OpenFreeMap or an offline pack); null = [attributionText].
+  final String? text;
+  const AttributionLine({super.key, required this.style, this.showMeshCore = false, this.onInfo, this.text});
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
-    // Street and Topo are drawn as the tile server made them (light, busy): a surface pill keeps the 12 pt line legible.
+    // Topo is drawn as the tile server made it (busy) and Light stays light under a dark theme: a surface pill keeps the
+    // 12 pt line legible on both.
     final pill = style == BaseMapStyle.street || style == BaseMapStyle.topo;
     final ink = t.colorScheme.onSurface;
     final halo = t.colorScheme.surface;
@@ -39,7 +44,7 @@ class AttributionLine extends StatelessWidget {
           ? null
           : [Shadow(color: halo, blurRadius: 2), Shadow(color: halo, blurRadius: 4), Shadow(color: halo.withValues(alpha: 0.9), offset: const Offset(0.5, 0.5), blurRadius: 1)],
     );
-    final text = attributionText(style);
+    final text = this.text ?? attributionText(style);
     final infoButton = GestureDetector(
         key: const Key('map-attribution-info'),
         behavior: HitTestBehavior.opaque,

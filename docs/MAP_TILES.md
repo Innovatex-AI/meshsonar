@@ -1,29 +1,85 @@
 # Map tiles: sources, cache, offline packs, licences
 
-One base map, three sources, drawn as layers (lib/ui/map/coverage_map.dart, lib/ui/map/tile_source.dart):
+Since 0.32.0 (plan unified-map-system §2.3, phase M2) every map in the app draws ONE basemap: our own Protomaps vector
+tiles, the same tiles and the same light / dark styles as the website, with OpenFreeMap as the automatic fallback.
+OpenStreetMap's community tile server is no longer used anywhere (test/lint/no_osm_tile_server_test.dart fails if its
+host appears in the app sources or assets).
+
+Drawn as layers (lib/ui/map/coverage_map.dart and every small map, lib/ui/map/basemap_layer.dart):
 
 1. **Chart grid** (always): the lat/lon paper you see with nothing loaded. Never blank.
-2. **Online + disk-cached raster tiles** (`MeshTileProvider`): OpenStreetMap (Chart, Street, Dark styles) or OpenTopoMap (Topo). Cache first (flutter_map's built-in disk cache, 1 GB cap, honours the server's Cache-Control/ETag), stale tiles are shown rather than a blank when the refresh fails or there is no signal, at most 6 concurrent requests (newest tile first), every request is cancelled when its tile leaves the screen, 8 s timeout, no retries; three failures in a row open a circuit breaker for 15 s (cache only, no requests); the phone's own "offline" state closes it at once and coming back online re-requests the empty tiles. Tiles that an installed offline pack draws are skipped (no request, no cache read).
-3. **Offline region pack** (PMTiles vector tiles, `OfflineBasemapLayer`): drawn on top for the pack that covers the view centre; outside the pack's area the online/cached tiles carry on, so there is no blank edge. Topo has no pack.
+2. **Online basemap** (`BasemapLayer`): vector tiles from `https://api.meshsonar.com/basemap/t/na-20261108/{z}/{x}/{y}.bin`
+   (meshsonar-infra `stack/basemap`, North America z0-14, Cloudflare edge-cached), rendered on the phone by
+   vector_map_tiles in raster mode with the styles in `lib/core/basemap_styles.g.dart`. Each tile goes through
+   `MeshTileProvider` (`tile_source.dart`): disk cache first, stale beats blank, 6 requests at most, 8 s timeout, no
+   retries, circuit breaker, the phone's offline state; a 204 (empty tile) is a tile, not a failure.
+3. **Offline region pack** (`OfflineBasemapLayer`): drawn on top for the pack covering the view centre; tiles it draws are
+   never requested online.
 
-The Credits sheet (the (i) on the credit line, bottom right of the map) says which is in use: Online map, Offline map: <pack>, Saved map (no signal), No map here (no signal). Installed packs show as dashed outlines.
+Base map styles (the cycler): **Chart** (our map, light or dark with the app theme), **Light** (always the light style; id
+`street`), **Dark** (always the dark style), **Topo** (OpenTopoMap raster, until M3 brings our own Topo).
 
-## Licences and attribution (unchanged rules, enforced by tests)
+## Which map engine, and why vector (decision M2, Nov 9 2026)
 
-- OpenStreetMap data/tiles: © OpenStreetMap contributors (ODbL). The credit is always on the map as one 12 pt line in the bottom-right corner (`map-attribution`, `AttributionLine`), with an (i) (`map-attribution-info`, 44 x 44 hit area) that opens the Credits sheet; it never collapses to the bare (i) and cannot be switched off (the OSM Attribution Guidelines: in a corner of the map, no interaction needed to see it; an (i) alone is not compliant). **Credit terms checked Nov 2 2026:** OpenTopoMap (opentopomap.org/about): CC-BY-SA, required credit "Kartendaten: © OpenStreetMap-Mitwirkende, SRTM | Kartendarstellung: © OpenTopoMap (CC-BY-SA)" (our English line on Topo says the same: "© OpenStreetMap contributors, SRTM | Map style © OpenTopoMap (CC-BY-SA)"), app use allowed while the server is not hammered, no numeric rate limit, a short notice of use is requested; the wiki says to always name opentopomap.org. MeshCore Map (map.meshcore.io, github.com/meshcore-dev/map.meshcore.io): the site publishes no credit, attribution or data-use terms (the repo is MIT licensed, which covers its code, not the node data); we keep crediting "MeshCore Map" in the corner line while its layer draws and in the Credits sheet, and the operators should be asked before the public release. `tile.openstreetmap.org` is the public community server; its usage policy (https://operations.osmfoundation.org/policies/tiles) asks apps not to bulk-download and to identify themselves. The provider sends `User-Agent: flutter_map (com.meshsonar.app)`, caches, bounds concurrency, never prefetches and never retries in a loop. If the app's tile traffic grows, move Street/Chart to a paid or self-hosted tile service; the host is a single constant in `lib/core/map_styles.dart`.
-- OpenTopoMap: © OpenStreetMap contributors, SRTM | Map style © OpenTopoMap (CC-BY-SA); max zoom 17.
-- Offline packs: built from OpenStreetMap data, served from tiles.meshsonar.com, same attribution.
+The app's engine is flutter_map. It draws raster tiles natively and vector tiles through vector_map_tiles (already used
+for offline packs since WP13). Neither our tile server nor OpenFreeMap serves raster tiles, and running a raster render
+server would be new infrastructure, so the app draws our vector tiles itself (raster mode: each tile is rendered to an
+image once and cached, every overlay keeps working unchanged). The styles are generated from the website's own code:
+`node tool/basemap/make_basemap_styles.mjs` builds @protomaps/basemaps layers (white / black flavours, no POIs), applies
+the website's `tintBasemap()` recipe with the website token values, fetches OpenFreeMap Positron / Dark through the same
+tint, and reduces every expression to what vector_tile_renderer 6.1 reads (test/ui/map/basemap_styles_test.dart: zero
+renderer warnings, real tiles from both servers render as light / dark maps). Re-run it when the website palette or
+`@protomaps/basemaps` changes. Not done in M2 (the M2 phase proper renders from the Map Definition): basemap labels drawn
+above coverage (the website does; here labels are part of the basemap image under the overlays).
+
+## Fallback (same rules as the website, `lib/core/basemap.dart`)
+
+- Health probe `GET https://api.meshsonar.com/basemap/t/<archive>.json`, 4 s budget, at most once a minute for the whole
+  app; a failed probe draws OpenFreeMap until a later probe answers.
+- 4 tile failures in a row mid-session switch to OpenFreeMap (until the next probe in a minute).
+- A view outside the extract (`viewInsideOurBasemap`, the website's `viewInsideBasemap`) draws OpenFreeMap; back to ours
+  when the view returns.
+- OpenFreeMap's tile URL comes from its TileJSON (`https://tiles.openfreemap.org/planet`, host pinned), read once when first
+  needed; a built-in URL is used until then. 4 OpenFreeMap failures pause it for a minute; with both down, the chart grid.
+
+## Labels and fonts (the glyph caveat, resolved)
+
+Labels are Flutter text drawn on the phone in the system font (`CupertinoSystemText` = SF Pro on iOS): the styles' every
+`text-font` is that family and the app never loads glyph PBFs or sprites. So the server's Noto glyphs
+(`/basemap/fonts/`) serve only the website, Barlow is not used by any map, and SF Pro (which may not be redistributed as
+glyph PBFs) needs no server copy. Decision recorded in meshsonar-infra HANDOFF (M2 entry).
+
+## Licences and attribution
+
+- The credit is always on the map, no interaction needed: the Drive map's `AttributionLine` (12 pt, bottom right, (i) opens
+  the Credits sheet) and every small map's `MiniMapCredit` (= `BasemapCredit`). Both name the source drawn right now:
+  **"Protomaps © OpenStreetMap contributors"** on our tiles and on M2 offline packs, **"OpenFreeMap © OpenStreetMap
+  contributors"** on the fallback, Topo's own line on Topo. test/lint/map_credit_test.dart fails if a FlutterMap has no
+  shared credit or draws its own raster tile layer.
+- OpenStreetMap data © OpenStreetMap contributors (ODbL). Protomaps basemap layers (@protomaps/basemaps, BSD-3-Clause).
+  OpenFreeMap: OpenMapTiles styles (BSD-3-Clause code, CC-BY 4.0 design), free and keyless.
+- OpenTopoMap: CC-BY-SA, credit "© OpenStreetMap contributors, SRTM | Map style © OpenTopoMap (CC-BY-SA)"; max zoom 17.
 - Hosts are pinned by `test/integration/hosts_static_test.dart`.
 
-## What was verified and what was not
+## Offline packs (M2)
 
-Unit tests (test/ui/map/tile_source_test.dart): cache hit with no request, 304 handling, stale-beats-blank, no cache + no network = empty tile and no exception, breaker open/probe/close, offline flag, bounded concurrency, newest first, cancellation, timeout, pack skip. Benchmark run with live OSM tiles on the simulator. NOT verified: a real drive through a no-signal area on a phone, a real pack's vector-layer render cost (no pack file on the build machine; only the 3-tile fixture), and the 1 GB cache growth over weeks.
+A pack is one region's road basemap (an extract of the same North America archive, z0-14, schema `protomaps`) plus a
+coverage snapshot (`<CODE>.coverage.pmtiles`: Measured z6-13 and Predicted z8-13 coverage v2 tiles of the region's default
+preset, both layers in each tile) plus repeaters, which ride on the app's on-disk repeater store (`repeater_sync.dart`,
+read at launch before any network call, so pins and names work offline). Built on the server by meshsonar-infra
+`stack/basemap/build-packs.py`, served from `https://api.meshsonar.com/basemap/packs/` (manifest + immutable files,
+range requests for resume). Pack style = the online style, so moving in or out of a pack changes nothing on screen.
 
-## Offline packs on tiles.meshsonar.com (WP13, Nov 2026)
+- Manifest `https://api.meshsonar.com/basemap/packs/manifest.json`; each entry adds `schema` and a `coverage` block
+  (`url`, `bytes`, `sha256`, `version`, `preset`). While it is not published (404) the app reads the pre-M2 manifest on
+  `tiles.meshsonar.com` (OpenMapTiles packs, drawn with the old `offline_style.dart` until updated).
+- Coverage snapshot: downloaded after the basemap file, size + SHA-256 checked, written atomically; a failed one never
+  replaces a good one. Refreshed at launch at most every 12 h (Wi-Fi rule respected); the server rebuilds it nightly.
+- When the network fails, the coverage layers read the pack snapshot (`CoverageTileStore.offlineTiles`), first while the
+  layer is offline; the live tile replaces it once the network is back. Deeper zooms use the z13 hexagons as stand-ins.
 
-Packs: CMH (Columbus), DAY (Dayton), CVG (Cincinnati). Each is one immutable PMTiles v3 file named `<CODE>-v<yymmdd>.pmtiles` (gzip tiles, z0-14, OpenMapTiles schema, bbox = the region's bbox from `/api/cmh/regions-index`). DAY is built from the Ohio + Indiana extracts, CVG from Ohio + Indiana + Kentucky (merged with osmium; `meshsonar-infra/scripts/tiles/build-region-pack.sh`). Topo has no pack and never works offline; the base-style sheet row says "needs signal".
-
-**Publishing rule (additive only):** upload the new pack file(s) first, then replace `manifest.json` last. A published pack file is never overwritten in place and old versions are kept until clients have updated (a changed pack means a new filename and a new `version`). `meshsonar-infra/scripts/tiles/check-manifest.sh` HEADs every pack in the live manifest (200, `content-length` equals the manifest `bytes`, `accept-ranges: bytes`, host pinned, style files 200) and requires CMH, DAY and CVG; run it before and after every publish. Test: `test/core/offline_pack_regions_test.dart` (3-tile fixture with the DAY and CVG bboxes, manifest with three packs).
+### Pre-M2 packs (`offlineStyleVersion` bump rule, web styles, Barlow glyph stacks)
+Kept only for packs installed before M2 and the website's old pack styles on tiles.meshsonar.com:
 
 ### `offlineStyleVersion` bump rule
 `offlineStyleVersion` (`lib/core/offline_style.dart`) and the manifest's `style_version` are one number. Bump both, in the same release, whenever the offline style changes in a way an installed pack must pick up: layer set, colours, label fonts or sizes, source-layer names. Do not bump for a new or rebuilt pack (that is the pack `version`) or for app-only code that does not change the style JSON. The website styles at `styles/v<N>/` are regenerated from the same code (`dart run tool/make_web_styles.dart`), uploaded under the new `v<N>` path before the manifest points at them, and the old `v<N-1>` path stays.

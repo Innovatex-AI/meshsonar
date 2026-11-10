@@ -1,9 +1,12 @@
 // The offline basemap: downloaded PMTiles region packs drawn with vector_map_tiles inside the existing flutter_map.
-// Fallback order: installed pack covering the map -> online OSM raster tiles (flutter_map's own cache) -> chart grid.
+// Fallback order: installed pack covering the map -> the online basemap (our vector tiles / OpenFreeMap, disk-cached) ->
+// chart grid. M2 packs (schema protomaps) draw with the online map's own style, so moving in or out of a pack changes
+// nothing on screen; pre-M2 packs (openmaptiles) keep the old offline style until they are updated.
 // NOTE: the app's map engine is flutter_map (not maplibre_gl); a MapLibre-style JSON is used only as the *theme* format
 // the vector renderer understands. See meshsonar-infra/docs/tiles-offline-packs.md.
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -13,11 +16,13 @@ import 'package:path_provider/path_provider.dart';
 import 'package:vector_map_tiles/vector_map_tiles.dart';
 import 'package:vector_tile_renderer/vector_tile_renderer.dart' as vtr;
 
+import '../../core/basemap.dart' show BasemapSource;
 import '../../core/offline_packs.dart';
 import '../../core/offline_style.dart';
 import '../../core/pmtiles_reader.dart';
 import '../../platform/app_lifecycle_bridge.dart';
 import '../../platform/network_monitor.dart';
+import 'basemap_layer.dart' show basemapTheme;
 import 'tile_source.dart' show MapTileStats;
 
 /// Serves tiles from an open PMTiles file to the vector renderer.
@@ -140,6 +145,54 @@ class OfflineBasemap extends ChangeNotifier {
     if (changed) notifyListeners();
   }
 
+  final Map<String, (String, PmtilesReader?)> _coverage = {}; // code -> (snapshot sha256, reader or null when unreadable)
+
+  /// The coverage snapshot tile of an installed pack covering tile z/x/y for [preset] (both layers in one MVT), or null.
+  /// Used by the coverage layers when the network fails (CoverageTileStore.offlineTiles).
+  Future<Uint8List?> coverageTile(String preset, int z, int x, int y) async {
+    final m = _manager;
+    if (m == null) return null;
+    final n = 1 << z;
+    final lon = (x + 0.5) / n * 360 - 180;
+    final yy = math.pi * (1 - 2 * (y + 0.5) / n);
+    final lat = (180 / math.pi) * math.atan((math.exp(yy) - math.exp(-yy)) / 2);
+    for (final ip in m.installed.values) {
+      final c = ip.coverage;
+      if (c == null || c.preset != preset || !ip.covers(lat, lon)) continue;
+      final r = await _coverageReader(m, ip.code, c.sha256);
+      if (r == null || z < r.header.minZoom || z > r.header.maxZoom) continue;
+      try {
+        final b = await r.tile(z, x, y);
+        if (b != null) return b;
+      } on PmtilesException {
+        continue;
+      }
+    }
+    return null;
+  }
+
+  Future<PmtilesReader?> _coverageReader(OfflinePackManager m, String code, String sha) async {
+    final cur = _coverage[code];
+    if (cur != null && cur.$1 == sha && (cur.$2 == null || !cur.$2!.isClosed)) return cur.$2;
+    await cur?.$2?.close();
+    PmtilesReader? r;
+    try {
+      r = await PmtilesReader.open(m.coverageFile(code));
+    } catch (_) {
+      r = null; // missing or damaged: the layer stays on the network / saved cells
+    }
+    _coverage[code] = (sha, r);
+    return r;
+  }
+
+  /// At launch: brings installed packs' coverage snapshots up to date (at most every 12 h, Wi-Fi rule respected).
+  Future<void> refreshCoverageWhenStale() async {
+    try {
+      final m = await manager();
+      await m.refreshCoverageIfStale(await network.current());
+    } catch (_) {}
+  }
+
   /// Kicks off the lazy open (safe to call from initState; failures just mean "no offline pack").
   void ensureOpen() {
     manager().then((_) {}, onError: (Object _) {});
@@ -201,7 +254,10 @@ class OfflineBasemapLayer extends StatelessWidget {
 
   /// Forces the dark (true) or light (false) look; null follows the app theme.
   final bool? dark;
-  const OfflineBasemapLayer({super.key, required this.reader, this.dark});
+
+  /// The pack's tile schema (decides the style).
+  final PackSchema schema;
+  const OfflineBasemapLayer({super.key, required this.reader, this.dark, this.schema = PackSchema.openmaptiles});
 
   /// Widget tests replace the vector layer (it spins up isolates the test binding cancels).
   @visibleForTesting
@@ -212,15 +268,19 @@ class OfflineBasemapLayer extends StatelessWidget {
     final debug = debugBuilder;
     if (debug != null) return debug(reader);
     final dark = this.dark ?? Theme.of(context).brightness == Brightness.dark;
+    final protomaps = schema == PackSchema.protomaps;
     return VectorTileLayer(
-      theme: vtr.ThemeReader().read(offlineMapStyle(dark: dark)),
-      tileProviders: TileProviders({'openmaptiles': PmtilesVectorTileProvider(reader)}),
+      theme: protomaps ? basemapTheme(BasemapSource.ours, dark: dark) : _legacyTheme(dark),
+      tileProviders: TileProviders({protomaps ? 'protomaps' : 'openmaptiles': PmtilesVectorTileProvider(reader)}),
       layerMode: VectorTileLayerMode.raster,
       maximumZoom: 19,
     );
   }
 }
 
-/// The app's offline style: OSM Carto colours through the same matrix as the online tiles (see core/offline_style.dart),
+final Map<bool, vtr.Theme> _legacy = {};
+vtr.Theme _legacyTheme(bool dark) => _legacy.putIfAbsent(dark, () => vtr.ThemeReader().read(offlineMapStyle(dark: dark)));
+
+/// The pre-M2 offline style (OpenMapTiles packs): OSM Carto colours through the same matrix as the online tiles (see core/offline_style.dart),
 /// labels drawn with Flutter text in the system font (SF Pro on iOS, spike S1; no glyph files needed in the app).
 Map<String, dynamic> offlineMapStyle({required bool dark}) => offlineStyle(dark: dark);

@@ -8,7 +8,8 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:meshsonar/ui/map/coverage_map.dart';
+import 'package:meshsonar/core/offline_packs.dart' show PackSchema;
+import 'package:meshsonar/ui/map/basemap_layer.dart';
 import 'package:meshsonar/ui/map/offline_basemap.dart';
 import 'package:meshsonar/ui/theme.dart';
 
@@ -58,14 +59,9 @@ void main() {
                   ),
                   children: [
                     if (online)
-                      TileLayer(
-                        urlTemplate: CoverageMap.tileUrl,
-                        userAgentPackageName: CoverageMap.userAgentPackageName,
-                        maxNativeZoom: 19,
-                        tileBuilder: (context, tile, _) => ColorFiltered(colorFilter: ColorFilter.matrix(mc.tileMatrix), child: tile),
-                      )
+                      const BasemapLayer()
                     else
-                      OfflineBasemapLayer(reader: reader!),
+                      OfflineBasemapLayer(reader: reader!, schema: OfflineBasemap.instance.managerOrNull?.installed['CMH']?.schema ?? PackSchema.openmaptiles),
                   ],
                 ),
               ),

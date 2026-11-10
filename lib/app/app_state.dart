@@ -572,7 +572,11 @@ class AppState extends ChangeNotifier {
   }
 
   /// Decoded coverage tiles, shared by every map of the app.
-  CoverageTileStore get coverageTiles => _tileStore ??= CoverageTileStore(coverageV2Client);
+  /// Offline: the installed packs' coverage snapshots stand in when the network fails (M2 offline packs).
+  CoverageTileStore get coverageTiles => _tileStore ??= CoverageTileStore(coverageV2Client, offlineTiles: coverageOfflineTiles);
+
+  /// Where the coverage store reads pack snapshots (the app wires OfflineBasemap here; null in pure tests).
+  static Future<Uint8List?> Function(String preset, int z, int x, int y)? coverageOfflineTiles;
 
   CoverageMeta? _coverageMetaV2;
 

@@ -212,9 +212,10 @@ class _OfflinePacksScreenState extends State<OfflinePacksScreen> {
                 padding: const EdgeInsets.fromLTRB(Gap.l, Gap.s, Gap.l, Gap.xl),
                 children: [
                   Text(
-                    'Download a region once and its map works with no signal. Packs are OpenStreetMap data hosted by '
-                    'MeshSonar. Without a pack the map uses online tiles. Downloads run while the app is open and '
-                    'pick up where they stopped.',
+                    'Download a region once and its map works with no signal: the road map, coverage (measured and '
+                    'predicted) and repeaters. Packs are the same OpenStreetMap map MeshSonar draws online, hosted by '
+                    'MeshSonar; their coverage is refreshed on Wi-Fi. Without a pack the map uses online tiles. Downloads '
+                    'run while the app is open and pick up where they stopped.',
                     style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
                   ),
                   SwitchListTile(
@@ -274,7 +275,7 @@ class _OfflinePacksScreenState extends State<OfflinePacksScreen> {
                     ],
                   ),
                   const SizedBox(height: Gap.l),
-                  Text(mf?.attribution ?? '© OpenStreetMap contributors', style: t.textTheme.labelSmall),
+                  Text(mf?.attribution ?? 'Protomaps © OpenStreetMap contributors', style: t.textTheme.labelSmall),
                 ],
               ),
       ),

@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 0.31.1+56
+version: 0.32.0+57
 
 environment:
   sdk: ^3.13.5
@@ -100,6 +100,8 @@ flutter:
     - assets/fonts/Barlow-Regular.ttf
     - assets/fonts/Barlow-SemiBold.ttf
     - assets/fonts/Barlow-OFL.txt
+    # The bundled Map Definition (plan §2.2 / §8b M2): the M1 fixture, used until the server's copy has been read once.
+    - assets/map/map-definition.json
 
   # To add assets to your application, add an assets section, like this:
   # assets:

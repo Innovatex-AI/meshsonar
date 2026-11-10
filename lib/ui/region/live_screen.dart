@@ -3,6 +3,7 @@
 // backgrounded / the screen is off / the tab is hidden, and reopened on return. View-only, so safe while driving.
 // Offline: Live is never stored on the phone, so when the stream cannot be reached it says Live needs a connection,
 // keeps retrying with backoff on its own, and offers a Retry that reconnects right away.
+import '../map/basemap_layer.dart' show BasemapLayer;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -11,7 +12,6 @@ import 'package:latlong2/latlong.dart';
 
 import '../../core/live_stream.dart';
 import '../../core/region_packets_api.dart' show packetTypeName, packetRouteName;
-import '../map/coverage_map.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import 'packet_detail_screen.dart';
@@ -253,12 +253,7 @@ class _MiniMap extends StatelessWidget {
       ),
       children: [
         // Graded to the theme like every other mini map (it was raw OSM, audit 03 §4.1 item 16).
-        TileLayer(
-          urlTemplate: CoverageMap.tileUrl,
-          userAgentPackageName: CoverageMap.userAgentPackageName,
-          maxNativeZoom: 19,
-          tileBuilder: (context, tile, _) => ColorFiltered(colorFilter: ColorFilter.matrix(m.tileMatrix), child: tile),
-        ),
+        const BasemapLayer(),
         CircleLayer(circles: [
           for (final p in pts) CircleMarker(point: p, radius: 5, color: cs.primary.withValues(alpha: 0.8), borderColor: cs.onPrimary, borderStrokeWidth: 1),
         ]),

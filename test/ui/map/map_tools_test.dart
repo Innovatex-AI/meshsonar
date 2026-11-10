@@ -16,6 +16,7 @@ import 'package:meshsonar/core/map_styles.dart';
 import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/core/region_stats_api.dart';
 import 'package:meshsonar/ui/device_feedback.dart';
+import 'package:meshsonar/ui/map/basemap_layer.dart' show BasemapLayer;
 import 'package:meshsonar/ui/map/coverage_map.dart';
 import 'package:meshsonar/ui/map/map_key.dart';
 import 'package:meshsonar/ui/drive/drive_map_model.dart';
@@ -94,33 +95,27 @@ void main() {
       ),
     );
 
-    testWidgets('each style asks its own tile server and credits it', (tester) async {
+    testWidgets('Chart / Light / Dark draw our vector basemap, Topo its raster server; each credits its source', (tester) async {
       for (final s in BaseMapStyle.values) {
         await mapWith(tester, s);
         await tester.pump();
-        final layer = tester.widget<TileLayer>(find.byType(TileLayer));
-        expect(layer.urlTemplate, s.tileUrl, reason: s.id);
-        expect(layer.maxNativeZoom, s.maxNativeZoom);
-        expect(find.descendant(of: find.byKey(const Key('map-attribution')), matching: find.text(s.attribution)), findsOneWidget);
-      }
-    });
-
-    testWidgets('Street and Topo are drawn as served; Chart follows the theme and Dark is forced dark', (tester) async {
-      for (final s in [BaseMapStyle.street, BaseMapStyle.topo]) {
-        await mapWith(tester, s);
-        await tester.pump();
-        expect(tester.widget<TileLayer>(find.byType(TileLayer)).tileBuilder, isNull, reason: s.id);
-      }
-      for (final s in [BaseMapStyle.chart, BaseMapStyle.dark]) {
-        await mapWith(tester, s);
-        await tester.pump();
-        expect(tester.widget<TileLayer>(find.byType(TileLayer)).tileBuilder, isNotNull, reason: s.id);
+        if (s.isVector) {
+          expect(tester.widget<BasemapLayer>(find.byType(BasemapLayer)).dark, s.darkLook, reason: s.id);
+          expect(find.byType(TileLayer), findsNothing, reason: s.id);
+          expect(find.descendant(of: find.byKey(const Key('map-attribution')), matching: find.text('Protomaps © OpenStreetMap contributors')), findsOneWidget);
+        } else {
+          final layer = tester.widget<TileLayer>(find.byType(TileLayer));
+          expect(layer.urlTemplate, s.tileUrl, reason: s.id);
+          expect(layer.maxNativeZoom, s.maxNativeZoom);
+          expect(layer.tileBuilder, isNull, reason: 'Topo is drawn as served');
+          expect(find.byType(BasemapLayer), findsNothing);
+          expect(find.descendant(of: find.byKey(const Key('map-attribution')), matching: find.text(s.attribution)), findsOneWidget);
+        }
       }
       final light = MeshSonarColors.forPalette(ColourPalette.standard, Brightness.light).tileMatrix;
-      expect(tileMatrixFor(BaseMapStyle.chart, light), light);
-      expect(tileMatrixFor(BaseMapStyle.dark, light), kDarkTileMatrix, reason: 'forced dark even in a light theme');
-      expect(tileMatrixFor(BaseMapStyle.street, light), isNull);
-      expect(tileMatrixFor(BaseMapStyle.topo, light), isNull);
+      for (final s in BaseMapStyle.values) {
+        expect(tileMatrixFor(s, light), isNull, reason: '${s.id}: no colour grading (the vector styles are the website\'s light / dark)');
+      }
     });
 
     testWidgets('an installed offline pack is drawn for Chart, Street and Dark (light/dark look) but not for Topo', (tester) async {
@@ -134,7 +129,7 @@ void main() {
         await tester.pump();
         final layer = tester.widget<OfflineBasemapLayer>(find.byType(OfflineBasemapLayer));
         looks.add(layer.dark);
-        expect(find.byType(TileLayer), findsOneWidget, reason: '${s.id}: online/cached tiles stay under the pack, skipping what it draws');
+        expect(find.byType(BasemapLayer), findsOneWidget, reason: '${s.id}: the online basemap stays under the pack, skipping what it draws');
       }
       expect(looks, [null, false, true], reason: 'chart follows the theme, street is the light look, dark is forced dark');
       await mapWith(tester, BaseMapStyle.topo);

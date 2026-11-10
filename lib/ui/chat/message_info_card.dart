@@ -1,6 +1,8 @@
 // How a message travelled, at a glance (chat + radio round, CR4): the card under a long-pressed bubble, the repeats list of
 // the details sheet, and the path map. Names come from HopResolver (radio contacts, then the network roster); a prefix two
 // known repeaters share is shown in the warning colour with "2 possible", like the official app's red prefix.
+import '../map/overlays/mini_map_credit.dart';
+import '../map/basemap_layer.dart' show BasemapLayer;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Material, MaterialType;
 import 'package:flutter_map/flutter_map.dart';
@@ -12,7 +14,6 @@ import '../../chat/models.dart';
 import '../design/app_symbols.dart';
 import '../design/app_type.dart';
 import '../design/tokens.dart';
-import '../map/coverage_map.dart' show CoverageMap;
 import '../theme.dart' show MeshSonarColors;
 
 String _clock(int ms) {
@@ -257,12 +258,7 @@ class MessagePathMapScreen extends StatelessWidget {
         key: const Key('path-map'),
         options: fit,
         children: [
-          TileLayer(
-            urlTemplate: CoverageMap.tileUrl,
-            userAgentPackageName: CoverageMap.userAgentPackageName,
-            maxNativeZoom: 19,
-            tileBuilder: (context, tile, _) => ColorFiltered(colorFilter: ColorFilter.matrix(m.tileMatrix), child: tile),
-          ),
+          const BasemapLayer(),
           if (connect && pts.length > 1) PolylineLayer(polylines: [Polyline(points: pts, strokeWidth: 3, color: m.beacon)]),
           MarkerLayer(markers: [
             for (var i = 0; i < placed.length; i++)
@@ -276,12 +272,8 @@ class MessagePathMapScreen extends StatelessWidget {
                 ]),
               ),
           ]),
+          const MiniMapCredit(),
         ],
-      ),
-      Positioned(
-        right: 6,
-        bottom: 4,
-        child: Text('© OpenStreetMap contributors', style: AppType.caption.copyWith(color: AppColors.of(context).textMuted)),
       ),
     ]);
   }

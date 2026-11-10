@@ -11,6 +11,8 @@
 #   FLOW_TEST=integration_test/drive_visual_test.dart DEVICES="iPhone 17 Pro|iPhone SE|iPad Pro 11-inch" scripts/verify_sim.sh <worktree>
 #   scripts/verify_sim.sh <path-to-checkout-or-worktree> [out-dir]
 # Env: DEVICES="iPad Pro 11-inch|iPhone 17 Pro" (| separated name prefixes), MODE=debug|release (default debug),
+#      HARNESS=1 runs any SCREEN/FRAMES/VERIFY_DONE harness (e.g. integration_test/m2_map_visual_test.dart) the drive-matrix
+#      way: built once, one run per VARIANTS appearance.
 #      FLOW_TEST=integration_test/contacts_visual_test.dart runs that flow instead of the all-screens tour (Contacts and DMs).
 #      OFFLINE_MAPS=1 also runs integration_test/offline_maps_test.dart (in-app download of the real CMH pack, then
 #      z10/z14 light/dark shots of the offline map).
@@ -157,7 +159,8 @@ run_drive_variant() {
 }
 
 FAIL=0
-[[ "${FLOW_TEST:-}" == *drive_visual_test.dart ]] && build_drive_harness
+is_harness() { [[ "${FLOW_TEST:-}" == *drive_visual_test.dart || "${HARNESS:-0}" = 1 ]]; }
+is_harness && build_drive_harness
 IFS='|' read -ra LIST <<< "$DEVICES"
 for NAME in "${LIST[@]}"; do
   UDID="$(pick_udid "$NAME" || true)" # no match must reach the message below, not kill the script under set -e/pipefail
@@ -169,7 +172,7 @@ for NAME in "${LIST[@]}"; do
   sim bootstatus "$UDID" -b >/dev/null
   [ -z "${SIM_SET:-}" ] && { open -a Simulator --args -CurrentDeviceUDID "$UDID" 2>/dev/null || true; }
 
-  if [[ "${FLOW_TEST:-}" == *drive_visual_test.dart ]]; then
+  if is_harness; then
     for V in ${VARIANTS:-light:large dark:large light:accessibility-extra-large}; do
       case "$V" in
         light:large) L=light;; dark:large) L=dark;; light:accessibility-extra-large) L=ax3;; *) L="${V//:/-}";;

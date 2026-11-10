@@ -12,6 +12,8 @@
 // Keys (tests): 'privacy-zones-screen', 'zones-map', 'zone-status', 'zone-add', 'zone-add-here', 'zone-add-banner',
 // 'zone-add-cancel', 'zone-tile-<i>', 'zone-editor', 'zone-name', 'zone-radius', 'zone-move', 'zone-here', 'zone-delete',
 // 'zone-trim', 'zone-limit', 'zones-unsupported', 'zones-website'.
+import '../map/overlays/mini_map_credit.dart';
+import '../map/basemap_layer.dart' show BasemapLayer;
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -319,12 +321,7 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
           if (offline != null)
             OfflineBasemapLayer(key: ValueKey('zones-offline-${_pack.code}'), reader: offline)
           else if (_tiles)
-            TileLayer(
-              urlTemplate: CoverageMap.tileUrl,
-              userAgentPackageName: CoverageMap.userAgentPackageName,
-              maxNativeZoom: 19,
-              tileBuilder: (context, tile, _) => ColorFiltered(colorFilter: ColorFilter.matrix(mc.tileMatrix), child: tile),
-            ),
+            const BasemapLayer(),
           CircleLayer(circles: [
             for (var i = 0; i < zones.length; i++)
               CircleMarker(
@@ -364,10 +361,7 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
               ),
           ]),
           if (_tiles && offline == null)
-            const RichAttributionWidget(
-              alignment: AttributionAlignment.bottomLeft,
-              attributions: [TextSourceAttribution('© OpenStreetMap contributors')],
-            ),
+            const MiniMapCredit(),
         ],
       ),
     );

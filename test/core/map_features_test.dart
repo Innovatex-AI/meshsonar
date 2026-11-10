@@ -62,18 +62,24 @@ void main() {
     test('topo is the only one without an offline pack, and credits OpenTopoMap and OSM', () {
       expect([for (final s in BaseMapStyle.values) if (!s.usesOfflinePack) s], [BaseMapStyle.topo]);
       expect(BaseMapStyle.topo.attribution, allOf(contains('OpenTopoMap'), contains('OpenStreetMap')));
-      expect(BaseMapStyle.topo.tileUrl, contains('opentopomap.org'));
+      expect(BaseMapStyle.topo.tileUrl, allOf(contains('opentopomap.org'), contains('{z}'), contains('{x}'), contains('{y}')));
       for (final s in BaseMapStyle.values) {
         expect(s.attribution, contains('OpenStreetMap'));
-        expect(s.tileUrl, allOf(contains('{z}'), contains('{x}'), contains('{y}')));
+      }
+      for (final s in [BaseMapStyle.chart, BaseMapStyle.street, BaseMapStyle.dark]) {
+        expect(s.tileUrl, isNull, reason: '${s.id} is our vector basemap');
+        expect(s.attribution, 'Protomaps © OpenStreetMap contributors');
       }
     });
-    test('grading: chart follows the theme, street and topo are as served, dark is forced', () {
-      expect(BaseMapStyle.chart.ungraded, isFalse);
-      expect(BaseMapStyle.street.ungraded, isTrue);
-      expect(BaseMapStyle.topo.ungraded, isTrue);
+    test('looks: chart follows the theme, Light is always light, Dark always dark; nothing is colour-graded any more', () {
+      expect(BaseMapStyle.chart.darkLook, isNull);
+      expect(BaseMapStyle.street.darkLook, isFalse);
+      expect(BaseMapStyle.dark.darkLook, isTrue);
       expect(BaseMapStyle.dark.forcesDark, isTrue);
       expect(BaseMapStyle.chart.forcesDark, isFalse);
+      for (final s in BaseMapStyle.values) {
+        expect(s.ungraded, isTrue, reason: s.id);
+      }
     });
     test('the style is saved in settings only when it is not the default', () {
       expect(const Settings().toJson().containsKey('base_map_style'), isFalse);
