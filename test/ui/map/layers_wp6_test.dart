@@ -265,6 +265,37 @@ void main() {
       expect(find.textContaining('Range rings'), findsNothing);
     });
 
+    testWidgets('iPad-sized anchored sheet: a finger drag on the list scrolls it to the Palette', (t) async {
+      t.view.physicalSize = const Size(834, 1210);
+      t.view.devicePixelRatio = 1;
+      addTearDown(t.view.reset);
+      final h = Harness();
+      await h.state.init();
+      final model = DriveMapModel(h.state, prefs: _openPrefs());
+      addTearDown(model.dispose);
+      await t.pumpWidget(AppScope(
+        state: h.state,
+        child: MaterialApp(
+          theme: meshSonarTheme(Brightness.light),
+          home: Scaffold(
+            body: Stack(children: [
+              const Positioned.fill(child: ColoredBox(color: Colors.grey)),
+              // The anchored host's bound: 0.75 of the area above a 100 pt dock.
+              Positioned(left: 0, right: 0, bottom: 100, child: ConstrainedBox(constraints: const BoxConstraints(maxHeight: (1210 - 100) * 0.75), child: MapLayersSheet(model: model))),
+            ]),
+          ),
+        ),
+      ));
+      await t.pumpAndSettle();
+      final list = find.descendant(of: find.byKey(const Key('layers-sheet')), matching: find.byType(Scrollable)).first;
+      expect(find.byKey(const Key('layers-palette')), findsNothing);
+      for (var i = 0; i < 20 && find.byKey(const Key('layers-palette')).evaluate().isEmpty; i++) {
+        await t.drag(list, const Offset(0, -250));
+        await t.pumpAndSettle();
+      }
+      expect(find.byKey(const Key('layers-palette')), findsOneWidget, reason: 'every row is reachable by scrolling');
+    });
+
     testWidgets('defaults: This drive and Ping dots on', (t) async {
       final m = await openSheet(t);
       expect(m.layerState.isOn('hexes'), isTrue);

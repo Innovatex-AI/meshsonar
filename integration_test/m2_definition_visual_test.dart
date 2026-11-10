@@ -181,9 +181,18 @@ void main() {
           return Offset(r.center.dx, y);
         }
         var shotNetwork = false;
+        var last = -1.0;
+        bool moved(double px) {
+          final m = px != last;
+          last = px;
+          return m;
+        }
         collect();
         for (var i = 0; i < 16 && (seen.length < names.length || !shotNetwork); i++) {
           await t.dragFrom(visibleIn(list), const Offset(0, -200));
+          // If the drag did not move the list (seen on the iPad simulator), step it directly: the frames need every part.
+          final pos = t.state<ScrollableState>(list).position;
+          if (!moved(pos.pixels)) pos.jumpTo(math.min(pos.pixels + 200, pos.maxScrollExtent));
           await pumpFor(t, const Duration(milliseconds: 700));
           collect();
           final net = find.byKey(const Key('layers-group-network'));
@@ -194,6 +203,8 @@ void main() {
         }
         if (!shotNetwork) await mdframe(t, 'md-03b-layers-network');
         await t.dragFrom(visibleIn(list), const Offset(0, -400));
+        final end = t.state<ScrollableState>(list).position;
+        end.jumpTo(end.maxScrollExtent);
         await pumpFor(t, const Duration(seconds: 1));
         collect();
         final missing = names.where((n) => !seen.contains(n)).toList();
