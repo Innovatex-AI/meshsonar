@@ -1,16 +1,19 @@
 #!/usr/bin/env bash
 # Verify an app build end to end on iOS simulators before hand-off.
 #
+# DEFAULT (Andy, Nov 10 2026, for speed): iPhone 17 Pro only, dark theme only, normal text size. iPad, light and AX3 runs
+# are opt-in (DEVICES=..., VARIANTS=...) for when a change is specifically about them; Andy reports device problems himself.
+#
 # Drive visual matrix (plan WP-H, drive-map-redesign-plan section 22): with FLOW_TEST=integration_test/drive_visual_test.dart the
 # script runs that harness once per device x VARIANT and writes frames to <out>/<device>/<variant>/NN-name.png plus log.txt and a
-# summary.txt. Env: VARIANTS="light:large dark:large light:accessibility-extra-large" (appearance:content-size; AX3 is
+# summary.txt. Env: VARIANTS="dark:large" default (e.g. "light:large dark:large light:accessibility-extra-large") (appearance:content-size; AX3 is
 # accessibility-extra-large), LANDSCAPE=1 also runs the iPad in landscape (light, large). The device "iPhone SE" resolves to the
 # simulator MS-SE3 (375x667), created on demand with simctl. Order per variant: uninstall, install, grant location, set the
 # simulated location, run (the grant comes AFTER the install, the old order made every frame show Location denied, 22.2 a).
 # A run FAILS on any STEPFAIL, MISSING or OVERFLOW line.
 #   FLOW_TEST=integration_test/drive_visual_test.dart DEVICES="iPhone 17 Pro|iPhone SE|iPad Pro 11-inch" scripts/verify_sim.sh <worktree>
 #   scripts/verify_sim.sh <path-to-checkout-or-worktree> [out-dir]
-# Env: DEVICES="iPad Pro 11-inch|iPhone 17 Pro" (| separated name prefixes), MODE=debug|release (default debug),
+# Env: DEVICES="iPhone 17 Pro" default (| separated name prefixes, e.g. "iPhone 17 Pro|iPad Pro 11-inch"), MODE=debug|release (default debug),
 #      HARNESS=1 runs any SCREEN/FRAMES/VERIFY_DONE harness (e.g. integration_test/m2_map_visual_test.dart) the drive-matrix
 #      way: built once, one run per VARIANTS appearance.
 #      FLOW_TEST=integration_test/contacts_visual_test.dart runs that flow instead of the all-screens tour (Contacts and DMs).
@@ -36,7 +39,7 @@ SRC="${1:?usage: verify_sim.sh <checkout> [out-dir]}"
 SRC="$(cd "$SRC" && pwd)"
 OUT="${2:-$HOME/meshsonar-verify/$(basename "$SRC")-$(date +%Y%m%d-%H%M%S)}"
 MODE="${MODE:-debug}"
-DEVICES="${DEVICES:-iPad Pro 11-inch|iPhone 17 Pro}"
+DEVICES="${DEVICES:-iPhone 17 Pro}"
 BUNDLE=com.meshsonar.app
 mkdir -p "$OUT"
 cd "$SRC"
@@ -173,7 +176,7 @@ for NAME in "${LIST[@]}"; do
   [ -z "${SIM_SET:-}" ] && { open -a Simulator --args -CurrentDeviceUDID "$UDID" 2>/dev/null || true; }
 
   if is_harness; then
-    for V in ${VARIANTS:-light:large dark:large light:accessibility-extra-large}; do
+    for V in ${VARIANTS:-dark:large}; do
       case "$V" in
         light:large) L=light;; dark:large) L=dark;; light:accessibility-extra-large) L=ax3;; *) L="${V//:/-}";;
       esac
@@ -183,6 +186,7 @@ for NAME in "${LIST[@]}"; do
     sim ui "$UDID" content_size large; sim ui "$UDID" appearance light
     continue
   fi
+  sim ui "$UDID" appearance "${TOUR_APPEARANCE:-dark}"   # the screen tour runs in one theme (default dark, Andy Nov 10)
   echo "-- build ($MODE, simulator)"
   flutter build ios --simulator "--$MODE" 2>&1 | tail -3 | tee "$D/build.log"
   APP="$SRC/build/ios/iphonesimulator/Runner.app"
