@@ -193,7 +193,7 @@ class StatsFigures extends StatelessWidget {
       (AppScope.unitsOf(context).isImperial ? 'Miles driven' : 'Km driven', s.km == null ? '—' : AppScope.unitsOf(context).total(s.km! * 1000, groupInt).split(' ').first),
       ('Pings', _n(s.pings)),
       ('Pings heard', _pct(s.heardPct)),
-      ('Squares heard', _pct(s.cellsHeardPct)),
+      ('Cells heard', _pct(s.cellsHeardPct)),
       ('Repeaters heard', _n(s.repeatersHeard)),
       ('Last drive', s.lastDriveAt == null ? '—' : agoText(s.lastDriveAt)),
     ];
@@ -254,7 +254,7 @@ class LeaderboardView extends StatelessWidget {
             selected: highlight != null && r.callsign.toLowerCase() == highlight,
             leading: CircleAvatar(radius: 14, child: Text('${r.rank}')),
             title: Text(highlight != null && r.callsign.toLowerCase() == highlight ? '${r.callsign} (you)' : r.callsign),
-            subtitle: Text('${r.drives} drives · ${r.cells} squares · ${r.repeatersHeard} repeaters'),
+            subtitle: Text('${r.drives} drives · ${r.cells} cells · ${r.repeatersHeard} repeaters'),
             trailing: Text(AppScope.unitsOf(context).distance(r.km * 1000)),
           ),
       ],
