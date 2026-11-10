@@ -31,6 +31,7 @@ const _frames = <String>[
   'md-01-cmh-map',
   'md-02-legend-open',
   'md-03-layers-top',
+  'md-03b-layers-network',
   'md-04-layers-filters',
   'md-05-colour-blind',
   'md-06-repeater-rings',
@@ -152,17 +153,32 @@ void main() {
     await step('layers', () async {
       if (!await tapKey(t, ['drive-map-layers'], wait: const Duration(seconds: 2))) throw StateError('no Layers button');
       if (find.byKey(const Key('layers-sheet')).evaluate().isEmpty) throw StateError('Layers sheet did not open');
-      for (final g in ['coverage', 'network', 'context']) {
-        if (find.byKey(Key('layers-group-$g'), skipOffstage: false).evaluate().isEmpty) throw StateError('no $g group');
+      try {
+        if (find.byKey(const Key('layers-group-coverage')).evaluate().isEmpty) throw StateError('no coverage group');
+        await mdframe(t, 'md-03-layers-top');
+        // The sheet's list is lazy: scroll each later group into view (the website panel's order).
+        final list = find.descendant(of: find.byKey(const Key('layers-sheet')), matching: find.byType(Scrollable)).first;
+        for (final key in ['layers-group-network', 'layer-network', 'layers-group-context']) {
+          await t.scrollUntilVisible(find.byKey(Key(key)), 160, scrollable: list, maxScrolls: 40);
+        }
+        await pumpFor(t, const Duration(seconds: 1));
+        for (final name in ['Moving phones', 'Observers', 'All MeshCore repeaters', 'Link lines', 'Region borders']) {
+          expectText('layers network', name);
+        }
+        await mdframe(t, 'md-03b-layers-network');
+        for (final key in ['layers-group-filters', 'layers-group-palette', 'layers-palette']) {
+          await t.scrollUntilVisible(find.byKey(Key(key)), 160, scrollable: list, maxScrolls: 40);
+        }
+        await pumpFor(t, const Duration(seconds: 1));
+        expectText('layers', 'Measured in');
+        expectText('layers', 'Drives from');
+        await mdframe(t, 'md-04-layers-filters');
+      } finally {
+        await dismiss(t);
       }
-      await mdframe(t, 'md-03-layers-top');
-      await tapKey(t, ['layers-palette'], wait: const Duration(seconds: 1), quiet: true); // scrolls Filters + Palette into view
-      expectText('layers', 'Measured in');
-      expectText('layers', 'Drives from');
-      await mdframe(t, 'md-04-layers-filters');
-      await dismiss(t);
     });
     await step('rings', () async {
+      if (find.byKey(const Key('layers-sheet')).evaluate().isNotEmpty) await dismiss(t);
       await toMapTab(t);
       MainMapFocus.request(const LatLng(40.0995, -82.94), 13);
       await pumpFor(t, const Duration(seconds: 10));

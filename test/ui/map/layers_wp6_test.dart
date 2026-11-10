@@ -265,6 +265,12 @@ void main() {
       expect(find.textContaining('Range rings'), findsNothing);
     });
 
+    testWidgets('defaults: This drive and Ping dots on', (t) async {
+      final m = await openSheet(t);
+      expect(m.layerState.isOn('hexes'), isTrue);
+      expect(t.widget<Switch>(find.byKey(const Key('layer-hexes'))).value, isTrue);
+    });
+
     testWidgets('a layer that is off shows the definition hint; Predicted / Heard say they are not on an old server', (t) async {
       final m = await openSheet(t);
       expect(m.layerState.isOn('network'), isFalse);
