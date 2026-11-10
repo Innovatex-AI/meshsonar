@@ -5,6 +5,23 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+## [0.32.0+57] — 2026-11-09 — our own map tiles everywhere, offline packs with coverage (plan M2, basemap half)
+
+- **Every map draws MeshSonar's own map** (unified map plan §2.3, M2): the Drive map and all the small maps (repeater,
+  reach, your drives, Where to drive, contact, message path, plan tools, drive report, live packets, privacy zones, home
+  observer) now draw our Protomaps vector tiles from api.meshsonar.com/basemap, in the website's own light and dark styles,
+  with labels in SF Pro. OpenFreeMap takes over by itself when our tiles fail (health check once a minute, 4 tile errors) or
+  outside North America. OpenStreetMap's community tile server is no longer used anywhere; a test fails if it comes back.
+- **Credits on every map** name the map you are looking at: "Protomaps © OpenStreetMap contributors", or OpenFreeMap's credit
+  on the fallback. Four small maps that showed only a fixed OSM line (or none in the map corner) now use the shared credit.
+  The Credits sheet explains the base map and links protomaps.com and openfreemap.org.
+- Base map styles: Chart (follows the app theme), **Light** (was "Street": always the light map, for bright sun), Dark, Topo.
+  The tiles are no longer colour-graded on the phone: they are drawn in the right colours.
+- **Offline packs** are being rebuilt from the same tiles plus the region's coverage (measured and predicted) and
+  repeaters: the app reads the new pack list from api.meshsonar.com/basemap/packs/, installs the coverage snapshot with the
+  pack (checksum-verified, never replacing a good copy with a bad one), refreshes it at most every 12 hours on Wi-Fi, and
+  draws it when the network fails. Until the new packs are published the old ones keep working as before.
+
 ## [0.31.1+56] — 2026-11-09 — drive positions kept only for the part your drive keeps (contract 8.7)
 
 - **Privacy fix (fail closed):** the exact observer positions sent during a drive are now held by the server until the

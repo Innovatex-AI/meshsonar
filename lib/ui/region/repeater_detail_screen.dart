@@ -3,6 +3,7 @@
 // not found in this region, offline/error with retry, and the server's own `Sourced` state (partial / pending /
 // stale / unavailable) shown as a banner. Unknown values render as "unknown", never as zero.
 // Ends with "Your drives" (your_drives_section.dart): how the drives stored on this phone heard this repeater.
+import '../map/basemap_layer.dart' show BasemapLayer;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -14,7 +15,6 @@ import 'package:latlong2/latlong.dart' hide Path;
 import '../../core/repeater_detail_api.dart';
 import '../app.dart' show AppScope;
 import '../charts/sparkline.dart';
-import '../map/coverage_map.dart';
 import '../theme.dart';
 import '../repeater_reach_section.dart';
 import '../your_drives_section.dart';
@@ -463,15 +463,7 @@ class _RepeaterDetailScreenState extends State<RepeaterDetailScreen> {
                 ),
                 children: [
                   if (widget.mapTiles)
-                    TileLayer(
-                      urlTemplate: CoverageMap.tileUrl,
-                      userAgentPackageName: CoverageMap.userAgentPackageName,
-                      maxNativeZoom: 19,
-                      tileBuilder: (context, tile, _) => ColorFiltered(
-                        colorFilter: ColorFilter.matrix(m.tileMatrix),
-                        child: tile,
-                      ),
-                    ),
+                    const BasemapLayer(),
                   MarkerLayer(
                     markers: [
                       Marker(

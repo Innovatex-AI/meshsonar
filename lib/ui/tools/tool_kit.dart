@@ -1,6 +1,7 @@
 // Shared pieces of the Tools screens: the page that explains "no radio" in plain words, a button with a visible cooldown,
 // the airtime note, notes with an icon AND words (colour never carries meaning alone), the small map, and formatters.
 // Every Tools screen is built from these so the empty / disconnected / busy / error states read the same everywhere.
+import '../map/basemap_layer.dart' show BasemapLayer;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -9,7 +10,6 @@ import 'package:latlong2/latlong.dart';
 
 import '../../radio/session.dart' show LinkState;
 import '../../radio/tools/radio_tools.dart';
-import '../map/coverage_map.dart' show CoverageMap;
 import '../theme.dart';
 import 'tools_host.dart';
 import '../map/overlays/mini_map_credit.dart';
@@ -458,12 +458,7 @@ class ToolMap extends StatelessWidget {
             ),
             children: [
               if (tilesEnabled)
-                TileLayer(
-                  urlTemplate: CoverageMap.tileUrl,
-                  userAgentPackageName: CoverageMap.userAgentPackageName,
-                  maxNativeZoom: 19,
-                  tileBuilder: (context, tile, _) => ColorFiltered(colorFilter: ColorFilter.matrix(m.tileMatrix), child: tile),
-                ),
+                const BasemapLayer(),
               if (lines.isNotEmpty)
                 PolylineLayer(polylines: [
                   for (final l in lines)

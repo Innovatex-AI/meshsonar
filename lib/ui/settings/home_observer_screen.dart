@@ -4,6 +4,7 @@
 // The owner chooses how the public map shows it: exact, or rounded to about 1 km. While it is on, the screen stays awake,
 // the radio is reconnected by itself, and a heartbeat goes to the server every 5 minutes so the Observers layer on the
 // website shows it as up. Turning it off deletes the home position on the server (back to a moving observer).
+import '../map/basemap_layer.dart' show BasemapLayer;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -231,12 +232,7 @@ class _HomeObserverScreenState extends State<HomeObserverScreen> {
             ),
             children: [
               if (_tiles)
-                TileLayer(
-                  urlTemplate: CoverageMap.tileUrl,
-                  userAgentPackageName: CoverageMap.userAgentPackageName,
-                  maxNativeZoom: 19,
-                  tileBuilder: (context, tile, _) => ColorFiltered(colorFilter: ColorFilter.matrix(mc.tileMatrix), child: tile),
-                ),
+                const BasemapLayer(),
               if (pin != null && pub != null && _public == HomeLocationPublic.rounded1km)
                 CircleLayer(circles: [
                   CircleMarker(

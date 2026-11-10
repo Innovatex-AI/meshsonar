@@ -1,6 +1,8 @@
 // Shared pieces of the native Plan tools (airtime, presets, link, painter, coverage check, field data): the page frame,
 // section cards, the offline "as of" row, a labelled slider, the point picker (typed coordinates + "my location" + map tap)
 // and the small tap-to-place map. Same look as the Tools screens: plain words, icon AND text for every state.
+import '../map/overlays/mini_map_credit.dart';
+import '../map/basemap_layer.dart' show BasemapLayer;
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -12,7 +14,6 @@ import '../../app/app_state.dart';
 import '../../core/region_cache.dart' show asOfLabel;
 import '../pick_field.dart';
 import '../app.dart';
-import '../map/coverage_map.dart' show CoverageMap;
 import '../map/region_center.dart';
 
 /// A Plan tool page: app bar, safe area, a reading column (an iPad would otherwise stretch the cards across 1,100 dp).
@@ -436,12 +437,7 @@ class _PlanMapState extends State<PlanMap> {
               onTap: widget.onTap == null ? null : (_, p) => widget.onTap!(p),
             ),
             children: [
-              TileLayer(
-                urlTemplate: CoverageMap.tileUrl,
-                userAgentPackageName: CoverageMap.userAgentPackageName,
-                maxNativeZoom: 19,
-                tileBuilder: (context, tile, _) => ColorFiltered(colorFilter: ColorFilter.matrix(m.tileMatrix), child: tile),
-              ),
+              const BasemapLayer(),
               if (widget.polygons.isNotEmpty)
                 PolygonLayer(polygons: [
                   for (final g in widget.polygons) Polygon(points: g.ring, color: g.color.withValues(alpha: 0.45), borderStrokeWidth: 0, hitValue: null),
@@ -464,7 +460,7 @@ class _PlanMapState extends State<PlanMap> {
                           ),
                   ),
               ]),
-              const RichAttributionWidget(alignment: AttributionAlignment.bottomLeft, attributions: [TextSourceAttribution('© OpenStreetMap contributors')]),
+              const MiniMapCredit(),
             ],
           ),
         ),

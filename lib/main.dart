@@ -10,6 +10,7 @@ import 'app/wiring.dart';
 import 'platform/map_prefs_store.dart' show openSharedMapPrefs;
 import 'ui/app.dart';
 import 'ui/device_feedback.dart' show PlatformDeviceFeedback;
+import 'ui/map/offline_basemap.dart' show OfflineBasemap;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,6 +18,8 @@ Future<void> main() async {
     final services = await buildRealServices();
     // The map's remembered choices (layers, follow options) are read before the first frame so the Drive map never flashes defaults.
     await openSharedMapPrefs();
+    // Offline packs' coverage snapshots stand in for the coverage layers when the network fails (M2).
+    AppState.coverageOfflineTiles = OfflineBasemap.instance.coverageTile;
     final state = AppState(services);
     // Home observer keeps the screen awake while it is on (lib/app/app_state.dart _applyHomeMode).
     state.keepAwakeHook = (on) => unawaited(const PlatformDeviceFeedback().keepAwake(on));
@@ -36,6 +39,7 @@ Future<void> main() async {
       return null;
     }));
     alerts?.startLaunchReconnect();
+    unawaited(OfflineBasemap.instance.refreshCoverageWhenStale());
   } catch (e) {
     runApp(StartupErrorApp(message: e.toString()));
   }

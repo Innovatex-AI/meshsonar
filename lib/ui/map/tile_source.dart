@@ -325,18 +325,27 @@ class MeshTileProvider extends TileProvider {
   // ---- the load, separate from the ImageProvider so tests call it directly ----
 
   /// Resolves one tile to image bytes (a transparent PNG when there is nothing to show).
-  Future<Uint8List> load(String url, {required bool skip, required Future<void> cancel}) async {
+  Future<Uint8List> load(String url, {required bool skip, required Future<void> cancel}) async => (await loadWithOutcome(url, skip: skip, cancel: cancel)).$1;
+
+  /// [load], plus what happened (the vector basemap counts failures for its fallback to OpenFreeMap).
+  Future<(Uint8List, TileOutcome)> loadWithOutcome(String url, {required bool skip, required Future<void> cancel}) async {
     TileFetchGate._pendingLoads++;
+    var outcome = TileOutcome.failed;
     try {
-      return await _load(url, skip: skip, cancel: cancel);
+      final b = await _load(url, skip: skip, cancel: cancel, seen: (o) => outcome = o);
+      return (b, outcome);
     } finally {
       TileFetchGate._pendingLoads--;
     }
   }
 
-  Future<Uint8List> _load(String url, {required bool skip, required Future<void> cancel}) async {
+  Future<Uint8List> _load(String url, {required bool skip, required Future<void> cancel, required void Function(TileOutcome) seen}) async {
+    void rec(TileOutcome o) {
+      stats.record(o);
+      seen(o);
+    }
     if (skip) {
-      stats.record(TileOutcome.packCovered);
+      rec(TileOutcome.packCovered);
       return TileProvider.transparentImage;
     }
     CachedMapTile? cached;
@@ -350,15 +359,15 @@ class MeshTileProvider extends TileProvider {
     }
     final fresh = cached != null && !cached.metadata.isStale;
     if (fresh) {
-      stats.record(TileOutcome.cacheHit);
+      rec(TileOutcome.cacheHit);
       return cached.bytes;
     }
     if (!gate.mayRequest) {
       if (cached != null) {
-        stats.record(TileOutcome.staleServed);
+        rec(TileOutcome.staleServed);
         return cached.bytes;
       }
-      stats.record(TileOutcome.offlineEmpty);
+      rec(TileOutcome.offlineEmpty);
       return TileProvider.transparentImage;
     }
     var cancelled = false;
@@ -367,10 +376,10 @@ class MeshTileProvider extends TileProvider {
     if (permit == null || cancelled) {
       permit?.release();
       if (cancelled) {
-        stats.record(TileOutcome.cancelled);
+        rec(TileOutcome.cancelled);
       } else {
         // dropped from a long queue or the gate closed while waiting
-        stats.record(cached != null ? TileOutcome.staleServed : TileOutcome.offlineEmpty);
+        rec(cached != null ? TileOutcome.staleServed : TileOutcome.offlineEmpty);
       }
       return cached?.bytes ?? TileProvider.transparentImage;
     }
@@ -396,13 +405,20 @@ class MeshTileProvider extends TileProvider {
         timer.cancel();
         if (res.statusCode == 304 && cached != null) {
           gate.recordSuccess();
-          stats.record(TileOutcome.notModified);
+          rec(TileOutcome.notModified);
           _store(url, res.headers, null);
           return cached.bytes;
         }
+        if (res.statusCode == 204) {
+          // A vector tile server's "nothing here" (our basemap answers 204 for an empty tile): an empty tile, not a failure.
+          gate.recordSuccess();
+          rec(TileOutcome.networkOk);
+          _store(url, res.headers, Uint8List(0));
+          return Uint8List(0);
+        }
         if (res.statusCode == 200 && bytes.isNotEmpty) {
           gate.recordSuccess();
-          stats.record(TileOutcome.networkOk);
+          rec(TileOutcome.networkOk);
           _store(url, res.headers, bytes);
           return bytes;
         }
@@ -411,18 +427,18 @@ class MeshTileProvider extends TileProvider {
         timer.cancel();
         if (timedOut) {
           gate.recordFailure();
-          stats.record(cached != null ? TileOutcome.staleServed : TileOutcome.failed);
+          rec(cached != null ? TileOutcome.staleServed : TileOutcome.failed);
         } else {
-          stats.record(TileOutcome.cancelled);
+          rec(TileOutcome.cancelled);
         }
         return cached?.bytes ?? TileProvider.transparentImage;
       } catch (_) {
         timer.cancel();
         if (cancelled) {
-          stats.record(TileOutcome.cancelled);
+          rec(TileOutcome.cancelled);
         } else {
           gate.recordFailure();
-          stats.record(cached != null ? TileOutcome.staleServed : TileOutcome.failed);
+          rec(cached != null ? TileOutcome.staleServed : TileOutcome.failed);
         }
         return cached?.bytes ?? TileProvider.transparentImage;
       }

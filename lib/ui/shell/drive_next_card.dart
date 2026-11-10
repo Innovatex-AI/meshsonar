@@ -1,6 +1,7 @@
 // Plan tab, "Where to drive next": measured-coverage gaps near the phone, from the network coverage the app already holds
 // (lib/core/drive_next.dart). A small map, a list with distance and direction, and "Navigate" into Apple Maps. Every state
 // says what to do: no location, loading, failed, nothing to find.
+import '../map/basemap_layer.dart' show BasemapLayer;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:h3_flutter/h3_flutter.dart' show H3;
@@ -14,7 +15,6 @@ import '../../core/units.dart' show Units;
 import '../app.dart';
 import '../../core/coverage_v2.dart' show CoverageBand;
 import '../map/coverage_bands.dart' show CoverageBandColors;
-import '../map/coverage_map.dart' show CoverageMap;
 import '../design/app_surfaces.dart';
 import '../map/overlays/mini_map_credit.dart';
 
@@ -275,15 +275,7 @@ class _DriveNextCardState extends State<DriveNextCard> {
             ),
           ),
           children: [
-            TileLayer(
-              urlTemplate: CoverageMap.tileUrl,
-              userAgentPackageName: CoverageMap.userAgentPackageName,
-              maxNativeZoom: 19,
-              tileBuilder: (context, tile, _) => ColorFiltered(
-                colorFilter: ColorFilter.matrix(m.tileMatrix),
-                child: tile,
-              ),
-            ),
+            const BasemapLayer(),
             MarkerLayer(
               markers: [
                 for (final x in targets)

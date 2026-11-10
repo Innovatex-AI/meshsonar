@@ -3,6 +3,7 @@
 // map, never the raw track. Says plainly that it is from drives on this phone; the website's "where MeshSonar drives
 // heard it" (repeater-reach) needs an auth the app does not have (stream 5 design doc, server request P1-b).
 // Needs AppScope for the drive store; without one (isolated widget tests of a screen) it renders nothing.
+import 'map/basemap_layer.dart' show BasemapLayer;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -200,12 +201,7 @@ class _CellMap extends StatelessWidget {
             ),
             children: [
               if (tiles)
-                TileLayer(
-                  urlTemplate: CoverageMap.tileUrl,
-                  userAgentPackageName: CoverageMap.userAgentPackageName,
-                  maxNativeZoom: 19,
-                  tileBuilder: (context, tile, _) => ColorFiltered(colorFilter: ColorFilter.matrix(m.tileMatrix), child: tile),
-                ),
+                const BasemapLayer(),
               PolygonLayer(polygons: [
                 for (final c in history.cells)
                   Polygon(

@@ -35,7 +35,7 @@ Every platform dependency sits behind an interface or a function in `AppServices
 | Share | `AppServices.shareFile(File)` | `shareDriveFile` (share_plus) | Takes a `dart:io File`. A web port needs a bytes-based variant (download). |
 | Wake lock + haptics | `DeviceFeedback` (`ui/device_feedback.dart`) | `wakelock_plus`, `HapticFeedback` | Already no-op tolerant. |
 | Background operation | Platform config + `GeolocatorLocationSource._settings()` | Android foreground-service notification; iOS `allowBackgroundLocationUpdates` + `UIBackgroundModes` | See the per-target sections below. |
-| Map tiles | `CoverageMap.tileUrl` | `https://tile.openstreetmap.org/{z}/{x}/{y}.png` with UA package `com.meshsonar.app` | See ROADMAP: heavy use needs another provider. |
+| Map tiles | `OurBasemap` (`lib/core/basemap.dart`) | `https://api.meshsonar.com/basemap/t/<archive>/{z}/{x}/{y}.bin` (our Protomaps vector tiles), OpenFreeMap fallback | See docs/MAP_TILES.md. |
 | Clock and ids | `AppServices.clock`, `newId` | `DateTime.now`, UUID v4 | Tests inject fakes. |
 | Theme override | env `MESHSONAR_THEME=dark\|light` | desktop only | For screenshots. |
 

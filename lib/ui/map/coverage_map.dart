@@ -92,7 +92,8 @@ import '../../core/map_filter.dart' show GeoBounds;
 import '../../core/map_styles.dart';
 import 'cell_raster_layer.dart';
 import 'tile_source.dart';
-import '../../core/offline_packs.dart' show NetworkKind;
+import '../../core/offline_packs.dart' show NetworkKind, PackSchema;
+import '../../core/basemap.dart' show BasemapSource, BasemapSourceX, OurBasemap;
 import '../../platform/map_prefs_store.dart' show openSharedMapPrefs;
 import 'live_puck.dart';
 import 'map_layers.dart';
@@ -110,6 +111,7 @@ import 'parts/simulated_tag.dart';
 import 'parts/source_chip.dart';
 
 export 'parts/simulated_tag.dart' show SimulatedTag;
+import 'basemap_layer.dart';
 import 'offline_basemap.dart';
 import 'sheets/map_hit_sheet.dart';
 import '../ping_detail_sheet.dart' show PingDetailSheet;
@@ -180,8 +182,8 @@ Color hexColor(MeshSonarColors c, HexCell h, PingColorMode mode) => mode == Ping
 /// unknown) is purple in every palette.
 Color networkLevelColor(BuildContext context, CoverageLevel level) => MeshSonarColors.of(context).levelColor(level);
 
-/// The colour matrix [style]'s online tiles are drawn through: Chart follows the theme's [themeMatrix], Dark is always the dark
-/// chart grading, Street and Topo are shown as the tile server made them (null).
+/// The colour matrix [style]'s online raster tiles are drawn through. Since M2 none: Chart / Light / Dark are our vector
+/// tiles already drawn in the website's light / dark styles, and Topo is shown as its tile server made it.
 List<double>? tileMatrixFor(BaseMapStyle style, List<double> themeMatrix) =>
     style.ungraded ? null : (style.forcesDark ? kDarkTileMatrix : themeMatrix);
 
@@ -414,7 +416,6 @@ class CoverageMap extends StatefulWidget {
   @visibleForTesting
   static H3? hexEngine = loadHexEngine();
 
-  static const String tileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
   static const String userAgentPackageName = 'com.meshsonar.app';
 
   @override
@@ -1687,7 +1688,9 @@ class _CoverageMapState extends State<CoverageMap> {
             ChartGrid(color: mc.mapGrid),
             // Online + disk-cached tiles everywhere, except where an installed offline pack draws (no request for those); the
             // pack's vector tiles go on top of that. Where a pack ends the online/cached tiles carry on: never a blank edge.
-            if (tiles)
+            // Chart / Light / Dark: our vector basemap (OpenFreeMap fallback), every tile through the same cache and gate.
+            if (tiles && style.isVector) BasemapLayer(key: ValueKey('basemap-${style.id}'), dark: style.darkLook, tiles: _tiles(), reset: _tileReset.stream),
+            if (tiles && !style.isVector)
               TileLayer(
                 key: ValueKey('tiles-${style.id}'),
                 urlTemplate: style.tileUrl,
@@ -1696,15 +1699,9 @@ class _CoverageMapState extends State<CoverageMap> {
                 tileProvider: _tiles(),
                 reset: _tileReset.stream,
                 tileDisplay: const TileDisplay.fadeIn(duration: Duration(milliseconds: 150)),
-                // Wide viewports (iPad, 4.21) keep and pre-load more rings so a pan or a first paint shows tiles, not grey squares;
-                // the chart grid underneath stays as the fallback for any tile that is still on its way.
-                // On a phone the map is full bleed (about 40 tiles with a ring of pre-load), and the public tile servers answer in 2-4 s
-                // per tile through the 6-request gate: pre-loading a ring meant the visible tiles waited behind tiles nobody could see
-                // yet and the map stayed blank for ~15 s. Phones load the viewport only (panBuffer 0); keepBuffer 1 keeps the tiles
-                // just left behind.
+                // Phones load the viewport only (panBuffer 0) so the visible tiles never wait behind tiles nobody sees yet.
                 keepBuffer: wide ? 4 : 1,
                 panBuffer: wide ? 1 : 0,
-                // Street and Topo are drawn as the tile server made them; Chart is graded to the theme, Dark to the dark chart.
                 tileBuilder: tileGrading == null
                     ? null
                     : (context, tile, _) => ColorFiltered(colorFilter: ColorFilter.matrix(tileGrading), child: tile),
@@ -1713,8 +1710,9 @@ class _CoverageMapState extends State<CoverageMap> {
               OfflineBasemapLayer(
                 key: ValueKey('offline-pack-${_pack.code}${style == BaseMapStyle.chart ? '' : '-${style.id}'}'),
                 reader: offlinePack,
-                // Dark forces the dark look; Street and Chart draw the pack in the light look unless the app theme is dark.
-                dark: style.forcesDark ? true : (style == BaseMapStyle.street ? false : null),
+                schema: _pack.basemap.managerOrNull?.installed[_pack.code]?.schema ?? PackSchema.openmaptiles,
+                // Dark forces the dark look, Light the light look; Chart follows the app theme.
+                dark: style.darkLook,
               ),
             if (tiles && style.usesOfflinePack) ..._packOutlines(mc),
             if (widget.coverageV2 case final v2? when v2.drawTiles) ...[
@@ -1910,20 +1908,37 @@ class _CoverageMapState extends State<CoverageMap> {
       controls: _controls(context, pos, latest),
       bottom: _bottomColumn(context, tiles, mc, t),
       // The credit: always mounted (Drive plan section 8), bottom-right, tapped (i) opens the Credits sheet.
-      attribution: networkSource == null
-          ? AttributionLine(style: style, onInfo: () => _openCredits(context, style, tiles, null))
-          : ListenableBuilder(
-              listenable: networkSource,
-              builder: (context, _) {
-                final meshCore = showNetwork && networkSource.globalPoints.length > 0;
-                return AttributionLine(
-                  style: style,
-                  showMeshCore: meshCore,
-                  onInfo: () => _openCredits(context, style, tiles, meshCore ? (networkSource.feed.global.attribution ?? 'MeshCore Map') : null),
+      attribution: BasemapSourceBuilder(
+        controller: _controller,
+        builder: (context, source) {
+          final credit = _creditText(style, source, offlinePack != null);
+          return networkSource == null
+              ? AttributionLine(style: style, text: credit, onInfo: () => _openCredits(context, style, tiles, null))
+              : ListenableBuilder(
+                  listenable: networkSource,
+                  builder: (context, _) {
+                    final meshCore = showNetwork && networkSource.globalPoints.length > 0;
+                    return AttributionLine(
+                      style: style,
+                      text: credit,
+                      showMeshCore: meshCore,
+                      onInfo: () => _openCredits(context, style, tiles, meshCore ? (networkSource.feed.global.attribution ?? 'MeshCore Map') : null),
+                    );
+                  },
                 );
-              },
-            ),
+        },
+      ),
     );
+  }
+
+  /// The credit of what the base map draws now: Topo's own line, the offline pack's, or the online source's (ours / OpenFreeMap).
+  String _creditText(BaseMapStyle style, BasemapSource source, bool packDrawn) {
+    if (!style.isVector) return style.attribution;
+    if (packDrawn) {
+      final ip = _pack.basemap.managerOrNull?.installed[_pack.code];
+      return ip == null || ip.schema == PackSchema.protomaps ? OurBasemap.attribution : '© OpenStreetMap contributors';
+    }
+    return source.attribution;
   }
 
   void _openCredits(BuildContext context, BaseMapStyle style, bool tiles, String? meshCoreCredit) {

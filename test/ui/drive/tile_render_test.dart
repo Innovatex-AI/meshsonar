@@ -1,4 +1,5 @@
-// Real tile pixels on the real Drive screen: serves real OSM / OpenTopoMap tiles (fetched once into TILE_DIR, default
+// Real tile pixels on the real Drive screen (raster Topo since M2; Chart / Light / Dark are our vector basemap, rendered and
+// checked in test/ui/map/basemap_styles_test.dart and on the simulator): serves real OpenTopoMap tiles (fetched once into TILE_DIR, default
 // <system temp>/meshsonar-tiles; any z/x/y gets the nearest real tile so the camera position does not matter), renders the Drive screen
 // at 393x852 for every base style and writes PNGs to TILE_OUT. Asserts the map area shows tile colours (not a flat fill).
 // Without real tiles in TILE_DIR every test returns at once (nothing to render), like the other environment-dependent tests.
@@ -16,6 +17,7 @@ import 'package:meshsonar/app/app_flags.dart';
 import 'package:meshsonar/app/app_state.dart';
 import 'package:meshsonar/ui/app.dart';
 import 'package:meshsonar/ui/drive_screen.dart';
+import 'package:meshsonar/ui/map/basemap_layer.dart' show BasemapLayer;
 import 'package:meshsonar/ui/map/coverage_map.dart';
 
 import '../fakes.dart';
@@ -33,7 +35,7 @@ File? tileFor(String kind) {
 
 void main() {
   final key = GlobalKey();
-  for (final style in ['chart', 'street']) {
+  for (final style in ['topo']) {
     testWidgets('inside the real app shell: $style', (tester) async {
       final osm = tileFor('osm');
       if (osm == null) return;
@@ -136,7 +138,8 @@ void main() {
     await tester.runAsync(() => Future<void>.delayed(const Duration(seconds: 5)));
     await settle();
     await settle();
-    expect(tester.widget<TileLayer>(find.byType(TileLayer)).urlTemplate, contains('tile.openstreetmap.org'));
+    expect(find.byType(BasemapLayer), findsOneWidget, reason: 'Chart is our vector basemap');
+    expect(find.byType(TileLayer), findsNothing);
     await tester.tap(find.byKey(const Key('drive-map-layers')));
     await tester.runAsync(() => Future<void>.delayed(const Duration(seconds: 1)));
     await settle();
@@ -163,7 +166,7 @@ void main() {
     await tester.pump(const Duration(seconds: 25));
   });
 
-  for (final style in ['chart', 'street', 'dark', 'topo']) {
+  for (final style in ['topo']) {
     for (final state in ['idle']) {
       testWidgets('tiles visible: $style $state', (tester) async {
         final osm = tileFor('osm'), topo = tileFor('topo');

@@ -4,6 +4,8 @@
 // Opened from the drive detail screen ("Report") and from the Drive screen's "View drive report" card.
 // The numbers come from lib/core/drive_report.dart, computed once per open (async; fine for drives of thousands of
 // pings). The v2 chart sections live in drive_report_sections.dart.
+import '../map/overlays/mini_map_credit.dart';
+import '../map/basemap_layer.dart' show BasemapLayer;
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -561,12 +563,7 @@ class _CellMap extends StatelessWidget {
             ),
             children: [
               if (tiles)
-                TileLayer(
-                  urlTemplate: CoverageMap.tileUrl,
-                  userAgentPackageName: CoverageMap.userAgentPackageName,
-                  maxNativeZoom: 19,
-                  tileBuilder: (context, tile, _) => ColorFiltered(colorFilter: ColorFilter.matrix(m.tileMatrix), child: tile),
-                ),
+                const BasemapLayer(),
               PolygonLayer(polygons: [
                 for (final c in r.cells)
                   Polygon(
@@ -587,10 +584,7 @@ class _CellMap extends StatelessWidget {
                   pill: tiles,
                 ),
               if (tiles)
-                const RichAttributionWidget(
-                  showFlutterMapAttribution: false,
-                  attributions: [TextSourceAttribution('OpenStreetMap contributors')],
-                ),
+                const MiniMapCredit(),
             ],
           ),
         ),

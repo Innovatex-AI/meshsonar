@@ -1,8 +1,15 @@
-// Offline region map packs: a versioned manifest of per-region PMTiles files (our own OSM-derived vector tiles, built by
-// meshsonar-infra/scripts/tiles/build-region-pack.sh), a resumable downloader and storage accounting. Pure Dart.
+// Offline region map packs: a versioned manifest of per-region PMTiles files, a resumable downloader and storage accounting.
+// Pure Dart.
 //
-// Privacy/hosts: the manifest is a public static file on the MeshSonar tiles host (R2 behind tiles.meshsonar.com); pack URLs must be https and on the SAME host as
-// the manifest (no wildcard, no third-party CDN without a spec decision). No driver key or identifier is ever sent here.
+// Since M2 (plan unified-map-system §2.3) a pack is the region's road basemap cut from OUR Protomaps tiles (the same tiles
+// and style the online map draws, schema "protomaps") plus a coverage snapshot (Measured + Predicted coverage v2 tiles of
+// the region's default preset, `<CODE>.coverage.pmtiles`), built on the server by meshsonar-infra
+// stack/basemap/build-packs.py and served from api.meshsonar.com/basemap/packs/. Repeaters come from the app's on-disk
+// repeater store (core/repeater_sync.dart), which already works offline. Packs installed before M2 (schema
+// "openmaptiles", from tiles.meshsonar.com) keep drawing with the old style until they are updated.
+//
+// Privacy/hosts: the manifest is a public static file; pack URLs must be https and on the SAME host as the manifest (no
+// wildcard, no third-party CDN without a spec decision). No driver key or identifier is ever sent here.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -11,14 +18,57 @@ import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 
-const defaultPackManifestUrl = 'https://tiles.meshsonar.com/manifest.json';
+const defaultPackManifestUrl = 'https://api.meshsonar.com/basemap/packs/manifest.json';
+
+/// The pre-M2 manifest (OpenMapTiles packs on R2). Read only while the new one is not published (404 / not 200).
+const legacyPackManifestUrl = 'https://tiles.meshsonar.com/manifest.json';
+
+/// Vector tile schema of a pack (decides the style it is drawn with).
+enum PackSchema {
+  /// Pre-M2 packs: OpenMapTiles schema, drawn with core/offline_style.dart.
+  openmaptiles,
+
+  /// Our Protomaps tiles, drawn with the online map's style (core/basemap.dart).
+  protomaps;
+
+  static PackSchema parse(Object? v) => v == 'protomaps' ? PackSchema.protomaps : PackSchema.openmaptiles;
+}
+
+/// A pack's coverage snapshot file (Measured + Predicted tiles of one preset at one coverage data version).
+class PackCoverage {
+  final Uri url;
+  final int bytes, version;
+  final String sha256, preset;
+  const PackCoverage({required this.url, required this.bytes, required this.version, required this.sha256, required this.preset});
+
+  /// Null for a missing or unusable block (the pack still works as a basemap).
+  static PackCoverage? fromJson(Object? j, Uri manifestUri, {bool requireHttps = true}) {
+    if (j is! Map<String, dynamic>) return null;
+    try {
+      final url = manifestUri.resolve(j['url'] as String? ?? '');
+      if ((requireHttps && url.scheme != 'https') || url.host != manifestUri.host) return null;
+      final bytes = j['bytes'], version = j['version'], preset = j['preset'];
+      final sha = (j['sha256'] as String? ?? '').toLowerCase();
+      if (bytes is! int || bytes <= 0 || version is! int || preset is! String || preset.isEmpty || !RegExp(r'^[0-9a-f]{64}$').hasMatch(sha)) return null;
+      return PackCoverage(url: url, bytes: bytes, version: version, sha256: sha, preset: preset);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Map<String, dynamic> toJson() => {'url': url.toString(), 'bytes': bytes, 'version': version, 'sha256': sha256, 'preset': preset};
+}
 
 class PackManifestEntry {
   final String code, name, sha256;
   final int version, bytes, minZoom, maxZoom;
   final Uri url;
   final List<double> bbox; // minLon, minLat, maxLon, maxLat
+  final PackSchema schema;
+  final PackCoverage? coverage;
   const PackManifestEntry({
+    this.schema = PackSchema.openmaptiles,
+    this.coverage,
     required this.code,
     required this.name,
     required this.version,
@@ -57,6 +107,8 @@ class PackManifestEntry {
       bbox: bbox,
       minZoom: (j['min_zoom'] as int?) ?? 0,
       maxZoom: (j['max_zoom'] as int?) ?? 14,
+      schema: PackSchema.parse(j['schema']),
+      coverage: PackCoverage.fromJson(j['coverage'], manifestUri, requireHttps: requireHttps),
     );
   }
 
@@ -73,6 +125,8 @@ class PackManifestEntry {
     'bbox': bbox,
     'min_zoom': minZoom,
     'max_zoom': maxZoom,
+    'schema': schema.name,
+    'coverage': ?coverage?.toJson(),
   };
 }
 
@@ -114,7 +168,13 @@ class InstalledPack {
   final int version, bytes;
   final List<double> bbox; // stored so the map can pick a pack with no network and no manifest
   final DateTime installedAt;
+  final PackSchema schema;
+
+  /// The coverage snapshot installed with it (null: none yet, or a pre-M2 pack).
+  final PackCoverage? coverage;
   const InstalledPack({
+    this.schema = PackSchema.openmaptiles,
+    this.coverage,
     required this.code,
     required this.name,
     required this.version,
@@ -131,7 +191,12 @@ class InstalledPack {
     sha256: j['sha256'] as String,
     bbox: (j['bbox'] as List).map((e) => (e as num).toDouble()).toList(),
     installedAt: DateTime.parse(j['installed_at'] as String),
+    schema: PackSchema.parse(j['schema']),
+    coverage: PackCoverage.fromJson(j['coverage'], Uri.parse((j['coverage'] as Map?)?['url'] as String? ?? 'x:'), requireHttps: false),
   );
+
+  InstalledPack withCoverage(PackCoverage? c) =>
+      InstalledPack(code: code, name: name, version: version, bytes: bytes, sha256: sha256, bbox: bbox, installedAt: installedAt, schema: schema, coverage: c);
   Map<String, dynamic> toJson() => {
     'name': name,
     'version': version,
@@ -139,6 +204,8 @@ class InstalledPack {
     'sha256': sha256,
     'bbox': bbox,
     'installed_at': installedAt.toUtc().toIso8601String(),
+    'schema': schema.name,
+    'coverage': ?coverage?.toJson(),
   };
   bool covers(double lat, double lon) => lat >= bbox[1] && lat <= bbox[3] && lon >= bbox[0] && lon <= bbox[2];
 }
@@ -209,6 +276,9 @@ class OfflinePackManager {
   File get _prefsFile => File(p.join(root.path, 'prefs.json'));
   File get _manifestCache => File(p.join(root.path, 'manifest.cache.json'));
   File packFile(String code) => File(p.join(root.path, '$code.pmtiles'));
+
+  /// The pack's coverage snapshot (PMTiles, both layers in each tile).
+  File coverageFile(String code) => File(p.join(root.path, '$code.coverage.pmtiles'));
   File _partFile(String code) => File(p.join(root.path, '$code.pmtiles.part'));
   // Which version the .part holds; a .part for another version (or of unknown origin) is discarded, never appended to.
   File _partMeta(String code) => File(p.join(root.path, '$code.pmtiles.part.json'));
@@ -285,10 +355,11 @@ class OfflinePackManager {
     try {
       cache = jsonDecode(await _manifestCache.readAsString()) as Map<String, dynamic>;
     } catch (_) {}
+    final cacheUri = Uri.tryParse(cache?['uri'] as String? ?? '') ?? manifestUri;
     PackManifest? cached() {
       if (cache == null) return null;
       try {
-        return PackManifest.parse(cache['body'] as String, manifestUri).copyWith(
+        return PackManifest.parse(cache['body'] as String, cacheUri).copyWith(
           fetchedAt: DateTime.tryParse(cache['fetched_at'] as String? ?? ''),
         );
       } catch (_) {
@@ -296,23 +367,29 @@ class OfflinePackManager {
       }
     }
 
-    try {
-      final etag = cache?['etag'] as String?;
+    Future<PackManifest?> fetchFrom(Uri uri) async {
+      final String? etag = uri == cacheUri ? (cache?['etag'] as String?) : null;
       final r = await _client
-          .get(manifestUri, headers: {if (etag != null && cached() != null) 'if-none-match': etag})
+          .get(uri, headers: {if (etag != null && cached() != null) 'if-none-match': etag})
           .timeout(const Duration(seconds: 20));
       final now = DateTime.now().toUtc();
-      if (r.statusCode == 304 && cached() != null) {
+      if (r.statusCode == 304 && etag != null && cached() != null) {
         cache!['fetched_at'] = now.toIso8601String();
         await _writeManifestCache(cache);
         return cached()!.copyWith(fetchedAt: now);
       }
-      if (r.statusCode != 200) {
-        throw HttpException('manifest HTTP ${r.statusCode}', uri: manifestUri);
-      }
+      if (r.statusCode != 200) return null;
       final body = utf8.decode(r.bodyBytes);
-      final m = PackManifest.parse(body, manifestUri).copyWith(fetchedAt: now);
-      await _writeManifestCache({'etag': r.headers['etag'], 'fetched_at': now.toIso8601String(), 'body': body});
+      final m = PackManifest.parse(body, uri).copyWith(fetchedAt: now);
+      await _writeManifestCache({'uri': uri.toString(), 'etag': r.headers['etag'], 'fetched_at': now.toIso8601String(), 'body': body});
+      return m;
+    }
+
+    try {
+      var m = await fetchFrom(manifestUri);
+      // The M2 manifest is not published yet (or was withdrawn): the pre-M2 one keeps the packs screen working.
+      if (m == null && manifestUri.toString() == defaultPackManifestUrl) m = await fetchFrom(Uri.parse(legacyPackManifestUrl));
+      if (m == null) throw HttpException('manifest not available', uri: manifestUri);
       return m;
     } catch (e) {
       final c = cached();
@@ -515,11 +592,15 @@ class OfflinePackManager {
         sha256: e.sha256,
         bbox: e.bbox,
         installedAt: DateTime.now(),
+        schema: e.schema,
+        // a basemap update keeps a snapshot that is still for this pack's preset; [downloadCoverage] brings the new one
+        coverage: _installed[e.code]?.coverage,
       );
       _pending.remove(e.code); // same moment as installed: no observer sees "installed and still queued"
       _active.remove(e.code);
       await _saveIndex();
       await _savePrefs();
+      if (e.coverage != null) unawaited(downloadCoverage(e));
     } catch (err) {
       try {
         await sink?.close();
@@ -538,6 +619,71 @@ class OfflinePackManager {
       );
     } finally {
       _notify();
+    }
+  }
+
+  final Set<String> _coverageBusy = {};
+
+  /// Downloads [e]'s coverage snapshot for an installed pack when it is missing or older than the manifest's. Small (a few
+  /// MB), so no resume: a failure leaves the old snapshot (or none) in place and is tried again at the next manifest read.
+  /// Never replaces a good snapshot with one that failed the size or SHA-256 check. Returns true when a new one was installed.
+  Future<bool> downloadCoverage(PackManifestEntry e) async {
+    final c = e.coverage;
+    final ip = _installed[e.code];
+    if (c == null || ip == null || _coverageBusy.contains(e.code)) return false;
+    if (ip.coverage != null && ip.coverage!.sha256 == c.sha256 && await coverageFile(e.code).exists()) return false;
+    _coverageBusy.add(e.code);
+    final tmp = File('${coverageFile(e.code).path}.part');
+    try {
+      final r = await _client.get(c.url).timeout(const Duration(seconds: 60));
+      if (r.statusCode != 200 || r.bodyBytes.length != c.bytes || sha256.convert(r.bodyBytes).toString() != c.sha256) return false;
+      await tmp.writeAsBytes(r.bodyBytes, flush: true);
+      await tmp.rename(coverageFile(e.code).path);
+      final now = _installed[e.code];
+      if (now == null) return false; // deleted meanwhile
+      _installed[e.code] = now.withCoverage(c);
+      await _saveIndex();
+      _notify();
+      return true;
+    } catch (_) {
+      return false;
+    } finally {
+      _coverageBusy.remove(e.code);
+      await _deleteQuietly(tmp);
+    }
+  }
+
+  /// Brings every installed pack's coverage snapshot up to [m] (on Wi-Fi, or any network when Wi-Fi only is off).
+  Future<int> refreshCoverage(PackManifest m, NetworkKind net) async {
+    if (net == NetworkKind.offline || (net == NetworkKind.cellular && _wifiOnly)) return 0;
+    var n = 0;
+    for (final e in m.packs) {
+      final ip = _installed[e.code];
+      if (ip == null || ip.version != e.version || e.coverage == null) continue;
+      if (await downloadCoverage(e)) n++;
+    }
+    return n;
+  }
+
+  File get _coverageCheck => File(p.join(root.path, 'coverage_checked.json'));
+
+  /// At most once per [every] (persisted): reads the manifest and brings installed packs' coverage snapshots up to date
+  /// (the server rebuilds them nightly). Nothing to do without installed packs. Never throws. Returns snapshots installed.
+  Future<int> refreshCoverageIfStale(NetworkKind net, {Duration every = const Duration(hours: 12), DateTime? now}) async {
+    if (_installed.isEmpty || net == NetworkKind.offline) return 0;
+    final t = (now ?? DateTime.now()).toUtc();
+    try {
+      final j = jsonDecode(await _coverageCheck.readAsString()) as Map<String, dynamic>;
+      final at = DateTime.tryParse(j['at'] as String? ?? '');
+      if (at != null && t.difference(at) < every && !t.isBefore(at)) return 0;
+    } catch (_) {}
+    try {
+      final m = await fetchManifest();
+      if (m.fromCache) return 0; // no answer: try again next launch
+      await _atomicWrite(_coverageCheck, () => jsonEncode({'at': t.toIso8601String()}));
+      return await refreshCoverage(m, net);
+    } catch (_) {
+      return 0;
     }
   }
 
@@ -594,7 +740,7 @@ class OfflinePackManager {
     _cancel[code] = true;
     _active.remove(code);
     _pending.remove(code);
-    for (final f in [packFile(code), _partFile(code), _partMeta(code)]) {
+    for (final f in [packFile(code), _partFile(code), _partMeta(code), coverageFile(code)]) {
       if (await f.exists()) await f.delete();
     }
     _installed.remove(code);
@@ -630,7 +776,7 @@ class OfflinePackManager {
     try {
       await for (final f in root.list()) {
         if (f is! File) continue;
-        final m = RegExp(r'^([A-Za-z0-9]+)\.pmtiles(\.part)?$').firstMatch(p.basename(f.path));
+        final m = RegExp(r'^([A-Za-z0-9]+)(\.coverage)?\.pmtiles(\.part)?$').firstMatch(p.basename(f.path));
         if (m == null) continue;
         out[m.group(1)!] = (out[m.group(1)!] ?? 0) + await _lengthOr0(f);
       }

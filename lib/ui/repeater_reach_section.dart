@@ -4,6 +4,7 @@
 // mistaken for the phone-only ones. Privacy as the server applies it: public drives only, each drive's start and end
 // trimmed and privacy zones removed, cells instead of tracks, times rounded to the hour. Every state is explicit.
 // Needs AppScope; without one (isolated widget tests) it renders nothing.
+import 'map/basemap_layer.dart' show BasemapLayer;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -256,12 +257,7 @@ class _ReachMap extends StatelessWidget {
             ),
             children: [
               if (tiles)
-                TileLayer(
-                  urlTemplate: CoverageMap.tileUrl,
-                  userAgentPackageName: CoverageMap.userAgentPackageName,
-                  maxNativeZoom: 19,
-                  tileBuilder: (context, tile, _) => ColorFiltered(colorFilter: ColorFilter.matrix(m.tileMatrix), child: tile),
-                ),
+                const BasemapLayer(),
               PolygonLayer(polygons: [
                 for (final c in reach.cells)
                   Polygon(
