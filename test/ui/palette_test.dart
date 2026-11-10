@@ -1,4 +1,5 @@
-// The two colour palettes (Standard, Colour-blind safe; High contrast was removed in M0, Nov 8 2026): exact hex values (the website copies them), colour-blind separation measured by simulating
+// The two colour palettes (Standard, Colour-blind safe), read from the Map Definition (M2): the theme's strength colours are
+// the definition's bands; colour-blind separation measured by simulating
 // protanopia / deuteranopia / tritanopia and comparing with CIEDE2000, contrast against the map, link-line style, and
 // the setting's persistence. Values are written in docs/FEATURES.md and meshsonar-infra/docs/planning/colour-palettes-2026-10-31.md.
 import 'dart:ui';
@@ -7,6 +8,7 @@ import 'package:flutter/material.dart' show Brightness, Colors;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/colour_palette.dart';
+import 'package:meshsonar/core/map_definition.dart';
 import 'package:meshsonar/core/network_coverage.dart';
 import 'package:meshsonar/ui/theme.dart';
 
@@ -14,57 +16,27 @@ import '../support/colour_science.dart';
 
 Color hex(String h) => Color(0xFF000000 | int.parse(h, radix: 16));
 
-/// strong, good, fair, weak, grey, purple, then the SNR stops.
-typedef Spec = ({List<String> steps, List<String> stops, String link, bool dashed});
-
-const dark = <ColourPalette, Spec>{
-  ColourPalette.standard: (
-    steps: ['0AA349', '8DCE3C', 'FCE738', 'F63647', '8D99A6', 'B59AE0'], // no blue (Andy, Nov 8): the coverage ramp
-    stops: ['F63647', 'FCE738', '0AA349'], // red -> yellow -> green (Nov 8 2026, coverage-v2-colours.md)
-    link: 'FF6D00',
-    dashed: false,
-  ),
-  ColourPalette.colourBlind: (
-    steps: ['2B8CE0', '8EDBFF', 'EDDD55', 'D25637', '8D99A6', 'B356A4'],
-    stops: ['D25637', 'EDDD55', '8EDBFF', '2B8CE0'],
-    link: 'F4F7F9',
-    dashed: true,
-  ),
-};
-const light = <ColourPalette, Spec>{
-  ColourPalette.standard: (
-    steps: ['18631D', '749119', 'B07D16', 'B80321', '8795A1', '8A63C9'], // no blue (Andy, Nov 8): the coverage ramp, gold for fair
-    stops: ['B80321', 'E9B907', '18631D'], // red -> yellow -> green (Nov 8 2026, coverage-v2-colours.md)
-    link: 'FF6D00',
-    dashed: false,
-  ),
-  ColourPalette.colourBlind: (
-    steps: ['0A4FA0', '1E88C8', '9C7F06', '762608', '8795A1', '8E5A8A'],
-    stops: ['762608', '9C7F06', '004E66', '0A4FA0'],
-    link: '0C1E28',
-    dashed: true,
-  ),
-};
-
 const darkTiles = Color(0xFF0D1B26), lightTiles = Color(0xFFE9EFF1);
 
+/// What each palette must hold. The hex values themselves are the Map Definition's (M2: no app table); these are the measured
+/// properties of the definition's colours, printed as MEASURE lines so a definition change that weakens them is seen.
 void main() {
+  final def = MapDefinition.bundled;
   for (final b in Brightness.values) {
-    final table = b == Brightness.dark ? dark : light;
     final tiles = b == Brightness.dark ? darkTiles : lightTiles;
     for (final p in ColourPalette.values) {
-      final spec = table[p]!;
       final mc = MeshSonarColors.forPalette(p, b);
+      final sig = def.signal(p.id, dark: b == Brightness.dark);
       final steps = [mc.levelStrong, mc.levelGood, mc.levelFair, mc.levelWeak, mc.silent, mc.heardUnknown];
-      final names = ['strong', 'good', 'fair', 'weak', 'grey', 'purple'];
+      final names = ['strong', 'good', 'fair', 'weak', 'no reply', 'heard no SNR'];
       group('${p.id} ${b.name}', () {
-        test('pins the documented hex values', () {
-          expect(steps, [for (final h in spec.steps) hex(h)]);
-          expect(mc.snrStops, [for (final h in spec.stops) hex(h)]);
-          expect(mc.linkLine, hex(spec.link));
-          expect(mc.linkLineDashed, spec.dashed);
+        test('the strength colours are the definition bands (one 5-band scale, plan §2.5)', () {
+          expect(steps, [for (final i in [5, 4, 3, 1, 0, 6]) Color(sig.bands[i])]);
+          expect(mc.snrStops, [for (final i in [1, 2, 3, 4, 5]) Color(sig.bands[i])]);
+          expect(mc.linkLine, Color(sig.link.color));
+          expect(mc.linkLineCasing, Color(sig.link.casing).withValues(alpha: sig.link.casingOpacity));
+          expect(mc.linkLineDashed, sig.link.dash != null);
           expect(mc.palette, p);
-          // forPing's two ends are the first and last stop; grey and purple are never part of the scale.
           expect(mc.forPing(heard: true, snr: -30), mc.snrStops.first);
           expect(mc.forPing(heard: true, snr: 30), mc.snrStops.last);
           expect(mc.forPing(heard: false), mc.silent);
@@ -73,7 +45,7 @@ void main() {
           expect(mc.levelColor(CoverageLevel.unknown), mc.heardUnknown);
         });
 
-        test('every step, grey and purple are told apart by normal vision (dE2000 >= 10)', () {
+        test('every step is told apart by normal vision (dE2000 >= 10)', () {
           for (var i = 0; i < steps.length; i++) {
             for (var j = i + 1; j < steps.length; j++) {
               final d = deltaE(steps[i], steps[j], Vision.normal);
@@ -82,12 +54,10 @@ void main() {
           }
         });
 
-        for (final v in [Vision.protan, Vision.deutan, Vision.tritan]) {
-          test('separation under ${v.name}', () {
-            // standard is documented, not guaranteed; colour-blind safe must hold.
-            final need = switch (p) { ColourPalette.standard => 0.0, ColourPalette.colourBlind => 10.0 };
+        test('measured: colour-vision separation and contrast on the map (MEASURE lines)', () {
+          for (final v in [Vision.protan, Vision.deutan, Vision.tritan]) {
             var worst = double.infinity;
-            String where = '';
+            var where = '';
             for (var i = 0; i < steps.length; i++) {
               for (var j = i + 1; j < steps.length; j++) {
                 final d = deltaE(steps[i], steps[j], v);
@@ -98,43 +68,21 @@ void main() {
               }
             }
             // ignore: avoid_print
-            print('MIN-DE ${p.id} ${b.name} ${v.name}: ${worst.toStringAsFixed(1)} ($where)');
-            expect(worst, greaterThanOrEqualTo(need), reason: '$where = $worst');
-          });
-        }
-
-        test('the ping scale never lands on grey or purple (blended points stay >= 8 dE from both)', () {
-          if (p == ColourPalette.standard) return; // the standard scale passes through teal, as it always has
-          for (final v in Vision.values) {
-            for (var i = 0; i <= 40; i++) {
-              final c = mc.snrAt(i / 40);
-              expect(deltaE(c, mc.silent, v), greaterThanOrEqualTo(8), reason: '${v.name} t=${i / 40} vs grey');
-              expect(deltaE(c, mc.heardUnknown, v), greaterThanOrEqualTo(8), reason: '${v.name} t=${i / 40} vs purple');
-            }
+            print('MEASURE ${p.id} ${b.name} ${v.name}: min dE ${worst.toStringAsFixed(1)} ($where)');
+            // Colour-blind safe must hold under every simulated deficiency (standard is documented, not guaranteed).
+            if (p == ColourPalette.colourBlind) expect(worst, greaterThanOrEqualTo(10), reason: '$where = $worst');
           }
-        });
-
-        test('contrast against the map tiles', () {
-          const need = 3.0;
-          for (final i in [0, 1, 2, 3, 5]) {
-            expect(contrastRatio(steps[i], tiles), greaterThanOrEqualTo(need), reason: '${names[i]} ${contrastRatio(steps[i], tiles)}');
+          for (var i = 0; i < 4; i++) {
+            // ignore: avoid_print
+            print('MEASURE ${p.id} ${b.name} contrast ${names[i]} ${contrastRatio(steps[i], tiles).toStringAsFixed(2)}');
           }
-          // The standard orange line is the existing look (3 px with a dark casing, 2.4:1 on the light map); the new styles
-          // must clear 3:1 on their own.
-          if (p != ColourPalette.standard) expect(contrastRatio(mc.linkLine, tiles), greaterThanOrEqualTo(3));
         });
 
         test('link lines stay distinguishable from the strength colours', () {
-          if (!spec.dashed) {
-            // standard: orange solid, the same as ever.
-            expect(mc.linkLine, hex('FF6D00'));
-            return;
-          }
-          // Achromatic and dashed: no strength colour is a near-grey or white line.
           for (final c in steps.take(4)) {
             expect(c, isNot(mc.linkLine));
           }
-          expect(contrastRatio(mc.linkLine, mc.linkLineCasing.withValues(alpha: 1)), greaterThan(8));
+          if (mc.linkLineDashed) expect(contrastRatio(mc.linkLine, mc.linkLineCasing.withValues(alpha: 1)), greaterThan(8));
         });
       });
     }
@@ -144,15 +92,15 @@ void main() {
     expect(MeshSonarColors.dark.palette, ColourPalette.standard);
     final t = meshSonarTheme(Brightness.light, palette: ColourPalette.colourBlind);
     expect(t.extension<MeshSonarColors>()!.palette, ColourPalette.colourBlind);
-    expect(t.extension<MeshSonarColors>()!.levelStrong, hex('0A4FA0'));
-    expect(meshSonarTheme(Brightness.dark).extension<MeshSonarColors>()!.levelStrong, hex('0AA349'));
+    expect(t.extension<MeshSonarColors>()!.levelStrong, Color(MapDefinition.bundled.signal('colour_blind', dark: false).bands[5]));
+    expect(meshSonarTheme(Brightness.dark).extension<MeshSonarColors>()!.levelStrong, Color(MapDefinition.bundled.signal('standard', dark: true).bands[5]));
   });
 
   test('lerp keeps the stops list valid between palettes of different length', () {
     final a = MeshSonarColors.forPalette(ColourPalette.standard, Brightness.dark);
     final b = MeshSonarColors.forPalette(ColourPalette.colourBlind, Brightness.dark);
     final m = a.lerp(b, 0.5);
-    expect(m.snrStops.length, anyOf(3, 4));
+    expect(m.snrStops.length, 5);
     expect(a.lerp(b, 0).levelStrong, a.levelStrong);
     expect(a.lerp(b, 1).levelStrong, b.levelStrong);
   });

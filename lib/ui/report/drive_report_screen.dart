@@ -4,8 +4,7 @@
 // Opened from the drive detail screen ("Report") and from the Drive screen's "View drive report" card.
 // The numbers come from lib/core/drive_report.dart, computed once per open (async; fine for drives of thousands of
 // pings). The v2 chart sections live in drive_report_sections.dart.
-import '../map/overlays/mini_map_credit.dart';
-import '../map/basemap_layer.dart' show BasemapLayer;
+import '../map/map_preview.dart';
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -505,7 +504,7 @@ class _Highlights extends StatelessWidget {
   }
 }
 
-/// Heard fraction 0..1 → colour: grey (silent) at 0, then the palette's ramp (red → yellow → green on Standard).
+/// Heard fraction 0..1 → colour: the No-reply colour (silent) at 0, then the palette's ramp (red → yellow → green on Standard).
 Color heardColor(MeshSonarColors m, ReportCell c) {
   if (c.heard == 0) return m.silent;
   final f = c.heardFraction;
@@ -551,19 +550,16 @@ class _CellMap extends StatelessWidget {
         child: SizedBox(
           key: const Key('report-map'),
           height: 260,
-          child: FlutterMap(
-            options: MapOptions(
-              initialCameraFit: CameraFit.bounds(
-                bounds: LatLngBounds(LatLng(south, west), LatLng(north, east)),
-                padding: const EdgeInsets.all(28),
-                maxZoom: 16,
-              ),
-              backgroundColor: m.mapBackground,
-              interactionOptions: const InteractionOptions(flags: InteractiveFlag.pinchZoom | InteractiveFlag.doubleTapZoom),
+          child: MapPreview(
+            fit: CameraFit.bounds(
+              bounds: LatLngBounds(LatLng(south, west), LatLng(north, east)),
+              padding: const EdgeInsets.all(28),
+              maxZoom: 16,
             ),
-            children: [
-              if (tiles)
-                const BasemapLayer(),
+            interaction: MapPreviewInteraction.zoom,
+            tiles: tiles,
+            openAt: LatLng((south + north) / 2, (west + east) / 2),
+            overlays: [
               PolygonLayer(polygons: [
                 for (final c in r.cells)
                   Polygon(
@@ -583,8 +579,6 @@ class _CellMap extends StatelessWidget {
                   badges: badges,
                   pill: tiles,
                 ),
-              if (tiles)
-                const MiniMapCredit(),
             ],
           ),
         ),

@@ -23,7 +23,7 @@ import 'dart:convert' show Utf8Codec;
 
 /// Layer keys the website's coverage page knows (its `LAYERS`, in its order). `model` and `reach` are shelved there and
 /// have no app layer; they are kept so a website link survives a round trip through the app.
-const List<String> kWebsiteShowKeys = ['measured', 'repeaters', 'observers', 'model', 'reach', 'regions', 'network', 'predicted', 'heardcells'];
+const List<String> kWebsiteShowKeys = ['measured', 'repeaters', 'observers', 'model', 'reach', 'regions', 'network', 'predicted', 'heardcells', 'borders', 'phones'];
 
 /// The Heard-by-phones coverage layer's id in the app and in `meshsonar://` links (coverage-v2-api-contract.md "Heard
 /// layer"). On the website the same layer is `show=heard`, which in app links means "Heard this drive": https links are

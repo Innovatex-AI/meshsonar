@@ -177,11 +177,12 @@ class _RegionSwitcherSheetState extends State<RegionSwitcherSheet> {
             ),
         ];
         final mq = MediaQuery.of(context);
+        // The sheet route is keyboard-aware (it already sits above the keyboard): the list takes the height the sheet gives,
+        // never the screen height minus the keyboard a second time (that overflowed by ~80 px while searching, Nov 10).
         return SafeArea(
-          child: Padding(
-            padding: EdgeInsets.only(bottom: mq.viewInsets.bottom), // above the keyboard while searching
-            child: ConstrainedBox(
-              constraints: BoxConstraints(maxHeight: (mq.size.height - mq.viewInsets.bottom) * 0.85),
+          child: LayoutBuilder(
+            builder: (context, box) => ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: box.maxHeight.isFinite ? box.maxHeight : (mq.size.height - mq.viewInsets.bottom) * 0.85),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               ...fixed,
               Flexible(

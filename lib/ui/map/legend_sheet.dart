@@ -255,14 +255,14 @@ class _MapLegendSheetState extends State<MapLegendSheet> {
       LegendRow(
         id: 'ping-silent',
         swatch: LegendSwatch(color: mc.silent, shape: SwatchShape.dot),
-        title: 'Grey: nothing heard',
+        title: 'No reply: nothing heard',
         detail: 'You sent a ping and no repeater answered here.',
       ),
       if (!byResult)
         LegendRow(
           id: 'ping-unknown',
           swatch: LegendSwatch(color: mc.heardUnknown, shape: SwatchShape.dot),
-          title: 'Purple: heard, no signal reading',
+          title: 'Grey: heard, no signal reading',
           detail: 'A repeater answered but did not report how strong. Never coloured as a strength.',
         ),
     ];
@@ -392,8 +392,8 @@ class _MapLegendSheetState extends State<MapLegendSheet> {
   ];
 
   String _levelTitle(CoverageLevel level, String text) => switch (level) {
-    CoverageLevel.unknown => 'Purple: heard, signal unknown',
-    CoverageLevel.none => 'Grey: mapped, nothing heard',
+    CoverageLevel.unknown => 'Grey: heard, signal unknown',
+    CoverageLevel.none => 'No reply: mapped, nothing heard',
     _ => '${_stepName(level)}: $text',
   };
 
@@ -412,11 +412,11 @@ class _MapLegendSheetState extends State<MapLegendSheet> {
       _note(context, 'Your pings rolled up to the same hexagons as the website. This is only what this phone recorded.'),
       if (byResult) ...[
         LegendRow(id: 'yours-heard', swatch: LegendSwatch(color: mc.snrStrong), title: 'Green: a ping here was heard', detail: 'The map is set to Heard, so a hexagon is green if any ping in it was heard.'),
-        LegendRow(id: 'yours-silent', swatch: LegendSwatch(color: mc.silent, silentCell: true), title: 'Grey: nothing heard here'),
+        LegendRow(id: 'yours-silent', swatch: LegendSwatch(color: mc.silent, silentCell: true), title: 'No reply: nothing heard here'),
       ] else ...[
         LegendRow(id: 'yours-strong', swatch: LegendSwatch(color: mc.forPing(heard: true, snr: 10)), title: 'Strong, +10 dB or better', detail: 'Coloured by the best SNR of any ping in the hexagon, on the same scale as the pings.'),
         LegendRow(id: 'yours-weak', swatch: LegendSwatch(color: mc.forPing(heard: true, snr: -10)), title: 'Weak, -10 dB or worse'),
-        LegendRow(id: 'yours-silent', swatch: LegendSwatch(color: mc.silent, silentCell: true), title: 'Grey: nothing heard here'),
+        LegendRow(id: 'yours-silent', swatch: LegendSwatch(color: mc.silent, silentCell: true), title: 'No reply: nothing heard here'),
       ],
     ];
   }

@@ -243,47 +243,92 @@ void main() {
       return model;
     }
 
-    testWidgets('sections in order: Base map, Coverage, Network; the plan section 5 rows; no rings, no neighbours', (t) async {
+    testWidgets('the website Layers panel: Basemap, Coverage, Network, Context, Filters, Palette; rows and names from the definition', (t) async {
       await openSheet(t);
       final ys = [
-        for (final g in ['base', 'coverage', 'network']) t.getTopLeft(find.byKey(Key('layers-group-$g'), skipOffstage: false)).dy,
+        for (final g in ['base', 'coverage', 'network', 'context', 'filters', 'palette']) t.getTopLeft(find.byKey(Key('layers-group-$g'), skipOffstage: false)).dy,
       ];
       expect([...ys]..sort(), ys);
-      final rows = ['layer-network-coverage', 'layer-predicted', 'layer-hexes', 'layer-pings', 'layer-region-repeaters', 'layer-labels', 'layer-observers', 'layer-links'];
+      final rows = [
+        'layer-hexes', 'layer-pings', 'layer-network-coverage', 'layer-heardcells', 'layer-predicted', //
+        'layer-phones', 'layer-observers', 'layer-region-repeaters', 'layer-labels', 'layer-network', 'layer-links', 'layer-borders',
+      ];
       final rowY = [for (final id in rows) t.getTopLeft(find.byKey(Key(id), skipOffstage: false)).dy];
-      expect([...rowY]..sort(), rowY, reason: 'Measured, Predicted, This drive, Ping dots, Repeaters, Names, Observers, Lines');
-      for (final id in ['layer-rings', 'layer-neighbours', 'layer-network', 'layer-repeaters']) {
-        expect(find.byKey(Key(id), skipOffstage: false), findsNothing, reason: '$id is not a row of its own');
+      expect([...rowY]..sort(), rowY, reason: 'top of the map first, as on the website');
+      for (final id in ['layer-rings', 'layer-neighbours', 'layer-repeaters-scope']) {
+        expect(find.byKey(Key(id), skipOffstage: false), findsNothing, reason: '$id is gone');
       }
-      for (final text in ['Measured coverage', 'Predicted coverage', 'This drive', 'Ping dots', 'Repeaters', 'Names', 'Observers', 'Lines to repeaters']) {
-        expect(find.text(text), findsWidgets, reason: text);
+      for (final text in ['Measured coverage', 'Heard by phones', 'Predicted coverage', 'This drive', 'Ping dots', 'Moving phones', 'Observers', 'Repeaters', 'Names', 'All MeshCore repeaters', 'Link lines', 'Region borders']) {
+        expect(find.text(text, skipOffstage: false), findsWidgets, reason: text);
       }
       expect(find.text('Colour by'), findsNothing);
       expect(find.textContaining('Range rings'), findsNothing);
     });
 
-    testWidgets('F7: Measured coverage says whose coverage it is; Predicted says it is not on an old server', (t) async {
-      await openSheet(t);
-      expect(find.text("Everyone's drives: the average signal in each cell."), findsOneWidget);
-      // Predicted and Heard (no ping, Nov 9) both say so: the fake server has neither coverageV2 nor coverageHeard.
-      expect(find.text('Not available on this server yet'), findsNWidgets(2), reason: 'the fake server has no coverageV2');
-      expect(t.widget<Switch>(find.byKey(const Key('layer-predicted'))).onChanged, isNull);
-      expect(t.widget<Switch>(find.byKey(const Key('layer-heardcells'))).onChanged, isNull, reason: 'Heard needs coverageHeard');
+    testWidgets('iPad-sized anchored sheet: a finger drag on the list scrolls it to the Palette', (t) async {
+      t.view.physicalSize = const Size(834, 1210);
+      t.view.devicePixelRatio = 1;
+      addTearDown(t.view.reset);
+      final h = Harness();
+      await h.state.init();
+      final model = DriveMapModel(h.state, prefs: _openPrefs());
+      addTearDown(model.dispose);
+      await t.pumpWidget(AppScope(
+        state: h.state,
+        child: MaterialApp(
+          theme: meshSonarTheme(Brightness.light),
+          home: Scaffold(
+            body: Stack(children: [
+              const Positioned.fill(child: ColoredBox(color: Colors.grey)),
+              // The anchored host's bound: 0.75 of the area above a 100 pt dock.
+              Positioned(left: 0, right: 0, bottom: 100, child: ConstrainedBox(constraints: const BoxConstraints(maxHeight: (1210 - 100) * 0.75), child: MapLayersSheet(model: model))),
+            ]),
+          ),
+        ),
+      ));
+      await t.pumpAndSettle();
+      final list = find.descendant(of: find.byKey(const Key('layers-sheet')), matching: find.byType(Scrollable)).first;
+      expect(find.byKey(const Key('layers-palette')), findsNothing);
+      for (var i = 0; i < 20 && find.byKey(const Key('layers-palette')).evaluate().isEmpty; i++) {
+        await t.drag(list, const Offset(0, -250));
+        await t.pumpAndSettle();
+      }
+      expect(find.byKey(const Key('layers-palette')), findsOneWidget, reason: 'every row is reachable by scrolling');
     });
 
-    testWidgets('Repeaters: one switch with a This region / All MeshCore scope; Names is under it', (t) async {
+    testWidgets('defaults: This drive and Ping dots on', (t) async {
+      final m = await openSheet(t);
+      expect(m.layerState.isOn('hexes'), isTrue);
+      expect(t.widget<Switch>(find.byKey(const Key('layer-hexes'))).value, isTrue);
+    });
+
+    testWidgets('a layer that is off shows the definition hint; Predicted / Heard say they are not on an old server', (t) async {
+      final m = await openSheet(t);
+      expect(m.layerState.isOn('network'), isFalse);
+      expect(find.textContaining('Turn on to see every repeater in the country', skipOffstage: false), findsOneWidget);
+      // Predicted and Heard (no ping, Nov 9) both say so: the fake server has neither coverageV2 nor coverageHeard.
+      expect(find.text('Not available on this server yet', skipOffstage: false), findsAtLeastNWidgets(2), reason: 'the fake server has no coverageV2');
+      expect(t.widget<Switch>(find.byKey(const Key('layer-predicted'), skipOffstage: false)).onChanged, isNull);
+      expect(t.widget<Switch>(find.byKey(const Key('layer-heardcells'), skipOffstage: false)).onChanged, isNull, reason: 'Heard needs coverageHeard');
+    });
+
+    testWidgets('Repeaters and All MeshCore repeaters are two switches (website); Names is under Repeaters', (t) async {
       final m = await openSheet(t);
       expect(t.widget<Switch>(find.byKey(const Key('layer-region-repeaters'))).value, isTrue);
-      expect(m.repeatersAll, isFalse);
-      await t.tap(find.byKey(const Key('layer-scope-all')));
+      expect(find.byKey(const Key('layer-network'), skipOffstage: false), findsOneWidget, reason: 'a switch of its own');
+      m.setLayer('network', true);
       await t.pumpAndSettle();
       expect(m.layerState.isOn('network'), isTrue);
-      expect(m.layerState.isOn('repeaters'), isFalse);
-      expect(t.widget<Switch>(find.byKey(const Key('layer-region-repeaters'))).value, isTrue, reason: 'still on, other scope');
+      expect(m.layerState.isOn('repeaters'), isTrue, reason: 'independent switches');
+      await t.ensureVisible(find.byKey(const Key('layer-region-repeaters')));
       await t.tap(find.byKey(const Key('layer-region-repeaters')));
       await t.pumpAndSettle();
-      expect(repeatersOn(m.layerState), isFalse);
-      expect(t.widget<Switch>(find.byKey(const Key('layer-labels'))).onChanged, isNull, reason: 'Names needs Repeaters on');
+      expect(m.layerState.isOn('repeaters'), isFalse);
+      expect(m.layerState.isOn('network'), isTrue);
+      expect(t.widget<Switch>(find.byKey(const Key('layer-labels'))).onChanged, isNotNull, reason: 'names for All MeshCore repeaters too');
+      m.setLayer('network', false);
+      await t.pumpAndSettle();
+      expect(t.widget<Switch>(find.byKey(const Key('layer-labels'))).onChanged, isNull, reason: 'Names needs a repeater layer on');
     });
 
     testWidgets('inline keys sit under the rows and follow the Pings mode', (t) async {
@@ -297,22 +342,27 @@ void main() {
       expect(find.text('not heard'), findsWidgets);
     });
 
-    testWidgets('Coverage options is a page inside the sheet: window, growth slider, source, back; no colour by or detail', (t) async {
+    testWidgets('Filters on the main page (website names): Measured in, growth slider, Drives from; no colour by or detail', (t) async {
       final m = await openSheet(t);
-      await t.ensureVisible(find.byKey(const Key('layer-measured-options')));
-      await t.tap(find.byKey(const Key('layer-measured-options')));
-      await t.pumpAndSettle();
-      expect(find.byKey(const Key('layers-options-page')), findsOneWidget);
-      expect(find.byType(CoverageOptionsBody), findsOneWidget);
+      expect(find.byType(CoverageOptionsBody, skipOffstage: false), findsOneWidget);
+      expect(find.text('Measured in', skipOffstage: false), findsOneWidget);
+      expect(find.text('Drives from', skipOffstage: false), findsOneWidget);
+      for (final id in ['all', '30d', '7d', '24h']) {
+        expect(find.byKey(Key('cov-since-$id'), skipOffstage: false), findsOneWidget, reason: id);
+      }
       expect(find.byKey(const Key('cov-color-Share heard')), findsNothing);
       expect(find.byKey(const Key('cov-res-Auto')), findsNothing);
-      await t.tap(find.byKey(const Key('cov-since-7 d')));
+      await t.ensureVisible(find.byKey(const Key('cov-since-7d'), skipOffstage: false));
+      await t.tap(find.byKey(const Key('cov-since-7d')));
       await t.pump();
       expect(m.coverageQuery.since, CoverageSince.week);
-      await t.tap(find.byKey(const Key('layers-options-back')));
-      await t.pumpAndSettle();
-      expect(find.byKey(const Key('layers-options-page')), findsNothing);
-      expect(find.textContaining('Window 7 d'), findsOneWidget);
+      await t.tap(find.byKey(const Key('cov-since-30d')));
+      await t.pump();
+      expect(m.coverageQuery.since, CoverageSince.month);
+      await t.tap(find.byKey(const Key('cov-source-meshmapper')));
+      await t.pump();
+      expect(m.coverageQuery.source, CoverageSource.meshmapper);
+      expect(find.byKey(const Key('layers-palette'), skipOffstage: false), findsOneWidget, reason: 'the palette chooser');
     });
 
     testWidgets('Reset asks first, then restores the defaults', (t) async {

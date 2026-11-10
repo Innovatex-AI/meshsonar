@@ -3,7 +3,7 @@
 // map, never the raw track. Says plainly that it is from drives on this phone; the website's "where MeshSonar drives
 // heard it" (repeater-reach) needs an auth the app does not have (stream 5 design doc, server request P1-b).
 // Needs AppScope for the drive store; without one (isolated widget tests of a screen) it renders nothing.
-import 'map/basemap_layer.dart' show BasemapLayer;
+import 'map/map_preview.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -16,7 +16,6 @@ import 'onboarding/ui_prefs.dart' show driveLabel;
 import 'report/drive_report_screen.dart' show openDriveReport;
 import 'report/local_drives.dart';
 import 'widgets.dart';
-import 'map/overlays/mini_map_credit.dart';
 
 /// Drives listed under the facts before "and N more".
 const int yourDrivesListed = 5;
@@ -193,15 +192,12 @@ class _CellMap extends StatelessWidget {
         borderRadius: BorderRadius.circular(Corners.small),
         child: SizedBox(
           height: 170,
-          child: FlutterMap(
-            options: MapOptions(
-              initialCameraFit: CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(18), maxZoom: 15),
-              backgroundColor: m.mapBackground,
-              interactionOptions: const InteractionOptions(flags: InteractiveFlag.none),
-            ),
-            children: [
-              if (tiles)
-                const BasemapLayer(),
+          child: MapPreview(
+            fit: CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(18), maxZoom: 15),
+            tiles: tiles,
+            openAt: bounds.center,
+            openZoom: 13,
+            overlays: [
               PolygonLayer(polygons: [
                 for (final c in history.cells)
                   Polygon(
@@ -215,7 +211,6 @@ class _CellMap extends StatelessWidget {
                 MarkerLayer(markers: [
                   Marker(point: LatLng(lat!, lon!), width: 24, height: 24, child: Icon(Icons.cell_tower, color: m.beacon, size: 24)),
                 ]),
-              const MiniMapCredit(),
             ],
           ),
         ),

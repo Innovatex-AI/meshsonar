@@ -25,6 +25,7 @@ import 'drive/ping_settings_sheet.dart';
 import 'drive/heard_box.dart';
 import 'map/coverage_map.dart';
 import 'map/map_key.dart';
+import 'map/legend_card.dart';
 import 'map/legend_sheet.dart' show showMapLegend;
 import 'map/layers/layers_sheet.dart' show showGeneratedLayersSheet;
 import 'drive/gps_health_banner.dart';
@@ -547,6 +548,15 @@ class _MapPane extends StatelessWidget {
                   tiles: s.coverageTiles, meta: s.coverageMeta, drawTiles: model.drawTiles, fetchCell: s.coverageCell, heard: s.coverageHeard)
               : null,
           mapKey: MapKey(model: model),
+          regionBorders: model.regionBorders,
+          takesFocusRequests: true,
+          legend: LegendCard(
+            key: const Key('drive-legend-card'),
+            on: model.layerState.on,
+            meta: model.coverageV2 ? s.coverageMeta : null,
+            local: model.coverageFiltered,
+            drivePanel: model.pings.isNotEmpty || s.driving,
+          ),
           openLegend: () => showMapLegend(context, pingColors: model.pingColors),
           fallbackCenter: viewedRegionCenter(s),
           fallbackBounds: viewedRegionBounds(s),

@@ -3,7 +3,7 @@
 // not found in this region, offline/error with retry, and the server's own `Sourced` state (partial / pending /
 // stale / unavailable) shown as a banner. Unknown values render as "unknown", never as zero.
 // Ends with "Your drives" (your_drives_section.dart): how the drives stored on this phone heard this repeater.
-import '../map/basemap_layer.dart' show BasemapLayer;
+import '../map/map_preview.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -20,7 +20,6 @@ import '../repeater_reach_section.dart';
 import '../your_drives_section.dart';
 import 'snr_trend_card.dart';
 import '../design/app_surfaces.dart';
-import '../map/overlays/mini_map_credit.dart';
 
 /// Pushes the detail screen for one repeater of the region served at [baseUrl].
 Future<void> openRepeaterDetail(
@@ -452,18 +451,13 @@ class _RepeaterDetailScreenState extends State<RepeaterDetailScreen> {
             borderRadius: BorderRadius.circular(Corners.small),
             child: SizedBox(
               height: 180,
-              child: FlutterMap(
-                options: MapOptions(
-                  initialCenter: p,
-                  initialZoom: 13,
-                  backgroundColor: m.mapBackground,
-                  interactionOptions: const InteractionOptions(
-                    flags: InteractiveFlag.none,
-                  ),
-                ),
-                children: [
-                  if (widget.mapTiles)
-                    const BasemapLayer(),
+              child: MapPreview(
+                center: p,
+                zoom: 13,
+                tiles: widget.mapTiles,
+                coverage: kPreviewCoverage,
+                openAt: p,
+                overlays: [
                   MarkerLayer(
                     markers: [
                       Marker(
@@ -478,7 +472,6 @@ class _RepeaterDetailScreenState extends State<RepeaterDetailScreen> {
                       ),
                     ],
                   ),
-                  const MiniMapCredit(),
                 ],
               ),
             ),

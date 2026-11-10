@@ -14,9 +14,8 @@ import 'package:flutter_map/flutter_map.dart';
 
 import '../../../core/cluster_index.dart';
 import '../../../core/repeater_points.dart' show RepeaterPoints;
-import '../../design/map_tokens.dart';
 import '../../design/tokens.dart' show AppColors;
-import 'clustered_points_layer.dart' show clusterLabelInk, clusterLod, clusterSemanticsLabel, visibleSlice;
+import 'clustered_points_layer.dart' show clusterLod, clusterSemanticsLabel, visibleSlice;
 import 'map_layer.dart';
 import 'repeater_cluster_layer.dart' show repeaterHitFor;
 import 'repeater_map_source.dart';
@@ -387,17 +386,19 @@ class RepeaterPainter extends CustomPainter {
   }
 
   void _paintCluster(Canvas canvas, RepeaterClusterItem c) {
-    final b = theme.brightness;
-    // Neutral fill so the ring is the only colour: dark bubble in light mode, light bubble in dark mode.
-    final fill = MapTokens.mapInk(b);
-    final ink = clusterLabelInk(fill);
-    final tp = clusterCountPainter(clusterLabel(c.count), ink);
+    // The definition's cluster: a plain count bubble (`symbols.cluster`: fill, 2 pt stroke, count in the text colour).
+    final sym = theme.symbol;
+    final tp = clusterCountPainter(clusterLabel(c.count), sym.clusterText);
     final rad = math.max(clusterBubbleRadiusFor(c.count), tp.width / 2 + 6);
-    final ring = freshnessColor(c.freshness, b);
-    final halo = MapTokens.mapHalo(b);
-    canvas.drawCircle(c.at, rad + 2, Paint()..color = halo);
-    canvas.drawCircle(c.at, rad, Paint()..color = ring);
-    canvas.drawCircle(c.at, rad - 3, Paint()..color = fill);
+    canvas.drawCircle(c.at, rad, Paint()..color = sym.clusterFill);
+    canvas.drawCircle(
+      c.at,
+      rad - 1,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..color = sym.clusterStroke,
+    );
     tp.paint(canvas, c.at - Offset(tp.width / 2, tp.height / 2));
   }
 

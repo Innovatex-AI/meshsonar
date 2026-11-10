@@ -13,7 +13,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' show LatLng;
 
 import '../../../core/region_overview_api.dart' show RegionObserver;
-import '../../theme.dart';
+import '../active_map_definition.dart';
 import 'map_layer.dart';
 
 /// True when [o] carries a drawable public position (both set, finite, in range, not 0/0).
@@ -49,17 +49,18 @@ class ObserverLayer extends StatelessWidget {
 
   /// The clock for the moving-phone fade (tests pass one).
   final DateTime Function()? now;
-  const ObserverLayer({super.key, required this.observers, this.regionName, this.onHit, this.now});
+  /// The definition's two layers: `observers` (fixed stations) and `phones` (moving MeshSonar phones).
+  final bool showFixed, showMobile;
+  const ObserverLayer({super.key, required this.observers, this.regionName, this.onHit, this.now, this.showFixed = true, this.showMobile = true});
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    final mc = MeshSonarColors.of(context);
+    final sym = ObserverSymbolColours.of(Theme.of(context).brightness);
     final at = (now ?? DateTime.now)().toUtc();
     return MarkerLayer(
       markers: [
         for (final o in observers)
-          if (observerHasPosition(o) && o.mobile && observerOpacity(o, at) > 0)
+          if (showMobile && observerHasPosition(o) && o.mobile && observerOpacity(o, at) > 0)
             Marker(
               point: LatLng(o.lat!, o.lon!),
               width: 40,
@@ -79,7 +80,7 @@ class ObserverLayer extends StatelessWidget {
                       child: CustomPaint(
                         key: ValueKey('map-observer-${o.key}-mobile'),
                         size: const Size(18, 18),
-                        painter: MobileObserverPainter(fill: t.colorScheme.primary, glyph: t.colorScheme.onPrimary, halo: t.colorScheme.surface),
+                        painter: MobileObserverPainter(fill: sym.phoneFill, glyph: sym.phoneStroke, halo: sym.phoneFill),
                       ),
                     ),
                   ),
@@ -87,7 +88,7 @@ class ObserverLayer extends StatelessWidget {
               ),
             ),
         for (final o in observers)
-          if (observerHasPosition(o) && !o.mobile)
+          if (showFixed && observerHasPosition(o) && !o.mobile)
             Marker(
               point: LatLng(o.lat!, o.lon!),
               width: 40,
@@ -105,10 +106,10 @@ class ObserverLayer extends StatelessWidget {
                   child: CustomPaint(
                     key: ValueKey('map-observer-${o.key}-${o.online ? 'online' : 'offline'}'),
                     size: const Size(20, 18),
-                    painter: _TrianglePainter(
-                      fill: o.online ? t.colorScheme.primary : null,
-                      stroke: o.online ? t.colorScheme.surface : mc.silent,
-                      halo: t.colorScheme.surface,
+                    painter: ObserverTrianglePainter(
+                      fill: o.online ? sym.observerStroke : null,
+                      stroke: o.online ? sym.observerFill : sym.observerOffline,
+                      halo: sym.observerFill,
                     ),
                   ),
                 ),
@@ -120,11 +121,24 @@ class ObserverLayer extends StatelessWidget {
   }
 }
 
-class _TrianglePainter extends CustomPainter {
+/// The definition's observer and phone colours in one theme (`symbols.observer`, `symbols.phone`).
+class ObserverSymbolColours {
+  final Color observerStroke, observerFill, observerOffline, phoneStroke, phoneFill;
+  const ObserverSymbolColours(this.observerStroke, this.observerFill, this.observerOffline, this.phoneStroke, this.phoneFill);
+  static ObserverSymbolColours of(Brightness b) {
+    final d = ActiveMapDefinition.current;
+    final dark = b == Brightness.dark;
+    Color c(String s, String k) => Color(d.symbolColour(s, k, dark: dark));
+    return ObserverSymbolColours(c('observer', 'stroke'), c('observer', 'fill'), c('observer', 'offline'), c('phone', 'stroke'), c('phone', 'fill'));
+  }
+}
+
+/// The observer triangle (filled = online, outline = offline). Shared with the legend so the two always match.
+class ObserverTrianglePainter extends CustomPainter {
   final Color? fill;
   final Color stroke;
   final Color halo;
-  _TrianglePainter({required this.fill, required this.stroke, required this.halo});
+  ObserverTrianglePainter({required this.fill, required this.stroke, required this.halo});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -150,7 +164,7 @@ class _TrianglePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_TrianglePainter old) => old.fill != fill || old.stroke != stroke || old.halo != halo;
+  bool shouldRepaint(ObserverTrianglePainter old) => old.fill != fill || old.stroke != stroke || old.halo != halo;
 }
 
 /// A moving MeshSonar phone (contract section 8.4): a filled circle with a small phone outline inside. Shared with the
@@ -167,6 +181,7 @@ class MobileObserverPainter extends CustomPainter {
     final r = math.min(size.width, size.height) / 2;
     canvas.drawCircle(c, r + 1.5, Paint()..color = halo.withValues(alpha: 0.9));
     canvas.drawCircle(c, r, Paint()..color = fill);
+    canvas.drawCircle(c, r - 0.75, Paint()..style = PaintingStyle.stroke..strokeWidth = 1.5..color = glyph);
     final w = r * 0.8, h = r * 1.25;
     final rect = RRect.fromRectAndRadius(Rect.fromCenter(center: c, width: w, height: h), Radius.circular(w * 0.22));
     canvas.drawRRect(rect, Paint()

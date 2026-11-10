@@ -10,6 +10,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:meshsonar/core/basemap.dart';
 import 'package:meshsonar/core/map_definition.dart';
+import 'package:meshsonar/core/map_definition_bundled.g.dart';
 
 final bundled = File('assets/map/map-definition.json').readAsStringSync();
 
@@ -33,6 +34,26 @@ void main() {
     expect(d.layers.map((l) => l['id']), containsAllInOrder(['borders', 'predicted', 'heard', 'measured', 'repeaters']));
     expect(d.palettes.map((p) => p['id']), containsAll(['standard', 'colour_blind']));
     expect((d.coverage['tiles'] as Map)['hexFromZoom'], 13);
+  });
+
+  test('the generated bundled constant equals the asset (dart run tool/map_definition/gen_bundled.dart after a new fixture)', () {
+    expect(jsonDecode(kBundledMapDefinitionJson), jsonDecode(bundled));
+    expect(MapDefinition.bundled.version, MapDefinition.parse(bundled).version);
+  });
+
+  test('typed readers: groups, layers in drawing order, palettes, filters, symbols', () {
+    final d = MapDefinition.bundled;
+    expect(d.groups.map((g) => g.name), ['Coverage', 'Network', 'Context']);
+    expect(d.layerDefs.first.id, 'borders');
+    expect(d.layerDef('network')!.defaultOn, isFalse);
+    expect(d.layerDef('drive')!.panelOnly, isTrue);
+    expect(d.paletteDefs.map((p) => p.name), ['Standard', 'Colour-blind safe']);
+    expect(d.signal('standard', dark: false).bands, hasLength(7));
+    expect(d.signal('nope', dark: true).bands, d.signal('standard', dark: true).bands, reason: 'unknown palette -> the first');
+    expect(d.signal('colour_blind', dark: false).link.dash, isNotNull);
+    expect(d.filter('time').options.map((o) => o.id), ['all', '30d', '7d', '24h']);
+    expect(d.symbolColour('border', 'x', dark: true), isNot(0xFF808080), reason: 'border colours are per theme, not per key');
+    expect(d.symbolColour('repeater', 'ring', dark: false), parseHexColour(((d.symbol('repeater')['colours'] as Map)['light'] as Map)['ring'] as String));
   });
 
   test('contract parity: the road basemap in the definition is the one the app draws, with the same credit', () {

@@ -1,8 +1,7 @@
 // Shared pieces of the native Plan tools (airtime, presets, link, painter, coverage check, field data): the page frame,
 // section cards, the offline "as of" row, a labelled slider, the point picker (typed coordinates + "my location" + map tap)
 // and the small tap-to-place map. Same look as the Tools screens: plain words, icon AND text for every state.
-import '../map/overlays/mini_map_credit.dart';
-import '../map/basemap_layer.dart' show BasemapLayer;
+import '../map/map_preview.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -421,23 +420,18 @@ class _PlanMapState extends State<PlanMap> {
         child: SizedBox(
           key: const Key('plan-map'),
           height: widget.height,
-          child: FlutterMap(
-            mapController: _map,
-            options: MapOptions(
-              initialCenter: centre ?? (pts.length == 1 ? pts.first : const LatLng(0, 0)),
-              initialZoom: centre != null ? (centre == continentalCenter ? continentalZoom : 11) : (pts.length == 1 ? 12 : 3),
-              initialCameraFit: pts.length > 1
-                  ? CameraFit.coordinates(coordinates: pts, padding: const EdgeInsets.all(36), maxZoom: 16)
-                  : (bounds == null ? null : CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(24), maxZoom: 14)),
-              minZoom: 2,
-              maxZoom: 18,
-              backgroundColor: m.mapBackground,
-              interactionOptions: const InteractionOptions(flags: InteractiveFlag.all & ~InteractiveFlag.rotate),
-              onMapReady: () => _ready = true,
-              onTap: widget.onTap == null ? null : (_, p) => widget.onTap!(p),
-            ),
-            children: [
-              const BasemapLayer(),
+          child: MapPreview(
+            controller: _map,
+            center: centre ?? (pts.length == 1 ? pts.first : const LatLng(0, 0)),
+            zoom: centre != null ? (centre == continentalCenter ? continentalZoom : 11) : (pts.length == 1 ? 12 : 3),
+            fit: pts.length > 1
+                ? CameraFit.coordinates(coordinates: pts, padding: const EdgeInsets.all(36), maxZoom: 16)
+                : (bounds == null ? null : CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(24), maxZoom: 14)),
+            interaction: MapPreviewInteraction.edit,
+            coverage: kPreviewCoverage,
+            onMapReady: () => _ready = true,
+            onTap: widget.onTap == null ? null : (_, p) => widget.onTap!(p),
+            overlays: [
               if (widget.polygons.isNotEmpty)
                 PolygonLayer(polygons: [
                   for (final g in widget.polygons) Polygon(points: g.ring, color: g.color.withValues(alpha: 0.45), borderStrokeWidth: 0, hitValue: null),
@@ -460,7 +454,6 @@ class _PlanMapState extends State<PlanMap> {
                           ),
                   ),
               ]),
-              const MiniMapCredit(),
             ],
           ),
         ),

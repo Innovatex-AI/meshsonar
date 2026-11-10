@@ -12,8 +12,7 @@
 // Keys (tests): 'privacy-zones-screen', 'zones-map', 'zone-status', 'zone-add', 'zone-add-here', 'zone-add-banner',
 // 'zone-add-cancel', 'zone-tile-<i>', 'zone-editor', 'zone-name', 'zone-radius', 'zone-move', 'zone-here', 'zone-delete',
 // 'zone-trim', 'zone-limit', 'zones-unsupported', 'zones-website'.
-import '../map/overlays/mini_map_credit.dart';
-import '../map/basemap_layer.dart' show BasemapLayer;
+import '../map/map_preview.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -285,7 +284,6 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
   }
 
   Widget _mapBox(BuildContext context, AppState s, {double? height}) {
-    final mc = MeshSonarColors.of(context);
     final t = Theme.of(context);
     final zones = _zones;
     final start = _startView(s);
@@ -295,33 +293,26 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
       container: true,
       label: 'Map of your privacy zones. ${zones.isEmpty ? 'No zones yet.' : '${zones.length} ${zones.length == 1 ? 'zone' : 'zones'}.'} '
           'The list below the map is the way to select and edit a zone with a screen reader.',
-      child: FlutterMap(
-        key: const Key('zones-map'),
-        mapController: _map,
-        options: MapOptions(
-          initialCenter: start.center,
-          initialZoom: start.zoom,
-          initialCameraFit: start.bounds == null ? null : CameraFit.bounds(bounds: start.bounds!, padding: const EdgeInsets.all(40), maxZoom: 16),
-          minZoom: 2,
-          maxZoom: 18,
-          backgroundColor: mc.mapBackground,
-          interactionOptions: const InteractionOptions(flags: InteractiveFlag.all & ~InteractiveFlag.rotate),
-          onMapReady: () {
-            _mapReady = true;
-            _framedKey = _keyOf(start);
-            if (_tiles && _pack.update(start.center.latitude, start.center.longitude) && mounted) setState(() {});
-          },
-          onPositionChanged: (cam, hasGesture) {
-            if (hasGesture) _touched = true;
-            if (_tiles && _pack.update(cam.center.latitude, cam.center.longitude) && mounted) setState(() {});
-          },
-          onTap: (_, p) => unawaited(_onMapTap(p)),
-        ),
-        children: [
-          if (offline != null)
-            OfflineBasemapLayer(key: ValueKey('zones-offline-${_pack.code}'), reader: offline)
-          else if (_tiles)
-            const BasemapLayer(),
+      child: MapPreview(
+        mapKey: const Key('zones-map'),
+        controller: _map,
+        center: start.center,
+        zoom: start.zoom,
+        fit: start.bounds == null ? null : CameraFit.bounds(bounds: start.bounds!, padding: const EdgeInsets.all(40), maxZoom: 16),
+        interaction: MapPreviewInteraction.edit,
+        tiles: _tiles,
+        basemap: offline == null ? null : OfflineBasemapLayer(key: ValueKey('zones-offline-${_pack.code}'), reader: offline),
+        onMapReady: () {
+          _mapReady = true;
+          _framedKey = _keyOf(start);
+          if (_tiles && _pack.update(start.center.latitude, start.center.longitude) && mounted) setState(() {});
+        },
+        onPositionChanged: (cam, hasGesture) {
+          if (hasGesture) _touched = true;
+          if (_tiles && _pack.update(cam.center.latitude, cam.center.longitude) && mounted) setState(() {});
+        },
+        onTap: (_, p) => unawaited(_onMapTap(p)),
+        overlays: [
           CircleLayer(circles: [
             for (var i = 0; i < zones.length; i++)
               CircleMarker(
@@ -360,8 +351,6 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
                 ),
               ),
           ]),
-          if (_tiles && offline == null)
-            const MiniMapCredit(),
         ],
       ),
     );

@@ -1,10 +1,13 @@
-// Coverage v2 colours and drawing styles. The hex values and opacities are copied EXACTLY from meshsonar-infra
-// docs/planning/coverage-v2-colours.md (shared with the website, WP4); change both platforms together. Band meaning and labels
-// come from /api/coverage/meta (lib/core/coverage_v2.dart); colours are keyed by band number (token coverage-band-N).
+// Coverage v2 colours and drawing styles, read from the Map Definition (plan unified-map-system §2.2, phase M2): the band
+// colours per palette and theme (`palettes[].themes[theme].bands`, No-reply outline / point), the absolute opacities
+// (`drawing`) and the predicted multipliers (`palettes[].predicted[theme]`). No colour is copied into the app: a change on the
+// server reaches every map. Band meaning and labels come from the definition's `bands` / `/api/coverage/meta`.
 import 'package:flutter/widgets.dart';
 
 import '../../core/colour_palette.dart';
 import '../../core/coverage_v2.dart' show CoverageBand;
+import '../../core/map_definition.dart';
+import 'active_map_definition.dart';
 import 'cell_raster_layer.dart' show CellStyle;
 
 /// One palette's band ramp in one brightness.
@@ -19,58 +22,88 @@ class CoverageBandColors {
 
   /// The dark-theme ramp (Predicted is drawn quieter there, [PredictedOpacity.of]).
   final bool dark;
-  const CoverageBandColors(this.band, this.noReplyOutline, this.noReplyPoint, {this.dark = false});
 
-  Color operator [](int b) => band[b.clamp(0, 6)];
+  /// The definition and palette these colours came from (opacities and multipliers are read from the same place).
+  final MapDefinition definition;
+  final String paletteId;
+  const CoverageBandColors(this.band, this.noReplyOutline, this.noReplyPoint, {this.dark = false, required this.definition, required this.paletteId});
 
-  static CoverageBandColors of(ColourPalette palette, Brightness brightness) {
+  Color operator [](int b) => band[b.clamp(0, band.length - 1)];
+
+  static final Map<(String, String, bool), CoverageBandColors> _cache = {};
+
+  /// The colours of [palette] on [brightness], from [definition] (default: the active one).
+  static CoverageBandColors of(ColourPalette palette, Brightness brightness, {MapDefinition? definition}) {
+    final d = definition ?? ActiveMapDefinition.current;
     final dark = brightness == Brightness.dark;
-    return switch (palette) {
-      ColourPalette.standard => dark ? _standardDark : _standardLight,
-      ColourPalette.colourBlind => dark ? _cbDark : _cbLight,
-    };
+    return _cache.putIfAbsent((d.version, palette.id, dark), () {
+      if (_cache.length > 16) _cache.clear();
+      final s = d.signal(palette.id, dark: dark);
+      return CoverageBandColors(
+        [for (final b in s.bands) Color(b)],
+        Color(s.noReplyOutline),
+        Color(s.noReplyPoint),
+        dark: dark,
+        definition: d,
+        paletteId: palette.id,
+      );
+    });
   }
+
+  @override
+  bool operator ==(Object other) =>
+      other is CoverageBandColors && other.definition.version == definition.version && other.paletteId == paletteId && other.dark == dark;
+  @override
+  int get hashCode => Object.hash(definition.version, paletteId, dark);
 }
-
-// No-reply outline and z<=12 point: standard uses the band-0 dark red itself (the old bright-red outline would read as Edge); the
-// two accessible palettes keep the bright-red outline and the grey point (their Edge is red-orange; a red point would merge with it).
-const _outlineDark = Color(0xFFFF4D4D), _outlineLight = Color(0xFFC4161C);
-const _pointDark = Color(0xFF7A7A7A), _pointLight = Color(0xFF6A6A6A);
-
-// Standard is red -> yellow -> green, bad to good, no blue (Andy, Nov 8 2026, field feedback on build 49: "the blue is misleading").
-// Not promised colour-blind safe: colour-blind users pick colour_blind (warm = bad, cool = good, CVD-safe on all pairs).
-//                                     0 No reply        1 Edge            2 Weak            3 Fair            4 Good            5 Excellent       6 heard, no SNR
-const _standardDark = CoverageBandColors([Color(0xFFA6302F), Color(0xFFF63647), Color(0xFFFB8F41), Color(0xFFFCE738), Color(0xFF8DCE3C), Color(0xFF0AA349), Color(0xFF6E6E6E)], Color(0xFFA6302F), Color(0xFFA6302F), dark: true);
-const _standardLight = CoverageBandColors([Color(0xFF68050F), Color(0xFFB80321), Color(0xFFD36C1D), Color(0xFFE9B907), Color(0xFF749119), Color(0xFF18631D), Color(0xFF707070)], Color(0xFF68050F), Color(0xFF68050F));
-const _cbDark = CoverageBandColors([Color(0xFF472024), Color(0xFFE14C33), Color(0xFFF4993C), Color(0xFFF7E555), Color(0xFF86DBFD), Color(0xFF438AF1), Color(0xFF6E6E6E)], _outlineDark, _pointDark, dark: true);
-const _cbLight = CoverageBandColors([Color(0xFFEA7267), Color(0xFF592B21), Color(0xFFB63202), Color(0xFF9D8904), Color(0xFF3887B8), Color(0xFF2A3EAD), Color(0xFFA0A0A0)], _outlineLight, _pointLight);
 
 /// Measured cells: style index = band * 2 + (faint ? 1 : 0); 14 styles. Faint = under `meta.faintBelow` (3) attempts.
 int measuredStyleIndex(int band, bool faint) => band.clamp(0, 6) * 2 + (faint ? 1 : 0);
 
 /// The measured (and "This drive") styles, colours doc "Measured": bands at 0.85 (faint 0.55); No reply a quiet dark-red fill
 /// 0.6 / 0.35 under a 1 px red outline 0.9 / 0.55; dots at 0.9 (faint 0.55), No-reply dots in the point grey at 0.6.
-List<CellStyle> measuredStyles(CoverageBandColors c) => [
-  for (var b = 0; b <= 6; b++)
-    for (final faint in [false, true])
-      b == CoverageBand.noReply
-          ? CellStyle(
-              c[0].withValues(alpha: faint ? 0.35 : 0.6),
-              c.noReplyOutline.withValues(alpha: faint ? 0.55 : 0.9),
-              1,
-              null,
-              c.noReplyPoint.withValues(alpha: 0.6),
-            )
-          : CellStyle(c[b].withValues(alpha: faint ? 0.55 : 0.85), const Color(0x00000000), 0, null, c[b].withValues(alpha: faint ? 0.55 : 0.9)),
-];
+List<CellStyle> measuredStyles(CoverageBandColors c) {
+  final d = c.definition;
+  double v(String k, double f) => d.drawingValue(k, f);
+  return [
+    for (var b = 0; b <= 6; b++)
+      for (final faint in [false, true])
+        b == CoverageBand.noReply
+            ? CellStyle(
+                c[0].withValues(alpha: faint ? v('noReplyFillFaint', 0.35) : v('noReplyFill', 0.6)),
+                c.noReplyOutline.withValues(alpha: faint ? v('noReplyLineFaint', 0.55) : v('noReplyLine', 0.9)),
+                1,
+                null,
+                c.noReplyPoint.withValues(alpha: v('noReplyPoint', 0.6)),
+              )
+            : CellStyle(
+                c[b].withValues(alpha: faint ? v('faint', 0.55) : v('measured', 0.85)),
+                const Color(0x00000000),
+                0,
+                null,
+                c[b].withValues(alpha: faint ? v('pointFaint', 0.55) : v('point', 0.9)),
+              ),
+  ];
+}
 
 /// The Heard-by-phones styles (meshsonar-infra coverage-v2-colours.md "Heard", same values as the website's HEARD_STYLE):
 /// never a fill; hexagons are an outline 1.6 px in the band colour at 0.9; zoomed out a hollow ring (radius 2.2, stroke 1.2,
 /// 0.85). Index = band 0..6.
-List<CellStyle> heardStyles(CoverageBandColors c) => [
-  for (var b = 0; b <= 6; b++)
-    CellStyle(const Color(0x00000000), c[b].withValues(alpha: 0.9), 1.6, null, c[b].withValues(alpha: 0.85), 2, 1.2),
-];
+List<CellStyle> heardStyles(CoverageBandColors c) {
+  final d = c.definition;
+  return [
+    for (var b = 0; b <= 6; b++)
+      CellStyle(
+        const Color(0x00000000),
+        c[b].withValues(alpha: d.heardValue('lineOpacity', 0.9)),
+        d.heardValue('lineWidth', 1.6),
+        null,
+        c[b].withValues(alpha: d.heardValue('ringOpacity', 0.85)),
+        2,
+        d.heardValue('ringWidth', 1.2),
+      ),
+  ];
+}
 
 /// Heard ring dots: radius 2.2 px.
 const double kHeardDotPx = 4.4;
@@ -81,9 +114,11 @@ const double kHeardDotPx = 4.4;
 class PredictedOpacity {
   final double fill, hatch, noneHatch;
   const PredictedOpacity(this.fill, this.hatch, this.noneHatch);
-  static const PredictedOpacity light = PredictedOpacity(0.35, 0.6, 0.5);
-  static const PredictedOpacity dark = PredictedOpacity(0.2, 0.4, 0.3);
-  static PredictedOpacity of(CoverageBandColors c) => c.dark ? dark : light;
+  /// From the definition (`palettes[].predicted[theme]`).
+  static PredictedOpacity of(CoverageBandColors c) {
+    final m = c.definition.predicted(c.paletteId, dark: c.dark);
+    return PredictedOpacity(m.fill, m.hatch, m.none);
+  }
 }
 
 /// Predicted opacity `o` (0.15-0.6, server) in ten 0.05 steps so cells can share styles: 0.15, 0.20, ... 0.60. At most 0.025 off

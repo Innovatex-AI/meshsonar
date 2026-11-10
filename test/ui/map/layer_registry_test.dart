@@ -1,5 +1,9 @@
+import 'dart:convert';
+
 // The layer registry, MapLayerState <-> ?show=, and every layer's availability text.
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/core/map_definition.dart';
+import 'package:meshsonar/core/map_definition_bundled.g.dart';
 import 'package:meshsonar/core/map_prefs.dart';
 import 'package:meshsonar/core/map_view_state.dart';
 import 'package:meshsonar/core/region_repeaters_api.dart';
@@ -33,8 +37,8 @@ void main() {
     test('coverage redesign layers (plan section 5): rings gone, predicted added, under measured', () {
       // Nov 9 2026: + 'heardcells', the Heard (no ping) layer (phone observer contract section 8.5), between predicted and measured.
       expect(kMapLayers.map((l) => l.id).toSet(),
-          {'predicted', 'heardcells', 'measured', 'hexes', 'pings', 'links', 'heard', 'repeaters', 'network', 'observers', 'labels'});
-      expect(kMapLayers, hasLength(11));
+          {'borders', 'predicted', 'heardcells', 'measured', 'hexes', 'pings', 'links', 'heard', 'repeaters', 'network', 'observers', 'phones', 'labels'});
+      expect(kMapLayers, hasLength(13));
       expect(layerSpec('heardcells')!.z, greaterThan(layerSpec('predicted')!.z));
       expect(layerSpec('heardcells')!.z, lessThan(layerSpec('measured')!.z), reason: 'a pinged cell shows its Measured colour');
       expect(layerSpec('rings'), isNull);
@@ -43,18 +47,49 @@ void main() {
       expect(layerSpec('predicted')!.z, lessThan(layerSpec('measured')!.z), reason: 'predicted is drawn UNDER measured (D8)');
     });
 
-    test('defaults: both coverage layers and This drive on; network (56,889 points) and observers off', () {
-      expect(kDefaultLayerState.on, {'predicted', 'heardcells', 'measured', 'hexes', 'links', 'heard', 'pings', 'repeaters', 'labels'});
+    test('defaults come from the Map Definition: every defaultOn layer, plus the drive extras; All MeshCore repeaters off', () {
+      expect(kDefaultLayerState.on,
+          {'borders', 'predicted', 'heardcells', 'measured', 'hexes', 'links', 'repeaters', 'observers', 'phones', 'heard', 'pings', 'labels'});
       expect(kDefaultLayerState.mode, {'pings': 'snr'}, reason: 'no colour-by mode any more (D9)');
-      expect(layerSpec('network')!.label, 'All MeshCore repeaters');
-      expect(layerSpec('network')!.defaultOn, isFalse);
+      expect(layerLabel('network'), 'All MeshCore repeaters');
+      expect(kDefaultLayerState.isOn('network'), isFalse);
       expect(layerSpec('nope'), isNull);
-      expect(LayerGroup.values.map((g) => g.label), ['Coverage', 'Network']);
-      // The sheet's rows, website names for the two coverage layers (parity rule).
-      expect([for (final r in kSheetRows[LayerGroup.coverage]!) r.id], ['measured', 'predicted', 'heardcells', 'hexes', 'pings']);
-      expect([for (final r in kSheetRows[LayerGroup.network]!) r.id], ['repeaters', 'labels', 'observers', 'links']);
-      expect([for (final id in ['measured', 'predicted', 'hexes', 'pings', 'repeaters', 'labels', 'links']) layerSpec(id)!.label],
-          ['Measured coverage', 'Predicted coverage', 'This drive', 'Ping dots', 'Repeaters', 'Names', 'Lines to repeaters']);
+      expect(LayerGroup.values.map((g) => g.label), ['Coverage', 'Network', 'Context']);
+    });
+
+    test('the sheet is the website Layers panel: groups and rows from the definition, top of the map first', () {
+      final rows = sheetRows(MapDefinition.bundled);
+      expect([for (final (g, _) in rows) g.name], ['Coverage', 'Network', 'Context']);
+      expect([for (final r in rows[0].$2) r.id], ['hexes', 'pings', 'measured', 'heardcells', 'predicted'],
+          reason: 'This drive (the panel-only drive layer, the app drive panel) then the website rows');
+      expect([for (final r in rows[1].$2) r.id], ['phones', 'observers', 'repeaters', 'labels', 'network', 'links']);
+      expect([for (final r in rows[2].$2) r.id], ['borders']);
+      expect([for (final id in ['measured', 'heardcells', 'predicted', 'phones', 'observers', 'repeaters', 'network', 'links', 'borders']) layerLabel(id, MapDefinition.bundled)], [
+        'Measured coverage',
+        'Heard by phones',
+        'Predicted coverage',
+        'Moving phones',
+        'Observers',
+        'Repeaters',
+        'All MeshCore repeaters',
+        'Link lines',
+        'Region borders',
+      ]);
+    });
+
+    test('the hub definition: no observers, phones, links or network rows', () {
+      final j = jsonDecode(kBundledMapDefinitionJson) as Map<String, dynamic>;
+      j['layers'] = [for (final l in j['layers'] as List) if (const {'borders', 'predicted', 'heard', 'measured', 'drive', 'repeaters'}.contains((l as Map)['id'])) l];
+      final hub = MapDefinition.parse(jsonEncode(j));
+      final ids = [for (final (_, rs) in sheetRows(hub)) for (final r in rs) r.id];
+      expect(ids, isNot(contains('observers')));
+      expect(ids, isNot(contains('links')));
+      expect(ids, containsAll(['repeaters', 'measured', 'borders']));
+    });
+
+    test('paint order follows the definition', () {
+      expect(definitionLayerIds(MapDefinition.bundled),
+          ['borders', 'predicted', 'heardcells', 'measured', 'hexes', 'links', 'network', 'repeaters', 'observers', 'phones']);
     });
 
     test('one Repeaters switch with a scope: region by default, All MeshCore remembered while off', () {
@@ -93,13 +128,13 @@ void main() {
 
   group('MapLayerState', () {
     test('toggle, mode, equality', () {
-      final s = kDefaultLayerState.toggle('observers', true).withMode('pings', 'result');
-      expect(s.isOn('observers'), isTrue);
+      final s = kDefaultLayerState.toggle('network', true).withMode('pings', 'result');
+      expect(s.isOn('network'), isTrue);
       expect(s.modeOf('pings'), 'result');
-      expect(s.toggle('observers', true), same(s));
+      expect(s.toggle('network', true), same(s));
       expect(s.withMode('pings', 'result'), same(s));
-      expect(s.toggle('observers', false).withMode('pings', 'snr'), kDefaultLayerState);
-      expect(s.hashCode, kDefaultLayerState.toggle('observers', true).withMode('pings', 'result').hashCode);
+      expect(s.toggle('network', false).withMode('pings', 'snr'), kDefaultLayerState);
+      expect(s.hashCode, kDefaultLayerState.toggle('network', true).withMode('pings', 'result').hashCode);
     });
 
     test('toShow: website keys only and in the website order for web; app keys after for app links', () {

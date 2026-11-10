@@ -1,7 +1,7 @@
 // Shared pieces of the Tools screens: the page that explains "no radio" in plain words, a button with a visible cooldown,
 // the airtime note, notes with an icon AND words (colour never carries meaning alone), the small map, and formatters.
 // Every Tools screen is built from these so the empty / disconnected / busy / error states read the same everywhere.
-import '../map/basemap_layer.dart' show BasemapLayer;
+import '../map/map_preview.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -12,7 +12,6 @@ import '../../radio/session.dart' show LinkState;
 import '../../radio/tools/radio_tools.dart';
 import '../theme.dart';
 import 'tools_host.dart';
-import '../map/overlays/mini_map_credit.dart';
 
 /// Smallest tap target (logical px).
 const double kToolTarget = 48;
@@ -448,17 +447,14 @@ class ToolMap extends StatelessWidget {
         borderRadius: BorderRadius.circular(Corners.small),
         child: SizedBox(
           height: height,
-          child: FlutterMap(
-            options: MapOptions(
-              initialCenter: pts.first,
-              initialZoom: 13,
-              initialCameraFit: fit,
-              backgroundColor: m.mapBackground,
-              interactionOptions: const InteractionOptions(flags: InteractiveFlag.pinchZoom | InteractiveFlag.drag),
-            ),
-            children: [
-              if (tilesEnabled)
-                const BasemapLayer(),
+          child: MapPreview(
+            center: pts.first,
+            zoom: 13,
+            fit: fit,
+            interaction: MapPreviewInteraction.pan,
+            tiles: tilesEnabled,
+            coverage: kPreviewCoverage,
+            overlays: [
               if (lines.isNotEmpty)
                 PolylineLayer(polylines: [
                   for (final l in lines)
@@ -473,7 +469,6 @@ class ToolMap extends StatelessWidget {
                     child: p.child ?? Icon(p.icon, color: p.color ?? m.beacon, size: 28),
                   ),
               ]),
-              const MiniMapCredit(),
             ],
           ),
         ),

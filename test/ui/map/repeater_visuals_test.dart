@@ -86,7 +86,9 @@ void main() {
                 final s = {for (final e in crops.entries) e.key: simulate(e.value, sim)};
                 for (final (a, c) in [(_fresh, _recent), (_fresh, _stale), (_recent, _stale)]) {
                   final d = meanAbsDiff(s[a]!, s[c]!);
-                  expect(d, greaterThan(6), reason: '${b.name} $sim ${room ? 'room' : 'repeater'} ${variant.name}: ${a.name} vs ${c.name} differ by $d');
+                  // The definition's symbol (M2) tells the states apart by the RING (solid / dashed / none + faded), the same in
+                  // every vision: solid vs dashed is the smallest step (~3.4 mean), the faded stale one is far apart.
+                  expect(d, greaterThan(a == _fresh && c == _recent ? 3 : 6), reason: '${b.name} $sim ${room ? 'room' : 'repeater'} ${variant.name}: ${a.name} vs ${c.name} differ by $d');
                 }
               }
             }

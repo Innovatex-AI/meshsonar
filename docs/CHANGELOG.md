@@ -5,6 +5,30 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+## [0.33.0+58] — 2026-11-10 — the app renders its maps from the Map Definition (plan M2)
+
+- **One definition, app and website alike** (unified map plan §2.2): every map now takes its layers, layer names, groups,
+  defaults, drawing order, signal colours, legend and symbols from the server's Map Definition (`/api/map/definition`, the
+  same one the website uses), for the region you are looking at. A bundled copy works with no network. No signal colour is
+  written into the app any more; a test fails if one comes back.
+- **Layers panel = the website's**: Basemap, Coverage (Measured coverage, Heard by phones, Predicted coverage, plus This drive
+  and Ping dots while you drive), Network (Moving phones, Observers, Repeaters with Names, All MeshCore repeaters, Link lines),
+  Context (Region borders, new), Filters (Measured in: All time / 30 days / 7 days / 24 h; Drives from: All drives /
+  MeshSonar / MeshMapper) and Palette. Repeaters and All MeshCore repeaters are two switches again, as on the website.
+  Observers and Moving phones are on by default.
+- **Legend card on the map**: the band ramp and "Weak → strong signal"; tap it for every entry of the layers that are on,
+  with the band names and dB ranges, and the palette chooser (Standard / Colour-blind safe).
+- **Repeater symbol = the website's**: a neutral tower on a disc; a solid ring = heard in 24 h, a dashed ring = in 7 days, no
+  ring and faded = older. Clusters are plain count bubbles. Observers and moving phones use the definition's colours.
+- **One signal scale**: ping dots, link lines and the older network steps use the same five bands; a ping nobody answered is
+  the No-reply colour and a reply without a reading is the "heard, no direct signal" grey.
+- **Small maps are previews of the one map**: the repeater, reach, your drives, Where to drive, contact, message path, tools,
+  drive report, live packets, privacy zones, home observer and Plan maps are one shared component with the same basemap,
+  coverage colours and credit; previews have "Open the map", which opens the Drive map at that spot.
+- Region borders: the viewed region's outline on the Drive map (definition border symbol).
+- Offline maps: a region without a pack says so (packs cover North America; elsewhere the online map works).
+- Region stats say "cells", not "squares" (E1 coverage cells, PR #200).
+
 ## [0.32.0+57] — 2026-11-09 — our own map tiles everywhere, offline packs with coverage (plan M2, basemap half)
 
 - **Every map draws MeshSonar's own map** (unified map plan §2.3, M2): the Drive map and all the small maps (repeater,

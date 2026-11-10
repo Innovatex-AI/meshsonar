@@ -4,20 +4,23 @@
 // draw call. Until the atlas is ready (and in widget tests, where `toImage` never completes) the same drawing code
 // paints each badge straight onto the canvas ([paintRepeaterSprite]), so the picture is identical either way.
 //
-// Shape language, so colour-blind and greyscale users still tell the states apart (asserted by tests):
-//   Fresh  (advert <= 24 h)  solid fill, white / dark tower glyph
-//   Recent (<= 7 d)          35% tint, 2 pt coloured ring, coloured glyph
-//   Stale  (> 7 d or never)  hollow, dashed ring, glyph at 70%
-// Rooms are rounded squares (radius 30%), repeaters circles. The tower glyph + the white ring is the repeater
-// signature; pings are plain dots and never use it.
+// The symbol is the Map Definition's (`symbols.repeater`, the website draws the same, plan §2.4): a neutral tower on a disc,
+// and the state is the RING, never a colour, so colour-blind and greyscale users tell the states apart (asserted by tests):
+//   Fresh  (advert <= 24 h)  solid ring
+//   Recent (<= 7 d)          dashed ring
+//   Stale  (> 7 d or never)  no ring, the whole symbol faded (definition opacity, 0.45)
+// Icon, disc and ring colours per theme come from the definition. Rooms are rounded squares (radius 30%), repeaters circles.
+// Pings are plain dots and never use the tower.
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../../../core/map_definition.dart' show MapDefinition;
 import '../../../core/region_repeaters_api.dart' show RepeaterActivity;
 import '../../design/map_tokens.dart';
+import '../active_map_definition.dart';
 
 /// Three-state freshness of a repeater (plan 6.3, D10).
 enum RepeaterFreshness { fresh, recent, stale }
@@ -109,17 +112,72 @@ class RepeaterSpriteSpec {
   );
 }
 
+/// The definition's repeater symbol in one theme (`symbols.repeater`, `symbols.selection`, `symbols.cluster`).
+@immutable
+class RepeaterSymbolStyle {
+  final Color icon, disc, ring, selection, clusterFill, clusterStroke, clusterText;
+
+  /// Opacity of a stale repeater (`states[stale].opacity`).
+  final double staleOpacity;
+  const RepeaterSymbolStyle({
+    required this.icon,
+    required this.disc,
+    required this.ring,
+    required this.selection,
+    required this.clusterFill,
+    required this.clusterStroke,
+    required this.clusterText,
+    required this.staleOpacity,
+  });
+
+  static RepeaterSymbolStyle of(Brightness b, [MapDefinition? definition]) {
+    final d = definition ?? ActiveMapDefinition.current;
+    final dark = b == Brightness.dark;
+    Color c(String sym, String key) => Color(d.symbolColour(sym, key, dark: dark));
+    final states = (d.symbol('repeater')['states'] as List? ?? const []).whereType<Map>();
+    final stale = states.where((s) => s['id'] == 'stale').firstOrNull;
+    return RepeaterSymbolStyle(
+      icon: c('repeater', 'icon'),
+      disc: c('repeater', 'disc'),
+      ring: c('repeater', 'ring'),
+      selection: c('selection', 'x'),
+      clusterFill: c('cluster', 'fill'),
+      clusterStroke: c('cluster', 'stroke'),
+      clusterText: c('cluster', 'text'),
+      staleOpacity: (stale?['opacity'] as num?)?.toDouble() ?? 0.45,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is RepeaterSymbolStyle &&
+      other.icon == icon &&
+      other.disc == disc &&
+      other.ring == ring &&
+      other.selection == selection &&
+      other.clusterFill == clusterFill &&
+      other.clusterStroke == clusterStroke &&
+      other.clusterText == clusterText &&
+      other.staleOpacity == staleOpacity;
+  @override
+  int get hashCode => Object.hash(icon, disc, ring, selection, clusterFill, clusterStroke, clusterText, staleOpacity);
+}
+
 /// Everything besides the spec that changes how a sprite looks. Also the atlas cache key.
 @immutable
 class RepeaterSpriteTheme {
   final Brightness brightness;
 
-  /// The system's Increase Contrast setting (MediaQuery.highContrast): keyline at 100% alpha and a 3 pt ring.
+  /// The system's Increase Contrast setting (MediaQuery.highContrast): keyline at 100% alpha and a thicker ring.
   final bool highContrast;
 
-  /// Selection halo colour and the heard tick colour.
+  /// The heard tick colour; [accent] is kept for callers, the selection halo is the definition's selection colour.
   final Color accent, ok;
-  const RepeaterSpriteTheme({required this.brightness, required this.accent, required this.ok, this.highContrast = false});
+
+  /// The definition's symbol colours (default: the active definition, [brightness]).
+  final RepeaterSymbolStyle symbol;
+  RepeaterSpriteTheme({required this.brightness, required this.accent, required this.ok, this.highContrast = false, RepeaterSymbolStyle? symbol})
+    : symbol = symbol ?? RepeaterSymbolStyle.of(brightness);
 
   @override
   bool operator ==(Object other) =>
@@ -127,9 +185,10 @@ class RepeaterSpriteTheme {
       other.brightness == brightness &&
       other.highContrast == highContrast &&
       other.accent.toARGB32() == accent.toARGB32() &&
-      other.ok.toARGB32() == ok.toARGB32();
+      other.ok.toARGB32() == ok.toARGB32() &&
+      other.symbol == symbol;
   @override
-  int get hashCode => Object.hash(brightness, highContrast, accent.toARGB32(), ok.toARGB32());
+  int get hashCode => Object.hash(brightness, highContrast, accent.toARGB32(), ok.toARGB32(), symbol);
 }
 
 /// Atlas cache key: theme + DPR (+ palette, which is part of the theme).
@@ -164,35 +223,31 @@ void _dashed(Canvas canvas, Path path, Paint paint, double on, double off) {
   }
 }
 
+/// The definition's tower: a caret (mast and two legs) with a cross-bar, as the website draws it.
 void _glyph(Canvas canvas, Offset c, double d, Color color) {
-  final gs = d * 0.5; // glyph height: >= 10 pt for every badge that gets one
-  final stroke = math.max(1.5, gs * 0.13);
+  final gs = d * 0.46;
   final p = Paint()
     ..style = PaintingStyle.stroke
-    ..strokeWidth = stroke
+    ..strokeWidth = math.max(1.4, gs * 0.16)
     ..strokeCap = StrokeCap.round
+    ..strokeJoin = StrokeJoin.round
     ..color = color;
-  final top = Offset(c.dx, c.dy - gs * 0.26);
-  // Mast and a short base.
-  canvas.drawLine(top, Offset(c.dx, c.dy + gs * 0.5), p);
-  canvas.drawLine(Offset(c.dx - gs * 0.24, c.dy + gs * 0.5), Offset(c.dx + gs * 0.24, c.dy + gs * 0.5), p);
-  // One arc per side.
-  final arcRect = Rect.fromCircle(center: top, radius: gs * 0.42);
-  canvas.drawArc(arcRect, -0.75, 1.5, false, p);
-  canvas.drawArc(arcRect, math.pi - 0.75, 1.5, false, p);
-  canvas.drawCircle(top, stroke * 0.7, Paint()..color = color);
+  final top = Offset(c.dx, c.dy - gs * 0.5);
+  final l = Offset(c.dx - gs * 0.42, c.dy + gs * 0.5), r = Offset(c.dx + gs * 0.42, c.dy + gs * 0.5);
+  canvas.drawPath(Path()..moveTo(l.dx, l.dy)..lineTo(top.dx, top.dy)..lineTo(r.dx, r.dy), p);
+  canvas.drawLine(Offset(c.dx - gs * 0.22, c.dy + gs * 0.08), Offset(c.dx + gs * 0.22, c.dy + gs * 0.08), p);
 }
 
 /// Paints one sprite centred on [c] at logical scale (the atlas calls this at DPR scale too).
 void paintRepeaterSprite(Canvas canvas, Offset c, RepeaterSpriteSpec spec, RepeaterSpriteTheme theme) {
-  final b = theme.brightness;
   final v = spec.variant;
+  final sym = theme.symbol;
   final r = v.radius;
-  final fill = freshnessColor(spec.freshness, b);
-  final ringColor = MapTokens.mapHalo(b); // white (light) / #12161B (dark): the repeater signature
-  final base = ringColor;
   final donut = v == SpriteVariant.donut;
-  final ringW = donut ? 1.5 : (theme.highContrast ? 3.0 : 2.0);
+  final stale = spec.freshness == RepeaterFreshness.stale;
+  // The disc sits inside the ring's track: ring width + a 1 pt gap, so a ring-less (stale) symbol keeps the same disc size.
+  final ringW = donut ? 1.5 : (theme.highContrast ? 2.6 : 1.8);
+  final discR = r - ringW - 1.2;
 
   if (v.isSelected) {
     canvas.drawPath(
@@ -200,79 +255,39 @@ void paintRepeaterSprite(Canvas canvas, Offset c, RepeaterSpriteSpec spec, Repea
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 3
-        ..color = theme.accent,
+        ..color = sym.selection,
     );
   }
-  // Keyline: 1 pt outside the ring, 25% ink (100% in high contrast).
+  if (stale) canvas.saveLayer(Rect.fromCircle(center: c, radius: r + 4), Paint()..color = Color.fromRGBO(0, 0, 0, sym.staleOpacity));
+  // The disc with a 1 pt keyline in the ring colour (so a disc on a same-coloured map still has an edge).
+  canvas.drawPath(_shape(c, discR, spec.room), Paint()..color = sym.disc);
   canvas.drawPath(
-    _shape(c, r + 0.5, spec.room),
+    _shape(c, discR, spec.room),
     Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1
-      ..color = MapTokens.mapInk(b).withValues(alpha: theme.highContrast ? 1 : 0.25),
+      ..strokeWidth = theme.highContrast ? 1.5 : 1
+      ..color = sym.ring.withValues(alpha: theme.highContrast ? 1 : 0.6),
   );
-  canvas.drawPath(_shape(c, r, spec.room), Paint()..color = ringColor);
-  final ri = r - ringW;
-  final inner = _shape(c, ri, spec.room);
-
-  if (donut) {
-    // 3 pt coloured ring, light centre, no glyph. Stale is a dashed ring, Recent has a tinted centre.
-    canvas.drawPath(inner, Paint()..color = base);
-    switch (spec.freshness) {
-      case RepeaterFreshness.fresh:
-        canvas.drawPath(inner, Paint()..color = fill);
-        canvas.drawPath(_shape(c, ri - 3, spec.room), Paint()..color = base);
-      case RepeaterFreshness.recent:
-        canvas.drawPath(inner, Paint()..color = fill);
-        canvas.drawPath(_shape(c, ri - 3, spec.room), Paint()..color = Color.alphaBlend(fill.withValues(alpha: 0.35), base));
-      case RepeaterFreshness.stale:
-        _dashed(
-          canvas,
-          _shape(c, ri - 1.5, spec.room),
-          Paint()
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 3
-            ..color = fill,
-          2.2,
-          1.6,
-        );
-    }
-  } else {
-    canvas.drawPath(inner, Paint()..color = base);
-    final glyph = MapTokens.repeaterGlyph(b);
-    switch (spec.freshness) {
-      case RepeaterFreshness.fresh:
-        canvas.drawPath(inner, Paint()..color = fill);
-        _glyph(canvas, c, v.diameter, glyph);
-      case RepeaterFreshness.recent:
-        canvas.drawPath(inner, Paint()..color = fill.withValues(alpha: 0.35));
-        canvas.drawPath(
-          _shape(c, ri - 1, spec.room),
-          Paint()
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 2
-            ..color = fill,
-        );
-        _glyph(canvas, c, v.diameter, fill);
-      case RepeaterFreshness.stale:
-        _dashed(
-          canvas,
-          _shape(c, ri - 0.75, spec.room),
-          Paint()
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 1.5
-            ..color = fill,
-          3,
-          2,
-        );
-        _glyph(canvas, c, v.diameter, fill.withValues(alpha: 0.7));
-    }
+  if (!donut) _glyph(canvas, c, discR * 2, sym.icon);
+  final ringPaint = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = ringW
+    ..color = sym.ring;
+  final ringPath = _shape(c, r - ringW / 2, spec.room);
+  switch (spec.freshness) {
+    case RepeaterFreshness.fresh:
+      canvas.drawPath(ringPath, ringPaint);
+    case RepeaterFreshness.recent:
+      _dashed(canvas, ringPath, ringPaint, donut ? 2 : 2.4, donut ? 1.6 : 1.8);
+    case RepeaterFreshness.stale:
+      break; // no ring; faded below
   }
+  if (stale) canvas.restore();
 
   if (v.hasTick) {
-    // 8 pt green tick, top right, outlined in the ring colour so it reads on any fill.
+    // 8 pt green tick, top right, outlined in the disc colour so it reads on any map.
     final t = c + Offset(r * 0.74, -r * 0.74);
-    canvas.drawCircle(t, 5.5, Paint()..color = ringColor);
+    canvas.drawCircle(t, 5.5, Paint()..color = sym.disc);
     canvas.drawCircle(t, 4, Paint()..color = theme.ok);
     final tick = Path()
       ..moveTo(t.dx - 2, t.dy + 0.1)

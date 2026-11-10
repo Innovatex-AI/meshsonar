@@ -11,12 +11,13 @@ import '../../../core/region_overview_api.dart' show RegionObserver;
 import 'repeater_map_source.dart' show RepeaterPoint;
 
 /// Sections of the layers sheet after the base map picker, in this order (coverage plan section 5: Coverage, Network).
-enum LayerGroup { coverage, network }
+enum LayerGroup { coverage, network, context }
 
 extension LayerGroupLabel on LayerGroup {
   String get label => switch (this) {
     LayerGroup.coverage => 'Coverage',
     LayerGroup.network => 'Network',
+    LayerGroup.context => 'Context',
   };
 }
 

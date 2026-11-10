@@ -10,7 +10,9 @@ import 'package:flutter/material.dart';
 import '../../core/coverage_query.dart';
 import '../../core/network_coverage.dart';
 import '../drive/drive_map_model.dart';
+import '../../core/map_definition.dart' show MapFilterOptionDef;
 import '../theme.dart';
+import 'active_map_definition.dart';
 import 'coverage_timeline_slider.dart';
 
 /// The old (pre-v2) best-SNR legend steps, strongest first (same thresholds as [levelFor]).
@@ -23,7 +25,8 @@ List<(CoverageLevel, String)> coverageLegend() => const [
   (CoverageLevel.none, 'mapped, nothing heard'),
 ];
 
-/// The options page body of the coverage layers: window, growth slider and source.
+/// The Filters section of the Layers sheet (the website's: "Measured in" and "Drives from", option names from the Map
+/// Definition's `filters`), plus the app's coverage-growth timeline slider between them.
 class CoverageOptionsBody extends StatelessWidget {
   final DriveMapModel model;
   const CoverageOptionsBody({super.key, required this.model});
@@ -32,72 +35,52 @@ class CoverageOptionsBody extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = Theme.of(context);
     final q = model.coverageQuery;
-    final label = t.textTheme.labelMedium?.copyWith(
-      color: t.colorScheme.onSurfaceVariant,
-    );
+    final def = ActiveMapDefinition.current;
+    final time = def.filter('time'), source = def.filter('source');
+    final label = t.textTheme.labelMedium?.copyWith(color: t.colorScheme.onSurfaceVariant);
     Widget row(String title, Widget chips) => Padding(
       padding: const EdgeInsets.only(bottom: Gap.s),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: label),
-          const SizedBox(height: 4),
-          chips,
-        ],
-      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: label), const SizedBox(height: 4), chips]),
     );
-    Widget chips<T>(
-      String prefix,
-      List<T> values,
-      T selected,
-      String Function(T) text,
-      ValueChanged<T> onPick,
-    ) => Wrap(
+    Widget chips(String prefix, List<MapFilterOptionDef> options, String selected, ValueChanged<String> onPick) => Wrap(
       spacing: Gap.s,
       runSpacing: 0,
       children: [
-        for (final v in values)
+        for (final o in options)
           ChoiceChip(
-            key: Key('$prefix-${text(v)}'),
-            label: Text(text(v)),
-            selected: v == selected,
+            key: Key('$prefix-${o.id}'),
+            label: Text(o.label),
+            selected: o.id == selected,
             visualDensity: VisualDensity.compact,
-            onSelected: (_) => onPick(v),
+            onSelected: (_) => onPick(o.id),
           ),
       ],
     );
+    final note = time.note;
     return KeyedSubtree(
       key: const Key('coverage-layer-controls'),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+          if (time.available) ...[
             row(
-              'Measured in the last',
-              chips<CoverageSince>(
-                'cov-since',
-                CoverageSince.values,
-                q.since,
-                (v) => v.label,
-                (v) => model.coverageQuery = q.copyWith(since: v),
-              ),
+              'Measured in',
+              chips('cov-since', time.options.where((o) => CoverageSince.ofDefinitionId(o.id) != null).toList(), q.since.definitionId, (id) {
+                model.coverageQuery = q.copyWith(since: CoverageSince.ofDefinitionId(id));
+              }),
             ),
             CoverageTimelineSlider(model: model),
             row(
-              'Source',
-              chips<CoverageSource>(
-                'cov-source',
-                CoverageSource.values,
-                q.source,
-                (v) => v.label,
-                (v) => model.coverageQuery = q.copyWith(source: v),
-              ),
+              'Drives from',
+              chips('cov-source', source.options.where((o) => CoverageSource.values.any((v) => v.wire == o.id)).toList(), q.source.wire, (id) {
+                model.coverageQuery = q.copyWith(source: CoverageSource.values.firstWhere((v) => v.wire == id));
+              }),
             ),
-          ],
-        ),
-      ],
+            if (note != null && (q.since != CoverageSince.all || q.until != null))
+              Text(note, key: const Key('cov-time-note'), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+          ] else if (note != null)
+            Text(note, style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+        ],
       ),
     );
   }

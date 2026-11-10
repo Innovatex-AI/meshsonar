@@ -4,7 +4,7 @@
 // mistaken for the phone-only ones. Privacy as the server applies it: public drives only, each drive's start and end
 // trimmed and privacy zones removed, cells instead of tracks, times rounded to the hour. Every state is explicit.
 // Needs AppScope; without one (isolated widget tests) it renders nothing.
-import 'map/basemap_layer.dart' show BasemapLayer;
+import 'map/map_preview.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -22,7 +22,6 @@ import 'map/coverage_map.dart' show CoverageMap;
 import 'region/region_dataset_view.dart' show FigureStrip;
 import 'settings_screen.dart' show DriverKeyScreen;
 import 'widgets.dart';
-import 'map/overlays/mini_map_credit.dart';
 
 final _hex = RegExp(r'^[0-9a-fA-F]{8,64}$');
 
@@ -249,15 +248,12 @@ class _ReachMap extends StatelessWidget {
         borderRadius: BorderRadius.circular(Corners.small),
         child: SizedBox(
           height: 190,
-          child: FlutterMap(
-            options: MapOptions(
-              initialCameraFit: CameraFit.bounds(bounds: LatLngBounds.fromPoints(pts), padding: const EdgeInsets.all(18), maxZoom: 15),
-              backgroundColor: m.mapBackground,
-              interactionOptions: const InteractionOptions(flags: InteractiveFlag.none),
-            ),
-            children: [
-              if (tiles)
-                const BasemapLayer(),
+          child: MapPreview(
+            fit: CameraFit.bounds(bounds: LatLngBounds.fromPoints(pts), padding: const EdgeInsets.all(18), maxZoom: 15),
+            tiles: tiles,
+            openAt: lat != null && lon != null ? LatLng(lat!, lon!) : LatLngBounds.fromPoints(pts).center,
+            openZoom: 12,
+            overlays: [
               PolygonLayer(polygons: [
                 for (final c in reach.cells)
                   Polygon(
@@ -269,7 +265,6 @@ class _ReachMap extends StatelessWidget {
               ]),
               if (lat != null && lon != null)
                 MarkerLayer(markers: [Marker(point: LatLng(lat!, lon!), width: 24, height: 24, child: Icon(Icons.cell_tower, color: m.beacon, size: 24))]),
-              const MiniMapCredit(),
             ],
           ),
         ),

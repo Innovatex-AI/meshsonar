@@ -276,16 +276,16 @@ void main() {
   });
 
   group('sprite atlas', () {
-    const theme = RepeaterSpriteTheme(brightness: Brightness.light, accent: Colors.teal, ok: Colors.green);
+    final theme = RepeaterSpriteTheme(brightness: Brightness.light, accent: Colors.teal, ok: Colors.green);
 
     test('cache keys: theme, palette and DPR each make a different key; the same inputs the same key', () {
-      const a = RepeaterSpriteKey(theme, 3);
-      expect(a, const RepeaterSpriteKey(RepeaterSpriteTheme(brightness: Brightness.light, accent: Colors.teal, ok: Colors.green), 3));
-      expect(a.hashCode, const RepeaterSpriteKey(RepeaterSpriteTheme(brightness: Brightness.light, accent: Colors.teal, ok: Colors.green), 3).hashCode);
-      expect(a, isNot(const RepeaterSpriteKey(theme, 2)));
-      expect(a, isNot(const RepeaterSpriteKey(RepeaterSpriteTheme(brightness: Brightness.dark, accent: Colors.teal, ok: Colors.green), 3)));
-      expect(a, isNot(const RepeaterSpriteKey(RepeaterSpriteTheme(brightness: Brightness.light, accent: Colors.teal, ok: Colors.green, highContrast: true), 3)));
-      expect(a, isNot(const RepeaterSpriteKey(RepeaterSpriteTheme(brightness: Brightness.light, accent: Colors.red, ok: Colors.green), 3)));
+      final a = RepeaterSpriteKey(theme, 3);
+      expect(a, RepeaterSpriteKey(RepeaterSpriteTheme(brightness: Brightness.light, accent: Colors.teal, ok: Colors.green), 3));
+      expect(a.hashCode, RepeaterSpriteKey(RepeaterSpriteTheme(brightness: Brightness.light, accent: Colors.teal, ok: Colors.green), 3).hashCode);
+      expect(a, isNot(RepeaterSpriteKey(theme, 2)));
+      expect(a, isNot(RepeaterSpriteKey(RepeaterSpriteTheme(brightness: Brightness.dark, accent: Colors.teal, ok: Colors.green), 3)));
+      expect(a, isNot(RepeaterSpriteKey(RepeaterSpriteTheme(brightness: Brightness.light, accent: Colors.teal, ok: Colors.green, highContrast: true), 3)));
+      expect(a, isNot(RepeaterSpriteKey(RepeaterSpriteTheme(brightness: Brightness.light, accent: Colors.red, ok: Colors.green), 3)));
     });
 
     test('every state is its own sprite: 3 freshness x 2 kinds x 6 variants = 36 distinct indices', () {
@@ -306,7 +306,7 @@ void main() {
     testWidgets('the atlas is built once per key, never per frame, and a new DPR builds a new one', (t) async {
       final sprites = RepeaterSprites.instance..clear();
       addTearDown(sprites.clear);
-      const a = RepeaterSpriteKey(theme, 2);
+      final a = RepeaterSpriteKey(theme, 2);
       expect(sprites.atlasFor(a), isNull, reason: 'building; callers paint without it');
       for (var i = 0; i < 20; i++) {
         sprites.atlasFor(a);
@@ -317,7 +317,7 @@ void main() {
       expect(atlas, isNotNull);
       expect(atlas!.image.width, (kSpriteCell * 2 * 6).round());
       expect(sprites.builds, 1);
-      sprites.atlasFor(const RepeaterSpriteKey(theme, 3));
+      sprites.atlasFor(RepeaterSpriteKey(theme, 3));
       expect(sprites.builds, 2);
     });
 

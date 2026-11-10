@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../design/app_surfaces.dart';
 import '../../core/colour_palette.dart';
+import '../map/active_map_definition.dart';
 import '../../core/units.dart';
 import '../app.dart';
 import '../design/app_symbols.dart';
@@ -278,10 +279,8 @@ Future<String?> pickUnit(BuildContext context, UnitQuantity q) {
 }
 
 /// What each palette is for, in one line (the only wording for it).
-String paletteSummary(ColourPalette p) => switch (p) {
-  ColourPalette.standard => 'Red to yellow to green: dark red where nothing answered, green for the strongest signal.',
-  ColourPalette.colourBlind => 'Blue to yellow to orange. Safe for red-green and blue-yellow colour blindness. Link lines turn dashed.',
-};
+String paletteSummary(ColourPalette p) =>
+    ActiveMapDefinition.current.paletteDefs.where((d) => d.id == p.id).firstOrNull?.blurb ?? p.label; // the Map Definition's words
 
 /// The coverage colours of [p] as a strip (the same preview as the website's palette picker): Excellent to Edge, then
 /// No reply and Heard, no direct signal. Shown beside each choice so the person sees the palette before picking it.
@@ -329,7 +328,7 @@ class ColourPaletteTile extends StatelessWidget {
           leading: const Icon(Icons.palette_outlined),
           title: Text(e.title),
           subtitle: Text(
-            'How signal strength is coloured on every map and chart. Grey (nothing heard) and purple (heard, signal unknown) '
+            'How signal strength is coloured on every map and chart. No reply (nothing heard) and grey (heard, no direct signal) '
             'stay distinct in both.',
             key: const Key('colour-palette-explanation'),
           ),
