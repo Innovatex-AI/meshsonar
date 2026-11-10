@@ -100,6 +100,8 @@ flutter:
     - assets/fonts/Barlow-Regular.ttf
     - assets/fonts/Barlow-SemiBold.ttf
     - assets/fonts/Barlow-OFL.txt
+    # The bundled Map Definition (plan §2.2 / §8b M2): the M1 fixture, used until the server's copy has been read once.
+    - assets/map/map-definition.json
 
   # To add assets to your application, add an assets section, like this:
   # assets:

@@ -88,7 +88,7 @@ void main() {
       CoverageMap(pings: [silentPing('a')], position: const LatLng(40.126, -82.93), showTiles: true),
       b: Brightness.light,
     );
-    expect(find.text('© OpenStreetMap contributors'), findsOneWidget);
+    expect(find.text('Protomaps © OpenStreetMap contributors'), findsOneWidget);
     expect(find.byKey(const Key('map-recenter')), findsNothing);
     await tester.drag(find.byType(CoverageMap), const Offset(120, 80));
     await tester.pump();

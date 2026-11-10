@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'app/app_state.dart';
 import 'alerts/alerts_runtime.dart';
 import 'app/chat_wiring.dart';
+import 'app/map_definition_wiring.dart';
 import 'app/wiring.dart';
 import 'platform/map_prefs_store.dart' show openSharedMapPrefs;
 import 'ui/app.dart';
@@ -40,6 +41,7 @@ Future<void> main() async {
     }));
     alerts?.startLaunchReconnect();
     unawaited(OfflineBasemap.instance.refreshCoverageWhenStale());
+    unawaited(startMapDefinition(state.client.baseUrl));
   } catch (e) {
     runApp(StartupErrorApp(message: e.toString()));
   }

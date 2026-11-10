@@ -21,6 +21,9 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
   repeaters: the app reads the new pack list from api.meshsonar.com/basemap/packs/, installs the coverage snapshot with the
   pack (checksum-verified, never replacing a good copy with a bad one), refreshes it at most every 12 hours on Wi-Fi, and
   draws it when the network fails. Until the new packs are published the old ones keep working as before.
+- **Map Definition cache** (plan §2.2 / §8b): the app ships the M1 Map Definition (bundled copy), keeps the last good copy
+  from the server per region, refreshes it when it is more than an hour old (ETag, 304), and never replaces a good copy
+  with one that fails to parse or has a newer schema. Nothing draws from it yet; that is the next step of M2.
 
 ## [0.31.1+56] — 2026-11-09 — drive positions kept only for the part your drive keeps (contract 8.7)
 
