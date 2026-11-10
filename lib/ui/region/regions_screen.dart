@@ -38,7 +38,7 @@ const _sortLabels = {
   RegionSort.drivers: 'Drivers',
   RegionSort.pings: 'Pings',
   RegionSort.heardPct: 'Heard',
-  RegionSort.cellsHeardPct: 'Squares',
+  RegionSort.cellsHeardPct: 'Cells',
   RegionSort.repeatersHeard: 'Repeaters',
 };
 
@@ -551,7 +551,7 @@ class _RegionsScreenState extends State<RegionsScreen> {
             DataColumn(label: Text('Drivers'), numeric: true),
             DataColumn(label: Text('Pings'), numeric: true),
             DataColumn(label: Text('Heard'), numeric: true),
-            DataColumn(label: Text('Squares'), numeric: true),
+            DataColumn(label: Text('Cells'), numeric: true),
             DataColumn(label: Text('Repeaters'), numeric: true),
           ],
           rows: [
