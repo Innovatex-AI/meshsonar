@@ -67,7 +67,7 @@ class _DemoTransport implements PhotoTransport {
     // Bytes out in steps, then the body is out and the answer takes a moment ("Processing…").
     for (var i = 1; i <= 5; i++) {
       onProgress?.call(bytes.length * i ~/ 5, bytes.length);
-      await Future<void>.delayed(Duration(milliseconds: i < 5 ? 400 : 2500));
+      await Future<void>.delayed(Duration(milliseconds: i < 5 ? 1200 : 5000));
     }
     return const PhotoUploadResult(id: 'Up10aded', url: 'https://meshsonar.com/p/Up10aded', thumbUrl: '', fullUrl: '');
   }
@@ -212,9 +212,9 @@ void main() {
       await t.tap(find.byKey(const Key('photo-library')));
       await pumpFor(t, const Duration(milliseconds: 500));
       await shot(t, 'photo-uploading');
-      await pumpFor(t, const Duration(milliseconds: 1200));
+      await pumpFor(t, const Duration(milliseconds: 4500));
       await shot(t, 'photo-processing');
-      await pumpFor(t, const Duration(seconds: 2));
+      await pumpFor(t, const Duration(seconds: 5));
       await shot(t, 'photo-link-inserted');
       // Send it: the own bubble shows the photo.
       await t.enterText(find.byKey(const Key('composer-field')), 'From the trailhead https://meshsonar.com/p/Up10aded');
