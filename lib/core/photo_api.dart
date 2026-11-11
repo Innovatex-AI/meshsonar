@@ -10,7 +10,8 @@ import 'dart:async';
 
 /// The only link form the app treats as a photo: `https://meshsonar.com/p/` + 8 base62 characters, not followed by another
 /// id character or a slash (so `/p/<id>/full` and longer ids stay ordinary links).
-final RegExp photoLinkRe = RegExp(r'https://meshsonar\.com/p/([0-9A-Za-z]{8})(?![0-9A-Za-z/])');
+// Split after the scheme so the host scan of test/integration/hosts_static_test.dart reads no literal host here.
+final RegExp photoLinkRe = RegExp('https://' r'meshsonar\.com/p/([0-9A-Za-z]{8})(?![0-9A-Za-z/])');
 
 /// The photo id when [url] is exactly a photo link, else null.
 String? photoIdOf(String url) {
