@@ -348,6 +348,16 @@ const String kBundledMapDefinitionJson = r'''
           "state": "stale",
           "label": "Not heard for over 7 days (faded)"
         }
+      ],
+      "controls": [
+        {
+          "id": "names",
+          "name": "Names",
+          "defaultOn": true,
+          "urlKey": "names",
+          "rule": "repeaterNames",
+          "hint": "Name beside each repeater, from street zoom (z14); fewer when crowded."
+        }
       ]
     },
     {
@@ -412,7 +422,7 @@ const String kBundledMapDefinitionJson = r'''
             "#68050F",
             "#B80321",
             "#D36C1D",
-            "#E9B907",
+            "#8F6C00",
             "#749119",
             "#18631D",
             "#707070"
@@ -471,7 +481,7 @@ const String kBundledMapDefinitionJson = r'''
             "#EA7267",
             "#592B21",
             "#B63202",
-            "#9D8904",
+            "#988400",
             "#3887B8",
             "#2A3EAD",
             "#A0A0A0"
@@ -807,6 +817,18 @@ const String kBundledMapDefinitionJson = r'''
       ],
       "default": "all",
       "available": true
+    },
+    "growth": {
+      "key": "asof",
+      "label": "Coverage growth (as of)",
+      "source": "/api/cmh/region-timeline",
+      "step": "day",
+      "tz": "UTC",
+      "debounceMs": 350,
+      "playTickMs": 1200,
+      "applies": "measured",
+      "available": true,
+      "note": "Predicted coverage and Heard by phones are all-time and hide while an earlier day is picked."
     }
   },
   "limits": {
@@ -824,6 +846,8 @@ const String kBundledMapDefinitionJson = r'''
     "show",
     "t",
     "src",
+    "asof",
+    "names",
     "palette",
     "panel"
   ],
@@ -1002,6 +1026,6 @@ const String kBundledMapDefinitionJson = r'''
     "heardAt": "2026-11-09T00:00:00.000Z",
     "heardCells": 1
   },
-  "version": "d456ecaa"
+  "version": "5cd63967"
 }
 ''';
