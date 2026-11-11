@@ -248,6 +248,18 @@ final List<ScreenStep> screens = [
     await t.pageBack();
     await pumpFor(t, const Duration(seconds: 1));
   }),
+  // More > Home observer: the map, the public-map choice and the Antenna at home list (P2, Nov 10 2026).
+  ScreenStep('home-observer', (t) async {
+    await _openMoreRow(t, 'more-homeObserver');
+    if (!await waitFor(t, find.byKey(const Key('home-observer-list')))) throw const _Skip();
+    await shot(t, 'home-observer');
+    final antenna = find.byKey(const Key('home-antenna-unknown'));
+    await t.ensureVisible(antenna);
+    await pumpFor(t, const Duration(milliseconds: 500));
+    await shot(t, 'home-observer-antenna');
+    await t.pageBack();
+    await pumpFor(t, const Duration(seconds: 1));
+  }, optional: true),
   ScreenStep('region', (t) async {
     await openTab(t, 'Region');
     await shot(t, 'region');

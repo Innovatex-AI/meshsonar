@@ -65,6 +65,20 @@ void main() {
     expect(newPingTag(random: math.Random(1)), isNot(newPingTag(random: math.Random(2))));
   });
 
+  test('onPingSent fires once per ping, before the send and before any echo (the telemetry echo window, P1)', () async {
+    final rig = Rig(speedMps: 0);
+    await rig.open();
+    final sent = <DateTime>[];
+    rig.engine.onPingSent = sent.add;
+    await rig.engine.start(manual());
+    final p = await rig.engine.pingNow();
+    expect(sent, hasLength(1));
+    expect(sent.single.toUtc(), p.ts, reason: 'the send time is the ping time');
+    await rig.engine.pingNow();
+    expect(sent, hasLength(2));
+    await rig.engine.stop();
+  });
+
   test('start joins the channel; pingNow emits one finished ping with real echoes', () async {
     final rig = Rig(speedMps: 0); // parked in Uptown, next to "WSTV Uptown"
     await rig.open();

@@ -86,7 +86,7 @@ void main() {
         config: const TelemetryConfig(holdFor: Duration(seconds: 90), minGap: Duration.zero),
         now: () => _at.add(const Duration(minutes: 3)),
         autoSchedule: false,
-        observer: () => obs,
+        observer: (_) => obs,
       );
 
   test('own echo, ping public: own true with raw; ping not public: header only; later echoes are marked too', () async {

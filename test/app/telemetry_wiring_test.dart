@@ -9,6 +9,8 @@ import 'package:meshsonar/app/app_state.dart';
 import 'package:meshsonar/app/services.dart';
 
 import 'package:h3_ffi/h3_ffi.dart';
+import 'package:meshsonar/core/antenna_profile.dart';
+import 'package:meshsonar/core/api.dart' show Settings;
 import 'package:meshsonar/core/drive_end.dart';
 import 'package:meshsonar/core/home_observer.dart';
 import 'package:meshsonar/core/model.dart';
@@ -150,15 +152,12 @@ Future<_H> _ready({void Function(_H h)? before}) async {
 }
 
 void main() {
-  test('radio packets are uploaded after the hold, as telemetry v2 (Public channel: raw + channel, never plain text)', () async {
+  test('radio packets go at the next flush when no own ping is in flight (P1), as telemetry v2 (Public channel: raw + channel, never plain text)', () async {
     final h = await _ready();
     h.link.rx.add(_pkt(h.now, 1));
     await Future<void>.delayed(Duration.zero);
     await h.state.flushTelemetry();
-    expect(h.tele.bodies, isEmpty, reason: 'held so our own echoes can be recognised');
-    h.now = h.now.add(const Duration(minutes: 2));
-    await h.state.flushTelemetry();
-    expect(h.tele.bodies, hasLength(1));
+    expect(h.tele.bodies, hasLength(1), reason: 'no 90 s hold without an own ping in flight');
     expect(h.tele.bodies.single.contains('secret words'), isFalse);
     expect(h.tele.bodies.single.contains('Ann'), isFalse);
     final j = jsonDecode(h.tele.bodies.single) as Map;
@@ -318,6 +317,53 @@ void main() {
       expect(h.state.homeObserverActive, isFalse);
     });
 
+    // P2 (HANDOFF "Phone observer data analysis + plan", Nov 10 2026): the radio block's antenna follows the mode.
+    Future<_H> withCarAntenna() => _ready(
+        before: (h) => h.settings.saved = h.settings.saved.copyWith(antennaProfiles: {
+              'abcdef0123': AntennaProfile(mount: AntennaMount.insideCar, heightM: 1.2, updatedAt: DateTime.utc(2026, 11, 1)),
+            }));
+
+    test('P2: background mode sends the drive antenna; home mode sends the home antenna, unknown by default', () async {
+      final h = await withCarAntenna();
+      var j = await sendOne(h, _advert(h.now, List.filled(32, 0x21)));
+      expect((j['observer'] as Map)['mode'], 'background');
+      expect(((j['observer'] as Map)['radio'] as Map)['antenna'], 'inside_car');
+
+      expect(await h.state.startHomeObserver(39.95, -83.01, HomeLocationPublic.exact), HomeCallOutcome.ok);
+      j = await sendOne(h, _advert(h.now, List.filled(32, 0x22)));
+      expect((j['observer'] as Map)['mode'], 'home');
+      expect(((j['observer'] as Map)['radio'] as Map)['antenna'], 'unknown', reason: 'never the car antenna at home');
+
+      await h.state.updateSettings(h.state.settings.copyWith(homeAntenna: AntennaMount.fixedMast));
+      j = await sendOne(h, _advert(h.now, List.filled(32, 0x23)));
+      expect(((j['observer'] as Map)['radio'] as Map)['antenna'], 'fixed_mast');
+
+      // The home heartbeat carries the same radio block.
+      final n = h.tele.homeCalls.length;
+      await h.state.homeObserverService.heartbeatNow();
+      final hb = h.tele.homeCalls.skip(n).firstWhere((c) => c.startsWith('HEARTBEAT '));
+      final hbBody = jsonDecode(hb.substring('HEARTBEAT '.length)) as Map;
+      expect(hbBody['mode'], 'home');
+      expect((hbBody['radio'] as Map)['antenna'], 'fixed_mast');
+
+      // Off again: back to the drive antenna; the home choice is kept for next time.
+      expect(await h.state.stopHomeObserver(), HomeCallOutcome.ok);
+      j = await sendOne(h, _advert(h.now, List.filled(32, 0x24)));
+      expect(((j['observer'] as Map)['radio'] as Map)['antenna'], 'inside_car');
+      expect(h.state.settings.homeAntenna, AntennaMount.fixedMast);
+    });
+
+    test('P2: the home antenna survives a restart (settings JSON) and "Don\'t know" clears it', () {
+      const s = Settings(homeAntenna: AntennaMount.roofMagMount);
+      expect(s.toJson()['home_antenna'], 'roofMagMount');
+      expect(Settings.fromJson(s.toJson()).homeAntenna, AntennaMount.roofMagMount);
+      expect(const Settings().toJson().containsKey('home_antenna'), isFalse, reason: 'default unknown is not written');
+      expect(Settings.fromJson({'home_antenna': 'bogus'}).homeAntenna, isNull);
+      expect(s.copyWith(clearHomeAntenna: true).homeAntenna, isNull);
+      expect(AppState.homeAntennaToken(null), 'unknown');
+      expect(AppState.homeAntennaToken(AntennaMount.fixedMast), 'fixed_mast');
+    });
+
     test('an erase makes a new observer id and ends home mode', () async {
       final h = await _ready();
       await h.state.startHomeObserver(39.95, -83.01, HomeLocationPublic.rounded1km);
@@ -363,6 +409,23 @@ void main() {
       final pk = (j['packets'] as List).single as Map;
       expect(pk['pos'], {'lat': 39.970001, 'lon': -82.990002, 'acc_m': 6.0});
       expect(pk.containsKey('cell'), isFalse);
+    });
+
+    test('P2: drive mode sends the drive antenna, unchanged, even with a home antenna set', () async {
+      final h = _H()..approveKey();
+      h.settings.saved = h.settings.saved.copyWith(homeAntenna: AntennaMount.fixedMast, antennaProfiles: {
+        'abcdef0123': AntennaProfile(mount: AntennaMount.roofMagMount, heightM: 1.8, updatedAt: DateTime.utc(2026, 11, 1)),
+      });
+      await h.state.init();
+      expect(await h.state.connect(const RadioDevice(id: 'aa:bb', name: 'MeshCore-Truck'), RadioKind.bluetooth), isTrue);
+      await h.state.privacyZones.setTrim(0);
+      await h.state.startDrive();
+      expect(h.state.observerMode, ObserverMode.drive);
+      h.link.rx.add(_advert(h.now, List.filled(32, 0x68)));
+      await Future<void>.delayed(Duration.zero);
+      final j = await flushOne(h);
+      expect((j['observer'] as Map)['mode'], 'drive');
+      expect(((j['observer'] as Map)['radio'] as Map)['antenna'], 'roof_mag_mount');
     });
 
     test('no drive fix within 10 s: the cell instead (or nothing for Region only)', () async {
