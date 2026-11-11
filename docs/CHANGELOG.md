@@ -5,6 +5,8 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+## [0.34.0+59] — 2026-11-10 — photo messages, phone observers upload within seconds, antenna at home
+
 - **Phone observer uploads within seconds, not ~95 s (P1).** A packet is held only while this phone has its own ping in
   flight: from the moment the ping goes out (the engine's new `onPingSent`) until 90 s after it, so its echoes are still
   sent as `own: true`. Every other packet goes at the normal cadence: a batch every 5 s with the app open, every 60 s (or
