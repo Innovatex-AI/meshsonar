@@ -3,6 +3,8 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import '../../core/photo_api.dart';
+
 
 String two(int n) => n.toString().padLeft(2, '0');
 
@@ -50,8 +52,8 @@ String listStamp(BuildContext context, int? ms, {DateTime? now}) {
 
 int utf8Len(String s) => utf8.encode(s).length;
 
-/// Pieces of a message: plain text, a link, or a mention.
-enum PartKind { text, url, meshLink, mention }
+/// Pieces of a message: plain text, a link, a MeshSonar photo link (`https://meshsonar.com/p/<8 base62>`), or a mention.
+enum PartKind { text, url, meshLink, mention, photo }
 
 class TextPart {
   final PartKind kind;
@@ -76,13 +78,36 @@ List<TextPart> splitMessage(String s) {
         t = t.substring(0, t.length - tail.length);
       }
     }
-    final kind = t.startsWith('@[') ? PartKind.mention : (t.toLowerCase().startsWith('meshcore://') ? PartKind.meshLink : PartKind.url);
+    final kind = t.startsWith('@[')
+        ? PartKind.mention
+        : (t.toLowerCase().startsWith('meshcore://') ? PartKind.meshLink : (photoIdOf(t) != null ? PartKind.photo : PartKind.url));
     out.add(TextPart(kind, t));
     if (tail.isNotEmpty) out.add(TextPart(PartKind.text, tail));
     last = m.end;
   }
   if (last < s.length) out.add(TextPart(PartKind.text, s.substring(last)));
   return out;
+}
+
+/// The photo links of [s], in order.
+List<String> photoLinksOf(String s) => [for (final p in splitMessage(s)) if (p.kind == PartKind.photo) p.text];
+
+/// [s] without its photo links (and the spaces they leave), for the text under a photo.
+String textWithoutPhotos(String s) {
+  final b = StringBuffer();
+  for (final p in splitMessage(s)) {
+    if (p.kind != PartKind.photo) b.write(p.text);
+  }
+  return b.toString().replaceAll(RegExp(r'[ \t]{2,}'), ' ').trim();
+}
+
+/// A list preview: "Photo" (or "Photo: text") instead of the photo link.
+String photoPreview(String s) {
+  final n = photoLinksOf(s).length;
+  if (n == 0) return s;
+  final rest = textWithoutPhotos(s);
+  final label = n == 1 ? 'Photo' : '$n photos';
+  return rest.isEmpty ? label : '$label: $rest';
 }
 
 /// "@[Name]" -> "@Name" for display.

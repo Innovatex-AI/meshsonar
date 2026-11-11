@@ -66,6 +66,9 @@ dependencies:
   universal_ble: ^3.1.0
   flutter_slidable: ^4.0.3
   local_auth: ^3.0.0
+  image_picker: ^1.2.4
+  flutter_image_compress: ^2.5.1
+  gal: ^2.3.3
 dev_dependencies:
   integration_test:
     sdk: flutter

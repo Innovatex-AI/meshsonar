@@ -44,6 +44,9 @@ import 'chat_list_actions.dart';
 import 'chat_navigation.dart';
 import '../design/app_widgets.dart' show TipCard;
 import 'composer.dart';
+import '../../core/photo_api.dart' show photoIdOf;
+import 'photo_widgets.dart';
+import '../../app/photo_controller.dart';
 import 'route_broken_card.dart';
 import '../../chat/route_health.dart';
 import 'message_bubble.dart';
@@ -84,6 +87,9 @@ class ConversationScreen extends StatefulWidget {
   /// Open scrolled to this message and flash it (search hits).
   final String? anchorMessageId;
 
+  /// Photo messages; null = [PhotoWiring.controller] (tests inject one).
+  final PhotoController? photos;
+
   const ConversationScreen({
     super.key,
     required this.controller,
@@ -94,6 +100,7 @@ class ConversationScreen extends StatefulWidget {
     this.header,
     this.embedded = false,
     this.anchorMessageId,
+    this.photos,
   });
 
   static Future<void> open(
@@ -166,10 +173,20 @@ class _ConversationScreenState extends State<ConversationScreen> {
   final Map<String, MessageBubble> _bubbles = {};
 
   ChatController get c => widget.controller;
+  PhotoController? _photosBound;
+  PhotoController? get _photos => widget.photos ?? PhotoWiring.controller.value;
+
+  void _onPhotos() {
+    if (!mounted) return;
+    _bubbles.clear(); // the auto-load switch and own ids change what bubbles show
+    setState(() {});
+  }
 
   @override
   void initState() {
     super.initState();
+    _photosBound = _photos?..addListener(_onPhotos);
+    unawaited(_photosBound?.refreshConfig());
     _scroll.addListener(_onScroll);
     c.addListener(_onController);
     _sub = c.events.listen(_onEvent);
@@ -413,6 +430,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
     _flash?.cancel();
     _deliveryTick?.cancel();
     c.removeListener(_onController);
+    _photosBound?.removeListener(_onPhotos);
     if (c.activeConversation == widget.convKey) c.setActiveConversation(null);
     _scroll.dispose();
     _query.dispose();
@@ -534,6 +552,11 @@ class _ConversationScreenState extends State<ConversationScreen> {
     }
   }
 
+  void _openPhoto(String url) {
+    final p = _photos;
+    if (p != null) unawaited(PhotoViewerScreen.open(context, url: url, photos: p));
+  }
+
   ChatMessage? _byId(String id) => _msgs.where((m) => m.id == id).firstOrNull;
 
   Future<void> _perform(String id, MessageMenuEntry e) async {
@@ -555,6 +578,26 @@ class _ConversationScreenState extends State<ConversationScreen> {
         await details.showMessageDetails(context, chat: c.service, messageId: m.id);
       case MessageMenuId.pathMap:
         await _openPathMap(m);
+      case MessageMenuId.viewPhoto:
+      case MessageMenuId.savePhoto:
+      case MessageMenuId.sharePhoto:
+      case MessageMenuId.reportPhoto:
+      case MessageMenuId.deletePhoto:
+        final l = e.link;
+        final p = _photos;
+        if (l == null || p == null) return;
+        switch (e.id) {
+          case MessageMenuId.viewPhoto:
+            await PhotoViewerScreen.open(context, url: l, photos: p);
+          case MessageMenuId.savePhoto:
+            await savePhotoFlow(context, p.source, l);
+          case MessageMenuId.sharePhoto:
+            await sharePhotoFlow(context, p.source, l);
+          case MessageMenuId.reportPhoto:
+            await reportPhotoFlow(context, p, l);
+          default:
+            await deletePhotoFlow(context, p, l);
+        }
       case MessageMenuId.openLink:
         final l = e.link;
         if (l == null) return;
@@ -571,8 +614,12 @@ class _ConversationScreenState extends State<ConversationScreen> {
     final m = _byId(id);
     if (m == null) return;
     final canResend = deliveryUi(m, radioConnected: c.radioConnected, nowMs: c.now().millisecondsSinceEpoch).canResend;
+    final p = _photos;
     final r = await MessageMenu.showSheet(context, m,
-        hasMap: _hasMap(m, messageInfo(m, resolver: _resolver, contact: _kind == ConvKind.dm ? _contact : null)), canResend: canResend);
+        hasMap: _hasMap(m, messageInfo(m, resolver: _resolver, contact: _kind == ConvKind.dm ? _contact : null)),
+        canResend: canResend,
+        photos: p != null,
+        isOwnPhoto: (u) => p?.isOwn(photoIdOf(u) ?? '') ?? false);
     if (r != null && mounted) await _perform(id, r);
   }
 
@@ -858,6 +905,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
           mentionNames: _mentionNames,
           onSent: _jumpToLatest,
           onChannelInfoWhenOffRadio: offRadio ? _openInfo : null,
+          photos: _photos,
         ),
       ],
     );
@@ -946,6 +994,8 @@ class _ConversationScreenState extends State<ConversationScreen> {
               onMenu: _perform,
               onLongPress: _longPressSheet,
               onDetails: (id) => details.showMessageDetails(context, chat: c.service, messageId: id),
+              photos: _photos,
+              onPhoto: _openPhoto,
             );
             final cached = _bubbles[m.id];
             final MessageBubble shown = cached != null && cached.signature == bubble.signature ? cached : (_bubbles[m.id] = bubble);

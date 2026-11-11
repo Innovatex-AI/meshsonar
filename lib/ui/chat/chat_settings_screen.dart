@@ -1,9 +1,10 @@
-// More > Chat (chat plan 2.2, 4.2, 4.3): quick replies, "Return sends" for a hardware keyboard, and the Haptics switch (the
-// same setting as Settings > Units & display). Inset-grouped list, nothing else lives here.
+// More > Chat (chat plan 2.2, 4.2, 4.3): quick replies, "Return sends" for a hardware keyboard, "Load photos automatically"
+// (photo messages) and the Haptics switch (the same setting as Settings > Units & display). Inset-grouped list, nothing else lives here.
 import 'package:flutter/material.dart';
 
 import '../../app/chat_controller.dart';
 import '../../app/chat_wiring.dart';
+import '../../app/photo_controller.dart';
 import '../../chat/quick_replies.dart';
 import '../app.dart';
 import '../design/app_symbols.dart';
@@ -15,13 +16,17 @@ import 'quick_replies_sheet.dart';
 class ChatSettingsScreen extends StatefulWidget {
   /// Tests inject a controller; the app reads [ChatWiring.controller].
   final ChatController? controller;
-  const ChatSettingsScreen({super.key, this.controller});
+
+  /// Tests inject a photo controller; the app reads [PhotoWiring.controller].
+  final PhotoController? photos;
+  const ChatSettingsScreen({super.key, this.controller, this.photos});
   @override
   State<ChatSettingsScreen> createState() => _ChatSettingsScreenState();
 }
 
 class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
   ChatController? get _c => widget.controller ?? ChatWiring.controller.value;
+  PhotoController? get _p => widget.photos ?? PhotoWiring.controller.value;
 
   @override
   Widget build(BuildContext context) {
@@ -67,6 +72,21 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
                 ),
               ],
             ),
+            if (_p != null)
+              InsetGroup(
+                header: 'Photos',
+                rows: [
+                  AppSwitchTile(
+                    switchKey: const Key('chat-photos-autoload'),
+                    symbol: AppSymbols.photo,
+                    title: 'Load photos automatically',
+                    subtitle: 'Shows photos in chats as they arrive. Loading a photo contacts the MeshSonar server, which sees '
+                        'your internet address. Off: tap a photo to load it.',
+                    value: _p!.autoLoad,
+                    onChanged: (v) => setState(() => _p!.autoLoad = v),
+                  ),
+                ],
+              ),
             if (st != null && app != null)
               InsetGroup(
                 header: 'Feel',

@@ -9,6 +9,7 @@ import '../design/app_symbols.dart';
 import '../design/app_type.dart';
 import '../design/avatar_style.dart';
 import '../design/tokens.dart';
+import 'message_format.dart' show photoPreview;
 
 const double kRowMinHeight = 72;
 const double kAvatarSize = 52;
@@ -143,7 +144,7 @@ String rowSemantics(ConversationRow r, String stamp) {
     final w = deliveryWord(r.delivery);
     if (w.isNotEmpty) b.write('$w. ');
     if (r.previewSender != null) b.write('${r.previewSender}: ');
-    b.write(r.preview.isEmpty ? emptyPreview(r) : r.preview);
+    b.write(r.preview.isEmpty ? emptyPreview(r) : photoPreview(r.preview));
   }
   return b.toString();
 }
@@ -177,7 +178,7 @@ class _ConversationTileState extends State<ConversationTile> {
     final previewHeight = scaler.scale(15) * 1.27 * 2;
     final stampBelow = scaler.scale(17) > 17 * 1.5;
     final sym = deliverySymbol(r.delivery);
-    final text = r.preview.isEmpty ? emptyPreview(r) : r.preview;
+    final text = r.preview.isEmpty ? emptyPreview(r) : photoPreview(r.preview);
 
     final spans = <InlineSpan>[
       if (r.hasDraft) TextSpan(text: 'Draft: ', style: subStyle.copyWith(color: c.accent, fontWeight: FontWeight.w600)),

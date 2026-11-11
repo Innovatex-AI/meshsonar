@@ -71,3 +71,6 @@ redistributed.
 | `numberSign` | `number` | shared |
 | `exclamationCircleFill` | `exclamationmark.circle.fill` | shared |
 | `checkmarkBubble` | `checkmark.bubble` | Chats: Mark all as read |
+| `squareAndArrowDown` | `square.and.arrow.down` | Chat: Save photo to Photos |
+| `camera` | `camera` | Chat: composer photo button, Take Photo |
+| `photo` | `photo` | Chat: photo placeholders, Choose from Library, View photo |

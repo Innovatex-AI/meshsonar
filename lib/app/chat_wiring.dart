@@ -10,8 +10,10 @@
 //   * publishes the controller in [ChatWiring.controller] and, through lib/ui/chat/chat_tab_provider.dart, the Chat tab
 //     in [ChatTabHost.provider].
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../chat/tip_store.dart';
 import '../ui/design/app_widgets.dart' show appTipStore;
@@ -20,12 +22,16 @@ import '../chat/channel_secret.dart' show hashtagSecret16;
 import '../chat/chat_service.dart';
 import '../chat/models.dart' show ChannelKind;
 import '../core/model.dart' show PingKind;
+import '../core/photo_api.dart' show PhotoTransport;
+import '../core/photo_cache.dart';
+import '../platform/photo_picker.dart';
 import '../ui/chat/chat_tab_provider.dart';
 import '../ui/chat/conversation_screen.dart';
 import '../ui/shell/chat_tab_host.dart';
 import 'app_flags.dart';
 import 'app_state.dart';
 import 'chat_controller.dart';
+import 'photo_controller.dart';
 
 class ChatWiring {
   ChatWiring._();
@@ -112,6 +118,28 @@ class ChatWiring {
     ChatTabHost.openConversation = (context, convKey) => ConversationScreen.open(context,
         controller: ctl, convKey: convKey, title: service.conversation(convKey)?.title);
 
+    // Photo messages: images cached on disk (Library/Caches, which iOS may clear), uploads with the driver key.
+    Directory cacheDir;
+    try {
+      cacheDir = Directory('${(await getApplicationCacheDirectory()).path}${Platform.pathSeparator}photo_cache');
+    } catch (_) {
+      cacheDir = Directory('${Directory.systemTemp.path}${Platform.pathSeparator}meshsonar_photo_cache');
+    }
+    PhotoWiring.controller.value ??= PhotoController(
+      store: store,
+      transport: () {
+        final c = app.client;
+        return c is PhotoTransport ? (c as PhotoTransport) : null;
+      },
+      driverKey: () => app.settings.driverKey,
+      keyApproved: () => app.keyApproved,
+      source: HttpPhotoCache(cacheDir),
+      picker: DevicePhotoPicker(),
+      nowMs: () => app.services.clock().millisecondsSinceEpoch,
+    );
+    // A key that gets approved later turns the button from "explain" to "ready".
+    app.addListener(_photoKeyListener);
+
     controller.value = ctl;
     _provider = ChatTabProviderImpl(ctl);
     ChatTabHost.provider.value = _provider;
@@ -119,7 +147,20 @@ class ChatWiring {
   }
 
   /// Tears the wiring down (tests, or a wipe of chat data).
+  static bool? _lastKeyApproved;
+  static void _photoKeyListener() {
+    final a = _app?.keyApproved;
+    if (a == _lastKeyApproved) return;
+    _lastKeyApproved = a;
+    final p = PhotoWiring.controller.value;
+    p?.keyStateChanged();
+  }
+
   static Future<void> detach() async {
+    _app?.removeListener(_photoKeyListener);
+    final p = PhotoWiring.controller.value;
+    PhotoWiring.controller.value = null;
+    p?.dispose();
     await _sessions?.cancel();
     _sessions = null;
     final l = _appListener;

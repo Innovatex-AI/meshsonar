@@ -16,6 +16,7 @@
 //   <base>/api/cmh/public-coverage  GET  (public, no driver key)        -> {cells[{lat,lon,pings,heard,bestSnr,
 //                                                                          medianSnr,repeaters,lastAt,h3?,
 //                                                                          noiseFloor?}], asOf, grid?, totals}
+//   <base>/api/cmh/photo-config | photo-upload | photo-delete | photo-report   (lib/core/photo_api.dart, contract v1)
 //   <base>/api/cmh/regions-index   GET  (public, no driver key)        -> {regions[{code,slug,name,url,
 //                                                                          bbox:[w,s,e,n]|null,boundary?}], asOf}
 // Errors come back as {error} (403 also carries {status}); they're thrown as CmatException(error, status: http code).
@@ -36,6 +37,7 @@ import 'region_lookup.dart';
 import 'hex_cells.dart' show loadHexEngine;
 import 'map_links.dart';
 import 'node_claim.dart';
+import 'photo_api.dart';
 import 'privacy_zones.dart';
 import 'repeater_reach.dart';
 import 'report_body.dart' show problemReportMaxBytes;
@@ -86,7 +88,7 @@ DriverKeyStatus parseDriverKeyStatus(Object? s) => switch (s) {
       _ => DriverKeyStatus.unknown,
     };
 
-class HttpCmatClient implements CmatClient, TelemetryTransport, HomeObserverTransport, DriveEndTransport {
+class HttpCmatClient implements CmatClient, TelemetryTransport, HomeObserverTransport, DriveEndTransport, PhotoTransport {
   @override
   final Uri baseUrl;
   final http.Client _http;
@@ -684,6 +686,104 @@ class HttpCmatClient implements CmatClient, TelemetryTransport, HomeObserverTran
       ));
     }
     return PublicCoverage(cells: cells, asOf: asOf, grid: grid);
+  }
+
+  // ---------- photo messages (lib/core/photo_api.dart, contract v1) ----------
+
+  @override
+  Future<PhotoConfig> photoConfig() async {
+    try {
+      return PhotoConfig.parse(await _send('GET', 'photo-config', timeout: const Duration(seconds: 10)));
+    } on CmatException catch (e) {
+      throw _photoError(e);
+    }
+  }
+
+  @override
+  Future<PhotoUploadResult> uploadPhoto(String driverKey, List<int> bytes,
+      {String contentType = 'image/jpeg', void Function(int sent, int total)? onProgress, PhotoCancel? cancel}) async {
+    if (driverKey.isEmpty) throw const PhotoError(PhotoErrorKind.noKey);
+    if (cancel?.cancelled ?? false) throw const PhotoError(PhotoErrorKind.cancelled);
+    final req = http.AbortableStreamedRequest('POST', endpoint('photo-upload'), abortTrigger: cancel?.whenCancelled);
+    req.headers['accept'] = 'application/json';
+    req.headers['content-type'] = contentType;
+    req.headers['x-driver-key'] = driverKey;
+    req.contentLength = bytes.length;
+    final total = bytes.length;
+    // The body goes out in 16 KB pieces so the bar moves while a weak cellular link drains it.
+    unawaited(() async {
+      const chunk = 16 * 1024;
+      var sent = 0;
+      try {
+        while (sent < total) {
+          if (cancel?.cancelled ?? false) break;
+          final end = sent + chunk < total ? sent + chunk : total;
+          req.sink.add(bytes.sublist(sent, end));
+          sent = end;
+          onProgress?.call(sent, total);
+          await Future<void>.delayed(Duration.zero);
+        }
+      } catch (_) {}
+      await req.sink.close();
+    }());
+    if (total == 0) onProgress?.call(0, 0);
+    http.Response res;
+    try {
+      res = await _http.send(req).then(http.Response.fromStream).timeout(uploadTimeout);
+    } on http.RequestAbortedException {
+      throw const PhotoError(PhotoErrorKind.cancelled);
+    } on TimeoutException {
+      throw PhotoError(PhotoErrorKind.network, detail: 'timed out talking to ${baseUrl.host}');
+    } on SocketException catch (e) {
+      throw PhotoError(PhotoErrorKind.network, detail: e.message);
+    } on http.ClientException catch (e) {
+      if (cancel?.cancelled ?? false) throw const PhotoError(PhotoErrorKind.cancelled);
+      throw PhotoError(PhotoErrorKind.network, detail: e.message);
+    } on HandshakeException catch (e) {
+      throw PhotoError(PhotoErrorKind.network, detail: e.message);
+    }
+    if (cancel?.cancelled ?? false) throw const PhotoError(PhotoErrorKind.cancelled);
+    Object? decoded;
+    try {
+      decoded = res.body.isEmpty ? null : jsonDecode(res.body);
+    } catch (_) {
+      decoded = null;
+    }
+    final body = decoded is Map ? decoded.cast<String, dynamic>() : null;
+    if (res.statusCode != 201 && res.statusCode != 200) {
+      throw PhotoError.fromStatus(res.statusCode, body: body, retryAfterHeader: int.tryParse(res.headers['retry-after'] ?? ''));
+    }
+    if (body == null) throw PhotoError(PhotoErrorKind.server, status: res.statusCode, detail: 'unreadable answer');
+    try {
+      return PhotoUploadResult.parse(body);
+    } on FormatException catch (e) {
+      throw PhotoError(PhotoErrorKind.server, status: res.statusCode, detail: e.message);
+    }
+  }
+
+  @override
+  Future<void> deletePhoto(String driverKey, String id) async {
+    if (driverKey.isEmpty) throw const PhotoError(PhotoErrorKind.noKey);
+    try {
+      await _send('POST', 'photo-delete', driverKey: driverKey, body: {'id': id});
+    } on CmatException catch (e) {
+      throw _photoError(e);
+    }
+  }
+
+  @override
+  Future<void> reportPhoto(String id, PhotoReportReason reason, {String? driverKey}) async {
+    try {
+      await _send('POST', 'photo-report', driverKey: driverKey, body: {'id': id, 'reason': reason.slug}, ok: const {200, 202});
+    } on CmatException catch (e) {
+      throw _photoError(e);
+    }
+  }
+
+  static PhotoError _photoError(CmatException e) {
+    final s = e.status;
+    if (s == null) return PhotoError(PhotoErrorKind.network, detail: e.message);
+    return PhotoError.fromStatus(s, body: e.body, retryAfterHeader: e.retryAfterSec);
   }
 
   @override

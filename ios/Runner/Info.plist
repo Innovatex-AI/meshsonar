@@ -77,7 +77,11 @@
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>MeshSonar connects to your MeshCore companion radio over Bluetooth to send wardriving pings and hear repeater echoes.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>MeshSonar uses the camera only when you tap Scan QR code, to read a MeshCore channel or contact code. Nothing is recorded or saved.</string>
+	<string>Take a photo to share in a chat. MeshSonar also uses the camera when you tap Scan QR code, to read a MeshCore channel or contact code; nothing from a scan is recorded.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Pick a photo to share in a chat.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Save a photo from a chat to your Photos.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>MeshSonar can use Face ID to protect saved repeater and room passwords.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>

@@ -163,7 +163,18 @@ Chat UI: the `chatRedesign` switch in More > Developer and the old Contacts | Ch
   read back and offers Undo; a row the firmware cannot do is hidden and listed with its reason.
 - **Accessibility and design.** SF Pro only, shared popup helpers (`showAppSheet` / `showAppAlert` / `showAppActionSheet` / `showAppToast`), a
   widget-ban lint for Chat folders, Dynamic Type through AX5, 44 pt targets, Increase Contrast and Reduce Transparency honoured, VoiceOver actions
-  on every swipe action. Haptics switch in Settings; More > Chat holds Quick replies, Return sends and Haptics.
+  on every swipe action. Haptics switch in Settings; More > Chat holds Quick replies, Return sends, Load photos automatically and Haptics.
+- **Photo messages** (unreleased; plan meshsonar-infra `docs/planning/photo-messages-2026-11-10.md`, API contract v1). A camera button in the
+  composer (shown only when the server's `photo-config` says photos are on; without an approved driver key it explains instead) offers Take Photo
+  or Choose from Library. The phone shrinks the picture to a 2048 px long edge, JPEG q80, and removes every metadata segment (EXIF, GPS, XMP,
+  comments); a picture whose metadata cannot be proven gone is not sent. It uploads with progress, Cancel and Retry, then puts the 32-byte link
+  `https://meshsonar.com/p/<id>` at the end of the text, counted by the byte meter. If the text plus link would not fit, nothing is trimmed: the
+  composer says how many bytes to cut and adds the link as soon as they are. Every server refusal (401, 403, 413, 415, 429 with the wait, 503) has
+  its own sentence. Received photo links draw as a rounded thumbnail with the rest of the text ("Photo, loads when online" offline, "Photo
+  removed" after deletion); tap for the full-screen viewer (pinch zoom, Save to Photos, Share, Report with a reason, Delete photo for your own
+  uploads, which the phone remembers); the long-press menu has the same entries. More > Chat > **Load photos automatically** (on): off, bubbles
+  show "Tap to load photo", since loading contacts the MeshSonar server. Other clients see a plain link that opens the web page. The radio
+  only ever carries the link text.
 - **Parity.** Chat, contacts, path management, ping, repeater login and the repeater dashboard are app-only by design (HANDOFF section 71 D5).
 
 ## Repeater administration and rooms (unreleased)

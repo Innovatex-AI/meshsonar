@@ -160,18 +160,25 @@ void main() {
 
     test('no unused permission strings: no peripheral role, only the prompts the app triggers', () {
       expect(plist, isNot(contains('NSBluetoothPeripheralUsageDescription')));
-      for (final k in ['NSBluetoothAlwaysUsageDescription', 'NSLocationWhenInUseUsageDescription', 'NSLocationAlwaysAndWhenInUseUsageDescription', 'NSMotionUsageDescription', 'NSCameraUsageDescription']) {
+      for (final k in ['NSBluetoothAlwaysUsageDescription', 'NSLocationWhenInUseUsageDescription', 'NSLocationAlwaysAndWhenInUseUsageDescription', 'NSMotionUsageDescription', 'NSCameraUsageDescription', 'NSPhotoLibraryUsageDescription', 'NSPhotoLibraryAddUsageDescription']) {
         expect(plist, contains(k));
       }
-      for (final k in ['NSMicrophoneUsageDescription', 'NSContactsUsageDescription', 'NSPhotoLibraryUsageDescription', 'NSUserTrackingUsageDescription', 'NSLocalNetworkUsageDescription']) {
+      for (final k in ['NSMicrophoneUsageDescription', 'NSContactsUsageDescription', 'NSUserTrackingUsageDescription', 'NSLocalNetworkUsageDescription']) {
         expect(plist, isNot(contains(k)), reason: k);
       }
     });
 
-    test('the camera string says it is used only for Scan QR code and nothing is recorded (channel and contact QR codes)', () {
+    test('the camera string names its two uses: a photo for a chat, and Scan QR code (nothing from a scan is recorded)', () {
       final m = RegExp(r'NSCameraUsageDescription</key>\s*<string>(.*?)</string>', dotAll: true).firstMatch(plist)!.group(1)!;
+      expect(m, contains('Take a photo to share in a chat'));
       expect(m, contains('Scan QR code'));
-      expect(m, contains('Nothing is recorded'));
+      expect(m, contains('nothing from a scan is recorded'));
+    });
+
+    test('the photo library strings are plain: pick a photo for a chat, save a photo from a chat', () {
+      String v(String k) => RegExp('$k</key>\\s*<string>(.*?)</string>', dotAll: true).firstMatch(plist)!.group(1)!;
+      expect(v('NSPhotoLibraryUsageDescription'), 'Pick a photo to share in a chat.');
+      expect(v('NSPhotoLibraryAddUsageDescription'), 'Save a photo from a chat to your Photos.');
     });
 
     test('the Always string says background use is for recording a drive, not "never when not driving" nor region tracking', () {

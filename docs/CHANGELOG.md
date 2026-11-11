@@ -5,6 +5,16 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- **Photo messages (app half; the server half ships separately and the button stays hidden until its `photo-config` says
+  enabled).** Composer camera button: Take Photo / Choose from Library, shrink to 2048 px JPEG q80 with all metadata (GPS
+  included) removed and checked, upload with progress, Cancel and Retry, and the 32-byte `https://meshsonar.com/p/<id>` link
+  added at the end of the text inside the byte budget (never trimmed: the composer says how many bytes to cut). Photo links
+  in received messages draw as thumbnails (loading, "Photo, loads when online", "Photo removed", "Tap to load photo"); a
+  full-screen viewer with pinch zoom, Save to Photos, Share, Report and Delete photo (own uploads); the same entries on
+  long-press. More > Chat > Load photos automatically (default on). Chats list previews say "Photo". New packages:
+  image_picker 1.2.4, flutter_image_compress 2.5.1, gal 2.3.3. iOS: photo library read/add strings; the camera string now
+  names both uses.
+
 ## [0.33.0+58] — 2026-11-10 — the app renders its maps from the Map Definition (plan M2)
 
 - **One definition, app and website alike** (unified map plan §2.2): every map now takes its layers, layer names, groups,
