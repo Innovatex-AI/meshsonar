@@ -308,7 +308,8 @@ class _ComposerState extends State<Composer> {
       case _PhotoStage.preparing:
         text = 'Preparing photo';
       case _PhotoStage.uploading:
-        text = 'Uploading photo ${(j.progress * 100).round()}%';
+        // progress counts bytes the network took; at 1 the body is out and the server's answer is awaited.
+        text = j.progress >= 1 ? 'Processing…' : 'Uploading photo ${(j.progress * 100).round()}%';
       case _PhotoStage.waitingForRoom:
         final n = _bytesToCut(j.result!.url);
         text = 'Photo uploaded. Its link needs ${utf8.encode(j.result!.url).length + 1} bytes: cut $n ${n == 1 ? 'byte' : 'bytes'} from your message to add it.';

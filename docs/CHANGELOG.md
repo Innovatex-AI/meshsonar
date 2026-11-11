@@ -5,6 +5,19 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- **Photo upload on a slow uplink.** On a ~14 KB/s phone uplink the composer said "Uploading photo 100%" at once and then
+  "could not reach server" after 120 s: the whole body was pushed into package:http's sink in one go and a fixed total timeout
+  fired while it drained. Now: (1) the upload goes over `lib/core/photo_wire.dart` (dart:io HttpClient, unbuffered, 8 KB writes
+  each awaited until the socket takes them), so the bar shows real network progress, and "Processing…" once the body is out;
+  Cancel aborts the socket. (2) It times out on progress, not a total: no byte out for 45 s, no answer 60 s after the last byte,
+  hard cap 10 min (`PhotoUploadTimeouts`). (3) Size budget on the phone (`lib/core/photo_budget.dart`): after the shrink to
+  `maxEdgePx` q80, a JPEG over 450 KB is encoded again from the original at q70, then q60, then at q60 with the long edge 20 %
+  smaller per step, never below 800 px; the smallest is kept if none fits. The metadata strip and its GPS/EXIF check are
+  unchanged and still run last. (4) New `PhotoErrorKind.stalled`: "Upload stalled — your connection is too slow right now. Try
+  again or use Wi-Fi." (retryable); a real connect/DNS/TLS/drop failure keeps "Could not reach the MeshSonar server". Retry
+  resends the already-prepared bytes. Tests on fake time (`FakePhotoWire`): progress follows writes, 45 s stall, 60 s answer,
+  10 KB/s for 300 KB succeeds, 10 min cap, budget steps, error mapping; plus a loopback-socket test of the real wire.
+
 ## [0.34.0+59] — 2026-11-10 — photo messages, phone observers upload within seconds, antenna at home
 
 - **Phone observer uploads within seconds, not ~95 s (P1).** A packet is held only while this phone has its own ping in

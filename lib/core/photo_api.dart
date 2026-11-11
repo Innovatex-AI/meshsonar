@@ -75,7 +75,10 @@ class PhotoUploadResult {
   }
 }
 
-enum PhotoErrorKind { noKey, notApproved, tooLarge, notImage, rateLimited, disabled, notFound, network, cancelled, server }
+/// [stalled]: the upload was moving too slowly to finish (no byte out for [PhotoUploadTimeouts.stall], no answer within
+/// [PhotoUploadTimeouts.response] of the last byte, or over [PhotoUploadTimeouts.cap] in all). [network]: the server could
+/// not be reached at all (DNS, connect, TLS, connection dropped).
+enum PhotoErrorKind { noKey, notApproved, tooLarge, notImage, rateLimited, disabled, notFound, network, stalled, cancelled, server }
 
 /// Every refusal of the photo endpoints, mapped to one plain sentence for the person.
 class PhotoError implements Exception {
@@ -104,7 +107,7 @@ class PhotoError implements Exception {
     return PhotoError(kind, status: status, retryAfterS: ra, detail: err);
   }
 
-  bool get retryable => kind == PhotoErrorKind.network || kind == PhotoErrorKind.server || kind == PhotoErrorKind.rateLimited;
+  bool get retryable => kind == PhotoErrorKind.network || kind == PhotoErrorKind.stalled || kind == PhotoErrorKind.server || kind == PhotoErrorKind.rateLimited;
 
   String get message => switch (kind) {
         PhotoErrorKind.noKey => 'Photos need a MeshSonar driver key. Set one up in Settings > Account.',
@@ -115,6 +118,7 @@ class PhotoError implements Exception {
         PhotoErrorKind.disabled => 'Photos are switched off on the server right now.',
         PhotoErrorKind.notFound => 'That photo is already gone, or it is not yours.',
         PhotoErrorKind.network => 'Could not reach the MeshSonar server. Check your connection and try again.',
+        PhotoErrorKind.stalled => 'Upload stalled — your connection is too slow right now. Try again or use Wi-Fi.',
         PhotoErrorKind.cancelled => 'Upload cancelled.',
         PhotoErrorKind.server => 'The server could not take the photo${status == null ? '' : ' (error $status)'}. Try again.',
       };
@@ -129,6 +133,21 @@ String waitText(int? s) {
   if (s < 90) return 'in $s seconds';
   if (s < 5400) return 'in ${(s / 60).round()} minutes';
   return 'in ${(s / 3600).round()} hours';
+}
+
+/// When a photo upload gives up. It is judged on progress, not on a fixed total, so a slow but steady uplink (14 KB/s
+/// for a 450 KB photo is ~33 s, a 1 MB one ~75 s) finishes, and a dead one fails fast.
+class PhotoUploadTimeouts {
+  /// No byte accepted by the socket for this long (connecting counts): stalled.
+  final Duration stall;
+
+  /// The whole body is out but no answer this long after the last byte: stalled. The server answers in under 0.5 s; the
+  /// rest is the OS send buffer draining over the slow link.
+  final Duration response;
+
+  /// Hard cap on the whole upload, however steady.
+  final Duration cap;
+  const PhotoUploadTimeouts({this.stall = const Duration(seconds: 45), this.response = const Duration(seconds: 60), this.cap = const Duration(minutes: 10)});
 }
 
 /// Lets the person stop an upload in flight.
@@ -159,7 +178,8 @@ enum PhotoReportReason {
 abstract class PhotoTransport {
   Future<PhotoConfig> photoConfig();
 
-  /// Raw bytes up; [onProgress] gets (sent, total). Throws [PhotoError].
+  /// Raw bytes up; [onProgress] gets (sent, total), where sent counts bytes the network actually took. sent == total means
+  /// the body is out and the answer is awaited. Throws [PhotoError].
   Future<PhotoUploadResult> uploadPhoto(String driverKey, List<int> bytes,
       {String contentType = 'image/jpeg', void Function(int sent, int total)? onProgress, PhotoCancel? cancel});
 

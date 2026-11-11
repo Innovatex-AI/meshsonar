@@ -1,4 +1,4 @@
-// Camera / photo library, the on-phone shrink (long edge <= maxEdgePx, JPEG q80) and the metadata strip of photo messages.
+// Camera / photo library, the on-phone shrink (long edge <= maxEdgePx, JPEG q80, then the 450 KB budget) and the metadata strip of photo messages.
 // The compressor re-encodes without EXIF (keepExif: false); stripJpegMetadata (lib/core/jpeg_meta.dart) then removes any
 // APP1/XMP/COM segment that might still be there, and the result is checked for GPS before it may leave the phone. Also:
 // Save to Photos (gal) and the sharing of a photo file.
@@ -15,6 +15,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../core/jpeg_meta.dart';
+import '../core/photo_budget.dart';
 
 enum PhotoPickSource { camera, library }
 
@@ -81,15 +82,16 @@ class DevicePhotoPicker implements PhotoPicker {
 }
 
 /// Shrinks and re-encodes [original] (any format the phone reads, HEIC included) to a metadata-free JPEG q80.
+/// Then, above 450 KB, steps down the quality and the edge (lib/core/photo_budget.dart) so a slow uplink can carry it.
 Future<PreparedPhoto> preparePhotoBytes(Uint8List original, {int maxEdgePx = 2048, String? path}) async {
-  Future<Uint8List?> compress(Uint8List src, int min, {bool fromPath = false}) async {
+  Future<Uint8List?> compress(Uint8List src, int min, {bool fromPath = false, int quality = 80}) async {
     try {
       if (fromPath && path != null) {
         return await FlutterImageCompress.compressWithFile(path,
-            minWidth: min, minHeight: min, quality: 80, format: CompressFormat.jpeg, keepExif: false, autoCorrectionAngle: true);
+            minWidth: min, minHeight: min, quality: quality, format: CompressFormat.jpeg, keepExif: false, autoCorrectionAngle: true);
       }
       return await FlutterImageCompress.compressWithList(src,
-          minWidth: min, minHeight: min, quality: 80, format: CompressFormat.jpeg, keepExif: false, autoCorrectionAngle: true);
+          minWidth: min, minHeight: min, quality: quality, format: CompressFormat.jpeg, keepExif: false, autoCorrectionAngle: true);
     } catch (_) {
       return null;
     }
@@ -104,6 +106,20 @@ Future<PreparedPhoto> preparePhotoBytes(Uint8List original, {int maxEdgePx = 204
     final again = await compress(out, compressMinFor(dims.$1, dims.$2, maxEdgePx));
     if (again != null && again.isNotEmpty) {
       out = again;
+      dims = await imageSize(out);
+    }
+  }
+  // Size budget: re-encode from the original (not the q80 output, to avoid stacking JPEG losses) at lower quality, then a
+  // smaller edge. The aspect comes from the shrunk picture, so the compressor's min-both-edges rule lands the long edge.
+  if (out.length > photoBudgetBytes) {
+    final aspect = dims ?? size;
+    final edge = dims == null ? maxEdgePx : math.max(dims.$1, dims.$2);
+    final fitted = await fitPhotoBudget(out, edge, (e, q) async {
+      final min = aspect == null ? e : compressMinFor(aspect.$1, aspect.$2, e);
+      return compress(original, min, fromPath: true, quality: q);
+    });
+    if (!identical(fitted, out)) {
+      out = fitted;
       dims = await imageSize(out);
     }
   }
