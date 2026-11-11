@@ -20,6 +20,7 @@ import 'package:meshsonar/main.dart' as app;
 import 'package:meshsonar/platform/photo_picker.dart';
 import 'package:meshsonar/radio/simulator.dart';
 import 'package:meshsonar/ui/app.dart';
+import 'package:meshsonar/ui/shell/chat_tab_host.dart';
 
 import 'gps_fixture_bytes.dart';
 import 'screens.dart';
@@ -139,6 +140,29 @@ void main() {
     final scanner = state.services.simulatorScanner as SimulatedRadioScanner;
     expect(await state.connectSimulator(), isTrue);
     await pumpFor(t, const Duration(seconds: 3));
+    // First connect of a radio asks for its antenna: pick one and save (as dm_delivery_visual_test does).
+    if (await waitFor(t, find.byKey(const Key('antenna-sheet')), timeout: const Duration(seconds: 6))) {
+      final mount = find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key as ValueKey<String>).value.startsWith('mount-')).first;
+      await t.tap(mount);
+      await pumpFor(t, const Duration(milliseconds: 500));
+      final height = find.byKey(const Key('antenna-height-field'));
+      if (height.evaluate().isNotEmpty) {
+        await t.ensureVisible(height);
+        await t.enterText(height, '3');
+      }
+      final unknown = find.byKey(const Key('antenna-gain-unknown'));
+      if (unknown.evaluate().isNotEmpty) {
+        await t.ensureVisible(unknown);
+        await t.tap(unknown);
+        await pumpFor(t, const Duration(milliseconds: 500));
+      }
+      final save = find.byKey(const Key('antenna-save'));
+      if (save.evaluate().isNotEmpty) {
+        await t.ensureVisible(save);
+        await t.tap(save);
+        await pumpFor(t, const Duration(seconds: 1));
+      }
+    }
     while (find.byType(BottomSheet).evaluate().isNotEmpty) {
       await t.tapAt(const Offset(2, 2));
       await pumpFor(t, const Duration(seconds: 1));
@@ -168,9 +192,15 @@ void main() {
     await pumpFor(t, const Duration(seconds: 5));
     await shot(t, 'photo-chats-list');
 
-    final first = find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key as ValueKey<String>).value.startsWith('slide-')).first;
-    await t.tap(first);
+    // Open the channel the photos arrived on.
+    final row = chat.conversationRows().firstWhere((r) => r.preview.contains('meshsonar.com/p/'), orElse: () => chat.conversationRows().first);
+    ChatTabHost.openConversation!(t.element(find.byType(Scaffold).first), row.key);
     await pumpFor(t, const Duration(seconds: 3));
+    final tip = find.byKey(const Key('tip-dismiss'));
+    if (tip.evaluate().isNotEmpty) {
+      await t.tap(tip.first);
+      await pumpFor(t, const Duration(seconds: 1));
+    }
     await shot(t, 'photo-conversation');
 
     // The composer's photo button and its sheet.
@@ -183,6 +213,19 @@ void main() {
       await shot(t, 'photo-uploading');
       await pumpFor(t, const Duration(seconds: 2));
       await shot(t, 'photo-link-inserted');
+      // Send it: the own bubble shows the photo.
+      await t.enterText(find.byKey(const Key('composer-field')), 'From the trailhead https://meshsonar.com/p/Up10aded');
+      await pumpFor(t, const Duration(milliseconds: 500));
+      await t.tap(find.byKey(const Key('composer-send')));
+      await pumpFor(t, const Duration(seconds: 3));
+      // The first send offers alerts once: not now.
+      if (await waitFor(t, find.text('Not now'), timeout: const Duration(seconds: 3))) {
+        await t.tap(find.text('Not now').first);
+        await pumpFor(t, const Duration(seconds: 1));
+      }
+      FocusManager.instance.primaryFocus?.unfocus();
+      await pumpFor(t, const Duration(seconds: 1));
+      await shot(t, 'photo-sent');
     } else {
       // ignore: avoid_print
       print('STEPFAIL composer-photo button missing');
@@ -190,12 +233,27 @@ void main() {
 
     // The viewer.
     final thumb = find.byKey(const Key('photo-thumb-k3Xq9TzA'));
+    // Older messages are above (the list is reversed): scroll back to Maya's photo.
+    try {
+      await t.scrollUntilVisible(thumb, 300,
+          scrollable: find.descendant(of: find.byKey(const Key('conv-list')), matching: find.byType(Scrollable)).first, maxScrolls: 20);
+    } catch (_) {}
+    await pumpFor(t, const Duration(seconds: 1));
     if (await waitFor(t, thumb, timeout: const Duration(seconds: 5))) {
+      await t.ensureVisible(thumb.first);
+      await pumpFor(t, const Duration(seconds: 1));
+      await shot(t, 'photo-received-thumbnail');
       await t.tap(thumb.first);
       await pumpFor(t, const Duration(seconds: 2));
       await shot(t, 'photo-viewer');
-      await t.tap(find.byKey(const Key('viewer-close')));
-      await pumpFor(t, const Duration(seconds: 1));
+      final close = find.byKey(const Key('viewer-close'));
+      if (close.evaluate().isEmpty) {
+        // ignore: avoid_print
+        print('STEPFAIL viewer did not open');
+      } else {
+        await t.tap(close);
+        await pumpFor(t, const Duration(seconds: 1));
+      }
     } else {
       // ignore: avoid_print
       print('STEPFAIL photo thumb missing');
