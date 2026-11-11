@@ -32,10 +32,12 @@ void main() {
     for (final s in screens) {
       try {
         await s.run(t);
-      } catch (e) {
+      } catch (e, st) {
         if (s.optional) {
           // ignore: avoid_print
-          print('SKIPPED ${s.name} (not on this checkout)');
+          print('SKIPTRACE ${s.name}: ${st.toString().split('\n').take(8).join(' | ')}');
+          // ignore: avoid_print
+          print('SKIPPED ${s.name} (not on this checkout: ${e.toString().split('\n').first})');
           continue;
         }
         // ignore: avoid_print
