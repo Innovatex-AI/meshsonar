@@ -4,6 +4,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/core/antenna_profile.dart';
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/home_observer.dart';
 import 'package:meshsonar/ui/app.dart';
@@ -72,6 +73,28 @@ Future<void> _show(WidgetTester tester, String key) async {
 }
 
 void main() {
+  testWidgets('P2: Antenna at home lists the drive antenna mounts plus Don\'t know (default); a tap saves it at once',
+      (tester) async {
+    final h = await _pump(tester, const HomeObserverScreen(showTiles: false));
+    expect(find.text('Antenna at home'), findsOneWidget);
+    expect(find.text(homeObserverAntennaHelp), findsOneWidget);
+    for (final k in ['unknown', for (final m in AntennaMount.values) m.name]) {
+      expect(find.byKey(Key('home-antenna-$k')), findsOneWidget);
+    }
+    expect(h.state.settings.homeAntenna, isNull);
+    expect(tester.widget<ListTile>(find.byKey(const Key('home-antenna-unknown'))).selected, isTrue);
+    await _show(tester, 'home-antenna-fixedMast');
+    await tester.tap(find.byKey(const Key('home-antenna-fixedMast')));
+    await tester.pumpAndSettle();
+    expect(h.state.settings.homeAntenna, AntennaMount.fixedMast);
+    expect(h.settings.saved.homeAntenna, AntennaMount.fixedMast, reason: 'persisted');
+    expect(tester.widget<ListTile>(find.byKey(const Key('home-antenna-fixedMast'))).selected, isTrue);
+    await _show(tester, 'home-antenna-unknown');
+    await tester.tap(find.byKey(const Key('home-antenna-unknown')));
+    await tester.pumpAndSettle();
+    expect(h.state.settings.homeAntenna, isNull);
+  });
+
   testWidgets('place on the map, choose exact, turn on (PUT), see the status, turn off (DELETE)', (tester) async {
     final h = await _pump(tester, const HomeObserverScreen(showTiles: false));
     expect(find.text(homeObserverLead), findsOneWidget);

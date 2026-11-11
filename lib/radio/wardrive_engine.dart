@@ -135,6 +135,10 @@ class DefaultWardriveEngine implements WardriveEngine {
   /// asks again after [pingSkipRetry].
   PingGate pingGate = const AlwaysGoPingGate();
 
+  /// Told the moment a ping is about to go on air (its send time), before the send command. The telemetry uploader holds
+  /// packets heard from then for its echo window, so this ping's echoes can be marked own once its hash is known.
+  void Function(DateTime sentAt)? onPingSent;
+
   /// How long after a skipped ping the engine waits before asking the gate again.
   Duration pingSkipRetry = const Duration(seconds: 2);
 
@@ -881,6 +885,7 @@ class DefaultWardriveEngine implements WardriveEngine {
       };
       sentAt = _clock();
       sendMono = _mono();
+      onPingSent?.call(sentAt);
       // The command is issued BEFORE anything that tells the UI (status fan-out runs in microtasks once we yield).
       final sending = link.sendChannelText(idx, text);
       _setStatus(EngineState.pinging, 'Pinging');

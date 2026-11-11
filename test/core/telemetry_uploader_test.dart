@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/core/telemetry.dart';
 import 'package:meshsonar/core/telemetry_uploader.dart';
@@ -45,7 +47,11 @@ void main() {
   late Directory dir;
   File? qf;
 
-  TelemetryUploader make({TelemetryConfig config = const TelemetryConfig(holdFor: Duration.zero, minGap: Duration.zero)}) =>
+  TelemetryUploader make(
+          {TelemetryConfig config = const TelemetryConfig(holdFor: Duration.zero, minGap: Duration.zero),
+          TelemetryObserver? observer,
+          bool autoSchedule = false,
+          DateTime Function()? now}) =>
       TelemetryUploader(
         enabled: () => on,
         driverKey: () => key,
@@ -55,8 +61,9 @@ void main() {
         platform: 'ios',
         queueFile: qf,
         config: config,
-        now: () => clock,
-        autoSchedule: false,
+        now: now ?? () => clock,
+        autoSchedule: autoSchedule,
+        observer: observer == null ? null : (_) => observer,
       );
 
   TelemetryRecord rec({int salt = 0, String? region = 'CMH', DateTime? at}) =>
@@ -195,14 +202,112 @@ void main() {
     expect(packets.single['pkt_hash'], isNot(echo.packetHash));
   });
 
-  test('records are held before sending', () async {
-    final u = make(config: const TelemetryConfig(holdFor: Duration(seconds: 90), minGap: Duration.zero));
+  // P1 (HANDOFF "Phone observer data analysis + plan", Nov 10 2026): the 90 s hold applies only while our own ping is in
+  // flight; everything else goes at the normal cadence.
+  const obs = TelemetryObserver(id: '0123456789abcdef0123456789abcdef');
+  const hold90 = TelemetryConfig(holdFor: Duration(seconds: 90), minGap: Duration.zero);
+
+  test('P1: a packet with no ping in flight goes at the next flush (no 90 s hold)', () async {
+    final u = make(config: hold90, observer: obs);
+    expect(u.pingInFlight, isFalse);
     u.add(rec(at: clock));
     await u.flush();
+    expect(tx.posts, hasLength(1));
+    expect(u.queued, 0);
+  });
+
+  test('P1: an own echo heard during the ping is held, then marked own (v2)', () async {
+    final u = make(config: hold90, observer: obs);
+    u.pingSent(clock);
+    expect(u.pingInFlight, isTrue);
+    clock = clock.add(const Duration(seconds: 2));
+    final echo = rec(at: clock);
+    u.add(echo);
+    await u.flush();
+    expect(tx.posts, isEmpty, reason: 'held while the ping is in flight');
+    clock = clock.add(const Duration(seconds: 10)); // the listen window ends; the engine reports the ping's hash
+    u.markOwn(echo.packetHash!, publicRaw: true);
+    await u.flush();
     expect(tx.posts, isEmpty);
-    clock = clock.add(const Duration(seconds: 91));
+    clock = clock.add(const Duration(seconds: 79)); // 91 s after the send
+    await u.flush();
+    final p = ((jsonDecode(tx.posts.single.body)['packets'] as List).single as Map);
+    expect(p['pkt_hash'], echo.packetHash);
+    expect(p['own'], isTrue);
+  });
+
+  test('P1: a packet arriving during an in-flight ping is held until the echo window ends; older ones are not', () async {
+    final u = make(config: hold90, observer: obs);
+    final before = rec(salt: 1, at: clock.subtract(const Duration(seconds: 1))); // heard before the ping went out
+    u.add(before);
+    final sent = clock;
+    u.pingSent(sent);
+    clock = clock.add(const Duration(seconds: 30));
+    final during = rec(salt: 2, at: clock);
+    u.add(during);
+    await u.flush();
+    var ps = jsonDecode(tx.posts.single.body)['packets'] as List;
+    expect(ps.map((p) => (p as Map)['pkt_hash']), [before.packetHash], reason: 'only the packet heard before the ping goes');
+    expect(u.queued, 1);
+    clock = sent.add(const Duration(seconds: 89));
+    await u.flush();
+    expect(tx.posts, hasLength(1), reason: 'still inside the 90 s echo window');
+    clock = sent.add(const Duration(seconds: 90));
+    expect(u.pingInFlight, isFalse);
+    await u.flush();
+    ps = jsonDecode(tx.posts[1].body)['packets'] as List;
+    expect(ps.map((p) => (p as Map)['pkt_hash']), [during.packetHash]);
+    expect(u.queued, 0);
+  });
+
+  test('P1: overlapping pings hold until the last window that covers the packet ends', () async {
+    final u = make(config: hold90, observer: obs);
+    final p1 = clock;
+    u.pingSent(p1);
+    clock = clock.add(const Duration(seconds: 20));
+    u.pingSent(clock);
+    final p2 = clock;
+    clock = clock.add(const Duration(seconds: 5));
+    u.add(rec(at: clock));
+    clock = p1.add(const Duration(seconds: 95)); // the first window closed, the second is still open
+    await u.flush();
+    expect(tx.posts, isEmpty);
+    clock = p2.add(const Duration(seconds: 90));
     await u.flush();
     expect(tx.posts, hasLength(1));
+  });
+
+  test('P1 cadence: no ping = sent within minGap (foreground) / backgroundGap (background); during a ping = at window end',
+      () {
+    qf = null; // real disk I/O never completes on fake time
+    fakeAsync((async) {
+      final start = clock;
+      DateTime t() => start.add(async.elapsed);
+      final u = make(
+          config: const TelemetryConfig(holdFor: Duration(seconds: 90)), observer: obs, autoSchedule: true, now: t);
+      u.add(rec(at: t()));
+      async.elapse(const Duration(seconds: 6));
+      expect(tx.posts, hasLength(1), reason: 'foreground: the next 5 s flush');
+
+      u.foreground = false;
+      u.add(rec(salt: 1, at: t()));
+      async.elapse(const Duration(seconds: 30));
+      expect(tx.posts, hasLength(1));
+      async.elapse(const Duration(seconds: 31));
+      expect(tx.posts, hasLength(2), reason: 'background: within the 60 s cadence');
+
+      u.foreground = true;
+      final sent = t();
+      u.pingSent(sent);
+      async.elapse(const Duration(seconds: 1));
+      u.add(rec(salt: 2, at: t()));
+      async.elapse(const Duration(seconds: 80));
+      expect(tx.posts, hasLength(2), reason: 'held by the in-flight ping');
+      async.elapse(const Duration(seconds: 11));
+      expect(tx.posts, hasLength(3), reason: 'sent once the echo window closed');
+      unawaited(u.dispose());
+      async.flushMicrotasks();
+    });
   });
 
   test('batches are capped, one request per minGap, grouped by region', () async {

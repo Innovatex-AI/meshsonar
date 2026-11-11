@@ -12,7 +12,9 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../app/app_state.dart';
+import '../../core/antenna_profile.dart';
 import '../../core/home_observer.dart';
+import '../antenna_sheet.dart' show antennaMountInfo;
 import '../app.dart';
 import '../design/app_surfaces.dart' show showAppToast;
 import '../design/app_symbols.dart';
@@ -29,6 +31,10 @@ const String homeObserverWhileOn =
     'While it is on: the screen stays awake (keep MeshSonar open and the phone charging), the radio is reconnected by '
     'itself if it drops, and every 5 minutes the phone tells the server it is still listening. Packets are shared from '
     'this position, never with your moving position.';
+
+/// What the home antenna choice means.
+const String homeObserverAntennaHelp =
+    'Shared with the packets this phone hears at home. Your drive antenna is used only while a drive records.';
 
 /// What the position choice means.
 const String homeObserverPositionHelp =
@@ -163,6 +169,13 @@ class _HomeObserverScreenState extends State<HomeObserverScreen> {
             const SizedBox(height: Gap.xs),
             Text(homeObserverPositionHelp, style: t.textTheme.bodySmall),
             const SizedBox(height: Gap.l),
+            Semantics(header: true, child: Text('Antenna at home', style: t.textTheme.titleMedium)),
+            const SizedBox(height: Gap.xs),
+            Text(homeObserverAntennaHelp, style: t.textTheme.bodySmall),
+            const SizedBox(height: Gap.s),
+            _antennaTile(context, s, null),
+            for (final m in AntennaMount.values) _antennaTile(context, s, m),
+            const SizedBox(height: Gap.l),
             Text(homeObserverWhileOn, style: t.textTheme.bodyMedium),
             if (!s.settings.telemetryEnabled) ...[
               const SizedBox(height: Gap.s),
@@ -198,6 +211,38 @@ class _HomeObserverScreenState extends State<HomeObserverScreen> {
                 child: Semantics(liveRegion: true, child: Text(_result!, key: const Key('home-observer-result'))),
               ),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// One choice of the home antenna: the drive antenna's mounts plus "Don't know" ([m] null, the default, sent as
+  /// `unknown`). Saved at once, on or off.
+  Widget _antennaTile(BuildContext context, AppState s, AntennaMount? m) {
+    final t = Theme.of(context);
+    final (icon, about) = m == null ? (Icons.help_outline, 'Sent as unknown.') : antennaMountInfo[m]!;
+    final selected = s.settings.homeAntenna == m;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Gap.s),
+      child: Semantics(
+        inMutuallyExclusiveGroup: true,
+        checked: selected,
+        child: ListTile(
+          key: ValueKey('home-antenna-${m?.name ?? 'unknown'}'),
+          selected: selected,
+          selectedTileColor: t.colorScheme.primaryContainer,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(Corners.chip),
+            side: BorderSide(color: selected ? t.colorScheme.primary : t.colorScheme.outlineVariant, width: 1.5),
+          ),
+          leading: Icon(icon),
+          title: Text(m?.label ?? "Don't know"),
+          subtitle: Text(about),
+          trailing: Icon(selected ? Icons.radio_button_checked : Icons.radio_button_unchecked),
+          onTap: selected
+              ? null
+              : () => unawaited(s.updateSettings(
+                  m == null ? s.settings.copyWith(clearHomeAntenna: true) : s.settings.copyWith(homeAntenna: m))),
         ),
       ),
     );

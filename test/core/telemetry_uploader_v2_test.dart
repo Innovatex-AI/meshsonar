@@ -43,7 +43,7 @@ void main() {
         config: config,
         now: () => clock,
         autoSchedule: false,
-        observer: () => obs,
+        observer: (_) => obs,
         onServerErased: erased,
         onObserver: onObs,
       );
@@ -220,8 +220,9 @@ void main() {
     expect(tx.posts, hasLength(4), reason: 'back in front: 5 s cadence');
   });
 
-  test('the own-ping hold-back still applies in v2 (default 90 s)', () async {
+  test('the own-ping hold-back still applies in v2 while a ping is in flight (default 90 s)', () async {
     final u = make(config: const TelemetryConfig());
+    u.pingSent(clock);
     u.add(advert(at: clock));
     clock = clock.add(const Duration(seconds: 60));
     await u.flush();

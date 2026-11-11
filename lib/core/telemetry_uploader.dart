@@ -9,9 +9,12 @@
 //    queue (memory and disk) at once. A server-side erase is a separate, remembered request ([eraseServerData]).
 //  * Only [TelemetryRecord]s exist here: raw bytes only of public packet types (the record enforces it), an H3 res-7 cell at
 //    most, never coordinates, names or the radio's public key; the observer id is random per install.
-//  * Echoes of our own TX pings are observer packets too (contract section 8.1, Nov 9 2026): records are held
-//    [TelemetryConfig.holdFor] so the ping's hash is known, then sent with `own: true` ([markOwn]); raw only when that ping
-//    was uploaded publicly. A v1 batch (no `own` field) still leaves them out, as before.
+//  * Echoes of our own TX pings are observer packets too (contract section 8.1, Nov 9 2026): a record that arrives while
+//    one of our pings is in flight ([pingSent] until [TelemetryConfig.holdFor] after it) is held until that window ends, so
+//    the ping's hash is known, then sent with `own: true` ([markOwn]); raw only when that ping was uploaded publicly. Every
+//    other record goes at the normal cadence (no hold), so a home or background phone uploads within 5-60 s, not ~95 s
+//    (HANDOFF "Phone observer data analysis", P1). A v1 batch (no `own` field) still leaves own echoes out, as before.
+//    Drive positions sent sooner stay private: the server holds them pending until drive-end (contract section 8.7).
 //  * Cadence (contract section 6): in the foreground a batch at most every [TelemetryConfig.minGap] (5 s); in the background
 //    every [TelemetryConfig.backgroundGap] (60 s) or as soon as [TelemetryConfig.backgroundBatch] (50) packets are ready.
 //  * Rate caps: intake per minute/hour, at most [TelemetryConfig.maxBatchesPerHour] batches per hour (the server allows
@@ -54,7 +57,8 @@ class TelemetryConfig {
   /// Records kept waiting; beyond it the oldest are dropped. At about 200 bytes each the disk file stays near 1 MB.
   final int maxQueue;
 
-  /// A record waits this long before it may be sent, so a ping's hash is known and its echoes can be recognised and dropped.
+  /// A record that arrives during one of our own pings waits until this long after that ping was sent, so the ping's hash
+  /// is known and its echoes can be marked own. Records with no ping in flight are not held.
   final Duration holdFor;
 
   /// Minimum time between two requests; the foreground flush cadence (5 s).
@@ -217,8 +221,9 @@ class TelemetryUploader {
   /// Schedule the next flush by itself after records arrive. Tests switch it off and call [flush].
   final bool autoSchedule;
 
-  /// The observer block for v2 (random id + radio context); null = not known yet, the batch goes as v1 (headers only).
-  final TelemetryObserver? Function()? observer;
+  /// The observer block for v2 (random id + radio context) for a batch heard in [mode] (the antenna differs: home mode
+  /// sends the home antenna); null = not known yet, the batch goes as v1 (headers only).
+  final TelemetryObserver? Function(ObserverMode mode)? observer;
 
   /// Called after the server confirmed an erase (the app then starts a new observer id and ends home mode).
   final void Function()? onServerErased;
@@ -248,6 +253,9 @@ class TelemetryUploader {
   /// Hashes of this phone's own transmissions -> whether the ping was uploaded publicly (raw may go with its echoes).
   final LinkedHashMap<String, bool> _ownHashes = LinkedHashMap();
   final LinkedHashSet<String> _seen = LinkedHashSet();
+
+  /// Send times of our own pings whose echo window ([TelemetryConfig.holdFor] after the send) may still be open.
+  final List<DateTime> _pingStarts = [];
   final List<DateTime> _batchTimes = [];
   DateTime? _nextAttempt;
   DateTime? _lastSend;
@@ -320,6 +328,32 @@ class TelemetryUploader {
       }
     }
   }
+
+  /// One of our own pings is going out now (or at [at]): records arriving from then until [TelemetryConfig.holdFor] after
+  /// it are held, because they may be its echoes and its hash is known only once its listen window ends ([markOwn]).
+  void pingSent([DateTime? at]) {
+    if (config.holdFor <= Duration.zero) return;
+    _pingStarts.add((at ?? now()).toUtc());
+    while (_pingStarts.length > 256) {
+      _pingStarts.removeAt(0);
+    }
+  }
+
+  /// Our own ping is in flight: an echo window is open now.
+  bool get pingInFlight => _holdFrom(now()) != null;
+
+  /// Records that arrived at or after this instant are held: the send time of the earliest own ping whose echo window is
+  /// still open at [t]. Null = nothing is held. Closed windows are forgotten.
+  DateTime? _holdFrom(DateTime t) {
+    _pingStarts.removeWhere((p) => !t.isBefore(p.add(config.holdFor)));
+    if (_pingStarts.isEmpty) return null;
+    return _pingStarts.reduce((a, b) => a.isBefore(b) ? a : b);
+  }
+
+  /// When the window that holds records from [from] closes.
+  DateTime _holdEnd(DateTime from) => from.add(config.holdFor);
+
+  bool _ready(TelemetryRecord r, DateTime? holdFrom) => holdFrom == null || r.at.isBefore(holdFrom);
 
   /// The drive ended at [lat]/[lon]: exact positions still waiting within [trimM] of it go out as their cell instead
   /// (the drive's end trim, section 8.2). [cellOf] gives the cell for a position (null = none).
@@ -437,10 +471,11 @@ class TelemetryUploader {
   void _schedule() {
     if (!autoSchedule || _timer != null) return;
     final t = now();
-    // Wake when the oldest record has waited out the hold-back, and not before the cadence allows a batch.
+    // Wake at the cadence; when every waiting record is held by an own ping's echo window, not before that window ends.
     var wait = _foreground ? _gap(t) : config.backgroundGap;
-    if (_queue.isNotEmpty) {
-      final ready = _queue.first.at.add(config.holdFor).difference(t);
+    final from = _holdFrom(t);
+    if (_queue.isNotEmpty && from != null && _readyCount(t) == 0) {
+      final ready = _holdEnd(from).difference(t);
       if (ready > wait) wait = ready;
     }
     if (!_foreground && _readyCount(t) >= config.backgroundBatch) wait = _gap(t);
@@ -469,13 +504,13 @@ class TelemetryUploader {
     return config.minGap;
   }
 
-  /// Records past the hold-back (the queue is in arrival order, so they are at its start).
+  /// Records not held by an own ping's echo window.
   int _readyCount(DateTime t) {
-    final cut = t.subtract(config.holdFor);
+    final from = _holdFrom(t);
+    if (from == null) return _queue.length;
     var n = 0;
     for (final r in _queue) {
-      if (r.at.isAfter(cut)) break;
-      n++;
+      if (_ready(r, from)) n++;
     }
     return n;
   }
@@ -520,7 +555,8 @@ class TelemetryUploader {
     if (_lastSend != null && t.difference(_lastSend!) < _gap(t)) return;
     if (_batchTimes.length >= config.maxBatchesPerHour) return;
 
-    final eligible = _queue.where((r) => !r.at.isAfter(t.subtract(config.holdFor))).toList();
+    final from = _holdFrom(t);
+    final eligible = _queue.where((r) => _ready(r, from)).toList();
     if (eligible.isEmpty) return;
     // Background: a batch every minute, or sooner once enough packets are ready.
     if (!_foreground &&
@@ -534,7 +570,7 @@ class TelemetryUploader {
     final batch = eligible.where((r) => r.region == region && r.mode == mode).take(config.batchSize).toList();
 
     final key = driverKey()!;
-    final obs = _v1Only ? null : observer?.call();
+    final obs = _v1Only ? null : observer?.call(mode);
     final v2 = obs != null && obs.valid;
     // v1 has no `own` field: our own echoes stay out of a v1 batch (the pre-section-8 rule).
     List<int> bodyFor(bool asV2) => utf8.encode(asV2

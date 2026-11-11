@@ -248,6 +248,29 @@ final List<ScreenStep> screens = [
     await t.pageBack();
     await pumpFor(t, const Duration(seconds: 1));
   }),
+  // More > Home observer: the map, the public-map choice and the Antenna at home list (P2, Nov 10 2026).
+  ScreenStep('home-observer', (t) async {
+    // Back out of whatever the previous steps left open (Settings, About) in every navigator, then open the row.
+    for (final n in t.stateList<NavigatorState>(find.byType(Navigator, skipOffstage: false))) {
+      n.popUntil((r) => r.isFirst);
+    }
+    await pumpFor(t, const Duration(seconds: 1));
+    await openShellTab(t, 'More');
+    // The More list may still be scrolled to its end (the About step): scroll back up to the Home observer row.
+    final row = find.byKey(const Key('more-homeObserver'));
+    if (row.hitTestable().evaluate().isEmpty) {
+      await t.scrollUntilVisible(row, -200, scrollable: find.byType(Scrollable).hitTestable().first);
+    }
+    await t.ensureVisible(row);
+    await pumpFor(t, const Duration(milliseconds: 500));
+    await t.tap(row);
+    await pumpFor(t, const Duration(seconds: 1));
+    if (!await waitFor(t, find.byKey(const Key('home-observer-list')))) throw const _Skip();
+    // Scrolled by jumps, not drags (a drag over the map pans the map); the antenna list sits below the map.
+    await shootFullScroll(t, 'home-observer');
+    await t.pageBack();
+    await pumpFor(t, const Duration(seconds: 1));
+  }, optional: true),
   ScreenStep('region', (t) async {
     await openTab(t, 'Region');
     await shot(t, 'region');

@@ -5,6 +5,18 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- **Phone observer uploads within seconds, not ~95 s (P1).** A packet is held only while this phone has its own ping in
+  flight: from the moment the ping goes out (the engine's new `onPingSent`) until 90 s after it, so its echoes are still
+  sent as `own: true`. Every other packet goes at the normal cadence: a batch every 5 s with the app open, every 60 s (or
+  50 packets) in the background. Home and background phones now show on Live almost in real time, and the server's phone
+  `upload_lag_s` drops from ~95-110 s to the cadence. Drive positions sent sooner stay private: the server holds them
+  pending until drive-end (contract section 8.7). `lib/core/telemetry_uploader.dart` `pingSent`.
+- **Antenna at home (P2).** Settings > Home observer has a new "Antenna at home" choice: the drive antenna's mounts
+  (Handheld, Inside car, Roof mag-mount, Fixed mast) plus "Don't know", the default. Home mode sends it in the observer
+  block's `radio.antenna` (`unknown` when not set) on batches and heartbeats; drive and background mode keep sending the
+  drive antenna. A phone sitting at home no longer reports `inside_car`. Kept when Home observer is turned off (settings key
+  `home_antenna`, written only when set). The server stores the radio block as sent.
+
 - **Photo messages (app half; the server half ships separately and the button stays hidden until its `photo-config` says
   enabled).** Composer camera button: Take Photo / Choose from Library, shrink to 2048 px JPEG q80 with all metadata (GPS
   included) removed and checked, upload with progress, Cancel and Retry, and the 32-byte `https://meshsonar.com/p/<id>` link

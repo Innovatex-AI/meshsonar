@@ -22,7 +22,8 @@ Future<void> showAntennaSheet(BuildContext context, {String? radioKey, bool user
   );
 }
 
-const Map<AntennaMount, (IconData, String)> _mountInfo = {
+/// Icon and one-line description of each mount (also the Home observer antenna choice).
+const Map<AntennaMount, (IconData, String)> antennaMountInfo = {
   AntennaMount.handheld: (Icons.back_hand_outlined, 'The radio in your hand or pocket, with its own antenna.'),
   AntennaMount.insideCar: (Icons.directions_car_outlined, 'On the dash or a seat, antenna inside the car.'),
   AntennaMount.roofMagMount: (Icons.settings_input_antenna, 'A magnetic antenna on the car roof.'),
@@ -219,7 +220,7 @@ class _AntennaSheetState extends State<_AntennaSheet> {
 
   Widget _mountTile(BuildContext context, AntennaMount m) {
     final t = Theme.of(context);
-    final (icon, about) = _mountInfo[m]!;
+    final (icon, about) = antennaMountInfo[m]!;
     final selected = _mount == m;
     return Padding(
       padding: const EdgeInsets.only(bottom: Gap.s),

@@ -121,7 +121,7 @@ const List<SettingsEntry> settingsEntries = [
       keywords: ['location', 'observer', 'approximate', 'region only', 'hexagon', '5 km', 'privacy', 'telemetry']),
   SettingsEntry('home-observer', 'privacy', 'Home observer',
       'Leave this phone at home next to your radio as a fixed observer at a spot you place on the map (exact or about 1 km on the public map).',
-      keywords: ['home', 'observer', 'fixed', 'base station', 'keep awake', 'heartbeat', 'uptime']),
+      keywords: ['home', 'observer', 'fixed', 'base station', 'keep awake', 'heartbeat', 'uptime', 'antenna', 'home antenna']),
   // Drive-context categories (stream 7; titles = lib/core/data_categories.dart).
   SettingsEntry('collect-motion-toggle', 'privacy', 'Motion and altitude',
       'GPS height, direction of travel and accuracy, saved with your drive (uploaded with it when the server accepts it).',

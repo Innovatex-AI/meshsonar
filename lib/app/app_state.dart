@@ -1448,8 +1448,10 @@ class AppState extends ChangeNotifier {
   /// The server's 64-hex key for this phone's observer (from the last v2 answer); null until one came back.
   String? get observerKey => _observerKey ?? _home.lastKey;
 
-  /// The observer block of a v2 batch: random id + the connected radio's context. Null until the id is loaded.
-  TelemetryObserver? _telemetryObserver() {
+  /// The observer block of a v2 batch heard in [mode]: random id + the connected radio's context. The antenna follows the
+  /// mode: home mode sends the Home observer antenna ([Settings.homeAntenna], `unknown` when not set), drive and
+  /// background the drive antenna profile, as before. Null until the id is loaded.
+  TelemetryObserver? _telemetryObserver(ObserverMode mode) {
     final id = observerIdentity.id;
     if (id == null) return null;
     final info = _selfInfo;
@@ -1464,7 +1466,9 @@ class AppState extends ChangeNotifier {
         bwKhz: r?.bwKhz,
         sf: r?.sf,
         cr: r?.cr,
-        antenna: profile == null ? null : antennaToken(profile.mount),
+        antenna: mode == ObserverMode.home
+            ? homeAntennaToken(_settings.homeAntenna)
+            : (profile == null ? null : antennaToken(profile.mount)),
       ),
     );
   }
@@ -1472,6 +1476,10 @@ class AppState extends ChangeNotifier {
   /// The antenna mount as a contract token (`^[a-z0-9_-]{1,24}$`): insideCar -> inside_car.
   @visibleForTesting
   static String antennaToken(AntennaMount m) => m.name.replaceAllMapped(RegExp('[A-Z]'), (x) => '_${x[0]!.toLowerCase()}');
+
+  /// The Home observer antenna as a contract token; `unknown` when it was never set ("Don't know").
+  @visibleForTesting
+  static String homeAntennaToken(AntennaMount? m) => m == null ? 'unknown' : antennaToken(m);
 
   H3? _h3;
   bool _h3Tried = false;
@@ -1534,7 +1542,7 @@ class AppState extends ChangeNotifier {
     connected: () => connected,
     config: () => homeObserverActive ? _settings.homeObserver : null,
     mode: () => observerMode.wire,
-    radio: () => _telemetryObserver()?.radio.toJson() ?? const <String, dynamic>{},
+    radio: () => _telemetryObserver(observerMode)?.radio.toJson() ?? const <String, dynamic>{},
     autoTimer: services.observerHeartbeatTimer,
   );
 
@@ -2227,6 +2235,9 @@ class AppState extends ChangeNotifier {
   void _attachGate(WardriveEngine engine) {
     final session = radioSessions.session;
     if (session != null && engine is DefaultWardriveEngine) engine.pingGate = session.pingGate;
+    // Packets heard while our own ping is in flight wait for its echo window (telemetry_uploader.dart pingSent); all
+    // others go at the normal cadence.
+    if (engine is DefaultWardriveEngine) engine.onPingSent = (at) => _tele.pingSent(at);
   }
 
   /// "3 min ahead of", "2 h behind", "5 days ahead of" ... for a clock-skew warning.
