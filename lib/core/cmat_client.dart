@@ -38,6 +38,7 @@ import 'hex_cells.dart' show loadHexEngine;
 import 'map_links.dart';
 import 'node_claim.dart';
 import 'photo_api.dart';
+import 'photo_wire.dart';
 import 'privacy_zones.dart';
 import 'repeater_reach.dart';
 import 'report_body.dart' show problemReportMaxBytes;
@@ -95,12 +96,22 @@ class HttpCmatClient implements CmatClient, TelemetryTransport, HomeObserverTran
   final Duration timeout;
   final Duration uploadTimeout;
 
+  /// The socket under photo uploads (real per-chunk progress; see lib/core/photo_wire.dart) and when they give up.
+  final PhotoWire photoWire;
+  final PhotoUploadTimeouts photoTimeouts;
+
+  /// Size of one photo body write: small enough that the bar moves every half second at ~14 KB/s.
+  static const int photoChunkBytes = 8 * 1024;
+
   HttpCmatClient(
     this.baseUrl, {
     http.Client? client,
     this.timeout = const Duration(seconds: 30),
     this.uploadTimeout = const Duration(seconds: 120),
-  }) : _http = client ?? http.Client();
+    PhotoWire? photoWire,
+    this.photoTimeouts = const PhotoUploadTimeouts(),
+  })  : _http = client ?? http.Client(),
+        photoWire = photoWire ?? const IoPhotoWire();
 
   Uri endpoint(String name) {
     var path = baseUrl.path;
@@ -704,44 +715,70 @@ class HttpCmatClient implements CmatClient, TelemetryTransport, HomeObserverTran
       {String contentType = 'image/jpeg', void Function(int sent, int total)? onProgress, PhotoCancel? cancel}) async {
     if (driverKey.isEmpty) throw const PhotoError(PhotoErrorKind.noKey);
     if (cancel?.cancelled ?? false) throw const PhotoError(PhotoErrorKind.cancelled);
-    final req = http.AbortableStreamedRequest('POST', endpoint('photo-upload'), abortTrigger: cancel?.whenCancelled);
-    req.headers['accept'] = 'application/json';
-    req.headers['content-type'] = contentType;
-    req.headers['x-driver-key'] = driverKey;
-    req.contentLength = bytes.length;
     final total = bytes.length;
-    // The body goes out in 16 KB pieces so the bar moves while a weak cellular link drains it.
-    unawaited(() async {
-      const chunk = 16 * 1024;
-      var sent = 0;
-      try {
-        while (sent < total) {
-          if (cancel?.cancelled ?? false) break;
-          final end = sent + chunk < total ? sent + chunk : total;
-          req.sink.add(bytes.sublist(sent, end));
-          sent = end;
-          onProgress?.call(sent, total);
-          await Future<void>.delayed(Duration.zero);
-        }
-      } catch (_) {}
-      await req.sink.close();
-    }());
-    if (total == 0) onProgress?.call(0, 0);
-    http.Response res;
-    try {
-      res = await _http.send(req).then(http.Response.fromStream).timeout(uploadTimeout);
-    } on http.RequestAbortedException {
-      throw const PhotoError(PhotoErrorKind.cancelled);
-    } on TimeoutException {
-      throw PhotoError(PhotoErrorKind.network, detail: 'timed out talking to ${baseUrl.host}');
-    } on SocketException catch (e) {
-      throw PhotoError(PhotoErrorKind.network, detail: e.message);
-    } on http.ClientException catch (e) {
-      if (cancel?.cancelled ?? false) throw const PhotoError(PhotoErrorKind.cancelled);
-      throw PhotoError(PhotoErrorKind.network, detail: e.message);
-    } on HandshakeException catch (e) {
-      throw PhotoError(PhotoErrorKind.network, detail: e.message);
+    final t = photoTimeouts;
+    final done = Completer<PhotoWireResponse>();
+    PhotoWireRequest? req;
+    Timer? watchdog;
+    void fail(PhotoError e) {
+      if (done.isCompleted) return;
+      done.completeError(e);
+      req?.abort();
     }
+
+    // One watchdog, re-armed on every byte the socket takes: [t.stall] while sending (and connecting), [t.response] once the
+    // last byte is out. A slow but steady link never trips it; only the hard cap bounds the whole upload.
+    void arm(Duration d, String why) {
+      watchdog?.cancel();
+      watchdog = Timer(d, () => fail(PhotoError(PhotoErrorKind.stalled, detail: why)));
+    }
+
+    final cap = Timer(t.cap, () => fail(PhotoError(PhotoErrorKind.stalled, detail: 'not done after ${t.cap.inMinutes} min')));
+    unawaited(cancel?.whenCancelled.then((_) => fail(const PhotoError(PhotoErrorKind.cancelled))));
+    unawaited(() async {
+      try {
+        arm(t.stall, 'could not connect within ${t.stall.inSeconds} s');
+        final r = await photoWire.open('POST', endpoint('photo-upload'),
+            {'accept': 'application/json', 'content-type': contentType, 'x-driver-key': driverKey}, total);
+        if (done.isCompleted) {
+          r.abort();
+          return;
+        }
+        req = r;
+        var sent = 0;
+        onProgress?.call(0, total);
+        while (sent < total) {
+          final end = sent + photoChunkBytes < total ? sent + photoChunkBytes : total;
+          await r.write(bytes.sublist(sent, end));
+          if (done.isCompleted) return;
+          sent = end;
+          arm(sent < total ? t.stall : t.response,
+              sent < total ? 'no progress for ${t.stall.inSeconds} s' : 'no answer ${t.response.inSeconds} s after the last byte');
+          onProgress?.call(sent, total);
+        }
+        if (total == 0) arm(t.response, 'no answer');
+        final res = await r.finish();
+        if (!done.isCompleted) done.complete(res);
+      } on PhotoError catch (e) {
+        fail(e);
+      } catch (e) {
+        if (cancel?.cancelled ?? false) return fail(const PhotoError(PhotoErrorKind.cancelled));
+        fail(PhotoError(PhotoErrorKind.network, detail: switch (e) {
+          SocketException() => e.message,
+          HandshakeException() => e.message,
+          HttpException() => e.message,
+          _ => '$e',
+        }));
+      }
+    }());
+    final PhotoWireResponse wres;
+    try {
+      wres = await done.future;
+    } finally {
+      watchdog?.cancel();
+      cap.cancel();
+    }
+    final res = http.Response.bytes(wres.body, wres.status, headers: wres.headers);
     if (cancel?.cancelled ?? false) throw const PhotoError(PhotoErrorKind.cancelled);
     Object? decoded;
     try {

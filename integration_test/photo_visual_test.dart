@@ -64,9 +64,10 @@ class _DemoTransport implements PhotoTransport {
   @override
   Future<PhotoUploadResult> uploadPhoto(String driverKey, List<int> bytes,
       {String contentType = 'image/jpeg', void Function(int sent, int total)? onProgress, PhotoCancel? cancel}) async {
-    for (var i = 1; i <= 4; i++) {
-      onProgress?.call(bytes.length * i ~/ 4, bytes.length);
-      await Future<void>.delayed(const Duration(milliseconds: 250));
+    // Bytes out in steps, then the body is out and the answer takes a moment ("Processing…").
+    for (var i = 1; i <= 5; i++) {
+      onProgress?.call(bytes.length * i ~/ 5, bytes.length);
+      await Future<void>.delayed(Duration(milliseconds: i < 5 ? 1200 : 15000));
     }
     return const PhotoUploadResult(id: 'Up10aded', url: 'https://meshsonar.com/p/Up10aded', thumbUrl: '', fullUrl: '');
   }
@@ -211,7 +212,9 @@ void main() {
       await t.tap(find.byKey(const Key('photo-library')));
       await pumpFor(t, const Duration(milliseconds: 500));
       await shot(t, 'photo-uploading');
-      await pumpFor(t, const Duration(seconds: 2));
+      await pumpFor(t, const Duration(milliseconds: 4500));
+      await shot(t, 'photo-processing');
+      await pumpFor(t, const Duration(seconds: 14));
       await shot(t, 'photo-link-inserted');
       // Send it: the own bubble shows the photo.
       await t.enterText(find.byKey(const Key('composer-field')), 'From the trailhead https://meshsonar.com/p/Up10aded');
