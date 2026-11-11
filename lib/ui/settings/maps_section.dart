@@ -47,15 +47,6 @@ class MapFollowOptions extends StatelessWidget {
             onChanged: (v) => p.headingUp = v,
           ),
           SwitchListTile(
-            key: const Key('map-auto-recenter-setting'),
-            secondary: const Icon(Icons.my_location_outlined),
-            title: const Text('Re-centre by itself'),
-            subtitle: const Text('After you move the map while driving, it returns to you 10 seconds after you let go. Off: tap the '
-                're-centre button.'),
-            value: p.autoResumeSec > 0,
-            onChanged: (v) => p.autoResumeSec = v ? 10 : 0,
-          ),
-          SwitchListTile(
             key: const Key('map-zoom-speed-setting'),
             secondary: const Icon(Icons.zoom_out_map_outlined),
             title: const Text('Zoom out at speed'),

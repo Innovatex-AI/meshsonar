@@ -3,7 +3,8 @@
 // (lib/platform/map_prefs_store.dart); tests use none and get plain in-memory preferences.
 //
 //   headingUp       the map turns so the direction of travel is up (default off: north-up).
-//   autoResumeSec   a map the person moved re-centres by itself after this many seconds without a touch; 0 = only the button.
+//   (auto_resume_sec, the old "re-centre by itself" timer, was removed Nov 10 2026: a moved map stays put until Recenter.
+//   An old file's key is ignored and dropped on the next save.)
 //   zoomBySpeed     zoom out gently at highway speed (default off: the zoom stays where the person put it).
 //   healthOverlay   the small "Map and GPS health" readout on the map (Settings > Diagnostics).
 //   layers          per map page (`drive`, later `analyze`): which layers are on or off, the Pings colour mode, and the network
@@ -108,7 +109,6 @@ class MapPrefs extends ChangeNotifier {
   Future<void> Function(String json)? write;
 
   bool _headingUp = false;
-  int _autoResumeSec = 10;
   bool _zoomBySpeed = false;
   bool _healthOverlay = false;
   final Map<String, LayerPrefs> _layers = {};
@@ -116,7 +116,6 @@ class MapPrefs extends ChangeNotifier {
   Future<void>? _loading;
 
   bool get headingUp => _headingUp;
-  int get autoResumeSec => _autoResumeSec;
   bool get zoomBySpeed => _zoomBySpeed;
   bool get healthOverlay => _healthOverlay;
   bool get loaded => _loaded;
@@ -134,7 +133,6 @@ class MapPrefs extends ChangeNotifier {
   }
 
   set headingUp(bool v) => _set(() => _headingUp = v, _headingUp != v);
-  set autoResumeSec(int v) => _set(() => _autoResumeSec = v.clamp(0, 600), _autoResumeSec != v.clamp(0, 600));
   set zoomBySpeed(bool v) => _set(() => _zoomBySpeed = v, _zoomBySpeed != v);
   set healthOverlay(bool v) => _set(() => _healthOverlay = v, _healthOverlay != v);
 
@@ -147,7 +145,6 @@ class MapPrefs extends ChangeNotifier {
 
   Map<String, Object?> toJson() => {
     'heading_up': _headingUp,
-    'auto_resume_sec': _autoResumeSec,
     'zoom_by_speed': _zoomBySpeed,
     'health_overlay': _healthOverlay,
     if (_layers.isNotEmpty) 'layers': {for (final e in _layers.entries) e.key: e.value.toJson()},
@@ -156,7 +153,6 @@ class MapPrefs extends ChangeNotifier {
   void applyJson(Object? j) {
     if (j is! Map) return;
     if (j['heading_up'] is bool) _headingUp = j['heading_up'] as bool;
-    if (j['auto_resume_sec'] is int) _autoResumeSec = (j['auto_resume_sec'] as int).clamp(0, 600);
     if (j['zoom_by_speed'] is bool) _zoomBySpeed = j['zoom_by_speed'] as bool;
     if (j['health_overlay'] is bool) _healthOverlay = j['health_overlay'] as bool;
     final ls = j['layers'];

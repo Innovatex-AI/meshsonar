@@ -12,7 +12,14 @@ class MapViewController {
   final MapController map = MapController();
 
   /// Follow state: the camera drives itself until the person moves the map (lib/core/camera_follow.dart).
-  final CameraFollow follow = CameraFollow(autoResume: null);
+  final CameraFollow follow = CameraFollow();
+
+  /// While following: where the puck sits on the screen (offset from the map widget's centre, screen pixels). Null = take it
+  /// from where the puck is now on the next follow frame. Cleared when the person moves the map; Recenter sets the middle.
+  ({double dx, double dy})? followOffset;
+
+  /// The one zoom-in to street level on the first GPS fix (an overview map) has been done; never again this session.
+  bool firstFixZoomDone = false;
 
   /// Heading-up rotation, for the compass button.
   final ValueNotifier<double> rotation = ValueNotifier<double>(0);

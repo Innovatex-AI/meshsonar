@@ -1,6 +1,7 @@
-// The live map's follow camera and direction arrow, on a real CoverageMap with a puck: the arrow stays at its place on the screen
-// while the car moves, points along the course (compass when stopped) without spinning at north, a finger pauses follow and the
-// re-centre button (or 10 s of quiet) resumes it, heading-up turns the map, zoom-by-speed eases out, GPS weak shows a tag.
+// The live map's follow camera and direction arrow, on a real CoverageMap with a puck: the arrow keeps its place on the screen
+// while the car moves, points along the course (compass when stopped) without spinning at north, a pan / pinch turns follow off
+// for good (pings, fixes, panel changes never move or zoom the map again) and only the Recenter button resumes it, heading-up
+// turns the map, zoom-by-speed eases out, GPS weak shows a tag. Andy Nov 10 2026: "it needs to stay where i put it".
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -9,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:meshsonar/core/hex_cells.dart' show HexPoint;
 import 'package:meshsonar/core/map_prefs.dart';
+import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/core/network_coverage.dart';
 import 'package:meshsonar/radio/radio_api.dart';
 import 'package:meshsonar/ui/app.dart';
@@ -39,7 +41,14 @@ class Rig {
     courseDeg: course,
   );
 
-  Widget app({List<NetworkCell> cells = const [], bool rotatable = false}) => MaterialApp(
+  Widget app({
+    List<NetworkCell> cells = const [],
+    bool rotatable = false,
+    List<DrivePing> pings = const [],
+    LatLng? position = const LatLng(40, -83),
+    bool withPuck = true,
+    double bottomClearance = 0,
+  }) => MaterialApp(
     theme: meshSonarTheme(Brightness.light),
     home: Scaffold(
       body: SizedBox(
@@ -47,11 +56,11 @@ class Rig {
         height: 800,
         child: CoverageMap(
           key: const Key('map'),
-          pings: const [],
-          puck: puck,
+          pings: pings,
+          puck: withPuck ? puck : null,
           prefs: prefs,
-          position: const LatLng(40, -83),
-          lookAhead: true,
+          position: position,
+          bottomClearance: bottomClearance,
           showTiles: false,
           networkCells: cells,
           rotatable: rotatable,
@@ -80,7 +89,8 @@ class Rig {
   }
 }
 
-MapCamera cameraOf(WidgetTester t) => MapCamera.of(t.element(find.byKey(const Key('puck-paint'))));
+/// The live camera, read from a layer inside the FlutterMap (the chart grid is always there, puck or not).
+MapCamera cameraOf(WidgetTester t) => MapCamera.of(t.element(find.byWidgetPredicate((w) => w.runtimeType.toString() == 'ChartGrid').first));
 Offset markAt(WidgetTester t) => t.getCenter(find.byKey(const Key('map-position')));
 double arrowAngle(WidgetTester t) {
   final w = t.widget<Transform>(find.byKey(const Key('map-heading-arrow')));
@@ -105,7 +115,7 @@ void main() {
 
   tearDown(() => r.puck.dispose());
 
-  testWidgets('following: the arrow stays at its place on the screen (lower third) while the car drives 20 s', (t) async {
+  testWidgets('following: the arrow keeps the place it started at (the middle, not pinned to the lower third) while the car drives 20 s', (t) async {
     phone(t);
     await t.pumpWidget(r.app());
     r.puck.onFix(r.fix());
@@ -113,7 +123,7 @@ void main() {
     final anchor = markAt(t);
     final mapBox = t.getRect(find.byKey(const Key('map')));
     expect(anchor.dx, closeTo(mapBox.center.dx, 1));
-    expect(anchor.dy - mapBox.top, closeTo(800 * 0.66, 2), reason: 'lower third: more road ahead');
+    expect(anchor.dy - mapBox.top, closeTo(400, 2), reason: 'where it was when follow started; no jump to the lower third');
     var worst = 0.0;
     for (var i = 0; i < 14; i++) {
       await r.drive(t, 1);
@@ -212,28 +222,123 @@ void main() {
     await r.drive(t, 2);
     expect(find.byKey(const Key('map-recenter')), findsNothing);
     final mapBox = t.getRect(find.byKey(const Key('map')));
-    expect(markAt(t).dy - mapBox.top, closeTo(800 * 0.66, 3));
+    expect(markAt(t).dy - mapBox.top, closeTo(400, 3), reason: 'Recenter: the middle of the visible map');
   });
 
-  testWidgets('auto re-centre: 10 s after the last touch (setting), and not when the setting is off', (t) async {
+  testWidgets('after a pan and a pinch-zoom, 40 s of fixes, pings and position updates leave the camera centre and zoom alone', (t) async {
     phone(t);
-    await t.pumpWidget(r.app());
+    var pings = <DrivePing>[];
+    var pos = const LatLng(40, -83);
+    await t.pumpWidget(r.app(pings: pings, position: pos));
     r.puck.onFix(r.fix());
     await r.drive(t, 3);
-    await t.drag(find.byKey(const Key('map')), const Offset(0, 100));
+    await t.drag(find.byKey(const Key('map')), const Offset(30, 120));
     await t.pump();
-    expect(find.byKey(const Key('map-recenter')), findsOneWidget);
-    await r.drive(t, 8);
-    expect(find.byKey(const Key('map-recenter')), findsOneWidget, reason: '8 s is not enough');
-    await r.drive(t, 4);
-    expect(find.byKey(const Key('map-recenter')), findsNothing, reason: 'back on the car by itself');
+    // a two-finger pinch out (zoom in)
+    final c = t.getCenter(find.byKey(const Key('map')));
+    final g1 = await t.startGesture(c - const Offset(40, 0), pointer: 7);
+    final g2 = await t.startGesture(c + const Offset(40, 0), pointer: 8);
+    for (var i = 1; i <= 10; i++) {
+      await g1.moveTo(c - Offset(40.0 + 8 * i, 0));
+      await g2.moveTo(c + Offset(40.0 + 8 * i, 0));
+      await t.pump(const Duration(milliseconds: 16));
+    }
+    await g1.up();
+    await g2.up();
+    await t.pump();
+    expect(find.byKey(const Key('map-recenter')), findsOneWidget, reason: 'follow is off: Recenter shows');
+    final cam0 = cameraOf(t);
+    final centre = cam0.center, zoom = cam0.zoom, rot = cam0.rotation;
+    for (var n = 0; n < 40; n++) {
+      // a ping lands and the position moves on, like a real drive
+      pings = [DrivePing(id: 'p$n', ts: _t0.add(Duration(seconds: n)), lat: 40 + r.northM / _mLat, lon: -83), ...pings];
+      pos = LatLng(40 + r.northM / _mLat, -83);
+      await t.pumpWidget(r.app(pings: pings, position: pos));
+      await r.drive(t, 1);
+      final cam = cameraOf(t);
+      expect(cam.center.latitude, closeTo(centre.latitude, 1e-9), reason: 'ping $n: the map stays where the person put it');
+      expect(cam.center.longitude, closeTo(centre.longitude, 1e-9), reason: 'ping $n');
+      expect(cam.zoom, zoom, reason: 'ping $n: the zoom is never changed by code');
+      expect(cam.rotation, rot);
+    }
+    expect(find.byKey(const Key('map-recenter')), findsOneWidget, reason: 'no auto re-centre: still off after 40 s');
+  });
 
-    r.prefs.autoResumeSec = 0;
+  testWidgets('follow off: Dock / Medium panel changes never move the camera; Recenter turns follow back on', (t) async {
+    phone(t);
+    await t.pumpWidget(r.app(bottomClearance: 120));
+    r.puck.onFix(r.fix());
+    await r.drive(t, 3);
+    await t.drag(find.byKey(const Key('map')), const Offset(0, 200)); // the person puts the car low on the screen
     await t.pump();
-    await t.drag(find.byKey(const Key('map')), const Offset(0, 100));
+    final cam0 = cameraOf(t);
+    for (final clearance in [420.0, 120.0, 560.0, 120.0, 420.0]) {
+      await t.pumpWidget(r.app(bottomClearance: clearance)); // Medium, Dock, tall, Dock, Medium
+      await r.drive(t, 4);
+      final cam = cameraOf(t);
+      expect(cam.center.latitude, closeTo(cam0.center.latitude, 1e-9), reason: 'clearance $clearance');
+      expect(cam.center.longitude, closeTo(cam0.center.longitude, 1e-9));
+      expect(cam.zoom, cam0.zoom);
+    }
+    expect(find.byKey(const Key('map-recenter')), findsOneWidget);
+    await t.tap(find.byKey(const Key('map-recenter')));
     await t.pump();
-    await r.drive(t, 30);
-    expect(find.byKey(const Key('map-recenter')), findsOneWidget, reason: 'setting off: only the button');
+    expect(find.byKey(const Key('map-recenter')), findsNothing, reason: 'Recenter turned follow back on');
+    final z = cameraOf(t).zoom;
+    await r.drive(t, 3);
+    // following again: the arrow sits in the middle of the part of the map the panel leaves free (800 - 420 = 380 px)
+    final mapBox = t.getRect(find.byKey(const Key('map')));
+    expect(markAt(t).dy - mapBox.top, closeTo(380 / 2, 3));
+    expect(cameraOf(t).zoom, z, reason: 'Recenter keeps the zoom');
+  });
+
+  testWidgets('follow on: a panel that grows over the arrow nudges it back into view, nothing else', (t) async {
+    phone(t);
+    await t.pumpWidget(r.app(bottomClearance: 120));
+    r.puck.onFix(r.fix());
+    await r.drive(t, 3);
+    final mapBox = t.getRect(find.byKey(const Key('map')));
+    expect(markAt(t).dy - mapBox.top, closeTo(400, 2));
+    final z = cameraOf(t).zoom;
+    await t.pumpWidget(r.app(bottomClearance: 560)); // the panel now covers y > 240
+    await r.drive(t, 2);
+    expect(markAt(t).dy - mapBox.top, closeTo(240 - 48, 2), reason: 'just inside the visible area');
+    expect(cameraOf(t).zoom, z);
+    await t.pumpWidget(r.app(bottomClearance: 120)); // the panel shrinks again: the arrow stays where it is
+    await r.drive(t, 2);
+    expect(markAt(t).dy - mapBox.top, closeTo(240 - 48, 2));
+  });
+
+  testWidgets('follow on: pings never change the zoom (no puck: the first ping used to zoom to street level)', (t) async {
+    phone(t);
+    await t.pumpWidget(r.app(withPuck: false, position: null));
+    await t.pump();
+    final z0 = cameraOf(t).zoom;
+    expect(z0, lessThan(13.6), reason: 'opened on an overview');
+    var pings = <DrivePing>[];
+    for (var n = 0; n < 5; n++) {
+      pings = [DrivePing(id: 'p$n', ts: _t0.add(Duration(seconds: 15 * n)), lat: 40 + n * 0.0005, lon: -83), ...pings];
+      await t.pumpWidget(r.app(withPuck: false, position: null, pings: pings));
+      await t.pump();
+      expect(cameraOf(t).zoom, z0, reason: 'ping $n');
+    }
+    expect(find.byKey(const Key('map-recenter')), findsNothing, reason: 'still following');
+  });
+
+  testWidgets('follow on with the live puck: 30 s of fixes and pings never change the zoom', (t) async {
+    phone(t);
+    var pings = <DrivePing>[];
+    await t.pumpWidget(r.app(pings: pings));
+    r.puck.onFix(r.fix());
+    await r.drive(t, 2);
+    final z0 = cameraOf(t).zoom;
+    for (var n = 0; n < 6; n++) {
+      pings = [DrivePing(id: 'p$n', ts: _t0.add(Duration(seconds: 5 * n)), lat: 40 + r.northM / _mLat, lon: -83), ...pings];
+      await t.pumpWidget(r.app(pings: pings, position: LatLng(40 + r.northM / _mLat, -83)));
+      await r.drive(t, 5);
+      expect(cameraOf(t).zoom, z0, reason: 'ping $n');
+    }
+    expect(find.byKey(const Key('map-recenter')), findsNothing);
   });
 
   testWidgets('heading-up turns the map so the direction of travel is up; the button toggles it; north-up turns it back', (t) async {

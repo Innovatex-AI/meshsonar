@@ -4,15 +4,17 @@
 //   CoverageMap(
 //     pings: pings,                       // every ping to draw, any order (dots coloured by result or SNR)
 //     repeaters: state.repeaters,         // RepeaterRef cache: amber beacon markers, name on tap
-//     position: LatLng(fix.lat, fix.lon), // optional "you are here"; follow mode keeps it centred
+//     position: LatLng(fix.lat, fix.lon), // optional "you are here"; follow mode keeps it where it is on the screen
 //     repeaterLabel: state.repeaterLabel, // optional: prefix -> display name for the link labels
 //     heard: heardSnapshot(state.heard),  // optional: live/holding/stale repeaters (Drive screen)
 //     layerState: kDefaultLayerState,     // optional: which registry layers are on (and the Pings colour mode)
 //     networkCells: cells,                // optional: network-wide coverage cells (GET public-coverage)
 //   )
 //
-// Live drive: pass `position` and leave `follow: true`. Dragging the map turns follow off and shows a
-// Recenter button. Drive detail: pass `follow: false, fitToPings: true` to frame the whole drive.
+// Live drive: pass `position` and leave `follow: true`. Follow keeps the position where it is on the screen (never re-pins it,
+// never zooms). Any pan, zoom, pinch or rotate turns follow off and the camera is then never moved by code (pings, fixes,
+// coverage, panel changes) until the Recenter button is tapped (lib/core/camera_follow.dart). Drive detail: pass
+// `follow: false, fitToPings: true` to frame the whole drive.
 //
 // What's drawn, bottom to top:
 //   1. A chart grid on the map background (so the map looks intentional with no tiles / no signal).
@@ -225,7 +227,7 @@ class CoverageMap extends StatefulWidget {
   /// to the repeaters that heard the latest ping are drawn from it without rebuilding the map on each GPS fix.
   final PuckController? puck;
 
-  /// Keep [position] centred (until the user drags the map).
+  /// Follow [position] (keeping it where it is on the screen) until the person moves the map.
   final bool follow;
 
   /// Frame all pings when the map first opens (drive detail). Ignored if there are fewer than 2 pings.
@@ -233,10 +235,6 @@ class CoverageMap extends StatefulWidget {
 
   /// Draw links from the newest ping to the repeaters it heard.
   final bool showLinks;
-
-  /// While following, keep the position two thirds down the map (more road ahead) instead of centred. No ring is drawn:
-  /// the only rings on the map are the animated ping rings of the live puck.
-  final bool lookAhead;
 
   /// Allow pan/zoom.
   final bool interactive;
@@ -372,7 +370,6 @@ class CoverageMap extends StatefulWidget {
     this.puck,
     this.fitToPings = false,
     this.showLinks = true,
-    this.lookAhead = true,
     this.interactive = true,
     this.rotatable = false,
     this.showTiles,
@@ -453,7 +450,8 @@ class _CoverageMapState extends State<CoverageMap> {
     if (v) {
       _fc.resume();
     } else {
-      _fc.userMoved(_now());
+      _vc.followOffset = null;
+      _fc.userMoved();
     }
   }
 
@@ -1026,6 +1024,7 @@ class _CoverageMapState extends State<CoverageMap> {
   void _fitLinks() {
     final s = _currentLinks();
     if (s == null || s.ends.isEmpty) return;
+    setState(() => _follow = false); // the person framed these links: keep that view until Recenter
     _controller.fitCamera(CameraFit.coordinates(
       coordinates: [LatLng(s.lat, s.lon), for (final e in s.ends) LatLng(e.lat, e.lon)],
       padding: widget.overlayPadding + const EdgeInsets.all(56),
@@ -1200,11 +1199,10 @@ class _CoverageMapState extends State<CoverageMap> {
     _hadCamera = _vc.initialised;
     if (!_hadCamera) {
       _vc.initialised = true;
-      if (!widget.follow) _fc.userMoved(_now());
+      if (!widget.follow) _fc.userMoved();
     }
     _hits.onNothing = _clearLinks; // a tap on nothing puts the lines away
     if (widget.takesFocusRequests) MainMapFocus.notifier.addListener(_onFocusRequest);
-    _applyPrefs();
     _prefs.addListener(_onPrefs);
     if (widget.puck != null) unawaited(openSharedMapPrefs());
     if (widget.showTiles ?? CoverageMap.tilesByDefault) {
@@ -1232,15 +1230,9 @@ class _CoverageMapState extends State<CoverageMap> {
     }, onError: (Object _) {});
   }
 
-  void _applyPrefs() {
-    final sec = _prefs.autoResumeSec;
-    _fc.autoResume = widget.puck == null || sec <= 0 ? null : Duration(seconds: sec);
-  }
-
   void _onPrefs() {
     if (!mounted) return;
     final was = _headingUpApplied;
-    _applyPrefs();
     if (was && !_prefs.headingUp) _northUp(); // heading-up off: the map turns back to north
     _headingUpApplied = _prefs.headingUp;
     setState(() {});
@@ -1298,20 +1290,22 @@ class _CoverageMapState extends State<CoverageMap> {
       return;
     }
     final pos = widget.position;
-    // First real location after opening on an overview: zoom in to street level.
-    final firstFix =
-        (old.position == null && pos != null) || (old.pings.isEmpty && widget.pings.isNotEmpty && pos == null);
-    if (_follow && _ready && firstFix) {
-      final target = pos ?? LatLng(_latest!.lat, _latest!.lon);
-      _controller.move(target, math.max(_controller.camera.zoom, 13.6));
-    } else if (_follow && _ready && pos != null && pos != old.position && widget.puck?.pose == null) {
-      _controller.move(pos, _controller.camera.zoom);
-    } else if (_follow && _ready && pos == null) {
+    if (!_follow || !_ready) return; // a map the person moved is never moved by code: pings and fixes just draw
+    // First real GPS location after opening on an overview (zoomed out past 12): zoom in to street level, once per session.
+    // Pings never change the zoom.
+    if (old.position == null && pos != null && !_vc.firstFixZoomDone && _controller.camera.zoom < 12) {
+      _vc.firstFixZoomDone = true;
+      _vc.followOffset = null;
+      _controller.move(pos, 13.6);
+      return;
+    }
+    if (widget.puck?.pose != null) return; // the live puck drives the camera frame by frame (_onPuckFrame)
+    if (pos != null) {
+      if (pos != old.position) _keepAt(pos);
+    } else {
       final l = _latest;
       final ol = old.pings.isEmpty ? null : old.pings.first;
-      if (l != null && (ol == null || ol.id != l.id || old.pings.length != widget.pings.length)) {
-        _controller.move(LatLng(l.lat, l.lon), _controller.camera.zoom);
-      }
+      if (l != null && (ol == null || ol.id != l.id || old.pings.length != widget.pings.length)) _keepAt(LatLng(l.lat, l.lon));
     }
   }
 
@@ -1328,7 +1322,7 @@ class _CoverageMapState extends State<CoverageMap> {
     final r = MainMapFocus.notifier.value;
     if (r == null || !_ready || !mounted) return;
     MainMapFocus.taken(r);
-    _fc.userMoved(_now());
+    _follow = false;
     _controller.move(r.at, r.zoom);
     setState(() {});
   }
@@ -1353,22 +1347,57 @@ class _CoverageMapState extends State<CoverageMap> {
     }
   }
 
-  /// One display frame of the puck: drives the camera so the arrow stays at its place on the screen. The camera moves from the
-  /// SAME pose the arrow is drawn with, in the same frame, so there is nothing to lag or fight. A finger on the map, or a map the
-  /// person moved, is left alone (until the re-centre button or the auto-resume).
+  /// The part of the map widget covered by overlays and the Drive screen's top / bottom clearances (panel): what follow keeps
+  /// the puck out of.
+  EdgeInsets get _followPad => widget.overlayPadding + EdgeInsets.only(top: widget.topClearance, bottom: widget.bottomClearance);
+
+  /// Where [at] is on the screen under [cam], as an offset from the map widget's centre (screen pixels).
+  static ({double dx, double dy}) _screenOffset(MapCamera cam, LatLng at) {
+    final d = cam.projectAtZoom(at, cam.zoom) - cam.projectAtZoom(cam.center, cam.zoom);
+    final r = cam.rotation * math.pi / 180;
+    return (dx: d.dx * math.cos(r) - d.dy * math.sin(r), dy: d.dx * math.sin(r) + d.dy * math.cos(r));
+  }
+
+  /// The follow offset to use for [at] this frame: the remembered one (or where [at] is now), kept inside the visible area.
+  ({double dx, double dy}) _followOffsetFor(MapCamera cam, LatLng at) {
+    final size = cam.nonRotatedSize;
+    final pad = _followPad;
+    final want = _vc.followOffset ?? _screenOffset(cam, at);
+    final a = keepInView(
+      dx: want.dx, dy: want.dy, width: size.width, height: size.height, left: pad.left, top: pad.top, right: pad.right, bottom: pad.bottom);
+    _vc.followOffset = a;
+    return a;
+  }
+
+  /// The camera centre that puts [at] at screen offset [a] with zoom [z] and rotation [rot].
+  static LatLng _centreFor(MapCamera cam, LatLng at, ({double dx, double dy}) a, double z, double rot) {
+    final r = rot * math.pi / 180;
+    final rx = a.dx * math.cos(r) + a.dy * math.sin(r);
+    final ry = -a.dx * math.sin(r) + a.dy * math.cos(r);
+    return cam.unprojectAtZoom(cam.projectAtZoom(at, z) - Offset(rx, ry), z);
+  }
+
+  /// Following without a live puck (position or newest ping changed): keep [at] at its place on the screen, same zoom.
+  void _keepAt(LatLng at) {
+    final cam = _controller.camera;
+    final c = _centreFor(cam, at, _followOffsetFor(cam, at), cam.zoom, cam.rotation);
+    if ((c.latitude - cam.center.latitude).abs() < 1e-9 && (c.longitude - cam.center.longitude).abs() < 1e-9) return;
+    _controller.move(c, cam.zoom);
+  }
+
+  /// One display frame of the puck: while following, moves the camera so the arrow keeps its place on the screen (where it
+  /// was when follow started, the middle after Recenter), from the SAME pose the arrow is drawn with, in the same frame, so
+  /// there is nothing to lag or fight. The zoom is never changed (except the opt-in zoom-by-speed). A finger on the map, or a
+  /// map the person moved, is left alone until the Recenter button.
   void _onPuckFrame(LatLng at, double dt) {
     final puck = widget.puck;
     if (puck == null || !_ready) return;
-    final now = puck.clock();
-    final wasFollowing = _fc.following;
-    final drive = _fc.shouldDrive(now);
-    if (!wasFollowing && _fc.following && mounted) setState(() {}); // auto re-centred
     final tele = widget.telemetry;
     if (tele != null) {
       tele.mode = _fc.following ? 'follow' : 'paused';
       tele.headingUp = _prefs.headingUp;
     }
-    if (!drive) return;
+    if (!_fc.shouldDrive) return;
     final pose = puck.pose;
     if (pose == null) return;
     final cam = _controller.camera;
@@ -1383,22 +1412,7 @@ class _CoverageMapState extends State<CoverageMap> {
     var rot = cam.rotation;
     final mh = puck.mapHeadingDeg;
     if (_prefs.headingUp && mh != null) rot = rot + shortestArc(rot, headingUpRotation(mh));
-    final size = cam.nonRotatedSize;
-    final pad = widget.overlayPadding;
-    final a = followAnchor(
-      width: size.width,
-      height: size.height,
-      left: pad.left,
-      top: pad.top,
-      right: pad.right,
-      bottom: pad.bottom,
-      fromTop: widget.lookAhead ? 0.66 : 0.5,
-    );
-    final r = rot * math.pi / 180;
-    final rx = a.dx * math.cos(r) + a.dy * math.sin(r);
-    final ry = -a.dx * math.sin(r) + a.dy * math.cos(r);
-    final p = cam.projectAtZoom(at, z);
-    final c = cam.unprojectAtZoom(p - Offset(rx, ry), z);
+    final c = _centreFor(cam, at, _followOffsetFor(cam, at), z, rot);
     if (z == cam.zoom && rot == cam.rotation && (c.latitude - cam.center.latitude).abs() < 1e-9 && (c.longitude - cam.center.longitude).abs() < 1e-9) return;
     _controller.moveAndRotate(c, z, rot);
     tele?.drives++;
@@ -1410,18 +1424,20 @@ class _CoverageMapState extends State<CoverageMap> {
     return p == null ? widget.position : LatLng(p.lat, p.lon);
   }
 
+  /// The Recenter button: follow is on again and the position goes to the middle of the visible area. The zoom stays.
   void _recenter() {
     setState(() => _follow = true);
     final target = _livePosition ?? (_latest == null ? null : LatLng(_latest!.lat, _latest!.lon));
-    if (target != null && _ready) {
-      final double z = math.max(_controller.camera.zoom, 14.0);
-      _userZoom = z - _zoomOffset;
-      if (widget.puck != null) {
-        _onPuckFrame(target, 0.016); // the follower puts it at its place on the screen at once
-        if (_controller.camera.zoom < z) _controller.move(_controller.camera.center, z);
-      } else {
-        _controller.move(target, z);
-      }
+    if (!_ready) return;
+    final cam = _controller.camera;
+    final size = cam.nonRotatedSize;
+    final pad = _followPad;
+    _vc.followOffset = followAnchor(width: size.width, height: size.height, left: pad.left, top: pad.top, right: pad.right, bottom: pad.bottom);
+    if (target == null) return;
+    if (widget.puck != null && widget.puck!.pose != null) {
+      _onPuckFrame(target, 0.016); // the follower puts it at its place on the screen at once
+    } else {
+      _keepAt(target);
     }
   }
 
@@ -1666,8 +1682,8 @@ class _CoverageMapState extends State<CoverageMap> {
                   : (widget.rotatable ? InteractiveFlag.all : (InteractiveFlag.all & ~InteractiveFlag.rotate)),
             ),
             onPointerDown: (_, _) => _fc.pointerDown(),
-            onPointerUp: (_, _) => _fc.pointerUp(_now()),
-            onPointerCancel: (_, _) => _fc.pointerUp(_now()),
+            onPointerUp: (_, _) => _fc.pointerUp(),
+            onPointerCancel: (_, _) => _fc.pointerUp(),
             onMapReady: () {
               _ready = true;
               if (widget.takesFocusRequests && MainMapFocus.notifier.value != null) {
@@ -1728,9 +1744,10 @@ class _CoverageMapState extends State<CoverageMap> {
               }
               if (widget.rotatable) _rotationN.value = camera.rotation;
               if (hasGesture) {
-                // The person moved the map: the camera stops driving at once (never fights a finger).
+                // The person panned, zoomed, pinched or rotated: follow is off and code never moves this camera again
+                // until Recenter (no auto-resume, Andy Nov 10 2026).
                 final was = _fc.following;
-                _fc.userMoved(_now());
+                _follow = false;
                 _userZoom = camera.zoom - _zoomOffset;
                 if (was) setState(() {});
               }

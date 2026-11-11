@@ -2,6 +2,7 @@
 // drive and prints "SCREEN <name>" while the simulated car drives, so a script can screenshot the sonar puck moving
 // between pings, the ping rings, and the lines to the repeaters that heard it. Also opens the Drive tab's Ping settings.
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:meshsonar/main.dart' as app;
@@ -50,10 +51,34 @@ void main() {
       await t.drag(find.byKey(const Key('drive-map')), const Offset(160, 60), warnIfMissed: false);
       await pumpFor(t, const Duration(seconds: 1));
     }
+    // Pinch-zoom in as well: the person's zoom and position must now survive every ping (Andy Nov 10 2026).
+    final mc = t.getCenter(find.byKey(const Key('drive-map'))) - const Offset(0, 120);
+    final g1 = await t.startGesture(mc - const Offset(40, 0), pointer: 71);
+    final g2 = await t.startGesture(mc + const Offset(40, 0), pointer: 72);
+    for (var i = 1; i <= 10; i++) {
+      await g1.moveTo(mc - Offset(40.0 + 6 * i, 0));
+      await g2.moveTo(mc + Offset(40.0 + 6 * i, 0));
+      await t.pump(const Duration(milliseconds: 16));
+    }
+    await g1.up();
+    await g2.up();
+    await pumpFor(t, const Duration(seconds: 1));
+    camLog(t, 'panned');
     await shot1(t, 'puck-panned');
+    // Several pings (and 30 s of fixes) while the map is where the person put it: the camera must not move.
+    for (var i = 1; i <= 4; i++) {
+      if (find.byKey(const Key('ping-now')).evaluate().isNotEmpty) await t.tap(find.byKey(const Key('ping-now')), warnIfMissed: false);
+      await pumpFor(t, const Duration(seconds: 8));
+      camLog(t, 'after-ping-$i');
+      await shot1(t, 'puck-held-after-ping-$i');
+    }
     await t.tap(find.byKey(const Key('map-recenter')));
     await pumpFor(t, const Duration(seconds: 1));
+    camLog(t, 'recentred');
     await shot1(t, 'puck-recentred');
+    await pumpFor(t, const Duration(seconds: 6));
+    camLog(t, 'following');
+    await shot1(t, 'puck-following');
     // Quick ping settings.
     await t.tap(find.byKey(const Key('ping-settings-chip')));
     await pumpFor(t, const Duration(seconds: 1));
@@ -77,4 +102,13 @@ Future<void> shot1(WidgetTester t, String name) async {
   // ignore: avoid_print
   print('SCREEN $name');
   await pumpFor(t, const Duration(milliseconds: 250));
+}
+
+/// Prints the Drive map's camera (centre, zoom) so the log proves the view held still: `CAM tag lat lon zoom`.
+void camLog(WidgetTester t, String tag) {
+  final grid = find.byWidgetPredicate((w) => w.runtimeType.toString() == 'ChartGrid');
+  if (grid.evaluate().isEmpty) return;
+  final c = MapCamera.of(t.element(grid.first));
+  // ignore: avoid_print
+  print('CAM $tag ${c.center.latitude.toStringAsFixed(7)} ${c.center.longitude.toStringAsFixed(7)} ${c.zoom.toStringAsFixed(3)} recenter=${find.byKey(const Key('map-recenter')).evaluate().isNotEmpty}');
 }

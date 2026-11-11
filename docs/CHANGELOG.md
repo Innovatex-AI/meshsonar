@@ -5,6 +5,15 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- **Drive map stays where you put it.** Pan, zoom, pinch or rotate the Drive map and it stays exactly there: pings, ping
+  results, GPS fixes, coverage redraws and Dock/Medium panel changes never move or zoom it again until you tap Recenter.
+  Root cause: the follow camera re-centred by itself 10 s after the last touch (the "Re-centre by itself" setting, on by
+  default) and then pinned the position to the lower third of the map, so every few seconds (it looked like every ping)
+  the view snapped back. The auto re-centre and its setting are gone (an old saved value is ignored). Follow mode now keeps
+  the position where it is on the screen (the middle of the visible map after Recenter, nudged back into view only if the
+  panel would cover it) and never changes the zoom; Recenter keeps your zoom. The first ping no longer zooms the map to
+  street level. `lib/core/camera_follow.dart`, `lib/ui/map/coverage_map.dart`.
+
 ## [0.34.0+59] — 2026-11-10 — photo messages, phone observers upload within seconds, antenna at home
 
 - **Phone observer uploads within seconds, not ~95 s (P1).** A packet is held only while this phone has its own ping in
