@@ -166,8 +166,11 @@ Chat UI: the `chatRedesign` switch in More > Developer and the old Contacts | Ch
   on every swipe action. Haptics switch in Settings; More > Chat holds Quick replies, Return sends, Load photos automatically and Haptics.
 - **Photo messages** (unreleased; plan meshsonar-infra `docs/planning/photo-messages-2026-11-10.md`, API contract v1). A camera button in the
   composer (shown only when the server's `photo-config` says photos are on; without an approved driver key it explains instead) offers Take Photo
-  or Choose from Library. The phone shrinks the picture to a 2048 px long edge, JPEG q80, and removes every metadata segment (EXIF, GPS, XMP,
-  comments); a picture whose metadata cannot be proven gone is not sent. It uploads with progress, Cancel and Retry, then puts the 32-byte link
+  or Choose from Library. The phone shrinks the picture to the server's `maxEdgePx` long edge, JPEG q80; above 450 KB it re-encodes at q70, then
+  q60, then 20 % smaller edges (never below 800 px). It removes every metadata segment (EXIF, GPS, XMP, comments); a picture whose metadata cannot
+  be proven gone is not sent. It uploads with real progress (bytes the socket took; "Processing…" once the body is out), Cancel and Retry
+  (resends the prepared bytes). It gives up only on a stall: no byte out for 45 s, no answer 60 s after the last byte, or 10 min in all, and then
+  says "Upload stalled — your connection is too slow right now"; an unreachable server says "Could not reach". Then it puts the 32-byte link
   `https://meshsonar.com/p/<id>` at the end of the text, counted by the byte meter. If the text plus link would not fit, nothing is trimmed: the
   composer says how many bytes to cut and adds the link as soon as they are. Every server refusal (401, 403, 413, 415, 429 with the wait, 503) has
   its own sentence. Received photo links draw as a rounded thumbnail with the rest of the text ("Photo, loads when online" offline, "Photo

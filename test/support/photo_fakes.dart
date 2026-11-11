@@ -1,13 +1,16 @@
 // Fakes for the photo-message tests: a transport that answers per contract v1 without a server, a picture source that hands
-// back fixed states, a picker that returns a prepared photo, and a tiny real PNG to draw.
+// back fixed states, a picker that returns a prepared photo, a socket ([FakePhotoWire]) for HttpCmatClient's upload that
+// drains at a set rate on (fake) time, stalls or drops on demand, and a tiny real PNG to draw.
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:meshsonar/app/photo_controller.dart';
 import 'package:meshsonar/chat/store.dart';
 import 'package:meshsonar/core/photo_api.dart';
 import 'package:meshsonar/core/photo_cache.dart';
+import 'package:meshsonar/core/photo_wire.dart';
 import 'package:meshsonar/platform/photo_picker.dart';
 
 /// A 2x2 opaque PNG (blue), small enough to inline.
@@ -22,7 +25,11 @@ class FakePhotoTransport implements PhotoTransport {
   Object? uploadError;
   String nextId = 'k3Xq9TzA';
   Completer<void>? holdUpload;
+
+  /// Holds the answer after the whole body was reported out (the composer then says "Processing…").
+  Completer<void>? holdAnswer;
   final uploads = <int>[];
+  final uploadedBytes = <List<int>>[];
   final deletes = <String>[];
   final reports = <(String, PhotoReportReason, String?)>[];
   Object? deleteError;
@@ -37,6 +44,7 @@ class FakePhotoTransport implements PhotoTransport {
   Future<PhotoUploadResult> uploadPhoto(String driverKey, List<int> bytes,
       {String contentType = 'image/jpeg', void Function(int sent, int total)? onProgress, PhotoCancel? cancel}) async {
     uploads.add(bytes.length);
+    uploadedBytes.add(bytes);
     onProgress?.call(bytes.length ~/ 2, bytes.length);
     final h = holdUpload;
     if (h != null) {
@@ -44,6 +52,11 @@ class FakePhotoTransport implements PhotoTransport {
       if (cancel?.cancelled ?? false) throw const PhotoError(PhotoErrorKind.cancelled);
     }
     onProgress?.call(bytes.length, bytes.length);
+    final a = holdAnswer;
+    if (a != null) {
+      await Future.any([a.future, if (cancel != null) cancel.whenCancelled]);
+      if (cancel?.cancelled ?? false) throw const PhotoError(PhotoErrorKind.cancelled);
+    }
     if (uploadError != null) throw uploadError!;
     final url = 'https://meshsonar.com/p/$nextId';
     return PhotoUploadResult(id: nextId, url: url, thumbUrl: '$url/thumb', fullUrl: '$url/full');
@@ -115,3 +128,87 @@ PhotoController fakePhotos(ChatStore store,
       picker: picker ?? FakePhotoPicker(),
       nowMs: () => DateTime(2026, 11, 10, 12).millisecondsSinceEpoch,
     );
+
+/// The socket under HttpCmatClient.uploadPhoto, without a network. Each write completes after `chunk / bytesPerSecond` of
+/// (fake) time; [stallAfterBytes] makes the write that would pass it hang until abort; [connectError] / [writeError] throw;
+/// [answer] builds the reply from the request ([answerDelay] later, or never when [neverAnswer]).
+class FakePhotoWire implements PhotoWire {
+  int? bytesPerSecond;
+  int? stallAfterBytes;
+  Object? connectError;
+  Object? writeError;
+  bool neverAnswer = false;
+  Duration answerDelay = Duration.zero;
+  PhotoWireResponse Function(FakeWireRequest r) answer = (r) => PhotoWireResponse(201, utf8.encode(jsonEncode({
+        'id': 'k3Xq9TzA',
+        'url': 'https://meshsonar.com/p/k3Xq9TzA',
+        'thumbUrl': 'https://meshsonar.com/p/k3Xq9TzA/thumb',
+        'fullUrl': 'https://meshsonar.com/p/k3Xq9TzA/full',
+        'w': 2048,
+        'h': 1536,
+        'bytes': r.body.length,
+        'duplicate': false,
+      })), headers: const {'content-type': 'application/json'});
+  final requests = <FakeWireRequest>[];
+
+  /// Called after each accepted write with the bytes taken so far (to compare with the reported progress).
+  void Function(int written)? onWritten;
+
+  @override
+  Future<PhotoWireRequest> open(String method, Uri url, Map<String, String> headers, int contentLength) async {
+    if (connectError != null) throw connectError!;
+    final r = FakeWireRequest(this, method, url, headers, contentLength);
+    requests.add(r);
+    return r;
+  }
+}
+
+class FakeWireRequest implements PhotoWireRequest {
+  final FakePhotoWire wire;
+  final String method;
+  final Uri url;
+  final Map<String, String> headers;
+  final int contentLength;
+  final body = <int>[];
+  bool aborted = false;
+  bool finished = false;
+  final Completer<void> _abort = Completer<void>();
+  FakeWireRequest(this.wire, this.method, this.url, this.headers, this.contentLength);
+
+  Future<void> _hang() async {
+    await _abort.future;
+    throw const SocketException('connection aborted');
+  }
+
+  @override
+  Future<void> write(List<int> chunk) async {
+    if (aborted) throw const SocketException('connection aborted');
+    if (wire.writeError != null) throw wire.writeError!;
+    final stall = wire.stallAfterBytes;
+    if (stall != null && body.length + chunk.length > stall) return _hang();
+    final rate = wire.bytesPerSecond;
+    if (rate != null) {
+      await Future.any([Future<void>.delayed(Duration(microseconds: chunk.length * 1000000 ~/ rate)), _abort.future]);
+      if (aborted) throw const SocketException('connection aborted');
+    }
+    body.addAll(chunk);
+    wire.onWritten?.call(body.length);
+  }
+
+  @override
+  Future<PhotoWireResponse> finish() async {
+    finished = true;
+    if (wire.neverAnswer) {
+      await _hang();
+    }
+    if (wire.answerDelay > Duration.zero) await Future.any([Future<void>.delayed(wire.answerDelay), _abort.future]);
+    if (aborted) throw const SocketException('connection aborted');
+    return wire.answer(this);
+  }
+
+  @override
+  void abort() {
+    aborted = true;
+    if (!_abort.isCompleted) _abort.complete();
+  }
+}

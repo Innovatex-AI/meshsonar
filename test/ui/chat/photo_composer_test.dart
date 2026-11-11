@@ -143,9 +143,10 @@ void main() {
     const PhotoError(PhotoErrorKind.rateLimited, status: 429, retryAfterS: 600): ('Try again in 10 minutes', true),
     const PhotoError(PhotoErrorKind.disabled, status: 503): ('switched off', true),
     const PhotoError(PhotoErrorKind.network): ('Could not reach', true),
+    const PhotoError(PhotoErrorKind.stalled): ('Upload stalled — your connection is too slow right now. Try again or use Wi-Fi.', true),
   };
   for (final e in errors.entries) {
-    testWidgets('upload error ${e.key.status ?? 'network'} shows "${e.value.$1}"', (tester) async {
+    testWidgets('upload error ${e.key.status ?? e.key.kind.name} shows "${e.value.$1}"', (tester) async {
       await pump(tester, await dm());
       transport.uploadError = e.key;
       await sendPhoto(tester);
@@ -159,6 +160,9 @@ void main() {
         await tester.pumpAndSettle();
         expect(fieldText(tester), photoUrlA);
         expect(transport.uploads.length, 2);
+        // Retry resends the bytes already prepared; it does not open the picker again.
+        expect(identical(transport.uploadedBytes[1], transport.uploadedBytes[0]), isTrue);
+        expect(picker.picks.length, 1);
       }
     });
   }
@@ -173,6 +177,18 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('composer-photo-strip')), findsNothing);
     expect(fieldText(tester), '');
+  });
+
+  testWidgets('once the whole body is out the strip says Processing… (not a stuck 100%) until the answer', (tester) async {
+    await pump(tester, await dm());
+    transport.holdAnswer = Completer<void>();
+    await sendPhoto(tester);
+    expect(tester.widget<Text>(find.byKey(const Key('composer-photo-status'))).data, 'Processing…');
+    expect(find.byKey(const Key('composer-photo-cancel')), findsOneWidget);
+    transport.holdAnswer!.complete();
+    await tester.pumpAndSettle();
+    expect(fieldText(tester), photoUrlA);
+    expect(find.byKey(const Key('composer-photo-strip')), findsNothing);
   });
 
   testWidgets('backing out of the picker leaves no strip; a picker failure says why', (tester) async {

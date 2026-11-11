@@ -22,6 +22,8 @@ const allowedLiteralHosts = {...allowedServerHosts, 'map.meshcore.io', 'api.mesh
 // the keyless basemap fallback (OpenFreeMap TileJSON + tiles), contacted only when our tiles fail or the view leaves our extract.
 // tiles.meshsonar.com stays for the pre-M2 pack manifest (read only while the M2 one is not published).
 // coverage_v2.dart: the coverage v2 reads (tiles, cell, meta) go to the configured MeshSonar server only (WP5, Nov 8 2026).
+// photo_wire.dart: the photo upload's socket (dart:io HttpClient for real per-chunk progress); it only opens the URL
+// HttpCmatClient.endpoint('photo-upload') hands it, i.e. the configured MeshSonar server.
 // api.meshcore.nz: read-only MeshCore community radio-preset list (Andy, Oct 21 2026 decision; Radio tab, on tap only).
 
 void main() {
@@ -49,7 +51,7 @@ void main() {
     expect(hosts.keys, containsAll(['map.meshcore.io', 'api.meshsonar.com', 'tiles.openfreemap.org']), reason: 'the scan itself works');
     final unknown = {for (final e in hosts.entries) if (!allowedLiteralHosts.contains(e.key)) e.key: e.value};
     expect(unknown, isEmpty, reason: 'a new host in lib/ needs a spec decision (MeshSonar sends only to its server)');
-    expect(clients.difference({'cmat_client.dart', 'repeater_directory.dart', 'region_repeaters_api.dart', 'region_overview_api.dart', 'region_reports_api.dart', 'region_packets_api.dart', 'region_analysis_api.dart', 'repeater_detail_api.dart', 'etag_client.dart', 'region_stats_api.dart', 'region_timeline_api.dart', 'coverage_v2.dart', 'live_stream.dart', 'radio_presets.dart', 'offline_packs.dart', 'offline_basemap.dart', 'repeater_sync.dart', 'tile_source.dart', 'basemap.dart', 'map_definition.dart', 'photo_cache.dart'}), isEmpty);
+    expect(clients.difference({'cmat_client.dart', 'repeater_directory.dart', 'region_repeaters_api.dart', 'region_overview_api.dart', 'region_reports_api.dart', 'region_packets_api.dart', 'region_analysis_api.dart', 'repeater_detail_api.dart', 'etag_client.dart', 'region_stats_api.dart', 'region_timeline_api.dart', 'coverage_v2.dart', 'live_stream.dart', 'radio_presets.dart', 'offline_packs.dart', 'offline_basemap.dart', 'repeater_sync.dart', 'tile_source.dart', 'basemap.dart', 'map_definition.dart', 'photo_cache.dart', 'photo_wire.dart'}), isEmpty);
     expect(hosts.keys.where((h) => h.contains('meshmapper')), isEmpty);
   });
 
