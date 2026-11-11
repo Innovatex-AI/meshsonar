@@ -58,6 +58,9 @@ abstract final class AppSymbols {
   static const lineDecrease = AppSymbol('line.3.horizontal.decrease', CupertinoIcons.line_horizontal_3_decrease, Icons.filter_list);
   static const layers = AppSymbol('square.stack.3d.up', CupertinoIcons.square_stack_3d_up, Icons.layers_outlined);
   static const squareAndArrowUp = AppSymbol('square.and.arrow.up', CupertinoIcons.share, Icons.ios_share);
+  static const squareAndArrowDown = AppSymbol('square.and.arrow.down', CupertinoIcons.square_arrow_down, Icons.download_outlined);
+  static const camera = AppSymbol('camera', CupertinoIcons.camera, Icons.photo_camera_outlined);
+  static const photo = AppSymbol('photo', CupertinoIcons.photo, Icons.photo_outlined);
   static const docOnDoc = AppSymbol('doc.on.doc', CupertinoIcons.doc_on_doc, Icons.copy);
   static const trash = AppSymbol('trash', CupertinoIcons.trash, Icons.delete_outline);
   static const pin = AppSymbol('pin', CupertinoIcons.pin, Icons.push_pin_outlined);
@@ -112,7 +115,7 @@ abstract final class AppSymbols {
     gear, //
     location, locationFill, antenna, wifi, bolt, battery, thermometer, tray, waveform, //
     route, gauge, bubbles, qrcode,
-    squareAndPencil, globe, numberSign, exclamationCircleFill, checkmarkBubble,
+    squareAndPencil, globe, numberSign, exclamationCircleFill, checkmarkBubble, squareAndArrowDown, camera, photo,
   ];
 }
 

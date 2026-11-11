@@ -9,6 +9,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/semantics.dart' show CustomSemanticsAction;
 
+import '../../app/photo_controller.dart';
 import '../../chat/bubble_grouping.dart';
 import '../../chat/delivery_state.dart';
 import '../../chat/message_info.dart';
@@ -17,8 +18,10 @@ import '../design/app_symbols.dart';
 import '../design/app_type.dart';
 import '../design/avatar_style.dart';
 import '../design/tokens.dart';
+import '../../core/photo_api.dart' show photoIdOf;
 import 'message_format.dart';
 import 'message_menu.dart';
+import 'photo_widgets.dart';
 
 const double kBubbleAvatar = 28;
 
@@ -74,6 +77,12 @@ class MessageBubble extends StatefulWidget {
   /// Resend a channel message no repeater relayed (shown when [delivery] says it can be resent, CR2).
   final void Function(String id)? onResend;
 
+  /// Photo messages: with a controller, MeshSonar photo links draw as thumbnails (null = plain links, as in previews).
+  final PhotoController? photos;
+
+  /// A loaded thumbnail was tapped: open the viewer.
+  final void Function(String url)? onPhoto;
+
   const MessageBubble({
     super.key,
     required this.slot,
@@ -97,6 +106,8 @@ class MessageBubble extends StatefulWidget {
     this.infoCard,
     this.hasMap = false,
     this.onResend,
+    this.photos,
+    this.onPhoto,
   });
 
   /// A lone bubble (previews, the System traffic list): no grouping, no status line, no menu.
@@ -120,7 +131,9 @@ class MessageBubble extends StatefulWidget {
         onDetails = null,
         infoCard = null,
         hasMap = false,
-        onResend = null;
+        onResend = null,
+        photos = null,
+        onPhoto = null;
 
   ChatMessage get message => slot.message;
 
@@ -131,6 +144,7 @@ class MessageBubble extends StatefulWidget {
       m.id, m.state.name, m.attempt, m.repeatsHeard, hasMap, m.ackMs, m.failReason?.name, m.text.length, m.snr, m.rssi, m.pathLen, m.route?.name, //
       slot.joinsOlder, slot.joinsNewer, slot.separatorAbove, slot.showSender, //
       delivery?.word, delivery?.detail, showStatus, radioConnected, avatars, wide, expanded, info?.sentence, highlighted, separatorText, selfName,
+      photos != null, photos?.autoLoad, //
     ].join('|');
   }
 
@@ -149,21 +163,22 @@ class _MessageBubbleState extends State<MessageBubble> {
     super.dispose();
   }
 
-  List<InlineSpan> _spans(Color link, Color mention, Color mentionMe) {
+  List<InlineSpan> _spans(String text, Color link, Color mention, Color mentionMe) {
     for (final t in _taps) {
       t.dispose();
     }
     _taps.clear();
     final out = <InlineSpan>[];
-    for (final p in splitMessage(widget.message.text)) {
+    for (final p in splitMessage(text)) {
       switch (p.kind) {
         case PartKind.text:
           out.add(TextSpan(text: p.text));
         case PartKind.url:
+        case PartKind.photo:
         case PartKind.meshLink:
           final r = TapGestureRecognizer()
             ..onTap = () {
-              if (p.kind == PartKind.url) {
+              if (p.kind != PartKind.meshLink) {
                 widget.onUrl?.call(p.text);
               } else {
                 widget.onMeshLink?.call(p.text);
@@ -195,7 +210,9 @@ class _MessageBubbleState extends State<MessageBubble> {
     final m = widget.message;
     final who = m.isOutgoing ? 'You' : (m.senderName ?? 'Message');
     final tail = m.isOutgoing ? (widget.delivery?.detail ?? '') : '';
-    final sb = StringBuffer('$who, ${m.text}');
+    final photos = widget.photos == null ? const <String>[] : photoLinksOf(m.text);
+    final body = photos.isEmpty ? m.text : [if (photos.length == 1) 'Photo' else '${photos.length} photos', textWithoutPhotos(m.text)].where((e) => e.isNotEmpty).join('. ');
+    final sb = StringBuffer('$who, $body');
     if (tail.isNotEmpty) sb.write(', ${tail[0].toLowerCase()}${tail.substring(1)}');
     sb.write(', $time');
     return sb.toString();
@@ -217,17 +234,46 @@ class _MessageBubbleState extends State<MessageBubble> {
     final maxW = (MediaQuery.sizeOf(context).width * (w.wide ? 0.6 : 0.78)).clamp(0.0, 560.0);
     final style = avatarStyle(m.senderPrefix ?? m.senderName ?? 'x', c);
 
+    final photoLinks = w.photos == null ? const <String>[] : photoLinksOf(m.text);
+    final rest = photoLinks.isEmpty ? m.text : textWithoutPhotos(m.text);
+    final linkColors = (mine ? c.bubbleOutText : c.accent, mine ? c.bubbleOutText : c.accent, mine ? c.bubbleOutText : c.warning);
+    final Widget content = photoLinks.isEmpty
+        ? Text.rich(TextSpan(style: base, children: _spans(m.text, linkColors.$1, linkColors.$2, linkColors.$3)))
+        : Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final u in photoLinks)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: PhotoThumb(
+                    key: ValueKey('thumb-${m.id}-$u'),
+                    url: u,
+                    source: w.photos!.source,
+                    autoLoad: w.photos!.autoLoad,
+                    maxWidth: maxW - 8,
+                    onOpen: w.onPhoto,
+                  ),
+                ),
+              if (rest.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(10, 2, 10, 6),
+                  child: Text.rich(TextSpan(style: base, children: _spans(rest, linkColors.$1, linkColors.$2, linkColors.$3))),
+                ),
+            ],
+          );
+
     final body = Container(
       key: Key('bubble-${m.id}'),
       constraints: BoxConstraints(maxWidth: maxW, minHeight: Hit.of(context)),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      padding: photoLinks.isEmpty ? const EdgeInsets.symmetric(horizontal: 14, vertical: 10) : const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: w.highlighted ? Color.alphaBlend(c.accent.withValues(alpha: 0.35), bg) : bg,
         // Increase Contrast: a hairline edge on every bubble (the fill alone may be too close to the page colour).
         border: failed ? Border.all(color: c.danger, width: 1.5) : ((MediaQuery.maybeHighContrastOf(context) ?? false) ? Border.all(color: c.textMuted, width: 1) : null),
         borderRadius: _radius(mine),
       ),
-      child: Text.rich(TextSpan(style: base, children: _spans(mine ? c.bubbleOutText : c.accent, mine ? c.bubbleOutText : c.accent, mine ? c.bubbleOutText : c.warning))),
+      child: content,
     );
 
     final tappable = GestureDetector(
@@ -235,7 +281,8 @@ class _MessageBubbleState extends State<MessageBubble> {
       onTap: () => failed ? w.onFailedTap?.call(m.id) : w.onTap?.call(m.id),
       child: body,
     );
-    final menuEntries = MessageMenu.entries(m, hasMap: w.hasMap, canResend: (w.delivery?.canResend ?? false) && w.onResend != null);
+    final menuEntries = MessageMenu.entries(m,
+        hasMap: w.hasMap, canResend: (w.delivery?.canResend ?? false) && w.onResend != null, photos: w.photos != null, isOwnPhoto: (u) => w.photos?.isOwn(photoIdOf(u) ?? '') ?? false);
     final Widget withMenu = (MessageMenu.apple(context) && MessageMenu.useContextMenu)
         ? CupertinoContextMenu.builder(
             enableHapticFeedback: true,
@@ -281,7 +328,7 @@ class _MessageBubbleState extends State<MessageBubble> {
         ? GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => failed ? w.onFailedTap?.call(m.id) : w.onTap?.call(m.id), child: withMenu)
         : withMenu;
 
-    final links = MessageMenu.linksOf(m);
+    final links = MessageMenu.linksOf(m, photos: w.photos != null);
     final actions = <CustomSemanticsAction, VoidCallback>{
       const CustomSemanticsAction(label: 'Copy'): () => w.onMenu?.call(m.id, const MessageMenuEntry(MessageMenuId.copy, 'Copy', AppSymbols.docOnDoc)),
       const CustomSemanticsAction(label: 'Details'): () => w.onDetails?.call(m.id),
@@ -307,6 +354,15 @@ class _MessageBubbleState extends State<MessageBubble> {
               link: true,
               label: 'Link, $l',
               onTap: () => l.toLowerCase().startsWith('meshcore://') ? w.onMeshLink?.call(l) : w.onUrl?.call(l),
+              child: const SizedBox.expand(),
+            ),
+          ),
+        for (final u in photoLinks)
+          Positioned.fill(
+            child: Semantics(
+              button: true,
+              label: 'Photo. Double tap to open',
+              onTap: () => w.onPhoto?.call(u),
               child: const SizedBox.expand(),
             ),
           ),

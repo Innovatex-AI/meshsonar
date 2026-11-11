@@ -11,6 +11,9 @@ import 'package:flutter/semantics.dart' show SemanticsService;
 import 'package:flutter/services.dart';
 
 import '../../app/chat_controller.dart';
+import '../../app/photo_controller.dart';
+import '../../core/photo_api.dart';
+import '../../platform/photo_picker.dart' show PhotoPickSource, PhotoPrepareException, PreparedPhoto;
 import '../../chat/models.dart' show ConvKey, ConvKind;
 import '../../chat/quick_replies.dart';
 import '../design/app_surfaces.dart';
@@ -20,6 +23,7 @@ import '../design/app_haptics.dart';
 import '../design/app_symbols.dart';
 import '../design/app_type.dart';
 import '../design/tokens.dart';
+import 'photo_widgets.dart' show showPhotoNeedsKey;
 import 'quick_replies_sheet.dart';
 
 /// Keeps the field inside the packet: typing past the limit is refused (warning haptic), a paste is cut at a character
@@ -54,7 +58,10 @@ class Composer extends StatefulWidget {
   /// Set when the conversation is a channel that is no longer on the radio: the bar explains and offers this.
   final VoidCallback? onChannelInfoWhenOffRadio;
 
-  const Composer({super.key, required this.controller, required this.convKey, this.hint = 'Message', this.mentionNames = const [], this.onSent, this.onChannelInfoWhenOffRadio});
+  /// Photo messages: the photo button, the upload strip and the link insertion. Null = no photo button.
+  final PhotoController? photos;
+
+  const Composer({super.key, required this.controller, required this.convKey, this.hint = 'Message', this.mentionNames = const [], this.onSent, this.onChannelInfoWhenOffRadio, this.photos});
 
   @override
   State<Composer> createState() => _ComposerState();
@@ -70,6 +77,8 @@ class _ComposerState extends State<Composer> {
   bool _trimmed = false;
   BudgetLevel _level = BudgetLevel.quiet;
   List<String> _replies = const [];
+  _PhotoJob? _job;
+  PhotoController? _photosBound;
 
   ChatController get c => widget.controller;
 
@@ -81,6 +90,20 @@ class _ComposerState extends State<Composer> {
     c.addListener(_onController);
     _replies = loadQuickReplies(c.store);
     _level = ByteBudget.of(_text.text, c.service.maxTextBytes(widget.convKey)).level;
+    _bindPhotos();
+  }
+
+  void _bindPhotos() {
+    if (identical(_photosBound, widget.photos)) return;
+    _photosBound?.removeListener(_onController);
+    _photosBound = widget.photos?..addListener(_onController);
+    unawaited(_photosBound?.refreshConfig());
+  }
+
+  @override
+  void didUpdateWidget(Composer old) {
+    super.didUpdateWidget(old);
+    _bindPhotos();
   }
 
   void _onController() {
@@ -95,6 +118,9 @@ class _ComposerState extends State<Composer> {
     final msg = b.announcementFor(_level);
     if (msg != null && mounted) SemanticsService.sendAnnouncement(View.of(context), msg, Directionality.of(context));
     _level = b.level;
+    // A photo link that did not fit goes in by itself once enough text was cut.
+    final j = _job;
+    if (j != null && j.stage == _PhotoStage.waitingForRoom && _linkFits(j.result!.url)) _insertLink(j.result!.url);
     setState(() {});
   }
 
@@ -110,6 +136,8 @@ class _ComposerState extends State<Composer> {
     _debounce?.cancel();
     _trimTimer?.cancel();
     c.removeListener(_onController);
+    _photosBound?.removeListener(_onController);
+    _job?.cancel.cancel();
     try {
       // Straight to the store: no event while the widget tree is being torn down.
       c.store.drafts.save(widget.convKey, _text.text, c.now().millisecondsSinceEpoch);
@@ -179,6 +207,164 @@ class _ComposerState extends State<Composer> {
     _focus.requestFocus();
   }
 
+  // ---------- photos ----------
+
+  int get _max => c.service.maxTextBytes(widget.convKey);
+
+  String _withLink(String url) {
+    final t = _text.text.trimRight();
+    return t.isEmpty ? url : '$t $url';
+  }
+
+  bool _linkFits(String url) => utf8.encode(_withLink(url).trim()).length <= _max;
+
+  /// Bytes to cut from the text before [url] fits.
+  int _bytesToCut(String url) => utf8.encode(_withLink(url).trim()).length - _max;
+
+  void _insertLink(String url) {
+    final t = _withLink(url);
+    _job = null;
+    _text.value = TextEditingValue(text: t, selection: TextSelection.collapsed(offset: t.length));
+  }
+
+  Future<void> _photoTapped() async {
+    final p = widget.photos;
+    if (p == null) return;
+    AppHaptics.selection();
+    if (p.button == PhotoButton.needsKey) {
+      await showPhotoNeedsKey(context);
+      return;
+    }
+    if (_job != null && _job!.stage == _PhotoStage.uploading) return;
+    final src = await showAppActionSheet<PhotoPickSource>(
+      context,
+      sheetKey: const Key('photo-source-sheet'),
+      title: 'Send a photo',
+      message: 'The photo is shrunk and its details (like location) removed on this phone, then stored on the MeshSonar '
+          'server. The message carries a short link to it.',
+      actions: const [
+        AppAction('Take Photo', PhotoPickSource.camera, symbol: AppSymbols.camera, key: Key('photo-camera')),
+        AppAction('Choose from Library', PhotoPickSource.library, symbol: AppSymbols.photo, key: Key('photo-library')),
+      ],
+    );
+    if (src == null || !mounted) return;
+    PreparedPhoto? photo;
+    setState(() => _job = _PhotoJob(_PhotoStage.preparing));
+    try {
+      photo = await p.picker.pick(src, maxEdgePx: p.config.maxEdgePx);
+    } on PhotoPrepareException catch (e) {
+      if (mounted) setState(() => _job = _PhotoJob(_PhotoStage.failed, error: e.message));
+      return;
+    } catch (_) {
+      if (mounted) setState(() => _job = _PhotoJob(_PhotoStage.failed, error: 'Could not read that photo.'));
+      return;
+    }
+    if (!mounted) return;
+    if (photo == null) {
+      setState(() => _job = null);
+      return;
+    }
+    await _upload(photo);
+  }
+
+  Future<void> _upload(PreparedPhoto photo) async {
+    final p = widget.photos;
+    if (p == null) return;
+    final job = _PhotoJob(_PhotoStage.uploading, photo: photo);
+    setState(() => _job = job);
+    try {
+      final r = await p.upload(photo.bytes, cancel: job.cancel, onProgress: (sent, total) {
+        if (!mounted || !identical(_job, job)) return;
+        setState(() => job.progress = total <= 0 ? 0 : sent / total);
+      });
+      if (!mounted || !identical(_job, job)) return;
+      if (_linkFits(r.url)) {
+        _insertLink(r.url);
+        AppHaptics.light();
+      } else {
+        AppHaptics.warning();
+        setState(() => _job = _PhotoJob(_PhotoStage.waitingForRoom, photo: photo, result: r));
+      }
+    } on PhotoError catch (e) {
+      if (!mounted || !identical(_job, job)) return;
+      setState(() => _job = e.kind == PhotoErrorKind.cancelled ? null : _PhotoJob(_PhotoStage.failed, photo: photo, error: e.message, retryable: e.kind != PhotoErrorKind.tooLarge && e.kind != PhotoErrorKind.notImage));
+    } catch (_) {
+      if (!mounted || !identical(_job, job)) return;
+      setState(() => _job = _PhotoJob(_PhotoStage.failed, photo: photo, error: const PhotoError(PhotoErrorKind.server).message));
+    }
+  }
+
+  void _dropPhoto() {
+    _job?.cancel.cancel();
+    setState(() => _job = null);
+  }
+
+  Widget _photoStrip(AppColors colors) {
+    final j = _job!;
+    final bytes = j.photo?.bytes;
+    final String text;
+    Color tone = colors.textMuted;
+    switch (j.stage) {
+      case _PhotoStage.preparing:
+        text = 'Preparing photo';
+      case _PhotoStage.uploading:
+        text = 'Uploading photo ${(j.progress * 100).round()}%';
+      case _PhotoStage.waitingForRoom:
+        final n = _bytesToCut(j.result!.url);
+        text = 'Photo uploaded. Its link needs ${utf8.encode(j.result!.url).length + 1} bytes: cut $n ${n == 1 ? 'byte' : 'bytes'} from your message to add it.';
+        tone = colors.warning;
+      case _PhotoStage.failed:
+        text = j.error ?? 'Upload failed.';
+        tone = colors.danger;
+    }
+    Widget btn(Key key, String label, VoidCallback onTap) => CupertinoButton(
+          key: key,
+          padding: const EdgeInsets.symmetric(horizontal: Gap.s),
+          minimumSize: Size.square(Hit.of(context)),
+          onPressed: onTap,
+          child: Text(label, style: AppType.footnote.copyWith(color: colors.accent, fontWeight: FontWeight.w600)),
+        );
+    return Padding(
+      key: const Key('composer-photo-strip'),
+      padding: const EdgeInsets.only(left: Gap.s, bottom: Gap.xs),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: SizedBox(
+            width: 40,
+            height: 40,
+            child: bytes == null
+                ? ColoredBox(color: colors.surfaceHigh, child: const Center(child: CupertinoActivityIndicator()))
+                : Image.memory(bytes, fit: BoxFit.cover, cacheWidth: 120, gaplessPlayback: true),
+          ),
+        ),
+        const SizedBox(width: Gap.s),
+        Expanded(
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(text, key: const Key('composer-photo-status'), style: AppType.footnote.copyWith(color: tone)),
+            if (j.stage == _PhotoStage.uploading)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Container(
+                  key: const Key('composer-photo-progress'),
+                  height: 3,
+                  decoration: BoxDecoration(color: colors.outline.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(2)),
+                  alignment: Alignment.centerLeft,
+                  child: FractionallySizedBox(
+                    widthFactor: j.progress.clamp(0.0, 1.0),
+                    child: Container(decoration: BoxDecoration(color: colors.accent, borderRadius: BorderRadius.circular(2))),
+                  ),
+                ),
+              ),
+          ]),
+        ),
+        if (j.stage == _PhotoStage.uploading) btn(const Key('composer-photo-cancel'), 'Cancel', _dropPhoto),
+        if (j.stage == _PhotoStage.failed && j.retryable && j.photo != null) btn(const Key('composer-photo-retry'), 'Retry', () => _upload(j.photo!)),
+        if (j.stage == _PhotoStage.failed || j.stage == _PhotoStage.waitingForRoom) btn(const Key('composer-photo-remove'), 'Remove', _dropPhoto),
+      ]),
+    );
+  }
+
   /// "@par" right before the cursor: the partial name, or null.
   String? get _mentionQuery {
     if (widget.mentionNames.isEmpty) return null;
@@ -212,6 +398,7 @@ class _ComposerState extends State<Composer> {
     final b = ByteBudget.of(_text.text, max);
     final offAir = widget.onChannelInfoWhenOffRadio != null;
     final canSend = c.hasRadioIdentity && !offAir && b.used > 0 && !b.over;
+    final showPhoto = !offAir && (widget.photos?.button ?? PhotoButton.hidden) != PhotoButton.hidden;
     final mention = _mentionQuery;
     final mentionHits = mention == null ? const <String>[] : [for (final n in widget.mentionNames) if (n.toLowerCase().startsWith(mention.toLowerCase())) n].take(8).toList();
 
@@ -251,6 +438,7 @@ class _ComposerState extends State<Composer> {
                   child: Text('Trimmed to fit', key: const Key('composer-trimmed'), style: AppType.footnote.copyWith(color: colors.warning)),
                 ),
               ?strip,
+              if (_job != null) _photoStrip(colors),
               if (note != null)
                 Padding(
                   padding: const EdgeInsets.only(left: Gap.m, bottom: Gap.xs),
@@ -282,6 +470,13 @@ class _ComposerState extends State<Composer> {
                       selected: _chips,
                       onTap: () => setState(() => _chips = !_chips),
                     ),
+                    if (showPhoto)
+                      _RoundButton(
+                        key: const Key('composer-photo'),
+                        symbol: AppSymbols.camera,
+                        label: 'Send a photo',
+                        onTap: _photoTapped,
+                      ),
                     Expanded(
                       child: Container(
                         decoration: BoxDecoration(color: colors.surfaceHigh, borderRadius: BorderRadius.circular(22)),
@@ -323,6 +518,20 @@ class _ComposerState extends State<Composer> {
     if (Blur.opaque(context)) return bar;
     return ClipRect(child: BackdropFilter(filter: ImageFilter.blur(sigmaX: Blur.sigma, sigmaY: Blur.sigma), child: bar));
   }
+}
+
+enum _PhotoStage { preparing, uploading, waitingForRoom, failed }
+
+/// The photo being sent from this composer: what it is doing and what the person can do about it.
+class _PhotoJob {
+  final _PhotoStage stage;
+  final PreparedPhoto? photo;
+  final PhotoUploadResult? result;
+  final String? error;
+  final bool retryable;
+  final PhotoCancel cancel = PhotoCancel();
+  double progress = 0;
+  _PhotoJob(this.stage, {this.photo, this.result, this.error, this.retryable = true});
 }
 
 class _Strip extends StatelessWidget {
