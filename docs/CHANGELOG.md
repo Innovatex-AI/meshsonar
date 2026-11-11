@@ -5,6 +5,8 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+## [0.34.1+60] — 2026-11-11 — the Drive map stays where you put it; photo uploads on slow connections
+
 - **Drive map stays where you put it.** Pan, zoom, pinch or rotate the Drive map and it stays exactly there: pings, ping
   results, GPS fixes, coverage redraws and Dock/Medium panel changes never move or zoom it again until you tap Recenter.
   Root cause: the follow camera re-centred by itself 10 s after the last touch (the "Re-centre by itself" setting, on by
