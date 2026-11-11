@@ -524,7 +524,6 @@ class _MapPane extends StatelessWidget {
           position: model.position ?? (model.pings.isEmpty ? idleMapPosition(s) : null),
           puck: model.puck,
           telemetry: model.telemetry,
-          lookAhead: true, // follow with more road ahead (the position sits two thirds down)
           rotatable: rotatable ?? expanded,
           topClearance: topClearance,
           bottomClearance: bottomClearance,

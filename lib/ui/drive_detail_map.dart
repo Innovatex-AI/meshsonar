@@ -20,7 +20,6 @@ class DriveDetailMap extends StatelessWidget {
       repeaterLabel: s.repeaterLabel,
       follow: false,
       fitToPings: true,
-      lookAhead: false,
       showLinks: false,
       fallbackCenter: viewedRegionCenter(s),
       coverageV2: s.coverageV2 ? CoverageV2Inputs(tiles: s.coverageTiles, meta: s.coverageMeta, drawTiles: false, fetchCell: s.coverageCell) : null,

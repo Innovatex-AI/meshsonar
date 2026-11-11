@@ -1,60 +1,56 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/core/camera_follow.dart';
 
-final _t = DateTime.utc(2026, 11, 1, 12);
-DateTime at(num s) => _t.add(Duration(milliseconds: (s * 1000).round()));
-
 void main() {
-  test('follows by default; a gesture pauses at once and stays paused with a finger down', () {
-    final f = CameraFollow(autoResume: const Duration(seconds: 10));
-    expect(f.shouldDrive(at(0)), isTrue);
+  test('follows by default; a gesture pauses at once and the camera holds still with a finger down', () {
+    final f = CameraFollow();
+    expect(f.shouldDrive, isTrue);
     f.pointerDown();
     expect(f.following, isTrue, reason: 'a touch alone is not a move (taps on buttons) ...');
-    expect(f.shouldDrive(at(0.1)), isFalse, reason: '... but the camera holds still while a finger is down');
-    f.userMoved(at(0.2));
+    expect(f.shouldDrive, isFalse, reason: '... but the camera holds still while a finger is down');
+    f.userMoved();
     expect(f.following, isFalse);
-    expect(f.shouldDrive(at(0.3)), isFalse, reason: 'never fights a finger');
-    f.pointerUp(at(1));
-    expect(f.shouldDrive(at(5)), isFalse);
+    expect(f.shouldDrive, isFalse, reason: 'never fights a finger');
+    f.pointerUp();
+    expect(f.shouldDrive, isFalse);
   });
 
-  test('auto-resume 10 s after the last touch, not before, not while a finger is down', () {
-    final f = CameraFollow(autoResume: const Duration(seconds: 10));
+  test('no auto-resume: a moved map stays paused however long nothing touches it; only resume() (Recenter) brings it back', () {
+    final f = CameraFollow();
     f.pointerDown();
-    f.userMoved(at(0));
-    f.pointerUp(at(2));
-    expect(f.shouldDrive(at(11.9)), isFalse);
-    expect(f.resumeIn(at(8))!.inSeconds, 4);
-    expect(f.shouldDrive(at(12.0)), isTrue);
-    expect(f.following, isTrue);
-    // another gesture restarts the clock
-    f.pointerDown();
-    f.userMoved(at(20));
-    expect(f.shouldDrive(at(60)), isFalse, reason: 'finger still down');
-    f.pointerUp(at(61));
-    expect(f.shouldDrive(at(70)), isFalse);
-    expect(f.shouldDrive(at(71.1)), isTrue);
-  });
-
-  test('autoResume null: only resume() brings it back', () {
-    final f = CameraFollow(autoResume: null);
-    f.userMoved(at(0));
-    expect(f.shouldDrive(at(1000)), isFalse);
-    expect(f.resumeIn(at(1000)), isNull);
+    f.userMoved();
+    f.pointerUp();
+    for (var i = 0; i < 1000; i++) {
+      expect(f.shouldDrive, isFalse);
+    }
     f.resume();
-    expect(f.shouldDrive(at(1001)), isTrue);
+    expect(f.shouldDrive, isTrue);
   });
 
   test('notifies on pause and resume only', () {
     final f = CameraFollow();
     var n = 0;
     f.addListener(() => n++);
-    f.userMoved(at(0));
-    f.userMoved(at(1));
+    f.userMoved();
+    f.userMoved();
     expect(n, 1);
     f.resume();
     f.resume();
     expect(n, 2);
+  });
+
+  test('keepInView: an offset inside the visible area is untouched; one under an overlay comes back inside', () {
+    // 400 x 800 map, a 300 px panel at the bottom, 48 px margin: visible y from -400+48 to 400-300-48 = 52.
+    final inside = keepInView(dx: 30, dy: -100, width: 400, height: 800, bottom: 300);
+    expect(inside.dx, 30);
+    expect(inside.dy, -100);
+    final under = keepInView(dx: 0, dy: 200, width: 400, height: 800, bottom: 300);
+    expect(under.dy, closeTo(52, 1e-9));
+    final left = keepInView(dx: -300, dy: 0, width: 400, height: 800);
+    expect(left.dx, closeTo(-200 + 48, 1e-9));
+    // a tiny free area: the margin shrinks to a quarter of it, never inverts
+    final tiny = keepInView(dx: 0, dy: 500, width: 400, height: 800, top: 380, bottom: 380);
+    expect(tiny.dy, closeTo(10, 1e-9));
   });
 
   test('speed zoom: nothing in town, a gentle zoom-out on the highway, smooth in between', () {
@@ -71,14 +67,14 @@ void main() {
     }
   });
 
-  test('anchor: lower third of the free area, overlays respected', () {
+  test('anchor: the middle of the free area by default (Recenter), overlays respected', () {
     final a = followAnchor(width: 400, height: 800);
     expect(a.dx, 0);
-    expect(a.dy, closeTo(800 * 0.66 - 400, 1e-9));
+    expect(a.dy, 0);
     final b = followAnchor(width: 400, height: 800, bottom: 200, left: 100);
     expect(b.dx, closeTo(50, 1e-9));
-    expect(b.dy, closeTo(600 * 0.66 - 400, 1e-9));
-    expect(followAnchor(width: 400, height: 800, fromTop: 0.5).dy, 0);
+    expect(b.dy, closeTo(600 * 0.5 - 400, 1e-9));
+    expect(followAnchor(width: 400, height: 800, fromTop: 0.66).dy, closeTo(800 * 0.66 - 400, 1e-9));
   });
 
   test('easeToward converges and never overshoots', () {

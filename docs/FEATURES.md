@@ -337,7 +337,10 @@ and ≥ 640 px) the map sits on the left and the controls on the right.
   10 s old; a **teleport** (> 90 m/s and further than the accuracies explain) is dropped, and believed only after 3 agreeing
   fixes in a row (then the dot snaps).
 - Drawn: accuracy disc (when bigger than the dot), heading cone toward travel, the dot. 30 fps, ticker asleep when settled.
-- Camera follows the dot; dragging the map stops following; the re-centre button follows again.
+- Camera follows the dot, keeping it where it is on the screen (the middle of the visible map after Recenter; nudged back
+  inside only when an overlay such as the panel would cover it). Following never changes the zoom. Any pan, zoom, pinch or
+  rotate stops following for good: pings, fixes, coverage redraws and panel (Dock/Medium) changes never move or zoom the map
+  again until the Recenter button (no auto re-centre).
 - Ping: rings from the dot while the engine is `pinging`; then lines from the moving dot to every live heard repeater with a
   known position (link orange, 5 s full strength, fade to the held look, dashed when older); a silent ping sends one grey ring.
 - Reduced motion (system setting): no slide, no push-ahead, no rings; lines appear at once.
@@ -421,7 +424,8 @@ simulator's repeaters in Simulator mode), **ping dots**, and the current **posit
   nothing, **purple** = heard but no signal reading, and heard pings are coloured by best SNR on a **−10 → +10 dB** scale
   (blue → teal → green), or plain green in "Heard / not" mode. Strength colours are only ever used for a measured SNR.
   The newest dot pulses once.
-- **Follow mode** keeps the position centred. Dragging turns it off and shows **Recenter** (`map-recenter`).
+- **Follow mode** keeps the position where it is on the screen (never re-pinned, never zoomed). Any pan, zoom, pinch or rotate
+  turns it off and shows **Recenter** (`map-recenter`); until that is tapped the map stays exactly where the person put it.
 - **Link lines**: tap a repeater and a line runs to every cell it was heard in; tap a coverage cell and a line runs to every repeater heard there, coloured and labelled by best SNR (strongest 24 labelled, 250 max), with a Fit / Clear chip. Needs an approved key and the server's `cellLinks` (cells) or `reachDriverKey` (repeaters) capability; public drives only.
 - **Repeater names** are written beside every repeater marker (layers sheet > Network > Repeater names, on by default and
   remembered): collision-avoided, zoom-dependent (none below zoom 9; heard-this-drive from 9; the rest from 11; at most 8/14/24/36/60

@@ -5,6 +5,15 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- **Drive map stays where you put it.** Pan, zoom, pinch or rotate the Drive map and it stays exactly there: pings, ping
+  results, GPS fixes, coverage redraws and Dock/Medium panel changes never move or zoom it again until you tap Recenter.
+  Root cause: the follow camera re-centred by itself 10 s after the last touch (the "Re-centre by itself" setting, on by
+  default) and then pinned the position to the lower third of the map, so every few seconds (it looked like every ping)
+  the view snapped back. The auto re-centre and its setting are gone (an old saved value is ignored). Follow mode now keeps
+  the position where it is on the screen (the middle of the visible map after Recenter, nudged back into view only if the
+  panel would cover it) and never changes the zoom; Recenter keeps your zoom. The first ping no longer zooms the map to
+  street level. `lib/core/camera_follow.dart`, `lib/ui/map/coverage_map.dart`.
+
 - **Photo upload on a slow uplink.** On a ~14 KB/s phone uplink the composer said "Uploading photo 100%" at once and then
   "could not reach server" after 120 s: the whole body was pushed into package:http's sink in one go and a fixed total timeout
   fired while it drained. Now: (1) the upload goes over `lib/core/photo_wire.dart` (dart:io HttpClient, unbuffered, 8 KB writes
