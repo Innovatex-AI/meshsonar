@@ -235,6 +235,32 @@ void main() {
     });
   });
 
+  group('Coverage check (DEF-3: mean SNR band)', () {
+    testWidgets('says the mean SNR and its margin over the floor, and a strong-but-rarely-answered place is Covered', (tester) async {
+      phone(tester, h: 4500);
+      final h = Harness();
+      // 2 of 10 pings answered (the old heard-share rule said Weak) at +9 dB mean SNR (the new rule: Excellent, Covered)
+      h.client.publicCoverageResult = PublicCoverage(
+        asOf: '2026-10-31T00:00:00Z',
+        grid: const CoverageGrid.h3(res: 11, cellDeg: 0.0002),
+        cells: [
+          const CoverageCell(lat: 40.126, lon: -82.93, pings: 10, heard: 2, bestSnr: 10, medianSnr: 9, repeaters: 1, lastAt: '2026-10-30T12:00:00Z', snrMean: 9, nOk: 2, nFail: 8, band: 5),
+          const CoverageCell(lat: 40.2, lon: -82.93, pings: 10, heard: 10, bestSnr: -5, medianSnr: -6, repeaters: 1, lastAt: '2026-10-30T12:00:00Z', snrMean: -6, nOk: 10, nFail: 0, band: 2),
+        ],
+      );
+      await open(tester, h, const CoverageCheckScreen(initialPoint: LatLng(40.126, -82.93)));
+      expect(tester.widget<Text>(find.byKey(const Key('check-verdict'))).data, 'Covered');
+      expect(tester.widget<Text>(find.byKey(const Key('check-body'))).data, contains('averaged +9.0'));
+      await tester.enterText(find.byKey(const Key('check-point-field')), '40.2, -82.93');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      // every ping answered (the old rule said Covered) but at 1.5 dB over the floor: Weak
+      expect(tester.widget<Text>(find.byKey(const Key('check-verdict'))).data, 'Weak');
+      expect(tester.widget<Text>(find.byKey(const Key('check-body'))).data, contains('1.5'));
+      await drain(tester);
+    });
+  });
+
   group('small screens and big text', () {
     final screens = <String, Widget Function()>{
       'airtime': () => const AirtimeScreen(),

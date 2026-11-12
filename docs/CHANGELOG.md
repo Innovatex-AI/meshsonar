@@ -3,6 +3,29 @@
 All notable changes to MeshSonar. Dates are local (US Eastern). This changelog was reconstructed from the commit
 history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md](ROADMAP.md).
 
+## Unreleased
+
+- **AN-1 (app): the Analyze tab reads the analysis engine.** The Region tab opens on a new "Analyze" tab that shows the same four
+  sections and numbers as the website's `/analysis?tab=analyze` (contract: meshcore-insights `docs/analyze-contract.md`): What needs
+  attention (`region-insights`, E9), Network health (`region-repeater-health` E6 + `region-overview.recentEvents` E8), Traffic
+  (`region-traffic?hours=24` E3, with the source chip "ours 38% · outside 60% · phones 2%") and Node list check
+  (`region-node-gate?days=30` E4). Each section has its own state from the read's `status` and `region-status` (new in the app):
+  loading, error with Try again, none ("Not available in {region} yet" with the engine's reason), stale (engine-stale, region-status
+  stale, or built over 36 h ago, judged on the phone too: a banner and the older figures dimmed) and ready ("Updated {time}").
+  Times use the region's own time zone with its abbreviation ("Nov 10, 2026, 10:50 PM EST"; UTC, said so, when the region has none),
+  via the `timezone` package (already in the tree through flutter_local_notifications, now a direct dependency). Same formatters
+  and rounding as the web; uptime is a 0-100 percent. The engine builds per region, so there is no union screen: the region
+  switcher is the picker (the app has no group or hub region). The old Analysis tab and every other Region tab stay. Code:
+  `lib/core/analyze_model.dart`, `analyze_api.dart`, `zone_time.dart`, `lib/ui/region/analyze_panel.dart`. Tests: fixtures in
+  `test/fixtures/analyze/` (the contract's example payloads), `test/core/analyze_model_test.dart`, `test/ui/region/analyze_panel_test.dart`.
+- **AN-2 / DEF-3: the coverage check uses the mean SNR band, not the heard share.** Plan > Coverage check now judges a place the way the
+  map colours its cells (`coverageBandOf`, same rule as SQL `ms_coverage_band`): the mean SNR of every successful result within the
+  chosen distance (pooled, weighted by n_ok), as a margin over the LoRa floor of the viewed region's spreading factor. Band 0 = "Driven,
+  nothing heard"; Edge or Weak (mean under 5 dB over the floor) = "Weak"; Fair, Good, Excellent = "Covered"; heard with no SNR figure =
+  "Covered", said as ungraded. The result shows the mean SNR, its margin and the band. An older server without `metric=mean` has no
+  mean: its heard pings stand in for n_ok and the median SNR for the mean. `test/core/plan/coverage_check_test.dart` replaces the
+  heard-share cases (a place with 2 of 10 pings answered at +9 dB is now Covered; 10 of 10 at 1.5 dB over the floor is Weak).
+
 ## [0.36.0+62] — 2026-11-12 — drive panel consistency, one unread rule, adverts, privacy manifest, Terms link
 
 - **Terms of service link (LAUNCH-1):** Settings > Privacy has a "Terms of service" row that opens the website's new `/terms` page.

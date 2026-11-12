@@ -1,4 +1,4 @@
-// The Region tab registers the RF and Growth tabs (after Analysis, as on the website's /analysis) and the Export
+// The Region tab opens on the engine-fed Analyze tab, registers the RF and Growth tabs (after Analysis, as on the website's /analysis) and the Export
 // region report action, which opens the export sheet for the viewed region.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -19,7 +19,7 @@ void main() {
     await openRegionTab(tester);
     await tester.pumpAndSettle();
     final labels = tester.widgetList<Tab>(find.byType(Tab)).map((t) => t.text).toList();
-    expect(labels, ['Overview', 'Repeaters', 'Observers', 'Packets', 'Analysis', 'RF', 'Growth', 'Reports', 'Stats', 'Live', 'Silent', 'Wardrive']);
+    expect(labels, ['Analyze', 'Overview', 'Repeaters', 'Observers', 'Packets', 'Analysis', 'RF', 'Growth', 'Reports', 'Stats', 'Live', 'Silent', 'Wardrive']);
     await tester.tap(find.byKey(const Key('region-report-export')));
     await tester.pump();
     expect(find.byType(RegionReportExportSheet), findsOneWidget);

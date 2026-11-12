@@ -1,0 +1,30 @@
+{
+  "status": {
+    "state": "ready",
+    "reason": null,
+    "computedAt": "2026-11-11T03:50:00Z",
+    "source": "e9"
+  },
+  "packets24h": 1,
+  "observersOnline": 1,
+  "observersTotal": 1,
+  "repeaters": 1,
+  "repeatersHeard24h": 1,
+  "packetsPerHour": [],
+  "lastPacketAt": "2026-11-11T03:50:00Z",
+  "sources": [],
+  "recentEvents": [
+    {
+      "type": "repeater_new",
+      "key": "k9",
+      "detail": "Ridge 2",
+      "at": "2026-11-11T08:00:00Z"
+    },
+    {
+      "type": "link_lost",
+      "key": null,
+      "detail": "A to B",
+      "at": "2026-11-11T07:00:00Z"
+    }
+  ]
+}

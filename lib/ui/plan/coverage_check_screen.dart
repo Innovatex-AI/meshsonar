@@ -51,7 +51,7 @@ class _CoverageCheckScreenState extends State<CoverageCheckScreen> {
     final cov = s.networkCoverage;
     final p = _p;
     CoverageCheck? r;
-    if (cov != null && p != null) r = checkCoverage(cov.cells, p.latitude, p.longitude, radiusM: _radiusM, reachM: cellReachM(cov.grid));
+    if (cov != null && p != null) r = checkCoverage(cov.cells, p.latitude, p.longitude, radiusM: _radiusM, reachM: cellReachM(cov.grid), sf: s.viewingPreset?.sf ?? 7);
     return PlanPage(id: 'check', title: 'Coverage check', children: [
       Text(
         'Is there measured coverage at a place? Checked against real drives, not a model. The point stays on your phone.',
@@ -109,9 +109,24 @@ class _CoverageCheckScreenState extends State<CoverageCheckScreen> {
 
   Widget _result(BuildContext context, AppState s, CoverageCheck r, Units units) {
     final t = Theme.of(context);
+    final mean = r.meanSnr;
+    final margin = mean == null ? null : mean - r.floorDb;
+    String db(double v) => fmtDb(v, signed: true);
+    // "5.0 dB above" / "2.0 dB below" the LoRa floor of the region's spreading factor.
+    String vsFloor(double m) => '${fmtDb(m.abs())} ${m < 0 ? 'below' : 'above'} the radio floor (${db(r.floorDb)})';
     final (IconData icon, String head, String body) = switch (r.verdict) {
-      CoverageVerdict.covered => (Icons.check_circle, 'Covered', 'Drives here got answers from repeaters on ${(r.heardShare * 100).round()} % of their pings.'),
-      CoverageVerdict.weak => (Icons.help_outline, 'Weak', 'Only ${(r.heardShare * 100).round()} % of the pings driven here were answered: this place is on the edge.'),
+      CoverageVerdict.covered => (
+        Icons.check_circle,
+        'Covered',
+        mean == null
+            ? 'A repeater answered drives here, but the answers carry no signal figure, so the strength cannot be graded.'
+            : 'Drives here averaged ${db(mean)} SNR, ${vsFloor(margin!)}: ${_bandName(s, r.band!).toLowerCase()} signal.',
+      ),
+      CoverageVerdict.weak => (
+        Icons.help_outline,
+        'Weak',
+        'Drives here averaged ${db(mean!)} SNR, ${vsFloor(margin!)}: ${_bandName(s, r.band!).toLowerCase()} signal, this place is on the edge.',
+      ),
       CoverageVerdict.dead => (Icons.signal_wifi_off, 'Driven, nothing heard', 'People drove here and no repeater answered a single ping.'),
       CoverageVerdict.unmeasured => (Icons.explore_off, 'Not measured', 'Nobody has driven within ${units.distance(r.radiusM)} of this place in the data loaded.'),
     };
@@ -129,6 +144,8 @@ class _CoverageCheckScreenState extends State<CoverageCheckScreen> {
         PlanFacts([
           ('Driven cells nearby', '${r.cells}, ${r.heardCells} with an answer'),
           ('Pings', '${r.pings}, ${r.heardPings} answered'),
+          ('Mean signal', r.meanSnr == null ? 'none recorded' : fmtDb(r.meanSnr!, signed: true)),
+          if (r.band != null) ('Band', _bandName(s, r.band!)),
           ('Best signal', r.bestSnr == null ? 'none recorded' : fmtDb(r.bestSnr!, signed: true)),
           ('Most repeaters in one cell', '${r.maxRepeaters}'),
           if (last != null) ('Last measured', last.toLocal().toString().substring(0, 10)),
@@ -144,4 +161,7 @@ class _CoverageCheckScreenState extends State<CoverageCheckScreen> {
       ),
     ]);
   }
+
+  /// The band's word as the server's legend says it ("Good"), the built-in list before the first meta answer.
+  String _bandName(AppState s, int band) => s.coverageMeta.labelOf(band);
 }
