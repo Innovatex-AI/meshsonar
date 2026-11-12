@@ -1,4 +1,4 @@
-// The real shell with the real chat provider: Chat tab (Contacts | Channels), unread badge, Chat-in-Drive button on the Drive tab.
+// The real shell with the real chat provider: Chat tab (Contacts | Channels), unread badge (the Drive tab has no chat entry).
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/app/chat_wiring.dart';
@@ -6,12 +6,8 @@ import 'package:meshsonar/ui/chat/chat_tab_provider.dart';
 import 'package:meshsonar/ui/shell/chat_tab_host.dart';
 
 import '../fakes.dart' show Harness;
+import 'chat_integration_helpers.dart';
 import 'chat_kit.dart';
-
-Future<void> tapTab(WidgetTester tester, String label) async {
-  await tester.tap(find.descendant(of: find.byKey(const Key('shell-tabs')), matching: find.text(label)));
-  await tester.pumpAndSettle();
-}
 
 void main() {
   late ChatKit kit;
@@ -51,18 +47,15 @@ void main() {
     expect(find.text('Ohio'), findsNothing);
   });
 
-  testWidgets('Drive tab has the Messages button; it opens the drive sheet with the unread conversation', (tester) async {
+  testWidgets('Drive tab has no Messages entry: messaging lives only in the Chat tab', (tester) async {
     setSize(tester);
     final ch = await kit.channel(1, 'Ohio');
     kit.incoming(ch, 'Ann', 'road closed ahead');
     final h = Harness()..approveKey();
     await h.pumpApp(tester);
     await tester.pump();
-    expect(find.byKey(const Key('drive-chat')), findsOneWidget);
-    await tester.tap(find.byKey(const Key('drive-chat')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(Key('drive-chat-row-${ch.convKey}')), findsOneWidget);
-    expect(find.text('road closed ahead'), findsOneWidget);
+    expect(find.byKey(const Key('drive-chat')), findsNothing);
+    expect(find.textContaining('Messages'), findsNothing);
   });
 
   testWidgets('iPad landscape: two columns, a tapped conversation opens in the right pane', (tester) async {

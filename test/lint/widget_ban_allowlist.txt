@@ -1,7 +1,6 @@
 # Allow-list of current offenders (see widget_ban_test.dart). It may only shrink. Format: path|pattern|count
 lib/ui/chat/chat_banner_host.dart|Icons.|1
 lib/ui/chat/chat_banner_host.dart|InkWell(|1
-lib/ui/chat/chat_drive_sheet.dart|Icons.|4
 lib/ui/chat/chat_row.dart|InkWell(|1
 lib/ui/chat/chat_search_screen.dart|Divider(|1
 lib/ui/chat/chat_search_screen.dart|Icons.|2

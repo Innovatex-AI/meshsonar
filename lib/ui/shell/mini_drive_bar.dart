@@ -15,6 +15,7 @@ import '../../radio/radio_api.dart';
 import '../../app/app_state.dart';
 import '../app.dart';
 import '../drive/drive_controls.dart' show LiveDot, confirmAndStopDrive;
+import '../drive/radio_link_status.dart';
 import '../widgets.dart' show bestSnr;
 
 /// Text the bar shows for a drive, split for layout (visual) and one sentence for screen readers.
@@ -47,11 +48,12 @@ MiniBarSummary miniBarSummary(AppState s, {Units? units}) {
       : '$n ${n == 1 ? 'ping' : 'pings'} · ${s.heardCount} heard';
   String waiting;
   var problem = false;
+  // The radio words are the shared ones (RadioLinkStatus): "Reconnecting…" and "Not connected", as on the Dock, the chip and the pill.
   if (s.reconnecting) {
-    waiting = 'Radio reconnecting';
+    waiting = RadioLinkStatus.reconnectingLabel;
     problem = true;
   } else if (st.state == EngineState.error || !s.connected) {
-    waiting = st.state == EngineState.error ? 'Radio problem' : 'Waiting for radio';
+    waiting = st.state == EngineState.error ? 'Radio problem' : const RadioLinkStatus(RadioLink.notConnected).statusLabel;
     problem = true;
   } else if (s.settings.discoveryMode) {
     waiting = 'Listening only';
@@ -110,7 +112,7 @@ String miniBarElapsed(Duration d) {
 
 /// What the bar's hero says and the sentence VoiceOver reads for the whole drive.
 class MiniBarHero {
-  /// "2 heard", "No echo", "No pings yet" or the problem ("Radio reconnecting").
+  /// "2 heard", "No echo", "No pings yet" or the problem ("Reconnecting…").
   final String text;
   final bool problem;
 
@@ -228,7 +230,10 @@ class _MiniDriveBarState extends State<MiniDriveBar> {
                             padding: const EdgeInsets.symmetric(horizontal: Gap.l, vertical: 4),
                             child: Row(
                               children: [
-                                if (paused)
+                                if (hero.problem && !s.connected)
+                                  // The radio is the problem: the same glyph and spinner as the Dock (RadioLinkStatus).
+                                  RadioLinkStatus.of(s).leading(context, size: 16, color: dotColor)
+                                else if (paused)
                                   Icon(Icons.pause_circle_outline_rounded, size: 16, color: dotColor)
                                 else
                                   LiveDot(color: dotColor),

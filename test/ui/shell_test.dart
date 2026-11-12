@@ -484,7 +484,7 @@ void main() {
       expect(waiting(), 'Listening for echoes');
       e.setStatus(const EngineStatus(EngineState.error, message: 'Radio disconnected'));
       await tester.pump(const Duration(milliseconds: 50));
-      expect(waiting(), anyOf('Radio problem', 'Radio reconnecting'));
+      expect(waiting(), anyOf('Radio problem', 'Reconnecting…'));
       expect(miniBarSummary(h.state).problem, isTrue);
       e.setStatus(const EngineStatus(EngineState.driving));
       await tester.pump(const Duration(milliseconds: 50));

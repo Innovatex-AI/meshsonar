@@ -5,8 +5,7 @@
 //       anchorMessageId: hit.id);                          // a search hit: lands on that message and flashes it
 //
 // It reads and writes only through [ChatController] (so: the local chat database and the radio, never the network). The
-// title is looked up from the conversation when not given. Embedded (`embedded: true`) it has no bar, for the Chat-in-Drive
-// sheet.
+// title is looked up from the conversation when not given.
 //
 // Chat plan 4.2: navigation bar with ONE 44 pt title block (avatar, name, route text) that opens the profile / Channel info
 // and an ellipsis menu (Search, Route, Mute, Info); grouped bubbles with the time under the last bubble of a run; five
@@ -81,9 +80,6 @@ class ConversationScreen extends StatefulWidget {
   /// A widget above the message list (the room screen shows the join bar there).
   final Widget? header;
 
-  /// No bar (Chat-in-Drive sheet).
-  final bool embedded;
-
   /// Open scrolled to this message and flash it (search hits).
   final String? anchorMessageId;
 
@@ -98,7 +94,6 @@ class ConversationScreen extends StatefulWidget {
     this.subtitle,
     this.actions = const [],
     this.header,
-    this.embedded = false,
     this.anchorMessageId,
     this.photos,
   });
@@ -750,7 +745,6 @@ class _ConversationScreenState extends State<ConversationScreen> {
     // CupertinoPageScaffold gives no Material text style: without this, every Text in the thread fell back to Flutter's
     // debug style (yellow double underline), in release builds too.
     final body = Material(type: MaterialType.transparency, child: _searching ? _searchBody(context, colors) : _chatBody(context));
-    if (widget.embedded) return ColoredBox(color: colors.surface, child: Column(children: [Expanded(child: body)]));
     return CupertinoPageScaffold(
       backgroundColor: colors.surface,
       navigationBar: _bar(context, colors),

@@ -5,6 +5,21 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+Build 62 (0.36.0+62) work: drive panel consistency, one unread rule, no Messages in the Drive tab (APP-1..APP-4, APP-7).
+
+- **The Drive panel stays put (APP-1).** Root cause of "the panel jumps to the middle on launch and I cannot see the map": the last
+  detent was saved and restored, so a panel left at Medium reopened at Medium while the radio was still reconnecting. It now always
+  opens at the Dock; a connect or reconnect never changes the detent. The Dock shows "Connecting…" / "Reconnecting…" with Cancel
+  (Cancel also stops the automatic reconnect at once). Tests: `panel_connect_dock_test.dart`.
+- **One radio-link look (APP-2).** New `RadioLinkStatus` (state to icon, words, colour) read by the Dock, the collapsed pill, the mini drive
+  bar, the map capsule and the app-bar chip. The collapsed pill is a labelled capsule instead of a lone Bluetooth icon. Words:
+  Connect radio, Connecting…, Reconnecting…, Start drive. The mini bar says "Reconnecting…" / "Not connected" (was "Radio reconnecting" /
+  "Waiting for radio"). Table in docs/FEATURES.md.
+- **One unread rule (APP-3).** The app-icon badge now counts unread messages like the Chat tab badge (it counted conversations); every badge
+  caps at "99+" (the tab badge showed up to 999+). Agreement test `unread_agreement_test.dart`.
+- **No Messages in the Drive tab (APP-4).** The Messages row in the Drive panel, the Messages button of the legacy action row and the
+  Chat-in-Drive sheet are removed.
+
 ## [0.35.0+61] — 2026-11-12 — private (end-to-end encrypted) photos in DMs
 
 - **Private (end-to-end encrypted) photo messages, app half.** A photo sent in a direct message, a room or a private channel is

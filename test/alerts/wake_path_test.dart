@@ -89,7 +89,7 @@ void main() {
     await sync.drain();
     await settle();
     expect(h.store.messages.count(), 2);
-    expect(h.service.unreadBadge(), 1);
+    expect(h.service.unreadBadge(), 2, reason: 'the app-icon badge counts unread messages (one rule), two here');
     c2.dispose();
   });
 

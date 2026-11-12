@@ -529,7 +529,11 @@ class ChatService {
   /// settings table). Badges count only its conversations: exactly what the list shows.
   static const String lastRadioSetting = 'last_radio_id';
   String? get listRadioId => store.db.setting(lastRadioSetting);
-  int unreadBadge() => store.messages.unreadConversationCount(radioId: listRadioId, nowMs: nowMs());
+  /// The app-icon badge: the same number as the Chat tab badge (one rule, docs/FEATURES.md "Unread count").
+  int unreadBadge() => unreadMessages();
+
+  /// THE unread rule: unread incoming messages in non-muted, non-system, non-blocked conversations of the radio on screen; a
+  /// conversation marked unread with nothing unread counts one. Everything that shows a count derives from this.
   int unreadMessages() => store.messages.unreadMessageCount(radioId: listRadioId, nowMs: nowMs());
 
   /// "Mark all as read" on the radio whose list is on screen.
