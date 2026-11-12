@@ -214,6 +214,9 @@ List<ConversationRow> buildConversationRows({
   return [...normal, ...system];
 }
 
+/// How every unread badge prints [n]: the number, capped at "99+" (tab badge, row pills, mini bars).
+String unreadCountLabel(int n) => n > 99 ? '99+' : '$n';
+
 /// The Chat tab badge: unread messages, muted and system conversations excluded (D19).
 int unreadMessageTotal(Iterable<ConversationRow> rows) {
   var n = 0;

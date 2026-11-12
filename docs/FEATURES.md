@@ -97,7 +97,7 @@ Chat UI: the `chatRedesign` switch in More > Developer and the old Contacts | Ch
 
 - **Shell.** Large "Chat" title with a New button (Cmd-N), a pinned **Chats | Contacts | Channels | Network** control (Cmd-1/2/3/4; a cold launch starts
   on Chats, the choice is remembered for the session only; the labels stay on one line, shrunk to fit on small phones) and a collapsing search field. One status banner replaces every per-tab offline note.
-  The tab badge counts unread messages (muted and System excluded). From 900 pt of tab width (iPad, Split View) it is two columns: the lists in a
+  The tab badge counts unread messages (muted and System excluded; see **Unread count**, below). From 900 pt of tab width (iPad, Split View) it is two columns: the lists in a
   380 pt sidebar and the open conversation beside them; Cmd-K is a quick switcher there. Two one-time tips (swipe a conversation, Network).
 - **Chats inbox and Channels (chat + radio round CR1).** Chats is the inbox in labelled sections: **Direct messages**, **Channels**,
   **Rooms**, **System** (an empty section has no header), each pinned first then newest, with the same swipe and long-press actions.
@@ -136,8 +136,16 @@ Chat UI: the `chatRedesign` switch in More > Developer and the old Contacts | Ch
   everyone nearby).
 - **Safety while driving**: a drive is running and GPS speed above 8 km/h (unlocks below 6): the composer is replaced by "Typing is off while the
   car is moving" with **I'm a passenger** (lasts for that drive). Reading and incoming banners work. A stale or missing speed never locks.
-- **Chat in Drive**: the Messages button next to Ping opens a half-height sheet: unread conversations, then a conversation with the same
-  composer and the same lock. Pings are never blocked by it.
+- **No chat in the Drive tab (build 62, Andy Nov 12 2026).** The Drive tab is for the coverage map and the drive. The old Messages
+  row / button and the Chat-in-Drive sheet (`chat_drive_sheet.dart`) are gone; messaging lives only in the Chat tab (its own System /
+  wardrive items are unchanged). Incoming-message banners and the Chat tab badge still work while driving.
+- **Unread count (one rule, build 62).** `ChatController.unreadMessages` is THE number: unread incoming messages in the conversations of
+  the radio on screen that are **not muted (while muted), not system, not from a blocked contact**; direct messages, rooms and channels
+  all count; reactions are not messages and do not count; a conversation marked unread with nothing unread counts one. Everything that
+  shows a count derives from it: the Chat tab badge, the Chats "Mark all as read" control (shown only when it is above zero), the
+  app-icon badge (`ChatService.unreadBadge` = `unreadMessages`), and the pill on each non-muted row (their sum equals the badge; a muted row
+  still shows its own grey pill but is not in the total). All print it with `unreadCountLabel`: the number up to 99, then "99+". They clear
+  together (open the conversation, or Mark all as read). Test: `test/ui/chat/unread_agreement_test.dart`.
 - **Contacts.** People only, Favourites first then A-Z under sticky letter headers; one collapsed "New nodes nearby" row; "Manage contacts" and
   "N of M on your radio" at the foot; swipe right Message / Favourite, left Ping / Remove (Undo). Add contact is the top-right button. Details in
   "Contacts and direct messages" below.
@@ -260,8 +268,27 @@ the intro counts as already seen.
 File: `ui/drive_screen.dart` + `ui/drive/*`. It's built for one hand in a moving car. In landscape (width > height
 and ≥ 640 px) the map sits on the left and the controls on the right.
 
-- **App bar:** MeshSonar title. The **connection chip** (`connection-chip`) shows "Not connected", "Connecting…", the
-  radio name, or "Simulator" with a *SIMULATED GPS & RADIO* tag. Tap it to open Connect.
+- **App bar** (legacy layout, `driveRedesign` off): MeshSonar title. The **connection chip** (`connection-chip`) shows "Not connected",
+  "Connecting…", "Reconnecting…", the radio name, or "Simulator" with a *SIMULATED GPS & RADIO* tag. Tap it to open Connect. In the
+  redesigned screen the map's status capsule does this job.
+- **Radio link: one look on every surface (build 62).** `lib/ui/drive/radio_link_status.dart` (`RadioLinkStatus`) is the ONE mapping from
+  the radio link to icon, words and colour. The Dock, the collapsed pill, the mini drive bar, the map capsule and the legacy app-bar chip
+  all read it; none keeps its own. Test: `test/ui/drive/radio_link_status_test.dart`.
+
+  | State | Icon | Action label (Dock button, collapsed pill) | Status label (Dock title, chip, mini bar) | Colour |
+  |---|---|---|---|---|
+  | Not connected | bluetooth off | Connect radio | Not connected (capsule: "No radio") | muted |
+  | Connecting | spinner | Connecting… | Connecting… | warning |
+  | Reconnecting (mid-drive, or the automatic reconnect after launch) | spinner | Reconnecting… | Reconnecting… | warning |
+  | Connected | bluetooth connected (Start drive uses a play glyph) | Start drive | the radio name (capsule: "Radio") | ok |
+  | Simulator (debug) | flask | Start drive | Simulator | warning |
+
+  The collapsed pill is a labelled capsule (the same glyph and words as the Dock button), never a lone Bluetooth icon.
+- **The panel never moves because of the radio (build 62).** The Drive panel always opens at the Dock detent (the last detent is no longer
+  restored: a panel left at Medium used to reopen mid-screen on launch and cover the map). A connect attempt, a reconnect or a failed
+  connect shows in the Dock ("Connecting…" / "Reconnecting…" with Cancel) and never changes the detent; the map is usable with no radio.
+  Only the person's own drag or tap, or the driving auto-collapse (Medium to Dock), moves the panel. Test:
+  `test/ui/drive/panel_connect_dock_test.dart`.
 - **Live coverage map** (see [Map](#coverage-map)), with these overlays:
   - **Heard box** (top left, see below), shown once a ping exists and while driving or something has been heard.
   - **Full-screen** (`map-fullscreen`) and **Layers** (`drive-map-layers`) buttons (top right).

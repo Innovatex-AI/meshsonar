@@ -94,8 +94,9 @@ void main() {
     unawaited(h.state.connect(h.bt.devices.first, RadioKind.bluetooth));
     await tester.pump(const Duration(milliseconds: 50));
     expect(h.state.connecting, isTrue);
-    expect(find.text('Connecting to your radio...'), findsOneWidget);
-    expect(tester.widget<Text>(find.byKey(const Key('capsule-radio'))).data, 'Connecting');
+    expect(find.text('Connecting…'), findsWidgets, reason: 'the Dock status line and the capsule say it with the shared wording');
+    expect(tester.widget<Text>(find.byKey(const Key('status-line'))).data, 'Connecting…');
+    expect(tester.widget<Text>(find.byKey(const Key('capsule-radio'))).data, 'Connecting…');
     expect(tester.getSize(find.byKey(const Key('connect-cancel'))).height, greaterThanOrEqualTo(48));
     await tester.tap(find.byKey(const Key('connect-cancel')));
     await tester.pump(const Duration(milliseconds: 50));

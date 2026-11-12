@@ -101,7 +101,9 @@ class ChatController extends ChangeNotifier {
   String? get radioId => _radioId;
   bool get hasRadioIdentity => _radioId != null;
   bool get radioConnected => sink.canSend;
-  /// Unread MESSAGES (muted and system conversations excluded): the Chat tab badge (D19).
+  /// THE unread count (D19, docs/FEATURES.md "Unread count"): unread MESSAGES in non-muted, non-system conversations. The Chat tab
+  /// badge, the Chats "Mark all as read" control, the app-icon badge and the sum of the row pills all come from this one rule;
+  /// show it with [unreadCountLabel] so every badge caps the same way.
   int get unreadMessages => _unread;
   Stream<ChatEvent> get events => service.events;
 

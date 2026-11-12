@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../../app/app_state.dart';
 import '../../core/gps_health.dart';
 import '../design/tokens.dart';
+import 'radio_link_status.dart';
 
 enum _Level { ok, warn, bad, idle }
 
@@ -22,7 +23,7 @@ class StatusCapsule extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: state.gpsHealth,
+      listenable: Listenable.merge([state.gpsHealth, RadioLinkStatus.listenable(state)]),
       builder: (context, _) => _build(context, state.gpsHealth.value),
     );
   }
@@ -32,21 +33,15 @@ class StatusCapsule extends StatelessWidget {
     final c = AppColors.fromTheme(Theme.of(context));
     final sim = s.connected && s.radioKind == RadioKind.simulator;
 
-    final String radioWord;
-    final _Level radio;
-    if (s.connecting) {
-      radioWord = 'Connecting';
-      radio = _Level.warn;
-    } else if (s.reconnecting && s.driving) {
-      radioWord = 'Radio lost';
-      radio = _Level.bad;
-    } else if (s.connected) {
-      radioWord = 'Radio';
-      radio = _Level.ok;
-    } else {
-      radioWord = 'No radio';
-      radio = _Level.idle;
-    }
+    // The radio half reads RadioLinkStatus like the Dock, the pill and the app-bar chip (words, colour, spinner). A connected radio
+    // is just "Radio" here: the chip is one word wide and the Dock carries its name.
+    final link = RadioLinkStatus.of(s);
+    final String radioWord = link.connected ? 'Radio' : (link.link == RadioLink.notConnected ? 'No radio' : link.statusLabel);
+    final _Level radio = switch (link.link) {
+      RadioLink.notConnected => _Level.idle,
+      RadioLink.connecting || RadioLink.reconnecting || RadioLink.simulator => _Level.warn,
+      RadioLink.connected => _Level.ok,
+    };
 
     // GPS: only has a health value while a drive runs; idle it follows the location permission.
     final String? gpsWord;
@@ -138,7 +133,7 @@ class StatusCapsule extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (s.connecting)
+                    if (link.working)
                       SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2, color: col(radio)))
                     else
                       _Dot(col(radio)),
