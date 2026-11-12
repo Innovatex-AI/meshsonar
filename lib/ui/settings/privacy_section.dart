@@ -131,6 +131,14 @@ List<Widget> privacySectionRows(BuildContext context) {
         onTap: () => s.openWebPage('/me/privacy'),
       ),
     ),
+    // Terms of service (V1-PLAN LAUNCH-1): one page on the hub host, also linked from the website's sign-in, privacy page and footer.
+    ListTile(
+      key: const Key('terms-of-service-link'),
+      leading: const Icon(Icons.gavel_outlined),
+      title: const Text('Terms of service'),
+      subtitle: Text('On ${s.webPage('/terms')}: use of MeshSonar, photos and chat, reports.'),
+      onTap: () => s.openWebPage('/terms'),
+    ),
   ];
 }
 
