@@ -75,19 +75,19 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>MeshSonar connects to your MeshCore companion radio over Bluetooth to send wardriving pings and hear repeater echoes.</string>
+	<string>MeshSonar connects to your MeshCore companion radio over Bluetooth to send wardriving pings, hear repeater echoes and carry your chat messages. It stays connected in the background so a drive, the Home observer and incoming messages keep working.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Take a photo to share in a chat. MeshSonar also uses the camera when you tap Scan QR code, to read a MeshCore channel or contact code; nothing from a scan is recorded.</string>
+	<string>Take a photo to share in a chat. The photo is uploaded to MeshSonar's server so the chat link can show it (encrypted on this phone first in private chats; its location and camera details are removed). MeshSonar also uses the camera when you tap Scan QR code, to read a MeshCore channel or contact code; nothing from a scan is recorded.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Pick a photo to share in a chat.</string>
+	<string>Pick a photo to share in a chat. The photo is uploaded to MeshSonar's server so the chat link can show it (encrypted on this phone first in private chats; its location and camera details are removed).</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Save a photo from a chat to your Photos.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>MeshSonar can use Face ID to protect saved repeater and room passwords.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>MeshSonar records where each ping was sent so your drive can be mapped.</string>
+	<string>MeshSonar records where each ping was sent so your drive can be mapped, shows you on the coverage map and works out which MeshSonar region you are in.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>While you record a drive, MeshSonar keeps placing each ping on the map when the screen is off or another app (like navigation) is in front. iOS shows a blue indicator while it does. Your position is not used in the background when you are not recording a drive, and is never put in the on-air ping.</string>
+	<string>While you record a drive, MeshSonar keeps placing each ping on the map when the screen is off or another app (like navigation) is in front. iOS shows a blue indicator while it does. Your position is not used in the background when you are not recording a drive, and is never put in the on-air ping. If Share what my radio hears is on, packets your radio hears in the background are sent to the server tagged only with the roughly 5 km area MeshSonar last knew (or nothing, if you chose Region only).</string>
 	<key>NSMotionUsageDescription</key>
 	<string>MeshSonar reads air pressure from your phone's barometer during a drive, to explain changes in radio range. It is saved with your drive. You can turn it off in Settings &gt; Privacy &amp; data sharing.</string>
 	<key>UIBackgroundModes</key>
