@@ -3,7 +3,9 @@
 All notable changes to MeshSonar. Dates are local (US Eastern). This changelog was reconstructed from the commit
 history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md](ROADMAP.md).
 
-## [Unreleased]
+## [0.36.0+62] — 2026-11-12 — drive panel consistency, one unread rule, adverts, privacy manifest, Terms link
+
+- **Terms of service link (LAUNCH-1):** Settings > Privacy has a "Terms of service" row that opens the website's new `/terms` page.
 
 - **APP-6: drive mode keeps and uploads heard adverts.** Confirmed end to end (`test/radio/heard_adverts_test.dart`, real `0x88`
   LOG_RX_DATA frames through `MeshCoreCompanionLink.observerRxPackets` into the uploader in drive mode): the radio delivers every
