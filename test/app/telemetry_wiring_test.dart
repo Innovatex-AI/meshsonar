@@ -464,6 +464,26 @@ void main() {
       expect(pk.containsKey('cell'), isFalse);
     });
 
+    test('APP-6: a heard advert is kept and queued in drive mode with its raw bytes; a forged-short advert is not', () async {
+      final h = await drivingReady();
+      expect(h.state.observerMode, ObserverMode.drive);
+      final short = RxPacket(
+          at: h.now,
+          raw: MeshPacket(header: makeHeader(RouteType.flood, PayloadType.advert), pathLenByte: 0, path: const [], payload: Uint8List(20)).toBytes(),
+          snrDb: 4,
+          rssiDbm: -99);
+      h.link.rx.add(short);
+      await Future<void>.delayed(Duration.zero);
+      expect(h.state.telemetryQueued, 0);
+      final good = _advert(h.now, List.filled(32, 0x1b));
+      h.link.rx.add(good);
+      await Future<void>.delayed(Duration.zero);
+      expect(h.state.telemetryQueued, 1);
+      final pk = ((await flushOne(h))['packets'] as List).single as Map;
+      expect(pk['type'], 4);
+      expect((pk['raw'] as String).length, good.raw.length * 2);
+    });
+
     test('an echo of a public drive ping goes own: true WITH raw; inside a zone, header only', () async {
       final h = await drivingReady();
       final p1 = _advert(h.now, List.filled(32, 0x66));

@@ -78,9 +78,9 @@ void main() {
 
   test('raw only for ADVERT, PATH and TRACE among the non-group types', () {
     for (final t in [PayloadType.advert, PayloadType.path, PayloadType.trace]) {
-      final r = TelemetryRecord.fromRx(_pkt(t, List.filled(40, 0x33)))!;
+      final r = TelemetryRecord.fromRx(_pkt(t, List.filled(110, 0x33)))!;
       expect(r.raw, isNotNull, reason: 'type $t');
-      expect(r.raw, _hex(_pkt(t, List.filled(40, 0x33)).raw));
+      expect(r.raw, _hex(_pkt(t, List.filled(110, 0x33)).raw));
       expect(r.toJsonV2()['raw'], r.raw);
       expect(r.toJsonV2().containsKey('channel'), isFalse);
     }
@@ -146,7 +146,7 @@ void main() {
   });
 
   test('never latitude/longitude on a packet; the cell is a res-7 index or nothing', () {
-    final r = TelemetryRecord.fromRx(_pkt(PayloadType.advert, List.filled(40, 3)), cell: '872a1072bffffff')!;
+    final r = TelemetryRecord.fromRx(_pkt(PayloadType.advert, List.filled(110, 3)), cell: '872a1072bffffff')!;
     final j = r.toJsonV2();
     expect(j.keys.every(TelemetryRecord.wireKeysV2.contains), isTrue);
     for (final k in ['lat', 'lon', 'latitude', 'longitude', 'position', 'gps']) {
@@ -159,7 +159,7 @@ void main() {
   });
 
   test('home mode never carries a cell', () {
-    final r = TelemetryRecord.fromRx(_pkt(PayloadType.advert, List.filled(40, 3)), cell: '872a1072bffffff', mode: ObserverMode.home)!;
+    final r = TelemetryRecord.fromRx(_pkt(PayloadType.advert, List.filled(110, 3)), cell: '872a1072bffffff', mode: ObserverMode.home)!;
     expect(r.cell, isNull);
     expect(r.toJsonV2().containsKey('cell'), isFalse);
     expect(r.mode, ObserverMode.home);
@@ -179,7 +179,7 @@ void main() {
     expect(back.raw, r.raw);
     expect(back.channel, 'public');
     expect(back.cell, '872a1072bffffff');
-    final home = TelemetryRecord.fromRx(_pkt(PayloadType.advert, List.filled(40, 3)), mode: ObserverMode.home)!;
+    final home = TelemetryRecord.fromRx(_pkt(PayloadType.advert, List.filled(110, 3)), mode: ObserverMode.home)!;
     expect(TelemetryRecord.tryFromJson(home.toQueueJson())!.mode, ObserverMode.home);
     // A tampered queue entry cannot widen what is sent.
     final ack = {'rx_ts': '2026-11-08T12:00:00.000Z', 'type': 3, 'route': 1, 'hash_size': 1, 'path': ['a1'], 'raw': 'abcd', 'cell': 'zz'};
@@ -194,7 +194,7 @@ void main() {
     final id = hexId(hexCellOf(h3!, 39.9612, -82.9988, res: 7));
     expect(id, matches(telemetryCellRe));
     expect(h3.getResolution(BigInt.parse(id, radix: 16)), 7);
-    final r = TelemetryRecord.fromRx(_pkt(PayloadType.advert, List.filled(40, 3)), cell: id)!;
+    final r = TelemetryRecord.fromRx(_pkt(PayloadType.advert, List.filled(110, 3)), cell: id)!;
     expect(r.toJsonV2()['cell'], id);
   }, skip: h3 == null ? 'libh3 not found (brew install h3)' : false);
 }
