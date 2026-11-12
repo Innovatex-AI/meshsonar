@@ -5,6 +5,8 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+## [0.35.0+61] — 2026-11-12 — private (end-to-end encrypted) photos in DMs
+
 - **Private (end-to-end encrypted) photo messages, app half.** A photo sent in a direct message, a room or a private channel is
   now encrypted on the phone and the server stores only ciphertext; the message carries `https://meshsonar.com/e/<id>#<key>`
   (55 bytes; the key is the URL fragment and is never sent to a server). Public and `#hashtag` channels keep the plain `/p/<id>`
@@ -17,7 +19,6 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
   and caches only the decrypted copy (`e_<id>_*.img`), the viewer fetches `/full`; 404/410 read "Photo expired"; a failed decrypt
   or offline is the quiet placeholder. Viewer: Save, Share link (the link text, not the picture), Report with "Let moderators see
   this photo?" (sends `key` only on yes), Delete for the owner. Notifications show "[Private photo]" instead of the link.
-  Not in this build: version bump / TestFlight (main session).
 
 ## [0.34.1+60] — 2026-11-11 — the Drive map stays where you put it; photo uploads on slow connections
 
