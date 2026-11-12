@@ -1,5 +1,7 @@
 # Roadmap and known gaps
 
+> **Status Nov 12 2026 (V1-PLAN DOC-1):** the app is 0.36.0+62 (iOS, TestFlight). It now has the chat redesign (DMs, channels, rooms, delivery states), the always-on phone observer, plain and end-to-end-encrypted private photos, offline map packs, the Drive panel redesign, and the Analyze tab. The live to-do list is `meshsonar-infra/docs/V1-PLAN.md`; Android is v1.1 (below). Items here that mention Android are still accurate; the rest of this list is history.
+
 Gaps found while documenting v0.2.0, with file references. Priorities: **P1** affects data or field use, **P2**
 affects correctness or polish, **P3** is housekeeping. Items fixed since are listed at the end.
 

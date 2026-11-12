@@ -1,0 +1,55 @@
+{
+  "gate": {
+    "state": "partial",
+    "trusted": false,
+    "fresh": {
+      "ok": true,
+      "asOf": "2026-11-11T02:50:00.000Z",
+      "ageS": 3600,
+      "maxAgeS": 64800,
+      "feed": "CoreScope sync"
+    },
+    "coverage": {
+      "known": 812,
+      "total": 1000,
+      "ratio": 0.812,
+      "windowH": 24,
+      "minSample": 50,
+      "minRatio": 0.9,
+      "ambiguous": 0,
+      "oneByte": {
+        "known": 0,
+        "total": 0
+      }
+    },
+    "reason": "Partial: node list incomplete. 812 of 1,000 hop codes heard in the last 24 h match a known node (81%); routes are not drawn on the map and hop codes are marked unconfirmed.",
+    "computedAt": "2026-11-11T03:50:00.000Z"
+  },
+  "hopsFrom": "e3",
+  "history": [
+    {
+      "day": "2026-11-09",
+      "builtAt": "2026-11-10T03:50:00Z",
+      "state": "partial",
+      "codes": 1000,
+      "known": 800,
+      "ambiguous": 10,
+      "placedCodes": 700,
+      "packets": 5000,
+      "placedPackets": 4000,
+      "ratio": 0.8
+    },
+    {
+      "day": "2026-11-10",
+      "builtAt": "2026-11-11T03:50:00Z",
+      "state": "partial",
+      "codes": 1000,
+      "known": 812,
+      "ambiguous": 10,
+      "placedCodes": 700,
+      "packets": 5000,
+      "placedPackets": 4100,
+      "ratio": 0.812
+    }
+  ]
+}

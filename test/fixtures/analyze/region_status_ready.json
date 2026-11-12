@@ -1,0 +1,26 @@
+[
+  {
+    "key": "network.findings",
+    "state": "ready",
+    "computedAt": "2026-11-11T03:50:00Z",
+    "source": "Analysis engine"
+  },
+  {
+    "key": "network.snapshots",
+    "state": "ready",
+    "computedAt": "2026-11-11T03:50:00Z",
+    "source": "Analysis engine"
+  },
+  {
+    "key": "network.packets",
+    "state": "ready",
+    "computedAt": "2026-11-11T03:50:00Z",
+    "source": "Analysis engine"
+  },
+  {
+    "key": "network.repeaters",
+    "state": "ready",
+    "computedAt": "2026-11-11T03:50:00Z",
+    "source": "Analysis engine"
+  }
+]

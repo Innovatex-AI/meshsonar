@@ -1,0 +1,43 @@
+{
+  "status": {
+    "state": "ready",
+    "reason": null,
+    "computedAt": "2026-11-11T03:50:00Z",
+    "source": "e9"
+  },
+  "builtAt": "2026-11-11T03:50:00Z",
+  "rows": [
+    {
+      "code": "repeaters_new",
+      "severity": "info",
+      "section": "network",
+      "title": "2 new repeaters",
+      "detail": "Two repeaters were heard for the first time this week.",
+      "figures": {},
+      "refs": [],
+      "builtAt": "2026-11-11T03:50:00Z"
+    },
+    {
+      "code": "critical_nodes",
+      "severity": "alert",
+      "section": "links",
+      "title": "6 repeaters are single points of failure",
+      "detail": "Losing one of them strands 6 others from the main network.",
+      "figures": {},
+      "refs": [
+        "aa11bb22cc33dd44aa11bb22cc33dd44aa11bb22cc33dd44aa11bb22cc33dd44"
+      ],
+      "builtAt": "2026-11-11T03:50:00Z"
+    },
+    {
+      "code": "low_uptime",
+      "severity": "warn",
+      "section": "network",
+      "title": "3 repeaters are often silent",
+      "detail": "They were heard in under half of the hours with traffic.",
+      "figures": {},
+      "refs": [],
+      "builtAt": "2026-11-11T03:50:00Z"
+    }
+  ]
+}
