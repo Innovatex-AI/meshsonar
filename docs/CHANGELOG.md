@@ -5,6 +5,20 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- **Private (end-to-end encrypted) photo messages, app half.** A photo sent in a direct message, a room or a private channel is
+  now encrypted on the phone and the server stores only ciphertext; the message carries `https://meshsonar.com/e/<id>#<key>`
+  (55 bytes; the key is the URL fragment and is never sent to a server). Public and `#hashtag` channels keep the plain `/p/<id>`
+  link; the rule is `lib/chat/photo_kind.dart` (no user toggle, a private conversation never falls back to a plain link: without
+  `e2e: true` in `photo-config` its photo button is hidden). New: `lib/core/private_photo.dart` (AES-128-GCM, blob
+  `0x01 || nonce || ct || tag`, AAD `ms-e2e-v1:thumb|full`, `u32be thumbLen || thumb || full` body; golden vector shared with the
+  server in `test/fixtures/photos/photo-e2e-golden-vector.json`), `photo-upload-enc` upload over the same `PhotoWire` progress and
+  stall logic, a 480 px q70 thumb, and an EXIF/GPS check of BOTH JPEGs before encryption (`jpegIsClean`). Receiving: a new
+  `PartKind.photoPrivate` (a link without a valid 22-character key stays a url), the bubble fetches and decrypts `/e/<id>/thumb`
+  and caches only the decrypted copy (`e_<id>_*.img`), the viewer fetches `/full`; 404/410 read "Photo expired"; a failed decrypt
+  or offline is the quiet placeholder. Viewer: Save, Share link (the link text, not the picture), Report with "Let moderators see
+  this photo?" (sends `key` only on yes), Delete for the owner. Notifications show "[Private photo]" instead of the link.
+  Not in this build: version bump / TestFlight (main session).
+
 ## [0.34.1+60] — 2026-11-11 — the Drive map stays where you put it; photo uploads on slow connections
 
 - **Drive map stays where you put it.** Pan, zoom, pinch or rotate the Drive map and it stays exactly there: pings, ping

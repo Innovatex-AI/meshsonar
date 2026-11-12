@@ -263,7 +263,6 @@ class _ComposerState extends State<Composer> {
     setState(() => _job = _PhotoJob(_PhotoStage.preparing));
     try {
       photo = await p.picker.pick(src, maxEdgePx: p.config.maxEdgePx);
-      if (photo != null && private) thumb = await p.picker.thumbnail(photo);
     } on PhotoPrepareException catch (e) {
       if (mounted) setState(() => _job = _PhotoJob(_PhotoStage.failed, error: e.message));
       return;
@@ -275,6 +274,17 @@ class _ComposerState extends State<Composer> {
     if (photo == null) {
       setState(() => _job = null);
       return;
+    }
+    if (private) {
+      try {
+        thumb = await p.picker.thumbnail(photo);
+      } on PhotoPrepareException catch (e) {
+        if (mounted) setState(() => _job = _PhotoJob(_PhotoStage.failed, photo: photo, error: e.message, retryable: false));
+        return;
+      } catch (_) {
+        if (mounted) setState(() => _job = _PhotoJob(_PhotoStage.failed, photo: photo, error: 'Could not read that photo.', retryable: false));
+        return;
+      }
     }
     await _upload(photo, thumb: thumb);
   }

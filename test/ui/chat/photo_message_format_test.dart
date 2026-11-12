@@ -3,9 +3,64 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/core/photo_api.dart';
 import 'package:meshsonar/ui/chat/message_format.dart';
 
+const photoUrlX = 'https://meshsonar.com/p/Zz00Aa11';
+
 List<(PartKind, String)> parts(String s) => [for (final p in splitMessage(s)) (p.kind, p.text)];
 
+const privId = 'k3Xq9TzA';
+const privKey = 'AAECAwQFBgcICQoLDA0ODw';
+const privUrl = 'https://meshsonar.com/e/$privId#$privKey';
+
 void main() {
+  group('splitMessage private photo parts', () {
+    test('a bare private link is one photoPrivate part carrying the whole link', () {
+      expect(parts(privUrl), [(PartKind.photoPrivate, privUrl)]);
+    });
+
+    test('text around it; trailing punctuation is not part of the link', () {
+      expect(parts('for you $privUrl please'), [(PartKind.text, 'for you '), (PartKind.photoPrivate, privUrl), (PartKind.text, ' please')]);
+      for (final tail in ['.', ',', '!', '?', ')', ':', ';']) {
+        expect(parts('see $privUrl$tail'), [(PartKind.text, 'see '), (PartKind.photoPrivate, privUrl), (PartKind.text, tail)], reason: tail);
+      }
+    });
+
+    test('a plain and a private link in one message keep their own kinds', () {
+      expect(parts('$photoUrlX $privUrl').map((e) => e.$1).toList(), [PartKind.photo, PartKind.text, PartKind.photoPrivate]);
+    });
+
+    test('a link without a valid 22-character key stays an ordinary url', () {
+      for (final u in [
+        'https://meshsonar.com/e/$privId', // no key at all
+        'https://meshsonar.com/e/$privId#',
+        'https://meshsonar.com/e/$privId#AAECAwQFBgcICQoLDA0OD', // 21
+        'https://meshsonar.com/e/$privId#${privKey}A', // 23
+        'https://meshsonar.com/e/$privId#AAECAwQFBgcICQoLDA0O+w', // not url-safe
+        'https://meshsonar.com/e/k3Xq9Tz#$privKey', // 7-character id
+        'https://meshsonar.com/e/k3Xq9TzAB#$privKey', // 9
+        'https://meshsonar.com/e/$privId/full#$privKey',
+        'https://meshsonar.com/e/$privId#$privKey/x',
+      ]) {
+        expect(parts(u), [(PartKind.url, u)], reason: u);
+      }
+    });
+
+    test('a private link is not a plain photo and a plain link is not private', () {
+      expect(photoIdOf(privUrl), isNull);
+      expect(anyPhotoIdOf(privUrl), privId);
+      expect(anyPhotoIdOf('https://meshsonar.com/p/k3Xq9TzA'), 'k3Xq9TzA');
+      expect(anyPhotoIdOf('https://example.com/'), isNull);
+    });
+
+    test('photoLinksOf, textWithoutPhotos and photoPreview treat it as a photo', () {
+      expect(photoLinksOf('hi $privUrl'), [privUrl]);
+      expect(textWithoutPhotos('hi $privUrl'), 'hi');
+      expect(photoPreview(privUrl), 'Photo');
+      expect(photoPreview('hi $privUrl'), 'Photo: hi');
+      expect(photoPreview('$privUrl $photoUrlX'), '2 photos');
+      expect(photoPreview('hi $privUrl'), isNot(contains(privKey)));
+    });
+  });
+
   group('splitMessage photo parts', () {
     test('a bare photo link is one photo part', () {
       expect(parts('https://meshsonar.com/p/k3Xq9TzA'), [(PartKind.photo, 'https://meshsonar.com/p/k3Xq9TzA')]);
