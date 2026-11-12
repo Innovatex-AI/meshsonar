@@ -379,12 +379,12 @@ void main() {
       expect(m.layerState, kDefaultLayerState);
     });
 
-    testWidgets('the base map picker replaces the cycler: four tiles, a tap selects', (t) async {
+    testWidgets('the base map picker replaces the cycler: five tiles (Topo and Satellite from the definition), a tap selects', (t) async {
       final m = await openSheet(t);
-      for (final id in ['chart', 'street', 'dark', 'topo']) {
+      for (final id in ['chart', 'street', 'dark', 'topo', 'satellite']) {
         expect(find.byKey(Key('base-map-$id')), findsOneWidget);
       }
-      expect(find.text('needs signal'), findsOneWidget);
+      expect(find.text('needs signal'), findsNWidgets(2), reason: 'Topo and Satellite come from the network only');
       await t.tap(find.byKey(const Key('base-map-dark')));
       await t.pumpAndSettle();
       expect(m.baseStyle.id, 'dark');

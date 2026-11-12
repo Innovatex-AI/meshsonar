@@ -5,6 +5,14 @@
 const String kBundledMapDefinitionJson = r'''
 {
   "v": 1,
+  "schemaMinor": 1,
+  "capabilities": [
+    "basemap.topo",
+    "basemap.satellite",
+    "layer.estimated",
+    "layer.redundancy",
+    "layer.snrlinks"
+  ],
   "scope": {
     "kind": "region",
     "slug": "cmh",
@@ -15,6 +23,7 @@ const String kBundledMapDefinitionJson = r'''
       "id": "road",
       "name": "Road",
       "description": "Streets and town names; light or dark with the site theme.",
+      "render": "vector",
       "vector": {
         "tiles": "https://api.meshsonar.com/basemap/t/na-20261108/{z}/{x}/{y}.bin",
         "glyphs": "https://api.meshsonar.com/basemap/fonts/{fontstack}/{range}.pbf",
@@ -39,6 +48,8 @@ const String kBundledMapDefinitionJson = r'''
         "dark": "https://tiles.openfreemap.org/styles/dark"
       },
       "hillshade": null,
+      "topo": null,
+      "satellite": null,
       "attribution": [
         "Protomaps",
         "© OpenStreetMap contributors"
@@ -50,6 +61,65 @@ const String kBundledMapDefinitionJson = r'''
       "id": "relief",
       "name": "Relief",
       "description": "The road map with hill shading from open terrain data.",
+      "render": "vector",
+      "vector": {
+        "tiles": "https://api.meshsonar.com/basemap/t/na-20261108/{z}/{x}/{y}.bin",
+        "glyphs": "https://api.meshsonar.com/basemap/fonts/{fontstack}/{range}.pbf",
+        "sprite": {
+          "light": "https://api.meshsonar.com/basemap/sprites/v4/white",
+          "dark": "https://api.meshsonar.com/basemap/sprites/v4/black"
+        },
+        "flavour": {
+          "light": "white",
+          "dark": "black"
+        },
+        "bounds": [
+          -170,
+          7,
+          -50,
+          84
+        ],
+        "maxzoom": 14
+      },
+      "fallbackStyle": {
+        "light": "https://tiles.openfreemap.org/styles/positron",
+        "dark": "https://tiles.openfreemap.org/styles/dark"
+      },
+      "topo": null,
+      "satellite": null,
+      "hillshade": {
+        "tiles": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png",
+        "encoding": "terrarium",
+        "exaggeration": 0.35,
+        "maxzoom": 14
+      },
+      "attribution": [
+        "Protomaps",
+        "© OpenStreetMap contributors",
+        "AWS Terrain Tiles (USGS, SRTM and others)"
+      ],
+      "maxZoom": 20,
+      "offline": false
+    },
+    {
+      "id": "plain",
+      "name": "Plain",
+      "description": "No background map: only the data, on a plain ground.",
+      "render": "none",
+      "vector": null,
+      "fallbackStyle": null,
+      "hillshade": null,
+      "topo": null,
+      "satellite": null,
+      "attribution": [],
+      "maxZoom": 20,
+      "offline": true
+    },
+    {
+      "id": "topo",
+      "name": "Topo",
+      "description": "Land cover, water and roads in a topographic palette, with hill shading from open terrain data.",
+      "render": "vector",
       "vector": {
         "tiles": "https://api.meshsonar.com/basemap/t/na-20261108/{z}/{x}/{y}.bin",
         "glyphs": "https://api.meshsonar.com/basemap/fonts/{fontstack}/{range}.pbf",
@@ -76,9 +146,105 @@ const String kBundledMapDefinitionJson = r'''
       "hillshade": {
         "tiles": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png",
         "encoding": "terrarium",
-        "exaggeration": 0.35,
+        "exaggeration": 0.55,
         "maxzoom": 14
       },
+      "topo": {
+        "base": {
+          "light": "light",
+          "dark": "dark"
+        },
+        "overrides": {
+          "light": {
+            "background": "#E9E2CE",
+            "earth": "#EFE9D6",
+            "park_a": "#CFE3B4",
+            "park_b": "#C2DBA6",
+            "wood_a": "#BCD6A0",
+            "wood_b": "#B0CF95",
+            "scrub_a": "#D2DDB0",
+            "scrub_b": "#C8D6A2",
+            "sand": "#F1E3B7",
+            "beach": "#F1E3B7",
+            "glacier": "#F4F8FA",
+            "water": "#A9D0E5",
+            "buildings": "#D8CDB6",
+            "industrial": "#E3DAC2",
+            "hospital": "#EAD9CF",
+            "school": "#EBDDC2",
+            "pedestrian": "#EFE6D2",
+            "minor_a": "#FBF8EF",
+            "minor_b": "#F5F0E0",
+            "minor_casing": "#C8BB9F",
+            "minor_service": "#F5F0E0",
+            "minor_service_casing": "#CFC3A8",
+            "link": "#F4E3B4",
+            "link_casing": "#B79F6B",
+            "major": "#F4D58B",
+            "major_casing_early": "#B79F6B",
+            "major_casing_late": "#B79F6B",
+            "highway": "#EDA95A",
+            "highway_casing_early": "#A9783A",
+            "highway_casing_late": "#A9783A",
+            "railway": "#7B6F5A",
+            "boundaries": "#8A6F4E",
+            "landcover": {
+              "barren": "#E2D8BE",
+              "farmland": "#E3E6C4",
+              "forest": "#BCD6A0",
+              "glacier": "#F4F8FA",
+              "grassland": "#D5E4B6",
+              "scrub": "#CCD9A4",
+              "urban_area": "#E6DFCB"
+            }
+          },
+          "dark": {
+            "background": "#161A15",
+            "earth": "#1B201A",
+            "park_a": "#243425",
+            "park_b": "#2A3C2B",
+            "wood_a": "#26382A",
+            "wood_b": "#2D412F",
+            "scrub_a": "#2B3624",
+            "scrub_b": "#31402A",
+            "sand": "#3A3622",
+            "beach": "#3A3622",
+            "glacier": "#2B3438",
+            "water": "#12324A",
+            "buildings": "#2C2E27",
+            "industrial": "#25271F",
+            "hospital": "#30262A",
+            "school": "#2E2C22",
+            "pedestrian": "#23271F",
+            "minor_a": "#3A3C32",
+            "minor_b": "#33352C",
+            "minor_casing": "#161814",
+            "minor_service": "#30322A",
+            "minor_service_casing": "#161814",
+            "link": "#5A4C2C",
+            "link_casing": "#161814",
+            "major": "#6D5A2E",
+            "major_casing_early": "#161814",
+            "major_casing_late": "#161814",
+            "highway": "#8A5F2A",
+            "highway_casing_early": "#161814",
+            "highway_casing_late": "#161814",
+            "railway": "#8C8672",
+            "boundaries": "#9C876A",
+            "landcover": {
+              "barren": "#2A2A22",
+              "farmland": "#242A20",
+              "forest": "#26382A",
+              "glacier": "#2B3438",
+              "grassland": "#27331F",
+              "scrub": "#2B3624",
+              "urban_area": "#22251E"
+            }
+          }
+        },
+        "contours": null
+      },
+      "satellite": null,
       "attribution": [
         "Protomaps",
         "© OpenStreetMap contributors",
@@ -88,15 +254,68 @@ const String kBundledMapDefinitionJson = r'''
       "offline": false
     },
     {
-      "id": "plain",
-      "name": "Plain",
-      "description": "No background map: only the data, on a plain ground.",
+      "id": "satellite",
+      "name": "Satellite",
+      "description": "Aerial imagery: USGS NAIP in the US, Esri World Imagery elsewhere. Needs a connection.",
+      "render": "raster",
       "vector": null,
       "fallbackStyle": null,
       "hillshade": null,
-      "attribution": [],
+      "topo": null,
+      "satellite": {
+        "sources": [
+          {
+            "id": "esri",
+            "name": "Esri World Imagery",
+            "tiles": "https://meshsonar.com/api/map/satellite/esri/{z}/{y}/{x}",
+            "tileSize": 256,
+            "minzoom": 0,
+            "maxzoom": 18,
+            "bounds": [
+              -180,
+              -85.0511,
+              180,
+              85.0511
+            ],
+            "attribution": [
+              "Powered by Esri. Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community"
+            ],
+            "layerMaxZoom": null
+          },
+          {
+            "id": "naip",
+            "name": "USGS NAIP",
+            "tiles": "https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}",
+            "tileSize": 256,
+            "minzoom": 0,
+            "maxzoom": 16,
+            "bounds": [
+              -125,
+              24.4,
+              -66.9,
+              49.5
+            ],
+            "attribution": [
+              "Imagery: USGS National Map (NAIP)"
+            ],
+            "layerMaxZoom": 17
+          }
+        ],
+        "esriAvailable": true,
+        "labels": {
+          "from": "vector",
+          "flavour": "black",
+          "note": "Town and road names from our vector tiles, drawn over the imagery inside the basemap extract."
+        }
+      },
+      "attribution": [
+        "Powered by Esri. Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community",
+        "Imagery: USGS National Map (NAIP)",
+        "Protomaps",
+        "© OpenStreetMap contributors"
+      ],
       "maxZoom": 20,
-      "offline": true
+      "offline": false
     }
   ],
   "defaultBasemap": "road",
@@ -228,6 +447,44 @@ const String kBundledMapDefinitionJson = r'''
       ]
     },
     {
+      "id": "redundancy",
+      "name": "Redundancy",
+      "group": "coverage",
+      "defaultOn": false,
+      "minZoom": 0,
+      "maxZoom": 22,
+      "source": {
+        "type": "geojson",
+        "endpoint": "/api/cmh/region-link-graph?sources=measured&drive=1 (drive rows: [repeaterIdx, h3, attempts, snrMean], count distinct repeaterIdx per h3)"
+      },
+      "style": "redundancy",
+      "tap": "none",
+      "hidesWithTime": true,
+      "hint": "How many repeaters were measured in each cell; one is a single point of failure.",
+      "legend": [
+        {
+          "kind": "step",
+          "step": 1,
+          "label": "1 repeater: a single point of failure"
+        },
+        {
+          "kind": "step",
+          "step": 2,
+          "label": "2 repeaters"
+        },
+        {
+          "kind": "step",
+          "step": 3,
+          "label": "3 repeaters"
+        },
+        {
+          "kind": "step",
+          "step": 4,
+          "label": "4 or more repeaters"
+        }
+      ]
+    },
+    {
       "id": "drive",
       "name": "This drive",
       "group": "coverage",
@@ -253,6 +510,35 @@ const String kBundledMapDefinitionJson = r'''
           "symbol": "ping",
           "state": "none",
           "label": "Ping nobody answered"
+        }
+      ]
+    },
+    {
+      "id": "snrlinks",
+      "name": "Links by SNR",
+      "group": "network",
+      "defaultOn": false,
+      "minZoom": 0,
+      "maxZoom": 22,
+      "source": {
+        "type": "geojson",
+        "endpoint": "/api/cmh/region-link-graph?drive=0 (link rows: [aIdx, bIdx, source, width, snrDb, snrN, rssi, n, feeds, mix, lastAt, km])"
+      },
+      "style": "snr-link",
+      "tap": "none",
+      "hint": "Repeater-to-repeater links: colour is the SNR, width the packets seen.",
+      "legend": [
+        {
+          "kind": "bands",
+          "from": 5,
+          "to": 1,
+          "note": "Link SNR (reported neighbour tables and measured /neighbors reports)"
+        },
+        {
+          "kind": "symbol",
+          "symbol": "snrlink",
+          "state": "none",
+          "label": "Seen relaying, no SNR (width = packets)"
         }
       ]
     },
@@ -357,6 +643,35 @@ const String kBundledMapDefinitionJson = r'''
           "urlKey": "names",
           "rule": "repeaterNames",
           "hint": "Name beside each repeater, from street zoom (z14); fewer when crowded."
+        }
+      ]
+    },
+    {
+      "id": "estimated",
+      "name": "Estimated positions",
+      "group": "network",
+      "defaultOn": true,
+      "minZoom": 0,
+      "maxZoom": 22,
+      "source": {
+        "type": "geojson",
+        "endpoint": "/api/cmh/region-repeater-estimates"
+      },
+      "style": "repeater-estimated",
+      "tap": "repeater",
+      "hint": "Repeaters with no GPS, placed from their located neighbours; paler = less sure.",
+      "legend": [
+        {
+          "kind": "symbol",
+          "symbol": "estimated",
+          "state": "high",
+          "label": "Estimated position (3 or more neighbours), approximate"
+        },
+        {
+          "kind": "symbol",
+          "symbol": "estimated",
+          "state": "low",
+          "label": "Estimated position, low confidence (fewer or far-apart neighbours)"
         }
       ]
     },
@@ -749,6 +1064,68 @@ const String kBundledMapDefinitionJson = r'''
         "light": "#111827",
         "dark": "#F9FAFB"
       }
+    },
+    "estimated": {
+      "endpoint": "/api/cmh/region-repeater-estimates",
+      "opacity": {
+        "high": 0.8,
+        "medium": 0.6,
+        "low": 0.4
+      },
+      "confidence": {
+        "high": "3 or more located neighbours, all within 15 km of each other",
+        "medium": "2 or more located neighbours within 40 km of each other (3 or more spread over 15 to 40 km, or 2)",
+        "low": "1 located neighbour, or neighbours more than 40 km apart"
+      }
+    },
+    "redundancy": {
+      "steps": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "opacity": 0.72,
+      "colours": {
+        "light": [
+          "#D9C8F0",
+          "#B496DD",
+          "#8A5FC4",
+          "#5B2E94"
+        ],
+        "dark": [
+          "#4A3470",
+          "#7A55B0",
+          "#A98ADB",
+          "#D9C8F7"
+        ]
+      },
+      "labels": [
+        "1 repeater: a single point of failure",
+        "2 repeaters",
+        "3 repeaters",
+        "4 or more repeaters"
+      ]
+    },
+    "snrLink": {
+      "opacity": 0.85,
+      "widthPx": [
+        1.2,
+        5
+      ],
+      "widthAtPackets": [
+        1,
+        500
+      ],
+      "noSnr": {
+        "light": "#6B7280",
+        "dark": "#9CA3AF"
+      },
+      "casing": {
+        "light": "#FFFFFF",
+        "dark": "#0D1B26"
+      },
+      "casingOpacity": 0.6
     }
   },
   "labels": {
@@ -1026,6 +1403,6 @@ const String kBundledMapDefinitionJson = r'''
     "heardAt": "2026-11-09T00:00:00.000Z",
     "heardCells": 1
   },
-  "version": "5cd63967"
+  "version": "c79801aa"
 }
 ''';

@@ -56,9 +56,9 @@ BasemapSource basemapSourceAt(MapCamera camera, {BasemapHealth? health}) {
 }
 
 /// Shared themes (parsed once; the renderer's caches key on the theme id).
-final Map<(BasemapSource, bool), vtr.Theme> _themes = {};
-vtr.Theme basemapTheme(BasemapSource source, {required bool dark}) =>
-    _themes.putIfAbsent((source, dark), () => vtr.ThemeReader().read(basemapStyle(source, dark: dark)));
+final Map<(BasemapSource, bool, BasemapLook), vtr.Theme> _themes = {};
+vtr.Theme basemapTheme(BasemapSource source, {required bool dark, BasemapLook look = BasemapLook.road}) =>
+    _themes.putIfAbsent((source, dark, look), () => vtr.ThemeReader().read(basemapStyle(source, dark: dark, look: look)));
 
 class BasemapLayer extends StatefulWidget {
   /// Forces the dark (true) or light (false) look; null follows the app theme.
@@ -69,11 +69,20 @@ class BasemapLayer extends StatefulWidget {
 
   /// An event re-asks for every tile (the network came back, a pack was installed or removed).
   final Stream<void>? reset;
-  const BasemapLayer({super.key, this.dark, this.tiles, this.reset});
 
-  /// Widget tests replace the vector layer (it spins up isolates the test binding cancels). Gets the source drawn.
+  /// Road / Light / Dark ([BasemapLook.road]), the Topo palette, or only the town and road names over Satellite imagery
+  /// ([BasemapLook.labels]: drawn only while OUR tiles are the source, since OpenFreeMap has no label-only look).
+  final BasemapLook look;
+  const BasemapLayer({super.key, this.dark, this.tiles, this.reset, this.look = BasemapLook.road});
+
+  /// Widget tests replace the vector layer (it spins up isolates the test binding cancels). Gets the source drawn (and the look
+  /// through [debugLook]).
   @visibleForTesting
   static Widget Function(BasemapSource source, bool dark)? debugBuilder;
+
+  /// The look the last build asked for (tests).
+  @visibleForTesting
+  static BasemapLook? debugLook;
 
   /// False under `flutter test` (no network, no renderer isolates): the layer draws nothing unless [debugBuilder] is set.
   static bool enabled = () {
@@ -152,12 +161,17 @@ class _BasemapLayerState extends State<BasemapLayer> {
     final source = basemapSourceAt(camera, health: _health);
     if (source == BasemapSource.openFreeMap && BasemapLayer.enabled) unawaited(_health.resolveOpenFreeMap());
     final dark = widget.dark ?? Theme.of(context).brightness == Brightness.dark;
+    // Satellite names come from our tiles only (inside the extract, while our server answers); never from OpenFreeMap.
+    if (widget.look == BasemapLook.labels && source != BasemapSource.ours) return const SizedBox.shrink();
     final debug = BasemapLayer.debugBuilder;
-    if (debug != null) return debug(source, dark);
+    if (debug != null) {
+      BasemapLayer.debugLook = widget.look;
+      return debug(source, dark);
+    }
     if (!BasemapLayer.enabled || source == BasemapSource.none) return const SizedBox.shrink();
     return VectorTileLayer(
-      key: ValueKey('basemap-${source.name}-${dark ? 'dark' : 'light'}-$_generation'),
-      theme: basemapTheme(source, dark: dark),
+      key: ValueKey('basemap-${source.name}-${dark ? 'dark' : 'light'}-${widget.look.name}-$_generation'),
+      theme: basemapTheme(source, dark: dark, look: widget.look),
       tileProviders: _providersFor(source, widget.tiles ?? BasemapLayer.sharedTiles),
       layerMode: VectorTileLayerMode.raster,
       maximumZoom: 19,

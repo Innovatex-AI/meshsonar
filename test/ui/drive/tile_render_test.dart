@@ -1,5 +1,5 @@
-// Real tile pixels on the real Drive screen (raster Topo since M2; Chart / Light / Dark are our vector basemap, rendered and
-// checked in test/ui/map/basemap_styles_test.dart and on the simulator): serves real OpenTopoMap tiles (fetched once into TILE_DIR, default
+// Real tile pixels on the real Drive screen (raster Satellite since M3; Chart / Light / Dark / Topo are our vector basemap, rendered and
+// checked in test/ui/map/basemap_styles_test.dart and on the simulator): serves real raster tiles (the 'topo' PNGs of the tile dir stand in for imagery) (fetched once into TILE_DIR, default
 // <system temp>/meshsonar-tiles; any z/x/y gets the nearest real tile so the camera position does not matter), renders the Drive screen
 // at 393x852 for every base style and writes PNGs to TILE_OUT. Asserts the map area shows tile colours (not a flat fill).
 // Without real tiles in TILE_DIR every test returns at once (nothing to render), like the other environment-dependent tests.
@@ -35,7 +35,7 @@ File? tileFor(String kind) {
 
 void main() {
   final key = GlobalKey();
-  for (final style in ['topo']) {
+  for (final style in ['satellite']) {
     testWidgets('inside the real app shell: $style', (tester) async {
       final osm = tileFor('osm');
       if (osm == null) return;
@@ -103,7 +103,7 @@ void main() {
     final urls = <String>[];
     CoverageMap.debugTileClient = MockClient((req) async {
       urls.add(req.url.host);
-      final f = req.url.host.contains('opentopomap') ? topo : osm;
+      final f = (req.url.path.contains('satellite') || req.url.host.contains('nationalmap')) ? topo : osm;
       return http.Response.bytes(f.readAsBytesSync(), 200, headers: {'content-type': 'image/png'});
     });
     addTearDown(() => CoverageMap.debugTileClient = null);
@@ -143,7 +143,7 @@ void main() {
     await tester.tap(find.byKey(const Key('drive-map-layers')));
     await tester.runAsync(() => Future<void>.delayed(const Duration(seconds: 1)));
     await settle();
-    final swatch = find.byKey(const Key('base-map-topo'));
+    final swatch = find.byKey(const Key('base-map-satellite'));
     debugPrint('SWATCH found=${swatch.evaluate().length}');
     if (swatch.evaluate().isEmpty) {
       await tester.drag(find.byType(Scrollable).last, const Offset(0, -300));
@@ -154,19 +154,19 @@ void main() {
     await tester.tap(swatch, warnIfMissed: false);
     await settle();
     debugPrint('SWITCH style=${h.state.settings.baseMapStyle} hosts=${urls.toSet()}');
-    expect(h.state.settings.baseMapStyle, 'topo');
-    expect(tester.widget<TileLayer>(find.byType(TileLayer)).urlTemplate, contains('opentopomap'), reason: 'the map draws topo tiles after the swatch is tapped');
+    expect(h.state.settings.baseMapStyle, 'satellite');
+    expect(tester.widgetList<TileLayer>(find.byType(TileLayer)).map((l) => l.urlTemplate), [contains('satellite'), contains('nationalmap')], reason: 'the map draws the satellite sources after the swatch is tapped');
     await tester.runAsync(() async {
       final boundary = key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
       final image = await boundary.toImage();
       final data = (await image.toByteData(format: ui.ImageByteFormat.png))!;
       Directory(outDir).createSync(recursive: true);
-      File('$outDir/after-switch-topo.png').writeAsBytesSync(data.buffer.asUint8List());
+      File('$outDir/after-switch-satellite.png').writeAsBytesSync(data.buffer.asUint8List());
     });
     await tester.pump(const Duration(seconds: 25));
   });
 
-  for (final style in ['topo']) {
+  for (final style in ['satellite']) {
     for (final state in ['idle']) {
       testWidgets('tiles visible: $style $state', (tester) async {
         final osm = tileFor('osm'), topo = tileFor('topo');
@@ -190,7 +190,7 @@ void main() {
         var requests = 0;
         CoverageMap.debugTileClient = MockClient((req) async {
           requests++;
-          final f = req.url.host.contains('opentopomap') ? topo : osm;
+          final f = (req.url.path.contains('satellite') || req.url.host.contains('nationalmap')) ? topo : osm;
           return http.Response.bytes(f.readAsBytesSync(), 200, headers: {'content-type': 'image/png'});
         });
         addTearDown(() => CoverageMap.debugTileClient = null);
@@ -238,7 +238,8 @@ void main() {
             }
           }
           debugPrint('TILECOLOURS $style $state ${colours.length}');
-          expect(requests, lessThanOrEqualTo(26), reason: 'a phone-size map asks for the viewport only, not a ring of pre-load tiles');
+          expect(requests, lessThanOrEqualTo(60), // two imagery sources + our names
+               reason: 'a phone-size map asks for the viewport only, not a ring of pre-load tiles');
           expect(colours.length, greaterThan(35), reason: '$style $state: the map area shows tile colours, not a flat fill');
         });
         if (h.state.driving) await h.state.stopDrive();

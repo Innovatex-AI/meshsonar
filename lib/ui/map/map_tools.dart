@@ -26,6 +26,7 @@ IconData baseStyleIcon(BaseMapStyle s) => switch (s) {
   BaseMapStyle.street => Icons.map_outlined,
   BaseMapStyle.dark => Icons.dark_mode_outlined,
   BaseMapStyle.topo => Icons.terrain,
+  BaseMapStyle.satellite => Icons.satellite_alt_outlined,
 };
 
 /// The three buttons for a right-hand map column.
@@ -50,7 +51,7 @@ class MapToolColumn extends StatelessWidget {
             MapIconButton(
               key: Key('$keyPrefix-map-style'),
               icon: baseStyleIcon(style),
-              tooltip: 'Base map: ${style.label}. Tap for ${style.next.label}',
+              tooltip: 'Base map: ${style.label}. Tap for ${style.nextAvailable(model.availableBaseStyles).label}',
               onPressed: () {
                 model.cycleBaseStyle();
                 showAppToast(context, '${model.baseStyle.label}: ${model.baseStyle.blurb}', duration: const Duration(milliseconds: 1400));

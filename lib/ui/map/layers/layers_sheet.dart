@@ -34,6 +34,8 @@ import '../sheets/coverage_cell_sheet.dart' show CoverageBandSwatch;
 import '../legend_sheet.dart' show LegendSwatch, SwatchShape, showMapLegend;
 import '../legend_card.dart' show PaletteSwitch, RepeaterRingKey;
 import '../active_map_definition.dart';
+import '../legend_card.dart' show legendEntryKey;
+import '../../../core/map_basemaps.dart' show MapBasemaps;
 import '../map_layers.dart' show PingColorMode;
 import '../map_tools.dart' show showMapFilterSheet;
 import '../overlays/credits_sheet.dart' show showMapCredits;
@@ -349,7 +351,7 @@ class _NavRow extends StatelessWidget {
   }
 }
 
-/// The four base maps as 72 x 72 tiles (replaces the cycling button and its toast, U10).
+/// The base maps the definition offers (Chart, Light, Dark; Topo and Satellite when it advertises them) as 72 x 72 tiles (replaces the cycling button and its toast, U10).
 class _BaseMapPicker extends StatelessWidget {
   final DriveMapModel model;
   const _BaseMapPicker({required this.model});
@@ -358,21 +360,23 @@ class _BaseMapPicker extends StatelessWidget {
     BaseMapStyle.chart => b == Brightness.dark ? const Color(0xFF2B2F36) : MapTokens.landLight,
     BaseMapStyle.street => const Color(0xFFF2EFE9),
     BaseMapStyle.dark => const Color(0xFF1B1F24),
-    BaseMapStyle.topo => const Color(0xFFD7E6C6),
+    BaseMapStyle.topo => const Color(0xFFEFE9D6),
+    BaseMapStyle.satellite => const Color(0xFF3F5B3A),
   };
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
     final sel = model.baseStyle;
+    final satNote = sel == BaseMapStyle.satellite ? ActiveMapDefinition.current.satellite?.coverageNote : null;
     return Padding(
       key: const Key('layers-base-map'),
       padding: const EdgeInsets.symmetric(horizontal: Gap.l),
-      child: Wrap(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Wrap(
         spacing: Gap.m,
         runSpacing: Gap.s,
         children: [
-          for (final s in BaseMapStyle.values)
+          for (final s in model.availableBaseStyles)
             Semantics(
               button: true,
               selected: s == sel,
@@ -403,7 +407,7 @@ class _BaseMapPicker extends StatelessWidget {
                         const SizedBox(height: 2),
                         Text(s.label, style: t.textTheme.labelMedium, maxLines: 1),
                         // Scaled to the tile's width: at the default text size "needs signal" is wider than the tile and was cut to "needs".
-                        if (s == BaseMapStyle.topo)
+                        if (s.needsNetwork)
                           FittedBox(
                             fit: BoxFit.scaleDown,
                             child: Text('needs signal', style: t.textTheme.labelSmall?.copyWith(color: t.colorScheme.onSurfaceVariant), maxLines: 1, softWrap: false),
@@ -416,6 +420,8 @@ class _BaseMapPicker extends StatelessWidget {
             ),
         ],
       ),
+      if (satNote != null) Padding(padding: const EdgeInsets.only(top: Gap.s), child: Text(satNote, key: const Key('layers-base-map-note'), style: t.textTheme.labelSmall?.copyWith(color: t.colorScheme.onSurfaceVariant))),
+      ]),
     );
   }
 }
@@ -471,7 +477,7 @@ class _InlineKey extends StatelessWidget {
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           for (final i in items)
-            Row(mainAxisSize: MainAxisSize.min, children: [i.swatch, const SizedBox(width: 4), Text(i.label, style: style)]),
+            Row(mainAxisSize: MainAxisSize.min, children: [i.swatch, const SizedBox(width: 4), Flexible(child: Text(i.label, style: style))]), // long definition labels wrap
         ],
       ),
     );
@@ -531,9 +537,33 @@ List<KeyItem> layerKeyItems(BuildContext context, String layerId, DriveMapModel 
       return repeaterFreshnessKey(context, hours: true);
     case 'heard':
       return [KeyItem(ExcludeSemantics(child: Icon(Icons.check_circle, size: 16, color: mc.snrStrong)), 'green tick = heard this drive')];
+    case 'redundancy':
+    case 'snrlinks':
+    case 'estimated':
+      return definitionKeyItems(context, layerId);
     default:
       return const [];
   }
+}
+
+/// The inline key of an M3 layer straight from the definition's `legend` (the website draws the same entries): labels and colours
+/// are the definition's, nothing is written here.
+List<KeyItem> definitionKeyItems(BuildContext context, String appLayerId) {
+  final def = ActiveMapDefinition.current;
+  final defId = definitionLayerId(appLayerId);
+  final layer = defId == null ? null : def.layerDef(defId);
+  if (layer == null) return const [];
+  final mc = MeshSonarColors.of(context);
+  final bands = CoverageBandColors.of(mc.palette, Theme.of(context).brightness, definition: def);
+  final labels = def.bandLabels;
+  return [
+    for (final e in layer.legend)
+      if (e.kind == 'bands')
+        for (var b = e.from ?? 5; (e.from ?? 5) >= (e.to ?? 1) ? b >= (e.to ?? 1) : b <= (e.to ?? 1); b += (e.from ?? 5) >= (e.to ?? 1) ? -1 : 1)
+          KeyItem(CoverageBandSwatch(band: b, colors: bands, size: 16), (labels[b] ?? 'Band $b').toLowerCase())
+      else
+        KeyItem(legendEntryKey(context, e, def), e.label ?? ''),
+  ];
 }
 
 /// The coverage v2 bands as inline key items (strongest first, then No reply), from [meta]'s labels.

@@ -4,6 +4,7 @@
 //
 // Website layers deliberately NOT ported (planner/GIS, shelved or token-gated there): model, reach, sites, candidates,
 // population, gaps, hillshade. `model`/`reach` links still parse (core/map_view_state.dart) and are ignored here.
+import '../../../core/map_basemaps.dart' show capLayerEstimated, capLayerRedundancy, capLayerSnrLinks;
 import '../../../core/map_definition.dart' show MapDefinition, MapGroupDef;
 import '../../../core/map_prefs.dart' show LayerPrefs;
 import '../active_map_definition.dart';
@@ -22,10 +23,16 @@ const List<MapLayerSpec> kMapLayers = [
   MapLayerSpec(id: 'predicted', label: 'Predicted coverage', group: LayerGroup.coverage, z: 5, defaultOn: true, onWebsite: true, serverFed: true),
   MapLayerSpec(id: kHeardCellsLayerId, label: 'Heard by phones', group: LayerGroup.coverage, z: 7, defaultOn: true, onWebsite: true, serverFed: true),
   MapLayerSpec(id: 'measured', label: 'Measured coverage', group: LayerGroup.coverage, z: 10, defaultOn: true, onWebsite: true, serverFed: true),
+  // M3-2 (Map Definition `layer.redundancy`): per res-11 cell, how many distinct repeaters were measured there. Off by default.
+  MapLayerSpec(id: 'redundancy', label: 'Redundancy', group: LayerGroup.coverage, z: 12, defaultOn: false, onWebsite: true, serverFed: true),
   MapLayerSpec(id: 'hexes', label: 'This drive', group: LayerGroup.coverage, z: 20, defaultOn: true, onWebsite: false, serverFed: false),
+  // M3-2 (`layer.snrlinks`): repeater-to-repeater lines coloured by SNR, width by packets. Off by default.
+  MapLayerSpec(id: 'snrlinks', label: 'Links by SNR', group: LayerGroup.network, z: 24, defaultOn: false, onWebsite: true, serverFed: true),
   MapLayerSpec(id: 'links', label: 'Link lines', group: LayerGroup.network, z: 25, defaultOn: true, onWebsite: false, serverFed: false),
   MapLayerSpec(id: kNetworkLayerId, label: 'All MeshCore repeaters', group: LayerGroup.network, z: 30, defaultOn: false, onWebsite: true, serverFed: true),
   MapLayerSpec(id: kRosterLayerId, label: 'Repeaters', group: LayerGroup.network, z: 40, defaultOn: true, onWebsite: true, serverFed: true),
+  // M3-2 (`layer.estimated`): repeaters with no GPS placed from their located neighbours, paler = less sure. On by default.
+  MapLayerSpec(id: 'estimated', label: 'Estimated positions', group: LayerGroup.network, z: 42, defaultOn: true, onWebsite: true, serverFed: true),
   MapLayerSpec(id: 'observers', label: 'Observers', group: LayerGroup.network, z: 45, defaultOn: true, onWebsite: true, serverFed: true),
   MapLayerSpec(id: 'phones', label: 'Moving phones', group: LayerGroup.network, z: 47, defaultOn: true, onWebsite: true, serverFed: true),
   MapLayerSpec(id: 'heard', label: 'Heard this drive', group: LayerGroup.network, z: 60, defaultOn: true, onWebsite: false, serverFed: false),
@@ -76,7 +83,7 @@ List<(MapGroupDef, List<SheetRow>)> sheetRows([MapDefinition? def]) {
         g,
         <SheetRow>[
           for (final l in d.layerDefs.reversed)
-            if (l.group == g.id && appLayerId(l.id) != null && (!l.panelOnly || l.id == 'drive')) ...[
+            if (l.group == g.id && appLayerId(l.id) != null && (!l.panelOnly || l.id == 'drive') && _capabilityOf(l.id, d)) ...[
               (id: appLayerId(l.id)!, parent: null),
               if (l.id == 'drive') (id: 'pings', parent: 'hexes'),
               if (l.id == 'repeaters') (id: kLabelsLayerId, parent: kRosterLayerId),
@@ -85,6 +92,15 @@ List<(MapGroupDef, List<SheetRow>)> sheetRows([MapDefinition? def]) {
       ),
   ];
 }
+
+/// The M3 layers are offered only while the definition advertises their capability string (a client checks it before relying on a
+/// feature); every other layer needs none.
+bool _capabilityOf(String defId, MapDefinition d) => switch (defId) {
+  'estimated' => d.hasCapability(capLayerEstimated),
+  'redundancy' => d.hasCapability(capLayerRedundancy),
+  'snrlinks' => d.hasCapability(capLayerSnrLinks),
+  _ => true,
+};
 
 /// The section a layer belongs to (from the definition's group; the app's extras follow their parent).
 LayerGroup layerGroupOf(String appId) => layerSpec(appId)?.group ?? LayerGroup.coverage;
@@ -276,7 +292,7 @@ LayerStatus _feedStatus(MapFeedState s, int count, {required String Function(int
 }
 
 /// Sanity: the registry's website ids are exactly the website keys the app draws (asserted by tests).
-const Set<String> kWebsiteKeysDrawn = {'measured', 'predicted', 'repeaters', 'observers', 'network', kHeardCellsLayerId, 'borders', 'phones'};
+const Set<String> kWebsiteKeysDrawn = {'measured', 'predicted', 'repeaters', 'observers', 'network', kHeardCellsLayerId, 'borders', 'phones', 'redundancy', 'snrlinks', 'estimated'};
 
 /// App-only ids, the same list the URL code writes in `meshsonar://` links.
 const List<String> kAppOnlyIds = kAppOnlyShowKeys;

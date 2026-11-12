@@ -3,6 +3,29 @@
 All notable changes to MeshSonar. Dates are local (US Eastern). This changelog was reconstructed from the commit
 history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md](ROADMAP.md).
 
+## [Unreleased] — M3 (app): Topo + Satellite basemaps, estimated repeaters, Redundancy and Links by SNR
+
+Parity with the website (meshcore-insights PR #256; contract "Map Definition M3"). No version bump (the build is cut separately).
+
+- **Bundled Map Definition = the M3 fixture** (`assets/map/map-definition.json`, regenerated `map_definition_bundled.g.dart`): `schemaMinor` 1 and `capabilities`
+  (`basemap.topo`, `basemap.satellite`, `layer.estimated`, `layer.redundancy`, `layer.snrlinks`). The app reads `capabilities` before it offers any of it:
+  an older cached definition (none of these keys) keeps working and offers Chart / Light / Dark and the old layers only; a saved Topo / Satellite choice is
+  drawn as Chart until the definition offers it (`BaseMapStyle.effective`).
+- **Topo** is now our own Protomaps map in the definition's topographic palette (baked by `tool/basemap/make_basemap_styles.mjs` from the definition's `topo.overrides`).
+  OpenTopoMap is gone. Decision: the terrarium **hillshade is not drawn in the app** (no raster-DEM renderer in flutter_map / vector_map_tiles; a server-side
+  hillshade raster would be the way, not done in this chunk); the credit names only what is drawn.
+- **Satellite** (`ui/map/satellite_layers.dart`): Esri World Imagery via MeshSonar's proxy URL from the definition (left out when `esriAvailable` is false), USGS NAIP over the US
+  (z16 native, drawn to z17), our town and road names over it inside the extract. The Esri / USGS credits are always on the map and in the Credits sheet. No key or
+  identifier is sent to an imagery host. With no connection Topo and Satellite show an honest pill (`map-needs-network`), never a blank map.
+- **Base map picker and cycler** show Topo / Satellite only when the definition offers them (picker note: what the imagery covers).
+- **Estimated positions** (`layer.estimated`, on by default): the server's estimates from `region-repeater-estimates`, drawn as given, the repeater symbol in its roster freshness,
+  paler by confidence (the definition's .8 / .6 / .4), never clustered, never shown for a repeater the roster has a position for; tap = "Estimated position, approximate".
+- **Redundancy** (`layer.redundancy`, off) and **Links by SNR** (`layer.snrlinks`, off): from `region-link-graph` (Redundancy alone asks `sources=measured&drive=1`, Links by SNR every
+  source; one request serves both), same rules as the website (`core/m3_data.dart`); colours from `symbols.redundancy` / `symbols.snrLink` and the palette bands; legend entries and
+  Layers sheet keys are the definition's own labels.
+- Tests: `test/core/map_basemaps_test.dart`, `m3_data_test.dart`, `test/ui/map/m3_layers_test.dart`, topo / labels styles in `basemap_styles_test.dart`, offline pill in `map_tools_test.dart`;
+  `test/support/huge_screen.dart` is 8000 pt tall (the sheet has three more rows).
+
 ## [0.36.0+62] — 2026-11-12 — drive panel consistency, one unread rule, adverts, privacy manifest, Terms link
 
 - **Terms of service link (LAUNCH-1):** Settings > Privacy has a "Terms of service" row that opens the website's new `/terms` page.

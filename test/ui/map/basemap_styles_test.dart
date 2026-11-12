@@ -2,6 +2,7 @@
 // tool/basemap/make_basemap_styles.mjs) are fully readable by the app's renderer (vector_tile_renderer warns about any
 // expression it cannot read; zero warnings allowed), use the app's system font (SF Pro) and no glyph or sprite files, carry
 // the website palette, and draw REAL tiles from our server and from OpenFreeMap (fixtures in test/fixtures/basemap) as maps.
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -73,6 +74,54 @@ void main() {
       });
     }
   }
+
+  group('M3 looks: Topo (the definition\'s palette) and the Satellite labels', () {
+    final def = jsonDecode(File('assets/map/map-definition.json').readAsStringSync()) as Map<String, dynamic>;
+    final topo = ((def['basemaps'] as List).cast<Map<String, dynamic>>().firstWhere((b) => b['id'] == 'topo'))['topo'] as Map<String, dynamic>;
+
+    for (final dark in [false, true]) {
+      final theme = dark ? 'dark' : 'light';
+      test('topo $theme: the renderer reads every layer with no warning; one source; system font; no URLs', () {
+        final log = _Capture();
+        final style = basemapStyle(BasemapSource.ours, dark: dark, look: BasemapLook.topo);
+        final read = vtr.ThemeReader(logger: log).read(style);
+        expect(log.warnings, isEmpty, reason: log.warnings.join('\n'));
+        expect(read.layers.length, (style['layers'] as List).length);
+        expect((style['sources'] as Map).keys.single, 'protomaps');
+        expect(style.toString(), isNot(contains('http')));
+        for (final l in (style['layers'] as List).where((l) => l['type'] == 'symbol')) {
+          expect((l['layout'] as Map)['text-font'], [appLabelFont]);
+        }
+      });
+
+      test('topo $theme: the ground and the water are the definition\'s override colours, untinted', () {
+        final overrides = (topo['overrides'] as Map<String, dynamic>)[theme] as Map<String, dynamic>;
+        final layers = (basemapStyle(BasemapSource.ours, dark: dark, look: BasemapLook.topo)['layers'] as List).cast<Map<String, dynamic>>();
+        final bg = layers.firstWhere((l) => l['type'] == 'background');
+        expect(((bg['paint'] as Map)['background-color'] as String).toLowerCase(), (overrides['background'] as String).toLowerCase());
+        final water = layers.firstWhere((l) => l['id'] == 'water');
+        expect(((water['paint'] as Map)['fill-color']).toString().toLowerCase(), (overrides['water'] as String).toLowerCase());
+        final road = basemapStyle(BasemapSource.ours, dark: dark);
+        expect(((road['layers'] as List).first as Map)['paint'], isNot((bg['paint'])), reason: 'Topo is not the Road palette');
+      });
+    }
+
+    test('OpenFreeMap has one look: Topo asked of the fallback is its own style', () {
+      expect(basemapStyle(BasemapSource.openFreeMap, dark: false, look: BasemapLook.topo), basemapStyle(BasemapSource.openFreeMap, dark: false));
+    });
+
+    test('labels: only symbol layers (town and road names), white-on-dark flavour, readable with no warning', () {
+      final log = _Capture();
+      final style = basemapStyle(BasemapSource.ours, dark: true, look: BasemapLook.labels);
+      final layers = (style['layers'] as List).cast<Map<String, dynamic>>();
+      expect(layers, isNotEmpty);
+      expect(layers.every((l) => l['type'] == 'symbol'), isTrue, reason: 'no ground, water or road lines over the imagery');
+      expect(layers.any((l) => (l['id'] as String).contains('poi')), isFalse);
+      vtr.ThemeReader(logger: log).read(style);
+      expect(log.warnings, isEmpty, reason: log.warnings.join('\n'));
+      expect(basemapStyle(BasemapSource.ours, dark: false, look: BasemapLook.labels), style, reason: 'one look over imagery, whatever the app theme');
+    });
+  });
 
   test('no POI layer (the map is about the mesh), labels last', () {
     final layers = basemapStyle(BasemapSource.ours, dark: false)['layers'] as List;

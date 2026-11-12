@@ -56,19 +56,19 @@ void main() {
       for (final s in BaseMapStyle.values) {
         expect(BaseMapStyle.parse(s.id), s);
       }
-      expect(BaseMapStyle.parse('satellite'), BaseMapStyle.chart);
+      expect(BaseMapStyle.parse('hybrid'), BaseMapStyle.chart, reason: 'an id this build does not know');
       expect(BaseMapStyle.parse(null), BaseMapStyle.chart);
     });
-    test('topo is the only one without an offline pack, and credits OpenTopoMap and OSM', () {
-      expect([for (final s in BaseMapStyle.values) if (!s.usesOfflinePack) s], [BaseMapStyle.topo]);
-      expect(BaseMapStyle.topo.attribution, allOf(contains('OpenTopoMap'), contains('OpenStreetMap')));
-      expect(BaseMapStyle.topo.tileUrl, allOf(contains('opentopomap.org'), contains('{z}'), contains('{x}'), contains('{y}')));
+    test('topo and satellite are the ones without an offline pack (the network only); every style credits OpenStreetMap or its imagery', () {
+      expect([for (final s in BaseMapStyle.values) if (!s.usesOfflinePack) s], [BaseMapStyle.topo, BaseMapStyle.satellite]);
+      expect([for (final s in BaseMapStyle.values) if (s.needsNetwork) s], [BaseMapStyle.topo, BaseMapStyle.satellite]);
       for (final s in BaseMapStyle.values) {
-        expect(s.attribution, contains('OpenStreetMap'));
-      }
-      for (final s in [BaseMapStyle.chart, BaseMapStyle.street, BaseMapStyle.dark]) {
-        expect(s.tileUrl, isNull, reason: '${s.id} is our vector basemap');
-        expect(s.attribution, 'Protomaps © OpenStreetMap contributors');
+        if (s.isSatellite) {
+          expect(s.attribution, isEmpty, reason: 'satellite builds its credit from the definition');
+        } else {
+          expect(s.attribution, 'Protomaps © OpenStreetMap contributors', reason: s.id);
+          expect(s.isVector, isTrue);
+        }
       }
     });
     test('looks: chart follows the theme, Light is always light, Dark always dark; nothing is colour-graded any more', () {

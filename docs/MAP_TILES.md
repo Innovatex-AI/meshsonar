@@ -17,7 +17,20 @@ Drawn as layers (lib/ui/map/coverage_map.dart and every small map, lib/ui/map/ba
    never requested online.
 
 Base map styles (the cycler): **Chart** (our map, light or dark with the app theme), **Light** (always the light style; id
-`street`), **Dark** (always the dark style), **Topo** (OpenTopoMap raster, until M3 brings our own Topo).
+`street`), **Dark** (always the dark style), **Topo** and **Satellite** (M3, Nov 12 2026; offered only while the Map Definition
+advertises `basemap.topo` / `basemap.satellite`, an older cached definition offers the first three and a saved Topo / Satellite
+is drawn as Chart).
+
+- **Topo** is our own vector tiles in the definition's topographic palette (`basemaps[topo].topo`: Protomaps' light / dark
+  flavour with the overrides laid over it, baked into `lib/core/basemap_styles.g.dart` by `tool/basemap/make_basemap_styles.mjs`
+  from `assets/map/map-definition.json`). OpenTopoMap is no longer called. No offline pack (the definition says `offline: false`).
+  Not drawn: the terrarium hillshade the website adds (no raster-DEM renderer in the app), recorded as a decision in the CHANGELOG.
+- **Satellite** is raster imagery from the definition's sources, bottom to top: Esri World Imagery through MeshSonar's own proxy
+  (`/api/map/satellite/esri/{z}/{y}/{x}`; left out when `esriAvailable` is false), then USGS NAIP over the contiguous US
+  (native z16, drawn to z17), then our town and road names (labels-only black flavour) over the imagery inside our extract
+  (`ui/map/satellite_layers.dart`). Tiles go through the same `MeshTileProvider` (disk cache, request gate, circuit breaker).
+  No key, header or identifier is sent to any imagery host. With no network, Topo and Satellite show "needs a connection.
+  Saved tiles only. Chart works offline." (`map-needs-network`) instead of a blank map.
 
 ## Which map engine, and why vector (decision M2, Nov 9 2026)
 
@@ -54,11 +67,13 @@ glyph PBFs) needs no server copy. Decision recorded in meshsonar-infra HANDOFF (
 - The credit is always on the map, no interaction needed: the Drive map's `AttributionLine` (12 pt, bottom right, (i) opens
   the Credits sheet) and every small map's `MiniMapCredit` (= `BasemapCredit`). Both name the source drawn right now:
   **"Protomaps © OpenStreetMap contributors"** on our tiles and on M2 offline packs, **"OpenFreeMap © OpenStreetMap
-  contributors"** on the fallback, Topo's own line on Topo. test/lint/map_credit_test.dart fails if a FlutterMap has no
+  contributors"** on the fallback, the definition's imagery credits on Satellite ("Powered by Esri. Source: Esri, Maxar, Earthstar
+  Geographics, and the GIS User Community", "Imagery: USGS National Map (NAIP)", plus ours). test/lint/map_credit_test.dart fails if a FlutterMap has no
   shared credit or draws its own raster tile layer.
 - OpenStreetMap data © OpenStreetMap contributors (ODbL). Protomaps basemap layers (@protomaps/basemaps, BSD-3-Clause).
   OpenFreeMap: OpenMapTiles styles (BSD-3-Clause code, CC-BY 4.0 design), free and keyless.
-- OpenTopoMap: CC-BY-SA, credit "© OpenStreetMap contributors, SRTM | Map style © OpenTopoMap (CC-BY-SA)"; max zoom 17.
+- Esri World Imagery: terms require the attribution on the map (the proxy holds the key; never in the app). USGS National Map
+  (NAIP): public-domain imagery, credited.
 - Hosts are pinned by `test/integration/hosts_static_test.dart`.
 
 ## Offline packs (M2)

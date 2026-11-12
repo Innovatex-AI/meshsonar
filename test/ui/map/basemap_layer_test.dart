@@ -106,4 +106,31 @@ void main() {
     expect(find.text('OpenFreeMap © OpenStreetMap contributors'), findsOneWidget);
     expect(find.textContaining('openstreetmap.org'), findsNothing);
   });
+
+  testWidgets('the Satellite names (labels look) are drawn only from OUR tiles: nothing over OpenFreeMap, whose style has no label-only look', (tester) async {
+    BasemapHealth.instance = BasemapHealth(client: () => throw StateError('offline test'));
+    final drawn = <(BasemapSource, BasemapLook)>[];
+    BasemapLayer.debugBuilder = (s, dark) {
+      drawn.add((s, BasemapLayer.debugLook ?? BasemapLook.road));
+      return const SizedBox.shrink();
+    };
+    addTearDown(() {
+      BasemapLayer.debugBuilder = null;
+      BasemapLayer.debugLook = null;
+      BasemapHealth.instance = BasemapHealth();
+    });
+    Widget labelsAt(LatLng c) => MaterialApp(
+      home: SizedBox(
+        width: 300,
+        height: 200,
+        child: FlutterMap(key: ValueKey(c), options: MapOptions(initialCenter: c, initialZoom: 12), children: const [BasemapLayer(look: BasemapLook.labels, dark: true)]),
+      ),
+    );
+    await tester.pumpWidget(labelsAt(const LatLng(39.96, -83.0)));
+    expect(drawn, [(BasemapSource.ours, BasemapLook.labels)], reason: 'inside our extract: our names over the imagery');
+    drawn.clear();
+    await tester.pumpWidget(labelsAt(const LatLng(51.5, -0.12)));
+    await tester.pump();
+    expect(drawn, isEmpty, reason: 'London is outside the extract: imagery only, no names');
+  });
 }

@@ -32,6 +32,17 @@ class MapDefinition {
 
   int get v => json['v'] as int;
 
+  /// The additive revision inside schema `v` (M3 sent 1; an older definition has none: 0).
+  int get schemaMinor => (json['schemaMinor'] as num?)?.toInt() ?? 0;
+
+  /// The feature strings the server advertises (`basemap.topo`, `basemap.satellite`, `layer.estimated`, `layer.redundancy`,
+  /// `layer.snrlinks`). An older definition has none: nothing new is offered from it. A client checks the string before it
+  /// relies on a feature (contract "Map Definition M3").
+  Set<String> get capabilities => {
+    for (final c in (json['capabilities'] as List? ?? const [])) if (c is String) c,
+  };
+  bool hasCapability(String c) => capabilities.contains(c);
+
   /// FNV-1a hash of the body (cache key, ETag).
   String get version => json['version'] as String;
   Map<String, dynamic> get scope => json['scope'] as Map<String, dynamic>;
@@ -335,17 +346,18 @@ class SignalColoursDef {
   const SignalColoursDef({required this.bands, required this.noReplyOutline, required this.noReplyPoint, required this.link});
 }
 
-/// One legend entry of a layer (`layers[].legend[]`): kind band / bands / hatch / outline / faint / symbol.
+/// One legend entry of a layer (`layers[].legend[]`): kind band / bands / hatch / outline / faint / step (Redundancy, M3) / symbol.
 class LegendEntryDef {
   final String kind;
-  final int? band, from, to;
+  final int? band, from, to, step;
   final String? label, note, symbol, state;
-  const LegendEntryDef({required this.kind, this.band, this.from, this.to, this.label, this.note, this.symbol, this.state});
+  const LegendEntryDef({required this.kind, this.band, this.from, this.to, this.step, this.label, this.note, this.symbol, this.state});
   factory LegendEntryDef.fromJson(Map<String, dynamic> j) => LegendEntryDef(
     kind: j['kind'] as String? ?? 'symbol',
     band: (j['band'] as num?)?.toInt(),
     from: (j['from'] as num?)?.toInt(),
     to: (j['to'] as num?)?.toInt(),
+    step: (j['step'] as num?)?.toInt(),
     label: j['label'] as String?,
     note: j['note'] as String?,
     symbol: j['symbol'] as String?,

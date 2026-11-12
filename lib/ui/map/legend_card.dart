@@ -16,6 +16,7 @@ import '../theme.dart';
 import 'active_map_definition.dart';
 import 'coverage_bands.dart';
 import 'layers/observer_layer.dart' show MobileObserverPainter, ObserverSymbolColours, ObserverTrianglePainter;
+import 'layers/m3_layers.dart' show SnrLinkStyle, redundancyColour;
 import 'layers/registry.dart' show definitionLayerId;
 import 'layers/repeater_sprites.dart' show RepeaterSymbolStyle;
 import 'sheets/coverage_cell_sheet.dart' show CoverageBandSwatch;
@@ -120,6 +121,15 @@ Widget legendEntryKey(BuildContext context, LegendEntryDef e, MapDefinition def)
       return CoverageBandSwatch(band: e.band ?? 4, colors: c, heard: true, size: 16);
     case 'faint':
       return CoverageBandSwatch(band: 4, colors: c, faint: true, size: 16);
+    case 'step':
+      // Redundancy (M3): the definition's purple ramp, step 1..4.
+      return ExcludeSemantics(
+        child: Container(
+          width: 16,
+          height: 16,
+          decoration: BoxDecoration(color: redundancyColour(def, e.step ?? 1, dark: br == Brightness.dark).withValues(alpha: def.symbol('redundancy')['opacity'] is num ? (def.symbol('redundancy')['opacity'] as num).toDouble() : 1), borderRadius: BorderRadius.circular(3)),
+        ),
+      );
   }
   final obs = ObserverSymbolColours.of(br);
   switch (e.symbol) {
@@ -136,6 +146,17 @@ Widget legendEntryKey(BuildContext context, LegendEntryDef e, MapDefinition def)
     case 'phone':
       return ExcludeSemantics(
         child: CustomPaint(size: const Size.square(14), painter: MobileObserverPainter(fill: obs.phoneFill, glyph: obs.phoneStroke, halo: obs.phoneFill)),
+      );
+    case 'estimated':
+      // Estimated position (M3): the repeater symbol, paler by confidence (the definition's opacity for the state).
+      final o = def.symbol('estimated')['opacity'];
+      final op = o is Map && o[e.state] is num ? (o[e.state] as num).toDouble() : 0.6;
+      return Opacity(opacity: op, child: const RepeaterRingKey(state: 'fresh'));
+    case 'snrlink':
+      // Links by SNR with no SNR (M3): the neutral dashed line.
+      final nc = SnrLinkStyle.of(def, dark: br == Brightness.dark).noSnr;
+      return ExcludeSemantics(
+        child: SizedBox(width: 16, height: 3, child: Row(children: [for (var i = 0; i < 3; i++) ...[Container(width: 4, height: 3, color: nc), if (i < 2) const SizedBox(width: 2)]])),
       );
     case 'border':
       final col = Color(def.symbolColour('border', 'x', dark: br == Brightness.dark));

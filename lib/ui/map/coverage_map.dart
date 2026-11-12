@@ -88,6 +88,7 @@ import 'layers/repeater_painter_layer.dart';
 import 'layers/repeater_sprites.dart' show RepeaterFreshness, freshnessOfAdvertBand, freshnessOfRosterBand;
 import 'layers/registry.dart' show definitionLayerIds, kDefaultLayerState, kHeardCellsLayerId;
 import 'layers/region_borders_layer.dart';
+import '../../core/map_basemaps.dart' show MapBasemaps;
 import 'active_map_definition.dart';
 import 'main_map_focus.dart';
 import 'layers/repeater_map_source.dart';
@@ -117,6 +118,10 @@ import 'parts/source_chip.dart';
 
 export 'parts/simulated_tag.dart' show SimulatedTag;
 import 'basemap_layer.dart';
+import 'satellite_layers.dart';
+import 'layers/m3_layers.dart';
+import '../design/app_surfaces.dart' show showAppSheet;
+import '../../core/m3_data.dart' show RedundancyCell, RepeaterEstimate, SnrLink;
 import 'offline_basemap.dart';
 import 'sheets/map_hit_sheet.dart';
 import '../ping_detail_sheet.dart' show PingDetailSheet;
@@ -188,7 +193,7 @@ Color hexColor(MeshSonarColors c, HexCell h, PingColorMode mode) => mode == Ping
 Color networkLevelColor(BuildContext context, CoverageLevel level) => MeshSonarColors.of(context).levelColor(level);
 
 /// The colour matrix [style]'s online raster tiles are drawn through. Since M2 none: Chart / Light / Dark are our vector
-/// tiles already drawn in the website's light / dark styles, and Topo is shown as its tile server made it.
+/// tiles already drawn in the website's light / dark styles, and Topo and Satellite are drawn as served.
 List<double>? tileMatrixFor(BaseMapStyle style, List<double> themeMatrix) =>
     style.ungraded ? null : (style.forcesDark ? kDarkTileMatrix : themeMatrix);
 
@@ -282,6 +287,13 @@ class CoverageMap extends StatefulWidget {
 
   /// Display name of the region [observers] belong to (for the observer sheet).
   final String? observersRegionName;
+
+  /// M3-2 layers (core/m3_data.dart), each drawn only when its layer is on and the host passes data: the server's estimated
+  /// positions (drawn exactly as given), the Redundancy cells and the Links by SNR lines.
+  final List<RepeaterEstimate> estimates;
+  final RepeaterFreshness Function(String key)? estimateFreshness;
+  final List<RedundancyCell> redundancyCells;
+  final List<SnrLink> snrLinks;
 
   /// "Open repeater page" from a repeater sheet (null = no button).
   final void Function(BuildContext context, RepeaterPoint point)? openRepeaterPage;
@@ -384,6 +396,10 @@ class CoverageMap extends StatefulWidget {
     this.layerState,
     this.observers = const [],
     this.observersRegionName,
+    this.estimates = const [],
+    this.estimateFreshness,
+    this.redundancyCells = const [],
+    this.snrLinks = const [],
     this.openRepeaterPage,
     this.highlightKey,
     this.onSelectRepeater,
@@ -466,6 +482,9 @@ class _CoverageMapState extends State<CoverageMap> {
   MeshTileProvider? _tileProvider;
   final MapTileStats _tileStats = MapTileStats.instance;
   StreamSubscription<NetworkKind>? _netSub;
+
+  /// The phone has no network (connectivity); Topo and Satellite then say so instead of leaving a blank map.
+  final ValueNotifier<bool> _offline = ValueNotifier<bool>(false);
   String? _selectedRepeater;
   double? _lastZoom;
 
@@ -1222,10 +1241,14 @@ class _CoverageMapState extends State<CoverageMap> {
   void _watchNetwork() {
     TileFetchGate.debugForceOffline.addListener(_onForcedOffline);
     final net = _pack.basemap.network;
-    unawaited(net.current().then((k) => _tiles().gate.setPhoneOnline(k != NetworkKind.offline), onError: (Object _) {}));
+    unawaited(net.current().then((k) {
+      _tiles().gate.setPhoneOnline(k != NetworkKind.offline);
+      _offline.value = k == NetworkKind.offline;
+    }, onError: (Object _) {}));
     _netSub = net.changes.listen((k) {
       final online = k != NetworkKind.offline;
       _tiles().gate.setPhoneOnline(online);
+      _offline.value = !online;
       if (online) _tileReset.add(null); // tiles that failed while offline are asked for again
     }, onError: (Object _) {});
   }
@@ -1459,6 +1482,7 @@ class _CoverageMapState extends State<CoverageMap> {
     _boundsTimer?.cancel();
     _prefs.removeListener(_onPrefs);
     unawaited(_netSub?.cancel());
+    _offline.dispose();
     TileFetchGate.debugForceOffline.removeListener(_onForcedOffline);
     unawaited(_tileReset.close());
     _tileProvider?.dispose();
@@ -1530,6 +1554,51 @@ class _CoverageMapState extends State<CoverageMap> {
     _netMc = mc;
     _netBr = br;
     return d;
+  }
+
+  // Redundancy cells as raster data, rebuilt only when the cells, the theme or the definition change.
+  CellLayerData? _redData;
+  List<RedundancyCell>? _redSrc;
+  bool? _redDark;
+  String? _redVersion;
+  CellLayerData _redundancyData(bool dark) {
+    final d = ActiveMapDefinition.current;
+    final cur = _redData;
+    if (cur != null && identical(_redSrc, widget.redundancyCells) && _redDark == dark && _redVersion == d.version) return cur;
+    final hexFrom = widget.coverageV2?.meta.hexFromZoom.toDouble();
+    final data = redundancyLayerData(widget.redundancyCells, d, CoverageMap.hexEngine, dark: dark, dotBelowZoom: hexFrom);
+    _redData = data;
+    _redSrc = widget.redundancyCells;
+    _redDark = dark;
+    _redVersion = d.version;
+    return data;
+  }
+
+  /// A tap on an estimated repeater: what it is and how sure the position is (never presented as a real position).
+  void _showEstimate(RepeaterEstimate e) {
+    if (!mounted) return;
+    final d = ActiveMapDefinition.current;
+    showAppSheet<void>(
+      context,
+      detents: const [0.3, 0.5],
+      builder: (ctx, controller) => SingleChildScrollView(
+        key: const Key('estimated-sheet'),
+        controller: controller,
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(e.name?.trim().isNotEmpty == true ? e.name!.trim() : 'Repeater ${e.key.substring(0, e.key.length < 4 ? e.key.length : 4)}', style: Theme.of(ctx).textTheme.titleLarge),
+            const SizedBox(height: 4),
+            Text('Estimated position, approximate', style: Theme.of(ctx).textTheme.titleSmall),
+            const SizedBox(height: 8),
+            Text('This ${e.role == 'room' ? 'room server' : 'repeater'} has not shared a position. MeshSonar placed it from the repeaters around it that have one; the real spot can be some distance away.', style: Theme.of(ctx).textTheme.bodyMedium),
+            const SizedBox(height: 8),
+            Text('${e.confidenceText(d)} (${e.anchors} ${e.anchors == 1 ? 'neighbour' : 'neighbours'}${e.spreadKm == null ? '' : ', up to ${AppScope.unitsOf(ctx).distance(approx: true, e.spreadKm! * 1000)} apart'}).', key: const Key('estimated-confidence'), style: Theme.of(ctx).textTheme.bodyMedium),
+          ],
+        ),
+      ),
+    );
   }
 
   CellLayerData? _hexLayerData;
@@ -1628,8 +1697,9 @@ class _CoverageMapState extends State<CoverageMap> {
   Widget build(BuildContext context) {
     final mc = MeshSonarColors.of(context);
     final t = Theme.of(context);
-    final style = widget.baseStyle;
-    final tileGrading = tileMatrixFor(style, mc.tileMatrix);
+    // Topo / Satellite are drawn only while the definition in use advertises them; a saved choice an older cached definition does
+    // not offer is Chart (M3, contract "Map Definition M3").
+    final style = BaseMapStyle.effective(widget.baseStyle, ActiveMapDefinition.current);
     final tiles = widget.showTiles ?? CoverageMap.tilesByDefault;
     final wide = MediaQuery.sizeOf(context).shortestSide >= 600;
     // A downloaded region pack covering the map wins over online tiles; no pack (or a corrupt one) means online as before.
@@ -1758,23 +1828,11 @@ class _CoverageMapState extends State<CoverageMap> {
             // Online + disk-cached tiles everywhere, except where an installed offline pack draws (no request for those); the
             // pack's vector tiles go on top of that. Where a pack ends the online/cached tiles carry on: never a blank edge.
             // Chart / Light / Dark: our vector basemap (OpenFreeMap fallback), every tile through the same cache and gate.
-            if (tiles && style.isVector) BasemapLayer(key: ValueKey('basemap-${style.id}'), dark: style.darkLook, tiles: _tiles(), reset: _tileReset.stream),
-            if (tiles && !style.isVector)
-              TileLayer(
-                key: ValueKey('tiles-${style.id}'),
-                urlTemplate: style.tileUrl,
-                userAgentPackageName: CoverageMap.userAgentPackageName,
-                maxNativeZoom: style.maxNativeZoom,
-                tileProvider: _tiles(),
-                reset: _tileReset.stream,
-                tileDisplay: const TileDisplay.fadeIn(duration: Duration(milliseconds: 150)),
-                // Phones load the viewport only (panBuffer 0) so the visible tiles never wait behind tiles nobody sees yet.
-                keepBuffer: wide ? 4 : 1,
-                panBuffer: wide ? 1 : 0,
-                tileBuilder: tileGrading == null
-                    ? null
-                    : (context, tile, _) => ColorFiltered(colorFilter: ColorFilter.matrix(tileGrading), child: tile),
-              ),
+            if (tiles && style.isVector)
+              BasemapLayer(key: ValueKey('basemap-${style.id}'), dark: style.darkLook, look: style.look, tiles: _tiles(), reset: _tileReset.stream),
+            // Satellite: Esri (our proxy) then NAIP then our names, from the definition (ui/map/satellite_layers.dart).
+            if (tiles && style.isSatellite)
+              ...satelliteLayers(ActiveMapDefinition.current, tiles: _tiles(), userAgentPackageName: CoverageMap.userAgentPackageName, reset: _tileReset.stream, wide: wide),
             if (offlinePack != null)
               OfflineBasemapLayer(
                 key: ValueKey('offline-pack-${_pack.code}${style == BaseMapStyle.chart ? '' : '-${style.id}'}'),
@@ -1889,6 +1947,29 @@ class _CoverageMapState extends State<CoverageMap> {
                 ),
               ),
             ],
+              'redundancy': () => [
+                if (layerState.isOn('redundancy') && widget.redundancyCells.isNotEmpty)
+                  CellRasterLayer(key: const Key('redundancy-layer'), data: _redundancyData(t.brightness == Brightness.dark)),
+              ],
+              'snrlinks': () => [
+                if (layerState.isOn('snrlinks') && widget.snrLinks.isNotEmpty)
+                  ...snrLinkLayers(
+                    widget.snrLinks,
+                    ActiveMapDefinition.current,
+                    signal: ActiveMapDefinition.current.signal(mc.palette.id, dark: t.brightness == Brightness.dark),
+                    dark: t.brightness == Brightness.dark,
+                  ),
+              ],
+              'estimated': () => [
+                if (layerState.isOn('estimated') && widget.estimates.isNotEmpty)
+                  EstimatedRepeaterLayer(
+                    key: const Key('estimated-layer'),
+                    estimates: widget.estimates,
+                    freshnessOf: widget.estimateFreshness ?? (_) => RepeaterFreshness.stale,
+                    definition: ActiveMapDefinition.current,
+                    onTap: (e) => _hits.submit(MapHitCandidate(MapHitKind.repeater, () => _showEstimate(e))),
+                  ),
+              ],
               'observers': () => [
                 if ((layerState.isOn('observers') || layerState.isOn('phones')) && widget.observers.isNotEmpty)
                   ObserverLayer(
@@ -1955,7 +2036,7 @@ class _CoverageMapState extends State<CoverageMap> {
                   selectedDetail: selected == null ? null : _detailFor(selected, origin),
                   origin: origin,
                   puck: pos,
-                  pill: style == BaseMapStyle.street || style == BaseMapStyle.topo,
+                  pill: style == BaseMapStyle.street || style == BaseMapStyle.topo || style.isSatellite,
                   linkTags: [
                     if (_captions)
                       for (final h in liveLinks)
@@ -2001,7 +2082,7 @@ class _CoverageMapState extends State<CoverageMap> {
       ),
       topTrailing: widget.topTrailing,
       controls: _controls(context, pos, latest),
-      bottom: _bottomColumn(context, tiles, mc, t),
+      bottom: _bottomColumn(context, tiles, mc, t, style),
       // The credit: always mounted (Drive plan section 8), bottom-right, tapped (i) opens the Credits sheet.
       attribution: BasemapSourceBuilder(
         controller: _controller,
@@ -2040,7 +2121,7 @@ class _CoverageMapState extends State<CoverageMap> {
 
   /// The credit of what the base map draws now: Topo's own line, the offline pack's, or the online source's (ours / OpenFreeMap).
   String _creditText(BaseMapStyle style, BasemapSource source, bool packDrawn) {
-    if (!style.isVector) return style.attribution;
+    if (style.isSatellite) return satelliteCredit(ActiveMapDefinition.current);
     if (packDrawn) {
       final ip = _pack.basemap.managerOrNull?.installed[_pack.code];
       return ip == null || ip.schema == PackSchema.protomaps ? OurBasemap.attribution : '© OpenStreetMap contributors';
@@ -2061,6 +2142,7 @@ class _CoverageMapState extends State<CoverageMap> {
             )
           : null,
       colourKey: widget.mapKey,
+      imageryCredits: style.isSatellite ? (ActiveMapDefinition.current.satellite?.credits ?? const []) : const [],
       meshCoreCredit: meshCoreCredit,
       openLegend: widget.openLegend == null
           ? null
@@ -2073,10 +2155,32 @@ class _CoverageMapState extends State<CoverageMap> {
 
   /// The bottom slot: what the host puts there, then this map's own status (the info panel, the SIMULATED tag, the offline note).
   /// Nothing here is a credit; the credit is the [AttributionLine].
-  Widget? _bottomColumn(BuildContext context, bool tiles, MeshSonarColors mc, ThemeData t) {
+  Widget? _bottomColumn(BuildContext context, bool tiles, MeshSonarColors mc, ThemeData t, BaseMapStyle style) {
     final panel = _panel(context);
     final children = <Widget>[
       ?widget.bottom,
+      // Topo and Satellite come from the network only (no offline pack draws them): with no connection say so, honestly, and point at
+      // the map that does work offline, instead of leaving a blank or half-drawn map (M3).
+      if (tiles && style.needsNetwork)
+        ValueListenableBuilder<bool>(
+          valueListenable: _offline,
+          builder: (context, off, _) => !off
+              ? const SizedBox.shrink()
+              : Padding(
+                  padding: const EdgeInsets.only(bottom: Gap.xs),
+                  child: MapPill(
+                    key: const Key('map-needs-network'),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.cloud_off_rounded, size: 13, color: mc.textMuted),
+                        const SizedBox(width: 4),
+                        Flexible(child: Text('${style.label} needs a connection. Saved tiles only. Chart works offline.', overflow: TextOverflow.ellipsis, maxLines: 2, style: t.textTheme.labelSmall?.copyWith(fontSize: 11))),
+                      ],
+                    ),
+                  ),
+                ),
+        ),
       if (panel != null) ...[SizedBox(width: double.infinity, child: panel), const SizedBox(height: Gap.xs)],
       // New Drive screen: SIM is a badge in the status capsule and the offline state is a pill at the top; nothing bottom-left.
       if (widget.simulated && widget.onLayers == null) ...[const SimulatedTag(key: Key('map-simulated')), const SizedBox(height: Gap.xs)],
