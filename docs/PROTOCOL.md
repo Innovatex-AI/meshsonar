@@ -239,6 +239,18 @@ Each repeater **appends** its own hash (a prefix of its public key) before it re
 routeRecvPacket`). So `path[0]` is the repeater that heard the phone directly, and the number of entries is the
 number of repeats. `MeshPacket.tryParse` returns null for anything `Packet::readFrom` would reject.
 
+### 3.1 Heard adverts in drive mode (APP-6, Nov 12 2026)
+
+Every ADVERT (payload type 4) the radio hears arrives as a `0x88` LOG_RX_DATA push (the firmware logs before any filtering), so the
+car radio hands the phone every repeater advert on the road. `MeshCoreCompanionLink.observerRxPackets` carries it (never paused),
+`TelemetryRecord.fromRx` keeps it with its full raw bytes (the signature is inside), and the uploader sends it in the normal
+observer batch (`meshsonar-telemetry/2`, mode `drive` during a drive). The phone adds only what any drive-mode packet carries (the
+§8.7 `pos`, held pending by the server, or no position under Region only); an advert never carries anything of its own about the phone
+(no name, no radio key: the connected radio's own advert is dropped). An advert with a payload under 101 bytes is dropped on the phone.
+The server verifies the Ed25519 signature (`node_advert` sync) and stores name, role and position.
+The radio's contact list (`GET_CONTACTS`) holds key, type, name, position and last-advert time but NOT the advert signature, so it
+cannot go through the signed-advert path; it is deliberately not uploaded (an unsigned name would be a claim nobody can verify).
+
 ## 4. Channels and crypto
 
 ### 4.1 Channel secret derivation

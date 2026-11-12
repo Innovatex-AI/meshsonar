@@ -58,7 +58,7 @@ void main() {
           header: makeHeader(RouteType.flood, PayloadType.advert),
           pathLenByte: 1,
           path: [Uint8List.fromList([0xa1])],
-          payload: Uint8List.fromList(List.generate(40, (i) => (i + salt) & 0xff)),
+          payload: Uint8List.fromList(List.generate(110, (i) => (i + salt) & 0xff)),
         ).toBytes(),
         snrDb: 4,
         rssiDbm: -95,

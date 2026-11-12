@@ -5,6 +5,15 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased]
 
+- **APP-6: drive mode keeps and uploads heard adverts.** Confirmed end to end (`test/radio/heard_adverts_test.dart`, real `0x88`
+  LOG_RX_DATA frames through `MeshCoreCompanionLink.observerRxPackets` into the uploader in drive mode): the radio delivers every
+  heard ADVERT (payload type 4) before any firmware filtering, the observer copy of the stream is never paused (not by a remote
+  request, not by the Rx log screen), nothing in the parser or uploader drops it, and it goes up as `raw` bytes (signature
+  included, so the server's `node_advert` sync can verify it and name the repeater). New: an ADVERT whose payload is shorter
+  than 101 bytes (key 32 + timestamp 4 + signature 64 + flags 1, i.e. forged or cut) is dropped on the phone (`telemetryMinAdvertPayload`)
+  instead of being sent for the server to count as unparseable. The radio's contact list is NOT uploaded: a contact record has no
+  advert signature, so the server could not verify it (see PROTOCOL.md section 3.1).
+
 ## [0.35.0+61] — 2026-11-12 — private (end-to-end encrypted) photos in DMs
 
 - **Private (end-to-end encrypted) photo messages, app half.** A photo sent in a direct message, a room or a private channel is

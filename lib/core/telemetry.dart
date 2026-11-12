@@ -35,6 +35,9 @@ const Set<int> telemetryGroupTypes = {PayloadType.grpTxt, PayloadType.grpData};
 /// Group types join them only with a proven Public / # channel ([telemetryGroupTypes] + `channel`).
 const Set<int> telemetryRawTypes = {PayloadType.advert, PayloadType.path, PayloadType.trace};
 
+/// Shortest valid ADVERT payload: public key 32 + timestamp 4 + Ed25519 signature 64 + flags 1.
+const int telemetryMinAdvertPayload = 32 + 4 + 64 + 1;
+
 /// Longest `raw` the contract allows: 256 bytes (512 hex chars). A longer packet goes header-only.
 const int telemetryMaxRawBytes = 256;
 
@@ -306,6 +309,9 @@ class TelemetryRecord {
         return null;
       }
     }
+    // A real advert is public key (32) + timestamp (4) + signature (64) + flags (1) at least. Anything shorter is a forged or cut
+    // packet the server could only count as unparseable, so it never leaves the phone (APP-6).
+    if (p.payloadType == PayloadType.advert && p.payload.length < telemetryMinAdvertPayload) return null;
     if (p.payloadType == PayloadType.advert && ownPublicKey != null && ownPublicKey.length == 64 && p.payload.length >= 32 &&
         _hex(p.payload.sublist(0, 32)) == ownPublicKey.toLowerCase()) {
       return null;
