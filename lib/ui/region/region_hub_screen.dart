@@ -1,9 +1,10 @@
-// The Region tab: the viewed region (switcher at the top), twelve tabs of website data for it, and Export region report.
+// The Region tab: the viewed region (switcher at the top), thirteen tabs of website data for it, and Export region report.
 import 'package:flutter/material.dart';
 
 import '../../core/airtime_share.dart';
 import '../app.dart';
 import '../location_status.dart';
+import 'analyze_panel.dart';
 import 'growth_panel.dart';
 import 'live_screen.dart';
 import 'packet_analytics_panels.dart';
@@ -48,7 +49,7 @@ class RegionHubScreen extends StatelessWidget {
     final s = AppScope.of(context);
     final region = s.viewingRegion;
     return DefaultTabController(
-      length: 12,
+      length: 13,
       child: Scaffold(
         appBar: AppBar(
           title: Text(region?.name ?? 'Region', key: const Key('region-title')),
@@ -67,6 +68,7 @@ class RegionHubScreen extends StatelessWidget {
             isScrollable: true,
             tabAlignment: TabAlignment.start,
             tabs: [
+              Tab(text: 'Analyze'),
               Tab(text: 'Overview'),
               Tab(text: 'Repeaters'),
               Tab(text: 'Observers'),
@@ -107,6 +109,7 @@ class RegionHubScreen extends StatelessWidget {
                       // Keyed by region: switching region rebuilds every panel against the new region host.
                       key: ValueKey('region-tabs-${region.code}'),
                       children: [
+                        AnalyzePanel(baseUrl: region.url, regionSlug: region.slug, regionName: region.name, timezone: s.viewingTimezone),
                         buildOverviewPanel(region.url, region.slug),
                         buildRepeatersPanel(region.url, region.slug),
                         buildObserversPanel(region.url, region.slug),
