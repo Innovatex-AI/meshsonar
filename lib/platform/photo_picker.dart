@@ -37,6 +37,10 @@ class PhotoPrepareException implements Exception {
 abstract class PhotoPicker {
   /// Null when the person backed out. Throws [PhotoPrepareException] when the picture could not be read or shrunk.
   Future<PreparedPhoto?> pick(PhotoPickSource source, {int maxEdgePx = 2048});
+
+  /// The small copy of [full] for a private photo (long edge [edge], JPEG [quality], no metadata). Throws
+  /// [PhotoPrepareException].
+  Future<PreparedPhoto> thumbnail(PreparedPhoto full, {int edge = privateThumbEdgePx, int quality = privateThumbQuality});
 }
 
 /// Long and short edge of [bytes] when Flutter can read its header, else null.
@@ -79,6 +83,31 @@ class DevicePhotoPicker implements PhotoPicker {
     final original = await f.readAsBytes();
     return preparePhotoBytes(original, maxEdgePx: maxEdgePx, path: f.path);
   }
+
+  @override
+  Future<PreparedPhoto> thumbnail(PreparedPhoto full, {int edge = privateThumbEdgePx, int quality = privateThumbQuality}) => prepareThumbnail(full, edge: edge, quality: quality);
+}
+
+/// Shrinks the already metadata-free [full] to a thumbnail (long edge [edge], JPEG [quality]) and proves it carries no EXIF or
+/// GPS, like [preparePhotoBytes] does for the full image.
+Future<PreparedPhoto> prepareThumbnail(PreparedPhoto full, {int edge = privateThumbEdgePx, int quality = privateThumbQuality}) async {
+  var w = full.width, h = full.height;
+  if (w <= 0 || h <= 0) {
+    final size = await imageSize(full.bytes);
+    if (size != null) (w, h) = size;
+  }
+  final min = w <= 0 || h <= 0 ? edge : compressMinFor(w, h, edge);
+  Uint8List? out;
+  try {
+    out = await FlutterImageCompress.compressWithList(full.bytes, minWidth: min, minHeight: min, quality: quality, format: CompressFormat.jpeg, keepExif: false, autoCorrectionAngle: true);
+  } catch (_) {
+    out = null;
+  }
+  if (out == null || out.isEmpty) throw const PhotoPrepareException('Could not make a preview of that photo.');
+  final clean = stripJpegMetadata(out);
+  if (!jpegIsClean(clean)) throw const PhotoPrepareException('Could not remove the photo details (like location) safely, so it was not sent.');
+  final dims = await imageSize(clean);
+  return PreparedPhoto(clean, dims?.$1 ?? 0, dims?.$2 ?? 0);
 }
 
 /// Shrinks and re-encodes [original] (any format the phone reads, HEIC included) to a metadata-free JPEG q80.
@@ -124,7 +153,7 @@ Future<PreparedPhoto> preparePhotoBytes(Uint8List original, {int maxEdgePx = 204
     }
   }
   final clean = stripJpegMetadata(out);
-  if (!isJpeg(clean) || jpegHasExif(clean) || jpegHasGps(clean)) {
+  if (!jpegIsClean(clean)) {
     // Never upload a picture whose metadata could not be proven gone.
     throw const PhotoPrepareException('Could not remove the photo details (like location) safely, so it was not sent.');
   }

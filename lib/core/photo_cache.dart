@@ -1,12 +1,15 @@
-// On-disk cache of photo images (thumbs and full copies) read from `https://meshsonar.com/p/<id>/thumb|full`.
-// One file per image, `<id>_<thumb|full>.img`; a removed photo (410) leaves a small `<id>.gone` marker so the bubble says
-// "Photo removed" without asking again. The folder is trimmed to [maxBytes], oldest first. Pure Dart: no Flutter imports.
+// On-disk cache of photo images (thumbs and full copies) read from `https://meshsonar.com/p/<id>/thumb|full`, and of private
+// photos (`https://meshsonar.com/e/<id>#<key>`: the ciphertext is fetched from `/e/<id>/thumb|full`, decrypted in memory with
+// the key from the link and only the DECRYPTED JPEG is kept, like any chat attachment; the key itself is never stored here).
+// One file per image, `<id>_<thumb|full>.img` (private: `e_<id>_...`); a removed photo (410, or 404 for a private one) leaves
+// a small `<id>.gone` marker so the bubble says "Photo removed" / "Photo expired" without asking again. The folder is trimmed to [maxBytes], oldest first. Pure Dart: no Flutter imports.
 import 'dart:async';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
 import 'photo_api.dart';
+import 'private_photo.dart';
 
 enum PhotoVariant { thumb, full }
 
@@ -51,7 +54,14 @@ class HttpPhotoCache implements PhotoSource {
   HttpPhotoCache(this.dir, {http.Client? client, this.maxBytes = 150 * 1024 * 1024, this.timeout = const Duration(seconds: 30)})
       : _http = client ?? http.Client();
 
-  String? _id(String url) => photoIdOf(url);
+  /// The file stem of a photo link: `<id>` for a plain one, `e_<id>` for a private one; null for anything else.
+  String? _id(String url) {
+    final plain = photoIdOf(url);
+    if (plain != null) return plain;
+    final p = parsePrivatePhotoLink(url);
+    return p == null ? null : 'e_${p.id}';
+  }
+
   File _file(String id, PhotoVariant v) => File('${dir.path}${Platform.pathSeparator}${id}_${v.name}.img');
   File _gone(String id) => File('${dir.path}${Platform.pathSeparator}$id.gone');
 
@@ -96,14 +106,17 @@ class HttpPhotoCache implements PhotoSource {
     if (await knownRemoved(url)) return const PhotoFetch.removed();
     final hit = await cached(url, v);
     if (hit != null) return PhotoFetch.ok(hit);
-    final target = v == PhotoVariant.thumb ? photoThumbUrl(url) : photoFullUrl(url);
+    final link = parsePrivatePhotoLink(url);
+    final role = v == PhotoVariant.thumb ? PrivatePhotoRole.thumb : PrivatePhotoRole.full;
+    final target = link != null ? link.blobUrl(role) : (v == PhotoVariant.thumb ? photoThumbUrl(url) : photoFullUrl(url));
     http.Response res;
     try {
-      res = await _http.get(Uri.parse(target), headers: const {'accept': 'image/webp,image/*'}).timeout(timeout);
+      res = await _http.get(Uri.parse(target), headers: {'accept': link != null ? 'application/octet-stream' : 'image/webp,image/*'}).timeout(timeout);
     } catch (_) {
       return const PhotoFetch.failed();
     }
-    if (res.statusCode == 410) {
+    // A private photo is deleted after 30 days: an unknown id (404) and a removed one (410) both read as gone.
+    if (res.statusCode == 410 || (link != null && res.statusCode == 404)) {
       try {
         await dir.create(recursive: true);
         await _gone(id).writeAsString('410');
@@ -113,15 +126,24 @@ class HttpPhotoCache implements PhotoSource {
       return const PhotoFetch.removed();
     }
     if (res.statusCode != 200 || res.bodyBytes.isEmpty) return const PhotoFetch.failed();
+    List<int> image = res.bodyBytes;
+    if (link != null) {
+      try {
+        image = await PrivatePhoto.decrypt(res.bodyBytes, link.key, role);
+      } catch (_) {
+        // Wrong key, damaged blob: nothing is cached and nothing about the key is reported.
+        return const PhotoFetch.failed();
+      }
+    }
     try {
       await dir.create(recursive: true);
       final f = _file(id, v);
       final tmp = File('${f.path}.part');
-      await tmp.writeAsBytes(res.bodyBytes, flush: true);
+      await tmp.writeAsBytes(image, flush: true);
       await tmp.rename(f.path);
       if (++_writes % 20 == 1) unawaited(trim());
     } catch (_) {}
-    return PhotoFetch.ok(res.bodyBytes);
+    return PhotoFetch.ok(image);
   }
 
   @override

@@ -5,8 +5,15 @@
 //   <base>/api/cmh/photo-delete   POST x-driver-key, {id}           -> 200 {deleted: true}; 404 not found or not the owner
 //   <base>/api/cmh/photo-report   POST {id, reason} (key optional)  -> 202 {reported: true}
 //   https://meshsonar.com/p/<id>/thumb | /full                     -> image/webp; 404 unknown; 410 removed
+// Private (end-to-end encrypted) photos, docs/planning/photo-e2e-private-2026-11-12.md (lib/core/private_photo.dart):
+//   <base>/api/cmh/photo-upload-enc POST x-driver-key, x-photo-w, x-photo-h, octet-stream body (u32be thumbLen || thumb || full)
+//                                 -> 201 {id, url (no key), thumbUrl, fullUrl, w, h, bytes, duplicate}; same 401/403/413/429/503
+//   photo-report also takes an optional `key` (22 chars) when the reporter lets moderators see the photo
+//   https://meshsonar.com/e/<id>/thumb | /full                     -> ciphertext blob; 404 unknown; 410 removed
 // The radio only ever carries the plain link text; nothing here touches the mesh. Pure Dart: no Flutter imports.
 import 'dart:async';
+
+import 'private_photo.dart';
 
 /// The only link form the app treats as a photo: `https://meshsonar.com/p/` + 8 base62 characters, not followed by another
 /// id character or a slash (so `/p/<id>/full` and longer ids stay ordinary links).
@@ -20,6 +27,9 @@ String? photoIdOf(String url) {
   return m.group(1);
 }
 
+/// The id of a photo link of either kind (plain `/p/<id>` or private `/e/<id>#<key>`), else null.
+String? anyPhotoIdOf(String url) => photoIdOf(url) ?? parsePrivatePhotoLink(url)?.id;
+
 /// Image addresses of a photo link (contract: url + `/thumb`, url + `/full`).
 String photoThumbUrl(String url) => '$url/thumb';
 String photoFullUrl(String url) => '$url/full';
@@ -30,7 +40,18 @@ class PhotoConfig {
   final int maxUploadBytes;
   final int maxEdgePx;
   final String linkPrefix;
-  const PhotoConfig({required this.enabled, this.maxUploadBytes = 10485760, this.maxEdgePx = 2048, this.linkPrefix = 'https://meshsonar.com/p/'});
+
+  /// The server takes private (encrypted) photos (`photo-upload-enc`). Without it a direct message gets no photo button.
+  final bool e2e;
+  final String privateLinkPrefix;
+  const PhotoConfig({
+    required this.enabled,
+    this.maxUploadBytes = 10485760,
+    this.maxEdgePx = 2048,
+    this.linkPrefix = 'https://meshsonar.com/p/',
+    this.e2e = false,
+    this.privateLinkPrefix = privatePhotoLinkPrefix,
+  });
 
   static const PhotoConfig disabled = PhotoConfig(enabled: false);
 
@@ -41,10 +62,12 @@ class PhotoConfig {
       maxUploadBytes: asInt(j['maxUploadBytes'], 10485760),
       maxEdgePx: asInt(j['maxEdgePx'], 2048),
       linkPrefix: j['linkPrefix'] is String && (j['linkPrefix'] as String).isNotEmpty ? j['linkPrefix'] as String : 'https://meshsonar.com/p/',
+      e2e: j['e2e'] == true,
+      privateLinkPrefix: j['privateLinkPrefix'] is String && (j['privateLinkPrefix'] as String).isNotEmpty ? j['privateLinkPrefix'] as String : privatePhotoLinkPrefix,
     );
   }
 
-  Map<String, dynamic> toJson() => {'enabled': enabled, 'maxUploadBytes': maxUploadBytes, 'maxEdgePx': maxEdgePx, 'linkPrefix': linkPrefix};
+  Map<String, dynamic> toJson() => {'enabled': enabled, 'maxUploadBytes': maxUploadBytes, 'maxEdgePx': maxEdgePx, 'linkPrefix': linkPrefix, 'e2e': e2e, 'privateLinkPrefix': privateLinkPrefix};
 }
 
 /// `201` of `photo-upload`.
@@ -73,6 +96,22 @@ class PhotoUploadResult {
       duplicate: j['duplicate'] == true,
     );
   }
+}
+
+/// Reads the `201` of `photo-upload-enc`: the id must be 8 base62 characters and `url` (when present) the key-less
+/// `/e/<id>`. Throws [FormatException] otherwise. The result's urls carry no key.
+PhotoUploadResult parsePrivateUploadResult(Map<String, dynamic> j) {
+  final id = j['id'];
+  if (id is! String || !RegExp(r'^[0-9A-Za-z]{8}$').hasMatch(id)) throw const FormatException('upload answer without a photo id');
+  final url = '$privatePhotoLinkPrefix$id';
+  int? n(Object? v) => v is num ? v.toInt() : null;
+  return PhotoUploadResult(id: id, url: url, thumbUrl: '$url/thumb', fullUrl: '$url/full', w: n(j['w']), h: n(j['h']), bytes: n(j['bytes']), duplicate: j['duplicate'] == true);
+}
+
+/// Extension on a finished upload result.
+extension PhotoUploadResultPrivate on PhotoUploadResult {
+  /// The same result with another [url] (the private link, key included, that goes into the message).
+  PhotoUploadResult withUrl(String newUrl) => PhotoUploadResult(id: id, url: newUrl, thumbUrl: thumbUrl, fullUrl: fullUrl, w: w, h: h, bytes: bytes, duplicate: duplicate);
 }
 
 /// [stalled]: the upload was moving too slowly to finish (no byte out for [PhotoUploadTimeouts.stall], no answer within
@@ -186,6 +225,13 @@ abstract class PhotoTransport {
   /// Throws [PhotoError] (404 = gone or not the owner).
   Future<void> deletePhoto(String driverKey, String id);
 
-  /// [driverKey] is optional. Throws [PhotoError].
-  Future<void> reportPhoto(String id, PhotoReportReason reason, {String? driverKey});
+  /// Private photo: the encrypted blobs go up as one octet-stream body ([PrivatePhoto.buildUploadBody]); [width] / [height]
+  /// are the full image's pixels (page layout only). Same progress, cancel and errors as [uploadPhoto]. The result's urls carry
+  /// no key (the server never has it).
+  Future<PhotoUploadResult> uploadPrivatePhoto(String driverKey, List<int> body,
+      {required int width, required int height, void Function(int sent, int total)? onProgress, PhotoCancel? cancel});
+
+  /// [driverKey] is optional. [key] (22 characters) is sent only when the reporter chose to let moderators see a private
+  /// photo. Throws [PhotoError].
+  Future<void> reportPhoto(String id, PhotoReportReason reason, {String? driverKey, String? key});
 }

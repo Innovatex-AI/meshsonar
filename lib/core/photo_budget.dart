@@ -37,3 +37,22 @@ Future<Uint8List> fitPhotoBudget(Uint8List first, int edge, Future<Uint8List?> F
   }
   return best;
 }
+
+// ---- the link in the message (160-byte packet budget) and the private thumb ----
+
+/// `https://meshsonar.com/p/<8>`: 24 + 8.
+const int plainPhotoLinkBytes = 32;
+
+/// `https://meshsonar.com/e/<8>#<22>`: 24 + 8 + 1 + 22 (same value as `privatePhotoLinkBytes`, lib/core/private_photo.dart).
+const int privatePhotoLinkBytesBudget = 55;
+
+/// Bytes a photo link takes in the message, [private] or plain.
+int photoLinkBytes({required bool private}) => private ? privatePhotoLinkBytesBudget : plainPhotoLinkBytes;
+
+/// Bytes of text left beside a photo link: the link and the separating space come out of [maxTextBytes]
+/// (a direct message: 160 - 55 - 1 = 104 private, 160 - 32 - 1 = 127 plain).
+int textBytesBesidePhoto(int maxTextBytes, {required bool private}) => maxTextBytes - photoLinkBytes(private: private) - 1;
+
+/// The private thumb: long edge and JPEG quality (docs/planning/photo-e2e-private-2026-11-12.md).
+const int privateThumbEdgePx = 480;
+const int privateThumbQuality = 70;

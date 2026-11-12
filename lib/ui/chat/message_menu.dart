@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import '../../chat/models.dart' show ChatMessage, MessageState;
 import '../design/app_surfaces.dart';
 import '../design/app_symbols.dart';
+import '../../core/private_photo.dart' show parsePrivatePhotoLink;
 import 'message_format.dart';
 
 enum MessageMenuId { copy, openLink, viewPhoto, savePhoto, sharePhoto, reportPhoto, deletePhoto, pathMap, details, retry, resend, cancel, delete }
@@ -38,7 +39,7 @@ abstract final class MessageMenu {
   /// The links the menu offers to open. With [photos] on, photo links are left out (they get the photo entries instead).
   static List<String> linksOf(ChatMessage m, {bool photos = false}) => [
     for (final p in splitMessage(m.text))
-      if (p.kind == PartKind.url || p.kind == PartKind.meshLink || (!photos && p.kind == PartKind.photo)) p.text,
+      if (p.kind == PartKind.url || p.kind == PartKind.meshLink || (!photos && isPhotoKind(p.kind))) p.text,
   ];
 
   /// Copy, Open link(s), Route on map (when a hop of its path has a known position, [hasMap]), Full details, Try Again
@@ -61,7 +62,7 @@ abstract final class MessageMenu {
       for (var i = 0; i < shots.length; i++) ...[
         MessageMenuEntry(MessageMenuId.viewPhoto, 'View photo${n(i)}', AppSymbols.photo, link: shots[i]),
         MessageMenuEntry(MessageMenuId.savePhoto, 'Save to Photos${n(i)}', AppSymbols.squareAndArrowDown, link: shots[i]),
-        MessageMenuEntry(MessageMenuId.sharePhoto, 'Share photo${n(i)}', AppSymbols.squareAndArrowUp, link: shots[i]),
+        MessageMenuEntry(MessageMenuId.sharePhoto, parsePrivatePhotoLink(shots[i]) != null ? 'Share private link${n(i)}' : 'Share photo${n(i)}', AppSymbols.squareAndArrowUp, link: shots[i]),
         MessageMenuEntry(MessageMenuId.reportPhoto, 'Report photo${n(i)}', AppSymbols.flag, link: shots[i]),
       ],
       for (final l in linksOf(m, photos: photos))

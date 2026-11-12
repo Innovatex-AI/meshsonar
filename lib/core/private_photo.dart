@@ -189,3 +189,7 @@ String buildPrivatePhotoLink(String id, List<int> key) => '$privatePhotoLinkPref
 
 /// The same link with the key replaced, for anything that may be shown or logged.
 String redactPrivatePhotoLink(String url) => url.replaceAll(RegExp(r'#[A-Za-z0-9_-]{22}'), '#<key>');
+
+/// [s] with every private photo link replaced by "[Private photo]": for notification text and anything else outside the chat
+/// that must not carry a key.
+String hidePrivatePhotoLinks(String s) => s.replaceAll(privatePhotoLinkRe, '[Private photo]');

@@ -18,7 +18,7 @@ import '../design/app_symbols.dart';
 import '../design/app_type.dart';
 import '../design/avatar_style.dart';
 import '../design/tokens.dart';
-import '../../core/photo_api.dart' show photoIdOf;
+import '../../core/photo_api.dart' show anyPhotoIdOf;
 import 'message_format.dart';
 import 'message_menu.dart';
 import 'photo_widgets.dart';
@@ -175,6 +175,7 @@ class _MessageBubbleState extends State<MessageBubble> {
           out.add(TextSpan(text: p.text));
         case PartKind.url:
         case PartKind.photo:
+        case PartKind.photoPrivate:
         case PartKind.meshLink:
           final r = TapGestureRecognizer()
             ..onTap = () {
@@ -247,7 +248,7 @@ class _MessageBubbleState extends State<MessageBubble> {
                 Padding(
                   padding: const EdgeInsets.only(bottom: 4),
                   child: PhotoThumb(
-                    key: ValueKey('thumb-${m.id}-$u'),
+                    key: ValueKey('thumb-${m.id}-${anyPhotoIdOf(u)}'),
                     url: u,
                     source: w.photos!.source,
                     autoLoad: w.photos!.autoLoad,
@@ -282,7 +283,7 @@ class _MessageBubbleState extends State<MessageBubble> {
       child: body,
     );
     final menuEntries = MessageMenu.entries(m,
-        hasMap: w.hasMap, canResend: (w.delivery?.canResend ?? false) && w.onResend != null, photos: w.photos != null, isOwnPhoto: (u) => w.photos?.isOwn(photoIdOf(u) ?? '') ?? false);
+        hasMap: w.hasMap, canResend: (w.delivery?.canResend ?? false) && w.onResend != null, photos: w.photos != null, isOwnPhoto: (u) => w.photos?.isOwn(anyPhotoIdOf(u) ?? '') ?? false);
     final Widget withMenu = (MessageMenu.apple(context) && MessageMenu.useContextMenu)
         ? CupertinoContextMenu.builder(
             enableHapticFeedback: true,

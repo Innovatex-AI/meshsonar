@@ -20,6 +20,7 @@ import 'package:flutter/foundation.dart';
 import '../chat/chat_service.dart';
 import '../chat/events.dart';
 import '../chat/models.dart';
+import '../core/private_photo.dart' show hidePrivatePhotoLinks;
 import '../platform/local_notifications.dart';
 import 'alert_prefs.dart';
 
@@ -254,7 +255,10 @@ class AlertCoordinator extends ChangeNotifier {
     return null;
   }
 
-  static String _clip(String t) => t.length <= previewChars ? t : '${t.substring(0, previewChars)}…';
+  static String _clip(String raw) {
+    final t = hidePrivatePhotoLinks(raw); // a private photo's key stays out of notifications
+    return t.length <= previewChars ? t : '${t.substring(0, previewChars)}…';
+  }
 
   @override
   void dispose() {

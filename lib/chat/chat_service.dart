@@ -17,6 +17,7 @@ import 'events.dart';
 import 'mesh_links.dart';
 import 'models.dart';
 import 'outbox.dart';
+import 'photo_kind.dart';
 import 'radio_bridge.dart';
 import 'store.dart';
 
@@ -433,6 +434,13 @@ class ChatService {
     if (ConvKey.kindOf(convKey) != ConvKind.channel) return maxPacketTextBytes;
     final n = utf8.encode(selfName() ?? '').length;
     return maxPacketTextBytes - (n == 0 ? 32 : n) - 2;
+  }
+
+  /// Plain or private photo link for [convKey] (lib/chat/photo_kind.dart).
+  PhotoKind photoKind(String convKey) {
+    Channel? ch;
+    if (ConvKey.kindOf(convKey) == ConvKind.channel) ch = store.channels.getById(int.tryParse(ConvKey.body(convKey)) ?? -1);
+    return photoKindFor(convKey, ch);
   }
 
   /// Stores an outgoing message and queues it. Returns at once; delivery state arrives as events.
