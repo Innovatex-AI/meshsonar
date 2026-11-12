@@ -8,6 +8,7 @@ import 'dart:typed_data';
 
 import 'package:meshsonar/app/photo_controller.dart';
 import 'package:meshsonar/chat/store.dart';
+import 'package:meshsonar/core/jpeg_meta.dart';
 import 'package:meshsonar/core/photo_api.dart';
 import 'package:meshsonar/core/photo_cache.dart';
 import 'package:meshsonar/core/photo_wire.dart';
@@ -16,11 +17,18 @@ import 'package:meshsonar/platform/photo_picker.dart';
 /// A 2x2 opaque PNG (blue), small enough to inline.
 final Uint8List tinyPng = base64Decode('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGOI6jkBRAwQCgAtXga5P89JmQAAAABJRU5ErkJggg==');
 
+/// A real, metadata-free JPEG (the GPS fixture of test/core/jpeg_meta_test.dart after the strip): what a private upload accepts.
+final Uint8List cleanJpeg = stripJpegMetadata(File('test/fixtures/photos/gps_fixture.jpg').readAsBytesSync());
+
+/// The private link of photo id k3Xq9TzA under the golden-vector key (fixed, so tests can predict it).
+const privateKeyA = 'AAECAwQFBgcICQoLDA0ODw';
+const privateUrlA = 'https://meshsonar.com/e/k3Xq9TzA#$privateKeyA';
+
 const photoUrlA = 'https://meshsonar.com/p/k3Xq9TzA';
 const photoUrlB = 'https://meshsonar.com/p/Zz00Aa11';
 
 class FakePhotoTransport implements PhotoTransport {
-  PhotoConfig config = const PhotoConfig(enabled: true);
+  PhotoConfig config = const PhotoConfig(enabled: true, e2e: true);
   Object? configError;
   Object? uploadError;
   String nextId = 'k3Xq9TzA';
@@ -32,6 +40,13 @@ class FakePhotoTransport implements PhotoTransport {
   final uploadedBytes = <List<int>>[];
   final deletes = <String>[];
   final reports = <(String, PhotoReportReason, String?)>[];
+
+  /// The `key` of each report, in order (null = the reporter did not let moderators see the photo).
+  final reportKeys = <String?>[];
+
+  /// Private uploads: the whole body, and the headers' width and height.
+  final privateBodies = <List<int>>[];
+  final privateSizes = <(int, int)>[];
   Object? deleteError;
 
   @override
@@ -63,13 +78,38 @@ class FakePhotoTransport implements PhotoTransport {
   }
 
   @override
+  Future<PhotoUploadResult> uploadPrivatePhoto(String driverKey, List<int> body,
+      {required int width, required int height, void Function(int sent, int total)? onProgress, PhotoCancel? cancel}) async {
+    privateBodies.add(body);
+    privateSizes.add((width, height));
+    onProgress?.call(body.length ~/ 2, body.length);
+    final h = holdUpload;
+    if (h != null) {
+      await Future.any([h.future, if (cancel != null) cancel.whenCancelled]);
+      if (cancel?.cancelled ?? false) throw const PhotoError(PhotoErrorKind.cancelled);
+    }
+    onProgress?.call(body.length, body.length);
+    final a = holdAnswer;
+    if (a != null) {
+      await Future.any([a.future, if (cancel != null) cancel.whenCancelled]);
+      if (cancel?.cancelled ?? false) throw const PhotoError(PhotoErrorKind.cancelled);
+    }
+    if (uploadError != null) throw uploadError!;
+    final url = 'https://meshsonar.com/e/$nextId';
+    return PhotoUploadResult(id: nextId, url: url, thumbUrl: '$url/thumb', fullUrl: '$url/full');
+  }
+
+  @override
   Future<void> deletePhoto(String driverKey, String id) async {
     if (deleteError != null) throw deleteError!;
     deletes.add(id);
   }
 
   @override
-  Future<void> reportPhoto(String id, PhotoReportReason reason, {String? driverKey}) async => reports.add((id, reason, driverKey));
+  Future<void> reportPhoto(String id, PhotoReportReason reason, {String? driverKey, String? key}) async {
+    reports.add((id, reason, driverKey));
+    reportKeys.add(key);
+  }
 }
 
 /// Answers every photo with one state (per url when set in [byUrl]).
@@ -107,6 +147,11 @@ class FakePhotoSource implements PhotoSource {
 
 class FakePhotoPicker implements PhotoPicker {
   PreparedPhoto? next = PreparedPhoto(tinyPng, 2, 2);
+
+  /// What [thumbnail] returns (a clean JPEG by default); [thumbError] makes it throw.
+  PreparedPhoto thumbNext = PreparedPhoto(cleanJpeg, 1, 1);
+  Object? thumbError;
+  int thumbnails = 0;
   Object? error;
   final picks = <PhotoPickSource>[];
   @override
@@ -114,6 +159,13 @@ class FakePhotoPicker implements PhotoPicker {
     picks.add(source);
     if (error != null) throw error!;
     return next;
+  }
+
+  @override
+  Future<PreparedPhoto> thumbnail(PreparedPhoto full, {int edge = 480, int quality = 70}) async {
+    thumbnails++;
+    if (thumbError != null) throw thumbError!;
+    return thumbNext;
   }
 }
 

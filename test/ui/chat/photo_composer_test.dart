@@ -38,10 +38,9 @@ void main() {
     return photos;
   }
 
-  Future<String> dm() async {
-    kit.bob();
-    return ConvKey.dm(bobKey);
-  }
+  // A plain (public link) photo goes only where anyone who knows the channel's public name can read it: the Public channel.
+  // Direct messages and private channels take private (encrypted) photos: test/ui/chat/private_photo_composer_test.dart.
+  Future<String> dm() async => (await kit.channel(1, 'Public', kind: ChannelKind.public)).convKey;
 
   Future<void> sendPhoto(WidgetTester tester) async {
     await tester.tap(find.byKey(const Key('composer-photo')));
@@ -72,7 +71,7 @@ void main() {
     expect(picker.picks, isEmpty);
   });
 
-  testWidgets('DM: the link goes at the end after a space, and the meter counts it', (tester) async {
+  testWidgets('plain channel: the link goes at the end after a space, and the meter counts it', (tester) async {
     await pump(tester, await dm());
     await tester.enterText(find.byKey(const Key('composer-field')), 'summit view');
     await tester.pump();
@@ -80,7 +79,7 @@ void main() {
     expect(transport.uploads, [tinyPng.length]);
     expect(fieldText(tester), 'summit view $photoUrlA');
     expect(find.byKey(const Key('composer-photo-strip')), findsNothing);
-    // 160 - 11 - 1 - 32 = 116 left: the ring is quiet; with a longer text the number shows the link's cost.
+    // 156 - 11 - 1 - 32 = 112 left: the ring is quiet; with a longer text the number shows the link's cost.
     final long = 'x' * 110;
     await tester.enterText(find.byKey(const Key('composer-field')), long);
     await tester.pump();
@@ -88,8 +87,8 @@ void main() {
     expect(fieldText(tester), '$long $photoUrlA');
     expect(utf8.encode(fieldText(tester)).length, 143);
     expect(find.byKey(const Key('composer-left')), findsOneWidget);
-    expect(find.text('17'), findsOneWidget);
-    expect(kit.controller.service.maxTextBytes(ConvKey.dm(bobKey)), 160);
+    expect(find.text('13'), findsOneWidget);
+    expect(kit.controller.service.maxTextBytes(ConvKey.channel(1)), 156);
   });
 
   testWidgets('an empty composer gets just the link', (tester) async {
@@ -98,23 +97,23 @@ void main() {
     expect(fieldText(tester), photoUrlA);
   });
 
-  testWidgets('DM: one byte too many is not trimmed; the person is told to cut 1 byte, then it goes in by itself', (tester) async {
+  testWidgets('one byte too many is not trimmed; the person is told to cut 1 byte, then it goes in by itself', (tester) async {
     await pump(tester, await dm());
-    final text = 'a' * 128; // 128 + 1 + 32 = 161 > 160
+    final text = 'a' * 124; // 124 + 1 + 32 = 157 > 156
     await tester.enterText(find.byKey(const Key('composer-field')), text);
     await tester.pump();
     await sendPhoto(tester);
     expect(fieldText(tester), text, reason: 'nothing trimmed, nothing inserted');
     expect(find.textContaining('cut 1 byte from your message'), findsOneWidget);
-    await tester.enterText(find.byKey(const Key('composer-field')), 'a' * 127);
+    await tester.enterText(find.byKey(const Key('composer-field')), 'a' * 123);
     await tester.pump();
-    expect(fieldText(tester), '${'a' * 127} $photoUrlA');
-    expect(utf8.encode(fieldText(tester)).length, 160);
+    expect(fieldText(tester), '${'a' * 123} $photoUrlA');
+    expect(utf8.encode(fieldText(tester)).length, 156);
     expect(find.byKey(const Key('composer-photo-strip')), findsNothing);
   });
 
   testWidgets('channel: the budget is 160 - name - 2, and the bytes to cut count multi-byte characters', (tester) async {
-    final ch = await kit.channel(1, 'Ohio');
+    final ch = await kit.channel(1, 'Ohio', kind: ChannelKind.public);
     await pump(tester, ch.convKey);
     final max = kit.controller.service.maxTextBytes(ch.convKey);
     expect(max, 160 - 2 - 2, reason: 'self name "Me"');

@@ -44,7 +44,7 @@ import 'chat_list_actions.dart';
 import 'chat_navigation.dart';
 import '../design/app_widgets.dart' show TipCard;
 import 'composer.dart';
-import '../../core/photo_api.dart' show photoIdOf;
+import '../../core/photo_api.dart' show anyPhotoIdOf;
 import 'photo_widgets.dart';
 import '../../app/photo_controller.dart';
 import 'route_broken_card.dart';
@@ -619,7 +619,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
         hasMap: _hasMap(m, messageInfo(m, resolver: _resolver, contact: _kind == ConvKind.dm ? _contact : null)),
         canResend: canResend,
         photos: p != null,
-        isOwnPhoto: (u) => p?.isOwn(photoIdOf(u) ?? '') ?? false);
+        isOwnPhoto: (u) => p?.isOwn(anyPhotoIdOf(u) ?? '') ?? false);
     if (r != null && mounted) await _perform(id, r);
   }
 

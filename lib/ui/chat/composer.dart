@@ -12,6 +12,7 @@ import 'package:flutter/services.dart';
 
 import '../../app/chat_controller.dart';
 import '../../app/photo_controller.dart';
+import '../../chat/photo_kind.dart';
 import '../../core/photo_api.dart';
 import '../../platform/photo_picker.dart' show PhotoPickSource, PhotoPrepareException, PreparedPhoto;
 import '../../chat/models.dart' show ConvKey, ConvKind;
@@ -227,10 +228,16 @@ class _ComposerState extends State<Composer> {
     _text.value = TextEditingValue(text: t, selection: TextSelection.collapsed(offset: t.length));
   }
 
+  /// Private (end-to-end encrypted) or plain link for this conversation (lib/chat/photo_kind.dart): decided by the
+  /// conversation, never by the person.
+  bool get _privatePhoto => c.service.photoKind(widget.convKey) == PhotoKind.private;
+
   Future<void> _photoTapped() async {
     final p = widget.photos;
     if (p == null) return;
     AppHaptics.selection();
+    final private = _privatePhoto;
+    if (p.buttonFor(private ? PhotoKind.private : PhotoKind.plain) == PhotoButton.hidden) return;
     if (p.button == PhotoButton.needsKey) {
       await showPhotoNeedsKey(context);
       return;
@@ -240,15 +247,19 @@ class _ComposerState extends State<Composer> {
       context,
       sheetKey: const Key('photo-source-sheet'),
       title: 'Send a photo',
-      message: 'The photo is shrunk and its details (like location) removed on this phone, then stored on the MeshSonar '
-          'server. The message carries a short link to it.',
+      message: private
+          ? 'The photo is shrunk, its details (like location) removed and then encrypted on this phone. MeshSonar stores only '
+              'the encrypted copy; the link in the message holds the key, so only people who get the message can open it. '
+              'It is deleted after 30 days.'
+          : 'The photo is shrunk and its details (like location) removed on this phone, then stored on the MeshSonar '
+              'server. The message carries a short link to it.',
       actions: const [
         AppAction('Take Photo', PhotoPickSource.camera, symbol: AppSymbols.camera, key: Key('photo-camera')),
         AppAction('Choose from Library', PhotoPickSource.library, symbol: AppSymbols.photo, key: Key('photo-library')),
       ],
     );
     if (src == null || !mounted) return;
-    PreparedPhoto? photo;
+    PreparedPhoto? photo, thumb;
     setState(() => _job = _PhotoJob(_PhotoStage.preparing));
     try {
       photo = await p.picker.pick(src, maxEdgePx: p.config.maxEdgePx);
@@ -264,19 +275,42 @@ class _ComposerState extends State<Composer> {
       setState(() => _job = null);
       return;
     }
-    await _upload(photo);
+    if (private) {
+      try {
+        thumb = await p.picker.thumbnail(photo);
+      } on PhotoPrepareException catch (e) {
+        if (mounted) setState(() => _job = _PhotoJob(_PhotoStage.failed, photo: photo, error: e.message, retryable: false));
+        return;
+      } catch (_) {
+        if (mounted) setState(() => _job = _PhotoJob(_PhotoStage.failed, photo: photo, error: 'Could not read that photo.', retryable: false));
+        return;
+      }
+    }
+    await _upload(photo, thumb: thumb);
   }
 
-  Future<void> _upload(PreparedPhoto photo) async {
+  /// [thumb] is set for a private conversation: the photo then goes up encrypted and the link carries the key; a private
+  /// conversation never gets a plain link.
+  Future<void> _upload(PreparedPhoto photo, {PreparedPhoto? thumb}) async {
     final p = widget.photos;
     if (p == null) return;
-    final job = _PhotoJob(_PhotoStage.uploading, photo: photo);
+    final private = _privatePhoto;
+    final job = _PhotoJob(_PhotoStage.uploading, photo: photo, thumb: thumb);
     setState(() => _job = job);
+    void progress(int sent, int total) {
+      if (!mounted || !identical(_job, job)) return;
+      setState(() => job.progress = total <= 0 ? 0 : sent / total);
+    }
+
     try {
-      final r = await p.upload(photo.bytes, cancel: job.cancel, onProgress: (sent, total) {
-        if (!mounted || !identical(_job, job)) return;
-        setState(() => job.progress = total <= 0 ? 0 : sent / total);
-      });
+      final PhotoUploadResult r;
+      if (private) {
+        final t = thumb ?? await p.picker.thumbnail(photo);
+        job.thumb = t;
+        r = await p.uploadPrivate(photo, t, cancel: job.cancel, onProgress: progress);
+      } else {
+        r = await p.upload(photo.bytes, cancel: job.cancel, onProgress: progress);
+      }
       if (!mounted || !identical(_job, job)) return;
       if (_linkFits(r.url)) {
         _insertLink(r.url);
@@ -285,9 +319,12 @@ class _ComposerState extends State<Composer> {
         AppHaptics.warning();
         setState(() => _job = _PhotoJob(_PhotoStage.waitingForRoom, photo: photo, result: r));
       }
+    } on PhotoPrepareException catch (e) {
+      if (!mounted || !identical(_job, job)) return;
+      setState(() => _job = _PhotoJob(_PhotoStage.failed, photo: photo, thumb: job.thumb, error: e.message, retryable: false));
     } on PhotoError catch (e) {
       if (!mounted || !identical(_job, job)) return;
-      setState(() => _job = e.kind == PhotoErrorKind.cancelled ? null : _PhotoJob(_PhotoStage.failed, photo: photo, error: e.message, retryable: e.kind != PhotoErrorKind.tooLarge && e.kind != PhotoErrorKind.notImage));
+      setState(() => _job = e.kind == PhotoErrorKind.cancelled ? null : _PhotoJob(_PhotoStage.failed, photo: photo, thumb: job.thumb, error: e.message, retryable: e.kind != PhotoErrorKind.tooLarge && e.kind != PhotoErrorKind.notImage));
     } catch (_) {
       if (!mounted || !identical(_job, job)) return;
       setState(() => _job = _PhotoJob(_PhotoStage.failed, photo: photo, error: const PhotoError(PhotoErrorKind.server).message));
@@ -360,7 +397,7 @@ class _ComposerState extends State<Composer> {
           ]),
         ),
         if (j.stage == _PhotoStage.uploading) btn(const Key('composer-photo-cancel'), 'Cancel', _dropPhoto),
-        if (j.stage == _PhotoStage.failed && j.retryable && j.photo != null) btn(const Key('composer-photo-retry'), 'Retry', () => _upload(j.photo!)),
+        if (j.stage == _PhotoStage.failed && j.retryable && j.photo != null) btn(const Key('composer-photo-retry'), 'Retry', () => _upload(j.photo!, thumb: j.thumb)),
         if (j.stage == _PhotoStage.failed || j.stage == _PhotoStage.waitingForRoom) btn(const Key('composer-photo-remove'), 'Remove', _dropPhoto),
       ]),
     );
@@ -399,7 +436,7 @@ class _ComposerState extends State<Composer> {
     final b = ByteBudget.of(_text.text, max);
     final offAir = widget.onChannelInfoWhenOffRadio != null;
     final canSend = c.hasRadioIdentity && !offAir && b.used > 0 && !b.over;
-    final showPhoto = !offAir && (widget.photos?.button ?? PhotoButton.hidden) != PhotoButton.hidden;
+    final showPhoto = !offAir && (widget.photos?.buttonFor(_privatePhoto ? PhotoKind.private : PhotoKind.plain) ?? PhotoButton.hidden) != PhotoButton.hidden;
     final mention = _mentionQuery;
     final mentionHits = mention == null ? const <String>[] : [for (final n in widget.mentionNames) if (n.toLowerCase().startsWith(mention.toLowerCase())) n].take(8).toList();
 
@@ -527,12 +564,15 @@ enum _PhotoStage { preparing, uploading, waitingForRoom, failed }
 class _PhotoJob {
   final _PhotoStage stage;
   final PreparedPhoto? photo;
+
+  /// The small copy of a private photo, kept so a retry does not redo it.
+  PreparedPhoto? thumb;
   final PhotoUploadResult? result;
   final String? error;
   final bool retryable;
   final PhotoCancel cancel = PhotoCancel();
   double progress = 0;
-  _PhotoJob(this.stage, {this.photo, this.result, this.error, this.retryable = true});
+  _PhotoJob(this.stage, {this.photo, this.thumb, this.result, this.error, this.retryable = true});
 }
 
 class _Strip extends StatelessWidget {

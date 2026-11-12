@@ -178,6 +178,16 @@ Chat UI: the `chatRedesign` switch in More > Developer and the old Contacts | Ch
   uploads, which the phone remembers); the long-press menu has the same entries. More > Chat > **Load photos automatically** (on): off, bubbles
   show "Tap to load photo", since loading contacts the MeshSonar server. Other clients see a plain link that opens the web page. The radio
   only ever carries the link text.
+- **Private (end-to-end encrypted) photos** (unreleased; spec meshsonar-infra `docs/planning/photo-e2e-private-2026-11-12.md`). The app decides from the
+  conversation, with no toggle: a direct message, a room and a channel whose secret is not derivable from its name (a private channel) send a
+  **private** photo; Public and `#hashtag` channels (readable by anyone who knows the name) keep the plain link. A private photo is never sent as
+  a plain link: if the server's `photo-config` lacks `e2e: true`, the photo button is hidden in private conversations. The phone makes a 480 px
+  q70 thumb and the full image (same shrink and 450 KB budget), proves neither has EXIF/GPS, encrypts both with AES-128-GCM under a fresh random
+  key and uploads only ciphertext (`photo-upload-enc`). The message carries `https://meshsonar.com/e/<id>#<key>` (55 bytes, so a DM has 104 bytes
+  left for text); the key is the URL fragment, which browsers never send. Receiving: the bubble fetches and decrypts the thumb (the decrypted
+  copy stays in the on-phone photo cache), tap opens the full photo; "Photo expired" after the server's 30-day deletion; a key that does not open
+  it shows the quiet placeholder. Share sends the link text, Report asks "Let moderators see this photo?" and sends the key only on yes;
+  notifications show "[Private photo]" instead of the link. A link without a valid 22-character key stays an ordinary link.
 - **Parity.** Chat, contacts, path management, ping, repeater login and the repeater dashboard are app-only by design (HANDOFF section 71 D5).
 
 ## Repeater administration and rooms (unreleased)

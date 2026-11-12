@@ -1,6 +1,9 @@
 // Photo messages in the chat UI: the thumbnail inside a bubble (loading, loaded, "Tap to load photo" when automatic loading
 // is off, "Photo, loads when online" when it cannot be fetched, "Photo removed" after a 410), the full-screen viewer (pinch
 // zoom, Save to Photos, Share, Report, Delete photo for own uploads) and the shared actions the long-press menu also uses.
+// Private (end-to-end encrypted) photos use the same widgets: the url is the whole private link (`/e/<id>#<key>`), the
+// source decrypts, "Photo expired" replaces "Photo removed", Share shares the link text and Report offers to let
+// moderators see the photo.
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -10,6 +13,7 @@ import 'package:flutter/material.dart';
 import '../../app/photo_controller.dart';
 import '../../core/photo_api.dart';
 import '../../core/photo_cache.dart';
+import '../../core/private_photo.dart';
 import '../../platform/photo_picker.dart' as platform;
 import '../design/app_surfaces.dart';
 import '../design/app_symbols.dart';
@@ -21,6 +25,8 @@ const double kPhotoThumbMaxW = 240;
 const double kPhotoThumbMaxH = 300;
 
 enum PhotoThumbState { loading, loaded, tapToLoad, offline, removed }
+
+bool _isPrivate(String url) => parsePrivatePhotoLink(url) != null;
 
 class PhotoThumb extends StatefulWidget {
   final String url;
@@ -131,7 +137,9 @@ class _PhotoThumbState extends State<PhotoThumb> {
       PhotoThumbState.loading => tile(AppSymbols.photo, '', key: const Key('photo-loading'), spinner: true),
       PhotoThumbState.tapToLoad => tile(AppSymbols.photo, 'Tap to load photo', key: const Key('photo-tap-to-load')),
       PhotoThumbState.offline => tile(AppSymbols.photo, 'Photo, loads when online', key: const Key('photo-offline')),
-      PhotoThumbState.removed => tile(AppSymbols.xmarkCircleFill, 'Photo removed', key: const Key('photo-removed')),
+      PhotoThumbState.removed => _isPrivate(widget.url)
+          ? tile(AppSymbols.xmarkCircleFill, 'Photo expired', key: const Key('photo-expired'))
+          : tile(AppSymbols.xmarkCircleFill, 'Photo removed', key: const Key('photo-removed')),
       PhotoThumbState.loaded => ConstrainedBox(
           key: const Key('photo-loaded'),
           constraints: BoxConstraints(maxWidth: w, maxHeight: kPhotoThumbMaxH, minWidth: 80, minHeight: 60),
@@ -152,7 +160,7 @@ class _PhotoThumbState extends State<PhotoThumb> {
       PhotoThumbState.loading => 'Photo, loading',
       PhotoThumbState.tapToLoad => 'Photo. Double tap to load it',
       PhotoThumbState.offline => 'Photo, loads when online. Double tap to try again',
-      PhotoThumbState.removed => 'Photo removed',
+      PhotoThumbState.removed => _isPrivate(widget.url) ? 'Photo expired' : 'Photo removed',
     };
     return Semantics(
       button: _state != PhotoThumbState.removed && _state != PhotoThumbState.loading,
@@ -160,7 +168,7 @@ class _PhotoThumbState extends State<PhotoThumb> {
       label: label,
       excludeSemantics: true,
       onTap: _tap,
-      child: GestureDetector(key: Key('photo-thumb-${photoIdOf(widget.url) ?? widget.url}'), behavior: HitTestBehavior.opaque, onTap: _tap, child: child),
+      child: GestureDetector(key: Key('photo-thumb-${anyPhotoIdOf(widget.url) ?? 'x'}'), behavior: HitTestBehavior.opaque, onTap: _tap, child: child),
     );
   }
 }
@@ -171,16 +179,35 @@ String _errorText(Object e) => e is PhotoError ? e.message : 'Something went wro
 
 /// Report flow: reason picker, then `photo-report`. Toasts the outcome.
 Future<void> reportPhotoFlow(BuildContext context, PhotoController photos, String url) async {
+  final private = _isPrivate(url);
   final reason = await showAppActionSheet<PhotoReportReason>(
     context,
     sheetKey: const Key('photo-report-sheet'),
     title: 'Report this photo',
-    message: 'MeshSonar reviews reported photos and removes what breaks the rules. The sender is not told who reported it.',
+    message: private
+        ? 'This photo is encrypted, so MeshSonar cannot see it unless you choose to show it. The sender is not told who reported it.'
+        : 'MeshSonar reviews reported photos and removes what breaks the rules. The sender is not told who reported it.',
     actions: [for (final r in PhotoReportReason.values) AppAction(r.label, r, key: Key('photo-report-${r.slug}'))],
   );
   if (reason == null || !context.mounted) return;
+  var shareKey = false;
+  if (private) {
+    // The reporter decides: the key lets moderators open this one photo; without it the report is still recorded.
+    final choice = await showAppActionSheet<bool>(
+      context,
+      sheetKey: const Key('photo-report-key-sheet'),
+      title: 'Let moderators see this photo?',
+      message: 'Sending the photo\'s key lets MeshSonar moderators open just this photo to review your report. Without it they only see that you reported it.',
+      actions: const [
+        AppAction('Report and let moderators see it', true, key: Key('photo-report-share-key')),
+        AppAction('Report without showing the photo', false, key: Key('photo-report-no-key')),
+      ],
+    );
+    if (choice == null || !context.mounted) return;
+    shareKey = choice;
+  }
   try {
-    await photos.report(url, reason);
+    await photos.report(url, reason, shareKey: shareKey);
     if (context.mounted) showAppToast(context, 'Reported. Thank you.', kind: AppToastKind.success);
   } catch (e) {
     if (context.mounted) showAppToast(context, _errorText(e), kind: AppToastKind.error);
@@ -192,7 +219,9 @@ Future<bool> deletePhotoFlow(BuildContext context, PhotoController photos, Strin
   final ok = await showAppAlert(
     context,
     title: 'Delete this photo?',
-    message: 'It is removed from the MeshSonar server, so the link shows "Photo removed" for everyone. The message text stays.',
+    message: _isPrivate(url)
+        ? 'It is removed from the MeshSonar server, so the link stops working for everyone. The message text stays.'
+        : 'It is removed from the MeshSonar server, so the link shows "Photo removed" for everyone. The message text stays.',
     confirmLabel: 'Delete photo',
     cancelLabel: 'Keep',
     destructive: true,
@@ -232,7 +261,8 @@ Future<void> sharePhotoFlow(BuildContext context, PhotoSource source, String url
   final origin = box == null || !box.hasSize ? null : box.localToGlobal(Offset.zero) & box.size;
   final b = await _fullBytes(source, url);
   try {
-    if (b == null) {
+    // A private photo is shared as its private link (whoever has the whole link can open it), never as the picture.
+    if (b == null || _isPrivate(url)) {
       await platform.sharePhotoLink(url, origin: origin);
     } else {
       await platform.sharePhoto(b, url, origin: origin);
@@ -302,13 +332,14 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final own = widget.photos.isOwn(photoIdOf(widget.url) ?? '');
+    final own = widget.photos.isOwn(anyPhotoIdOf(widget.url) ?? '');
+    final private = _isPrivate(widget.url);
     const ink = Colors.white;
     final b = _bytes;
     final removed = _failed == PhotoFetchState.removed;
     Widget body;
     if (removed) {
-      body = Text('Photo removed', key: const Key('viewer-removed'), style: AppType.body.copyWith(color: ink));
+      body = Text(private ? 'Photo expired' : 'Photo removed', key: Key(private ? 'viewer-expired' : 'viewer-removed'), style: AppType.body.copyWith(color: ink));
     } else if (b == null) {
       body = _failed == null
           ? const CupertinoActivityIndicator(color: ink)
@@ -351,7 +382,7 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
               child: Semantics(label: 'Close', button: true, child: const AppSymbolIcon(AppSymbols.xmark, size: 24, color: ink)),
             ),
             const Spacer(),
-            Text('Photo', style: AppType.headline.copyWith(color: ink)),
+            Text(private ? 'Private photo' : 'Photo', style: AppType.headline.copyWith(color: ink)),
             const Spacer(),
             const SizedBox(width: 44 + Gap.s * 2),
           ]),
@@ -360,7 +391,7 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
             padding: const EdgeInsets.symmetric(horizontal: Gap.s),
             child: Row(children: [
               action(const Key('viewer-save'), AppSymbols.squareAndArrowDown, 'Save', loaded ? (ctx) => savePhotoFlow(ctx, _src, widget.url) : null),
-              action(const Key('viewer-share'), AppSymbols.squareAndArrowUp, 'Share', removed ? null : (ctx) => sharePhotoFlow(ctx, _src, widget.url)),
+              action(const Key('viewer-share'), AppSymbols.squareAndArrowUp, private ? 'Share link' : 'Share', removed ? null : (ctx) => sharePhotoFlow(ctx, _src, widget.url)),
               action(const Key('viewer-report'), AppSymbols.flag, 'Report', removed ? null : (ctx) => reportPhotoFlow(ctx, widget.photos, widget.url)),
               if (own)
                 action(const Key('viewer-delete'), AppSymbols.trash, 'Delete', removed

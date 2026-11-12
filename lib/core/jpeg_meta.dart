@@ -120,3 +120,7 @@ bool _findTag(Uint8List d, int t, int tag) {
   }
   return false;
 }
+
+/// True when [b] is a JPEG with no EXIF and no GPS: the check every photo must pass before it may leave the phone (plain or
+/// private; for a private photo the server cannot look inside, so this is the only gate).
+bool jpegIsClean(List<int> b) => isJpeg(b) && !jpegHasExif(b) && !jpegHasGps(b);

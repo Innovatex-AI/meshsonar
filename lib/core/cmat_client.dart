@@ -16,7 +16,7 @@
 //   <base>/api/cmh/public-coverage  GET  (public, no driver key)        -> {cells[{lat,lon,pings,heard,bestSnr,
 //                                                                          medianSnr,repeaters,lastAt,h3?,
 //                                                                          noiseFloor?}], asOf, grid?, totals}
-//   <base>/api/cmh/photo-config | photo-upload | photo-delete | photo-report   (lib/core/photo_api.dart, contract v1)
+//   <base>/api/cmh/photo-config | photo-upload | photo-upload-enc | photo-delete | photo-report   (lib/core/photo_api.dart, contract v1)
 //   <base>/api/cmh/regions-index   GET  (public, no driver key)        -> {regions[{code,slug,name,url,
 //                                                                          bbox:[w,s,e,n]|null,boundary?}], asOf}
 // Errors come back as {error} (403 also carries {status}); they're thrown as CmatException(error, status: http code).
@@ -712,7 +712,17 @@ class HttpCmatClient implements CmatClient, TelemetryTransport, HomeObserverTran
 
   @override
   Future<PhotoUploadResult> uploadPhoto(String driverKey, List<int> bytes,
-      {String contentType = 'image/jpeg', void Function(int sent, int total)? onProgress, PhotoCancel? cancel}) async {
+      {String contentType = 'image/jpeg', void Function(int sent, int total)? onProgress, PhotoCancel? cancel}) =>
+      _uploadPhotoBody('photo-upload', driverKey, bytes, contentType, const {}, PhotoUploadResult.parse, onProgress, cancel);
+
+  @override
+  Future<PhotoUploadResult> uploadPrivatePhoto(String driverKey, List<int> body,
+          {required int width, required int height, void Function(int sent, int total)? onProgress, PhotoCancel? cancel}) =>
+      _uploadPhotoBody('photo-upload-enc', driverKey, body, 'application/octet-stream', {'x-photo-w': '$width', 'x-photo-h': '$height'}, parsePrivateUploadResult,
+          onProgress, cancel);
+
+  Future<PhotoUploadResult> _uploadPhotoBody(String fn, String driverKey, List<int> bytes, String contentType, Map<String, String> extraHeaders,
+      PhotoUploadResult Function(Map<String, dynamic>) parse, void Function(int sent, int total)? onProgress, PhotoCancel? cancel) async {
     if (driverKey.isEmpty) throw const PhotoError(PhotoErrorKind.noKey);
     if (cancel?.cancelled ?? false) throw const PhotoError(PhotoErrorKind.cancelled);
     final total = bytes.length;
@@ -738,8 +748,8 @@ class HttpCmatClient implements CmatClient, TelemetryTransport, HomeObserverTran
     unawaited(() async {
       try {
         arm(t.stall, 'could not connect within ${t.stall.inSeconds} s');
-        final r = await photoWire.open('POST', endpoint('photo-upload'),
-            {'accept': 'application/json', 'content-type': contentType, 'x-driver-key': driverKey}, total);
+        final r = await photoWire.open('POST', endpoint(fn),
+            {'accept': 'application/json', 'content-type': contentType, 'x-driver-key': driverKey, ...extraHeaders}, total);
         if (done.isCompleted) {
           r.abort();
           return;
@@ -792,7 +802,7 @@ class HttpCmatClient implements CmatClient, TelemetryTransport, HomeObserverTran
     }
     if (body == null) throw PhotoError(PhotoErrorKind.server, status: res.statusCode, detail: 'unreadable answer');
     try {
-      return PhotoUploadResult.parse(body);
+      return parse(body);
     } on FormatException catch (e) {
       throw PhotoError(PhotoErrorKind.server, status: res.statusCode, detail: e.message);
     }
@@ -809,9 +819,9 @@ class HttpCmatClient implements CmatClient, TelemetryTransport, HomeObserverTran
   }
 
   @override
-  Future<void> reportPhoto(String id, PhotoReportReason reason, {String? driverKey}) async {
+  Future<void> reportPhoto(String id, PhotoReportReason reason, {String? driverKey, String? key}) async {
     try {
-      await _send('POST', 'photo-report', driverKey: driverKey, body: {'id': id, 'reason': reason.slug}, ok: const {200, 202});
+      await _send('POST', 'photo-report', driverKey: driverKey, body: {'id': id, 'reason': reason.slug, 'key': ?key}, ok: const {200, 202});
     } on CmatException catch (e) {
       throw _photoError(e);
     }

@@ -73,9 +73,14 @@ class _DemoTransport implements PhotoTransport {
   }
 
   @override
+  Future<PhotoUploadResult> uploadPrivatePhoto(String driverKey, List<int> body,
+          {required int width, required int height, void Function(int sent, int total)? onProgress, PhotoCancel? cancel}) =>
+      throw const PhotoError(PhotoErrorKind.disabled);
+
+  @override
   Future<void> deletePhoto(String driverKey, String id) async {}
   @override
-  Future<void> reportPhoto(String id, PhotoReportReason reason, {String? driverKey}) async {}
+  Future<void> reportPhoto(String id, PhotoReportReason reason, {String? driverKey, String? key}) async {}
 }
 
 class _DemoSource implements PhotoSource {
@@ -101,6 +106,8 @@ class _DemoPicker implements PhotoPicker {
   _DemoPicker(this.bytes);
   @override
   Future<PreparedPhoto?> pick(PhotoPickSource source, {int maxEdgePx = 2048}) async => PreparedPhoto(bytes, 960, 720);
+  @override
+  Future<PreparedPhoto> thumbnail(PreparedPhoto full, {int edge = 480, int quality = 70}) async => full;
 }
 
 void main() {

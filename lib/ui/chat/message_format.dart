@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import '../../core/photo_api.dart';
+import '../../core/private_photo.dart';
 
 
 String two(int n) => n.toString().padLeft(2, '0');
@@ -52,8 +53,10 @@ String listStamp(BuildContext context, int? ms, {DateTime? now}) {
 
 int utf8Len(String s) => utf8.encode(s).length;
 
-/// Pieces of a message: plain text, a link, a MeshSonar photo link (`https://meshsonar.com/p/<8 base62>`), or a mention.
-enum PartKind { text, url, meshLink, mention, photo }
+/// Pieces of a message: plain text, a link, a MeshSonar photo link (`https://meshsonar.com/p/<8 base62>`), a private
+/// (encrypted) photo link (`https://meshsonar.com/e/<8 base62>#<22 key characters>`; a link without a valid key stays a url),
+/// or a mention.
+enum PartKind { text, url, meshLink, mention, photo, photoPrivate }
 
 class TextPart {
   final PartKind kind;
@@ -80,7 +83,9 @@ List<TextPart> splitMessage(String s) {
     }
     final kind = t.startsWith('@[')
         ? PartKind.mention
-        : (t.toLowerCase().startsWith('meshcore://') ? PartKind.meshLink : (photoIdOf(t) != null ? PartKind.photo : PartKind.url));
+        : (t.toLowerCase().startsWith('meshcore://')
+            ? PartKind.meshLink
+            : (photoIdOf(t) != null ? PartKind.photo : (parsePrivatePhotoLink(t) != null ? PartKind.photoPrivate : PartKind.url)));
     out.add(TextPart(kind, t));
     if (tail.isNotEmpty) out.add(TextPart(PartKind.text, tail));
     last = m.end;
@@ -89,14 +94,17 @@ List<TextPart> splitMessage(String s) {
   return out;
 }
 
-/// The photo links of [s], in order.
-List<String> photoLinksOf(String s) => [for (final p in splitMessage(s)) if (p.kind == PartKind.photo) p.text];
+/// True for a plain or a private photo part.
+bool isPhotoKind(PartKind k) => k == PartKind.photo || k == PartKind.photoPrivate;
+
+/// The photo links of [s] (plain and private, a private one with its key), in order.
+List<String> photoLinksOf(String s) => [for (final p in splitMessage(s)) if (isPhotoKind(p.kind)) p.text];
 
 /// [s] without its photo links (and the spaces they leave), for the text under a photo.
 String textWithoutPhotos(String s) {
   final b = StringBuffer();
   for (final p in splitMessage(s)) {
-    if (p.kind != PartKind.photo) b.write(p.text);
+    if (!isPhotoKind(p.kind)) b.write(p.text);
   }
   return b.toString().replaceAll(RegExp(r'[ \t]{2,}'), ' ').trim();
 }
