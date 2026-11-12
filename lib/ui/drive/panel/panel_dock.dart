@@ -9,6 +9,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../../alerts/alerts_runtime.dart';
 import '../../../app/app_state.dart';
 import '../../../core/dead_area.dart' show silentPingStreak;
 import '../../../core/model.dart';
@@ -16,6 +17,7 @@ import '../../../core/startup_location.dart' show LocationAccess;
 import '../../../radio/radio_api.dart';
 import '../../design/tokens.dart';
 import '../drive_controls.dart' show confirmAndStopDrive, openConnect, openFinishedDriveReport;
+import '../radio_link_status.dart';
 import 'auto_collapse.dart';
 
 /// Distinct repeaters that heard [p]. A repeater is counted once however many echoes it produced.
@@ -50,13 +52,19 @@ class DriveDock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // The radio link (connecting, automatic reconnect after launch) changes this row; AppState alone does not tell about the latter.
+    return ListenableBuilder(listenable: RadioLinkStatus.listenable(state), builder: _row);
+  }
+
+  Widget _row(BuildContext context, Widget? _) {
     final s = state;
     final ax = isAx(context);
+    final link = RadioLinkStatus.of(s);
     final Widget row;
     if (s.driving) {
       row = _DrivingDock(state: s, debounce: debounce, onPing: onPing, ax: ax);
-    } else if (s.connecting) {
-      row = _ConnectingDock(state: s, ax: ax);
+    } else if (link.working) {
+      row = _ConnectingDock(state: s, link: link, ax: ax);
     } else if (s.lastFinishedSessionId != null) {
       row = _FinishedDock(state: s, sessionId: s.lastFinishedSessionId!, ax: ax);
     } else {
@@ -89,7 +97,7 @@ class _IdleDock extends StatelessWidget {
     // Idle table (plan 4.20): not connected -> "Not connected" / "Connect your radio to begin" + Connect radio; location off ->
     // "Location is off for MeshSonar" (Start disabled; the strip above carries Allow location / Open Settings).
     final locationOff = s.locationNote != null;
-    final String title = !s.connected ? 'Not connected' : (locationOff ? 'Location is off for MeshSonar' : 'Ready');
+    final String title = !s.connected ? RadioLinkStatus.of(s).statusLabel : (locationOff ? 'Location is off for MeshSonar' : 'Ready');
     final String sub = !s.connected
         ? 'Connect your radio to begin'
         : (s.needsAntennaSetup ? 'Set your antenna first (open the panel)' : (locationOff ? 'Allow location to start a drive' : s.connectionLabel));
@@ -128,6 +136,7 @@ class _StartStopButton extends StatelessWidget {
     final s = state;
     final t = Theme.of(context);
     final driving = s.driving;
+    final link = RadioLinkStatus.of(s);
     final dark = t.brightness == Brightness.dark;
     final stopBg = dark ? const Color(0xFFFF8A80) : t.colorScheme.error;
     final stopFg = dark ? const Color(0xFF2A0A08) : t.colorScheme.onError;
@@ -159,9 +168,14 @@ class _StartStopButton extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(driving ? Icons.stop_rounded : (s.connected ? Icons.play_arrow_rounded : Icons.bluetooth_searching_rounded), size: 22),
+              if (driving)
+                const Icon(Icons.stop_rounded, size: 22)
+              else if (s.connected)
+                const Icon(Icons.play_arrow_rounded, size: 22)
+              else
+                link.leading(context, size: 22, color: IconTheme.of(context).color),
               const SizedBox(width: 6),
-              Text(driving ? 'Stop' : (s.connected ? 'Start drive' : 'Connect radio'), maxLines: 1, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+              Text(driving ? 'Stop' : link.label, maxLines: 1, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
             ],
           ),
         ),
@@ -172,27 +186,38 @@ class _StartStopButton extends StatelessWidget {
 
 // ------------------------------------------------------------------------------------------------ connecting
 
-/// Wireframe B: spinner + "Connecting to your radio..." and a Cancel text button that returns to idle with no confirmation.
+/// Wireframe B: spinner + "Connecting…" / "Reconnecting…" (the one wording, [RadioLinkStatus]) and a Cancel text button that returns to
+/// idle with no confirmation. It sits in the Dock like every other state: it never changes the detent and never covers the map.
 class _ConnectingDock extends StatelessWidget {
   final AppState state;
+  final RadioLinkStatus link;
   final bool ax;
-  const _ConnectingDock({required this.state, this.ax = false});
+  const _ConnectingDock({required this.state, required this.link, this.ax = false});
+
+  void _cancel() {
+    state.cancelConnect();
+    AlertsHost.runtime.value?.reconnect?.cancel();
+  }
 
   @override
   Widget build(BuildContext context) {
     final c = AppColors.fromTheme(Theme.of(context));
+    final radio = AlertsHost.runtime.value?.reconnect?.radioName;
+    final String sub = link.link == RadioLink.reconnecting
+        ? (radio == null ? 'Looking for your radio' : 'Looking for $radio')
+        : 'Looking for GPS - step outside if indoors';
     final text = _dockText(
       context,
       Row(children: [
-        SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2.5, color: c.accent)),
+        link.leading(context, size: 18, color: c.accent),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Connecting to your radio...', key: Key('status-line'), maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
-              Text('Looking for GPS - step outside if indoors', key: const Key('dock-subtitle'), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: c.textMuted)),
+              Text(link.label, key: const Key('status-line'), maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+              Text(sub, key: const Key('dock-subtitle'), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: c.textMuted)),
             ],
           ),
         ),
@@ -202,11 +227,11 @@ class _ConnectingDock extends StatelessWidget {
       button: true,
       label: 'Cancel connecting',
       excludeSemantics: true,
-      onTap: state.cancelConnect,
+      onTap: _cancel,
       child: GestureDetector(
         key: const Key('connect-cancel'),
         behavior: HitTestBehavior.opaque,
-        onTap: state.cancelConnect,
+        onTap: _cancel,
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 48, minWidth: 72),
           child: Center(child: Text('Cancel', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: c.accent))),

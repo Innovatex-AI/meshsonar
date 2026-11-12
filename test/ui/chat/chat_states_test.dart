@@ -9,7 +9,6 @@ import 'package:meshsonar/chat/models.dart';
 import 'package:meshsonar/chat/radio_bridge.dart';
 import 'package:meshsonar/ui/chat/channel_detail_screen.dart';
 import 'package:meshsonar/ui/chat/chat_banner_host.dart';
-import 'package:meshsonar/ui/chat/chat_drive_sheet.dart';
 import 'package:meshsonar/ui/chat/conversation_screen.dart';
 
 import 'chat_kit.dart';
@@ -48,42 +47,6 @@ void main() {
       kit.controller.updateDrive(driving: false);
       await tester.pump();
       expect(find.byKey(const Key('composer-field')), findsOneWidget);
-    });
-  });
-
-  group('Chat-in-Drive sheet', () {
-    Future<void> pumpSheet(WidgetTester tester) async {
-      await tester.pumpWidget(host(Builder(builder: (c) => Scaffold(body: Center(child: FilledButton(key: const Key('open'), onPressed: () => showChatDriveSheet(c, kit.controller), child: const Text('open')))))));
-      await tester.tap(find.byKey(const Key('open')));
-      await tester.pumpAndSettle();
-    }
-
-    testWidgets('lists unread conversations first; opens one with a composer; locked while moving', (tester) async {
-      setSize(tester);
-      final a = await kit.channel(1, 'Ohio');
-      final b = await kit.channel(2, 'Quiet');
-      kit.incoming(a, 'Ann', 'convoy at the exit');
-      kit.service.markRead(b.convKey);
-      await pumpSheet(tester);
-      expect(find.text('Unread messages'), findsOneWidget);
-      expect(find.byKey(Key('drive-chat-row-${a.convKey}')), findsOneWidget);
-      expect(find.byKey(Key('drive-chat-row-${b.convKey}')), findsNothing);
-      await tester.tap(find.byKey(Key('drive-chat-row-${a.convKey}')));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('drive-chat-conversation')), findsOneWidget);
-      expect(find.byKey(const Key('composer-field')), findsOneWidget);
-      kit.controller.updateDrive(driving: true, sessionId: 'd1', speedMps: 20, fixAt: DateTime.fromMillisecondsSinceEpoch(kit.clockMs));
-      await tester.pump();
-      expect(find.byKey(const Key('composer-locked')), findsOneWidget);
-      await tester.tap(find.byKey(const Key('drive-chat-back')));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('drive-chat-locked')), findsOneWidget);
-    });
-
-    testWidgets('nothing yet: says so', (tester) async {
-      setSize(tester);
-      await pumpSheet(tester);
-      expect(find.text('No messages yet'), findsOneWidget);
     });
   });
 

@@ -46,7 +46,7 @@ void main() {
       await Future<void>.delayed(Duration.zero);
       expect(h.store.messages.count(), 3);
       expect(adds, 3);
-      expect(h.service.unreadBadge(), 2);
+      expect(h.service.unreadBadge(), 3, reason: 'unread MESSAGES (channel 2 + DM 1), the one badge rule');
       expect(h.store.messages.unreadCount(ch.convKey), 2);
     });
 

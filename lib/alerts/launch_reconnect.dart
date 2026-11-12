@@ -146,7 +146,7 @@ class LaunchReconnect extends ChangeNotifier {
   /// The person did something that decides it (disconnected, picked another radio): stop.
   void cancel() {
     _cancel = true;
-    if (!active) _set(LaunchReconnectState.idle);
+    _set(LaunchReconnectState.idle); // the Dock's Cancel must show at once, not after the current wait ends
   }
 
   /// Settings > Radio > Auto-connect changed. Off stops a running loop and clears a "Could not reach" line, so the strip never

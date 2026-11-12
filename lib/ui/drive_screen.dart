@@ -36,9 +36,10 @@ import 'ping_cue.dart';
 import 'map/repeater_page_link.dart';
 import 'map/coverage_timeline_slider.dart';
 import 'widgets.dart';
-import 'onboarding/ui_prefs.dart';
 import 'drive/dock_strip.dart';
+import 'drive/radio_link_status.dart';
 import 'drive/status_capsule.dart';
+import 'design/tokens.dart' show AppColors;
 import 'drive/panel/auto_collapse.dart';
 import 'drive/panel/drive_panel.dart';
 import 'drive/panel/immersive_pill.dart';
@@ -121,13 +122,14 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
   }
 
   DrivePanelController _makePanel(AppState s) {
-    final saved = uiPrefsFor(s).drivePanelDetent;
-    final c = DrivePanelController(vsync: this, initial: saved == 'medium' ? PanelDetent.medium : PanelDetent.dock);
+    // Always starts at the Dock (Andy, Nov 12 2026): the last detent used to be restored, so a panel left at Medium reopened in the
+    // middle of the screen on launch and covered the map while the radio was still reconnecting. Nothing but the person's own
+    // drag or tap moves the panel; a connect attempt never does.
+    final c = DrivePanelController(vsync: this);
     c.onDetentChanged = (from, to) {
       // The tab bar follows the panel: Immersive hides it (250 ms, shell), anything else brings it back.
       _shell?.setImmersive(to == PanelDetent.immersive);
       if (to == PanelDetent.medium) _auto.touch(s.services.clock());
-      if (to != PanelDetent.immersive) unawaited(uiPrefsFor(s).setDrivePanelDetent(to.name));
     };
     c.onSettled = () {
       // Overlay clearances and MapInsets are written once, here, never per animation frame.
@@ -320,10 +322,10 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
                   ),
                       if (idlePill)
                         Positioned(
-                          left: floating ? cardLeft + (cardWidth! - 64) / 2 : (box.maxWidth - 64) / 2,
+                          left: floating ? cardLeft : 0,
+                          width: floating ? cardWidth! : box.maxWidth,
                           bottom: (floating ? 16 : 0) + mq.viewPadding.bottom + 8,
-                          width: 64,
-                          child: ImmersivePill(state: s, controller: panel),
+                          child: Center(heightFactor: 1, child: ImmersivePill(state: s, controller: panel)),
                         ),
                     ]);
                   },
@@ -727,39 +729,34 @@ class ConnectionChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return ListenableBuilder(listenable: RadioLinkStatus.listenable(state), builder: (context, _) => _build(context));
+  }
+
+  Widget _build(BuildContext context) {
     final s = state;
     final t = Theme.of(context);
-    final mc = MeshSonarColors.of(context);
-    final sim = s.connected && s.radioKind == RadioKind.simulator;
-    final retrying = s.connecting || (s.reconnecting && s.driving);
-    final Color dot = retrying ? mc.beacon : (sim ? mc.beacon : (s.connected ? t.colorScheme.primary : mc.silent));
+    final link = RadioLinkStatus.of(s);
+    final sim = link.link == RadioLink.simulator;
+    // Colour, glyph and words come from RadioLinkStatus, as on the Dock, the pill and the mini bar. A connected radio shows its name.
+    final dot = link.color(AppColors.fromTheme(t));
+    final text = link.connected ? s.connectionLabel : link.statusLabel;
     // In the app bar the chip keeps a fixed height, so it stops growing at 1.5x (the label is two lines by then).
     return MediaQuery(
       data: MediaQuery.of(context).copyWith(textScaler: MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.5)),
       child: ActionChip(
       onPressed: onPressed,
-      avatar: retrying
-          ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: dot))
-          : Icon(
-              s.connected
-                  ? (sim ? Icons.science_rounded : Icons.bluetooth_connected_rounded)
-                  : Icons.bluetooth_disabled_rounded,
-              size: 20,
-              color: dot,
-            ),
+      avatar: link.leading(context, size: link.working ? 16 : 20, color: dot),
       label: sim
           ? Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(s.connectionLabel,
-                    maxLines: 1, overflow: TextOverflow.ellipsis, style: t.textTheme.labelLarge?.copyWith(height: 1.1)),
+                Text(text, maxLines: 1, overflow: TextOverflow.ellipsis, style: t.textTheme.labelLarge?.copyWith(height: 1.1)),
                 const SizedBox(height: 2),
                 const SimulatedTag(key: Key('chip-simulated'), dense: true),
               ],
             )
-          : Text(s.connectionLabel,
-              maxLines: 1, overflow: TextOverflow.ellipsis),
+          : Text(text, maxLines: 1, overflow: TextOverflow.ellipsis),
       side: BorderSide(color: dot.withValues(alpha: 0.6)),
       backgroundColor: dot.withValues(alpha: 0.10),
     ));

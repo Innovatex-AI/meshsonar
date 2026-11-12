@@ -21,6 +21,7 @@ import '../onboarding/ui_prefs.dart';
 import '../telemetry_sheet.dart';
 import 'analyze_tab.dart';
 import 'blur_bar.dart';
+import '../../chat/conversation_row.dart' show unreadCountLabel;
 import '../chat/chat_banner_host.dart';
 import 'chat_tab.dart';
 import 'chat_tab_host.dart';
@@ -195,7 +196,7 @@ class _HomeShellState extends State<HomeShell> {
       builder: (_, _) {
         final n = ChatTabHost.unread;
         if (n <= 0) return icon;
-        return Badge.count(key: const Key('chat-badge'), count: n, child: icon);
+        return Badge(key: const Key('chat-badge'), label: Text(unreadCountLabel(n)), child: icon);
       },
     );
   }

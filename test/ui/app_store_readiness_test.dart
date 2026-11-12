@@ -171,13 +171,15 @@ void main() {
     test('the camera string names its two uses: a photo for a chat, and Scan QR code (nothing from a scan is recorded)', () {
       final m = RegExp(r'NSCameraUsageDescription</key>\s*<string>(.*?)</string>', dotAll: true).firstMatch(plist)!.group(1)!;
       expect(m, contains('Take a photo to share in a chat'));
+      expect(m, contains('uploaded'), reason: 'photos leave the phone; the string must say so');
       expect(m, contains('Scan QR code'));
       expect(m, contains('nothing from a scan is recorded'));
     });
 
     test('the photo library strings are plain: pick a photo for a chat, save a photo from a chat', () {
       String v(String k) => RegExp('$k</key>\\s*<string>(.*?)</string>', dotAll: true).firstMatch(plist)!.group(1)!;
-      expect(v('NSPhotoLibraryUsageDescription'), 'Pick a photo to share in a chat.');
+      expect(v('NSPhotoLibraryUsageDescription'), startsWith('Pick a photo to share in a chat.'));
+      expect(v('NSPhotoLibraryUsageDescription'), contains('uploaded'), reason: 'photos leave the phone; the string must say so');
       expect(v('NSPhotoLibraryAddUsageDescription'), 'Save a photo from a chat to your Photos.');
     });
 
@@ -186,6 +188,25 @@ void main() {
       expect(m, contains('record a drive'));
       expect(m, contains('not used in the background when you are not recording'));
       expect(m, isNot(contains('which MeshSonar region')));
+    });
+
+    test('the Always string covers the always-on phone observer; Bluetooth and When-in-use strings match what the app does', () {
+      String v(String k) => RegExp('$k</key>\\s*<string>(.*?)</string>', dotAll: true).firstMatch(plist)!.group(1)!;
+      expect(v('NSLocationAlwaysAndWhenInUseUsageDescription'), contains('Share what my radio hears'));
+      expect(v('NSLocationAlwaysAndWhenInUseUsageDescription'), contains('5 km'));
+      expect(v('NSBluetoothAlwaysUsageDescription'), allOf(contains('chat'), contains('background')));
+      expect(v('NSLocationWhenInUseUsageDescription'), allOf(contains('region'), contains('map')));
+    });
+
+    test('privacy manifest declares what the app collects: photos (uploaded), coarse and precise location, all linked, none for tracking', () {
+      final m = File('ios/Runner/PrivacyInfo.xcprivacy').readAsStringSync();
+      for (final type in ['PhotosorVideos', 'CoarseLocation', 'PreciseLocation', 'UserID', 'OtherUserContent']) {
+        final block = RegExp('<string>NSPrivacyCollectedDataType$type</string>(.*?)</dict>', dotAll: true).firstMatch(m);
+        expect(block, isNotNull, reason: '$type must be declared');
+        expect(block!.group(1), contains('NSPrivacyCollectedDataTypeLinked</key>\n\t\t\t<true/>'), reason: '$type is linked to the driver key');
+        expect(block.group(1), contains('NSPrivacyCollectedDataTypeTracking</key>\n\t\t\t<false/>'), reason: '$type is not used for tracking');
+        expect(block.group(1), contains('NSPrivacyCollectedDataTypePurposeAppFunctionality'));
+      }
     });
 
     test('background modes are exactly location and bluetooth-central', () {

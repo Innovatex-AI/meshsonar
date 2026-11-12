@@ -1,17 +1,14 @@
 // Medium's content (Drive plan 4.5, 5.2) as a list of widgets for the panel's scroll view, in order: unsaved warning, location
 // note, the ratio line with the Passenger switch, the 2x3 stat grid, "Heard last ping" (2 rows), then the list rows (antenna,
-// ping settings, log, chat, map guide). WP3b finishes this content; this is the shell with every old footer function kept.
+// ping settings, log, map guide). WP3b finishes this content; this is the shell with every old footer function kept.
 import 'package:flutter/cupertino.dart' show CupertinoSwitch;
 import 'package:flutter/material.dart';
 
 import '../../../app/app_state.dart';
-import '../../../app/chat_wiring.dart';
 import '../../../core/heard.dart' show haversineM;
-import '../../../app/chat_controller.dart';
 import '../../../core/model.dart';
 import '../../../core/region_repeaters_api.dart' show RegionRepeater;
 import '../../../radio/radio_api.dart' show GeoFix;
-import '../../chat/chat_drive_sheet.dart';
 import '../../design/tokens.dart';
 import '../../drive_stats.dart' show formatDuration;
 import '../../location_status.dart';
@@ -181,12 +178,6 @@ class MediumContent {
       ],
       Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [AntennaChip(state: s), PingSettingsChip(state: s), LogButton(state: s)]),
       const SizedBox(height: 4),
-      ValueListenableBuilder<ChatController?>(
-        valueListenable: ChatWiring.controller,
-        builder: (context, chat, _) => chat == null
-            ? const SizedBox.shrink()
-            : row(Icons.chat_bubble_outline_rounded, chat.unreadMessages > 0 ? 'Messages (${chat.unreadMessages} unread)' : 'Messages', () => showChatDriveSheet(context, chat), key: const Key('drive-chat')),
-      ),
       row(Icons.help_outline_rounded, 'Map guide', openGuide, key: const Key('medium-guide')),
     ];
   }

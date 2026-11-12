@@ -137,7 +137,9 @@ void main() {
     expect(find.byKey(const Key('immersive-pill')), findsOneWidget);
     expect(find.byKey(const Key('drive-panel')), findsNothing, reason: 'the panel is not drawn');
     final pill = tester.getRect(find.byKey(const Key('pill-start')));
-    expect(pill.size, const Size(56, 56));
+    expect(pill.height, 56, reason: 'a labelled capsule, not a lone glyph');
+    expect(pill.width, greaterThanOrEqualTo(56));
+    expect(find.descendant(of: find.byKey(const Key('pill-start')), matching: find.text('Start drive')), findsOneWidget);
     expect(pill.center.dx, closeTo(201, 1));
     await tester.tap(find.byKey(const Key('pill-nub')));
     await settle(tester);

@@ -279,7 +279,7 @@ class _UnreadPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = AppColors.of(context);
-    final label = count > 99 ? '99+' : '$count';
+    final label = unreadCountLabel(count);
     return Container(
       key: const Key('unread-pill'),
       constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
