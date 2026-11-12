@@ -10,9 +10,10 @@ import 'package:path/path.dart' as p;
 /// lib/core/server_url.dart, kept equal to [sameServerHosts] by the test below), the public node map, and
 /// our basemap (api.meshsonar.com/basemap) with the OpenFreeMap fallback (tiles.openfreemap.org).
 const allowedServerHosts = {'meshsonar.com', 'cmh.meshsonar.com', 'cmh-meshcore.lovable.app'};
-const allowedLiteralHosts = {...allowedServerHosts, 'map.meshcore.io', 'api.meshsonar.com', 'tiles.openfreemap.org', 'tile.opentopomap.org', 'api.meshcore.nz', 'tiles.meshsonar.com', 'open-meteo.com', 'www.openstreetmap.org', 'opendatacommons.org', 'opentopomap.org', 'creativecommons.org', 'flasher.meshcore.io', 'protomaps.com', 'openfreemap.org'};
+const allowedLiteralHosts = {...allowedServerHosts, 'map.meshcore.io', 'api.meshsonar.com', 'tiles.openfreemap.org', 'api.meshcore.nz', 'tiles.meshsonar.com', 'open-meteo.com', 'www.openstreetmap.org', 'opendatacommons.org', 'www.esri.com', 'www.usgs.gov', 'creativecommons.org', 'flasher.meshcore.io', 'protomaps.com', 'openfreemap.org'};
 // protomaps.com, openfreemap.org: basemap credit LINKS in the Credits sheet, opened in the browser on tap only (M2).
-// www.openstreetmap.org, opendatacommons.org, opentopomap.org, creativecommons.org: the map credit LINKS in the Credits sheet (the (i)
+// www.esri.com, www.usgs.gov (M3 Satellite imagery credit LINKS, on tap only; the imagery itself is fetched from the URLs in the Map Definition, never hard-coded here).
+// www.openstreetmap.org, opendatacommons.org, creativecommons.org: the map credit LINKS in the Credits sheet (the (i)
 // on the map's credit line), opened in the browser on tap only, like open-meteo.com above (Drive WP2 default decision, HANDOFF 105).
 // open-meteo.com: the licence credit LINK for server-side weather, opened in the browser on tap only (About, drive report
 // Weather block). The app never contacts Open-Meteo; the server does (stream 7 WP6).

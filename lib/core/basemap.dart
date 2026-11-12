@@ -68,13 +68,22 @@ extension BasemapSourceX on BasemapSource {
   };
 }
 
-/// The style JSON (vector_tile_renderer subset, generated from the website's styles) for a source and theme.
-Map<String, dynamic> basemapStyle(BasemapSource source, {required bool dark}) {
-  final json = switch ((source, dark)) {
-    (BasemapSource.openFreeMap, false) => openfreemapLightStyleJson,
-    (BasemapSource.openFreeMap, true) => openfreemapDarkStyleJson,
-    (_, false) => protomapsLightStyleJson,
-    (_, true) => protomapsDarkStyleJson,
+/// Which of our Protomaps looks a vector layer draws (M3): the Road / Light / Dark map, the Topo palette (the Map Definition's
+/// `basemaps[topo].topo` overrides laid over Protomaps' light / dark flavour, baked by tool/basemap/make_basemap_styles.mjs), or
+/// only the town and road names (drawn over Satellite imagery inside our extract, black flavour).
+enum BasemapLook { road, topo, labels }
+
+/// The style JSON (vector_tile_renderer subset, generated from the website's styles) for a source, theme and [look]. OpenFreeMap
+/// has one look (its Positron / Dark): Topo falls back to it, and the labels look has no OpenFreeMap equivalent (never asked).
+Map<String, dynamic> basemapStyle(BasemapSource source, {required bool dark, BasemapLook look = BasemapLook.road}) {
+  final json = switch ((source, dark, look)) {
+    (BasemapSource.openFreeMap, false, _) => openfreemapLightStyleJson,
+    (BasemapSource.openFreeMap, true, _) => openfreemapDarkStyleJson,
+    (_, _, BasemapLook.labels) => protomapsLabelsStyleJson,
+    (_, false, BasemapLook.topo) => protomapsTopoLightStyleJson,
+    (_, true, BasemapLook.topo) => protomapsTopoDarkStyleJson,
+    (_, false, _) => protomapsLightStyleJson,
+    (_, true, _) => protomapsDarkStyleJson,
   };
   return _parsed.putIfAbsent(json, () => jsonDecode(json) as Map<String, dynamic>);
 }

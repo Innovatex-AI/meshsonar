@@ -1,7 +1,7 @@
 // AttributionLine (Drive plan section 8, R04, D13): the map credit as one always-visible 12 pt line in the bottom-RIGHT corner
 // with a trailing (i) that opens the Credits sheet. It never collapses to the bare (i) and a MapPageConfig cannot turn it off:
 // the OSM Attribution Guidelines say the credit should appear in a corner of the map and not need interaction to see it, and
-// an (i) alone is not compliant. On Topo the line also carries the OpenTopoMap credit (CC-BY-SA needs reasonable visibility).
+// an (i) alone is not compliant. On Satellite the line carries the imagery credits (Esri, USGS NAIP) the definition requires.
 //
 // Keys: 'map-attribution' (the whole line), 'map-attribution-text', 'map-attribution-info' (the (i) button),
 // 'map-attribution-meshcore' (the optional second line).
@@ -12,7 +12,7 @@ import '../../../core/map_styles.dart';
 import '../../theme.dart';
 
 /// The default text of the credit line for [style]. Chart, Light and Dark are our Protomaps tiles (the map passes the
-/// OpenFreeMap credit while the fallback draws); Topo adds OpenTopoMap and SRTM.
+/// OpenFreeMap credit while the fallback draws, Satellite the imagery credits).
 String attributionText(BaseMapStyle style) => style.attribution;
 
 class AttributionLine extends StatelessWidget {
@@ -31,9 +31,9 @@ class AttributionLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
-    // Topo is drawn as the tile server made it (busy) and Light stays light under a dark theme: a surface pill keeps the
+    // Topo and Satellite are busy and Light stays light under a dark theme: a surface pill keeps the
     // 12 pt line legible on both.
-    final pill = style == BaseMapStyle.street || style == BaseMapStyle.topo;
+    final pill = style == BaseMapStyle.street || style == BaseMapStyle.topo || style.isSatellite;
     final ink = t.colorScheme.onSurface;
     final halo = t.colorScheme.surface;
     TextStyle base(Color c) => (t.textTheme.labelSmall ?? const TextStyle()).copyWith(

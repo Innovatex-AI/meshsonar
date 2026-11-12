@@ -535,7 +535,7 @@ Circles where this driver's pings are hidden from every public view, for drives 
 
 ## Drive tab quick tools (unreleased)
 
-Under the layers button (Drive map and full-screen map): **base map** cycler (Chart, Street, Dark, Topo; saved; offline packs drawn for all but Topo), **filter** drawer (result, age, repeater, my pings only; badge shows how many are on), **trophy** (region leaderboard + your totals from this phone) and the **coverage pill** (share of cells and of your tx pings heard inside the view). Coverage options > Colour by adds **Ping age** (indigo ramp) and **Noise vs typical** (teal to rust); grey = mapped nothing heard, purple = heard signal unknown, green/blue/amber/red only for signal. Settings > Wardriving > Ping feedback: haptic tap (on) and sound (off), different for heard and heard nothing.
+Under the layers button (Drive map and full-screen map): **base map** cycler (Chart, Street, Dark, plus Topo and Satellite when the Map Definition offers them; saved; offline packs drawn for Chart, Street and Dark; Topo and Satellite need a connection and say so offline), **filter** drawer (result, age, repeater, my pings only; badge shows how many are on), **trophy** (region leaderboard + your totals from this phone) and the **coverage pill** (share of cells and of your tx pings heard inside the view). Coverage options > Colour by adds **Ping age** (indigo ramp) and **Noise vs typical** (teal to rust); grey = mapped nothing heard, purple = heard signal unknown, green/blue/amber/red only for signal. Settings > Wardriving > Ping feedback: haptic tap (on) and sound (off), different for heard and heard nothing.
 
 ## Full-screen map
 
@@ -1332,3 +1332,5 @@ single file it always was. The drive report shares a `.txt` file and its text.
 
 All errors are turned into one short plain-language line (`lib/app/messages.dart`). Data-safety wording ("your data is
 safe on this phone") is used for network and server errors. 401, 403, 413 and 429 each get their own text.
+
+**M3 map layers (Nov 12 2026).** Layers sheet > Coverage > **Redundancy** (res-11 cells coloured by how many distinct repeaters were measured there: 1 is a single point of failure; off by default; hides while a time window looks at the past) and Network > **Links by SNR** (a line per located repeater pair, colour = SNR band, width = packets, dashed neutral = seen relaying only; off by default) and **Estimated positions** (repeaters with no GPS drawn at the server's estimate, paler the less sure; tap says it is approximate; on by default). Parity with the website; labels and colours come from the Map Definition; offered only when it advertises `layer.redundancy` / `layer.snrlinks` / `layer.estimated`.

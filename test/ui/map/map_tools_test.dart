@@ -12,7 +12,9 @@ import 'package:latlong2/latlong.dart';
 import 'package:meshsonar/app/app_state.dart' show RadioKind;
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/colour_palette.dart';
+import 'package:meshsonar/core/basemap.dart' show BasemapLook;
 import 'package:meshsonar/core/map_styles.dart';
+import 'package:meshsonar/core/offline_packs.dart' show NetworkKind;
 import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/core/region_stats_api.dart';
 import 'package:meshsonar/ui/device_feedback.dart';
@@ -95,21 +97,25 @@ void main() {
       ),
     );
 
-    testWidgets('Chart / Light / Dark draw our vector basemap, Topo its raster server; each credits its source', (tester) async {
+    testWidgets('Chart / Light / Dark / Topo draw our vector basemap, Satellite the definition\'s imagery; each credits its source', (tester) async {
       for (final s in BaseMapStyle.values) {
         await mapWith(tester, s);
         await tester.pump();
         if (s.isVector) {
-          expect(tester.widget<BasemapLayer>(find.byType(BasemapLayer)).dark, s.darkLook, reason: s.id);
+          final layer = tester.widget<BasemapLayer>(find.byType(BasemapLayer));
+          expect(layer.dark, s.darkLook, reason: s.id);
+          expect(layer.look, s.look, reason: s.id);
           expect(find.byType(TileLayer), findsNothing, reason: s.id);
           expect(find.descendant(of: find.byKey(const Key('map-attribution')), matching: find.text('Protomaps © OpenStreetMap contributors')), findsOneWidget);
         } else {
-          final layer = tester.widget<TileLayer>(find.byType(TileLayer));
-          expect(layer.urlTemplate, s.tileUrl, reason: s.id);
-          expect(layer.maxNativeZoom, s.maxNativeZoom);
-          expect(layer.tileBuilder, isNull, reason: 'Topo is drawn as served');
-          expect(find.byType(BasemapLayer), findsNothing);
-          expect(find.descendant(of: find.byKey(const Key('map-attribution')), matching: find.text(s.attribution)), findsOneWidget);
+          final layers = tester.widgetList<TileLayer>(find.byType(TileLayer)).toList();
+          expect(layers.map((l) => l.urlTemplate), [contains('/api/map/satellite/esri/'), contains('basemap.nationalmap.gov')], reason: 'Esri (our proxy) then NAIP, from the definition');
+          expect(layers.map((l) => l.maxNativeZoom), [18, 16]);
+          expect(layers.map((l) => l.maxZoom), [22, 17], reason: 'NAIP is drawn up to z17 only');
+          expect(layers.map((l) => l.tileBuilder), everyElement(isNull), reason: 'imagery is drawn as served');
+          expect(find.byType(BasemapLayer), findsOneWidget, reason: 'our names over the imagery');
+          expect(tester.widget<BasemapLayer>(find.byType(BasemapLayer)).look, BasemapLook.labels);
+          expect(find.descendant(of: find.byKey(const Key('map-attribution')), matching: find.textContaining('Powered by Esri')), findsOneWidget);
         }
       }
       final light = MeshSonarColors.forPalette(ColourPalette.standard, Brightness.light).tileMatrix;
@@ -132,25 +138,59 @@ void main() {
         expect(find.byType(BasemapLayer), findsOneWidget, reason: '${s.id}: the online basemap stays under the pack, skipping what it draws');
       }
       expect(looks, [null, false, true], reason: 'chart follows the theme, street is the light look, dark is forced dark');
-      await mapWith(tester, BaseMapStyle.topo);
-      await tester.pump();
-      expect(find.byType(OfflineBasemapLayer), findsNothing, reason: 'there is no offline topo');
-      expect(tester.widget<TileLayer>(find.byType(TileLayer)).urlTemplate, BaseMapStyle.topo.tileUrl);
+      for (final s in [BaseMapStyle.topo, BaseMapStyle.satellite]) {
+        await mapWith(tester, s);
+        await tester.pump();
+        expect(find.byType(OfflineBasemapLayer), findsNothing, reason: 'there is no offline ${s.id}');
+      }
       await tester.pumpWidget(const SizedBox());
       await tester.runAsync(() => b.debugClose());
     });
 
-    testWidgets('the cycler button steps chart > street > dark > topo > chart, saves the choice and says what it is', (tester) async {
+    testWidgets('Topo and Satellite with no connection say so (an honest message, never a blank map); Chart does not; back online it clears', (tester) async {
+      final net = FakeNetworkMonitor(NetworkKind.offline);
+      late OfflineBasemap b;
+      await tester.runAsync(() async {
+        final root = Directory('${tmp.path}/np')..createSync(recursive: true);
+        File('${root.path}/packs.json').writeAsStringSync('{}');
+        b = OfflineBasemap.forTest();
+        await b.manager(root: root, client: MockClient((_) async => http.Response('', 404)), network: net);
+      });
+      OfflineBasemap.debugInstance = b;
+      for (final s in [BaseMapStyle.satellite, BaseMapStyle.topo]) {
+        await mapWith(tester, s);
+        await tester.pump();
+        await tester.pump();
+        expect(find.byKey(const Key('map-needs-network')), findsOneWidget, reason: s.id);
+        expect(find.textContaining('${s.label} needs a connection'), findsOneWidget);
+        expect(find.textContaining('Chart works offline'), findsOneWidget);
+      }
+      await mapWith(tester, BaseMapStyle.chart);
+      await tester.pump();
+      await tester.pump();
+      expect(find.byKey(const Key('map-needs-network')), findsNothing, reason: 'Chart has the offline pack');
+      await mapWith(tester, BaseMapStyle.satellite);
+      await tester.pump();
+      await tester.pump();
+      expect(find.byKey(const Key('map-needs-network')), findsOneWidget);
+      net.emit(NetworkKind.wifi);
+      await tester.pump();
+      expect(find.byKey(const Key('map-needs-network')), findsNothing, reason: 'online again');
+      await tester.pumpWidget(const SizedBox());
+      await tester.runAsync(() => b.debugClose());
+    });
+
+    testWidgets('the cycler button steps chart > street > dark > topo > satellite > chart, saves the choice and says what it is', (tester) async {
       final h = await driving(tester);
       expect(h.state.settings.baseMapStyle, 'chart');
       final seen = <String>[];
-      for (var i = 0; i < 4; i++) {
+      for (var i = 0; i < 5; i++) {
         await tester.tap(find.byKey(const Key('drive-map-style')));
         await settleLive(tester);
         seen.add(h.state.settings.baseMapStyle);
         expect(find.textContaining('${BaseMapStyle.parse(seen.last).label}:'), findsOneWidget);
       }
-      expect(seen, ['street', 'dark', 'topo', 'chart']);
+      expect(seen, ['street', 'dark', 'topo', 'satellite', 'chart']);
       expect(h.settings.saved.baseMapStyle, 'chart');
       await stop(tester, h);
     });

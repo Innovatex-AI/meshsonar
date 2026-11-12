@@ -36,9 +36,11 @@ void main() {
 
     test('coverage redesign layers (plan section 5): rings gone, predicted added, under measured', () {
       // Nov 9 2026: + 'heardcells', the Heard (no ping) layer (phone observer contract section 8.5), between predicted and measured.
-      expect(kMapLayers.map((l) => l.id).toSet(),
-          {'borders', 'predicted', 'heardcells', 'measured', 'hexes', 'pings', 'links', 'heard', 'repeaters', 'network', 'observers', 'phones', 'labels'});
-      expect(kMapLayers, hasLength(13));
+      // Nov 12 2026 (M3-2): + 'redundancy', 'snrlinks' and 'estimated' (Map Definition capabilities layer.redundancy / layer.snrlinks / layer.estimated).
+      expect(kMapLayers.map((l) => l.id).toSet(), {
+        'borders', 'predicted', 'heardcells', 'measured', 'redundancy', 'hexes', 'pings', 'snrlinks', 'links', 'heard', 'repeaters', 'network', 'estimated', 'observers', 'phones', 'labels',
+      });
+      expect(kMapLayers, hasLength(16));
       expect(layerSpec('heardcells')!.z, greaterThan(layerSpec('predicted')!.z));
       expect(layerSpec('heardcells')!.z, lessThan(layerSpec('measured')!.z), reason: 'a pinged cell shows its Measured colour');
       expect(layerSpec('rings'), isNull);
@@ -49,7 +51,9 @@ void main() {
 
     test('defaults come from the Map Definition: every defaultOn layer, plus the drive extras; All MeshCore repeaters off', () {
       expect(kDefaultLayerState.on,
-          {'borders', 'predicted', 'heardcells', 'measured', 'hexes', 'links', 'repeaters', 'observers', 'phones', 'heard', 'pings', 'labels'});
+          {'borders', 'predicted', 'heardcells', 'measured', 'hexes', 'links', 'repeaters', 'estimated', 'observers', 'phones', 'heard', 'pings', 'labels'});
+      expect(kDefaultLayerState.isOn('redundancy'), isFalse, reason: 'Redundancy is off by default (the definition)');
+      expect(kDefaultLayerState.isOn('snrlinks'), isFalse, reason: 'Links by SNR is off by default (the definition)');
       expect(kDefaultLayerState.mode, {'pings': 'snr'}, reason: 'no colour-by mode any more (D9)');
       expect(layerLabel('network'), 'All MeshCore repeaters');
       expect(kDefaultLayerState.isOn('network'), isFalse);
@@ -60,14 +64,17 @@ void main() {
     test('the sheet is the website Layers panel: groups and rows from the definition, top of the map first', () {
       final rows = sheetRows(MapDefinition.bundled);
       expect([for (final (g, _) in rows) g.name], ['Coverage', 'Network', 'Context']);
-      expect([for (final r in rows[0].$2) r.id], ['hexes', 'pings', 'measured', 'heardcells', 'predicted'],
+      expect([for (final r in rows[0].$2) r.id], ['hexes', 'pings', 'redundancy', 'measured', 'heardcells', 'predicted'],
           reason: 'This drive (the panel-only drive layer, the app drive panel) then the website rows');
-      expect([for (final r in rows[1].$2) r.id], ['phones', 'observers', 'repeaters', 'labels', 'network', 'links']);
+      expect([for (final r in rows[1].$2) r.id], ['phones', 'observers', 'estimated', 'repeaters', 'labels', 'network', 'links', 'snrlinks']);
       expect([for (final r in rows[2].$2) r.id], ['borders']);
-      expect([for (final id in ['measured', 'heardcells', 'predicted', 'phones', 'observers', 'repeaters', 'network', 'links', 'borders']) layerLabel(id, MapDefinition.bundled)], [
+      expect([for (final id in ['measured', 'heardcells', 'predicted', 'redundancy', 'snrlinks', 'estimated', 'phones', 'observers', 'repeaters', 'network', 'links', 'borders']) layerLabel(id, MapDefinition.bundled)], [
         'Measured coverage',
         'Heard by phones',
         'Predicted coverage',
+        'Redundancy',
+        'Links by SNR',
+        'Estimated positions',
         'Moving phones',
         'Observers',
         'Repeaters',
@@ -89,7 +96,7 @@ void main() {
 
     test('paint order follows the definition', () {
       expect(definitionLayerIds(MapDefinition.bundled),
-          ['borders', 'predicted', 'heardcells', 'measured', 'hexes', 'links', 'network', 'repeaters', 'observers', 'phones']);
+          ['borders', 'predicted', 'heardcells', 'measured', 'redundancy', 'hexes', 'snrlinks', 'links', 'network', 'repeaters', 'estimated', 'observers', 'phones']);
     });
 
     test('one Repeaters switch with a scope: region by default, All MeshCore remembered while off', () {

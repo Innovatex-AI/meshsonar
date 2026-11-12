@@ -28,17 +28,19 @@ void main() {
     expect(inside(-60, 40, -40, 50, 8), isFalse); // east edge past the extract at z8
   });
 
-  test('chart / light / dark are our vector map, topo the only raster; nothing points at a raster OSM server', () {
+  test('chart / light / dark / topo are our vector map, satellite the only raster; nothing points at a raster OSM server', () {
     for (final s in [BaseMapStyle.chart, BaseMapStyle.street, BaseMapStyle.dark]) {
       expect(s.isVector, isTrue, reason: s.id);
-      expect(s.tileUrl, isNull);
       expect(s.attribution, OurBasemap.attribution);
       expect(s.usesOfflinePack, isTrue);
     }
+    expect(BaseMapStyle.topo.isVector, isTrue, reason: 'M3 Topo is our own Protomaps map in the definition palette');
+    expect(BaseMapStyle.topo.look, BasemapLook.topo);
+    expect(BaseMapStyle.chart.look, BasemapLook.road);
     expect(BaseMapStyle.chart.darkLook, isNull);
     expect(BaseMapStyle.street.darkLook, isFalse);
     expect(BaseMapStyle.dark.darkLook, isTrue);
-    expect(BaseMapStyle.topo.isVector, isFalse);
+    expect(BaseMapStyle.satellite.isVector, isFalse);
     expect(BaseMapStyle.parse('street'), BaseMapStyle.street, reason: 'a saved choice keeps working');
   });
 

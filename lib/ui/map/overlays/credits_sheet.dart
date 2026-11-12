@@ -1,8 +1,8 @@
 // The Credits sheet behind the attribution line's (i) (Drive plan section 8). Minimal in WP2: the full licence text and links,
-// OpenTopoMap and SRTM when Topo is the base, MeshCore Map when its layer is on, where the base map is coming from right now
+// the Topo palette note when Topo is the base, the imagery credits (Esri, USGS NAIP) when Satellite is, MeshCore Map when its layer is on, where the base map is coming from right now
 // (this replaces the old on-map source chip), the colour key (moved off the map), and a way into the legend.
 //
-// Keys: 'credits-sheet', 'credits-osm', 'credits-topo', 'credits-meshcore', 'credits-source', 'credits-key', 'credits-legend'.
+// Keys: 'credits-sheet', 'credits-osm', 'credits-topo', 'credits-satellite', 'credits-meshcore', 'credits-source', 'credits-key', 'credits-legend'.
 import 'package:flutter/material.dart';
 
 import '../../../core/map_styles.dart';
@@ -19,6 +19,7 @@ Future<void> showMapCredits(
   Widget? colourKey,
   String? meshCoreCredit,
   VoidCallback? openLegend,
+  List<String> imageryCredits = const [],
 }) {
   return showAppSheet<void>(
     context,
@@ -30,6 +31,7 @@ Future<void> showMapCredits(
       colourKey: colourKey,
       meshCoreCredit: meshCoreCredit,
       openLegend: openLegend,
+      imageryCredits: imageryCredits,
     ),
   );
 }
@@ -41,12 +43,15 @@ class CreditsSheet extends StatelessWidget {
   final Widget? colourKey;
   final String? meshCoreCredit;
   final VoidCallback? openLegend;
-  const CreditsSheet({super.key, this.controller, required this.style, this.sourceState, this.colourKey, this.meshCoreCredit, this.openLegend});
+
+  /// The credit lines of the imagery drawn under Satellite (from the Map Definition's sources).
+  final List<String> imageryCredits;
+  const CreditsSheet({super.key, this.controller, required this.style, this.sourceState, this.colourKey, this.meshCoreCredit, this.openLegend, this.imageryCredits = const []});
 
   static final Uri _osmCopyright = Uri.parse('https://www.openstreetmap.org/copyright');
   static final Uri _odbl = Uri.parse('https://opendatacommons.org/licenses/odbl/1-0/');
-  static final Uri _topo = Uri.parse('https://opentopomap.org');
-  static final Uri _ccBySa = Uri.parse('https://creativecommons.org/licenses/by-sa/3.0/');
+  static final Uri _esri = Uri.parse('https://www.esri.com');
+  static final Uri _naip = Uri.parse('https://www.usgs.gov/centers/eros/science/usgs-eros-archive-aerial-photography-national-agriculture-imagery-program-naip');
   static final Uri _meshcore = Uri.parse('https://map.meshcore.io');
   static final Uri _protomaps = Uri.parse('https://protomaps.com');
   static final Uri _openfreemap = Uri.parse('https://openfreemap.org');
@@ -81,14 +86,24 @@ class CreditsSheet extends StatelessWidget {
           ],
         ),
         if (style == BaseMapStyle.topo) ...[
-          head('Terrain map'),
+          head('Topo map'),
           Column(
             key: const Key('credits-topo'),
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Map data: © OpenStreetMap contributors, SRTM. Map style: © OpenTopoMap (CC-BY-SA).', style: t.textTheme.bodyMedium),
-              link('opentopomap.org', _topo),
-              link('Creative Commons BY-SA 3.0', _ccBySa),
+              Text('The Topo map is MeshSonar\'s own vector tiles (Protomaps, from OpenStreetMap data) in a land cover and terrain palette.', style: t.textTheme.bodyMedium),
+            ],
+          ),
+        ],
+        if (style == BaseMapStyle.satellite) ...[
+          head('Satellite imagery'),
+          Column(
+            key: const Key('credits-satellite'),
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final c in imageryCredits) Text(c, style: t.textTheme.bodyMedium),
+              if (imageryCredits.any((c) => c.contains('Esri'))) link('esri.com', _esri),
+              if (imageryCredits.any((c) => c.contains('USGS'))) link('USGS National Map (NAIP)', _naip),
             ],
           ),
         ],

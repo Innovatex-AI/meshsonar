@@ -16,7 +16,10 @@ import 'package:latlong2/latlong.dart';
 
 import '../../app/app_state.dart';
 import '../../core/api.dart' show PublicCoverage;
-import '../../core/coverage_v2.dart' show CoverageTileStore;
+import '../../core/coverage_v2.dart' show CoverageTileStore, presetSf;
+import '../../core/m3_data.dart';
+import '../../core/map_basemaps.dart';
+import '../../core/region_m3_api.dart';
 import '../../core/coverage_query.dart';
 import '../../core/heard.dart';
 import '../../core/hex_cells.dart' show loadHexEngine;
@@ -44,6 +47,7 @@ import '../map/layers/observer_layer.dart' show positionedObservers;
 import '../map/layers/registry.dart';
 import '../map/layers/region_borders_layer.dart' show regionBorderRings;
 import '../map/layers/repeater_map_source.dart';
+import '../map/layers/repeater_sprites.dart' show RepeaterFreshness, freshnessOfActivity;
 import '../map/cell_raster_layer.dart' show CellRasterLayer;
 import '../map/live_puck.dart';
 import '../map/core/map_view_controller.dart';
@@ -62,6 +66,9 @@ class DriveMapModel extends ChangeNotifier {
     MapHealthSink? healthSink,
     MapPrefs? prefs,
     this.pageId = kDriveLayerPage,
+    Future<EstimatesAnswer> Function(String baseUrl, String slug)? estimates,
+    Future<LinkGraph> Function(String baseUrl, String slug, {required bool allSources, required bool drive})? linkGraph,
+    Future<RegionRepeaters> Function(String baseUrl, String regionSlug)? roster,
   }) : _prefs = prefs ?? MapPrefs.shared,
        // ignore: prefer_initializing_formals
        _compass = compass,
@@ -69,6 +76,10 @@ class DriveMapModel extends ChangeNotifier {
         sink: healthSink ?? _sinkFor(state),
         clock: state.services.clock,
       ) {
+    // The M3 / roster fetchers are set before the first load below (tests pass stubs here; the app uses the region client).
+    if (estimates != null) estimatesFetcher = estimates;
+    if (linkGraph != null) linkGraphFetcher = linkGraph;
+    if (roster != null) regionRepeatersFetcher = roster;
     _wireHealth();
     SchedulerBinding.instance.addTimingsCallback(_onTimings);
     // The remembered layer choices of this page (LayerPrefs, read synchronously: main loads the file before the first frame), so
@@ -80,6 +91,7 @@ class DriveMapModel extends ChangeNotifier {
     repeaterSource = RepeaterMapSource(repeaterFeed, clock: state.services.clock, isolateThreshold: repeaterIsolateThreshold)
       ..dedupeAgainstRoster = _layerState.isOn(kRosterLayerId);
     state.addListener(_onState);
+    ActiveMapDefinition.notifier.addListener(_onDefinition);
     _onState();
     // A remembered window / source / detail is asked for now, not on the next zoom.
     if (_query != const CoverageQuery()) _scheduleCoverageFetch(immediate: true);
@@ -256,6 +268,7 @@ class DriveMapModel extends ChangeNotifier {
     if (turnedOn(kRosterLayerId) || turnedOn(kNetworkLayerId)) repeaterSource.refreshAges();
     if (turnedOn(kRosterLayerId) && _regionRepeaters.isEmpty && repeaterFeed.region.rows.isEmpty) unawaited(loadRegionRepeaters());
     if (turnedOn('observers') || turnedOn('phones')) unawaited(loadObservers());
+    if (turnedOn('estimated') || turnedOn('snrlinks') || turnedOn('redundancy')) loadM3Data();
   }
 
   /// Turns one registry layer on or off (each definition layer is its own switch, as on the website: Repeaters and All
@@ -397,6 +410,183 @@ class DriveMapModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ---------- M3 layers: Estimated positions, Redundancy, Links by SNR (plan unified-map-system §8b M3-2) ----------
+  // Data is asked only while the layer is on, only for a viewed region (the hub has no roster of its own), and only when the Map
+  // Definition in use advertises the layer (`layer.estimated` / `layer.redundancy` / `layer.snrlinks`). Nothing is invented: a
+  // layer with no data says so in the Layers sheet, and the server's estimated positions are drawn exactly as given.
+  EstimatesAnswer? _estimates;
+  Set<String> _rosterPositioned = const {};
+  Map<String, RepeaterFreshness> _rosterFreshness = const {};
+  MapFeedState _estimatesState = MapFeedState.idle;
+  String? _estimatesSlug;
+  int _estimatesSeq = 0;
+
+  LinkGraph? _graph;
+  MapFeedState _graphState = MapFeedState.idle;
+  String? _graphSlug;
+  bool _graphAll = false, _graphDrive = false;
+  int _graphSeq = 0;
+
+  /// Test seams: how the two answers are fetched.
+  Future<EstimatesAnswer> Function(String baseUrl, String slug) estimatesFetcher = (u, s) => fetchRegionEstimates(u, s);
+  Future<LinkGraph> Function(String baseUrl, String slug, {required bool allSources, required bool drive}) linkGraphFetcher =
+      (u, s, {required allSources, required drive}) => fetchRegionLinkGraph(u, s, allSources: allSources, drive: drive);
+
+  /// True when the Map Definition in use offers layer [id] (its capability string AND the layer entry).
+  bool layerOffered(String id) {
+    final d = ActiveMapDefinition.current;
+    final cap = switch (id) {
+      'estimated' => capLayerEstimated,
+      'redundancy' => capLayerRedundancy,
+      'snrlinks' => capLayerSnrLinks,
+      _ => null,
+    };
+    return cap == null || (d.hasCapability(cap) && d.layerDef(id) != null);
+  }
+
+  bool _m3On(String id) => layerOffered(id) && _layerState.isOn(id) && state.viewingRegion != null;
+
+  /// The estimated positions that are still without a position in the roster, ready to draw (empty until loaded or when the layer is off).
+  List<RepeaterEstimate> get estimatesToShow => !_m3On('estimated') || _estimates == null ? const [] : estimatesToDraw(_estimates!, _rosterPositioned);
+  RepeaterFreshness freshnessOfEstimate(String key) => _rosterFreshness[key] ?? RepeaterFreshness.stale;
+  MapFeedState get estimatesState => _estimatesSlug == state.viewingRegion?.slug ? _estimatesState : MapFeedState.idle;
+
+  /// Redundancy cells (hidden while a time window / source filter looks at the past: the drive rows have one window).
+  RedundancyResult? get redundancy {
+    final g = _graph;
+    if (!_m3On('redundancy') || coverageFiltered || g == null || !_graphDrive) return null;
+    if (!identical(_redFor, g)) {
+      _redFor = g;
+      _redResult = redundancyCells(g); // memoised: the map keys its drawn picture on the identity of this list
+    }
+    return _redResult;
+  }
+
+  LinkGraph? _redFor, _snrFor;
+  RedundancyResult? _redResult;
+  List<SnrLink> _snrResult = const [];
+  String? _snrKey;
+
+  /// Links by SNR lines (memoised on the graph, the definition and the preset).
+  List<SnrLink> get snrLinesToShow {
+    final g = _graph;
+    if (!_m3On('snrlinks') || g == null || !_graphAll) return const [];
+    final d = ActiveMapDefinition.current;
+    final sf = presetSf(state.coverageMeta.defaultPreset);
+    final key = '${d.version}/$sf';
+    if (!identical(_snrFor, g) || _snrKey != key) {
+      _snrFor = g;
+      _snrKey = key;
+      _snrResult = snrLinks(g, d, sf: sf);
+    }
+    return _snrResult;
+  }
+
+  MapFeedState get linkGraphState => _graphSlug == state.viewingRegion?.slug ? _graphState : MapFeedState.idle;
+
+  /// Fetches what the M3 layers that are on need (estimates + roster; the link graph with the parameters the layers ask for).
+  void loadM3Data({bool force = false}) {
+    if (_m3On('estimated')) unawaited(loadEstimates(force: force));
+    if (_m3On('snrlinks') || _m3On('redundancy')) unawaited(loadLinkGraph(force: force));
+  }
+
+  Future<void> loadEstimates({bool force = false}) async {
+    final v = state.viewingRegion;
+    if (v == null) return;
+    if (!force && _estimatesSlug == v.slug && (_estimatesState == MapFeedState.ready || _estimatesState == MapFeedState.loading)) return;
+    final seq = ++_estimatesSeq;
+    if (_estimatesSlug != v.slug) {
+      _estimates = null;
+      _rosterPositioned = const {};
+      _rosterFreshness = const {};
+    }
+    _estimatesSlug = v.slug;
+    _estimatesState = _estimates == null ? MapFeedState.loading : _estimatesState;
+    notifyListeners();
+    try {
+      // The roster tells which estimated repeaters have a position since (those are not drawn) and how fresh each one is.
+      final results = await Future.wait<Object>([estimatesFetcher(v.url, v.slug), regionRepeatersFetcher(v.url, v.slug)]);
+      if (_disposed || seq != _estimatesSeq) return;
+      final roster = results[1] as RegionRepeaters;
+      _estimates = results[0] as EstimatesAnswer;
+      _rosterPositioned = {for (final r in roster.rows) if (r.hasPosition) r.key};
+      _rosterFreshness = {for (final r in roster.rows) r.key: freshnessOfActivity(r.status)};
+      _estimatesState = MapFeedState.ready;
+    } catch (_) {
+      if (_disposed || seq != _estimatesSeq) return;
+      _estimatesState = _estimates == null ? MapFeedState.failed : MapFeedState.stale;
+    }
+    notifyListeners();
+  }
+
+  Future<void> loadLinkGraph({bool force = false}) async {
+    final v = state.viewingRegion;
+    if (v == null) return;
+    final all = _m3On('snrlinks'), drive = _m3On('redundancy'); // fetched even while a time filter hides it, so clearing the filter needs no wait
+    if (!all && !drive) return;
+    final same = _graphSlug == v.slug && (_graphAll || !all) && (_graphDrive || !drive);
+    if (!force && same && (_graphState == MapFeedState.ready || _graphState == MapFeedState.loading)) return;
+    final seq = ++_graphSeq;
+    if (_graphSlug != v.slug) {
+      _graph = null;
+      _graphAll = _graphDrive = false;
+    }
+    _graphSlug = v.slug;
+    _graphState = _graph == null ? MapFeedState.loading : _graphState;
+    notifyListeners();
+    // One request serves both layers: every source when Links by SNR is on, the drive rows when Redundancy is on (what a
+    // previous answer already held is kept in the request, so toggling the second layer never drops the first one's data).
+    final wantAll = all || _graphAll, wantDrive = drive || _graphDrive;
+    try {
+      final g = await linkGraphFetcher(v.url, v.slug, allSources: wantAll, drive: wantDrive);
+      if (_disposed || seq != _graphSeq) return;
+      _graph = g;
+      _graphAll = wantAll;
+      _graphDrive = wantDrive;
+      _graphState = MapFeedState.ready;
+    } catch (_) {
+      if (_disposed || seq != _graphSeq) return;
+      _graphState = _graph == null ? MapFeedState.failed : MapFeedState.stale;
+    }
+    notifyListeners();
+  }
+
+  /// The Layers sheet's switch state and the line under it for the M3 layers.
+  LayerStatus _m3Status(String id) {
+    String plural(int n, String one, String many) => '$n ${n == 1 ? one : many}';
+    switch (id) {
+      case 'estimated':
+        final shown = estimatesToShow;
+        return _m3Feed(estimatesState, shown.length, what: (n) => '${plural(n, 'repeater', 'repeaters')} with no GPS, placed from neighbours', none: 'No estimated positions: every repeater that has links already has a position, or none has a neighbour with one.');
+      case 'snrlinks':
+        return _m3Feed(linkGraphState, snrLinesToShow.length, what: (n) => plural(n, 'link between located repeaters', 'links between located repeaters'), none: 'No links between located repeaters yet.');
+      default:
+        if (coverageFiltered) return const LayerStatus(LayerAvailability.ready, detail: 'Hidden while looking back: the drive data has one window');
+        final r = redundancy;
+        final base = _m3Feed(linkGraphState, r?.cells.length ?? 0, what: (n) => '${plural(n, 'cell', 'cells')} with a measured repeater', none: 'No cell has a measured repeater matched to one node yet.');
+        if (r != null && r.cells.isNotEmpty && r.unresolved > 0) {
+          return LayerStatus(base.availability, detail: '${base.detail} · ${plural(r.unresolved, 'repeater id', 'repeater ids')} could not be matched to one repeater and ${r.unresolved == 1 ? 'is' : 'are'} not counted');
+        }
+        return base;
+    }
+  }
+
+  LayerStatus _m3Feed(MapFeedState s, int count, {required String Function(int) what, required String none}) {
+    switch (s) {
+      case MapFeedState.unsupported:
+        return const LayerStatus(LayerAvailability.unsupported, detail: 'Not available on this server yet');
+      case MapFeedState.idle:
+      case MapFeedState.loading:
+        return const LayerStatus(LayerAvailability.loading, detail: 'Loading…');
+      case MapFeedState.failed:
+        return const LayerStatus(LayerAvailability.failed, detail: "Couldn't load. Check the connection and retry.", canRetry: true);
+      case MapFeedState.ready:
+        return count == 0 ? LayerStatus(LayerAvailability.empty, detail: none) : LayerStatus(LayerAvailability.ready, detail: what(count));
+      case MapFeedState.stale:
+        return LayerStatus(LayerAvailability.stale, detail: '${what(count)} · older copy', canRetry: true);
+    }
+  }
+
   // ---------- layer availability (the generated layers sheet) ----------
   MapFeedState get _coverageState {
     // A saved copy served because the live fetch failed counts as stale even though the fetch itself "succeeded" (F5).
@@ -406,7 +596,7 @@ class DriveMapModel extends ChangeNotifier {
   }
 
   /// The switch state and the line under it for registry layer [id].
-  LayerStatus statusOf(String id) => layerStatus(
+  LayerStatus statusOf(String id) => (id == 'estimated' || id == 'snrlinks' || id == 'redundancy') ? _m3Status(id) : layerStatus(
     id,
     MapLayerInputs(
       coverageState: _coverageState,
@@ -436,6 +626,11 @@ class DriveMapModel extends ChangeNotifier {
         await state.refreshNetworkCoverage();
       case 'observers':
         await loadObservers(force: true);
+      case 'estimated':
+        await loadEstimates(force: true);
+      case 'snrlinks':
+      case 'redundancy':
+        await loadLinkGraph(force: true);
       case kRosterLayerId:
         if (state.repeaterSync == null || (repeaterFeed.region.rows.isEmpty && _regionRepeatersRegion != null)) {
           await loadRegionRepeaters();
@@ -631,6 +826,7 @@ class DriveMapModel extends ChangeNotifier {
       if (!first) timeline.regionChanged();
       // On by default now (the definition): loaded for the first region too, not only after a change.
       if (_layerState.isOn('observers') || _layerState.isOn('phones')) unawaited(loadObservers());
+      loadM3Data();
     }
 
     _watchTiles();
@@ -708,18 +904,29 @@ class DriveMapModel extends ChangeNotifier {
     }
   }
 
+  /// A new definition (the server's copy arrived): what is offered (basemaps, M3 layers) may have changed.
+  void _onDefinition() {
+    if (_disposed) return;
+    loadM3Data();
+    notifyListeners();
+  }
+
   // ---------- base map style (street / dark / topo), the filter drawer and the coverage % of what is in view ----------
   late String _styleId = state.settings.baseMapStyle;
 
-  /// The base map drawn under everything (Settings.baseMapStyle, saved).
-  BaseMapStyle get baseStyle => BaseMapStyle.parse(state.settings.baseMapStyle);
+  /// The base map drawn under everything: the saved choice (Settings.baseMapStyle), or Chart when the Map Definition in use does
+  /// not offer it (Topo / Satellite from a cached definition that predates M3, or one whose server dropped the capability).
+  BaseMapStyle get baseStyle => BaseMapStyle.effective(BaseMapStyle.parse(state.settings.baseMapStyle), ActiveMapDefinition.current);
+
+  /// The base maps the person may pick now (the definition's `capabilities`): the picker and the cycler show exactly these.
+  List<BaseMapStyle> get availableBaseStyles => BaseMapStyle.availableFor(ActiveMapDefinition.current);
   void setBaseStyle(BaseMapStyle v) {
-    if (v == baseStyle) return;
+    if (v == baseStyle || !availableBaseStyles.contains(v)) return;
     unawaited(state.updateSettings(state.settings.copyWith(baseMapStyle: v.id)));
   }
 
-  /// The cycler button: the next style.
-  void cycleBaseStyle() => setBaseStyle(baseStyle.next);
+  /// The cycler button: the next offered style.
+  void cycleBaseStyle() => setBaseStyle(baseStyle.nextAvailable(availableBaseStyles));
 
   MapFilter _filter = MapFilter.none;
   MapFilter get filter => _filter;
@@ -888,6 +1095,7 @@ class DriveMapModel extends ChangeNotifier {
     timeline.dispose();
     mapView.dispose();
     state.removeListener(_onState);
+    ActiveMapDefinition.notifier.removeListener(_onDefinition);
     _tilesListened?.removeListener(_onTiles);
     repeaterSource.dispose();
     repeaterFeed.dispose();

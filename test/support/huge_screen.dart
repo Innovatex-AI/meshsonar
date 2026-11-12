@@ -1,10 +1,10 @@
 // A phone-width surface tall enough that the whole layers sheet (about 25 rows, lazily built, shrink-wrapped to 40% of the
-// screen at its first detent) is built: 432 x 6500 logical, device pixel ratio 1 (a high ratio makes pumpAndSettle time out).
+// screen at its first detent) is built: 432 x 8000 logical, device pixel ratio 1 (a high ratio makes pumpAndSettle time out).
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void useHugeScreen(WidgetTester tester) {
-  tester.view.physicalSize = const Size(432, 6500);
+  tester.view.physicalSize = const Size(432, 8000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
 }

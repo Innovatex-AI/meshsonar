@@ -4,6 +4,8 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:meshsonar/core/map_styles.dart';
+import 'package:meshsonar/ui/map/active_map_definition.dart';
+import 'package:meshsonar/ui/map/satellite_layers.dart';
 import 'package:meshsonar/ui/map/core/map_hit_resolver.dart';
 import 'package:meshsonar/ui/map/core/map_insets.dart';
 import 'package:meshsonar/ui/map/core/map_view_controller.dart';
@@ -36,13 +38,15 @@ void main() {
         banner: const SizedBox(height: 56, width: double.infinity, child: Text('gps banner')),
       ),
     };
+    // Satellite's credit is the definition's imagery credits (Esri, USGS NAIP) plus ours; the others carry their own line.
+    String creditOf(BaseMapStyle s) => s.isSatellite ? satelliteCredit(ActiveMapDefinition.current) : s.attribution;
     for (final style in BaseMapStyle.values) {
       for (final e in states.entries) {
         for (final scale in [1.0, 2.0]) {
-          testWidgets('${style.id} / ${e.key} / x$scale shows ${style.attribution.split(',').first} bottom-right', (tester) async {
+          testWidgets('${style.id} / ${e.key} / x$scale shows ${creditOf(style).split(',').first} bottom-right', (tester) async {
             await tester.pumpWidget(_app(e.value(style), textScale: scale));
             await tester.pump();
-            final text = find.text(style.attribution);
+            final text = find.text(creditOf(style));
             expect(text, findsOneWidget);
             final handle = tester.ensureSemantics();
             expect(tester.getSemantics(text).label, contains('OpenStreetMap'));
@@ -58,10 +62,18 @@ void main() {
       }
     }
 
-    testWidgets('Topo carries the OpenTopoMap credit in the corner line itself, not only in the sheet', (tester) async {
+    testWidgets('Satellite carries the Esri and USGS NAIP credit in the corner line itself, not only in the sheet', (tester) async {
+      await tester.pumpWidget(_app(CoverageMap(pings: const [], showTiles: true, baseStyle: BaseMapStyle.satellite)));
+      await tester.pump();
+      expect(find.textContaining('Powered by Esri'), findsOneWidget);
+      expect(find.textContaining('USGS National Map (NAIP)'), findsOneWidget);
+      expect(find.textContaining('OpenStreetMap contributors'), findsOneWidget, reason: 'our names are drawn over the imagery');
+    });
+
+    testWidgets('Topo is our own map: no OpenTopoMap credit any more', (tester) async {
       await tester.pumpWidget(_app(CoverageMap(pings: const [], showTiles: true, baseStyle: BaseMapStyle.topo)));
       await tester.pump();
-      expect(find.textContaining('OpenTopoMap (CC-BY-SA)'), findsOneWidget);
+      expect(find.textContaining('OpenTopoMap'), findsNothing);
       expect(find.textContaining('OpenStreetMap contributors'), findsOneWidget);
     });
 
@@ -75,6 +87,17 @@ void main() {
       expect(find.byKey(const Key('credits-sheet')), findsOneWidget);
       expect(find.byKey(const Key('credits-topo')), findsOneWidget);
       expect(find.byKey(const Key('credits-osm')), findsOneWidget);
+    });
+
+    testWidgets('the Credits sheet names the Esri and USGS imagery on Satellite', (tester) async {
+      await tester.pumpWidget(_app(CoverageMap(pings: const [], showTiles: true, baseStyle: BaseMapStyle.satellite)));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('map-attribution-info')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.byKey(const Key('credits-satellite')), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const Key('credits-satellite')), matching: find.textContaining('Esri')), findsWidgets);
+      expect(find.descendant(of: find.byKey(const Key('credits-satellite')), matching: find.textContaining('USGS')), findsWidgets);
     });
   });
 

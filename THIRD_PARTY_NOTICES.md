@@ -69,7 +69,7 @@ the full licence is bundled at assets/fonts/Barlow-OFL.txt. Used as the app type
 Map data © OpenStreetMap contributors, available under the Open Database License (https://www.openstreetmap.org/copyright).
 The road and dark maps are MeshSonar's own vector tiles built by Protomaps (https://protomaps.com) from OpenStreetMap data,
 drawn with styles generated from @protomaps/basemaps (BSD-3-Clause). The fallback is OpenFreeMap (https://openfreemap.org,
-OpenMapTiles styles: BSD-3-Clause code, CC-BY 4.0 design). Topo is OpenTopoMap (CC-BY-SA). The app shows the credit of
+OpenMapTiles styles: BSD-3-Clause code, CC-BY 4.0 design). Topo is the same Protomaps map in a topographic palette. Satellite is Esri World Imagery (through MeshSonar's proxy, "Powered by Esri. Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community") and USGS National Map imagery (NAIP). The app shows the credit of
 the source drawn on every map. Map rendering uses flutter_map, vector_map_tiles and vector_tile_renderer (BSD-3-Clause).
 
 ## Data (shown in the drive report)

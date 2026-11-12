@@ -26,11 +26,12 @@ void main() {
   setUp(() => tmp = Directory.systemTemp.createTempSync('mapdef'));
   tearDown(() => tmp.deleteSync(recursive: true));
 
-  test('the bundled copy is the M1 fixture (meshsonar-infra docs/planning) and parses', () {
-    final infra = File('../meshsonar-infra/docs/planning/map-definition-fixture.json');
-    if (infra.existsSync()) expect(bundled, infra.readAsStringSync(), reason: 'copy the fixture again when M1 regenerates it');
+  test('the bundled copy is the M3 fixture (meshcore-insights src/test/contract/map-definition.fixture.json) and parses', () {
+    final web = File('../meshcore-insights/src/test/contract/map-definition.fixture.json');
+    if (web.existsSync()) expect(jsonDecode(bundled), jsonDecode(web.readAsStringSync()), reason: 'copy the website fixture again when the definition changes');
     final d = MapDefinition.parse(bundled);
     expect(d.v, 1);
+    expect(d.schemaMinor, 1);
     expect(d.layers.map((l) => l['id']), containsAllInOrder(['borders', 'predicted', 'heard', 'measured', 'repeaters']));
     expect(d.palettes.map((p) => p['id']), containsAll(['standard', 'colour_blind']));
     expect((d.coverage['tiles'] as Map)['hexFromZoom'], 13);
