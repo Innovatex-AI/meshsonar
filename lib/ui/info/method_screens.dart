@@ -42,7 +42,7 @@ const _howSections = <_Section>[
     <String>[
       'Method (More > Method): how the figures are made and what they can and cannot say.',
       'Analyze > Region: repeaters, observers, packets, analysis, RF, growth, reports and stats for the region.',
-      'More > Become an observer: make your own repeater report to MeshSonar.',
+      'More > Set up a repeater observer: make your own repeater report to MeshSonar.',
     ],
   ]),
 ];

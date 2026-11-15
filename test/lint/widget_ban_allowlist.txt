@@ -16,8 +16,6 @@ lib/ui/contacts/contacts_settings_sheet.dart|SwitchListTile(|3
 lib/ui/contacts/contacts_settings_sheet.dart|TextButton|2
 lib/ui/contacts/qr_scan_screen.dart|Icons.|3
 lib/ui/contacts/radio_list_sheet.dart|FilledButton|2
-lib/ui/radios/admin_launcher.dart|FilledButton|2
-lib/ui/radios/admin_launcher.dart|Icons.|2
 lib/ui/radios/observer_join_screen.dart|Card(|1
 lib/ui/radios/observer_join_screen.dart|FilledButton|1
 lib/ui/radios/observer_join_screen.dart|Icons.|1

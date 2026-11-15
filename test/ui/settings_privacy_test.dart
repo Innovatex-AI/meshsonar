@@ -106,7 +106,7 @@ void main() {
     await openSettingsTab(tester);
     expect(find.text('PRIVACY & DATA SHARING'), findsOneWidget, reason: 'the section the sheet points to exists by that name');
     await showSetting(tester, 'telemetry-toggle');
-    expect(find.text(telemetryCategory.title), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const Key('telemetry-toggle')), matching: find.text(telemetryCategory.title)), findsOneWidget);
     expect(find.textContaining(telemetryCategory.summary), findsOneWidget);
   });
 
