@@ -40,7 +40,14 @@ const List<MapLayerSpec> kMapLayers = [
   // Repeater names beside the markers (Andy, Oct 30 2026): a sub-switch under Repeaters (the definition's label rule: from z14
   // with collision; the switch lets a driver turn them off).
   MapLayerSpec(id: kLabelsLayerId, label: 'Names', group: LayerGroup.network, z: 75, defaultOn: true, onWebsite: false, serverFed: false),
+  // The open plan (release 0.38, Map Definition minor 2 `plan` layer, panel-only): planned nodes, their predicted footprints
+  // and planned links, drawn by the app from the plan JSON on top of everything. Off until a plan is shown (the Plan tab, or
+  // a plan sent to the Drive map); never in the layers sheet.
+  MapLayerSpec(id: kPlanLayerId, label: 'Plan', group: LayerGroup.network, z: 80, defaultOn: false, onWebsite: false, serverFed: false),
 ];
+
+/// The plan layer's id, the same in the Map Definition (`layers[].id`), `meshsonar://` links and [MapLayerState].
+const String kPlanLayerId = 'plan';
 
 /// The app id of a definition layer id (the definition's `heard` is the app's `heardcells`, its `drive` the app's `hexes`;
 /// `live` has no map layer in the app yet: null).

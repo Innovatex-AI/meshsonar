@@ -2,6 +2,7 @@
 // This is the only app file that names concrete lib/core and lib/radio classes (see docs/CONTRACTS.md).
 import 'dart:io';
 
+import 'package:app_links/app_links.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
@@ -14,6 +15,8 @@ import '../core/drive_store.dart';
 import '../core/etag_client.dart';
 import '../core/gps_health.dart' show BackgroundLocation;
 import '../core/idle_region_watcher.dart';
+import '../core/mqtt/observer_engine_factory.dart';
+import '../core/plan/plan_repository.dart';
 import '../core/position_filter.dart';
 import '../core/privacy_zone_store.dart';
 import '../core/region_cache.dart';
@@ -159,7 +162,24 @@ Future<AppServices> buildRealServices() async {
     deviceDetails: DeviceInfoPlusDetails(appBuild: app.build),
     // Chat: Keychain for channel secrets, SQLite file under Application Support; opened on first use.
     openChatStore: () => chatStore ??= chat_db.openChatStore(KeychainSecretStore()),
+    // Settings > Observer: the MQTT feed engine (lib/core/mqtt/observer_engine_factory.dart) and the Keychain for feed passwords.
+    observerEngineFactory: () => createObserverEngine(secrets: KeychainSecretStore(), clock: () => DateTime.now().toUtc()),
+    secretStore: KeychainSecretStore(),
+    // Saved plans (Master Planner), one file each, next to settings.json.
+    planRepository: FilePlanRepository(Directory('${root.path}${Platform.pathSeparator}plans')),
+    // Universal links / app links, including the one the app was opened with (plan share links go to the Plan tab).
+    incomingLinks: _incomingLinks,
     clock: DateTime.now,
     newId: () => uuid.v4(),
   );
+}
+
+/// The app_links stream (it also emits the launch link). Mobile and macOS only; elsewhere there are none.
+Stream<Uri> _incomingLinks() {
+  if (kIsWeb || !(Platform.isIOS || Platform.isAndroid || Platform.isMacOS)) return const Stream.empty();
+  try {
+    return AppLinks().uriLinkStream;
+  } catch (_) {
+    return const Stream.empty();
+  }
 }

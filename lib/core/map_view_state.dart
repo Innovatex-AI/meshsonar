@@ -36,8 +36,9 @@ String webShowKey(String k) => k == kHeardCellsLayerId ? 'heard' : k;
 /// The app layer id for a website `show=` key.
 String fromWebShowKey(String k) => k == 'heard' ? kHeardCellsLayerId : k;
 
-/// Layer keys only the app draws (its own drive layers). Written in `meshsonar://` links, never in https links.
-const List<String> kAppOnlyShowKeys = ['hexes', 'links', 'heard', 'pings', 'labels'];
+/// Layer keys only the app draws (its own drive layers, and the open plan: `plan`, release 0.38). Written in
+/// `meshsonar://` links, never in https links.
+const List<String> kAppOnlyShowKeys = ['hexes', 'links', 'heard', 'pings', 'labels', 'plan'];
 
 const Set<String> kColorKeys = {'snr', 'heard', 'noise'};
 const Set<String> kSinceKeys = {'7d', '24h', '1h'};

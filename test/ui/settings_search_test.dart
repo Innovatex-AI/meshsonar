@@ -156,9 +156,12 @@ void main() {
     addTearDown(tester.view.reset);
     await openSettings(tester);
     expect(find.byKey(const Key('settings-section-pane')), findsOneWidget);
+    final pane = find.descendant(of: find.byKey(const Key('settings-section-pane')), matching: find.byType(Scrollable)).first;
     for (final s in settingsSections) {
+      await tester.scrollUntilVisible(find.byKey(Key('section-nav-${s.id}')), 80, scrollable: pane);
       expect(find.byKey(Key('section-nav-${s.id}')), findsOneWidget);
     }
+    await tester.scrollUntilVisible(find.byKey(const Key('settings-search')), -80, scrollable: pane);
     expect(find.byKey(const Key('section-driver')), findsOneWidget);
     expect(find.byKey(const Key('section-wardriving')), findsNothing, reason: 'one section at a time');
     await tester.tap(find.byKey(const Key('section-nav-privacy')));

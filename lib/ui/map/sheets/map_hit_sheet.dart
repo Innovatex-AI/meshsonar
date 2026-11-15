@@ -9,17 +9,28 @@ import '../layers/map_layer.dart';
 import 'observer_sheet.dart';
 import 'repeater_sheet.dart';
 
+/// Opens a host's own sheet for a hit the generic sheets do not cover (a plan node, a long-press pin). Returns true when it
+/// opened one.
+typedef MapHitHandler<T extends MapHit> = Future<bool> Function(BuildContext context, T hit);
+
 /// Opens the sheet for [hit]. A cell opens the cell sheet, a repeater the repeater sheet, an observer the observer sheet, repeaters stacked on one
-/// spot a list; a plain cluster moves [controller]'s camera to its members (when a controller is given). Returns
-/// true when a sheet was opened.
+/// spot a list; a plain cluster moves [controller]'s camera to its members (when a controller is given). A plan node
+/// and a long-press go to the host's [onPlanNode] / [onLongPress] (the planner and the map that owns the plan layer);
+/// without one nothing opens. Returns true when a sheet was opened.
 Future<bool> showMapHitSheet(
   BuildContext context,
   MapHit hit, {
   MapController? controller,
   RepeaterSheetContext repeaterContext = const RepeaterSheetContext(),
   ObserverSheetContext observerContext = const ObserverSheetContext(),
+  MapHitHandler<PlanNodeHit>? onPlanNode,
+  MapHitHandler<LongPressHit>? onLongPress,
 }) async {
   switch (hit) {
+    case PlanNodeHit():
+      return onPlanNode == null ? false : onPlanNode(context, hit);
+    case LongPressHit():
+      return onLongPress == null ? false : onLongPress(context, hit);
     case CellHit(:final cell):
       await showCellSheet(context, cell);
       return true;
