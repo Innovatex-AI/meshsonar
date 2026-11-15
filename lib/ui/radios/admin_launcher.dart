@@ -1,4 +1,5 @@
-// Opens the repeater admin or room screens for a key, from the Repeaters list, a repeater sheet or the map. Builds the session
+// Opens the repeater admin or room screens for a key, from Chat > Network, the node actions (ui/nodes/node_actions.dart:
+// "Administer" on every repeater and room surface) or a contact profile. Builds the session
 // over the connected radio, the contact lookups, and the password vault. Says plainly why it cannot when there is no radio.
 import 'dart:io' show Platform;
 
@@ -17,7 +18,6 @@ import '../app.dart';
 import '../chat/conversation_screen.dart' show ConversationScreen;
 import '../../chat/models.dart' show ConvKey;
 import '../design/app_surfaces.dart';
-import 'repeater_admin/admin_common.dart' show kTarget;
 import 'repeater_admin/admin_controller.dart';
 import 'repeater_admin/repeater_dashboard_screen.dart';
 import 'rooms/room_join_bar.dart';
@@ -116,32 +116,4 @@ Future<void> openRoom(BuildContext context, {required String keyHex, required St
     title: name,
     header: RoomJoinBar(keyHex: keyHex, name: name),
   );
-}
-
-/// "Administer this repeater" on a repeater sheet. Hidden when there is no radio connection that can do it.
-class AdminRepeaterButton extends StatelessWidget {
-  final String keyHex;
-  final String name;
-  final bool isRoom;
-  const AdminRepeaterButton({super.key, required this.keyHex, required this.name, this.isRoom = false});
-
-  @override
-  Widget build(BuildContext context) {
-    final app = AppScope.maybeOf(context);
-    if (app == null || keyHex.length != 64) return const SizedBox.shrink();
-    final s = app.radioSession;
-    if (s == null || !s.isConnected || !s.supportsRepeaterAdmin) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(top: Gap.m),
-      child: Wrap(spacing: Gap.m, runSpacing: Gap.s, children: [
-        FilledButton.tonalIcon(
-          key: const Key('admin-this-repeater'),
-          style: FilledButton.styleFrom(minimumSize: kTarget),
-          icon: Icon(isRoom ? Icons.forum_outlined : Icons.admin_panel_settings_outlined),
-          label: Text(isRoom ? 'Open this room' : 'Administer this repeater'),
-          onPressed: () => isRoom ? openRoom(context, keyHex: keyHex, name: name) : openRepeaterAdmin(context, keyHex: keyHex, name: name),
-        ),
-      ]),
-    );
-  }
 }

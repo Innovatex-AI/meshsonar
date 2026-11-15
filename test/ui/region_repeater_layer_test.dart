@@ -63,7 +63,7 @@ void main() {
     expect(find.text('Raa'), findsWidgets);
     expect(find.text('AA'), findsOneWidget, reason: 'hash prefix, as the old tooltip showed');
     expect(find.byKey(const Key('repeater-sheet-status')), findsOneWidget);
-    expect(find.byKey(const Key('repeater-sheet-open')), findsNothing, reason: 'no host link given');
+    expect(find.byKey(const Key('node-action-openPage')), findsNothing, reason: 'no host link given');
   });
 
   testWidgets('a tap away from the only positioned repeater opens nothing (the unpositioned one is not drawn)', (t) async {

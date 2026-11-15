@@ -58,6 +58,11 @@ void main() {
       expect(find.text('OH.FRA.ForestPark'), findsWidgets);
       expect(find.text('SNR unknown'), findsWidgets);
       expect(find.text('OH.FRA.ForestPark.OB'), findsOneWidget);
+      // The node actions (release 0.38): the same set as every repeater surface; no "Open page" on the page itself.
+      for (final k in ['planFrom', 'addToPlan', 'linkTo', 'ping', 'admin']) {
+        expect(find.byKey(Key('node-action-$k')), findsOneWidget, reason: k);
+      }
+      expect(find.byKey(const Key('node-action-openPage')), findsNothing);
     },
   );
 
@@ -136,6 +141,10 @@ void main() {
     expect(find.text('No neighbours known.'), findsOneWidget);
     expect(find.text('Last heard: unknown'), findsOneWidget);
     expect(find.text('Room server'), findsOneWidget);
+    // No position: no plan action (nothing to plan from); the room can still be pinged and administered.
+    expect(find.byKey(const Key('node-action-linkTo')), findsNothing);
+    expect(find.byKey(const Key('node-action-planFrom')), findsNothing);
+    expect(find.text('Administer room'), findsOneWidget);
   });
 
   testWidgets('openRepeaterDetail pushes the screen', (t) async {

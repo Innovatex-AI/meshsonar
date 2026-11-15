@@ -194,6 +194,18 @@ void main() {
       expect(find.textContaining('rounded to about 1.0 km'), findsOneWidget);
     });
 
+    testWidgets('a published position offers the plan actions; an unpublished one offers none', (t) async {
+      await t.pumpWidget(host(Units.metric));
+      for (final k in ['planFrom', 'addToPlan', 'linkTo']) {
+        expect(find.byKey(Key('node-action-$k')), findsOneWidget, reason: k);
+      }
+      expect(find.byKey(const Key('node-action-admin')), findsNothing, reason: 'an observer is not administered here');
+      await t.pumpWidget(const MaterialApp(
+        home: Scaffold(body: ObserverSheet(observer: RegionObserver(key: 'abcdef0123', name: 'Hidden', online: true))),
+      ));
+      expect(find.byKey(const Key('node-actions')), findsNothing);
+    });
+
     testWidgets('imperial: distance in miles', (t) async {
       await t.pumpWidget(host(Units.imperial));
       expect(find.text('0.7 mi'), findsOneWidget);

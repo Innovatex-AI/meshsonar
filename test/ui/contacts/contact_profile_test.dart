@@ -258,6 +258,45 @@ void main() {
     });
   });
 
+  group('plan actions (node actions, release 0.38)', () {
+    Future<void> add(Contact c) async {
+      rig.port.radioAdd(c);
+      rig.chat.contacts.attach(rig.port);
+      await rig.chat.contacts.syncNow();
+    }
+
+    tw('a repeater with a public position: Plan from here, Add to plan, Link to…', (tester) async {
+      setScreen(tester);
+      await add(radioContact(5, type: ContactType.repeater, name: 'Hilltop'));
+      await pumpProfile(tester, rig, keyN(5));
+      for (final k in ['node-action-planFrom', 'node-action-addToPlan', 'node-action-linkTo']) {
+        await scrollTo(tester, find.byKey(Key(k)));
+        expect(find.byKey(Key(k)), findsOneWidget, reason: k);
+      }
+      expect(find.text('Link to…'), findsOneWidget);
+    });
+
+    tw('a person: Link to… only (a person is a link end, not a plan site)', (tester) async {
+      setScreen(tester);
+      await add(radioContact(1, name: 'Ann'));
+      await pumpProfile(tester, rig, keyN(1));
+      await scrollTo(tester, find.byKey(const Key('node-action-linkTo')));
+      expect(find.byKey(const Key('node-action-linkTo')), findsOneWidget);
+      expect(find.byKey(const Key('node-action-planFrom')), findsNothing);
+      expect(find.byKey(const Key('node-action-addToPlan')), findsNothing);
+    });
+
+    tw('position not public (U+1F6AB in the name): no plan action at all', (tester) async {
+      setScreen(tester);
+      await add(radioContact(5, type: ContactType.repeater, name: 'Hilltop \u{1F6AB}'));
+      await pumpProfile(tester, rig, keyN(5));
+      await scrollTo(tester, find.byKey(const Key('contact-share')));
+      for (final k in ['node-action-planFrom', 'node-action-addToPlan', 'node-action-linkTo']) {
+        expect(find.byKey(Key(k)), findsNothing, reason: k);
+      }
+    });
+  });
+
   group('tiles that wait for their feature', () {
     tw('person gets Ping and Stats; Ping opens the ping sheet after the airtime line', (tester) async {
       setScreen(tester);

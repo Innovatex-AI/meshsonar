@@ -2,7 +2,8 @@
 // noise floor, packets per hour, nodes heard in 24 h, model/firmware, battery (the observer node's own raw value, not a
 // health claim), distance from you (Units setting), the data source and how the position was published.
 // Data: the viewed region's `region-observers` rows (only observers whose owner made the position public carry
-// lat/lon; the server rounds them per `location_public`). Design: stream-1-maps.md 4.6.
+// lat/lon; the server rounds them per `location_public`). Design: stream-1-maps.md 4.6. Ends with the node actions
+// (Plan from here, Add to plan, Link to…, only with a published position: ui/nodes/node_actions.dart).
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 
@@ -13,6 +14,8 @@ import '../../app.dart' show AppScope;
 import '../../region/region_common.dart' show agoText, groupInt;
 import '../../theme.dart';
 import '../../design/app_surfaces.dart';
+import '../../nodes/node_actions.dart' show NodeActionBar;
+import '../../nodes/node_ref.dart';
 
 /// What the observer sheet needs from the host besides the observer.
 class ObserverSheetContext {
@@ -34,6 +37,18 @@ Future<void> showObserverSheet(
     builder: (_, c) => SafeArea(child: ObserverSheet(observer: observer, regionName: regionName, ctx: ctx, scrollController: c)),
   );
 }
+
+/// The observer as the one node object. Without a published position (no lat/lon from the server) it is hidden, so it
+/// offers no plan action.
+NodeRef nodeRefOfObserver(RegionObserver o) => NodeRef(
+      key: o.key,
+      name: o.displayName,
+      kind: NodeKind.observer,
+      lat: o.lat,
+      lon: o.lon,
+      source: NodeSource.observer,
+      positionHidden: o.lat == null || o.lon == null,
+    );
 
 /// "MeshSonar observer" for our own, else the third-party view the region republishes.
 String observerSourceText(RegionObserver o, String? regionName) {
@@ -113,6 +128,7 @@ class ObserverSheet extends StatelessWidget {
               key: const Key('observer-sheet-source'),
               style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
             ),
+            NodeActionBar(node: nodeRefOfObserver(o)),
           ],
         ),
       ),
