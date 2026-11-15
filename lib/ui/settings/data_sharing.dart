@@ -418,6 +418,12 @@ const List<DataFlow> otherDataFlows = [
       'Each ping\'s time, position, signal and which repeaters heard it, plus the antenna setup. Uploaded only to your '
           'server, under your driver key, when uploads are on (Settings > Drives & uploads). Without a key nothing is '
           'uploaded. Privacy zones on the website hide pings near places you choose.'),
+  DataFlow('MQTT feeds to other sites',
+      'Only feeds you add yourself in Settings > Observer, each off until you turn it on. A feed gets the same public '
+          'packets as Share with MeshSonar (never direct messages or private channels), their signal strength and your '
+          'radio\'s public key as the observer id. Never your position or your name. It runs only while the app is '
+          'running, your radio is connected and Share with MeshSonar is on. A feed password stays in the phone\'s '
+          'Keychain.'),
   DataFlow('The ping itself',
       'What your radio transmits is exactly "MS:" and 10 random characters. Never your position, name or any '
           'identifier.'),

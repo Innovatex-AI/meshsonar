@@ -193,7 +193,7 @@ class _MoreListState extends State<MoreList> {
             row(MoreItem.observer, Icons.sensors, 'Observer', observerStatusLine(s)),
             header('Community'),
             row(MoreItem.leaderboard, Icons.emoji_events_outlined, 'Leaderboard', 'Drivers who opted in, this region or every region'),
-            row(MoreItem.observerJoin, Icons.visibility_outlined, 'Become an observer',
+            row(MoreItem.observerJoin, Icons.visibility_outlined, observerJoinTitle,
                 'Step by step: make your repeater report to MeshSonar. Free'),
             header('App'),
             row(MoreItem.chat, Icons.chat_bubble_outline, 'Chat', 'Quick replies, Return key, haptics'),
