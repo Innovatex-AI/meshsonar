@@ -45,7 +45,18 @@
 // 'layer-network-paint' / 'layer-repeaters-paint' (the clustered layers), 'map-observer-<key>', 'map-network-legend',
 // 'map-network-attribution',
 // 'map-heard-label-<key>', 'map-link-distance-<key>', 'map-position', 'map-recenter', 'map-compass', 'map-offline',
-// 'map-attribution', 'map-simulated'.
+// 'map-attribution', 'map-simulated'; the plan layer's 'plan-layer', 'plan-links-layer', 'plan-node-<id>' (layers/plan_layer.dart).
+//
+// Extension points (release 0.38, plan §4.5 item 1; added without changing what the Drive map does by default):
+//   - [planOverlay]: the provider hook of the `plan` layer (layers/plan_overlay.dart). Drawn on top of everything while the
+//     `plan` layer is on. The main map ([takesFocusRequests]) defaults to [MainMapFocus.overlay] and applies each focus
+//     request's overlay (layers, plan, targets) to it.
+//   - [onPlanNode]: a tap on a plan node (a [PlanNodeHit], which wins every tap). Without one, a map drawing a plan opens the
+//     plan node sheet (layers/plan_node_sheet.dart: Navigate, Remove plan from map).
+//   - [onLongPress]: a long-press on bare map (a [LongPressHit], "drop a pin"); a long-press on a plan node is a [PlanNodeHit]
+//     for [onPlanNode]. Without one a long-press does nothing (as before).
+//   - [takesFocusRequests] false (the default) keeps a secondary map (the planner's, a detail map) from taking "Open the map
+//     here" requests meant for the Drive map.
 import 'dart:async' show StreamController, StreamSubscription, Timer, unawaited;
 import 'dart:io' show Platform;
 import 'dart:math' as math;
@@ -86,7 +97,11 @@ import 'layers/map_layer.dart';
 import 'layers/observer_layer.dart';
 import 'layers/repeater_painter_layer.dart';
 import 'layers/repeater_sprites.dart' show RepeaterFreshness, freshnessOfAdvertBand, freshnessOfRosterBand;
-import 'layers/registry.dart' show definitionLayerIds, kDefaultLayerState, kHeardCellsLayerId;
+import 'layers/registry.dart' show definitionLayerIds, kDefaultLayerState, kHeardCellsLayerId, kPlanLayerId;
+import 'layers/plan_layer.dart' show planLayerWidgets, planNodeAt;
+import 'layers/plan_node_sheet.dart' show showPlanNodeSheet;
+import 'layers/plan_overlay.dart';
+import '../design/app_haptics.dart' show AppHaptics;
 import 'layers/region_borders_layer.dart';
 import '../../core/map_basemaps.dart' show MapBasemaps;
 import 'active_map_definition.dart';
@@ -117,6 +132,7 @@ import 'parts/simulated_tag.dart';
 import 'parts/source_chip.dart';
 
 export 'parts/simulated_tag.dart' show SimulatedTag;
+export 'sheets/map_hit_sheet.dart' show MapHitHandler;
 import 'basemap_layer.dart';
 import 'satellite_layers.dart';
 import 'layers/m3_layers.dart';
@@ -373,6 +389,15 @@ class CoverageMap extends StatefulWidget {
   /// The remembered map choices (heading-up, auto re-centre, zoom by speed). Null = the app-wide [MapPrefs.shared].
   final MapPrefs? prefs;
 
+  /// What the `plan` layer draws (the provider hook). Null = [MainMapFocus.overlay] on the main map, nothing elsewhere.
+  final PlanOverlayController? planOverlay;
+
+  /// A tap (or long-press) on a plan node. Null = the plan node sheet.
+  final MapHitHandler<PlanNodeHit>? onPlanNode;
+
+  /// A long-press on bare map (drop a pin). Null = a long-press does nothing.
+  final MapHitHandler<LongPressHit>? onLongPress;
+
   const CoverageMap({
     super.key,
     required this.pings,
@@ -426,6 +451,9 @@ class CoverageMap extends StatefulWidget {
     this.onBoundsChanged,
     this.telemetry,
     this.prefs,
+    this.planOverlay,
+    this.onPlanNode,
+    this.onLongPress,
   });
 
   /// True unless running under `flutter test`.
@@ -1090,6 +1118,8 @@ class _CoverageMapState extends State<CoverageMap> {
       controller: _controller,
       repeaterContext: RepeaterSheetContext(position: here, openRegionPage: widget.openRepeaterPage),
       observerContext: ObserverSheetContext(position: here),
+      onPlanNode: widget.onPlanNode ?? _planNodeSheet,
+      onLongPress: widget.onLongPress,
     );
   }
 
@@ -1347,7 +1377,37 @@ class _CoverageMapState extends State<CoverageMap> {
     MainMapFocus.taken(r);
     _follow = false;
     _controller.move(r.at, r.zoom);
+    if (r.hasOverlay) unawaited(_planSource?.applyFocus(r));
     setState(() {});
+  }
+
+  /// The plan layer's provider: the host's, else (main map) the shared one.
+  PlanOverlayController? get _planSource => widget.planOverlay ?? (widget.takesFocusRequests ? MainMapFocus.overlay : null);
+
+  /// A plan node was tapped: it wins every tap (MapHitKind.planNode).
+  void _onPlanNodeTap(PlanOverlayNode n) {
+    _hits.submit(MapHitCandidate(MapHitKind.planNode, () => _applyHit(PlanNodeHit(nodeId: n.id, name: n.name, lat: n.at.latitude, lon: n.at.longitude))));
+  }
+
+  /// A long-press: on a drawn plan node it is that node, else a pin on bare map.
+  void _onLongPress(LatLng point) {
+    final src = _planSource;
+    final ls = widget.layerState ?? kDefaultLayerState;
+    final node = (src != null && ls.isOn(kPlanLayerId)) ? planNodeAt(src.drawnNodes, _controller.camera, point) : null;
+    unawaited(AppHaptics.selection());
+    _applyHit(node != null
+        ? PlanNodeHit(nodeId: node.id, name: node.name, lat: node.at.latitude, lon: node.at.longitude)
+        : LongPressHit(lat: point.latitude, lon: point.longitude));
+  }
+
+  /// No host handler: the plan node sheet (what it is, how far, Navigate, Remove plan from map).
+  Future<bool> _planNodeSheet(BuildContext context, PlanNodeHit hit) async {
+    final src = _planSource;
+    final n = src?.nodeById(hit.nodeId);
+    if (src == null || n == null) return false;
+    final here = widget.position ?? (_latest == null ? null : LatLng(_latest!.lat, _latest!.lon));
+    await showPlanNodeSheet(context, n, here: here, onRemove: src.clear);
+    return true;
   }
 
   /// Frames the repeater together with where we are (stops following until Recenter).
@@ -1798,6 +1858,7 @@ class _CoverageMapState extends State<CoverageMap> {
                 _hits.submit(MapHitCandidate(MapHitKind.cell, () => _showCellLinks(cell)));
               }
             },
+            onLongPress: widget.interactive && widget.onLongPress != null ? (_, point) => _onLongPress(point) : null,
             onPositionChanged: (camera, hasGesture) {
               _reportBounds();
               if (tiles && _pack.update(camera.center.latitude, camera.center.longitude)) setState(() {});
@@ -2053,6 +2114,9 @@ class _CoverageMapState extends State<CoverageMap> {
                   avoid: (size) => _overlayRects(),
                 ),
               ),
+            // The open plan (registry z 80): on top of everything, so its nodes win every tap.
+            if (layerState.isOn(kPlanLayerId))
+              if (_planSource case final plan?) ...planLayerWidgets(plan, onTap: _onPlanNodeTap),
           ],
         ),
       banner: widget.banner,

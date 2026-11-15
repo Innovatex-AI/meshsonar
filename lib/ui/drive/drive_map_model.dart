@@ -54,6 +54,7 @@ import '../map/core/map_view_controller.dart';
 import '../map/tile_source.dart' show MapTileStats;
 import '../map/tile_source.dart' as tiles show currentMapSource;
 import '../map/map_layers.dart';
+import '../map/main_map_focus.dart' show MainMapFocus;
 import '../region/region_common.dart' show regionApiFactory;
 
 class DriveMapModel extends ChangeNotifier {
@@ -85,7 +86,9 @@ class DriveMapModel extends ChangeNotifier {
     // The remembered layer choices of this page (LayerPrefs, read synchronously: main loads the file before the first frame), so
     // there is no flash of defaults. Repeater names fall back to the old Settings.mapRepeaterLabels key until chosen here.
     _lp = _prefs.layerPrefs(pageId);
-    _layerState = layerStateFromPrefs(_lp, labelsFallback: state.settings.mapRepeaterLabels);
+    _layerState = _withPlan(layerStateFromPrefs(_lp, labelsFallback: state.settings.mapRepeaterLabels));
+    _planSeq = MainMapFocus.overlay.requestSeq;
+    MainMapFocus.overlay.addListener(_onPlanOverlay);
     _query = _queryFromPrefs(_lp);
     repeaterFeed = AppStateRepeaterFeed(state, fallbackRoster: _fallbackRoster);
     repeaterSource = RepeaterMapSource(repeaterFeed, clock: state.services.clock, isolateThreshold: repeaterIsolateThreshold)
@@ -107,6 +110,30 @@ class DriveMapModel extends ChangeNotifier {
     since: CoverageSince.values.where((e) => e.name == p.since).firstOrNull ?? CoverageSince.all,
     source: CoverageSource.values.where((e) => e.name == p.source).firstOrNull ?? CoverageSource.all,
   );
+
+  // The `plan` layer on the Drive map (plan §4.5 J4/J5): plan nodes and targets sent with "open the map with this overlay"
+  // (MainMapFocus.overlay). It is on exactly while that overlay has something to draw (or a request asked for it), off by
+  // default, and never remembered: a saved choice for it is ignored and none is written, so the Drive map opens as before.
+  int _planSeq = 0;
+
+  MapLayerState _withPlan(MapLayerState n) {
+    final o = MainMapFocus.overlay;
+    return n.toggle(kPlanLayerId, o.isActive || o.requestedLayers.contains(kPlanLayerId));
+  }
+
+  void _onPlanOverlay() {
+    if (_disposed) return;
+    final o = MainMapFocus.overlay;
+    var n = _layerState;
+    if (o.requestSeq != _planSeq) {
+      _planSeq = o.requestSeq;
+      // The other layers a request asks for are switched on like the person did it (remembered).
+      for (final id in o.requestedLayers) {
+        if (id != kPlanLayerId && kMapLayerIds.contains(id) && layerOffered(id)) n = n.toggle(id, true);
+      }
+    }
+    layerState = _withPlan(n);
+  }
 
   void _saveLayerPrefs(LayerPrefs next) {
     _lp = next;
@@ -252,6 +279,7 @@ class DriveMapModel extends ChangeNotifier {
     // Remember what the person changed (not the whole state, so a layer added later arrives with its own default).
     final toggles = {..._lp.toggles};
     for (final id in kMapLayerIds) {
+      if (id == kPlanLayerId) continue; // session only (see _withPlan)
       if (n.isOn(id) != was.isOn(id)) toggles[id] = n.isOn(id);
     }
     final modes = {..._lp.modes};
@@ -293,7 +321,7 @@ class DriveMapModel extends ChangeNotifier {
   void resetLayers() {
     _saveLayerPrefs(LayerPrefs.empty);
     final was = _layerState;
-    _layerState = defaultLayerState();
+    _layerState = _withPlan(defaultLayerState());
     repeaterSource.dedupeAgainstRoster = _layerState.isOn(kRosterLayerId);
     if (_layerState.isOn(kLabelsLayerId) != state.settings.mapRepeaterLabels) {
       unawaited(state.updateSettings(state.settings.copyWith(mapRepeaterLabels: _layerState.isOn(kLabelsLayerId))));
@@ -1096,6 +1124,7 @@ class DriveMapModel extends ChangeNotifier {
     mapView.dispose();
     state.removeListener(_onState);
     ActiveMapDefinition.notifier.removeListener(_onDefinition);
+    MainMapFocus.overlay.removeListener(_onPlanOverlay);
     _tilesListened?.removeListener(_onTiles);
     repeaterSource.dispose();
     repeaterFeed.dispose();

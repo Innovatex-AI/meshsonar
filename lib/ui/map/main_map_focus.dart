@@ -8,6 +8,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
 
+import 'layers/plan_overlay.dart' show PlanOverlayController;
+
 /// A place the person may want to drive to, drawn as a target on the main map (a suggested site, a plan node).
 @immutable
 class MapFocusTarget {
@@ -46,6 +48,10 @@ class MapFocusRequest {
 class MainMapFocus {
   MainMapFocus._();
   static final ValueNotifier<MapFocusRequest?> notifier = ValueNotifier<MapFocusRequest?>(null);
+
+  /// What the main map's `plan` layer draws (layers/plan_overlay.dart): the main map applies each request's overlay here when
+  /// it takes the request, and "Remove from map" clears it. The planner sets [PlanOverlayController.resolvePlan] on it.
+  static final PlanOverlayController overlay = PlanOverlayController();
   static int _seq = 0;
 
   static void request(LatLng at, double zoom, {Set<String> showLayers = const {}, String? planId, List<MapFocusTarget> targets = const []}) =>
