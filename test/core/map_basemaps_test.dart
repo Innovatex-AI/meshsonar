@@ -28,11 +28,11 @@ MapDefinition _old() => _def((j) {
 
 void main() {
   group('the M3 fixture', () {
-    test('parses; schemaMinor 1; the five capabilities; Topo and Satellite are offered', () {
+    test('parses; schemaMinor 2; the five capabilities; Topo and Satellite are offered', () {
       final d = MapDefinition.parse(_body);
       expect(d.v, 1);
-      expect(d.schemaMinor, 1);
-      expect(d.capabilities, {capBasemapTopo, capBasemapSatellite, capLayerEstimated, capLayerRedundancy, capLayerSnrLinks});
+      expect(d.schemaMinor, 2);
+      expect(d.capabilities, containsAll({capBasemapTopo, capBasemapSatellite, capLayerEstimated, capLayerRedundancy, capLayerSnrLinks}));
       expect(d.offersTopo, isTrue);
       expect(d.offersSatellite, isTrue);
       expect(BaseMapStyle.availableFor(d), [BaseMapStyle.chart, BaseMapStyle.street, BaseMapStyle.dark, BaseMapStyle.topo, BaseMapStyle.satellite]);

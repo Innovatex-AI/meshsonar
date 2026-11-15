@@ -96,7 +96,7 @@ void main() {
 
     test('paint order follows the definition', () {
       expect(definitionLayerIds(MapDefinition.bundled),
-          ['borders', 'predicted', 'heardcells', 'measured', 'redundancy', 'hexes', 'snrlinks', 'links', 'network', 'repeaters', 'estimated', 'observers', 'phones']);
+          ['borders', 'predicted', 'heardcells', 'measured', 'redundancy', 'hexes', 'snrlinks', 'links', 'network', 'repeaters', 'estimated', 'observers', 'phones', 'plan']);
     });
 
     test('one Repeaters switch with a scope: region by default, All MeshCore remembered while off', () {
