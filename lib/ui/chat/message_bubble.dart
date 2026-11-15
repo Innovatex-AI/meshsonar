@@ -8,6 +8,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/semantics.dart' show CustomSemanticsAction;
+import 'package:latlong2/latlong.dart' show LatLng;
 
 import '../../app/photo_controller.dart';
 import '../../chat/bubble_grouping.dart';
@@ -19,6 +20,10 @@ import '../design/app_type.dart';
 import '../design/avatar_style.dart';
 import '../design/tokens.dart';
 import '../../core/photo_api.dart' show anyPhotoIdOf;
+import '../map/layers/registry.dart' show kPlanLayerId;
+import '../map/main_map_focus.dart';
+import '../nodes/node_actions.dart' show sendToPlanner, shellControllerFor;
+import '../shell/shell_controller.dart' show PlanNodeSeed, PlanRequest;
 import 'message_format.dart';
 import 'message_menu.dart';
 import 'photo_widgets.dart';
@@ -32,6 +37,106 @@ AppSymbol symbolFor(DeliveryGlyph g) => switch (g) {
       DeliveryGlyph.checkmarkCircleFill => AppSymbols.checkmarkCircleFill,
       DeliveryGlyph.exclamationCircleFill => AppSymbols.exclamationCircleFill,
     };
+
+// ---------------------------------------------------------------------------------------------------- coordinates (J3)
+
+/// A place a message names: decimal "lat, lon" (at least three decimals each, so "3.5, 4.2" is not one) or a `geo:` URI.
+@immutable
+class MessageCoordinate {
+  final double lat, lon;
+  const MessageCoordinate(this.lat, this.lon);
+
+  LatLng get at => LatLng(lat, lon);
+
+  @override
+  bool operator ==(Object other) => other is MessageCoordinate && other.lat == lat && other.lon == lon;
+  @override
+  int get hashCode => Object.hash(lat, lon);
+  @override
+  String toString() => 'MessageCoordinate($lat, $lon)';
+}
+
+final RegExp _geoUri = RegExp(r'geo:(-?\d{1,2}(?:\.\d+)?),(-?\d{1,3}(?:\.\d+)?)', caseSensitive: false);
+final RegExp _decimalPair = RegExp(r'(?<![\w.])(-?\d{1,2}\.\d{3,10})\s*[,;]\s*(-?\d{1,3}\.\d{3,10})(?!\.?\d)');
+
+/// The first usable coordinate in [text], or null. Conservative: both numbers in range (lat within 90, lon within 180), not
+/// (0, 0) or next to it (an unset position), and none at all when the text carries the "hidden position" mark (U+1F6AB, as
+/// a node name does): the person asked for that place not to be shared, so it is never turned into a button.
+MessageCoordinate? messageCoordinate(String text) {
+  if (text.isEmpty || text.contains('\u{1F6AB}')) return null;
+  final found = <(int, MessageCoordinate)>[];
+  for (final m in _geoUri.allMatches(text)) {
+    final c = _valid(double.tryParse(m.group(1)!), double.tryParse(m.group(2)!));
+    if (c != null) found.add((m.start, c));
+  }
+  for (final m in _decimalPair.allMatches(text)) {
+    final c = _valid(double.tryParse(m.group(1)!), double.tryParse(m.group(2)!));
+    if (c != null) found.add((m.start, c));
+  }
+  if (found.isEmpty) return null;
+  found.sort((a, b) => a.$1.compareTo(b.$1));
+  return found.first.$2;
+}
+
+MessageCoordinate? _valid(double? lat, double? lon) {
+  if (lat == null || lon == null || !lat.isFinite || !lon.isFinite) return null;
+  if (lat.abs() > 90 || lon.abs() > 180) return null;
+  if (lat.abs() < 0.001 && lon.abs() < 0.001) return null;
+  return MessageCoordinate(lat, lon);
+}
+
+/// "Open in Planner": the Plan tab with a pin at [c] (PlanRequest.point).
+bool openCoordinateInPlanner(BuildContext context, MessageCoordinate c) =>
+    sendToPlanner(context, PlanRequest.point(PlanNodeSeed(name: 'From chat', lat: c.lat, lon: c.lon, source: 'chat')));
+
+/// "Open on map": the Drive tab's map looking at [c] with a target drawn there on the plan layer (Navigate from its sheet).
+bool openCoordinateOnMap(BuildContext context, MessageCoordinate c) {
+  final shell = shellControllerFor(context);
+  if (shell == null) return false;
+  Navigator.maybeOf(context, rootNavigator: true)?.popUntil((r) => r.isFirst);
+  MainMapFocus.request(c.at, 15, showLayers: const {kPlanLayerId}, targets: [MapFocusTarget(id: 'chat-${c.lat},${c.lon}', at: c.at, label: 'From chat')]);
+  shell.openDrive();
+  return true;
+}
+
+/// The two buttons under a bubble whose text holds a coordinate. Keys: `coord-planner-<id>`, `coord-map-<id>`.
+class _CoordinateChips extends StatelessWidget {
+  final String messageId;
+  final MessageCoordinate coordinate;
+  final Color color;
+  const _CoordinateChips({required this.messageId, required this.coordinate, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    Widget chip(Key key, AppSymbol symbol, String label, VoidCallback onTap) => Semantics(
+          button: true,
+          label: label,
+          excludeSemantics: true,
+          child: GestureDetector(
+            key: key,
+            behavior: HitTestBehavior.opaque,
+            onTap: onTap,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: Hit.of(context)),
+              child: Container(
+                alignment: Alignment.center,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(border: Border.all(color: color.withValues(alpha: 0.6)), borderRadius: BorderRadius.circular(18)),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  AppSymbolIcon(symbol, size: 16, color: color),
+                  const SizedBox(width: 6),
+                  Flexible(child: Text(label, style: AppType.footnote.copyWith(color: color, fontWeight: FontWeight.w600))),
+                ]),
+              ),
+            ),
+          ),
+        );
+    return Wrap(spacing: 8, runSpacing: 6, children: [
+      chip(Key('coord-planner-$messageId'), AppSymbols.map, 'Open in Planner', () => openCoordinateInPlanner(context, coordinate)),
+      chip(Key('coord-map-$messageId'), AppSymbols.location, 'Open on map', () => openCoordinateOnMap(context, coordinate)),
+    ]);
+  }
+}
 
 class MessageBubble extends StatefulWidget {
   /// Counts `build` calls of bubbles (the performance test reads and resets it). Not used in production paths.
@@ -264,6 +369,21 @@ class _MessageBubbleState extends State<MessageBubble> {
             ],
           );
 
+    final coord = messageCoordinate(m.text);
+    final Widget shown = coord == null
+        ? content
+        : Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              content,
+              Padding(
+                padding: EdgeInsets.fromLTRB(photoLinks.isEmpty ? 0 : 10, 8, 0, photoLinks.isEmpty ? 0 : 6),
+                child: _CoordinateChips(messageId: m.id, coordinate: coord, color: mine ? c.bubbleOutText : c.accent),
+              ),
+            ],
+          );
+
     final body = Container(
       key: Key('bubble-${m.id}'),
       constraints: BoxConstraints(maxWidth: maxW, minHeight: Hit.of(context)),
@@ -274,7 +394,7 @@ class _MessageBubbleState extends State<MessageBubble> {
         border: failed ? Border.all(color: c.danger, width: 1.5) : ((MediaQuery.maybeHighContrastOf(context) ?? false) ? Border.all(color: c.textMuted, width: 1) : null),
         borderRadius: _radius(mine),
       ),
-      child: content,
+      child: shown,
     );
 
     final tappable = GestureDetector(
@@ -333,6 +453,9 @@ class _MessageBubbleState extends State<MessageBubble> {
     final actions = <CustomSemanticsAction, VoidCallback>{
       const CustomSemanticsAction(label: 'Copy'): () => w.onMenu?.call(m.id, const MessageMenuEntry(MessageMenuId.copy, 'Copy', AppSymbols.docOnDoc)),
       const CustomSemanticsAction(label: 'Details'): () => w.onDetails?.call(m.id),
+      // The chips under the bubble are inside the excluded visible tree: VoiceOver reaches them as actions of the bubble.
+      if (coord != null) const CustomSemanticsAction(label: 'Open in Planner'): () => openCoordinateInPlanner(context, coord),
+      if (coord != null) const CustomSemanticsAction(label: 'Open on map'): () => openCoordinateOnMap(context, coord),
       if (failed) const CustomSemanticsAction(label: 'Try Again'): () => w.onMenu?.call(m.id, const MessageMenuEntry(MessageMenuId.retry, 'Try Again', AppSymbols.arrowUpCircleFill)),
       if (m.isPending) const CustomSemanticsAction(label: 'Cancel sending'): () => w.onMenu?.call(m.id, const MessageMenuEntry(MessageMenuId.cancel, 'Cancel sending', AppSymbols.xmarkCircleFill)),
       if (!m.isPending) const CustomSemanticsAction(label: 'Delete'): () => w.onMenu?.call(m.id, const MessageMenuEntry(MessageMenuId.delete, 'Delete', AppSymbols.trash, destructive: true)),
