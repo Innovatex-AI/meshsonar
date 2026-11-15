@@ -1,0 +1,23 @@
+{
+  "a": {
+    "lat": 37.1,
+    "lon": -80.2
+  },
+  "b": {
+    "lat": 37.12,
+    "lon": -80.14
+  },
+  "haM": 10,
+  "hbM": 1.5,
+  "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+  },
+  "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+  },
+  "direction": "down"
+}

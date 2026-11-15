@@ -2,6 +2,7 @@
 // (meshcore-insights scripts/plan-tools-golden.ts -> test/fixtures/plan_tools_golden.json).
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/core/plan/link_model.dart';
+import 'package:meshsonar/core/plan_contract.dart';
 
 import 'plan_golden.dart';
 
@@ -12,10 +13,10 @@ void main() {
   final profiles = {for (final p in (g['profiles'] as List).cast<Map<String, dynamic>>()) p['name'] as String: p};
 
   test('constants agree with the website', () {
-    expect(lambdaM, closeTo(_d(g['lambdaM']), 1e-12));
+    expect(lambdaFor(PlanRadio.usDefault), closeTo(_d(g['lambdaM']), 1e-12));
     expect(keM, closeTo(_d(g['keM']), 1e-6));
-    expect(sensitivityDbmLink(), closeTo(_d(g['sensitivityDbm']), 1e-12));
-    expect(noiseFloorDbm(), closeTo(_d(g['noiseFloorDbm']), 1e-12));
+    expect(radioSensitivityDbm(PlanRadio.usDefault), closeTo(_d(g['sensitivityDbm']), 1e-12));
+    expect(radioNoiseFloorDbm(PlanRadio.usDefault), closeTo(_d(g['noiseFloorDbm']), 1e-12));
     final t = g['tiers'] as Map<String, dynamic>;
     expect([terrainTiers.strong, terrainTiers.likely, terrainTiers.possible], [t['strong'], t['likely'], t['possible']]);
   });

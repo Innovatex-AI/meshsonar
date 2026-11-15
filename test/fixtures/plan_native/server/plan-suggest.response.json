@@ -1,0 +1,360 @@
+{
+  "pool": 38,
+  "sites": [
+    {
+      "id": "t:882a956f55fffff",
+      "lat": 39.93001,
+      "lon": -82.94987,
+      "groundM": 330,
+      "heightAboveM": 6,
+      "kind": "terrain",
+      "mount": "ground",
+      "osm": null,
+      "gain": {
+        "newAreaKm2": 307.3,
+        "newPeople": 0,
+        "newLinks": [
+          {
+            "key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "name": "Downtown",
+            "km": 4.8,
+            "odds": 0.294,
+            "tier": "Strong",
+            "marginDb": 35
+          },
+          {
+            "key": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "name": "East",
+            "km": 4.2,
+            "odds": 0.301,
+            "tier": "Strong",
+            "marginDb": 33
+          }
+        ],
+        "redundancy": "joins_components",
+        "spofName": null
+      },
+      "evidence": {
+        "deadZoneDrives": 0,
+        "heightAdvantageM": 51
+      },
+      "score": 100,
+      "reason": "+307 km² of new coverage; reaches 2 existing repeaters; joins two separate parts of the mesh",
+      "scores": {
+        "coverage": 0,
+        "links": 100,
+        "redundancy": 100,
+        "evidence": 0,
+        "height": 87
+      }
+    },
+    {
+      "id": "t:882a956a81fffff",
+      "lat": 39.98001,
+      "lon": -82.99999,
+      "groundM": 390,
+      "heightAboveM": 6,
+      "kind": "terrain",
+      "mount": "ground",
+      "osm": null,
+      "gain": {
+        "newAreaKm2": 564.2,
+        "newPeople": 1500,
+        "newLinks": [],
+        "redundancy": "none",
+        "spofName": null
+      },
+      "evidence": {
+        "deadZoneDrives": 0,
+        "heightAdvantageM": 67
+      },
+      "score": 84,
+      "reason": "+564 km² of new coverage, 1,500 people; 67 m above its surroundings",
+      "scores": {
+        "coverage": 100,
+        "links": 0,
+        "redundancy": 0,
+        "evidence": 0,
+        "height": 100
+      }
+    },
+    {
+      "id": "t:882a956a27fffff",
+      "lat": 40.01999,
+      "lon": -83.05973,
+      "groundM": 310,
+      "heightAboveM": 6,
+      "kind": "terrain",
+      "mount": "ground",
+      "osm": null,
+      "gain": {
+        "newAreaKm2": 273.4,
+        "newPeople": 1500,
+        "newLinks": [],
+        "redundancy": "none",
+        "spofName": null
+      },
+      "evidence": {
+        "deadZoneDrives": 0,
+        "heightAdvantageM": 47
+      },
+      "score": 81,
+      "reason": "+273 km² of new coverage, 1,500 people; 47 m above its surroundings",
+      "scores": {
+        "coverage": 100,
+        "links": 0,
+        "redundancy": 0,
+        "evidence": 0,
+        "height": 84
+      }
+    },
+    {
+      "id": "t:882a956b5bfffff",
+      "lat": 40.04523,
+      "lon": -83.06179,
+      "groundM": 250.1,
+      "heightAboveM": 6,
+      "kind": "terrain",
+      "mount": "ground",
+      "osm": null,
+      "gain": {
+        "newAreaKm2": 39.3,
+        "newPeople": 1500,
+        "newLinks": [],
+        "redundancy": "none",
+        "spofName": null
+      },
+      "evidence": {
+        "deadZoneDrives": 0,
+        "heightAdvantageM": 0
+      },
+      "score": 66,
+      "reason": "+39 km² of new coverage, 1,500 people",
+      "scores": {
+        "coverage": 100,
+        "links": 0,
+        "redundancy": 0,
+        "evidence": 0,
+        "height": 4
+      }
+    },
+    {
+      "id": "t:882a956159fffff",
+      "lat": 40.0284,
+      "lon": -82.91691,
+      "groundM": 250,
+      "heightAboveM": 6,
+      "kind": "terrain",
+      "mount": "ground",
+      "osm": null,
+      "gain": {
+        "newAreaKm2": 40.8,
+        "newPeople": 1500,
+        "newLinks": [],
+        "redundancy": "none",
+        "spofName": null
+      },
+      "evidence": {
+        "deadZoneDrives": 0,
+        "heightAdvantageM": 0
+      },
+      "score": 65,
+      "reason": "+41 km² of new coverage, 1,500 people",
+      "scores": {
+        "coverage": 100,
+        "links": 0,
+        "redundancy": 0,
+        "evidence": 0,
+        "height": 0
+      }
+    },
+    {
+      "id": "t:882a956335fffff",
+      "lat": 40.04417,
+      "lon": -82.92721,
+      "groundM": 250,
+      "heightAboveM": 6,
+      "kind": "terrain",
+      "mount": "ground",
+      "osm": null,
+      "gain": {
+        "newAreaKm2": 40.7,
+        "newPeople": 1500,
+        "newLinks": [],
+        "redundancy": "none",
+        "spofName": null
+      },
+      "evidence": {
+        "deadZoneDrives": 0,
+        "heightAdvantageM": 0
+      },
+      "score": 65,
+      "reason": "+41 km² of new coverage, 1,500 people",
+      "scores": {
+        "coverage": 100,
+        "links": 0,
+        "redundancy": 0,
+        "evidence": 0,
+        "height": 0
+      }
+    },
+    {
+      "id": "t:882a956339fffff",
+      "lat": 40.04417,
+      "lon": -82.90661,
+      "groundM": 250,
+      "heightAboveM": 6,
+      "kind": "terrain",
+      "mount": "ground",
+      "osm": null,
+      "gain": {
+        "newAreaKm2": 40,
+        "newPeople": 1500,
+        "newLinks": [],
+        "redundancy": "none",
+        "spofName": null
+      },
+      "evidence": {
+        "deadZoneDrives": 0,
+        "heightAdvantageM": 0
+      },
+      "score": 65,
+      "reason": "+40 km² of new coverage, 1,500 people",
+      "scores": {
+        "coverage": 100,
+        "links": 0,
+        "redundancy": 0,
+        "evidence": 0,
+        "height": 0
+      }
+    },
+    {
+      "id": "t:882a9568a5fffff",
+      "lat": 39.9337,
+      "lon": -83.09269,
+      "groundM": 250,
+      "heightAboveM": 6,
+      "kind": "terrain",
+      "mount": "ground",
+      "osm": null,
+      "gain": {
+        "newAreaKm2": 42.2,
+        "newPeople": 1500,
+        "newLinks": [],
+        "redundancy": "none",
+        "spofName": null
+      },
+      "evidence": {
+        "deadZoneDrives": 0,
+        "heightAdvantageM": 0
+      },
+      "score": 65,
+      "reason": "+42 km² of new coverage, 1,500 people",
+      "scores": {
+        "coverage": 100,
+        "links": 0,
+        "redundancy": 0,
+        "evidence": 0,
+        "height": 0
+      }
+    },
+    {
+      "id": "t:882a956f09fffff",
+      "lat": 39.93001,
+      "lon": -82.96978,
+      "groundM": 269.3,
+      "heightAboveM": 6,
+      "kind": "terrain",
+      "mount": "ground",
+      "osm": null,
+      "gain": {
+        "newAreaKm2": 9.6,
+        "newPeople": 0,
+        "newLinks": [
+          {
+            "key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "name": "Downtown",
+            "km": 3.4,
+            "odds": 0.401,
+            "tier": "Strong",
+            "marginDb": 38
+          }
+        ],
+        "redundancy": "none",
+        "spofName": null
+      },
+      "evidence": {
+        "deadZoneDrives": 0,
+        "heightAdvantageM": 16
+      },
+      "score": 44,
+      "reason": "+9.6 km² of new coverage; reaches Downtown; 16 m above its surroundings",
+      "scores": {
+        "coverage": 0,
+        "links": 74,
+        "redundancy": 0,
+        "evidence": 0,
+        "height": 49
+      }
+    },
+    {
+      "id": "t:882a956ad1fffff",
+      "lat": 39.98001,
+      "lon": -82.96841,
+      "groundM": 277.9,
+      "heightAboveM": 6,
+      "kind": "terrain",
+      "mount": "ground",
+      "osm": null,
+      "gain": {
+        "newAreaKm2": 17,
+        "newPeople": 0,
+        "newLinks": [
+          {
+            "key": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "name": "East",
+            "km": 4.7,
+            "odds": 0.306,
+            "tier": "Strong",
+            "marginDb": 26
+          }
+        ],
+        "redundancy": "none",
+        "spofName": null
+      },
+      "evidence": {
+        "deadZoneDrives": 0,
+        "heightAdvantageM": 22
+      },
+      "score": 43,
+      "reason": "+17 km² of new coverage; reaches East; 22 m above its surroundings",
+      "scores": {
+        "coverage": 0,
+        "links": 69,
+        "redundancy": 0,
+        "evidence": 0,
+        "height": 58
+      }
+    }
+  ],
+  "notes": [
+    "Ranked from 38 candidate sites (terrain high points and OpenStreetMap structures); Verify runs the full model on a site.",
+    "Scored at the pool's mount heights (pole 6 m, treetop 18 m, structure height) for a handheld at 1.5 m; your radio, power and gain shift every margin."
+  ],
+  "preparing": false,
+  "goal": "overall",
+  "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+  },
+  "model": "profile+bullington+clutter v1 (E11 sparse grid)",
+  "terrain": "AWS Terrain Tiles (Terrarium; USGS 3DEP / SRTM blend), bare earth",
+  "asOf": "2026-11-15T12:00:00.000Z",
+  "confidence": {
+    "level": "calibrated",
+    "note": "Calibrated on Columbus; 412 measured cells in this region"
+  },
+  "cached": false
+}
