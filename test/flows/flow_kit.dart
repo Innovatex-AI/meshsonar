@@ -9,7 +9,6 @@ import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/node_claim.dart';
 import 'package:meshsonar/core/plan/plan_api.dart';
 import 'package:meshsonar/core/plan/plan_store.dart';
-import 'package:meshsonar/core/plan_contract.dart';
 import 'package:meshsonar/ui/plan/planner_screen.dart';
 import 'package:meshsonar/ui/shell/shell_controller.dart';
 
