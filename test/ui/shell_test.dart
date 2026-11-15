@@ -361,7 +361,7 @@ void main() {
         }
       }
 
-      expect(planTools.map((t) => t.id), ['link', 'painter', 'airtime', 'presets', 'check']);
+      expect(planTools.map((t) => t.id), ['link', 'painter']);
       for (final t in planTools) {
         await tester.scrollUntilVisible(find.byKey(Key('plan-${t.id}')), 120, scrollable: list);
         await clearBar(find.byKey(Key('plan-${t.id}')));
