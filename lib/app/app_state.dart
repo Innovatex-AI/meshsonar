@@ -49,7 +49,7 @@ import '../core/server_url.dart';
 import '../core/sync_service.dart' show DefaultSyncService;
 import '../chat/channel_secret.dart' show hashtagSecret16, publicChannelSecret16;
 import '../core/drive_end.dart';
-import '../core/home_observer.dart';
+import '../core/observer_status.dart';
 import '../core/hex_cells.dart' show hexCellOf, hexId, loadHexEngine;
 import '../core/observer_engine.dart';
 import '../core/observer_identity.dart';
@@ -1470,9 +1470,8 @@ class AppState extends ChangeNotifier with _ObserverWiring {
   String? _observerKey;
 
 
-  /// The observer block of a v2 batch heard in [mode]: random id + the connected radio's context. The antenna follows the
-  /// mode: home mode sends the Home observer antenna ([Settings.homeAntenna], `unknown` when not set), drive and
-  /// background the drive antenna profile, as before. Null until the id is loaded.
+  /// The observer block of a v2 batch heard in [mode]: random id + the connected radio's context, with the drive antenna
+  /// profile's mount in every mode. Null until the id is loaded.
   TelemetryObserver? _telemetryObserver(ObserverMode mode) {
     final id = observerIdentity.id;
     if (id == null) return null;
@@ -1488,9 +1487,7 @@ class AppState extends ChangeNotifier with _ObserverWiring {
         bwKhz: r?.bwKhz,
         sf: r?.sf,
         cr: r?.cr,
-        antenna: mode == ObserverMode.home
-            ? homeAntennaToken(_settings.homeAntenna)
-            : (profile == null ? null : antennaToken(profile.mount)),
+        antenna: profile == null ? null : antennaToken(profile.mount),
       ),
     );
   }
@@ -1498,10 +1495,6 @@ class AppState extends ChangeNotifier with _ObserverWiring {
   /// The antenna mount as a contract token (`^[a-z0-9_-]{1,24}$`): insideCar -> inside_car.
   @visibleForTesting
   static String antennaToken(AntennaMount m) => m.name.replaceAllMapped(RegExp('[A-Z]'), (x) => '_${x[0]!.toLowerCase()}');
-
-  /// The Home observer antenna as a contract token; `unknown` when it was never set ("Don't know").
-  @visibleForTesting
-  static String homeAntennaToken(AntennaMount? m) => m == null ? 'unknown' : antennaToken(m);
 
   H3? _h3;
   bool _h3Tried = false;
@@ -1513,8 +1506,8 @@ class AppState extends ChangeNotifier with _ObserverWiring {
     _h3Tried = true;
   }
 
-  /// The H3 res-7 cell (~5 km) the phone was in at [at], per the person's choice: null for "Region only", in home mode,
-  /// or without a fix from within 10 minutes of [at]. Never coordinates.
+  /// The H3 res-7 cell (~5 km) the phone was in at [at], per the person's choice: null for "Region only" or
+  /// without a fix from within 10 minutes of [at]. Never coordinates.
   String? _telemetryCell(DateTime at) {
     if (_settings.telemetryRegionOnly) return null;
     final f = _phoneFix;
@@ -1533,7 +1526,7 @@ class AppState extends ChangeNotifier with _ObserverWiring {
     }
   }
 
-  // ---------- observer (Home observer, heartbeat, observer engine): lib/app/observer_wiring.dart ----------
+  // ---------- observer (sharing, heartbeat, observer engine): lib/app/observer_wiring.dart ----------
 
   // ---------- drive position for observer packets (contract section 8.2) ----------
   final List<GeoFix> _driveFixes = [];
@@ -1704,7 +1697,7 @@ class AppState extends ChangeNotifier with _ObserverWiring {
       rx,
       region: _currentRegion?.code,
       channelMatch: _shareable.match,
-      cell: mode == ObserverMode.home || pos != null ? null : _telemetryCell(rx.at),
+      cell: pos != null ? null : _telemetryCell(rx.at),
       mode: mode,
       pos: pos,
       ownPublicKey: _selfInfo?.publicKey,
@@ -3263,7 +3256,7 @@ class AppState extends ChangeNotifier with _ObserverWiring {
         if (c.id != CategoryId.packetHeaders && _settings.collectionOn(c.id) && !s.collectionOn(c.id)) c.id,
     ];
     _settings = s;
-    if (_loaded) _applyObserverState(); // sharing or home mode switched: heartbeat and keep-awake follow at once
+    if (_loaded) _applyObserverState(); // sharing switched: the heartbeat and the observer engine follow at once
     if (switchedOff.isNotEmpty) unawaited(_contextCategoriesOff(switchedOff)); // unsent context is stripped, weather erased
     // Weather switched on or off: drives the server holds with the other choice get the new one (one small request each).
     if (s.collectionOn(CategoryId.weather) != prevWeather) unawaited(_weatherChoiceChanged());
