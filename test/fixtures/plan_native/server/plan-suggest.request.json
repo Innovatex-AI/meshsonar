@@ -1,0 +1,23 @@
+{
+  "bounds": {
+    "south": 39.9,
+    "north": 40.05,
+    "west": -83.1,
+    "east": -82.9
+  },
+  "goal": "overall",
+  "limit": 10,
+  "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+  },
+  "antennaM": 10,
+  "txDbm": 22,
+  "gainDbi": 3,
+  "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+  }
+}

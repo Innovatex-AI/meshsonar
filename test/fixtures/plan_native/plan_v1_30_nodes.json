@@ -1,0 +1,308 @@
+{
+ "v": 1,
+ "id": "p_golden30",
+ "name": "Columbus backbone",
+ "region": "cmh",
+ "radio": {
+  "freqMHz": 910.525,
+  "bwKHz": 62.5,
+  "sf": 7,
+  "cr": 5
+ },
+ "clutter": {
+  "canopyM": 15.0,
+  "dbPerKm": 13.3
+ },
+ "goal": "links",
+ "receiverM": 1.8,
+ "createdAt": "2026-11-15T12:00:00.000Z",
+ "updatedAt": "2026-11-15T13:30:00.000Z",
+ "nodes": [
+  {
+   "id": "n00",
+   "name": "Site 1",
+   "lat": 39.9,
+   "lon": -83.1,
+   "status": "planned",
+   "mine": true,
+   "heightM": 6.0,
+   "txDbm": 20.0,
+   "gainDbi": 5.8,
+   "cableLossDb": 1.2,
+   "role": "repeater"
+  },
+  {
+   "id": "n01",
+   "name": "Site 2",
+   "lat": 39.91234,
+   "lon": -83.0783,
+   "status": "installed",
+   "mount": "tree",
+   "role": "repeater"
+  },
+  {
+   "id": "n02",
+   "name": "Site 3",
+   "lat": 39.92468,
+   "lon": -83.0566,
+   "status": "existing",
+   "existingKey": "0202020202020202020202020202020202020202020202020202020202020202",
+   "role": "repeater"
+  },
+  {
+   "id": "n03",
+   "name": "Site 4",
+   "lat": 39.93702,
+   "lon": -83.0349,
+   "status": "planned",
+   "role": "repeater"
+  },
+  {
+   "id": "n04",
+   "name": "Site 5",
+   "lat": 39.94936,
+   "lon": -83.0132,
+   "status": "installed",
+   "heightM": 10.0,
+   "role": "repeater"
+  },
+  {
+   "id": "n05",
+   "name": "Site 6",
+   "lat": 39.9617,
+   "lon": -82.9915,
+   "status": "existing",
+   "mine": true,
+   "existingKey": "0505050505050505050505050505050505050505050505050505050505050505",
+   "mount": "building",
+   "role": "repeater"
+  },
+  {
+   "id": "n06",
+   "name": "Site 7",
+   "lat": 39.97404,
+   "lon": -83.1,
+   "status": "planned",
+   "gainDbi": 5.8,
+   "role": "repeater"
+  },
+  {
+   "id": "n07",
+   "name": "Site 8 (Mount Olive)",
+   "lat": 39.98638,
+   "lon": -83.0783,
+   "status": "installed",
+   "txDbm": 20.0,
+   "role": "repeater"
+  },
+  {
+   "id": "n08",
+   "name": "Site 9",
+   "lat": 39.99872,
+   "lon": -83.0566,
+   "status": "existing",
+   "existingKey": "0808080808080808080808080808080808080808080808080808080808080808",
+   "heightM": 14.0,
+   "role": "repeater"
+  },
+  {
+   "id": "n09",
+   "name": "Site 10",
+   "lat": 40.01106,
+   "lon": -83.0349,
+   "status": "planned",
+   "cableLossDb": 1.2,
+   "mount": "ground",
+   "role": "repeater"
+  },
+  {
+   "id": "n10",
+   "name": "Site 11",
+   "lat": 40.0234,
+   "lon": -83.0132,
+   "status": "installed",
+   "mine": true,
+   "role": "repeater"
+  },
+  {
+   "id": "n11",
+   "name": "Site 12",
+   "lat": 40.03574,
+   "lon": -82.9915,
+   "status": "existing",
+   "existingKey": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+   "role": "repeater"
+  },
+  {
+   "id": "n12",
+   "name": "Site 13",
+   "lat": 40.04808,
+   "lon": -83.1,
+   "status": "planned",
+   "heightM": 18.0,
+   "gainDbi": 5.8,
+   "role": "repeater"
+  },
+  {
+   "id": "n13",
+   "name": "Site 14",
+   "lat": 40.06042,
+   "lon": -83.0783,
+   "status": "installed",
+   "mount": "tree",
+   "role": "repeater"
+  },
+  {
+   "id": "n14",
+   "name": "Site 15",
+   "lat": 40.07276,
+   "lon": -83.0566,
+   "status": "existing",
+   "existingKey": "0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e",
+   "txDbm": 20.0,
+   "role": "repeater"
+  },
+  {
+   "id": "n15",
+   "name": "Site 16",
+   "lat": 40.0851,
+   "lon": -83.0349,
+   "status": "planned",
+   "mine": true,
+   "role": "repeater"
+  },
+  {
+   "id": "n16",
+   "name": "Site 17",
+   "lat": 40.09744,
+   "lon": -83.0132,
+   "status": "installed",
+   "heightM": 22.0,
+   "role": "repeater"
+  },
+  {
+   "id": "n17",
+   "name": "Site 18",
+   "lat": 40.10978,
+   "lon": -82.9915,
+   "status": "existing",
+   "existingKey": "1111111111111111111111111111111111111111111111111111111111111111",
+   "mount": "building",
+   "role": "repeater"
+  },
+  {
+   "id": "n18",
+   "name": "Site 19",
+   "lat": 40.12212,
+   "lon": -83.1,
+   "status": "planned",
+   "gainDbi": 5.8,
+   "cableLossDb": 1.2,
+   "role": "repeater"
+  },
+  {
+   "id": "n19",
+   "name": "Site 20",
+   "lat": 40.13446,
+   "lon": -83.0783,
+   "status": "installed",
+   "role": "repeater"
+  },
+  {
+   "id": "n20",
+   "name": "Site 21",
+   "lat": 40.1468,
+   "lon": -83.0566,
+   "status": "existing",
+   "mine": true,
+   "existingKey": "1414141414141414141414141414141414141414141414141414141414141414",
+   "heightM": 26.0,
+   "role": "repeater"
+  },
+  {
+   "id": "n21",
+   "name": "Site 22",
+   "lat": 40.15914,
+   "lon": -83.0349,
+   "status": "planned",
+   "txDbm": 20.0,
+   "mount": "ground",
+   "role": "repeater"
+  },
+  {
+   "id": "n22",
+   "name": "Site 23",
+   "lat": 40.17148,
+   "lon": -83.0132,
+   "status": "installed",
+   "role": "repeater"
+  },
+  {
+   "id": "n23",
+   "name": "Site 24",
+   "lat": 40.18382,
+   "lon": -82.9915,
+   "status": "existing",
+   "existingKey": "1717171717171717171717171717171717171717171717171717171717171717",
+   "role": "repeater"
+  },
+  {
+   "id": "n24",
+   "name": "Site 25",
+   "lat": 40.19616,
+   "lon": -83.1,
+   "status": "planned",
+   "heightM": 30.0,
+   "gainDbi": 5.8,
+   "role": "repeater"
+  },
+  {
+   "id": "n25",
+   "name": "Site 26",
+   "lat": 40.2085,
+   "lon": -83.0783,
+   "status": "installed",
+   "mine": true,
+   "mount": "tree",
+   "role": "repeater"
+  },
+  {
+   "id": "n26",
+   "name": "Site 27",
+   "lat": 40.22084,
+   "lon": -83.0566,
+   "status": "existing",
+   "existingKey": "1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a",
+   "role": "repeater"
+  },
+  {
+   "id": "n27",
+   "name": "Site 28",
+   "lat": 40.23318,
+   "lon": -83.0349,
+   "status": "planned",
+   "cableLossDb": 1.2,
+   "role": "repeater"
+  },
+  {
+   "id": "n28",
+   "name": "Site 29",
+   "lat": 40.24552,
+   "lon": -83.0132,
+   "status": "installed",
+   "heightM": 34.0,
+   "txDbm": 20.0,
+   "role": "repeater"
+  },
+  {
+   "id": "n29",
+   "name": "Site 30",
+   "lat": 40.25786,
+   "lon": -82.9915,
+   "status": "existing",
+   "existingKey": "1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d",
+   "mount": "building",
+   "role": "handheld"
+  }
+ ]
+}

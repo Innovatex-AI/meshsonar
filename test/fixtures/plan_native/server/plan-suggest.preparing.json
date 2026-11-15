@@ -1,0 +1,23 @@
+{
+  "pool": 0,
+  "sites": [],
+  "preparing": true,
+  "cached": false,
+  "goal": "overall",
+  "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+  },
+  "notes": [
+    "Preparing this region: the candidate sites are being computed. Try again in a few minutes."
+  ],
+  "model": "profile+bullington+clutter v1 (E11 sparse grid)",
+  "terrain": "AWS Terrain Tiles (Terrarium; USGS 3DEP / SRTM blend), bare earth",
+  "asOf": null,
+  "confidence": {
+    "level": "estimate",
+    "note": "no site table yet"
+  }
+}

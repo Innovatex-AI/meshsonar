@@ -1,0 +1,24 @@
+{
+  "site": {
+    "lat": 37.27,
+    "lon": -79.94
+  },
+  "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+  },
+  "antennaM": 10,
+  "txDbm": 22,
+  "gainDbi": 3,
+  "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+  },
+  "receiver": "handheld",
+  "receiverM": 1.5,
+  "mount": "building",
+  "direction": "both",
+  "radiusKm": 5
+}
