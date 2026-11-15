@@ -209,7 +209,11 @@ void main() {
       await tapShellTab(tester, 'Chat');
       expect(find.byKey(const Key('blur-bar-opaque')), findsOneWidget);
       // Drive is unselected here (Chat is open): the outline car; selected it is car.fill.
-      final car = find.descendant(of: find.byKey(const Key('shell-tabs')), matching: find.byType(AppSymbolIcon));
+      // Every tab draws an AppSymbol (Cupertino on Apple platforms, release 0.38); the Drive one is the car.
+      expect(find.descendant(of: find.byKey(const Key('shell-tabs')), matching: find.byType(AppSymbolIcon)), findsNWidgets(AppTab.values.length));
+      final car = find.descendant(
+          of: find.byKey(const Key('shell-tabs')),
+          matching: find.byWidgetPredicate((w) => w is AppSymbolIcon && (w.symbol == AppSymbols.car || w.symbol == AppSymbols.carFill)));
       expect(tester.widget<AppSymbolIcon>(car).symbol, AppSymbols.car);
       await tapShellTab(tester, 'Drive');
       expect(tester.widget<AppSymbolIcon>(car).symbol, AppSymbols.carFill);

@@ -1,11 +1,15 @@
 // The searchable index of Settings: every section and every setting row, with the words a person might type to find
 // it. Section widgets take their titles from here, so a result always names the row exactly as it is shown.
 // Adding a row to Settings = add a [SettingsEntry] here and wrap the row in a SettingsAnchor with the same id
-// (test/ui/settings_search_test.dart fails for an entry without a row).
+// (test/ui/settings_search_test.dart fails for an entry without a row). The Privacy and Observer sections keep their
+// entries in their own files (privacySettingsEntries, observerSettingsEntries), spread in here in display order, so the
+// work on those sections never edits this file.
 import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 
 import '../../app/app_state.dart';
+import 'observer_section.dart' show observerSettingsEntries;
+import 'privacy_section.dart' show privacySettingsEntries;
 
 class SettingsSectionInfo {
   final String id;
@@ -21,6 +25,7 @@ const List<SettingsSectionInfo> settingsSections = [
   SettingsSectionInfo('display', 'Units & display', Icons.straighten),
   SettingsSectionInfo('maps', 'Map & offline maps', Icons.map_outlined),
   SettingsSectionInfo('privacy', 'Privacy & data sharing', Icons.privacy_tip_outlined),
+  SettingsSectionInfo('observer', 'Observer', Icons.sensors),
   SettingsSectionInfo('notifications', 'Notifications', Icons.notifications_outlined),
   SettingsSectionInfo('wardriving', 'Wardriving', Icons.radar),
   SettingsSectionInfo('radio', 'Radio', Icons.settings_input_antenna),
@@ -58,7 +63,6 @@ class SettingsEntry {
 
 bool _isAndroid(AppState s) => defaultTargetPlatform == TargetPlatform.android;
 bool _hasSiteConfig(AppState s) => s.siteConfig != null;
-bool _hasKey(AppState s) => s.hasKey;
 bool _hasDirectory(AppState s) => s.services.directory != null;
 bool _hasSavedReport(AppState s) => s.savedReport != null;
 
@@ -112,59 +116,10 @@ const List<SettingsEntry> settingsEntries = [
   SettingsEntry('map-follow-options', 'maps', 'Follow and direction',
       'Heading-up or north-up map, re-centre by itself after you move the map, and zoom out a little at highway speed.',
       keywords: ['follow', 'heading', 'north up', 'rotate', 'recenter', 're-center', 'zoom', 'speed', 'compass', 'direction']),
-  // Privacy & data sharing
-  SettingsEntry('telemetry-toggle', 'privacy', 'Share what my radio hears (observer)',
-      'Your phone acts as an observer: public packets and signal strength your radio hears go to the live map. Never private messages or private channels.',
-      keywords: ['telemetry', 'observer', 'sharing', 'data collection', 'opt out', 'live feed', 'packets', 'packet headers', 'privacy']),
-  SettingsEntry('telemetry-location', 'privacy', 'Observer location',
-      'Approximate (~5 km hexagon, the default) or Region only. Never your exact position.',
-      keywords: ['location', 'observer', 'approximate', 'region only', 'hexagon', '5 km', 'privacy', 'telemetry']),
-  SettingsEntry('home-observer', 'privacy', 'Home observer',
-      'Leave this phone at home next to your radio as a fixed observer at a spot you place on the map (exact or about 1 km on the public map).',
-      keywords: ['home', 'observer', 'fixed', 'base station', 'keep awake', 'heartbeat', 'uptime', 'antenna', 'home antenna']),
-  // Drive-context categories (stream 7; titles = lib/core/data_categories.dart).
-  SettingsEntry('collect-motion-toggle', 'privacy', 'Motion and altitude',
-      'GPS height, direction of travel and accuracy, saved with your drive (uploaded with it when the server accepts it).',
-      keywords: ['altitude', 'height', 'heading', 'course', 'gps accuracy', 'data collection', 'opt out']),
-  SettingsEntry('collect-barometer-toggle', 'privacy', 'Air pressure',
-      'Phone barometer during a drive, saved with your drive (uploaded with it when the server accepts it).',
-      keywords: ['barometer', 'pressure', 'hpa', 'inhg', 'motion & fitness', 'sensor', 'data collection', 'opt out']),
-  SettingsEntry('collect-phone_battery-toggle', 'privacy', 'Phone battery',
-      'Battery level and charging during a drive, saved with your drive (uploaded with it when the server accepts it).',
-      keywords: ['battery', 'charging', 'low power', 'data collection', 'opt out']),
-  SettingsEntry('collect-device-toggle', 'privacy', 'Phone and app details',
-      'System version, phone model code and app build, saved with your drive (uploaded with it when the server accepts it).',
-      keywords: ['device', 'model', 'ios version', 'android version', 'build', 'data collection', 'opt out']),
-  SettingsEntry('collect-radio_health-toggle', 'privacy', 'Radio health',
-      'Radio battery, uptime, error flags, packet counters and airtime during a drive, saved with your drive (uploaded with it when the server accepts it).',
-      keywords: ['radio battery', 'uptime', 'airtime', 'counters', 'stats', 'errors', 'data collection', 'opt out']),
-  SettingsEntry('collect-radio_config-toggle', 'privacy', 'Radio settings',
-      'Board, firmware and power limits of your radio, saved with your drive (uploaded with it when the server accepts it).',
-      keywords: ['firmware', 'board', 'max power', 'radio settings', 'data collection', 'opt out']),
-  SettingsEntry('collect-weather-toggle', 'privacy', 'Weather for my drives',
-      'The server looks up weather near your uploaded drives, on a coarse grid, when it supports it. Data: Open-Meteo.com.',
-      keywords: ['weather', 'temperature', 'open-meteo', 'data collection', 'opt out']),
-  SettingsEntry('telemetry-erase-now', 'privacy', 'Erase shared observer packets',
-      'Asks the server to delete every packet this phone sent as an observer, and its home observer.',
-      keywords: ['delete', 'erase', 'remove', 'telemetry', 'gdpr'], available: _hasKey),
-  SettingsEntry('delete-my-data', 'privacy', 'Delete my data and account',
-      'Deletes the drive context and observer packets the server holds for you, the context and drives saved on this phone, and your account on the website.',
-      keywords: ['delete', 'erase', 'remove', 'gdpr', 'my data', 'privacy', 'forget', 'context', 'weather', 'sensors', 'account', 'driver key', 'drives']),
-  SettingsEntry('privacy-policy', 'privacy', 'Privacy policy',
-      'What MeshSonar shows in public and what stays yours, on meshsonar.com.',
-      keywords: ['privacy policy', 'policy', 'terms', 'legal']),
-  SettingsEntry('privacy-what-shared', 'privacy', 'What MeshSonar shares',
-      'Everything that leaves this phone, where it goes, and what never does.',
-      keywords: ['data', 'collected', 'disclosure', 'shared', 'privacy policy']),
-  SettingsEntry('privacy-location', 'privacy', 'Location while driving',
-      'Why the app asks for "Always" location and what it is never used for.',
-      keywords: ['gps', 'always', 'background', 'location', 'permission', 'tracking']),
-  SettingsEntry('privacy-zones', 'privacy', 'Privacy zones',
-      'Places where your pings are hidden from the public map, and how much of the start and end of each drive is trimmed.',
-      keywords: ['privacy zone', 'zones', 'home', 'hide', 'trim', 'start and end', 'private', 'map', 'location']),
-  SettingsEntry('privacy-zones-website', 'privacy', 'Manage privacy zones on the website',
-      'Hide pings near places like home, on the website. Applies to drives on the server.',
-      keywords: ['home', 'hide', 'zone', 'website']),
+  // Privacy & data sharing: the entries live next to their rows (lib/ui/settings/privacy_section.dart).
+  ...privacySettingsEntries,
+  // Observer: the entries live next to their rows (lib/ui/settings/observer_section.dart).
+  ...observerSettingsEntries,
   // Radio
   SettingsEntry('radio-tab', 'radio', 'Radio details',
       'What the connected radio reports, compared with the region\'s preset. Read-only.',

@@ -38,9 +38,9 @@ void main() {
       // Nov 9 2026: + 'heardcells', the Heard (no ping) layer (phone observer contract section 8.5), between predicted and measured.
       // Nov 12 2026 (M3-2): + 'redundancy', 'snrlinks' and 'estimated' (Map Definition capabilities layer.redundancy / layer.snrlinks / layer.estimated).
       expect(kMapLayers.map((l) => l.id).toSet(), {
-        'borders', 'predicted', 'heardcells', 'measured', 'redundancy', 'hexes', 'pings', 'snrlinks', 'links', 'heard', 'repeaters', 'network', 'estimated', 'observers', 'phones', 'labels',
+        'borders', 'predicted', 'heardcells', 'measured', 'redundancy', 'hexes', 'pings', 'snrlinks', 'links', 'heard', 'repeaters', 'network', 'estimated', 'observers', 'phones', 'labels', 'plan',
       });
-      expect(kMapLayers, hasLength(16));
+      expect(kMapLayers, hasLength(17));
       expect(layerSpec('heardcells')!.z, greaterThan(layerSpec('predicted')!.z));
       expect(layerSpec('heardcells')!.z, lessThan(layerSpec('measured')!.z), reason: 'a pinged cell shows its Measured colour');
       expect(layerSpec('rings'), isNull);

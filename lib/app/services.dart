@@ -20,7 +20,10 @@ import '../core/repeater_directory.dart';
 import '../core/repeater_sync.dart';
 import '../core/startup_location.dart';
 import '../core/report_draft_store.dart';
+import '../chat/secret_store.dart';
 import '../chat/store.dart';
+import '../core/observer_engine.dart';
+import '../core/plan/plan_repository.dart';
 import '../radio/radio_api.dart';
 
 /// Local cache of CMAT's repeater list, so names show with no signal.
@@ -172,6 +175,20 @@ class AppServices {
   /// so a person who only drives never gets a chat file. Returns the same store on every call. Null = no chat (tests).
   final Future<ChatStore> Function()? openChatStore;
 
+  /// Builds the observer engine that feeds outside MQTT sites (lib/core/observer_engine.dart; the real one comes from
+  /// lib/core/mqtt/observer_engine_factory.dart). Null = no engine (tests): every feed slot reads Off.
+  final ObserverEngine Function()? observerEngineFactory;
+
+  /// Keychain/Keystore for secrets that must never be in settings.json (MQTT feed passwords). Null = memory only (tests).
+  final SecretStore? secretStore;
+
+  /// Where saved plans live (lib/core/plan/plan_repository.dart). Null = memory only (tests).
+  final PlanRepository? planRepository;
+
+  /// Links opened into the app (universal links, app links; the app_links plugin in the real app), including the one it
+  /// was launched with. Plan links go to `AppState.planInbox`. Null = none (tests).
+  final Stream<Uri> Function()? incomingLinks;
+
   final DateTime Function() clock;
   final String Function() newId;
 
@@ -216,6 +233,10 @@ class AppServices {
     this.phoneBattery,
     this.deviceDetails,
     this.openChatStore,
+    this.observerEngineFactory,
+    this.secretStore,
+    this.planRepository,
+    this.incomingLinks,
   });
 
   /// Public node directory (map.meshcore.io) for names/positions CMAT doesn't know. Null = not used (tests).

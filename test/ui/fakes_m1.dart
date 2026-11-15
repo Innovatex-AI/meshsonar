@@ -109,6 +109,10 @@ class M1Harness extends Harness {
     newId: nextId,
     appInfo: appInfo,
     reportDraftStore: drafts,
+    observerEngineFactory: observerEngineFactory,
+    planRepository: planRepository,
+    incomingLinks: () => incomingLinks.stream,
+    secretStore: secretStore,
   );
 }
 

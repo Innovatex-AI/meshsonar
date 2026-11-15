@@ -51,7 +51,9 @@ import '../chat/channel_secret.dart' show hashtagSecret16, publicChannelSecret16
 import '../core/drive_end.dart';
 import '../core/home_observer.dart';
 import '../core/hex_cells.dart' show hexCellOf, hexId, loadHexEngine;
+import '../core/observer_engine.dart';
 import '../core/observer_identity.dart';
+import '../core/plan/plan_repository.dart';
 import '../core/privacy_zones.dart' show distanceM;
 import '../core/telemetry.dart';
 import '../core/telemetry_uploader.dart';
@@ -73,8 +75,11 @@ import 'privacy_zones_controller.dart';
 import 'context_upload_hook.dart';
 import 'drive_context_hook.dart';
 import 'messages.dart';
+import 'plan_inbox.dart';
 import 'ping_feedback.dart';
 import 'services.dart';
+
+part 'observer_wiring.dart';
 
 enum RadioKind { none, bluetooth, simulator }
 
@@ -93,7 +98,7 @@ class ProblemReportOutcome {
 /// Whether a drive report can ask the server for weather (see [AppState.driveWeatherGate]).
 enum DriveWeatherGate { ok, switchedOff, noApprovedKey, serverDoesNot }
 
-class AppState extends ChangeNotifier {
+class AppState extends ChangeNotifier with _ObserverWiring {
   final AppServices services;
   AppState(this.services);
 
@@ -188,6 +193,24 @@ class AppState extends ChangeNotifier {
   PlanStore get planStore {
     final rc = services.regionCache?.dir;
     return _planStore ??= PlanStore(dir: rc == null ? null : Directory('${rc.parent.path}${Platform.pathSeparator}plan_tools'), clock: services.clock);
+  }
+
+  /// Saved plans of the Master Planner (lib/core/plan/plan_repository.dart). Memory only when the build gives none (tests).
+  late final PlanRepository plans = services.planRepository ?? MemoryPlanRepository();
+
+  /// Shared plan links that reached the app and wait for the Plan tab (lib/app/plan_inbox.dart). Fed from
+  /// [AppServices.incomingLinks] from [init] on; a pasted link goes in with [PlanInbox.offer].
+  final PlanInbox planInbox = PlanInbox();
+  StreamSubscription<Uri>? _incomingLinkSub;
+
+  void _listenForLinks() {
+    final links = services.incomingLinks;
+    if (links == null || _incomingLinkSub != null) return;
+    try {
+      _incomingLinkSub = links().listen(planInbox.offer, onError: (Object e) => _logError('Incoming link failed', e));
+    } catch (e) {
+      _logError('Incoming links unavailable', e);
+    }
   }
 
   /// The server the Plan tools ask: the viewed region's own host (its repeaters and boundary feed the coverage model),
@@ -1245,6 +1268,7 @@ class AppState extends ChangeNotifier {
 
   void _onForeground(bool fg) {
     _telemetry?.foreground = fg; // 5 s batches in front, 60 s or 50 packets behind (contract section 6)
+    _observerForegroundChanged(fg);
     if (!fg) return;
     unawaited(flushDriveEnds());
     _claims?.appResumed();
@@ -1445,8 +1469,6 @@ class AppState extends ChangeNotifier {
   late final ObserverIdentity observerIdentity = services.observerIdentity ?? ObserverIdentity.memory();
   String? _observerKey;
 
-  /// The server's 64-hex key for this phone's observer (from the last v2 answer); null until one came back.
-  String? get observerKey => _observerKey ?? _home.lastKey;
 
   /// The observer block of a v2 batch heard in [mode]: random id + the connected radio's context. The antenna follows the
   /// mode: home mode sends the Home observer antenna ([Settings.homeAntenna], `unknown` when not set), drive and
@@ -1511,49 +1533,7 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  /// The person erased what the server holds: a new observer id from now on, and home mode is over (the server's erase
-  /// removed the home observer too).
-  Future<void> _afterServerErase() async {
-    await observerIdentity.rotate();
-    _observerKey = null;
-    _home.stopHeartbeat();
-    _home.status = null;
-    final h = _settings.homeObserver;
-    if (h != null && h.on) {
-      _settings = _settings.copyWith(homeObserver: h.copyWith(on: false));
-      try {
-        await services.settingsStore.save(_settings);
-      } catch (_) {}
-      _applyHomeMode();
-    }
-    notifyListeners();
-  }
-
-  // ---------- home observer (step O3; lib/core/home_observer.dart, lib/ui/settings/home_observer_screen.dart) ----------
-  late final HomeObserverService _home = HomeObserverService(
-    transport: () {
-      final c = client;
-      return c is HomeObserverTransport ? c as HomeObserverTransport : null;
-    },
-    driverKey: () => keyApproved ? _settings.driverKey : null,
-    observerId: observerIdentity.load,
-    // Every connected phone sends a status heartbeat while sharing is on (contract section 8.3), not only a home observer.
-    active: () => observerSharing,
-    connected: () => connected,
-    config: () => homeObserverActive ? _settings.homeObserver : null,
-    mode: () => observerMode.wire,
-    radio: () => _telemetryObserver(observerMode)?.radio.toJson() ?? const <String, dynamic>{},
-    autoTimer: services.observerHeartbeatTimer,
-  );
-
-  /// Sharing is on for a real radio, the disclosure was seen and the server took the key: this phone is an observer now.
-  bool get observerSharing =>
-      _settings.telemetryEnabled && _radioKind != RadioKind.simulator && _telemetryDisclosed() && keyApproved;
-
-  /// What this phone is right now (contract section 8): `drive` while a drive records, `home` with Home observer on,
-  /// else `background`.
-  ObserverMode get observerMode =>
-      driving ? ObserverMode.drive : (homeObserverActive ? ObserverMode.home : ObserverMode.background);
+  // ---------- observer (Home observer, heartbeat, observer engine): lib/app/observer_wiring.dart ----------
 
   // ---------- drive position for observer packets (contract section 8.2) ----------
   final List<GeoFix> _driveFixes = [];
@@ -1677,100 +1657,6 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  /// The home observer service (status, heartbeat count).
-  HomeObserverService get homeObserverService => _home;
-
-  /// Home mode is on (saved), sharing is on and this is a real radio: packets go as `observer.mode = home`, no cell.
-  bool get homeObserverActive =>
-      (_settings.homeObserver?.on ?? false) && _settings.telemetryEnabled && _radioKind != RadioKind.simulator;
-
-  /// Keeps the screen awake while home mode is on (set by the UI root; wakelock).
-  void Function(bool on)? keepAwakeHook;
-  bool _homeAwake = false;
-  bool _homeUserDisconnect = false;
-  bool _homeReconnecting = false;
-  StreamSubscription<LinkState>? _homeLinkSub;
-
-  /// Turns home mode on at [lat]/[lon] (or moves it): saves the choice, registers it with the server (`PUT`), keeps the
-  /// screen awake, reconnects the radio by itself and sends the heartbeat. Returns what the server said.
-  Future<HomeCallOutcome> startHomeObserver(double lat, double lon, HomeLocationPublic p) async {
-    final cfg = HomeObserverConfig(on: true, lat: lat, lon: lon, locationPublic: p);
-    await updateSettings(_settings.copyWith(homeObserver: cfg, telemetryEnabled: true));
-    final o = await _home.register(cfg);
-    _applyHomeMode();
-    unawaited(refreshHomeObserverStatus());
-    notifyListeners();
-    return o;
-  }
-
-  /// Turns home mode off: `DELETE` on the server (back to a mobile observer, home position hidden), heartbeat and keep-awake
-  /// stop. The position stays saved on this phone for next time.
-  Future<HomeCallOutcome> stopHomeObserver() async {
-    final h = _settings.homeObserver;
-    if (h != null) await updateSettings(_settings.copyWith(homeObserver: h.copyWith(on: false)));
-    final o = await _home.unregister();
-    _applyHomeMode();
-    notifyListeners();
-    return o;
-  }
-
-  /// Reads `GET /observer/me` for the status card.
-  Future<HomeCallOutcome> refreshHomeObserverStatus() async {
-    final o = await _home.refreshStatus(key: _observerKey ?? _home.lastKey, now: services.clock().toUtc());
-    notifyListeners();
-    return o;
-  }
-
-  /// Heartbeat, keep-awake and auto-reconnect follow home mode and the radio link.
-  void _applyHomeMode() {
-    final on = homeObserverActive;
-    if (observerSharing && connected) {
-      _home.startHeartbeat();
-    } else {
-      _home.stopHeartbeat();
-    }
-    if (on != _homeAwake) {
-      _homeAwake = on;
-      keepAwakeHook?.call(on);
-    }
-    _homeLinkSub ??= radioSessions.linkStates.listen(_onHomeLink);
-  }
-
-  void _onHomeLink(LinkState st) {
-    if (st == LinkState.disconnected && homeObserverActive && !_homeUserDisconnect && !driving) unawaited(_reconnectHome());
-    _applyHomeMode();
-  }
-
-  /// Home mode: the radio dropped (out of range, rebooted, Bluetooth hiccup). Keep trying until it is back, home mode is
-  /// turned off or the person disconnects.
-  Future<void> _reconnectHome() async {
-    final device = _device, kind = _radioKind, expected = _radioKey;
-    if (_homeReconnecting || device == null || kind == RadioKind.none) return;
-    _homeReconnecting = true;
-    diagnostics.add('Home observer: the radio dropped; reconnecting');
-    try {
-      final session = await radioSessions.reconnect(
-        scannerFor(kind),
-        device,
-        keepGoing: () => homeObserverActive && !_homeUserDisconnect && !driving && identical(_device, device),
-        delay: (n) => Duration(seconds: n <= 1 ? 2 : math.min(60, 5 * n)),
-        expectedKeyHex: expected,
-        onConnected: (session) async {
-          _selfInfo = session.selfInfo;
-          unawaited(_telemetrySub?.cancel());
-          _telemetrySub = _observerStream(session.link).listen(_onTelemetryRx, onError: (Object _) {});
-        },
-      );
-      if (session != null) diagnostics.add('Home observer: radio reconnected');
-    } catch (e) {
-      _logError('Home observer reconnect failed', e);
-    } finally {
-      _homeReconnecting = false;
-      _applyHomeMode();
-      notifyListeners();
-    }
-  }
-
   bool _telemetryDisclosed() {
     if (_telemetryDisclosedSeen) return true;
     final f = services.uiPrefsFile;
@@ -1823,7 +1709,10 @@ class AppState extends ChangeNotifier {
       pos: pos,
       ownPublicKey: _selfInfo?.publicKey,
     );
-    if (r != null) _tele.add(r);
+    if (r != null) {
+      _tele.add(r);
+      _feedObserverEngine(r, rx);
+    }
   }
 
   /// Packet headers waiting on this phone to be sent (Settings > Privacy & data sharing shows the count).
@@ -2122,8 +2011,7 @@ class AppState extends ChangeNotifier {
           'firmware ${info.firmware ?? 'unknown'}');
       notifyListeners();
       onRadioConnected?.call(device, kind, info);
-      _homeUserDisconnect = false;
-      _applyHomeMode();
+      _observerOnConnected();
       return true;
     } catch (e) {
       if (gen != _connectGen) return false; // cancelled: no error to show
@@ -2265,8 +2153,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> disconnect({bool quiet = false}) async {
     if (driving) await stopDrive();
-    _homeUserDisconnect = true; // the person ended the link: home mode does not pull it back
-    _home.stopHeartbeat();
+    _observerOnUserDisconnect();
     final hadRadio = radioSessions.session != null;
     unawaited(_telemetrySub?.cancel());
     _telemetrySub = null;
@@ -3293,6 +3180,7 @@ class AppState extends ChangeNotifier {
     }
     unawaited(refreshLocationAccess());
     _resumeBridge ??= (AppLifecycleBridge(_onForeground)..attach());
+    _listenForLinks();
     unawaited(_loadDirectory());
     unawaited(refreshSiteConfig());
     unawaited(refreshNetworkCoverage());
@@ -3314,7 +3202,7 @@ class AppState extends ChangeNotifier {
       unawaited(_tele.flush());
     }
     unawaited(observerIdentity.load());
-    _applyHomeMode();
+    _applyObserverState();
     unawaited(flushDriveEnds()); // confirmations left from a previous run (killed app, no signal)
     if (keyApproved) unawaited(refreshRepeaters(quiet: true));
     unawaited(ensureKey().then((ok) {
@@ -3375,7 +3263,7 @@ class AppState extends ChangeNotifier {
         if (c.id != CategoryId.packetHeaders && _settings.collectionOn(c.id) && !s.collectionOn(c.id)) c.id,
     ];
     _settings = s;
-    if (_loaded) _applyHomeMode(); // sharing or home mode switched: heartbeat and keep-awake follow at once
+    if (_loaded) _applyObserverState(); // sharing or home mode switched: heartbeat and keep-awake follow at once
     if (switchedOff.isNotEmpty) unawaited(_contextCategoriesOff(switchedOff)); // unsent context is stripped, weather erased
     // Weather switched on or off: drives the server holds with the other choice get the new one (one small request each).
     if (s.collectionOn(CategoryId.weather) != prevWeather) unawaited(_weatherChoiceChanged());
@@ -3824,10 +3712,9 @@ class AppState extends ChangeNotifier {
     _statusSub?.cancel();
     _telemetrySub?.cancel();
     unawaited(_telemetry?.dispose());
-    _homeLinkSub?.cancel();
     _driveEndTimer?.cancel();
-    _home.dispose();
-    if (_homeAwake) keepAwakeHook?.call(false);
+    _disposeObserver();
+    unawaited(_incomingLinkSub?.cancel());
     super.dispose();
   }
 }

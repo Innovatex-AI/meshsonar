@@ -232,6 +232,14 @@ class RecordingClient implements CmatClient {
   @override
   Future<NodeClaim> updateClaim(String driverKey, String pubkey, Map<String, Object?> changes) => throw UnimplementedError();
   @override
+  Future<PlanLinkResult> planLink(PlanLinkRequest request) => throw UnimplementedError();
+  @override
+  Future<PlanVerifyResult> planVerify(PlanVerifyRequest request) => throw UnimplementedError();
+  @override
+  Future<PlanSuggestResult> planSuggest(PlanSuggestRequest request) => throw UnimplementedError();
+  @override
+  Future<MqttPresetFetch> mqttPresets({String? ifNoneMatch}) => throw UnimplementedError();
+  @override
   final Uri baseUrl = Uri.parse('https://example.org');
   final List<DriveBatch> uploads;
   RecordingClient(this.uploads);

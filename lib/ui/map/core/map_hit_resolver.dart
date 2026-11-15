@@ -1,11 +1,12 @@
 // MapHitResolver: one tap, one decision (Drive plan 7.6). Every source that could claim a tap (a ping dot, a repeater marker
 // or cluster, an observer, the coverage cell under the finger) submits a candidate during the tap; the resolver picks the winner
-// by fixed priority ping > repeater > observer > cell, nearest first, smallest polygon first for cells, and runs only that
+// by fixed priority plan node > ping > repeater > observer > cell, nearest first, smallest polygon first for cells, and runs only that
 // candidate's action. It replaces the old 90 ms timer arbitration: the decision is taken as soon as the tap has been delivered
 // to every source (a microtask after the same pointer dispatch), not after a fixed delay.
 import 'dart:async' show scheduleMicrotask;
 
-enum MapHitKind { ping, repeater, observer, cell }
+/// In priority order. [planNode] (a node of the open plan, release 0.38) is drawn on top of everything, so it wins.
+enum MapHitKind { planNode, ping, repeater, observer, cell }
 
 class MapHitCandidate {
   final MapHitKind kind;

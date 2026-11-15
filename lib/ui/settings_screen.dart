@@ -17,6 +17,7 @@ import 'settings/drives_section.dart';
 import 'settings/maps_section.dart';
 import 'settings/my_radios_section.dart';
 import 'settings/notifications_section.dart';
+import 'settings/observer_section.dart';
 import 'settings/privacy_section.dart';
 import 'settings/radio_section.dart';
 import 'settings/region_section.dart';
@@ -40,6 +41,7 @@ List<Widget> settingsSectionRows(BuildContext context, String id) => switch (id)
       'display' => displaySectionRows(context),
       'maps' => mapsSectionRows(context),
       'privacy' => privacySectionRows(context),
+      'observer' => observerSectionRows(context),
       'notifications' => notificationsSectionRows(context),
       'wardriving' => wardrivingSectionRows(context),
       'radio' => radioSectionRows(context),
@@ -56,6 +58,7 @@ String? settingsSectionHelp(String id) => switch (id) {
       'display' => displayHelp,
       'maps' => mapsHelp,
       'privacy' => privacyHelp,
+      'observer' => observerHelp,
       'notifications' => notificationsHelp,
       'wardriving' => wardrivingHelp,
       'radio' => radioHelp,

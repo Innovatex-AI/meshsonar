@@ -15,6 +15,10 @@ import 'package:meshsonar/core/drive_store.dart' show TraceStore;
 import 'package:meshsonar/core/phone_sensors.dart';
 import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/core/idle_region_watcher.dart';
+import 'package:meshsonar/core/observer_engine.dart';
+import 'package:meshsonar/core/plan/plan_repository.dart';
+import 'package:meshsonar/core/telemetry.dart' show TelemetryRecord;
+import 'package:meshsonar/chat/secret_store.dart';
 import 'package:meshsonar/core/offline_packs.dart' show NetworkKind, NetworkMonitor;
 import 'package:meshsonar/core/region_lookup.dart';
 import 'package:meshsonar/core/region_stats_api.dart' show HubRegions;
@@ -327,10 +331,102 @@ class FakeCmatClient implements CmatClient {
     return ContextUploadResult(pingsUpdated: batch.pings.length);
   }
 
+  // ---------- Master Planner + MQTT presets (release 0.38 foundation seams) ----------
+  // Each answers its `...Result`, or throws `...Error`; a null result behaves like a server without the endpoint (404).
+  // Every request is kept, in order, for assertions.
+  final List<PlanLinkRequest> planLinkAsks = [];
+  PlanLinkResult? planLinkResult;
+  Object? planLinkError;
+  final List<PlanVerifyRequest> planVerifyAsks = [];
+  PlanVerifyResult? planVerifyResult;
+  Object? planVerifyError;
+  final List<PlanSuggestRequest> planSuggestAsks = [];
+  PlanSuggestResult? planSuggestResult;
+  Object? planSuggestError;
+
+  /// [mqttPresets]: the list and its ETag; an ask with `ifNoneMatch` equal to [mqttPresetsEtag] is answered "not modified".
+  final List<String?> mqttPresetAsks = [];
+  MqttPresetList? mqttPresetsResult;
+  String? mqttPresetsEtag;
+  Object? mqttPresetsError;
+
+  static Never _noEndpoint(String name) => throw CmatException('no $name endpoint', status: 404);
+
+  @override
+  Future<PlanLinkResult> planLink(PlanLinkRequest request) async {
+    planLinkAsks.add(request);
+    if (planLinkError != null) throw planLinkError!;
+    return planLinkResult ?? _noEndpoint('plan-link');
+  }
+
+  @override
+  Future<PlanVerifyResult> planVerify(PlanVerifyRequest request) async {
+    planVerifyAsks.add(request);
+    if (planVerifyError != null) throw planVerifyError!;
+    return planVerifyResult ?? _noEndpoint('plan-verify');
+  }
+
+  @override
+  Future<PlanSuggestResult> planSuggest(PlanSuggestRequest request) async {
+    planSuggestAsks.add(request);
+    if (planSuggestError != null) throw planSuggestError!;
+    return planSuggestResult ?? _noEndpoint('plan-suggest');
+  }
+
+  @override
+  Future<MqttPresetFetch> mqttPresets({String? ifNoneMatch}) async {
+    mqttPresetAsks.add(ifNoneMatch);
+    if (mqttPresetsError != null) throw mqttPresetsError!;
+    final list = mqttPresetsResult ?? _noEndpoint('mqtt-presets');
+    if (ifNoneMatch != null && ifNoneMatch == mqttPresetsEtag) return MqttPresetFetch.notModified(etag: mqttPresetsEtag);
+    return MqttPresetFetch.fresh(list, etag: mqttPresetsEtag);
+  }
+
   /// Members added to [CmatClient] later (0.4.0's `reportProblem`) don't break every UI test: a fake that needs one
   /// overrides it (see `ReportingCmatClient` in fakes_m1.dart); calling one that isn't faked fails loudly.
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+/// An observer engine that records every state and packet AppState hands it (release 0.38 observer-engine slot).
+class FakeObserverEngine implements ObserverEngine {
+  final List<ObserverEngineState> states = [];
+  final List<(TelemetryRecord, RxPacket)> packets = [];
+  final List<MqttSlotSettings> tested = [];
+  bool disposed = false;
+  List<ObserverFeedStatus> statusList = const [];
+  final StreamController<List<ObserverFeedStatus>> _status = StreamController.broadcast();
+
+  ObserverEngineState? get last => states.isEmpty ? null : states.last;
+
+  @override
+  void update(ObserverEngineState state) => states.add(state);
+
+  @override
+  void onPublicPacket(TelemetryRecord record, RxPacket rx) => packets.add((record, rx));
+
+  @override
+  List<ObserverFeedStatus> get statuses => statusList;
+
+  @override
+  Stream<List<ObserverFeedStatus>> get statusChanges => _status.stream;
+
+  void emitStatus(List<ObserverFeedStatus> s) {
+    statusList = s;
+    _status.add(s);
+  }
+
+  @override
+  Future<ObserverFeedStatus> test(MqttSlotSettings slot) async {
+    tested.add(slot);
+    return ObserverFeedStatus(slotId: slot.id, state: ObserverFeedState.connected);
+  }
+
+  @override
+  Future<void> dispose() async {
+    disposed = true;
+    await _status.close();
+  }
 }
 
 class FakeSyncService implements SyncService {
@@ -663,6 +759,13 @@ class Harness {
   PhoneBatterySource? phoneBattery;
   DeviceDetailsSource? deviceDetails;
   File? uiPrefsFile;
+
+  /// Release 0.38 seams (null / empty = off, as before): the observer engine ([FakeObserverEngine] records what it got),
+  /// saved plans, incoming links and the secret store.
+  ObserverEngine Function()? observerEngineFactory;
+  final MemoryPlanRepository planRepository = MemoryPlanRepository();
+  final StreamController<Uri> incomingLinks = StreamController<Uri>.broadcast();
+  final InMemorySecretStore secretStore = InMemorySecretStore();
   DateTime clockNow = DateTime.utc(2026, 10, 16, 18, 0, 0);
 
   /// The next engine's start fails with this (and first emits [engineStartPings]).
@@ -748,6 +851,10 @@ class Harness {
     phoneBattery: phoneBattery,
     deviceDetails: deviceDetails,
     uiPrefsFile: uiPrefsFile,
+    observerEngineFactory: observerEngineFactory,
+    planRepository: planRepository,
+    incomingLinks: () => incomingLinks.stream,
+    secretStore: secretStore,
   );
 
   late final AppState state = AppState(services)..retryPendingAtLaunch = false;

@@ -189,3 +189,18 @@ final class ObserverHit extends MapHit {
   final String? regionName;
   const ObserverHit(this.observer, {this.regionName});
 }
+
+/// A node of the open plan (planned or installed site) drawn by the `plan` layer (release 0.38, Master Planner). Carries
+/// only what the hit sheet and the planner need to find it again: the plan node's id, its name and where it is.
+final class PlanNodeHit extends MapHit {
+  final String nodeId;
+  final String name;
+  final double lat, lon;
+  const PlanNodeHit({required this.nodeId, required this.name, required this.lat, required this.lon});
+}
+
+/// A long-press on bare map (drop a pin there). Hosts send it only when nothing else claimed the press.
+final class LongPressHit extends MapHit {
+  final double lat, lon;
+  const LongPressHit({required this.lat, required this.lon});
+}
