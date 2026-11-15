@@ -135,7 +135,7 @@ void main() {
       await settle(tester);
       expect(st.detent, PlannerDetent.dock);
       expect(tester.getSize(find.byKey(const Key('planner-sheet'))).height, lessThan(medium));
-      expect(find.byKey(const Key('planner-sheet-body')), findsNothing, reason: 'the dock shows the chips only');
+      expect(tester.getSize(find.byKey(const Key('planner-sheet-body'))).height, 0, reason: 'the dock shows the chips only');
       expect(find.byKey(const Key('planner-mode-link')), findsOneWidget);
       await tester.fling(handle, const Offset(0, -60), 1500);
       await settle(tester);
@@ -232,7 +232,9 @@ void main() {
       await settle(tester);
       st.selectNodeForTest(n.id);
       await settle(tester);
-      await tapIn(tester, find.byKey(const Key('plan-selected-move')));
+      await tapIn(tester, find.byKey(const Key('plan-selected-edit')));
+      await settle(tester);
+      await tester.tap(find.byKey(const Key('node-move')));
       await settle(tester);
       expect(find.byKey(const Key('planner-move-bar')), findsOneWidget);
       expect(find.byKey(const Key('planner-crosshair')), findsOneWidget);

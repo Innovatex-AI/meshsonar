@@ -901,7 +901,13 @@ class _FindSitesBodyState extends State<_FindSitesBody> {
       const SizedBox(height: Gap.s),
       if (_noView != null) PlanLine(AppSymbols.infoCircle, _noView!),
       if (_loading && r == null) ConstrainedBox(constraints: const BoxConstraints(minHeight: 120), child: AppLoadingView(label: 'Ranking places from the network data…', timeout: Duration(seconds: 35))),
-      if (r != null && !r.ok) AppErrorView(key: const Key('sites-error'), title: 'Could not find sites', message: r.error, onRetry: () => unawaited(_run())),
+      if (r != null && !r.ok)
+        AppErrorView(
+          key: const Key('sites-error'),
+          title: r.unavailable ? 'Find sites is not on this region\'s server yet' : 'Could not find sites',
+          message: r.unavailable ? '${r.error} Your plan, Link and Coverage keep working; try again later.' : r.error,
+          onRetry: () => unawaited(_run()),
+        ),
       if (r != null && r.ok && r.data!.preparing)
         const AppEmptyView(
             key: Key('sites-preparing'),

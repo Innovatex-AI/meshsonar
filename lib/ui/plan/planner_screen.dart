@@ -16,8 +16,7 @@
 // node where the phone is and runs the coverage Estimate.
 //
 // Keys: 'planner', 'planner-map', 'planner-mode-<id>' (chips), 'plan-name', 'plan-menu', 'plan-radio-summary',
-// 'plan-quick-here', 'plan-quick-network', 'plan-selected', 'plan-selected-edit', 'plan-selected-link',
-// 'plan-selected-coverage', 'planner-move-bar', 'planner-move-set', 'planner-move-cancel', 'planner-crosshair',
+// 'plan-quick-here', 'plan-quick-network', 'plan-selected', 'plan-selected-edit', 'planner-move-bar', 'planner-move-set', 'planner-move-cancel', 'planner-crosshair',
 // 'saved-plans', 'saved-plan-<id>', 'plan-rename-field', 'plan-rename-save'.
 import 'dart:async';
 
@@ -123,6 +122,7 @@ class PlannerScreenState extends State<PlannerScreen> {
 
   @override
   void dispose() {
+    _refit?.cancel();
     _c?.removeListener(_onPlan);
     unawaited(_c?.dispose());
     _source?.dispose();
@@ -175,8 +175,13 @@ class PlannerScreenState extends State<PlannerScreen> {
       _moving = null;
     });
     _syncOverlay();
+    // Once now, and once more after the map's own first camera move (it centres on the phone's position when that arrives).
     WidgetsBinding.instance.addPostFrameCallback((_) => _fitPlan());
+    _refit?.cancel();
+    _refit = Timer(const Duration(milliseconds: 900), _fitPlan);
   }
+
+  Timer? _refit;
 
   Future<void> _open(Plan p) async {
     final c = _c;
@@ -231,6 +236,11 @@ class PlannerScreenState extends State<PlannerScreen> {
 
   double get _sheetHeight => _available <= 0 ? 0 : PlannerSheetMetrics.heightOf(_detent, _available, context);
 
+  /// The sheet height the map works around: at Full the map is behind the sheet, so its view (Find sites, focus, the
+  /// crosshair) is the part above the Medium line.
+  double get _mapSheetHeight =>
+      _available <= 0 ? 0 : _sheetHeight.clamp(0, PlannerSheetMetrics.heightOf(PlannerDetent.medium, _available, context)).toDouble();
+
   T? _camera<T>(T Function() f) {
     try {
       return f();
@@ -242,13 +252,13 @@ class PlannerScreenState extends State<PlannerScreen> {
   /// The map point at the middle of the part of the map above the sheet.
   LatLng? get _crosshair => _camera(() {
         final cam = _view.map.camera;
-        return cam.screenOffsetToLatLng(Offset(cam.nonRotatedSize.width / 2, (cam.nonRotatedSize.height - _sheetHeight) / 2));
+        return cam.screenOffsetToLatLng(Offset(cam.nonRotatedSize.width / 2, (cam.nonRotatedSize.height - _mapSheetHeight) / 2));
       });
 
   PlanBounds? _visibleBounds() => _camera(() {
         final cam = _view.map.camera;
         final a = cam.screenOffsetToLatLng(Offset.zero);
-        final b = cam.screenOffsetToLatLng(Offset(cam.nonRotatedSize.width, cam.nonRotatedSize.height - _sheetHeight));
+        final b = cam.screenOffsetToLatLng(Offset(cam.nonRotatedSize.width, cam.nonRotatedSize.height - _mapSheetHeight));
         return PlanBounds(
           south: a.latitude < b.latitude ? a.latitude : b.latitude,
           north: a.latitude < b.latitude ? b.latitude : a.latitude,
@@ -263,7 +273,7 @@ class PlannerScreenState extends State<PlannerScreen> {
       final cam = _view.map.camera;
       final z = zoom ?? (cam.zoom < 11 ? 13.0 : cam.zoom);
       final px = cam.projectAtZoom(LatLng(at.lat, at.lon), z);
-      final centre = cam.unprojectAtZoom(px + Offset(0, _sheetHeight / 2), z);
+      final centre = cam.unprojectAtZoom(px + Offset(0, _mapSheetHeight / 2), z);
       _view.map.move(centre, z);
       return true;
     });
@@ -278,7 +288,7 @@ class PlannerScreenState extends State<PlannerScreen> {
     }
     _camera(() => _view.map.fitCamera(CameraFit.bounds(
           bounds: LatLngBounds.fromPoints([for (final n in c.nodes) LatLng(n.lat, n.lon)]),
-          padding: EdgeInsets.fromLTRB(48, 96, 48, _sheetHeight + 48),
+          padding: EdgeInsets.fromLTRB(48, MediaQuery.paddingOf(context).top + 96, 48, _mapSheetHeight + 48),
           maxZoom: 15,
         )));
   }
@@ -302,7 +312,7 @@ class PlannerScreenState extends State<PlannerScreen> {
     final c = _c!;
     try {
       final n = c.addNode(name: name ?? 'Site ${c.nodes.where((x) => x.status == PlanNodeStatus.planned).length + 1}', lat: at.lat, lon: at.lon);
-      setState(() => _selected = n.id);
+      _select(n.id);
       unawaited(AppHaptics.success());
       showAppToast(context, 'Dropped ${n.name}.', actionLabel: 'Undo', onAction: c.undo);
       return n;
@@ -615,7 +625,8 @@ class PlannerScreenState extends State<PlannerScreen> {
                 onPlanNode: _onPlanNode,
                 onLongPress: _onLongPress,
                 topClearance: topInset,
-                bottomClearance: sheetH,
+                // At Full the map is behind the sheet: its controls and credit stay at the Medium line, clear of the status bar.
+                bottomClearance: _mapSheetHeight,
                 topLeading: _titlePill(context, c),
               ),
             ),
@@ -809,45 +820,36 @@ class PlannerScreenState extends State<PlannerScreen> {
     ];
   }
 
+  /// The selected node in one row: what it is, Edit (name, height, power, Move, Delete) and clear. A mode uses the selected
+  /// node as its default (Coverage estimates it, Link starts from it).
   Widget _selectedCard(BuildContext context, PlanNode n) {
     final t = Theme.of(context);
-    Widget action(Key key, String label, AppSymbol sym, VoidCallback onTap) => TextButton.icon(
-          key: key,
-          style: TextButton.styleFrom(minimumSize: const Size(Hit.min, Hit.min)),
-          onPressed: onTap,
-          icon: AppSymbolIcon(sym, size: 18),
-          label: Text(label),
-        );
     return Container(
       key: const Key('plan-selected'),
       margin: const EdgeInsets.only(bottom: Gap.s),
-      padding: const EdgeInsets.all(Gap.s),
+      padding: const EdgeInsets.symmetric(horizontal: Gap.s, vertical: Gap.xs),
       decoration: BoxDecoration(color: t.colorScheme.primary.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(Corners.small)),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          AppSymbolIcon(nodeSymbol(n), color: t.colorScheme.primary),
-          const SizedBox(width: Gap.s),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(n.name, style: t.textTheme.titleSmall),
-              Text(nodeSummary(n, context), style: t.textTheme.bodySmall),
-            ]),
-          ),
-          IconButton(
-            tooltip: 'Clear the selection',
-            constraints: const BoxConstraints(minWidth: Hit.min, minHeight: Hit.min),
-            onPressed: () => _select(null),
-            icon: const AppSymbolIcon(AppSymbols.xmark, size: 18),
-          ),
-        ]),
-        Wrap(spacing: Gap.xs, children: [
-          action(const Key('plan-selected-edit'), 'Edit', AppSymbols.squareAndPencil, () => _edit(n.id)),
-          action(const Key('plan-selected-link'), 'Link from here', AppSymbols.route,
-              () => _startMode(PlanModeId.link, PlanModeIntent(PlanModeIntentKind.linkFrom, n.id, seq: ++_intentSeq))),
-          action(const Key('plan-selected-coverage'), 'Coverage', AppSymbols.antenna,
-              () => _startMode(PlanModeId.coverage, PlanModeIntent(PlanModeIntentKind.coverageOf, n.id, seq: ++_intentSeq))),
-          action(const Key('plan-selected-move'), 'Move', AppSymbols.location, () => _startMove(n.id)),
-        ]),
+      child: Row(children: [
+        AppSymbolIcon(nodeSymbol(n), color: t.colorScheme.primary),
+        const SizedBox(width: Gap.s),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(n.name, style: t.textTheme.titleSmall),
+            Text(nodeSummary(n, context), style: t.textTheme.bodySmall),
+          ]),
+        ),
+        TextButton(
+          key: const Key('plan-selected-edit'),
+          style: TextButton.styleFrom(minimumSize: const Size(Hit.min, Hit.min)),
+          onPressed: () => _edit(n.id),
+          child: Text('Edit', semanticsLabel: 'Edit ${n.name}'),
+        ),
+        IconButton(
+          tooltip: 'Clear the selection',
+          constraints: const BoxConstraints(minWidth: Hit.min, minHeight: Hit.min),
+          onPressed: () => _select(null),
+          icon: const AppSymbolIcon(AppSymbols.xmark, size: 18),
+        ),
       ]),
     );
   }

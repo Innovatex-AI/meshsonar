@@ -198,8 +198,11 @@ class _PlannerSheetState extends State<PlannerSheet> {
                 onVerticalDragEnd: _end,
                 child: SizedBox(height: math.max(0, dock - 22), child: widget.dock),
               ),
-              if (showBody)
-                Expanded(
+              // Always built (also at the Dock, where it has no height), so a mode keeps its state and result while the
+              // sheet is collapsed; hidden from VoiceOver while it cannot be seen.
+              Expanded(
+                child: ExcludeSemantics(
+                  excluding: !showBody,
                   // Not lazy: a plan holds at most 30 nodes, and every row must be reachable by VoiceOver and ensureVisible.
                   child: SingleChildScrollView(
                     key: const Key('planner-sheet-body'),
@@ -208,6 +211,7 @@ class _PlannerSheetState extends State<PlannerSheet> {
                     child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: widget.children),
                   ),
                 ),
+              ),
             ]),
           ),
         ),
