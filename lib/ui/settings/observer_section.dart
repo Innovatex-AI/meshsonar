@@ -24,7 +24,7 @@ const String observerHelp =
 /// One line on what the observer is doing now, in plain words (More > Observer and the status row).
 String observerStatusLine(AppState s) {
   if (!s.settings.telemetryEnabled) {
-    return 'Off. Turn on "Share what my radio hears" under Privacy & data sharing to share again.';
+    return 'Off. Turn on "Share with MeshSonar" under Privacy & data sharing to share again.';
   }
   if (s.observerSharing) {
     return s.connected

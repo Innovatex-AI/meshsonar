@@ -13,7 +13,6 @@ import '../always_location_screen.dart';
 import '../app.dart';
 import 'data_sharing.dart';
 import 'delete_my_data.dart';
-import 'home_observer_screen.dart';
 import 'privacy_zones_screen.dart';
 import 'settings_index.dart';
 import 'settings_kit.dart';
@@ -21,15 +20,12 @@ import 'settings_kit.dart';
 /// The searchable rows of this section (spread into settingsEntries by settings_index.dart, in this order). Each id is a
 /// SettingsAnchor below.
 const List<SettingsEntry> privacySettingsEntries = [
-  SettingsEntry('telemetry-toggle', 'privacy', 'Share what my radio hears (observer)',
-      'Your phone acts as an observer: public packets and signal strength your radio hears go to the live map. Never private messages or private channels.',
-      keywords: ['telemetry', 'observer', 'sharing', 'data collection', 'opt out', 'live feed', 'packets', 'packet headers', 'privacy']),
+  SettingsEntry('telemetry-toggle', 'privacy', 'Share with MeshSonar',
+      'Whenever your radio is connected and the app is open, your phone is an observer: public packets and signal strength your radio hears go to the live map. Never private messages or private channels.',
+      keywords: ['telemetry', 'observer', 'share what my radio hears', 'sharing', 'data collection', 'opt out', 'live feed', 'packets', 'packet headers', 'privacy']),
   SettingsEntry('telemetry-location', 'privacy', 'Observer location',
       'Approximate (~5 km hexagon, the default) or Region only. Never your exact position.',
       keywords: ['location', 'observer', 'approximate', 'region only', 'hexagon', '5 km', 'privacy', 'telemetry']),
-  SettingsEntry('home-observer', 'privacy', 'Home observer',
-      'Leave this phone at home next to your radio as a fixed observer at a spot you place on the map (exact or about 1 km on the public map).',
-      keywords: ['home', 'observer', 'fixed', 'base station', 'keep awake', 'heartbeat', 'uptime', 'antenna', 'home antenna']),
   // Drive-context categories (stream 7; titles = lib/core/data_categories.dart).
   SettingsEntry('collect-motion-toggle', 'privacy', 'Motion and altitude',
       'GPS height, direction of travel and accuracy, saved with your drive (uploaded with it when the server accepts it).',
@@ -53,7 +49,7 @@ const List<SettingsEntry> privacySettingsEntries = [
       'The server looks up weather near your uploaded drives, on a coarse grid, when it supports it. Data: Open-Meteo.com.',
       keywords: ['weather', 'temperature', 'open-meteo', 'data collection', 'opt out']),
   SettingsEntry('telemetry-erase-now', 'privacy', 'Erase shared observer packets',
-      'Asks the server to delete every packet this phone sent as an observer, and its home observer.',
+      'Asks the server to delete every packet this phone sent as an observer.',
       keywords: ['delete', 'erase', 'remove', 'telemetry', 'gdpr'], available: _privacyHasKey),
   SettingsEntry('delete-my-data', 'privacy', 'Delete my data and account',
       'Deletes the drive context and observer packets the server holds for you, the context and drives saved on this phone, and your account on the website.',
@@ -91,17 +87,6 @@ List<Widget> privacySectionRows(BuildContext context) {
       ),
       if (identical(c, telemetryCategory)) ...[
         const SettingsAnchor(id: 'telemetry-location', child: TelemetryLocationTile()),
-        SettingsAnchor(
-          id: 'home-observer',
-          child: ListTile(
-            key: const Key('home-observer'),
-            leading: const Icon(Icons.home_work_outlined),
-            title: Text(settingsEntry('home-observer').title),
-            subtitle: Text(s.homeObserverActive ? 'On: this phone is a fixed observer at home.' : settingsEntry('home-observer').summary),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const HomeObserverScreen())),
-          ),
-        ),
       ],
     ],
     if (s.hasKey)

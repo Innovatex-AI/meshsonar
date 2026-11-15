@@ -8,7 +8,6 @@ import 'colour_palette.dart';
 import 'drive_context_wire.dart' show ContextUploadResult, DriveContextBatch;
 import 'driver_account.dart';
 import 'driver_summary.dart' show DriverSummary;
-import 'home_observer.dart' show HomeObserverConfig;
 import 'model.dart';
 import 'map_links.dart';
 import 'mqtt_contract.dart';
@@ -729,15 +728,6 @@ class Settings {
   /// the H3 res-7 cell the phone was in); true = "Region only" (no cell). Written only when true.
   final bool telemetryRegionOnly;
 
-  /// Home observer (lib/core/home_observer.dart): where the phone sits at home and how the public map shows it; null =
-  /// never set up. Written only when set.
-  final HomeObserverConfig? homeObserver;
-
-  /// The antenna the radio uses at home (Settings > Home observer > Antenna at home), sent in the observer block's
-  /// `radio.antenna` while Home observer is on; null = "Don't know" (sent as `unknown`, the default). Drive and background
-  /// mode keep sending the drive antenna. Kept when Home observer is turned off; written only when set.
-  final AntennaMount? homeAntenna;
-
   /// Map: write each repeater's name next to its marker (the "Repeater names" map layer). On by default; the layers
   /// sheet switch persists here.
   final bool mapRepeaterLabels;
@@ -818,8 +808,6 @@ class Settings {
     this.unitOverrides = const UnitOverrides(),
     this.telemetryEnabled = true,
     this.telemetryRegionOnly = false,
-    this.homeObserver,
-    this.homeAntenna,
     this.mapRepeaterLabels = true,
     this.colourPalette = ColourPalette.standard,
     this.baseMapStyle = 'chart',
@@ -856,10 +844,6 @@ class Settings {
     UnitOverrides? unitOverrides,
     bool? telemetryEnabled,
     bool? telemetryRegionOnly,
-    HomeObserverConfig? homeObserver,
-    bool clearHomeObserver = false,
-    AntennaMount? homeAntenna,
-    bool clearHomeAntenna = false,
     bool? mapRepeaterLabels,
     ColourPalette? colourPalette,
     String? baseMapStyle,
@@ -895,8 +879,6 @@ class Settings {
         unitOverrides: unitOverrides ?? this.unitOverrides,
         telemetryEnabled: telemetryEnabled ?? this.telemetryEnabled,
         telemetryRegionOnly: telemetryRegionOnly ?? this.telemetryRegionOnly,
-        homeObserver: clearHomeObserver ? null : (homeObserver ?? this.homeObserver),
-        homeAntenna: clearHomeAntenna ? null : (homeAntenna ?? this.homeAntenna),
         mapRepeaterLabels: mapRepeaterLabels ?? this.mapRepeaterLabels,
         colourPalette: colourPalette ?? this.colourPalette,
         baseMapStyle: baseMapStyle ?? this.baseMapStyle,
@@ -933,8 +915,6 @@ class Settings {
         if (!unitOverrides.isEmpty) 'unit_overrides': unitOverrides.toJson(),
         if (!telemetryEnabled) 'telemetry_enabled': false,
         if (telemetryRegionOnly) 'telemetry_location': 'region',
-        if (homeObserver != null) 'home_observer': homeObserver!.toJson(),
-        if (homeAntenna != null) 'home_antenna': homeAntenna!.name,
         if (!mapRepeaterLabels) 'map_repeater_labels': false,
         if (colourPalette != ColourPalette.standard) 'colour_palette': colourPalette.id,
         if (baseMapStyle != 'chart') 'base_map_style': baseMapStyle,
@@ -972,8 +952,7 @@ class Settings {
         unitOverrides: UnitOverrides.fromJson(j['unit_overrides']),
         telemetryEnabled: j['telemetry_enabled'] is bool ? j['telemetry_enabled'] as bool : true,
         telemetryRegionOnly: j['telemetry_location'] == 'region',
-        homeObserver: HomeObserverConfig.fromJson(j['home_observer']),
-        homeAntenna: AntennaMount.values.where((m) => m.name == j['home_antenna']).firstOrNull,
+        // `home_observer` / `home_antenna` (the Home observer, removed in 0.38) are ignored on read and not written again.
         mapRepeaterLabels: j['map_repeater_labels'] is bool ? j['map_repeater_labels'] as bool : true,
         colourPalette: ColourPalette.parse(j['colour_palette']),
         baseMapStyle: _str(j['base_map_style']) ?? 'chart',

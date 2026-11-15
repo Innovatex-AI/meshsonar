@@ -12,8 +12,9 @@ import '../radio/radio_session_impl.dart';
 import 'services.dart';
 
 /// The disclosure version that lists every collection category (stream 7 section 4.6). Every existing user sees it
-/// once; nothing of the drive-context categories is collected before it has been seen.
-const int collectionDisclosureVersion = 2;
+/// once; nothing of the drive-context categories is collected before it has been seen. 3 (release 0.38): rewritten for
+/// observer everywhere (the phone observes whenever a radio is connected and the app is open; no Home observer).
+const int collectionDisclosureVersion = 3;
 
 /// The ui_prefs.json key holding the disclosure version last seen (lib/ui/onboarding/ui_prefs.dart writes it).
 const String collectionDisclosedKey = 'collection_disclosed_v';

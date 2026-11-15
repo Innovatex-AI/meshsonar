@@ -45,7 +45,7 @@ import 'privacy_zones.dart';
 import 'repeater_reach.dart';
 import 'report_body.dart' show problemReportMaxBytes;
 import 'drive_end.dart';
-import 'home_observer.dart';
+import 'observer_status.dart';
 import 'telemetry_uploader.dart';
 
 /// One rejected ping, as reported by the server (only the first 20 are listed).
@@ -91,7 +91,7 @@ DriverKeyStatus parseDriverKeyStatus(Object? s) => switch (s) {
       _ => DriverKeyStatus.unknown,
     };
 
-class HttpCmatClient implements CmatClient, TelemetryTransport, HomeObserverTransport, DriveEndTransport, PhotoTransport {
+class HttpCmatClient implements CmatClient, TelemetryTransport, ObserverStatusTransport, DriveEndTransport, PhotoTransport {
   @override
   final Uri baseUrl;
   final http.Client _http;
@@ -204,30 +204,22 @@ class HttpCmatClient implements CmatClient, TelemetryTransport, HomeObserverTran
   @override
   Future<TelemetryHttpResult> deleteTelemetry(String driverKey) => _telemetry('DELETE', driverKey, null);
 
-  // ---------- home observer (lib/core/home_observer.dart; contract section 4) ----------
+  // ---------- observer status (lib/core/observer_status.dart; contract section 8.3) ----------
   @override
-  Future<HomeObserverHttpResult> putHome(String driverKey, Map<String, dynamic> body) =>
-      _observer('PUT', endpoint('observer/home'), driverKey, homeObserverJson(body));
-
-  @override
-  Future<HomeObserverHttpResult> heartbeat(String driverKey, Map<String, dynamic> body) =>
-      _observer('POST', endpoint('observer/heartbeat'), driverKey, homeObserverJson(body));
-
-  @override
-  Future<HomeObserverHttpResult> deleteHome(String driverKey, String observerId) =>
-      _observer('DELETE', endpoint('observer/home').replace(queryParameters: {'id': observerId}), driverKey, null);
+  Future<ObserverHttpResult> heartbeat(String driverKey, Map<String, dynamic> body) =>
+      _observer('POST', endpoint('observer/heartbeat'), driverKey, observerJson(body));
 
   /// `POST /api/cmh/observer/drive-end` (contract section 8.7, lib/core/drive_end.dart).
   @override
   Future<int> driveEnd(String driverKey, Map<String, dynamic> body) async =>
-      (await _raw('POST', endpoint('observer/drive-end'), driverKey, homeObserverJson(body))).status;
+      (await _raw('POST', endpoint('observer/drive-end'), driverKey, observerJson(body))).status;
 
   @override
-  Future<HomeObserverHttpResult> me(String driverKey) => _observer('GET', endpoint('observer/me'), driverKey, null);
+  Future<ObserverHttpResult> me(String driverKey) => _observer('GET', endpoint('observer/me'), driverKey, null);
 
-  Future<HomeObserverHttpResult> _observer(String method, Uri url, String driverKey, List<int>? body) async {
+  Future<ObserverHttpResult> _observer(String method, Uri url, String driverKey, List<int>? body) async {
     final r = await _raw(method, url, driverKey, body);
-    return HomeObserverHttpResult(r.status, body: r.body);
+    return ObserverHttpResult(r.status, body: r.body);
   }
 
   Future<TelemetryHttpResult> _telemetry(String method, String driverKey, List<int>? body) =>
