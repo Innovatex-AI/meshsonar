@@ -1,4 +1,4 @@
-// The admin launcher (the Repeaters screen is retired; Chat > Network lists them), and the "Administer this repeater" button, through the real app state with a real
+// The admin launcher (the Repeaters screen is retired; Chat > Network lists them), and the node actions' "Administer" (ui/nodes/node_actions.dart), through the real app state with a real
 // companion link over the fake radio (and, for the negative cases, the plain fake link that cannot administer).
 import 'dart:async';
 import 'dart:typed_data';
@@ -10,6 +10,8 @@ import 'package:meshsonar/radio/admin_password_vault.dart';
 import 'package:meshsonar/radio/companion_link.dart';
 import 'package:meshsonar/radio/radio_api.dart';
 import 'package:meshsonar/ui/app.dart';
+import 'package:meshsonar/ui/nodes/node_actions.dart';
+import 'package:meshsonar/ui/nodes/node_ref.dart';
 import 'package:meshsonar/ui/radios/admin_launcher.dart';
 
 import '../../support/repeater_admin_fake.dart';
@@ -61,7 +63,7 @@ void main() {
   setUp(() => setAdminVaultForTest(AdminPasswordVault()));
   tearDown(() => setAdminVaultForTest(null));
 
-  testWidgets('the repeater sheet button is hidden without a capable radio and opens the admin login with one', (tester) async {
+  testWidgets('"Administer" is dimmed with the reason without a radio and opens the admin login with one', (tester) async {
     useTallScreen(tester);
     final h = AdminHarness();
     await tester.runAsync(() => h.state.init());
@@ -70,17 +72,24 @@ void main() {
     await tester.pump();
     final key = h.rep.keyHex;
     Future<void> showButton() async {
-      await tester.pumpWidget(AppScope(state: h.state, child: MaterialApp(home: Scaffold(body: AdminRepeaterButton(keyHex: key, name: 'Hilltop')))));
+      await tester.pumpWidget(AppScope(state: h.state, child: MaterialApp(home: Scaffold(body: NodeActionBar(node: NodeRef(key: key, name: 'Hilltop', kind: NodeKind.repeater, source: NodeSource.network))))));
       await tester.pump();
     }
 
     await showButton();
-    expect(find.byKey(const Key('admin-this-repeater')), findsNothing);
+    expect(find.byKey(const Key('node-action-admin')), findsOneWidget);
+    expect(find.byKey(const Key('node-actions-reason')), findsOneWidget);
+    expect(find.text(kNeedRadioReason), findsOneWidget, reason: 'Ping says it needs the radio first');
+    await tester.tap(find.byKey(const Key('node-action-admin')));
+    await tester.pump();
+    expect(find.byKey(const Key('login-title')), findsNothing, reason: 'dimmed: says why, opens nothing');
+    await tester.pump(const Duration(seconds: 5));
     await tester.runAsync(() => h.state.connectSimulator());
     await showButton();
-    expect(find.byKey(const Key('admin-this-repeater')), findsOneWidget);
-    expect(tester.getSize(find.byKey(const Key('admin-this-repeater'))).height, greaterThanOrEqualTo(48));
-    await tester.tap(find.byKey(const Key('admin-this-repeater')));
+    expect(find.byKey(const Key('node-action-admin')), findsOneWidget);
+    expect(find.byKey(const Key('node-actions-reason')), findsNothing);
+    expect(tester.getSize(find.byKey(const Key('node-action-admin'))).height, greaterThanOrEqualTo(44));
+    await tester.tap(find.byKey(const Key('node-action-admin')));
     await pumpUntilFound(tester, find.byKey(const Key('login-title')));
     expect(find.text('Hilltop'), findsWidgets);
     await tester.pumpWidget(const SizedBox());

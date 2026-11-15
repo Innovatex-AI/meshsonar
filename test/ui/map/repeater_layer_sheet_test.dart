@@ -226,8 +226,12 @@ void main() {
       expect(find.text(attribution), findsOneWidget);
       final keyText = t.widget<RichText>(find.descendant(of: find.byKey(const Key('repeater-sheet-key')), matching: find.byType(RichText)));
       expect(keyText.text.toPlainText(), k('a'));
-      expect(find.byKey(const Key('repeater-sheet-open')), findsNothing, reason: 'not in a known roster');
+      expect(find.byKey(const Key('node-action-openPage')), findsNothing, reason: 'not in a known roster');
       expect(find.byKey(const Key('repeater-sheet-status')), findsNothing);
+      // The node actions (release 0.38): the same set as every repeater surface.
+      for (final a in ['planFrom', 'addToPlan', 'linkTo', 'ping', 'admin']) {
+        expect(find.byKey(Key('node-action-$a'), skipOffstage: false), findsOneWidget, reason: a);
+      }
     });
 
     testWidgets('imperial units, no fix, room server', (t) async {
@@ -259,9 +263,9 @@ void main() {
       expect(find.text('12'), findsOneWidget);
       expect(find.text('CC'), findsOneWidget);
       expect(find.text('MeshSonar region roster (CMH)'), findsOneWidget);
-      await t.ensureVisible(find.byKey(const Key('repeater-sheet-open')));
+      await t.ensureVisible(find.byKey(const Key('node-action-openPage')));
       await t.pumpAndSettle();
-      await t.tap(find.byKey(const Key('repeater-sheet-open')));
+      await t.tap(find.byKey(const Key('node-action-openPage')));
       await t.pumpAndSettle();
       expect(opened.single.key, k('a'));
       expect(find.byKey(const Key('repeater-sheet')), findsNothing, reason: 'the sheet closes first');

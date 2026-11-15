@@ -1,6 +1,7 @@
 // Tap a repeater on a clustered map layer (global network list or the region roster): a bottom sheet with its name,
 // type, full key (copyable), last advert / last heard, distance from you (Units setting), the roster's own figures
-// when the key is in the viewed region's roster, the data source, and "Open repeater page" when the region is known.
+// when the key is in the viewed region's roster, the data source, then the node actions (Plan from here, Add to plan,
+// Link to…, Ping, Open repeater page when the region is known, Claim, Administer: ui/nodes/node_actions.dart).
 // Several repeaters on one spot (one tower) open a list first. Design: stream-1-maps.md 4.6.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -15,8 +16,8 @@ import '../../theme.dart';
 import '../layers/repeater_cluster_layer.dart' show networkBandColors, rosterBandColors;
 import '../layers/repeater_map_source.dart';
 import '../map_layers.dart' show formatSnrShort;
-import '../../claims/claim_widgets.dart' show ClaimRepeaterAction;
-import '../../radios/admin_launcher.dart' show AdminRepeaterButton;
+import '../../nodes/node_actions.dart' show NodeActionBar;
+import '../../nodes/node_ref.dart';
 import '../../design/app_surfaces.dart';
 
 /// What the sheet needs from the host besides the point.
@@ -58,6 +59,16 @@ Future<void> showRepeaterListSheet(BuildContext context, List<RepeaterPoint> poi
     ),
   );
 }
+
+/// The point as the one node object (its actions: ui/nodes/node_actions.dart).
+NodeRef nodeRefOfPoint(RepeaterPoint p) => NodeRef(
+      key: p.key,
+      name: p.name,
+      kind: p.isRoom ? NodeKind.room : NodeKind.repeater,
+      lat: p.lat,
+      lon: p.lon,
+      source: p.source == RepeaterPointSource.global ? NodeSource.network : NodeSource.roster,
+    );
 
 String roleText(bool isRoom) => isRoom ? 'Room server' : 'Repeater';
 
@@ -168,20 +179,15 @@ class RepeaterSheet extends StatelessWidget {
             ],
             const SizedBox(height: Gap.s),
             Text(sourceText(p), key: const Key('repeater-sheet-source'), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
-            if (open != null && p.region != null) ...[
-              const SizedBox(height: Gap.m),
-              FilledButton.icon(
-                key: const Key('repeater-sheet-open'),
-                onPressed: () {
-                  if (dismissOnOpen) Navigator.of(context).pop();
-                  open(context, p);
-                },
-                icon: const Icon(Icons.open_in_new),
-                label: const Text('Open repeater page'),
-              ),
-            ],
-            ClaimRepeaterAction(keyHex: p.key, name: p.name, isRoom: p.isRoom),
-            AdminRepeaterButton(keyHex: p.key, name: p.name, isRoom: p.isRoom),
+            NodeActionBar(
+              node: nodeRefOfPoint(p),
+              onOpenPage: open != null && p.region != null
+                  ? () {
+                      if (dismissOnOpen) Navigator.of(context).pop();
+                      open(context, p);
+                    }
+                  : null,
+            ),
           ],
         ),
       ),

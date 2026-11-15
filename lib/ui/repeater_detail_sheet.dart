@@ -1,6 +1,7 @@
 // Bottom sheet for one repeater heard on a drive: name, full key, position, distance from the latest position,
 // times heard, last/best SNR, an SNR-over-the-drive sparkline and when it was last heard, then "Your drives" (every
-// drive on this phone that heard it: your_drives_section.dart).
+// drive on this phone that heard it: your_drives_section.dart) and, for a resolved repeater, its reach and the node
+// actions (ui/nodes/node_actions.dart).
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -9,8 +10,9 @@ import '../core/heard.dart';
 import '../core/model.dart';
 import 'app.dart' show AppScope;
 import 'charts/sparkline.dart';
-import 'claims/claim_widgets.dart' show ClaimRepeaterAction;
-import 'radios/admin_launcher.dart' show AdminRepeaterButton;
+import 'nodes/node_actions.dart' show NodeActionBar;
+import 'nodes/node_ref.dart';
+import 'region/repeater_detail_screen.dart' show openRepeaterDetail;
 import 'repeater_widgets.dart';
 import 'theme.dart';
 import 'widgets.dart';
@@ -172,12 +174,23 @@ class RepeaterDetailSheet extends StatelessWidget {
         if (ref != null) ...[
           const SizedBox(height: Gap.l),
           RepeaterReachSection(repeaterKey: ref.key, lat: ref.lat, lon: ref.lon),
-          ClaimRepeaterAction(keyHex: ref.key, name: repeaterTitle(m)),
-          AdminRepeaterButton(keyHex: ref.key, name: repeaterTitle(m)),
+          NodeActionBar(
+            node: NodeRef.fromRepeaterRef(ref, name: repeaterTitle(m)),
+            onOpenPage: _regionPage(context, m),
+          ),
         ],
       ],
     );
   }
+}
+
+/// "Open repeater page" for a repeater the MeshSonar region roster named (so the viewed region has its page); null
+/// otherwise (a name from the public map only, or no viewed region).
+VoidCallback? _regionPage(BuildContext context, RepeaterMatch m) {
+  final ref = m.ref;
+  final region = AppScope.maybeOf(context)?.viewingRegion;
+  if (ref == null || region == null || m.source != RepeaterSource.cmat) return null;
+  return () => openRepeaterDetail(context, baseUrl: region.url, regionSlug: region.slug, repeaterKey: ref.key);
 }
 
 /// A small SNR line chart. Nulls (heard, SNR not measured) are drawn as gaps. A dashed line marks 0 dB.

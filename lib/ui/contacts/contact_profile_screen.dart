@@ -1,5 +1,5 @@
 // Contact profile (chat plan 4.6; replaces contact_detail_screen.dart): who it is, how messages reach them, and the quick
-// actions for that kind of contact. Inset-grouped cards, share and Edit in the nav bar, everything that changes the
+// actions for that kind of contact (and the node actions: Plan from here, Add to plan, Link to… as one group of rows). Inset-grouped cards, share and Edit in the nav bar, everything that changes the
 // contact (name, notes, favourite, keep on radio, block, remove) in the Edit sheet. Reactive: a route learned, a favourite
 // toggled or a contact removed shows at once.
 import 'dart:async';
@@ -21,6 +21,8 @@ import '../design/app_symbols.dart';
 import '../design/app_type.dart';
 import '../design/app_widgets.dart';
 import '../design/tokens.dart';
+import '../nodes/node_actions.dart' show NodeActionEnv, NodeActionId, nodeActions, runNodeAction;
+import '../nodes/node_ref.dart';
 import '../shell/shell_controller.dart';
 import '../tools/ping_result_sheet.dart';
 import 'contact_edit_sheet.dart';
@@ -145,6 +147,13 @@ class _ContactProfileScreenState extends State<ContactProfileScreen> {
     final loose = !c.onRadio;
     final delivery = c.type == ContactType.companion ? _lastDelivery(conv, now) : null;
     final adv = c.lastAdvertTs;
+    // The plan actions (Plan from here, Add to plan, Link to…) as one group, same rule as every other node surface: only
+    // with a public position, and Link to… also for a person. Rows, not tiles: the tile row stays at four.
+    final planRows = <Widget>[
+      for (final a in nodeActions(NodeRef.fromContact(c), NodeActionEnv(radioConnected: connected, hostPing: true)))
+        if (a.id == NodeActionId.planFrom || a.id == NodeActionId.addToPlan || a.id == NodeActionId.linkTo)
+          ProfileRow(key: a.widgetKey, label: a.label, chevron: true, onTap: () => _nodeAction(c, a.id)),
+    ];
 
     return Scaffold(
       backgroundColor: col.bg,
@@ -222,6 +231,7 @@ class _ContactProfileScreenState extends State<ContactProfileScreen> {
                   if (loose && (c.favourite || _c.conversationOf(c) != null))
                     ProfileRow(key: const Key('contact-put-on-radio'), label: 'Put on radio now', onTap: () => _putOnRadio(c)),
                 ]),
+                if (planRows.isNotEmpty) ProfileGroup(rows: planRows),
                 ProfileGroup(rows: [
                   ProfileRow(
                     key: const Key('contact-key-row'),
@@ -356,6 +366,7 @@ class _ContactProfileScreenState extends State<ContactProfileScreen> {
         _c.openAdmin!(context, c);
       case ProfileTileId.route:
         await _route(c);
+
       case ProfileTileId.ping:
         await showPingSheet(context, contact: c, manager: _m, onUseRoute: (r) => offerUseRoute(context, _m, c, r));
       case ProfileTileId.stats:
@@ -363,6 +374,14 @@ class _ContactProfileScreenState extends State<ContactProfileScreen> {
       case ProfileTileId.telemetry:
         await showUserStatsSheet(context, contact: c);
     }
+  }
+
+  /// One of the plan actions of the node actions (ui/nodes/node_actions.dart): Plan from here, Add to plan, Link to….
+  Future<void> _nodeAction(Contact c, NodeActionId id) async {
+    final node = NodeRef.fromContact(c);
+    final a = nodeActions(node, NodeActionEnv(radioConnected: _m.connected, hostPing: true)).where((x) => x.id == id).firstOrNull;
+    if (a == null) return;
+    await runNodeAction(context, node, a);
   }
 
   Future<void> _pingOptions(Contact c) =>
