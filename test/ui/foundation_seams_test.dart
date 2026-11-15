@@ -77,7 +77,8 @@ void main() {
       await tester.pump();
       await tester.pump();
       expect(shell.tab, AppTab.plan);
-      expect(shell.pendingPlan, PlanRequest.openLink(link));
+      // The Plan tab (the Planner, release 0.38 A7) takes the request as soon as it is shown.
+      expect(shell.pendingPlan, isNull, reason: 'the Plan tab took the link');
       expect(h.state.planInbox.isEmpty, isTrue);
       await _drain(tester);
     });

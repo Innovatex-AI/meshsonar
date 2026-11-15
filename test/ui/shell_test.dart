@@ -12,7 +12,6 @@ import 'package:meshsonar/ui/drive_screen.dart';
 import 'package:meshsonar/ui/onboarding/ui_prefs.dart';
 import 'package:meshsonar/ui/shell/chat_tab_host.dart';
 import 'package:meshsonar/ui/shell/mini_drive_bar.dart';
-import 'package:meshsonar/ui/shell/plan_tab.dart';
 import 'package:meshsonar/ui/shell/shell_controller.dart';
 
 import 'fakes.dart';
@@ -65,7 +64,7 @@ void main() {
       await tapShellTab(tester, 'Analyze');
       expect(find.byKey(const Key('analyze-segments')), findsOneWidget);
       await tapShellTab(tester, 'Plan');
-      expect(find.byKey(const Key('plan-list')), findsOneWidget);
+      expect(find.byKey(const Key('planner')), findsOneWidget);
       await tapShellTab(tester, 'More');
       expect(find.byKey(const Key('more-list')), findsOneWidget);
       await drain(tester);
@@ -110,7 +109,7 @@ void main() {
       final h2 = Harness();
       attachUiPrefs(h2.state, prefs);
       await h2.pumpApp(tester);
-      expect(find.byKey(const Key('plan-list')), findsOneWidget);
+      expect(find.byKey(const Key('planner')), findsOneWidget);
       expect(prefs.toJson()['last_tab'], 'plan');
       await drain(tester);
     });
@@ -187,7 +186,7 @@ void main() {
       // Other tabs stay above the bar, never under it.
       await tapShellTab(tester, 'Plan');
       final bar = tester.getRect(find.byKey(const Key('shell-tabs')));
-      expect(tester.getRect(find.byKey(const Key('plan-list'))).bottom, lessThanOrEqualTo(bar.top + 0.5));
+      expect(tester.getRect(find.byKey(const Key('planner'))).bottom, lessThanOrEqualTo(bar.top + 0.5));
       await drain(tester);
     });
 
@@ -352,38 +351,23 @@ void main() {
   });
 
   group('Plan tab', () {
-    testWidgets('every tool opens its native screen (no browser, no external-link icon); the removed tools are gone', (tester) async {
+    testWidgets('the Plan tab opens on the Planner: one map, the sheet and the four mode chips; no tool list, no browser', (tester) async {
       phone(tester);
       final h = Harness();
       await h.pumpApp(tester);
       await tapShellTab(tester, 'Plan');
-      final list = find.descendant(of: find.byKey(const Key('plan-list')), matching: find.byType(Scrollable)).first;
-      Future<void> clearBar(Finder f) async {
-        while (tester.getCenter(f).dy > 640) {
-          await tester.drag(list, const Offset(0, -100));
-          await tester.pump();
-        }
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.byKey(const Key('planner')), findsOneWidget);
+      expect(find.byKey(const Key('planner-map')), findsOneWidget);
+      expect(find.byKey(const Key('planner-sheet')), findsOneWidget);
+      for (final id in const ['link', 'coverage', 'findSites', 'whereToDrive']) {
+        expect(find.byKey(Key('planner-mode-$id')), findsOneWidget, reason: id);
       }
-
-      expect(planTools.map((t) => t.id), ['link', 'painter']);
-      for (final t in planTools) {
-        await tester.scrollUntilVisible(find.byKey(Key('plan-${t.id}')), 120, scrollable: list);
-        await clearBar(find.byKey(Key('plan-${t.id}')));
-        final tile = find.byKey(Key('plan-${t.id}'));
-        expect(find.descendant(of: tile, matching: find.byIcon(Icons.open_in_new)), findsNothing, reason: t.id);
-        await tester.tap(tile);
-        await tester.pumpAndSettle();
-        expect(find.byKey(const Key('plan-list')), findsNothing, reason: '${t.id} opened a screen over the Plan tab');
-        expect(find.byKey(Key('plan-page-${t.id}')), findsOneWidget, reason: t.id);
-        await tester.pageBack();
-        await tester.pumpAndSettle();
+      for (final gone in const ['link', 'painter', 'planner', 'recommended', 'sites', 'scenarios', 'tracker', 'field']) {
+        expect(find.byKey(Key('plan-$gone')), findsNothing, reason: '$gone: the old tool rows are gone');
       }
-      for (final gone in const ['planner', 'recommended', 'sites', 'scenarios', 'tracker', 'field']) {
-        expect(find.byKey(Key('plan-$gone')), findsNothing, reason: '$gone was removed (M0)');
-      }
-      expect(h.openedUrls, isEmpty, reason: 'a native tool never opens the browser');
+      expect(h.openedUrls, isEmpty, reason: 'the planner never opens the browser');
       expect(find.text('Plan on the website'), findsNothing);
-      expect(find.text('Coming next, inside the app'), findsNothing);
       await drain(tester);
     });
   });
