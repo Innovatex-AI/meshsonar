@@ -70,8 +70,9 @@ void main() {
       }
       expect(shared, contains('region code'));
       expect(shared, contains('app version'));
-      // The observer block: random id, radio model / firmware / preset / antenna; the home position.
-      for (final w in ['random observer number', 'board model', 'firmware', 'frequency', 'antenna', 'home position']) {
+      // The observer block: random id, radio model / firmware / preset / antenna (no home position since 0.38).
+      expect(shared, isNot(contains('home')));
+      for (final w in ['random observer number', 'board model', 'firmware', 'frequency', 'antenna']) {
         expect(shared, contains(w), reason: 'observer field "$w" not disclosed');
       }
       final never = telemetryCategory.neverShared.join(' ').toLowerCase();
@@ -164,7 +165,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('telemetry-erase-dialog')), findsNothing);
     expect(h.state.settings.telemetryEnabled, isFalse);
-    expect(find.textContaining('Share what my radio hears (observer) is off.'), findsOneWidget);
+    expect(find.textContaining('Share with MeshSonar is off.'), findsOneWidget);
   });
 
   testWidgetsT('erase without turning sharing off: destructive confirm, then DELETE', (tester) async {
@@ -194,7 +195,7 @@ void main() {
     await tester.pumpAndSettle();
     final list = find.byKey(const Key('what-shared-screen'));
     final scroll = find.descendant(of: list, matching: find.byType(Scrollable)).first;
-    expect(find.text('Share what my radio hears (observer): on'), findsOneWidget);
+    expect(find.text('Share with MeshSonar: on'), findsOneWidget);
     for (final t in [
       ...telemetryCategory.shared,
       for (final f in otherDataFlows) f.body,

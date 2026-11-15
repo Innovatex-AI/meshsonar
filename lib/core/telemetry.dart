@@ -7,7 +7,7 @@
 //  * `raw`: the full packet bytes, ONLY for public types: ADVERT, PATH, TRACE, and GRP_TXT / GRP_DATA whose channel was
 //    proven (MAC) to be Public or a # channel; then `channel` says which ("public" / "#name"). Never for anything else.
 //  * `cell`: the H3 resolution-7 cell (~5 km) the phone was in when it heard the packet; never latitude/longitude. Left
-//    out when the person chose "Region only", when there is no recent fix, and always in Home observer mode.
+//    out when the person chose "Region only" or when there is no recent fix.
 //
 // Section 8 (Andy, Nov 9 2026: "the phone is always the observer"): `own` marks a repeat of this phone's own ping (raw only
 // if that ping was uploaded publicly); mode `drive` packets may carry the exact `pos` from the drive GPS (privacy rules
@@ -85,16 +85,16 @@ class TelemetryPos {
   int get hashCode => Object.hash(lat, lon, accM);
 }
 
-/// Where the phone was when it heard packets: `background` (in a pocket, moving, the default) or `home` (a fixed home
-/// observer at a registered position, contract section 4).
+/// What the phone was doing when it heard packets: `background` (the default: the app runs with a radio connected) or
+/// `drive` (a drive is recording). The Home observer mode is gone (Nov 15 2026, observer-everywhere plan D3); a record
+/// queued as `home` by an older build reads back as `background`.
 enum ObserverMode {
   background('background'),
 
   /// A drive is recording (contract section 8.2): packets may carry the exact `pos` from the drive's GPS.
-  drive('drive'),
-  home('home');
+  drive('drive');
 
-  static ObserverMode parse(Object? v) => v == home.wire ? home : (v == drive.wire ? drive : background);
+  static ObserverMode parse(Object? v) => v == drive.wire ? drive : background;
 
   final String wire;
   const ObserverMode(this.wire);
@@ -171,10 +171,10 @@ class TelemetryRecord {
   /// v2: for a group packet with [raw], the proven channel (`public` / `#name`); null otherwise.
   final String? channel;
 
-  /// v2: the H3 resolution-7 cell (15 hex) the phone was in; null when not shared. Never in [ObserverMode.home].
+  /// v2: the H3 resolution-7 cell (15 hex) the phone was in; null when not shared, and never next to a drive `pos`.
   final String? cell;
 
-  /// Background (moving phone), drive (a drive is recording) or home observer. Batches are sent per mode.
+  /// Background (the app runs with a radio connected) or drive (a drive is recording). Batches are sent per mode.
   final ObserverMode mode;
 
   /// v2 section 8.2: the exact drive position at [at], drive mode only, privacy rules already applied by the caller; sent
@@ -213,7 +213,7 @@ class TelemetryRecord {
   })  : pos = (mode == ObserverMode.drive && pos != null && pos.valid) ? pos : null,
         pathHashes = List.unmodifiable(pathHashes),
         // The privacy rules hold whatever a caller passes: raw only for a public type (a group one only with its proven
-        // channel), the channel only with raw, the cell only as an H3 res-7 index and never for a home observer.
+        // channel), the channel only with raw, the cell only as an H3 res-7 index.
         raw = (raw != null && raw.length <= telemetryMaxRawBytes * 2 && raw.length.isEven && _rawRe.hasMatch(raw) &&
                 rawAllowedFor(payloadType, channel) && (!telemetryGroupTypes.contains(payloadType) || channelChecked))
             ? raw
@@ -222,8 +222,8 @@ class TelemetryRecord {
                 telemetryChannelRe.hasMatch(channel) && raw.length <= telemetryMaxRawBytes * 2 && _rawRe.hasMatch(raw))
             ? channel
             : null,
-        // The cell: never for a home observer, and not next to an exact drive position (pos replaces it).
-        cell = (mode != ObserverMode.home && !(mode == ObserverMode.drive && pos != null && pos.valid) && cell != null &&
+        // The cell: not next to an exact drive position (pos replaces it).
+        cell = (!(mode == ObserverMode.drive && pos != null && pos.valid) && cell != null &&
                 telemetryCellRe.hasMatch(cell))
             ? cell
             : null;
@@ -354,7 +354,7 @@ class TelemetryRecord {
         ...toJson(),
         if (raw != null) 'raw': raw,
         if (raw != null && channel != null) 'channel': channel,
-        if (pos != null && mode == ObserverMode.drive) 'pos': pos!.toJson() else if (cell != null && mode != ObserverMode.home) 'cell': cell,
+        if (pos != null && mode == ObserverMode.drive) 'pos': pos!.toJson() else if (cell != null) 'cell': cell,
         if (own) 'own': true,
       };
 

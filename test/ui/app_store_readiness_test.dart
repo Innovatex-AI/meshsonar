@@ -192,9 +192,12 @@ void main() {
 
     test('the Always string covers the always-on phone observer; Bluetooth and When-in-use strings match what the app does', () {
       String v(String k) => RegExp('$k</key>\\s*<string>(.*?)</string>', dotAll: true).firstMatch(plist)!.group(1)!;
-      expect(v('NSLocationAlwaysAndWhenInUseUsageDescription'), contains('Share what my radio hears'));
+      expect(v('NSLocationAlwaysAndWhenInUseUsageDescription'), contains('Share with MeshSonar'));
       expect(v('NSLocationAlwaysAndWhenInUseUsageDescription'), contains('5 km'));
       expect(v('NSBluetoothAlwaysUsageDescription'), allOf(contains('chat'), contains('background')));
+      // Observer everywhere (0.38): App Review reads the Bluetooth string; it says the phone observes while connected.
+      expect(v('NSBluetoothAlwaysUsageDescription'), allOf(contains('observer'), contains('public packets')));
+      expect(plist, isNot(contains('Home observer')));
       expect(v('NSLocationWhenInUseUsageDescription'), allOf(contains('region'), contains('map')));
     });
 

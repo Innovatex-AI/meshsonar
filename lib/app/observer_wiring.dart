@@ -1,44 +1,38 @@
 // The observer side of AppState, in one place (release 0.38 foundation): whether this phone is an observer
-// ([observerSharing]), its mode, the status heartbeat, the Home observer (step O3; lib/core/home_observer.dart,
-// lib/ui/settings/home_observer_screen.dart) with its keep-awake and radio auto-reconnect, and the observer-engine slot
-// that feeds outside MQTT sites (lib/core/observer_engine.dart). Moved out of app_state.dart unchanged so the observer
-// work never has to edit that file; app_state.dart calls only the hooks marked "called by AppState" below.
+// ([observerSharing]), its mode, the status heartbeat (lib/core/observer_status.dart), bringing a dropped radio back, and
+// the observer-engine slot that feeds outside MQTT sites (lib/core/observer_engine.dart). app_state.dart calls only the
+// hooks marked "called by AppState" below.
+//
+// Observer everywhere (Andy, Nov 15 2026; meshsonar-infra docs/planning/observer-everywhere-mqtt-plan-2026-11-15.md): the
+// app is an observer whenever a radio is connected and the app runs, ON by default with one opt-out
+// (Settings.telemetryEnabled = Share with MeshSonar). There is no Home observer and no Drive observer mode any more: a drive
+// only adds its exact position to the packets heard while it records (`observer.mode = drive`, plan D1).
 part of 'app_state.dart';
 
 mixin _ObserverWiring on ChangeNotifier {
   AppState get _s => this as AppState;
 
-  /// The person erased what the server holds: a new observer id from now on, and home mode is over (the server's erase
-  /// removed the home observer too).
+  /// The person erased what the server holds: a new observer id from now on.
   Future<void> _afterServerErase() async {
     final s = _s;
     await s.observerIdentity.rotate();
     s._observerKey = null;
-    _home.stopHeartbeat();
-    _home.status = null;
-    final h = s._settings.homeObserver;
-    if (h != null && h.on) {
-      s._settings = s._settings.copyWith(homeObserver: h.copyWith(on: false));
-      try {
-        await s.services.settingsStore.save(s._settings);
-      } catch (_) {}
-      _applyObserverState();
-    }
+    _observerStatus.lastKey = null;
+    _observerStatus.status = null;
     notifyListeners();
   }
 
-  // ---------- home observer (step O3; lib/core/home_observer.dart, lib/ui/settings/home_observer_screen.dart) ----------
-  late final HomeObserverService _home = HomeObserverService(
+  // ---------- status heartbeat (lib/core/observer_status.dart) ----------
+  late final ObserverStatusService _observerStatus = ObserverStatusService(
     transport: () {
       final c = _s.client;
-      return c is HomeObserverTransport ? c as HomeObserverTransport : null;
+      return c is ObserverStatusTransport ? c as ObserverStatusTransport : null;
     },
     driverKey: () => _s.keyApproved ? _s._settings.driverKey : null,
     observerId: _s.observerIdentity.load,
-    // Every connected phone sends a status heartbeat while sharing is on (contract section 8.3), not only a home observer.
+    // Every connected phone sends a status heartbeat while sharing is on (contract section 8.3).
     active: () => observerSharing,
     connected: () => _s.connected,
-    config: () => homeObserverActive ? _s._settings.homeObserver : null,
     mode: () => observerMode.wire,
     radio: () => _s._telemetryObserver(observerMode)?.radio.toJson() ?? const <String, dynamic>{},
     autoTimer: _s.services.observerHeartbeatTimer,
@@ -48,109 +42,44 @@ mixin _ObserverWiring on ChangeNotifier {
   bool get observerSharing =>
       _s._settings.telemetryEnabled && _s._radioKind != RadioKind.simulator && _s._telemetryDisclosed() && _s.keyApproved;
 
-  /// What this phone is right now (contract section 8): `drive` while a drive records, `home` with Home observer on,
-  /// else `background`.
-  ObserverMode get observerMode =>
-      _s.driving ? ObserverMode.drive : (homeObserverActive ? ObserverMode.home : ObserverMode.background);
+  /// What this phone is right now (contract section 8): `drive` while a drive records, else `background`.
+  ObserverMode get observerMode => _s.driving ? ObserverMode.drive : ObserverMode.background;
 
   /// The server's 64-hex key for this phone's observer (from the last v2 answer); null until one came back.
-  String? get observerKey => _s._observerKey ?? _home.lastKey;
+  String? get observerKey => _s._observerKey ?? _observerStatus.lastKey;
 
-  /// The home observer service (status, heartbeat count).
-  HomeObserverService get homeObserverService => _home;
+  /// The status heartbeat and the last `GET /observer/me` answer (Settings > Observer reads it).
+  ObserverStatusService get observerStatusService => _observerStatus;
 
-  /// Home mode is on (saved), sharing is on and this is a real radio: packets go as `observer.mode = home`, no cell.
-  bool get homeObserverActive =>
-      (_s._settings.homeObserver?.on ?? false) && _s._settings.telemetryEnabled && _s._radioKind != RadioKind.simulator;
-
-  /// Keeps the screen awake while home mode is on (set by the UI root; wakelock).
-  void Function(bool on)? keepAwakeHook;
-  bool _homeAwake = false;
-  bool _homeUserDisconnect = false;
-  bool _homeReconnecting = false;
-  StreamSubscription<LinkState>? _homeLinkSub;
-
-  /// Turns home mode on at [lat]/[lon] (or moves it): saves the choice, registers it with the server (`PUT`), keeps the
-  /// screen awake, reconnects the radio by itself and sends the heartbeat. Returns what the server said.
-  Future<HomeCallOutcome> startHomeObserver(double lat, double lon, HomeLocationPublic p) async {
-    final cfg = HomeObserverConfig(on: true, lat: lat, lon: lon, locationPublic: p);
-    await _s.updateSettings(_s._settings.copyWith(homeObserver: cfg, telemetryEnabled: true));
-    final o = await _home.register(cfg);
-    _applyObserverState();
-    unawaited(refreshHomeObserverStatus());
+  /// Reads `GET /observer/me` (packets heard in 24 h, last packet, last heartbeat) for this phone.
+  Future<ObserverCallOutcome> refreshObserverStatus() async {
+    final o = await _observerStatus.refreshStatus(key: observerKey, now: _s.services.clock().toUtc());
     notifyListeners();
     return o;
   }
 
-  /// Turns home mode off: `DELETE` on the server (back to a mobile observer, home position hidden), heartbeat and keep-awake
-  /// stop. The position stays saved on this phone for next time.
-  Future<HomeCallOutcome> stopHomeObserver() async {
-    final h = _s._settings.homeObserver;
-    if (h != null) await _s.updateSettings(_s._settings.copyWith(homeObserver: h.copyWith(on: false)));
-    final o = await _home.unregister();
-    _applyObserverState();
-    notifyListeners();
-    return o;
-  }
+  /// The radio link dropped by itself (out of range, rebooted, Bluetooth hiccup) outside a drive: the app's saved-radio
+  /// auto-connect brings it back (set by main.dart to AlertsRuntime's LaunchReconnect, which honours Settings > Radio >
+  /// Auto-connect and a radio released on purpose). A drive has its own reconnect loop in AppState.
+  void Function()? onRadioDropped;
+  bool _userDisconnect = false;
+  StreamSubscription<LinkState>? _linkSub;
 
-  /// Reads `GET /observer/me` for the status card.
-  Future<HomeCallOutcome> refreshHomeObserverStatus() async {
-    final o = await _home.refreshStatus(key: _s._observerKey ?? _home.lastKey, now: _s.services.clock().toUtc());
-    notifyListeners();
-    return o;
-  }
-
-  /// Heartbeat, keep-awake and auto-reconnect follow home mode and the radio link; the observer engine follows too.
-  /// Called by AppState after a settings change and at launch.
+  /// The heartbeat follows sharing and the radio link; the observer engine follows too. Called by AppState after a
+  /// settings change and at launch.
   void _applyObserverState() {
-    final on = homeObserverActive;
     if (observerSharing && _s.connected) {
-      _home.startHeartbeat();
+      _observerStatus.startHeartbeat();
     } else {
-      _home.stopHeartbeat();
+      _observerStatus.stopHeartbeat();
     }
-    if (on != _homeAwake) {
-      _homeAwake = on;
-      keepAwakeHook?.call(on);
-    }
-    _homeLinkSub ??= _s.radioSessions.linkStates.listen(_onHomeLink);
+    _linkSub ??= _s.radioSessions.linkStates.listen(_onLink);
     _updateObserverEngine();
   }
 
-  void _onHomeLink(LinkState st) {
-    if (st == LinkState.disconnected && homeObserverActive && !_homeUserDisconnect && !_s.driving) unawaited(_reconnectHome());
+  void _onLink(LinkState st) {
+    if (st == LinkState.disconnected && !_userDisconnect && !_s.driving && _s._device != null) onRadioDropped?.call();
     _applyObserverState();
-  }
-
-  /// Home mode: the radio dropped (out of range, rebooted, Bluetooth hiccup). Keep trying until it is back, home mode is
-  /// turned off or the person disconnects.
-  Future<void> _reconnectHome() async {
-    final s = _s;
-    final device = s._device, kind = s._radioKind, expected = s._radioKey;
-    if (_homeReconnecting || device == null || kind == RadioKind.none) return;
-    _homeReconnecting = true;
-    s.diagnostics.add('Home observer: the radio dropped; reconnecting');
-    try {
-      final session = await s.radioSessions.reconnect(
-        s.scannerFor(kind),
-        device,
-        keepGoing: () => homeObserverActive && !_homeUserDisconnect && !s.driving && identical(s._device, device),
-        delay: (n) => Duration(seconds: n <= 1 ? 2 : math.min(60, 5 * n)),
-        expectedKeyHex: expected,
-        onConnected: (session) async {
-          s._selfInfo = session.selfInfo;
-          unawaited(s._telemetrySub?.cancel());
-          s._telemetrySub = AppState._observerStream(session.link).listen(s._onTelemetryRx, onError: (Object _) {});
-        },
-      );
-      if (session != null) s.diagnostics.add('Home observer: radio reconnected');
-    } catch (e) {
-      s._logError('Home observer reconnect failed', e);
-    } finally {
-      _homeReconnecting = false;
-      _applyObserverState();
-      notifyListeners();
-    }
   }
 
   // ---------- observer engine (MQTT feeds to other sites; lib/core/observer_engine.dart) ----------
@@ -181,16 +110,16 @@ mixin _ObserverWiring on ChangeNotifier {
 
   // ---------- hooks called by AppState ----------
 
-  /// A radio link just came up (connect or reconnect by the person).
+  /// A radio link just came up (connect or reconnect).
   void _observerOnConnected() {
-    _homeUserDisconnect = false;
+    _userDisconnect = false;
     _applyObserverState();
   }
 
-  /// The person ended the link: home mode does not pull it back.
+  /// The person ended the link: nothing pulls it back by itself.
   void _observerOnUserDisconnect() {
-    _homeUserDisconnect = true;
-    _home.stopHeartbeat();
+    _userDisconnect = true;
+    _observerStatus.stopHeartbeat();
   }
 
   /// The app came to the front or went behind.
@@ -206,9 +135,8 @@ mixin _ObserverWiring on ChangeNotifier {
   }
 
   void _disposeObserver() {
-    _homeLinkSub?.cancel();
-    _home.dispose();
-    if (_homeAwake) keepAwakeHook?.call(false);
+    _linkSub?.cancel();
+    _observerStatus.dispose();
     unawaited(observerEngine.dispose());
   }
 }

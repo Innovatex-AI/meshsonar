@@ -9,6 +9,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/app/app_state.dart';
+import 'package:meshsonar/app/drive_context_hook.dart' show collectionDisclosureVersion;
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/data_categories.dart' as core;
 import 'package:meshsonar/core/drive_context.dart';
@@ -123,20 +124,49 @@ void main() {
   });
 
   group('versioned disclosure flag', () {
-    test('someone who saw only the v1 sheet sees v2 once; headers keep their consent', () async {
+    test('someone who saw only the v1 sheet sees the current sheet once; headers keep their consent', () async {
       final f = File('${tmp.path}/ui_prefs.json')..writeAsStringSync(jsonEncode({'onboarding_seen': true, 'telemetry_disclosed': true}));
       final p = FileUiPrefs(f);
       await p.load();
       expect(p.packetHeadersDisclosed, isTrue);
       expect(p.disclosedVersion, 1);
-      expect(p.telemetryDisclosed, isFalse, reason: 'the app shell opens the v2 sheet');
+      expect(p.telemetryDisclosed, isFalse, reason: 'the app shell opens the current sheet');
       await p.markTelemetryDisclosed();
       final j = jsonDecode(f.readAsStringSync()) as Map;
-      expect(j['collection_disclosed_v'], 2);
+      expect(j['collection_disclosed_v'], 3);
       expect(j['telemetry_disclosed'], isTrue);
       final again = FileUiPrefs(f);
       await again.load();
       expect(again.telemetryDisclosed, isTrue, reason: 'shown once');
+    });
+
+    test('0.38: someone who saw the v2 sheet sees the rewritten observer sheet (v3) once', () async {
+      expect(collectionDisclosureVersion, 3);
+      final f = File('${tmp.path}/ui_prefs_v2.json')
+        ..writeAsStringSync(jsonEncode({'onboarding_seen': true, 'telemetry_disclosed': true, 'collection_disclosed_v': 2}));
+      final p = FileUiPrefs(f);
+      await p.load();
+      expect(p.telemetryDisclosed, isFalse, reason: 'the observer text changed: shown again');
+      await p.markTelemetryDisclosed();
+      final again = FileUiPrefs(f);
+      await again.load();
+      expect(again.telemetryDisclosed, isTrue, reason: 'shown once');
+    });
+
+    test('the observer disclosure: radio connected + app open, public packets only, no Home observer, no own-ping contradiction', () {
+      expect(telemetryCategory.disclosureLead, contains('Whenever your radio is connected and the app is open'));
+      expect(telemetryCategory.disclosureLead, contains('public packets only'));
+      expect(telemetryCategory.title, 'Share with MeshSonar');
+      final all = [telemetryCategory.summary, telemetryCategory.disclosureLead, ...telemetryCategory.shared, ...telemetryCategory.neverShared]
+          .join(' ')
+          .toLowerCase();
+      expect(all, isNot(contains('home')));
+      // The repeats of your own pings ARE shared (marked as yours): "Never shared" must not say they are not.
+      expect(telemetryCategory.shared.any((x) => x.contains('repeats of your own pings')), isTrue);
+      expect(telemetryCategory.neverShared.any((x) => x.contains('their echoes')), isFalse);
+      expect(telemetryCategory.neverShared.join(' '), contains('MQTT feed'));
+      // No promise of background coverage beyond what iOS allows.
+      expect(telemetryCategory.destination, contains('while iOS keeps it running'));
     });
 
     test('a fresh install has seen nothing', () async {
