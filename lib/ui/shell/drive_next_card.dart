@@ -12,7 +12,12 @@ import '../../core/heard.dart' show compass;
 import '../../core/hex_cells.dart' show loadHexEngine;
 import '../../core/startup_location.dart' show LocationAction;
 import '../../core/units.dart' show Units;
+import '../../core/plan/plan_model.dart' show PlanNode, PlanNodeStatus;
+import '../../core/plan_contract.dart' show PlanSite;
 import '../app.dart';
+import '../map/layers/registry.dart' show kPlanLayerId;
+import '../map/main_map_focus.dart';
+import '../nodes/node_actions.dart' show shellControllerFor;
 import '../../core/coverage_v2.dart' show CoverageBand;
 import '../map/coverage_bands.dart' show CoverageBandColors;
 import '../design/app_surfaces.dart';
@@ -26,6 +31,69 @@ typedef DriveNextMapBuilder = Widget Function(
   LatLng me,
   List<DriveTarget> targets,
 );
+
+// ---------------------------------------------------------------------------------------------------- targets on the Drive map (J4)
+
+/// Apple Maps directions to [lat], [lon] (the one hand-off every "Navigate" uses); false, with a toast, when Maps could not
+/// open.
+Future<bool> navigateToPoint(BuildContext context, double lat, double lon, {required String label}) async {
+  final s = AppScope.read(context);
+  final ok = await s.services.openUrl(appleMapsDirections(lat, lon, label: 'MeshSonar: $label'));
+  if (!ok && context.mounted) showAppToast(context, 'Could not open Maps.', kind: AppToastKind.error);
+  return ok;
+}
+
+/// A Find-sites result as targets for the Drive map, numbered in the order given (#1, #2 ... as on the planner's map).
+List<MapFocusTarget> focusTargetsFromSites(Iterable<PlanSite> sites) => [
+      for (final e in sites.indexed) MapFocusTarget(id: e.$2.id, at: LatLng(e.$2.at.lat, e.$2.at.lon), label: '#${e.$1 + 1}'),
+    ];
+
+/// The plan's sites that are still to be built (planned, not installed or existing) as targets to drive to.
+List<MapFocusTarget> focusTargetsFromPlanNodes(Iterable<PlanNode> nodes) => [
+      for (final n in nodes)
+        if (n.status == PlanNodeStatus.planned) MapFocusTarget(id: n.id, at: LatLng(n.lat, n.lon), label: n.name),
+    ];
+
+/// Opens the Drive tab's map with [targets] drawn on its `plan` layer, the camera on the first of them. Closes the sheets
+/// and screens above the tabs first. False (nothing happened) with no targets or no shell.
+bool showTargetsOnDriveMap(BuildContext context, List<MapFocusTarget> targets, {double zoom = 13}) {
+  if (targets.isEmpty) return false;
+  final shell = shellControllerFor(context);
+  if (shell == null) return false;
+  Navigator.maybeOf(context, rootNavigator: true)?.popUntil((r) => r.isFirst);
+  MainMapFocus.request(targets.first.at, zoom, showLayers: const {kPlanLayerId}, targets: targets);
+  shell.openDrive();
+  return true;
+}
+
+/// "Navigate" and "Show on the Drive map" for one place (a Find-sites result, a planned site). Keys
+/// `drive-target-navigate`, `drive-target-show-map`.
+class DriveTargetActions extends StatelessWidget {
+  final String name;
+  final double lat, lon;
+
+  /// What the Drive map draws; null = just this place.
+  final List<MapFocusTarget>? targets;
+  const DriveTargetActions({super.key, required this.name, required this.lat, required this.lon, this.targets});
+
+  @override
+  Widget build(BuildContext context) => Wrap(spacing: Gap.s, runSpacing: Gap.xs, children: [
+        FilledButton.tonalIcon(
+          key: const Key('drive-target-navigate'),
+          style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+          icon: const Icon(Icons.navigation_outlined, size: 18),
+          label: const Text('Navigate'),
+          onPressed: () => navigateToPoint(context, lat, lon, label: name),
+        ),
+        OutlinedButton.icon(
+          key: const Key('drive-target-show-map'),
+          style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
+          icon: const Icon(Icons.directions_car_outlined, size: 18),
+          label: const Text('Show on the Drive map'),
+          onPressed: () => showTargetsOnDriveMap(context, targets ?? [MapFocusTarget(id: 'target-$lat,$lon', at: LatLng(lat, lon), label: name)]),
+        ),
+      ]);
+}
 
 class DriveNextCard extends StatefulWidget {
   /// Tests replace the tile map for every card (the Plan tab builds it without arguments).
@@ -213,7 +281,6 @@ class _DriveNextCardState extends State<DriveNextCard> {
     Units units,
     MeshSonarColors m,
   ) {
-    final s = AppScope.of(context);
     final silent = x.kind == DriveTargetKind.silent;
     final dir = compass(
       bearingDegrees(me.latitude, me.longitude, x.lat, x.lon),
@@ -236,14 +303,7 @@ class _DriveNextCardState extends State<DriveNextCard> {
         style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
         icon: const Icon(Icons.navigation_outlined, size: 18),
         label: const Text('Navigate'),
-        onPressed: () async {
-          final ok = await s.services.openUrl(
-            appleMapsDirections(x.lat, x.lon, label: 'MeshSonar: $what'),
-          );
-          if (!ok && context.mounted) {
-            showAppToast(context, 'Could not open Maps.', kind: AppToastKind.error);
-          }
-        },
+        onPressed: () => navigateToPoint(context, x.lat, x.lon, label: what),
       ),
     );
   }
