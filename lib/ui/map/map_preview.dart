@@ -9,12 +9,18 @@
 //   - a picker ([MapPreviewInteraction.edit]): the few screens that place something on the map (privacy zones, the home
 //     observer, the Plan tools) keep their own taps, on the same component.
 //
+// The person's layer choices (lib/core/map_prefs.dart): a preview is kept under a page id ([layerPage]: `detail` for the
+// detail pages, `plan` for the planner's small maps). A coverage layer the person switched off there (or, with no choice
+// there, on the Drive map) is not drawn, even if the page asks for it; a preview never adds a layer the page did not ask for.
+// [planOverlay] draws the `plan` layer (layers/plan_layer.dart) on top, unless the page's choice switched it off.
+//
 // Keys: the map keeps the caller's [mapKey]; 'map-preview-open' is the Open button.
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../core/coverage_v2.dart' show CoverageTileLayer;
+import '../../core/map_prefs.dart';
 
 import '../app.dart' show AppScope;
 import '../design/app_symbols.dart';
@@ -24,7 +30,9 @@ import 'active_map_definition.dart';
 import 'basemap_layer.dart';
 import 'coverage_bands.dart';
 import 'coverage_tiles_layer.dart';
-import 'layers/registry.dart' show definitionLayerIds, kHeardCellsLayerId;
+import 'layers/plan_layer.dart' show planLayerWidgets;
+import 'layers/plan_overlay.dart' show PlanOverlayController;
+import 'layers/registry.dart' show definitionLayerIds, kHeardCellsLayerId, kPlanLayerId;
 import 'main_map_focus.dart';
 import 'overlays/mini_map_credit.dart';
 
@@ -70,6 +78,15 @@ class MapPreview extends StatelessWidget {
   final LatLng? openAt;
   final double? openZoom;
 
+  /// The page id the person's layer choices are read under ([kDetailLayerPage] or [kPlanLayerPage]).
+  final String layerPage;
+
+  /// The remembered choices; null = [MapPrefs.shared].
+  final MapPrefs? prefs;
+
+  /// The plan to draw on top (the `plan` layer); null = none.
+  final PlanOverlayController? planOverlay;
+
   final void Function(TapPosition, LatLng)? onTap;
   final void Function(MapCamera, bool)? onPositionChanged;
   final VoidCallback? onMapReady;
@@ -90,6 +107,9 @@ class MapPreview extends StatelessWidget {
     this.basemap,
     this.openAt,
     this.openZoom,
+    this.layerPage = kDetailLayerPage,
+    this.prefs,
+    this.planOverlay,
     this.onTap,
     this.onPositionChanged,
     this.onMapReady,
@@ -102,7 +122,13 @@ class MapPreview extends StatelessWidget {
     MapPreviewInteraction.edit => InteractiveFlag.all & ~InteractiveFlag.rotate,
   };
 
-  List<Widget> _coverageLayers(BuildContext context) {
+  /// The coverage layers this preview draws: what the page asks for, less what the person switched off.
+  Set<String> effectiveCoverage(MapPrefs p) => {
+    for (final id in kPreviewCoverage)
+      if (coverage.contains(id) && p.previewLayerOn(layerPage, id, fallback: true)) id,
+  };
+
+  List<Widget> _coverageLayers(BuildContext context, Set<String> coverage) {
     if (coverage.isEmpty) return const [];
     final s = AppScope.maybeOf(context);
     if (s == null || !s.coverageV2) return const [];
@@ -145,6 +171,11 @@ class MapPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = prefs ?? MapPrefs.shared;
+    return ListenableBuilder(listenable: p, builder: (context, _) => _build(context, p));
+  }
+
+  Widget _build(BuildContext context, MapPrefs p) {
     final mc = MeshSonarColors.of(context);
     final t = Theme.of(context);
     final map = FlutterMap(
@@ -164,8 +195,9 @@ class MapPreview extends StatelessWidget {
       ),
       children: [
         if (basemap != null) basemap! else if (tiles) const BasemapLayer(),
-        ..._coverageLayers(context),
+        ..._coverageLayers(context, effectiveCoverage(p)),
         ...overlays,
+        if (planOverlay case final plan? when p.previewLayerOn(layerPage, kPlanLayerId, fallback: true)) ...planLayerWidgets(plan),
         const MiniMapCredit(),
       ],
     );
