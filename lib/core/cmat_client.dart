@@ -583,8 +583,12 @@ class HttpCmatClient implements CmatClient, TelemetryTransport, ObserverStatusTr
   Future<PlanSuggestResult> planSuggest(PlanSuggestRequest request) =>
       _plan('plan-suggest', request.toJson(), PlanSuggestResult.parse, timeout: const Duration(seconds: 30));
 
+  /// Supplies this install's driver key for the planner calls. It only selects the per-driver rate allowance (phones behind one
+  /// carrier-NAT address would otherwise share a per-IP limit); nothing in the answer depends on it. Set by AppState.
+  String? Function()? driverKeyProvider;
+
   Future<T> _plan<T>(String name, Map<String, dynamic> body, T Function(Map<String, dynamic>) parse, {required Duration timeout}) async {
-    final j = await _send('POST', name, body: body, timeout: timeout);
+    final j = await _send('POST', name, body: body, timeout: timeout, driverKey: driverKeyProvider?.call());
     try {
       return parse(j);
     } on FormatException {

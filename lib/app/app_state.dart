@@ -15,6 +15,7 @@ import 'package:h3_flutter/h3_flutter.dart' show H3;
 import '../core/antenna_profile.dart';
 import '../core/api.dart';
 import '../core/claim_flow.dart';
+import '../core/cmat_client.dart' show HttpCmatClient;
 import '../core/coverage_query.dart';
 import '../core/coverage_v2.dart';
 import '../core/diagnostics.dart';
@@ -123,7 +124,11 @@ class AppState extends ChangeNotifier with _ObserverWiring {
   CmatClient? _client;
   CmatClient get client {
     final url = Uri.tryParse(_settings.serverUrl) ?? Uri.parse(const Settings().serverUrl);
-    if (_client == null || _client!.baseUrl != url) _client = services.cmatClientFactory(url);
+    if (_client == null || _client!.baseUrl != url) {
+      _client = services.cmatClientFactory(url);
+      final c = _client;
+      if (c is HttpCmatClient) c.driverKeyProvider = () => _settings.driverKey;
+    }
     return _client!;
   }
 
