@@ -7,15 +7,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:meshsonar/core/api.dart';
-import 'package:meshsonar/core/plan/airtime_calc.dart';
 import 'package:meshsonar/core/plan/plan_store.dart';
-import 'package:meshsonar/ui/plan/airtime_screen.dart';
-import 'package:meshsonar/ui/plan/coverage_check_screen.dart';
 import 'package:meshsonar/ui/plan/link_screen.dart';
 import 'package:meshsonar/ui/plan/painter_screen.dart';
 import 'package:meshsonar/ui/plan/plan_common.dart';
-import 'package:meshsonar/ui/plan/presets_screen.dart';
 
 import '../fakes.dart';
 import '../shell_test.dart' show phone, drain;
@@ -44,44 +39,6 @@ Map<String, dynamic> _score({double hill = 215}) => {
     };
 
 void main() {
-  group('Airtime and load', () {
-    testWidgets('calculator runs on the phone, matches the formula, and reacts to the packet kind; no live-load card', (tester) async {
-      phone(tester, h: 4500);
-      final h = Harness();
-      await open(tester, h, const AirtimeScreen());
-      final want = fmtMs(timeOnAir(packetBytes(const PacketSpec(PayloadKind.group, chars: 40, hops: 2)).total, meshcoreUs).totalMs);
-      expect(tester.widget<Text>(find.byKey(const Key('airtime-toa'))).data, want);
-      await tester.tap(find.byKey(const Key('airtime-kind-ack')));
-      await tester.pump();
-      final ack = fmtMs(timeOnAir(packetBytes(const PacketSpec(PayloadKind.ack, hops: 2)).total, meshcoreUs).totalMs);
-      expect(tester.widget<Text>(find.byKey(const Key('airtime-toa'))).data, ack);
-      expect(ack, isNot(want));
-      expect(find.byKey(const Key('airtime-live')), findsNothing, reason: 'the dead live-load half was removed (M0)');
-      expect(find.byKey(const Key('airtime-whatif')), findsNothing);
-      expect(h.openedUrls, isEmpty);
-      await drain(tester);
-    });
-
-  });
-
-  group('Radio presets', () {
-    testWidgets('24 rows against the base preset, the base marked, CR switch changes airtime; US default when no region preset', (tester) async {
-      phone(tester, h: 4500);
-      final h = Harness();
-      await open(tester, h, const PresetsScreen());
-      expect(find.byKey(const Key('presets-table')), findsOneWidget);
-      expect(find.textContaining(RegExp(r'^SF\d+ / ')), findsNWidgets(24));
-      expect(find.textContaining('(now)'), findsOneWidget);
-      List<String?> table() => tester.widgetList<Text>(find.descendant(of: find.byKey(const Key('presets-table')), matching: find.byType(Text))).map((t) => t.data).toList();
-      final before = table();
-      await tester.tap(find.descendant(of: find.byKey(const Key('presets-cr')), matching: find.text('4/8')));
-      await tester.pump();
-      final after = table();
-      expect(after, isNot(before));
-      await drain(tester);
-    });
-  });
-
   group('Point-to-point link', () {
     testWidgets('one profile request carries only the two points; heights re-score with no second request; offline reuses the profile', (tester) async {
       phone(tester, h: 4500);
@@ -210,65 +167,11 @@ void main() {
     });
   });
 
-  group('Coverage check', () {
-    CoverageCell c(double lat, double lon, int pings, int heard) => CoverageCell(lat: lat, lon: lon, pings: pings, heard: heard, bestSnr: 6, medianSnr: 3, repeaters: 2, lastAt: '2026-10-30T12:00:00Z');
-
-    testWidgets('answers from cached measured cells: covered, dead and unmeasured, with no network call of its own', (tester) async {
-      phone(tester, h: 4500);
-      final h = Harness();
-      h.client.publicCoverageResult = PublicCoverage(
-        asOf: '2026-10-31T00:00:00Z',
-        grid: const CoverageGrid.h3(res: 9, cellDeg: 0.002),
-        cells: [c(40.126, -82.93, 10, 9), c(40.2, -82.93, 6, 0)],
-      );
-      await open(tester, h, const CoverageCheckScreen(initialPoint: LatLng(40.126, -82.93)));
-      expect(tester.widget<Text>(find.byKey(const Key('check-verdict'))).data, 'Covered');
-      await tester.enterText(find.byKey(const Key('check-point-field')), '40.2, -82.93');
-      await tester.testTextInput.receiveAction(TextInputAction.done);
-      await tester.pumpAndSettle();
-      expect(tester.widget<Text>(find.byKey(const Key('check-verdict'))).data, 'Driven, nothing heard');
-      await tester.enterText(find.byKey(const Key('check-point-field')), '41.5, -80.1');
-      await tester.testTextInput.receiveAction(TextInputAction.done);
-      await tester.pumpAndSettle();
-      expect(tester.widget<Text>(find.byKey(const Key('check-verdict'))).data, 'Not measured');
-      await drain(tester);
-    });
-  });
-
-  group('Coverage check (DEF-3: mean SNR band)', () {
-    testWidgets('says the mean SNR and its margin over the floor, and a strong-but-rarely-answered place is Covered', (tester) async {
-      phone(tester, h: 4500);
-      final h = Harness();
-      // 2 of 10 pings answered (the old heard-share rule said Weak) at +9 dB mean SNR (the new rule: Excellent, Covered)
-      h.client.publicCoverageResult = PublicCoverage(
-        asOf: '2026-10-31T00:00:00Z',
-        grid: const CoverageGrid.h3(res: 11, cellDeg: 0.0002),
-        cells: [
-          const CoverageCell(lat: 40.126, lon: -82.93, pings: 10, heard: 2, bestSnr: 10, medianSnr: 9, repeaters: 1, lastAt: '2026-10-30T12:00:00Z', snrMean: 9, nOk: 2, nFail: 8, band: 5),
-          const CoverageCell(lat: 40.2, lon: -82.93, pings: 10, heard: 10, bestSnr: -5, medianSnr: -6, repeaters: 1, lastAt: '2026-10-30T12:00:00Z', snrMean: -6, nOk: 10, nFail: 0, band: 2),
-        ],
-      );
-      await open(tester, h, const CoverageCheckScreen(initialPoint: LatLng(40.126, -82.93)));
-      expect(tester.widget<Text>(find.byKey(const Key('check-verdict'))).data, 'Covered');
-      expect(tester.widget<Text>(find.byKey(const Key('check-body'))).data, contains('averaged +9.0'));
-      await tester.enterText(find.byKey(const Key('check-point-field')), '40.2, -82.93');
-      await tester.testTextInput.receiveAction(TextInputAction.done);
-      await tester.pumpAndSettle();
-      // every ping answered (the old rule said Covered) but at 1.5 dB over the floor: Weak
-      expect(tester.widget<Text>(find.byKey(const Key('check-verdict'))).data, 'Weak');
-      expect(tester.widget<Text>(find.byKey(const Key('check-body'))).data, contains('1.5'));
-      await drain(tester);
-    });
-  });
-
   group('small screens and big text', () {
     final screens = <String, Widget Function()>{
-      'airtime': () => const AirtimeScreen(),
       'baseline': () => const Scaffold(body: SizedBox()),
-      'presets': () => const PresetsScreen(),
       'link': () => LinkScreen(store: PlanStore(), client: () => MockClient((r) async => _json(_score())), initialA: const LatLng(39.96, -82.99), initialB: const LatLng(40.0, -82.93)),
       'painter': () => PainterScreen(store: PlanStore(), client: () => MockClient((r) async => _json({'error': 'x'}, 400)), initialPoint: const LatLng(40.1, -82.9)),
-      'check': () => const CoverageCheckScreen(initialPoint: LatLng(40.1, -82.9)),
     };
     for (final e in screens.entries) {
       testWidgets('${e.key}: 320 dp wide at 2x text draws without overflow', (tester) async {

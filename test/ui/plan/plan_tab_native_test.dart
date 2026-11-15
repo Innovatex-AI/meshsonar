@@ -13,7 +13,7 @@ void main() {
     await h.pumpApp(tester);
     await tapShellTab(tester, 'Plan');
     await tester.pumpAndSettle();
-    for (final id in const ['link', 'painter', 'airtime', 'presets', 'check']) {
+    for (final id in const ['link', 'painter']) {
       final tile = find.byKey(Key('plan-$id'));
       await tester.scrollUntilVisible(tile, 200, scrollable: find.byType(Scrollable).first);
       expect(find.descendant(of: tile, matching: find.byIcon(Icons.open_in_new)), findsNothing, reason: id);

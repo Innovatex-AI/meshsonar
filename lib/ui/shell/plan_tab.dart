@@ -3,11 +3,8 @@
 // removed in M0 (Nov 8 2026, unified map plan §4): they were CMH-only and frozen. "Find a site" replaces the planner in phase P.
 import 'package:flutter/material.dart';
 
-import '../plan/airtime_screen.dart';
-import '../plan/coverage_check_screen.dart';
 import '../plan/link_screen.dart';
 import '../plan/painter_screen.dart';
-import '../plan/presets_screen.dart';
 import 'drive_next_card.dart';
 import '../app.dart';
 
@@ -31,12 +28,6 @@ final List<PlanTool> planTools = [
       'A terrain check between any two points: line of sight, clearance and the odds the link works.', Icons.timeline, '/tools/link', native: () => const LinkScreen()),
   PlanTool('painter', 'Coverage painter',
       'Modelled coverage from any point, from terrain and the link model.', Icons.blur_on, '/tools/painter', native: () => const PainterScreen()),
-  PlanTool('airtime', 'Airtime and load',
-      'Airtime per packet for any radio setting, and how much of the channel a send rate takes.', Icons.timer_outlined, '/tools/airtime', native: () => const AirtimeScreen()),
-  PlanTool('presets', 'Radio presets',
-      'How the common MeshCore radio presets compare on range, airtime and channel load.', Icons.tune, '/tools/presets', native: () => const PresetsScreen()),
-  PlanTool('check', 'Coverage check', 'Is there measured coverage at a place? Checked against real drives.',
-      Icons.fact_check_outlined, '/coverage/check', native: () => const CoverageCheckScreen()),
 ];
 
 /// A page on the region's website (or meshsonar.com when the base is not a URL).
@@ -70,7 +61,7 @@ class PlanTab extends StatelessWidget {
                 Semantics(header: true, child: Text('Planning tools', style: t.textTheme.titleSmall)),
                 const SizedBox(height: Gap.xs),
                 Text(
-                  'Check a link, paint coverage, work out airtime, compare radio presets and check measured coverage'
+                  'Check a link and paint modelled coverage'
                   '${region == null ? '' : ' for ${region.name}'}, right here. No account needed.',
                   style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant),
                 ),
