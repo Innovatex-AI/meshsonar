@@ -209,11 +209,16 @@ class MapStart {
   return (lat: (s! + n!) / 2, lon: (w + e!) / 2);
 }
 
+/// The region a fresh install opens on when there is no GPS fix, no remembered region and no manual pick. The server URL stays
+/// the hub (it gates per-region routing); this only decides which region is viewed and where the first map camera sits.
+const String defaultRegionCode = 'CMH';
+
 /// Where a map with nothing of its own to show (no drive on it) opens:
 ///  1. the phone ([phone]), unless the person picked a region to view ([viewingIsManual]) that does not contain it;
 ///  2. the viewed region's centre, when that region was picked or remembered ([viewingRemembered]);
-///  3. the middle of every region (hub view);
-///  4. the whole world.
+///  3. the built-in default region ([defaultRegionCode]) when nothing else is known ([viewingIsDefault]);
+///  4. the middle of every region (hub view);
+///  5. the whole world.
 MapStart mapStartFor({
   required PhoneFix? phone,
   required RegionIndexEntry? viewing,
@@ -221,6 +226,7 @@ MapStart mapStartFor({
   required bool viewingRemembered,
   required List<RegionIndexEntry> index,
   DateTime? now,
+  bool viewingIsDefault = false,
 }) {
   final p = phone;
   if (p != null) {
@@ -234,7 +240,7 @@ MapStart mapStartFor({
         !_holds(viewing, p.fix.lat, p.fix.lon);
     if (!manualElsewhere && !staleElsewhere) return MapStart(MapStartKind.phone, lat: p.fix.lat, lon: p.fix.lon);
   }
-  if (viewing != null && (viewingIsManual || viewingRemembered || p != null)) {
+  if (viewing != null && (viewingIsManual || viewingRemembered || p != null || viewingIsDefault)) {
     final c = regionCenter(viewing);
     if (c != null) return MapStart(MapStartKind.region, lat: c.lat, lon: c.lon);
   }
