@@ -1,6 +1,7 @@
 // The tile loader's cancellation (vector_map_tiles / executor_lib "Cancelled") is dropped; every other error still goes on.
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/app/benign_errors.dart';
 
@@ -27,6 +28,13 @@ void main() {
     expect(isBenignTileCancel(const FormatException('Cancelled')), isFalse);
   });
 
+  test('only sensors_plus "no barometer" is benign among platform exceptions', () {
+    expect(isBenignNoBarometer(PlatformException(code: 'UNAVAILABLE', message: 'Barometer is not available on this device')), isTrue);
+    expect(isBenignNoBarometer(PlatformException(code: 'UNAVAILABLE', message: 'Bluetooth is off')), isFalse);
+    expect(isBenignNoBarometer(PlatformException(code: 'ERROR', message: 'Barometer failed')), isFalse);
+    expect(isBenignNoBarometer(Exception('Barometer is not available')), isFalse);
+  });
+
   test('the installed filter drops the cancel and forwards everything else to the previous handlers', () {
     final oldPlatform = PlatformDispatcher.instance.onError;
     final oldFlutter = FlutterError.onError;
@@ -49,6 +57,8 @@ void main() {
 
       FlutterError.onError!(FlutterErrorDetails(exception: CancellationException()));
       expect(flutterSeen, isEmpty);
+      FlutterError.onError!(FlutterErrorDetails(exception: PlatformException(code: 'UNAVAILABLE', message: 'Barometer is not available on this device')));
+      expect(flutterSeen, isEmpty, reason: 'the no-barometer report is dropped');
       FlutterError.onError!(FlutterErrorDetails(exception: boom));
       expect(flutterSeen, [boom]);
     } finally {
