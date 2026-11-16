@@ -290,10 +290,12 @@ class _FinishedDock extends StatelessWidget {
     }
     return Row(
       children: [
-        Expanded(child: text),
+        // With the MeshTrack button the row is full on an iPhone SE: the two buttons shrink their labels before the
+        // summary gives way (flex 3 : 2 : 3), so nothing overflows at any width.
+        Expanded(flex: 3, child: text),
         const MeshTrackDockButton(),
         const SizedBox(width: 8),
-        SizedBox(
+        Flexible(flex: 2, child: SizedBox(
           height: 48,
           child: OutlinedButton(
             key: const Key('view-report'),
@@ -301,9 +303,9 @@ class _FinishedDock extends StatelessWidget {
             onPressed: () => openFinishedDriveReport(context, sessionId),
             child: const FittedBox(fit: BoxFit.scaleDown, child: Text('Report', maxLines: 1)),
           ),
-        ),
+        )),
         const SizedBox(width: 8),
-        SizedBox(
+        Flexible(flex: 3, child: SizedBox(
           height: 48,
           child: FilledButton(
             key: const Key('start-stop'),
@@ -311,7 +313,7 @@ class _FinishedDock extends StatelessWidget {
             onPressed: s.busy ? null : () => s.connected ? s.startDrive() : openConnect(context),
             child: FittedBox(fit: BoxFit.scaleDown, child: Text(s.connected ? 'Start new' : 'Connect radio', maxLines: 1)),
           ),
-        ),
+        )),
       ],
     );
   }

@@ -14,7 +14,7 @@ import 'package:meshsonar/chat/events.dart';
 import 'package:meshsonar/chat/backup.dart';
 import 'package:meshsonar/chat/models.dart';
 import 'package:meshsonar/chat/secret_store.dart';
-import 'package:meshsonar/core/api.dart' show MeshTrackSettings;
+import 'package:meshsonar/core/api.dart' show MeshTrackSettings, MtPanelTag;
 import 'package:meshsonar/core/meshtrack/plus_code.dart';
 import 'package:meshsonar/core/privacy_zones.dart';
 import 'package:meshsonar/radio/radio_api.dart';
@@ -616,11 +616,40 @@ void main() {
       });
     });
 
+    test('Drive panel "New" tag: nothing before the first drive, armed by it, gone for good once MeshTrack is opened', () {
+      fakeAsync((a) {
+        final r = MtRig(a);
+        var notes = 0;
+        r.ops.addListener(() => notes++);
+        expect(r.ops.panelNew, isFalse);
+        r.ops.markPanelSeen(); // opened before any drive: the tag still shows once on the first drive
+        r.settle();
+        expect(r.settings.panelTag, MtPanelTag.notYet);
+        r.w.driveStarted();
+        r.settle();
+        expect(r.ops.panelNew, isTrue);
+        expect(notes, greaterThan(0), reason: 'the panel row rebuilds when the tag arms');
+        expect(MeshTrackSettings.fromJson(jsonDecode(jsonEncode(r.settings.toJson()))).panelTag, MtPanelTag.show, reason: 'kept across a restart');
+        r.ops.markPanelSeen();
+        r.settle();
+        expect(r.ops.panelNew, isFalse);
+        r.w.driveStopped();
+        r.w.driveStarted();
+        r.settle();
+        expect(r.ops.panelNew, isFalse, reason: 'once per install');
+        expect(r.settings.toJson()['panel_new'], 'seen');
+        r.w.driveStopped();
+        r.settle(const Duration(seconds: 2));
+      });
+    });
+
     test('default settings write nothing under meshtrack', () {
       expect(const MeshTrackSettings().isDefault, isTrue);
       expect(const MeshTrackSettings().toJson(), isEmpty);
       expect(MeshTrackSettings.fromJson('junk').isDefault, isTrue);
       expect(MeshTrackSettings.fromJson({'groups': 'x', 'show_positions': [1, 'a']}).showPositions, {1});
+      expect(MeshTrackSettings.fromJson({'panel_new': 'notYet'}).panelTag, MtPanelTag.notYet);
+      expect(MeshTrackSettings.fromJson({'panel_new': 7}).panelTag, MtPanelTag.notYet);
     });
 
     test('the privacy zones gate the wiring sends too (zones not loaded = nothing)', () {

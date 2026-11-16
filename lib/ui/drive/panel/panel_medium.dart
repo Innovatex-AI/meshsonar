@@ -77,9 +77,11 @@ class MediumContent {
             container: true,
             label: '$label: $value',
             excludeSemantics: true,
-            child: SizedBox(
-              height: 52,
+            // At least 52 pt; it grows with large text instead of clipping the label (2x text overflowed the fixed 52).
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 52),
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
