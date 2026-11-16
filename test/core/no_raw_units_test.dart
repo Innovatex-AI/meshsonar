@@ -38,14 +38,13 @@ const List<String> allowedLines = [
   // sliders; the factor is Units' own constant, shown to the person only through Units.height.
   "import '../units.dart' show metresPerFoot;",
   'const double ftM = metresPerFoot;',
-  // MeshTrack's wire format (meshtrack plan section 3) carries speed as whole km/h (`s34`): the core converts the GPS
-  // m/s to that protocol unit, which is never shown; the screens show speeds through Units.speed.
-  'f.speedMps! * 3.6 : null',
-  'd / dt * 3.6;',
-  'f.lon) / dt * 3.6;',
-  'return s * 3.6;',
-  // The simulated friends (lib/radio/simulator.dart) write the same MT1 km/h field.
+  // MeshTrack's wire format carries speed as whole km/h (`MT1 @<code> s<kmh>`, meshtrack plan section 3) and the smart
+  // rate is specified in km/h; these are protocol values, never shown (the Group sheet formats speed through Units).
   'final kmh = ((fix.speedMps ?? 0) * 3.6).round();',
+  'final v = speedKmh ?? (f.speedMps != null && f.speedMps! >= 0 ? f.speedMps! * 3.6 : null);',
+  'final kmh = dt <= 0 ? double.infinity : d / dt * 3.6;',
+  'if (s != null && s.isFinite && s >= 0) return s * 3.6;',
+  'return distanceM(p.lat, p.lon, f.lat, f.lon) / dt * 3.6;',
 ];
 
 final _raw = RegExp(r'(\}|\$\w+|\d) ?(km/h|kph|km|mph|mi|ft|m|hPa|mbar|inHg|mmHg|°C|°F|° ?C|° ?F)(?![\w:])');

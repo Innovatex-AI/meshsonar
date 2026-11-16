@@ -254,7 +254,6 @@ class MeshTrackWiring {
     // groups runs nothing.
     if (_reg.isNotEmpty) await _ensureServiceStarted();
     service.loadGroups(initial);
-    _persist();
     if (_chat != null) _scheduleReconcile(write: _connected);
   }
 
@@ -448,17 +447,24 @@ class MeshTrackWiring {
     _reg.clear();
     try {
       final raw = await _keychain.read(registryRef);
-      if (raw == null) return;
+      if (raw == null) {
+        _savedRegistry = '[]';
+        return;
+      }
       final j = jsonDecode(utf8.decode(raw));
       if (j is! List) return;
       for (final e in j) {
         final r = _Reg.fromJson(e);
         if (r != null && !_reg.any((x) => x.uid == r.uid)) _reg.add(r);
       }
+      _savedRegistry = jsonEncode([for (final r in _reg) r.toJson()]);
     } catch (_) {
       _log('meshtrack: group list in the Keychain could not be read');
     }
   }
+
+  /// The registry JSON last written to (or read from) the Keychain.
+  String? _savedRegistry;
 
   _Reg? _regOf(String uid) => _reg.where((r) => r.uid == uid).firstOrNull;
 
@@ -483,19 +489,23 @@ class MeshTrackWiring {
         'rows': st.rows,
       });
     }
-    final s = _readSettings().copyWith(groups: list);
     _persistChain = _persistChain.then((_) async {
-      try {
-        if (_reg.isEmpty) {
-          await _keychain.delete(registryRef);
-        } else {
-          await _keychain.write(registryRef, Uint8List.fromList(utf8.encode(reg)));
+      if (reg != _savedRegistry) {
+        try {
+          if (_reg.isEmpty) {
+            await _keychain.delete(registryRef);
+          } else {
+            await _keychain.write(registryRef, Uint8List.fromList(utf8.encode(reg)));
+          }
+          _savedRegistry = reg;
+        } catch (_) {
+          _log('meshtrack: group list could not be saved to the Keychain');
         }
-      } catch (_) {
-        _log('meshtrack: group list could not be saved to the Keychain');
       }
+      final cur = _readSettings();
+      if (jsonEncode(cur.groups) == jsonEncode(list)) return; // nothing new: settings.json is not rewritten
       try {
-        await _writeSettings(s);
+        await _writeSettings(cur.copyWith(groups: list));
       } catch (_) {
         _log('meshtrack: group settings could not be saved');
       }
