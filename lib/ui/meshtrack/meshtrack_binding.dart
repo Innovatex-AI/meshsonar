@@ -77,12 +77,7 @@ abstract final class MeshTrackUi {
   }
 
   /// The app's binding, from AppState (`meshTrack` / `meshTrackGroups` of the wiring, contract section "AppState").
-  /// Tests that build the whole app set [debugForState].
-  static MeshTrackBinding? forState(AppState s) => debugForState?.call(s) ?? _fromAppState(s);
-
-  static MeshTrackBinding? Function(AppState s)? debugForState;
-
-  static MeshTrackBinding? _fromAppState(AppState s) {
+  static MeshTrackBinding? forState(AppState s) {
     final service = s.meshTrack, ops = s.meshTrackGroups;
     if (service == null || ops == null) return null;
     return bindingFor(s, service, ops);
