@@ -37,10 +37,10 @@ class AirSink extends FakeSink {
   FakeRadioSlots Function()? radio;
   final keys = <Uint8List>[];
   @override
-  Future<int> sendChannel({required String radioId, required int slot, required String text, required int timestamp}) async {
+  Future<int> sendChannel({required String radioId, required int slot, required String text, required int timestamp, int priority = CommandPriority.user}) async {
     final n = channels.length;
     final key = Uint8List.fromList(radio!().slotList[slot].secret);
-    final r = super.sendChannel(radioId: radioId, slot: slot, text: text, timestamp: timestamp); // records synchronously
+    final r = super.sendChannel(radioId: radioId, slot: slot, text: text, timestamp: timestamp, priority: priority); // records synchronously
     if (channels.length > n) keys.add(key);
     return r;
   }

@@ -91,7 +91,9 @@ class MtBeaconMark {
   final bool parked;
   final double? parkedLat, parkedLon;
   final bool lastWasParked;
-  const MtBeaconMark(this.lastSentAt, this.lastSentCourse, this.parked, this.parkedLat, this.parkedLon, this.lastWasParked);
+  final bool firstPending;
+  const MtBeaconMark(this.lastSentAt, this.lastSentCourse, this.parked, this.parkedLat, this.parkedLon, this.lastWasParked,
+      [this.firstPending = false]);
 }
 
 /// The rate decision. Feed every fix to [decide] once; call [markSent] when the position was handed to the radio.
@@ -103,6 +105,9 @@ class SmartBeacon {
   bool _parked = false;
   bool _lastWasParked = false;
   double? _parkedLat, _parkedLon;
+
+  /// A share (re)started after an earlier send: the next fix past the floor goes out at once (as a first send).
+  bool _firstPending = false;
 
   DateTime? get lastSentAt => _lastSentAt;
 
@@ -133,8 +138,19 @@ class SmartBeacon {
   /// Course change that triggers an early send at [vKmh] (>= 10 km/h).
   static double cornerThresholdDeg(double vKmh) => 25 + 300 / vKmh;
 
-  /// Forget everything (share start).
+  /// A share starts (Share on, Undo of a stop, a drive start): the next fix goes out as a first send, but never closer
+  /// than the floor to the last real send, so switching Share off and on (or a drive restart) cannot beat the airtime
+  /// floor. The last-sent time is kept; everything else is forgotten.
+  void restart() {
+    final last = _lastSentAt;
+    reset();
+    _lastSentAt = last;
+    _firstPending = last != null;
+  }
+
+  /// Forget everything, the last-sent time too.
   void reset() {
+    _firstPending = false;
     _lastSentAt = null;
     _lastSentCourse = null;
     _prev = null;
@@ -179,6 +195,7 @@ class SmartBeacon {
     if (last == null) return yes(MtBeaconWhy.first);
     final since = now.difference(last);
     if (since < floor(positionAirtime ?? meshTrackPositionAirtime(), groups: groups)) return MtBeaconDecision.no;
+    if (_firstPending) return yes(MtBeaconWhy.first);
     final vv = v ?? 0;
     if (_parked) {
       final moved = _parkedLat == null ? double.infinity : distanceM(_parkedLat!, _parkedLon!, fix.lat, fix.lon);
@@ -206,8 +223,9 @@ class SmartBeacon {
 
   /// Records a send of [d] for [fix] at [at]; returns the state before, for [restore].
   MtBeaconMark markSent(MtBeaconDecision d, MtFix fix, DateTime at) {
-    final before = MtBeaconMark(_lastSentAt, _lastSentCourse, _parked, _parkedLat, _parkedLon, _lastWasParked);
+    final before = MtBeaconMark(_lastSentAt, _lastSentCourse, _parked, _parkedLat, _parkedLon, _lastWasParked, _firstPending);
     _lastSentAt = at;
+    _firstPending = false;
     if (d.courseDeg != null) _lastSentCourse = d.courseDeg;
     _lastWasParked = d.parked;
     if (d.parked) {
@@ -221,9 +239,12 @@ class SmartBeacon {
     return before;
   }
 
-  /// Puts back the state from before a send that did not go out (the next fix re-evaluates).
-  void restore(MtBeaconMark m) {
-    _lastSentAt = m.lastSentAt;
+  /// Puts back the state from before a send that did not go out (the next fix re-evaluates). [backoffFrom] (an airtime
+  /// refusal) keeps that time as the last send, so the next try waits the floor instead of going on every fix; the refused
+  /// message is still owed, so it goes as soon as the floor has passed.
+  void restore(MtBeaconMark m, {DateTime? backoffFrom}) {
+    _lastSentAt = backoffFrom ?? m.lastSentAt;
+    _firstPending = m.firstPending || backoffFrom != null;
     _lastSentCourse = m.lastSentCourse;
     _lastWasParked = m.lastWasParked;
     _parked = m.parked;

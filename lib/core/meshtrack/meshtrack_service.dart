@@ -23,7 +23,7 @@ import 'smart_beacon.dart';
 import 'track_group.dart';
 
 export 'interop.dart' show MtSource;
-export 'smart_beacon.dart' show MtFix, MtRate, meshTrackPositionAirtime;
+export 'smart_beacon.dart' show MtFix, MtRate, kMtMaxAccuracyM, meshTrackPositionAirtime;
 export 'track_group.dart'
     show MeshTrackGroup, MtFriend, MtMeetPin, MtStaleness, MtTrailPoint, mtStaleness, kMtMaxNames;
 
@@ -61,6 +61,12 @@ const Duration kMtAskGap = Duration(seconds: 60);
 
 /// One hour of sharing.
 const Duration kMtOneHour = Duration(hours: 1);
+
+/// A stop message owed to a group that was left while the radio was gone goes on reconnect, if within this long.
+const Duration kMtPendingStopFor = Duration(minutes: 10);
+
+/// Below this speed a moving position carries no `s` (a rounded `s0` would read as parked).
+const double kMtMinSpeedKmh = 1;
 
 /// How long "Sharing slower: airtime limit" shows after a refused send.
 const Duration kMtAirtimeNoticeFor = Duration(minutes: 2);
@@ -281,6 +287,26 @@ class MtGroupView {
   String get name => config.name;
 }
 
+/// Most position messages kept per group for "Show position messages".
+const int kMtMessageLogMax = 100;
+
+/// One MeshTrack message heard or sent on a group's channel, for "Show position messages" (channel detail). Memory only:
+/// never stored as chat, never notified, never in a backup, export or search; gone after 24 h, on Leave and on Delete my
+/// data.
+class MtLoggedMessage {
+  /// Who sent it; null = me.
+  final String? name;
+
+  /// The message body as on the air (`MT1 @87G8Q2X5+7F2 s34 c270`).
+  final String body;
+
+  /// The parsed message; null for another app's position format.
+  final MtMessage? message;
+  final DateTime at;
+  const MtLoggedMessage({required this.name, required this.body, required this.at, this.message});
+  bool get mine => name == null;
+}
+
 /// My last sent position (the hollow ring on the map while sharing). Memory only.
 class MtMyPosition {
   final double lat;
@@ -365,7 +391,9 @@ class _Queued {
   final String text;
   final _Kind kind;
   final DateTime at;
-  final void Function()? onRefused;
+
+  /// Not sent; [airtime] = refused by the airtime budget or region cap (not a failure or a vanished group).
+  final void Function(bool airtime)? onRefused;
   final void Function()? onSent;
   _Queued(this.channelId, this.text, this.kind, this.at, {this.onRefused, this.onSent});
 }
@@ -384,7 +412,15 @@ class _Group {
 
   /// Sharing ended while the radio was gone: `MT1 x` goes on reconnect.
   bool stopPending = false;
+
+  /// Recent MeshTrack messages on this channel, oldest first (memory only).
+  final List<MtLoggedMessage> log = [];
   _Group(this.config) : track = TrackGroup(config.channelId);
+
+  void addLog(MtLoggedMessage m) {
+    log.add(m);
+    if (log.length > kMtMessageLogMax) log.removeRange(0, log.length - kMtMessageLogMax);
+  }
 }
 
 /// The MeshTrack engine. See API.md for the wiring.
@@ -402,6 +438,9 @@ class MeshTrackService {
 
   final Map<int, _Group> _groups = {};
   final Map<int, Object?> _pendingRestore = {};
+
+  /// Stop messages owed to groups that were left while the radio was gone: channel -> send by (once, on reconnect).
+  final Map<int, DateTime> _orphanStops = {};
   final SmartBeacon _beacon = SmartBeacon();
   final List<_Queued> _queue = [];
   final List<void Function()> _listeners = [];
@@ -415,6 +454,9 @@ class MeshTrackService {
   DateTime? _windowClosedAt;
   DateTime? _lastMtSendAt;
   DateTime? _airtimeLimitedAt;
+
+  /// The last send was refused by the airtime budget (logged once until a send goes out again).
+  bool _airtimeRefusing = false;
   MtShareReason? _lastGateReason;
   MtMyPosition? _myLastSent;
   MtPositionMode _mode = MtPositionMode.exact;
@@ -583,7 +625,7 @@ class MeshTrackService {
       }
     }
     _enforceMax();
-    if (startedSharing) _beacon.reset();
+    if (startedSharing) _beacon.restart();
     _changed();
   }
 
@@ -602,11 +644,17 @@ class MeshTrackService {
     if (g == null) return null;
     final before = g.config;
     if (g.config.share) _stop(g, MtStopCause.left, notify: false);
+    // Left while the radio is gone: the stop message is still owed to the channel (sent on reconnect, within 10 min).
+    if (g.stopPending) _orphanStops[channelId] = _now().add(kMtPendingStopFor);
+    g.stopPending = false;
     g.answerTimer?.cancel();
     g.track.clear();
+    g.log.clear();
     _groups.remove(channelId);
     _groupsChanged();
-    _changed();
+    _changed(save: false);
+    // The left group's friends leave meshtrack_last.json now, not after the 5 s save delay.
+    unawaited(_save());
     return before;
   }
 
@@ -626,15 +674,28 @@ class MeshTrackService {
       return MtResult.ok;
     }
     if (!g.config.onRadio) return MtResult.notOnRadio;
-    if (!g.config.share && _groups.values.where((x) => x.config.share).length >= kMtMaxSharingGroups) {
-      return MtResult.tooManyGroups;
-    }
     final now = _now();
-    g.config = g.config.copyWith(
-        share: true, duration: duration, shareUntil: duration == MtShareDuration.oneHour ? now.add(kMtOneHour) : null);
-    g.sentThisSession = false;
+    final until = duration == MtShareDuration.oneHour ? now.add(kMtOneHour) : null;
+    if (g.config.share) {
+      // Already sharing (the This drive / 1 hour / Until I stop control): only the duration changes. The share session,
+      // its stop message and the beacon's timing carry on.
+      g.config = g.config.copyWith(duration: duration, shareUntil: until);
+      _groupsChanged();
+      _changed();
+      _evaluate();
+      return MtResult.ok;
+    }
+    if (_groups.values.where((x) => x.config.share).length >= kMtMaxSharingGroups) return MtResult.tooManyGroups;
+    g.config = g.config.copyWith(share: true, duration: duration, shareUntil: until);
+    // Off -> on. A stop message that has not gone out yet (Undo of "Stopped sharing", or a stop held for the radio) is
+    // dropped: friends never heard it, so this is still the same share session and its stop is owed later.
+    final queuedStops = _queue.where((q) => q.channelId == channelId && q.kind == _Kind.stop).length;
+    _queue.removeWhere((q) => q.channelId == channelId && q.kind == _Kind.stop);
+    final orphan = _orphanStops.remove(channelId) != null;
+    g.sentThisSession = queuedStops > 0 || g.stopPending || orphan;
     g.stopPending = false;
-    _beacon.reset();
+    // The beacon keeps its last-sent time: switching Share off and on never beats the airtime floor.
+    _beacon.restart();
     if (!_radio && _disconnectTimer == null) _armDisconnectStop();
     _groupsChanged();
     _changed();
@@ -647,7 +708,10 @@ class MeshTrackService {
     final g = _groups[channelId];
     if (g == null) return MtResult.unknownGroup;
     g.config = g.config.copyWith(see: on);
-    if (!on) g.track.clear();
+    if (!on) {
+      g.track.clear();
+      g.log.clear();
+    }
     _groupsChanged();
     _changed();
     return MtResult.ok;
@@ -733,6 +797,12 @@ class MeshTrackService {
           _enqueue(_Queued(g.config.channelId, kMtStopText, _Kind.stop, _now()));
         }
       }
+      // Left while the radio was gone: the owed stop goes once, if the radio came back within 10 min.
+      final now = _now();
+      for (final e in _orphanStops.entries) {
+        if (now.isBefore(e.value) && !_groups.containsKey(e.key)) _enqueue(_Queued(e.key, kMtStopText, _Kind.stop, now));
+      }
+      _orphanStops.clear();
       _pump();
     } else {
       _armDisconnectStop();
@@ -777,7 +847,7 @@ class MeshTrackService {
       }
     }
     if (any) _groupsChanged();
-    _beacon.reset();
+    _beacon.restart();
     _changed(save: false);
     _evaluate();
   }
@@ -821,7 +891,9 @@ class MeshTrackService {
   String _positionText(MtFix f, {bool parked = false, double? speedKmh, double? courseDeg}) {
     final code = _code(f);
     if (parked) return formatMtParked(code);
-    final v = speedKmh ?? (f.speedMps != null && f.speedMps! >= 0 ? f.speedMps! * 3.6 : null);
+    var v = speedKmh ?? (f.speedMps != null && f.speedMps! >= 0 ? f.speedMps! * 3.6 : null);
+    // `s0` means parked on the wire: a slow-moving position below 1 km/h goes without a speed.
+    if (v != null && v < kMtMinSpeedKmh) v = null;
     final c = courseDeg ?? (f.courseDeg != null && f.courseDeg! >= 0 ? f.courseDeg : null);
     return formatMtPosition(code, speedKmh: v?.round(), courseDeg: c?.round());
   }
@@ -844,10 +916,12 @@ class MeshTrackService {
     final mark = _beacon.markSent(d, fix, now);
     var restored = false;
     for (final g in groups) {
-      _enqueue(_Queued(g.config.channelId, text, _Kind.position, now, onRefused: () {
+      _enqueue(_Queued(g.config.channelId, text, _Kind.position, now, onRefused: (airtime) {
         if (!restored) {
           restored = true;
-          _beacon.restore(mark);
+          // An airtime refusal backs off for the floor (no retry and no log line on every fix); anything else retries
+          // on the next fix.
+          _beacon.restore(mark, backoffFrom: airtime ? _now() : null);
         }
       }, onSent: () {
         g.sentThisSession = true;
@@ -913,19 +987,21 @@ class MeshTrackService {
     return MtResult.ok;
   }
 
-  /// "Meet here": sets the meet-up pin at a chosen point and sends it. A point inside a privacy zone (or its 200 m
-  /// buffer) is refused, like any position.
-  MtResult meetHere(int channelId, double lat, double lon, {String? label}) {
+  /// "Meet here": sets the meet-up pin at a chosen point and sends it. A point inside a privacy zone (or its 200 m plus
+  /// [accuracyM] buffer) is refused, like any position. [accuracyM] = the phone fix's accuracy when the point is where I
+  /// am (0 for a point picked on the map). In Approximate mode the pin goes at 8 digits (about 275 m), like positions, so
+  /// "Meet here" never leaks an exact position.
+  MtResult meetHere(int channelId, double lat, double lon, {String? label, double accuracyM = 0}) {
     final g = _groups[channelId];
     if (g == null) return MtResult.unknownGroup;
     if (!g.config.onRadio) return MtResult.notOnRadio;
     if (!_radio) return MtResult.radioDisconnected;
-    final gate = _zoneGate(lat, lon, 0);
+    final gate = _zoneGate(lat, lon, accuracyM.isFinite && accuracyM > 0 ? accuracyM : 0);
     if (gate != null) {
       _log('meshtrack: skipped: ${_reasonWord(gate)}');
       return _resultOf(gate);
     }
-    final code = PlusCode.encode(lat, lon);
+    final code = PlusCode.encode(lat, lon, codeLength: _mode == MtPositionMode.exact ? kPlusCodeExactDigits : kPlusCodeApproxDigits);
     final a = PlusCode.tryDecode(code)!;
     final clean = cleanMeetLabel(label);
     g.track.meet = MtMeetPin(lat: a.lat, lon: a.lon, label: clean, setBy: _selfNameOf(), at: _now());
@@ -948,6 +1024,7 @@ class MeshTrackService {
   Future<void> clearLastKnown() async {
     for (final g in _groups.values) {
       g.track.clear();
+      g.log.clear();
     }
     _pendingRestore.clear();
     _saveTimer?.cancel();
@@ -1024,14 +1101,20 @@ class MeshTrackService {
     final g = _groups[q.channelId];
     // A stop message still goes after Leave (the group is gone from the list but the channel is still there).
     if (q.kind != _Kind.stop && (g == null || !g.config.onRadio)) {
-      q.onRefused?.call();
+      q.onRefused?.call(false);
       return _pump();
     }
     final verdict = _budgetOf(q.channelId, q.text);
     if (verdict != MtBudget.ok) {
-      _log(verdict == MtBudget.tooLong ? 'meshtrack: skipped: too long' : 'meshtrack: skipped: airtime limit');
-      if (verdict == MtBudget.airtimeLimit && q.kind == _Kind.position) _airtimeLimitedAt = now;
-      q.onRefused?.call();
+      final airtime = verdict == MtBudget.airtimeLimit;
+      if (!airtime) {
+        _log('meshtrack: skipped: too long');
+      } else if (!_airtimeRefusing) {
+        _airtimeRefusing = true; // logged once until a send goes out again
+        _log('meshtrack: skipped: airtime limit');
+      }
+      if (airtime && q.kind == _Kind.position) _airtimeLimitedAt = now;
+      q.onRefused?.call(airtime);
       _changed(save: false);
       return _pump();
     }
@@ -1045,11 +1128,13 @@ class MeshTrackService {
       if (_disposed) return;
       if (ok) {
         _log('meshtrack: sent ${q.kind.name}, $bytes bytes');
+        _airtimeRefusing = false;
         if (q.kind == _Kind.position) _airtimeLimitedAt = null;
+        _groups[q.channelId]?.addLog(MtLoggedMessage(name: null, body: q.text, message: parseMeshTrack(q.text), at: _now()));
         q.onSent?.call();
       } else {
         _log('meshtrack: send failed (${q.kind.name})');
-        q.onRefused?.call();
+        q.onRefused?.call(false);
       }
       _changed(save: false);
       _pump();
@@ -1058,7 +1143,7 @@ class MeshTrackService {
       _inFlight = null;
       if (_disposed) return;
       _log('meshtrack: send failed (${q.kind.name})');
-      q.onRefused?.call();
+      q.onRefused?.call(false);
       _pump();
     });
   }
@@ -1093,6 +1178,7 @@ class MeshTrackService {
     if (msg != null) {
       if (name == null || isSelf) return true;
       if (g.track.isDuplicate(name, e.senderTs, body)) return true;
+      if (g.config.see) g.addLog(MtLoggedMessage(name: name, body: body, message: msg, at: at));
       switch (msg) {
         case MtPosition():
           if (g.config.see) {
@@ -1126,6 +1212,7 @@ class MeshTrackService {
     final io = parseInterop(body, refLat: f?.lat, refLon: f?.lon);
     if (io == null) return false;
     if (io is MtInteropPosition && name != null && !isSelf && g.config.see && !g.track.isDuplicate(name, e.senderTs, body)) {
+      if (io.consume) g.addLog(MtLoggedMessage(name: name, body: body, at: at));
       g.track.addPosition(
           name: name, lat: io.lat, lon: io.lon, accuracyM: io.accuracyM, at: at, now: now, source: io.source, snr: e.snr, pathLen: e.pathLen);
       _changed();
@@ -1169,10 +1256,20 @@ class MeshTrackService {
 
   // ---------------------------------------------------------------- tick, state, persistence
 
+  /// The group's recent MeshTrack messages, newest first, for "Show position messages" (display only; see
+  /// [MtLoggedMessage]). Empty for an unknown group.
+  List<MtLoggedMessage> positionMessages(int channelId) {
+    final g = _groups[channelId];
+    if (g == null) return const [];
+    final now = _now();
+    return [for (final m in g.log.reversed) if (now.difference(m.at) <= kMtOnListFor) m];
+  }
+
   void _onTick() {
     final now = _now();
     for (final g in _groups.values.toList()) {
       g.track.prune(now);
+      g.log.removeWhere((m) => now.difference(m.at) > kMtOnListFor);
       final until = g.config.shareUntil;
       if (g.config.share && g.config.duration == MtShareDuration.oneHour && until != null && !now.isBefore(until)) {
         _stop(g, MtStopCause.durationEnded, notify: false);

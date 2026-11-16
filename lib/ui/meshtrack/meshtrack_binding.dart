@@ -27,6 +27,9 @@ class MeshTrackBinding {
   /// The phone's best-known position (distance and compass point to friends); null when never located.
   final MtLatLon? Function() here;
 
+  /// Accuracy of [here], metres; null when unknown.
+  final double? Function() hereAccuracyM;
+
   /// My radio's name (the default group name, and who a request is for).
   final String? Function() selfName;
 
@@ -43,11 +46,14 @@ class MeshTrackBinding {
     required this.ops,
     this.units = Units.metric,
     required this.here,
+    this.hereAccuracyM = _noAccuracy,
     required this.selfName,
     required this.chat,
     this.now = DateTime.now,
     this.onCentre,
   });
+
+  static double? _noAccuracy() => null;
 }
 
 /// Tests (and previews) provide the binding directly.
@@ -92,6 +98,7 @@ abstract final class MeshTrackUi {
           final f = s.phoneFix?.fix;
           return f == null ? null : (lat: f.lat, lon: f.lon);
         },
+        hereAccuracyM: () => s.phoneFix?.fix.accuracyM,
         selfName: () => s.selfInfo?.name,
         chat: () => ChatWiring.controller.value,
       );

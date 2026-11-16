@@ -316,6 +316,55 @@ void main() {
     });
   });
 
+  group('U1 review fixes: duration change, Undo, Show position messages', () {
+    test('switching This drive -> Until I stop mid-drive sends nothing extra; Stop + Undo waits the floor; the stop still reaches Beth; '
+        'Show position messages keeps Beth\'s chat empty and lists Andy in the position list', () {
+      fakeAsync((a) {
+        final w = MtWorld(() => worldT0.add(a.elapsed));
+        final andy = w.phone('Andy', introSeen: true);
+        final beth = w.phone('Beth', introSeen: true);
+        settle(a, w);
+        final g = newGroup(a, w, andy);
+        final bethId = joinGroup(a, w, beth, g.link);
+        final id = andy.groupOf(g.key)!.channelId;
+        wait(a, w, beth.ops.setShowPositionMessages(bethId, true));
+        expect(andy.svc.setShare(id, true), MtResult.ok);
+        andy.w.driveStarted();
+        var s = 0;
+        void fixes() {
+          s++;
+          andy.w.onDriveFix(andy.fix(homeLat + north(13.9 * s), homeLon, speedMps: 13.9, course: 0));
+        }
+
+        run(a, w, const Duration(seconds: 5), each: fixes);
+        final first = andy.sentOn(g.key).length;
+        expect(first, 1);
+        // The sheet's duration control while sharing: no new "first" send, same session.
+        expect(andy.svc.setShare(id, true, duration: MtShareDuration.untilStopped), MtResult.ok);
+        run(a, w, const Duration(seconds: 10), each: fixes);
+        expect(andy.sentOn(g.key).length, first, reason: 'a duration change is not a new share');
+        // Stop, then Undo at once: nothing before the floor (25.4 s from the last send at t = 0).
+        andy.svc.setShare(id, false);
+        expect(andy.svc.setShare(id, true, duration: MtShareDuration.untilStopped), MtResult.ok);
+        run(a, w, const Duration(seconds: 8), each: fixes);
+        expect(andy.sentOn(g.key).where((t) => t.startsWith('MT1 @')), hasLength(1), reason: 'the floor holds across off/on');
+        run(a, w, const Duration(seconds: 10), each: fixes);
+        expect(andy.sentOn(g.key).where((t) => t.startsWith('MT1 @')), hasLength(2));
+        andy.svc.setShare(id, false);
+        run(a, w, const Duration(seconds: 5));
+        expect(friendOn(beth, g.key, 'Andy')!.stopped, isTrue, reason: 'the stop still reaches Beth');
+        expect(beth.chatTexts(g.key), isEmpty, reason: 'Show position messages never makes MT1 text chat');
+        final list = beth.svc.positionMessages(bethId);
+        expect(list.where((m) => m.name == 'Andy'), isNotEmpty);
+        expect(list.first.body, 'MT1 x');
+        for (final p in [andy, beth]) {
+          p.w.dispose();
+        }
+        settle(a, w);
+      });
+    });
+  });
+
   // ============================================================================================ U2
   group('U2 club drive day: 8 cars on one map, one member on the official MeshCore app', () {
     test('7 MeshTrack cars + a stock-app member who types "lat, lon" and a Plus Code -> "typed" pins; our MT1 text reads in plain chat', () {

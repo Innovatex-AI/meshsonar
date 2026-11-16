@@ -2963,6 +2963,7 @@ class AppState extends ChangeNotifier with _ObserverWiring {
     _pingSub = null;
     _statusSub = null;
     _engine = null;
+    _mt?.engineStopped(); // no engine, no ping listen window: MeshTrack sends are not held any more
   }
 
   String get statusLine {

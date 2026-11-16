@@ -582,7 +582,7 @@ class ChatService {
     final d = gate.requestTrack(bytes);
     if (!d.go) return SilentSendResult.skipped(d.reason!.name, d.message, bytes, airtimeLimited: d.airtimeLimited);
     try {
-      final ts = await gate.runTrackSend(bytes, () => out.sendChannel(radioId: radioId, slot: slot, text: body, timestamp: nowMs() ~/ 1000));
+      final ts = await gate.runTrackSend(bytes, () => out.sendChannel(radioId: radioId, slot: slot, text: body, timestamp: nowMs() ~/ 1000, priority: CommandPriority.ping));
       return SilentSendResult.sent(ts, bytes);
     } on OutboundFailure catch (f) {
       return SilentSendResult.failed(f.message, bytes);

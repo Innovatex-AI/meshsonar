@@ -209,12 +209,10 @@ class MeshTrackWiring {
 
   bool get started => _started;
 
-  /// The chat inbound tap: the core decides; a group whose "Show position messages" is on keeps them as chat too.
-  late final ChannelTextTap _tap = ChannelTextTap.of((e) {
-    final consumed = service.onChannelText(MtInboundText.fromTapEvent(e));
-    if (!consumed) return TapVerdict.pass;
-    return _readSettings().showPositions.contains(e.channelId) ? TapVerdict.pass : TapVerdict.consume;
-  });
+  /// The chat inbound tap: the core decides. MeshTrack machine text is never stored as chat (plan 6), whatever "Show
+  /// position messages" says: that switch shows the service's in-memory list of them in channel detail instead
+  /// ([MeshTrackService.positionMessages]), so they are never notified, unread, backed up, exported or searched.
+  late final ChannelTextTap _tap = ChannelTextTap.of((e) => service.onChannelText(MtInboundText.fromTapEvent(e)) ? TapVerdict.consume : TapVerdict.pass);
 
   /// The tap registered with chat (tests).
   @visibleForTesting
@@ -331,10 +329,22 @@ class MeshTrackWiring {
   }
 
   void driveStopped() {
-    if (_disposed || !_driving) return;
+    if (_disposed) return;
+    // The ping engine is gone with the drive (also after a drive that failed to start): its listen window is closed.
+    engineStopped();
+    if (!_driving) return;
     _driving = false;
     service.driveStopped();
     _updatePhoneFixes();
+  }
+
+  /// The ping engine was torn down: no listen window and no next ping any more (a window left open would hold every
+  /// MeshTrack send).
+  void engineStopped() {
+    if (_disposed) return;
+    if (!_window.listening && _window.nextPingAt == null) return;
+    _window = MtPingWindow.idle;
+    service.setPingWindow(MtPingWindow.idle);
   }
 
   /// Every fix of the drive's GPS stream.
@@ -374,11 +384,17 @@ class MeshTrackWiring {
       service.leaveGroup(id);
     }
     await service.clearLastKnown();
+    for (final g in _readSettings().groups) {
+      if (g['uid'] case final String uid) _removedUids.add(uid);
+    }
+    _removedUids.addAll([for (final r in _reg) r.uid]);
     _reg.clear();
     _stored.clear();
     _uidByChannel.clear();
     _recentlyRemoved.clear();
-    _persist();
+    _showBeforeRemove.clear();
+    if (_readSettings().showPositions.isNotEmpty) unawaited(_saveValues((s) => s.copyWith(showPositions: const {})));
+    _persist(force: true);
     await _persistChain;
     return ids.length;
   }
@@ -426,7 +442,9 @@ class MeshTrackWiring {
   }
 
   /// The pre-send check: too long for the channel, or the arbiter's airtime budget / region cap. A short gap after another
-  /// send is not an airtime limit: it passes here and the send itself is refused (the next fix tries again).
+  /// send is not an airtime limit: it passes here and the send itself is refused (the next fix tries again). The arbiter
+  /// counts exactly one refusal per attempt: the check peeks (no side effect); only an airtime refusal that stops the send
+  /// here is counted (the silent send that follows a pass asks, and counts, itself).
   MtBudget _budget(int channelId, String text) {
     final b = _chat;
     if (b == null) return MtBudget.ok;
@@ -435,32 +453,93 @@ class MeshTrackWiring {
     if (row != null && bytes > b.service.maxTextBytes(row.convKey)) return MtBudget.tooLong;
     final g = _gate;
     if (g != null) {
-      final d = g.requestTrack(bytes);
-      if (!d.go && d.airtimeLimited) return MtBudget.airtimeLimit;
+      final d = g.peekTrack(bytes);
+      if (!d.go && d.airtimeLimited) {
+        g.requestTrack(bytes); // the one counted refusal of this attempt
+        return MtBudget.airtimeLimit;
+      }
     }
     return MtBudget.ok;
   }
 
   // ------------------------------------------------------------------ the Keychain registry and settings
 
-  Future<void> _loadRegistry() async {
-    _reg.clear();
+  /// The Keychain registry could not be read: a read error, data that is not a list, or nothing while `meshtrack.groups`
+  /// still lists groups (a locked Keychain can answer "nothing"). While set the registry is never written or deleted and
+  /// `meshtrack.groups` is never rewritten, so a bad read can never wipe the stored groups. Every write first reads again.
+  bool _registryUnreadable = false;
+
+  /// Groups the person removed (Leave, the channel deleted, Delete my data): their stored settings may go. Settings of any
+  /// other group not in the registry are kept as they are.
+  final Set<String> _removedUids = {};
+
+  @visibleForTesting
+  bool get debugRegistryUnreadable => _registryUnreadable;
+
+  /// One read of the registry. Null = unreadable (see [_registryUnreadable]); an empty list = really no registry yet (a
+  /// fresh install: the settings list no group either, or [acceptEmpty]).
+  Future<List<_Reg>?> _readRegistry({bool acceptEmpty = false}) async {
     try {
       final raw = await _keychain.read(registryRef);
-      if (raw == null) {
-        _savedRegistry = '[]';
-        return;
-      }
+      if (raw == null) return acceptEmpty || _readSettings().groups.isEmpty ? <_Reg>[] : null;
       final j = jsonDecode(utf8.decode(raw));
-      if (j is! List) return;
+      if (j is! List) return null;
+      final out = <_Reg>[];
       for (final e in j) {
         final r = _Reg.fromJson(e);
-        if (r != null && !_reg.any((x) => x.uid == r.uid)) _reg.add(r);
+        if (r != null && !out.any((x) => x.uid == r.uid)) out.add(r);
       }
-      _savedRegistry = jsonEncode([for (final r in _reg) r.toJson()]);
+      return out;
     } catch (_) {
-      _log('meshtrack: group list in the Keychain could not be read');
+      return null;
     }
+  }
+
+  Future<void> _loadRegistry() async {
+    _reg.clear();
+    final list = await _readRegistry();
+    if (list == null) {
+      _registryUnreadable = true;
+      _log('meshtrack: group list in the Keychain could not be read');
+      return;
+    }
+    _registryUnreadable = false;
+    _reg.addAll(list);
+    _savedRegistry = jsonEncode([for (final r in _reg) r.toJson()]);
+  }
+
+  /// Reads the registry again while it is unreadable; on success merges it with the groups added since (the read list
+  /// first) and puts its groups back on this radio. True when it is readable now. "Nothing" is believed only when the app
+  /// is in front (the Keychain is unlocked) and two reads in a row say so.
+  Future<bool> _retryRegistry() async {
+    if (!_registryUnreadable) return true;
+    var list = await _readRegistry();
+    if (list == null && _foreground) {
+      final again = await _readRegistry(acceptEmpty: true);
+      if (again != null && again.isNotEmpty) {
+        list = again;
+      } else if (again != null) {
+        list = await _readRegistry(acceptEmpty: true); // "nothing" twice in a row, in front: really no registry
+      }
+    }
+    if (list == null || _disposed) return false;
+    _registryUnreadable = false;
+    _savedRegistry = jsonEncode([for (final r in list) r.toJson()]);
+    var added = false;
+    for (final r in list.reversed) {
+      if (_removedUids.contains(r.uid) || _reg.any((x) => x.uid == r.uid)) continue;
+      _reg.insert(0, r);
+      _stored.putIfAbsent(r.uid, _Stored.new);
+      added = true;
+    }
+    _log('meshtrack: group list in the Keychain read again');
+    if (added) _scheduleReconcile(write: _connected);
+    return true;
+  }
+
+  void _addReg(_Reg r) {
+    _removedUids.remove(r.uid);
+    if (!_reg.any((x) => x.uid == r.uid)) _reg.add(r);
   }
 
   /// The registry JSON last written to (or read from) the Keychain.
@@ -471,25 +550,32 @@ class MeshTrackWiring {
   int _uidN = 0;
   String _newUid() => 'g${_now().microsecondsSinceEpoch.toRadixString(36)}${(_uidN++).toRadixString(36)}';
 
-  /// Writes the registry (Keychain) and `meshtrack.groups` (settings), in order, best effort.
-  void _persist() {
-    final reg = jsonEncode([for (final r in _reg) r.toJson()]);
-    final list = <Map<String, Object?>>[];
-    final byUid = {for (final e in _uidByChannel.entries) e.value: e.key};
-    for (final r in _reg) {
-      final st = _stored[r.uid];
-      if (st == null) continue;
-      final id = byUid[r.uid];
-      final cfg = id == null ? null : service.state.group(id)?.config;
-      final base = cfg ?? st.last;
-      if (base == null) continue;
-      list.add({
-        ...base.copyWith(see: st.see, shareEveryDrive: st.shareEveryDrive).toJson(),
-        'uid': r.uid,
-        'rows': st.rows,
-      });
-    }
+  /// Writes the registry (Keychain) and `meshtrack.groups` (settings), in order, best effort. While the registry is
+  /// unreadable it is read again first; if it still cannot be read nothing is written ([force]: Delete my data, which
+  /// removes everything anyway).
+  void _persist({bool force = false}) {
     _persistChain = _persistChain.then((_) async {
+      if (!force && _registryUnreadable && !await _retryRegistry()) {
+        _log('meshtrack: group list not saved (the Keychain list could not be read)');
+        return;
+      }
+      if (force) _registryUnreadable = false;
+      final reg = jsonEncode([for (final r in _reg) r.toJson()]);
+      final list = <Map<String, Object?>>[];
+      final byUid = {for (final e in _uidByChannel.entries) e.value: e.key};
+      for (final r in _reg) {
+        final st = _stored[r.uid];
+        if (st == null) continue;
+        final id = byUid[r.uid];
+        final cfg = id == null ? null : service.state.group(id)?.config;
+        final base = cfg ?? st.last;
+        if (base == null) continue;
+        list.add({
+          ...base.copyWith(see: st.see, shareEveryDrive: st.shareEveryDrive).toJson(),
+          'uid': r.uid,
+          'rows': st.rows,
+        });
+      }
       if (reg != _savedRegistry) {
         try {
           if (_reg.isEmpty) {
@@ -503,6 +589,12 @@ class MeshTrackWiring {
         }
       }
       final cur = _readSettings();
+      // A stored group that is not in the registry (and was not removed by the person) keeps its settings as they are.
+      final known = {for (final r in _reg) r.uid};
+      for (final g in cur.groups) {
+        final uid = g['uid'];
+        if (uid is String && !known.contains(uid) && !_removedUids.contains(uid)) list.add(g);
+      }
       if (jsonEncode(cur.groups) == jsonEncode(list)) return; // nothing new: settings.json is not rewritten
       try {
         await _writeSettings(cur.copyWith(groups: list));
@@ -529,15 +621,19 @@ class MeshTrackWiring {
     if (_disposed) return;
     if (list.isNotEmpty) unawaited(_ensureServiceStarted());
     final ids = {for (final c in list) c.channelId};
-    // Removed (Leave, or a group cleared): forget it in the Keychain and the settings. Kept for an Undo.
+    // Removed (Leave, Start fresh, or a group cleared): forget it in the Keychain and the settings, and its "Show position
+    // messages" switch. Kept for an Undo.
+    final gone = <int>{};
     for (final e in _uidByChannel.entries.toList()) {
       if (ids.contains(e.key)) continue;
+      gone.add(e.key);
       final r = _regOf(e.value);
       if (r != null) {
         _recentlyRemoved[e.key] = r;
         _reg.remove(r);
       }
       _stored.remove(e.value);
+      _removedUids.add(e.value);
       _uidByChannel.remove(e.key);
     }
     for (final c in list) {
@@ -546,7 +642,7 @@ class MeshTrackWiring {
         // New to the wiring (addGroup / restoreGroup called on the service directly): adopt it with its channel's key.
         final back = _recentlyRemoved.remove(c.channelId);
         if (back != null) {
-          _reg.add(back);
+          _addReg(back);
           uid = back.uid;
         } else {
           uid = _newUid();
@@ -554,6 +650,8 @@ class MeshTrackWiring {
         }
         _uidByChannel[c.channelId] = uid;
       }
+      // Back after an Undo (Leave, Start fresh): its "Show position messages" switch comes back too.
+      if (_showBeforeRemove.remove(c.channelId)) unawaited(_saveValues((s) => s.copyWith(showPositions: {...s.showPositions, c.channelId})));
       final st = _stored[uid] ??= _Stored();
       st.last = c;
       // A group that is not on this radio reports See off: the person's choice is kept for when it is back.
@@ -562,7 +660,19 @@ class MeshTrackWiring {
       final radio = _chat?.radioId();
       if (radio != null) st.rows[radio] = c.channelId;
     }
+    _forgetShowPositions(gone, forUndo: true);
     _persist();
+  }
+
+  /// Channels whose "Show position messages" was on when the group was removed (Undo of Leave puts it back).
+  final Set<int> _showBeforeRemove = {};
+
+  /// Removes the "Show position messages" setting of channels that are no longer groups.
+  void _forgetShowPositions(Set<int> channelIds, {bool forUndo = false}) {
+    final on = channelIds.intersection(_readSettings().showPositions);
+    if (on.isEmpty) return;
+    if (forUndo) _showBeforeRemove.addAll(on);
+    unawaited(_saveValues((s) => s.copyWith(showPositions: s.showPositions.difference(on))));
   }
 
   Future<void> _adoptFromRow(String uid, int channelId, String name) async {
@@ -577,7 +687,7 @@ class MeshTrackWiring {
       _persist();
       return;
     }
-    if (_regOf(uid) == null) _reg.add(_Reg(uid, row.name, Uint8List.fromList(secret)));
+    if (_regOf(uid) == null) _addReg(_Reg(uid, row.name, Uint8List.fromList(secret)));
     _persist();
   }
 
@@ -644,6 +754,8 @@ class MeshTrackWiring {
     final b = _chat;
     final radio = b?.radioId();
     if (b == null || radio == null || _disposed) return;
+    // A registry that could not be read at start is tried again (it may have been a locked Keychain).
+    if (_registryUnreadable) await _retryRegistry();
     final connected = _connected && b.radioConnected();
     final store = b.store;
     final resolved = <({String uid, int id, String name, bool onRadio})>[];
@@ -656,9 +768,12 @@ class MeshTrackWiring {
       final mapped = st.rows[radio];
       Channel? row = mapped == null ? null : store.channels.getById(mapped);
       if (mapped != null && row == null) {
-        // The person deleted the channel on this radio (the channel delete flow): the group goes with it.
+        // The person deleted the channel on this radio (the channel delete flow): the group goes with it, and its "Show
+        // position messages" setting too.
+        _forgetShowPositions({mapped});
         _reg.remove(r);
         _stored.remove(r.uid);
+        _removedUids.add(r.uid);
         dropped.add(r.uid);
         changed = true;
         continue;
@@ -817,7 +932,7 @@ class MeshTrackGroupOps extends ChangeNotifier {
     final id = c.id!;
     if (isGroup(id)) return MtGroupOpResult.ok(id);
     final uid = _w._newUid();
-    _w._reg.add(_Reg(uid, c.name, Uint8List.fromList(secret)));
+    _w._addReg(_Reg(uid, c.name, Uint8List.fromList(secret)));
     _w._stored[uid] = _Stored(rows: {radio: id}, see: see);
     _w._uidByChannel[id] = uid;
     _svc.addGroup(id, c.name);
@@ -905,7 +1020,7 @@ class MeshTrackGroupOps extends ChangeNotifier {
     } catch (e) {
       // Nothing changed on the radio: the old group comes back as it was (Share off).
       _w._recentlyRemoved.remove(channelId);
-      _w._reg.add(reg);
+      _w._addReg(reg);
       _w._stored[reg.uid] = _Stored(rows: {n.radio: channelId}, see: cfg.see, shareEveryDrive: cfg.shareEveryDrive);
       _w._uidByChannel[channelId] = reg.uid;
       _svc.restoreGroup(cfg);
@@ -932,7 +1047,7 @@ class MeshTrackGroupOps extends ChangeNotifier {
       _w._recentlyRemoved.remove(newChannelId);
       final back = await b.admin.undoRekey(rec.old, fresh);
       final radio = b.radioId();
-      _w._reg.add(rec.oldReg);
+      _w._addReg(rec.oldReg);
       _w._stored[rec.oldReg.uid] = _Stored(rows: {?radio: back.id!}, see: rec.oldConfig.see, shareEveryDrive: rec.oldConfig.shareEveryDrive);
       _w._uidByChannel[back.id!] = rec.oldReg.uid;
       _svc.restoreGroup(rec.oldConfig);

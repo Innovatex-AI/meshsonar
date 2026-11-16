@@ -32,6 +32,9 @@ class FakeSink implements OutboundMessageSink {
   int nextAck = 1000;
   final directs = <SentDirect>[];
   final channels = <({int slot, String text, int ts})>[];
+
+  /// The command queue class of each channel send, in order.
+  final channelPriorities = <int>[];
   int estTimeoutMs = 4000;
 
   @override
@@ -50,7 +53,7 @@ class FakeSink implements OutboundMessageSink {
   }
 
   @override
-  Future<int> sendChannel({required String radioId, required int slot, required String text, required int timestamp}) async {
+  Future<int> sendChannel({required String radioId, required int slot, required String text, required int timestamp, int priority = CommandPriority.user}) async {
     if (!connected) throw const RadioNotConnected();
     final f = failNext;
     if (f != null) {
@@ -58,6 +61,7 @@ class FakeSink implements OutboundMessageSink {
       throw f;
     }
     channels.add((slot: slot, text: text, ts: timestamp));
+    channelPriorities.add(priority);
     return timestamp;
   }
 }

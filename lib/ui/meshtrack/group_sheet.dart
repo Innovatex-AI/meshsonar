@@ -287,6 +287,9 @@ class _GroupSheetState extends State<GroupSheet> {
       case 'invite':
         await openInvite(context, g.channelId, g.name);
       case 'every':
+        // Turning it on is a way to share: the intro comes first, like the Share switch.
+        if (!every && !await ensureMeshTrackIntro(context, b.ops)) return;
+        if (!context.mounted) return;
         b.service.setShareEveryDrive(g.channelId, !every);
         showAppToast(context, !every ? '${g.name}: Share turns on when you start a drive.' : '${g.name}: Share stays off until you turn it on.');
       case 'fresh':
@@ -407,7 +410,10 @@ class _GroupSheetState extends State<GroupSheet> {
     ];
   }
 
-  void _sendMine(BuildContext context, MeshTrackBinding b, MtGroupView g) {
+  Future<void> _sendMine(BuildContext context, MeshTrackBinding b, MtGroupView g) async {
+    // A one-shot share is still a share: the intro comes first.
+    if (!await ensureMeshTrackIntro(context, b.ops)) return;
+    if (!context.mounted) return;
     final r = b.service.sendMyPosition(g.channelId);
     if (r == MtResult.ok) {
       showAppToast(context, 'Your position is on its way to ${g.name}.', kind: AppToastKind.success);
@@ -423,7 +429,8 @@ class _GroupSheetState extends State<GroupSheet> {
       return;
     }
     final old = g.meet;
-    final r = b.service.meetHere(g.channelId, at.lat, at.lon);
+    // Where I am: the fix's accuracy widens the privacy-zone buffer (unknown = the worst accuracy a share accepts).
+    final r = b.service.meetHere(g.channelId, at.lat, at.lon, accuracyM: b.hereAccuracyM() ?? kMtMaxAccuracyM);
     if (r != MtResult.ok) {
       _toast(context, r);
       return;
