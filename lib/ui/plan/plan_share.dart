@@ -589,8 +589,8 @@ class _PlanImportSheetState extends State<PlanImportSheet> {
     final t = Theme.of(context);
     final nodes = _nodes!;
     final have = _inPlan;
-    final left = _room;
-    final full = _picked.length >= left;
+    final open = _room;
+    final full = _picked.length >= open;
     return AppSheetScaffold(
       key: const Key('plan-import-preview'),
       controller: widget.scroll,
@@ -613,7 +613,7 @@ class _PlanImportSheetState extends State<PlanImportSheet> {
       children: [
         Text(nodes.summary, key: const Key('plan-import-summary'), style: t.textTheme.bodyMedium),
         Text(
-          left <= 0 ? 'This plan is full (${Plan.maxNodes} nodes). Remove a node first.' : 'Room left in the plan: $left ${left == 1 ? 'node' : 'nodes'}${widget.near == null ? '' : '; nearest to the map first'}.',
+          open <= 0 ? 'This plan is full (${Plan.maxNodes} nodes). Remove a node first.' : 'Room left in the plan: $open ${open == 1 ? 'node' : 'nodes'}${widget.near == null ? '' : '; nearest to the map first'}.',
           style: t.textTheme.bodySmall,
         ),
         if (_rows.isEmpty)

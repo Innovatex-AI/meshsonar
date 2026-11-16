@@ -24,6 +24,7 @@ import '../design/sheet_detents.dart' show formSheetDetents;
 import '../design/state_views.dart';
 import '../design/tokens.dart';
 import '../settings/settings_kit.dart' show InfoTile, SliderTile;
+import '../nodes/node_ref.dart' show nameHidesPosition;
 import 'plan_modes.dart' show PlanLine, PlanListenable, symbolData;
 
 /// The words for a node's status (vocabulary table: "Node", "Estimate", "Measured").
@@ -326,6 +327,8 @@ List<PickableNode> pickableNodes({
   for (final r in [...region, ...global]) {
     final k = r.key.toLowerCase();
     if (!seen.add(k) || !r.lat.isFinite || !r.lon.isFinite || (r.lat == 0 && r.lon == 0)) continue;
+    // A node whose owner hides its position (the no-position mark in its name) is never offered for a plan (privacy).
+    if (nameHidesPosition(r.name)) continue;
     final km = near == null ? null : haversineKm(near.lat, near.lon, r.lat, r.lon);
     final mine = claimed.contains(k);
     if (!mine && km != null && km > maxKm) continue;

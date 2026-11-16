@@ -9,8 +9,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/plan/saved_plans.dart';
+import 'package:meshsonar/core/network_repeaters.dart' show NetworkRepeater;
 import 'package:meshsonar/ui/nodes/node_actions.dart';
 import 'package:meshsonar/ui/nodes/node_ref.dart';
+import 'package:meshsonar/ui/plan/node_list.dart' show pickableNodes;
 import 'package:meshsonar/ui/plan/plan_modes.dart';
 import 'package:meshsonar/ui/plan/plan_share.dart' show showPlanImport, showPlanShare;
 import 'package:meshsonar/ui/plan/planner_screen.dart';
@@ -84,6 +86,7 @@ Future<void> _scrollSheet(WidgetTester tester) async {
 }
 
 void main() {
+  pickerPrivacy();
   group('Dynamic Type AX3 (3.1x) on a 390 dp phone', () {
     testWidgets('the empty Planner: quick starts and every mode body', (tester) async {
       phone(tester, scale: ax3, w: 390, h: 844);
@@ -290,3 +293,15 @@ void main() {
 bool _ancestorIsHeader(WidgetTester tester, Finder f) =>
     find.ancestor(of: f, matching: find.byWidgetPredicate((w) => w is Semantics && w.properties.header == true)).evaluate().isNotEmpty;
 
+
+/// The existing-node picker never offers a node whose owner hides its position (V1 review, privacy).
+void pickerPrivacy() {
+  test('pickableNodes skips nodes whose name carries the no-position mark', () {
+    final rows = [
+      NetworkRepeater(key: 'aa' * 32, lat: 40.1, lon: -83.0, name: 'Open hilltop'),
+      NetworkRepeater(key: 'bb' * 32, lat: 40.2, lon: -83.1, name: 'Hidden $kNoPositionMark'),
+    ];
+    final got = pickableNodes(region: rows, global: const [], claimed: {'bb' * 32}, near: const PlanPoint(40.1, -83.0));
+    expect(got.map((p) => p.name), ['Open hilltop'], reason: 'hidden even when it is your own claimed node');
+  });
+}
