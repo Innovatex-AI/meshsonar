@@ -148,6 +148,40 @@ void main() {
       expect(broker.messages.single.retain, isFalse);
     });
 
+    for (final preset in [false, true]) {
+      test('last will (${preset ? 'preset, retained' : 'custom, unretained'}): a lost link makes the broker say offline; '
+          'turning the feed off says offline itself and leaves no will', () async {
+        var s = _local('s1', broker.port, aud: 'mqtt.test.meshsonar');
+        if (preset) s = s.copyWith(presetId: 'corecomms');
+        engine.update(engineState(slots: [s], sign: radio.sign));
+        await _until(() => engine.statuses.single.state == ObserverFeedState.connected, what: 'connected');
+        await _until(() => broker.messages.any((m) => m.topic.endsWith('/status')), what: 'online');
+        final online = broker.messages.firstWhere((m) => m.topic.endsWith('/status'));
+        expect((jsonDecode(online.payload) as Map)['status'], 'online');
+        expect(online.retain, preset);
+        await broker.dropAll(); // the link is lost: no DISCONNECT from the phone
+        await _until(() => broker.messages.any((m) => m.will), what: 'will');
+        final will = broker.messages.firstWhere((m) => m.will);
+        expect(will.topic, online.topic, reason: 'same topic as online');
+        expect(will.retain, online.retain, reason: 'same retain flag as online');
+        expect(will.qos, 1);
+        expect((jsonDecode(will.payload) as Map)['status'], 'offline');
+        expect((jsonDecode(will.payload) as Map)['origin_id'], rfcPublicHex.toUpperCase());
+        await _until(() => broker.connectedClients.length == 2, what: 'reconnect');
+        await _until(() => engine.statuses.single.state == ObserverFeedState.connected, what: 'connected again');
+        final before = broker.messages.length;
+        engine.update(engineState(slots: [s.copyWith(enabled: false)], sign: radio.sign));
+        await _until(() => broker.messages.length > before, what: 'offline on stop');
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        final after = broker.messages.sublist(before);
+        expect(after.map((m) => 'will=${m.will} ${m.payload}').toList(), hasLength(1), reason: 'a clean stop: offline from the app, no will');
+        expect(after.single.will, isFalse);
+        expect(after.single.topic, online.topic);
+        expect(after.single.retain, online.retain);
+        expect((jsonDecode(after.single.payload) as Map)['status'], 'offline');
+      });
+    }
+
     test('nothing listening: Error with plain words, then backoff', () async {
       final s = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
       final dead = s.port;
