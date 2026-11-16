@@ -8,6 +8,7 @@
 // - battery_plus: level, charging state, Low Power Mode / battery saver. No permission.
 // - device_info_plus: the hardware model identifier (iOS utsname.machine e.g. "iPhone15,2", Android Build.MODEL) and
 //   OS version. Never the user's device name, identifierForVendor, Android id or serial.
+import 'dart:async';
 import 'dart:io';
 
 import 'package:battery_plus/battery_plus.dart' as bp;
@@ -17,10 +18,28 @@ import 'package:sensors_plus/sensors_plus.dart';
 import '../core/drive_context.dart';
 import '../core/phone_sensors.dart';
 
-class SensorsPlusBarometer implements BarometerSource {
+/// No barometer reading for this long = the barometer is unavailable. The plugin samples once a second; when it cannot
+/// start (no barometer, Motion & Fitness refused, the simulator) Flutter's EventChannel reports the plugin's UNAVAILABLE
+/// answer instead of putting it on the stream, so the stream just stays silent and the drive's Air pressure status would
+/// never leave "not started". The silence becomes a [BarometerUnavailable] error on the stream; the drive listens with cancelOnError and
+/// turns it into "unavailable" (the Settings line says why).
+const Duration kBarometerSilence = Duration(seconds: 15);
+
+class BarometerUnavailable implements Exception {
+  const BarometerUnavailable();
   @override
-  Stream<double> readings() =>
-      barometerEventStream(samplingPeriod: const Duration(seconds: 1)).map((e) => e.pressure);
+  String toString() => 'BarometerUnavailable: no barometer reading for ${kBarometerSilence.inSeconds} s';
+}
+
+class SensorsPlusBarometer implements BarometerSource {
+  /// The raw pressure stream in hPa (tests pass their own).
+  final Stream<double> Function() _source;
+  final Duration silence;
+  SensorsPlusBarometer({Stream<double> Function()? source, this.silence = kBarometerSilence})
+      : _source = source ?? (() => barometerEventStream(samplingPeriod: const Duration(seconds: 1)).map((e) => e.pressure));
+
+  @override
+  Stream<double> readings() => _source().timeout(silence, onTimeout: (sink) => sink.addError(const BarometerUnavailable()));
 }
 
 PhoneBatteryState phoneBatteryStateOf(bp.BatteryState s) => switch (s) {

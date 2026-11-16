@@ -108,6 +108,24 @@ void main() {
       await finish(tester);
     });
 
+    testWidgets('Link to… from a repeater contact (Chat > Network): the repeater joins as an existing repeater, not a handheld', (tester) async {
+      phone(tester);
+      final h = Harness();
+      final st = await openPlanner(tester, h);
+      await tapShellTab(tester, 'Chat');
+      final contact = Contact(radioId: 'r1', publicKey: 'dd' * 32, type: ContactType.repeater, name: 'Otterbein Hill', lat: 40.12, lon: -82.93);
+      await pushOnRoot(tester, NodeActionBar(node: NodeRef.fromContact(contact), env: _noRadio));
+      await tapKey(tester, 'node-action-linkTo');
+      await settle(tester);
+      expect(st.mode, PlanModeId.link);
+      final n = st.controller!.nodes.single;
+      expect(n.name, 'Otterbein Hill');
+      expect(n.role, PlanNodeRole.repeater);
+      expect(n.status, PlanNodeStatus.existing);
+      expect(n.existingKey, 'dd' * 32);
+      await finish(tester);
+    });
+
     testWidgets('a contact with no position (0, 0) offers no Link to…', (tester) async {
       phone(tester);
       final h = Harness();

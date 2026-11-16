@@ -9,6 +9,9 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 - **Offline status and last will:** a feed says `offline` when it stops and sets the same message as its last will, on the online status topic with the same retain flag (WS-OUT 7).
 - **Per-install client id** instead of per launch (WS-OUT 8).
 - **`mqtt.meshsonar.com` is refused as a feed** in Settings > Observer and by the engine; a saved one shows Not allowed (WS-OUT 9).
+- **Link to… from a repeater contact** (Chat > Network > a repeater) puts it in the plan as an existing repeater, not as a handheld person (V-5).
+- **Phones without a barometer** (or Motion & Fitness refused) now show Air pressure as unavailable after 15 s of silence; the plugin's UNAVAILABLE report is no longer treated as an error (V-5).
+- **Simulator tour (V-5):** `verify_sim.sh` grants location by default (`GRANT_LOCATION=0` opts out); the antenna, drive-live, drive-report, drive-detail and new J2 contact > Link to… steps pass and print `STEP <name> ok` / `STEPFAIL`; J2 in `planner_visual_test.dart` is a required step.
 
 ## [0.38.0+66] — 2026-11-16 — Privacy zones on the phone, fewer warnings, universal links, CMH default
 
