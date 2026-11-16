@@ -19,6 +19,7 @@ import '../design/app_symbols.dart';
 import '../design/app_type.dart';
 import '../design/avatar_style.dart';
 import '../design/tokens.dart';
+import '../../core/meshtrack/mt_wire.dart' show mtReadable;
 import '../../core/photo_api.dart' show anyPhotoIdOf;
 import '../map/layers/registry.dart' show kPlanLayerId;
 import '../map/main_map_focus.dart';
@@ -317,7 +318,7 @@ class _MessageBubbleState extends State<MessageBubble> {
     final who = m.isOutgoing ? 'You' : (m.senderName ?? 'Message');
     final tail = m.isOutgoing ? (widget.delivery?.detail ?? '') : '';
     final photos = widget.photos == null ? const <String>[] : photoLinksOf(m.text);
-    final body = photos.isEmpty ? m.text : [if (photos.length == 1) 'Photo' else '${photos.length} photos', textWithoutPhotos(m.text)].where((e) => e.isNotEmpty).join('. ');
+    final body = photos.isEmpty ? (mtReadable(m.text) ?? m.text) : [if (photos.length == 1) 'Photo' else '${photos.length} photos', textWithoutPhotos(m.text)].where((e) => e.isNotEmpty).join('. ');
     final sb = StringBuffer('$who, $body');
     if (tail.isNotEmpty) sb.write(', ${tail[0].toLowerCase()}${tail.substring(1)}');
     sb.write(', $time');
@@ -342,9 +343,13 @@ class _MessageBubbleState extends State<MessageBubble> {
 
     final photoLinks = w.photos == null ? const <String>[] : photoLinksOf(m.text);
     final rest = photoLinks.isEmpty ? m.text : textWithoutPhotos(m.text);
+    // A MeshTrack message kept as chat reads as words, not wire text (lib/core/meshtrack/mt_wire.dart mtReadable).
+    final readable = photoLinks.isEmpty ? mtReadable(m.text) : null;
     final linkColors = (mine ? c.bubbleOutText : c.accent, mine ? c.bubbleOutText : c.accent, mine ? c.bubbleOutText : c.warning);
     final Widget content = photoLinks.isEmpty
-        ? Text.rich(TextSpan(style: base, children: _spans(m.text, linkColors.$1, linkColors.$2, linkColors.$3)))
+        ? (readable != null
+            ? Text(readable, key: ValueKey('mt-readable-${m.id}'), style: base.copyWith(fontStyle: FontStyle.italic))
+            : Text.rich(TextSpan(style: base, children: _spans(m.text, linkColors.$1, linkColors.$2, linkColors.$3))))
         : Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,

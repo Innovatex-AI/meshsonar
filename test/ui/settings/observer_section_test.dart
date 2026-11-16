@@ -287,6 +287,8 @@ void main() {
         await tester.tap(find.byKey(const Key('mqtt-slot-save')));
         await tester.pumpAndSettle();
         expect(find.text(meshSonarBrokerRefusal), findsOneWidget, reason: host);
+        final err = tester.widget<TextField>(find.descendant(of: find.byKey(const Key('mqtt-field-host')), matching: find.byType(TextField)));
+        expect(err.decoration?.errorMaxLines, greaterThanOrEqualTo(3), reason: 'the refusal is a sentence: not cut to one line');
         expect(r.h.state.settings.mqttSlots, isEmpty, reason: 'nothing saved for $host');
         await tester.tap(find.byKey(const Key('mqtt-slot-cancel')));
         await settleIo(tester);
@@ -306,6 +308,10 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.widget<Text>(find.byKey(const Key('mqtt-slot-slot-1-status'))).data, 'Not allowed\n$meshSonarBrokerRefusal');
       expect(r.h.state.settings.mqttSlots.single, ours, reason: 'the saved slot is kept, not dropped');
+      // It can never connect, so its switch is off and cannot be turned on (sim tour: it looked like a normal off feed).
+      final sw = tester.widget<Switch>(find.byKey(const Key('mqtt-slot-slot-1-switch')));
+      expect(sw.value, isFalse);
+      expect(sw.onChanged, isNull);
     });
 
     testWidgetsT('a preset list that names MeshSonar\'s own server never offers it', (tester) async {

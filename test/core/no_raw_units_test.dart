@@ -41,7 +41,7 @@ const List<String> allowedLines = [
   // MeshTrack's wire format carries speed as whole km/h (`MT1 @<code> s<kmh>`, meshtrack plan section 3) and the smart
   // rate is specified in km/h; these are protocol values, never shown (the Group sheet formats speed through Units).
   'final kmh = ((fix.speedMps ?? 0) * 3.6).round();',
-  'final v = speedKmh ?? (f.speedMps != null && f.speedMps! >= 0 ? f.speedMps! * 3.6 : null);',
+  'var v = speedKmh ?? (f.speedMps != null && f.speedMps! >= 0 ? f.speedMps! * 3.6 : null);',
   'final kmh = dt <= 0 ? double.infinity : d / dt * 3.6;',
   'if (s != null && s.isFinite && s >= 0) return s * 3.6;',
   'return distanceM(p.lat, p.lon, f.lat, f.lon) / dt * 3.6;',

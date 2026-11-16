@@ -378,8 +378,11 @@ void main() {
           expect(h.s.askWhereAreYou(1), MtResult.ok);
           expect(h.s.askWhereAreYou(1, name: 'Sam'), MtResult.tooSoon);
           expect(h.s.state.group(1)!.askedUntil, isNotNull);
+          expect(h.s.state.group(1)!.askedName, isNull, reason: 'asked everyone');
           h.a.elapse(const Duration(seconds: 61));
+          expect(h.s.state.group(1)!.askedName, isNull);
           expect(h.s.askWhereAreYou(1, name: 'Sam'), MtResult.ok);
+          expect(h.s.state.group(1)!.askedName, 'Sam', reason: 'only Sam\'s row says Asked');
           h.a.elapse(const Duration(seconds: 5));
           expect(h.texts(), ['MT1 ?', 'MT1 ? Sam']);
         }));

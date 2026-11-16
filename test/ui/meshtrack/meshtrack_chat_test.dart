@@ -3,11 +3,13 @@
 // group channel with @[name] typed), Make room, and Settings > MeshTrack rows.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/chat/bubble_grouping.dart';
 import 'package:meshsonar/chat/conversation_row.dart';
 import 'package:meshsonar/chat/models.dart';
 import 'package:meshsonar/core/units.dart';
 import 'package:meshsonar/ui/chat/channel_detail_screen.dart';
 import 'package:meshsonar/ui/chat/conversation_tile.dart';
+import 'package:meshsonar/ui/chat/message_bubble.dart';
 import 'package:meshsonar/ui/meshtrack/group_setup.dart' show MakeRoomScreen;
 import 'package:meshsonar/ui/meshtrack/meshtrack_binding.dart';
 import 'package:meshsonar/ui/meshtrack/mt_message.dart';
@@ -39,6 +41,17 @@ void main() {
     expect(find.bySemanticsLabel(RegExp(r'^Family, MeshTrack group')), findsOneWidget);
     sem.dispose();
     await rig.done(tester);
+  });
+
+  testWidgets('a MeshTrack message kept as chat reads as words in its bubble, not "MT1 @..." (sim tour)', (tester) async {
+    setSize(tester);
+    final ch = await kit.channel(2, 'Saturday crew');
+    kit.incoming(ch, 'Jo N8JO', 'MT1 @86GV429W+H34 s40 c46');
+    final m = kit.service.page(ch.convKey).messages.first;
+    await tester.pumpWidget(host(MessageBubble(
+        key: ValueKey(m.id), slot: BubbleSlot(message: m, joinsOlder: false, joinsNewer: false, separatorAbove: false, showSender: true))));
+    expect(find.text('Shared their position (MeshTrack)'), findsOneWidget);
+    expect(find.textContaining('MT1'), findsNothing);
   });
 
   testWidgets('channel detail: Use for MeshTrack on an eligible private channel, then MeshTrack group + Show position messages; off has Undo', (tester) async {

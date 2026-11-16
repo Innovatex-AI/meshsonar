@@ -1,13 +1,16 @@
 // Drive chip states and the Group sheet (plan 5.4, 5.5, 7, 8, 9): rows in metric and imperial, intro once, Undo on stop /
 // leave / clear meet, the disabled 4th Share switch, Asked for 60 s, row tap centres the map, iPhone 17 Pro dark, iPad
 // side panel, 2x text, VoiceOver labels and 44/48 pt targets.
+import 'package:flutter/cupertino.dart' show CupertinoButton;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/core/privacy_zones.dart';
 import 'package:meshsonar/core/units.dart';
 import 'package:meshsonar/ui/drive/drive_controls.dart' show MeshTrackChip;
+import 'package:meshsonar/ui/design/tokens.dart' show Layout;
 import 'package:meshsonar/ui/meshtrack/group_sheet.dart';
 import 'package:meshsonar/ui/meshtrack/meshtrack_binding.dart';
+import 'package:meshsonar/ui/meshtrack/meshtrack_copy.dart' show mtKeepTogether;
 
 import 'mt_kit.dart';
 
@@ -216,6 +219,24 @@ void main() {
       expect(find.byKey(const Key('mt-empty-new')), findsOneWidget);
       expect(find.byKey(const Key('mt-empty-join')), findsOneWidget);
       expect(find.byKey(const Key('mt-empty-existing')), findsOneWidget);
+      // The empty state's own buttons are the only New group / Join; the title sits on the screen margin (sim tour: a
+      // shrink-wrapped header used to be centred with duplicate buttons).
+      expect(find.byKey(const Key('mt-new')), findsNothing);
+      expect(find.byKey(const Key('mt-join-open')), findsNothing);
+      expect(tester.getTopLeft(find.text('MeshTrack')).dx, moreOrLessEquals(Layout.screenMargin, epsilon: 1));
+      await rig.done(tester);
+    });
+
+    testWidgets('with a group: New group and Join on the right edge of the header', (tester) async {
+      phone(tester);
+      final rig = MtRig();
+      rig.svc.addGroup(1, 'Family');
+      await openSheet(tester, rig);
+      expect(tester.getTopLeft(find.text('MeshTrack')).dx, moreOrLessEquals(Layout.screenMargin, epsilon: 1));
+      // The header spans the sheet (margin to margin), so spaceBetween puts the buttons on the right edge when they fit.
+      final width = tester.getSize(find.byKey(const Key('mt-groups'))).width;
+      final header = find.ancestor(of: find.text('MeshTrack'), matching: find.byType(Wrap)).last;
+      expect(tester.getSize(header).width, moreOrLessEquals(width - 2 * Layout.screenMargin, epsilon: 1));
       await rig.done(tester);
     });
 
@@ -348,9 +369,10 @@ void main() {
         rig.hear(1, 'Ann', dLat: -0.01, dLon: -0.02, pathLen: 2, snr: -3);
         await openSheet(tester, rig, channelId: 1);
         expect(find.byKey(const Key('mt-people-title')), findsOneWidget);
-        expect(find.textContaining(dist), findsOneWidget);
-        expect(find.textContaining('direct · SNR 6.5 dB · $speed'), findsOneWidget);
-        expect(find.textContaining('via 2 repeaters · SNR -3.0 dB'), findsOneWidget);
+        // Each " · " part keeps its words together on screen (mtKeepTogether), so the rows use no-break spaces.
+        expect(find.textContaining(mtKeepTogether(dist)), findsOneWidget);
+        expect(find.textContaining(mtKeepTogether('direct · SNR 6.5 dB · $speed')), findsOneWidget);
+        expect(find.textContaining(mtKeepTogether('via 2 repeaters · SNR -3.0 dB')), findsOneWidget);
         await tester.tap(find.byKey(const Key('mt-friend-tap-Sam')));
         await tester.pump();
         expect(rig.centred, hasLength(1));
@@ -378,6 +400,39 @@ void main() {
       await tester.tap(find.byKey(const Key('mt-message-Sam')));
       await tester.pump();
       expect(find.textContaining('Connect your radio once first'), findsOneWidget);
+      await rig.done(tester);
+    });
+
+    testWidgets('Where are you? to one person: only their row says Asked; the others are off, not "Asked" (sim tour)', (tester) async {
+      phone(tester);
+      final rig = MtRig();
+      rig.svc
+        ..addGroup(1, 'Family')
+        ..setRadioConnected(true);
+      rig.hear(1, 'Sam');
+      rig.hear(1, 'Ann', dLat: -0.01);
+      await openSheet(tester, rig, channelId: 1);
+      await tester.tap(find.byKey(const Key('mt-ask-Sam')));
+      await tester.pump();
+      expect(find.descendant(of: find.byKey(const Key('mt-ask-Sam')), matching: find.text('Asked')), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const Key('mt-ask-Ann')), matching: find.text('Where are you?')), findsOneWidget);
+      expect(tester.widget<CupertinoButton>(find.byKey(const Key('mt-ask-Ann'))).onPressed, isNull, reason: 'once per minute per group');
+      await rig.done(tester);
+    });
+
+    testWidgets('a friend row keeps its lines whole: Message and Where are you? sit under the text (sim tour)', (tester) async {
+      phone(tester);
+      final rig = MtRig()..units = Units.imperial;
+      rig.svc
+        ..addGroup(1, 'Family')
+        ..setRadioConnected(true);
+      rig.hear(1, 'Jo N8JO', speed: 40, pathLen: 1, snr: 5.5);
+      await openSheet(tester, rig, channelId: 1);
+      final name = find.text('Jo N8JO');
+      final ask = find.byKey(const Key('mt-ask-Jo N8JO'));
+      expect(tester.getTopLeft(ask).dy, greaterThanOrEqualTo(tester.getBottomLeft(name).dy), reason: 'actions under the name');
+      // Lines break only between " · " parts, never inside "0.7 mi W" or "25 mph" (the sim tour showed "25 / mph").
+      expect(find.textContaining('via\u00A01\u00A0repeater · SNR\u00A05.5\u00A0dB · 25\u00A0mph'), findsOneWidget);
       await rig.done(tester);
     });
 

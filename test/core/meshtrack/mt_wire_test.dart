@@ -167,4 +167,17 @@ void main() {
     }
     expect(consumed, greaterThan(0)); // the mutations do produce valid messages too
   });
+
+  test('mtReadable: plain words for every MeshTrack message, null for chat', () {
+    expect(mtReadable('MT1 @86GV429W+H34 s40 c46'), 'Shared their position (MeshTrack)');
+    expect(mtReadable('MT1 @86GV429W+H34 s0'), 'Parked (MeshTrack)');
+    expect(mtReadable('MT1 ?'), 'Asked where everyone is (MeshTrack)');
+    expect(mtReadable('MT1 ? Sam'), 'Asked where Sam is (MeshTrack)');
+    expect(mtReadable('MT1 !86GV429W+H34 Gas station'), 'Set the meet-up point "Gas station" (MeshTrack)');
+    expect(mtReadable('MT1 !86GV429W+H34'), 'Set a meet-up point (MeshTrack)');
+    expect(mtReadable('MT1 !x'), 'Cleared the meet-up point (MeshTrack)');
+    expect(mtReadable('MT1 x'), 'Stopped sharing their position (MeshTrack)');
+    expect(mtReadable('see you at 8'), isNull);
+    expect(mtReadable('MT1 hello'), isNull);
+  });
 }
