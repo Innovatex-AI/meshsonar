@@ -54,6 +54,7 @@ The clock (`now:`) and randomness (`random:`) are injected. Tests use fakeAsync.
 | `leaveGroup(id) -> MtGroupConfig?`, `restoreGroup(config)` | Leave, and its Undo. Leave sends `MT1 x` and forgets the group's friends. |
 | `setPositionMode(exact/approximate)`, `setRate(smart/lowTraffic)`, `setAnswerRequests(bool)` | Settings > MeshTrack. Persist them in app Settings and pass them in at start. |
 | `clearLastKnown()` | Delete my data. |
+| `whenIdle(id, {timeout})` | Completes when nothing for that channel is queued or in flight (or after 20 s). Start fresh awaits it after `leaveGroup`, so the old group's `MT1 x` goes under the old key before the channel is rekeyed. |
 
 ## Outputs
 - `state` (`MeshTrackState`), `addListener` / `removeListener` (Listenable shape), and the `states` stream. Fields:
