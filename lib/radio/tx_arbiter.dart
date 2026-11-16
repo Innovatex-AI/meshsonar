@@ -189,6 +189,9 @@ abstract interface class TrackTxGate {
   /// May a MeshTrack message with [textBytes] bytes of body go now? Never queues; a refusal is counted.
   TrackDecision requestTrack(int textBytes);
 
+  /// The same answer as [requestTrack] with no side effect at all (nothing counted): a pre-check.
+  TrackDecision peekTrack(int textBytes);
+
   /// Runs [send] (the actual radio send of [textBytes] body bytes) as a track transmission and records it on the ledger.
   Future<T> runTrackSend<T>(int textBytes, Future<T> Function() send);
 }
@@ -338,21 +341,27 @@ class TxArbiter implements PingGate, TrackTxGate {
   /// "May I send a MeshTrack message with [textBytes] bytes of body now?" Synchronous, never queues, never waits; the only
   /// side effect is the skip counter. Rules in the header comment.
   @override
-  TrackDecision requestTrack(int textBytes) {
+  TrackDecision requestTrack(int textBytes) => _decideTrack(textBytes, count: true);
+
+  @override
+  TrackDecision peekTrack(int textBytes) => _decideTrack(textBytes, count: false);
+
+  TrackDecision _decideTrack(int textBytes, {required bool count}) {
     final now = _clock();
     final est = estimateTrackMs(textBytes);
+    TrackDecision skip(TrackSkipReason r, String m) => count ? _trackSkip(r, m, est) : TrackDecision.skip(r, m, est);
     final u = _lastUserSend, p = _lastPingSend;
     if ((u != null && now.difference(u) < policy.userSendGap) || (p != null && now.difference(p) < policy.userSendGap)) {
-      return _trackSkip(TrackSkipReason.gap, 'Position waits: the radio just sent', est);
+      return skip(TrackSkipReason.gap, 'Position waits: the radio just sent');
     }
     _prune(now);
     final used = _msInWindow(now, policy.pingWindow, TxPriority.track);
     if (used + est > policy.trackBudgetFraction * policy.pingWindow.inMilliseconds) {
-      return _trackSkip(TrackSkipReason.budget, 'Sharing slower: airtime limit', est);
+      return skip(TrackSkipReason.budget, 'Sharing slower: airtime limit');
     }
     final total = _msInWindow(now, policy.capWindow, null);
     if (total + est > policy.capFraction * policy.capWindow.inMilliseconds) {
-      return _trackSkip(TrackSkipReason.regionCap, 'Sharing slower: airtime limit', est);
+      return skip(TrackSkipReason.regionCap, 'Sharing slower: airtime limit');
     }
     return TrackDecision.go(est);
   }
