@@ -1,9 +1,11 @@
 // What the Planner works out about a plan on the phone (release 0.38 improvements 7, 8, 15, 16): the link matrix (every
 // pair of up to [linkMatrixMaxNodes] nodes), "how many nodes see this spot", the relay finder, snap-to-high-ground, node
 // classes (critical / backbone / redundant / marginal, from E8 network facts and line-of-sight peers) and the calibration
-// confidence line ("412 drive cells within 2 km" or "unobserved, estimate"). Terrain comes in through a [ProfileSource]
+// confidence line ("412 drive cells within 2 km" or "unobserved, estimate"), and the verify loop (improvement 20: an installed
+// node's plan-verify prediction against measured cells, [compareVerifyWithMeasured]). Terrain comes in through a [ProfileSource]
 // (PlanApi.profile: score-link, else plan-link, each with its stored copies); every number is the on-device model
 // (link_model.dart) for the plan's radio and clutter, so changing a height or the radio needs no new request. Pure Dart.
+import 'dart:convert' show base64;
 import 'dart:math' as math;
 
 import '../plan_contract.dart';
@@ -385,4 +387,128 @@ CalibrationConfidence calibrationConfidence(PlanPoint at, Iterable<PlanPoint> dr
     if (haversineKm(at.lat, at.lon, c.lat, c.lon) <= radiusKm) n++;
   }
   return CalibrationConfidence(n, radiusKm);
+}
+
+// ---------------------------------------------------------------- verify loop (improvement 20)
+/// Fewer measured cells inside a prediction than this is "not enough data" to judge it.
+const int verifyMinCells = 5;
+
+/// One measured coverage cell (drives and observers): its centre, whether anything was heard there, its SNR when read.
+class PlanMeasuredCell {
+  final PlanPoint at;
+  final bool heard;
+  final double? snr;
+  const PlanMeasuredCell(this.at, {required this.heard, this.snr});
+}
+
+/// A plan-verify prediction for an installed node next to what was measured around it.
+class VerifyComparison {
+  /// Measured cells inside the prediction's sweep (the cells compared).
+  final int compared;
+
+  /// Predicted covered (margin >= 0) and heard / predicted covered but nothing heard.
+  final int coveredHeard, coveredSilent;
+
+  /// Heard although the prediction says no decode there (measured outside the prediction) / quiet where it said so too.
+  final int heardOutside, quietOutside;
+
+  /// Mean measured and predicted SNR over the heard cells with a reading, dB (null = none).
+  final double? measuredSnr, predictedSnr;
+  final int minCells;
+  const VerifyComparison({
+    required this.compared,
+    required this.coveredHeard,
+    required this.coveredSilent,
+    required this.heardOutside,
+    required this.quietOutside,
+    this.measuredSnr,
+    this.predictedSnr,
+    this.minCells = verifyMinCells,
+  });
+
+  /// Enough measured cells to say anything.
+  bool get enough => compared >= minCells;
+
+  /// Share of compared cells where prediction and measurement agree, percent.
+  double get agreePct => compared == 0 ? 0 : 100 * (coveredHeard + quietOutside) / compared;
+
+  /// Predicted minus measured SNR (positive = the prediction is more hopeful than the drives).
+  double? get biasDb => measuredSnr == null || predictedSnr == null ? null : predictedSnr! - measuredSnr!;
+}
+
+/// The margin (dB over sensitivity) the coverage run in [r] predicts at a point, read from its 0.5 dB `grid` (radials x
+/// samples around [site], default the run's own `params` position). Null when the answer carries no usable grid.
+double? Function(PlanPoint at)? predictedMarginSampler(PlanVerifyResult r, {PlanPoint? site}) {
+  final g = r.raw['grid'], params = r.raw['params'];
+  if (g is! Map) return null;
+  final radials = (g['radials'] as num?)?.round(), n = (g['n'] as num?)?.round(), step = (g['stepM'] as num?)?.toDouble();
+  final b64 = g['margin'], scale = (g['scale'] as num?)?.toDouble() ?? 0.5;
+  final at = site ?? (params is Map && params['lat'] is num && params['lon'] is num ? PlanPoint((params['lat'] as num).toDouble(), (params['lon'] as num).toDouble()) : null);
+  if (radials == null || n == null || step == null || step <= 0 || b64 is! String || at == null || radials < 1 || n < 1) return null;
+  final List<int> bytes;
+  try {
+    bytes = base64.decode(b64);
+  } on FormatException {
+    return null;
+  }
+  if (bytes.length != radials * n) return null;
+  final mLon = _mPerDegLon(at.lat);
+  return (p) {
+    final dy = (p.lat - at.lat) * _mPerDegLat, dx = (p.lon - at.lon) * mLon;
+    final d = math.sqrt(dx * dx + dy * dy);
+    if (d > (n + 0.5) * step) return null;
+    final j = (d / step).round().clamp(1, n);
+    var brg = math.atan2(dx, dy) * 180 / math.pi;
+    if (brg < 0) brg += 360;
+    final k = (brg / 360 * radials).round() % radials;
+    final b = bytes[k * n + j - 1];
+    return (b > 127 ? b - 256 : b) * scale;
+  };
+}
+
+/// Compares the [prediction] for an installed node with measured [cells]: a cell is predicted covered when the margin
+/// there is at least 0 ([marginAt], default the answer's own grid, [predictedMarginSampler]); predicted SNR = margin +
+/// the radio's SNR floor ([snrFloorDb], default the run's `model.snrFloorDb`, else SF7's). Cells outside the sweep are
+/// not compared. Below [minCells] compared cells the result says [VerifyComparison.enough] false.
+VerifyComparison compareVerifyWithMeasured(
+  PlanVerifyResult prediction,
+  Iterable<PlanMeasuredCell> cells, {
+  PlanPoint? site,
+  double? Function(PlanPoint at)? marginAt,
+  double? snrFloorDb,
+  int minCells = verifyMinCells,
+}) {
+  final sample = marginAt ?? predictedMarginSampler(prediction, site: site);
+  final model = prediction.raw['model'];
+  final floor = snrFloorDb ?? (model is Map && model['snrFloorDb'] is num ? (model['snrFloorDb'] as num).toDouble() : snrFloorForSf(model is Map && model['sf'] is num ? (model['sf'] as num).round() : 7));
+  var compared = 0, ch = 0, cs = 0, ho = 0, qo = 0, nSnr = 0;
+  var sumM = 0.0, sumP = 0.0;
+  if (sample != null) {
+    for (final c in cells) {
+      final m = sample(c.at);
+      if (m == null) continue;
+      compared++;
+      final covered = m >= 0;
+      if (covered && c.heard) ch++;
+      if (covered && !c.heard) cs++;
+      if (!covered && c.heard) ho++;
+      if (!covered && !c.heard) qo++;
+      final s = c.snr;
+      if (c.heard && s != null && s.isFinite) {
+        nSnr++;
+        sumM += s;
+        sumP += m + floor;
+      }
+    }
+  }
+  return VerifyComparison(
+    compared: compared,
+    coveredHeard: ch,
+    coveredSilent: cs,
+    heardOutside: ho,
+    quietOutside: qo,
+    measuredSnr: nSnr == 0 ? null : sumM / nSnr,
+    predictedSnr: nSnr == 0 ? null : sumP / nSnr,
+    minCells: minCells,
+  );
 }
