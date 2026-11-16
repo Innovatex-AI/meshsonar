@@ -79,15 +79,16 @@ class Harness {
   late final ChatService service;
   var _id = 0;
 
-  Harness({RetryPolicy policy = const RetryPolicy(jitterMs: 0, minGapMs: 0)}) : this.withSink(FakeSink(), policy: policy);
+  /// [selfName] is the radio's name (the `name: ` prefix the firmware adds to this phone's channel messages).
+  Harness({RetryPolicy policy = const RetryPolicy(jitterMs: 0, minGapMs: 0), String selfName = 'Me'}) : this.withSink(FakeSink(), policy: policy, selfName: selfName);
 
-  Harness.withSink(this.sink, {RetryPolicy policy = const RetryPolicy(jitterMs: 0, minGapMs: 0)}) {
+  Harness.withSink(this.sink, {RetryPolicy policy = const RetryPolicy(jitterMs: 0, minGapMs: 0), String selfName = 'Me'}) {
     service = ChatService(
       store: store,
       source: source,
       sink: sink,
       nowMs: clock.call,
-      selfName: () => 'Me',
+      selfName: () => selfName,
       newId: () => 'm${_id++}',
       policy: policy,
       autoTimer: false,

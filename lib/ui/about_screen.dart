@@ -52,6 +52,16 @@ const List<({String name, String license, String note})> thirdPartyNotices = [
   (name: 'http, path, uuid', license: 'BSD-3-Clause / MIT', note: 'Networking and utilities.'),
   (name: 'pdf', license: 'Apache-2.0, © David PHAM-VAN', note: 'Drive and region reports as PDF (made on the phone).'),
   (
+    name: 'Open Location Code',
+    license: 'Apache-2.0, © Google (google/open-location-code)',
+    note: 'MeshTrack Plus Codes, computed on the phone from the published algorithm. Nothing calls Google.',
+  ),
+  (
+    name: 'MeshCore-TEAM',
+    license: 'CC BY-NC-SA 4.0, © tmacinc (tmacinc/MeshCore-TEAM)',
+    note: 'MeshTrack reads its position messages so TEAM friends show on your map. Format read for interop; no code used.',
+  ),
+  (
     name: 'Open-Meteo',
     license: 'Data under CC BY 4.0. Its free service is for non-commercial use.',
     note: openMeteoCredit,

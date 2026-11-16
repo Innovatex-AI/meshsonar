@@ -5,6 +5,7 @@ history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md
 
 ## [Unreleased] — build 67 — MQTT feed safety (O1a)
 
+- **MeshTrack: see your friends on the map.** Make a group (a private channel) and invite friends with a QR code or link, or join theirs; while you share, your position goes to the group over the radio and their positions show on your Drive map with name, last heard, distance and direction. Share for This drive, 1 hour (no drive needed) or Until I stop, to up to 3 groups at once; nothing is sent inside or near your privacy zones, and nothing goes to MeshSonar's server. Friends on the official MeshCore app join with the same link and read your position as a Plus Code; positions they type, and MeshCore-TEAM positions, show on your map. Start fresh gives a group a new link to cut someone off; groups come back on a new radio or after a reinstall. Credits for Open Location Code and MeshCore-TEAM in About. Start fresh now sends the old group's stop message before the key changes (it could be lost).
 - **MQTT feeds never get our own traffic:** echoes of this phone's own pings (public or not) and packets on the drive channel are dropped before the feed engine (observer-and-data-platform-plan WS-OUT 4). Property test over every packet type.
 - **Offline status and last will:** a feed says `offline` when it stops and sets the same message as its last will, on the online status topic with the same retain flag (WS-OUT 7).
 - **Per-install client id** instead of per launch (WS-OUT 8).

@@ -993,6 +993,8 @@ class MeshTrackGroupOps extends ChangeNotifier {
     if (reg == null) return const MtGroupOpResult(MtGroupOpStatus.failed, message: MtCopy.failed);
     // The old group is retired first, so nothing puts the old key back on the radio while the new one is written.
     _svc.leaveGroup(channelId); // stops sharing (MT1 x when a position went out) and forgets the old group's friends
+    // The old group's MT1 x must leave under the OLD key: wait until it is on the air before the new key goes in.
+    await _svc.whenIdle(channelId);
     final ChannelJoin j;
     try {
       j = await n.b.admin.rekeyPrivate(old);
@@ -1022,6 +1024,7 @@ class MeshTrackGroupOps extends ChangeNotifier {
     if (fresh == null) return;
     try {
       _svc.leaveGroup(newChannelId);
+      await _svc.whenIdle(newChannelId); // the new group's MT1 x goes under the new key, before the old key is back
       _w._recentlyRemoved.remove(newChannelId);
       final back = await b.admin.undoRekey(rec.old, fresh);
       final radio = b.radioId();

@@ -454,6 +454,41 @@ void main() {
           expect(h.events.whereType<MtSharingStopped>().single.cause, MtStopCause.user);
         }));
 
+    test('whenIdle: completes once the leave stop is on the air (Start fresh waits on it before the new key goes in)', () => _run((h) {
+          h.ready();
+          h.s.onFix(h.fix());
+          h.a.flushMicrotasks();
+          expect(h.positions(1), 1, reason: 'a position just went: the stop must wait the 3 s spacing');
+          h.s.leaveGroup(1);
+          var idle = false;
+          h.s.whenIdle(1).then((_) => idle = true);
+          h.a.elapse(const Duration(seconds: 2));
+          expect(idle, isFalse, reason: 'MT1 x still queued');
+          expect(h.stops(1), 0);
+          h.a.elapse(const Duration(seconds: 2));
+          expect(h.stops(1), 1);
+          expect(idle, isTrue, reason: 'idle right after the stop went');
+          var other = false;
+          h.s.whenIdle(2).then((_) => other = true);
+          h.a.flushMicrotasks();
+          expect(other, isTrue, reason: 'nothing queued for that channel: at once');
+        }));
+
+    test('whenIdle gives up after its timeout (radio gone, nothing can go)', () => _run((h) {
+          h.ready();
+          h.s.onFix(h.fix());
+          h.a.flushMicrotasks();
+          h.s.askWhereAreYou(1);
+          h.s.setRadioConnected(false);
+          h.s.setShare(1, false);
+          var idle = false;
+          h.s.whenIdle(1, timeout: const Duration(seconds: 5)).then((_) => idle = true);
+          h.a.elapse(const Duration(seconds: 4));
+          expect(idle, isFalse);
+          h.a.elapse(const Duration(seconds: 2));
+          expect(idle, isTrue);
+        }));
+
     test('This drive ends with the drive', () => _run((h) {
           h.ready(groups: [1, 2], d: MtShareDuration.thisDrive);
           h.s.driveStarted();

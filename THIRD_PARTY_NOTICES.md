@@ -1,7 +1,8 @@
 # Third-party notices
 
-MeshSonar is MIT-licensed. It contains code ported or adapted from the projects below, each under the MIT License.
-The full MIT License text follows each copyright line.
+MeshSonar is MIT-licensed. It contains code ported or adapted from the projects below (MIT unless a section names another
+licence) and credits the data, fonts, algorithms and message formats it uses. The full MIT License text is in the section
+"MIT License" below; other licences are linked in their own sections.
 
 ## Radio (lib/radio/)
 
@@ -83,3 +84,26 @@ phone never contacts Open-Meteo and sends no position to it. The data is license
 (https://creativecommons.org/licenses/by/4.0/); the credit line above is shown directly under any weather values. Open-Meteo's
 free API is for non-commercial use only: check its terms (or use its paid or self-hosted service) before any commercial use.
 Used in: lib/core/drive_env_cache.dart, lib/ui/report/drive_weather_section.dart.
+
+## MeshTrack (lib/core/meshtrack/)
+
+### Open Location Code
+Copyright 2014 Google Inc. — https://github.com/google/open-location-code — Apache License 2.0
+(https://www.apache.org/licenses/LICENSE-2.0)
+
+MeshTrack writes and reads positions as Plus Codes (Open Location Code). The encoder and decoder were written in Dart from
+the published specification (docs/specification.md) and follow the reference implementation's algorithm; they run on the
+phone and call no Google service. The upstream test vectors (test_data/encoding.csv, decoding.csv, shortCodeTests.csv,
+validityTests.csv) are copied unchanged under test/fixtures/olc/ with their licence header and the full licence text
+(test/fixtures/olc/LICENSE).
+Used in: lib/core/meshtrack/plus_code.dart, lib/core/meshtrack/mt_wire.dart, lib/core/meshtrack/interop.dart.
+
+### MeshCore-TEAM
+Copyright tmacinc — https://github.com/tmacinc/MeshCore-TEAM — Creative Commons BY-NC-SA 4.0
+(https://creativecommons.org/licenses/by-nc-sa/4.0/)
+
+So that MeshCore-TEAM users show on a MeshTrack map, MeshSonar reads that app's `#TEL:` position messages (base64 of 11
+bytes: latitude and longitude as big-endian int32 x 1e7, then battery and forwarding bytes) and hides its `#CAP:`
+messages. The message format was read from its source (lib/models/telemetry_message.dart, capability_message.dart) for
+interoperability only. No MeshCore-TEAM code is copied or adapted; the receive-only parser was written from the format.
+Used in: lib/core/meshtrack/interop.dart.
