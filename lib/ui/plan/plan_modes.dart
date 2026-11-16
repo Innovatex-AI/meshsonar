@@ -26,12 +26,9 @@ import '../../core/hex_cells.dart' show loadHexEngine;
 import '../../core/plan/link_model.dart' show ftM;
 import '../../core/plan/plan_api.dart';
 import '../../core/plan/plan_controller.dart';
-import '../../core/plan/plan_model.dart';
 import '../../core/plan_contract.dart';
 import '../../core/units.dart' show Units;
 import '../app.dart';
-import '../design/app_haptics.dart';
-import '../design/app_surfaces.dart';
 import '../design/app_symbols.dart';
 import '../design/state_views.dart';
 import '../design/tokens.dart';
@@ -39,6 +36,7 @@ import '../map/layers/plan_overlay.dart' show PlanLinkVerdict, PlanOverlayLink;
 import '../map/layers/registry.dart' show kPlanLayerId;
 import '../map/main_map_focus.dart';
 import '../shell/drive_next_card.dart';
+import 'modes/find_sites_mode.dart';
 import 'modes/link_mode.dart';
 
 // ------------------------------------------------------------------------------------------------ the mode interface
@@ -175,7 +173,7 @@ class PlanModeContext {
 final List<PlanMode> planModes = [
   const LinkMode(),
   const _CoverageMode(),
-  const _FindSitesMode(),
+  const FindSitesMode(),
   const WhereToDriveMode(),
 ];
 
@@ -505,183 +503,6 @@ class _CoverageBodyState extends State<_CoverageBody> {
       ...resultNotes(context, r),
       if (d.note.isNotEmpty) Text('Estimate, not a measurement. ${d.note}', style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
     ]);
-  }
-}
-
-// ------------------------------------------------------------------------------------------------ Find sites (compact)
-
-class _FindSitesMode extends PlanMode {
-  const _FindSitesMode();
-  @override
-  PlanModeId get id => PlanModeId.findSites;
-  @override
-  String get label => 'Find sites';
-  @override
-  AppSymbol get symbol => AppSymbols.magnifyingglass;
-  @override
-  String get hint => 'Where a new repeater would help most, in the part of the map you are looking at.';
-  @override
-  bool get needsNodes => false;
-  @override
-  Widget buildSheet(PlanModeContext context) => _FindSitesBody(context, key: const ValueKey('plan-mode-body-sites'));
-}
-
-String goalWords(PlanGoal g) => switch (g) {
-      PlanGoal.overall => 'Best overall',
-      PlanGoal.coverage => 'Coverage',
-      PlanGoal.links => 'Links',
-      PlanGoal.redundancy => 'Redundancy',
-    };
-
-class _FindSitesBody extends StatefulWidget {
-  final PlanModeContext ctx;
-  const _FindSitesBody(this.ctx, {super.key});
-  @override
-  State<_FindSitesBody> createState() => _FindSitesBodyState();
-}
-
-class _FindSitesBodyState extends State<_FindSitesBody> {
-  bool _loading = false;
-  PlanResult<PlanSuggestResult>? _res;
-  String? _noView;
-  int _seq = 0;
-
-  PlanModeContext get ctx => widget.ctx;
-
-  @override
-  void initState() {
-    super.initState();
-    ctx.hooks.onNodeTap = _onNodeTap;
-    ctx.setOverlay(PlanModeOverlay.empty);
-  }
-
-  @override
-  void dispose() {
-    if (ctx.hooks.onNodeTap == _onNodeTap) ctx.hooks.onNodeTap = null;
-    super.dispose();
-  }
-
-  List<PlanSite> get _sites => _res?.data?.sites ?? const [];
-
-  bool _onNodeTap(String id) {
-    if (!id.startsWith('site-')) return false;
-    final s = _sites.where((x) => 'site-${x.id}' == id).firstOrNull;
-    if (s == null) return false;
-    _add(s);
-    return true;
-  }
-
-  void _publish() => ctx.setOverlay(PlanModeOverlay(targets: [
-        for (var i = 0; i < _sites.length; i++)
-          MapFocusTarget(id: 'site-${_sites[i].id}', at: LatLng(_sites[i].at.lat, _sites[i].at.lon), label: '#${i + 1}'),
-      ]));
-
-  Future<void> _run() async {
-    final b = ctx.visibleBounds();
-    if (b == null) {
-      setState(() => _noView = 'The map has not opened yet. Try again in a moment.');
-      return;
-    }
-    final p = ctx.controller.plan;
-    final n = ++_seq;
-    setState(() {
-      _loading = true;
-      _noView = null;
-    });
-    final r = await ctx.api.suggest(PlanSuggestRequest(bounds: b, goal: p.goal, radio: p.radio, clutter: p.clutter, receiverM: p.receiverM));
-    if (!mounted || n != _seq) return;
-    setState(() {
-      _loading = false;
-      _res = r;
-    });
-    _publish();
-  }
-
-  void _add(PlanSite s) {
-    final i = _sites.indexOf(s);
-    try {
-      final node = ctx.controller.addNode(name: 'Site ${i + 1}', lat: s.at.lat, lon: s.at.lon, mount: s.mount, heightM: s.heightAboveM == null ? null : plannedHeightM);
-      ctx.selectNode(node.id);
-      unawaited(AppHaptics.success());
-      showAppToast(context, 'Added ${node.name} to the plan.', kind: AppToastKind.success, actionLabel: 'Undo', onAction: ctx.controller.undo);
-    } on PlanFullException catch (e) {
-      showAppToast(context, e.toString(), kind: AppToastKind.error);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    final units = AppScope.unitsOf(context);
-    final goal = ctx.controller.plan.goal;
-    final r = _res;
-    return Column(key: const Key('plan-mode-sites'), crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Text('Ranks places in the part of the map above this sheet. Only the view and the plan\'s radio settings are sent.', style: t.textTheme.bodyMedium),
-      const SizedBox(height: Gap.s),
-      Semantics(header: true, child: Text('Goal', style: t.textTheme.titleSmall)),
-      Wrap(spacing: Gap.s, runSpacing: Gap.xs, children: [
-        for (final g in const [PlanGoal.overall, PlanGoal.coverage, PlanGoal.links, PlanGoal.redundancy])
-          ChoiceChip(
-            key: Key('sites-goal-${g.wire}'),
-            label: Text(goalWords(g)),
-            selected: goal == g,
-            onSelected: (_) => setState(() => ctx.controller.setGoal(g)),
-          ),
-      ]),
-      const SizedBox(height: Gap.s),
-      _primary(context, key: const Key('sites-run'), label: _loading ? 'Finding sites…' : 'Find sites in this view', symbol: AppSymbols.magnifyingglass, busy: _loading, onPressed: () => unawaited(_run())),
-      const SizedBox(height: Gap.s),
-      if (_noView != null) PlanLine(AppSymbols.infoCircle, _noView!),
-      if (_loading && r == null) ConstrainedBox(constraints: const BoxConstraints(minHeight: 120), child: AppLoadingView(label: 'Ranking places from the network data…', timeout: Duration(seconds: 35))),
-      if (r != null && !r.ok)
-        AppErrorView(
-          key: const Key('sites-error'),
-          title: r.unavailable ? 'Find sites is not on this region\'s server yet' : 'Could not find sites',
-          message: r.unavailable ? '${r.error} Your plan, Link and Coverage keep working; try again later.' : r.error,
-          onRetry: () => unawaited(_run()),
-        ),
-      if (r != null && r.ok && r.data!.preparing)
-        const AppEmptyView(
-            key: Key('sites-preparing'),
-            symbol: AppSymbols.clock,
-            title: 'This region\'s site table is being built',
-            message: 'The server is preparing the candidates for this region. Try again in a few minutes.'),
-      if (r != null && r.ok && !r.data!.preparing && r.data!.sites.isEmpty)
-        AppEmptyView(
-            key: const Key('sites-empty'),
-            symbol: AppSymbols.magnifyingglass,
-            title: 'No sites in this view',
-            message: 'Zoom out or move the map, then find sites again.',
-            actionLabel: 'Try again',
-            onAction: () => unawaited(_run())),
-      if (r != null && r.ok && r.data!.sites.isNotEmpty) ...[
-        ...resultNotes(context, r),
-        Column(key: const Key('sites-result'), children: [
-          for (var i = 0; i < r.data!.sites.length; i++) _site(context, i, r.data!.sites[i], units),
-        ]),
-        Text('Estimates ranked from measured coverage, the network and terrain; tap Add to put a site in the plan.',
-            style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
-      ],
-    ]);
-  }
-
-  Widget _site(BuildContext context, int i, PlanSite s, Units units) {
-    final t = Theme.of(context);
-    return ListTile(
-      key: Key('site-${s.id}'),
-      contentPadding: EdgeInsets.zero,
-      minVerticalPadding: Gap.s,
-      leading: CircleAvatar(radius: 16, child: Text('${i + 1}')),
-      title: Text('Score ${s.score.round()}${s.heightAboveM == null ? '' : ' · ${units.height(s.heightAboveM!)} above the area'}'),
-      subtitle: Text(s.reason.isEmpty ? 'Site ${i + 1}' : s.reason),
-      onTap: () => ctx.focusMap(s.at, zoom: 14),
-      trailing: TextButton(
-        key: Key('site-add-${s.id}'),
-        style: TextButton.styleFrom(minimumSize: const Size(Hit.min, Hit.min)),
-        onPressed: () => _add(s),
-        child: Text('Add', semanticsLabel: 'Add site ${i + 1} to the plan', style: TextStyle(color: t.colorScheme.primary)),
-      ),
-    );
   }
 }
 
