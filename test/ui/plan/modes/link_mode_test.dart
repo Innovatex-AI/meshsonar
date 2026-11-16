@@ -10,7 +10,6 @@ import 'package:flutter/semantics.dart' show SemanticsAction;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/plan/plan_model.dart';
-import 'package:meshsonar/core/plan_contract.dart';
 import 'package:meshsonar/ui/plan/modes/link_mode.dart';
 
 import '../../fakes.dart';
@@ -241,7 +240,7 @@ void main() {
       c.addNode(name: 'A', lat: 40.10, lon: -82.90);
       c.addNode(name: 'B', lat: 40.15, lon: -82.80);
       await settle(tester);
-      expect(find.textContaining('Drive data near A: 2 drive cells within 2 km; near B: unobserved, estimate.'), findsOneWidget);
+      expect(find.textContaining(RegExp(r'^Drive data near A: 2 drive cells within .+; near B: no drives within .+ \(unobserved, estimate\)\.$')), findsOneWidget);
       await drain(tester);
     });
 

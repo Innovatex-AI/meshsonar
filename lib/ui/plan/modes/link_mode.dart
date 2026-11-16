@@ -669,7 +669,7 @@ class LinkModeBodyState extends State<LinkModeBody> {
         key: const Key('link-scrub-readout'),
         style: t.textTheme.bodySmall,
       ),
-      Text('Ground with the earth\'s curve, the straight line of sight, and the shaded Fresnel zone (dashed: its 60 % edge).',
+      Text('Ground with the earth\'s curve, the straight line of sight, and the shaded Fresnel zone (the thin line inside it is its 60 % edge).',
           style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
       // ---- what to change
       if (raise > 0 || ridge != null) _header(context, 'What to change'),
@@ -730,7 +730,7 @@ class LinkModeBodyState extends State<LinkModeBody> {
       _driveCells(context, rq),
       PlanLine(
         d.provenance.confidence == PlanConfidenceLevel.measured ? AppSymbols.checkmarkCircleFill : AppSymbols.infoCircle,
-        'Confidence: ${confidenceWords(d.provenance.confidence)}${d.provenance.confidenceNote == null ? '' : ' (${d.provenance.confidenceNote})'}.',
+        _confidenceLine(d.provenance),
         key: const Key('link-confidence'),
       ),
       // ---- the numbers
@@ -759,6 +759,16 @@ class LinkModeBodyState extends State<LinkModeBody> {
     ]);
   }
 
+  /// "Confidence: Measured (heard 41 times …)." The on-phone note "unobserved, estimate" only repeats the level.
+  static String _confidenceLine(PlanProvenance p) {
+    final note = p.confidenceNote;
+    final level = confidenceWords(p.confidence);
+    if (note == null || note.toLowerCase() == 'unobserved, estimate') {
+      return p.confidence == PlanConfidenceLevel.estimate ? 'Confidence: $level. Nothing measured between these two yet; the model alone.' : 'Confidence: $level.';
+    }
+    return 'Confidence: $level ($note).';
+  }
+
   static String _day(DateTime t) {
     final l = t.toLocal();
     String two(int n) => n.toString().padLeft(2, '0');
@@ -785,9 +795,13 @@ class LinkModeBodyState extends State<LinkModeBody> {
       _cellsKey = key;
     }
     final (ca, cb) = _cells!;
+    final units = AppScope.unitsOf(context);
+    String words(CalibrationConfidence c) => c.observed
+        ? '${c.driveCells} drive ${c.driveCells == 1 ? 'cell' : 'cells'} within ${units.distance(c.radiusKm * 1000)}'
+        : 'no drives within ${units.distance(c.radiusKm * 1000)} (unobserved, estimate)';
     return PlanLine(
       AppSymbols.car,
-      'Drive data near A: ${ca.text}; near B: ${cb.text}.',
+      'Drive data near A: ${words(ca)}; near B: ${words(cb)}.',
       key: const Key('link-drive-cells'),
     );
   }
@@ -807,6 +821,9 @@ class LinkModeBodyState extends State<LinkModeBody> {
       if (_relayLoading) const PlanLine(AppSymbols.clock, 'Reading the terrain from both ends to a few high points between them…'),
       if (_relayError != null && !_relayLoading)
         AppErrorView(key: const Key('link-relay-error'), title: 'No relay points', message: _relayError, onRetry: () => unawaited(_findRelays())),
+      if (relays != null && relays.isNotEmpty && !_relayLoading && relays.every((r) => r.verdict == PlanVerdict.unlikely))
+        const PlanLine(AppSymbols.exclamationTriangle, 'None of these points makes both hops work at the default mast height. Try a taller mast on the relay, or Find sites for higher ground.',
+            key: Key('link-relay-none-works')),
       if (relays != null && relays.isEmpty && !_relayLoading)
         const PlanLine(AppSymbols.infoCircle, 'No point between them was found that both ends reach. Try a node on higher ground with Find sites.', key: Key('link-relay-empty')),
       if (relays != null && !_relayLoading)
