@@ -18,6 +18,31 @@ void main() {
   ChatMessage sendDm(String text) => h.service.send(radioId: radioA, convKey: h.bobConv, text: text);
   ChatMessage get(String id) => h.store.messages.get(id)!;
 
+  test('undo of deleting a queued message brings it back as failed (cancelled), never as a queued message nothing will send', () async {
+    h.bob();
+    final m = sendDm('hi');
+    expect(get(m.id).state, MessageState.queued);
+    expect(h.service.deleteMessage(m.id), isTrue);
+    expect(h.store.outbox.count(), 0);
+    h.service.restoreMessage(m);
+    final back = get(m.id);
+    expect(back.state, MessageState.failed);
+    expect(back.failReason, FailReason.cancelled);
+    await h.service.pump();
+    expect(h.sink.directs, isEmpty, reason: 'nothing is sent from a restored message');
+  });
+
+  test('undo of deleting a delivered message restores it as it was', () async {
+    h.bob();
+    final m = sendDm('hi');
+    await h.service.pump();
+    h.service.handleInbound(const InboundAck(radioId: radioA, ackCode: 1000));
+    final acked = get(m.id);
+    h.service.deleteMessage(m.id);
+    h.service.restoreMessage(acked);
+    expect(get(m.id).state, MessageState.acked);
+  });
+
   test('flood DM: sent, then acked; ack time measured', () async {
     h.bob();
     final m = sendDm('hi');

@@ -523,9 +523,11 @@ class DefaultSyncService implements SyncService {
     if (sc == null || sc.disabled || sc.pingCtx.isEmpty) return;
     final unsynced = (await store.unsyncedPings(session.id)).map((p) => p.id).toSet();
     final rejected = await _ledger.rejectedIds(session.id);
+    // A ping kept on the phone (privacy zone) is not "unsynced" but the server never had it: its context must not leave either.
+    final held = await _held.zoneHeldIds(session.id);
     final late = [
       for (final p in await store.pings(session.id))
-        if (sc.pingCtx.containsKey(p.id) && !unsynced.contains(p.id) && !rejected.contains(p.id)) p.id,
+        if (sc.pingCtx.containsKey(p.id) && !unsynced.contains(p.id) && !rejected.contains(p.id) && !held.contains(p.id)) p.id,
     ];
     for (var i = 0; i < late.length; i += maxSamplesPerUpload) {
       final ids = late.sublist(i, i + maxSamplesPerUpload > late.length ? late.length : i + maxSamplesPerUpload);
