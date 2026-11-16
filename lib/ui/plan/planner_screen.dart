@@ -16,7 +16,8 @@
 // node where the phone is and runs the coverage Estimate (without a phone position: "Coverage from the map centre").
 //
 // Keys: 'planner', 'planner-map', 'planner-mode-<id>' (chips), 'plan-name', 'plan-menu', 'plan-radio-summary',
-// 'plan-quick-here', 'plan-quick-centre', 'plan-quick-network', 'plan-selected', 'plan-selected-edit', 'planner-move-bar', 'planner-move-set', 'planner-move-cancel', 'planner-crosshair',
+// 'plan-quick-here', 'plan-quick-centre', 'plan-quick-network', 'plan-selected', 'plan-selected-edit', 'plan-node-drive' (J4:
+// Navigate / Show on the Drive map for the selected node), 'plan-menu-drive-map' (the plan's planned sites on the Drive map), 'planner-move-bar', 'planner-move-set', 'planner-move-cancel', 'planner-crosshair',
 // 'saved-plans', 'saved-plan-<id>'; Rename uses saved_plans.dart's sheet ('saved-plan-name-field', 'saved-plan-name-save').
 import 'dart:async';
 import 'dart:math' as math;
@@ -48,7 +49,9 @@ import '../map/layers/plan_node_sheet.dart' show showPlanNodeSheet;
 import '../map/layers/plan_overlay.dart';
 import '../map/layers/registry.dart' show kPlanLayerId, layerStateFromPrefs;
 import '../map/layers/repeater_map_source.dart';
+import '../map/main_map_focus.dart' show MainMapFocus;
 import '../map/region_center.dart' show idleMapPosition, viewedRegionBounds, viewedRegionCenter;
+import '../nodes/node_actions.dart' show shellControllerFor;
 import '../shell/shell_controller.dart';
 import 'modes/footprint_layer.dart' show PlanFootprintController, PlanFootprintLayer, PlanFootprintScope;
 import 'node_list.dart';
@@ -119,6 +122,12 @@ class PlannerScreenState extends State<PlannerScreen> {
     _init = true;
     _s = AppScope.read(context);
     _saved = SavedPlans(_s.plans, clock: _s.services.clock);
+    // A Drive-map request that names a saved plan draws it (J4). Holds only the store, not this screen.
+    final saved = _saved;
+    MainMapFocus.overlay.resolvePlan = (id) async {
+      final p = await saved.load(id);
+      return p == null ? null : planDriveOverlay(p);
+    };
     _feed = AppStateRepeaterFeed(_s);
     _source = RepeaterMapSource(_feed!, clock: _s.services.clock);
     unawaited(_load());
@@ -538,6 +547,8 @@ class PlannerScreenState extends State<PlannerScreen> {
       actions: [
         const AppAction('Rename', 'rename', symbol: AppSymbols.squareAndPencil, key: Key('plan-menu-rename')),
         const AppAction('Radio and clutter', 'settings', symbol: AppSymbols.antenna, key: Key('plan-menu-settings')),
+        if (planDriveTargets(c.nodes).isNotEmpty)
+          const AppAction('Show plan on the Drive map', 'drive', symbol: AppSymbols.car, key: Key('plan-menu-drive-map')),
         const AppAction('Share or export', 'share', symbol: AppSymbols.squareAndArrowUp, key: Key('plan-menu-share')),
         const AppAction('Saved plans', 'open', symbol: AppSymbols.tray, key: Key('plan-menu-open')),
         const AppAction('Import a plan or contacts', 'import', symbol: AppSymbols.squareAndArrowDown, key: Key('plan-menu-import')),
@@ -552,6 +563,8 @@ class PlannerScreenState extends State<PlannerScreen> {
         await _rename();
       case 'settings':
         await showPlanSettings(context, c, regionPreset: _s.siteConfig?.radioPreset);
+      case 'drive':
+        await _showPlanOnDrive();
       case 'share':
         await showPlanShare(context, c.plan);
       case 'open':
@@ -566,6 +579,22 @@ class PlannerScreenState extends State<PlannerScreen> {
       case 'redo':
         c.redo();
     }
+  }
+
+  /// "Show plan on the Drive map": the Drive tab's map with the plan's planned sites as targets to drive to, and the plan's
+  /// installed and network nodes drawn from the saved plan ([MainMapFocus.overlay]'s resolvePlan). Hidden positions never go.
+  Future<void> _showPlanOnDrive() async {
+    final c = _c;
+    if (c == null) return;
+    final targets = planDriveTargets(c.nodes);
+    if (targets.isEmpty) return;
+    if (c.dirty) await c.save(); // the Drive map reads the saved plan
+    if (!mounted) return;
+    final shell = shellControllerFor(context);
+    if (shell == null) return;
+    Navigator.maybeOf(context, rootNavigator: true)?.popUntil((r) => r.isFirst);
+    MainMapFocus.request(targets.first.at, 11, showLayers: const {kPlanLayerId}, planId: c.plan.id, targets: targets);
+    shell.openDrive();
   }
 
   /// The plan bar's name and the menu's Rename: the same sheet as Saved plans (promptPlanName owns its text controller,
@@ -897,12 +926,16 @@ class PlannerScreenState extends State<PlannerScreen> {
     ]);
     // At large text the buttons go under the words, so the name keeps the full width.
     final large = MediaQuery.textScalerOf(context).scale(14) > 14 * 1.6;
+    final drive = nodeCanBeDrivenTo(n) ? PlanNodeDriveActions(node: n) : null;
+    Widget card(Widget top) => drive == null
+        ? top
+        : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [top, Padding(padding: const EdgeInsets.only(bottom: Gap.xs), child: drive)]);
     return Container(
       key: const Key('plan-selected'),
       margin: const EdgeInsets.only(bottom: Gap.s),
       padding: const EdgeInsets.symmetric(horizontal: Gap.s, vertical: Gap.xs),
       decoration: BoxDecoration(color: t.colorScheme.primary.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(Corners.small)),
-      child: large
+      child: card(large
           ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 AppSymbolIcon(nodeSymbol(n), color: t.colorScheme.primary),
@@ -917,7 +950,7 @@ class PlannerScreenState extends State<PlannerScreen> {
               Expanded(child: what),
               edit,
               clear,
-            ]),
+            ])),
     );
   }
 

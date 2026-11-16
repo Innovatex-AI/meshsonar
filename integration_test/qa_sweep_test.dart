@@ -83,7 +83,7 @@ Future<void> openPlanTool(WidgetTester t, String id) async {
     row = find.byKey(Key('plan-$id'));
   }
   if (row.evaluate().isEmpty) {
-    await t.scrollUntilVisible(row, 150, scrollable: find.descendant(of: find.byKey(const Key('plan-list')), matching: find.byType(Scrollable)).first);
+    await t.scrollUntilVisible(row, 150, scrollable: find.descendant(of: find.byKey(const Key('planner-sheet-body')), matching: find.byType(Scrollable)).first);
   }
   await t.ensureVisible(row);
   await t.tap(row);

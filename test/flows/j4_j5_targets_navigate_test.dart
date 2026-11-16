@@ -11,6 +11,7 @@ import 'package:meshsonar/ui/map/layers/plan_node_sheet.dart';
 import 'package:meshsonar/ui/map/layers/plan_overlay.dart';
 import 'package:meshsonar/ui/map/layers/registry.dart' show kPlanLayerId;
 import 'package:meshsonar/ui/map/main_map_focus.dart';
+import 'package:meshsonar/ui/plan/node_list.dart' show planDriveOverlay;
 import 'package:meshsonar/ui/plan/planner_screen.dart';
 import 'package:meshsonar/ui/shell/drive_next_card.dart';
 import 'package:meshsonar/ui/shell/shell_controller.dart';
@@ -128,6 +129,88 @@ void main() {
       final ctx = tester.element(find.byKey(const Key('drive-target-navigate')));
       expect(showTargetsOnDriveMap(ctx, const []), isFalse);
       expect(find.byKey(const Key('drive-target-navigate')), findsOneWidget, reason: 'nothing to show: the screen stays');
+      await finish(tester);
+    });
+  });
+
+  group('J4 the plan\'s own nodes reach the Drive map', () {
+    testWidgets('the selected planned node: Navigate opens Maps; Show on the Drive map requests that node as the target', (tester) async {
+      phone(tester, h: 1100);
+      final h = Harness();
+      final st = await openPlanner(tester, h);
+      final n = st.controller!.addNode(name: 'Hill site', lat: 40.31, lon: -82.71);
+      st.selectNodeForTest(n.id);
+      await settle(tester);
+      final card = find.byKey(const Key('plan-selected'));
+      expect(find.descendant(of: card, matching: find.byKey(const Key('plan-node-drive'))), findsOneWidget);
+      await tester.tap(find.descendant(of: card, matching: find.byKey(const Key('drive-target-navigate'))));
+      await settle(tester);
+      expect(h.openedUrls.last.queryParameters['daddr'], '40.310000,-82.710000');
+      await tester.tap(find.descendant(of: card, matching: find.byKey(const Key('drive-target-show-map'))));
+      await settle(tester);
+      expect(shellOf(tester).tab, AppTab.drive);
+      final t = _driveTargets();
+      expect([for (final x in t) (x.id, x.label, x.at)], [(n.id, 'Hill site', const LatLng(40.31, -82.71))]);
+      await finish(tester);
+    });
+
+    testWidgets('an installed node gets Navigate only; a node whose position is hidden offers nothing', (tester) async {
+      phone(tester, h: 1100);
+      final h = Harness();
+      final st = await openPlanner(tester, h);
+      final c = st.controller!;
+      final built = c.addNode(name: 'Built tower', lat: 40.4, lon: -82.6);
+      c.updateNode(built.id, (x) => x.copyWith(status: PlanNodeStatus.installed));
+      st.selectNodeForTest(built.id);
+      await settle(tester);
+      expect(find.byKey(const Key('drive-target-navigate')), findsOneWidget);
+      expect(find.byKey(const Key('drive-target-show-map')), findsNothing);
+
+      final hidden = c.addNode(name: 'Secret \u{1F6AB}', lat: 40.5, lon: -82.5);
+      st.selectNodeForTest(hidden.id);
+      await settle(tester);
+      expect(find.byKey(const Key('plan-selected')), findsOneWidget);
+      expect(find.byKey(const Key('plan-node-drive')), findsNothing);
+      expect(find.byKey(const Key('drive-target-navigate')), findsNothing);
+      expect(find.byKey(const Key('drive-target-show-map')), findsNothing);
+      expect(MainMapFocus.notifier.value, isNull, reason: 'nothing was sent to the Drive map');
+      await finish(tester);
+    });
+
+    testWidgets('the plan menu: Show plan on the Drive map sends every planned site (not hidden ones) and the saved plan id', (tester) async {
+      phone(tester, h: 1100);
+      final h = Harness();
+      final st = await openPlanner(tester, h);
+      final c = st.controller!;
+      final a = c.addNode(name: 'Site A', lat: 40.2, lon: -82.8);
+      final b = c.addNode(name: 'Site B', lat: 40.0, lon: -83.0);
+      c.addNode(name: 'Hidden \u{1F6AB}', lat: 40.1, lon: -82.9);
+      final built = c.addNode(name: 'Built', lat: 40.3, lon: -82.7);
+      c.updateNode(built.id, (x) => x.copyWith(status: PlanNodeStatus.installed));
+      await settle(tester);
+      await tapKey(tester, 'plan-menu');
+      await settle(tester);
+      await tapKey(tester, 'plan-menu-drive-map');
+      await settle(tester);
+      expect(shellOf(tester).tab, AppTab.drive);
+      expect(_driveTargets().map((t) => t.id), [a.id, b.id]);
+      // The saved plan resolves for the Drive map: its installed node is drawn, its planned and hidden ones are not doubled.
+      final drawn = await MainMapFocus.overlay.resolvePlan!(c.plan.id);
+      expect(drawn!.nodes.map((n) => n.id), [built.id]);
+      expect(planDriveOverlay(c.plan).nodes.map((n) => n.id), [built.id]);
+      await finish(tester);
+    });
+
+    testWidgets('a plan with only hidden or built nodes has no Show plan on the Drive map entry', (tester) async {
+      phone(tester, h: 1100);
+      final h = Harness();
+      final st = await openPlanner(tester, h);
+      st.controller!.addNode(name: 'Hidden \u{1F6AB}', lat: 40.1, lon: -82.9);
+      await settle(tester);
+      await tapKey(tester, 'plan-menu');
+      await settle(tester);
+      expect(find.byKey(const Key('plan-menu-sheet')), findsOneWidget);
+      expect(find.byKey(const Key('plan-menu-drive-map')), findsNothing);
       await finish(tester);
     });
   });

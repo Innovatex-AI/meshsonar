@@ -5,10 +5,12 @@
 //
 // Keys: 'plan-node-list', 'plan-list-node-<id>', 'plan-node-edit-<id>'; editor 'node-editor', 'node-name', 'node-status',
 // 'node-role', 'node-mine', 'node-height', 'node-tx', 'node-gain', 'node-cable', 'node-mount', 'node-move', 'node-delete';
-// picker 'node-picker', 'node-picker-search', 'node-pick-<key>', 'node-picker-empty'.
+// picker 'node-picker', 'node-picker-search', 'node-pick-<key>', 'node-picker-empty'. Drive hand-off (J4): 'plan-node-drive'
+// holding drive_next_card.dart's 'drive-target-navigate' / 'drive-target-show-map'.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart' show LatLng;
 
 import '../../core/network_repeaters.dart' show NetworkRepeater;
 import '../../core/plan/link_model.dart' show haversineKm;
@@ -23,7 +25,10 @@ import '../design/app_symbols.dart';
 import '../design/sheet_detents.dart' show formSheetDetents;
 import '../design/state_views.dart';
 import '../design/tokens.dart';
+import '../map/layers/plan_overlay.dart' show PlanOverlay, PlanOverlayNode, PlanOverlayNodeKind;
+import '../map/main_map_focus.dart' show MapFocusTarget;
 import '../settings/settings_kit.dart' show InfoTile, SliderTile;
+import '../shell/drive_next_card.dart' show DriveTargetActions, focusTargetsFromPlanNodes, navigateToPoint;
 import '../nodes/node_ref.dart' show nameHidesPosition;
 import 'plan_modes.dart' show PlanLine, PlanListenable, symbolData;
 
@@ -52,6 +57,51 @@ String nodeSummary(PlanNode n, BuildContext context) {
     if (n.mine) 'mine',
     if (n.approximate) 'position about 1 km',
   ].join(' · ');
+}
+
+// ------------------------------------------------------------------------------------------------ to the Drive map (J4)
+
+/// The node may be driven to and drawn on the Drive map: a real position (not the 0,0 "no position" placeholder) that its
+/// owner does not hide (the no-entry mark in the name).
+bool nodeCanBeDrivenTo(PlanNode n) =>
+    n.lat.isFinite && n.lon.isFinite && n.lat.abs() <= 90 && n.lon.abs() <= 180 && !(n.lat == 0 && n.lon == 0) && !nameHidesPosition(n.name);
+
+/// The plan's planned sites, as Drive-map targets (never a node whose position is hidden).
+List<MapFocusTarget> planDriveTargets(Iterable<PlanNode> nodes) => focusTargetsFromPlanNodes(nodes.where(nodeCanBeDrivenTo));
+
+/// What the Drive map's `plan` layer draws for a saved plan named by id ([PlanOverlayController.resolvePlan]): the plan's
+/// installed and network nodes that may be shown. Its planned sites go with the request as targets ([planDriveTargets]),
+/// so they are not drawn twice.
+PlanOverlay planDriveOverlay(Plan p) => PlanOverlay(planId: p.id, nodes: [
+      for (final n in p.nodes)
+        if (n.status != PlanNodeStatus.planned && nodeCanBeDrivenTo(n))
+          PlanOverlayNode(id: n.id, name: n.name, at: LatLng(n.lat, n.lon), kind: PlanOverlayNodeKind.installed),
+    ]);
+
+/// Navigate (Apple Maps) and, for a planned site, Show on the Drive map, for one plan node. Nothing for a node whose
+/// position is hidden or unknown.
+class PlanNodeDriveActions extends StatelessWidget {
+  final PlanNode node;
+  const PlanNodeDriveActions({super.key, required this.node});
+
+  @override
+  Widget build(BuildContext context) {
+    final n = node;
+    if (!nodeCanBeDrivenTo(n)) return const SizedBox.shrink();
+    final Widget child = n.status == PlanNodeStatus.planned
+        ? DriveTargetActions(name: n.name, lat: n.lat, lon: n.lon, targets: focusTargetsFromPlanNodes([n]))
+        : Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: FilledButton.tonalIcon(
+              key: const Key('drive-target-navigate'),
+              style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+              icon: const Icon(Icons.navigation_outlined, size: 18),
+              label: const Text('Navigate'),
+              onPressed: () => navigateToPoint(context, n.lat, n.lon, label: n.name),
+            ),
+          );
+    return KeyedSubtree(key: const Key('plan-node-drive'), child: child);
+  }
 }
 
 // ------------------------------------------------------------------------------------------------ the list
@@ -294,6 +344,7 @@ class _NodeEditorState extends State<_NodeEditor> {
               title: n.approximate ? 'About ${n.lat.toStringAsFixed(2)}, ${n.lon.toStringAsFixed(2)}' : '${n.lat.toStringAsFixed(5)}, ${n.lon.toStringAsFixed(5)}',
               subtitle: n.approximate ? 'Shared to about 1 km. Move it to set the exact spot.' : 'Position',
             ),
+            if (nodeCanBeDrivenTo(n)) ...[const SizedBox(height: Gap.s), PlanNodeDriveActions(node: n)],
             const SizedBox(height: Gap.m),
           ],
         );
