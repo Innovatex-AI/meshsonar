@@ -7,6 +7,7 @@
 //   * order: pinned first, then newest first (title, then key, break ties so the order never shuffles); the System group
 //     (the wardrive channel) always last;
 //   * badge: unread MESSAGES of unmuted, non-system conversations (D19), summed by [unreadMessageTotal].
+import '../core/meshtrack/mt_wire.dart' show mtReadable;
 import 'models.dart';
 
 /// What the avatar and its small type badge show.
@@ -159,7 +160,7 @@ List<ConversationRow> buildConversationRows({
       title: title,
       avatarSeed: ch != null ? '${ch.id}' : (contact?.publicKey ?? ConvKey.body(key)),
       lastTsMs: s?.lastTsMs,
-      preview: hasDraft ? draft : (lastText ?? ''),
+      preview: hasDraft ? draft : (lastText == null ? '' : (mtReadable(lastText) ?? lastText)),
       previewSender: sender,
       hasDraft: hasDraft,
       delivery: hasDraft ? RowDelivery.none : deliveryFor(last, isChannel: isChannel),

@@ -4,7 +4,7 @@
 //   P0 user message   never delayed by anything here, not even the budgets (at the region cap the caller is only warned)
 //   P1 ack / login / status / trace / sync
 //   P2 self advert
-//   P3 wardrive ping
+//   P3 wardrive ping, and MeshTrack position messages (TxPriority.track: same class value, its own ledger rows and budget)
 //   P4 discovery
 //
 // The command queue (command_queue.dart) orders waiting commands by these classes; this class answers the question the
@@ -18,12 +18,21 @@
 //   - and the engine's own distance/time rule is met (the engine checks that itself).
 // Otherwise the ping is SKIPPED with a reason; it is never queued for later.
 //
+// MeshTrack (meshsonar-infra docs/planning/meshtrack-plan-2026-11-16.md section 4): a track message may go only if
+//   - no user message and no ping went out in the last 2 s (gap),
+//   - track airtime in the rolling 10 minutes stays at or under 1% of wall time (budget), checked always, chat or not,
+//   - all own transmit time in the rolling hour stays under the region cap, WHEN known (same rule as pings).
+// A refused track send is SKIPPED, never queued: the MeshTrack service re-asks at the next fix. Pings get the same 2 s
+// gap after a track send that they get after a user send. [TxArbiter.requestTrack] asks without side effects on the
+// ledger; [TxArbiter.runTrackSend] wraps the actual send so the session's own airtime record counts it as track, not user.
+//
 // "Arbiter idle" (nobody chatting) = no user message in the last [TxPolicy.chatWindow] (or [chatActive] false): then the
 // radio-queue probe and the budgets are off and every ping is a go, exactly the behaviour before sessions existed. Binding
 // the chat layer to the radio is not chatting. The 2 s rule has nothing to act on without user sends.
 // The caps are policy defaults, not legal advice.
 import 'dart:async';
 import 'dart:collection';
+import 'dart:convert';
 
 import 'airtime.dart';
 import 'command_queue.dart';
@@ -35,6 +44,9 @@ enum TxPriority {
   admin(CommandPriority.admin),
   advert(CommandPriority.advert),
   ping(CommandPriority.ping),
+
+  /// MeshTrack position / request / meet-up / stop messages: queued like a ping, budgeted on their own ledger rows.
+  track(CommandPriority.ping),
   discovery(CommandPriority.discovery);
 
   final int value;
@@ -69,6 +81,9 @@ class TxPolicy {
   /// How long the queue_len probe may take before the ping goes anyway (a lost reply is not a busy radio).
   final Duration probeTimeout;
 
+  /// MeshTrack airtime allowed in [pingWindow] (the rolling 10 minutes), as a fraction of wall time. Inclusive limit.
+  final double trackBudgetFraction;
+
   const TxPolicy({
     this.pingBudgetFraction = 0.02,
     this.pingWindow = const Duration(minutes: 10),
@@ -78,6 +93,7 @@ class TxPolicy {
     this.userSendGap = const Duration(seconds: 2),
     this.chatWindow = const Duration(minutes: 10),
     this.probeTimeout = const Duration(seconds: 3),
+    this.trackBudgetFraction = 0.01,
   });
 
   TxPolicy copyWith({double? capFraction, Duration? chatWindow}) => TxPolicy(
@@ -89,6 +105,7 @@ class TxPolicy {
         userSendGap: userSendGap,
         chatWindow: chatWindow ?? this.chatWindow,
         probeTimeout: probeTimeout,
+        trackBudgetFraction: trackBudgetFraction,
       );
 }
 
@@ -121,10 +138,72 @@ class TxLedgerSnapshot {
   final Map<PingSkipReason, int> skipped;
   final int pingsSent;
   final int userSends;
-  const TxLedgerSnapshot(this.pingMsInWindow, this.totalMsInCapWindow, this.skipped, this.pingsSent, this.userSends);
+
+  /// MeshTrack airtime in the last [TxPolicy.pingWindow], ms.
+  final double trackMsInWindow;
+
+  /// MeshTrack sends recorded, and the ones the arbiter refused by reason, since the session started.
+  final int trackSent;
+  final Map<TrackSkipReason, int> trackSkipped;
+  const TxLedgerSnapshot(this.pingMsInWindow, this.totalMsInCapWindow, this.skipped, this.pingsSent, this.userSends,
+      {this.trackMsInWindow = 0, this.trackSent = 0, this.trackSkipped = const {}});
 }
 
-class TxArbiter implements PingGate {
+/// Why a MeshTrack send was refused. The send is skipped, never queued; the service re-asks at the next fix.
+enum TrackSkipReason {
+  /// MeshTrack airtime in the rolling 10 minutes would pass 1% of wall time.
+  budget,
+
+  /// Own transmit time in the rolling hour would pass the region's known cap.
+  regionCap,
+
+  /// A user message or a ping went out less than 2 s ago: let its repeats be heard first.
+  gap,
+}
+
+/// The arbiter's answer to "may I send a MeshTrack message of N bytes now?".
+class TrackDecision {
+  final bool go;
+  final TrackSkipReason? reason;
+
+  /// One plain line for diagnostics or the Group sheet ("Sharing slower: airtime limit"); empty on go.
+  final String message;
+
+  /// The estimated time on air of the asked-for message, ms.
+  final double estimateMs;
+  const TrackDecision.go(this.estimateMs)
+      : go = true,
+        reason = null,
+        message = '';
+  const TrackDecision.skip(TrackSkipReason this.reason, this.message, this.estimateMs) : go = false;
+
+  /// True when the airtime budget or the region cap (not a short gap) refused it: the Group sheet's "Sharing slower".
+  bool get airtimeLimited => reason == TrackSkipReason.budget || reason == TrackSkipReason.regionCap;
+
+  @override
+  String toString() => go ? 'TrackDecision.go' : 'TrackDecision.skip(${reason!.name})';
+}
+
+/// What the chat layer needs from the arbiter to send a MeshTrack message without a chat bubble.
+abstract interface class TrackTxGate {
+  /// May a MeshTrack message with [textBytes] bytes of body go now? Never queues; a refusal is counted.
+  TrackDecision requestTrack(int textBytes);
+
+  /// The same answer as [requestTrack] with no side effect at all (nothing counted): a pre-check.
+  TrackDecision peekTrack(int textBytes);
+
+  /// Runs [send] (the actual radio send of [textBytes] body bytes) as a track transmission and records it on the ledger.
+  Future<T> runTrackSend<T>(int textBytes, Future<T> Function() send);
+}
+
+/// Zone marker for [TxArbiter.runTrackSend]: the session's admitUserSend inside it records a track send.
+class _TrackScope {
+  final TxArbiter owner;
+  bool recorded = false;
+  _TrackScope(this.owner);
+}
+
+class TxArbiter implements PingGate, TrackTxGate {
   final DateTime Function() _clock;
   TxPolicy policy;
 
@@ -142,9 +221,13 @@ class TxArbiter implements PingGate {
 
   final Queue<_Entry> _ledger = Queue();
   DateTime? _lastUserSend;
+  DateTime? _lastPingSend;
+  DateTime? _lastTrackSend;
   final Map<PingSkipReason, int> _skipped = {};
+  final Map<TrackSkipReason, int> _trackSkipped = {};
   int _pings = 0;
   int _users = 0;
+  int _tracks = 0;
 
   TxArbiter({DateTime Function()? clock, this.policy = const TxPolicy(), this.queueProbe, this.airParams, this.senderNameBytes})
       : _clock = clock ?? DateTime.now;
@@ -169,6 +252,10 @@ class TxArbiter implements PingGate {
     return p.airtimeMs(groupTextPacketBytes(name + 2 + textBytes));
   }
 
+  /// Estimated time on air of a MeshTrack message with [textBytes] bytes of body (the firmware adds "name: "), ms. Same
+  /// packet as any channel text (GRP_TXT).
+  double estimateTrackMs(int textBytes) => estimateChannelMs(textBytes);
+
   /// Estimated time on air of a direct message, ms.
   double estimateDirectMs(int textBytes) {
     final p = airParams?.call();
@@ -192,7 +279,16 @@ class TxArbiter implements PingGate {
 
   /// A user message goes out now. Never refused and never delayed: it is only recorded. Returns true when it pushes the
   /// hour over the region cap, so the UI can warn (the radio's own duty-cycle limiter still applies).
+  ///
+  /// Inside [runTrackSend] (the MeshTrack silent send goes through the same session call as a user message) the send is
+  /// recorded as [TxPriority.track] instead, never as a user message, and no warning is returned.
   bool admitUserSend(double airtimeMs) {
+    final scope = Zone.current[_TrackScope];
+    if (scope is _TrackScope && identical(scope.owner, this) && !scope.recorded) {
+      scope.recorded = true;
+      trackSent(airtimeMs);
+      return false;
+    }
     final now = _clock();
     _lastUserSend = now;
     _users++;
@@ -214,7 +310,86 @@ class TxArbiter implements PingGate {
   TxLedgerSnapshot snapshot() {
     final now = _clock();
     return TxLedgerSnapshot(_msInWindow(now, policy.pingWindow, TxPriority.ping), _msInWindow(now, policy.capWindow, null),
-        Map.unmodifiable(_skipped), _pings, _users);
+        Map.unmodifiable(_skipped), _pings, _users,
+        trackMsInWindow: _msInWindow(now, policy.pingWindow, TxPriority.track), trackSent: _tracks, trackSkipped: Map.unmodifiable(_trackSkipped));
+  }
+
+  // ------------------------------------------------------------------ MeshTrack
+
+  TrackSkipReason? _lastTrackSkip;
+  DateTime? _lastTrackSkipAt;
+
+  /// The most recent reason a MeshTrack send was refused, until one goes out again (null if none since).
+  TrackSkipReason? get lastTrackSkipReason => _lastTrackSkip;
+  DateTime? get lastTrackSkipAt => _lastTrackSkipAt;
+
+  /// True while the airtime budget or the region cap is what holds MeshTrack back: the last decision was such a skip within
+  /// [within] and no track message has gone out since. The Group sheet shows "Sharing slower: airtime limit".
+  bool trackSlowedByBudget({Duration within = const Duration(minutes: 10)}) {
+    final r = _lastTrackSkip, at = _lastTrackSkipAt;
+    if (r == null || at == null) return false;
+    return (r == TrackSkipReason.budget || r == TrackSkipReason.regionCap) && _clock().difference(at) <= within;
+  }
+
+  TrackDecision _trackSkip(TrackSkipReason r, String message, double est) {
+    _lastTrackSkip = r;
+    _lastTrackSkipAt = _clock();
+    _trackSkipped[r] = (_trackSkipped[r] ?? 0) + 1;
+    return TrackDecision.skip(r, message, est);
+  }
+
+  /// "May I send a MeshTrack message with [textBytes] bytes of body now?" Synchronous, never queues, never waits; the only
+  /// side effect is the skip counter. Rules in the header comment.
+  @override
+  TrackDecision requestTrack(int textBytes) => _decideTrack(textBytes, count: true);
+
+  @override
+  TrackDecision peekTrack(int textBytes) => _decideTrack(textBytes, count: false);
+
+  TrackDecision _decideTrack(int textBytes, {required bool count}) {
+    final now = _clock();
+    final est = estimateTrackMs(textBytes);
+    TrackDecision skip(TrackSkipReason r, String m) => count ? _trackSkip(r, m, est) : TrackDecision.skip(r, m, est);
+    final u = _lastUserSend, p = _lastPingSend;
+    if ((u != null && now.difference(u) < policy.userSendGap) || (p != null && now.difference(p) < policy.userSendGap)) {
+      return skip(TrackSkipReason.gap, 'Position waits: the radio just sent');
+    }
+    _prune(now);
+    final used = _msInWindow(now, policy.pingWindow, TxPriority.track);
+    if (used + est > policy.trackBudgetFraction * policy.pingWindow.inMilliseconds) {
+      return skip(TrackSkipReason.budget, 'Sharing slower: airtime limit');
+    }
+    final total = _msInWindow(now, policy.capWindow, null);
+    if (total + est > policy.capFraction * policy.capWindow.inMilliseconds) {
+      return skip(TrackSkipReason.regionCap, 'Sharing slower: airtime limit');
+    }
+    return TrackDecision.go(est);
+  }
+
+  /// Same as [requestTrack] for a body given as text (its UTF-8 bytes).
+  TrackDecision requestTrackText(String body) => requestTrack(utf8.encode(body).length);
+
+  /// Records a MeshTrack transmission that took [ms] on air (estimate).
+  void trackSent(double ms) {
+    _tracks++;
+    _lastTrackSend = _clock();
+    _lastTrackSkip = null;
+    _lastTrackSkipAt = null;
+    recordTx(TxPriority.track, ms);
+  }
+
+  /// Runs [send] as a MeshTrack transmission of [textBytes] body bytes. A session send inside it that calls
+  /// [admitUserSend] is recorded as track (not as a user message); if nothing inside recorded it and [send] completed, the
+  /// estimate is recorded here. A send that throws before anything was recorded leaves the ledger alone.
+  @override
+  Future<T> runTrackSend<T>(int textBytes, Future<T> Function() send) async {
+    final scope = _TrackScope(this);
+    final r = await runZoned(send, zoneValues: {_TrackScope: scope});
+    if (!scope.recorded) {
+      scope.recorded = true;
+      trackSent(estimateTrackMs(textBytes));
+    }
+    return r;
   }
 
   /// True while the person is chatting: [chatActive] AND (no message sent yet, or the last one is younger than
@@ -255,6 +430,10 @@ class TxArbiter implements PingGate {
     if (last != null && now.difference(last) < policy.userSendGap) {
       return _skip(PingSkipReason.userSendRecent, 'Ping skipped: a message was just sent');
     }
+    final track = _lastTrackSend;
+    if (track != null && now.difference(track) < policy.userSendGap) {
+      return _skip(PingSkipReason.userSendRecent, 'Ping skipped: a position was just shared');
+    }
     if (!_chatInUse(now)) return const PingDecision.go();
 
     final probe = queueProbe;
@@ -270,6 +449,10 @@ class TxArbiter implements PingGate {
       final again = _lastUserSend;
       if (again != null && _clock().difference(again) < policy.userSendGap) {
         return _skip(PingSkipReason.userSendRecent, 'Ping skipped: a message was just sent');
+      }
+      final trackAgain = _lastTrackSend;
+      if (trackAgain != null && _clock().difference(trackAgain) < policy.userSendGap) {
+        return _skip(PingSkipReason.userSendRecent, 'Ping skipped: a position was just shared');
       }
     }
 
@@ -291,6 +474,7 @@ class TxArbiter implements PingGate {
   @override
   void pingSent({int? airtimeMs}) {
     _pings++;
+    _lastPingSend = _clock();
     _lastSkip = null;
     _lastSkipAt = null;
     recordTx(TxPriority.ping, airtimeMs?.toDouble() ?? estimatePingMs());

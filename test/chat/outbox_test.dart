@@ -170,6 +170,7 @@ void main() {
     await h.service.pump();
     expect(get(m.id).state, MessageState.sent);
     expect(h.sink.channels.single.slot, 1);
+    expect(h.sink.channelPriorities.single, CommandPriority.user, reason: 'chat stays at user priority');
     expect(h.store.outbox.count(), 0);
     h.clock.advance(600000);
     await h.service.pump();

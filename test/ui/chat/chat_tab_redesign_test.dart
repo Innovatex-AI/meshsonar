@@ -351,6 +351,7 @@ void main() {
     testWidgets('no radio ever: the hero with Connect radio', (tester) async {
       kit.dispose();
       kit = ChatKit(knownRadio: false);
+      ChatWiring.controller.value = kit.controller; // never leave the disposed controller published (MeshTrack binds to it)
       provider?.dispose();
       provider = ChatTabProviderImpl(kit.controller);
       ChatTabHost.provider.value = provider;

@@ -4,6 +4,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/telemetry.dart';
 import 'package:meshsonar/radio/radio_api.dart';
+import 'package:meshsonar/chat/channel_secret.dart';
+import 'package:meshsonar/radio/packet.dart' show MeshPacket, decryptGroupText;
+
+import '../support/meshtrack_packets.dart';
 
 // Flood group-text packet: header 0x15 (route 1, type 5), 2 hops (0xA1, 0xB2), payload = recognisable secret bytes.
 final _secret = [0xDE, 0xAD, 0xBE, 0xEF, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA];
@@ -45,6 +49,26 @@ void main() {
       final raw = Uint8List.fromList([(t << 2) | 1, 0x00, 0x01, 0x02, 0x03]);
       expect(TelemetryRecord.fromRx(RxPacket(at: DateTime.utc(2026), raw: raw)), isNull, reason: 'type $t');
     }
+  });
+
+  // MT-8 privacy pin (MeshTrack plan sections 6 and 9): a MeshTrack position is a GRP_TXT on a private channel; it never
+  // becomes a record, heard from a friend or as our own send heard back through repeaters, whatever the observer holds.
+  test('a MeshTrack position on a private group channel never becomes a record (friend, and our own send heard back)', () {
+    final shareable = ShareableChannels(
+      () => [publicChannelSecret16, hashtagSecret16('#ohio')],
+      named: () => [(name: 'public', key: publicChannelSecret16), (name: '#ohio', key: hashtagSecret16('#ohio'))],
+    );
+    for (final rx in [meshTrackRx(name: 'Sam'), meshTrackRx(pathLen: 2), meshTrackRx(pathLen: 5, name: 'KE4BFI')]) {
+      // Positive control: the bytes really are the position, readable with the group key.
+      expect(decryptGroupText(meshTrackTestKey, MeshPacket.tryParse(rx.raw)!.payload)!.text, contains(meshTrackTestPosition));
+      for (final mode in ObserverMode.values) {
+        expect(TelemetryRecord.fromRx(rx, region: 'CMH', channelMatch: shareable.match, mode: mode), isNull);
+        expect(TelemetryRecord.fromRx(rx, region: 'CMH', shareableChannel: shareable.call, mode: mode), isNull);
+        expect(TelemetryRecord.fromRx(rx, region: 'CMH', mode: mode), isNull, reason: 'no channel check at all: fail closed');
+      }
+    }
+    // Control: the same text on Public does become a record.
+    expect(TelemetryRecord.fromRx(meshTrackRx(key: publicChannelSecret16, pathLen: 2), channelMatch: shareable.match), isNotNull);
   });
 
   test('out-of-range signal values are dropped, not sent', () {

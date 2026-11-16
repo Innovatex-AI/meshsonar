@@ -18,6 +18,7 @@ import 'package:meshsonar/radio/crypto.dart';
 import 'package:meshsonar/radio/packet.dart';
 import 'package:meshsonar/radio/protocol.dart';
 import 'package:meshsonar/radio/radio_api.dart';
+import 'package:meshsonar/radio/simulator.dart' show SimulatedFriend, defaultSimulatedFriends, simulatedFriendsChannelKey, simulatedFriendsChannelName;
 import 'package:meshsonar/radio/wardrive_engine.dart';
 
 /// One scripted copy of a ping arriving back at the radio.
@@ -64,6 +65,35 @@ List<ScriptedEcho> defaultEchoScript(int index, math.Random rng) {
   return out;
 }
 
+/// MeshTrack friends for a replay (meshtrack plan sections 9 and 10, MT-9): [SimulatedFriend]s sharing positions on a
+/// private channel [slot] of the replay radio, ticking every [tick] of fake time. Each position is heard as a real
+/// encrypted GRP_TXT (RX log, through [path]) and queued as the channel message the radio decrypted, like a real companion.
+/// A send by the app on [slot] is MeshTrack traffic, never a ping: it lands in [ScriptedTransport.trackSent], and a
+/// friend that answers requests replies after its 2-10 s delay.
+class FriendScript {
+  final List<SimulatedFriend> friends;
+  final int slot;
+  final String channelName;
+  final Uint8List key;
+  final Duration tick;
+  final List<int> path;
+  FriendScript(this.friends,
+      {this.slot = 2, this.channelName = simulatedFriendsChannelName, Uint8List? key, this.tick = const Duration(seconds: 1), this.path = const [0x11]})
+      : key = key ?? simulatedFriendsChannelKey;
+
+  /// The two simulator friends (one answers "Where are you?", one parks after 6 min), starting at [start].
+  factory FriendScript.westerville(DateTime start, {int slot = 2}) => FriendScript(defaultSimulatedFriends(start), slot: slot);
+}
+
+/// One MeshTrack message a scripted friend put on air.
+class FriendSent {
+  final DateTime at;
+  final String name;
+  final String text;
+  final Uint8List raw;
+  FriendSent(this.at, this.name, this.text, this.raw);
+}
+
 class SentPing {
   final DateTime at;
   final int timestamp;
@@ -106,6 +136,17 @@ class ScriptedTransport implements ByteTransport {
   final int _slotCount = 8;
   final Map<int, ({String name, Uint8List secret})> _slots = {};
 
+  /// MeshTrack friends on a private slot (null = none).
+  final FriendScript? friends;
+
+  /// What the friends sent, in order.
+  final List<FriendSent> friendSent = [];
+
+  /// Texts the app sent on the friends' slot (MeshTrack, not pings).
+  final List<({DateTime at, String text})> trackSent = [];
+  Timer? _friendTimer;
+  final math.Random _friendRng = math.Random(97);
+
   ScriptedTransport({
     required this.clock,
     int seed = 1,
@@ -116,11 +157,48 @@ class ScriptedTransport implements ByteTransport {
     this.sf = 7,
     this.bwHz = 62500,
     this.wardriveName = '#wardriving',
+    this.friends,
   }) : _rng = math.Random(seed) {
     _slots[0] = (name: 'Public', secret: Uint8List.fromList(publicChannelSecret));
+    final f = friends;
+    if (f != null) _slots[f.slot] = (name: f.channelName, secret: Uint8List.fromList(f.key));
+  }
+
+  /// Starts the friends' clock (also done by [startBackground]).
+  void startFriends() {
+    final f = friends;
+    if (f == null || _friendTimer != null) return;
+    void tickAll() {
+      if (!_connected) return;
+      final now = clock();
+      for (final fr in f.friends) {
+        final text = fr.tick(now);
+        if (text != null) _friendSays(fr, text);
+      }
+    }
+
+    _friendTimer = Timer.periodic(f.tick, (_) => tickAll());
+    tickAll();
+  }
+
+  void _friendSays(SimulatedFriend fr, String text) {
+    final f = friends!;
+    final ts = clock().toUtc().millisecondsSinceEpoch ~/ 1000;
+    final raw = MeshPacket(
+            header: makeHeader(RouteType.flood, PayloadType.grpTxt),
+            pathLenByte: encodePathLen(1, f.path.length),
+            path: [for (final p in f.path) Uint8List.fromList([p])],
+            payload: buildGroupTextPayload(f.key, ts, fr.name, text))
+        .toBytes();
+    friendSent.add(FriendSent(clock(), fr.name, text, raw));
+    _hear(raw, 5.5, -96, Duration.zero);
+    _offline.add(encodeChannelMsg(f.slot, '${fr.name}: $text', timestamp: ts, pathLen: f.path.length, snrDb: 5.5));
+    if (_offline.length > 16) _offline.removeAt(0);
+    _emit(encodeMsgWaiting(), const Duration(milliseconds: 15));
   }
 
   void startBackground() {
+    startFriends();
     if (backgroundEverySec <= 0) return;
     void next() {
       final ms = (backgroundEverySec * 1000 * (0.4 + _rng.nextDouble() * 1.2)).round();
@@ -142,6 +220,7 @@ class ScriptedTransport implements ByteTransport {
   Future<void> disconnect() async {
     _connected = false;
     _bgTimer?.cancel();
+    _friendTimer?.cancel();
     if (!_out.isClosed) await _out.close();
   }
 
@@ -208,6 +287,17 @@ class ScriptedTransport implements ByteTransport {
         final ts = bd.getUint32(3, Endian.little);
         final text = utf8.decode(frame.sublist(7), allowMalformed: true);
         _reply(encodeOk());
+        final f = friends;
+        if (f != null && frame[2] == f.slot) {
+          // MeshTrack on the friends' group: not a ping. A friend may answer a request.
+          final now = clock();
+          trackSent.add((at: now, text: text));
+          for (final fr in f.friends) {
+            final d = fr.answerDelay(text, now, _friendRng);
+            if (d != null) Timer(d, () => _connected ? _friendSays(fr, fr.answer(clock())) : null);
+          }
+          return;
+        }
         final idx = sent.length;
         final plan = script(idx, math.Random(idx * 7919 + 13));
         final at = clock();
@@ -343,6 +433,9 @@ ReplayResult runReplay({
 
   /// Called after each simulated second with the engine (to press "Ping now" mid-drive, change the config, ...).
   void Function(int second, DefaultWardriveEngine engine)? onSecond,
+
+  /// MeshTrack friends on a private slot, made at the replay's start time (see [FriendScript]).
+  FriendScript Function(DateTime start)? friends,
 }) {
   late ReplayResult result;
   fakeAsync((fa) {
@@ -350,7 +443,14 @@ ReplayResult runReplay({
     var jankOffset = Duration.zero;
     ReplayClocks.mono = () => fa.elapsed;
     DateTime clock() => t0.add(fa.elapsed + jankOffset);
-    final radio = ScriptedTransport(clock: clock, seed: seed, script: script, backgroundEverySec: backgroundEverySec, bleLatency: Duration(milliseconds: bleLatencyMs), sf: sf);
+    final radio = ScriptedTransport(
+        clock: clock,
+        seed: seed,
+        script: script,
+        backgroundEverySec: backgroundEverySec,
+        bleLatency: Duration(milliseconds: bleLatencyMs),
+        sf: sf,
+        friends: friends?.call(t0));
     final RunnableLocation gps = makeGps != null ? makeGps(clock) : ReplayLocation(clock, currentDelay: currentDelay);
     DateTime? startedAt;
     final link = MeshCoreCompanionLink(radio, timeout: const Duration(seconds: 5), clock: clock);

@@ -77,12 +77,16 @@ class MqttObserverEngine implements ObserverEngine {
   Future<String> installId() => _install ??= _loadInstallId();
 
   Future<String> _loadInstallId() async {
-    try {
-      final b = await secrets.read(installIdSlot);
-      if (b != null && b.length == 2) return _hex(b);
-    } catch (_) {}
     final v = _random.nextInt(0x10000);
     final b = Uint8List.fromList([v >> 8, v & 0xff]);
+    try {
+      final stored = await secrets.read(installIdSlot);
+      if (stored != null && stored.length == 2) return _hex(stored);
+    } catch (_) {
+      // The store could not be read: the stored id may still be there. Never overwrite it; this launch uses an id kept
+      // in memory only, and the next launch reads the stored one again.
+      return _hex(b);
+    }
     try {
       await secrets.write(installIdSlot, b);
     } catch (_) {
@@ -313,7 +317,7 @@ class MqttObserverEngine implements ObserverEngine {
         username: user,
         password: pass,
         willTopic: will?.topic,
-        willMessage: will == null ? null : _statusMessage(will.publicKey, online: false),
+        willMessage: will == null ? null : _statusMessage(will.publicKey, online: false, will: true),
         willQos: 1,
         willRetain: will != null && statusRetained(slot),
       );
@@ -322,8 +326,17 @@ class MqttObserverEngine implements ObserverEngine {
   /// custom slots publish status unretained, as the firmware does. One rule for all three.
   static bool statusRetained(MqttSlotSettings slot) => slot.retainStatus && slot.presetId != null;
 
-  String _statusMessage(String pk, {bool online = true}) => jsonEncode(
-    mqttStatusJson(publicKeyHex: pk, at: clock(), model: _state.radioModel, firmware: _state.firmware, online: online),
+  /// [will] = the last-will copy: no timestamp (the broker sends it whenever the link is lost, so a time from connect
+  /// would be wrong).
+  String _statusMessage(String pk, {bool online = true, bool will = false}) => jsonEncode(
+    mqttStatusJson(
+      publicKeyHex: pk,
+      at: clock(),
+      model: _state.radioModel,
+      firmware: _state.firmware,
+      online: online,
+      timestamp: !will,
+    ),
   );
 
   // ---------------------------------------------------------------- Test

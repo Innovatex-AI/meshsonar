@@ -14,6 +14,10 @@ import '../design/app_type.dart';
 import '../design/app_widgets.dart' show AppSwitchTile;
 import '../design/avatar_style.dart';
 import '../design/tokens.dart';
+import '../meshtrack/group_sheet.dart' show showGroupSheet;
+import '../meshtrack/meshtrack_binding.dart';
+import '../meshtrack/position_messages_screen.dart' show openPositionMessages;
+import '../settings/settings_kit.dart' show runWithUndo;
 import '../radio/inset_list.dart';
 import 'qr_widgets.dart';
 
@@ -191,6 +195,73 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
         c.service.restoreMessage(m);
       }
       c.refresh();
+    });
+  }
+
+  /// MeshTrack (plan 5.3 "Use with MeshTrack", 5.8 "Show position messages"): only for a private channel that can be a
+  /// group, and only when MeshTrack is in this build.
+  List<Widget> _meshTrack(BuildContext context, Channel ch) {
+    final b = MeshTrackUi.of(context);
+    final id = ch.id;
+    if (b == null || id == null || ch.kind != ChannelKind.private) return const [];
+    final group = b.ops.isGroup(id);
+    if (!group && !b.ops.eligibleChannels().any((e) => e.id == id)) return const [];
+    return [
+      InsetGroup(
+        header: 'MeshTrack',
+        footer: group
+            ? 'Friends in this channel can see each other on the map while they share. Position updates never go into the chat; Show position messages lists them here.'
+            : 'See friends from this channel on your map while they share, and share yours when you choose.',
+        rows: [
+          AppSwitchTile(
+            switchKey: const Key('mt-use-switch'),
+            symbol: AppSymbols.person2,
+            title: 'Use for MeshTrack',
+            value: group,
+            onChanged: (v) => v ? _useForMeshTrack(b, id) : _stopMeshTrack(b, ch),
+          ),
+          if (group) ...[
+            InsetRow(key: const Key('mt-group-row'), title: 'MeshTrack group', value: 'Open', onTap: () => showGroupSheet(context, channelId: id)),
+            AppSwitchTile(
+              switchKey: const Key('mt-show-positions'),
+              title: 'Show position messages',
+              subtitle: 'Lists the MeshTrack updates of this channel here. They are never saved in the chat.',
+              value: b.ops.showPositionMessages(id),
+              onChanged: (v) async {
+                await b.ops.setShowPositionMessages(id, v);
+                if (mounted) setState(() {});
+              },
+            ),
+            if (b.ops.showPositionMessages(id))
+              InsetRow(
+                key: const Key('mt-position-messages-row'),
+                title: 'Position messages',
+                value: '${b.service.positionMessages(id).length}',
+                onTap: () => openPositionMessages(context, id, ch.name),
+              ),
+          ],
+        ],
+      ),
+    ];
+  }
+
+  Future<void> _useForMeshTrack(MeshTrackBinding b, int id) async {
+    final r = await b.ops.useExistingChannel(id);
+    if (!mounted) return;
+    if (r.ok) {
+      showAppToast(context, 'This channel is now a MeshTrack group.', kind: AppToastKind.success);
+    } else {
+      showAppToast(context, r.message ?? 'Could not use this channel for MeshTrack. Try again.', kind: AppToastKind.error);
+    }
+    setState(() {});
+  }
+
+  Future<void> _stopMeshTrack(MeshTrackBinding b, Channel ch) async {
+    final saved = await b.ops.stopUsingChannel(ch.id!);
+    if (!mounted) return;
+    setState(() {});
+    runWithUndo(context, '${ch.name} is no longer a MeshTrack group.', commit: () async {}, onUndo: () {
+      if (saved != null) b.ops.undoStopUsing(saved).then((_) => _rebuild());
     });
   }
 
@@ -378,6 +449,7 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
                       InsetRow(key: const Key('mute-for'), title: 'Mute for a while', onTap: () => _muteFor(ch)),
                     ],
                   ),
+                  ..._meshTrack(context, ch),
                   InsetGroup(rows: [
                     AppSwitchTile(
                       switchKey: const Key('pin-switch'),

@@ -271,6 +271,9 @@ class DriveMapModel extends ChangeNotifier {
     return _borders;
   }
   MapLayerState get layerState => _layerState;
+
+  /// The Friends layer draws (MeshTrack in the build and the switch on).
+  bool get friendsOn => state.meshTrack != null && _layerState.isOn(kFriendsLayerId);
   set layerState(MapLayerState n) {
     if (n == _layerState) return;
     final was = _layerState;
@@ -462,6 +465,7 @@ class DriveMapModel extends ChangeNotifier {
 
   /// True when the Map Definition in use offers layer [id] (its capability string AND the layer entry).
   bool layerOffered(String id) {
+    if (id == kFriendsLayerId) return state.meshTrack != null; // MeshTrack in this build
     final d = ActiveMapDefinition.current;
     final cap = switch (id) {
       'estimated' => capLayerEstimated,

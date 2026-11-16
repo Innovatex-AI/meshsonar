@@ -9,6 +9,7 @@ import '../design/app_symbols.dart';
 import '../design/app_type.dart';
 import '../design/avatar_style.dart';
 import '../design/tokens.dart';
+import '../meshtrack/meshtrack_binding.dart' show MeshTrackUi;
 import 'message_format.dart' show photoPreview;
 
 const double kRowMinHeight = 72;
@@ -129,9 +130,10 @@ String emptyPreview(ConversationRow r) {
 }
 
 /// One line of the screen-reader label: title, state flags, delivery word, last message.
-String rowSemantics(ConversationRow r, String stamp) {
+String rowSemantics(ConversationRow r, String stamp, {bool meshTrack = false}) {
   final b = StringBuffer(r.title);
   if (r.kind == RowKind.room) b.write(', room');
+  if (meshTrack) b.write(', MeshTrack group');
   if (r.unread > 0) b.write(', ${r.unread} unread');
   if (r.pinned) b.write(', pinned');
   if (r.muted) b.write(', muted');
@@ -179,6 +181,15 @@ class _ConversationTileState extends State<ConversationTile> {
     final stampBelow = scaler.scale(17) > 17 * 1.5;
     final sym = deliverySymbol(r.delivery);
     final text = r.preview.isEmpty ? emptyPreview(r) : photoPreview(r.preview);
+    final mt = MeshTrackUi.of(context);
+    final meshTrack = r.isChannel && r.channelId != null && (mt?.ops.isGroup(r.channelId!) ?? false);
+    final title = meshTrack
+        ? Row(children: [
+            Flexible(child: Text(r.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: titleStyle)),
+            const SizedBox(width: Gap.xs),
+            const MeshTrackBadge(),
+          ])
+        : Text(r.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: titleStyle);
 
     final spans = <InlineSpan>[
       if (r.hasDraft) TextSpan(text: 'Draft: ', style: subStyle.copyWith(color: c.accent, fontWeight: FontWeight.w600)),
@@ -204,7 +215,7 @@ class _ConversationTileState extends State<ConversationTile> {
       container: true,
       button: true,
       selected: widget.selected,
-      label: rowSemantics(r, widget.stamp),
+      label: rowSemantics(r, widget.stamp, meshTrack: meshTrack),
       onTap: widget.onTap,
       customSemanticsActions: widget.actions,
       child: ExcludeSemantics(
@@ -231,14 +242,12 @@ class _ConversationTileState extends State<ConversationTile> {
                     children: [
                       if (stampBelow) ...[
                         // Large text: the time goes under the name, like Messages does, instead of squeezing it.
-                        Text(r.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: titleStyle),
+                        title,
                         Text(widget.stamp, maxLines: 1, overflow: TextOverflow.ellipsis, style: stampStyle),
                       ] else
                         Row(
                           children: [
-                            Expanded(
-                              child: Text(r.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: titleStyle),
-                            ),
+                            Expanded(child: title),
                             const SizedBox(width: Gap.s),
                             Text(widget.stamp, maxLines: 1, style: stampStyle),
                           ],
@@ -266,6 +275,26 @@ class _ConversationTileState extends State<ConversationTile> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// The small "MeshTrack" mark on a group's channel row in Chats.
+class MeshTrackBadge extends StatelessWidget {
+  const MeshTrackBadge({super.key = const Key('meshtrack-badge')});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AppColors.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(color: c.accent.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(6)),
+      child: Text(
+        'MeshTrack',
+        maxLines: 1,
+        textScaler: MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.5),
+        style: AppType.caption.copyWith(color: c.accent, fontWeight: FontWeight.w600),
       ),
     );
   }

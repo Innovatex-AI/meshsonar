@@ -220,10 +220,10 @@ class RadioSessionChatAdapter implements OutboundMessageSink {
   }
 
   @override
-  Future<int> sendChannel({required String radioId, required int slot, required String text, required int timestamp}) async {
+  Future<int> sendChannel({required String radioId, required int slot, required String text, required int timestamp, int priority = CommandPriority.user}) async {
     final region = regionScopeForSlot?.call(slot);
     final scope = (region == null || region.trim().isEmpty) ? null : r.FloodScope.key(hashtagSecret16(region));
-    final res = await session.sendChannelMessage(slot, text, scope: scope);
+    final res = await session.sendChannelMessage(slot, text, scope: scope, priority: priority);
     if (res.status == r.SendStatus.failed) _throw(res);
     if (res.status == r.SendStatus.queued) throw RadioBusy(res.detail ?? 'no answer from the radio');
     return res.timestamp == 0 ? timestamp : res.timestamp;
