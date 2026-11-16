@@ -21,6 +21,14 @@ Future<bool> waitFor(WidgetTester t, Finder f, {Duration timeout = const Duratio
   return false;
 }
 
+/// Back to the first route of every navigator (closes sheets and pushed screens on every tab).
+Future<void> popToRoots(WidgetTester t) async {
+  for (final n in t.stateList<NavigatorState>(find.byType(Navigator, skipOffstage: false))) {
+    n.popUntil((r) => r.isFirst);
+  }
+  await pumpFor(t, const Duration(seconds: 1));
+}
+
 /// Marks a screenshot point. The script watches stdout for these lines.
 Future<void> shot(WidgetTester t, String name) async {
   await pumpFor(t, const Duration(milliseconds: 800));
@@ -248,29 +256,51 @@ final List<ScreenStep> screens = [
     await t.pageBack();
     await pumpFor(t, const Duration(seconds: 1));
   }),
-  // More > Home observer: the map, the public-map choice and the Antenna at home list (P2, Nov 10 2026).
-  ScreenStep('home-observer', (t) async {
+  // More > Observer (release 0.38: the Home observer is gone): Settings opened at the Observer section, the master switch
+  // Share with MeshSonar, the observer status and the MQTT feeds (lib/ui/settings/observer_section.dart).
+  ScreenStep('observer', (t) async {
     // Back out of whatever the previous steps left open (Settings, About) in every navigator, then open the row.
-    for (final n in t.stateList<NavigatorState>(find.byType(Navigator, skipOffstage: false))) {
-      n.popUntil((r) => r.isFirst);
-    }
-    await pumpFor(t, const Duration(seconds: 1));
+    await popToRoots(t);
     await openShellTab(t, 'More');
-    // The More list may still be scrolled to its end (the About step): scroll back up to the Home observer row.
-    final row = find.byKey(const Key('more-homeObserver'));
+    // The More list may still be scrolled to its end (the About step): scroll back up to the Observer row.
+    final row = find.byKey(const Key('more-observer'));
     if (row.hitTestable().evaluate().isEmpty) {
-      await t.scrollUntilVisible(row, -200, scrollable: find.byType(Scrollable).hitTestable().first);
+      await t.scrollUntilVisible(
+        row,
+        -200,
+        scrollable: find.descendant(of: find.byKey(const Key('more-list')), matching: find.byType(Scrollable)).first,
+      );
     }
     await t.ensureVisible(row);
     await pumpFor(t, const Duration(milliseconds: 500));
     await t.tap(row);
     await pumpFor(t, const Duration(seconds: 1));
-    if (!await waitFor(t, find.byKey(const Key('home-observer-list')))) throw const _Skip();
-    // Scrolled by jumps, not drags (a drag over the map pans the map); the antenna list sits below the map.
-    await shootFullScroll(t, 'home-observer');
-    await t.pageBack();
-    await pumpFor(t, const Duration(seconds: 1));
-  }, optional: true),
+    expect(await waitFor(t, find.byKey(const Key('observer-share-toggle'))), isTrue, reason: 'Settings > Observer: Share with MeshSonar');
+    await shot(t, 'observer');
+    final feeds = find.byKey(const Key('mqtt-add-feed'));
+    await t.ensureVisible(feeds);
+    await pumpFor(t, const Duration(milliseconds: 500));
+    await shot(t, 'observer-mqtt-feeds');
+    await popToRoots(t);
+  }),
+  // Plan: the Planner (release 0.38). The empty plan with its one-tap start, then each mode chip's sheet. The full flows
+  // A-E and J1-J8 against the live server are integration_test/planner_visual_test.dart.
+  ScreenStep('planner', (t) async {
+    await popToRoots(t);
+    await openShellTab(t, 'Plan');
+    expect(await waitFor(t, find.byKey(const Key('planner'))), isTrue, reason: 'Plan tab is the Planner');
+    expect(await waitFor(t, find.byKey(const Key('planner-sheet'))), isTrue, reason: 'planner sheet');
+    await shot(t, 'planner');
+    for (final m in ['link', 'coverage', 'findSites', 'whereToDrive']) {
+      final chip = find.byKey(Key('planner-mode-$m'));
+      expect(await waitFor(t, chip), isTrue, reason: 'mode chip $m');
+      await t.tap(chip);
+      await pumpFor(t, const Duration(seconds: 1));
+      await shot(t, 'planner-mode-$m');
+    }
+    await t.tap(find.byKey(const Key('planner-mode-link')));
+    await pumpFor(t, const Duration(milliseconds: 500));
+  }),
   ScreenStep('region', (t) async {
     await openTab(t, 'Region');
     await shot(t, 'region');
