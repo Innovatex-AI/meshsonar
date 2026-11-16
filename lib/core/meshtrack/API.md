@@ -11,6 +11,7 @@ The app wires **one** `MeshTrackService`. Everything else here is a helper that 
 | `smart_beacon.dart` | `MtFix` (the fix value type), `MtRate`, `SmartBeacon` (rate logic), `meshTrackPositionAirtime(sf:, bwKhz:, cr:)`, `bearingDeg`, `angleDiffDeg`. |
 | `track_group.dart` | `MeshTrackGroup.eligible(Channel, {wardriveChannelName, secret})`, `TrackGroup` (one group's friends), `MtFriend`, `MtMeetPin`, `MtTrailPoint`, `MtStaleness`, `mtStaleness`, `mtEffectiveTime`. |
 | `interop.dart` | `parseInterop(body, {refLat, refLon})`. It reads typed Plus Codes, `lat, lon`, `geo:` URIs and MeshCore-TEAM `#TEL:` / `#CAP:` messages. It also defines `MtSource`. |
+| `ask_location.dart` | Ask for location (MT-13): `askLocationWait`, `askedPositionUsable`, `AskLimiter` (once per 30 s per person), `MtAskedPosition`. The service holds answered positions in memory (`putAsked`, `removeAsked`, `MeshTrackState.asked`); the request itself is `lib/radio/tools/ask_location.dart` `AskLocationHub`. |
 | `meshtrack_service.dart` | `MeshTrackService` and its types: `MtGroupConfig`, `MeshTrackState`, `MtGroupView`, `MtEvent`, `MtResult`, `MtShareReason`, `MtInboundText`, `MtPingWindow`, `MtLastKnownStore`, `MtBudget`. It also re-exports the types the UI needs. |
 
 ## Construction (app wiring, MT-5)

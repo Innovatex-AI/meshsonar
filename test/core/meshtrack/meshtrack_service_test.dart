@@ -795,4 +795,54 @@ void main() {
         // "Me: MT1 @<11-digit> s50 c90" = 29 text bytes -> 3 AES blocks -> 53-byte packet (plan section 3)
         expect(h.logs.where((l) => l.startsWith('meshtrack: sent position')).single, 'meshtrack: sent position, 53 bytes');
       }));
+
+  group('Ask for location pins (MT-13): memory only', () {
+    MtAskedPosition asked(_H h, {String key = 'aabbccdd', double lat = 40.1472}) =>
+        MtAskedPosition(keyHex: key, name: 'Sam Lee', lat: lat, lon: -82.9046, at: h.now);
+
+    test('putAsked shows a pin in state.asked; a newer answer from the same person replaces it; removeAsked clears it',
+        () => _run((h) {
+              h.s.putAsked(asked(h));
+              expect(h.s.state.asked.single.name, 'Sam Lee');
+              h.a.elapse(const Duration(minutes: 1));
+              h.s.putAsked(asked(h, key: 'AABBCCDD', lat: 40.2));
+              expect(h.s.state.asked.single.lat, 40.2);
+              h.a.elapse(const Duration(seconds: 5));
+              h.s.putAsked(asked(h, key: '11223344'));
+              expect(h.s.state.asked.length, 2);
+              expect(h.s.state.asked.first.keyHex, '11223344', reason: 'newest first');
+              h.s.removeAsked('aabbccdd');
+              expect(h.s.state.asked.single.keyHex, '11223344');
+            }));
+
+    test('never written to the last-known file and never logged', () => _run((h) {
+          h.ready(share: false);
+          expect(h.rx(1, 'Jo: MT1 @86GVXWQ2+2W s30 c90'), isTrue);
+          h.s.putAsked(asked(h));
+          h.a.elapse(const Duration(seconds: 30));
+          h.s.dispose();
+          h.a.flushMicrotasks();
+          final data = h.store.data ?? '';
+          expect(data, contains('Jo'));
+          expect(data, isNot(contains('Sam')));
+          expect(data, isNot(contains('40.147')));
+          expect(data, isNot(contains('aabbccdd')));
+          for (final l in h.logs) {
+            expect(l, isNot(contains('Sam')));
+            expect(l, isNot(contains('40.14')));
+          }
+        }));
+
+    test('off the map after 2 h (the friend rule), and cleared by Delete my data', () => _run((h) {
+          h.s.putAsked(asked(h));
+          h.a.elapse(const Duration(hours: 1, minutes: 59));
+          expect(h.s.state.asked, hasLength(1));
+          h.a.elapse(const Duration(minutes: 1, seconds: 15));
+          expect(h.s.state.asked, isEmpty);
+          h.s.putAsked(asked(h));
+          h.s.clearLastKnown();
+          h.a.flushMicrotasks();
+          expect(h.s.state.asked, isEmpty);
+        }));
+  });
 }

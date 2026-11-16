@@ -16,12 +16,14 @@ import 'dart:math' as math;
 import '../../chat/channel_text_tap.dart' show ChannelTextEvent, ChannelTextTap, TapVerdict;
 import '../../radio/airtime.dart' show groupTextPacketBytes;
 import '../privacy_zones.dart' show PrivacyZones, distanceM;
+import 'ask_location.dart';
 import 'interop.dart';
 import 'mt_wire.dart';
 import 'plus_code.dart';
 import 'smart_beacon.dart';
 import 'track_group.dart';
 
+export 'ask_location.dart';
 export 'interop.dart' show MtSource;
 export 'smart_beacon.dart' show MtFix, MtRate, kMtMaxAccuracyM, meshTrackPositionAirtime;
 export 'track_group.dart'
@@ -332,6 +334,10 @@ class MeshTrackState {
   final MtPositionMode positionMode;
   final MtRate rate;
   final bool answerRequests;
+
+  /// People asked for their location with "Ask for location" who answered with a position, newest first, within
+  /// [kAskedOnMapFor]. Memory only: never saved, never uploaded.
+  final List<MtAskedPosition> asked;
   const MeshTrackState({
     this.groups = const [],
     this.reason = MtShareReason.off,
@@ -342,6 +348,7 @@ class MeshTrackState {
     this.positionMode = MtPositionMode.exact,
     this.rate = MtRate.smart,
     this.answerRequests = true,
+    this.asked = const [],
   });
 
   /// At least one Share switch is on (even if not sending right now).
@@ -1033,6 +1040,7 @@ class MeshTrackService {
       g.log.clear();
     }
     _pendingRestore.clear();
+    _asked.clear();
     _saveTimer?.cancel();
     await _store?.clear();
     _changed(save: false);
@@ -1264,6 +1272,22 @@ class MeshTrackService {
 
   /// The group's recent MeshTrack messages, newest first, for "Show position messages" (display only; see
   /// [MtLoggedMessage]). Empty for an unknown group.
+  // ------------------------------------------------------------------ Ask for location (MT-13), memory only
+
+  final Map<String, MtAskedPosition> _asked = {};
+
+  /// Shows [p] on the map as an "asked" pin (replaces an older answer from the same person). Never saved: the
+  /// last-known file only holds group friends, and nothing here is logged.
+  void putAsked(MtAskedPosition p) {
+    _asked[p.keyHex.toLowerCase()] = p;
+    _changed(save: false);
+  }
+
+  /// Takes the "asked" pin of [keyHex] off the map.
+  void removeAsked(String keyHex) {
+    if (_asked.remove(keyHex.toLowerCase()) != null) _changed(save: false);
+  }
+
   List<MtLoggedMessage> positionMessages(int channelId) {
     final g = _groups[channelId];
     if (g == null) return const [];
@@ -1273,6 +1297,7 @@ class MeshTrackService {
 
   void _onTick() {
     final now = _now();
+    _asked.removeWhere((_, p) => now.difference(p.at) >= kAskedOnMapFor);
     for (final g in _groups.values.toList()) {
       g.track.prune(now);
       g.log.removeWhere((m) => now.difference(m.at) > kMtOnListFor);
@@ -1324,6 +1349,10 @@ class MeshTrackService {
       positionMode: _mode,
       rate: _rate,
       answerRequests: _answer,
+      asked: List.unmodifiable([
+        for (final p in _asked.values.toList()..sort((a, b) => b.at.compareTo(a.at)))
+          if (now.difference(p.at) < kAskedOnMapFor) p
+      ]),
     );
   }
 

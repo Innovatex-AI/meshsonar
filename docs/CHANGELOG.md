@@ -3,6 +3,10 @@
 All notable changes to MeshSonar. Dates are local (US Eastern). This changelog was reconstructed from the commit
 history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md](ROADMAP.md).
 
+## [Unreleased]
+
+- **Ask for location (MeshTrack MT-13).** On a person's contact screen, Ask for location asks their radio where it is with MeshCore's own telemetry request, so it works with people on any MeshCore app. You see the distance and direction, the person on the Drive map marked Asked, and Open on map; or "did not share a location" (with where they can allow it), or "No answer" with Try again; Cancel while asking. Once per 30 s per person, sent as a user message for airtime. The position stays on the phone in memory only (never uploaded or logged; gone after 2 h, and Delete my data forgets it everywhere); your own radio's telemetry settings are unchanged. Built from a reading of the MeshCore firmware source (`docs/protocol/telemetry-location-request.md`), not yet checked on hardware. The simulated radio's people answer all three ways (Bob with a position, Cara without, Ann not at all).
+
 ## [0.39.0+67] — 2026-11-16 — MeshTrack, MQTT feed safety, simulator tour fixes
 
 - **MeshTrack: see your friends on the map.** Make a group (a private channel) and invite friends with a QR code or link, or join theirs; while you share, your position goes to the group over the radio and their positions show on your Drive map with name, last heard, distance and direction. Share for This drive, 1 hour (no drive needed) or Until I stop, to up to 3 groups at once; nothing is sent inside or near your privacy zones, and nothing goes to MeshSonar's server. Friends on the official MeshCore app join with the same link and read your position as a Plus Code; positions they type, and MeshCore-TEAM positions, show on your map. Start fresh gives a group a new link to cut someone off; groups come back on a new radio or after a reinstall. Credits for Open Location Code and MeshCore-TEAM in About. Start fresh now sends the old group's stop message before the key changes (it could be lost).

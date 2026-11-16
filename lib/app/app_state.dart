@@ -1517,7 +1517,12 @@ class AppState extends ChangeNotifier with _ObserverWiring {
 
   /// Delete my data (Settings): MeshTrack's friends' last positions, meet pins and the group list on this phone. Returns
   /// how many groups were removed (0 with MeshTrack off).
-  Future<int> clearMeshTrackLocal() async => await _mt?.clearLocal() ?? 0;
+  /// Also forgets every telemetry / Ask for location answer the connected radio's Tools keep in memory (MT-13), with or
+  /// without MeshTrack in the build.
+  Future<int> clearMeshTrackLocal() async {
+    radioSession?.tools?.forgetPositions();
+    return await _mt?.clearLocal() ?? 0;
+  }
 
   // ---------- radio ----------
   RadioKind _radioKind = RadioKind.none;

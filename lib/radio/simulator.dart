@@ -320,6 +320,10 @@ class _Slot {
 class _SimContact {
   final Uint8List key;
   int type;
+
+  /// How this person's radio answers a telemetry request (Ask for location).
+  SimTelemetryAnswer telemetry = SimTelemetryAnswer.silent;
+  double? gpsLat, gpsLon;
   int flags = 0;
   int outPathLen = 0xFF;
   Uint8List outPath = Uint8List(0);
@@ -330,16 +334,35 @@ class _SimContact {
   _SimContact(this.key, this.type, this.name, this.lastMod);
 }
 
+/// How a simulated person's radio answers a telemetry request (MeshTrack MT-13 "Ask for location"), after the firmware
+/// (companion MyMesh.cpp onContactRequest): [silent] = base telemetry not allowed (the factory default: no answer at all);
+/// [batteryOnly] = base allowed, location not (battery and MCU temperature, no GPS record); [location] = location allowed
+/// and a GPS fix (adds an LPP GPS record, 0.0001 degree steps).
+enum SimTelemetryAnswer { silent, batteryOnly, location }
+
 /// A chat contact the simulated radio knows from the start (made-up names and keys).
 class SimulatedContact {
   final String name;
   final Uint8List publicKey;
-  SimulatedContact(this.name) : publicKey = sha256(utf8.encode('meshsonar-sim-contact:$name'));
+  final SimTelemetryAnswer telemetry;
+
+  /// The position its GPS reports ([SimTelemetryAnswer.location] only).
+  final double? gpsLat, gpsLon;
+  SimulatedContact(this.name, {this.telemetry = SimTelemetryAnswer.silent, this.gpsLat, this.gpsLon})
+      : publicKey = sha256(utf8.encode('meshsonar-sim-contact:$name'));
   String get keyHex => toHex(publicKey);
 }
 
-/// People the simulated radio can chat with. Tests and demos inject messages "from" them.
-List<SimulatedContact> defaultSimulatedContacts() => [SimulatedContact('Ann KE8ANN'), SimulatedContact('Bob W8BOB')];
+/// People the simulated radio can chat with. Tests and demos inject messages "from" them. For Ask for location: Ann never
+/// answers (the factory telemetry setting), Bob shares his position (about 3 km north-east of the Westerville start).
+List<SimulatedContact> defaultSimulatedContacts() => [
+      SimulatedContact('Ann KE8ANN'),
+      SimulatedContact('Bob W8BOB', telemetry: SimTelemetryAnswer.location, gpsLat: 40.1472, gpsLon: -82.9046),
+    ];
+
+/// The third Ask for location answer for the demo radio (added with [SimulatedTransport.meshTrackFriends]): Cara's radio
+/// answers without a position (battery and temperature only).
+List<SimulatedContact> askDemoSimulatedContacts() => [SimulatedContact('Cara N8CRA', telemetry: SimTelemetryAnswer.batteryOnly)];
 
 /// A simulated MeshCore companion radio.
 class SimulatedTransport implements ByteTransport {
@@ -499,8 +522,12 @@ class SimulatedTransport implements ByteTransport {
     _slots[0] = _Slot('Public', Uint8List.fromList(publicChannelSecret));
     if (this.meshTrackFriends && _slots.length > 1) _slots[1] = _Slot(simulatedFriendsChannelName, Uint8List.fromList(simulatedFriendsChannelKey));
     _bootAt = _clock();
-    for (final c in contacts ?? defaultSimulatedContacts()) {
-      _contacts.add(_SimContact(c.publicKey, AdvType.chat, c.name, _modClock++)..lastAdvert = _clockSecs);
+    for (final c in contacts ?? [...defaultSimulatedContacts(), if (this.meshTrackFriends) ...askDemoSimulatedContacts()]) {
+      _contacts.add(_SimContact(c.publicKey, AdvType.chat, c.name, _modClock++)
+        ..lastAdvert = _clockSecs
+        ..telemetry = c.telemetry
+        ..gpsLat = c.gpsLat
+        ..gpsLon = c.gpsLon);
     }
     for (final r in this.repeaters) {
       _contacts.add(_SimContact(r.publicKey, AdvType.repeater, r.name, _modClock++)
@@ -1286,8 +1313,19 @@ class SimulatedTransport implements ByteTransport {
   void _onTelemetryFor(List<int> key) {
     final c = _contactByPrefix(key, 32);
     if (c == null) return _emit(encodeErr(ErrCode.notFound));
-    _emit(encodeSent(tag: 0x7e1e, estTimeoutMs: 1800));
-    if (c.type == AdvType.chat) return; // companions do not answer telemetry unless allowed: silence
+    _emit(encodeSent(tag: 0x7e1e, estTimeoutMs: 1800, flood: c.outPathLen == 0xFF));
+    if (c.type == AdvType.chat) {
+      // A person answers by their own telemetry permissions (MyMesh.cpp onContactRequest): nothing unless base is allowed.
+      if (c.telemetry == SimTelemetryAnswer.silent) return;
+      final gLat = c.gpsLat, gLon = c.gpsLon;
+      final lpp = <int>[
+        ...lppVoltage(3.70 + (c.key[3] % 40) / 100),
+        if (c.telemetry == SimTelemetryAnswer.location && gLat != null && gLon != null) ...lppGps(gLat, gLon, 268),
+        ...lppTemperature(24.0 + (c.key[4] % 100) / 10),
+      ];
+      _emit(encodeTelemetryResponsePush(c.key.sublist(0, 6), lpp), const Duration(milliseconds: 1400));
+      return;
+    }
     final lpp = <int>[
       ...lppVoltage(3.80 + (c.key[3] % 40) / 100),
       ...lppTemperature(18.0 + (c.key[4] % 200) / 10),

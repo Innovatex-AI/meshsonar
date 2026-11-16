@@ -831,6 +831,18 @@ phone's location while the app is in front when a group shares for "1 hour" or "
   switches in `settings.json` (`meshtrack.groups`). On connect, a group missing from the radio is written to a free channel
   without asking (new radio, reinstall); a full radio leaves it "Not on this radio" (See and Share off) with Make room.
 
+**Ask for location (MT-13, one person, any MeshCore app).** Not channel text: MeshCore's own telemetry request to one contact,
+`[39][0 0 0][public key x32]` -> `RESP_CODE_SENT` -> later `PUSH_CODE_TELEMETRY_RESPONSE 0x8B [0x8B][0][key prefix x6][CayenneLPP]`;
+the position is the LPP GPS record (type 136, signed 24-bit big endian, 0.0001 degree, altitude 0.01 m). The person's radio
+answers only when its owner allows base telemetry (else silence), and sends a position only when location is allowed and its
+GPS is on (the GPS fix, or the saved advert position before the first fix; 0, 0 is treated as none). People only (repeaters and
+rooms answer location only to a logged-in admin). User priority through the remote-request queue, airtime recorded as a user
+send, at most once per 30 s per person; wait at least 30 s direct / 45 s flooded (`askLocationWait`). The answer is kept in
+memory only (an "Asked" pin on the Friends layer, 2 h), never uploaded, saved or logged with coordinates. Our own radio's
+telemetry permissions are not changed. Firmware reading with source links (**not verified on hardware**):
+`docs/protocol/telemetry-location-request.md`. Code: `lib/core/meshtrack/ask_location.dart`, `lib/radio/tools/ask_location.dart`,
+`lib/ui/meshtrack/ask_location_card.dart`.
+
 ## Hardware checklist: chat redesign
 
 Fourteen steps for a real radio (each says the expected result). Run in subsets at each wave gate; all of them before release.
