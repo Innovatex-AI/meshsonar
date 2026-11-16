@@ -163,6 +163,8 @@ class MqttObserverEngine implements ObserverEngine {
   }
 
   _Plan _plan(MqttSlotSettings slot, ObserverEngineState s) {
+    // Our own broker is never a feed, even when such a slot was saved before this check existed.
+    if (mqttHostIsMeshSonar(slot.host)) return const _Idle(ObserverFeedState.notAllowed, meshSonarBrokerRefusal);
     if (!slot.enabled) return const _Idle(ObserverFeedState.off);
     if (!s.sharing) return const _Idle(ObserverFeedState.off, 'Observer sharing is off.');
     final pk = s.radioPublicKey;
@@ -330,6 +332,7 @@ class MqttObserverEngine implements ObserverEngine {
   Future<ObserverFeedStatus> test(MqttSlotSettings slot) async {
     ObserverFeedStatus out(ObserverFeedState st, [String? why]) =>
         ObserverFeedStatus(slotId: slot.id, state: st, lastError: why, at: clock());
+    if (mqttHostIsMeshSonar(slot.host)) return out(ObserverFeedState.notAllowed, meshSonarBrokerRefusal);
     final s = _state;
     final pk = s.radioPublicKey?.toUpperCase();
     if (!s.connected || pk == null || pk.length != 64) {

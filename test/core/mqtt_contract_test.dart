@@ -82,4 +82,39 @@ void main() {
     expect(() => MqttPresetList.parse({'v': 1}), throwsFormatException);
     expect(const MqttPresetFetch.notModified(etag: 'x').notModified, isTrue);
   });
+
+  test("MeshSonar's own broker is recognised in any spelling (WS-OUT 9); other hosts are not", () {
+    for (final h in [
+      'mqtt.meshsonar.com',
+      'MQTT.MeshSonar.COM',
+      ' mqtt.meshsonar.com ',
+      'mqtt.meshsonar.com.',
+      'mqtt.meshsonar.com..',
+      'mqtt.meshsonar.com:443',
+      'mqtt.meshsonar.com:8883',
+      'mqtt.meshsonar.com.:1883',
+      'wss://mqtt.meshsonar.com/mqtt',
+      'WS://MQTT.MESHSONAR.COM:80/',
+      'mqtts://user@mqtt.meshsonar.com:8883',
+      'mqtt.meshsonar.com/ws?x=1',
+    ]) {
+      expect(mqttHostIsMeshSonar(h), isTrue, reason: h);
+    }
+    for (final h in [
+      'meshsonar.com',
+      'www.meshsonar.com',
+      'mqtt.meshsonar.co',
+      'mqtt.meshsonar.com.evil.example',
+      'xmqtt.meshsonar.com',
+      'mqtt-meshsonar.com',
+      'mqtt.corecomms.net',
+      '',
+    ]) {
+      expect(mqttHostIsMeshSonar(h), isFalse, reason: h);
+    }
+    // A saved slot pointing there still loads (it is shown as not allowed, never dropped).
+    final saved = MqttSlotSettings.tryParse({'id': 'slot-2', 'name': 'Ours', 'host': 'mqtt.meshsonar.com', 'enabled': true});
+    expect(saved, isNotNull);
+    expect(saved!.enabled, isTrue);
+  });
 }

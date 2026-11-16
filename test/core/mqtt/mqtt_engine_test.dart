@@ -613,6 +613,46 @@ void main() {
       expect(ids[3], test);
     });
   });
+
+  group("MeshSonar's own broker is never a feed (WS-OUT 9)", () {
+    test('a saved slot pointing there never connects, shows Not allowed, and other slots still run', () {
+      _run((e) {
+        e.engine.update(
+          engineState(
+            slots: [
+              slot('s1', host: 'MQTT.MeshSonar.com.', auth: MqttAuth.none),
+              slot('s2', host: 'mqtt.meshsonar.com', presetId: 'x'),
+              slot('s3', host: 'mqtt.example.org', auth: MqttAuth.none),
+            ],
+            sign: e.radio.sign,
+          ),
+        );
+        e.settle();
+        expect(e.labels(), ['Not allowed', 'Not allowed', 'Connected']);
+        expect(e.engine.statuses.first.lastError, meshSonarBrokerRefusal);
+        expect(e.net.connects.map((c) => c.host), ['mqtt.example.org']);
+        e.feed(1);
+        expect(e.net.packets().map((p) => p.clientId).toSet(), hasLength(1));
+        // Even when off, it says it is not allowed.
+        e.engine.update(engineState(slots: [slot('s1', host: 'mqtt.meshsonar.com', enabled: false)], sign: e.radio.sign));
+        e.settle();
+        expect(e.labels(), ['Not allowed']);
+        expect(e.net.connects, hasLength(1));
+      });
+    });
+
+    test('Test refuses it without connecting', () {
+      _run((e) {
+        e.engine.update(engineState(slots: const [], sign: e.radio.sign));
+        ObserverFeedStatus? r;
+        unawaited(e.engine.test(slot('s9', host: 'mqtt.meshsonar.com')).then((v) => r = v));
+        e.settle();
+        expect(r!.state, ObserverFeedState.notAllowed);
+        expect(r!.lastError, meshSonarBrokerRefusal);
+        expect(e.net.connects, isEmpty);
+      });
+    });
+  });
 }
 
 class _BrokenStore implements SecretStore {
