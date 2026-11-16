@@ -73,40 +73,6 @@ Future<bool> _tap(WidgetTester t, Finder f, {Duration wait = const Duration(seco
   return true;
 }
 
-/// Scrolls the Scrollable under [within] down until [f] is built (lazy lists build rows only near the viewport), then
-/// brings it into view. False when the end of the list comes first.
-Future<bool> _scrollTo(WidgetTester t, Finder f, Finder within, {Duration wait = const Duration(seconds: 15)}) async {
-  if (!await waitFor(t, within, timeout: wait)) return false;
-  final end = DateTime.now().add(wait);
-  while (DateTime.now().isBefore(end)) {
-    if (f.evaluate().isNotEmpty) {
-      // Centred, not at the top edge: a pinned header (the Chat search and segments) would cover a row scrolled to the top.
-      try {
-        await Scrollable.ensureVisible(t.element(f.first), alignment: 0.5);
-      } catch (_) {}
-      await pumpFor(t, const Duration(milliseconds: 400));
-      return true;
-    }
-    final states = t.stateList<ScrollableState>(find.descendant(of: within.first, matching: find.byType(Scrollable)));
-    final s = states.where((x) => x.axisDirection == AxisDirection.down).firstOrNull;
-    if (s == null) {
-      await pumpFor(t, const Duration(milliseconds: 300));
-      continue;
-    }
-    final p = s.position;
-    if (p.pixels >= p.maxScrollExtent - 1) {
-      // At the end: the rows may still be on their way (the radio's contact sync); wait a little and look again.
-      await pumpFor(t, const Duration(milliseconds: 500));
-      if (f.evaluate().isNotEmpty) continue;
-      if (p.pixels >= p.maxScrollExtent - 1 && DateTime.now().isAfter(end.subtract(const Duration(seconds: 5)))) return false;
-      continue;
-    }
-    p.jumpTo((p.pixels + p.viewportDimension * 0.6).clamp(0, p.maxScrollExtent));
-    await pumpFor(t, const Duration(milliseconds: 300));
-  }
-  return f.evaluate().isNotEmpty;
-}
-
 Future<void> _show(WidgetTester t, Finder f) async {
   try {
     await t.ensureVisible(f.first);
@@ -665,7 +631,7 @@ void main() {
       await openShellTab(t, 'Chat');
       await _tap(t, _key('segment-network'), what: 'segment-network');
       final tile = _prefix('network-row-');
-      final rows = await _scrollTo(t, tile, _key('chat-scroll'));
+      final rows = await scrollToFind(t, tile, _key('chat-scroll'));
       if (!rows) {
         await shot(t, 'planner-29-network-no-repeater');
         _fail('J2: no repeater rows under Chat > Network with the simulated radio');
@@ -677,7 +643,7 @@ void main() {
         final link2 = _key('node-action-linkTo');
         if (!await waitFor(t, _key('contact-profile'), timeout: const Duration(seconds: 10))) {
           _fail('J2: tapping a repeater row did not open its contact profile');
-        } else if (!await _scrollTo(t, link2, _key('contact-profile'))) {
+        } else if (!await scrollToFind(t, link2, _key('contact-profile'))) {
           await shot(t, 'planner-29-contact-profile');
           _fail('J2: the repeater contact profile has no Link to… row (the simulated repeaters all have a position)');
         } else {

@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/ui/app.dart' show AppScope;
+import 'package:meshsonar/ui/plan/planner_screen.dart';
 
 Future<void> pumpFor(WidgetTester t, Duration d) async {
   final end = DateTime.now().add(d);
@@ -28,6 +29,40 @@ Future<void> popToRoots(WidgetTester t) async {
     n.popUntil((r) => r.isFirst);
   }
   await pumpFor(t, const Duration(seconds: 1));
+}
+
+/// Scrolls the Scrollable under [within] down until [f] is built (lazy lists build rows only near the viewport), then
+/// brings it into view. False when the end of the list comes first.
+Future<bool> scrollToFind(WidgetTester t, Finder f, Finder within, {Duration wait = const Duration(seconds: 15)}) async {
+  if (!await waitFor(t, within, timeout: wait)) return false;
+  final end = DateTime.now().add(wait);
+  while (DateTime.now().isBefore(end)) {
+    if (f.evaluate().isNotEmpty) {
+      // Centred, not at the top edge: a pinned header (the Chat search and segments) would cover a row scrolled to the top.
+      try {
+        await Scrollable.ensureVisible(t.element(f.first), alignment: 0.5);
+      } catch (_) {}
+      await pumpFor(t, const Duration(milliseconds: 400));
+      return true;
+    }
+    final states = t.stateList<ScrollableState>(find.descendant(of: within.first, matching: find.byType(Scrollable)));
+    final s = states.where((x) => x.axisDirection == AxisDirection.down).firstOrNull;
+    if (s == null) {
+      await pumpFor(t, const Duration(milliseconds: 300));
+      continue;
+    }
+    final p = s.position;
+    if (p.pixels >= p.maxScrollExtent - 1) {
+      // At the end: the rows may still be on their way (the radio's contact sync); wait a little and look again.
+      await pumpFor(t, const Duration(milliseconds: 500));
+      if (f.evaluate().isNotEmpty) continue;
+      if (p.pixels >= p.maxScrollExtent - 1 && DateTime.now().isAfter(end.subtract(const Duration(seconds: 5)))) return false;
+      continue;
+    }
+    p.jumpTo((p.pixels + p.viewportDimension * 0.6).clamp(0, p.maxScrollExtent));
+    await pumpFor(t, const Duration(milliseconds: 300));
+  }
+  return f.evaluate().isNotEmpty;
 }
 
 /// Marks a screenshot point. The script watches stdout for these lines.
@@ -284,8 +319,13 @@ final List<ScreenStep> screens = [
     await shot(t, 'drives');
   }),
   ScreenStep('drive-detail', (t) async {
-    // A drive card's InkWell ('open-<session id>'); other 'open-' keys (open-log, open-progress, open-app-settings) are not cards.
-    final open = find.byWidgetPredicate((w) => w is InkWell && w.key is ValueKey && '${(w.key as ValueKey).value}'.startsWith('open-'));
+    // A drive card's InkWell ('open-<session id>' inside 'session-<session id>'). Other 'open-' keys are not drive cards:
+    // 'open-progress' (the Your progress card above the list, also an InkWell) opened Progress instead, and open-log /
+    // open-app-settings live on other screens.
+    final open = find.descendant(
+      of: find.byWidgetPredicate((w) => w.key is ValueKey && '${(w.key as ValueKey).value}'.startsWith('session-')),
+      matching: find.byWidgetPredicate((w) => w is InkWell && w.key is ValueKey && '${(w.key as ValueKey).value}'.startsWith('open-')),
+    );
     if (!await waitFor(t, open, timeout: const Duration(seconds: 5))) {
       if (!_droveOk) throw const _Skip();
       _stepFail('drive-detail: the drive just saved has no card in Analyze > Drives');
@@ -303,6 +343,39 @@ final List<ScreenStep> screens = [
     await pumpFor(t, const Duration(seconds: 1));
     if (find.byKey(const Key('drive-detail')).evaluate().isNotEmpty) _stepFail('drive-detail: Back did not close the drive detail');
     _stepOk('drive-detail');
+  }, optional: true),
+  // J2 (V-5, build 67): a repeater contact > Link to… opens the Planner in Link mode with the contact as an end. Runs here on
+  // the simulated radio (no server needed) as well as in planner_visual_test.dart. Repeaters live under Chat > Network below
+  // the radio card and the Nearby section, in a lazily built list: the rows only exist once scrolled near the viewport.
+  ScreenStep('j2-contact-link', (t) async {
+    final app = AppScope.of(t.element(find.byType(Scaffold).first));
+    if (!app.connected) throw const _Skip();
+    await popToRoots(t);
+    await openShellTab(t, 'Chat');
+    final seg = find.byKey(const Key('segment-network'));
+    if (!await waitFor(t, seg, timeout: const Duration(seconds: 8))) _stepFail('j2: no Network segment on the Chat tab');
+    await t.tap(seg.first);
+    await pumpFor(t, const Duration(seconds: 1));
+    final tile = find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key as ValueKey<String>).value.startsWith('network-row-'));
+    if (!await scrollToFind(t, tile, find.byKey(const Key('chat-scroll')))) _stepFail('j2: no repeater rows under Chat > Network with the simulated radio');
+    final prefix = (t.widget(tile.first).key as ValueKey<String>).value.substring('network-row-'.length).toLowerCase();
+    await t.tap(tile.first, warnIfMissed: false);
+    await pumpFor(t, const Duration(seconds: 1));
+    if (!await waitFor(t, find.byKey(const Key('contact-profile')), timeout: const Duration(seconds: 10))) _stepFail('j2: the repeater row did not open its profile');
+    final link = find.byKey(const Key('node-action-linkTo'));
+    if (!await scrollToFind(t, link, find.byKey(const Key('contact-profile')))) _stepFail('j2: the repeater profile has no Link to… row');
+    await shot(t, 'j2-contact-profile');
+    await t.tap(link.first, warnIfMissed: false);
+    await pumpFor(t, const Duration(seconds: 1));
+    final planner = find.byType(PlannerScreen, skipOffstage: false);
+    final ok = await _until(t, () {
+      if (planner.evaluate().isEmpty) return false;
+      final c = t.state<PlannerScreenState>(planner).controller;
+      return c != null && c.nodes.any((n) => n.existingKey?.toLowerCase().startsWith(prefix) ?? false) && find.byKey(const Key('plan-mode-link')).evaluate().isNotEmpty;
+    }, const Duration(seconds: 15));
+    if (!ok) _stepFail('j2: Link to… did not open the Planner in Link mode with the repeater as an end');
+    await shot(t, 'j2-contact-link');
+    _stepOk('j2-contact-link');
   }, optional: true),
   ScreenStep('settings', (t) async {
     await openTab(t, 'Settings');
