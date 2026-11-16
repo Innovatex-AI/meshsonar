@@ -226,4 +226,25 @@ void main() {
     expect(b.lastSentAt, isNull);
     expect(b.decide(f, now: _t0.add(const Duration(seconds: 1))).why, MtBeaconWhy.first);
   });
+
+  test('restart keeps the last-sent time: a share restarted inside the floor waits, then sends as first', () {
+    final b = SmartBeacon();
+    MtFix f(int s) => MtFix(lat: 40, lon: -83, at: _t0.add(Duration(seconds: s)), accuracyM: 5, speedMps: 14, courseDeg: 90);
+    final d0 = b.decide(f(0), now: _t0, positionAirtime: _sf7);
+    b.markSent(d0, f(0), _t0);
+    b.restart();
+    expect(b.decide(f(5), now: _t0.add(const Duration(seconds: 5)), positionAirtime: _sf7).send, isFalse);
+    final d = b.decide(f(26), now: _t0.add(const Duration(seconds: 26)), positionAirtime: _sf7);
+    expect(d.why, MtBeaconWhy.first, reason: 'past the floor the new share goes at once, not after the 72 s interval');
+  });
+
+  test('restore with a backoff waits the floor, then the refused send is still owed', () {
+    final b = SmartBeacon();
+    MtFix f(int s) => MtFix(lat: 40, lon: -83, at: _t0.add(Duration(seconds: s)), accuracyM: 5, speedMps: 14, courseDeg: 90);
+    final d0 = b.decide(f(0), now: _t0, positionAirtime: _sf7);
+    final mark = b.markSent(d0, f(0), _t0);
+    b.restore(mark, backoffFrom: _t0);
+    expect(b.decide(f(1), now: _t0.add(const Duration(seconds: 1)), positionAirtime: _sf7).send, isFalse);
+    expect(b.decide(f(26), now: _t0.add(const Duration(seconds: 26)), positionAirtime: _sf7).send, isTrue);
+  });
 }
