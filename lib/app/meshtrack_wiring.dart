@@ -209,12 +209,10 @@ class MeshTrackWiring {
 
   bool get started => _started;
 
-  /// The chat inbound tap: the core decides; a group whose "Show position messages" is on keeps them as chat too.
-  late final ChannelTextTap _tap = ChannelTextTap.of((e) {
-    final consumed = service.onChannelText(MtInboundText.fromTapEvent(e));
-    if (!consumed) return TapVerdict.pass;
-    return _readSettings().showPositions.contains(e.channelId) ? TapVerdict.pass : TapVerdict.consume;
-  });
+  /// The chat inbound tap: the core decides. MeshTrack machine text is never stored as chat (plan 6), whatever "Show
+  /// position messages" says: that switch shows the service's in-memory list of them in channel detail instead
+  /// ([MeshTrackService.positionMessages]), so they are never notified, unread, backed up, exported or searched.
+  late final ChannelTextTap _tap = ChannelTextTap.of((e) => service.onChannelText(MtInboundText.fromTapEvent(e)) ? TapVerdict.consume : TapVerdict.pass);
 
   /// The tap registered with chat (tests).
   @visibleForTesting
@@ -394,6 +392,8 @@ class MeshTrackWiring {
     _stored.clear();
     _uidByChannel.clear();
     _recentlyRemoved.clear();
+    _showBeforeRemove.clear();
+    if (_readSettings().showPositions.isNotEmpty) unawaited(_saveValues((s) => s.copyWith(showPositions: const {})));
     _persist(force: true);
     await _persistChain;
     return ids.length;
@@ -621,9 +621,12 @@ class MeshTrackWiring {
     if (_disposed) return;
     if (list.isNotEmpty) unawaited(_ensureServiceStarted());
     final ids = {for (final c in list) c.channelId};
-    // Removed (Leave, or a group cleared): forget it in the Keychain and the settings. Kept for an Undo.
+    // Removed (Leave, Start fresh, or a group cleared): forget it in the Keychain and the settings, and its "Show position
+    // messages" switch. Kept for an Undo.
+    final gone = <int>{};
     for (final e in _uidByChannel.entries.toList()) {
       if (ids.contains(e.key)) continue;
+      gone.add(e.key);
       final r = _regOf(e.value);
       if (r != null) {
         _recentlyRemoved[e.key] = r;
@@ -647,6 +650,8 @@ class MeshTrackWiring {
         }
         _uidByChannel[c.channelId] = uid;
       }
+      // Back after an Undo (Leave, Start fresh): its "Show position messages" switch comes back too.
+      if (_showBeforeRemove.remove(c.channelId)) unawaited(_saveValues((s) => s.copyWith(showPositions: {...s.showPositions, c.channelId})));
       final st = _stored[uid] ??= _Stored();
       st.last = c;
       // A group that is not on this radio reports See off: the person's choice is kept for when it is back.
@@ -655,7 +660,19 @@ class MeshTrackWiring {
       final radio = _chat?.radioId();
       if (radio != null) st.rows[radio] = c.channelId;
     }
+    _forgetShowPositions(gone, forUndo: true);
     _persist();
+  }
+
+  /// Channels whose "Show position messages" was on when the group was removed (Undo of Leave puts it back).
+  final Set<int> _showBeforeRemove = {};
+
+  /// Removes the "Show position messages" setting of channels that are no longer groups.
+  void _forgetShowPositions(Set<int> channelIds, {bool forUndo = false}) {
+    final on = channelIds.intersection(_readSettings().showPositions);
+    if (on.isEmpty) return;
+    if (forUndo) _showBeforeRemove.addAll(on);
+    unawaited(_saveValues((s) => s.copyWith(showPositions: s.showPositions.difference(on))));
   }
 
   Future<void> _adoptFromRow(String uid, int channelId, String name) async {
@@ -751,7 +768,9 @@ class MeshTrackWiring {
       final mapped = st.rows[radio];
       Channel? row = mapped == null ? null : store.channels.getById(mapped);
       if (mapped != null && row == null) {
-        // The person deleted the channel on this radio (the channel delete flow): the group goes with it.
+        // The person deleted the channel on this radio (the channel delete flow): the group goes with it, and its "Show
+        // position messages" setting too.
+        _forgetShowPositions({mapped});
         _reg.remove(r);
         _stored.remove(r.uid);
         _removedUids.add(r.uid);

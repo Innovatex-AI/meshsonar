@@ -287,6 +287,26 @@ class MtGroupView {
   String get name => config.name;
 }
 
+/// Most position messages kept per group for "Show position messages".
+const int kMtMessageLogMax = 100;
+
+/// One MeshTrack message heard or sent on a group's channel, for "Show position messages" (channel detail). Memory only:
+/// never stored as chat, never notified, never in a backup, export or search; gone after 24 h, on Leave and on Delete my
+/// data.
+class MtLoggedMessage {
+  /// Who sent it; null = me.
+  final String? name;
+
+  /// The message body as on the air (`MT1 @87G8Q2X5+7F2 s34 c270`).
+  final String body;
+
+  /// The parsed message; null for another app's position format.
+  final MtMessage? message;
+  final DateTime at;
+  const MtLoggedMessage({required this.name, required this.body, required this.at, this.message});
+  bool get mine => name == null;
+}
+
 /// My last sent position (the hollow ring on the map while sharing). Memory only.
 class MtMyPosition {
   final double lat;
@@ -392,7 +412,15 @@ class _Group {
 
   /// Sharing ended while the radio was gone: `MT1 x` goes on reconnect.
   bool stopPending = false;
+
+  /// Recent MeshTrack messages on this channel, oldest first (memory only).
+  final List<MtLoggedMessage> log = [];
   _Group(this.config) : track = TrackGroup(config.channelId);
+
+  void addLog(MtLoggedMessage m) {
+    log.add(m);
+    if (log.length > kMtMessageLogMax) log.removeRange(0, log.length - kMtMessageLogMax);
+  }
 }
 
 /// The MeshTrack engine. See API.md for the wiring.
@@ -621,6 +649,7 @@ class MeshTrackService {
     g.stopPending = false;
     g.answerTimer?.cancel();
     g.track.clear();
+    g.log.clear();
     _groups.remove(channelId);
     _groupsChanged();
     _changed(save: false);
@@ -679,7 +708,10 @@ class MeshTrackService {
     final g = _groups[channelId];
     if (g == null) return MtResult.unknownGroup;
     g.config = g.config.copyWith(see: on);
-    if (!on) g.track.clear();
+    if (!on) {
+      g.track.clear();
+      g.log.clear();
+    }
     _groupsChanged();
     _changed();
     return MtResult.ok;
@@ -992,6 +1024,7 @@ class MeshTrackService {
   Future<void> clearLastKnown() async {
     for (final g in _groups.values) {
       g.track.clear();
+      g.log.clear();
     }
     _pendingRestore.clear();
     _saveTimer?.cancel();
@@ -1097,6 +1130,7 @@ class MeshTrackService {
         _log('meshtrack: sent ${q.kind.name}, $bytes bytes');
         _airtimeRefusing = false;
         if (q.kind == _Kind.position) _airtimeLimitedAt = null;
+        _groups[q.channelId]?.addLog(MtLoggedMessage(name: null, body: q.text, message: parseMeshTrack(q.text), at: _now()));
         q.onSent?.call();
       } else {
         _log('meshtrack: send failed (${q.kind.name})');
@@ -1144,6 +1178,7 @@ class MeshTrackService {
     if (msg != null) {
       if (name == null || isSelf) return true;
       if (g.track.isDuplicate(name, e.senderTs, body)) return true;
+      if (g.config.see) g.addLog(MtLoggedMessage(name: name, body: body, message: msg, at: at));
       switch (msg) {
         case MtPosition():
           if (g.config.see) {
@@ -1177,6 +1212,7 @@ class MeshTrackService {
     final io = parseInterop(body, refLat: f?.lat, refLon: f?.lon);
     if (io == null) return false;
     if (io is MtInteropPosition && name != null && !isSelf && g.config.see && !g.track.isDuplicate(name, e.senderTs, body)) {
+      if (io.consume) g.addLog(MtLoggedMessage(name: name, body: body, at: at));
       g.track.addPosition(
           name: name, lat: io.lat, lon: io.lon, accuracyM: io.accuracyM, at: at, now: now, source: io.source, snr: e.snr, pathLen: e.pathLen);
       _changed();
@@ -1220,10 +1256,20 @@ class MeshTrackService {
 
   // ---------------------------------------------------------------- tick, state, persistence
 
+  /// The group's recent MeshTrack messages, newest first, for "Show position messages" (display only; see
+  /// [MtLoggedMessage]). Empty for an unknown group.
+  List<MtLoggedMessage> positionMessages(int channelId) {
+    final g = _groups[channelId];
+    if (g == null) return const [];
+    final now = _now();
+    return [for (final m in g.log.reversed) if (now.difference(m.at) <= kMtOnListFor) m];
+  }
+
   void _onTick() {
     final now = _now();
     for (final g in _groups.values.toList()) {
       g.track.prune(now);
+      g.log.removeWhere((m) => now.difference(m.at) > kMtOnListFor);
       final until = g.config.shareUntil;
       if (g.config.share && g.config.duration == MtShareDuration.oneHour && until != null && !now.isBefore(until)) {
         _stop(g, MtStopCause.durationEnded, notify: false);

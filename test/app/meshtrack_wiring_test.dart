@@ -10,6 +10,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/app/meshtrack_wiring.dart';
 import 'package:meshsonar/chat/channel_secret.dart';
 import 'package:meshsonar/chat/mesh_links.dart';
+import 'package:meshsonar/chat/events.dart';
+import 'package:meshsonar/chat/backup.dart';
 import 'package:meshsonar/chat/models.dart';
 import 'package:meshsonar/chat/secret_store.dart';
 import 'package:meshsonar/core/api.dart' show MeshTrackSettings;
@@ -39,17 +41,57 @@ void main() {
       });
     });
 
-    test('"Show position messages" on keeps MT1 text as chat in that channel, and still updates the map', () {
+    test('"Show position messages" on: MT1 text is still never chat (not stored, notified, unread, searched or backed up); '
+        'the display-only list has it', () {
       fakeAsync((a) {
         final r = MtRig(a);
         final id = r.groupSync('Family');
         r.ops.setShowPositionMessages(id, true);
         r.settle();
         expect(r.ops.showPositionMessages(id), isTrue);
-        r.inbound(r.channel(id).slot!, 'Sam: MT1 @${PlusCode.encode(40.2, -82.8)}');
+        final events = <ChatEvent>[];
+        r.h.service.events.listen(events.add);
+        r.inbound(r.channel(id).slot!, 'Sam: MT1 @${PlusCode.encode(40.2, -82.8)} s50 c90');
         r.settle();
         expect(r.svc.state.group(id)!.friends, hasLength(1));
-        expect(r.h.service.page(r.channel(id).convKey).messages, hasLength(1));
+        expect(r.h.service.page(r.channel(id).convKey).messages, isEmpty, reason: 'not stored as chat');
+        expect(events.whereType<ChatEvent>().where((e) => e.kind == ChatEventKind.messageAdded), isEmpty, reason: 'not notified');
+        expect(r.h.service.unreadMessages(), 0, reason: 'no unread');
+        expect(r.h.service.search('MT1'), isEmpty, reason: 'not in search');
+        Map<String, dynamic>? backup;
+        ChatBackup(r.h.store, newId: () => 'x').exportMap(const BackupOptions()).then((m) => backup = m);
+        r.settle();
+        expect(jsonEncode(backup), isNot(contains('MT1')), reason: 'not in a backup or export');
+        // Visible in the display-only list (channel detail > Position messages).
+        final list = r.svc.positionMessages(id);
+        expect(list.single.name, 'Sam');
+        expect(list.single.body, startsWith('MT1 @'));
+        // Off: nothing ever went into the chat, so nothing stays behind.
+        r.ops.setShowPositionMessages(id, false);
+        r.settle();
+        expect(r.h.service.page(r.channel(id).convKey).messages, isEmpty);
+      });
+    });
+
+    test('Leave clears the channel\'s "Show position messages" setting (Undo puts it back); deleting the channel clears it', () {
+      fakeAsync((a) {
+        final r = MtRig(a);
+        final id = r.groupSync('Family');
+        r.ops.setShowPositionMessages(id, true);
+        r.settle();
+        MtGroupConfig? saved;
+        r.ops.stopUsingChannel(id).then((v) => saved = v);
+        r.settle();
+        expect(r.settings.showPositions, isEmpty);
+        r.ops.undoStopUsing(saved!);
+        r.settle();
+        expect(r.settings.showPositions, {id});
+        r.admin.delete(r.channel(id));
+        r.settle();
+        r.changes.pulse();
+        r.settle();
+        expect(r.svc.state.group(id), isNull);
+        expect(r.settings.showPositions, isEmpty);
       });
     });
 
