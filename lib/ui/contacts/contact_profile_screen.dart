@@ -294,7 +294,7 @@ class _ContactProfileScreenState extends State<ContactProfileScreen> {
   Widget _location(BuildContext context, Contact c, int? adv, int now) {
     final col = AppColors.of(context);
     if (!c.hasPosition) {
-      return ProfileRow(key: const Key('contact-no-position'), label: 'Location', value: 'Not shared');
+      return ProfileRow(key: const Key('contact-no-position'), label: 'Location', value: 'Not announced'); // their announcements carry no position (Ask for location may still get one)
     }
     final coords = '${c.lat!.toStringAsFixed(5)}, ${c.lon!.toStringAsFixed(5)}';
     final when = adv == null ? 'when they last announced themselves' : 'when they last announced themselves, ${_ago(now - adv * 1000)}';
