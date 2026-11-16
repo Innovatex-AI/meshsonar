@@ -17,6 +17,7 @@ import '../../widgets.dart';
 import '../drive_controls.dart';
 import '../drive_live_stats.dart';
 import '../ping_settings_sheet.dart';
+import 'panel_meshtrack.dart';
 
 double _distanceM(List<DrivePing> pings) {
   var d = 0.0;
@@ -176,6 +177,8 @@ class MediumContent {
           ),
         const Divider(height: 16),
       ],
+      // MeshTrack (build 69): a full-width row by the chips, so friends' sharing is in the panel, not a pill on the map.
+      const MeshTrackPanelRow(),
       Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [AntennaChip(state: s), PingSettingsChip(state: s), LogButton(state: s)]),
       const SizedBox(height: 4),
       row(Icons.help_outline_rounded, 'Map guide', openGuide, key: const Key('medium-guide')),

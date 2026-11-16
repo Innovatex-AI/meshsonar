@@ -29,7 +29,7 @@ import '../chat/mesh_links.dart';
 import '../chat/models.dart';
 import '../chat/secret_store.dart';
 import '../chat/store.dart';
-import '../core/api.dart' show MeshTrackSettings;
+import '../core/api.dart' show MeshTrackSettings, MtPanelTag;
 import '../core/meshtrack/meshtrack_service.dart';
 import '../core/model.dart' show Radio;
 import '../core/privacy_zones.dart' show PrivacyZones;
@@ -326,6 +326,10 @@ class MeshTrackWiring {
     _driving = true;
     service.driveStarted();
     _updatePhoneFixes();
+    // The first drive after this update arms the Drive panel's "New" tag on the MeshTrack row (once per install).
+    if (_readSettings().panelTag == MtPanelTag.notYet) {
+      unawaited(_saveValues((s) => s.panelTag == MtPanelTag.notYet ? s.copyWith(panelTag: MtPanelTag.show) : s).then((_) => groups._notify()));
+    }
   }
 
   void driveStopped() {
@@ -1088,6 +1092,17 @@ class MeshTrackGroupOps extends ChangeNotifier {
   MeshTrackSettings get _s => _w._readSettings();
 
   bool get introSeen => _s.introSeen;
+
+  /// The Drive panel's MeshTrack row shows "New" (from the first drive after the update until MeshTrack is opened once).
+  bool get panelNew => _s.panelTag == MtPanelTag.show;
+
+  /// MeshTrack was opened (the Group sheet or the panel's Share switch): the "New" tag goes for good. Before the first
+  /// drive nothing changes, so the tag still shows once on that drive.
+  Future<void> markPanelSeen() async {
+    if (_s.panelTag != MtPanelTag.show) return;
+    await _w._saveValues((s) => s.copyWith(panelTag: MtPanelTag.seen));
+    _notify();
+  }
   Future<void> setIntroSeen() async {
     await _w._saveValues((s) => s.copyWith(introSeen: true));
     _notify();
