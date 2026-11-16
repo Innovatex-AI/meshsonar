@@ -129,12 +129,93 @@ mixin _ObserverWiring on ChangeNotifier {
     _updateObserverEngine();
   }
 
-  /// A packet passed the privacy filter ([record] non-null): the engine gets it only while this phone is an observer.
+  /// A packet passed the privacy filter ([record] non-null): the engine gets it only while this phone is an observer, and
+  /// under the same own-echo rule as the MeshSonar uploader (telemetry_uploader.dart markOwn / pingSent): an echo of one
+  /// of our own pings goes out only when that ping itself went up publicly (no privacy zone, no hidden drive), and
+  /// packets heard while a ping of ours is in flight wait until its hash is known.
   void _feedObserverEngine(TelemetryRecord record, RxPacket rx) {
-    if (observerSharing) observerEngine.onPublicPacket(record, rx);
+    if (!observerSharing) {
+      _mqttHeld.clear();
+      return;
+    }
+    final own = _mqttOwnPublic(record);
+    if (own == false) return; // an echo of a ping that was not public
+    if (own == null && _mqttPingsOpen > 0) {
+      _mqttHeld.add((record, rx));
+      while (_mqttHeld.length > _mqttHeldMax) {
+        _mqttHeld.removeAt(0);
+      }
+      return;
+    }
+    observerEngine.onPublicPacket(record, rx);
   }
 
+  // ---------- own-ping echoes for the MQTT feeds ----------
+
+  /// Hashes of our own pings -> whether that ping went up publicly (its echoes may then be published).
+  final Map<String, bool> _mqttOwnHashes = <String, bool>{};
+
+  /// Own pings sent whose hash is not known yet (their listen window is still open).
+  int _mqttPingsOpen = 0;
+  final List<(TelemetryRecord, RxPacket)> _mqttHeld = [];
+  Timer? _mqttHoldTimer;
+  static const int _mqttHeldMax = 512;
+
+  /// The longest a ping may stay unresolved before held packets are released (the uploader's echo window).
+  static const Duration mqttEchoHold = Duration(seconds: 90);
+
+  /// Null = not an echo of ours; true/false = an echo of a ping that was / was not public.
+  bool? _mqttOwnPublic(TelemetryRecord record) {
+    final h = record.packetHash?.toLowerCase();
+    return h == null ? null : _mqttOwnHashes[h];
+  }
+
+  /// One of our own pings is going out now: hold packets until its hash is known ([_observerPingResolved]).
+  void _observerPingSent(DateTime at) {
+    _mqttPingsOpen++;
+    _mqttHoldTimer?.cancel();
+    _mqttHoldTimer = Timer(mqttEchoHold, () {
+      // No ping resolved for the whole echo window (a drive stopped mid-ping): stop holding.
+      _mqttHoldTimer = null;
+      _mqttPingsOpen = 0;
+      _releaseMqttHeld();
+    });
+  }
+
+  /// A ping of ours resolved: [hash] (null when unknown) is ours, [public] says whether it went up publicly. [tx] = this
+  /// is the ping a [_observerPingSent] opened (a transmitted one), so its window closes.
+  void _observerPingResolved(String? hash, {required bool public, required bool tx}) {
+    if (hash != null && hash.isNotEmpty) {
+      _mqttOwnHashes[hash.toLowerCase()] = public;
+      while (_mqttOwnHashes.length > 2048) {
+        _mqttOwnHashes.remove(_mqttOwnHashes.keys.first);
+      }
+    }
+    if (tx && _mqttPingsOpen > 0) _mqttPingsOpen--;
+    if (_mqttPingsOpen == 0) {
+      _mqttHoldTimer?.cancel();
+      _mqttHoldTimer = null;
+    }
+    _releaseMqttHeld();
+  }
+
+  /// Sends what was held when no window is open any more; echoes of non-public pings are dropped.
+  void _releaseMqttHeld() {
+    if (_mqttPingsOpen > 0 || _mqttHeld.isEmpty) return;
+    final held = List.of(_mqttHeld);
+    _mqttHeld.clear();
+    if (!observerSharing) return;
+    for (final (r, rx) in held) {
+      if (_mqttOwnPublic(r) != false) observerEngine.onPublicPacket(r, rx);
+    }
+  }
+
+  @visibleForTesting
+  void debugObserverPingSent(DateTime at) => _observerPingSent(at);
+
   void _disposeObserver() {
+    _mqttHoldTimer?.cancel();
+    _mqttHeld.clear();
     _linkSub?.cancel();
     _observerStatus.dispose();
     unawaited(observerEngine.dispose());
