@@ -24,7 +24,7 @@ import '../design/sheet_detents.dart' show formSheetDetents;
 import '../design/state_views.dart';
 import '../design/tokens.dart';
 import '../settings/settings_kit.dart' show InfoTile, SliderTile;
-import 'plan_modes.dart' show PlanListenable, symbolData;
+import 'plan_modes.dart' show PlanLine, PlanListenable, symbolData;
 
 /// The words for a node's status (vocabulary table: "Node", "Estimate", "Measured").
 String nodeStatusWords(PlanNodeStatus s) => switch (s) {
@@ -83,8 +83,9 @@ class NodeList extends StatelessWidget {
       ]),
       if (nodes.isEmpty)
         Padding(
-          padding: const EdgeInsets.symmetric(vertical: Gap.s),
-          child: Text('No nodes yet. Long-press the map to drop a planned node.', style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+          padding: const EdgeInsets.symmetric(vertical: Gap.xs),
+          child: PlanLine(AppSymbols.pin, 'No nodes yet. Long-press the map to drop a planned node.',
+              key: const Key('plan-node-list-empty'), style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant)),
         ),
       for (final n in nodes)
         ListTile(
@@ -225,13 +226,13 @@ class _NodeEditorState extends State<_NodeEditor> {
               key: const Key('node-mine'),
               contentPadding: EdgeInsets.zero,
               secondary: AppSymbolIcon(AppSymbols.person),
-              title: const Text('This is my radio'),
+              title: const Text('This node is mine'),
               subtitle: const Text('Its position is rounded to about 1 km when you share the plan.'),
               value: n.mine,
               onChanged: n.existingKey != null ? null : (v) => _edit((x) => x.copyWith(mine: v)),
             ),
             if (n.existingKey != null)
-              Text('A network node is yours when you have claimed it (My radios).', style: t.textTheme.bodySmall),
+              Text('A network node is yours when you have claimed it (Settings > Claimed radios).', style: t.textTheme.bodySmall),
             const SizedBox(height: Gap.s),
             Semantics(header: true, child: Text('Mount', style: t.textTheme.titleSmall)),
             const SizedBox(height: Gap.xs),
@@ -429,7 +430,7 @@ class _NodePickerState extends State<_NodePicker> {
             leading: AppSymbolIcon(p.mine ? AppSymbols.personFill : AppSymbols.antenna),
             title: Text(p.name),
             subtitle: Text([
-              if (p.mine) 'My radio',
+              if (p.mine) 'Claimed',
               p.room ? 'Room' : 'Repeater',
               if (p.km != null) units.distance(p.km! * 1000),
             ].join(' · ')),

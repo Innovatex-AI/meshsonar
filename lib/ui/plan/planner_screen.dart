@@ -13,12 +13,13 @@
 // a shared plan link, Plan from here, Add to plan, Link to…, a point, a saved plan.
 //
 // First useful result within one tap (plan §4.5 item 8): an empty plan shows "Coverage from my location", which adds a
-// node where the phone is and runs the coverage Estimate.
+// node where the phone is and runs the coverage Estimate (without a phone position: "Coverage from the map centre").
 //
 // Keys: 'planner', 'planner-map', 'planner-mode-<id>' (chips), 'plan-name', 'plan-menu', 'plan-radio-summary',
-// 'plan-quick-here', 'plan-quick-network', 'plan-selected', 'plan-selected-edit', 'planner-move-bar', 'planner-move-set', 'planner-move-cancel', 'planner-crosshair',
-// 'saved-plans', 'saved-plan-<id>', 'plan-rename-field', 'plan-rename-save'.
+// 'plan-quick-here', 'plan-quick-centre', 'plan-quick-network', 'plan-selected', 'plan-selected-edit', 'planner-move-bar', 'planner-move-set', 'planner-move-cancel', 'planner-crosshair',
+// 'saved-plans', 'saved-plan-<id>'; Rename uses saved_plans.dart's sheet ('saved-plan-name-field', 'saved-plan-name-save').
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart' show SchedulerBinding, SchedulerPhase;
@@ -37,7 +38,6 @@ import '../app.dart';
 import '../design/app_haptics.dart';
 import '../design/app_surfaces.dart';
 import '../design/app_symbols.dart';
-import '../design/sheet_detents.dart' show formSheetDetents;
 import '../design/state_views.dart';
 import '../design/tokens.dart';
 import '../map/core/map_view_controller.dart';
@@ -55,7 +55,7 @@ import 'node_list.dart';
 import 'plan_modes.dart';
 import 'plan_share.dart' show PlanImportAdded, PlanImportOpen, showPlanImport, showPlanShare;
 import 'planner_sheet.dart';
-import 'saved_plans.dart' show showSavedPlans;
+import 'saved_plans.dart' show promptPlanName, showSavedPlans;
 
 class PlannerScreen extends StatefulWidget {
   const PlannerScreen({super.key});
@@ -242,9 +242,9 @@ class PlannerScreenState extends State<PlannerScreen> {
   double get _sheetHeight => _available <= 0 ? 0 : PlannerSheetMetrics.heightOf(_detent, _available, context);
 
   /// The sheet height the map works around: at Full the map is behind the sheet, so its view (Find sites, focus, the
-  /// crosshair) is the part above the Medium line.
-  double get _mapSheetHeight =>
-      _available <= 0 ? 0 : _sheetHeight.clamp(0, PlannerSheetMetrics.heightOf(PlannerDetent.medium, _available, context)).toDouble();
+  /// crosshair) is the part above the Medium line. That line is the plain Medium fraction of the height: at large Dynamic
+  /// Type Medium opens as Full, and the map's controls and credit would otherwise be pushed up into the status bar.
+  double get _mapSheetHeight => _available <= 0 ? 0 : math.min(_sheetHeight, _available * kPlannerMedium);
 
   T? _camera<T>(T Function() f) {
     try {
@@ -519,6 +519,15 @@ class PlannerScreenState extends State<PlannerScreen> {
     _startMode(PlanModeId.coverage, PlanModeIntent(PlanModeIntentKind.coverageOf, n.id, seq: ++_intentSeq));
   }
 
+  /// The quick start without a phone position: a planned node at the middle of the map above the sheet, then its coverage.
+  void _quickCentre() {
+    final at = _crosshair;
+    if (at == null) return;
+    final n = _addAt(PlanPoint(at.latitude, at.longitude));
+    if (n == null) return;
+    _startMode(PlanModeId.coverage, PlanModeIntent(PlanModeIntentKind.coverageOf, n.id, seq: ++_intentSeq));
+  }
+
   Future<void> _menu() async {
     final c = _c;
     if (c == null) return;
@@ -559,35 +568,12 @@ class PlannerScreenState extends State<PlannerScreen> {
     }
   }
 
+  /// The plan bar's name and the menu's Rename: the same sheet as Saved plans (promptPlanName owns its text controller,
+  /// so it lives as long as the sheet does, also while the sheet animates away).
   Future<void> _rename() async {
     final c = _c!;
-    final field = TextEditingController(text: c.plan.name);
-    final name = await showAppSheet<String>(
-      context,
-      detents: formSheetDetents(context),
-      builder: (ctx, scroll) => AppSheetScaffold(
-        controller: scroll,
-        title: 'Rename the plan',
-        primaryAction: FilledButton(
-          key: const Key('plan-rename-save'),
-          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(Hit.min + 4)),
-          onPressed: () => Navigator.of(ctx).pop(field.text),
-          child: const Text('Save'),
-        ),
-        children: [
-          TextField(
-            key: const Key('plan-rename-field'),
-            controller: field,
-            autofocus: true,
-            textInputAction: TextInputAction.done,
-            decoration: const InputDecoration(labelText: 'Plan name', border: OutlineInputBorder()),
-            onSubmitted: (v) => Navigator.of(ctx).pop(v),
-          ),
-        ],
-      ),
-    );
-    field.dispose();
-    if (name != null) c.rename(name);
+    final name = await promptPlanName(context, initial: c.plan.name);
+    if (name != null && mounted) c.rename(name);
   }
 
   Future<void> _openSavedList() async {
@@ -837,7 +823,7 @@ class PlannerScreenState extends State<PlannerScreen> {
         onTap: () => showPlanSettings(context, c, regionPreset: _s.siteConfig?.radioPreset),
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: Hit.min),
-          child: PlanLine(AppSymbols.antenna, 'Radio ${radioWords(p.radio)} · clutter ${p.clutter.canopyM.round()} m trees (Estimate). Tap to change.'),
+          child: PlanLine(AppSymbols.antenna, 'Radio ${radioWords(p.radio)} · clutter ${AppScope.unitsOf(context).height(p.clutter.canopyM.roundToDouble())} trees (Estimate). Tap to change.'),
         ),
       ),
       if (_loadNote != null) PlanLine(AppSymbols.exclamationTriangle, _loadNote!, key: const Key('planner-load-note')),
@@ -865,8 +851,17 @@ class PlannerScreenState extends State<PlannerScreen> {
           icon: const AppSymbolIcon(AppSymbols.locationFill, size: 18),
           label: const Text('Coverage from my location'),
         )
-      else
-        const PlanLine(AppSymbols.location, 'Allow location to start from where you are.'),
+      else ...[
+        // No position for the phone yet (location off or still coming): still one tap to a result, from the map's centre.
+        FilledButton.icon(
+          key: const Key('plan-quick-centre'),
+          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(Hit.min + 8)),
+          onPressed: _quickCentre,
+          icon: const AppSymbolIcon(AppSymbols.map, size: 18),
+          label: const Text('Coverage from the map centre'),
+        ),
+        const PlanLine(AppSymbols.location, 'Allow location to start from where you are.', key: Key('plan-quick-no-location')),
+      ],
       const SizedBox(height: Gap.s),
       OutlinedButton.icon(
         key: const Key('plan-quick-network'),
@@ -884,33 +879,45 @@ class PlannerScreenState extends State<PlannerScreen> {
   /// node as its default (Coverage estimates it, Link starts from it).
   Widget _selectedCard(BuildContext context, PlanNode n) {
     final t = Theme.of(context);
+    final edit = TextButton(
+      key: const Key('plan-selected-edit'),
+      style: TextButton.styleFrom(minimumSize: const Size(Hit.min, Hit.min)),
+      onPressed: () => _edit(n.id),
+      child: Text('Edit', semanticsLabel: 'Edit ${n.name}'),
+    );
+    final clear = IconButton(
+      tooltip: 'Clear the selection',
+      constraints: const BoxConstraints(minWidth: Hit.min, minHeight: Hit.min),
+      onPressed: () => _select(null),
+      icon: const AppSymbolIcon(AppSymbols.xmark, size: 18),
+    );
+    final what = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(n.name, style: t.textTheme.titleSmall),
+      Text(nodeSummary(n, context), style: t.textTheme.bodySmall),
+    ]);
+    // At large text the buttons go under the words, so the name keeps the full width.
+    final large = MediaQuery.textScalerOf(context).scale(14) > 14 * 1.6;
     return Container(
       key: const Key('plan-selected'),
       margin: const EdgeInsets.only(bottom: Gap.s),
       padding: const EdgeInsets.symmetric(horizontal: Gap.s, vertical: Gap.xs),
       decoration: BoxDecoration(color: t.colorScheme.primary.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(Corners.small)),
-      child: Row(children: [
-        AppSymbolIcon(nodeSymbol(n), color: t.colorScheme.primary),
-        const SizedBox(width: Gap.s),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(n.name, style: t.textTheme.titleSmall),
-            Text(nodeSummary(n, context), style: t.textTheme.bodySmall),
-          ]),
-        ),
-        TextButton(
-          key: const Key('plan-selected-edit'),
-          style: TextButton.styleFrom(minimumSize: const Size(Hit.min, Hit.min)),
-          onPressed: () => _edit(n.id),
-          child: Text('Edit', semanticsLabel: 'Edit ${n.name}'),
-        ),
-        IconButton(
-          tooltip: 'Clear the selection',
-          constraints: const BoxConstraints(minWidth: Hit.min, minHeight: Hit.min),
-          onPressed: () => _select(null),
-          icon: const AppSymbolIcon(AppSymbols.xmark, size: 18),
-        ),
-      ]),
+      child: large
+          ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                AppSymbolIcon(nodeSymbol(n), color: t.colorScheme.primary),
+                const SizedBox(width: Gap.s),
+                Expanded(child: what),
+              ]),
+              Wrap(alignment: WrapAlignment.end, children: [edit, clear]),
+            ])
+          : Row(children: [
+              AppSymbolIcon(nodeSymbol(n), color: t.colorScheme.primary),
+              const SizedBox(width: Gap.s),
+              Expanded(child: what),
+              edit,
+              clear,
+            ]),
     );
   }
 

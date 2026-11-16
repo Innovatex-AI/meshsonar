@@ -28,7 +28,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart' show LatLng;
 
-import '../../../core/plan/link_model.dart' show haversineKm;
+import '../../../core/plan/link_model.dart' show ftM, haversineKm;
 import '../../../core/plan/plan_api.dart';
 import '../../../core/plan/plan_controller.dart';
 import '../../../core/plan/plan_model.dart';
@@ -234,7 +234,7 @@ class SiteChecks {
     final p = await CoveragePainterApi(s.planBaseUrl, s.planStore).paint(PainterParams(
       lat: r.site.lat,
       lon: r.site.lon,
-      antennaFt: (r.antennaM / 0.3048).clamp(6, 200).toDouble(),
+      antennaFt: (r.antennaM / ftM).clamp(6, 200).toDouble(),
       txDbm: r.txDbm.clamp(0, 30).toDouble(),
       gainDbi: r.gainDbi.clamp(-3, 12).toDouble(),
     ));

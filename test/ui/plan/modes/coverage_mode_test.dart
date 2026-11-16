@@ -64,7 +64,7 @@ void main() {
     expect(find.byKey(const Key('coverage-area')), findsOneWidget);
     expect(find.textContaining('Already covered today'), findsOneWidget);
     expect(find.textContaining('New area not covered today'), findsOneWidget);
-    expect(find.textContaining('Longest predicted link'), findsOneWidget);
+    expect(find.textContaining('Longest link (Estimate)'), findsOneWidget);
     expect(find.textContaining('no census counts'), findsOneWidget, reason: 'people only where census data exists');
     expect(find.byKey(const Key('coverage-union')), findsOneWidget);
     expect(find.byKey(const Key('coverage-legend')), findsOneWidget);
@@ -222,9 +222,9 @@ void main() {
     await _estimate(tester);
     expect(find.byKey(const Key('coverage-verify-loop')), findsOneWidget);
     expect(find.textContaining('Measured cells compared'), findsOneWidget);
-    expect(find.textContaining('Predicted to decode, but nothing was heard: 1 cell'), findsOneWidget);
-    expect(find.textContaining('Heard outside the prediction: 1 cell'), findsOneWidget);
-    expect(find.textContaining('Mean SNR measured / predicted'), findsOneWidget);
+    expect(find.textContaining('Covered by the Estimate, but nothing was heard: 1 cell'), findsOneWidget);
+    expect(find.textContaining('Heard outside the Estimate: 1 cell'), findsOneWidget);
+    expect(find.textContaining('Mean SNR Measured / Estimate'), findsOneWidget);
     expect(find.textContaining('Our drives near it: 5 drive cells within 2 km'), findsOneWidget);
     await drain(tester);
   });

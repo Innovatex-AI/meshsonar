@@ -87,7 +87,7 @@ const List<(String, String)> linkGlossary = [
   ('Blocking ridge', 'The highest ground above the line of sight. Raising an antenna, moving a site, or a relay on high ground gets around it.'),
   ('Terrain odds', 'How often links like this one (same distance, same terrain loss) worked on real repeater pairs. An estimate from Columbus data.'),
   ('Down, Up, Both', 'Down: A transmits to B (a repeater to a person). Up: B back to A. Both: the weaker of the two, what a two-way chat needs.'),
-  ('Receiver height', 'How high a handheld or companion radio is held above the ground. A hand at 1.5 m, a car roof about 2 m, a window or mast higher.'),
+  ('Receiver height', 'How high a handheld or companion radio is held above the ground: lowest in a hand, a little higher on a car roof, highest at a window or on a mast.'),
   ('Clutter', 'Trees and buildings the terrain data does not show. The model adds a loss per kilometre for the part of the path below the canopy height. Both are estimates you can change.'),
   ('Estimate', 'Worked out by the model from bare-earth terrain. Not a promise: real links can be better or worse.'),
   ('Measured', 'From our own data: packets our observers heard between the two nodes, or drives near them.'),
@@ -716,7 +716,7 @@ class LinkModeBodyState extends State<LinkModeBody> {
           color: t.colorScheme.tertiary,
         ),
       if (m == null && v == PlanVerdict.likely && a?.existingKey != null && b?.existingKey != null)
-        const PlanLine(AppSymbols.exclamationCircle, 'Predicted to work, but no packets between these two have been recorded.', key: Key('link-never-heard')),
+        const PlanLine(AppSymbols.exclamationCircle, 'The Estimate says it works, but no packets between these two have been Measured yet.', key: Key('link-never-heard')),
       if (m != null)
         PlanLine(
           AppSymbols.waveform,
