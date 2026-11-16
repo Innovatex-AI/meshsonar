@@ -73,6 +73,23 @@ void main() {
     expect(keys.map((k) => k.toString()), [hashtagSecret16('#cmh').toString()]);
   });
 
+  test('the observer third gate learns every private channel key this radio holds, never a # or Public one (MT-8)', () async {
+    final ctl = (await ChatWiring.attach(h.state))!;
+    expect(await h.state.connectSimulator(), isTrue);
+    await until(() => ctl.radioId != null && ctl.store.channels.list(ctl.radioId!).isNotEmpty, what: 'Public channel row');
+    final id = ctl.radioId!;
+    final family = Uint8List.fromList(List.filled(16, 9));
+    await ctl.store.channels.save(Channel(radioId: id, slot: 5, name: '#cmh', kind: ChannelKind.hashtag), secret: hashtagSecret16('#cmh'));
+    await ctl.store.channels.save(Channel(radioId: id, slot: 6, name: 'Family', kind: ChannelKind.private), secret: family);
+    final lookup = h.state.privateChannelKeys!;
+    await until(() => lookup(channelHashByte(family)) != null, what: 'Family key read from the secret store');
+    expect(lookup(channelHashByte(family))!.map((k) => k.toString()), [family.toString()]);
+    expect(lookup(channelHashByte(hashtagSecret16('#cmh')))!.map((k) => k.toString()), isNot(contains(hashtagSecret16('#cmh').toString())));
+    expect(lookup(channelHashByte(publicChannelSecret16))!.map((k) => k.toString()), isNot(contains(publicChannelSecret16.toString())));
+    await ChatWiring.detach();
+    expect(h.state.privateChannelKeys, isNull);
+  });
+
   test('outbox resumes: a message written while the radio is away goes out after the reconnect', () async {
     final ctl = (await ChatWiring.attach(h.state))!;
     await h.state.connectSimulator();

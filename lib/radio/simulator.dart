@@ -11,6 +11,9 @@ import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import '../core/meshtrack/mt_wire.dart' show MtRequest, formatMtParked, formatMtPosition, parseMeshTrack;
+import '../core/meshtrack/plus_code.dart' show PlusCode;
+import '../core/meshtrack/smart_beacon.dart' show MtFix, SmartBeacon, bearingDeg;
 import 'crypto.dart';
 import 'packet.dart';
 import 'protocol.dart';
@@ -197,6 +200,105 @@ class SimulatedRepeater {
   final Set<String> loggedIn = {};
 }
 
+// ------------------------------------------------------------------ MeshTrack friends (meshtrack plan section 10)
+
+/// The private group the simulated friends share: its name on the simulated radio's channel list.
+const String simulatedFriendsChannelName = 'Saturday crew';
+
+/// The group's fixed 16-byte test key (made up; a private channel, so the observer gates never pass its packets).
+final Uint8List simulatedFriendsChannelKey = Uint8List.fromList(List<int>.generate(16, (i) => 0x51 + i));
+
+/// A friend sharing MeshTrack positions on the simulated group: drives the Westerville loop at [speedMps], [offsetM]
+/// ahead of where a car starting at [startedAt] would be, sends `MT1` positions at the smart rate (lib/core/meshtrack/
+/// smart_beacon.dart), parks for good after [parkAfter] (one `s0`, then quiet) and, when [answersRequests], answers
+/// `MT1 ?` (or `MT1 ? <its name>`) after 2-10 s, at most once per 30 s. Pure function of the times it is given.
+class SimulatedFriend {
+  final String name;
+  final double speedMps;
+  final double offsetM;
+  final DateTime startedAt;
+  final Duration? parkAfter;
+  final bool answersRequests;
+  final SimulatedLocationSource _route;
+  final SmartBeacon _beacon = SmartBeacon();
+  DateTime? _answeredAt;
+
+  /// Every text this friend sent, in order (tests and the demo).
+  final List<({DateTime at, String text})> sent = [];
+
+  /// Shortest pause between two answers to a request.
+  static const Duration answerGap = Duration(seconds: 30);
+
+  SimulatedFriend(
+    this.name, {
+    required this.startedAt,
+    this.speedMps = 13,
+    this.offsetM = 0,
+    this.parkAfter,
+    this.answersRequests = false,
+  }) : _route = SimulatedLocationSource(
+            speedMps: speedMps,
+            epoch: startedAt.subtract(Duration(microseconds: (offsetM / speedMps * 1e6).round())));
+
+  /// Parked for good from [startedAt] + [parkAfter].
+  bool parkedAt(DateTime t) => parkAfter != null && !t.isBefore(startedAt.add(parkAfter!));
+
+  /// Where the friend is at [t] (on the loop; the parking spot once parked).
+  ({double lat, double lon}) positionAt(DateTime t) => _route.positionAt(parkedAt(t) ? startedAt.add(parkAfter!) : t);
+
+  /// The friend's GPS fix at [t]: 5 m accuracy, speed, course over ground (none while parked).
+  MtFix fixAt(DateTime t) {
+    final p = positionAt(t);
+    if (parkedAt(t)) return MtFix(lat: p.lat, lon: p.lon, at: t, accuracyM: 5, speedMps: 0);
+    final b = _route.positionAt(t.subtract(const Duration(seconds: 2)));
+    return MtFix(lat: p.lat, lon: p.lon, at: t, accuracyM: 5, speedMps: speedMps, courseDeg: bearingDeg(b.lat, b.lon, p.lat, p.lon));
+  }
+
+  /// One GPS fix at [now]: the `MT1` text to send now, or null (the smart rate says wait, or parked and quiet).
+  String? tick(DateTime now) {
+    final fix = fixAt(now);
+    final d = _beacon.decide(fix, now: now);
+    if (!d.send) return null;
+    _beacon.markSent(d, fix, now);
+    final code = PlusCode.encode(fix.lat, fix.lon);
+    final text = d.parked
+        ? formatMtParked(code)
+        : formatMtPosition(code, speedKmh: d.speedKmh?.round(), courseDeg: d.courseDeg?.round());
+    sent.add((at: now, text: text));
+    return text;
+  }
+
+  /// A channel message [body] heard on the group at [now]: how long until this friend answers it, or null (not a
+  /// request for it, it does not answer, or it answered less than [answerGap] ago).
+  Duration? answerDelay(String body, DateTime now, math.Random rng) {
+    if (!answersRequests) return null;
+    final m = parseMeshTrack(body);
+    if (m is! MtRequest) return null;
+    if (m.name != null && m.name!.toLowerCase() != name.toLowerCase()) return null;
+    final last = _answeredAt;
+    if (last != null && now.difference(last) < answerGap) return null;
+    _answeredAt = now;
+    return Duration(milliseconds: 2000 + rng.nextInt(8001));
+  }
+
+  /// The answer to a request: the current position, at once (not through the smart rate).
+  String answer(DateTime now) {
+    final fix = fixAt(now);
+    final code = PlusCode.encode(fix.lat, fix.lon);
+    final kmh = ((fix.speedMps ?? 0) * 3.6).round();
+    final text = parkedAt(now) ? formatMtParked(code) : formatMtPosition(code, speedKmh: kmh, courseDeg: fix.courseDeg?.round());
+    sent.add((at: now, text: text));
+    return text;
+  }
+}
+
+/// The two demo friends: Sam drives 800 m ahead and answers "Where are you?"; Jo drives 2.5 km behind, slower, and parks
+/// after 6 minutes.
+List<SimulatedFriend> defaultSimulatedFriends(DateTime startedAt) => [
+      SimulatedFriend('Sam KD8SAM', startedAt: startedAt, speedMps: 13, offsetM: 800, answersRequests: true),
+      SimulatedFriend('Jo N8JO', startedAt: startedAt, speedMps: 11, offsetM: -2500, parkAfter: const Duration(minutes: 6)),
+    ];
+
 /// Fixed repeaters around Westerville (made-up names and keys; plausible sites).
 List<SimulatedRepeater> defaultSimulatedRepeaters() => [
       SimulatedRepeater('WSTV Uptown', 40.1258, -82.9312),
@@ -268,6 +370,18 @@ class SimulatedTransport implements ByteTransport {
   final bool ambientTraffic;
   Timer? _ambient;
   int _ambientTick = 0;
+
+  /// MeshTrack demo (meshtrack plan section 10): two friends on the private "Saturday crew" channel (slot 1) share
+  /// positions while the radio is connected. On only in the demo (defaults to [ambientTraffic]); never in tests unless
+  /// asked for.
+  final bool meshTrackFriends;
+
+  /// The friends sharing on the group, made when the app starts talking to the radio.
+  final List<SimulatedFriend> friends = [];
+  Timer? _friendTimer;
+
+  /// How often the friends' GPS ticks (simulated time).
+  static const Duration friendTick = Duration(seconds: 5);
 
   /// Adverts this radio sent through SEND_SELF_ADVERT (true = flood), for tests.
   final List<bool> sentAdverts = [];
@@ -374,13 +488,16 @@ class SimulatedTransport implements ByteTransport {
     int extraContacts = 0,
     this.contactFramePaceMs = 10,
     this.ambientTraffic = false,
-  })  : location = location ?? SimulatedLocationSource(timeScale: timeScale, clock: clock),
+    bool? meshTrackFriends,
+  })  : meshTrackFriends = meshTrackFriends ?? ambientTraffic,
+        location = location ?? SimulatedLocationSource(timeScale: timeScale, clock: clock),
         repeaters = repeaters ?? defaultSimulatedRepeaters(),
         _rng = math.Random(seed),
         _clock = clock ?? DateTime.now,
         publicKey = sha256(utf8.encode('meshsonar-sim-companion')),
         _slots = List.generate(maxChannels, (i) => _Slot('', Uint8List(16))) {
     _slots[0] = _Slot('Public', Uint8List.fromList(publicChannelSecret));
+    if (this.meshTrackFriends && _slots.length > 1) _slots[1] = _Slot(simulatedFriendsChannelName, Uint8List.fromList(simulatedFriendsChannelKey));
     _bootAt = _clock();
     for (final c in contacts ?? defaultSimulatedContacts()) {
       _contacts.add(_SimContact(c.publicKey, AdvType.chat, c.name, _modClock++)..lastAdvert = _clockSecs);
@@ -657,6 +774,7 @@ class SimulatedTransport implements ByteTransport {
           multiAcks: multiAcks,
         ));
         if (ambientTraffic) _startAmbient();
+        if (meshTrackFriends) _startFriends();
       case Cmd.deviceQuery:
         if (frame.length >= 2) _appTargetVer = frame[1];
         _emit(encodeDeviceInfo(
@@ -704,6 +822,7 @@ class SimulatedTransport implements ByteTransport {
         _txAirMs += _airMsPerPacket;
         sentChannel.add((slot: i, text: text));
         _simulateFlood(_slots[i].secret, ts, text);
+        _friendsHeard(i, text);
       case Cmd.syncNextMessage:
         _emit(_offline.isEmpty ? encodeNoMoreMessages() : _offline.removeAt(0));
       case Cmd.getContacts:
@@ -1228,6 +1347,69 @@ class SimulatedTransport implements ByteTransport {
     _emit(encodeLogRxData(snrDb, (_nf + snrDb).round(), pkt.toBytes()));
   }
 
+  /// Simulated time: the radio's boot plus wall time since then, times [timeScale] (the GPS loop runs on the same scale).
+  DateTime get simNow =>
+      _bootAt.add(Duration(microseconds: (_clock().difference(_bootAt).inMicroseconds * timeScale).round()));
+
+  /// The slot holding the friends' group key, or null (no friends, or the app put another channel there).
+  int? get friendsSlot {
+    if (!meshTrackFriends) return null;
+    for (var i = 0; i < _slots.length; i++) {
+      final k = _slots[i].secret;
+      var same = k.length == 16;
+      for (var j = 0; same && j < 16; j++) {
+        same = k[j] == simulatedFriendsChannelKey[j];
+      }
+      if (same) return i;
+    }
+    return null;
+  }
+
+  void _startFriends() {
+    if (_friendTimer != null || friendsSlot == null) return;
+    friends
+      ..clear()
+      ..addAll(defaultSimulatedFriends(simNow));
+    _friendTimer = Timer.periodic(_scaled(friendTick), (_) => _friendsTick());
+    _timers.add(_friendTimer!);
+    _friendsTick();
+  }
+
+  void _friendsTick() {
+    if (!_connected) return;
+    final now = simNow;
+    for (final f in friends) {
+      final text = f.tick(now);
+      if (text != null) _friendSays(f, text);
+    }
+  }
+
+  /// [f] sends [text] on the group: the encrypted packet reaches the Rx log (the observer gates drop it, private key) and
+  /// the radio queues the decrypted message for the app, as a real companion does.
+  void _friendSays(SimulatedFriend f, String text) {
+    final slot = friendsSlot;
+    if (slot == null || !_connected) return;
+    final via = repeaters.isEmpty ? const <int>[] : [repeaters[f.name.length % repeaters.length].publicKey[0]];
+    injectChatter(f.name, text, slot: slot, pathHashes: via, snrDb: 5.5);
+    injectChannelMessage(slot, f.name, text, pathLen: via.length, snrDb: 5.5);
+  }
+
+  /// The app sent [text] on [slot]: a friend answers a "Where are you?" on the group after its delay.
+  void _friendsHeard(int slot, String text) {
+    if (slot != friendsSlot) return;
+    final now = simNow;
+    for (final f in friends) {
+      final d = f.answerDelay(text, now, _rng);
+      if (d == null) continue;
+      late Timer t;
+      t = Timer(_scaled(d), () {
+        _timers.remove(t);
+        if (_connected) _friendSays(f, f.answer(simNow));
+      });
+      _timers.add(t);
+    }
+  }
+
   void _startAmbient() {
     if (_ambient != null) return;
     _ambient = Timer.periodic(_scaled(const Duration(seconds: 6)), (_) {
@@ -1287,6 +1469,9 @@ class SimulatedRadioScanner implements RadioScanner {
   /// Other nodes advertise and chatter now and then (the app's Simulator; not tests).
   final bool ambientTraffic;
 
+  /// MeshTrack friends on a private group (see [SimulatedTransport.meshTrackFriends]); null = same as [ambientTraffic].
+  final bool? meshTrackFriends;
+
   /// The transport handed out by the last [connect], for tests and demos.
   SimulatedTransport? lastTransport;
 
@@ -1316,6 +1501,7 @@ class SimulatedRadioScanner implements RadioScanner {
     this.autoAddSupported = true,
     this.contactFramePaceMs = 10,
     this.ambientTraffic = false,
+    this.meshTrackFriends,
   });
 
   @override
@@ -1337,7 +1523,8 @@ class SimulatedRadioScanner implements RadioScanner {
         extraContacts: extraContacts,
         autoAddSupported: autoAddSupported,
         contactFramePaceMs: contactFramePaceMs,
-        ambientTraffic: ambientTraffic);
+        ambientTraffic: ambientTraffic,
+        meshTrackFriends: meshTrackFriends);
     lastTransport = t;
     return t;
   }

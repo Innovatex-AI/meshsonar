@@ -1,5 +1,6 @@
 // Property test (WS-OUT 4, observer-and-data-platform-plan-2026-11-16.md): over EVERY payload type 0..15, every channel
-// verdict for group packets (Public, a # channel the phone holds, a private channel, the drive channel) and every own
+// verdict for group packets (Public, a # channel the phone holds, a private channel, the drive channel, a MeshTrack group
+// key leaked into the shareable set: the third gate) and every own
 // state (overheard, our own non-public ping's echo, our own public ping's echo, each one resolved before the echo or held
 // until the ping resolves), only overheard, non-own, public packets reach the MQTT engine, and of those only the public
 // kinds (ADVERT, PATH, TRACE, proven Public / # group packets) make a feed message.
@@ -24,7 +25,8 @@ class _RxLink extends FakeLink {
   Stream<RxPacket> get rxPackets => rx.stream;
 }
 
-enum _Chan { none, public, held, private, drive }
+// track: a private MeshTrack group key the phone holds that a regression let into the shareable set (the third gate drops it).
+enum _Chan { none, public, held, private, drive, track }
 
 enum _Own { overheard, ownPrivateBefore, ownPrivateHeld, ownPublicBefore, ownPublicHeld }
 
@@ -36,29 +38,35 @@ void main() {
       ..approveKey()
       ..observerEngineFactory = (() => engine)
       ..linkMaker = (info) => link = _RxLink(info);
+    final crew = List<int>.generate(16, (i) => 0x51 + i), privateKey = List<int>.generate(16, (i) => 0x40 + i);
     await h.state.init();
     expect(await h.state.connect(const RadioDevice(id: 'aa:bb', name: 'MeshCore-Truck'), RadioKind.bluetooth), isTrue);
     h.state
-      ..hashtagChannelKeys = (() => [hashtagSecret16('#ohio')])
-      ..hashtagChannelNames = (() => ['#ohio']);
+      ..hashtagChannelKeys = (() => [hashtagSecret16('#ohio'), crew])
+      ..hashtagChannelNames = (() => ['#ohio'])
+      ..privateChannelKeys = ((hash) => [
+            for (final k in [crew, privateKey])
+              if (channelHashByte(k) == hash) k
+          ]);
     await h.state.startDrive(); // a public drive, so an own ping at a real position goes up publicly
     expect(h.state.observerSharing, isTrue);
 
     final keys = <_Chan, List<int>>{
       _Chan.public: publicChannelSecret16,
       _Chan.held: hashtagSecret16('#ohio'),
-      _Chan.private: List<int>.generate(16, (i) => 0x40 + i),
+      _Chan.private: privateKey,
+      _Chan.track: crew,
       _Chan.drive: hashtagSecret16(h.state.settings.channel),
     };
     final expected = <String>{}, all = <String>{};
     var salt = 0, pingId = 0;
     for (var type = 0; type < 16; type++) {
       final group = telemetryGroupTypes.contains(type);
-      for (final chan in group ? [_Chan.public, _Chan.held, _Chan.private, _Chan.drive] : [_Chan.none]) {
+      for (final chan in group ? [_Chan.public, _Chan.held, _Chan.private, _Chan.drive, _Chan.track] : [_Chan.none]) {
         for (final own in _Own.values) {
           salt++;
           final payload = group
-              ? buildGroupTextPayload(keys[chan]!, 5000 + salt, 'Ann', 'words $salt')
+              ? buildGroupTextPayload(keys[chan]!, 5000 + salt, 'Ann', chan == _Chan.track ? 'MT1 @87G8Q2X5+7F2 s34 c270' : 'words $salt')
               : Uint8List.fromList(
                   List<int>.generate(type == PayloadType.advert ? telemetryMinAdvertPayload : 24, (i) => (i * 7 + salt) & 0xff)
                     ..[0] = salt & 0xff
@@ -88,7 +96,7 @@ void main() {
           await Future<void>.delayed(Duration.zero);
           if (held) h.state.debugOnPing(ping());
           final passesFilter = !telemetryPrivateTypes.contains(type) && (!group || chan == _Chan.public || chan == _Chan.held || chan == _Chan.drive);
-          if (!ownPing && chan != _Chan.drive && passesFilter) expected.add(hash);
+          if (!ownPing && chan != _Chan.drive && chan != _Chan.track && passesFilter) expected.add(hash);
         }
       }
     }
