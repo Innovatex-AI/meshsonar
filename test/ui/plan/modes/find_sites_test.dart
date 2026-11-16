@@ -23,8 +23,7 @@ import 'find_sites_fixtures.dart';
 
 PlanSuggestResult suggestFixture() => PlanSuggestResult.parse(jsonDecode(kPlanSuggestResponseJson) as Map<String, dynamic>);
 PlanSuggestResult preparingFixture() => PlanSuggestResult.parse(jsonDecode(kPlanSuggestPreparingJson) as Map<String, dynamic>);
-PlanVerifyResult verifyFixture() =>
-    PlanVerifyResult.parse(jsonDecode(File('test/fixtures/plan_server/plan-verify.site.response.json').readAsStringSync()) as Map<String, dynamic>);
+PlanVerifyResult verifyFixture() => PlanVerifyResult.parse(jsonDecode(kPlanVerifySiteJson) as Map<String, dynamic>);
 
 /// A client whose plan-verify takes a moment and records how many run at once; sites at [failLats] fail.
 class SlowVerifyClient extends FakeCmatClient {
@@ -71,6 +70,11 @@ void main() {
       expect(r.sites[2].gain.redundancy, PlanRedundancyGain.joinsComponents);
       expect(r.provenance.confidence, PlanConfidenceLevel.calibrated);
       expect(preparingFixture().preparing, isTrue);
+    });
+
+    test('the embedded plan-verify copy equals test/fixtures/plan_server/plan-verify.site.response.json', () {
+      final file = jsonDecode(File('test/fixtures/plan_server/plan-verify.site.response.json').readAsStringSync());
+      expect(jsonDecode(kPlanVerifySiteJson), file);
     });
 
     test('publicCandidates: never an existing node, never on a hidden-position node, at most 20', () {

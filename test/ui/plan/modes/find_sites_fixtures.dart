@@ -390,3 +390,424 @@ const String kPlanSuggestPreparingJson = r'''
   }
 }
 ''';
+
+/// A copy of test/fixtures/plan_server/plan-verify.site.response.json (the simulator tour cannot read files from the
+/// test folder; find_sites_test.dart checks the copy still equals the file).
+const String kPlanVerifySiteJson = r'''
+{
+  "mode": "coverage",
+  "params": {
+    "mode": "coverage",
+    "lat": 37.27,
+    "lon": -79.94,
+    "antennaFt": 33,
+    "antennaM": 10,
+    "txDbm": 22,
+    "gainDbi": 3,
+    "receiver": "handheld",
+    "receiverM": 1.5,
+    "radio": {
+      "freqMHz": 910.525,
+      "bwKHz": 62.5,
+      "sf": 7,
+      "cr": 5
+    },
+    "direction": "both",
+    "radiusKm": 5,
+    "searchKm": 1.5,
+    "clutter": {
+      "dbPerKm": 13.3,
+      "endpointDb": 0,
+      "canopyM": 15
+    }
+  },
+  "model": {
+    "name": "profile+bullington+clutter v1",
+    "direction": "both",
+    "freqMHz": 910.525,
+    "kFactor": 1.3333333333333333,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5,
+    "noiseFigureDb": 6,
+    "snrFloorDb": -7.5,
+    "noiseFloorDbm": -120.04,
+    "sensitivityDbm": -127.54,
+    "clutter": {
+      "dbPerKm": 13.3,
+      "endpointDb": 0,
+      "canopyM": 15
+    },
+    "receiver": {
+      "kind": "handheld",
+      "heightM": 1.5,
+      "gainDbi": 0,
+      "txDbm": 22
+    },
+    "existing": {
+      "heightM": 8,
+      "gainDbi": 3,
+      "txDbm": 22
+    },
+    "calibration": {
+      "baseline": "2026-10-14",
+      "liveRepeaters": 65,
+      "observedLinks": 145,
+      "pairs": 1046,
+      "maxKm": 20,
+      "medianResidualDb": 0.31,
+      "medianAbsResidualDb": 16.7,
+      "atZero": {
+        "predicted": 297,
+        "tp": 105,
+        "precision": 0.354,
+        "recall": 0.724,
+        "f1": 0.475
+      },
+      "atTen": {
+        "predicted": 226,
+        "tp": 84,
+        "precision": 0.372,
+        "recall": 0.579,
+        "f1": 0.453
+      },
+      "distanceOnly": {
+        "precision": 0.31,
+        "recall": 0.634,
+        "f1": 0.416
+      },
+      "auc": 0.818,
+      "aucDistanceOnly": 0.787
+    },
+    "note": "Estimate — terrain + diffraction + clutter; lidar canopy not included. Bare-earth DEM; trees and buildings enter only through the calibrated clutter term."
+  },
+  "terrain": {
+    "source": "AWS Terrain Tiles (Terrarium; USGS 3DEP / SRTM blend), bare earth",
+    "zoom": 13,
+    "pixelM": 15,
+    "tiles": 16,
+    "fetched": 1
+  },
+  "sweep": {
+    "radials": 360,
+    "stepM": 60,
+    "samples": 83,
+    "groundM": 300.7
+  },
+  "bands": [
+    {
+      "id": "below",
+      "label": "Below 0 dB",
+      "areaKm2": 38.85
+    },
+    {
+      "id": "fringe",
+      "label": "0–6 dB",
+      "areaKm2": 6.54
+    },
+    {
+      "id": "usable",
+      "label": "6–12 dB",
+      "areaKm2": 8.72
+    },
+    {
+      "id": "solid",
+      "label": "Over 12 dB",
+      "areaKm2": 23.81
+    }
+  ],
+  "coveredKm2": 39.07,
+  "population": {
+    "inRadius": 0,
+    "covered": 0,
+    "newlyCovered": 0,
+    "reachKm": 3,
+    "groupsCovered": 0,
+    "liveRepeaters": 2
+  },
+  "links": [
+    {
+      "publicKey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "keyShort": "aaaaaaaa",
+      "name": "Mill Mountain",
+      "piece": "Piece 1",
+      "km": 2.394,
+      "marginDb": 18.4,
+      "downDb": 18.4,
+      "upDb": 18.4,
+      "diffractionDb": 21,
+      "clutterDb": 16.9,
+      "fsplDb": 99.2
+    }
+  ],
+  "footprint": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "properties": {
+          "band": "below",
+          "label": "Below 0 dB",
+          "minDb": null,
+          "maxDb": 0,
+          "areaKm2": 38.85
+        },
+        "geometry": {
+          "type": "MultiPolygon",
+          "coordinates": [
+            [
+              [
+                [
+                  -79.94033,
+                  37.30049
+                ],
+                [
+                  -79.94049,
+                  37.31478
+                ],
+                [
+                  -79.93951,
+                  37.31478
+                ],
+                [
+                  -79.93967,
+                  37.30049
+                ],
+                [
+                  -79.94033,
+                  37.30049
+                ]
+              ]
+            ],
+            [
+              [
+                [
+                  -79.93967,
+                  37.29995
+                ],
+                [
+                  -79.93952,
+                  37.31398
+                ],
+                [
+                  -79.93855,
+                  37.31396
+                ],
+                [
+                  -79.93901,
+                  37.29994
+                ],
+                [
+                  -79.93967,
+                  37.29995
+                ]
+              ]
+            ]
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "band": "fringe",
+          "label": "0–6 dB",
+          "minDb": 0,
+          "maxDb": 6,
+          "areaKm2": 6.54
+        },
+        "geometry": {
+          "type": "MultiPolygon",
+          "coordinates": [
+            [
+              [
+                [
+                  -79.94032,
+                  37.29941
+                ],
+                [
+                  -79.94033,
+                  37.30049
+                ],
+                [
+                  -79.93967,
+                  37.30049
+                ],
+                [
+                  -79.93968,
+                  37.29941
+                ],
+                [
+                  -79.94032,
+                  37.29941
+                ]
+              ]
+            ],
+            [
+              [
+                [
+                  -79.93968,
+                  37.29941
+                ],
+                [
+                  -79.93967,
+                  37.29995
+                ],
+                [
+                  -79.93901,
+                  37.29994
+                ],
+                [
+                  -79.93903,
+                  37.2994
+                ],
+                [
+                  -79.93968,
+                  37.29941
+                ]
+              ]
+            ]
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "band": "usable",
+          "label": "6–12 dB",
+          "minDb": 6,
+          "maxDb": 12,
+          "areaKm2": 8.72
+        },
+        "geometry": {
+          "type": "MultiPolygon",
+          "coordinates": [
+            [
+              [
+                [
+                  -79.94031,
+                  37.29833
+                ],
+                [
+                  -79.94032,
+                  37.29941
+                ],
+                [
+                  -79.93968,
+                  37.29941
+                ],
+                [
+                  -79.93969,
+                  37.29833
+                ],
+                [
+                  -79.94031,
+                  37.29833
+                ]
+              ]
+            ],
+            [
+              [
+                [
+                  -79.93969,
+                  37.29833
+                ],
+                [
+                  -79.93968,
+                  37.29941
+                ],
+                [
+                  -79.93903,
+                  37.2994
+                ],
+                [
+                  -79.93907,
+                  37.29832
+                ],
+                [
+                  -79.93969,
+                  37.29833
+                ]
+              ]
+            ]
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "band": "solid",
+          "label": "Over 12 dB",
+          "minDb": 12,
+          "maxDb": null,
+          "areaKm2": 23.81
+        },
+        "geometry": {
+          "type": "MultiPolygon",
+          "coordinates": [
+            [
+              [
+                [
+                  -79.94,
+                  37.27
+                ],
+                [
+                  -79.94031,
+                  37.29833
+                ],
+                [
+                  -79.93969,
+                  37.29833
+                ],
+                [
+                  -79.94,
+                  37.27
+                ]
+              ]
+            ],
+            [
+              [
+                [
+                  -79.94,
+                  37.27
+                ],
+                [
+                  -79.93969,
+                  37.29833
+                ],
+                [
+                  -79.93907,
+                  37.29832
+                ],
+                [
+                  -79.94,
+                  37.27
+                ]
+              ]
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  "grid": {
+    "radials": 360,
+    "n": 83,
+    "stepM": 60,
+    "margin": "f39/f39/fXhzbWhjXllUT0tGQj87ODUzMS8tKyooJyYlJCMiISAfIicpKSspKykn",
+    "diffraction": "AAAAAAAAAAIEBgcJCw4QEhQWFxgZGhoaGhoaGRgYFxYVExIREA8ODQwMCwsKCgoK",
+    "scale": 0.5
+  },
+  "computeMs": 30,
+  "newAreaKm2": 39.05,
+  "alreadyCoveredKm2": 0.02,
+  "newPeople": null,
+  "mount": "building",
+  "asOf": "2026-11-15T10:00:00Z",
+  "confidence": {
+    "level": "estimate",
+    "note": "terrain model only here; calibrated on Columbus links (Oct 14 2026); 1 covered map cells within 2 km to compare"
+  },
+  "cached": false,
+  "totalMs": 34
+}
+''';

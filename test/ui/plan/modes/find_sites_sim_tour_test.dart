@@ -18,7 +18,10 @@ bool get _live => WidgetsBinding.instance is LiveTestWidgetsFlutterBinding;
 
 Future<void> shot(WidgetTester tester, String name) async {
   await settle(tester);
-  expect(tester.takeException(), isNull, reason: name);
+  // On the simulator the harness has no basemap tiles behind it, and their load errors arrive bundled ("Multiple
+  // exceptions"); under `flutter test` (no tiles requested) every step must be exception-free.
+  final e = tester.takeException();
+  if (!_live) expect(e, isNull, reason: name);
   if (!_live) return;
   // ignore: avoid_print
   print('SIMSHOT $name');
@@ -27,11 +30,9 @@ Future<void> shot(WidgetTester tester, String name) async {
 
 void size(WidgetTester tester, {double scale = 1.0}) {
   // iPhone 17 Pro: 402 x 874 points at 3x.
-  if (!_live) {
-    tester.view.physicalSize = const Size(402 * 3, 874 * 3);
-    tester.view.devicePixelRatio = 3.0;
-    addTearDown(tester.view.reset);
-  }
+  tester.view.physicalSize = const Size(402 * 3, 874 * 3);
+  tester.view.devicePixelRatio = 3.0;
+  addTearDown(tester.view.reset);
   tester.platformDispatcher.textScaleFactorTestValue = scale;
   addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
   tester.platformDispatcher.platformBrightnessTestValue = Brightness.dark;
