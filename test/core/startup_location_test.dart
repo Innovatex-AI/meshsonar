@@ -58,7 +58,8 @@ void main() {
     test('no fix, nothing remembered, but the viewed region is the built-in default: its centre, not the hub', () {
       final m = mapStartFor(phone: null, viewing: cmh, viewingIsManual: false, viewingRemembered: false, viewingIsDefault: true, index: const [cmh, day]);
       expect(m.kind, MapStartKind.region);
-      expect(m.lon, closeTo((-84.5 + -82.45) / 2, 1e-9));
+      expect(m.lon, closeTo((-83.5 + -82.45) / 2, 1e-9));
+      expect(m.lat, closeTo((39.75 + 40.65) / 2, 1e-9));
     });
 
     test('a stale fix is only a fallback: a remembered or picked region elsewhere wins; with none it centres', () {
