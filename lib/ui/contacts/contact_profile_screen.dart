@@ -21,6 +21,7 @@ import '../design/app_symbols.dart';
 import '../design/app_type.dart';
 import '../design/app_widgets.dart';
 import '../design/tokens.dart';
+import '../meshtrack/ask_location_card.dart';
 import '../nodes/node_actions.dart' show NodeActionEnv, NodeActionId, nodeActions, runNodeAction;
 import '../nodes/node_ref.dart';
 import '../shell/shell_controller.dart';
@@ -67,6 +68,9 @@ class ContactProfileScreen extends StatefulWidget {
   /// The radio's firmware capabilities (null = baseline). The real app wires this when WP7 exposes it on the session.
   final RadioCaps Function()? radioCaps;
 
+  /// Ask for location seam (tests); null = the app's ([AskLocationEnv.of]).
+  final AskLocationEnv? askLocation;
+
   const ContactProfileScreen({
     super.key,
     required this.controller,
@@ -76,6 +80,7 @@ class ContactProfileScreen extends StatefulWidget {
     this.shareFile = _defaultShareFile,
     this.claimBuilder = _defaultClaim,
     this.radioCaps,
+    this.askLocation,
   });
 
   @override
@@ -246,6 +251,8 @@ class _ContactProfileScreenState extends State<ContactProfileScreen> {
                   if (c.type == ContactType.room && canAdmin)
                     ProfileRow(key: const Key('contact-admin'), label: 'Administer room', chevron: true, onTap: () => _c.openAdmin!(context, c)),
                 ]),
+                // MeshTrack MT-13: ask a person's radio where it is (people only; see ask_location_card.dart).
+                if (c.type == ContactType.companion && !c.blocked) AskLocationCard(contact: c, env: widget.askLocation),
                 ProfileGroup(rows: [
                   if (c.type == ContactType.companion || c.type == ContactType.room)
                     AppSwitchTile(

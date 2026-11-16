@@ -268,3 +268,60 @@ const String mtPositionMessagesNote =
     'MeshTrack updates heard in this channel in the last 24 hours. They are shown here only: never saved in the chat, '
     'never notified, and not in backups, exports or search.';
 
+
+// ------------------------------------------------------------------------------------------------ Ask for location (MT-13)
+
+const String askLocationLabel = 'Ask for location';
+const String askCancel = 'Cancel';
+const String askTryAgain = 'Try again';
+const String askOpenOnMap = 'Open on map';
+const String askNotConnected = 'Connect your radio to ask.';
+const String askBusy = 'Your radio is busy with another request. Try again in a moment.';
+const String askFailed = 'Your radio could not send the request. Try again.';
+const String askNoAnswerHint = 'They may be out of range, or their radio may not answer location requests.';
+
+/// The "asked" mark on the Drive map pin and its legend.
+const String askedPinMark = 'Asked';
+
+String _first(String name) {
+  final f = name.trim().split(RegExp(r'\s+')).first;
+  return f.isEmpty ? name : f;
+}
+
+/// Under the Ask for location row before anything was asked.
+String askFooter(String name) => "Asks ${_first(name)}'s radio where it is. It answers only if they allow it.";
+
+/// While asking.
+String askAsking(String name) => 'Asking $name…';
+
+/// The answer had no position.
+String askNoLocation(String name) =>
+    "$name did not share a location. They can allow it in their MeshCore app's telemetry settings.";
+
+/// Nothing came back in time.
+String askNoAnswer(String name) => 'No answer from $name.';
+
+/// The radio does not have the contact.
+String askNotOnRadio(String name) => '$name is not on your radio yet. Put them on your radio, then ask.';
+
+/// "Ask again in 25 s" while the once-per-30-s limit holds.
+String askAgainIn(Duration left) => 'Ask again in ${(left.inMilliseconds / 1000).ceil()} s';
+
+/// "Answered just now" / "Answered 3 min ago".
+String askAnsweredAgo(DateTime at, DateTime now) {
+  final d = now.difference(at);
+  if (d.inMinutes < 1) return 'Answered just now';
+  if (d.inHours < 1) return 'Answered ${d.inMinutes} min ago';
+  return 'Answered ${d.inHours} h ago';
+}
+
+/// The headline of an answered position: "2.4 km NE of you", or "Position received" when my own position is unknown.
+String askWhere(MtLatLon? me, double lat, double lon, Units units) {
+  final dp = mtDistanceAndPoint(me, lat, lon, units);
+  if (dp == null) return 'Position received';
+  if (dp == 'here') return 'Right where you are';
+  return '$dp of you';
+}
+
+/// VoiceOver label of the asked pin on the map.
+String askedPinSemantics(String name, String ago) => '$name, asked for location, ${ago.toLowerCase()}';

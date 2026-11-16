@@ -193,7 +193,7 @@ class _UserStatsBodyState extends State<UserStatsBody> {
         return [_Card(key: const Key('stats-no-contact'), symbol: AppSymbols.person, title: 'Not on your radio', message: r.detail ?? '')];
       case TelemetryStatus.notConnected:
         return [_Card(key: const Key('stats-disconnected'), symbol: AppSymbols.antenna, title: 'Radio not connected', message: r.detail ?? '')];
-      case TelemetryStatus.tooSoon:
+      case TelemetryStatus.tooSoon || TelemetryStatus.cancelled:
         return [_Card(key: const Key('stats-too-soon'), symbol: AppSymbols.clock, title: 'Hold on', message: r.detail ?? 'Try again in a moment.')];
       case TelemetryStatus.refused:
         return [_Card(key: const Key('stats-refused'), symbol: AppSymbols.exclamationCircle, title: 'Your radio refused', message: r.detail ?? '')];

@@ -20,7 +20,33 @@ import 'tool_frames.dart';
 import 'tool_state.dart';
 import 'tools_radio.dart';
 
-enum TelemetryStatus { ok, empty, silent, noContact, refused, notConnected, tooSoon }
+enum TelemetryStatus { ok, empty, silent, noContact, refused, notConnected, tooSoon, cancelled }
+
+/// Ends a running telemetry request early (the person pressed Cancel). The request then returns
+/// [TelemetryStatus.cancelled] at once; a late answer from the contact is ignored.
+class TelemetryCancel {
+  bool _cancelled = false;
+  final List<void Function()> _hooks = [];
+  bool get isCancelled => _cancelled;
+
+  void cancel() {
+    if (_cancelled) return;
+    _cancelled = true;
+    final hooks = List.of(_hooks);
+    _hooks.clear();
+    for (final h in hooks) {
+      h();
+    }
+  }
+
+  void _on(void Function() f) {
+    if (_cancelled) {
+      f();
+    } else {
+      _hooks.add(f);
+    }
+  }
+}
 
 class TelemetryResult {
   final TelemetryStatus status;
@@ -150,24 +176,33 @@ class TelemetryTool with ToolChanges {
   /// [requestContact] through the shared queue so it never overlaps a login or a repeater refresh. A user tap runs at admin
   /// priority; [background] (auto refresh) is dropped when anything else is going on. Silence comes back as `silent` and the
   /// queue entry ends as noReply.
-  Future<TelemetryResult> requestContactQueued(RadioContact c, {bool background = false}) async {
+  ///
+  /// [user]: the person asked for it (Ask for location): it goes at user priority and its airtime is recorded by the
+  /// TxArbiter as a user send. [waitFor] picks how long to wait for the answer from the radio's SENT frame (default:
+  /// est_timeout + [waitSlack], within [minWait]..[maxWait]). [cancel] ends the wait early.
+  Future<TelemetryResult> requestContactQueued(RadioContact c,
+      {bool background = false, bool user = false, Duration Function(SentFrame sent)? waitFor, TelemetryCancel? cancel}) async {
     final q = queue;
-    if (q == null) return requestContact(c);
+    if (q == null) return requestContact(c, user: user, waitFor: waitFor, cancel: cancel);
     TelemetryResult? out;
     final req = q.enqueue<TelemetryResult>(
       kind: RemoteKind.telemetry,
       target: c.name.isEmpty ? c.publicKeyHex.substring(0, 8) : c.name,
-      priority: background ? CommandPriority.background : CommandPriority.admin,
+      priority: background ? CommandPriority.background : (user ? CommandPriority.user : CommandPriority.admin),
       run: (ctx) async {
-        final r = await requestContact(c);
+        final r = await requestContact(c, user: user, waitFor: waitFor, cancel: cancel);
         out = r;
         if (r.status == TelemetryStatus.silent) throw RemoteNoReply(r.detail ?? 'No reply');
         return r;
       },
     );
+    cancel?._on(() => q.cancel(req.id));
     final res = await req.result;
     final now = _clock();
     final who = c.name.isEmpty ? c.publicKeyHex.substring(0, 8) : c.name;
+    if (cancel != null && cancel.isCancelled) {
+      return TelemetryResult(TelemetryStatus.cancelled, who, now, keyHex: c.publicKeyHex, detail: 'Cancelled.');
+    }
     return switch (res) {
       RemoteDone<TelemetryResult>(:final value) => value,
       RemoteNoReplyResult<TelemetryResult>() => out ?? TelemetryResult(TelemetryStatus.silent, who, now, keyHex: c.publicKeyHex, detail: '$who did not answer.'),
@@ -208,10 +243,12 @@ class TelemetryTool with ToolChanges {
     }
   }
 
-  Future<TelemetryResult> requestContact(RadioContact c) async {
+  Future<TelemetryResult> requestContact(RadioContact c,
+      {bool user = false, Duration Function(SentFrame sent)? waitFor, TelemetryCancel? cancel}) async {
     final now = _clock();
     final who = c.name.isEmpty ? c.publicKeyHex.substring(0, 8) : c.name;
     TelemetryResult fail(TelemetryStatus s, String d) => TelemetryResult(s, who, now, keyHex: c.publicKeyHex, detail: d);
+    if (cancel != null && cancel.isCancelled) return fail(TelemetryStatus.cancelled, 'Cancelled.');
     if (!radio.isConnected) return fail(TelemetryStatus.notConnected, 'No radio is connected.');
     if (_busy) return fail(TelemetryStatus.tooSoon, 'A telemetry request is already running.');
     final wait = cooldown();
@@ -224,10 +261,11 @@ class TelemetryTool with ToolChanges {
       final t = TelemetryPush.tryParse(f);
       return t != null && t.prefixHex == c.publicKeyHex.substring(0, 12);
     });
+    cancel?._on(waiter.finishNow);
     try {
       final Frame reply;
       try {
-        reply = await radio.send(encodeTelemetryReqFor(key), priority: CommandPriority.admin);
+        reply = await radio.send(encodeTelemetryReqFor(key), priority: user ? CommandPriority.user : CommandPriority.admin);
       } on TimeoutException {
         return fail(TelemetryStatus.silent, 'The radio did not answer the command.');
       } on StateError {
@@ -239,9 +277,15 @@ class TelemetryTool with ToolChanges {
             : fail(TelemetryStatus.refused, 'The radio refused the request.');
       }
       if (reply is! SentFrame) return fail(TelemetryStatus.refused, 'The radio gave an unexpected answer.');
-      arbiter.recordTx(TxPriority.admin, estimateAirtimeMs());
-      final wait = Duration(milliseconds: (reply.estTimeoutMs + waitSlack.inMilliseconds).clamp(minWait.inMilliseconds, maxWait.inMilliseconds));
+      if (user) {
+        arbiter.admitUserSend(estimateAirtimeMs());
+      } else {
+        arbiter.recordTx(TxPriority.admin, estimateAirtimeMs());
+      }
+      final wait = waitFor?.call(reply) ??
+          Duration(milliseconds: (reply.estTimeoutMs + waitSlack.inMilliseconds).clamp(minWait.inMilliseconds, maxWait.inMilliseconds));
       final f = await waiter.wait(wait);
+      if (cancel != null && cancel.isCancelled) return fail(TelemetryStatus.cancelled, 'Cancelled.');
       if (f == null) {
         return fail(TelemetryStatus.silent, '$who did not answer in ${wait.inSeconds} s. It may be out of range or asleep.');
       }
@@ -282,6 +326,11 @@ class _PushWaiter {
       if (!_c.isCompleted) _c.complete(null);
     });
     return _c.future;
+  }
+
+  /// Ends the wait now with no answer (Cancel).
+  void finishNow() {
+    if (!_c.isCompleted) _c.complete(null);
   }
 
   void cancel() {

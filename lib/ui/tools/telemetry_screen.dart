@@ -269,6 +269,7 @@ class _ResultCard extends StatelessWidget {
       TelemetryStatus.refused => (NoteKind.info, 'The radio refused'),
       TelemetryStatus.notConnected => (NoteKind.problem, 'No radio'),
       TelemetryStatus.tooSoon => (NoteKind.info, 'Please wait a moment'),
+      TelemetryStatus.cancelled => (NoteKind.info, 'Cancelled'),
     };
     if (!r.ok) {
       final detail = r.status == TelemetryStatus.noContact ? '${r.detail ?? ''} Discover nearby can find and add it.' : (r.detail ?? '');

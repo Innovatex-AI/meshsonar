@@ -3,12 +3,15 @@
 //   * a pin per friend heard on a group whose See switch is on: initials in a disc, a course arrow while moving;
 //   * a short trail (the core keeps 30 min / 20 points) that fades with age; no line across a jump (`breakBefore`);
 //   * the meet-up flag of each group with its label (plain text);
-//   * my own last sent position as a hollow ring while I share.
+//   * my own last sent position as a hollow ring while I share;
+//   * an "asked" pin per person who answered "Ask for location" (MT-13, contact screen): the friend disc with an "Asked"
+//     mark under it, aging like a friend's pin. Memory only (MeshTrackState.asked).
 // Staleness (section 6): full colour < 5 min, faded 5-15 min, grey 15 min - 2 h, not drawn after (list only).
 // Additive: other layers are untouched. Colours from the theme and MapTokens (ink, halo, stale grey).
 //
 // Keys: 'friends-trails-layer', 'friends-layer', 'map-friend-<channelId>-<name>' (+ '-fresh' / '-faded' / '-grey' state key
-// on the disc), 'map-friend-arrow-<channelId>-<name>', 'map-meet-<channelId>', 'map-friend-me'.
+// on the disc), 'map-friend-arrow-<channelId>-<name>', 'map-meet-<channelId>', 'map-friend-me', 'map-asked-<key 8 hex>'
+// (+ '-fresh' / '-faded' / '-grey').
 // Also: [showMeetHereMenu], the Drive map's long-press "Meet here".
 import 'dart:math' as math;
 
@@ -19,6 +22,7 @@ import 'package:latlong2/latlong.dart' show LatLng;
 import '../../../core/meshtrack/meshtrack_service.dart';
 import '../../design/app_surfaces.dart' show AppAction, AppToastKind, showAppActionSheet, showAppToast;
 import '../../design/map_tokens.dart';
+import '../../meshtrack/meshtrack_copy.dart' show askedPinMark, askedPinSemantics;
 
 /// The layer's id (registry, layer prefs, `meshsonar://` links).
 const String kFriendsLayerId = 'friends';
@@ -56,15 +60,19 @@ typedef FriendTrailSegment = ({LatLng a, LatLng b, double strength, bool grey});
 /// One friend pin as drawn.
 typedef FriendPin = ({int channelId, MtFriend friend, double opacity, bool grey, double? arrowDeg});
 
+/// One "asked" pin as drawn (Ask for location).
+typedef AskedPin = ({MtAskedPosition asked, double opacity, bool grey});
+
 /// Everything the layer draws, from one state snapshot (pure: tested without a map).
 class FriendsLayerData {
   final List<FriendPin> pins;
   final List<FriendTrailSegment> segments;
   final List<({int channelId, MtMeetPin meet})> meets;
   final MtMyPosition? me;
-  const FriendsLayerData({this.pins = const [], this.segments = const [], this.meets = const [], this.me});
+  final List<AskedPin> asked;
+  const FriendsLayerData({this.pins = const [], this.segments = const [], this.meets = const [], this.me, this.asked = const []});
 
-  bool get isEmpty => pins.isEmpty && segments.isEmpty && meets.isEmpty && me == null;
+  bool get isEmpty => pins.isEmpty && segments.isEmpty && meets.isEmpty && me == null && asked.isEmpty;
 
   static FriendsLayerData of(MeshTrackState s, DateTime now) {
     final pins = <FriendPin>[];
@@ -82,7 +90,11 @@ class FriendsLayerData {
         segs.addAll(trailSegments(f.trail, now, grey: look.grey, opacity: look.opacity));
       }
     }
-    return FriendsLayerData(pins: pins, segments: segs, meets: meets, me: s.sharing ? s.myLastSent : null);
+    final asked = <AskedPin>[
+      for (final a in s.asked)
+        if (friendLook(mtStaleness(a.at, now)) case final look?) (asked: a, opacity: look.opacity, grey: look.grey),
+    ];
+    return FriendsLayerData(pins: pins, segments: segs, meets: meets, me: s.sharing ? s.myLastSent : null, asked: asked);
   }
 }
 
@@ -222,6 +234,14 @@ class FriendsMarkersLayer extends StatelessWidget {
               child: CustomPaint(key: const ValueKey('map-friend-me'), painter: _RingPainter(colour: c.pin, halo: c.halo)),
             ),
           ),
+        for (final a in data.asked)
+          Marker(
+            point: LatLng(a.asked.lat, a.asked.lon),
+            width: 72,
+            height: 64,
+            alignment: const Alignment(0, 0.25), // the disc centre (24 of 64 pt from the top) sits on the point
+            child: _AskedPin(pin: a, colours: c, ago: lastHeardText(a.asked.at, at)),
+          ),
         for (final p in data.pins)
           Marker(
             point: LatLng(p.friend.lat, p.friend.lon),
@@ -279,6 +299,61 @@ class _FriendPin extends StatelessWidget {
                 maxLines: 1,
                 textScaler: TextScaler.noScaling, // a map glyph: fixed size like the other markers
                 style: TextStyle(color: pin.grey ? colours.halo : colours.onPin, fontSize: 12, fontWeight: FontWeight.w700, height: 1),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A person who answered "Ask for location": the friend disc (initials) with an "Asked" mark under it. The disc centre is
+/// the position (the marker is shifted so the disc, not the whole box, sits on the point).
+class _AskedPin extends StatelessWidget {
+  final AskedPin pin;
+  final FriendsColours colours;
+  final String ago;
+  const _AskedPin({required this.pin, required this.colours, required this.ago});
+
+  @override
+  Widget build(BuildContext context) {
+    final a = pin.asked;
+    final id = a.keyHex.length >= 8 ? a.keyHex.substring(0, 8) : a.keyHex;
+    final state = pin.grey ? 'grey' : (pin.opacity < 1 ? 'faded' : 'fresh');
+    final fill = pin.grey ? colours.grey : colours.pin;
+    return Semantics(
+      label: askedPinSemantics(a.name, ago),
+      excludeSemantics: true,
+      child: Opacity(
+        key: ValueKey('map-asked-$id'),
+        opacity: pin.opacity,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 9),
+            Container(
+              key: ValueKey('map-asked-$id-$state'),
+              width: 30,
+              height: 30,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(color: fill, shape: BoxShape.circle, border: Border.all(color: colours.halo, width: 2)),
+              child: Text(
+                friendInitials(a.name),
+                maxLines: 1,
+                textScaler: TextScaler.noScaling,
+                style: TextStyle(color: pin.grey ? colours.halo : colours.onPin, fontSize: 12, fontWeight: FontWeight.w700, height: 1),
+              ),
+            ),
+            const SizedBox(height: 2),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+              decoration: BoxDecoration(color: colours.halo.withValues(alpha: 0.9), borderRadius: BorderRadius.circular(6)),
+              child: Text(
+                askedPinMark,
+                maxLines: 1,
+                textScaler: TextScaler.noScaling,
+                style: TextStyle(color: colours.ink, fontSize: 10, fontWeight: FontWeight.w600, height: 1.2),
               ),
             ),
           ],

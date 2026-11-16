@@ -5,6 +5,7 @@ import 'dart:async';
 
 import '../tx_arbiter.dart';
 import 'advert_tool.dart';
+import 'ask_location.dart';
 import 'device_settings.dart';
 import 'discover_tool.dart';
 import 'noise_monitor.dart';
@@ -27,16 +28,20 @@ class RadioTools {
   final TelemetryTool telemetry;
   final RadioSetupTool setup;
 
+  /// Ask for location (MeshTrack MT-13) on top of [telemetry]: per-contact state and the once-per-30-s limit.
+  final AskLocationHub askLocation;
+
   /// Device settings (Chat plan 4.14): the verified writes of the Device settings screen.
   final DeviceSettingsTool device;
 
-  RadioTools._(this.radio, this.arbiter, this.trace, this.ping, this.discover, this.adverts, this.rxLog, this.noise, this.telemetry, this.setup, this.device);
+  RadioTools._(this.radio, this.arbiter, this.trace, this.ping, this.discover, this.adverts, this.rxLog, this.noise, this.telemetry, this.setup, this.device, this.askLocation);
 
   /// [pingBusy]: true while a wardrive ping is in flight (the noise monitor then skips its read). [traceStore]: where saved
   /// traces live (null = memory).
   factory RadioTools(ToolsRadio radio, TxArbiter arbiter,
       {DateTime Function()? clock, bool Function()? pingBusy, TraceStore? traceStore}) {
     final trace = TraceTool(radio, arbiter, clock: clock, store: traceStore);
+    final telemetry = TelemetryTool(radio, arbiter, clock: clock);
     return RadioTools._(
       radio,
       arbiter,
@@ -46,9 +51,10 @@ class RadioTools {
       AdvertTool(radio, arbiter, clock: clock),
       RxLog(clock: clock),
       NoiseMonitor(radio, arbiter, clock: clock, busy: pingBusy),
-      TelemetryTool(radio, arbiter, clock: clock),
+      telemetry,
       RadioSetupTool(radio),
       DeviceSettingsTool(radio, clock: clock),
+      AskLocationHub(telemetry, clock: clock),
     );
   }
 
@@ -66,6 +72,7 @@ class RadioTools {
     noise.dispose();
     trace.dispose();
     discover.dispose();
+    askLocation.dispose();
     telemetry.dispose();
     setup.dispose();
     device.dispose();
