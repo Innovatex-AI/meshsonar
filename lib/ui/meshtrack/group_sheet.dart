@@ -1,4 +1,4 @@
-// The MeshTrack Group sheet (plan 5.4, 5.5, 7, 8). Opened from the Drive chip, Settings > MeshTrack > Groups and the
+// The MeshTrack Group sheet (plan 5.4, 5.5, 7, 8). Opened from the Drive panel (row and Dock button), Chat > Channels, Settings > MeshTrack > Groups and the
 // friends layer. Two pages in one sheet:
 //   * Groups: one card per group (name, "3 heard in the last 30 min", See and Share switches, the inline This drive /
 //     1 hour / Until I stop control while Share is on, the group menu: Invite, Start fresh, Leave, Share on every drive).
