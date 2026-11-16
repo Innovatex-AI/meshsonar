@@ -4,6 +4,7 @@
 //     session.json   the DriveSession; rewritten atomically (temp file + rename) on start and end
 //     pings.jsonl    one DrivePing JSON per line; appended and flushed before appendPing completes
 //     synced.txt     append-only ping ids the server has confirmed (stored or duplicate)
+//     zone_held.txt  append-only ping ids inside a privacy zone: kept on the phone, never uploaded
 //     rejected.txt   append-only ping ids the server rejected (kept locally, never re-sent)
 //     end_sent.txt   ended_at the server has been told about (so a finished drive is reported once)
 //     resend.txt     present when the session's details changed (a rename) since the server last saw them; holds a
@@ -51,6 +52,13 @@ abstract class SyncLedger {
 
   /// Clears the re-send mark, but only if it is still [token] (a newer change keeps it set).
   Future<void> clearSessionResend(String sessionId, String token);
+}
+
+/// Pings kept on the phone because they are inside a privacy zone (`zone_held.txt`): never uploaded, never retried, shown as
+/// "kept on this phone (privacy zone)". [DriveStore.unsyncedPings] excludes them, so they never count as waiting.
+abstract class ZoneHeldLedger {
+  Future<void> markZoneHeld(String sessionId, Iterable<String> pingIds);
+  Future<Set<String>> zoneHeldIds(String sessionId);
 }
 
 /// A store that keeps the per-ping debug trace beside the drive (`trace.jsonl`): for each ping the send time and every frame
@@ -106,7 +114,7 @@ Future<List<String>> closeOrphanedSessions(DriveStore store, {Set<String> except
   return closed;
 }
 
-class JsonlDriveStore implements DriveStore, TraceStore, MapHealthStore, SyncLedger, StorageSized, DriveContextLedger, ContextSyncLedger, ChunkedExport {
+class JsonlDriveStore implements DriveStore, TraceStore, MapHealthStore, SyncLedger, ZoneHeldLedger, StorageSized, DriveContextLedger, ContextSyncLedger, ChunkedExport {
   final Directory root;
   final Directory _sessionsDir;
   final Map<String, Future<void>> _locks = {};
@@ -268,6 +276,15 @@ class JsonlDriveStore implements DriveStore, TraceStore, MapHealthStore, SyncLed
         if (!await _dir(sessionId).exists()) return;
         await _appendLines(_file(sessionId, 'rejected.txt'), pingIds);
       });
+
+  @override
+  Future<void> markZoneHeld(String sessionId, Iterable<String> pingIds) => _locked(sessionId, () async {
+        if (!await _dir(sessionId).exists()) return;
+        await _appendLines(_file(sessionId, 'zone_held.txt'), pingIds);
+      });
+
+  @override
+  Future<Set<String>> zoneHeldIds(String sessionId) => _locked(sessionId, () => _readIds(sessionId, 'zone_held.txt'));
 
   @override
   Future<void> markEndReported(String sessionId, DateTime endedAt) => _locked(sessionId, () async {
@@ -592,7 +609,9 @@ class JsonlDriveStore implements DriveStore, TraceStore, MapHealthStore, SyncLed
 
   @override
   Future<List<DrivePing>> unsyncedPings(String sessionId) => _locked(sessionId, () async {
-        final done = await _readIds(sessionId, 'synced.txt')..addAll(await _readIds(sessionId, 'rejected.txt'));
+        final done = await _readIds(sessionId, 'synced.txt')
+          ..addAll(await _readIds(sessionId, 'rejected.txt'))
+          ..addAll(await _readIds(sessionId, 'zone_held.txt'));
         return (await _readPings(sessionId)).where((p) => !done.contains(p.id)).toList();
       });
 
@@ -611,13 +630,13 @@ class JsonlDriveStore implements DriveStore, TraceStore, MapHealthStore, SyncLed
       });
 
   /// Summaries by drive id, reused while the drive's files are unchanged (size and time of session.json, pings.jsonl,
-  /// synced.txt, rejected.txt, resend.txt). A drive of 5,000+ pings is parsed once, not on every list refresh (the
+  /// synced.txt, rejected.txt, zone_held.txt, resend.txt). A drive of 5,000+ pings is parsed once, not on every list refresh (the
   /// in-drive upload timer, every Stop, every app resume).
   final Map<String, ({String sig, SessionSummary summary})> _summaries = {};
 
   Future<String> _signature(String id) async {
     final parts = <String>[];
-    for (final name in ['session.json', 'pings.jsonl', 'synced.txt', 'rejected.txt', 'resend.txt']) {
+    for (final name in ['session.json', 'pings.jsonl', 'synced.txt', 'rejected.txt', 'zone_held.txt', 'resend.txt']) {
       final st = await _file(id, name).stat();
       parts.add(st.type == FileSystemEntityType.notFound ? '-' : '${st.size}@${st.modified.microsecondsSinceEpoch}');
     }
@@ -643,6 +662,7 @@ class JsonlDriveStore implements DriveStore, TraceStore, MapHealthStore, SyncLed
         final pings = await _readPings(id);
         final synced = await _readIds(id, 'synced.txt');
         final rejected = await _readIds(id, 'rejected.txt');
+        final held = await _readIds(id, 'zone_held.txt');
         final txPings = pings.where((p) => p.kind == PingKind.tx);
         final fresh = SessionSummary(
           session: s,
@@ -651,6 +671,7 @@ class JsonlDriveStore implements DriveStore, TraceStore, MapHealthStore, SyncLed
           heardCount: txPings.where((p) => p.echoes.isNotEmpty || p.neighbor != null).length,
           syncedCount: pings.where((p) => synced.contains(p.id)).length,
           rejectedCount: pings.where((p) => rejected.contains(p.id) && !synced.contains(p.id)).length,
+          zoneHeldCount: pings.where((p) => held.contains(p.id) && !synced.contains(p.id) && !rejected.contains(p.id)).length,
           sessionResendPending: await _readResend(id) != null,
         );
         _summaries[id] = (sig: sig, summary: fresh);

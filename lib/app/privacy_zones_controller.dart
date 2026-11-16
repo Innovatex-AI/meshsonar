@@ -8,6 +8,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../core/api.dart';
+import '../core/driver_settings.dart';
 import '../core/privacy_zone_store.dart';
 import '../core/privacy_zones.dart';
 
@@ -42,13 +43,18 @@ class PrivacyZonesController extends ChangeNotifier {
   final ZoneSupport Function() support;
   final DateTime Function() clock;
 
+  /// Whether the server can remove earlier uploads inside a zone (`capabilities.zonePurge`). Absent = never offered.
+  final bool Function() purgeSupported;
+
   PrivacyZonesController({
     required this.store,
     required this.driverKey,
     required this.client,
     required this.support,
     DateTime Function()? clock,
-  }) : clock = clock ?? DateTime.now;
+    bool Function()? purgeSupported,
+  })  : clock = clock ?? DateTime.now,
+        purgeSupported = purgeSupported ?? (() => false);
 
   PrivacyZoneState _state = const PrivacyZoneState();
   PrivacyZoneState get state => _state;
@@ -57,6 +63,21 @@ class PrivacyZonesController extends ChangeNotifier {
   bool get pending => _state.pending;
   bool _loaded = false;
   bool get loaded => _loaded;
+
+  /// What the upload paths ask (`hides(lat, lon)`): the zones as they are on this phone right now, pending changes
+  /// included. Until [load] has finished it hides everything (fail closed).
+  PrivacyZones get gate => _loaded ? PrivacyZones(_state.zones) : PrivacyZones.notLoaded;
+
+  /// Reads the zones from disk when that has not happened yet, then returns [gate]. Never throws: a store that fails
+  /// leaves the gate closed ([PrivacyZones.notLoaded]), so nothing is uploaded.
+  Future<PrivacyZones> ensureLoaded() async {
+    try {
+      await load();
+    } catch (_) {
+      return PrivacyZones.notLoaded;
+    }
+    return gate;
+  }
 
   ZoneSyncStatus _status = ZoneSyncStatus.idle;
   ZoneSyncStatus get status => _status;
@@ -90,7 +111,50 @@ class PrivacyZonesController extends ChangeNotifier {
       for (final z in zones.take(kZoneMax)) PrivacyZone.normalized(lat: z.lat, lon: z.lon, radiusM: z.radiusM, label: z.label),
     ];
     if (listEquals(clean, _state.zones)) return;
-    await _commit(_state.copyWith(zones: clean, pending: true));
+    // A new or bigger zone may cover pings the server already holds: queue it for the purge offer. A zone that is gone
+    // leaves the queue; what stays is what the person can still be asked about.
+    final queue = zonesNeedingPurge(_state.zones, clean);
+    final keep = [for (final q in _state.purge) if (clean.contains(q)) q];
+    await _commit(_state.copyWith(zones: clean, pending: true, purge: {...keep, ...queue}.take(kZoneMax).toList()));
+  }
+
+  /// Zones whose earlier uploads can be removed from the server now: queued, the server takes purges, and a key is there.
+  List<PrivacyZone> get purgeQueue => purgeSupported() && (driverKey() ?? '').isNotEmpty ? _state.purge : const [];
+
+  /// How many earlier uploads inside the queued zones the server holds (a dry run; nothing is removed). Null = nothing to
+  /// offer, or the server could not be asked now.
+  Future<ZonePurgeResult?> previewPurge() async {
+    final q = purgeQueue;
+    final key = driverKey();
+    if (q.isEmpty || key == null) return null;
+    try {
+      return await client().purgeZones(key, q, dryRun: true);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Removes the earlier uploads inside the queued zones from the server (irreversible; the screen confirms first). The
+  /// queue is cleared only when the server answered. Null = not done (it stays queued).
+  Future<ZonePurgeResult?> runPurge() async {
+    final q = purgeQueue;
+    final key = driverKey();
+    if (q.isEmpty || key == null) return null;
+    try {
+      final r = await client().purgeZones(key, q);
+      await _commit(_state.copyWith(purge: const []), send: false);
+      return r;
+    } catch (e) {
+      error = e is CmatException ? e.message : 'The server could not be reached.';
+      _notify();
+      return null;
+    }
+  }
+
+  /// The person chose to keep earlier uploads (they stay hidden from public views at read time).
+  Future<void> dismissPurge() async {
+    if (_state.purge.isEmpty) return;
+    await _commit(_state.copyWith(purge: const []), send: false);
   }
 
   Future<void> setTrim(int metres) async {
@@ -99,13 +163,13 @@ class PrivacyZonesController extends ChangeNotifier {
     await _commit(_state.copyWith(trimM: t, pending: true));
   }
 
-  Future<void> _commit(PrivacyZoneState next) async {
+  Future<void> _commit(PrivacyZoneState next, {bool send = true}) async {
     _state = next;
     error = null;
     _status = _compute();
     _notify();
     await store.save(next);
-    unawaited(sync());
+    if (send) unawaited(sync());
   }
 
   /// Sends what is waiting, or (nothing waiting) reads the server's list. Safe to call at any time and as often as wanted:
@@ -154,7 +218,7 @@ class PrivacyZonesController extends ChangeNotifier {
         _again = true;
         return _set(ZoneSyncStatus.offline);
       }
-      _state = PrivacyZoneState(zones: got.zones, trimM: got.trimM, pending: false, scope: got.scope, syncedAt: clock());
+      _state = PrivacyZoneState(zones: got.zones, trimM: got.trimM, pending: false, scope: got.scope, syncedAt: clock(), purge: _state.purge);
       await store.save(_state);
       _set(ZoneSyncStatus.synced);
     } on CmatException catch (e) {

@@ -78,6 +78,7 @@ class SyncBadge extends StatelessWidget {
     final kind = syncBadgeKind(s, summary);
     final n = summary.unsyncedCount;
     final rejected = summary.rejectedCount;
+    final held = summary.zoneHeldCount;
     // Only the name (or other drive details) is waiting: say so rather than "0 not synced".
     final waitingText = n > 0 ? '$n not synced' : 'Name not synced';
     final (IconData icon, String text, Color color) = switch (kind) {
@@ -104,6 +105,20 @@ class SyncBadge extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 13)),
         ),
+        if (held > 0 && kind != SyncBadgeKind.empty) ...[
+          const SizedBox(width: 4),
+          Flexible(
+            child: Tooltip(
+              message: 'These pings are inside one of your privacy zones. They are in your own drive log and stats on this '
+                  'phone, and are never uploaded.',
+              child: Text('· $held kept on this phone (privacy zone)',
+                  key: ValueKey('zone-held-${summary.session.id}'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: c.outline, fontWeight: FontWeight.w700, fontSize: 13)),
+            ),
+          ),
+        ],
         if (rejected > 0 && kind != SyncBadgeKind.empty) ...[
           const SizedBox(width: 4),
           Flexible(

@@ -7,6 +7,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:meshsonar/core/api.dart';
+import 'package:meshsonar/core/driver_settings.dart';
 import 'package:meshsonar/core/privacy_zones.dart';
 import 'package:meshsonar/core/idle_region_watcher.dart' show LastKnownStore;
 import 'package:meshsonar/radio/radio_api.dart' show GeoFix;
@@ -22,6 +23,14 @@ class ZonesClient extends FakeCmatClient {
   ZoneScope scope = ZoneScope.account;
   Object? error;
   final List<List<PrivacyZone>> posts = [];
+  final List<bool> purgeCalls = []; // dryRun flag of each purge call
+  ZonePurgeResult purgeAnswer = const ZonePurgeResult(pings: 7, positions: 2);
+
+  @override
+  Future<ZonePurgeResult> purgeZones(String driverKey, List<PrivacyZone> zones, {bool dryRun = false}) async {
+    purgeCalls.add(dryRun);
+    return ZonePurgeResult(dryRun: dryRun, pings: purgeAnswer.pings, positions: purgeAnswer.positions);
+  }
 
   @override
   Future<DriverPrivacy> driverPrivacy(String driverKey) async {
@@ -65,6 +74,7 @@ Future<(ZonesHarness, MapController)> pumpZones(
   double textScale = 1.0,
   Brightness brightness = Brightness.light,
   bool capable = true,
+  bool purge = false,
   bool withKey = true,
   bool withFix = true,
   void Function(ZonesHarness h)? setup,
@@ -78,7 +88,7 @@ Future<(ZonesHarness, MapController)> pumpZones(
   h.lastKnownStore = MemLast(null);
   h.client.siteConfigResult = SiteConfig(
     region: const RegionInfo(slug: 'cmh', url: 'https://cmh.meshsonar.com'),
-    capabilities: {if (capable) 'driverPrivacy'},
+    capabilities: {if (capable) 'driverPrivacy', if (purge) 'zonePurge'},
   );
   setup?.call(h);
   await h.state.init();

@@ -42,6 +42,7 @@ bool driveSafeToRemove(SessionSummary s, {String? recordingId}) =>
     s.session.endedAt != null &&
     !s.sessionResendPending &&
     s.rejectedCount == 0 &&
+    s.zoneHeldCount == 0 &&
     s.unsyncedCount == 0 &&
     s.syncedCount >= s.pingCount;
 

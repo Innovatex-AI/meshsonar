@@ -72,6 +72,7 @@ import 'gps_monitor.dart';
 import '../core/privacy_zone_store.dart' show MemoryPrivacyZoneStore;
 import '../core/region_neighbours.dart';
 import 'claims.dart';
+import 'driver_settings_controller.dart';
 import 'privacy_zones_controller.dart';
 import 'context_upload_hook.dart';
 import 'drive_context_hook.dart';
@@ -144,7 +145,8 @@ class AppState extends ChangeNotifier with _ObserverWiring {
       if (s is DefaultSyncService) {
         s
           ..capabilities = _uploadCapabilities
-          ..categoryOn = collectionOn;
+          ..categoryOn = collectionOn
+          ..zones = privacyZones.ensureLoaded;
       }
     }
     return _sync!;
@@ -444,6 +446,21 @@ class AppState extends ChangeNotifier with _ObserverWiring {
           return c == null ? ZoneSupport.unknown : (c.driverPrivacy ? ZoneSupport.yes : ZoneSupport.no);
         },
         clock: services.clock,
+        purgeSupported: () => uploadSiteConfig?.zonePurge == true,
+      );
+
+  DriverSettingsController? _driverSettings;
+
+  /// The callsign, display name, anonymous and leaderboard settings (lib/app/driver_settings_controller.dart): saved on the
+  /// phone at once, mirrored on the server when it has `driverSettings`; older servers never see a call.
+  DriverSettingsController get driverSettings => _driverSettings ??= DriverSettingsController(
+        store: services.driverSettingsStore ?? MemoryDriverSettingsStore(),
+        driverKey: () => _settings.driverKey,
+        client: () => client,
+        support: () {
+          final c = uploadSiteConfig;
+          return c == null ? ZoneSupport.unknown : (c.driverSettings ? ZoneSupport.yes : ZoneSupport.no);
+        },
       );
 
   /// Sends privacy-zone changes that are waiting (offline, or made before there was a key). Quiet and cheap when none are.
@@ -452,6 +469,9 @@ class AppState extends ChangeNotifier with _ObserverWiring {
       final z = privacyZones;
       await z.load();
       if (z.pending) await z.sync();
+      final d = driverSettings;
+      await d.load();
+      if (d.hasPending) await d.sync();
     } catch (e) {
       _logError('Sending privacy zones failed', e);
     }
@@ -1467,6 +1487,7 @@ class AppState extends ChangeNotifier with _ObserverWiring {
         queueFile: services.telemetryQueueFile,
         now: () => services.clock().toUtc(),
         observer: _telemetryObserver,
+        zones: () => privacyZones.gate,
         onServerErased: () => unawaited(_afterServerErase()),
         onObserver: (o) {
           final k = o['key'];
@@ -1522,6 +1543,10 @@ class AppState extends ChangeNotifier with _ObserverWiring {
     final f = _phoneFix;
     if (f == null || !f.live) return null;
     if (f.fix.at.toUtc().difference(at.toUtc()).abs() > const Duration(minutes: 10)) return null;
+    // Inside a privacy zone the packet carries no position at all, not even the ~5 km cell (it would still name the area).
+    final gate = privacyZones.gate;
+    if (gate.hides(f.fix.lat, f.fix.lon)) return null;
+    if (_driveFixes.isNotEmpty && gate.hides(_driveFixes.last.lat, _driveFixes.last.lon)) return null;
     if (!_h3Tried) {
       _h3Tried = true;
       _h3 = loadHexEngine();
@@ -1606,13 +1631,10 @@ class AppState extends ChangeNotifier with _ObserverWiring {
 
   /// A position is protected by the drive privacy rules: inside a privacy zone, or within the start trim of this drive.
   bool _privacyProtected(double lat, double lon) {
-    final z = _privacyZones;
-    final zones = z?.zones ?? const [];
-    for (final zone in zones) {
-      if (distanceM(lat, lon, zone.lat, zone.lon) <= zone.radiusM) return true;
-    }
+    final z = privacyZones; // created on first use; until its file is read the gate hides everything (fail closed)
+    if (z.gate.hides(lat, lon)) return true;
     final start = _driveStartFix;
-    final trim = (z?.trimM ?? 0).toDouble();
+    final trim = z.trimM.toDouble();
     if (start != null && trim > 0 && distanceM(lat, lon, start.lat, start.lon) <= trim) return true;
     return false;
   }
@@ -1704,6 +1726,7 @@ class AppState extends ChangeNotifier with _ObserverWiring {
 
   void _onTelemetryRx(RxPacket rx) {
     if (!_settings.telemetryEnabled) return;
+    unawaited(privacyZones.ensureLoaded()); // the gate fails closed until the zones are read
     final mode = observerMode;
     final pos = mode == ObserverMode.drive ? _drivePos(rx.at) : null;
     final r = TelemetryRecord.fromRx(
@@ -3181,6 +3204,8 @@ class AppState extends ChangeNotifier with _ObserverWiring {
       }
     }
     heard.holdPings = _settings.heardHoldPings;
+    // The privacy zones are read before anything can leave the phone: until they are, every position counts as hidden.
+    await privacyZones.ensureLoaded();
     try {
       _setRepeaters(await services.repeaterCache.load());
     } catch (_) {}
