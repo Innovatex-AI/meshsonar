@@ -8,17 +8,16 @@ import 'package:latlong2/latlong.dart';
 import '../../app/app_state.dart';
 import '../../app/chat_controller.dart';
 import '../../app/chat_wiring.dart';
-import '../../core/meshtrack/meshtrack_service.dart';
+import '../../app/meshtrack_wiring.dart';
 import '../../core/units.dart';
 import '../app.dart';
 import '../map/main_map_focus.dart';
 import '../nodes/node_actions.dart' show shellControllerFor;
 import 'meshtrack_copy.dart' show MtLatLon;
-import 'mt_contract_stub.dart';
 
 export '../../core/meshtrack/meshtrack_service.dart';
 export 'meshtrack_copy.dart' show MtLatLon;
-export 'mt_contract_stub.dart';
+export '../../app/meshtrack_wiring.dart' show MeshTrackGroupOps, MtGroupOpResult, MtGroupOpStatus, MtCopy;
 
 class MeshTrackBinding {
   final MeshTrackService service;
@@ -79,8 +78,11 @@ abstract final class MeshTrackUi {
 
   static MeshTrackBinding? Function(AppState s)? debugForState;
 
-  // Until lib/app/meshtrack_wiring.dart is merged AppState has no MeshTrack getters: MeshTrack stays off.
-  static MeshTrackBinding? _fromAppState(AppState s) => null;
+  static MeshTrackBinding? _fromAppState(AppState s) {
+    final service = s.meshTrack, ops = s.meshTrackGroups;
+    if (service == null || ops == null) return null;
+    return bindingFor(s, service, ops);
+  }
 
   /// Builds the binding parts that come from AppState and the chat wiring (used by the AppState resolver).
   static MeshTrackBinding bindingFor(AppState s, MeshTrackService service, MeshTrackGroupOps ops) => MeshTrackBinding(
