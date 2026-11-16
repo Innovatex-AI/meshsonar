@@ -10,6 +10,7 @@ import 'package:meshsonar/chat/models.dart' as models show Route;
 import 'package:meshsonar/chat/quick_replies.dart';
 import 'package:meshsonar/chat/route_health.dart';
 import 'package:meshsonar/chat/tip_store.dart';
+import 'package:meshsonar/ui/design/app_surfaces.dart' show dismissAppToast;
 import 'package:meshsonar/core/plan/airtime_calc.dart';
 import 'package:meshsonar/radio/caps.dart';
 import 'package:meshsonar/radio/rx_facts.dart';
@@ -117,6 +118,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('route-broken-card')), findsNothing);
       expect(kit.store.contacts.get(radioA, bobKey)!.hasPath, isFalse);
+      dismissAppToast();
     });
   });
 

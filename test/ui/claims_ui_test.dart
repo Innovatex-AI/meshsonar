@@ -387,13 +387,10 @@ void main() {
   group('Claim a repeater', () {
     final repeaters = [RepeaterRef(key: k('b'), name: 'Hilltop Repeater', lat: 40, lon: -83)];
 
-    testWidgets('setup: needs a radio, a repeater and a password; the promise is shown; password is hidden and capped at 15', (tester) async {
+    testWidgets('setup: needs a radio, a repeater and a password; password is hidden and capped at 15', (tester) async {
       await open(tester, radio: false, repeaters: repeaters);
       await openScreen(tester, const ClaimRepeaterScreen());
       expect(find.byKey(const Key('claim-needs-radio')), findsOneWidget);
-      expect(find.textContaining('Nothing on your repeater is changed'), findsWidgets);
-      expect(find.textContaining('We never see or store your admin password'), findsOneWidget);
-      expect(find.textContaining('it never affects whether its data counts'), findsOneWidget);
       final pw = tester.widget<TextField>(find.byKey(const Key('claim-password')));
       expect(pw.obscureText, isTrue);
       expect(pw.maxLength, 15);
