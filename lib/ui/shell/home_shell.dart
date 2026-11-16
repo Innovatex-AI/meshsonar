@@ -296,7 +296,11 @@ class _HomeShellState extends State<HomeShell> {
               bottomNavigationBar: wide || immersive
                   ? null
                   : BlurBar(
-                      child: NavigationBar(
+                      // Like the iOS tab bar, the labels grow only a little with Dynamic Type: at AX3 a full-size label
+                      // would push the bar off the bottom of the screen. VoiceOver still reads the full label.
+                      child: MediaQuery(
+                        data: MediaQuery.of(context).copyWith(textScaler: MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.3)),
+                        child: NavigationBar(
                         key: const Key('shell-tabs'),
                         backgroundColor: Colors.transparent,
                         surfaceTintColor: Colors.transparent,
@@ -311,6 +315,7 @@ class _HomeShellState extends State<HomeShell> {
                               label: t.label,
                             ),
                         ],
+                        ),
                       ),
                     ),
             ),

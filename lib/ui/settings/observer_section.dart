@@ -168,7 +168,10 @@ class _ObserverStatusTileState extends State<ObserverStatusTile> {
     final lines = <String>[observerStatusLine(s)];
     final st = s.observerStatusService.status;
     final now = s.services.clock().toUtc();
+    // The icon says the state too (VoiceOver reads the words): live, checking, a problem (offline included), or idle.
+    var sym = live ? AppSymbols.waveform : AppSymbols.antenna;
     if (_busy) {
+      sym = AppSymbols.clock;
       lines.add('Checking with the server…');
     } else if (st != null) {
       final heard = st.packets24h;
@@ -179,13 +182,14 @@ class _ObserverStatusTileState extends State<ObserverStatusTile> {
       // With an approved key, "no key" can only mean this server's client cannot report observer status.
       final o = _outcome == ObserverCallOutcome.noKey && s.keyApproved ? ObserverCallOutcome.notOnServer : _outcome!;
       lines.add(observerCallText(o));
+      if (o != ObserverCallOutcome.notOnServer) sym = o == ObserverCallOutcome.offline ? AppSymbols.wifi : AppSymbols.exclamationCircle;
     }
     final canAsk = s.keyApproved;
     // The Refresh button sits under the row, not beside it: at AX3 a trailing button would squeeze the text out.
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       InfoTile(
         key: const Key('observer-status'),
-        icon: _icon(context, live ? AppSymbols.waveform : AppSymbols.antenna),
+        icon: _icon(context, sym),
         title: settingsEntry('observer-status').title,
         subtitle: lines.join('\n'),
       ),
@@ -413,8 +417,19 @@ class _MqttFeedsBlockState extends State<MqttFeedsBlock> {
         if (slots.isEmpty)
           Padding(
             padding: const EdgeInsets.fromLTRB(Gap.l, 0, Gap.l, Gap.s),
-            child: Text('No feeds yet. MeshSonar\'s own feed is the switch above; feeds are for other sites.',
-                key: const Key('mqtt-feeds-empty'), style: t.textTheme.bodyMedium),
+            child: MergeSemantics(
+              child: Row(key: const Key('mqtt-feeds-empty'), crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: AppSymbolIcon(AppSymbols.tray, size: 18, color: t.colorScheme.onSurfaceVariant),
+                ),
+                const SizedBox(width: Gap.s),
+                Expanded(
+                  child: Text('No MQTT feeds yet. MeshSonar\'s own feed is the switch above; MQTT feeds are for other sites.',
+                      style: t.textTheme.bodyMedium),
+                ),
+              ]),
+            ),
           ),
         for (final slot in slots)
           MqttSlotTile(

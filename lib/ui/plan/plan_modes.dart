@@ -5,15 +5,12 @@
 // sites results) and can take map gestures through [PlanModeContext.hooks] (a long-press point, a tap on a plan node or a
 // target).
 //
-// Registration: [planModes] below, one entry per chip, in chip order. The Link, Coverage and Find sites modes registered
-// here are this file's own compact bodies (pick ends from the plan / one site / the view, run the planner API, show the
-// verdict, footprint numbers or ranked sites); the full modes (ui/plan/modes/link_mode.dart, coverage_mode.dart,
-// find_sites_mode.dart + wizard.dart) replace their registration line when they land. Where to drive hosts the existing
-// DriveNextCard (ui/shell/drive_next_card.dart, unchanged logic) and opens the Drive map with the targets.
+// Registration: [planModes] below, one entry per chip, in chip order: LinkMode (ui/plan/modes/link_mode.dart),
+// CoverageMode (coverage_mode.dart), FindSitesMode (find_sites_mode.dart + wizard.dart) and WhereToDriveMode (this file),
+// which hosts the existing DriveNextCard (ui/shell/drive_next_card.dart, unchanged logic) and opens the Drive map with
+// the targets. This file also keeps the pieces the modes share: PlanModeContext, the overlay, PlanFact, resultNotes.
 //
-// Keys: 'plan-mode-<id>' (the body), 'link-a' / 'link-b' (end pickers), 'link-run', 'link-result', 'link-verdict',
-// 'coverage-run', 'coverage-result', 'coverage-area', 'sites-goal-<goal>', 'sites-run', 'sites-result', 'site-<id>',
-// 'site-add-<id>', 'drive-next-show-map'.
+// Keys: each mode file lists its own; this file's: 'plan-mode-drive' (the Where to drive body), 'drive-next-show-map'.
 
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
@@ -205,7 +202,7 @@ PlanLinkVerdict overlayVerdict(PlanVerdict? v) => switch (v) {
       null => PlanLinkVerdict.unknown,
     };
 
-String areaWords(Units units, double km2) => units.distanceImperial ? '${(km2 * 0.386102).toStringAsFixed(1)} sq mi' : '${km2.toStringAsFixed(1)} km²';
+String areaWords(Units units, double km2) => units.area(km2);
 
 String dbWords(double v, {bool signed = false}) => '${signed && v > 0 ? '+' : v < 0 ? '-' : ''}${v.abs().toStringAsFixed(1)} dB';
 

@@ -707,12 +707,12 @@ class CoverageBodyState extends State<CoverageBody> {
           PlanFact('People not covered by a live repeater today', '${d.newPeople}')
         else
           const PlanLine(AppSymbols.person2, 'People: no census counts for this area, so none are shown.'),
-        PlanFact('Longest predicted link', longest == null ? 'none' : units.distance(longest * 1000)),
+        PlanFact('Longest link (Estimate)', longest == null ? 'none' : units.distance(longest * 1000)),
         const SizedBox(height: Gap.s),
         if (heard.isEmpty)
-          const PlanLine(AppSymbols.antenna, 'No live repeater is predicted to hear this site.', key: Key('coverage-nolinks'))
+          const PlanLine(AppSymbols.antenna, 'By the Estimate, no live repeater hears this site.', key: Key('coverage-nolinks'))
         else ...[
-          Semantics(header: true, child: Text('Predicted links to live repeaters', style: t.textTheme.titleSmall)),
+          Semantics(header: true, child: Text('Links to live repeaters (Estimate)', style: t.textTheme.titleSmall)),
           for (final l in heard.take(8)) PlanFact('${l.$2} · ${units.distance(l.$3 * 1000)}', dbWords(l.$4, signed: true)),
         ],
         if (restyled)
@@ -788,11 +788,11 @@ class CoverageBodyState extends State<CoverageBody> {
       } else {
         words.add(PlanFact('Measured cells compared', '${v.compared}'));
         words.add(PlanFact('Estimate and drives agree', '${v.agreePct.toStringAsFixed(0)} %'));
-        words.add(PlanFact('Predicted covered and heard', '${v.coveredHeard}'));
-        if (v.coveredSilent > 0) words.add(PlanLine(AppSymbols.exclamationTriangle, 'Predicted to decode, but nothing was heard: ${v.coveredSilent} ${v.coveredSilent == 1 ? 'cell' : 'cells'}.'));
-        if (v.heardOutside > 0) words.add(PlanLine(AppSymbols.waveform, 'Heard outside the prediction: ${v.heardOutside} ${v.heardOutside == 1 ? 'cell' : 'cells'}.'));
+        words.add(PlanFact('Covered by the Estimate and heard', '${v.coveredHeard}'));
+        if (v.coveredSilent > 0) words.add(PlanLine(AppSymbols.exclamationTriangle, 'Covered by the Estimate, but nothing was heard: ${v.coveredSilent} ${v.coveredSilent == 1 ? 'cell' : 'cells'}.'));
+        if (v.heardOutside > 0) words.add(PlanLine(AppSymbols.waveform, 'Heard outside the Estimate: ${v.heardOutside} ${v.heardOutside == 1 ? 'cell' : 'cells'}.'));
         if (v.biasDb != null) {
-          words.add(PlanFact('Mean SNR measured / predicted', '${_snrWords(v.measuredSnr!)} / ${_snrWords(v.predictedSnr!)}'));
+          words.add(PlanFact('Mean SNR Measured / Estimate', '${_snrWords(v.measuredSnr!)} / ${_snrWords(v.predictedSnr!)}'));
           words.add(PlanLine(AppSymbols.gauge,
               v.biasDb!.abs() < 3 ? 'The estimate matches the drives within 3 dB.' : 'The estimate is ${v.biasDb!.abs().toStringAsFixed(1)} dB ${v.biasDb! > 0 ? 'more hopeful' : 'more cautious'} than the drives.'));
         }

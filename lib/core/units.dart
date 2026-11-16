@@ -289,6 +289,11 @@ class Units {
   }
 
   /// Antenna height / elevation: metres (up to 2 decimals, trimmed) or whole feet.
+  /// An area given in square kilometres, in this system: "16.4 sq mi" or "42.5 km²" (one decimal).
+  String area(double km2) => distanceImperial
+      ? '${(km2 * 1e6 / (metresPerMile * metresPerMile)).toStringAsFixed(1)} sq mi'
+      : '${km2.toStringAsFixed(1)} km²';
+
   String height(double metres) =>
       heightImperial ? '${(metres / metresPerFoot).round()} ft' : '${_trim(metres, 2)} m';
 

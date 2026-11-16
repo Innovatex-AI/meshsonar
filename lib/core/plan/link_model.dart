@@ -33,8 +33,7 @@ const double ftM = metresPerFoot;
 /// Wavelength (m) of a radio's centre frequency.
 double lambdaFor(PlanRadio radio) => lightMs / (radio.freqMHz * 1e6);
 
-/// The default radio's wavelength, for the old Link screen's chart only (lib/ui/plan/link_screen.dart, deleted with it
-/// by the Planner shell). New code takes the plan's radio: [lambdaFor].
+/// The US default radio's wavelength. Every Planner mode takes the plan's own radio instead: [lambdaFor].
 final double lambdaM = lambdaFor(PlanRadio.usDefault);
 
 /// The 60 % first-Fresnel rule of thumb (website `FRESNEL_SHARE` / `FRESNEL_CLEAR`).

@@ -21,6 +21,7 @@ import '../../core/plan/plan_controller.dart';
 import '../../core/plan/plan_model.dart' show planRadioFor;
 import '../../core/plan/presets_calc.dart' show presetBw, presetSf, sensitivityDbm;
 import '../../core/plan_contract.dart';
+import '../app.dart';
 import '../design/app_haptics.dart';
 import '../design/app_surfaces.dart';
 import '../design/app_symbols.dart';
@@ -264,6 +265,7 @@ class _PlanSettings extends StatelessWidget {
     final p = controller.plan;
     final r = p.radio;
     final choices = planRadioChoices(regionPreset);
+    final units = AppScope.unitsOf(context);
     return AppSheetScaffold(
       key: const Key('plan-settings'),
       controller: scroll,
@@ -319,7 +321,7 @@ class _PlanSettings extends StatelessWidget {
           title: 'Tree canopy height',
           stops: _canopyStops,
           value: p.clutter.canopyM.round(),
-          label: (v) => '$v m',
+          label: (v) => units.height(v.toDouble()),
           onChanged: (v) => controller.setClutter(PlanClutter(canopyM: v.toDouble(), dbPerKm: p.clutter.dbPerKm)),
         ),
         SliderTile(

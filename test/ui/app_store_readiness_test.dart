@@ -72,8 +72,13 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    Future<void> see(WidgetTester tester, String key) => tester.scrollUntilVisible(find.byKey(Key(key)), 200,
-        scrollable: find.descendant(of: find.byKey(const Key('delete-my-data-screen')), matching: find.byType(Scrollable)).first);
+    Future<void> see(WidgetTester tester, String key) async {
+      await tester.scrollUntilVisible(find.byKey(Key(key)), 200,
+          scrollable: find.descendant(of: find.byKey(const Key('delete-my-data-screen')), matching: find.byType(Scrollable)).first);
+      // Mid-screen, clear of the tab bar the list scrolls under (where it lands depends on the length of the text above).
+      await Scrollable.ensureVisible(tester.element(find.byKey(Key(key))), alignment: 0.5);
+      await tester.pumpAndSettle();
+    }
 
     testWidgets('"Delete my account" opens the website page that deletes it', (tester) async {
       final h = await open(tester);

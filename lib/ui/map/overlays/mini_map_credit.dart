@@ -1,5 +1,5 @@
 // The map credit for the small maps that are not the shared CoverageMap (Where to drive, repeater position / reach / your
-// drives, contact, radio tools, live packets, message path, plan tools, drive report, privacy zones, home observer). The
+// drives, contact, radio tools, live packets, message path, drive report, privacy zones). The
 // OpenStreetMap Attribution Guidelines want the credit visible in a corner without interaction; the Drive map has its own
 // AttributionLine + Credits sheet. Every small map draws the shared basemap (BasemapLayer), so the line is the credit of
 // the source drawn: "Protomaps © OpenStreetMap contributors" on our tiles, OpenFreeMap's credit on the fallback.

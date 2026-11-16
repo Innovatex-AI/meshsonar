@@ -22,7 +22,7 @@ Future<void> showAntennaSheet(BuildContext context, {String? radioKey, bool user
   );
 }
 
-/// Icon and one-line description of each mount (also the Home observer antenna choice).
+/// Icon and one-line description of each mount.
 const Map<AntennaMount, (IconData, String)> antennaMountInfo = {
   AntennaMount.handheld: (Icons.back_hand_outlined, 'The radio in your hand or pocket, with its own antenna.'),
   AntennaMount.insideCar: (Icons.directions_car_outlined, 'On the dash or a seat, antenna inside the car.'),

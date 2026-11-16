@@ -24,7 +24,8 @@ import '../design/sheet_detents.dart' show formSheetDetents;
 import '../design/state_views.dart';
 import '../design/tokens.dart';
 import '../settings/settings_kit.dart' show InfoTile, SliderTile;
-import 'plan_modes.dart' show PlanListenable, symbolData;
+import '../nodes/node_ref.dart' show nameHidesPosition;
+import 'plan_modes.dart' show PlanLine, PlanListenable, symbolData;
 
 /// The words for a node's status (vocabulary table: "Node", "Estimate", "Measured").
 String nodeStatusWords(PlanNodeStatus s) => switch (s) {
@@ -48,7 +49,7 @@ String nodeSummary(PlanNode n, BuildContext context) {
     nodeStatusWords(n.status),
     if (n.role == PlanNodeRole.handheld) 'handheld',
     units.height(n.antennaM),
-    if (n.mine) 'my radio',
+    if (n.mine) 'mine',
     if (n.approximate) 'position about 1 km',
   ].join(' · ');
 }
@@ -83,8 +84,9 @@ class NodeList extends StatelessWidget {
       ]),
       if (nodes.isEmpty)
         Padding(
-          padding: const EdgeInsets.symmetric(vertical: Gap.s),
-          child: Text('No nodes yet. Long-press the map to drop a planned node.', style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+          padding: const EdgeInsets.symmetric(vertical: Gap.xs),
+          child: PlanLine(AppSymbols.pin, 'No nodes yet. Long-press the map to drop a planned node.',
+              key: const Key('plan-node-list-empty'), style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant)),
         ),
       for (final n in nodes)
         ListTile(
@@ -225,13 +227,13 @@ class _NodeEditorState extends State<_NodeEditor> {
               key: const Key('node-mine'),
               contentPadding: EdgeInsets.zero,
               secondary: AppSymbolIcon(AppSymbols.person),
-              title: const Text('This is my radio'),
+              title: const Text('This node is mine'),
               subtitle: const Text('Its position is rounded to about 1 km when you share the plan.'),
               value: n.mine,
               onChanged: n.existingKey != null ? null : (v) => _edit((x) => x.copyWith(mine: v)),
             ),
             if (n.existingKey != null)
-              Text('A network node is yours when you have claimed it (My radios).', style: t.textTheme.bodySmall),
+              Text('A network node is yours when you have claimed it (Settings > Claimed radios).', style: t.textTheme.bodySmall),
             const SizedBox(height: Gap.s),
             Semantics(header: true, child: Text('Mount', style: t.textTheme.titleSmall)),
             const SizedBox(height: Gap.xs),
@@ -325,6 +327,8 @@ List<PickableNode> pickableNodes({
   for (final r in [...region, ...global]) {
     final k = r.key.toLowerCase();
     if (!seen.add(k) || !r.lat.isFinite || !r.lon.isFinite || (r.lat == 0 && r.lon == 0)) continue;
+    // A node whose owner hides its position (the no-position mark in its name) is never offered for a plan (privacy).
+    if (nameHidesPosition(r.name)) continue;
     final km = near == null ? null : haversineKm(near.lat, near.lon, r.lat, r.lon);
     final mine = claimed.contains(k);
     if (!mine && km != null && km > maxKm) continue;
@@ -429,7 +433,7 @@ class _NodePickerState extends State<_NodePicker> {
             leading: AppSymbolIcon(p.mine ? AppSymbols.personFill : AppSymbols.antenna),
             title: Text(p.name),
             subtitle: Text([
-              if (p.mine) 'My radio',
+              if (p.mine) 'Claimed',
               p.room ? 'Room' : 'Repeater',
               if (p.km != null) units.distance(p.km! * 1000),
             ].join(' · ')),
