@@ -17,9 +17,11 @@
 #      HARNESS=1 runs any SCREEN/FRAMES/VERIFY_DONE harness (e.g. integration_test/m2_map_visual_test.dart) the drive-matrix
 #      way: built once, one run per VARIANTS appearance.
 #      FLOW_TEST=integration_test/contacts_visual_test.dart runs that flow instead of the all-screens tour (Contacts and DMs).
-#      GRANT_LOCATION=1 grants location to the fresh install and sets the simulated position (LOCATION="lat,lon", default
-#      Columbus) before the flow; e.g. GRANT_LOCATION=1 FLOW_TEST=integration_test/planner_visual_test.dart (the Planner flows
-#      A-E and J1-J8 against the deployed server; its OPENURL lines are opened with simctl openurl).
+#      GRANT_LOCATION=1 (the default since build 67, V-5) grants location to the fresh install and sets the simulated position
+#      (LOCATION="lat,lon", default Columbus) before the flow; e.g. FLOW_TEST=integration_test/planner_visual_test.dart (the
+#      Planner flows A-E and J1-J8 against the deployed server; its OPENURL lines are opened with simctl openurl). The
+#      screen tour needs it too: Start drive is off until location is allowed, so without the grant drive-live could not
+#      start a drive and drive-report / drive-detail had nothing to show. GRANT_LOCATION=0 runs a flow with location not asked.
 #      OFFLINE_MAPS=1 also runs integration_test/offline_maps_test.dart (in-app download of the real CMH pack, then
 #      z10/z14 light/dark shots of the offline map).
 # For each device: boot, `flutter build ios --simulator`, install + launch com.meshsonar.app, then run
@@ -209,7 +211,7 @@ for NAME in "${LIST[@]}"; do
   # fresh state for the flow test (first-run onboarding path); wipes only the simulator's app data
   sim terminate "$UDID" "$BUNDLE" 2>/dev/null || true
   sim uninstall "$UDID" "$BUNDLE" 2>/dev/null || true
-  if [ "${GRANT_LOCATION:-0}" = 1 ]; then
+  if [ "${GRANT_LOCATION:-1}" = 1 ]; then
     # Fresh install with location granted and a simulated position (default Columbus, LOCATION="lat,lon"); the flow test's
     # own install goes over it and keeps the grant (a grant on an uninstalled app is lost).
     sim install "$UDID" "$APP"
