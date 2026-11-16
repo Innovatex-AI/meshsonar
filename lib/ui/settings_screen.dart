@@ -15,6 +15,7 @@ import 'settings/diagnostics_section.dart';
 import 'settings/display_section.dart';
 import 'settings/drives_section.dart';
 import 'settings/maps_section.dart';
+import 'settings/meshtrack_section.dart';
 import 'settings/my_radios_section.dart';
 import 'settings/notifications_section.dart';
 import 'settings/observer_section.dart';
@@ -43,6 +44,7 @@ List<Widget> settingsSectionRows(BuildContext context, String id) => switch (id)
       'privacy' => privacySectionRows(context),
       'observer' => observerSectionRows(context),
       'notifications' => notificationsSectionRows(context),
+      'meshtrack' => meshTrackSectionRows(context),
       'wardriving' => wardrivingSectionRows(context),
       'radio' => radioSectionRows(context),
       'my-radios-section' => myRadiosSectionRows(context),
@@ -60,6 +62,7 @@ String? settingsSectionHelp(String id) => switch (id) {
       'privacy' => privacyHelp,
       'observer' => observerHelp,
       'notifications' => notificationsHelp,
+      'meshtrack' => meshTrackHelp,
       'wardriving' => wardrivingHelp,
       'radio' => radioHelp,
       'my-radios-section' => myRadiosHelp,
@@ -154,7 +157,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
             child: Semantics(header: true, child: Text('Jump to a section', style: Theme.of(ctx).textTheme.titleMedium)),
           ),
-          for (final info in settingsSections)
+          for (final info in visibleSettingsSections(AppScope.of(context)))
             ListTile(
               key: Key('jump-${info.id}'),
               leading: Icon(info.icon),
@@ -258,7 +261,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               if (_query.trim().isNotEmpty)
                 _results(context)
               else ...[
-                for (final info in settingsSections) _section(context, info, collapsible: true),
+                for (final info in visibleSettingsSections(AppScope.of(context))) _section(context, info, collapsible: true),
                 _footer(context),
               ],
             ]),
@@ -276,7 +279,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           if (_query.trim().isNotEmpty)
             _results(context)
           else
-            for (final info in settingsSections)
+            for (final info in visibleSettingsSections(AppScope.of(context)))
               ListTile(
                 key: Key('section-nav-${info.id}'),
                 leading: Icon(info.icon),

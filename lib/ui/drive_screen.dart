@@ -424,6 +424,7 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
                     children: [
                       AntennaChip(state: s),
                       PingSettingsChip(state: s),
+                      const MeshTrackChip(),
                       LogButton(state: s),
                     ],
                   ),
@@ -700,6 +701,7 @@ class _StateChips extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           RegionChip(state: s, always: true),
+          const MeshTrackChip(),
           for (final c in chips.take(2)) ...[const SizedBox(height: Gap.xs), c],
         ],
       ),
