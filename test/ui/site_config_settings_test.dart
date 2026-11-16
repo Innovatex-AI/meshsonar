@@ -108,6 +108,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('privacy-zones-screen')), findsOneWidget);
     expect(find.byKey(const Key('zones-map')), findsOneWidget);
-    expect(find.textContaining('hidden from the public map'), findsOneWidget);
+    expect(find.textContaining('never uploaded'), findsOneWidget);
   });
 }

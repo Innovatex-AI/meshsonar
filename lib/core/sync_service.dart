@@ -41,6 +41,7 @@ import 'drive_context.dart';
 import 'drive_context_wire.dart';
 import 'drive_store.dart';
 import 'model.dart';
+import 'privacy_zones.dart';
 
 const int maxPingsPerUpload = 5000;
 
@@ -59,11 +60,17 @@ class DefaultSyncService implements SyncService {
   /// been told about); without it the saved settings decide.
   bool Function(String categoryId)? categoryOn;
 
+  /// The privacy zones, read from the phone (loads them first). Pings inside a zone are never uploaded: they are marked
+  /// kept-on-this-phone ([ZoneHeldLedger]) and left out of every body. Fails closed: when this throws, or answers with
+  /// zones not loaded, nothing is uploaded at all (the pings stay queued). Null = no zones (tests, the plain service).
+  Future<PrivacyZones> Function()? zones;
+
   /// Now (tests set it).
   DateTime Function() clock = DateTime.now;
 
   /// Used when [store] doesn't implement [SyncLedger] (e.g. a fake store in tests); lasts for this object's lifetime.
   final _MemoryLedger _memLedger = _MemoryLedger();
+  ZoneHeldLedger get _held => store is ZoneHeldLedger ? store as ZoneHeldLedger : _memLedger;
   Future<void> _last = Future<void>.value();
 
   /// Sessions whose v1.2 upload was refused as a whole this run; they go up as the plain drive until the app restarts.
@@ -163,7 +170,7 @@ class DefaultSyncService implements SyncService {
       });
 
   SyncReport _report(List<_SessionResult> rs) {
-    var up = 0, stored = 0, dup = 0, rej = 0, ss = 0, sd = 0, sr = 0, cu = 0, cr = 0, cf = 0;
+    var up = 0, stored = 0, dup = 0, rej = 0, zh = 0, ss = 0, sd = 0, sr = 0, cu = 0, cr = 0, cf = 0;
     String? firstError;
     int? retryAfter;
     for (final r in rs) {
@@ -172,6 +179,7 @@ class DefaultSyncService implements SyncService {
       stored += r.stored;
       dup += r.duplicate;
       rej += r.rejected;
+      zh += r.zoneHeld;
       ss += r.samplesStored;
       sd += r.samplesDuplicate;
       sr += r.samplesRejected;
@@ -185,6 +193,7 @@ class DefaultSyncService implements SyncService {
       stored: stored,
       duplicate: dup,
       rejected: rej,
+      zoneHeld: zh,
       error: firstError,
       samplesStored: ss,
       samplesDuplicate: sd,
@@ -209,7 +218,34 @@ class DefaultSyncService implements SyncService {
     // Read before the uploads, so a rename made while they run stays marked for the next sync.
     final resendToken = await ledger.sessionResendToken(sessionId);
     final rejectedBefore = await ledger.rejectedIds(sessionId);
-    final pending = (await store.unsyncedPings(sessionId)).where((p) => !rejectedBefore.contains(p.id)).toList();
+    var pending = (await store.unsyncedPings(sessionId)).where((p) => !rejectedBefore.contains(p.id)).toList();
+    final gate = zones;
+    if (gate != null) {
+      // Fail closed: zones not known = nothing leaves the phone (the pings stay queued, the next sync tries again).
+      PrivacyZones z;
+      try {
+        z = await gate();
+      } catch (_) {
+        z = PrivacyZones.notLoaded;
+      }
+      if (!z.loaded) {
+        r.error = 'privacy zones not loaded yet; nothing uploaded';
+        return r;
+      }
+      final inZone = [for (final p in pending) if (z.hides(p.lat, p.lon)) p.id];
+      if (inZone.isNotEmpty) {
+        await _held.markZoneHeld(sessionId, inZone);
+        final skip = inZone.toSet();
+        pending = [for (final p in pending) if (!skip.contains(p.id)) p];
+        r.zoneHeld += inZone.length;
+      }
+      // A drive that is entirely inside zones is not announced to the server at all (no empty drive, no times).
+      if (pending.isEmpty) {
+        final all = await store.pings(sessionId);
+        final held = await _held.zoneHeldIds(sessionId);
+        if (all.isNotEmpty && all.every((p) => held.contains(p.id))) return r;
+      }
+    }
 
     try {
       final told = session.endedAt == null ? null : await ledger.endReported(sessionId);
@@ -542,6 +578,7 @@ class _SessionResult {
   int stored = 0;
   int duplicate = 0;
   int rejected = 0;
+  int zoneHeld = 0;
   int samplesStored = 0;
   int samplesDuplicate = 0;
   int samplesRejected = 0;
@@ -556,8 +593,13 @@ class _SessionResult {
   int? retryAfterSec;
 }
 
-class _MemoryLedger implements SyncLedger {
+class _MemoryLedger implements SyncLedger, ZoneHeldLedger {
   final Map<String, Set<String>> _rejected = {};
+  final Map<String, Set<String>> _zoneHeld = {};
+  @override
+  Future<void> markZoneHeld(String sessionId, Iterable<String> pingIds) async => (_zoneHeld[sessionId] ??= {}).addAll(pingIds);
+  @override
+  Future<Set<String>> zoneHeldIds(String sessionId) async => {...?_zoneHeld[sessionId]};
   final Map<String, DateTime> _ended = {};
   @override
   Future<void> markRejected(String sessionId, Iterable<String> pingIds) async =>

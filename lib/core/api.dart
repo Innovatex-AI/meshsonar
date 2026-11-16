@@ -13,6 +13,7 @@ import 'map_links.dart';
 import 'mqtt_contract.dart';
 import 'plan_contract.dart';
 import 'node_claim.dart';
+import 'driver_settings.dart';
 import 'privacy_zones.dart';
 import 'repeater_reach.dart';
 import 'region_lookup.dart';
@@ -43,6 +44,9 @@ class SessionSummary {
   /// "waiting to upload".
   final int rejectedCount;
 
+  /// Pings inside a privacy zone: kept on this phone (own log and stats), never uploaded, never retried.
+  final int zoneHeldCount;
+
   /// The drive's details (e.g. its name) changed since the server last saw them; the next sync re-sends the session
   /// even if every ping is already uploaded.
   final bool sessionResendPending;
@@ -53,12 +57,13 @@ class SessionSummary {
     required this.heardCount,
     required this.syncedCount,
     this.rejectedCount = 0,
+    this.zoneHeldCount = 0,
     this.sessionResendPending = false,
   }) : txCount = txCount ?? pingCount;
 
   /// Pings still waiting to upload (neither confirmed nor rejected).
   int get unsyncedCount {
-    final n = pingCount - syncedCount - rejectedCount;
+    final n = pingCount - syncedCount - rejectedCount - zoneHeldCount;
     return n < 0 ? 0 : n;
   }
 
@@ -240,6 +245,12 @@ class SiteConfig {
 
   /// `GET/POST driver-privacy` (`capabilities.driverPrivacy`): read and write this driver's privacy zones and trim distance.
   bool get driverPrivacy => capabilities.contains('driverPrivacy');
+
+  /// `GET/POST driver-settings` (`capabilities.driverSettings`): callsign, display name, anonymous, leaderboard opt-in.
+  bool get driverSettings => capabilities.contains('driverSettings');
+
+  /// `POST driver-privacy/purge` (`capabilities.zonePurge`): remove what the server already holds inside given zones.
+  bool get zonePurge => capabilities.contains('zonePurge');
 
   /// `GET driver-summary` (`capabilities.driverSummary`).
   bool get driverSummary => capabilities.contains('driverSummary');
@@ -443,6 +454,19 @@ abstract class CmatClient {
   /// [CmatException] (401 unknown key).
   Future<DriverPrivacy> driverPrivacy(String driverKey) => throw const CmatException('not supported by this client');
 
+  /// `GET /api/cmh/driver-settings` (`capabilities.driverSettings`). Throws [CmatException].
+  Future<DriverSettings> driverSettings(String driverKey) => throw const CmatException('not supported by this client');
+
+  /// `POST /api/cmh/driver-settings`: sends only the fields in [fields] (keys: callsign, display, anonymous,
+  /// leaderboardOptIn). The server applies all or none; 409 `needs_account` for a leaderboard change on a key with no account.
+  Future<DriverSettings> setDriverSettings(String driverKey, Map<String, Object?> fields) =>
+      throw const CmatException('not supported by this client');
+
+  /// `POST /api/cmh/driver-privacy/purge` (`capabilities.zonePurge`): deletes what the server already stored for this person
+  /// inside [zones] (or, with [dryRun], only counts it). Irreversible when [dryRun] is false. Throws [CmatException].
+  Future<ZonePurgeResult> purgeZones(String driverKey, List<PrivacyZone> zones, {bool dryRun = false}) =>
+      throw const CmatException('not supported by this client');
+
   /// `POST /api/cmh/driver-privacy`: replaces the zones and/or the trim distance. The server validates and rounds; a 400
   /// carries a plain-words `error` naming the zone. Throws [CmatException].
   Future<DriverPrivacy> setDriverPrivacy(String driverKey, {List<PrivacyZone>? zones, int? trimM}) =>
@@ -618,6 +642,9 @@ class SyncReport {
   final int stored;
   final int duplicate;
   final int rejected;
+
+  /// Pings left on the phone this sync because they are inside a privacy zone (never uploaded).
+  final int zoneHeld;
   final String? error; // first error, if any session failed
 
   /// Drive context (Drive Format v1.2), counted separately from pings. Samples: newly stored / already on the server /
@@ -638,6 +665,7 @@ class SyncReport {
     this.stored = 0,
     this.duplicate = 0,
     this.rejected = 0,
+    this.zoneHeld = 0,
     this.error,
     this.samplesStored = 0,
     this.samplesDuplicate = 0,

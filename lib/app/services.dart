@@ -12,6 +12,7 @@ import '../core/claim_flow.dart' show ClaimRestoreStore;
 import '../core/model.dart';
 import '../core/phone_sensors.dart';
 import '../core/privacy_zone_store.dart';
+import 'driver_settings_controller.dart' show DriverSettingsStore;
 import '../core/idle_region_watcher.dart';
 import '../core/region_cache.dart';
 import '../core/region_lookup.dart';
@@ -119,6 +120,9 @@ class AppServices {
   /// Where the privacy zones are kept (lib/core/privacy_zone_store.dart). Null = memory only.
   final PrivacyZoneStore? privacyZoneStore;
 
+  /// Where the pending callsign / display name / anonymous / leaderboard edits are kept. Null = memory only.
+  final DriverSettingsStore? driverSettingsStore;
+
   /// Where the unsent telemetry headers wait (lib/core/telemetry_uploader.dart). Null = memory only.
   final File? telemetryQueueFile;
 
@@ -217,6 +221,7 @@ class AppServices {
     this.observerHeartbeatTimer = false,
     this.driveEndQueueFile,
     this.privacyZoneStore,
+    this.driverSettingsStore,
     this.claimRestoreStore,
     this.directory,
     this.reportDraftStore,

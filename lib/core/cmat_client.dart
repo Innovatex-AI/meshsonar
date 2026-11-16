@@ -41,6 +41,7 @@ import 'map_links.dart';
 import 'node_claim.dart';
 import 'photo_api.dart';
 import 'photo_wire.dart';
+import 'driver_settings.dart';
 import 'privacy_zones.dart';
 import 'repeater_reach.dart';
 import 'report_body.dart' show problemReportMaxBytes;
@@ -355,6 +356,23 @@ class HttpCmatClient implements CmatClient, TelemetryTransport, ObserverStatusTr
       'POST', 'driver-privacy',
       driverKey: driverKey,
       body: {if (zones != null) 'privacyZones': [for (final z in zones) z.toJson()], 'trimM': ?trimM}));
+
+  @override
+  Future<DriverSettings> driverSettings(String driverKey) async => _settingsOf(await _send('GET', 'driver-settings', driverKey: driverKey));
+
+  @override
+  Future<DriverSettings> setDriverSettings(String driverKey, Map<String, Object?> fields) async =>
+      _settingsOf(await _send('POST', 'driver-settings', driverKey: driverKey, body: fields));
+
+  DriverSettings _settingsOf(Map<String, dynamic> j) =>
+      DriverSettings.tryParse(j) ?? (throw const CmatException('server sent an unreadable answer', status: 200));
+
+  @override
+  Future<ZonePurgeResult> purgeZones(String driverKey, List<PrivacyZone> zones, {bool dryRun = false}) async {
+    final j = await _send('POST', 'driver-privacy/purge',
+        driverKey: driverKey, body: {'zones': [for (final z in zones) z.toJson()..remove('label')], 'dryRun': dryRun});
+    return ZonePurgeResult.tryParse(j) ?? (throw const CmatException('server sent an unreadable answer', status: 200));
+  }
 
   DriverPrivacy _privacyOf(Map<String, dynamic> j) =>
       DriverPrivacy.tryParse(j) ?? (throw const CmatException('server sent an unreadable answer', status: 200));

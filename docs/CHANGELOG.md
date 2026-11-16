@@ -3,6 +3,20 @@
 All notable changes to MeshSonar. Dates are local (US Eastern). This changelog was reconstructed from the commit
 history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md](ROADMAP.md).
 
+## [Unreleased] — Build 66: privacy zones enforced on the phone, account toggles in the app
+
+### Privacy zones (A6, Z1-Z9)
+- **Zones now work on the phone, not just at read time.** `PrivacyZones.hides(lat, lon)` (`lib/core/privacy_zones.dart`, same haversine as the editor and the website) is asked by every upload path. A ping inside a zone is never put in a drive-upload body: it is marked kept-on-this-phone (`zone_held.txt`, `ZoneHeldLedger`), stays in the drive log, stats and export, never counts as waiting or rejected, and is never retried. A drive entirely inside zones is not announced to the server at all.
+- **Observer packets inside a zone carry no position at all** (no `pos`, no res-7 `cell`); the header still counts. The uploader re-checks the queue just before every batch, so a zone added after a packet was queued still applies.
+- **Fail closed:** until the zones are read from disk, uploads wait (drives) and positions are stripped (packets). Zones are read at app start.
+- **Drive badge:** "N kept on this phone (privacy zone)" on the drive list and detail.
+- **Remove earlier uploads (capability `zonePurge`):** adding or enlarging a zone counts what the server holds inside it (dry run), then asks once, with a confirm sheet, before `POST driver-privacy/purge` (irreversible). Result: "N earlier pings inside this zone were removed from the server." Older servers: no offer, no call.
+- Zone screen wording: pings stay on the phone, boundary-leak note, "Also on the website" button. The Privacy and sharing copy keeps its read-time wording until the next build.
+
+### Account settings in the app (capability `driverSettings`)
+- Settings > Privacy & data sharing > **How you appear**: callsign, display name, Stay anonymous, List me on the leaderboard (the website's `/me/privacy` fields). Edits are saved on the phone first, sent as only the fields changed, the phone's pending edit wins, the server value replaces the phone's when nothing is pending. A key with no website account gets the leaderboard switch disabled with the reason. Older servers: rows hidden, no call.
+- Contract: meshsonar-infra `docs/planning/build-66-settings-contract.md`.
+
 ## [0.38.0+64] — 2026-11-15 — Master Planner, observer everywhere, MQTT feeds
 
 The Plan tab is rebuilt as one planner, the Home observer is gone and the app is an observer whenever a radio is connected, and Settings gets an Observer section with MQTT feeds to other MeshCore sites. Server side: meshcore-insights `release/0.38` (planner endpoints, migration 0138); the app also works against the current server (Link mode falls back to the on-phone model, Coverage to the live painter, Find sites says the server does not have it yet).

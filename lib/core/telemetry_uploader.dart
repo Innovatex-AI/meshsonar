@@ -28,6 +28,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'privacy_zones.dart';
 import 'telemetry.dart';
 
 const String telemetryFormat = 'meshsonar-telemetry/1';
@@ -232,6 +233,11 @@ class TelemetryUploader {
   /// observer this phone is.
   final void Function(Map<String, dynamic> observer)? onObserver;
 
+  /// The privacy zones as they are now. Just before a batch is built, every queued record whose exact `pos` is inside a
+  /// zone loses it (and gets no cell either): a zone added after the packet was queued still applies, and while the zones
+  /// are not loaded no position leaves the phone (fail closed). Null = no zones (tests).
+  final PrivacyZones Function()? zones;
+
   TelemetryUploader({
     required this.enabled,
     required this.driverKey,
@@ -246,6 +252,7 @@ class TelemetryUploader {
     this.observer,
     this.onServerErased,
     this.onObserver,
+    this.zones,
   }) : now = now ?? DateTime.now;
 
   final List<TelemetryRecord> _queue = [];
@@ -523,6 +530,19 @@ class TelemetryUploader {
     return d > config.maxBackoff ? config.maxBackoff : d;
   }
 
+  /// Strips the position from queued records that fall inside a privacy zone (or from all of them while zones are unknown).
+  void _applyZones() {
+    final z = zones?.call();
+    if (z == null) return;
+    for (var i = 0; i < _queue.length; i++) {
+      final p = _queue[i].pos;
+      if (p != null && z.hides(p.lat, p.lon)) {
+        _queue[i] = _queue[i].withoutPos(null);
+        _dirty = true;
+      }
+    }
+  }
+
   /// Sends at most one batch if one is due. Safe to call often.
   Future<void> flush() async {
     if (_flushing) return;
@@ -555,6 +575,7 @@ class TelemetryUploader {
     if (_lastSend != null && t.difference(_lastSend!) < _gap(t)) return;
     if (_batchTimes.length >= config.maxBatchesPerHour) return;
 
+    _applyZones();
     final from = _holdFrom(t);
     final eligible = _queue.where((r) => _ready(r, from)).toList();
     if (eligible.isEmpty) return;

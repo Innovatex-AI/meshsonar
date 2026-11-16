@@ -102,6 +102,38 @@ double distanceM(double lat1, double lon1, double lat2, double lon2) {
   return 2 * r * math.asin(math.min(1.0, math.sqrt(a)));
 }
 
+/// The one question every upload path asks: is this position inside a privacy zone? Enforced on the phone (Z1): an
+/// in-zone ping is never queued for upload and an in-zone observer packet carries no position at all.
+///
+/// Fails closed: until the zones have been read from disk ([loaded] false) every position counts as hidden, and so does a
+/// position that is not a usable coordinate. Distance is the haversine [distanceM], the same rule the editor and the
+/// website's `zones.ts distanceM` use (inside = distance <= radius, so a point exactly on the edge is hidden); it wraps
+/// across the antimeridian by construction.
+class PrivacyZones {
+  final List<PrivacyZone> zones;
+  final bool loaded;
+  const PrivacyZones(this.zones, {this.loaded = true});
+
+  /// Zones not read yet: everything is hidden.
+  static const PrivacyZones notLoaded = PrivacyZones([], loaded: false);
+
+  bool hides(double lat, double lon) {
+    if (!loaded) return true;
+    if (!lat.isFinite || !lon.isFinite || lat.abs() > 90 || lon.abs() > 180) return true;
+    for (final z in zones) {
+      if (distanceM(lat, lon, z.lat, z.lon) <= z.radiusM) return true;
+    }
+    return false;
+  }
+}
+
+/// Zones of [next] that are new or bigger than anything in [before]: where already-uploaded pings may now need to be
+/// purged from the server. A zone counts as covered when one old zone's circle holds it entirely.
+List<PrivacyZone> zonesNeedingPurge(List<PrivacyZone> before, List<PrivacyZone> next) => [
+      for (final z in next)
+        if (!before.any((o) => distanceM(o.lat, o.lon, z.lat, z.lon) + z.radiusM <= o.radiusM + 0.5)) z,
+    ];
+
 /// Metres per screen pixel at [lat] and a flutter_map zoom (256 px tiles).
 double metresPerPixel(double lat, double zoom) => 156543.03392 * math.cos(lat * math.pi / 180) / math.pow(2, zoom);
 
@@ -149,15 +181,22 @@ class PrivacyZoneState {
   final bool pending;
   final ZoneScope? scope;
   final DateTime? syncedAt;
-  const PrivacyZoneState({this.zones = const [], this.trimM = kTrimDefaultM, this.pending = false, this.scope, this.syncedAt});
 
-  PrivacyZoneState copyWith({List<PrivacyZone>? zones, int? trimM, bool? pending, Object? scope = _keepScope, DateTime? syncedAt}) =>
+  /// New or enlarged zones whose earlier uploads the server may still hold: offered for removal (the purge confirm sheet)
+  /// until the person confirms or keeps them. Saved with the zones so an offline edit is not forgotten.
+  final List<PrivacyZone> purge;
+  const PrivacyZoneState(
+      {this.zones = const [], this.trimM = kTrimDefaultM, this.pending = false, this.scope, this.syncedAt, this.purge = const []});
+
+  PrivacyZoneState copyWith(
+          {List<PrivacyZone>? zones, int? trimM, bool? pending, Object? scope = _keepScope, DateTime? syncedAt, List<PrivacyZone>? purge}) =>
       PrivacyZoneState(
         zones: zones ?? this.zones,
         trimM: trimM ?? this.trimM,
         pending: pending ?? this.pending,
         scope: identical(scope, _keepScope) ? this.scope : scope as ZoneScope?,
         syncedAt: syncedAt ?? this.syncedAt,
+        purge: purge ?? this.purge,
       );
   static const Object _keepScope = Object();
 
@@ -165,6 +204,7 @@ class PrivacyZoneState {
         'zones': [for (final z in zones) z.toJson()],
         'trimM': trimM,
         'pending': pending,
+        if (purge.isNotEmpty) 'purge': [for (final z in purge) z.toJson()],
         if (scope != null) 'scope': scope!.name,
         if (syncedAt != null) 'syncedAt': syncedAt!.toUtc().toIso8601String(),
       };
@@ -180,7 +220,15 @@ class PrivacyZoneState {
       }
     }
     final t = j['trimM'];
+    final purge = <PrivacyZone>[];
+    if (j['purge'] is List) {
+      for (final x in j['purge'] as List) {
+        final z = PrivacyZone.tryParse(x);
+        if (z != null && purge.length < kZoneMax) purge.add(z);
+      }
+    }
     return PrivacyZoneState(
+      purge: purge,
       zones: zones,
       trimM: t is num && t.isFinite ? t.round().clamp(0, kTrimMaxM) : kTrimDefaultM,
       pending: j['pending'] == true,
