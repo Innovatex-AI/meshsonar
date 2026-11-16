@@ -19,6 +19,7 @@ import '../core/mqtt/observer_engine_factory.dart';
 import '../core/plan/plan_repository.dart';
 import '../core/position_filter.dart';
 import '../core/privacy_zone_store.dart';
+import 'driver_settings_controller.dart' show FileDriverSettingsStore;
 import '../core/region_cache.dart';
 import '../core/region_lookup.dart';
 import '../core/region_stats_api.dart';
@@ -123,6 +124,7 @@ Future<AppServices> buildRealServices() async {
       return ObserverIdentity(read: () => kc.read(observerIdSlot), write: (b) => kc.write(observerIdSlot, b));
     }(),
     privacyZoneStore: FilePrivacyZoneStore(File('${root.path}${Platform.pathSeparator}privacy_zones.json')),
+    driverSettingsStore: FileDriverSettingsStore(File('${root.path}${Platform.pathSeparator}driver_settings.json')),
     claimRestoreStore: FileClaimRestoreStore(File('${root.path}${Platform.pathSeparator}claim_restore.json')),
     // The one problem report that couldn't be sent yet, next to settings.json.
     reportDraftStore: FileReportDraftStore(File('${root.path}${Platform.pathSeparator}report_draft.json')),

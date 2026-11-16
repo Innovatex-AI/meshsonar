@@ -13,6 +13,7 @@ import '../design/app_surfaces.dart';
 import '../map/offline_basemap.dart';
 import '../region/region_common.dart' show agoText;
 import '../theme.dart';
+import 'settings_kit.dart' show runWithUndo;
 
 String formatPackBytes(int b) {
   if (b < 1024 * 1024) {
@@ -143,34 +144,33 @@ class _OfflinePacksScreenState extends State<OfflinePacksScreen> {
     }
   }
 
+  /// Codes being deleted inside the Undo window, so a second tap does not queue a second delete.
+  final Set<String> _removing = {};
+
   Future<void> _confirmDelete(InstalledPack ip) async {
-    final ok = await showAppConfirm(
+    if (!_removing.add(ip.code)) return;
+    runWithUndo(
       context,
-      title: 'Delete ${ip.name}?',
-      message: 'Frees ${formatPackBytes(ip.bytes)}. The map goes back to online tiles here.',
-      confirmLabel: 'Delete',
-      destructive: true,
-      cancelLabel: 'Keep',
-      confirmKey: const Key('pack-delete-confirm'),
+      'Deleting ${ip.name}. Frees ${formatPackBytes(ip.bytes)}; the map uses online tiles here.',
+      onUndo: () => _removing.remove(ip.code),
+      commit: () async {
+        await _guard(() => _m!.delete(ip.code));
+        _removing.remove(ip.code);
+      },
     );
-    if (ok) {
-      await _guard(() => _m!.delete(ip.code));
-    }
   }
 
   Future<void> _confirmDeleteAll() async {
-    final ok = await showAppConfirm(
+    if (!_removing.add('*')) return;
+    runWithUndo(
       context,
-      title: 'Delete all map packs?',
-      message: 'Frees ${formatPackBytes(_used)}, including unfinished downloads. The map goes back to online tiles.',
-      confirmLabel: 'Delete all',
-      destructive: true,
-      cancelLabel: 'Keep',
-      confirmKey: const Key('pack-delete-all-confirm'),
+      'Deleting all map packs. Frees ${formatPackBytes(_used)}; the map uses online tiles.',
+      onUndo: () => _removing.remove('*'),
+      commit: () async {
+        await _guard(() => _m!.deleteAll());
+        _removing.remove('*');
+      },
     );
-    if (ok) {
-      await _guard(() => _m!.deleteAll());
-    }
   }
 
   Future<void> _guard(Future<void> Function() f) async {

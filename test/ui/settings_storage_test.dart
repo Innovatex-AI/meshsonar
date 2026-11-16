@@ -57,7 +57,7 @@ void main() {
     return f.evaluate().isEmpty ? null : tester.widget<Text>(f).data;
   }
 
-  testWidgetsT('drives: only fully uploaded drives are removed, after a dialog that names what stays', (tester) async {
+  testWidgetsT('drives: only fully uploaded drives are removed, after an Undo window (no dialog)', (tester) async {
     final h = await open(tester, seed: (h) {
       h.store.seed(ended('up'), [silentPing('u1'), silentPing('u2')], syncedFirst: 2);
       h.store.seed(ended('waiting'), [silentPing('w1'), silentPing('w2'), silentPing('w3')], syncedFirst: 1);
@@ -67,20 +67,17 @@ void main() {
     expect(text(tester, 'storage-drives-value'), contains('3 drives'));
     expect(text(tester, 'storage-drives-value'), contains('1 fully uploaded, 2 not fully uploaded'));
 
-    // Cancel changes nothing.
+    // Undo inside the window changes nothing; there is no confirm dialog.
     await tester.tap(find.byKey(const Key('storage-drives-clear')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('storage-drives-dialog')), findsOneWidget);
-    expect(find.textContaining('2 drives not fully uploaded stay on this phone'), findsOneWidget);
-    expect(find.textContaining('3 pings the server does not have'), findsOneWidget);
-    expect(find.textContaining('This phone loses its copy'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('storage-drives-dialog-cancel')));
-    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('storage-drives-dialog')), findsNothing);
+    expect(find.text('Removing 1 uploaded drive from this phone.'), findsOneWidget);
+    await tester.tap(find.text('Undo'));
+    await tester.pump(const Duration(seconds: 7));
     expect(h.store.sessionsById.keys, unorderedEquals(['up', 'waiting', 'rejected']));
 
     await tester.tap(find.byKey(const Key('storage-drives-clear')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('storage-drives-dialog-confirm')));
+    await tester.pump(const Duration(seconds: 7));
     await settleIo(tester, until: () => find.textContaining('Removed 1 uploaded drive').evaluate().isNotEmpty);
     expect(h.store.sessionsById.keys, unorderedEquals(['waiting', 'rejected']),
         reason: 'unsynced and rejected pings exist only on this phone: never removed here');
@@ -109,7 +106,7 @@ void main() {
     expect(tester.widget<TextButton>(find.byKey(const Key('storage-drives-clear'))).onPressed, isNull);
   });
 
-  testWidgetsT('saved region data: size shown, clear asks, then the files are gone', (tester) async {
+  testWidgetsT('saved region data: size shown, clear runs at once (no dialog), then the files are gone', (tester) async {
     final h = await open(tester, seed: (h) {
       final d = Directory('${tmp.path}/region_cache')..createSync(recursive: true);
       File('${d.path}/rc_cmh_site-config.json').writeAsStringSync('{"key":"k","body":"x","at":"2026-10-16T17:00:00Z"}');
@@ -119,21 +116,14 @@ void main() {
     expect(text(tester, 'storage-region-value'), contains('KB'));
     await tester.tap(find.byKey(const Key('storage-region-clear')));
     await tester.pumpAndSettle();
-    expect(find.textContaining('download again the next time you open them'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('storage-region-dialog-cancel')));
-    await tester.pumpAndSettle();
-    expect(await tester.runAsync(h.regionCache.bytesUsed), greaterThan(0));
-
-    await tester.tap(find.byKey(const Key('storage-region-clear')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('storage-region-dialog-confirm')));
+    expect(find.byKey(const Key('storage-region-dialog')), findsNothing);
     await settleIo(tester, until: () => valueOf(tester, 'storage-region-value') == 'Nothing saved yet.');
     expect(await tester.runAsync(h.regionCache.bytesUsed), 0);
     expect(text(tester, 'storage-region-value'), 'Nothing saved yet.');
     expect(find.byKey(const Key('storage-region-clear')), findsNothing);
   });
 
-  testWidgetsT('repeater names: forget asks, then names are gone on disk and in memory', (tester) async {
+  testWidgetsT('repeater names: forget runs at once, then names are gone on disk and in memory', (tester) async {
     final h = await open(tester, seed: (h) {
       h.cache.items = const [RepeaterRef(key: 'abcd01', name: 'Water Tower', lat: 40, lon: -83)];
     });
@@ -141,8 +131,7 @@ void main() {
     await showSetting(tester, 'storage-repeaters-clear');
     await tester.tap(find.byKey(const Key('storage-repeaters-clear')));
     await tester.pumpAndSettle();
-    expect(find.textContaining('show as short codes'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('storage-repeaters-dialog-confirm')));
+    expect(find.byKey(const Key('storage-repeaters-dialog')), findsNothing);
     await settleIo(tester, until: () => h.cache.items.isEmpty);
     expect(h.state.repeaters, isEmpty);
     expect(h.cache.items, isEmpty);
@@ -157,8 +146,7 @@ void main() {
     expect(text(tester, 'storage-node-map-value'), contains('1 repeater near your drives'));
     await tester.tap(find.byKey(const Key('storage-node-map-clear')));
     await tester.pumpAndSettle();
-    expect(find.textContaining('tens of MB'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('storage-node-map-dialog-confirm')));
+    expect(find.byKey(const Key('storage-node-map-dialog')), findsNothing);
     await settleIo(tester, until: () => valueOf(tester, 'storage-node-map-value') == 'Not downloaded.');
     expect(h.nodeMapFile.existsSync(), isFalse);
     expect(h.state.directory, isNull);

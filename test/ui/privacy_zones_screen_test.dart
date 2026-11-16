@@ -6,6 +6,7 @@ import 'package:flutter_map/flutter_map.dart' show MapController;
 import 'package:latlong2/latlong.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/core/api.dart';
+import 'package:meshsonar/core/driver_settings.dart';
 import 'package:meshsonar/core/privacy_zones.dart';
 
 import '../support/zones_harness.dart';
@@ -38,7 +39,7 @@ Future<void> addByTap(WidgetTester tester, MapController map, double lat, double
 void main() {
   testWidgetsT('empty: explains what zones do, offers Add, adds nothing by itself', (tester) async {
     final (h, _) = await pumpZones(tester);
-    expect(find.textContaining('hidden from the public map'), findsOneWidget);
+    expect(find.textContaining('never uploaded'), findsOneWidget);
     expect(find.textContaining('start and end of each drive'), findsWidgets);
     expect(find.textContaining('trimmed'), findsOneWidget);
     await scrollTo(tester, k('zones-empty'));
@@ -155,6 +156,48 @@ void main() {
     await tester.pumpAndSettle();
     expect(h.state.privacyZones.trimM, kTrimMaxM);
     expect(h.zc.trim, kTrimMaxM);
+  });
+
+  group('purge of earlier uploads (zonePurge)', () {
+    testWidgetsT('a new zone: the confirm sheet counts what the server holds, Remove purges and says how many', (tester) async {
+      final (h, map) = await pumpZones(tester, purge: true);
+      await addByTap(tester, map, 39.9612, -82.9988);
+      await tester.pumpAndSettle();
+      expect(k('zone-purge-sheet'), findsOneWidget);
+      expect(find.textContaining('7 earlier pings'), findsOneWidget);
+      expect(h.zc.purgeCalls, [true], reason: 'a dry run only until the person confirms');
+      await tester.tap(k('zone-purge-confirm'));
+      await tester.pumpAndSettle();
+      expect(h.zc.purgeCalls, [true, false]);
+      expect(find.textContaining('7 earlier pings inside'), findsOneWidget);
+      expect(h.state.privacyZones.purgeQueue, isEmpty);
+    });
+
+    testWidgetsT('Keep them hidden: nothing is removed and the offer is gone', (tester) async {
+      final (h, map) = await pumpZones(tester, purge: true);
+      await addByTap(tester, map, 39.9612, -82.9988);
+      await tester.pumpAndSettle();
+      await tester.tap(k('zone-purge-keep'));
+      await tester.pumpAndSettle();
+      expect(h.zc.purgeCalls, [true]);
+      expect(h.state.privacyZones.purgeQueue, isEmpty);
+    });
+
+    testWidgetsT('nothing stored inside the zone: no sheet at all', (tester) async {
+      final (h, map) = await pumpZones(tester, purge: true, setup: (h) => h.zc.purgeAnswer = const ZonePurgeResult());
+      await addByTap(tester, map, 39.9612, -82.9988);
+      await tester.pumpAndSettle();
+      expect(k('zone-purge-sheet'), findsNothing);
+      expect(h.zc.purgeCalls, [true]);
+    });
+
+    testWidgetsT('an older server (no zonePurge): never offered, never called', (tester) async {
+      final (h, map) = await pumpZones(tester);
+      await addByTap(tester, map, 39.9612, -82.9988);
+      await tester.pumpAndSettle();
+      expect(k('zone-purge-sheet'), findsNothing);
+      expect(h.zc.purgeCalls, isEmpty);
+    });
   });
 
   group('offline and lazy key', () {

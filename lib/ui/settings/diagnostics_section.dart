@@ -101,16 +101,13 @@ class _DiagnosticsLogScreenState extends State<DiagnosticsLogScreen> {
   }
 
   Future<void> _clear(BuildContext context, AppState s) async {
-    final ok = await confirmSettingsChange(
-      context,
-      dialogKey: 'diagnostics-clear-dialog',
-      title: 'Clear the diagnostic log?',
-      body: 'The lines so far are deleted. A problem report sent afterwards can only include what happens from now on.',
-      confirmLabel: 'Clear',
-      destructive: true,
-    );
-    if (!ok || !mounted) return;
-    setState(s.diagnostics.clear);
+    runWithUndo(context, 'Clearing the diagnostic log.', commit: () async {
+      if (mounted) {
+        setState(s.diagnostics.clear);
+      } else {
+        s.diagnostics.clear();
+      }
+    });
   }
 
   @override

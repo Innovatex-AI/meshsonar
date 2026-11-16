@@ -13,6 +13,7 @@ import '../always_location_screen.dart';
 import '../app.dart';
 import 'data_sharing.dart';
 import 'delete_my_data.dart';
+import 'privacy_profile_rows.dart';
 import 'privacy_zones_screen.dart';
 import 'settings_index.dart';
 import 'settings_kit.dart';
@@ -20,6 +21,7 @@ import 'settings_kit.dart';
 /// The searchable rows of this section (spread into settingsEntries by settings_index.dart, in this order). Each id is a
 /// SettingsAnchor below.
 const List<SettingsEntry> privacySettingsEntries = [
+  ...privacyProfileEntries,
   SettingsEntry('telemetry-toggle', 'privacy', 'Share with MeshSonar',
       'Whenever your radio is connected and the app is open, your phone is an observer: public packets and signal strength your radio hears go to the live map. Never private messages or private channels.',
       keywords: ['telemetry', 'observer', 'share what my radio hears', 'sharing', 'data collection', 'opt out', 'live feed', 'packets', 'packet headers', 'privacy']),
@@ -80,6 +82,7 @@ const String privacyHelp =
 List<Widget> privacySectionRows(BuildContext context) {
   final s = AppScope.of(context);
   return [
+    const PrivacyProfileRows(),
     for (final c in dataCategories) ...[
       SettingsAnchor(
         id: c.toggleKey,
@@ -261,20 +264,33 @@ IconData categoryIcon(String coreId) => switch (coreId) {
   _ => Icons.podcasts,
 };
 
-/// Turning sharing on asks first (it states exactly what goes where). Turning it off takes effect at once (collection
-/// stops, the unsent queue is deleted); with a driver key, so something may have been sent, the person is also asked
-/// whether to erase what the server already holds.
+/// Turning on "Share with MeshSonar" (the master switch) asks first: that sheet is the data-collection disclosure. Every
+/// other category turns on at once and a toast says exactly what is shared, with Undo. Turning it off takes effect at once
+/// (collection stops, the unsent queue is deleted); with a driver key, so something may have been sent, the person is also
+/// asked whether to erase what the server already holds.
 Future<void> setDataCategory(BuildContext context, AppState s, DataCategory c, bool on) async {
   if (on) {
-    final ok = await confirmSettingsChange(
-      context,
-      dialogKey: '${c.id}-on-dialog',
-      title: 'Turn on: ${c.title}?',
-      body: 'Shared: ${c.shared.join('; ')}.\n\nNever shared: ${c.neverShared.join('; ')}.\n\n${c.destinationNow(s)}',
-      confirmLabel: c.keepLabel,
-    );
-    if (!ok) return;
+    if (identical(c, telemetryCategory)) {
+      final ok = await confirmSettingsChange(
+        context,
+        dialogKey: '${c.id}-on-dialog',
+        title: 'Turn on: ${c.title}?',
+        body: 'Shared: ${c.shared.join('; ')}.\n\nNever shared: ${c.neverShared.join('; ')}.\n\n${c.destinationNow(s)}',
+        confirmLabel: c.keepLabel,
+      );
+      if (!ok) return;
+      await s.updateSettings(c.set(s.settings, true));
+      return;
+    }
     await s.updateSettings(c.set(s.settings, true));
+    if (!context.mounted) return;
+    showAppToast(
+      context,
+      '${c.title} is on. ${c.destinationNow(s)} The full list is under What MeshSonar shares.',
+      actionLabel: 'Undo',
+      duration: const Duration(seconds: 8),
+      onAction: () => s.updateSettings(c.set(s.settings, false)),
+    );
     return;
   }
   await s.updateSettings(c.set(s.settings, false));

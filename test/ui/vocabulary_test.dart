@@ -124,7 +124,6 @@ void main() {
     final copy = [
       observerHelp,
       mqttFeedsHelp,
-      mqttOperatorCaution,
       for (final e in [...observerSettingsEntries, ...privacySettingsEntries]) '${e.title} ${e.summary}',
       telemetryCategory.summary,
       telemetryCategory.disclosureLead,

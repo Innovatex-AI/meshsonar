@@ -568,7 +568,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
       case MessageMenuId.cancel:
         c.service.cancel(m.id);
       case MessageMenuId.delete:
-        if (await confirmDeleteMessage(context)) c.service.deleteMessage(m.id);
+        deleteMessageWithUndo(context, c.service, m.id);
       case MessageMenuId.details:
         await details.showMessageDetails(context, chat: c.service, messageId: m.id);
       case MessageMenuId.pathMap:
@@ -628,7 +628,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
       case FailedChoice.details:
         await details.showMessageDetails(context, chat: c.service, messageId: id);
       case FailedChoice.delete:
-        if (await confirmDeleteMessage(context)) c.service.deleteMessage(id);
+        deleteMessageWithUndo(context, c.service, id);
     }
   }
 

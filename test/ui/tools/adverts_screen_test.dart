@@ -62,20 +62,10 @@ void main() {
     await end(tester);
   });
 
-  testWidgets('whole-mesh advert asks first; cancel sends nothing; confirm sends and the 5 minute cooldown applies', (tester) async {
+  testWidgets('whole-mesh advert sends straight away and the 5 minute cooldown applies', (tester) async {
     final (rig, host) = await connectedRig(tester);
     await pumpTool(tester, const AdvertsScreen(), host, device: Device.ipad);
     await tester.tap(find.byKey(const Key('adverts-send-flood')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('adverts-flood-confirm')), findsOneWidget);
-    expect(find.textContaining('repeater that hears it will send it on'), findsOneWidget);
-    expect(find.textContaining('usually enough'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('adverts-flood-cancel')));
-    await tester.pumpAndSettle();
-    expect(rig.radio.sentAdverts, isEmpty);
-    await tester.tap(find.byKey(const Key('adverts-send-flood')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('adverts-flood-go')));
     await settleReal(tester);
     expect(rig.radio.sentAdverts, [true]);
     expect(find.textContaining('Advert sent to the whole mesh'), findsOneWidget);

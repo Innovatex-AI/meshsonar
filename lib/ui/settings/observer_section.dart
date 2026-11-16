@@ -4,7 +4,7 @@
 //     data sharing, with the same confirm / erase flow).
 //   * Observer status: what the observer is doing now, and what the server last heard from it (`GET /observer/me`).
 //   * MQTT feeds: up to 10 outside MeshCore sites this phone feeds directly (lib/core/mqtt/). Each is added from the preset
-//     picker (search, caution badges) or as a Custom feed, stays OFF until the person turns it on, and shows its live
+//     picker (search) or as a Custom feed, stays OFF until the person turns it on, and shows its live
 //     status, packets sent in 24 h and last error. Passwords go to the Keychain under the slot's `secretRef`, never to
 //     settings.json. Test connects once and publishes a status message only.
 // Vocabulary (build plan §4.5 item 6, checked by test/ui/settings/observer_section_test.dart): Radio = the connected
@@ -32,7 +32,6 @@ import '../design/app_haptics.dart';
 import '../design/app_surfaces.dart';
 import '../design/app_symbols.dart';
 import '../design/state_views.dart';
-import '../design/tokens.dart';
 import 'data_sharing.dart' show telemetryCategory;
 import 'privacy_section.dart' show setDataCategory;
 import 'settings_index.dart';
@@ -61,10 +60,6 @@ const String mqttFeedsHelp =
     'signal strength and your radio\'s public key as the observer id. Never your position, your name, direct messages '
     'or private channels. Feeds run only while the app is running, your radio is connected and Share with MeshSonar is '
     'on. Each feed stays off until you turn it on.';
-
-/// The plain warning for a preset whose operator may not want phones, when the preset file has no text of its own.
-const String mqttOperatorCaution =
-    'This site may only want fixed observers, not phones. Ask the operator before you turn it on.';
 
 /// One line on what the observer is doing now, in plain words (More > Observer and the status row).
 String observerStatusLine(AppState s) {
@@ -341,7 +336,7 @@ class _MqttFeedsBlockState extends State<MqttFeedsBlock> {
       final c = await (await ObserverPresets.of(s)).current();
       if (mounted) setState(() => _catalog = c);
     } catch (_) {
-      // The bundled list is broken (a build error a test catches): slots still work, only their caution text is missing.
+      // The bundled list is broken (a build error a test catches): slots still work, the picker just stays empty.
     }
   }
 
@@ -376,19 +371,6 @@ class _MqttFeedsBlockState extends State<MqttFeedsBlock> {
 
   Future<void> _toggle(MqttSlotSettings slot, bool on) async {
     final s = AppScope.of(context);
-    if (on) {
-      final preset = _catalog?.byId(slot.presetId);
-      if (preset != null && preset.needsOperatorOk) {
-        final ok = await confirmSettingsChange(
-          context,
-          dialogKey: 'mqtt-caution-${slot.id}',
-          title: 'Turn on ${slot.name}?',
-          body: preset.caution ?? mqttOperatorCaution,
-          confirmLabel: 'Turn on',
-        );
-        if (!ok) return;
-      }
-    }
     AppHaptics.selection();
     await _replaceSlot(s, slot.copyWith(enabled: on));
   }
@@ -437,7 +419,6 @@ class _MqttFeedsBlockState extends State<MqttFeedsBlock> {
             slot: slot,
             status: _statuses[slot.id] ?? _fallbackStatus(s, slot),
             fromEngine: _statuses.containsKey(slot.id),
-            caution: (_catalog?.byId(slot.presetId)?.needsOperatorOk ?? false),
             onToggle: (v) => _toggle(slot, v),
             onTap: () => showMqttSlotSheet(context, slot: slot, isNew: false, preset: _catalog?.byId(slot.presetId)),
           ),
@@ -463,7 +444,6 @@ class MqttSlotTile extends StatelessWidget {
 
   /// [status] came from the engine (its text is a real last error) rather than from what the app knows (a reason).
   final bool fromEngine;
-  final bool caution;
   final ValueChanged<bool> onToggle;
   final VoidCallback onTap;
   const MqttSlotTile({
@@ -471,7 +451,6 @@ class MqttSlotTile extends StatelessWidget {
     required this.slot,
     required this.status,
     this.fromEngine = true,
-    required this.caution,
     required this.onToggle,
     required this.onTap,
   });
@@ -484,7 +463,6 @@ class MqttSlotTile extends StatelessWidget {
         '${status.sent24h} packet${status.sent24h == 1 ? '' : 's'} sent in 24 h',
       if (status.lastError != null && status.lastError!.isNotEmpty)
         fromEngine ? 'Last error: ${status.lastError}' : status.lastError!,
-      if (caution && !slot.enabled) 'Ask the operator first',
     ];
     return ListTile(
       leading: Icon(_icon(context, feedStateSymbol(status.state)), color: _feedStateColor(context, status.state)),
@@ -691,7 +669,6 @@ class _PresetRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
-    final warn = AppColors.of(context).warning;
     final where = [preset.host, ?preset.region].join(' · ');
     return MergeSemantics(
       child: ListTile(
@@ -701,16 +678,7 @@ class _PresetRow extends StatelessWidget {
         subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(where),
           if (added) const Text('Already in your feeds'),
-          if (preset.needsOperatorOk) ...[
-            const SizedBox(height: Gap.xs),
-            Row(key: Key('mqtt-preset-${preset.id}-caution'), children: [
-              AppSymbolIcon(AppSymbols.exclamationTriangle, size: 16, color: warn),
-              const SizedBox(width: Gap.xs),
-              Flexible(child: Text('Ask the operator first', style: t.textTheme.labelMedium?.copyWith(color: warn))),
-            ]),
-            Text(preset.caution ?? mqttOperatorCaution, style: t.textTheme.bodySmall),
-          ],
-          if (preset.needsRealIata && !preset.needsOperatorOk)
+          if (preset.needsRealIata)
             Text('Needs a real 3-letter airport code.', style: t.textTheme.bodySmall),
         ]),
         trailing: added ? AppSymbolIcon(AppSymbols.checkmark, semanticLabel: 'Added') : null,
@@ -883,21 +851,25 @@ class _SlotSheetState extends State<_SlotSheet> {
   Future<void> _delete() async {
     final s = widget.app;
     AppHaptics.warning();
-    final ok = await confirmSettingsChange(
-      context,
-      dialogKey: 'mqtt-delete-${_orig.id}',
-      title: 'Delete ${_orig.name}?',
-      body: 'The feed stops at once and its settings and saved password are removed from this phone. The site keeps what '
-          'it already received.',
-      confirmLabel: 'Delete',
-      destructive: true,
-    );
-    if (!ok) return;
-    await s.services.secretStore?.delete(_orig.secretRef);
-    await _saveSlots(s, [for (final x in s.settings.mqttSlots) if (x.id != _orig.id) x]);
+    final orig = _orig;
+    final before = s.settings.mqttSlots;
+    final at = before.indexWhere((x) => x.id == orig.id);
+    // The feed stops and disappears at once; its saved password stays in the Keychain until the Undo window ends.
+    await _saveSlots(s, [for (final x in before) if (x.id != orig.id) x]);
     if (!mounted) return;
+    runWithUndo(
+      context,
+      'Deleted ${orig.name}.',
+      onUndo: () {
+        final now = [...s.settings.mqttSlots];
+        if (!now.any((x) => x.id == orig.id)) now.insert(at < 0 || at > now.length ? now.length : at, orig);
+        unawaited(_saveSlots(s, now));
+      },
+      commit: () async {
+        if (!s.settings.mqttSlots.any((x) => x.id == orig.id)) await s.services.secretStore?.delete(orig.secretRef);
+      },
+    );
     Navigator.of(context).pop();
-    showAppToast(context, 'Deleted ${_orig.name}.');
   }
 
   String? _hostOk(String? v) {
@@ -963,15 +935,6 @@ class _SlotSheetState extends State<_SlotSheet> {
         primaryAction: FilledButton(key: const Key('mqtt-slot-save'), onPressed: _save, child: Text(widget.isNew ? 'Add feed' : 'Save')),
         secondaryAction: TextButton(key: const Key('mqtt-slot-cancel'), onPressed: _cancel, child: const Text('Cancel')),
         children: [
-          if (preset != null && preset.needsOperatorOk)
-            Padding(
-              padding: const EdgeInsets.only(bottom: Gap.s),
-              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                AppSymbolIcon(AppSymbols.exclamationTriangle, color: AppColors.of(context).warning),
-                const SizedBox(width: Gap.s),
-                Expanded(child: Text(preset.caution ?? mqttOperatorCaution, key: const Key('mqtt-slot-caution'))),
-              ]),
-            ),
           SwitchListTile(
             key: const Key('mqtt-field-enabled'),
             contentPadding: EdgeInsets.zero,

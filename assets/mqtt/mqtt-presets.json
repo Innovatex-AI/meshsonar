@@ -1,7 +1,7 @@
 {
  "v": 1,
  "asOf": "2026-11-15",
- "note": "Seed list from meshsonar-infra observer-everywhere-mqtt-plan-2026-11-15.md section 6 (maintained preset files of Cisien meshcoretomqtt and agessaman meshcore-packet-capture, read Nov 15 2026). Every preset ships OFF in the app. A preset says the broker exists, not that its operator accepts phone publishers; presets with needsOperatorOk are shown with a plain-words warning first. No shared credentials and no plain-tcp brokers are listed: those are reachable only through Custom.",
+ "note": "Seed list from meshsonar-infra observer-everywhere-mqtt-plan-2026-11-15.md section 6 (maintained preset files of Cisien meshcoretomqtt and agessaman meshcore-packet-capture, read Nov 15 2026). Every preset ships OFF in the app. A preset says the broker exists, not that its operator accepts phone publishers. No shared credentials and no plain-tcp brokers are listed: those are reachable only through Custom.",
  "presets": [
   {
    "id": "letsmesh-us",
@@ -12,8 +12,6 @@
    "auth": "jwt",
    "group": "main",
    "region": "US",
-   "needsOperatorOk": true,
-   "caution": "This site may only want fixed observers, not phones. Ask the operator before you turn it on. Its terms are unverified. The WebSocket path is uncertain (sources disagree); if it does not connect, use Test and try the other path under Custom.",
    "needsRealIata": true,
    "verified": false
   },
@@ -26,8 +24,6 @@
    "auth": "jwt",
    "group": "main",
    "region": "EU",
-   "needsOperatorOk": true,
-   "caution": "This site may only want fixed observers, not phones. Ask the operator before you turn it on. Its terms are unverified. The WebSocket path is uncertain (sources disagree); if it does not connect, use Test and try the other path under Custom.",
    "needsRealIata": true,
    "verified": false
   },
@@ -40,8 +36,6 @@
    "auth": "jwt",
    "group": "main",
    "region": "US",
-   "needsOperatorOk": true,
-   "caution": "MeshMapper discourages phone observers and wants a MeshMapper region code as the topic area. Ask the operator before you turn it on. The WebSocket path is uncertain (sources disagree); if it does not connect, use Test and try the other path under Custom.",
    "verified": false
   },
   {
@@ -53,8 +47,6 @@
    "auth": "jwt",
    "group": "main",
    "region": "Ohio-Kentucky-Indiana",
-   "needsOperatorOk": true,
-   "caution": "This site may only want fixed observers and has blocked automated access before. Ask the operator before you turn it on. Whether it wants a signed token is unclear; if it refuses, use Test.",
    "verified": false
   },
   {
@@ -66,8 +58,6 @@
    "auth": "jwt",
    "group": "main",
    "region": "Ohio-Kentucky-Indiana",
-   "needsOperatorOk": true,
-   "caution": "This site may only want fixed observers and has blocked automated access before. Ask the operator before you turn it on. Whether it wants a signed token is unclear; if it refuses, use Test.",
    "verified": false
   },
   {
@@ -112,7 +102,6 @@
    "auth": "jwt",
    "group": "main",
    "region": "US",
-   "caution": "The token lifetime must be 3600 seconds or less. The WebSocket path may be / on some setups; use Test if it does not connect.",
    "needsRealIata": true,
    "verified": false
   },
@@ -125,7 +114,6 @@
    "auth": "jwt",
    "group": "main",
    "region": "US",
-   "caution": "Publishes are dropped silently unless the topic area is a real three-letter airport code.",
    "needsRealIata": true,
    "verified": false
   },
@@ -160,7 +148,6 @@
    "auth": "jwt",
    "group": "main",
    "region": "Chicago",
-   "caution": "A regional site; its rules about who may publish are unverified.",
    "verified": false
   },
   {
@@ -172,7 +159,6 @@
    "auth": "jwt",
    "group": "us-regional",
    "region": "Colorado",
-   "caution": "Only useful inside its own region.",
    "verified": false
   },
   {
@@ -184,7 +170,6 @@
    "auth": "jwt",
    "group": "us-regional",
    "region": "Pacific Northwest",
-   "caution": "Only useful inside its own region.",
    "verified": false
   },
   {
@@ -196,7 +181,6 @@
    "auth": "jwt",
    "group": "us-regional",
    "region": "Boston",
-   "caution": "Only useful inside its own region.",
    "verified": false
   },
   {
@@ -208,7 +192,6 @@
    "auth": "jwt",
    "group": "us-regional",
    "region": "US",
-   "caution": "Only useful inside its own region.",
    "verified": false
   },
   {
@@ -220,7 +203,6 @@
    "auth": "jwt",
    "group": "us-regional",
    "region": "US",
-   "caution": "Only useful inside its own region.",
    "verified": false
   },
   {
@@ -232,7 +214,6 @@
    "auth": "jwt",
    "group": "us-regional",
    "region": "Idaho",
-   "caution": "Only useful inside its own region.",
    "verified": false
   },
   {
@@ -244,7 +225,6 @@
    "auth": "jwt",
    "group": "us-regional",
    "region": "Texas",
-   "caution": "Only useful inside its own region.",
    "verified": false
   },
   {
@@ -256,7 +236,6 @@
    "auth": "jwt",
    "group": "us-regional",
    "region": "Sacramento",
-   "caution": "Only useful inside its own region.",
    "verified": false
   },
   {
@@ -268,7 +247,6 @@
    "auth": "jwt",
    "group": "us-regional",
    "region": "Upstate New York",
-   "caution": "Only useful inside its own region.",
    "verified": false
   },
   {
@@ -280,7 +258,6 @@
    "auth": "jwt",
    "group": "us-regional",
    "region": "US",
-   "caution": "Only useful inside its own region.",
    "verified": false
   },
   {
@@ -292,7 +269,6 @@
    "auth": "jwt",
    "group": "us-regional",
    "region": "US",
-   "caution": "Only useful inside its own region.",
    "verified": false
   },
   {
@@ -304,7 +280,6 @@
    "auth": "jwt",
    "group": "us-regional",
    "region": "North Texas",
-   "caution": "Only useful inside its own region. Its port comes from a maintained preset file; if it does not connect, use Test or Custom.",
    "verified": false
   },
   {
@@ -316,7 +291,6 @@
    "auth": "jwt",
    "group": "more",
    "region": "DE",
-   "caution": "Only useful inside its own country. Its port comes from a maintained preset file; if it does not connect, use Test or Custom.",
    "verified": false
   },
   {
@@ -328,7 +302,6 @@
    "auth": "jwt",
    "group": "more",
    "region": "NL",
-   "caution": "Only useful inside its own country.",
    "verified": false
   },
   {
@@ -340,7 +313,6 @@
    "auth": "jwt",
    "group": "more",
    "region": "NL",
-   "caution": "Only useful inside its own country.",
    "verified": false
   },
   {
@@ -352,7 +324,6 @@
    "auth": "jwt",
    "group": "more",
    "region": "CZ",
-   "caution": "Only useful inside its own country.",
    "verified": false
   },
   {
@@ -364,7 +335,6 @@
    "auth": "jwt",
    "group": "more",
    "region": "SE",
-   "caution": "Only useful inside its own country.",
    "verified": false
   },
   {
@@ -376,7 +346,6 @@
    "auth": "jwt",
    "group": "more",
    "region": "FI",
-   "caution": "Only useful inside its own country.",
    "verified": false
   },
   {
@@ -388,7 +357,6 @@
    "auth": "jwt",
    "group": "more",
    "region": "UK",
-   "caution": "Only useful inside its own country.",
    "verified": false
   },
   {
@@ -400,7 +368,6 @@
    "auth": "jwt",
    "group": "more",
    "region": "LT",
-   "caution": "Only useful inside its own country.",
    "verified": false
   },
   {
@@ -412,7 +379,6 @@
    "auth": "jwt",
    "group": "more",
    "region": "World",
-   "caution": "Only useful inside its own country.",
    "verified": false
   },
   {
@@ -424,7 +390,6 @@
    "auth": "jwt",
    "group": "more",
    "region": "AU",
-   "caution": "Only useful inside its own country. For repeaters in Australia only: do not use it elsewhere.",
    "verified": false
   }
  ]

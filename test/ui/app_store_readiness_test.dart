@@ -195,6 +195,15 @@ void main() {
       expect(m, isNot(contains('which MeshSonar region')));
     });
 
+    test('universal links: the entitlement names meshsonar.com and every Runner build config points at it', () {
+      final ent = File('ios/Runner/Runner.entitlements').readAsStringSync();
+      expect(ent, contains('com.apple.developer.associated-domains'));
+      expect(ent, contains('applinks:meshsonar.com'));
+      final pbx = File('ios/Runner.xcodeproj/project.pbxproj').readAsStringSync();
+      expect('CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;'.allMatches(pbx).length, 3, reason: 'Debug, Release and Profile of Runner');
+      expect(plist, contains('<key>FlutterDeepLinkingEnabled</key>\n\t<false/>'), reason: 'app_links, not Flutter, receives the links');
+    });
+
     test('the Always string covers the always-on phone observer; Bluetooth and When-in-use strings match what the app does', () {
       String v(String k) => RegExp('$k</key>\\s*<string>(.*?)</string>', dotAll: true).firstMatch(plist)!.group(1)!;
       expect(v('NSLocationAlwaysAndWhenInUseUsageDescription'), contains('Share with MeshSonar'));
@@ -202,6 +211,9 @@ void main() {
       expect(v('NSBluetoothAlwaysUsageDescription'), allOf(contains('chat'), contains('background')));
       // Observer everywhere (0.38): App Review reads the Bluetooth string; it says the phone observes while connected.
       expect(v('NSBluetoothAlwaysUsageDescription'), allOf(contains('observer'), contains('public packets')));
+      // Only what is verified is claimed: a locked-screen drive keeps recording; background delivery of incoming messages is not promised.
+      expect(v('NSBluetoothAlwaysUsageDescription'), contains('A drive keeps recording in the background while the screen is locked.'));
+      expect(v('NSBluetoothAlwaysUsageDescription'), isNot(contains('incoming messages')));
       expect(plist, isNot(contains('Home observer')));
       expect(v('NSLocationWhenInUseUsageDescription'), allOf(contains('region'), contains('map')));
     });

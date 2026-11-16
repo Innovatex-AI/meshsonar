@@ -171,7 +171,7 @@ class _DiscoverBodyState extends State<_DiscoverBody> {
     return switch (_d.status) {
       DiscoverStatus.cooldown => [NoteCard(m ?? 'Wait a little before the next scan.', key: const Key('discover-cooldown'), title: 'Waiting for the next scan')],
       DiscoverStatus.refused || DiscoverStatus.notConnected => [NoteCard(m ?? 'The scan did not go out.', key: const Key('discover-problem'), kind: NoteKind.problem, title: 'Scan failed')],
-      DiscoverStatus.done when _d.results.isEmpty => [NoteCard(m ?? 'Nothing answered.', key: const Key('discover-empty'), kind: NoteKind.caution, title: 'Nothing answered')],
+      DiscoverStatus.done when _d.results.isEmpty => [NoteCard(m ?? 'Nothing answered.', key: const Key('discover-empty'), kind: NoteKind.info, title: 'Nothing answered')],
       DiscoverStatus.idle => [Text('No scan yet. Tap Scan now.', key: const Key('discover-idle'), style: Theme.of(context).textTheme.bodyMedium)],
       _ => const [],
     };

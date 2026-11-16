@@ -72,8 +72,8 @@ void main() {
     expect(l.asOf, DateTime.utc(2026, 11, 15));
     expect(l.presets, hasLength(1));
     final p = l.presets.single;
-    expect(p.needsOperatorOk, isTrue);
-    expect(p.caution, isNotNull);
+    // An older preset file (builds up to 64) still carries needsOperatorOk and caution: parsed, ignored, nothing thrown.
+    expect(p.needsRealIata, isTrue);
     expect(p.verified, isFalse);
     final slot = p.toSlot('slot-3', iata: 'CMH');
     expect(slot.enabled, isFalse);

@@ -83,7 +83,8 @@ void main() {
 
     await tester.tap(find.byKey(const Key('pack-delete-CMH')));
     await tester.pumpAndSettle();
-    await tapAsync(tester, find.byKey(const Key('pack-delete-confirm')));
+    expect(find.byKey(const Key('pack-delete-confirm')), findsNothing, reason: 'no dialog: Undo toast instead');
+    await tester.pump(const Duration(seconds: 7));
     await settle(tester, find.byKey(const Key('pack-download-CMH')));
     expect(m.installed, isEmpty);
     await settle(tester, find.textContaining('Storage used by map packs: 0 KB'));
@@ -174,7 +175,7 @@ void main() {
     expect(sha256.convert(m.packFile('CMH').readAsBytesSync()).toString(), sha256.convert(body2).toString());
   });
 
-  testWidgetsT('Delete all removes packs and partial downloads after confirming', (tester) async {
+  testWidgetsT('Delete all removes packs and partial downloads after the Undo window', (tester) async {
     final m = manager();
     await tester.runAsync(() async {
       await m.load();
@@ -186,9 +187,9 @@ void main() {
     await settle(tester, find.byKey(const Key('pack-delete-all')));
     expect(find.textContaining('Storage used by map packs: 4 KB'), findsOneWidget); // 2.9 KB pack + 1 KB stray part
     await tester.tap(find.byKey(const Key('pack-delete-all')));
-    await settle(tester, find.byKey(const Key('pack-delete-all-confirm')));
-    await sheetIn(tester);
-    await tapAsync(tester, find.byKey(const Key('pack-delete-all-confirm')));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byKey(const Key('pack-delete-all-confirm')), findsNothing);
+    await tester.pump(const Duration(seconds: 7));
     await settle(tester, find.byKey(const Key('pack-download-CMH')));
     expect(m.installed, isEmpty);
     expect(await tester.runAsync(() => m.usedBytes()), 0);
@@ -196,7 +197,7 @@ void main() {
     expect(find.byKey(const Key('pack-delete-all')), findsNothing);
   });
 
-  testWidgetsT('Delete: Keep does nothing, Delete removes the pack', (tester) async {
+  testWidgetsT('Delete: Undo keeps the pack, otherwise it is removed after the window', (tester) async {
     final m = manager();
     await tester.runAsync(() async {
       await m.load();
@@ -205,17 +206,14 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: OfflinePacksScreen(manager: m, network: FakeNetworkMonitor())));
     await settle(tester, find.byKey(const Key('pack-delete-CMH')));
     await tester.tap(find.byKey(const Key('pack-delete-CMH')));
-    await settle(tester, find.byKey(const Key('pack-delete-confirm')));
-    await sheetIn(tester);
-    await tester.tap(find.text('Keep'));
-    await tester.pump(const Duration(milliseconds: 700));
-    await tester.pump(const Duration(milliseconds: 700));
+    await tester.pump(const Duration(milliseconds: 300));
     expect(find.byKey(const Key('pack-delete-confirm')), findsNothing);
-    expect(m.installed.keys, contains('CMH'), reason: 'Keep leaves the pack alone');
+    await tester.tap(find.text('Undo'));
+    await tester.pump(const Duration(seconds: 7));
+    expect(m.installed.keys, contains('CMH'), reason: 'Undo leaves the pack alone');
     await tester.tap(find.byKey(const Key('pack-delete-CMH')));
-    await settle(tester, find.byKey(const Key('pack-delete-confirm')));
-    await sheetIn(tester);
-    await tapAsync(tester, find.byKey(const Key('pack-delete-confirm')));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(seconds: 7));
     await settle(tester, find.byKey(const Key('pack-download-CMH')));
     expect(m.installed, isEmpty);
   });

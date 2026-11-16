@@ -127,7 +127,7 @@ class _RxLogBodyState extends State<_RxLogBody> {
         Padding(
           padding: const EdgeInsets.only(top: Gap.s),
           child: NoteCard('Paused: ${_log.missedWhilePaused} ${_log.missedWhilePaused == 1 ? 'packet' : 'packets'} not listed. They are still counted.',
-              key: const Key('rxlog-paused'), kind: NoteKind.caution),
+              key: const Key('rxlog-paused'), kind: NoteKind.info),
         ),
       const SizedBox(height: Gap.m),
       Text(

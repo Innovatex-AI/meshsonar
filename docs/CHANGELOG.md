@@ -3,6 +3,27 @@
 All notable changes to MeshSonar. Dates are local (US Eastern). This changelog was reconstructed from the commit
 history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md](ROADMAP.md).
 
+## [0.38.0+66] — 2026-11-16 — Privacy zones on the phone, fewer warnings, universal links, CMH default
+
+### Build 66 summary
+- **Default region is Columbus (CMH)** when there is no GPS, manual pick or remembered region; first launch opens the map on Columbus.
+- **Universal links:** the Associated Domains capability is on and `applinks:meshsonar.com` is in `Runner.entitlements`; tapping a MeshSonar plan link opens the Planner. `release_ios.sh` archives through xcodebuild with the API key so profiles refresh.
+- **Warning cut:** MQTT cautions and operator badges removed; reversible confirms became silent actions or Undo toasts; "Careful" cards and the repeated claims card removed. Protective confirms and the data-collection disclosure stay.
+- **Bluetooth permission text** no longer claims background message delivery; a drive keeps recording while the screen is locked.
+
+
+### Privacy zones (A6, Z1-Z9)
+- **Zones now work on the phone, not just at read time.** `PrivacyZones.hides(lat, lon)` (`lib/core/privacy_zones.dart`, same haversine as the editor and the website) is asked by every upload path. A ping inside a zone is never put in a drive-upload body: it is marked kept-on-this-phone (`zone_held.txt`, `ZoneHeldLedger`), stays in the drive log, stats and export, never counts as waiting or rejected, and is never retried. A drive entirely inside zones is not announced to the server at all.
+- **Observer packets inside a zone carry no position at all** (no `pos`, no res-7 `cell`); the header still counts. The uploader re-checks the queue just before every batch, so a zone added after a packet was queued still applies.
+- **Fail closed:** until the zones are read from disk, uploads wait (drives) and positions are stripped (packets). Zones are read at app start.
+- **Drive badge:** "N kept on this phone (privacy zone)" on the drive list and detail.
+- **Remove earlier uploads (capability `zonePurge`):** adding or enlarging a zone counts what the server holds inside it (dry run), then asks once, with a confirm sheet, before `POST driver-privacy/purge` (irreversible). Result: "N earlier pings inside this zone were removed from the server." Older servers: no offer, no call.
+- Zone screen wording: pings stay on the phone, boundary-leak note, "Also on the website" button. The Privacy and sharing copy keeps its read-time wording until the next build.
+
+### Account settings in the app (capability `driverSettings`)
+- Settings > Privacy & data sharing > **How you appear**: callsign, display name, Stay anonymous, List me on the leaderboard (the website's `/me/privacy` fields). Edits are saved on the phone first, sent as only the fields changed, the phone's pending edit wins, the server value replaces the phone's when nothing is pending. A key with no website account gets the leaderboard switch disabled with the reason. Older servers: rows hidden, no call.
+- Contract: meshsonar-infra `docs/planning/build-66-settings-contract.md`.
+
 ## [0.38.0+64] — 2026-11-15 — Master Planner, observer everywhere, MQTT feeds
 
 The Plan tab is rebuilt as one planner, the Home observer is gone and the app is an observer whenever a radio is connected, and Settings gets an Observer section with MQTT feeds to other MeshCore sites. Server side: meshcore-insights `release/0.38` (planner endpoints, migration 0138); the app also works against the current server (Link mode falls back to the on-phone model, Coverage to the live painter, Find sites says the server does not have it yet).
@@ -23,7 +44,7 @@ The Plan tab is rebuilt as one planner, the Home observer is gone and the app is
 ### Observer everywhere and MQTT feeds
 - **Home observer and Drive observer mode removed.** The app is an observer whenever a radio is connected and the app is running (public packets only), **on by default with one opt-out** ("Share with MeshSonar"; turning it off clears the queue). The exact position is added only while driving. A dropped radio reconnects by itself outside a drive (Settings > Radio > Auto-connect). No background location, and no background promise beyond what iOS keeps running.
 - **Disclosure rewritten** (version 3: every user sees it once) in the app's vocabulary: Radio, Observer, Share with MeshSonar, MQTT feed. The own-ping wording contradiction is fixed. Bluetooth and location strings in Info.plist updated.
-- **Settings > Observer:** the master switch, observer status (packets the server got in 24 hours, last check-in), and **MQTT feeds (n of 10)**: a preset list (search, caution badges, grouped; all OFF; a caution preset asks before it is turned on) or Custom (host, port, TLS, sign-in Radio-signed / Password / None, token audience, username, airport code), per-feed status with words and icon, packets sent in 24 hours, last error, Test (sends one status message), Delete. Passwords live only in the Keychain. The preset list is bundled and refreshes from `GET /api/cmh/mqtt-presets` (cached, ETag).
+- **Settings > Observer:** the master switch, observer status (packets the server got in 24 hours, last check-in), and **MQTT feeds (n of 10)**: a preset list (search, grouped; all OFF; turning a feed on is one tap) or Custom (host, port, TLS, sign-in Radio-signed / Password / None, token audience, username, airport code), per-feed status with words and icon, packets sent in 24 hours, last error, Test (sends one status message), Delete. Passwords live only in the Keychain. The preset list is bundled and refreshes from `GET /api/cmh/mqtt-presets` (cached, ETag).
 - **MQTT engine** (`lib/core/mqtt/`): MQTT 3.1.1 over secure WebSocket; companion-signed Ed25519 JWT (the radio signs; re-signed before expiry); topics `meshcore/{IATA}/{KEY}/packets` and `/status`; firmware-style JSON; observer name `MeshSonar <first 8 hex of the key>`, never your radio's or your name; second privacy gate (only ADVERT, PATH, TRACE and proven public / `#name` group packets are published); per-feed cap 120 messages a minute (drop oldest), in-memory queue only, jittered backoff, auth-failed and cannot-sign retries. Position and name are never sent to a feed. Tested against an in-process broker and a real mosquitto.
 - "Become an observer" is now "Set up a repeater observer"; the More tab no longer has a Home observer row.
 

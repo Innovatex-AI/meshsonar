@@ -111,25 +111,19 @@ void main() {
       expect(find.byType(ConnectScreen), findsNothing, reason: 'the screen closes after a connect, as for a scanned radio');
     });
 
-    testWidgets('swipe left asks before forgetting; Cancel keeps it, Forget removes it from the list only', (tester) async {
+    testWidgets('swipe left forgets the radio from the list only, and Undo brings it back', (tester) async {
       final store = twoSaved();
       install(tester, store);
       await openConnect(tester, Harness());
       await tester.drag(find.byKey(const ValueKey('saved-radio-zz:zz')), const Offset(-500, 0));
       await tester.pumpAndSettle();
-      expect(find.byKey(const Key('saved-radio-forget-dialog')), findsOneWidget);
-      expect(find.textContaining('Chat history, contacts and its antenna setup stay'), findsOneWidget);
-      await tester.tap(find.byKey(const Key('saved-radio-forget-cancel')));
-      await tester.pumpAndSettle();
-      expect(store.byId('zz:zz'), isNotNull);
-      expect(find.byKey(const ValueKey('saved-radio-zz:zz')), findsOneWidget);
-      await tester.drag(find.byKey(const ValueKey('saved-radio-zz:zz')), const Offset(-500, 0));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('saved-radio-forget-confirm')));
-      await tester.pumpAndSettle();
       expect(store.byId('zz:zz'), isNull);
       expect(find.byKey(const ValueKey('saved-radio-zz:zz')), findsNothing);
       expect(store.radios.single.id, 'aa:bb');
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+      expect(store.byId('zz:zz'), isNotNull);
+      expect(find.byKey(const ValueKey('saved-radio-zz:zz')), findsOneWidget);
     });
 
     testWidgets('forgetting a radio that is in range puts it back in the scan list', (tester) async {
@@ -137,8 +131,6 @@ void main() {
       install(tester, store);
       await openConnect(tester, Harness());
       await tester.drag(find.byKey(const ValueKey('saved-radio-aa:bb')), const Offset(-500, 0));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('saved-radio-forget-confirm')));
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('device-aa:bb')), findsOneWidget);
     });

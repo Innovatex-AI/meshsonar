@@ -125,15 +125,6 @@ class _ContactEditSheetState extends State<ContactEditSheet> {
       showAppToast(context, '${c.displayName} is unblocked.');
       return;
     }
-    final ok = await showAppConfirm(
-      context,
-      title: 'Block ${c.displayName}?',
-      message: 'Their messages stop alerting you. You can unblock them here at any time.',
-      confirmLabel: 'Block',
-      destructive: true,
-      confirmKey: const Key('block-confirm'),
-    );
-    if (!ok || !mounted) return;
     _m.setBlocked(c.publicKey, true);
     _c.chat.markRead(c.type == ContactType.room ? ConvKey.room(c.prefix) : ConvKey.dm(c.prefix));
     final key = c.publicKey;

@@ -619,6 +619,39 @@ class ChatService {
     return ok;
   }
 
+  /// Undo of [deleteMessage]: puts [m] back and tells the open screens (same event as a delete: they re-read the thread).
+  ///
+  /// Deleting a message that was still waiting to be sent also dropped its outbox entry, so it cannot be sent again from
+  /// here: it comes back as failed ("Cancelled."), which the person can retry, never as a queued message that never goes.
+  void restoreMessage(ChatMessage m) {
+    store.messages.insert(m.isPending ? _asCancelled(m) : m);
+    _emit(ChatEvent.deleted(m.convKey));
+  }
+
+  static ChatMessage _asCancelled(ChatMessage m) => ChatMessage(
+        id: m.id,
+        seq: m.seq,
+        radioId: m.radioId,
+        convKind: m.convKind,
+        convKey: m.convKey,
+        direction: m.direction,
+        senderName: m.senderName,
+        senderPrefix: m.senderPrefix,
+        tsSender: m.tsSender,
+        tsLocalMs: m.tsLocalMs,
+        text: m.text,
+        snr: m.snr,
+        pathLen: m.pathLen,
+        route: m.route,
+        state: MessageState.failed,
+        attempt: m.attempt,
+        repeatsHeard: m.repeatsHeard,
+        failReason: FailReason.cancelled,
+        dedupeKey: m.dedupeKey,
+        read: m.read,
+        txtType: m.txtType,
+      );
+
   int deleteHistory(String convKey) {
     final n = store.messages.deleteHistory(convKey);
     _emit(ChatEvent.deleted(convKey));

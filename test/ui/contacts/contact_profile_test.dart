@@ -298,15 +298,12 @@ void main() {
   });
 
   group('tiles that wait for their feature', () {
-    tw('person gets Ping and Stats; Ping opens the ping sheet after the airtime line', (tester) async {
+    tw('person gets Ping and Stats; Ping opens the ping sheet', (tester) async {
       setScreen(tester);
       await rig.withContacts(1);
       await pumpProfile(tester, rig, keyN(1));
       expect(find.byKey(const Key('tile-ping')), findsOneWidget);
       await tester.tap(find.byKey(const Key('tile-ping')));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('ping-airtime-confirm')), findsOneWidget);
-      await tester.tap(find.byKey(const Key('ping-airtime-confirm')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('ping-headline')), findsOneWidget);
       expect(find.byKey(const Key('coming-soon-title')), findsNothing);
@@ -339,9 +336,6 @@ void main() {
       await tester.pumpAndSettle();
       expect(c(keyN(1)).forceFlood, isTrue);
       await tester.tap(find.byKey(const Key('route-reset')));
-      await tester.pumpAndSettle();
-      expect(c(keyN(1)).hasPath, isTrue, reason: 'nothing happens until confirmed');
-      await tester.tap(find.byKey(const Key('reset-route-confirm')));
       await tester.pumpAndSettle();
       await tester.pumpAndSettle();
       expect(c(keyN(1)).hasPath, isFalse);
@@ -517,15 +511,12 @@ void main() {
       expect(find.text('Connect your radio to change this.'), findsOneWidget);
     });
 
-    tw('Block asks first, says so, and Undo reverses it', (tester) async {
+    tw('Block says so, and Undo reverses it', (tester) async {
       setScreen(tester);
       await rig.withContacts(1);
       await pumpProfile(tester, rig, keyN(1));
       await openEdit(tester);
       await tester.tap(find.byKey(const Key('contact-block')));
-      await tester.pumpAndSettle();
-      expect(c(keyN(1)).blocked, isFalse, reason: 'confirmation first');
-      await tester.tap(find.byKey(const Key('block-confirm')));
       await tester.pumpAndSettle();
       expect(c(keyN(1)).blocked, isTrue);
       expect(find.textContaining('is blocked'), findsOneWidget);

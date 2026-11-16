@@ -239,7 +239,7 @@ class _SetupBodyState extends State<_SetupBody> {
       if (cut)
         const Padding(
           padding: EdgeInsets.only(top: Gap.s),
-          child: NoteCard('Adverts that carry a position cut a name longer than $maxAdvertNameBytesWithPosition bytes.', kind: NoteKind.caution),
+          child: NoteCard('Adverts that carry a position cut a name longer than $maxAdvertNameBytesWithPosition bytes.', kind: NoteKind.info),
         ),
       const SizedBox(height: Gap.m),
       Align(
@@ -259,16 +259,6 @@ class _SetupBodyState extends State<_SetupBody> {
   double? _num(String s) => double.tryParse(s.trim().replaceAll(',', '.'));
 
   Future<void> _usePhone() async {
-    final ok = await showAppAlert(
-      context,
-      title: 'Use your phone’s location?',
-      message:
-          'Your phone’s position is copied into the boxes below. It only goes to the radio when you press Save position. Once saved, adverts can carry it, and everyone who hears an advert sees where it was set.',
-      confirmLabel: 'Use my location',
-      dialogKey: const Key('setup-phone-location-confirm'),
-      confirmKey: const Key('setup-phone-location-ok'),
-    );
-    if (ok != true || !mounted) return;
     final p = await widget.host.phonePosition();
     if (!mounted) return;
     if (p == null) {
@@ -400,7 +390,7 @@ class _SetupBodyState extends State<_SetupBody> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const NoteCard(
           'A drive is recording. Changing the frequency settings or the TX power now would split the survey into parts measured with different settings. Stop the drive first, or confirm below.',
-          kind: NoteKind.caution,
+          kind: NoteKind.info,
           title: 'Drive in progress',
         ),
         const SizedBox(height: Gap.s),

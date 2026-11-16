@@ -90,7 +90,7 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>MeshSonar connects to your MeshCore companion radio over Bluetooth to send wardriving pings, hear repeater echoes and carry your chat messages. While it is connected and the app is running, your phone is an observer: it shares the public packets your radio hears with MeshSonar (turn this off in Settings with Share with MeshSonar). It stays connected in the background so a drive and incoming messages keep working.</string>
+	<string>MeshSonar connects to your MeshCore companion radio over Bluetooth to send wardriving pings, hear repeater echoes and carry your chat messages. While it is connected and the app is running, your phone is an observer: it shares the public packets your radio hears with MeshSonar (turn this off in Settings with Share with MeshSonar). A drive keeps recording in the background while the screen is locked.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Take a photo to share in a chat. The photo is uploaded to MeshSonar's server so the chat link can show it (encrypted on this phone first in private chats; its location and camera details are removed). MeshSonar also uses the camera when you tap Scan QR code, to read a MeshCore channel or contact code; nothing from a scan is recorded.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

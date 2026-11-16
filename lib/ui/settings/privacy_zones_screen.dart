@@ -27,15 +27,20 @@ import '../../app/privacy_zones_controller.dart';
 import '../../core/privacy_zones.dart';
 import '../../core/units.dart' show Units;
 import '../app.dart';
+import 'confirm_sheet.dart';
 import '../map/coverage_map.dart' show CoverageMap;
 import '../map/offline_basemap.dart';
 import '../map/region_center.dart';
 import 'privacy_zones_start.dart';
 
 /// The copy that says what a zone does. One place, so the screen, the search entry and the docs agree.
-const String privacyZonesExplain = 'Drives inside a zone are hidden from the public map. The start and end of each drive '
-    'are also trimmed (the trim distance below). Zones hide pings from every public view, for drives you already uploaded '
-    'and for future ones.';
+const String privacyZonesExplain = 'Pings inside a zone stay on this phone: they are never uploaded, and the drive log here keeps them. '
+    'The start and end of each drive are also trimmed (the trim distance below).';
+
+/// Under the trim: what a zone does not hide.
+const String privacyZonesEdgeNote = 'A ping just outside a zone shows where its edge is, so draw a zone a little bigger than the place '
+    'you want to hide. Packets your phone hears inside a zone are shared with no position. Adding or enlarging a zone also offers '
+    'to remove what the server already holds inside it.';
 
 /// The line under the Settings row: how many zones, and whether any wait to be sent.
 String privacyZonesSummary(AppState s, Units units) {
@@ -111,6 +116,56 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
     final n = _c!.zones.length;
     if (_selected != null && _selected! >= n) _selected = null;
     setState(() {});
+    unawaited(_maybeOfferPurge());
+  }
+
+  bool _offering = false;
+
+  /// A new or enlarged zone may cover pings the server already holds. Once the zones are saved on the server, count them
+  /// (a dry run) and, when there are any, ask before removing them: removing is irreversible.
+  Future<void> _maybeOfferPurge() async {
+    final c = _c;
+    if (_offering || c == null || _draft != null || c.status != ZoneSyncStatus.synced || c.purgeQueue.isEmpty) return;
+    _offering = true;
+    try {
+      final preview = await c.previewPurge();
+      if (!mounted || preview == null) return; // not asked now: it stays queued
+      if (preview.total == 0) {
+        await c.dismissPurge();
+        return;
+      }
+      final parts = [
+        if (preview.pings > 0) '${preview.pings} earlier ping${preview.pings == 1 ? '' : 's'}',
+        if (preview.positions > 0) '${preview.positions} observer position${preview.positions == 1 ? '' : 's'}',
+        if (preview.heard > 0) '${preview.heard} heard-along-the-way record${preview.heard == 1 ? '' : 's'}',
+      ];
+      final ok = await showConfirmSheet(
+        context,
+        title: 'Remove earlier uploads inside this zone?',
+        body: 'The server still holds ${parts.join(', ')} inside the zone you just saved. Remove them from the server now? '
+            'This cannot be undone. They stay in your own drive log on this phone. If you keep them, they are only hidden '
+            'from public views.',
+        confirmLabel: 'Remove from server',
+        cancelLabel: 'Keep them hidden',
+        destructive: true,
+        sheetKey: const Key('zone-purge-sheet'),
+        confirmKey: const Key('zone-purge-confirm'),
+        cancelKey: const Key('zone-purge-keep'),
+      );
+      if (!mounted) return;
+      if (!ok) {
+        await c.dismissPurge();
+        return;
+      }
+      final r = await c.runPurge();
+      if (!mounted) return;
+      final msg = r == null
+          ? 'Could not remove them just now. They stay hidden from public views and will be offered again.'
+          : '${r.pings} earlier ping${r.pings == 1 ? '' : 's'} inside ${preview.pings == 0 ? 'the zone' : 'this zone'} ${r.pings == 1 ? 'was' : 'were'} removed from the server.';
+      showAppToast(context, msg);
+    } finally {
+      _offering = false;
+    }
   }
 
   void _onPacks() {
@@ -487,13 +542,15 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
       if (_editable && _selected != null && _selected! < zones.length) _editor(context, zones[_selected!], _selected!),
       const SizedBox(height: Gap.l),
       _trim(context),
+      const SizedBox(height: Gap.m),
+      Text(privacyZonesEdgeNote, key: const Key('zones-edge-note'), style: Theme.of(context).textTheme.bodySmall),
       const SizedBox(height: Gap.l),
       OutlinedButton.icon(
         key: const Key('zones-website'),
         style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
         onPressed: () => unawaited(s.openWebPage('/me/privacy')),
         icon: const Icon(Icons.open_in_new, size: 18),
-        label: const Text('View this page on the website'),
+        label: const Text('Also on the website'),
       ),
     ];
   }
