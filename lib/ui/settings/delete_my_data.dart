@@ -180,20 +180,23 @@ class _DeleteMyDataScreenState extends State<DeleteMyDataScreen> {
       title: 'Delete the context saved on this phone?',
       body:
           'Removes the air pressure, altitude, battery, radio readings and phone details recorded with your drives '
-          'from every drive on this phone, and from the drive reports. The drives themselves stay. This does not '
-          'change the server.',
+          'from every drive on this phone, and from the drive reports. The drives themselves stay. '
+          '${s.meshTrack != null ? 'MeshTrack forgets your friends\' last positions and your group list; the channels stay in Chats. ' : ''}'
+          'This does not change the server.',
       confirmLabel: 'Delete on this phone',
       destructive: true,
     );
     if (!ok || !mounted) return;
     setState(() => _localBusy = true);
     final n = await s.deleteAllCollectedLocally();
+    final groups = await s.clearMeshTrackLocal(); // MeshTrack: last positions (meshtrack_last.json) and the group list
     if (!mounted) return;
     setState(() {
       _localBusy = false;
-      _localResult = n == 0
+      final drives = n == 0
           ? 'Nothing of it was saved on this phone.'
           : 'Deleted the saved context from $n drive${n == 1 ? '' : 's'} on this phone.';
+      _localResult = groups == 0 ? drives : '$drives MeshTrack forgot $groups group${groups == 1 ? '' : 's'} and your friends\' last positions.';
     });
   }
 

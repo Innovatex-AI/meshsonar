@@ -794,6 +794,9 @@ class Settings {
   /// How many MQTT feed slots there are.
   static const int maxMqttSlots = 10;
 
+  /// MeshTrack (Settings > MeshTrack and the group list, `meshtrack.*`). Written only when not the default.
+  final MeshTrackSettings meshtrack;
+
   bool collectionOn(String id) => id == 'packet_headers' ? telemetryEnabled : !collectionOff.contains(id);
 
   /// A copy with category [id] switched [on].
@@ -845,6 +848,7 @@ class Settings {
     this.collectionOff = const {},
     this.contextErasePending = const {},
     this.mqttSlots = const [],
+    this.meshtrack = const MeshTrackSettings(),
   });
 
   Settings copyWith({
@@ -881,6 +885,7 @@ class Settings {
     Set<String>? collectionOff,
     Set<String>? contextErasePending,
     List<MqttSlotSettings>? mqttSlots,
+    MeshTrackSettings? meshtrack,
     bool clearKey = false,
   }) =>
       Settings(
@@ -916,6 +921,7 @@ class Settings {
         collectionOff: collectionOff ?? this.collectionOff,
         contextErasePending: contextErasePending ?? this.contextErasePending,
         mqttSlots: mqttSlots == null ? this.mqttSlots : _slotsCapped(mqttSlots),
+        meshtrack: meshtrack ?? this.meshtrack,
       );
 
   Map<String, dynamic> toJson() => {
@@ -952,6 +958,7 @@ class Settings {
         if (collectionOff.isNotEmpty) 'collection_off': collectionOff.toList()..sort(),
         if (contextErasePending.isNotEmpty) 'context_erase_pending': contextErasePending.toList()..sort(),
         if (mqttSlots.isNotEmpty) 'mqtt_slots': [for (final m in mqttSlots) m.toJson()],
+        if (!meshtrack.isDefault) 'meshtrack': meshtrack.toJson(),
       };
   factory Settings.fromJson(Map<String, dynamic> j) => Settings(
         serverUrl: _str(j['server_url']) ?? defaultServerUrl,
@@ -1001,6 +1008,7 @@ class Settings {
           if (j['mqtt_slots'] case final List l)
             for (final v in l) ?MqttSlotSettings.tryParse(v),
         ]),
+        meshtrack: MeshTrackSettings.fromJson(j['meshtrack']),
       );
 
   /// Slots with a unique id, at most [maxMqttSlots] (the first ones win).
@@ -1037,6 +1045,86 @@ class Settings {
       for (final e in raw.entries)
         if ((e.key, AntennaProfile.tryParse(e.value)) case (final String key, final AntennaProfile p)) key.toLowerCase(): p,
     };
+  }
+}
+
+/// MeshTrack's stored choices (meshtrack plan 5.7, 7 "Settings"). [groups] is the `meshtrack.groups` list: one JSON object
+/// per group as the app wiring writes it (`MtGroupConfig.toJson` plus the wiring's `uid` and `rows`); kept as plain JSON so
+/// this file does not depend on the MeshTrack core. Positions are never stored here.
+class MeshTrackSettings {
+  final List<Map<String, Object?>> groups;
+
+  /// "Position friends see": false = Exact (the default), true = Approximate.
+  final bool approximate;
+
+  /// Rate: false = Smart (the default), true = Low traffic.
+  final bool lowTraffic;
+
+  /// Answer "Where are you?" while sharing (on by default).
+  final bool answerRequests;
+
+  /// The first-share intro was accepted ("Got it").
+  final bool introSeen;
+
+  /// Channel ids whose chat shows position messages (channel detail toggle, default off).
+  final Set<int> showPositions;
+
+  const MeshTrackSettings({
+    this.groups = const [],
+    this.approximate = false,
+    this.lowTraffic = false,
+    this.answerRequests = true,
+    this.introSeen = false,
+    this.showPositions = const {},
+  });
+
+  bool get isDefault => groups.isEmpty && !approximate && !lowTraffic && answerRequests && !introSeen && showPositions.isEmpty;
+
+  MeshTrackSettings copyWith({
+    List<Map<String, Object?>>? groups,
+    bool? approximate,
+    bool? lowTraffic,
+    bool? answerRequests,
+    bool? introSeen,
+    Set<int>? showPositions,
+  }) =>
+      MeshTrackSettings(
+        groups: groups ?? this.groups,
+        approximate: approximate ?? this.approximate,
+        lowTraffic: lowTraffic ?? this.lowTraffic,
+        answerRequests: answerRequests ?? this.answerRequests,
+        introSeen: introSeen ?? this.introSeen,
+        showPositions: showPositions ?? this.showPositions,
+      );
+
+  Map<String, Object?> toJson() => {
+        if (groups.isNotEmpty) 'groups': groups,
+        if (approximate) 'position': 'approximate',
+        if (lowTraffic) 'rate': 'low_traffic',
+        if (!answerRequests) 'answer_requests': false,
+        if (introSeen) 'intro_seen': true,
+        if (showPositions.isNotEmpty) 'show_positions': showPositions.toList()..sort(),
+      };
+
+  /// Anything odd falls back to the default for that field only.
+  factory MeshTrackSettings.fromJson(Object? raw) {
+    if (raw is! Map) return const MeshTrackSettings();
+    return MeshTrackSettings(
+      groups: [
+        if (raw['groups'] case final List l)
+          for (final g in l)
+            if (g is Map) {for (final e in g.entries) '${e.key}': e.value},
+      ],
+      approximate: raw['position'] == 'approximate',
+      lowTraffic: raw['rate'] == 'low_traffic',
+      answerRequests: raw['answer_requests'] != false,
+      introSeen: raw['intro_seen'] == true,
+      showPositions: {
+        if (raw['show_positions'] case final List l)
+          for (final v in l)
+            if (v is int) v,
+      },
+    );
   }
 }
 

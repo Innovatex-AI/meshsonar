@@ -81,6 +81,10 @@ import 'messages.dart';
 import 'plan_inbox.dart';
 import 'ping_feedback.dart';
 import 'services.dart';
+import 'app_flags.dart' show AppFlags;
+import 'chat_wiring.dart' show ChatWiring;
+import 'chat_controller.dart' show ChatController;
+import 'meshtrack_wiring.dart' show FileMtLastKnownStore, MeshTrackGroupOps, MeshTrackService, MeshTrackWiring, MtChatBinding, MtLastKnownStore;
 
 part 'observer_wiring.dart';
 
@@ -1299,6 +1303,7 @@ class AppState extends ChangeNotifier with _ObserverWiring {
   void debugOnForeground() => _onForeground(true);
 
   void _onForeground(bool fg) {
+    _mt?.setForeground(fg);
     _telemetry?.foreground = fg; // 5 s batches in front, 60 s or 50 packets behind (contract section 6)
     _observerForegroundChanged(fg);
     if (!fg) return;
@@ -1432,6 +1437,87 @@ class AppState extends ChangeNotifier with _ObserverWiring {
   /// Logs a caught error: its type and message, never a stack trace.
   void _logError(String what, Object e) =>
       diagnostics.add('$what: ${e is CmatException ? 'HTTP ${e.status ?? 'none'}, ${e.message}' : '${e.runtimeType}: $e'}');
+
+  // ---------- MeshTrack (lib/app/meshtrack_wiring.dart; meshsonar-infra docs/planning/meshtrack-plan-2026-11-16.md) ----------
+  MeshTrackWiring? _mt;
+
+  /// The MeshTrack engine; null when the build has MeshTrack off (AppFlags.meshTrack) or before [init].
+  MeshTrackService? get meshTrack => _mt?.service;
+
+  /// Group operations for the MeshTrack UI; null when MeshTrack is off.
+  MeshTrackGroupOps? get meshTrackGroups => _mt?.groups;
+
+  @visibleForTesting
+  MeshTrackWiring? get meshTrackWiring => _mt;
+
+  /// Tests: where `meshtrack_last.json` goes instead of the app support folder.
+  @visibleForTesting
+  MtLastKnownStore? meshTrackLastKnownOverride;
+
+  ChatController? _mtChat;
+  bool? _mtConnected;
+  int _mtGroupCount = 0;
+
+  /// Builds the one MeshTrack wiring (flag on only), at [init].
+  Future<void> _startMeshTrack() async {
+    if (!AppFlags.meshTrackOn || _mt != null) return;
+    final dir = services.telemetryQueueFile?.parent;
+    final w = _mt = MeshTrackWiring(
+      zones: () => privacyZones.gate,
+      readSettings: () => _settings.meshtrack,
+      writeSettings: _saveMeshTrackSettings,
+      keychain: services.secretStore,
+      lastKnown: meshTrackLastKnownOverride ??
+          (dir == null ? null : FileMtLastKnownStore(File('${dir.path}${Platform.pathSeparator}meshtrack_last.json'))),
+      radioParams: () => _selfInfo?.radio,
+      wardriveChannelName: () => _settings.channel,
+      phoneLocation: () => _locationSource,
+      log: diagnostics.add,
+      now: services.clock,
+    );
+    w.setTrackGate(radioSessions.arbiter);
+    // Screens that only show MeshTrack when a group exists (the Drive map's long-press) follow the group count.
+    w.groups.addListener(() {
+      final n = w.service.state.groups.length;
+      if (n == _mtGroupCount) return;
+      _mtGroupCount = n;
+      notifyListeners();
+    });
+    _meshTrackSync();
+    addListener(_meshTrackSync);
+    ChatWiring.controller.addListener(_meshTrackChat);
+    _meshTrackChat();
+    await w.start();
+  }
+
+  /// `meshtrack.*` in settings.json, written by the MeshTrack wiring only.
+  Future<void> _saveMeshTrackSettings(MeshTrackSettings m) async {
+    _settings = _settings.copyWith(meshtrack: m);
+    try {
+      await services.settingsStore.save(_settings);
+    } catch (e) {
+      _logError('Saving the MeshTrack settings failed', e);
+    }
+  }
+
+  /// Radio state follows [connected] (every change of this object).
+  void _meshTrackSync() {
+    final c = connected;
+    if (c == _mtConnected) return;
+    _mtConnected = c;
+    _mt?.setRadioConnected(c);
+  }
+
+  void _meshTrackChat() {
+    final c = ChatWiring.controller.value;
+    if (identical(c, _mtChat)) return;
+    _mtChat = c;
+    _mt?.bindChat(c == null ? null : MtChatBinding.of(c));
+  }
+
+  /// Delete my data (Settings): MeshTrack's friends' last positions, meet pins and the group list on this phone. Returns
+  /// how many groups were removed (0 with MeshTrack off).
+  Future<int> clearMeshTrackLocal() async => await _mt?.clearLocal() ?? 0;
 
   // ---------- radio ----------
   RadioKind _radioKind = RadioKind.none;
@@ -2570,6 +2656,7 @@ class AppState extends ChangeNotifier with _ObserverWiring {
         onFix: (f) {
           _noteDriveFix(f); // drive position for observer packets (section 8.2)
           _rawFixes.add(f);
+          _mt?.onDriveFix(f); // MeshTrack sharing rides the drive's GPS stream
         },
         onHealth: (h) => gpsHealth.value = h,
         access: services.locationAccess?.check,
@@ -2584,6 +2671,7 @@ class AppState extends ChangeNotifier with _ObserverWiring {
       _pingSub = engine.pings.listen(_onPing, onError: (Object e) => _say(friendlyError(e, action: 'A ping')));
       _statusSub = engine.status.listen((st) {
         _status = st;
+        _mt?.onEngineStatus(st); // MeshTrack never sends inside the ping's listen window
         // The radio dropped mid-drive: get it back and carry on in this same drive (never a new session).
         final skew = st.clockSkew;
         if (skew != null && !_skewSaid && _radioKind != RadioKind.simulator) {
@@ -2618,6 +2706,7 @@ class AppState extends ChangeNotifier with _ObserverWiring {
       unawaited(_ctx?.start());
       _scheduleDriveSync();
       unawaited(_idle?.setDriving(true));
+      _mt?.driveStarted();
       diagnostics.add(s.discoveryMode
           ? 'Drive started on ${s.channel}, listen-only (nothing transmitted)'
           : 'Drive started on ${s.channel}, auto-ping every ${s.intervalSec} s');
@@ -2648,6 +2737,7 @@ class AppState extends ChangeNotifier with _ObserverWiring {
         }
       }
       _session = null;
+      _mt?.driveStopped();
       _logError('Starting the drive failed', e);
       _say('Couldn\'t start the drive. ${friendlyError(e, action: 'Starting')}');
     } finally {
@@ -2797,6 +2887,7 @@ class AppState extends ChangeNotifier with _ObserverWiring {
       _session = null;
       _pingsPaused = false;
       unawaited(_idle?.setDriving(false));
+      _mt?.driveStopped(); // "This drive" shares end with the stop message
       _status = const EngineStatus(EngineState.idle);
     } finally {
       _busy = false;
@@ -3239,6 +3330,7 @@ class AppState extends ChangeNotifier with _ObserverWiring {
     unawaited(refreshNetworkCoverage());
     unawaited(refreshRegionIndex());
     await _loadSavedReport();
+    await _startMeshTrack();
     _loaded = true;
     notifyListeners();
     _initSync = syncRepeaterLists(SyncTrigger.launch);
@@ -3280,6 +3372,8 @@ class AppState extends ChangeNotifier with _ObserverWiring {
   }
 
   Future<void> updateSettings(Settings s) async {
+    // `meshtrack.*` belongs to the MeshTrack wiring: a settings screen's copy made earlier never rolls it back.
+    if (_mt != null) s = s.copyWith(meshtrack: _settings.meshtrack);
     final keyBefore = _settings.driverKey;
     // Keys belong to one server: a new server URL with the old key would only be refused, so the key goes with it.
     // Another address of the same server (lib/core/server_url.dart sameServerHosts) keeps it.
@@ -3752,6 +3846,9 @@ class AppState extends ChangeNotifier with _ObserverWiring {
 
   @override
   void dispose() {
+    removeListener(_meshTrackSync);
+    ChatWiring.controller.removeListener(_meshTrackChat);
+    unawaited(_mt?.dispose());
     _lifecycle?.detach();
     _resumeBridge?.detach();
     services.repeaterSync?.removeListener(_onRepeaterSync);
