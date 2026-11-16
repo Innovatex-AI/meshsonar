@@ -83,6 +83,12 @@ void main() {
       expect(e.length, 2);
       expect(eventWord[e.first.type], 'New repeater');
     });
+    test('every event kind the server emits has words (0143 adds link_flap, same words as the site)', () {
+      for (final k in ['repeater_new', 'repeater_quiet', 'repeater_renamed', 'repeater_moved', 'link_new', 'link_lost', 'link_flap']) {
+        expect(eventWord[k], isNotNull, reason: k);
+      }
+      expect(eventWord['link_flap'], 'Link on and off');
+    });
   });
 
   test('findings sort most severe first, engine order inside a severity', () {
