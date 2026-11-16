@@ -417,7 +417,8 @@ const List<DataFlow> otherDataFlows = [
   DataFlow('Your drives',
       'Each ping\'s time, position, signal and which repeaters heard it, plus the antenna setup. Uploaded only to your '
           'server, under your driver key, when uploads are on (Settings > Drives & uploads). Without a key nothing is '
-          'uploaded. Privacy zones on the website hide pings near places you choose.'),
+          'uploaded. A ping inside one of your privacy zones (Settings > Privacy & data sharing) is never uploaded: it stays on '
+          'this phone.'),
   DataFlow('MQTT feeds to other sites',
       'Only feeds you add yourself in Settings > Observer, each off until you turn it on. A feed gets the same public '
           'packets as Share with MeshSonar (never direct messages or private channels), their signal strength and your '
