@@ -20,6 +20,8 @@ import '../ui/design/app_widgets.dart' show appTipStore;
 import '../alerts/alerts_runtime.dart';
 import '../chat/channel_secret.dart' show hashtagSecret16;
 import '../chat/chat_service.dart';
+import '../chat/events.dart' show ChatEvent, ChatEventKind;
+import '../chat/private_channel_keys.dart';
 import '../chat/models.dart' show ChannelKind;
 import '../core/model.dart' show PingKind;
 import '../core/photo_api.dart' show PhotoTransport;
@@ -40,6 +42,8 @@ class ChatWiring {
   static final ValueNotifier<ChatController?> controller = ValueNotifier<ChatController?>(null);
 
   static StreamSubscription<dynamic>? _sessions;
+  static StreamSubscription<ChatEvent>? _channelEvents;
+  static PrivateChannelKeys? _privateKeys;
   static VoidCallback? _appListener;
   static AppState? _app;
   static ChatTabProviderImpl? _provider;
@@ -86,6 +90,21 @@ class ChatWiring {
       if (id == null) return const [];
       return [for (final c in store.channels.list(id)) if (c.kind == ChannelKind.hashtag) c.name];
     };
+    // The private channel keys (MeshTrack groups and every other private channel), for the observer's third gate: a group
+    // packet proven under one never reaches an MQTT feed or the upload. Never part of the shareable set above.
+    final privateKeys = PrivateChannelKeys(
+      channels: () {
+        final id = ctl.radioId;
+        return id == null ? const [] : store.channels.list(id);
+      },
+      secretOf: store.channels.secretOf,
+    );
+    _privateKeys = privateKeys;
+    app.privateChannelKeys = privateKeys.keysFor;
+    _channelEvents = service.events.listen((e) {
+      if (e.kind == ChatEventKind.channelsChanged) unawaited(privateKeys.refresh());
+    });
+    unawaited(privateKeys.refresh());
 
     ctl.updateDrive(driving: app.driving);
     _appListener = () {
@@ -163,6 +182,11 @@ class ChatWiring {
     p?.dispose();
     await _sessions?.cancel();
     _sessions = null;
+    await _channelEvents?.cancel();
+    _channelEvents = null;
+    _privateKeys?.clear();
+    _privateKeys = null;
+    _app?.privateChannelKeys = null;
     final l = _appListener;
     if (l != null) _app?.removeListener(l);
     _appListener = null;

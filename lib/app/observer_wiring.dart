@@ -132,13 +132,14 @@ mixin _ObserverWiring on ChangeNotifier {
   /// A packet passed the privacy filter ([record] non-null): the engine gets it only while this phone is an observer, and
   /// only when it is traffic this phone overheard (WS-OUT 4, observer-and-data-platform-plan-2026-11-16.md): an echo of
   /// one of our own pings never goes to an outside site, public or not, and neither does any packet on the drive channel
-  /// (the System channel the pings use). Packets heard while a ping of ours is in flight wait until its hash is known.
+  /// (the System channel the pings use), nor any group packet proven under a private channel key the phone holds
+  /// (the third gate, [_onPrivateChannel]). Packets heard while a ping of ours is in flight wait until its hash is known.
   void _feedObserverEngine(TelemetryRecord record, RxPacket rx) {
     if (!observerSharing) {
       _mqttHeld.clear();
       return;
     }
-    if (_mqttOwn(record) || _onDriveChannel(rx)) return;
+    if (_mqttOwn(record) || _onDriveChannel(rx) || _onPrivateChannel(rx)) return;
     if (_mqttPingsOpen > 0) {
       _mqttHeld.add((record, rx));
       while (_mqttHeld.length > _mqttHeldMax) {
@@ -157,6 +158,20 @@ mixin _ObserverWiring on ChangeNotifier {
     final p = MeshPacket.tryParse(rx.raw);
     if (p == null || !telemetryGroupTypes.contains(p.payloadType)) return false;
     return ShareableChannels(() => [hashtagSecret16(name)])(p.payload);
+  }
+
+  /// Third gate (MeshTrack plan section 15, WS-OUT): a group packet whose MAC verifies under ANY private channel key the
+  /// phone holds (a MeshTrack group or not). Cheap path: the payload's channel hash byte picks the keys first, so a MAC is
+  /// tried only for keys with that hash. A private key with this hash still being read counts as a match (fail closed).
+  bool _onPrivateChannel(RxPacket rx) {
+    final lookup = _s.privateChannelKeys;
+    if (lookup == null) return false;
+    final p = MeshPacket.tryParse(rx.raw);
+    if (p == null || !telemetryGroupTypes.contains(p.payloadType) || p.payload.length < 3) return false;
+    final keys = lookup(p.payload[0]);
+    if (keys == null) return true;
+    if (keys.isEmpty) return false;
+    return ShareableChannels(() => keys)(p.payload);
   }
 
   // ---------- own-ping echoes for the MQTT feeds ----------

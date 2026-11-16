@@ -261,7 +261,7 @@ class ChannelAdmin {
   // ------------------------------------------------------------------ MeshTrack "Start fresh"
 
   /// A new random secret under the same name, written into [c]'s slot (so a full radio needs no extra room). The old row
-  /// loses the slot and is renamed "<name> (old)" but keeps its history and its secret (shown as not on the radio); the new
+  /// loses the slot and is renamed `<name> (old)` but keeps its history and its secret (shown as not on the radio); the new
   /// row takes the slot and the name. Private channels on the radio only. Returns the new row. Undo: [undoRekey].
   Future<ChannelJoin> rekeyPrivate(Channel c) async {
     if (c.kind != ChannelKind.private) {

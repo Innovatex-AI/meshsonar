@@ -8,12 +8,15 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/chat/channel_secret.dart';
 import 'package:meshsonar/chat/secret_store.dart';
+import 'package:meshsonar/core/mqtt/mqtt_payload.dart';
 import 'package:meshsonar/core/mqtt/mqtt_engine.dart';
 import 'package:meshsonar/core/mqtt_contract.dart';
 import 'package:meshsonar/core/telemetry.dart';
 import 'package:meshsonar/radio/packet.dart';
 
+import '../../support/meshtrack_packets.dart';
 import 'support.dart';
 
 const _publicTypes = {PayloadType.advert, PayloadType.path, PayloadType.trace};
@@ -142,6 +145,45 @@ void main() {
     expect(net.packets(), isEmpty);
     engine.onPublicPacket(rec, advert);
     expect(net.packets(), hasLength(2)); // control: the matching pair goes to both slots
+  });
+
+  // MT-8 privacy pin (MeshTrack plan sections 6, 9, 15): a MeshTrack position on a private group channel, from a friend or
+  // our own send heard back through repeaters (path > 0), never makes a feed message, by any way in.
+  test('a MeshTrack position on a private channel never publishes (friend, own send heard back, forged verdicts)', () {
+    final shareable = ShareableChannels(
+      () => [publicChannelSecret16, hashtagSecret16('#ohio')],
+      named: () => [(name: 'public', key: publicChannelSecret16), (name: '#ohio', key: hashtagSecret16('#ohio'))],
+    );
+    final key = 'ab' * 32;
+    for (final route in [RouteType.flood, RouteType.direct]) {
+      for (final pathLen in [0, 1, 2, 5]) {
+        final base = meshTrackRx(pathLen: pathLen, name: pathLen == 0 ? 'Sam' : 'KE4BFI');
+        final pk = MeshPacket.tryParse(base.raw)!;
+        final p = rx(rawPacket(PayloadType.grpTxt, route: route, path: [for (final h in pk.path) ...h], payload: pk.payload));
+        // (a) the real filter: no record.
+        expect(TelemetryRecord.fromRx(p, region: 'CMH', channelMatch: shareable.match), isNull);
+        // A key proven but unnamed ('' = a key that slipped into the shareable set without a public name): no channel.
+        final unnamed = TelemetryRecord.fromRx(p, region: 'CMH', channelMatch: (_) => '');
+        expect(unnamed?.channel, isNull);
+        if (unnamed != null) {
+          expect(mqttPacketJson(unnamed, p, publicKeyHex: key), isNull);
+          engine.onPublicPacket(unnamed, p);
+        }
+        // (b) forged records over the same bytes: unchecked, or checked without a channel.
+        for (final forged in [
+          TelemetryRecord(at: p.at, payloadType: PayloadType.grpTxt, routeType: route, raw: _hex(p.raw), channel: 'public'),
+          TelemetryRecord(at: p.at, payloadType: PayloadType.grpTxt, routeType: route, channelChecked: true, raw: _hex(p.raw)),
+        ]) {
+          expect(mqttPacketJson(forged, p, publicKeyHex: key), isNull);
+          engine.onPublicPacket(forged, p);
+        }
+      }
+    }
+    expect(net.packets(), isEmpty);
+    // Control: the same text on Public publishes.
+    final pub = meshTrackRx(key: publicChannelSecret16, pathLen: 2);
+    final rec = TelemetryRecord.fromRx(pub, region: 'CMH', channelMatch: shareable.match)!;
+    expect(mqttPacketJson(rec, pub, publicKeyHex: key), isNotNull);
   });
 
   test('nothing is published while the phone is not an observer', () async {
