@@ -3,6 +3,7 @@
 // removed, Keychain restore to a new radio without asking, radio full, Start fresh and Leave with Undo, Delete my data,
 // settings across a restart (Share forced off).
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -15,6 +16,7 @@ import 'package:meshsonar/core/api.dart' show MeshTrackSettings;
 import 'package:meshsonar/core/meshtrack/plus_code.dart';
 import 'package:meshsonar/core/privacy_zones.dart';
 import 'package:meshsonar/radio/radio_api.dart';
+import 'package:meshsonar/radio/tx_arbiter.dart';
 
 import '../chat/support.dart';
 import 'meshtrack_rig.dart';
@@ -150,6 +152,45 @@ void main() {
         r.svc.setShare(id, true);
         r.settle();
         expect(r.w.phoneFixesActive, isFalse);
+      });
+    });
+  });
+
+  group('budget pre-check and the ping window', () {
+    test('an airtime refusal is counted once per attempt and retried only after the floor', () {
+      fakeAsync((a) {
+        final r = MtRig(a);
+        final id = r.groupSync('Family');
+        r.arbiter.policy = const TxPolicy(trackBudgetFraction: 0);
+        r.svc.setShare(id, true, duration: MtShareDuration.untilStopped);
+        for (var i = 0; i < 10; i++) {
+          r.svc.onFix(MeshTrackWiring.mtFixOf(r.fix()));
+          r.settle(const Duration(milliseconds: 160));
+        }
+        expect(r.sent, isEmpty);
+        expect(r.arbiter.snapshot().trackSkipped[TrackSkipReason.budget], 1, reason: 'one refusal for one attempt, not one per fix');
+        expect(r.logs.where((l) => l == 'meshtrack: skipped: airtime limit'), hasLength(1));
+        expect(r.svc.state.reason, MtShareReason.airtimeLimit);
+      });
+    });
+
+    test('a drive that failed to start (window left open, never driving) closes the ping window', () {
+      fakeAsync((a) {
+        final r = MtRig(a);
+        final id = r.groupSync('Family');
+        r.w.onEngineStatus(const EngineStatus(EngineState.pinging));
+        r.svc.onFix(MeshTrackWiring.mtFixOf(r.fix()));
+        expect(r.svc.sendMyPosition(id), MtResult.ok);
+        r.settle(const Duration(seconds: 1));
+        expect(r.sent, isEmpty, reason: 'held while the window is open');
+        r.w.driveStopped(); // AppState's failed-start path: the wiring was never driving
+        r.settle(const Duration(seconds: 1));
+        expect(r.sent, hasLength(1));
+        r.w.onEngineStatus(const EngineStatus(EngineState.pinging));
+        expect(r.svc.sendMyPosition(id), MtResult.ok);
+        r.w.engineStopped(); // engine teardown
+        r.settle(const Duration(seconds: 2));
+        expect(r.sent, hasLength(2));
       });
     });
   });
@@ -412,6 +453,79 @@ void main() {
     });
   });
 
+  group('Keychain registry read failures (never wipe the stored groups)', () {
+    for (final mode in ['throws', 'answers nothing']) {
+      test('a read that $mode while settings list groups: no write or delete, settings kept; the next good read brings them back', () {
+        fakeAsync((a) {
+          final r = MtRig(a);
+          final id = r.groupSync('Family');
+          final settings = r.settings;
+          expect(settings.groups, hasLength(1));
+          r.w.dispose();
+          r.settle();
+          final k = FlakyKeychain(r.keychain);
+          if (mode == 'throws') {
+            k.failReads = true;
+          } else {
+            k.nullReads = true;
+          }
+          final r2 = MtRig(a, harness: r.h, keychain: k, settings: settings, lastKnown: r.lastKnown, radios: r.radios, start: false);
+          r2.w.setForeground(false); // a background launch: the Keychain may stay locked for a while
+          r2.boot();
+          expect(r2.w.debugRegistryUnreadable, isTrue);
+          expect(r2.svc.state.groups, isEmpty);
+          // Any write path while unreadable: a new group.
+          r2.groupSync('Club');
+          r2.settle();
+          expect(k.writes, 0, reason: 'the registry is never written over while it cannot be read');
+          expect(k.deletes, 0);
+          expect(r2.settings.groups.where((g) => g['name'] == 'Family'), hasLength(1), reason: 'the stored group is kept');
+          // The Keychain unlocks: the next write reads first and merges.
+          k.failReads = false;
+          k.nullReads = false;
+          r2.svc.setShareEveryDrive(r2.svc.state.groups.single.channelId, true);
+          r2.settle();
+          expect(r2.w.debugRegistryUnreadable, isFalse);
+          expect(r2.registry().map((e) => e['name']).toSet(), {'Family', 'Club'});
+          expect(r2.svc.state.groups.map((g) => g.name).toSet(), {'Family', 'Club'});
+          expect(r2.svc.state.group(id), isNotNull);
+          expect(r2.settings.groups.map((g) => g['name']).toSet(), {'Family', 'Club'});
+        });
+      });
+    }
+
+    test('a fresh install (no registry, no stored groups) is not "unreadable": the first group is saved', () {
+      fakeAsync((a) {
+        final k = FlakyKeychain(InMemorySecretStore());
+        final r = MtRig(a, keychain: k);
+        expect(r.w.debugRegistryUnreadable, isFalse);
+        r.groupSync('Family');
+        expect(r.registry(), hasLength(1));
+        expect(r.settings.groups, hasLength(1));
+      });
+    });
+
+    test('in front, "nothing" twice in a row is believed (the settings ghost stays, new groups save)', () {
+      fakeAsync((a) {
+        final r = MtRig(a);
+        r.groupSync('Family');
+        final settings = r.settings;
+        r.w.dispose();
+        r.settle();
+        final k = FlakyKeychain(InMemorySecretStore()); // a restored phone: settings came back, the Keychain did not
+        final r2 = MtRig(a, harness: Harness(), keychain: k, settings: settings, radios: {radioA: FakeRadioSlots(4)}, start: false);
+        r2.w.setForeground(false);
+        r2.boot();
+        expect(r2.w.debugRegistryUnreadable, isTrue, reason: 'behind: "nothing" is not believed');
+        r2.w.setForeground(true);
+        r2.groupSync('Club');
+        expect(r2.w.debugRegistryUnreadable, isFalse);
+        expect(r2.registry().map((e) => e['name']), ['Club']);
+        expect(r2.settings.groups.map((g) => g['name']).toSet(), {'Family', 'Club'}, reason: 'stored entries not in the registry are kept');
+      });
+    });
+  });
+
   group('storage', () {
     test('Delete my data clears last-known, the group list and the Keychain registry (channels stay)', () {
       fakeAsync((a) {
@@ -480,6 +594,33 @@ void main() {
       });
     });
   });
+}
+
+/// A Keychain whose reads can fail (a locked Keychain): [failReads] throws, [nullReads] answers nothing.
+class FlakyKeychain implements SecretStore {
+  final SecretStore inner;
+  bool failReads = false;
+  bool nullReads = false;
+  int writes = 0, deletes = 0;
+  FlakyKeychain(this.inner);
+  @override
+  Future<Uint8List?> read(String ref) async {
+    if (failReads) throw StateError('locked');
+    if (nullReads) return null;
+    return inner.read(ref);
+  }
+
+  @override
+  Future<void> write(String ref, Uint8List secret) async {
+    writes++;
+    await inner.write(ref, secret);
+  }
+
+  @override
+  Future<void> delete(String ref) async {
+    deletes++;
+    await inner.delete(ref);
+  }
 }
 
 /// A Keychain that already holds one group "Family" (made on another install).
