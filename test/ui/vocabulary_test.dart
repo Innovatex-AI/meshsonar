@@ -27,6 +27,10 @@ final RegExp retired = RegExp(r'home observer|become an observer|drive observer|
 List<File> surfaceFiles() => [
       for (final dir in ['lib/ui/plan', 'lib/ui/nodes'])
         ...Directory(dir).listSync(recursive: true).whereType<File>().where((f) => f.path.endsWith('.dart')),
+      // MeshTrack (MT-6 builds it; the gate holds as soon as the folder exists).
+      for (final dir in optionalSurfaceDirs)
+        if (Directory(dir).existsSync())
+          ...Directory(dir).listSync(recursive: true).whereType<File>().where((f) => f.path.endsWith('.dart')),
       for (final f in [
         'lib/ui/shell/plan_tab.dart',
         'lib/ui/shell/more_tab.dart',
@@ -41,6 +45,29 @@ List<File> surfaceFiles() => [
       ])
         File(f),
     ];
+
+/// Surface folders another branch may not have created yet: scanned when present.
+const optionalSurfaceDirs = ['lib/ui/meshtrack'];
+
+/// "APRS" is a registered trademark in amateur radio (MeshTrack plan section 0): no product string contains it. Internal
+/// comments may say "APRS-style".
+final RegExp aprs = RegExp('aprs', caseSensitive: false);
+
+/// The user-facing string literals on [lines] (comment lines skipped) that match [re], as `path:line: text`.
+List<String> literalHits(String path, List<String> lines, RegExp re) {
+  final hits = <String>[];
+  for (var i = 0; i < lines.length; i++) {
+    final l = lines[i].trimLeft();
+    if (l.startsWith('//')) continue;
+    // A trailing comment is not copy either (a quote inside it would read as a literal).
+    final code = l.replaceFirst(RegExp(r'\s//\s.*$'), '');
+    for (final m in _literal.allMatches(code)) {
+      final s = m.group(1) ?? m.group(2) ?? '';
+      if (re.hasMatch(s)) hits.add('$path:${i + 1}: $s');
+    }
+  }
+  return hits;
+}
 
 final RegExp _literal = RegExp(r"'((?:[^'\\\n]|\\.)*)'|" r'"((?:[^"\\\n]|\\.)*)"');
 
@@ -75,6 +102,25 @@ void main() {
       }
     }
     expect(hits, isEmpty, reason: hits.join('\n'));
+  });
+
+  test('no string a person can read anywhere in the app contains "APRS" (MeshTrack plan section 0, MT-8)', () {
+    final hits = <String>[
+      for (final f in Directory('lib').listSync(recursive: true).whereType<File>().where((f) => f.path.endsWith('.dart')))
+        ...literalHits(f.path, f.readAsLinesSync(), aprs),
+    ];
+    expect(hits, isEmpty, reason: 'Say MeshTrack, never APRS:\n${hits.join('\n')}');
+  });
+
+  test('the APRS check catches copy and skips comments', () {
+    final lines = [
+      "  // APRS-style friend tracking, internal note",
+      "  /// Like 'APRS' on a ham band.",
+      "  Text('MeshAPRS friends'),",
+      '  const t = "Share like aprs";',
+      "  final x = 'MeshTrack'; // not 'APRS' here",
+    ];
+    expect(literalHits('x.dart', lines, aprs), ['x.dart:3: MeshAPRS friends', 'x.dart:4: Share like aprs']);
   });
 
   test('no comment names a deleted Plan screen (link_screen, painter_screen, plan_common)', () {
