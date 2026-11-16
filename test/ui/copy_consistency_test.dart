@@ -4,6 +4,16 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+const _meshTrackDir = 'lib/ui/meshtrack';
+
+final RegExp literal = RegExp(r"'((?:[^'\\\n]|\\.)*)'|" r'"((?:[^"\\\n]|\\.)*)"');
+final RegExp _plainBanned = RegExp(r'\b(paths?|hops?|hash(es)?|flood(s|ed|ing)?|adverts?|slots?)\b', caseSensitive: false);
+final RegExp _meshTrackBanned =
+    RegExp(r'\b(paths?|hops?|hash(es)?|flood(s|ed|ing)?|adverts?|slots?|beacon(s|ed|ing)?)\b', caseSensitive: false);
+
+/// The protocol words a person must not read on the screen at [path]: the plain-words list, plus "beacon" on MeshTrack's.
+RegExp bannedFor(String path) => path.startsWith(_meshTrackDir) ? _meshTrackBanned : _plainBanned;
+
 void main() {
   test('no stale approval / request-a-key / Lovable wording in user-facing strings', () {
     final banned = RegExp(
@@ -31,11 +41,12 @@ void main() {
   // Chat plan 2.1: protocol words appear only in Details sheets, Advanced rows and the Console. A line that is one of those
   // says so with a trailing `// copy-ok: why` comment; everything else in the primary Chat screens must use the plain words.
   test('Chat primary screens use plain words: no Path, hops, hash, flood, Advert or "slot N"', () {
-    final banned = RegExp(r'\b(paths?|hops?|hash(es)?|flood(s|ed|ing)?|adverts?|slots?)\b', caseSensitive: false);
-    final literal = RegExp(r"'((?:[^'\\\n]|\\.)*)'|" r'"((?:[^"\\\n]|\\.)*)"');
+
     final files = <File>[
       ...Directory('lib/ui/chat').listSync().whereType<File>(),
       ...Directory('lib/ui/contacts').listSync().whereType<File>(),
+      // MeshTrack (MT-6 builds it; checked as soon as the folder exists).
+      if (Directory(_meshTrackDir).existsSync()) ...Directory(_meshTrackDir).listSync(recursive: true).whereType<File>(),
       File('lib/ui/shell/chat_tab.dart'),
       File('lib/ui/tools/ping_result_sheet.dart'),
       File('lib/ui/radios/repeater_admin/login_sheet.dart'),
@@ -58,11 +69,19 @@ void main() {
           if (text.startsWith('package:') || text.startsWith('dart:')) continue;
           // Keys, symbol names and identifiers are not copy: only strings with a space or a capital/sentence shape count.
           if (!text.contains(' ') && text.toLowerCase() == text) continue;
-          if (banned.hasMatch(text)) hits.add('${f.path}:${i + 1}: $text');
+          if (bannedFor(f.path).hasMatch(text)) hits.add('${f.path}:${i + 1}: $text');
         }
       }
     }
-    expect(hits, isEmpty, reason: 'Use the plain word (Route, repeaters, Announce myself, searching) or mark the line `// copy-ok: Details/Advanced`:\n${hits.join('\n')}');
+    expect(hits, isEmpty, reason: 'Use the plain word (Route, repeaters, Announce myself, searching; MeshTrack: share, position) or mark the line `// copy-ok: Details/Advanced`:\n${hits.join('\n')}');
+  });
+
+  test('MeshTrack screens also never say "beacon" (internal word only, plan section 7); other screens are not affected', () {
+    expect(bannedFor('$_meshTrackDir/group_sheet.dart').hasMatch('Beacon sent'), isTrue);
+    expect(bannedFor('$_meshTrackDir/group_sheet.dart').hasMatch('beacons'), isTrue);
+    expect(bannedFor('$_meshTrackDir/group_sheet.dart').hasMatch('Send my position'), isFalse);
+    expect(bannedFor('lib/ui/chat/channel_detail_screen.dart').hasMatch('Beacon sent'), isFalse);
+    expect(bannedFor('lib/ui/chat/channel_detail_screen.dart').hasMatch('3 hops'), isTrue);
   });
 
   test('empty searches say the same thing everywhere (chat_copy)', () {

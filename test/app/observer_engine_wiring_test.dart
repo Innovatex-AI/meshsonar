@@ -175,6 +175,73 @@ void main() {
     h.state.dispose();
   });
 
+  // Third gate (MeshTrack plan section 15, MT-8): a group packet proven under ANY private channel key the phone holds never
+  // reaches the MQTT engine, even when a regression let that key into the shareable set (risk 2 of the plan).
+  group('private channel keys (third gate)', () {
+    final crew = List<int>.generate(16, (i) => 0x51 + i); // "Saturday crew", a MeshTrack group
+    const position = 'MT1 @87G8Q2X5+7F2 s34 c270';
+    RxPacket meshTrack(int ts, {required int pathLen, String name = 'KE4BFI'}) => RxPacket(
+        at: DateTime.utc(2026, 10, 16, 18),
+        raw: MeshPacket(
+          header: makeHeader(RouteType.flood, PayloadType.grpTxt),
+          pathLenByte: pathLen,
+          path: [for (var i = 0; i < pathLen; i++) Uint8List.fromList([0xa1 + i])],
+          payload: buildGroupTextPayload(crew, ts, name, position),
+        ).toBytes(),
+        snrDb: 5,
+        rssiDbm: -90);
+
+    test('a MeshTrack position, and our own MeshTrack send heard back via 2 repeaters, never reach the engine', () async {
+      final (h, engine, link) = await _ready();
+      final before = engine.packets.length;
+      h.state
+        // The regression the gate guards against: the private key slipped into the shareable set.
+        ..hashtagChannelKeys = (() => [crew])
+        ..privateChannelKeys = ((hash) => hash == channelHashByte(crew) ? [crew] : const []);
+      link.rx.add(meshTrack(7000, pathLen: 0, name: 'Sam')); // a friend, heard direct
+      link.rx.add(meshTrack(7001, pathLen: 2)); // our own send, repeated back to us
+      link.rx.add(_group(40, publicChannelSecret16)); // control: Public still goes
+      await Future<void>.delayed(Duration.zero);
+      expect(engine.packets.skip(before).map((p) => p.$1.channel), ['public']);
+      h.state.dispose();
+    });
+
+    test('a private key still being read counts as private (fail closed); other hashes are untouched', () async {
+      final (h, engine, link) = await _ready();
+      final before = engine.packets.length;
+      h.state
+        ..hashtagChannelKeys = (() => [crew, hashtagSecret16('#ohio')])
+        ..hashtagChannelNames = (() => ['#ohio'])
+        ..privateChannelKeys = ((hash) => hash == channelHashByte(crew) ? null : const []);
+      link.rx.add(meshTrack(7002, pathLen: 1));
+      link.rx.add(_group(41, hashtagSecret16('#ohio')));
+      await Future<void>.delayed(Duration.zero);
+      expect(engine.packets.skip(before).map((p) => p.$1.channel), ['#ohio']);
+      h.state.dispose();
+    });
+
+    test('a Public packet whose hash matches a private key but whose MAC does not still goes', () async {
+      final (h, engine, link) = await _ready();
+      final before = engine.packets.length;
+      final pub = _group(42, publicChannelSecret16);
+      // A different private key with the same one-byte hash as Public (1 in 256 keys do): only its MAC is tried, and fails.
+      var other = List<int>.filled(16, 0);
+      for (var i = 0; channelHashByte(other) != channelHashByte(publicChannelSecret16); i++) {
+        other = List<int>.generate(16, (j) => (i * 31 + j * 7 + (i >> 8)) & 0xff);
+      }
+      var tried = 0;
+      h.state.privateChannelKeys = (hash) {
+        tried++;
+        return hash == channelHashByte(other) ? [other] : const [];
+      };
+      link.rx.add(pub);
+      await Future<void>.delayed(Duration.zero);
+      expect(engine.packets.skip(before).map((p) => p.$1.channel), ['public']);
+      expect(tried, greaterThan(0));
+      h.state.dispose();
+    });
+  });
+
   test('without an engine factory the app runs the engine that runs nothing', () async {
     final h = Harness()..approveKey();
     await h.state.init();
