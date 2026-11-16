@@ -68,6 +68,11 @@ void main() {
     expect(build(channels: [ch]).single.offRadio, isTrue);
   });
 
+  test('a MeshTrack message as the last one reads as words, not wire text (sim tour)', () {
+    final rows = build(summaries: [dm(1, ts: 50, preview: 'MT1 @86GV429W+H34 s40 c46')], contacts: [person(1)]);
+    expect(rows.single.preview, 'MeshTrack: shared a position');
+  });
+
   test('a draft replaces the preview and lists a conversation that has no messages yet', () {
     final key = ConvKey.dm(keyOf(2));
     final rows = build(summaries: [dm(1, ts: 50)], contacts: [person(1), person(2)], drafts: {key: ' are you still there ', ConvKey.dm(keyOf(1)): ''});

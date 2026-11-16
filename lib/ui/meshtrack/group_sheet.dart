@@ -192,19 +192,26 @@ class _GroupSheetState extends State<GroupSheet> {
 
   Widget _groupsHeader(BuildContext context, MeshTrackBinding b, MeshTrackState st) {
     final c = AppColors.of(context);
+    // Full width, so the title sits on the screen margin and the buttons on the right edge (a bare Wrap in the sheet's
+    // Column shrank to its content and was centred). The empty state has its own New group / Join buttons, so the
+    // header shows them only once there is a group.
     return Padding(
       padding: const EdgeInsets.fromLTRB(Layout.screenMargin, Gap.xs, Layout.screenMargin, Gap.s),
-      child: Wrap(
-        alignment: WrapAlignment.spaceBetween,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        runSpacing: Gap.xs,
-        children: [
-          Semantics(header: true, child: Text(mtFeatureName, style: AppType.title2.copyWith(color: c.textPrimary))),
-          Wrap(spacing: Gap.s, runSpacing: Gap.xs, children: [
-            _HeaderButton(key: const Key('mt-new'), symbol: AppSymbols.plus, label: 'New group', onPressed: () => openNewGroup(context)),
-            _HeaderButton(key: const Key('mt-join-open'), symbol: AppSymbols.qrcode, label: 'Join', onPressed: () => openJoinGroup(context)),
-          ]),
-        ],
+      child: SizedBox(
+        width: double.infinity,
+        child: Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          runSpacing: Gap.xs,
+          children: [
+            Semantics(header: true, child: Text(mtFeatureName, style: AppType.title2.copyWith(color: c.textPrimary))),
+            if (st.groups.isNotEmpty)
+              Wrap(spacing: Gap.s, runSpacing: Gap.xs, children: [
+                _HeaderButton(key: const Key('mt-new'), symbol: AppSymbols.plus, label: 'New group', onPressed: () => openNewGroup(context)),
+                _HeaderButton(key: const Key('mt-join-open'), symbol: AppSymbols.qrcode, label: 'Join', onPressed: () => openJoinGroup(context)),
+              ]),
+          ],
+        ),
       ),
     );
   }
@@ -390,7 +397,8 @@ class _GroupSheetState extends State<GroupSheet> {
                     me: me,
                     units: b.units,
                     now: now,
-                    asked: asked,
+                    asked: asked && (g.askedName == null || g.askedName!.toLowerCase() == f.name.toLowerCase()),
+                    askBlocked: asked,
                     onTap: () => _centre(context, b, f),
                     onMessage: () => openMtMessage(context, b.chat(), g.channelId, f.name),
                     onAsk: notOnRadio ? null : () => _toast(context, b.service.askWhereAreYou(g.channelId, name: f.name)),
@@ -619,7 +627,11 @@ class FriendRow extends StatelessWidget {
   final MtLatLon? me;
   final Units units;
   final DateTime now;
+  /// This person was asked "Where are you?" (the button says Asked).
   final bool asked;
+
+  /// Someone in the group was asked less than a minute ago, so the button is off (it says Where are you?, muted).
+  final bool askBlocked;
   final VoidCallback onTap;
   final VoidCallback onMessage;
   final VoidCallback? onAsk;
@@ -630,6 +642,7 @@ class FriendRow extends StatelessWidget {
     required this.units,
     required this.now,
     required this.asked,
+    this.askBlocked = false,
     required this.onTap,
     required this.onMessage,
     required this.onAsk,
@@ -649,7 +662,7 @@ class FriendRow extends StatelessWidget {
     final lines = mtFriendLines(f, me: me, units: units, now: now);
     final faded = f.staleness != MtStaleness.fresh;
     final style = avatarStyle('mt:${f.name}', c);
-    final big = MediaQuery.textScalerOf(context).scale(17) > 17 * 1.5;
+    final off = asked || askBlocked || onAsk == null;
     final actions = [
       Hit.pad(
         size: kMtHit,
@@ -659,22 +672,22 @@ class FriendRow extends StatelessWidget {
       ),
       Semantics(
         button: true,
-        enabled: onAsk != null && !asked,
+        enabled: !off,
         label: asked ? '$mtAsked. You asked where they are' : '$mtWhereAreYou Ask ${f.name}',
         excludeSemantics: true,
         child: CupertinoButton(
           key: Key('mt-ask-${f.name}'),
           minimumSize: const Size.square(kMtHit),
           padding: const EdgeInsets.symmetric(horizontal: Gap.s),
-          onPressed: asked ? null : onAsk,
-          child: Text(asked ? mtAsked : mtWhereAreYou, style: AppType.subhead.copyWith(fontWeight: FontWeight.w600, color: asked || onAsk == null ? c.textMuted : c.accent)),
+          onPressed: off ? null : onAsk,
+          child: Text(asked ? mtAsked : mtWhereAreYou, style: AppType.subhead.copyWith(fontWeight: FontWeight.w600, color: off ? c.textMuted : c.accent)),
         ),
       ),
     ];
     final text = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text(f.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.headline.copyWith(color: faded ? c.textMuted : c.textPrimary)),
-      Text(lines.line1, style: AppType.subhead.copyWith(color: c.textMuted)),
-      if (lines.line2 != null) Text(lines.line2!, style: AppType.footnote.copyWith(color: f.jumped ? c.warning : c.textMuted)),
+      Text(mtKeepTogether(lines.line1), style: AppType.subhead.copyWith(color: c.textMuted)),
+      if (lines.line2 != null) Text(mtKeepTogether(lines.line2!), style: AppType.footnote.copyWith(color: f.jumped ? c.warning : c.textMuted)),
     ]);
     return Semantics(
       container: true,
@@ -713,9 +726,10 @@ class FriendRow extends StatelessWidget {
                 ),
               ),
             ),
-            if (!big) ...actions,
           ]),
-          if (big) Padding(padding: const EdgeInsets.only(left: 52), child: Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: actions)),
+          // The actions sit under the text (aligned with it), so the name and the two lines get the full width: beside
+          // them, "Where are you?" squeezed the lines into "0.7 mi / W" and "25 / mph" on a phone.
+          Padding(padding: const EdgeInsets.only(left: 52), child: Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: actions)),
         ]),
       ),
     );

@@ -271,7 +271,11 @@ void main() {
       var sawGps = false;
       final ok = await _until(t, () {
         final l = _chipLabel(t);
-        if (l == 'Waiting for GPS' && !sawGps) sawGps = true;
+        if (l == 'Waiting for GPS' && !sawGps) {
+          sawGps = true;
+          // ignore: avoid_print
+          print('SCREEN mt-16a-chip-waiting-gps');
+        }
         return l != null && l.startsWith('Sharing: ');
       }, const Duration(seconds: 30));
       if (!_app(t).driving) _fail('Start drive did not start a drive');
@@ -284,15 +288,16 @@ void main() {
 
     await step(t, 'friends-map', () async {
       final id = _groupId(t, simulatedFriendsChannelName) ?? _fail('no group');
-      // Jo parks 6 min after the radio connected: wait for it so the parked pin is on the map.
-      final parkAt = connectedAt.add(const Duration(minutes: 6, seconds: 40));
+      // Jo parks 6 min after the radio connected and sends its parked position after 90 s below 3 km/h: wait for it.
+      final parkAt = connectedAt.add(const Duration(minutes: 8, seconds: 20));
       while (DateTime.now().isBefore(parkAt)) {
         await pumpFor(t, const Duration(seconds: 5));
       }
       final g = _svc(t).state.group(id) ?? _fail('group gone');
-      final pts = [for (final f in g.friends) LatLng(f.lat, f.lon)];
+      final me = _app(t).phoneFix?.fix;
+      final pts = [for (final f in g.friends) LatLng(f.lat, f.lon), if (me != null) LatLng(me.lat, me.lon)];
       final c = LatLng(pts.map((p) => p.latitude).reduce((a, b) => a + b) / pts.length, pts.map((p) => p.longitude).reduce((a, b) => a + b) / pts.length);
-      MainMapFocus.request(c, 13.5);
+      MainMapFocus.request(c, 13);
       await pumpFor(t, const Duration(seconds: 3));
       if (find.byWidgetPredicate((w) => w.key is ValueKey && '${(w.key as ValueKey).value}'.startsWith('map-friend-')).evaluate().isEmpty) {
         _fail('no friend pins on the Drive map');
@@ -300,6 +305,15 @@ void main() {
       // ignore: avoid_print
       print('NOTE friends: ${g.friends.map((f) => '${f.name} ${f.staleness.name} moving=${(f.speedKmh ?? 0) > 0}').join(', ')}');
       await shot(t, 'mt-17-drive-friends');
+    });
+
+    await step(t, 'people-parked', () async {
+      final id = _groupId(t, simulatedFriendsChannelName) ?? _fail('no group');
+      await tapKey(t, 'meshtrack-chip');
+      if (find.byKey(Key('mt-open-$id')).evaluate().isNotEmpty) await tapKey(t, 'mt-open-$id');
+      if (!await waitFor(t, find.byKey(const Key('mt-people')))) _fail('no people page');
+      await shot(t, 'mt-17b-people-later');
+      await popToRoots(t);
     });
 
     await step(t, 'meet-here-map', () async {
@@ -323,6 +337,11 @@ void main() {
       if (!await waitFor(t, find.byKey(const Key('layers-sheet')))) _fail('no Layers sheet');
       final friends = find.descendant(of: find.byKey(const Key('layers-sheet')), matching: find.text('Friends'));
       if (!await scrollToFind(t, friends, find.byKey(const Key('layers-sheet')))) _fail('no Friends layer in the Layers sheet');
+      final net = find.byKey(const Key('layers-group-network'));
+      if (net.evaluate().isNotEmpty) {
+        await Scrollable.ensureVisible(t.element(net.first), alignment: 0.05);
+        await pumpFor(t, const Duration(milliseconds: 500));
+      }
       await shot(t, 'mt-20-layers');
       await popToRoots(t);
     });
@@ -352,13 +371,11 @@ void main() {
       await t.tap(row.first);
       await pumpFor(t, const Duration(seconds: 2));
       await shot(t, 'mt-22-channel-thread');
-      await tapText(t, simulatedFriendsChannelName, within: find.byType(AppBar).evaluate().isNotEmpty ? find.byType(AppBar) : null);
-      if (!await waitFor(t, find.byKey(const Key('mt-use-switch')), timeout: const Duration(seconds: 6))) {
-        // The title tap may not be the info route on this layout: the ellipsis menu's Channel info is.
-        await backRoot(t);
-        _fail('no MeshTrack section on the channel page');
-      }
-      await t.ensureVisible(find.byKey(const Key('mt-use-switch')));
+      await tapKey(t, 'conv-menu-button');
+      await tapKey(t, 'menu-info');
+      final use = find.byKey(const Key('mt-use-switch'));
+      if (!await waitFor(t, use, timeout: const Duration(seconds: 6))) _fail('no MeshTrack section on the channel page');
+      await Scrollable.ensureVisible(t.element(use.first), alignment: 0.3);
       await pumpFor(t, const Duration(milliseconds: 600));
       await shot(t, 'mt-23-channel-detail');
       await popToRoots(t);
@@ -386,7 +403,7 @@ void main() {
       await t.enterText(host, 'mqtt.meshsonar.com');
       await pumpFor(t, const Duration(milliseconds: 400));
       await tapKey(t, 'mqtt-slot-save');
-      await t.ensureVisible(host);
+      await Scrollable.ensureVisible(t.element(host), alignment: 0.15);
       await pumpFor(t, const Duration(milliseconds: 600));
       await shot(t, 'mt-25-observer-custom-error');
       await tapKey(t, 'mqtt-slot-cancel');

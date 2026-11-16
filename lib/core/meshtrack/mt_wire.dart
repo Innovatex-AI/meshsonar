@@ -223,3 +223,19 @@ const String kMtMeetClearText = '$kMtPrefix !x';
 
 /// `MT1 x`.
 const String kMtStopText = '$kMtPrefix x';
+
+/// What a chat bubble or a Chats row preview shows for a MeshTrack message [body] instead of its wire text ("MT1 @86GV…
+/// s40 c46" is not for people), or null when [body] is not a MeshTrack message. Groups hide these from chat unless "Show
+/// position messages" is on; this covers the ones kept as chat (that switch, and messages heard before a channel became
+/// a group).
+String? mtReadable(String body) => switch (parseMeshTrack(body)) {
+      null => null,
+      MtPosition(parked: true) => 'MeshTrack: parked here',
+      MtPosition() => 'MeshTrack: shared a position',
+      MtRequest(name: null) => 'MeshTrack: asked where everyone is',
+      MtRequest(:final name?) => 'MeshTrack: asked where $name is',
+      MtMeet(label: final l?) when l.isNotEmpty => 'MeshTrack: meet-up point "$l"',
+      MtMeet() => 'MeshTrack: set a meet-up point',
+      MtMeetClear() => 'MeshTrack: cleared the meet-up point',
+      MtStop() => 'MeshTrack: stopped sharing',
+    };

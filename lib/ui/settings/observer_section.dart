@@ -488,10 +488,11 @@ class MqttSlotTile extends StatelessWidget {
       subtitle: Text(lines.join('\n'), key: Key('mqtt-slot-${slot.id}-status')),
       isThreeLine: lines.length > 1,
       onTap: onTap,
+      // A feed that points at MeshSonar's own server can never connect: its switch is off and cannot be turned on.
       trailing: Switch(
         key: Key('mqtt-slot-${slot.id}-switch'),
-        value: slot.enabled,
-        onChanged: onToggle,
+        value: slot.enabled && status.state != ObserverFeedState.notAllowed,
+        onChanged: status.state == ObserverFeedState.notAllowed ? null : onToggle,
       ),
     );
   }
@@ -945,7 +946,7 @@ class _SlotSheetState extends State<_SlotSheet> {
             autocorrect: false,
             enableSuggestions: !obscure,
             textCapitalization: key == 'mqtt-field-iata' ? TextCapitalization.characters : TextCapitalization.none,
-            decoration: InputDecoration(labelText: label, helperText: help, helperMaxLines: 4, hintText: hint, border: const OutlineInputBorder()),
+            decoration: InputDecoration(labelText: label, helperText: help, helperMaxLines: 4, errorMaxLines: 4, hintText: hint, border: const OutlineInputBorder()),
           ),
         );
 

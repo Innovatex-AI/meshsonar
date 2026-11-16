@@ -82,6 +82,12 @@ void main() {
     expect(mtAgo(now.subtract(const Duration(hours: 3)), now), '3 h ago');
   });
 
+  test('mtKeepTogether: no break inside a part ("25 mph", "0.7 mi W"), only between parts', () {
+    expect(mtKeepTogether('just now · 0.7 mi W'), 'just\u00A0now · 0.7\u00A0mi\u00A0W');
+    expect(mtKeepTogether('via 1 repeater · 25 mph'), 'via\u00A01\u00A0repeater · 25\u00A0mph');
+    expect(mtKeepTogether('just now'), 'just\u00A0now');
+  });
+
   test('position friends see: Exact about 3 m / Approximate about 280 m, imperial through Units', () {
     expect(mtPositionModeLabel(MtPositionMode.exact, Units.metric), 'Exact (about 3 m)');
     expect(mtPositionModeLabel(MtPositionMode.approximate, Units.metric), 'Approximate (about 280 m)');

@@ -266,6 +266,9 @@ class MtGroupView {
   /// "Asked" until this time (the Where are you? button is disabled).
   final DateTime? askedUntil;
 
+  /// Who that last "Where are you?" went to; null = everyone in the group. Only that row says "Asked".
+  final String? askedName;
+
   /// When my position last went to this group.
   final DateTime? lastSentAt;
   const MtGroupView({
@@ -275,6 +278,7 @@ class MtGroupView {
     required this.sharingNow,
     this.meet,
     this.askedUntil,
+    this.askedName,
     this.lastSentAt,
   });
   int get channelId => config.channelId;
@@ -375,6 +379,7 @@ class _Group {
   final TrackGroup track;
   DateTime? lastSentAt;
   DateTime? askedUntil;
+  String? askedName;
   DateTime? lastAnswerAt;
   DateTime? lastAskedToastAt;
   Timer? answerTimer;
@@ -901,6 +906,7 @@ class MeshTrackService {
     final now = _now();
     if (g.askedUntil != null && now.isBefore(g.askedUntil!)) return MtResult.tooSoon;
     g.askedUntil = now.add(kMtAskGap);
+    g.askedName = name;
     _enqueue(_Queued(channelId, formatMtRequest(name), _Kind.request, now));
     _changed(save: false);
     return MtResult.ok;
@@ -1146,6 +1152,7 @@ class MeshTrackService {
         heardLast30Min: g.config.see ? g.track.heardWithin(const Duration(minutes: 30), now) : 0,
         sharingNow: _active(g),
         askedUntil: g.askedUntil != null && now.isBefore(g.askedUntil!) ? g.askedUntil : null,
+        askedName: g.askedUntil != null && now.isBefore(g.askedUntil!) ? g.askedName : null,
         lastSentAt: g.lastSentAt,
       ));
     }

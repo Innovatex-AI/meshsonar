@@ -197,6 +197,10 @@ List<String> mtFriendNotes(MtFriend f) => [
       if (!f.onMap) 'Not on the map',
     ];
 
+/// A " · " list for display: each part keeps its words together (no break inside "0.7 mi W" or "25 mph"), lines
+/// wrap only between parts.
+String mtKeepTogether(String line) => line.split(' · ').map((p) => p.replaceAll(' ', '\u00A0')).join(' · ');
+
 /// The two lines under a name, and the full screen-reader label.
 ({String line1, String? line2, String semantics}) mtFriendLines(MtFriend f, {required MtLatLon? me, required Units units, required DateTime now}) {
   final ago = mtAgo(f.lastHeard, now);
