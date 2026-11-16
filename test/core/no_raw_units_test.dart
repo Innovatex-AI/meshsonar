@@ -38,6 +38,12 @@ const List<String> allowedLines = [
   // sliders; the factor is Units' own constant, shown to the person only through Units.height.
   "import '../units.dart' show metresPerFoot;",
   'const double ftM = metresPerFoot;',
+  // MeshTrack's wire format (meshtrack plan section 3) carries speed as whole km/h (`s34`): the core converts the GPS
+  // m/s to that protocol unit, which is never shown; the screens show speeds through Units.speed.
+  'f.speedMps! * 3.6 : null',
+  'd / dt * 3.6;',
+  'f.lon) / dt * 3.6;',
+  'return s * 3.6;',
 ];
 
 final _raw = RegExp(r'(\}|\$\w+|\d) ?(km/h|kph|km|mph|mi|ft|m|hPa|mbar|inHg|mmHg|°C|°F|° ?C|° ?F)(?![\w:])');

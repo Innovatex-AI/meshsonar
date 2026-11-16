@@ -48,8 +48,8 @@ Future<void> openMtMessage(BuildContext context, ChatController? chat, int chann
       await ConversationScreen.open(context, controller: chat, convKey: ConvKey.dm(contact.prefix), title: contact.displayName);
     case MtMessageChannel(:final channelId, :final prefill):
       final key = ConvKey.channel(channelId);
-      final draft = chat.service.loadDraft(key) ?? '';
-      if (!draft.startsWith(prefill)) chat.service.saveDraft(key, '$prefill$draft');
+      final typed = chat.service.loadDraft(key) ?? '';
+      if (!typed.startsWith(prefill)) chat.service.saveDraft(key, prefill + typed);
       await ConversationScreen.open(context, controller: chat, convKey: key);
   }
 }
