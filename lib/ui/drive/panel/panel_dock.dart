@@ -3,6 +3,7 @@
 //   driving   three elements only: hero block (repeaters that heard the last ping + time since), Ping circle (64, draining
 //             ring, seconds to the next automatic ping), Stop 104x52 always labelled
 //   finished  summary + View report + Start new
+// Every state carries the MeshTrack button (56 x 52, panel_meshtrack.dart) left of its main button, tinted while sharing.
 // Start, Ping and Stop are opaque 48+ pt hit boxes that never scroll.
 import 'dart:async';
 import 'dart:math' as math;
@@ -19,6 +20,7 @@ import '../../design/tokens.dart';
 import '../drive_controls.dart' show confirmAndStopDrive, openConnect, openFinishedDriveReport;
 import '../radio_link_status.dart';
 import 'auto_collapse.dart';
+import 'panel_meshtrack.dart';
 
 /// Distinct repeaters that heard [p]. A repeater is counted once however many echoes it produced.
 int heardBy(DrivePing p) => {for (final e in p.echoes) e.repeater}.length;
@@ -115,9 +117,12 @@ class _IdleDock extends StatelessWidget {
     );
     final button = _StartStopButton(state: s, busy: busy, fullWidth: ax);
     if (ax) {
-      return Column(mainAxisAlignment: MainAxisAlignment.center, children: [SizedBox(height: 64, child: Align(alignment: Alignment.centerLeft, child: text)), button]);
+      return Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        SizedBox(height: 64, child: Row(children: [Expanded(child: Align(alignment: Alignment.centerLeft, child: text)), const MeshTrackDockButton()])),
+        button,
+      ]);
     }
-    return Row(children: [Expanded(child: text), const SizedBox(width: 12), button]);
+    return Row(children: [Expanded(child: text), const MeshTrackDockButton(), const SizedBox(width: 8), button]);
   }
 }
 
@@ -238,8 +243,13 @@ class _ConnectingDock extends StatelessWidget {
         ),
       ),
     );
-    if (ax) return Column(mainAxisAlignment: MainAxisAlignment.center, children: [SizedBox(height: 72, child: Align(alignment: Alignment.centerLeft, child: text)), SizedBox(height: 56, child: cancel)]);
-    return Row(children: [Expanded(child: text), const SizedBox(width: 8), cancel]);
+    if (ax) {
+      return Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        SizedBox(height: 72, child: Row(children: [Expanded(child: Align(alignment: Alignment.centerLeft, child: text)), const MeshTrackDockButton()])),
+        SizedBox(height: 56, child: cancel),
+      ]);
+    }
+    return Row(children: [Expanded(child: text), const MeshTrackDockButton(), const SizedBox(width: 4), cancel]);
   }
 }
 
@@ -270,7 +280,7 @@ class _FinishedDock extends StatelessWidget {
     );
     if (ax) {
       return Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        SizedBox(height: 64, child: Align(alignment: Alignment.centerLeft, child: text)),
+        SizedBox(height: 64, child: Row(children: [Expanded(child: Align(alignment: Alignment.centerLeft, child: text)), const MeshTrackDockButton()])),
         Row(children: [
           Expanded(child: SizedBox(height: 56, child: OutlinedButton(key: const Key('view-report'), onPressed: () => openFinishedDriveReport(context, sessionId), child: const Text('Report', maxLines: 1)))),
           const SizedBox(width: 8),
@@ -280,9 +290,12 @@ class _FinishedDock extends StatelessWidget {
     }
     return Row(
       children: [
-        Expanded(child: text),
+        // With the MeshTrack button the row is full on an iPhone SE: the two buttons shrink their labels before the
+        // summary gives way (flex 3 : 2 : 3), so nothing overflows at any width.
+        Expanded(flex: 3, child: text),
+        const MeshTrackDockButton(),
         const SizedBox(width: 8),
-        SizedBox(
+        Flexible(flex: 2, child: SizedBox(
           height: 48,
           child: OutlinedButton(
             key: const Key('view-report'),
@@ -290,9 +303,9 @@ class _FinishedDock extends StatelessWidget {
             onPressed: () => openFinishedDriveReport(context, sessionId),
             child: const FittedBox(fit: BoxFit.scaleDown, child: Text('Report', maxLines: 1)),
           ),
-        ),
+        )),
         const SizedBox(width: 8),
-        SizedBox(
+        Flexible(flex: 3, child: SizedBox(
           height: 48,
           child: FilledButton(
             key: const Key('start-stop'),
@@ -300,7 +313,7 @@ class _FinishedDock extends StatelessWidget {
             onPressed: s.busy ? null : () => s.connected ? s.startDrive() : openConnect(context),
             child: FittedBox(fit: BoxFit.scaleDown, child: Text(s.connected ? 'Start new' : 'Connect radio', maxLines: 1)),
           ),
-        ),
+        )),
       ],
     );
   }
@@ -327,6 +340,7 @@ class _DrivingDock extends StatelessWidget {
           child: Row(children: [
             Expanded(child: DockHero(state: s)),
             if (!discovery) PingCircle(state: s, debounce: debounce, onPing: onPing),
+            const MeshTrackDockButton(gap: 12),
           ]),
         ),
         _StartStopButton(state: s, busy: s.busy, fullWidth: true),
@@ -339,7 +353,8 @@ class _DrivingDock extends StatelessWidget {
           const SizedBox(width: 12),
           PingCircle(state: s, debounce: debounce, onPing: onPing),
         ],
-        const SizedBox(width: 12),
+        const MeshTrackDockButton(),
+        const SizedBox(width: 8),
         _StartStopButton(state: s, busy: s.busy),
       ],
     );

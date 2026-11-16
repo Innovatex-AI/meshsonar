@@ -24,6 +24,9 @@ import '../design/app_symbols.dart';
 import '../design/app_surfaces.dart';
 import '../design/app_type.dart';
 import '../design/tokens.dart';
+import '../meshtrack/group_setup.dart' show openNewGroup;
+import '../meshtrack/meshtrack_binding.dart' show MeshTrackUi;
+import '../meshtrack/meshtrack_copy.dart' show mtNewGroupEntry, mtNewGroupEntryBody;
 import 'channel_flows.dart';
 import 'conversation_tile.dart' show ConversationAvatar;
 import 'chat_navigation.dart';
@@ -56,6 +59,10 @@ class _AddContact extends _Outcome {
   const _AddContact();
 }
 
+class _NewMeshTrackGroup extends _Outcome {
+  const _NewMeshTrackGroup();
+}
+
 /// The sentence shown when there is no radio identity to put a channel on.
 const String noRadioForChannelText = 'Connect your radio once first. Channels live in the radio, so MeshSonar needs to see it before it can add one.';
 
@@ -84,6 +91,8 @@ Future<void> showNewChatSheet(
       if (link != null && context.mounted) await handleMeshLink(context, controller, link);
     case _AddContact():
       await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AddContactScreen(controller: navigator.contacts)));
+    case _NewMeshTrackGroup():
+      await openNewGroup(context);
   }
 }
 
@@ -379,6 +388,9 @@ class _NewChatBodyState extends State<_NewChatBody> {
           key: const Key('add-hashtag')),
       _tile(AppSymbols.globe, 'Join Public channel', 'The open channel most MeshCore users share', _busy ? null : () => _run((a, id) => a.joinPublic(id)), key: const Key('add-public')),
       _tile(AppSymbols.lockFill, 'Create a private channel', 'Only people you give the QR code or link to can read it', () => _go(_Page.create), key: const Key('add-create')),
+      // MeshTrack (build 69): a group is a private channel made for it; the New group screen does the rest.
+      if (MeshTrackUi.of(context) != null)
+        _tile(AppSymbols.person2Fill, mtNewGroupEntry, mtNewGroupEntryBody, () => Navigator.pop(context, const _NewMeshTrackGroup()), key: const Key('add-meshtrack')),
       _tile(AppSymbols.qrcode, 'Scan a QR code', 'Use the camera on a code from a friend', () => Navigator.pop(context, const _Scan()), key: const Key('add-scan')),
       _tile(AppSymbols.docOnDoc, 'Paste a link or key', 'A meshcore:// link, or a channel name with its secret', () => _go(_Page.paste), key: const Key('add-paste')),
       _tile(AppSymbols.personBadgePlus, 'Add a contact', 'Add someone with their link, key or QR code', () => Navigator.pop(context, const _AddContact()), key: const Key('new-contact')),

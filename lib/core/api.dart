@@ -1069,6 +1069,10 @@ class MeshTrackSettings {
   /// Channel ids whose chat shows position messages (channel detail toggle, default off).
   final Set<int> showPositions;
 
+  /// The Drive panel's "New" tag on the MeshTrack row: [MtPanelTag.notYet] until the first drive after the update,
+  /// [MtPanelTag.show] from then until the person opens MeshTrack once, then [MtPanelTag.seen] for good.
+  final MtPanelTag panelTag;
+
   const MeshTrackSettings({
     this.groups = const [],
     this.approximate = false,
@@ -1076,9 +1080,11 @@ class MeshTrackSettings {
     this.answerRequests = true,
     this.introSeen = false,
     this.showPositions = const {},
+    this.panelTag = MtPanelTag.notYet,
   });
 
-  bool get isDefault => groups.isEmpty && !approximate && !lowTraffic && answerRequests && !introSeen && showPositions.isEmpty;
+  bool get isDefault =>
+      groups.isEmpty && !approximate && !lowTraffic && answerRequests && !introSeen && showPositions.isEmpty && panelTag == MtPanelTag.notYet;
 
   MeshTrackSettings copyWith({
     List<Map<String, Object?>>? groups,
@@ -1087,6 +1093,7 @@ class MeshTrackSettings {
     bool? answerRequests,
     bool? introSeen,
     Set<int>? showPositions,
+    MtPanelTag? panelTag,
   }) =>
       MeshTrackSettings(
         groups: groups ?? this.groups,
@@ -1095,6 +1102,7 @@ class MeshTrackSettings {
         answerRequests: answerRequests ?? this.answerRequests,
         introSeen: introSeen ?? this.introSeen,
         showPositions: showPositions ?? this.showPositions,
+        panelTag: panelTag ?? this.panelTag,
       );
 
   Map<String, Object?> toJson() => {
@@ -1104,6 +1112,7 @@ class MeshTrackSettings {
         if (!answerRequests) 'answer_requests': false,
         if (introSeen) 'intro_seen': true,
         if (showPositions.isNotEmpty) 'show_positions': showPositions.toList()..sort(),
+        if (panelTag != MtPanelTag.notYet) 'panel_new': panelTag.name,
       };
 
   /// Anything odd falls back to the default for that field only.
@@ -1124,9 +1133,13 @@ class MeshTrackSettings {
           for (final v in l)
             if (v is int) v,
       },
+      panelTag: MtPanelTag.values.where((t) => t != MtPanelTag.notYet && t.name == raw['panel_new']).firstOrNull ?? MtPanelTag.notYet,
     );
   }
 }
+
+/// The Drive panel's once-per-install "New" tag on the MeshTrack row ([MeshTrackSettings.panelTag]).
+enum MtPanelTag { notYet, show, seen }
 
 abstract class SettingsStore {
   Future<Settings> load();

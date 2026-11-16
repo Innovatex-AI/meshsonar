@@ -1,20 +1,19 @@
-// Drive chip states and the Group sheet (plan 5.4, 5.5, 7, 8, 9): rows in metric and imperial, intro once, Undo on stop /
-// leave / clear meet, the disabled 4th Share switch, Asked for 60 s, row tap centres the map, iPhone 17 Pro dark, iPad
-// side panel, 2x text, VoiceOver labels and 44/48 pt targets.
+// The Group sheet (plan 5.4, 5.5, 7, 8, 9; the Drive panel's MeshTrack row and Dock button are in
+// test/ui/drive/panel_meshtrack_test.dart): rows in metric and imperial, intro once, Undo on stop / leave / clear meet,
+// the disabled 4th Share switch, Asked for 60 s, row tap centres the map, iPhone 17 Pro dark, iPad side panel, 2x
+// text, VoiceOver labels and 44/48 pt targets.
 import 'package:flutter/cupertino.dart' show CupertinoButton;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/core/privacy_zones.dart';
 import 'package:meshsonar/core/units.dart';
-import 'package:meshsonar/ui/drive/drive_controls.dart' show MeshTrackChip;
+import 'package:meshsonar/ui/drive/panel/panel_meshtrack.dart' show MeshTrackEvents;
 import 'package:meshsonar/ui/design/tokens.dart' show Layout;
 import 'package:meshsonar/ui/meshtrack/group_sheet.dart';
 import 'package:meshsonar/ui/meshtrack/meshtrack_binding.dart';
 import 'package:meshsonar/ui/meshtrack/meshtrack_copy.dart' show mtKeepTogether;
 
 import 'mt_kit.dart';
-
-String chipLabel(WidgetTester t) => t.widget<Text>(find.byKey(const Key('meshtrack-chip-label'))).data!;
 
 Future<void> openSheet(WidgetTester tester, MtRig rig, {int? channelId}) async {
   await tester.pumpWidget(rig.host(Opener((c) => showGroupSheet(c, channelId: channelId))));
@@ -38,84 +37,6 @@ Future<void> tapSwitch(WidgetTester tester, String key) async {
 }
 
 void main() {
-  group('Drive chip', () {
-    testWidgets('MeshTrack when off; Sharing: names with the accent dot; paused: privacy zone; Waiting for GPS', (tester) async {
-      phone(tester);
-      final rig = MtRig();
-      rig.svc
-        ..addGroup(1, 'Family')
-        ..addGroup(2, 'Saturday drive club')
-        ..setRadioConnected(true)
-        ..driveStarted();
-      await tester.pumpWidget(rig.host(const Scaffold(body: Center(child: MeshTrackChip()))));
-      expect(chipLabel(tester), 'MeshTrack');
-      expect(find.byKey(const Key('meshtrack-chip-dot')), findsNothing);
-
-      rig.svc.setShare(1, true);
-      await tester.pump();
-      expect(chipLabel(tester), 'Waiting for GPS', reason: 'no fix yet');
-
-      rig.fix();
-      await tester.pump();
-      expect(chipLabel(tester), 'Sharing: Family');
-      expect(find.byKey(const Key('meshtrack-chip-dot')), findsOneWidget);
-
-      rig.svc.setShare(2, true);
-      await tester.pump();
-      expect(chipLabel(tester), 'Sharing: Family +1');
-
-      rig.zones = PrivacyZones([PrivacyZone(lat: rig.here!.lat, lon: rig.here!.lon, radiusM: 300)]);
-      rig.fix();
-      await tester.pump();
-      expect(chipLabel(tester), 'Sharing paused: privacy zone');
-
-      final sem = tester.ensureSemantics();
-      expect(tester.getSemantics(find.byKey(const Key('meshtrack-chip-hit'))), matchesSemantics(
-        label: 'Sharing paused: privacy zone. Groups: Family, Saturday drive club. Opens your groups',
-        isButton: true,
-        hasTapAction: true,
-      ));
-      expect(tester.getSize(find.byKey(const Key('meshtrack-chip-hit'))).height, greaterThanOrEqualTo(48));
-      sem.dispose();
-
-      await tester.tap(find.byKey(const Key('meshtrack-chip-hit')));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('mt-groups')), findsOneWidget, reason: 'tap opens the Group sheet');
-      await rig.done(tester);
-    });
-
-    testWidgets('toasts: "Sam asked where you are" with Send my position, and Stopped sharing: radio disconnected + Share again', (tester) async {
-      phone(tester);
-      final rig = MtRig();
-      rig.ops.introSeen = true;
-      rig.svc
-        ..addGroup(1, 'Family')
-        ..setRadioConnected(true);
-      await tester.pumpWidget(rig.host(const Scaffold(body: Center(child: MeshTrackChip()))));
-      rig.svc.onChannelText(MtInboundText(channelId: 1, text: 'Sam: MT1 ?', receivedAt: DateTime.now()));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-      expect(find.text('Sam asked where you are'), findsOneWidget);
-      rig.fix();
-      await tester.tap(find.text('Send my position'));
-      await tester.pump();
-      expect(find.text('Your position is on its way.'), findsOneWidget);
-      await tester.pump(const Duration(seconds: 6));
-
-      rig.svc.setShare(1, true, duration: MtShareDuration.untilStopped);
-      rig.svc.setRadioConnected(false);
-      await tester.pump(const Duration(minutes: 5, seconds: 1));
-      await tester.pump(const Duration(milliseconds: 300));
-      expect(find.text('Stopped sharing: radio disconnected'), findsOneWidget);
-      rig.svc.setRadioConnected(true);
-      await tester.tap(find.text('Share again'));
-      await tester.pump();
-      expect(rig.svc.state.group(1)!.config.share, isTrue);
-      expect(rig.svc.state.group(1)!.config.duration, MtShareDuration.untilStopped);
-      await rig.done(tester);
-    });
-  });
-
   group('intro before any share (Send my position, the asked toast, Share on every drive)', () {
     testWidgets('"asked where you are" toast: Send my position shows the intro first; Not now sends nothing', (tester) async {
       phone(tester);
@@ -124,7 +45,7 @@ void main() {
         ..addGroup(1, 'Family')
         ..setRadioConnected(true);
       rig.fix();
-      await tester.pumpWidget(rig.host(const Scaffold(body: Center(child: MeshTrackChip()))));
+      await tester.pumpWidget(rig.host(const MeshTrackEvents(child: Scaffold(body: SizedBox.expand()))));
       rig.svc.onChannelText(MtInboundText(channelId: 1, text: 'Sam: MT1 ?', receivedAt: DateTime.now()));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));

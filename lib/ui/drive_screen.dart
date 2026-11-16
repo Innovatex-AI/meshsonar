@@ -47,6 +47,7 @@ import 'drive/panel/immersive_pill.dart';
 import 'drive/panel/drive_panel_controller.dart';
 import 'drive/panel/panel_dock.dart';
 import 'drive/panel/panel_medium.dart';
+import 'drive/panel/panel_meshtrack.dart';
 import 'drive/panel/panel_physics.dart';
 
 export 'drive/drive_controls.dart' show openConnect;
@@ -226,7 +227,8 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
     final showReport = report != null && report != _dismissedReport;
 
     // The expanded map changes the whole screen (app bar, footer), so the screen listens to the model, not just the map.
-    return ValueListenableBuilder<bool>(
+    // MeshTrack's toasts (asked where you are, radio gone, hour up) are listened to here, once, whatever the panel shows.
+    return MeshTrackEvents(child: ValueListenableBuilder<bool>(
       valueListenable: AppFlags.driveRedesignNotifier,
       builder: (context, redesign, _) => redesign
           ? AnimatedBuilder(animation: model, builder: (context, _) => _stage(context, s, model, liveStats))
@@ -234,7 +236,7 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
               animation: model,
               builder: (context, _) => _scaffold(context, s, t, model, liveStats, report, showReport),
             ),
-    );
+    ));
   }
 
   /// The new Drive screen (plan 4.1): the map full bleed and never resized, the panel above it, the shell's tab bar below.
@@ -425,7 +427,7 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
                     children: [
                       AntennaChip(state: s),
                       PingSettingsChip(state: s),
-                      const MeshTrackChip(),
+                      const MeshTrackDockButton(gap: 0),
                       LogButton(state: s),
                     ],
                   ),
@@ -708,7 +710,6 @@ class _StateChips extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           RegionChip(state: s, always: true),
-          const MeshTrackChip(),
           for (final c in chips.take(2)) ...[const SizedBox(height: Gap.xs), c],
         ],
       ),

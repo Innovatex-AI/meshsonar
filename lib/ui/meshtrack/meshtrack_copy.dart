@@ -105,6 +105,62 @@ String mtChipSemantics(MeshTrackState s) {
   return '$what. Opens your groups';
 }
 
+// ------------------------------------------------------------------------------------------------ Drive panel row
+
+/// The Drive panel's MeshTrack row subtitle with no group yet.
+const String mtPanelNoGroup = 'Share your position with friends';
+
+/// The row subtitle without a radio (not sharing).
+const String mtPanelNoRadio = 'Connect your radio to share';
+
+/// The "New" tag on the row, shown once per install from the first drive until the row is opened.
+const String mtPanelNewTag = 'New';
+
+/// Friends heard in the last 30 min over all groups (a person in two groups counts in both).
+int mtFriendsNearby(MeshTrackState s) => s.groups.fold(0, (n, g) => n + g.heardLast30Min);
+
+/// What the Drive panel's MeshTrack row says under its title, and its tone (the dot). Sharing states are the chip's words
+/// ("Sharing: Family, Club", "Sharing paused: privacy zone", "Waiting for GPS"); not sharing, it says what one tap gets.
+({String text, MtChipTone tone}) mtPanelLine(MeshTrackState s) {
+  if (s.sharing) {
+    final c = mtChip(s);
+    return (text: c.label, tone: c.tone);
+  }
+  if (!s.radioConnected) return (text: mtPanelNoRadio, tone: MtChipTone.idle);
+  if (s.groups.isEmpty) return (text: mtPanelNoGroup, tone: MtChipTone.idle);
+  final n = mtFriendsNearby(s);
+  if (n > 0) return (text: '$n ${n == 1 ? 'friend' : 'friends'} nearby', tone: MtChipTone.idle);
+  if (s.groups.length == 1) return (text: 'Not sharing with ${s.groups.first.name}', tone: MtChipTone.idle);
+  return (text: '${s.groups.length} groups, not sharing', tone: MtChipTone.idle);
+}
+
+/// Screen-reader label of the panel row (and the Dock button): what it says and what a tap does.
+String mtPanelSemantics(MeshTrackState s, {bool isNew = false}) {
+  final line = mtPanelLine(s).text;
+  final names = s.sharingNames.length > 1 ? '. Groups: ${s.sharingNames.join(', ')}' : '';
+  return '$mtFeatureName${isNew ? ', new' : ''}. $line$names. Opens your groups';
+}
+
+/// The Share switch label on the row when there is exactly one group.
+String mtPanelShareLabel(MtGroupView g) => 'Share my position with ${g.name}';
+
+// ------------------------------------------------------------------------------------------------ Chats card
+
+const String mtChatCardTitle = mtFeatureName;
+const String mtChatCardBody = 'See friends on the map. Make a group or join one.';
+
+/// The Chats card subtitle once there are groups ("Family, Club. Sharing with Family").
+String mtChatCardLine(MeshTrackState s) {
+  if (s.groups.isEmpty) return mtChatCardBody;
+  final names = mtChipNames([for (final g in s.groups) g.name], maxChars: 28);
+  if (!s.sharing) return '$names. See them on the Drive map.';
+  return '$names. ${mtChip(s).label}.';
+}
+
+/// The New chat sheet entry.
+const String mtNewGroupEntry = 'New MeshTrack group';
+const String mtNewGroupEntryBody = 'A private channel for friends to see each other on the Drive map';
+
 // ------------------------------------------------------------------------------------------------ sheet header
 
 /// The status line at the top of the Group sheet; null when not sharing.

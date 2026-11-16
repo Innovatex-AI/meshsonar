@@ -103,6 +103,18 @@ class FakeOps extends ChangeNotifier implements MeshTrackGroupOps {
   @override
   bool isGroup(int channelId) => svc.state.group(channelId) != null;
 
+  /// The Drive panel's "New" tag (the real ops arm it on the first drive).
+  bool newTag = false;
+  @override
+  bool get panelNew => newTag;
+  @override
+  Future<void> markPanelSeen() async {
+    if (!newTag) return;
+    newTag = false;
+    calls.add('panelSeen');
+    notifyListeners();
+  }
+
   @override
   Future<void> setIntroSeen() async {
     introSeen = true;

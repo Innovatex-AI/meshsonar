@@ -1,4 +1,4 @@
-// The MeshTrack Group sheet (plan 5.4, 5.5, 7, 8). Opened from the Drive chip, Settings > MeshTrack > Groups and the
+// The MeshTrack Group sheet (plan 5.4, 5.5, 7, 8). Opened from the Drive panel (row and Dock button), Chat > Channels, Settings > MeshTrack > Groups and the
 // friends layer. Two pages in one sheet:
 //   * Groups: one card per group (name, "3 heard in the last 30 min", See and Share switches, the inline This drive /
 //     1 hour / Until I stop control while Share is on, the group menu: Invite, Start fresh, Leave, Share on every drive).
@@ -37,6 +37,7 @@ const double kMtSidePanelWidth = 700;
 Future<void> showGroupSheet(BuildContext context, {int? channelId}) async {
   final b = MeshTrackUi.read(context);
   if (b == null) return;
+  unawaited(b.ops.markPanelSeen()); // MeshTrack found: the Drive panel's "New" tag goes
   Widget content(BuildContext ctx, ScrollController sc) => MeshTrackScope(binding: b, child: GroupSheet(controller: sc, initialGroup: channelId));
   if (MediaQuery.sizeOf(context).width >= kMtSidePanelWidth) {
     AppHaptics.light();
@@ -44,6 +45,27 @@ Future<void> showGroupSheet(BuildContext context, {int? channelId}) async {
     return;
   }
   await showAppSheet<void>(context, detents: formSheetDetents(context), builder: content);
+}
+
+/// A Share switch for [g] (the Group sheet's and the Drive panel's): on = the intro first (once), then share with
+/// [duration] (the sheet's default, This drive, unless given); a refusal (3 groups, not on the radio) is one toast. Off =
+/// stop at once with Undo, which shares again with the same duration.
+Future<void> setGroupShare(BuildContext context, MeshTrackBinding b, MtGroupView g, bool on, {MtShareDuration duration = MtShareDuration.thisDrive}) async {
+  if (on) {
+    if (!await ensureMeshTrackIntro(context, b.ops)) return;
+    if (!context.mounted) return;
+    mtShowResult(context, b.service.setShare(g.channelId, true, duration: duration));
+    return;
+  }
+  final before = g.config.duration;
+  b.service.setShare(g.channelId, false);
+  runWithUndo(context, mtStoppedSharingWith(g.name), commit: () async {}, onUndo: () => b.service.setShare(g.channelId, true, duration: before));
+}
+
+/// A refused MeshTrack command as one error toast; nothing for ok.
+void mtShowResult(BuildContext context, MtResult r) {
+  final t = mtResultText(r);
+  if (t != null) showAppToast(context, t, kind: AppToastKind.error);
 }
 
 /// The iPad side panel: slides in from the right edge, the map stays visible on the left.
@@ -259,22 +281,9 @@ class _GroupSheetState extends State<GroupSheet> {
     ];
   }
 
-  Future<void> _setShare(BuildContext context, MeshTrackBinding b, MtGroupView g, bool on) async {
-    if (on) {
-      if (!await ensureMeshTrackIntro(context, b.ops)) return;
-      if (!context.mounted) return;
-      _toast(context, b.service.setShare(g.channelId, true));
-      return;
-    }
-    final before = g.config.duration;
-    b.service.setShare(g.channelId, false);
-    runWithUndo(context, mtStoppedSharingWith(g.name), commit: () async {}, onUndo: () => b.service.setShare(g.channelId, true, duration: before));
-  }
+  Future<void> _setShare(BuildContext context, MeshTrackBinding b, MtGroupView g, bool on) => setGroupShare(context, b, g, on);
 
-  void _toast(BuildContext context, MtResult r) {
-    final t = mtResultText(r);
-    if (t != null) showAppToast(context, t, kind: AppToastKind.error);
-  }
+  void _toast(BuildContext context, MtResult r) => mtShowResult(context, r);
 
   Future<void> _menu(BuildContext context, MeshTrackBinding b, MtGroupView g) async {
     final every = g.config.shareEveryDrive;

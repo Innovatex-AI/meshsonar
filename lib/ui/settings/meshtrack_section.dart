@@ -12,14 +12,13 @@ import '../meshtrack/meshtrack_copy.dart';
 import 'settings_index.dart';
 import 'settings_kit.dart';
 
-const String meshTrackHelp = 'See friends on the map while you drive. Positions go only to your group over your radio, '
-    'never to MeshSonar\'s servers, and never from inside your privacy zones.';
+const String meshTrackHelp = 'See friends on the map while you drive. Your position goes only to your group, never to MeshSonar\'s servers.';
 
 /// The Settings entries of this section, spread into settings_index.dart in display order.
 const List<SettingsEntry> meshTrackSettingsEntries = [
   SettingsEntry('meshtrack-groups', 'meshtrack', 'Groups',
       'Your MeshTrack groups: whose positions you see and who gets yours. Make, join, invite or leave a group.',
-      keywords: ['meshtrack', 'friends', 'group', 'family', 'share', 'location', 'invite', 'join', 'qr', 'map', 'crew'],
+      keywords: ['meshtrack', 'track', 'tracking', 'friends', 'group', 'family', 'share', 'share location', 'location', 'position', 'where', 'invite', 'join', 'new group', 'qr', 'map', 'crew'],
       available: meshTrackAvailable),
   SettingsEntry('meshtrack-position', 'meshtrack', 'Position friends see',
       'Exact sends where you are to within a few steps. Approximate sends only the neighbourhood.',

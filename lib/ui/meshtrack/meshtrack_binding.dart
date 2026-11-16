@@ -1,7 +1,7 @@
 // How the MeshTrack screens reach the app: the one MeshTrackService (core), the group operations (app wiring), the units,
 // the phone's position, my radio name and the chat controller. The app builds it from AppState; widget tests put a
-// [MeshTrackScope] above the screen instead. Null = MeshTrack is off in this build (AppFlags.meshTrack false): the chip,
-// the Settings section and the channel-detail row are then hidden.
+// [MeshTrackScope] above the screen instead. Null = MeshTrack is off in this build (AppFlags.meshTrack false): the Drive
+// panel row and Dock button, the Chats card, the Settings section and the channel-detail row are then hidden.
 import 'package:flutter/widgets.dart';
 import 'package:latlong2/latlong.dart';
 
