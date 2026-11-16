@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'app/app_state.dart';
+import 'app/benign_errors.dart' show installBenignErrorFilter;
 import 'alerts/alerts_runtime.dart';
 import 'app/chat_wiring.dart';
 import 'app/map_definition_wiring.dart';
@@ -14,6 +15,8 @@ import 'ui/map/offline_basemap.dart' show OfflineBasemap;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // A map disposed while its tiles load cancels them (vector_map_tiles): harmless, never a crash. Everything else is reported.
+  installBenignErrorFilter();
   try {
     final services = await buildRealServices();
     // The map's remembered choices (layers, follow options) are read before the first frame so the Drive map never flashes defaults.

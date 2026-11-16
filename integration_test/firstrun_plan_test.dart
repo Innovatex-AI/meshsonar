@@ -38,7 +38,7 @@ void main() {
     }
     await openShellTab(t, 'Plan');
     await pumpFor(t, const Duration(seconds: 6));
-    final list = find.descendant(of: find.byKey(const Key('plan-list')), matching: find.byType(Scrollable)).first;
+    final list = find.descendant(of: find.byKey(const Key('planner-sheet-body')), matching: find.byType(Scrollable)).first;
     await t.drag(list, const Offset(0, -500));
     await pumpFor(t, const Duration(seconds: 1));
     await shot(t, 'plan-scrolled');
@@ -56,10 +56,10 @@ void main() {
     await pumpFor(t, const Duration(seconds: 2));
     await openShellTab(t, 'Plan');
     await pumpFor(t, const Duration(seconds: 10));
-    await t.drag(find.byKey(const Key('plan-list')), const Offset(0, 300));
+    await t.drag(find.byKey(const Key('planner-sheet-body')), const Offset(0, 300));
     await pumpFor(t, const Duration(seconds: 1));
     await shot(t, 'plan-with-position');
-    await t.drag(find.byKey(const Key('plan-list')), const Offset(0, -420));
+    await t.drag(find.byKey(const Key('planner-sheet-body')), const Offset(0, -420));
     await pumpFor(t, const Duration(seconds: 1));
     await shot(t, 'plan-with-position-2');
     // ignore: avoid_print

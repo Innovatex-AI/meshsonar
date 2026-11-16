@@ -38,7 +38,7 @@ void main() {
     await openShellTab(t, 'Plan');
     await pumpFor(t, const Duration(seconds: 4));
     await shot(t, 'm0-plan-top');
-    final planList = find.descendant(of: find.byKey(const Key('plan-list')), matching: find.byType(Scrollable)).first;
+    final planList = find.descendant(of: find.byKey(const Key('planner-sheet-body')), matching: find.byType(Scrollable)).first;
     await t.scrollUntilVisible(find.byKey(const Key('plan-check')), 200, scrollable: planList);
     await shot(t, 'm0-plan-tools');
     await t.tap(find.byKey(const Key('plan-airtime')));
