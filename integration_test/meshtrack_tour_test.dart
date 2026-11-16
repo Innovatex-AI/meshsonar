@@ -190,14 +190,28 @@ void main() {
       if (!await waitFor(t, field)) _fail('no New group screen');
       await shot(t, 'mt-05-new-group');
       await tapKey(t, 'mt-create');
-      if (!await waitFor(t, find.byKey(const Key('mt-invite-qr')), timeout: const Duration(seconds: 20))) _fail('Create did not show the invite');
+      final qr = find.byKey(const Key('mt-invite-qr'));
+      final err = find.byWidgetPredicate((w) => w.key == const Key('mt-name-error') || w.key == const Key('mt-op-error'));
+      await _until(t, () => qr.evaluate().isNotEmpty || err.evaluate().isNotEmpty, const Duration(seconds: 20));
+      if (qr.evaluate().isEmpty && err.evaluate().isNotEmpty) {
+        // The radio already has a channel with the default name (an earlier run left it there; channels outlive a
+        // reinstall on the radio and in the Keychain): show the error, then create under another name.
+        final why = find.descendant(of: err.first, matching: find.byType(Text));
+        // ignore: avoid_print
+        print('NOTE create refused: ${why.evaluate().isEmpty ? '?' : t.widget<Text>(why.first).data}');
+        await shot(t, 'mt-05b-create-refused');
+        await t.enterText(field, 'Ride crew ${DateTime.now().millisecondsSinceEpoch % 1000}');
+        await pumpFor(t, const Duration(milliseconds: 400));
+        await tapKey(t, 'mt-create');
+      }
+      if (!await waitFor(t, qr, timeout: const Duration(seconds: 20))) _fail('Create did not show the invite');
       await shot(t, 'mt-06-invite');
       await tapKey(t, 'mt-invite-done');
     });
 
     await step(t, 'use-saturday-crew', () async {
       await openGroupSheet(t);
-      await tapKey(t, 'mt-existing');
+      await tapKey(t, find.byKey(const Key('mt-existing')).evaluate().isNotEmpty ? 'mt-existing' : 'mt-empty-existing');
       await tapText(t, simulatedFriendsChannelName, within: find.byKey(const Key('mt-use-existing')));
       if (!await _until(t, () => _groupId(t, simulatedFriendsChannelName) != null, const Duration(seconds: 15))) {
         _fail('"$simulatedFriendsChannelName" did not become a group');
