@@ -298,6 +298,8 @@ const Map<String, String> eventWord = {
   'repeater_moved': 'Repeater moved',
   'link_new': 'New link',
   'link_lost': 'Link lost',
+  // server 0143 folds a link that comes and goes within a day into one row (same words as the site)
+  'link_flap': 'Link on and off',
 };
 
 // ---- region-status (DEF-2): one entry per dataset key
