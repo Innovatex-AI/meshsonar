@@ -609,7 +609,7 @@ class _MeetRow extends StatelessWidget {
               child: ExcludeSemantics(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(title, style: AppType.body.copyWith(color: c.textPrimary)),
-                  Text(sub, style: AppType.footnote.copyWith(color: c.textMuted)),
+                  Text(mtKeepTogether(sub), style: AppType.footnote.copyWith(color: c.textMuted)),
                 ]),
               ),
             ),

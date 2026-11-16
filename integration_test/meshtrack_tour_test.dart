@@ -134,6 +134,13 @@ void main() {
     await popToRoots(t);
     if (!_app(t).connected) _fail('the simulated radio did not connect');
     final connectedAt = DateTime.now();
+    // Groups live in the Keychain and survive a reinstall (as on a phone): leave any from an earlier run, so the tour
+    // starts from "No groups yet". Leave keeps the channels and their chat.
+    final ops = _app(t).meshTrackGroups;
+    for (final g in [..._svc(t).state.groups]) {
+      await ops?.stopUsingChannel(g.channelId);
+    }
+    await pumpFor(t, const Duration(seconds: 1));
 
     final wide = MediaQuery.sizeOf(t.element(find.byType(Scaffold).first)).width >= kMtSidePanelWidthForTour;
     if (_ipad || wide) {
@@ -297,7 +304,9 @@ void main() {
       final me = _app(t).phoneFix?.fix;
       final pts = [for (final f in g.friends) LatLng(f.lat, f.lon), if (me != null) LatLng(me.lat, me.lon)];
       final c = LatLng(pts.map((p) => p.latitude).reduce((a, b) => a + b) / pts.length, pts.map((p) => p.longitude).reduce((a, b) => a + b) / pts.length);
-      MainMapFocus.request(c, 13);
+      // Centre a little east of the middle: the map buttons sit on the right edge and covered a pin there.
+      final span = pts.map((p) => p.longitude).reduce((a, b) => a > b ? a : b) - pts.map((p) => p.longitude).reduce((a, b) => a < b ? a : b);
+      MainMapFocus.request(LatLng(c.latitude, c.longitude + span * 0.12), 12.6);
       await pumpFor(t, const Duration(seconds: 3));
       if (find.byWidgetPredicate((w) => w.key is ValueKey && '${(w.key as ValueKey).value}'.startsWith('map-friend-')).evaluate().isEmpty) {
         _fail('no friend pins on the Drive map');
@@ -313,6 +322,12 @@ void main() {
       if (find.byKey(Key('mt-open-$id')).evaluate().isNotEmpty) await tapKey(t, 'mt-open-$id');
       if (!await waitFor(t, find.byKey(const Key('mt-people')))) _fail('no people page');
       await shot(t, 'mt-17b-people-later');
+      final jo = find.byKey(const Key('mt-friend-Jo N8JO'));
+      if (jo.evaluate().isNotEmpty) {
+        await Scrollable.ensureVisible(t.element(jo.first), alignment: 0.6);
+        await pumpFor(t, const Duration(milliseconds: 500));
+        await shot(t, 'mt-17c-people-parked');
+      }
       await popToRoots(t);
     });
 
@@ -374,7 +389,8 @@ void main() {
       await tapKey(t, 'conv-menu-button');
       await tapKey(t, 'menu-info');
       final use = find.byKey(const Key('mt-use-switch'));
-      if (!await waitFor(t, use, timeout: const Duration(seconds: 6))) _fail('no MeshTrack section on the channel page');
+      // The channel page is a lazily built list: the MeshTrack section exists once scrolled near.
+      if (!await scrollToFind(t, use, find.byKey(const Key('channel-detail')))) _fail('no MeshTrack section on the channel page');
       await Scrollable.ensureVisible(t.element(use.first), alignment: 0.3);
       await pumpFor(t, const Duration(milliseconds: 600));
       await shot(t, 'mt-23-channel-detail');
