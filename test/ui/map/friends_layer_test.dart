@@ -261,6 +261,46 @@ void main() {
       await svc.dispose();
     });
 
+    testWidgets('long-press "Meet here" in Approximate goes at 8 digits; the zone gate runs on the pressed point', (tester) async {
+      final sent = <String>[];
+      var zones = const PrivacyZones([]);
+      final svc = MeshTrackService(
+        sendChannelText: (_, t) async {
+          sent.add(t);
+          return true;
+        },
+        budget: (_, _) => MtBudget.ok,
+        zones: () => zones,
+        selfName: () => 'Me',
+        now: () => _now,
+      );
+      svc.addGroup(7, 'Family');
+      svc.setRadioConnected(true);
+      svc.setPositionMode(MtPositionMode.approximate);
+      var at = (lat: 39.5, lon: -83.5);
+      await tester.pumpWidget(MaterialApp(
+        theme: meshSonarTheme(Brightness.dark),
+        home: Builder(builder: (context) => Scaffold(body: Center(child: TextButton(onPressed: () => showMeetHereMenu(context, svc, at.lat, at.lon), child: const Text('hold'))))),
+      ));
+      await tester.tap(find.text('hold'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('meet-here-7')));
+      await tester.pumpAndSettle();
+      expect(sent.single, 'MT1 !${PlusCode.encode(39.5, -83.5, codeLength: kPlusCodeApproxDigits)}');
+      await tester.pumpAndSettle(const Duration(seconds: 6));
+      // A pressed point 150 m outside a zone edge (inside the 200 m buffer) is refused.
+      zones = const PrivacyZones([PrivacyZone(label: 'Home', lat: 40.0, lon: -83.0, radiusM: 300)]);
+      at = (lat: 40.0, lon: -83.0 + 450 / (111320 * math.cos(40 * math.pi / 180)));
+      await tester.tap(find.text('hold'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('meet-here-7')));
+      await tester.pumpAndSettle();
+      expect(sent, hasLength(1));
+      expect(find.textContaining('privacy zones'), findsOneWidget);
+      await tester.pumpAndSettle(const Duration(seconds: 6));
+      await svc.dispose();
+    });
+
     testWidgets('long-press "Meet here" inside a privacy zone says so and sets nothing', (tester) async {
       final svc = MeshTrackService(
         sendChannelText: (_, _) async => true,

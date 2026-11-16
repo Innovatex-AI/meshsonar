@@ -81,6 +81,42 @@ void main() {
     await rig.done(tester);
   });
 
+  testWidgets('Show position messages on: channel detail opens the display-only Position messages list (heard and sent)', (tester) async {
+    phone(tester);
+    final rig = MtRig();
+    final ch = await kit.channel(2, 'Club');
+    rig.svc
+      ..addGroup(ch.id!, 'Club')
+      ..setRadioConnected(true);
+    rig.hear(ch.id!, 'Sam', speed: 50);
+    rig.fix();
+    rig.ops.introSeen = true;
+    rig.svc.sendMyPosition(ch.id!);
+    await tester.pumpWidget(rig.host(ChannelDetailScreen(controller: kit.controller, channelId: ch.id!)));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.byKey(const Key('mt-show-positions')), 200, scrollable: find.byType(Scrollable).first);
+    expect(find.byKey(const Key('mt-position-messages-row')), findsNothing, reason: 'only while the switch is on');
+    await tester.ensureVisible(find.byKey(const Key('mt-show-positions')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('mt-show-positions')));
+    await tester.pumpAndSettle();
+    expect(rig.ops.showPositions, {ch.id}, reason: 'switch on');
+    await tester.drag(find.byKey(const Key('channel-detail')), const Offset(0, -200));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('mt-position-messages-row')), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('mt-position-messages-row')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('mt-position-messages-row')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('mt-position-messages')), findsOneWidget);
+    expect(find.byKey(const Key('mt-position-messages-note')), findsOneWidget);
+    expect(find.text('Sam'), findsOneWidget);
+    expect(find.textContaining('Position, 50 km/h heading'), findsOneWidget);
+    expect(find.text('You'), findsOneWidget, reason: 'my own sent position is listed too');
+    expect(kit.controller.service.page(ch.convKey).messages, isEmpty, reason: 'never stored as chat');
+    await rig.done(tester);
+  });
+
   testWidgets('channel detail: an open channel gets no MeshTrack rows', (tester) async {
     phone(tester);
     final rig = MtRig();

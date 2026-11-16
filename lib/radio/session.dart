@@ -9,6 +9,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'claim_radio.dart';
+import 'command_queue.dart' show CommandPriority;
 import 'inbound.dart';
 import 'ping_gate.dart';
 import 'radio_api.dart';
@@ -74,8 +75,9 @@ abstract class RadioSession implements ClaimRadio {
 
   /// Sends [text] on channel slot [channelIndex] as a user message (priority P0: never delayed by the airtime budget).
   /// [scope] is set on the radio right before the flood is queued; null leaves scope alone. A channel send has no ACK in
-  /// the protocol: [SendStatus.accepted] means the radio will transmit it, nothing more.
-  Future<SendResult> sendChannelMessage(int channelIndex, String text, {FloodScope? scope});
+  /// the protocol: [SendStatus.accepted] means the radio will transmit it, nothing more. [priority] is the command queue
+  /// class: user (default) for a typed message; MeshTrack's silent sends pass [CommandPriority.ping].
+  Future<SendResult> sendChannelMessage(int channelIndex, String text, {FloodScope? scope, int priority = CommandPriority.user});
 
   /// Sends a direct message to the contact [publicKeyHex] (64 hex chars; the radio must have the contact, see
   /// [addOrUpdateContact]). The result carries the ack tag; a [SendConfirmedEvent] with that tag on [events] means

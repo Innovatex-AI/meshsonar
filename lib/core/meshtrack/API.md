@@ -46,14 +46,16 @@ The clock (`now:`) and randomness (`random:`) are injected. Tests use fakeAsync.
 | Command | Result |
 |---|---|
 | `addGroup(channelId, name)` | New, Join or Use with MeshTrack. Check `MeshTrackGroup.eligible` first. |
-| `setShare(id, on, duration: thisDrive/oneHour/untilStopped)` | `MtResult.ok / tooManyGroups (max 3) / notOnRadio`. Turning Share off sends `MT1 x` once. |
+| `setShare(id, on, duration: thisDrive/oneHour/untilStopped)` | `MtResult.ok / tooManyGroups (max 3) / notOnRadio`. Turning Share off sends `MT1 x` once. On a group that already shares it only changes the duration (same session, no extra send). Off then on (Undo) keeps the airtime floor from the last real send. |
 | `setSee(id, on)`, `setShareEveryDrive(id, on)` | |
 | `sendMyPosition(id)` | One shot. Returns `ok / privacyZone / zonesNotLoaded / waitingForGps / radioDisconnected`. |
 | `askWhereAreYou(id, {name})` | Returns `ok`, or `tooSoon` within 60 s. `MtGroupView.askedUntil` drives the "Asked" label. |
-| `meetHere(id, lat, lon, {label})`, `clearMeet(id)` | Meet pins obey the privacy zones. |
-| `leaveGroup(id) -> MtGroupConfig?`, `restoreGroup(config)` | Leave, and its Undo. Leave sends `MT1 x` and forgets the group's friends. |
+| `meetHere(id, lat, lon, {label, accuracyM})`, `clearMeet(id)` | Meet pins obey the privacy zones (buffer + `accuracyM`: the phone fix's accuracy for "where I am", 0 for a map point). Approximate mode sends the pin at 8 digits. |
+| `leaveGroup(id) -> MtGroupConfig?`, `restoreGroup(config)` | Leave, and its Undo. Leave sends `MT1 x` (held for the radio for up to 10 min when it is gone) and forgets the group's friends; `meshtrack_last.json` is written at once. |
+| `positionMessages(id) -> List<MtLoggedMessage>` | "Show position messages": the group's MeshTrack messages heard and sent in the last 24 h, newest first, memory only (never chat). |
 | `setPositionMode(exact/approximate)`, `setRate(smart/lowTraffic)`, `setAnswerRequests(bool)` | Settings > MeshTrack. Persist them in app Settings and pass them in at start. |
 | `clearLastKnown()` | Delete my data. |
+| `whenIdle(id, {timeout})` | Completes when nothing for that channel is queued or in flight (or after 20 s). Start fresh awaits it after `leaveGroup`, so the old group's `MT1 x` goes under the old key before the channel is rekeyed. |
 
 ## Outputs
 - `state` (`MeshTrackState`), `addListener` / `removeListener` (Listenable shape), and the `states` stream. Fields:
@@ -67,7 +69,8 @@ The clock (`now:`) and randomness (`random:`) are injected. Tests use fakeAsync.
   - `MtSharingStopped(channelId, cause)`: toast "Stopped sharing: radio disconnected" with Share again, or the Undo of a user stop.
 
 ## Rules the service enforces
-- Smart rate, the airtime floor, and multi-group sends 3 s apart.
+- Smart rate, the airtime floor, and multi-group sends 3 s apart. An airtime refusal backs off for the floor and is logged once per state change; the wiring's pre-check peeks (`TrackTxGate.peekTrack`), so the arbiter counts one refusal per attempt.
+- A moving position under 1 km/h carries no `s` (`s0` is the parked message only).
 - No send inside a ping listen window, within 3 s of a due ping, or less than 1 s after the window closes.
 - Privacy zones plus a 200 m buffer (plus the fix accuracy). Zones not loaded means nothing is sent.
 - Accuracy must be 100 m or better and the fix at most 30 s old.

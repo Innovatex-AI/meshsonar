@@ -3,6 +3,7 @@
 // and speeds go through Units.
 import '../../core/heard.dart' show compass;
 import '../../core/meshtrack/meshtrack_service.dart';
+import '../../core/meshtrack/mt_wire.dart';
 import '../../core/meshtrack/smart_beacon.dart' show bearingDeg;
 import '../../core/privacy_zones.dart' show distanceM;
 import '../../core/units.dart';
@@ -239,3 +240,31 @@ String mtRateLabel(MtRate r) => switch (r) {
       MtRate.smart => 'Smart',
       MtRate.lowTraffic => 'Low traffic',
     };
+
+// ------------------------------------------------------------------------------------------------ position messages
+
+/// One line in plain words for a MeshTrack message in "Position messages" (channel detail): "Position, 50 km/h heading
+/// E", "Parked", "Asked where everyone is", "Meet-up point: Big oak", "Stopped sharing".
+String mtMessageSummary(MtLoggedMessage m, Units units) {
+  final msg = m.message;
+  return switch (msg) {
+    MtPosition(parked: true) => 'Parked',
+    MtPosition(:final speedKmh?, :final courseDeg?) when speedKmh >= 5 =>
+      'Position, ${units.speed(speedKmh * 1000 / 3600)} heading ${compass(courseDeg.toDouble())}',
+    MtPosition(:final speedKmh?) when speedKmh >= 5 => 'Position, ${units.speed(speedKmh * 1000 / 3600)}',
+    MtPosition() => 'Position',
+    MtRequest(name: null) => 'Asked where everyone is',
+    MtRequest(:final name?) => 'Asked where $name is',
+    MtMeet(label: final l?) when l.isNotEmpty => 'Meet-up point: $l',
+    MtMeet() => 'Meet-up point',
+    MtMeetClear() => 'Meet-up point cleared',
+    MtStop() => 'Stopped sharing',
+    null => 'Position (another app)',
+  };
+}
+
+/// The note above the list: what this list is and is not.
+const String mtPositionMessagesNote =
+    'MeshTrack updates heard in this channel in the last 24 hours. They are shown here only: never saved in the chat, '
+    'never notified, and not in backups, exports or search.';
+

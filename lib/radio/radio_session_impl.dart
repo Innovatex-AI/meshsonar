@@ -187,7 +187,7 @@ class LinkRadioSession implements RadioSession, RepeaterAdminRadio, RadioStatsSo
   }
 
   @override
-  Future<SendResult> sendChannelMessage(int channelIndex, String text, {FloodScope? scope}) async {
+  Future<SendResult> sendChannelMessage(int channelIndex, String text, {FloodScope? scope, int priority = CommandPriority.user}) async {
     final mc = _mc;
     if (mc == null || !mc.isConnected) return const SendResult.failed(SendFailure.notConnected, detail: 'the radio is not connected');
     final bytes = utf8.encode(text).length;
@@ -201,7 +201,7 @@ class LinkRadioSession implements RadioSession, RepeaterAdminRadio, RadioStatsSo
     var retried = false;
     while (true) {
       try {
-        final f = await mc.sendChannelFrame(channelIndex, text, priority: CommandPriority.user, scope: scope);
+        final f = await mc.sendChannelFrame(channelIndex, text, priority: priority, scope: scope);
         final ts = mc.lastAttemptTimestamp;
         if (f is OkFrame || f is SentFrame) return SendResult.accepted(ts);
         // The firmware answers NOT_FOUND for a bad slot AND for a full packet pool (MyMesh.cpp 1190-1195): for a slot that

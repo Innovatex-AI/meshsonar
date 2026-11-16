@@ -21,6 +21,7 @@ import '../drive_stats.dart' show formatDuration;
 import '../meshtrack/group_sheet.dart' show showGroupSheet;
 import '../meshtrack/meshtrack_binding.dart';
 import '../meshtrack/meshtrack_copy.dart';
+import '../meshtrack/meshtrack_intro.dart' show ensureMeshTrackIntro;
 import '../ping_log_screen.dart' show openPingLog;
 import '../region/region_switch_sheet.dart' show showNearestRegionsSheet;
 import '../report/drive_report_screen.dart';
@@ -586,7 +587,12 @@ class _MeshTrackChipState extends State<MeshTrackChip> {
     if (svc == null) return;
     switch (e) {
       case MtAskedWhileNotSharing(:final channelId, :final name):
-        showAppToast(context, mtAskedToast(name), actionLabel: 'Send my position', onAction: () {
+        showAppToast(context, mtAskedToast(name), actionLabel: 'Send my position', onAction: () async {
+          // A one-shot share: the intro comes first, as for the Share switch.
+          if (!mounted) return;
+          final ops = MeshTrackUi.read(context)?.ops;
+          if (ops == null || !await ensureMeshTrackIntro(context, ops)) return;
+          if (!mounted) return;
           final r = svc.sendMyPosition(channelId);
           final t = mtResultText(r);
           if (mounted) showAppToast(context, t ?? 'Your position is on its way.', kind: t == null ? AppToastKind.success : AppToastKind.error);

@@ -17,6 +17,25 @@ void main() {
     expect(thirdPartyNoticeLinks['Open-Meteo'], Uri.parse('https://open-meteo.com'));
   });
 
+  test('MeshTrack credits: Open Location Code (Apache-2.0) and MeshCore-TEAM (CC BY-NC-SA 4.0, format only, no code)', () {
+    final olc = thirdPartyNotices.where((n) => n.name == 'Open Location Code').single;
+    expect(olc.license, contains('Apache-2.0'));
+    expect(olc.license, contains('google/open-location-code'));
+    final team = thirdPartyNotices.where((n) => n.name == 'MeshCore-TEAM').single;
+    expect(team.license, contains('CC BY-NC-SA 4.0'));
+    expect(team.note, contains('no code used'));
+    expect(thirdPartyNotices.map((n) => n.name), containsAllInOrder(['pdf', 'Open Location Code', 'MeshCore-TEAM', 'Open-Meteo']));
+    for (final n in thirdPartyNotices) {
+      expect('${n.name} ${n.license} ${n.note}'.toUpperCase(), isNot(contains('APRS')), reason: 'never APRS in product copy');
+    }
+    final md = File('THIRD_PARTY_NOTICES.md').readAsStringSync();
+    expect(md, contains('### Open Location Code'));
+    expect(md, contains('https://github.com/google/open-location-code'));
+    expect(md, contains('### MeshCore-TEAM'));
+    expect(md, contains('No MeshCore-TEAM code is copied'));
+    expect(File('test/fixtures/olc/LICENSE').readAsStringSync(), contains('Apache License'));
+  });
+
   test('THIRD_PARTY_NOTICES.md carries the credit line and the licence', () {
     final md = File('THIRD_PARTY_NOTICES.md').readAsStringSync();
     expect(md, contains('Weather data by Open-Meteo.com (CC BY 4.0)'));

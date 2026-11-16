@@ -16,6 +16,7 @@ import '../design/avatar_style.dart';
 import '../design/tokens.dart';
 import '../meshtrack/group_sheet.dart' show showGroupSheet;
 import '../meshtrack/meshtrack_binding.dart';
+import '../meshtrack/position_messages_screen.dart' show openPositionMessages;
 import '../settings/settings_kit.dart' show runWithUndo;
 import '../radio/inset_list.dart';
 import 'qr_widgets.dart';
@@ -209,7 +210,7 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
       InsetGroup(
         header: 'MeshTrack',
         footer: group
-            ? 'Friends in this channel can see each other on the map while they share. Position updates stay out of the chat unless you show them.'
+            ? 'Friends in this channel can see each other on the map while they share. Position updates never go into the chat; Show position messages lists them here.'
             : 'See friends from this channel on your map while they share, and share yours when you choose.',
         rows: [
           AppSwitchTile(
@@ -224,13 +225,20 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
             AppSwitchTile(
               switchKey: const Key('mt-show-positions'),
               title: 'Show position messages',
-              subtitle: 'Shows the MeshTrack updates in this chat',
+              subtitle: 'Lists the MeshTrack updates of this channel here. They are never saved in the chat.',
               value: b.ops.showPositionMessages(id),
               onChanged: (v) async {
                 await b.ops.setShowPositionMessages(id, v);
                 if (mounted) setState(() {});
               },
             ),
+            if (b.ops.showPositionMessages(id))
+              InsetRow(
+                key: const Key('mt-position-messages-row'),
+                title: 'Position messages',
+                value: '${b.service.positionMessages(id).length}',
+                onTap: () => openPositionMessages(context, id, ch.name),
+              ),
           ],
         ],
       ),
