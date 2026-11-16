@@ -250,11 +250,20 @@ class TelemetryTool with ToolChanges {
     TelemetryResult fail(TelemetryStatus s, String d) => TelemetryResult(s, who, now, keyHex: c.publicKeyHex, detail: d);
     if (cancel != null && cancel.isCancelled) return fail(TelemetryStatus.cancelled, 'Cancelled.');
     if (!radio.isConnected) return fail(TelemetryStatus.notConnected, 'No radio is connected.');
+    if (user) {
+      // A person's tap is never refused for the tool's spacing: it waits out the cooldown (and a request already
+      // running) and then goes, a few seconds later. Cancel and a lost radio still end it at once.
+      if (!await _waitTurn(cancel)) {
+        return (cancel != null && cancel.isCancelled)
+            ? fail(TelemetryStatus.cancelled, 'Cancelled.')
+            : fail(TelemetryStatus.notConnected, 'No radio is connected.');
+      }
+    }
     if (_busy) return fail(TelemetryStatus.tooSoon, 'A telemetry request is already running.');
     final wait = cooldown();
     if (wait != null) return fail(TelemetryStatus.tooSoon, 'Wait ${wait.inSeconds + 1} s before asking again.');
     _busy = true;
-    _lastAt = now;
+    _lastAt = _clock();
     notifyChanged();
     final key = fromHex(c.publicKeyHex);
     final waiter = _PushWaiter(radio.pushes, (f) {
@@ -298,6 +307,32 @@ class TelemetryTool with ToolChanges {
       _busy = false;
       notifyChanged();
     }
+  }
+
+  /// Waits until no telemetry request is running and the cooldown is over. False when cancelled or the radio went away.
+  Future<bool> _waitTurn(TelemetryCancel? cancel) async {
+    while (true) {
+      if (cancel != null && cancel.isCancelled) return false;
+      if (!radio.isConnected) return false;
+      final left = _busy ? const Duration(milliseconds: 250) : cooldown();
+      if (left == null) return true;
+      final done = Completer<void>();
+      final timer = Timer(left, () {
+        if (!done.isCompleted) done.complete();
+      });
+      cancel?._on(() {
+        timer.cancel();
+        if (!done.isCompleted) done.complete();
+      });
+      await done.future;
+    }
+  }
+
+  /// Delete my data: forgets every answer kept for the Latest list, the Stats sheet and the sparklines (positions included).
+  void clearHistory() {
+    _latest.clear();
+    _history.clear();
+    notifyChanged();
   }
 
   TelemetryResult _fromLpp(String who, String? key, bool self, DateTime at, Uint8List lpp) {

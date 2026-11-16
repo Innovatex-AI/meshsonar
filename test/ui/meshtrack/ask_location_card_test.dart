@@ -236,6 +236,21 @@ void main() {
     await r.pass(tester, const Duration(seconds: 31));
   });
 
+  testWidgets('review fix 3: after 2 h the answer and Open on map are gone (the pin is too)', (tester) async {
+    final r = Rig()..answers(maya, [...lppVoltage(3.9), ...lppGps(mayaLat, mayaLon, 268)]);
+    await pumpCard(tester, maya, r.env());
+    await tapAsk(tester, 'ask-location');
+    await r.pass(tester, const Duration(seconds: 3));
+    expect(find.byKey(const Key('ask-location-open')), findsOneWidget);
+    await r.pass(tester, const Duration(hours: 1, minutes: 59));
+    expect(find.byKey(const Key('ask-location-open')), findsOneWidget);
+    await r.pass(tester, const Duration(minutes: 1, seconds: 1));
+    expect(find.byKey(const Key('ask-location-open')), findsNothing);
+    expect(find.byKey(const Key('ask-location-answer')), findsNothing);
+    expect(find.text('Ask for location'), findsOneWidget);
+    r.hub.dispose();
+  });
+
   group('contact screen', () {
     Future<void> pumpProfile(WidgetTester tester, ContactsRig rig, String key, AskLocationEnv env) async {
       tester.view.physicalSize = const Size(402 * 3, 874 * 3);

@@ -13,6 +13,7 @@ import 'package:meshsonar/radio/protocol.dart';
 import 'package:meshsonar/radio/remote_request_queue.dart';
 import 'package:meshsonar/radio/tools/ask_location.dart';
 import 'package:meshsonar/radio/tools/lpp.dart';
+import 'package:meshsonar/radio/tools/radio_tools.dart';
 import 'package:meshsonar/radio/tools/telemetry_tool.dart';
 import 'package:meshsonar/radio/tools/tool_frames.dart';
 import 'package:meshsonar/radio/tx_arbiter.dart';
@@ -310,6 +311,117 @@ void main() {
       final people = [for (final c in (await rig.session.getContacts()).contacts) if (c.type == AdvType.chat) c.name];
       expect(people, ['Ann KE8ANN', 'Bob W8BOB']);
       await rig.close();
+    });
+  });
+
+  group('review fixes', () {
+    final keyB = Uint8List.fromList(List.generate(32, (i) => 0x10 + i));
+    final keyC = Uint8List.fromList(List.generate(32, (i) => 0x60 + i));
+    String hex(Uint8List k) => k.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    RadioContact person(Uint8List k, String name) => RadioContact(publicKeyHex: hex(k), type: AdvType.chat, outPath: Uint8List(0), name: name);
+
+    /// Every request is answered by the contact it names, after 1 s: Bob with a position, Cara without one.
+    void answerByKey(FakeToolsRadio radio) {
+      radio.onSend = (f) {
+        final prefix = f.sublist(4, 10);
+        final lpp = prefix[0] == keyB[0] ? [...voltRecord, ...gpsRecord] : [...voltRecord, ...tempRecord];
+        Timer(const Duration(seconds: 1), () => radio.push(Uint8List.fromList([0x8B, 0, ...prefix, ...lpp])));
+        return const SentFrame(flood: false, tag: 1, estTimeoutMs: 1800);
+      };
+    }
+
+    test('1. asking a second person within the 10 s tool spacing waits a few seconds and gets the answer (never "busy")', () {
+      fakeAsync((fa) {
+        final t0 = DateTime(2026, 11, 16, 12);
+        DateTime clock() => t0.add(fa.elapsed);
+        final radio = FakeToolsRadio();
+        answerByKey(radio);
+        final tool = TelemetryTool(radio, testArbiter(clock: clock), clock: clock)..queue = RemoteRequestQueue(clock: clock); // default 10 s minGap
+        final hub = AskLocationHub(tool, clock: clock);
+        AskState? bob, cara;
+        hub.ask(person(keyB, 'Bob W8BOB')).then((s) => bob = s);
+        fa.elapse(const Duration(seconds: 2));
+        expect(bob!.phase, AskPhase.located);
+        hub.ask(person(keyC, 'Cara N8CRA')).then((s) => cara = s);
+        fa.elapse(const Duration(seconds: 3));
+        expect(cara, isNull, reason: 'still waiting out the spacing, not refused');
+        expect(hub.stateOf(hex(keyC)).phase, AskPhase.asking);
+        fa.elapse(const Duration(seconds: 10));
+        expect(cara!.phase, AskPhase.noLocation, reason: 'Cara answered after the wait');
+        expect(radio.sent.length, 2);
+      });
+    });
+
+    test('1b. Cancel during that wait ends at once and sends nothing', () {
+      fakeAsync((fa) {
+        final t0 = DateTime(2026, 11, 16, 12);
+        DateTime clock() => t0.add(fa.elapsed);
+        final radio = FakeToolsRadio();
+        answerByKey(radio);
+        final tool = TelemetryTool(radio, testArbiter(clock: clock), clock: clock)..queue = RemoteRequestQueue(clock: clock);
+        final hub = AskLocationHub(tool, clock: clock);
+        hub.ask(person(keyB, 'Bob W8BOB'));
+        fa.elapse(const Duration(seconds: 2));
+        AskState? cara;
+        hub.ask(person(keyC, 'Cara N8CRA')).then((s) => cara = s);
+        fa.elapse(const Duration(seconds: 1));
+        hub.cancel(hex(keyC));
+        fa.elapse(const Duration(milliseconds: 100));
+        expect(cara!.phase, AskPhase.idle);
+        fa.elapse(const Duration(seconds: 20));
+        expect(radio.sent.length, 1, reason: 'the cancelled ask never went out');
+      });
+    });
+
+    test('2. Delete my data (RadioTools.forgetPositions): no position left in the hub or the telemetry tool', () async {
+      final radio = FakeToolsRadio();
+      answerByKey(radio);
+      final tools = RadioTools(radio, testArbiter());
+      tools.telemetry.queue = RemoteRequestQueue();
+      final bob = person(keyB, 'Bob W8BOB');
+      expect((await tools.askLocation.ask(bob)).phase, AskPhase.located);
+      expect(tools.telemetry.latest[bob.publicKeyHex]!.position, isNotNull);
+      expect(tools.telemetry.historyFor(bob.publicKeyHex), isNotEmpty);
+      tools.forgetPositions();
+      expect(tools.askLocation.stateOf(bob.publicKeyHex).phase, AskPhase.idle);
+      expect(tools.askLocation.stateOf(bob.publicKeyHex).position, isNull);
+      expect(tools.telemetry.latest, isEmpty);
+      expect(tools.telemetry.historyFor(bob.publicKeyHex), isEmpty);
+      await tools.dispose();
+    });
+
+    test('2b. Delete my data while asking: the late answer is not kept', () async {
+      final radio = FakeToolsRadio();
+      answerByKey(radio);
+      final tools = RadioTools(radio, testArbiter());
+      tools.telemetry.queue = RemoteRequestQueue();
+      final bob = person(keyB, 'Bob W8BOB');
+      MtAskedPosition? pinned;
+      final f = tools.askLocation.ask(bob, onLocated: (p) => pinned = p);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      tools.forgetPositions();
+      expect((await f).position, isNull);
+      expect(pinned, isNull);
+      expect(tools.askLocation.stateOf(bob.publicKeyHex).phase, AskPhase.idle);
+      await Future<void>.delayed(const Duration(milliseconds: 1100));
+      expect(tools.telemetry.latest, isEmpty);
+      await tools.dispose();
+    });
+
+    test('3. an answer expires with its map pin after 2 h: back to idle', () async {
+      var now = DateTime(2026, 11, 16, 12);
+      final radio = FakeToolsRadio();
+      answerByKey(radio);
+      final tool = TelemetryTool(radio, testArbiter(clock: () => now), clock: () => now, minGap: Duration.zero)..queue = RemoteRequestQueue();
+      final hub = AskLocationHub(tool, clock: () => now);
+      final bob = person(keyB, 'Bob W8BOB');
+      await hub.ask(bob);
+      now = now.add(const Duration(hours: 1, minutes: 59));
+      expect(hub.stateOf(bob.publicKeyHex).phase, AskPhase.located);
+      expect(hub.answerExpiresIn(bob.publicKeyHex), const Duration(minutes: 1));
+      now = now.add(const Duration(minutes: 1));
+      expect(hub.stateOf(bob.publicKeyHex).phase, AskPhase.idle);
+      expect(hub.stateOf(bob.publicKeyHex).position, isNull);
     });
   });
 }

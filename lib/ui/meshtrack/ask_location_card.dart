@@ -118,10 +118,14 @@ class _AskLocationCardState extends State<AskLocationCard> {
   AskLocationHub? _hub;
   Timer? _tick;
 
+  /// Re-draws when the shown answer expires ([kAskedOnMapFor]: its map pin is gone, so Open on map goes too).
+  Timer? _expiry;
+
   @override
   void dispose() {
     _sub?.cancel();
     _tick?.cancel();
+    _expiry?.cancel();
     super.dispose();
   }
 
@@ -177,6 +181,13 @@ class _AskLocationCardState extends State<AskLocationCard> {
     final st = hub?.stateOf(key, name: name) ?? AskState(AskPhase.notConnected, key, name);
     final wait = hub?.retryIn(key);
     _armTick(wait != null && !st.asking);
+    _expiry?.cancel();
+    final left = st.answeredAt == null ? null : hub?.answerExpiresIn(key);
+    _expiry = left == null
+        ? null
+        : Timer(left + const Duration(milliseconds: 50), () {
+            if (mounted) setState(() {});
+          });
     final now = env.now();
     final col = AppColors.of(context);
 

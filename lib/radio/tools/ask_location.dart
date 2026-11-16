@@ -87,8 +87,36 @@ class AskLocationHub with ToolChanges {
 
   static String _k(String keyHex) => keyHex.toLowerCase();
 
-  /// The current or last ask of [keyHex] in this session ([AskPhase.idle] when none).
-  AskState stateOf(String keyHex, {String name = ''}) => _states[_k(keyHex)] ?? AskState(AskPhase.idle, _k(keyHex), name);
+  /// The current or last ask of [keyHex] in this session ([AskPhase.idle] when none). An answer older than
+  /// [kAskedOnMapFor] has expired (its map pin is gone too): it reads as idle and is forgotten.
+  AskState stateOf(String keyHex, {String name = ''}) {
+    final k = _k(keyHex);
+    final s = _states[k];
+    if (s == null) return AskState(AskPhase.idle, k, name);
+    final at = s.answeredAt;
+    if (s.phase != AskPhase.asking && at != null && _clock().difference(at) >= kAskedOnMapFor) {
+      _states.remove(k);
+      return AskState(AskPhase.idle, k, s.name);
+    }
+    return s;
+  }
+
+  /// How long [keyHex]'s answer stays shown (null when there is no answer to expire).
+  Duration? answerExpiresIn(String keyHex) {
+    final at = _states[_k(keyHex)]?.answeredAt;
+    if (at == null) return null;
+    final left = kAskedOnMapFor - _clock().difference(at);
+    return left > Duration.zero ? left : Duration.zero;
+  }
+
+  /// Delete my data: forgets every answer (and stops any ask in flight).
+  void clear() {
+    for (final c in _running.values.toList()) {
+      c.cancel();
+    }
+    _states.clear();
+    notifyChanged();
+  }
 
   /// How long until [keyHex] may be asked again; null = now.
   Duration? retryIn(String keyHex) => limiter.waitFor(keyHex);
@@ -131,6 +159,9 @@ class AskLocationHub with ToolChanges {
       r = TelemetryResult(TelemetryStatus.refused, who, _clock(), keyHex: key);
     } finally {
       _running.remove(key);
+    }
+    if (cancel.isCancelled && !_states.containsKey(key)) {
+      return AskState(AskPhase.idle, key, who); // cleared (Delete my data) while asking: keep nothing
     }
     final at = _clock();
     AskState done(AskPhase p, {MtAskedPosition? pos, bool answered = false, bool sent = true}) {

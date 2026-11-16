@@ -96,9 +96,10 @@ They are fixed sites whose position is in their announcement anyway. **Decision:
 | Who | companions (people), not blocked | section 5 |
 | Request | `encodeTelemetryReqFor(key)` = `[39][0 0 0][key]` through the shared `RemoteRequestQueue`, `CommandPriority.user`; airtime recorded with `TxArbiter.admitUserSend` | one pending request in the firmware; user-initiated send |
 | Wait for the answer | `askLocationWait`: at least 30 s when SENT says direct, 45 s when flooded, `2 x est_timeout + 3 s` if longer, never over 60 s | section 1 timeouts are 1-6 s on US presets; the floor covers busy repeaters and the radio's own queue |
+| Another person right after | the Telemetry tool spaces requests 10 s apart; an Ask waits out that spacing (Cancel still works) instead of failing |
 | Same person again | once per 30 s (`AskLimiter`), kept across screens of one radio session; a request that never left the phone (no radio, not on the radio, radio busy) does not count | airtime |
 | Outcomes | position -> distance and direction (Units) + an "Asked" pin on the Friends layer + Open on map; answer without position (or 0, 0) -> "did not share a location"; silence -> "No answer" + Try again; Cancel stops waiting (a late answer is ignored) | sections 2-4 |
-| Privacy | the position is kept in memory only (radio session hub + map pin, off the map after 2 h, cleared by Delete my data), never uploaded, never in the last-known file, never logged with coordinates or names | MeshTrack plan section 6 |
+| Privacy | the position is kept in memory only (radio session hub + map pin + the Telemetry tool's answer list; the answer and pin expire after 2 h; Delete my data clears all three), never uploaded, never in the last-known file, never logged with coordinates or names | MeshTrack plan section 6 |
 | Our own radio's answers to others | unchanged: MeshSonar does not change the telemetry modes | Andy's MT-13 brief |
 
 ## 7. To check on hardware (when a stock companion is at hand)

@@ -60,6 +60,12 @@ class RadioTools {
 
   bool get connected => radio.isConnected;
 
+  /// Delete my data: every telemetry answer and every Ask for location answer kept in memory (positions included).
+  void forgetPositions() {
+    askLocation.clear();
+    telemetry.clearHistory();
+  }
+
   /// Starts the passive collectors (RX log, adverts). They read what the radio already pushes; they send nothing.
   void startListening() {
     if (!rxLog.listening) rxLog.listen(radio.rxPackets);
