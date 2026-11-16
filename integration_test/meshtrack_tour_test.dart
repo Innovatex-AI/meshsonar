@@ -79,22 +79,43 @@ Future<void> backRoot(WidgetTester t) async {
   await pumpFor(t, const Duration(milliseconds: 900));
 }
 
+/// Opens the Group sheet from the Drive panel's Dock button (always visible, every dock state).
 Future<void> openGroupSheet(WidgetTester t) async {
   await popToRoots(t);
   await openTab(t, 'Drive');
-  await tapKey(t, 'meshtrack-chip', why: 'no MeshTrack chip on the Drive tab');
+  await tapKey(t, 'mt-dock-hit', why: 'no MeshTrack button in the Drive Dock');
   if (!await waitFor(t, find.byKey(const Key('mt-groups')), timeout: const Duration(seconds: 5))) {
     if (find.byKey(const Key('mt-back')).evaluate().isNotEmpty) {
       await tapKey(t, 'mt-back');
     } else {
-      _fail('the chip did not open the Group sheet');
+      _fail('the Dock button did not open the Group sheet');
     }
   }
 }
 
-String? _chipLabel(WidgetTester t) {
-  final f = find.byKey(const Key('meshtrack-chip-label'));
+/// The Drive panel's MeshTrack row text, or null when Medium is not open.
+String? _rowLine(WidgetTester t) {
+  final f = find.byKey(const Key('mt-panel-subtitle'));
   return f.evaluate().isEmpty ? null : t.widget<Text>(f.first).data;
+}
+
+/// Opens the Drive panel to Medium and scrolls the MeshTrack row into view.
+Future<void> expandToRow(WidgetTester t) async {
+  final row = find.byKey(const Key('mt-panel-row'));
+  if (row.hitTestable().evaluate().isEmpty) {
+    await tapKey(t, 'drive-panel-grabber', why: 'no Drive panel');
+    await pumpFor(t, const Duration(milliseconds: 900));
+  }
+  if (!await scrollToFind(t, row, find.byKey(const Key('drive-panel-medium')))) _fail('no MeshTrack row in the Drive panel');
+  await Scrollable.ensureVisible(t.element(row.first), alignment: 0.5);
+  await pumpFor(t, const Duration(milliseconds: 700));
+}
+
+/// Back to the Dock.
+Future<void> collapsePanel(WidgetTester t) async {
+  if (find.byKey(const Key('drive-panel-medium')).evaluate().isEmpty) return;
+  await tapKey(t, 'drive-panel-grabber');
+  await pumpFor(t, const Duration(milliseconds: 700));
 }
 
 Future<bool> _until(WidgetTester t, bool Function() cond, Duration timeout) async {
@@ -151,12 +172,17 @@ void main() {
       return;
     }
 
-    // ------------------------------------------------------------------ chip, empty sheet, setup screens
-    await step(t, 'chip-idle', () async {
+    // ------------------------------------------------------------------ Drive panel, empty sheet, setup screens
+    await step(t, 'panel-idle', () async {
       await openTab(t, 'Drive');
-      if (!await waitFor(t, find.byKey(const Key('meshtrack-chip')))) _fail('no MeshTrack chip');
-      if (_chipLabel(t) != 'MeshTrack') _fail('chip says "${_chipLabel(t)}", not "MeshTrack"');
-      await shot(t, 'mt-01-chip-idle');
+      if (!await waitFor(t, find.byKey(const Key('mt-dock-hit')))) _fail('no MeshTrack button in the Dock');
+      if (find.byKey(const Key('meshtrack-chip')).evaluate().isNotEmpty) _fail('the old map pill is still on the map');
+      if (find.byKey(const Key('mt-dock-dot')).evaluate().isNotEmpty) _fail('sharing dot on the Dock with nothing shared');
+      await shot(t, 'mt-01-dock-not-sharing');
+      await expandToRow(t);
+      if (_rowLine(t) != 'Share your position with friends') _fail('row says "${_rowLine(t)}"');
+      await shot(t, 'mt-01b-panel-row-no-group');
+      await collapsePanel(t);
     });
 
     await step(t, 'sheet-empty', () async {
@@ -207,6 +233,16 @@ void main() {
       if (!await waitFor(t, qr, timeout: const Duration(seconds: 20))) _fail('Create did not show the invite');
       await shot(t, 'mt-06-invite');
       await tapKey(t, 'mt-invite-done');
+    });
+
+    await step(t, 'panel-one-group', () async {
+      await popToRoots(t);
+      await openTab(t, 'Drive');
+      await expandToRow(t);
+      if (find.byKey(const Key('mt-panel-share')).evaluate().isEmpty) _fail('no Share switch on the row with one group');
+      if (!(_rowLine(t) ?? '').startsWith('Not sharing with')) _fail('row says "${_rowLine(t)}"');
+      await shot(t, 'mt-06b-panel-row-one-group-switch');
+      await collapsePanel(t);
     });
 
     await step(t, 'use-saturday-crew', () async {
@@ -283,7 +319,7 @@ void main() {
     });
 
     // ------------------------------------------------------------------ drive: chip, friends layer, meet here, layers
-    await step(t, 'chip-sharing', () async {
+    await step(t, 'panel-sharing', () async {
       await popToRoots(t);
       await openTab(t, 'Drive');
       final go = find.byKey(const Key('start-stop'));
@@ -291,20 +327,34 @@ void main() {
       await t.tap(go.first);
       var sawGps = false;
       final ok = await _until(t, () {
-        final l = _chipLabel(t);
-        if (l == 'Waiting for GPS' && !sawGps) {
+        final r = _svc(t).state.reason;
+        if (r == MtShareReason.waitingForGps && !sawGps) {
           sawGps = true;
           // ignore: avoid_print
-          print('SCREEN mt-16a-chip-waiting-gps');
+          print('SCREEN mt-16a-dock-waiting-gps');
         }
-        return l != null && l.startsWith('Sharing: ');
+        return r == MtShareReason.sharing || r == MtShareReason.airtimeLimit;
       }, const Duration(seconds: 30));
       if (!_app(t).driving) _fail('Start drive did not start a drive');
-      if (!ok) _fail('chip says "${_chipLabel(t)}" while driving and sharing');
-      if (find.byKey(const Key('meshtrack-chip-dot')).evaluate().isEmpty) _fail('no accent dot on the Sharing chip');
+      if (!ok) _fail('MeshTrack is "${_svc(t).state.reason.name}" while driving and sharing');
+      await pumpFor(t, const Duration(seconds: 1));
+      if (find.byKey(const Key('mt-dock-dot')).evaluate().isEmpty) _fail('no sharing dot on the Dock button');
       // ignore: avoid_print
-      print('NOTE waiting-for-gps chip seen: $sawGps');
-      await shot(t, 'mt-16-chip-sharing');
+      print('NOTE waiting-for-gps seen: $sawGps');
+      await shot(t, 'mt-16-dock-sharing');
+      await expandToRow(t);
+      if (!(_rowLine(t) ?? '').startsWith('Sharing: ')) _fail('row says "${_rowLine(t)}" while sharing');
+      if (find.byKey(const Key('mt-panel-dot')).evaluate().isEmpty) _fail('no accent dot on the row');
+      // The first drive after the update arms the "New" tag; opening MeshTrack clears it.
+      if (find.byKey(const Key('mt-panel-new')).evaluate().isEmpty) _fail('no "New" tag on the first drive');
+      await shot(t, 'mt-16b-panel-row-sharing-new-tag');
+      await tapKey(t, 'mt-panel-row');
+      if (!await waitFor(t, find.byKey(const Key('mt-groups')))) _fail('the row did not open the Group sheet');
+      await backRoot(t);
+      await expandToRow(t);
+      if (find.byKey(const Key('mt-panel-new')).evaluate().isNotEmpty) _fail('"New" tag still there after opening MeshTrack');
+      await shot(t, 'mt-16c-panel-row-sharing');
+      await collapsePanel(t);
     });
 
     await step(t, 'friends-map', () async {
@@ -332,7 +382,7 @@ void main() {
 
     await step(t, 'people-parked', () async {
       final id = _groupId(t, simulatedFriendsChannelName) ?? _fail('no group');
-      await tapKey(t, 'meshtrack-chip');
+      await tapKey(t, 'mt-dock-hit');
       if (find.byKey(Key('mt-open-$id')).evaluate().isNotEmpty) await tapKey(t, 'mt-open-$id');
       if (!await waitFor(t, find.byKey(const Key('mt-people')))) _fail('no people page');
       await shot(t, 'mt-17b-people-later');
@@ -395,6 +445,18 @@ void main() {
       await pumpFor(t, const Duration(seconds: 1));
       if (!await waitFor(t, find.byKey(const Key('meshtrack-badge')))) _fail('no MeshTrack badge in Chats');
       await shot(t, 'mt-21-chats-badge');
+      // Channels: the MeshTrack card on top; the New chat sheet: New MeshTrack group.
+      await tapKey(t, 'segment-channels');
+      if (!await waitFor(t, find.byKey(const Key('mt-chat-card-hit')))) _fail('no MeshTrack card in Channels');
+      await shot(t, 'mt-21b-channels-card');
+      await tapKey(t, 'chat-new');
+      final entry = find.byKey(const Key('add-meshtrack'));
+      if (!await scrollToFind(t, entry, find.byType(Scrollable).last)) _fail('no New MeshTrack group in the New chat sheet');
+      await Scrollable.ensureVisible(t.element(entry.first), alignment: 0.5);
+      await pumpFor(t, const Duration(milliseconds: 600));
+      await shot(t, 'mt-21c-new-chat-meshtrack');
+      await backRoot(t);
+      await tapKey(t, 'segment-chats');
       final row = find.ancestor(of: find.text(simulatedFriendsChannelName), matching: find.byWidgetPredicate((w) => w.key is ValueKey && '${(w.key as ValueKey).value}'.startsWith('conv-')));
       if (row.evaluate().isEmpty) _fail('no Saturday crew row');
       await t.tap(row.first);
@@ -434,6 +496,34 @@ void main() {
       await Scrollable.ensureVisible(t.element(find.byKey(const Key('section-meshtrack')).first), alignment: 0.02);
       await pumpFor(t, const Duration(milliseconds: 600));
       await shot(t, 'mt-24-settings-meshtrack');
+      final ids = [for (final e in find.byWidgetPredicate((w) => w.key is ValueKey && '${(w.key as ValueKey).value}'.startsWith('section-')).evaluate()) '${(e.widget.key as ValueKey).value}'];
+      // ignore: avoid_print
+      print('NOTE settings sections built: $ids');
+      await popToRoots(t);
+    });
+
+    await step(t, 'settings-sections', () async {
+      await popToRoots(t);
+      await openTab(t, 'Settings');
+      await tapKey(t, 'settings-sections-action', why: 'no Jump to a section button');
+      if (!await waitFor(t, find.byKey(const Key('jump-meshtrack')))) _fail('MeshTrack is not in the section list');
+      await shot(t, 'mt-24a-settings-sections-meshtrack-high');
+      await backRoot(t);
+      await popToRoots(t);
+    });
+
+    await step(t, 'settings-search', () async {
+      await popToRoots(t);
+      await openTab(t, 'Settings');
+      final field = find.byKey(const Key('settings-search'));
+      if (!await waitFor(t, field)) _fail('no Settings search');
+      await t.ensureVisible(field);
+      await t.enterText(field, 'share location');
+      await pumpFor(t, const Duration(seconds: 1));
+      if (!await waitFor(t, find.textContaining('Groups'))) _fail('search did not find MeshTrack > Groups');
+      await shot(t, 'mt-24b-settings-search');
+      await t.enterText(field, '');
+      await pumpFor(t, const Duration(milliseconds: 500));
       await popToRoots(t);
     });
 
@@ -467,6 +557,30 @@ void main() {
       if (!(t.widget<Text>(tile.first).data ?? '').startsWith('Not allowed')) _fail('saved slot says "${t.widget<Text>(tile.first).data}"');
       await shot(t, 'mt-26-observer-not-allowed');
       await s.updateSettings(s.settings.copyWith(mqttSlots: [...s.settings.mqttSlots.where((x) => x.id != 'slot-9')]));
+      await popToRoots(t);
+    });
+
+    await step(t, 'panel-no-radio', () async {
+      await popToRoots(t);
+      await _app(t).disconnect();
+      await pumpFor(t, const Duration(seconds: 2));
+      await openTab(t, 'Drive');
+      if (!await waitFor(t, find.byKey(const Key('mt-dock-hit')))) _fail('no MeshTrack button in the Dock without a radio');
+      await expandToRow(t);
+      final line = _rowLine(t) ?? '';
+      // Share was on (Until I stop / 1 hour stay on for 5 min without a radio): then the row says it is paused.
+      if (line != 'Connect your radio to share' && line != 'Sharing paused: no radio') _fail('row says "$line" without a radio');
+      if (_svc(t).state.sharing) {
+        for (final g in _svc(t).state.groups) {
+          _svc(t).setShare(g.channelId, false);
+        }
+        await pumpFor(t, const Duration(seconds: 6));
+        if (_rowLine(t) != 'Connect your radio to share') _fail('row says "${_rowLine(t)}" without a radio, not sharing');
+      }
+      await shot(t, 'mt-27-panel-row-no-radio');
+      await tapKey(t, 'mt-panel-row');
+      if (!await waitFor(t, find.byKey(const Key('mt-groups')))) _fail('the row did not open the Group sheet without a radio');
+      await shot(t, 'mt-27b-sheet-no-radio');
       await popToRoots(t);
     });
 
