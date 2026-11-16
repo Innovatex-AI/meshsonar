@@ -6,6 +6,8 @@
 //   * Packets: only what AppState hands [onPublicPacket] (already through the privacy filter), checked again by
 //     [mqttPacketMessage]. Bounded in-memory queue per slot (120, drop-oldest), never persisted, cleared when the radio
 //     goes; at most 120 publishes per slot per minute (the rest wait in the queue, the oldest drop first).
+//   * Status: `online` on connect and every 5 minutes; `offline` when a live feed stops on purpose; the same `offline`
+//     as the connection's last will, so the broker says it when the link is lost. One topic and one retain rule for all.
 //   * Reconnect: jittered backoff 1..30 s; a refused login retries after 5 minutes with a freshly signed token; a radio
 //     that cannot sign retries after 10 minutes. Tokens are re-signed about 5 minutes before they end and the slot
 //     reconnects cleanly with the new one.
@@ -17,6 +19,7 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:math';
+import 'dart:typed_data';
 
 import '../../chat/secret_store.dart';
 import '../../radio/radio_api.dart' show RxPacket;
@@ -47,7 +50,10 @@ class MqttObserverEngine implements ObserverEngine {
   final Duration testLinger;
 
   final MqttTokenService _tokens;
-  late final String _session;
+
+  /// The secure-store slot of this install's client-id part (2 random bytes, 4 hex characters in the client id).
+  static const String installIdSlot = 'meshsonar.mqtt_client_id';
+  Future<String>? _install;
 
   MqttObserverEngine({
     required this.secrets,
@@ -63,9 +69,29 @@ class MqttObserverEngine implements ObserverEngine {
     Duration signTimeout = const Duration(seconds: 20),
   }) : _newTransport = transport ?? MqttClientTransport.new,
        _random = random ?? Random.secure(),
-       _tokens = MqttTokenService(clock: clock, signTimeout: signTimeout) {
-    _session = _random.nextInt(0x10000).toRadixString(16).padLeft(4, '0');
+       _tokens = MqttTokenService(clock: clock, signTimeout: signTimeout);
+
+  /// This install's part of every client id (WS-OUT 8): random once, then kept in the secure store (like the observer
+  /// id), so a broker sees the same client across launches instead of a new one per launch. Without a store it lasts for
+  /// this run only.
+  Future<String> installId() => _install ??= _loadInstallId();
+
+  Future<String> _loadInstallId() async {
+    try {
+      final b = await secrets.read(installIdSlot);
+      if (b != null && b.length == 2) return _hex(b);
+    } catch (_) {}
+    final v = _random.nextInt(0x10000);
+    final b = Uint8List.fromList([v >> 8, v & 0xff]);
+    try {
+      await secrets.write(installIdSlot, b);
+    } catch (_) {
+      // No secure store: still random, just not kept.
+    }
+    return _hex(b);
   }
+
+  static String _hex(List<int> b) => [for (final x in b) x.toRadixString(16).padLeft(2, '0')].join();
 
   ObserverEngineState _state = const ObserverEngineState();
   List<MqttSlotSettings> _slots = const [];
@@ -137,6 +163,8 @@ class MqttObserverEngine implements ObserverEngine {
   }
 
   _Plan _plan(MqttSlotSettings slot, ObserverEngineState s) {
+    // Our own broker is never a feed, even when such a slot was saved before this check existed.
+    if (mqttHostIsMeshSonar(slot.host)) return const _Idle(ObserverFeedState.notAllowed, meshSonarBrokerRefusal);
     if (!slot.enabled) return const _Idle(ObserverFeedState.off);
     if (!s.sharing) return const _Idle(ObserverFeedState.off, 'Observer sharing is off.');
     final pk = s.radioPublicKey;
@@ -238,12 +266,15 @@ class MqttObserverEngine implements ObserverEngine {
 
   // ---------------------------------------------------------------- shared by runners and Test
 
-  String _clientId(String publicKey, String slotId, {String suffix = ''}) {
+  /// `ms` + the radio key's first 8 hex + 6 hex of the slot id + this install's 4 hex [+ suffix]: 20 characters (21 for
+  /// Test), within MQTT 3.1.1's 23.
+  Future<String> _clientId(String publicKey, String slotId, {String suffix = ''}) async {
     var h = 0x811c9dc5;
     for (final c in slotId.codeUnits) {
       h = ((h ^ c) * 0x01000193) & 0xffffffff;
     }
-    return 'ms${publicKey.substring(0, 8).toLowerCase()}${(h & 0xffffff).toRadixString(16).padLeft(6, '0')}$_session$suffix';
+    final install = await installId();
+    return 'ms${publicKey.substring(0, 8).toLowerCase()}${(h & 0xffffff).toRadixString(16).padLeft(6, '0')}$install$suffix';
   }
 
   /// Username and password for [slot]; throws [MqttSignException] (radio) or [_NoSecret].
@@ -269,18 +300,31 @@ class MqttObserverEngine implements ObserverEngine {
     }
   }
 
-  MqttConnectRequest _request(MqttSlotSettings slot, String clientId, String? user, String? pass) => MqttConnectRequest(
-    host: slot.host,
-    port: slot.port,
-    wsPath: slot.wsPath,
-    tls: slot.tls,
-    clientId: clientId,
-    username: user,
-    password: pass,
-  );
+  /// [will] = the slot's status topic and radio key: the broker publishes `offline` there (with the slot's status retain
+  /// flag) when the connection is lost. Test connects without one.
+  MqttConnectRequest _request(MqttSlotSettings slot, String clientId, String? user, String? pass,
+          {({String topic, String publicKey})? will}) =>
+      MqttConnectRequest(
+        host: slot.host,
+        port: slot.port,
+        wsPath: slot.wsPath,
+        tls: slot.tls,
+        clientId: clientId,
+        username: user,
+        password: pass,
+        willTopic: will?.topic,
+        willMessage: will == null ? null : _statusMessage(will.publicKey, online: false),
+        willQos: 1,
+        willRetain: will != null && statusRetained(slot),
+      );
 
-  String _statusMessage(String pk) =>
-      jsonEncode(mqttStatusJson(publicKeyHex: pk, at: clock(), model: _state.radioModel, firmware: _state.firmware));
+  /// Whether [slot]'s status messages (online, offline, last will) are retained: only for a preset that allows it;
+  /// custom slots publish status unretained, as the firmware does. One rule for all three.
+  static bool statusRetained(MqttSlotSettings slot) => slot.retainStatus && slot.presetId != null;
+
+  String _statusMessage(String pk, {bool online = true}) => jsonEncode(
+    mqttStatusJson(publicKeyHex: pk, at: clock(), model: _state.radioModel, firmware: _state.firmware, online: online),
+  );
 
   // ---------------------------------------------------------------- Test
 
@@ -288,6 +332,7 @@ class MqttObserverEngine implements ObserverEngine {
   Future<ObserverFeedStatus> test(MqttSlotSettings slot) async {
     ObserverFeedStatus out(ObserverFeedState st, [String? why]) =>
         ObserverFeedStatus(slotId: slot.id, state: st, lastError: why, at: clock());
+    if (mqttHostIsMeshSonar(slot.host)) return out(ObserverFeedState.notAllowed, meshSonarBrokerRefusal);
     final s = _state;
     final pk = s.radioPublicKey?.toUpperCase();
     if (!s.connected || pk == null || pk.length != 64) {
@@ -303,8 +348,9 @@ class MqttObserverEngine implements ObserverEngine {
     } on _NoSecret catch (e) {
       return out(ObserverFeedState.authFailed, e.message);
     }
+    final id = await _clientId(pk, slot.id, suffix: 't');
     final t = _newTransport();
-    final res = await t.connect(_request(slot, _clientId(pk, slot.id, suffix: 't'), c.username, c.password));
+    final res = await t.connect(_request(slot, id, c.username, c.password));
     switch (res.outcome) {
       case MqttConnectOutcome.accepted:
         final ok = t.publish(MqttTopics.status(iata, pk), _statusMessage(pk), qos: 1);
@@ -406,6 +452,9 @@ class _SlotRunner {
 
   void start() => unawaited(_connect());
 
+  /// The feed stops on purpose (turned off, sharing off, radio gone, settings changed, app closing): a live connection
+  /// says `offline` first, on the same topic and with the same retain flag as `online`, then disconnects cleanly (a clean
+  /// disconnect does not fire the last will).
   void stop() {
     _stopped = true;
     _gen++;
@@ -413,7 +462,9 @@ class _SlotRunner {
     _queue.clear();
     final t = _t;
     _t = null;
-    if (t != null) unawaited(t.disconnect());
+    if (t == null) return;
+    if (_st == ObserverFeedState.connected) _publishStatus(t, online: false);
+    unawaited(t.disconnect());
   }
 
   void _cancelTimers() {
@@ -489,10 +540,12 @@ class _SlotRunner {
       return;
     }
     if (g != _gen || _stopped) return;
+    final id = await e._clientId(publicKey, slot.id);
+    if (g != _gen || _stopped) return;
     final t = e._newTransport();
     t.onDropped = () => _dropped(g);
     _t = t;
-    final res = await t.connect(e._request(slot, e._clientId(publicKey, slot.id), c.username, c.password));
+    final res = await t.connect(e._request(slot, id, c.username, c.password, will: (topic: _statusTopic, publicKey: publicKey)));
     if (g != _gen || _stopped) {
       await t.disconnect();
       return;
@@ -501,8 +554,11 @@ class _SlotRunner {
       case MqttConnectOutcome.accepted:
         _attempt = 0;
         _set(ObserverFeedState.connected);
-        _publishStatus();
-        _statusTimer = Timer.periodic(e.statusInterval, (_) => _publishStatus());
+        _publishStatus(t);
+        _statusTimer = Timer.periodic(e.statusInterval, (_) {
+          final live = _t;
+          if (live != null && _st == ObserverFeedState.connected) _publishStatus(live);
+        });
         final tok = c.token;
         if (tok != null) {
           var d = tok.expiresAt.difference(e.clock()) - mqttRefreshMargin(slot.ttlSec);
@@ -589,10 +645,9 @@ class _SlotRunner {
     }
   }
 
-  void _publishStatus() {
-    final t = _t;
-    if (t == null || _st != ObserverFeedState.connected) return;
-    // Retained only for a preset that allows it; custom slots publish status unretained, as the firmware does.
-    t.publish(_statusTopic, e._statusMessage(publicKey), qos: 1, retain: slot.retainStatus && slot.presetId != null);
+  /// Status on [t]: retained only for a preset that allows it ([MqttObserverEngine.statusRetained]), the same rule as the
+  /// offline message and the last will.
+  void _publishStatus(MqttTransport t, {bool online = true}) {
+    t.publish(_statusTopic, e._statusMessage(publicKey, online: online), qos: 1, retain: MqttObserverEngine.statusRetained(slot));
   }
 }

@@ -3,6 +3,13 @@
 All notable changes to MeshSonar. Dates are local (US Eastern). This changelog was reconstructed from the commit
 history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md](ROADMAP.md).
 
+## [Unreleased] — build 67 — MQTT feed safety (O1a)
+
+- **MQTT feeds never get our own traffic:** echoes of this phone's own pings (public or not) and packets on the drive channel are dropped before the feed engine (observer-and-data-platform-plan WS-OUT 4). Property test over every packet type.
+- **Offline status and last will:** a feed says `offline` when it stops and sets the same message as its last will, on the online status topic with the same retain flag (WS-OUT 7).
+- **Per-install client id** instead of per launch (WS-OUT 8).
+- **`mqtt.meshsonar.com` is refused as a feed** in Settings > Observer and by the engine; a saved one shows Not allowed (WS-OUT 9).
+
 ## [0.38.0+66] — 2026-11-16 — Privacy zones on the phone, fewer warnings, universal links, CMH default
 
 ### Build 66 summary

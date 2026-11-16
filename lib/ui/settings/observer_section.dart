@@ -243,6 +243,9 @@ abstract final class ObserverPresets {
 
 /// The status a slot shows when the engine has none for it (no engine in this build, or not started yet).
 ObserverFeedStatus _fallbackStatus(AppState s, MqttSlotSettings slot) {
+  if (mqttHostIsMeshSonar(slot.host)) {
+    return ObserverFeedStatus(slotId: slot.id, state: ObserverFeedState.notAllowed, lastError: meshSonarBrokerRefusal);
+  }
   if (!slot.enabled) return ObserverFeedStatus(slotId: slot.id, state: ObserverFeedState.off);
   if (!s.observerSharing) {
     return ObserverFeedStatus(
@@ -260,6 +263,7 @@ AppSymbol feedStateSymbol(ObserverFeedState st) => switch (st) {
       ObserverFeedState.connecting => AppSymbols.clock,
       ObserverFeedState.waitingForRadio => AppSymbols.antenna,
       ObserverFeedState.pausedInBackground => AppSymbols.clock,
+      ObserverFeedState.notAllowed => AppSymbols.xmarkCircleFill,
       ObserverFeedState.authFailed => AppSymbols.lock,
       ObserverFeedState.radioCantSign => AppSymbols.exclamationTriangle,
       ObserverFeedState.error => AppSymbols.exclamationCircle,
@@ -270,7 +274,11 @@ Color? _feedStateColor(BuildContext context, ObserverFeedState st) {
   final c = Theme.of(context).colorScheme;
   return switch (st) {
     ObserverFeedState.connected => c.primary,
-    ObserverFeedState.authFailed || ObserverFeedState.radioCantSign || ObserverFeedState.error => c.error,
+    ObserverFeedState.authFailed ||
+    ObserverFeedState.radioCantSign ||
+    ObserverFeedState.notAllowed ||
+    ObserverFeedState.error =>
+      c.error,
     _ => c.onSurfaceVariant,
   };
 }
@@ -360,6 +368,11 @@ class _MqttFeedsBlockState extends State<MqttFeedsBlock> {
       return;
     }
     final preset = picked.preset!;
+    if (mqttHostIsMeshSonar(preset.host)) {
+      // The picker hides such a preset; a list that still carries one is refused here too.
+      showAppToast(context, meshSonarBrokerRefusal, kind: AppToastKind.error);
+      return;
+    }
     final iata = defaultFeedIata(s);
     final follows = iata != null && iata == s.currentRegion?.code.toUpperCase();
     await _replaceSlot(s, preset.toSlot(id, iata: follows ? null : iata));
@@ -457,6 +470,11 @@ class MqttSlotTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // A saved slot that points at MeshSonar's own server: never connected, and it says why in plain words.
+    final status = mqttHostIsMeshSonar(slot.host)
+        ? ObserverFeedStatus(slotId: slot.id, state: ObserverFeedState.notAllowed, lastError: meshSonarBrokerRefusal)
+        : this.status;
+    final fromEngine = this.fromEngine && status.state != ObserverFeedState.notAllowed;
     final lines = <String>[
       slot.enabled || status.state != ObserverFeedState.off ? status.state.label : 'Off',
       if (status.sent24h > 0 || status.state == ObserverFeedState.connected)
@@ -583,7 +601,7 @@ class _PresetPickerState extends State<_PresetPicker> {
     } else if (c == null) {
       body = const AppLoadingView(key: Key('mqtt-presets-loading'), label: 'Loading the preset list');
     } else {
-      final found = c.search(_search.text);
+      final found = [for (final x in c.search(_search.text)) if (!mqttHostIsMeshSonar(x.host)) x];
       final rows = <Widget>[];
       for (final g in MqttPresetGroup.values) {
         final inGroup = [for (final x in found) if (c.groupOf(x) == g) x];
@@ -798,6 +816,11 @@ class _SlotSheetState extends State<_SlotSheet> {
     if (!(_form.currentState?.validate() ?? false)) return;
     final s = widget.app;
     final slot = _built();
+    if (mqttHostIsMeshSonar(slot.host)) {
+      // A preset feed has no host field to show the error under: say it here, save nothing.
+      setState(() => _test = ObserverFeedStatus(slotId: slot.id, state: ObserverFeedState.notAllowed, lastError: meshSonarBrokerRefusal));
+      return;
+    }
     final passwordChanged = slot.auth == MqttAuth.password && _pass.text.isNotEmpty;
     if (!await _storePassword(slot)) {
       if (mounted) showAppToast(context, 'This phone can\'t keep the password safely, so it was not saved.', kind: AppToastKind.error);
@@ -875,6 +898,7 @@ class _SlotSheetState extends State<_SlotSheet> {
   String? _hostOk(String? v) {
     final h = (v ?? '').trim();
     if (h.isEmpty) return 'Enter the broker\'s host name';
+    if (mqttHostIsMeshSonar(h)) return meshSonarBrokerRefusal;
     if (h.contains('://') || h.contains('/') || h.contains(' ')) return 'Only the host name, e.g. mqtt.example.org';
     return null;
   }

@@ -4,6 +4,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -469,4 +470,196 @@ void main() {
       unawaited(log.cancel());
     });
   });
+
+  group('last will and offline status (WS-OUT 7)', () {
+    for (final preset in [false, true]) {
+      test('${preset ? 'preset' : 'custom'}: will, online and offline share one topic and one retain flag', () {
+        _run((e) {
+          final s1 = slot('s1', presetId: preset ? 'corecomms' : null);
+          e.engine.update(engineState(slots: [s1], sign: e.radio.sign));
+          e.settle();
+          final online = e.net.statuses().single;
+          final c = e.net.connects.single;
+          expect(c.hasWill, isTrue);
+          expect(c.willTopic, online.topic);
+          expect(c.willRetain, online.retain);
+          expect(online.retain, preset, reason: 'retained only for a preset that allows it');
+          expect(c.willQos, 1);
+          expect((jsonDecode(c.willMessage!) as Map)['status'], 'offline');
+          expect((jsonDecode(c.willMessage!) as Map)['origin_id'], rfcPublicHex.toUpperCase());
+          // Turned off: offline on the same topic and retain flag, then a clean disconnect.
+          e.engine.update(engineState(slots: [s1.copyWith(enabled: false)], sign: e.radio.sign));
+          e.settle();
+          final offline = e.net.statuses().last;
+          expect((jsonDecode(offline.payload) as Map)['status'], 'offline');
+          expect(offline.topic, online.topic);
+          expect(offline.retain, online.retain);
+          expect(offline.qos, 1);
+          expect(e.net.live, isEmpty);
+        });
+      });
+    }
+
+    test('a preset with retain off: online, offline and will are all unretained', () {
+      _run((e) {
+        final s1 = slot('s1', presetId: 'corecomms').copyWith(retainStatus: false);
+        e.engine.update(engineState(slots: [s1], sign: e.radio.sign));
+        e.settle();
+        expect(e.net.statuses().single.retain, isFalse);
+        expect(e.net.connects.single.willRetain, isFalse);
+        e.engine.update(engineState(sharing: false, slots: [s1], sign: e.radio.sign));
+        e.settle();
+        expect(e.net.statuses().last.retain, isFalse);
+      });
+    });
+
+    test('sharing off, radio lost and dispose each say offline; a dropped link leaves it to the will', () {
+      _run((e) {
+        e.engine.update(engineState(slots: [slot('s1')], sign: e.radio.sign));
+        e.settle();
+        e.engine.update(engineState(sharing: false, slots: [slot('s1')], sign: e.radio.sign));
+        e.settle();
+        expect(e.net.statuses().map((p) => (jsonDecode(p.payload) as Map)['status']), ['online', 'offline']);
+        e.engine.update(engineState(slots: [slot('s1')], sign: e.radio.sign));
+        e.settle();
+        e.engine.update(engineState(connected: false, slots: [slot('s1')]));
+        e.settle();
+        expect((jsonDecode(e.net.statuses().last.payload) as Map)['status'], 'offline');
+        e.engine.update(engineState(slots: [slot('s1')], sign: e.radio.sign));
+        e.settle();
+        final n = e.net.statuses().length;
+        e.net.dropAll(); // the link is lost: the app cannot publish; the broker sends the will
+        e.settle();
+        expect(e.net.statuses(), hasLength(n));
+      });
+    });
+
+    test('Test connects without a will and publishes no offline', () {
+      _run((e) {
+        e.engine.update(engineState(slots: const [], sign: e.radio.sign));
+        unawaited(e.engine.test(slot('s9')));
+        e.settle();
+        expect(e.net.connects.single.hasWill, isFalse);
+        expect(e.net.statuses().map((p) => (jsonDecode(p.payload) as Map)['status']), ['online']);
+      });
+    });
+  });
+
+  group('client id (WS-OUT 8)', () {
+    test('per install: kept in the secure store, the same after a relaunch, different on another install', () async {
+      final store = InMemorySecretStore();
+      final a = MqttObserverEngine(secrets: store, clock: () => _t0, random: Random(7));
+      final id = await a.installId();
+      expect(id, matches(RegExp(r'^[0-9a-f]{4}$')));
+      expect(await a.installId(), id, reason: 'stable within a run');
+      expect(await store.read(MqttObserverEngine.installIdSlot), hasLength(2));
+      await a.dispose();
+      // A relaunch with a different random source still reads the stored value.
+      final b = MqttObserverEngine(secrets: store, clock: () => _t0, random: Random(99));
+      expect(await b.installId(), id);
+      await b.dispose();
+      // A fresh install (empty store) gets its own.
+      final ids = <String>{};
+      for (var seed = 0; seed < 8; seed++) {
+        final c = MqttObserverEngine(secrets: InMemorySecretStore(), clock: () => _t0, random: Random(seed));
+        ids.add(await c.installId());
+        await c.dispose();
+      }
+      expect(ids.length, greaterThan(1));
+    });
+
+    test('a store that fails still gives a random id for this run', () async {
+      final e = MqttObserverEngine(secrets: _BrokenStore(), clock: () => _t0, random: Random(3));
+      expect(await e.installId(), matches(RegExp(r'^[0-9a-f]{4}$')));
+      await e.dispose();
+    });
+
+    test('format: ms + 8 key hex + 6 slot hex + 4 install hex (20, Test 21), same across launches, <= 23', () {
+      final ids = <String>[];
+      final store = InMemorySecretStore();
+      for (var launch = 0; launch < 2; launch++) {
+        fakeAsync((a) {
+          final net = FakeNet();
+          final engine = MqttObserverEngine(
+            secrets: store,
+            clock: () => _t0.add(a.elapsed),
+            transport: net.create,
+            random: Random(launch + 40),
+            testLinger: Duration.zero,
+          );
+          final radio = TestRadioSigner();
+          engine.update(engineState(slots: [slot('s1')], sign: radio.sign));
+          a.flushMicrotasks();
+          a.elapse(const Duration(milliseconds: 1));
+          a.flushMicrotasks();
+          unawaited(engine.test(slot('s1')));
+          a.flushMicrotasks();
+          a.elapse(const Duration(milliseconds: 1));
+          a.flushMicrotasks();
+          ids.addAll(net.connects.map((c) => c.clientId));
+          unawaited(engine.dispose());
+          a.flushMicrotasks();
+        });
+      }
+      expect(ids, hasLength(4));
+      final live = ids[0], test = ids[1];
+      expect(live, matches(RegExp('^ms${rfcPublicHex.substring(0, 8)}[0-9a-f]{6}[0-9a-f]{4}\$')));
+      expect(live.length, 20);
+      expect(test, '${live}t');
+      for (final id in ids) {
+        expect(id.length, lessThanOrEqualTo(23));
+      }
+      expect(ids[2], live, reason: 'the same client id after a relaunch');
+      expect(ids[3], test);
+    });
+  });
+
+  group("MeshSonar's own broker is never a feed (WS-OUT 9)", () {
+    test('a saved slot pointing there never connects, shows Not allowed, and other slots still run', () {
+      _run((e) {
+        e.engine.update(
+          engineState(
+            slots: [
+              slot('s1', host: 'MQTT.MeshSonar.com.', auth: MqttAuth.none),
+              slot('s2', host: 'mqtt.meshsonar.com', presetId: 'x'),
+              slot('s3', host: 'mqtt.example.org', auth: MqttAuth.none),
+            ],
+            sign: e.radio.sign,
+          ),
+        );
+        e.settle();
+        expect(e.labels(), ['Not allowed', 'Not allowed', 'Connected']);
+        expect(e.engine.statuses.first.lastError, meshSonarBrokerRefusal);
+        expect(e.net.connects.map((c) => c.host), ['mqtt.example.org']);
+        e.feed(1);
+        expect(e.net.packets().map((p) => p.clientId).toSet(), hasLength(1));
+        // Even when off, it says it is not allowed.
+        e.engine.update(engineState(slots: [slot('s1', host: 'mqtt.meshsonar.com', enabled: false)], sign: e.radio.sign));
+        e.settle();
+        expect(e.labels(), ['Not allowed']);
+        expect(e.net.connects, hasLength(1));
+      });
+    });
+
+    test('Test refuses it without connecting', () {
+      _run((e) {
+        e.engine.update(engineState(slots: const [], sign: e.radio.sign));
+        ObserverFeedStatus? r;
+        unawaited(e.engine.test(slot('s9', host: 'mqtt.meshsonar.com')).then((v) => r = v));
+        e.settle();
+        expect(r!.state, ObserverFeedState.notAllowed);
+        expect(r!.lastError, meshSonarBrokerRefusal);
+        expect(e.net.connects, isEmpty);
+      });
+    });
+  });
+}
+
+class _BrokenStore implements SecretStore {
+  @override
+  Future<Uint8List?> read(String ref) async => throw StateError('locked');
+  @override
+  Future<void> write(String ref, Uint8List secret) async => throw StateError('locked');
+  @override
+  Future<void> delete(String ref) async {}
 }

@@ -18,6 +18,28 @@ enum MqttAuth {
   static MqttAuth parse(Object? v) => values.firstWhere((a) => a.wire == v, orElse: () => MqttAuth.jwt);
 }
 
+/// MeshSonar's own MQTT broker. It is never a feed slot (WS-OUT 9): Share with MeshSonar already sends this phone's
+/// packets to MeshSonar, so a slot pointing here would count them twice under two keys.
+const String meshSonarBrokerHost = 'mqtt.meshsonar.com';
+
+/// Why a slot pointing at [meshSonarBrokerHost] is refused, in plain words (Settings > Observer and the slot's status).
+const String meshSonarBrokerRefusal =
+    'This is MeshSonar\'s own server. Share with MeshSonar already sends it your packets, so it can\'t be an MQTT feed.';
+
+/// Whether [host] points at [meshSonarBrokerHost]: any case, with or without a scheme, sign-in, port, path or trailing
+/// dot (`MQTT.MeshSonar.com.`, `wss://mqtt.meshsonar.com:443/mqtt`).
+bool mqttHostIsMeshSonar(String host) {
+  var h = host.trim().toLowerCase();
+  h = h.replaceFirst(RegExp(r'^[a-z][a-z0-9+.\-]*://'), '');
+  final cut = h.indexOf(RegExp(r'[/?#]'));
+  if (cut >= 0) h = h.substring(0, cut);
+  final at = h.lastIndexOf('@');
+  if (at >= 0) h = h.substring(at + 1);
+  h = h.replaceFirst(RegExp(r':\d*$'), '');
+  h = h.replaceFirst(RegExp(r'\.+$'), '');
+  return h == meshSonarBrokerHost;
+}
+
 /// One MQTT feed slot. Off unless the person turned it on.
 class MqttSlotSettings {
   /// Stable per slot (`slot-1` ...), also the Keychain reference of its credentials.
