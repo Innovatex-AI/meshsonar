@@ -425,6 +425,8 @@ class MeshTrackService {
   Timer? _disconnectTimer;
   Timer? _saveTimer;
   bool _sending = false;
+  int? _inFlight;
+  final List<({int channelId, Completer<void> done, Timer timer})> _idleWaiters = [];
   bool _disposed = false;
   MeshTrackState? _state;
 
@@ -499,6 +501,11 @@ class MeshTrackService {
     for (final g in _groups.values) {
       g.answerTimer?.cancel();
     }
+    for (final w in List.of(_idleWaiters)) {
+      w.timer.cancel();
+      if (!w.done.isCompleted) w.done.complete();
+    }
+    _idleWaiters.clear();
     await _save();
     await _states.close();
     await _events.close();
@@ -960,7 +967,43 @@ class MeshTrackService {
     _pumpTimer = Timer(d < Duration.zero ? Duration.zero : d, _pump);
   }
 
+  /// Completes when nothing for [channelId] is queued or on its way to the radio any more (sent, refused or dropped),
+  /// or after [timeout]. Start fresh waits on it so the old group's `MT1 x` goes out under the OLD key before the
+  /// channel gets its new key (otherwise the stop would be lost, or go to the new group).
+  Future<void> whenIdle(int channelId, {Duration timeout = const Duration(seconds: 20)}) {
+    if (_disposed || _idle(channelId)) return Future.value();
+    final done = Completer<void>();
+    late final ({int channelId, Completer<void> done, Timer timer}) w;
+    w = (
+      channelId: channelId,
+      done: done,
+      timer: Timer(timeout, () {
+        _idleWaiters.remove(w);
+        if (!done.isCompleted) done.complete();
+      }),
+    );
+    _idleWaiters.add(w);
+    return done.future;
+  }
+
+  bool _idle(int channelId) => _inFlight != channelId && !_queue.any((q) => q.channelId == channelId);
+
+  void _checkIdle() {
+    if (_idleWaiters.isEmpty) return;
+    for (final w in List.of(_idleWaiters)) {
+      if (!_idle(w.channelId)) continue;
+      _idleWaiters.remove(w);
+      w.timer.cancel();
+      if (!w.done.isCompleted) w.done.complete();
+    }
+  }
+
   void _pump() {
+    _pumpOnce();
+    _checkIdle();
+  }
+
+  void _pumpOnce() {
     if (_disposed || _sending) return;
     _pumpTimer?.cancel();
     _pumpTimer = null;
@@ -994,9 +1037,11 @@ class MeshTrackService {
     }
     _lastMtSendAt = now;
     _sending = true;
+    _inFlight = q.channelId;
     final bytes = groupTextPacketBytes(utf8.encode('${_selfNameOf() ?? ''}: ${q.text}').length);
     _send(q.channelId, q.text).then((ok) {
       _sending = false;
+      _inFlight = null;
       if (_disposed) return;
       if (ok) {
         _log('meshtrack: sent ${q.kind.name}, $bytes bytes');
@@ -1010,6 +1055,7 @@ class MeshTrackService {
       _pump();
     }, onError: (Object _) {
       _sending = false;
+      _inFlight = null;
       if (_disposed) return;
       _log('meshtrack: send failed (${q.kind.name})');
       q.onRefused?.call();
