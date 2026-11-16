@@ -946,7 +946,11 @@ class AppState extends ChangeNotifier with _ObserverWiring {
     final u = _tracker.update(regionIndex, fix.lat, fix.lon, fix.at);
     _regionNearEdge = u.nearEdge;
     _regionAlsoIn = u.alsoIn;
+    final regionBefore = _currentRegion?.code;
     _currentRegion = u.current;
+    // The MQTT feeds publish under the region's airport code (meshcore/{IATA}/...): a new region retopics them, and a
+    // region found after the radio connected gives slots without their own code a topic at last.
+    if (_currentRegion?.code != regionBefore) _updateObserverEngine();
     if (u.nearEdge || u.alsoIn.isNotEmpty || (u.current == null && regionIndex.isNotEmpty)) unawaited(_refineOutlines(fix));
     if (_loaded) _refreshSyncedNames();
     if (u.changed) {
@@ -1592,6 +1596,10 @@ class AppState extends ChangeNotifier with _ObserverWiring {
   @visibleForTesting
   void debugDriveFix(GeoFix f) => _noteDriveFix(f);
 
+  /// For tests: a phone fix re-evaluating the current region (as a live GPS fix does).
+  @visibleForTesting
+  void debugUpdateRegion(GeoFix f) => _updateRegion(f);
+
   /// The drive's own pings go to the server publicly (uploads on, key accepted): only then may observer packets carry the
   /// exact drive position or own echoes their raw bytes.
   bool get _driveUploadsPublic => driving && _settings.autoSync && keyApproved;
@@ -1751,6 +1759,8 @@ class AppState extends ChangeNotifier with _ObserverWiring {
     _collectionSeen = true;
     _telemetryDisclosedSeen = true;
     _ctx?.refresh();
+    // The disclosure gates the observer (observerSharing): it may start now, without waiting for the next link change.
+    if (_loaded) _applyObserverState();
     notifyListeners();
   }
 
@@ -2123,7 +2133,13 @@ class AppState extends ChangeNotifier with _ObserverWiring {
     if (session != null && engine is DefaultWardriveEngine) engine.pingGate = session.pingGate;
     // Packets heard while our own ping is in flight wait for its echo window (telemetry_uploader.dart pingSent); all
     // others go at the normal cadence.
-    if (engine is DefaultWardriveEngine) engine.onPingSent = (at) => _tele.pingSent(at);
+    // The MQTT feeds hold the same way (observer_wiring.dart _observerPingSent).
+    if (engine is DefaultWardriveEngine) {
+      engine.onPingSent = (at) {
+        _tele.pingSent(at);
+        _observerPingSent(at);
+      };
+    }
   }
 
   /// "3 min ahead of", "2 h behind", "5 days ahead of" ... for a clock-skew warning.
@@ -2619,7 +2635,10 @@ class AppState extends ChangeNotifier with _ObserverWiring {
     // Our own transmission (and so its echoes) is never telemetry.
     // Our own transmission: its echoes are observer packets too, marked own (contract section 8.1); raw only when this
     // ping itself goes up publicly.
-    if (ping.pktHash != null) _telemetry?.markOwn(ping.pktHash!, publicRaw: _pingPublic(ping));
+    final public = _pingPublic(ping);
+    if (ping.pktHash != null) _telemetry?.markOwn(ping.pktHash!, publicRaw: public);
+    // The MQTT feeds follow the same rule: echoes of a non-public ping never go to an outside site.
+    _observerPingResolved(ping.pktHash, public: public, tx: ping.kind == PingKind.tx);
     final sid = _session?.id;
     if (sid == null) return;
     _pingCount++;
