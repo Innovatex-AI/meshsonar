@@ -49,7 +49,7 @@ String nodeSummary(PlanNode n, BuildContext context) {
     nodeStatusWords(n.status),
     if (n.role == PlanNodeRole.handheld) 'handheld',
     units.height(n.antennaM),
-    if (n.mine) 'my radio',
+    if (n.mine) 'mine',
     if (n.approximate) 'position about 1 km',
   ].join(' · ');
 }
