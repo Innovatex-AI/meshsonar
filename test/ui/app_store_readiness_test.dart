@@ -202,6 +202,9 @@ void main() {
       expect(v('NSBluetoothAlwaysUsageDescription'), allOf(contains('chat'), contains('background')));
       // Observer everywhere (0.38): App Review reads the Bluetooth string; it says the phone observes while connected.
       expect(v('NSBluetoothAlwaysUsageDescription'), allOf(contains('observer'), contains('public packets')));
+      // Only what is verified is claimed: a locked-screen drive keeps recording; background delivery of incoming messages is not promised.
+      expect(v('NSBluetoothAlwaysUsageDescription'), contains('A drive keeps recording in the background while the screen is locked.'));
+      expect(v('NSBluetoothAlwaysUsageDescription'), isNot(contains('incoming messages')));
       expect(plist, isNot(contains('Home observer')));
       expect(v('NSLocationWhenInUseUsageDescription'), allOf(contains('region'), contains('map')));
     });
