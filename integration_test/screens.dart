@@ -154,21 +154,35 @@ final List<ScreenStep> screens = [
     await pumpFor(t, const Duration(seconds: 4));
     await shot(t, 'connect-after-simulator');
   }, optional: true),
+  // The antenna sheet after the first connect. Every control is scrolled into view before its tap: on an iPhone 17 Pro the
+  // gain switch sits below the fold (y 1007 of 874), the old blind tap missed it, Save stayed disabled (gain unanswered) and
+  // the sheet closed unsaved, so Start drive stayed off ("Set your antenna first") and drive-live/report/detail never ran (V-5).
   ScreenStep('antenna', (t) async {
     final sheet = find.byKey(const Key('antenna-sheet'));
     if (!await waitFor(t, sheet, timeout: const Duration(seconds: 6))) throw const _Skip();
     await shot(t, 'antenna-sheet');
+    Future<void> tapIn(Finder f) async {
+      await t.ensureVisible(f.first);
+      await pumpFor(t, const Duration(milliseconds: 300));
+      await t.tap(f.first);
+      await pumpFor(t, const Duration(milliseconds: 400));
+    }
     final mount = find.byWidgetPredicate((w) => w.key is ValueKey && '${(w.key as ValueKey).value}'.startsWith('mount-'));
-    if (mount.evaluate().isNotEmpty) await t.tap(mount.first);
-    await pumpFor(t, const Duration(milliseconds: 500));
-    await t.tap(find.byKey(const Key('antenna-gain-unknown')));
-    await pumpFor(t, const Duration(milliseconds: 300));
-    await t.enterText(find.byKey(const Key('antenna-height-field')), '5');
+    if (mount.evaluate().isNotEmpty) await tapIn(mount);
+    await tapIn(find.byKey(const Key('antenna-gain-unknown')));
+    final height = find.byKey(const Key('antenna-height-field'));
+    await t.ensureVisible(height);
+    await t.enterText(height, '5');
     await pumpFor(t, const Duration(milliseconds: 500));
     final save = find.byKey(const Key('antenna-save'));
     await t.ensureVisible(save);
+    await pumpFor(t, const Duration(milliseconds: 300));
+    if (t.widget<ButtonStyleButton>(save).onPressed == null) _stepFail('antenna: Save is still disabled after mount, gain and height were answered');
     await t.tap(save);
     await pumpFor(t, const Duration(seconds: 2));
+    final app = AppScope.of(t.element(find.byType(Scaffold).first));
+    if (sheet.evaluate().isNotEmpty || app.needsAntennaSetup) _stepFail('antenna: Save did not store the antenna setup');
+    _stepOk('antenna');
   }, optional: true),
   ScreenStep('drive-ready', (t) async {
     await openTab(t, 'Drive');
@@ -201,8 +215,7 @@ final List<ScreenStep> screens = [
     final go = find.byKey(const Key('start-stop'));
     if (!await waitFor(t, go, timeout: const Duration(seconds: 10))) _stepFail('drive-live: no Start drive button on the Drive tab');
     if (t.widget<ButtonStyleButton>(go.first).onPressed == null) {
-      _stepFail('drive-live: Start drive is disabled (${_text(t, 'dock-subtitle') ?? 'no reason shown'}); '
-          'the tour needs location granted (verify_sim.sh grants it unless GRANT_LOCATION=0)');
+      _stepFail('drive-live: Start drive is disabled (${_text(t, 'dock-subtitle') ?? 'no reason shown'})');
     }
     await t.tap(go.first);
     if (!await _until(t, () => app.driving, const Duration(seconds: 15))) {
