@@ -203,11 +203,21 @@ void main() {
     expect(h.state.diagnostics.lines.join('\n'), contains('No GPS fix at launch'));
   });
 
-  test('nothing known (no fix, no region ever viewed): the hub view; no index either: the world', () async {
+  test('nothing known (no fix, no region ever viewed): Columbus (CMH is the default); no CMH in the index: the hub view; no index either: the world', () async {
     make();
     h.location.currentFix = () => null;
     await h.state.init();
     await launched();
+    expect(h.state.viewingRegion?.code, 'CMH');
+    expect(h.state.mapStart.kind, MapStartKind.region);
+    expect(h.state.mapStart.lon, closeTo((-83.5 + -82.45) / 2, 1e-9));
+    expect(h.state.settings.regionLast, isNull, reason: 'the default is not remembered');
+
+    make(index: const [day]);
+    h.location.currentFix = () => null;
+    await h.state.init();
+    await launched();
+    expect(h.state.viewingRegion?.code, 'DAY', reason: 'no CMH in the index: the first region');
     expect(h.state.mapStart.kind, MapStartKind.hub);
 
     make(index: const []);

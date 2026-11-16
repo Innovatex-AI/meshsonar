@@ -741,7 +741,7 @@ class AppState extends ChangeNotifier with _ObserverWiring {
       final n = _nearestMemo(idx, f);
       if (n != null) return n;
     }
-    return byCode(_settings.regionLast) ?? idx.first;
+    return byCode(_settings.regionLast) ?? byCode(defaultRegionCode) ?? idx.first;
   }
 
   // At 559 regions `viewingRegion` runs on every notification (each GPS fix, each state change): its lookups are
@@ -1121,6 +1121,8 @@ class AppState extends ChangeNotifier with _ObserverWiring {
         viewing: viewingRegion,
         viewingIsManual: viewingIsManual,
         viewingRemembered: _settings.regionLast != null,
+        // A fresh install with no GPS opens on the default region (Columbus), not the hub.
+        viewingIsDefault: viewingRegion?.code == defaultRegionCode,
         index: regionIndex,
         now: services.clock(),
       );
