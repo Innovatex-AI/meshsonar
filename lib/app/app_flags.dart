@@ -19,6 +19,18 @@ abstract final class AppFlags {
   static bool get driveRedesign => driveRedesignNotifier.value;
   static set driveRedesign(bool v) => driveRedesignNotifier.value = v;
 
+  /// MeshTrack (friends on the map over a private channel; meshsonar-infra docs/planning/meshtrack-plan-2026-11-16.md section
+  /// 11). ON in build 67 TestFlight; a build made with `--dart-define=MESHSONAR_MESHTRACK=false` hides the chip, the Friends
+  /// layer and the settings section and constructs nothing (`AppState.meshTrack` is null).
+  static const bool meshTrack = bool.fromEnvironment('MESHSONAR_MESHTRACK', defaultValue: true);
+
+  /// Tests only: overrides [meshTrack] for AppStates created afterwards (null = the build's value).
+  @visibleForTesting
+  static bool? debugMeshTrack;
+
+  /// What AppState reads: [debugMeshTrack] in tests, else [meshTrack].
+  static bool get meshTrackOn => debugMeshTrack ?? meshTrack;
+
 
   /// Reads the saved choice. A missing or damaged file leaves the default (on).
   static Future<void> load(File? file) async {
