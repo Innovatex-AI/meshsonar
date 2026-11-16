@@ -195,6 +195,15 @@ void main() {
       expect(m, isNot(contains('which MeshSonar region')));
     });
 
+    test('universal links: the entitlement names meshsonar.com and every Runner build config points at it', () {
+      final ent = File('ios/Runner/Runner.entitlements').readAsStringSync();
+      expect(ent, contains('com.apple.developer.associated-domains'));
+      expect(ent, contains('applinks:meshsonar.com'));
+      final pbx = File('ios/Runner.xcodeproj/project.pbxproj').readAsStringSync();
+      expect('CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;'.allMatches(pbx).length, 3, reason: 'Debug, Release and Profile of Runner');
+      expect(plist, contains('<key>FlutterDeepLinkingEnabled</key>\n\t<false/>'), reason: 'app_links, not Flutter, receives the links');
+    });
+
     test('the Always string covers the always-on phone observer; Bluetooth and When-in-use strings match what the app does', () {
       String v(String k) => RegExp('$k</key>\\s*<string>(.*?)</string>', dotAll: true).firstMatch(plist)!.group(1)!;
       expect(v('NSLocationAlwaysAndWhenInUseUsageDescription'), contains('Share with MeshSonar'));
