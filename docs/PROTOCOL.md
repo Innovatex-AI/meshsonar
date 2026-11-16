@@ -765,7 +765,8 @@ chat) is **not consumed**: it stays an ordinary chat message.
 **What the receiver does** (`meshtrack_service.dart`, `track_group.dart`). Only text on a channel that is a MeshTrack group on
 this phone is looked at. A parsed `MT1` message is consumed by the chat inbound tap (`ChatService.addChannelTextTap`,
 `lib/chat/channel_text_tap.dart`) before it is stored: no bubble, no notification, no unread count, not in chat backup, export or
-search (unless that channel's "Show position messages" is on in channel detail; the map updates either way). Messages from my
+search, whatever "Show position messages" says (that switch only lists them, from memory, under channel detail > Position
+messages; the map updates either way). MeshTrack sends go to the radio's command queue at ping priority, behind typed messages. Messages from my
 own radio name and messages with no sender name are consumed and ignored. Friend identity = the sender's name within the group
 (channel frames carry no sender key, so anyone with the key can use any name). Rules: one position per name per 5 s (extras
 dropped); at most 32 names per group (the oldest heard is dropped); duplicate receipts (same name, sender time, body) dropped
