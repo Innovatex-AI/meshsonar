@@ -23,7 +23,7 @@ import 'package:latlong2/latlong.dart' show LatLng;
 import '../../core/drive_next.dart' show driveNextTargets, DriveTarget;
 import '../../core/heard.dart' show bearingDeg, compass;
 import '../../core/hex_cells.dart' show loadHexEngine;
-import '../../core/plan/link_model.dart' show ftM, haversineKm;
+import '../../core/plan/link_model.dart' show ftM;
 import '../../core/plan/plan_api.dart';
 import '../../core/plan/plan_controller.dart';
 import '../../core/plan/plan_model.dart';
@@ -39,6 +39,7 @@ import '../map/layers/plan_overlay.dart' show PlanLinkVerdict, PlanOverlayLink;
 import '../map/layers/registry.dart' show kPlanLayerId;
 import '../map/main_map_focus.dart';
 import '../shell/drive_next_card.dart';
+import 'modes/link_mode.dart';
 
 // ------------------------------------------------------------------------------------------------ the mode interface
 
@@ -172,7 +173,7 @@ class PlanModeContext {
 
 /// The planner's chips, in order. A full mode replaces its line here when it lands (A8 link, A9 coverage, A10 find sites).
 final List<PlanMode> planModes = [
-  const _LinkMode(),
+  const LinkMode(),
   const _CoverageMode(),
   const _FindSitesMode(),
   const WhereToDriveMode(),
@@ -276,275 +277,6 @@ Widget _primary(BuildContext context, {required Key key, required String label, 
       icon: busy ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : AppSymbolIcon(symbol, size: 18),
       label: Text(label),
     );
-
-// ------------------------------------------------------------------------------------------------ Link (compact)
-
-class _LinkMode extends PlanMode {
-  const _LinkMode();
-  @override
-  PlanModeId get id => PlanModeId.link;
-  @override
-  String get label => 'Link';
-  @override
-  AppSymbol get symbol => AppSymbols.route;
-  @override
-  String get hint => 'Will one node hear another: pick two nodes of the plan.';
-  @override
-  Widget buildSheet(PlanModeContext context) => _LinkBody(context, key: ValueKey('plan-mode-body-link-${context.intent?.seq}'));
-}
-
-class _LinkBody extends StatefulWidget {
-  final PlanModeContext ctx;
-  const _LinkBody(this.ctx, {super.key});
-  @override
-  State<_LinkBody> createState() => _LinkBodyState();
-}
-
-class _LinkBodyState extends State<_LinkBody> {
-  String? _a, _b;
-  bool _pickA = false;
-  bool _loading = false;
-  PlanResult<PlanLinkResult>? _res;
-  String? _resKey, _askedKey;
-  int _seq = 0;
-
-  PlanModeContext get ctx => widget.ctx;
-
-  @override
-  void initState() {
-    super.initState();
-    final i = ctx.intent;
-    final nodes = ctx.controller.nodes;
-    if (i != null && (i.kind == PlanModeIntentKind.linkFrom || i.kind == PlanModeIntentKind.linkPair)) {
-      _a = i.nodeId;
-      _b = i.otherId;
-    } else {
-      _a = ctx.selectedNodeId ?? nodes.firstOrNull?.id;
-      _b = nodes.where((n) => n.id != _a).firstOrNull?.id;
-    }
-    ctx.hooks.onNodeTap = _onNodeTap;
-    ctx.plan.addListener(_onPlan);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeRun());
-  }
-
-  @override
-  void dispose() {
-    ctx.plan.removeListener(_onPlan);
-    if (ctx.hooks.onNodeTap == _onNodeTap) ctx.hooks.onNodeTap = null;
-    super.dispose();
-  }
-
-  bool _onNodeTap(String id) {
-    if (ctx.controller.plan.node(id) == null) return false;
-    // Taps fill A, then B, then alternate (B, A, B…), so two taps re-pick both ends.
-    setState(() {
-      if (_a == null || (_pickA && id != _b)) {
-        _a = id;
-        _pickA = false;
-      } else if (id != _a) {
-        _b = id;
-        _pickA = true;
-      }
-    });
-    unawaited(AppHaptics.selection());
-    _maybeRun();
-    return true;
-  }
-
-  void _onPlan() {
-    if (!mounted) return;
-    final p = ctx.controller.plan;
-    setState(() {
-      if (_a != null && p.node(_a!) == null) _a = null;
-      if (_b != null && p.node(_b!) == null) _b = null;
-      // A node that joins a plan with an end free fills it.
-      _a ??= p.nodes.where((n) => n.id != _b).firstOrNull?.id;
-      _b ??= p.nodes.where((n) => n.id != _a).firstOrNull?.id;
-    });
-    _maybeRun();
-  }
-
-  PlanLinkRequest? get _request {
-    final p = ctx.controller.plan;
-    final a = _a == null ? null : p.node(_a!), b = _b == null ? null : p.node(_b!);
-    if (a == null || b == null || a.id == b.id) return null;
-    return PlanLinkRequest(
-      a: a.point,
-      b: b.point,
-      haM: a.antennaM,
-      hbM: b.antennaM,
-      radio: p.radio,
-      clutter: p.clutter,
-      aKey: a.existingKey,
-      bKey: b.existingKey,
-    );
-  }
-
-  double? get _km {
-    final p = ctx.controller.plan;
-    final a = _a == null ? null : p.node(_a!), b = _b == null ? null : p.node(_b!);
-    return a == null || b == null ? null : haversineKm(a.lat, a.lon, b.lat, b.lon);
-  }
-
-  bool get _inRange {
-    final km = _km;
-    return km != null && km >= 0.1 && km <= 40;
-  }
-
-  void _maybeRun() {
-    final r = _request;
-    if (r == null || !_inRange) {
-      _publish();
-      return;
-    }
-    final key = PlanApi.linkKey(r);
-    if (key == _askedKey) {
-      _publish();
-      return;
-    }
-    unawaited(_run());
-  }
-
-  Future<void> _run() async {
-    final r = _request;
-    if (r == null || !_inRange) return;
-    final p = ctx.controller.plan;
-    final a = p.node(_a!)!, b = p.node(_b!)!;
-    final key = PlanApi.linkKey(r);
-    final n = ++_seq;
-    setState(() {
-      _loading = true;
-      _askedKey = key;
-    });
-    _publish();
-    final res = await ctx.api.link(r, aTxDbm: a.effectiveTxDbm, bTxDbm: b.effectiveTxDbm, aGainDbi: a.effectiveGainDbi, bGainDbi: b.effectiveGainDbi);
-    if (!mounted || n != _seq) return;
-    setState(() {
-      _loading = false;
-      _res = res;
-      _resKey = key;
-    });
-    _publish();
-  }
-
-  void _publish() {
-    if (_a == null || _b == null) {
-      ctx.setOverlay(PlanModeOverlay.empty);
-      return;
-    }
-    final current = _res?.ok == true && _request != null && _resKey == PlanApi.linkKey(_request!);
-    ctx.setOverlay(PlanModeOverlay(links: [PlanOverlayLink(fromId: _a!, toId: _b!, verdict: current ? overlayVerdict(_res!.data!.verdict) : PlanLinkVerdict.unknown)]));
-  }
-
-  Widget _end(BuildContext context, String label, String? value, ValueChanged<String?> onChanged, Key key) {
-    final nodes = ctx.controller.nodes;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: Gap.xs),
-      child: DropdownButtonFormField<String>(
-        key: key,
-        initialValue: value,
-        isExpanded: true,
-        decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
-        items: [for (final n in nodes) DropdownMenuItem(value: n.id, child: Text(n.name, overflow: TextOverflow.ellipsis))],
-        onChanged: onChanged,
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    final units = AppScope.unitsOf(context);
-    final nodes = ctx.controller.nodes;
-    if (nodes.length < 2) {
-      return AppEmptyView(
-        key: const Key('plan-mode-link'),
-        symbol: AppSymbols.route,
-        title: nodes.isEmpty ? 'Add two nodes to check a link' : 'Add one more node to check a link',
-        message: 'Long-press the map to drop a planned node, or add a repeater from the network.',
-        actionLabel: 'Add from the network',
-        onAction: ctx.openNodePicker,
-      );
-    }
-    final km = _km;
-    final req = _request;
-    final res = _res;
-    final current = res != null && req != null && _resKey == PlanApi.linkKey(req);
-    return Column(key: const Key('plan-mode-link'), crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      _end(context, 'End A', _a, (v) {
-        setState(() {
-          _a = v;
-          if (_b == v) _b = null;
-        });
-        _maybeRun();
-      }, Key('link-a-$_a')),
-      _end(context, 'End B', _b, (v) {
-        setState(() {
-          _b = v;
-          if (_a == v) _a = null;
-        });
-        _maybeRun();
-      }, Key('link-b-$_b')),
-      Text('Tip: tap a node on the map to make it an end.', style: t.textTheme.bodySmall),
-      if (km != null) PlanFact('Straight line', units.distance(km * 1000)),
-      if (km != null && km > 40)
-        PlanLine(AppSymbols.exclamationTriangle, 'The ends are ${units.distance(km * 1000)} apart; a link check reads terrain for up to ${units.distance(40000)}.', key: const Key('link-toofar')),
-      if (km != null && km < 0.1)
-        PlanLine(AppSymbols.exclamationTriangle, 'The ends are less than ${units.distance(100)} apart. Move one of them.', key: const Key('link-tooclose')),
-      const SizedBox(height: Gap.s),
-      _primary(context,
-          key: const Key('link-run'),
-          label: _loading ? 'Reading the terrain…' : current ? 'Check again' : 'Check this link',
-          symbol: AppSymbols.route,
-          busy: _loading,
-          onPressed: req != null && _inRange ? () => unawaited(_run()) : null),
-      const SizedBox(height: Gap.s),
-      if (_loading && !current) ConstrainedBox(constraints: const BoxConstraints(minHeight: 120), child: AppLoadingView(label: 'Reading the terrain between the two ends…', timeout: Duration(seconds: 50))),
-      if (res != null && !res.ok && current)
-        AppErrorView(key: const Key('link-error'), title: 'Could not check the link', message: res.error, onRetry: () => unawaited(_run())),
-      if (res != null && res.ok) _result(context, res, current, units),
-    ]);
-  }
-
-  Widget _result(BuildContext context, PlanResult<PlanLinkResult> r, bool current, Units units) {
-    final t = Theme.of(context);
-    final d = r.data!;
-    final v = d.verdict;
-    final p = ctx.controller.plan;
-    final aName = _a == null ? 'A' : p.node(_a!)?.name ?? 'A';
-    return Semantics(
-      container: true,
-      child: Column(key: const Key('link-result'), crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        if (!current) const PlanLine(AppSymbols.clock, 'The ends or settings changed: this is the last result. Check again to update it.', key: Key('link-stale')),
-        if (v != null)
-          PlanLine(verdictSymbol(v), '${verdictWords(v)} (Estimate)',
-              key: const Key('link-verdict'), color: t.colorScheme.primary, style: t.textTheme.titleLarge),
-        if (d.odds != null) PlanFact('Terrain odds (Estimate)', '${(d.odds! * 100).clamp(0, 100).toStringAsFixed(0)} %'),
-        PlanFact('Distance', units.distance(d.km * 1000)),
-        if (d.fresnelClearancePct != null) PlanFact('Fresnel zone open at the tightest point', '${d.fresnelClearancePct!.toStringAsFixed(0)} %'),
-        if (d.marginDb != null) PlanFact('Link margin (Estimate)', dbWords(d.marginDb!, signed: true)),
-        if (d.tightest != null && d.tightest!.raiseM > 0)
-          PlanLine(AppSymbols.arrowUpCircleFill, 'Raise $aName by ${units.height(d.tightest!.raiseM)} to clear 60 % of the Fresnel zone.', key: const Key('link-raise')),
-        if (d.ridge != null) PlanLine(AppSymbols.flag, 'Blocking ridge ${units.distance(d.ridge!.km * 1000)} from $aName.', key: const Key('link-ridge')),
-        if (d.measured != null)
-          PlanLine(
-            AppSymbols.waveform,
-            'Measured: ${d.measured!.echoes} ${d.measured!.echoes == 1 ? 'echo' : 'echoes'}'
-            '${d.measured!.meanSnr == null ? '' : ', mean SNR ${dbWords(d.measured!.meanSnr!)}'}'
-            '${d.measured!.lastAt == null ? '' : ', last ${_when(d.measured!.lastAt!)}'} (${d.measured!.source}).',
-            key: const Key('link-measured'),
-          )
-        else
-          const PlanLine(AppSymbols.waveform, 'Measured: no packets or drives recorded between these two yet.', key: Key('link-measured-none')),
-        ...resultNotes(context, r),
-        Text(
-          'Estimate from bare-earth terrain${d.provenance.terrain.isEmpty ? '' : ' (${d.provenance.terrain})'}; trees use the plan\'s clutter setting. Not a promise.',
-          style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
-        ),
-      ]),
-    );
-  }
-}
 
 // ------------------------------------------------------------------------------------------------ Coverage (compact)
 
