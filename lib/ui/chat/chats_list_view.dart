@@ -22,6 +22,7 @@ import '../design/app_symbols.dart';
 import '../design/app_type.dart';
 import '../design/state_views.dart';
 import '../design/tokens.dart';
+import '../meshtrack/meshtrack_entry.dart' show MeshTrackChatCard;
 import '../tools/adverts_screen.dart';
 import 'channel_flows.dart';
 import 'chat_list_actions.dart';
@@ -271,6 +272,8 @@ class _ChatsListViewState extends State<ChatsListView> {
     }
     return SliverMainAxisGroup(
       slivers: [
+        // MeshTrack: friends on the map, found where people look for groups (build 69). Hidden while searching.
+        if (!filtered) const SliverToBoxAdapter(child: MeshTrackChatCard()),
         if (!filtered)
           SliverToBoxAdapter(
             child: Padding(
@@ -308,16 +311,21 @@ class _ChatsListViewState extends State<ChatsListView> {
     final connected = _c.radioConnected;
     return SliverFillRemaining(
       hasScrollBody: false,
-      child: AppEmptyView(
-        key: const Key('channels-empty'),
-        symbol: AppSymbols.message,
-        title: 'No channels yet',
-        message: 'Join the Public channel to talk with everyone in range, or join a # channel your community uses.',
-        actionLabel: connected ? 'Join Public channel' : 'New channel',
-        onAction: connected
-            ? () => runChannelAction(context, _c, () => _c.admin.joinPublic(_c.radioId ?? ''), what: 'Public')
-            : widget.onNew,
-      ),
+      child: Column(children: [
+        const MeshTrackChatCard(),
+        Expanded(
+          child: AppEmptyView(
+            key: const Key('channels-empty'),
+            symbol: AppSymbols.message,
+            title: 'No channels yet',
+            message: 'Join the Public channel to talk with everyone in range, or join a # channel your community uses.',
+            actionLabel: connected ? 'Join Public channel' : 'New channel',
+            onAction: connected
+                ? () => runChannelAction(context, _c, () => _c.admin.joinPublic(_c.radioId ?? ''), what: 'Public')
+                : widget.onNew,
+          ),
+        ),
+      ]),
     );
   }
 
@@ -668,6 +676,7 @@ class _NothingYet extends StatelessWidget {
                   onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const AdvertsScreen())),
                   child: const Text('Announce myself'),
                 ),
+              const MeshTrackChatCard(padding: EdgeInsets.only(top: Gap.l)),
             ],
           ),
         ),
