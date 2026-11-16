@@ -188,7 +188,7 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
     if (!mounted) return;
     showAppToast(context, 'Messages cleared.', actionLabel: 'Undo', onAction: () {
       for (final m in all.reversed) {
-        c.store.messages.insert(m);
+        c.service.restoreMessage(m);
       }
       c.refresh();
     });

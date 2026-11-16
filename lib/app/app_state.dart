@@ -1674,6 +1674,7 @@ class AppState extends ChangeNotifier with _ObserverWiring {
 
   String? _cellAt(double lat, double lon) {
     if (_settings.telemetryRegionOnly) return null;
+    if (privacyZones.gate.hides(lat, lon)) return null; // inside a zone (or zones unread): not even the ~5 km cell
     if (!_h3Tried) {
       _h3Tried = true;
       _h3 = loadHexEngine();

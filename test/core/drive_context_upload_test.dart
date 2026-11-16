@@ -12,6 +12,7 @@ import 'package:meshsonar/core/drive_context.dart';
 import 'package:meshsonar/core/drive_context_wire.dart';
 import 'package:meshsonar/core/drive_store.dart';
 import 'package:meshsonar/core/model.dart';
+import 'package:meshsonar/core/privacy_zones.dart';
 import 'package:meshsonar/core/settings_store.dart';
 import 'package:meshsonar/core/sync_service.dart';
 import 'package:path/path.dart' as p;
@@ -340,6 +341,26 @@ void main() {
   });
 
   group('context that arrives late', () {
+    test('privacy zone: the context of a ping kept on the phone never goes through POST drive-context', () async {
+      sync.zones = () async => PrivacyZones([PrivacyZone(lat: 40.126, lon: -82.93, radiusM: 300)]);
+      final s = makeSession(startedAt: DateTime.now().toUtc().subtract(const Duration(hours: 1)), endedAt: null);
+      await store.startSession(s);
+      final inZone = makePing(0);
+      final outside = DrivePing(id: newId(), ts: DateTime.now().toUtc().subtract(const Duration(minutes: 45)), lat: 40.2, lon: -82.93);
+      await store.appendPing(s.id, inZone);
+      await store.appendPing(s.id, outside);
+      await store.endSession(s.id, DateTime.now().toUtc());
+      await sync.syncSession(s.id);
+      expect(await store.zoneHeldIds(s.id), {inZone.id});
+      await store.appendPingContext(s.id, inZone.id, PingContext(altM: 240.5));
+      await store.appendPingContext(s.id, outside.id, PingContext(altM: 241.0));
+      final report = await sync.syncSession(s.id);
+      expect(report.error, isNull);
+      expect(server.lateUploads, hasLength(1));
+      expect((server.lateUploads.single['pings'] as List).map((e) => (e as Map)['id']), [outside.id]);
+      expect(jsonEncode(server.lateUploads).contains('240.5'), isFalse);
+    });
+
     test('ctx recorded after its ping was confirmed goes through POST drive-context, once', () async {
       final s = await drive(3);
       await sync.syncSession(s.id); // pings up, no context yet
