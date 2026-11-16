@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Draws the MeshSonar app icon (1024x1024 PNG) from scratch: sonar arcs pinging out from a dot to three repeaters,
-on a deep teal background. Also writes a transparent foreground for Android adaptive icons.
+on a deep teal background, with the name MeshSonar along the bottom. Also writes a transparent foreground for Android adaptive icons.
 
     python3 tool/make_icon.py        # writes assets/icon/*.png
 Then: dart run flutter_launcher_icons
@@ -8,9 +8,12 @@ Then: dart run flutter_launcher_icons
 import math
 import os
 
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 S = 1024
+FONT = os.path.join(os.path.dirname(__file__), '..', 'assets', 'fonts', 'Barlow-Bold.ttf')  # SIL OFL
+WORDMARK_WHITE = (238, 250, 247)
+WORDMARK_DEEP = (6, 42, 44)
 SS = 4  # supersampling
 BG_TOP = (14, 77, 79)
 BG_BOTTOM = (6, 42, 44)
@@ -29,12 +32,12 @@ def gradient(size):
     return img
 
 
-def art(size, scale=1.0):
+def art(size, scale=1.0, dy=0):
     """The sonar mark on a transparent layer. scale<1 shrinks it toward the centre (adaptive-icon safe zone)."""
     W = size * SS
     layer = Image.new('RGBA', (W, W), (0, 0, 0, 0))
     d = ImageDraw.Draw(layer)
-    cx, cy = W * 0.5, W * (0.5 + 0.09 * scale)
+    cx, cy = W * 0.5, W * (0.5 + 0.09 * scale) + dy * SS
     R = W * 0.40 * scale
 
     # soft glow disc
@@ -86,11 +89,36 @@ def art(size, scale=1.0):
     return layer.resize((size, size), Image.LANCZOS)
 
 
+def wordmark(icon):
+    """Darker fade along the bottom carrying 'MeshSonar' (Mesh white, Sonar mint). Approved variant C, Nov 15 2026."""
+    fade = Image.new('RGBA', (S, S), (0, 0, 0, 0))
+    fd = ImageDraw.Draw(fade)
+    top = 650
+    for y in range(top, S):
+        t = (y - top) / (S - top)
+        fd.line([(0, y), (S, y)], fill=WORDMARK_DEEP + (round(235 * min(1, t * 1.5)),))
+    icon.alpha_composite(fade)
+    word = 'MeshSonar'
+    size = 100
+    for _ in range(40):  # fit the word to 820 px wide
+        font = ImageFont.truetype(FONT, size)
+        w = font.getlength(word)
+        if abs(w - 820) < 2:
+            break
+        size = max(10, round(size * 820 / w))
+    d = ImageDraw.Draw(icon)
+    x = S / 2 - font.getlength(word) / 2
+    for i, c in enumerate(word):
+        d.text((x, 930), c, font=font, fill=WORDMARK_WHITE if i < 4 else GLOW, anchor='ls')
+        x += font.getlength(c)
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     bg = gradient(S).convert('RGBA')
     icon = bg.copy()
-    icon.alpha_composite(art(S))
+    icon.alpha_composite(art(S, dy=-30))
+    wordmark(icon)
     icon.convert('RGB').save(os.path.join(OUT, 'icon.png'))  # iOS wants no alpha
     art(S, scale=0.68).save(os.path.join(OUT, 'foreground.png'))
     # Launch-screen mark: same art on transparent, small.
