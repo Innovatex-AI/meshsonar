@@ -15,7 +15,10 @@ class BrokerMessage {
   final String clientId, topic, payload;
   final int qos;
   final bool retain;
-  const BrokerMessage(this.clientId, this.topic, this.payload, this.qos, this.retain);
+
+  /// Published by the broker as the client's last will (its link ended without DISCONNECT).
+  final bool will;
+  const BrokerMessage(this.clientId, this.topic, this.payload, this.qos, this.retain, {this.will = false});
 }
 
 class JwtBroker {
@@ -101,6 +104,11 @@ class _Session {
   String? _clientId;
   String? _key;
   bool _busy = false;
+  String? _willTopic, _willMessage;
+  int _willQos = 0;
+  bool _willRetain = false;
+  bool _clean = false;
+  bool _done = false, _endedOnce = false;
 
   void run() {
     ws.listen(
@@ -108,9 +116,24 @@ class _Session {
         if (data is List<int>) _buf.addAll(data);
         unawaited(_pump());
       },
-      onDone: () {},
+      onDone: () {
+        // Frames already received (a DISCONNECT right before the close) are handled first, as a real broker does.
+        _done = true;
+        unawaited(_pump());
+      },
       onError: (_) {},
     );
+  }
+
+  /// The link ended: without a DISCONNECT first, the broker publishes the client's last will (MQTT 3.1.1 section 3.1.2.5).
+  void _ended() {
+    if (_endedOnce) return;
+    _endedOnce = true;
+    final t = _willTopic, m = _willMessage;
+    if (_clean || _key == null || t == null || m == null) return;
+    final w = BrokerMessage(_clientId!, t, m, _willQos, _willRetain, will: true);
+    b.messages.add(w);
+    if (!b._onMessage.isClosed) b._onMessage.add(w);
   }
 
   Future<void> _pump() async {
@@ -125,7 +148,10 @@ class _Session {
     } finally {
       _busy = false;
     }
+    if (_done && _frame0Empty) _ended();
   }
+
+  bool get _frame0Empty => _buf.length < 2;
 
   (int, Uint8List)? _frame() {
     if (_buf.length < 2) return null;
@@ -168,8 +194,10 @@ class _Session {
         o += 2; // keepalive
         _clientId = str();
         if (flags & 0x04 != 0) {
-          str();
-          str();
+          _willTopic = str();
+          _willMessage = str();
+          _willQos = (flags >> 3) & 3;
+          _willRetain = flags & 0x20 != 0;
         }
         final user = flags & 0x80 != 0 ? str() : null;
         final pass = flags & 0x40 != 0 ? str() : null;
@@ -203,6 +231,7 @@ class _Session {
       case 12: // PINGREQ
         _send([0xD0, 0]);
       case 14: // DISCONNECT
+        _clean = true;
         await ws.close();
     }
   }

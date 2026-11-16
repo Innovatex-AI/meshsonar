@@ -1,7 +1,9 @@
 // What a feed slot publishes (observer-everywhere-mqtt-plan-2026-11-15.md sections 3.4 and D8; JSON shape pinned from
 // docs/protocol/observer-firmware-notes.md section 5, golden tests in test/core/mqtt/mqtt_payload_test.dart):
 //   meshcore/{IATA}/{PUBKEY}/packets   one firmware-style JSON per public packet heard
-//   meshcore/{IATA}/{PUBKEY}/status    an "online" message on connect, every 5 minutes, and from Settings > Test
+//   meshcore/{IATA}/{PUBKEY}/status    an "online" message on connect, every 5 minutes, and from Settings > Test;
+//                                      "offline" when the feed stops on purpose, and as the last will the broker
+//                                      publishes when the connection is lost (same topic and retain flag as online)
 // The gate ([mqttPacketJson]) is a second, independent check behind the observer privacy filter
 // (TelemetryRecord.fromRx): only ADVERT, PATH, TRACE and group packets on a proven Public / #name channel are ever
 // published; DMs, requests, responses, anonymous requests, acks, multipart, control and custom packets never are, and
@@ -89,9 +91,16 @@ String? mqttPacketMessage(TelemetryRecord record, RxPacket rx, {required String 
   return j == null ? null : jsonEncode(j);
 }
 
-/// The `status` message: online, who (the radio's key), the radio model and firmware when known. No position.
-Map<String, dynamic> mqttStatusJson({required String publicKeyHex, required DateTime at, String? model, String? firmware}) => {
-  'status': 'online',
+/// The `status` message: online (or offline when [online] is false), who (the radio's key), the radio model and firmware
+/// when known. No position.
+Map<String, dynamic> mqttStatusJson({
+  required String publicKeyHex,
+  required DateTime at,
+  String? model,
+  String? firmware,
+  bool online = true,
+}) => {
+  'status': online ? 'online' : 'offline',
   'timestamp': mqttTimestamp(at),
   'origin': mqttOrigin(publicKeyHex),
   'origin_id': publicKeyHex.toUpperCase(),
