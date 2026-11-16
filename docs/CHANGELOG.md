@@ -3,7 +3,7 @@
 All notable changes to MeshSonar. Dates are local (US Eastern). This changelog was reconstructed from the commit
 history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md](ROADMAP.md).
 
-## [Unreleased]
+## [0.39.2+69] — 2026-11-16 — MeshTrack in the Drive panel, Chat and Settings
 
 - **MeshTrack is in the Drive panel, not a pill on the map.** The expanded panel has a MeshTrack row by the Antenna / Ping chips: what MeshTrack is doing ("Share your position with friends", "Sharing: Family, Club" with the accent dot, "Sharing paused: privacy zone", "Waiting for GPS", "2 friends nearby", "Connect your radio to share"); a tap opens your groups, and with one group a Share switch turns sharing on in one tap (the intro first, the group's last duration, Undo when you stop). The always-visible Dock has a MeshTrack button in every state (Ready, driving, Drive saved, connecting), tinted with the dot while you share so you always know your position is going out. A "New" tag marks the row from the first drive after this update until you open MeshTrack once. The MeshTrack toasts (asked where you are, radio disconnected, the hour is up) keep working with the panel collapsed or hidden.
 - **MeshTrack is easier to find elsewhere:** a MeshTrack card at the top of Chat > Channels (and in the empty Chats list) opens your groups; the New chat sheet has New MeshTrack group; Settings > MeshTrack moved up, right after Wardriving, Radio and Claimed radios, with a one-line description, and search finds it for friends, share location, meshtrack or track.
