@@ -44,6 +44,8 @@ const List<String> allowedLines = [
   'd / dt * 3.6;',
   'f.lon) / dt * 3.6;',
   'return s * 3.6;',
+  // The simulated friends (lib/radio/simulator.dart) write the same MT1 km/h field.
+  'final kmh = ((fix.speedMps ?? 0) * 3.6).round();',
 ];
 
 final _raw = RegExp(r'(\}|\$\w+|\d) ?(km/h|kph|km|mph|mi|ft|m|hPa|mbar|inHg|mmHg|°C|°F|° ?C|° ?F)(?![\w:])');
