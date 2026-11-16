@@ -54,7 +54,9 @@ pins the plist, manifest and icon facts this document relies on.
 
 ## 3. Age rating questionnaire
 
-All "None" / "No": cartoon or fantasy violence, realistic violence, sexual content or nudity, profanity, horror, alcohol/tobacco/drugs, medical/treatment info, gambling, contests, unrestricted web access (the app only opens meshsonar.com pages and a map-pack download from our own host), user-generated content shared with others (public views are numeric coverage squares and callsigns; there is no chat, comments, photos or free text shown to other users), loot boxes. Result: **4+**.
+Answer "None" / "No" for: cartoon or fantasy violence, realistic violence, sexual content or nudity, profanity or crude humour authored by us, horror, alcohol/tobacco/drugs, medical/treatment info, gambling, contests, loot boxes, unrestricted web access (the app only opens meshsonar.com pages and a map-pack download from our own host).
+**User-generated content: answer YES (changed from the first draft).** Since the chat redesign and photo messages (builds 59-61) the app shows text other people send over the MeshCore mesh (direct messages, rooms, public and `#hashtag` channels; this comes from radios, not from our server, and MeshSonar cannot moderate it) and photos a user chooses to send (stored on our server). Set the age rating from Apple's questionnaire with UGC = yes and unmoderated mesh text; do not claim 4+. Record the resulting rating here after App Store Connect computes it.
+**Guideline 1.2 (UGC) controls, as built:** report a photo (`Report this photo`, with a choice whether moderators may see it; viewer and message menu; `docs/runbooks/photo-takedown.md` in meshcore-insights), delete your own photo, **Block contact** (Contact edit sheet: a blocked contact's messages are marked read and the contact is hidden from lists; Undo), a Terms of service page (`/terms`, linked from Settings > Privacy & data sharing and the website) (use of MeshSonar, photos and chat, reports); confirm before submitting that it states what is not allowed and gives a contact address (checklist item 1). Private (end-to-end encrypted) photos cannot be scanned by the server by design; reports, the 30-day expiry and `/terms` cover them. The planner adds no UGC: shared plan links carry only a plan the sender made and are decoded on the phone.
 
 ## 4. Export compliance
 
@@ -76,6 +78,8 @@ Answer: **the app uses encryption, but only exempt encryption.** HTTPS (`NSURLSe
 | Diagnostics > **Performance Data** | Yes | No | App Functionality, Analytics | Phone battery level and charging state during a drive |
 | Diagnostics > **Other Diagnostic Data** | Yes | No | App Functionality, Analytics | System version, phone model code, app build; the companion radio's battery, uptime, counters and settings; problem reports |
 | User Content > **Other User Content** | Yes | No | App Functionality | The text of a problem report the person chooses to send |
+
+Observer and MQTT feeds (0.38): the observer data (public packet bytes, signal, time, the roughly 5 km cell, a random per-install observer id) is already covered by the Other Data, Coarse Location and User ID rows. An MQTT feed the user adds sends public packets and the radio's public key to a third-party site chosen by the user; nothing is sent until they add and turn one on (presets ship off), so no extra Apple data type is needed, but the privacy policy names it (`/privacy`, MQTT section) and the app says it before a feed is turned on. The Find sites wizard's ZIP or address is looked up on the phone by Apple's geocoder and is not sent to MeshSonar; the point sent is rounded to about 1 km.
 
 Notes for the form: nothing is collected for advertising, third-party advertising, product personalization or marketing. Health & Fitness is not declared (barometer is not HealthKit). No data from a Simulator drive is collected. Some types (altitude/direction, barometer, battery, device, radio health) are recorded on the phone and uploaded only to a server that says it accepts them; they are declared anyway so the label never has to change. Users can turn each category off in Settings > Privacy & data sharing and erase it from the server in Settings > Delete my data and account.
 
@@ -103,7 +107,7 @@ The app works fully on "While Using" (drives need the screen on or the app visib
 >
 > Accounts: none are required. A "driver key" (optional) is requested in Settings > Account & driver key to upload real drives to meshsonar.com; reviewers do not need one. Account deletion is in Settings > Privacy & data sharing > Delete my data and account; "Delete my account" opens meshsonar.com/me/privacy where the signed-in user deletes the account.
 >
-> Background modes: **location** is used only while a drive is recording, so pings keep their position when the screen is off or navigation is in front (the blue location indicator is shown). **bluetooth-central** keeps the link to the paired radio alive during that drive. Nothing runs in the background when no drive is recording.
+> Background modes: **location** is used only while a drive is recording, so pings keep their position when the screen is off or navigation is in front (the blue location indicator is shown). **bluetooth-central** keeps the link to the paired radio alive during that drive. Observer: while the radio is connected and the app is running, the phone shares the PUBLIC packets its radio hears with MeshSonar (Settings > Observer > Share with MeshSonar, on by default, one switch to turn it off and clear the queue; disclosed on first launch in a sheet). **Nothing uses location in the background when no drive is recording**; the observer sends only a roughly 5 km area (or nothing with Region only), and the app makes no claim of background service beyond what iOS keeps running (the `bluetooth-central` link). **MQTT feeds (Settings > Observer):** optional, all off until the user adds one; each sends only public packets and the radio's public key to a site the user chose (never position, name or private messages), with the password in the Keychain. **Plan tab:** the Planner needs no account or radio; try Plan > Link or Find sites (it uses the network; coordinates and settings leave the phone, never a name). Plan links open the app through `meshsonar://plan#...` (no universal links in this build).
 >
 > Nothing is sent on the air that identifies the user: the ping text is "MS:" plus 10 random characters.
 
@@ -119,6 +123,8 @@ Demo account: none needed. Contact: Andy (KE4BFI), alamb@innovatexit.com, phone 
 6. Settings > Privacy & data sharing (switches, policy link, delete my data and account).
 7. Offline map packs.
 8. iPad: Drive tab in landscape.
+9. Plan tab: the Planner on the map with the sheet at Medium (Link result, or Coverage footprint, or Find sites pins).
+10. Settings > Observer (Share with MeshSonar, MQTT feeds, preset picker).
 
 Capture with `xcrun simctl io booted screenshot` in the matching simulator; no device frames needed.
 

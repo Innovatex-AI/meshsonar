@@ -693,6 +693,37 @@ Firmware-derived, with spikes S1 to S14 recorded in `docs/protocol/chat-spikes-2
 - **Set path.** ADD_UPDATE_CONTACT with a chosen route and the outbox rewrite of a forgotten path are implemented but gated by
   `AppFlags.routeWriteVerified` (false) until step 7 of the checklist below passes on a real radio.
 
+## 14. MQTT feeds from the phone (release 0.38, `lib/core/mqtt/`)
+
+The phone can publish what its radio hears to outside MeshCore MQTT sites (Settings > Observer). Byte formats are the observer firmware's
+(docs/protocol/observer-firmware-notes.md sections 3-5); this section lists what the app does with them. Spec: meshsonar-infra
+`docs/planning/observer-everywhere-mqtt-plan-2026-11-15.md` (D1-D10). Engine description: docs/ARCHITECTURE.md 1.4.
+
+**Transport.** MQTT 3.1.1 over WebSocket only: `wss://host[:port]/path` (a slot with TLS switched off uses `ws://`; plain tcp is never used), subprotocol `mqtt`, keepalive 55 s, connect timeout 10 s,
+no client auto-reconnect (the engine reconnects with jittered backoff 1, 2, 4, 8, 16, 30 s x 0.5..1, floor 1 s, reset on success). CONNACK 4 or 5 = "Auth failed" (retry after 5 min with a fresh token).
+The engine keeps at most 10 slots, each its own connection and client id.
+
+**Login (JWT slots).** Username `v1_<PUBLIC KEY, 64 uppercase hex>`; password = the token `base64url(header).base64url(payload).HEX(signature)`:
+header `{"alg":"Ed25519","typ":"JWT"}`, payload in firmware order `publicKey` (uppercase hex), `aud`, `iat`, `exp` (no `owner`, `email` or `client` claims), base64url without padding.
+The signature is made **by the radio**: the companion `CMD_SIGN_*` flow (docs/PROTOCOL.md 2.5) over the ASCII text `header.payload`, rendered as **128 uppercase hex**. The phone holds no private key.
+Tokens are cached per (key, aud, ttl) and re-signed `ttl/10` clamped to 60..300 s before they expire, then the connection is cleanly renewed (the queue is kept). One signing runs at a time and a signing request
+times out after 20 s. A radio that cannot sign (old firmware, busy) gives the slot the state "Radio can't sign" and is retried every 10 minutes or at once on a new radio session. Password slots send the Keychain password
+(`mqtt.<slotId>`) with their username; "None" sends no credentials. Golden vectors: `test/core/mqtt/mqtt_jwt_test.dart` (RFC 8032 test 1 signing vector, an exact golden token).
+
+**Topics.** `meshcore/{IATA}/{KEY}/packets` and `meshcore/{IATA}/{KEY}/status` (`{KEY}` = the radio's key in uppercase hex; `{IATA}` = three letters or digits, upper-cased). The IATA is the slot's own code; else the phone's region code if it is 3 letters (`CMH`);
+otherwise the slot shows "No airport code for the topic" and publishes nothing (several brokers drop placeholder codes silently). No `raw` or `neighbors` topics.
+
+**`packets` message** (one JSON per public packet, QoS 0, not retained): `origin` = `MeshSonar <first 8 hex of the key>` (never the radio's own name or the person's), `origin_id` (key, uppercase), `timestamp` (ISO 8601 UTC with microseconds and `+00:00`),
+`type` `PACKET`, `direction` `rx`, `len`, `packet_type`, `payload_len`, `route` `F` or `D`, `raw` (uppercase hex of the packet), `SNR`, `RSSI` (when known), `hash`, `time`, `date` (`DD/MM/YYYY`), and `path` for direct routes only. All numbers are JSON strings, as the firmware sends them. There is no `score`.
+**`status` message** (QoS 1; retained only for a preset slot that asks for it, never for a custom slot): `status` `online`, `timestamp`, `origin`, `origin_id`, `model` and `firmware_version` when known, `client_version` `meshsonar-app/1`. Sent on connect, every 5 minutes, and once from Settings > Test (which publishes nothing else). No position, no stats, no last-will.
+Golden payloads: `test/core/mqtt/mqtt_payload_test.dart`.
+
+**What may leave the phone (two independent gates).** Packets reach the engine only through `onPublicPacket`, after AppState's observer filter (`TelemetryRecord.fromRx`), and only while "Share with MeshSonar" is on and a radio is connected. The engine then re-parses the bytes and publishes **only** ADVERT, PATH and TRACE packets
+and group packets (GRP_TXT, GRP_DATA) the filter proved belong to the Public channel or a `#name` channel (MAC checked), and only when the record's `raw` equals the bytes. Requests, responses, direct messages, anonymous requests, acks, multipart, control and custom packets are never published;
+neither are the person's name, position, cell, drive state or the contents of a private channel. A property test runs every payload type 0..15 x 4 routes x path x sizes x channel verdicts through the real filter (`test/core/mqtt/mqtt_privacy_property_test.dart`).
+
+**Limits.** Per slot: in-memory queue of 120 messages (drop-oldest, never written to disk, cleared when the radio drops) and at most 120 publishes a minute. A live connection keeps publishing while the process runs; a connection lost in the background is not retried until the app is in the foreground.
+
 ## Hardware checklist: chat redesign
 
 Fourteen steps for a real radio (each says the expected result). Run in subsets at each wave gate; all of them before release.

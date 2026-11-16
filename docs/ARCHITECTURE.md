@@ -132,6 +132,45 @@ button press, and adverts, discovery, traces and telemetry have a visible cooldo
 recording, the viewed region's preset and scope names, joined channels, the phone position, opening a URL. `AppStateToolsHost` backs it with
 `AppState`; widget tests put a fake in a `ToolsHostScope` around a real `RadioTools` over the simulated radio.
 
+### 1.3 The Planner (release 0.38, "Master Planner")
+
+Pure-Dart core in `lib/core/plan/`, the screens in `lib/ui/plan/` and `lib/ui/shell/plan_tab.dart`. Server contract: meshcore-insights `docs/PLATFORM_CONTRACT.md` "Planner endpoints".
+
+| Piece | File | Job |
+|---|---|---|
+| Wire contract | `core/plan_contract.dart` (exported from `core/api.dart`) | typed `PlanLinkRequest/Result`, `PlanVerifyRequest/Result`, `PlanSuggestRequest/Result`, `PlanRadio`, `PlanClutter`, direction, mount, verdict, `PlanProvenance` (`model`, `terrain`, `asOf`, `confidence`). No `region` field anywhere (the region is the Host). The wizard point is rounded to 2 decimals inside `toJson`. |
+| Client | `CmatClient.planLink / planVerify / planSuggest / mqttPresets` (`core/api.dart`, `core/cmat_client.dart`) | `POST /api/cmh/plan-link|plan-verify|plan-suggest` (public, driver key sent when present for its own rate bucket, timeouts 45/60/30 s); `GET /api/cmh/mqtt-presets` with `If-None-Match`. A 501 `not_built` comes back as `CmatException(status: 501)`. |
+| Plan model | `plan_model.dart` | Plan JSON v1 (see docs/FEATURES.md "Plan tab"), tolerant decode (bad nodes dropped, values clamped, duplicate ids made unique; a non-v1 document throws), effective height/power/gain defaults, `resolveMine`, `mineNodes`. |
+| Controller | `plan_controller.dart` | `PlanController`: add (30 cap, `PlanFullException`; an `existingKey` is never added twice), move (a drag is one undo step), edit, delete, rename, radio, clutter, goal, receiver, undo/redo (50), autosave 600 ms after quiet and on dispose, cached link matrix, node classes, relays, snap. |
+| Store | `plan_repository.dart`, `saved_plans.dart`, `plan_store.dart` | `PlanRepository` = one `<id>.plan.json` per plan; `SavedPlans` (list newest first, damaged files skipped, save, delete, import with a fresh id); `PlanStore` = the offline copy of server answers. |
+| API with fallback | `plan_api.dart` | `PlanApi` wraps the client behind `planClientCall`: a good answer is stored (key = FNV-1a 64 of the request JSON); network failure, timeout, 5xx or 501 serves the stored copy flagged `offlineAsOf`; 4xx and 429 return the server's sentence and never fall back; plan-link also falls back to the on-device model (`PlanResult.onDevice`); `verifyMany` runs the top 5 one after another. |
+| Link maths | `link_model.dart` | the radio is a parameter (`lambdaFor`, `snrFloorForSf`, `fsplDb`, ...); `analyseLink`, 10 dB fade margin, `linkGeometry`, `localPlanLink` = the same maths as the server's `linkAnswer` (goldens generated from the website's `link.ts`, 3 radios x 3 profiles, in `test/fixtures/plan_native/`). |
+| Analysis | `plan_analysis.dart` | link matrix (<= 10 nodes), `nodesSeeing`, relay finder, snap to high ground (8 radial profiles), node classes, `calibrationConfidence`, `compareVerifyWithMeasured`. |
+| Codec / export | `plan_codec.dart`, `plan_export.dart` | share fragment (zlib deflate + base64url, rounding of `mine`/`installed`, decode limits), KML, GeoJSON, MeshCore setup lines, contacts / map.meshcore.io import. |
+| Shell | `ui/shell/plan_tab.dart`, `ui/plan/planner_screen.dart`, `planner_sheet.dart`, `plan_modes.dart` | the Plan tab root is the Planner; `plan_tab` takes the shell's pending `PlanRequest` (open link, open saved, plan from, add node, link to, point) and hands it to `PlannerScreenState.handle`. `PlanMode` registry (`planModes`); a mode builds its sheet from `PlanModeContext` (controller, api, hooks, intent, switchMode, picker). Modes: `modes/link_mode.dart`, `coverage_mode.dart`, `find_sites_mode.dart` (+ `wizard.dart`), `WhereToDriveMode`. |
+| Map seams | `ui/map/layers/plan_overlay.dart`, `plan_layer.dart`, `plan_node_sheet.dart`; `CoverageMap` params | `PlanOverlayController` (plan, targets, focus requests), the `plan` layer drawn last, `MapHitKind.planNode` and `LongPressHit`, `extraLayers` (the coverage footprint), `onPlanNodeDrag`. Additive: with no host hooks the Drive map is unchanged; `MainMapFocus.overlay` carries targets to the Drive tab; the `plan` layer is never persisted. `MapPrefs` page ids `plan` and `detail`. |
+| Node object | `ui/nodes/node_ref.dart`, `node_actions.dart` | `NodeRef` and `nodeActions` (docs/FEATURES.md "One node object"); `ShellController.openPlan(PlanRequest.*)`. |
+| Deep links | `app/plan_inbox.dart`, `ios/Runner/Info.plist` | `meshsonar://plan#<code>` through `app_links` into the shell's plan inbox. No Associated Domains entitlement in 0.38. |
+| Geocoder | `ui/plan/modes/wizard.dart`, `ios/Runner/GeocoderChannel.swift` | method channel `app.meshsonar/geocoder` (`geocode {query}` -> `{lat, lon, label}` or null); CLGeocoder; no location permission; the query never goes to MeshSonar. |
+
+**Rules.** New planner UI uses only the design kit (`design/app_surfaces.dart` sheets on `sheet_detents.dart`, `state_views.dart`, `settings_kit` `SliderTile`/`InfoTile`, `AppSymbols`, `AppHaptics`, `Hit`, `Motion`); the Drive panel files are not edited. Estimates are labelled Estimate in the UI.
+
+### 1.4 The observer and MQTT engine (release 0.38)
+
+| Piece | File | Job |
+|---|---|---|
+| Observer wiring | `app/observer_wiring.dart` | collects the AppState observer pieces: mode = `drive` while driving, else `background`; the heartbeat follows `observerSharing && connected`; `observerStatusService`; feeds `observerEngine` with each public packet the privacy filter kept (`_feedObserverEngine`). `ObserverEngineFactory` seam in `app/services.dart`; the default is `NoObserverEngine`. |
+| Observer status | `core/observer_status.dart` | heartbeat + `GET observer/me` (replaces `home_observer.dart`; the Home observer is gone). |
+| Engine | `core/mqtt/mqtt_engine.dart` | `MqttObserverEngine implements ObserverEngine`: up to 10 slots (`maxSlots`), one runner per enabled slot; statuses Off, Waiting for radio, Connecting, Connected, Auth failed, Radio can't sign, Paused in background, Error; per-slot in-memory queue 120 (drop-oldest, never persisted, cleared when the radio drops) and at most 120 publishes a minute; jittered backoff 1, 2, 4, 8, 16, 30 s (reset on success); refused login retries after 5 min with a fresh token, "cannot sign" after 10 min or at once on a new radio session; status message on connect and every 5 min; 24 h sent counter; `test()` publishes one status message. |
+| JWT | `core/mqtt/mqtt_jwt.dart` | companion-signed Ed25519 token `{"alg":"Ed25519","typ":"JWT"}` + payload `publicKey` (UPPER hex), `aud`, `iat`, `exp`; base64url without padding; the signature is the radio's `CMD_SIGN_*` over the ASCII `header.payload`, 128 UPPERCASE hex; MQTT username `v1_<KEY>`. `MqttTokenService` caches per (key, aud, ttl), re-signs `ttl/10` clamped 60..300 s before expiry, one signing at a time, 20 s signing timeout. |
+| Payload | `core/mqtt/mqtt_payload.dart` | topics and JSON (docs/PROTOCOL.md 14); the **second privacy gate**. |
+| Transport | `core/mqtt/mqtt_transport.dart` | `MqttTransport` and `MqttClientTransport` (`mqtt_client`): MQTT 3.1.1 over WebSocket only (`wss`; `ws` only for a slot with TLS off, never plain tcp), subprotocol `mqtt`, keepalive 55 s, 10 s connect timeout, no client auto-reconnect (the engine owns it), CONNACK 4/5 = Auth failed. |
+| Presets | `core/mqtt_presets.dart`, `assets/mqtt/mqtt-presets.json` | `MqttPresetStore` (bundled asset, last good server copy + ETag, refresh after 6 h, never throws) and `MqttPresetCatalog`. Keep the asset byte-identical to meshcore-insights `src/data/mqtt-presets.json`. |
+| Secrets | `SecretStore` (Keychain) key `mqtt.<slotId>` | feed passwords; never in settings. |
+| Settings UI | `ui/settings/observer_section.dart` | docs/FEATURES.md "Observer and MQTT feeds". |
+
+Packets enter the engine only through `onPublicPacket`, only while sharing and a radio is connected, after AppState's filter. No location of any kind is read or sent by the engine.
+
 ### Dependency rules (as implemented)
 
 1. **`lib/core` and `lib/radio` (except `ble_transport.dart`) never import Flutter.** They run under plain `dart test`
@@ -584,6 +623,14 @@ behaviour: silence, the replay rule, loss, caps, prefix matching, the blank-pass
 | `core/report_pdf.dart` | core | PDF document model (heading, text, facts, table, bars, line) and `renderReportPdf` on the `pdf` package: vector charts, Barlow embedded when given, missing glyphs as "?". |
 | `core/drive_report_pdf.dart` | core | `driveReportPdf`: the drive report as a `ReportDoc` (units, local time + zone). |
 | `core/region_report_pdf.dart` | core | `regionReportPdf`: the `region-report` body as a `ReportDoc` (UTC, every row, server status notes). |
+| `core/plan/plan_model.dart`, `plan_controller.dart`, `plan_codec.dart`, `plan_export.dart`, `plan_api.dart`, `plan_analysis.dart`, `link_model.dart`, `saved_plans.dart`, `plan_repository.dart`, `plan_store.dart` | core | The Planner's pure-Dart core (section 1.3). |
+| `core/plan_contract.dart`, `core/mqtt_contract.dart` | core | Planner wire types and MQTT slot / preset types (exported from `core/api.dart`). |
+| `core/mqtt/*`, `core/mqtt_presets.dart` | core | The MQTT observer engine and preset catalogue (section 1.4). |
+| `core/observer_status.dart`, `app/observer_wiring.dart` | core / app | Observer heartbeat and status (replaces `home_observer.dart`), observer wiring in AppState. |
+| `ui/plan/*`, `ui/plan/modes/*`, `ui/shell/plan_tab.dart` | ui | The Planner screens (section 1.3). |
+| `ui/nodes/node_ref.dart`, `node_actions.dart` | ui | `NodeRef` and the one node action set. |
+| `ui/settings/observer_section.dart` | ui | Settings > Observer: master switch, status, MQTT feeds, preset picker, feed sheet. |
+| `ui/map/layers/plan_overlay.dart`, `plan_layer.dart`, `plan_node_sheet.dart` | ui | Plan overlay controller, plan layer and default plan-node sheet on the map. |
 | `ui/charts/chart_frame.dart` | ui | `ChartFrame` (title, Chart/Table switch, one semantics node "title. summary", caption), `ChartTable`, `chartPalette`. |
 | `ui/charts/time_line_chart.dart` | ui | `TimeLineChart`: series over time with gap breaks, reference line, floor marks, fill, dots. |
 | `ui/charts/bar_chart.dart` | ui | `BarChart`: bars or grouped bars on a baseline, reference line, per-bar colour. |
