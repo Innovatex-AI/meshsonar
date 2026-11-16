@@ -65,6 +65,7 @@ Key layerSwitchKey(String id) => Key(switch (id) {
     'hexes' => 'Your pings this session, in the same cells and colours.',
     'heard' => 'Repeaters your pings reached (highlighted).',
     kLabelsLayerId => 'Name beside each repeater, from street zoom; fewer when crowded.',
+    kFriendsLayerId => 'Friends sharing their position in your MeshTrack groups, and the meet-up point.',
     _ => null,
   };
   return (title: layerLabel(spec.id, def), description: l == null ? own : (on ? null : l.hint));

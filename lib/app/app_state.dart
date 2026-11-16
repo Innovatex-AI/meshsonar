@@ -1456,6 +1456,7 @@ class AppState extends ChangeNotifier with _ObserverWiring {
 
   ChatController? _mtChat;
   bool? _mtConnected;
+  int _mtGroupCount = 0;
 
   /// Builds the one MeshTrack wiring (flag on only), at [init].
   Future<void> _startMeshTrack() async {
@@ -1475,6 +1476,13 @@ class AppState extends ChangeNotifier with _ObserverWiring {
       now: services.clock,
     );
     w.setTrackGate(radioSessions.arbiter);
+    // Screens that only show MeshTrack when a group exists (the Drive map's long-press) follow the group count.
+    w.groups.addListener(() {
+      final n = w.service.state.groups.length;
+      if (n == _mtGroupCount) return;
+      _mtGroupCount = n;
+      notifyListeners();
+    });
     _meshTrackSync();
     addListener(_meshTrackSync);
     ChatWiring.controller.addListener(_meshTrackChat);

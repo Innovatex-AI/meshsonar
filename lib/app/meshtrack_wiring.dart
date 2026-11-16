@@ -250,10 +250,21 @@ class MeshTrackWiring {
       }
     }
     // Registry entries without settings (a reinstall: settings.json is gone, the Keychain is not) appear once chat is bound.
-    await service.start();
+    // The engine's timers (staleness tick) and the last-known file start with the first group: a phone without MeshTrack
+    // groups runs nothing.
+    if (_reg.isNotEmpty) await _ensureServiceStarted();
     service.loadGroups(initial);
     _persist();
     if (_chat != null) _scheduleReconcile(write: _connected);
+  }
+
+  bool _serviceStarted = false;
+  Future<void>? _serviceStarting;
+
+  Future<void> _ensureServiceStarted() {
+    if (_serviceStarted || _disposed) return _serviceStarting ?? Future.value();
+    _serviceStarted = true;
+    return _serviceStarting = service.start();
   }
 
   Future<void> dispose() async {
@@ -263,7 +274,11 @@ class MeshTrackWiring {
     _unbindChat();
     await _phoneSub?.cancel();
     _phoneSub = null;
-    await service.dispose();
+    // Never started (no group ever): nothing to stop and no last-known file to write.
+    if (_serviceStarted) {
+      await _serviceStarting;
+      await service.dispose();
+    }
     groups._dispose();
   }
 
@@ -502,6 +517,7 @@ class MeshTrackWiring {
   /// The core's group list changed (Share / See / every drive switches, Leave, Undo, addGroup from the UI).
   void _onCoreGroups(List<MtGroupConfig> list) {
     if (_disposed) return;
+    if (list.isNotEmpty) unawaited(_ensureServiceStarted());
     final ids = {for (final c in list) c.channelId};
     // Removed (Leave, or a group cleared): forget it in the Keychain and the settings. Kept for an Undo.
     for (final e in _uidByChannel.entries.toList()) {
@@ -713,6 +729,7 @@ class MeshTrackWiring {
     _uidByChannel
       ..clear()
       ..addAll(uidByChannel);
+    if (out.isNotEmpty) unawaited(_ensureServiceStarted());
     service.syncGroups(out);
     _channelSig = _signature();
     if (changed) _log('meshtrack: groups matched to this radio');
