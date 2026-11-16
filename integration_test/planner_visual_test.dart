@@ -10,7 +10,7 @@
 //   * Find sites may answer "preparing this region" while the server builds its planning table (E11): that is a pass with
 //     a note; an error view is a failure.
 //   * A Coverage or Link check must come back with a result (the server is deployed): an error view is a failure.
-// J2 is optional here (a miss is a NOTE). Not covered here (no way on a simulator): J6 "mine" needs a radio claimed under a signed-in account (widget-tested in
+// J2 is a required step (V-5, build 67). Not covered here (no way on a simulator): J6 "mine" needs a radio claimed under a signed-in account (widget-tested in
 // test/ui/plan/q1_sim_tour_test.dart and the node-action matrix); exports through the Files app (the share sheet is shot
 // at the very end, it cannot be dismissed from a Flutter test).
 
@@ -71,6 +71,40 @@ Future<bool> _tap(WidgetTester t, Finder f, {Duration wait = const Duration(seco
   await t.tap(f.first, warnIfMissed: false);
   await pumpFor(t, const Duration(milliseconds: 800));
   return true;
+}
+
+/// Scrolls the Scrollable under [within] down until [f] is built (lazy lists build rows only near the viewport), then
+/// brings it into view. False when the end of the list comes first.
+Future<bool> _scrollTo(WidgetTester t, Finder f, Finder within, {Duration wait = const Duration(seconds: 15)}) async {
+  if (!await waitFor(t, within, timeout: wait)) return false;
+  final end = DateTime.now().add(wait);
+  while (DateTime.now().isBefore(end)) {
+    if (f.evaluate().isNotEmpty) {
+      // Centred, not at the top edge: a pinned header (the Chat search and segments) would cover a row scrolled to the top.
+      try {
+        await Scrollable.ensureVisible(t.element(f.first), alignment: 0.5);
+      } catch (_) {}
+      await pumpFor(t, const Duration(milliseconds: 400));
+      return true;
+    }
+    final states = t.stateList<ScrollableState>(find.descendant(of: within.first, matching: find.byType(Scrollable)));
+    final s = states.where((x) => x.axisDirection == AxisDirection.down).firstOrNull;
+    if (s == null) {
+      await pumpFor(t, const Duration(milliseconds: 300));
+      continue;
+    }
+    final p = s.position;
+    if (p.pixels >= p.maxScrollExtent - 1) {
+      // At the end: the rows may still be on their way (the radio's contact sync); wait a little and look again.
+      await pumpFor(t, const Duration(milliseconds: 500));
+      if (f.evaluate().isNotEmpty) continue;
+      if (p.pixels >= p.maxScrollExtent - 1 && DateTime.now().isAfter(end.subtract(const Duration(seconds: 5)))) return false;
+      continue;
+    }
+    p.jumpTo((p.pixels + p.viewportDimension * 0.6).clamp(0, p.maxScrollExtent));
+    await pumpFor(t, const Duration(milliseconds: 300));
+  }
+  return f.evaluate().isNotEmpty;
 }
 
 Future<void> _show(WidgetTester t, Finder f) async {
@@ -622,37 +656,43 @@ void main() {
           }
         }
       }
-      // J2: a repeater contact > Link to… Optional (integrator, Nov 15): the row lookup under Chat > Network was still being
-      // tuned when the run budget ran out, so a miss here is a NOTE, not a STEPFAIL; J2 is also widget-tested (node-action matrix).
+      // J2: a repeater contact > Link to… (V-5, build 67: a required step now). Repeaters live under Chat > Network
+      // (rows 'network-row-<prefix>'), below the radio card and the Nearby section in a lazily built CustomScrollView,
+      // so on a phone the Repeaters rows are not built until the list is scrolled: the old lookup waited for a row that
+      // was never built and noted "no repeater rows". The contact profile is a lazy ListView too (the plan rows sit under
+      // the claim card), so Link to… is scrolled into view inside 'contact-profile', not the first Scrollable on screen.
       await _home(t);
       await openShellTab(t, 'Chat');
-      // Repeaters live under Chat > Network (rows 'network-row-<prefix>').
-      await _tap(t, _key('segment-network'));
-      // The first repeater row of the radio's own list (simulated repeaters, all with a position).
+      await _tap(t, _key('segment-network'), what: 'segment-network');
       final tile = _prefix('network-row-');
-      if (await waitFor(t, tile, timeout: const Duration(seconds: 15))) {
+      final rows = await _scrollTo(t, tile, _key('chat-scroll'));
+      if (!rows) {
+        await shot(t, 'planner-29-network-no-repeater');
+        _fail('J2: no repeater rows under Chat > Network with the simulated radio');
+      } else {
         final prefix = (t.widget(tile.first).key as ValueKey<String>).value.substring('network-row-'.length).toLowerCase();
-        if (await _tap(t, tile, wait: const Duration(seconds: 5))) {
-          final link2 = _key('node-action-linkTo');
-          if (link2.evaluate().isEmpty) {
-            try {
-              await t.scrollUntilVisible(link2, 250, scrollable: find.byType(Scrollable).hitTestable().first);
-            } catch (_) {}
-          }
+        final before = _plan(t).nodes.length;
+        await t.tap(tile.first, warnIfMissed: false);
+        await pumpFor(t, const Duration(seconds: 1));
+        final link2 = _key('node-action-linkTo');
+        if (!await waitFor(t, _key('contact-profile'), timeout: const Duration(seconds: 10))) {
+          _fail('J2: tapping a repeater row did not open its contact profile');
+        } else if (!await _scrollTo(t, link2, _key('contact-profile'))) {
           await shot(t, 'planner-29-contact-profile');
-          if (await _tap(t, link2)) {
-            if (await _until(t, () => _plan(t).nodes.any((n) => n.existingKey?.toLowerCase().startsWith(prefix) ?? false), timeout: const Duration(seconds: 10)) &&
-                await waitFor(t, _key('plan-mode-link'), timeout: const Duration(seconds: 5))) {
-              _ok('J2 contact to Link');
-              await shot(t, 'planner-30-contact-link');
-            } else {
-              _ok('J2', 'J2: Link to… did not open Link mode with the contact as an end');
-            }
+          _fail('J2: the repeater contact profile has no Link to… row (the simulated repeaters all have a position)');
+        } else {
+          await shot(t, 'planner-29-contact-profile');
+          await t.tap(link2.first, warnIfMissed: false);
+          await pumpFor(t, const Duration(seconds: 1));
+          if (await _until(t, () => _plan(t).nodes.any((n) => n.existingKey?.toLowerCase().startsWith(prefix) ?? false), timeout: const Duration(seconds: 10)) &&
+              await waitFor(t, _key('plan-mode-link'), timeout: const Duration(seconds: 5))) {
+            _ok('J2 contact to Link');
+            await shot(t, 'planner-30-contact-link');
+          } else {
+            await shot(t, 'planner-30-contact-link-missing');
+            _fail('J2: Link to… did not open Link mode with the contact as an end (plan had $before nodes, now ${_plan(t).nodes.length})');
           }
         }
-      } else {
-        await shot(t, 'planner-29-network-no-repeater');
-        _ok('J2', 'J2: no repeater rows under Chat > Network with the simulated radio');
       }
     } else {
       _fail('J2/J3: the simulated radio did not connect');
