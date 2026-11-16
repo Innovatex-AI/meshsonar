@@ -13,7 +13,6 @@ const String olcSeparator = '+';
 const String olcPadding = '0';
 const int _sepPos = 8;
 const int _pairLen = 10;
-const int _gridLen = 5;
 const int _maxDigits = 15;
 const int _base = 20;
 const int _gridRows = 5;
