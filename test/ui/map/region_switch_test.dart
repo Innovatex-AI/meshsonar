@@ -10,6 +10,7 @@ import 'package:meshsonar/ui/region/region_switch_sheet.dart';
 import 'package:meshsonar/ui/region/region_switcher.dart';
 
 import '../fakes.dart';
+import '../toast_test_kit.dart';
 
 RegionIndexEntry box(String code, String name, double w, double s, double e, double n) => RegionIndexEntry(
       code: code,
@@ -64,7 +65,7 @@ Future<Harness> harness(WidgetTester tester) async {
 
 void main() {
   group('the confirm sheet and what the switch does', () {
-    testWidgets('switches at once with no sheet; the toast says so and Undo puts the old region back', (tester) async {
+    testWidgetsT('switches at once with no sheet; the toast says so and Undo puts the old region back', (tester) async {
       final h = await harness(tester);
       final before = h.state.viewingRegion?.code;
       await pumpAsk(tester, h, day);
@@ -77,7 +78,7 @@ void main() {
       expect(h.state.viewingRegion?.code, before);
     });
 
-    testWidgets('Switch makes Dayton the viewed region (saved as the manual pick), remembers it as recent', (tester) async {
+    testWidgetsT('Switch makes Dayton the viewed region (saved as the manual pick), remembers it as recent', (tester) async {
       final h = await harness(tester);
       await pumpAsk(tester, h, day);
       expect(h.state.settings.regionManual, 'DAY');
@@ -86,7 +87,7 @@ void main() {
       expect(h.state.regionNeighbours?.viewing.code, 'DAY', reason: 'the neighbours are now Dayton\'s');
     });
 
-    testWidgets('the switcher lists the last three switches first, most recent first', (tester) async {
+    testWidgetsT('the switcher lists the last three switches first, most recent first', (tester) async {
       final h = await harness(tester);
       attachUiPrefs(h.state, UiPrefs(seen: true));
       final p = uiPrefsFor(h.state);
@@ -104,7 +105,7 @@ void main() {
       expect(order[1], lessThan(order[2]));
     });
 
-    testWidgets('with no GPS fix the switcher lists the regions near the one on screen', (tester) async {
+    testWidgetsT('with no GPS fix the switcher lists the regions near the one on screen', (tester) async {
       final h = Harness();
       h.client.regionsIndexResult = index;
       h.location.currentFix = () => null;
@@ -120,7 +121,7 @@ void main() {
   });
 
   group('outside coverage', () {
-    testWidgets('the chip offers the nearest regions; picking one switches and closes the sheet', (tester) async {
+    testWidgetsT('the chip offers the nearest regions; picking one switches and closes the sheet', (tester) async {
       final h = Harness();
       h.client.regionsIndexResult = [day, zzv];
       h.location.currentFix = () => null;

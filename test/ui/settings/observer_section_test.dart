@@ -295,7 +295,7 @@ void main() {
       expect(r.h.state.settings.mqttSlots.single.wsPath, '/mqtt', reason: 'Test saves nothing');
     });
 
-    testWidgetsT('Delete asks, then removes the feed and its Keychain password', (tester) async {
+    testWidgetsT('Delete removes the feed at once (Undo brings it back) and its Keychain password after the window', (tester) async {
       const pw = MqttSlotSettings(id: 'slot-3', name: 'Pw', host: 'pw.example', auth: MqttAuth.password, username: 'u');
       final r = await _open(tester,
           settings: const Settings(driverKey: 'k-1234567890', keyStatus: DriverKeyStatus.approved, mqttSlots: [_slotA, pw]));
@@ -305,11 +305,13 @@ void main() {
       await settleIo(tester);
       await _inSheet(tester, 'mqtt-slot-delete');
       await tester.tap(find.byKey(const Key('mqtt-slot-delete')));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('mqtt-delete-slot-3')), findsOneWidget);
-      await tester.tap(find.byKey(const Key('mqtt-delete-slot-3-confirm')));
       await settleIo(tester);
+      expect(find.byKey(const Key('mqtt-delete-slot-3')), findsNothing, reason: 'no confirm dialog');
       expect(r.h.state.settings.mqttSlots.map((x) => x.id), ['slot-1']);
+      expect(find.text('Deleted Pw.'), findsOneWidget);
+      expect(await r.h.secretStore.read('mqtt.slot-3'), isNotNull, reason: 'the password waits out the Undo window');
+      await tester.pump(const Duration(seconds: 7));
+      await settleIo(tester);
       expect(await r.h.secretStore.read('mqtt.slot-3'), isNull);
     });
 

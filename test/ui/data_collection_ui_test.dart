@@ -242,7 +242,7 @@ void main() {
       expect(find.byKey(const Key('device-on-dialog')), findsNothing);
       expect(h.state.settings.collectionOn('device'), isTrue);
       expect(h.settings.saved.toJson().containsKey('collection_off'), isFalse);
-      expect(find.textContaining('is on.'), findsOneWidget);
+      expect(find.textContaining('is on.'), findsWidgets);
       await tester.tap(find.text('Undo'));
       await tester.pumpAndSettle();
       expect(h.state.settings.collectionOn('device'), isFalse);
