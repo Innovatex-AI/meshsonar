@@ -5,6 +5,8 @@
 // Pure Dart, no state: the TxArbiter's ledger and the Drive settings readout use it.
 import 'dart:math' as math;
 
+import '../core/airtime_share.dart' show LoraRadio;
+
 /// MeshCore's preamble length for [sf].
 int meshcorePreambleSymbols(int sf) => sf <= 8 ? 32 : 16;
 
@@ -58,3 +60,12 @@ double? wardrivePingAirtimeMs({required String radioName, int? sf, double? bwKhz
   final bytes = groupTextPacketBytes(nameBytes + 2 + 13, transportCodes: transportCodes);
   return loraAirtimeMs(payloadBytes: bytes, sf: sf, bwKhz: bwKhz, cr: (cr ?? 5).clamp(5, 8));
 }
+
+/// Time on air of one MeshTrack message (a GRP_TXT channel text, e.g. "KE4BFI: MT1 @87G8Q2X5+7F2 s34 c270") at [preset],
+/// ms. [textBytes] counts the whole text on air INCLUDING the "name: " prefix the firmware adds (34 bytes in the example
+/// -> 53-byte packet: 255 ms at SF7/BW62.5, meshtrack plan section 3). [transportCodes] adds a scoped flood's 4 bytes.
+double meshTrackAirtimeMs(int textBytes, LoraRadio preset, {bool transportCodes = false}) => loraAirtimeMs(
+    payloadBytes: groupTextPacketBytes(textBytes, transportCodes: transportCodes),
+    sf: preset.sf,
+    bwKhz: preset.bwKhz,
+    cr: preset.cr.clamp(5, 8));
