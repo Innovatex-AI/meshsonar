@@ -47,8 +47,17 @@ PLIST
 # The team id lives only in the untracked Signing.xcconfig (docs/DEVELOPMENT.md 2.1), never in project.pbxproj.
 printf 'DEVELOPMENT_TEAM = %s\n' "$TEAM_ID" > ios/Flutter/Signing.xcconfig
 
-flutter build xcarchive --release 2>&1 | tee "$OUT/build.log"
 ARCHIVE="build/ios/archive/Runner.xcarchive"
+if [ ${#AUTH[@]} -gt 0 ]; then
+  # With the API key, archive through xcodebuild so -allowProvisioningUpdates can refresh the profile (needed after a capability such as
+  # Associated Domains is enabled on the App ID: `flutter build xcarchive` cannot pass the key and fails with "No Accounts").
+  flutter build ios --release --config-only --no-codesign 2>&1 | tee "$OUT/build.log"
+  rm -rf "$ARCHIVE"; mkdir -p "$(dirname "$ARCHIVE")"
+  xcodebuild archive -workspace ios/Runner.xcworkspace -scheme Runner -configuration Release -destination 'generic/platform=iOS' \
+    -archivePath "$ARCHIVE" -allowProvisioningUpdates "${AUTH[@]}" 2>&1 | tee -a "$OUT/build.log"
+else
+  flutter build xcarchive --release 2>&1 | tee "$OUT/build.log"
+fi
 [ -d "$ARCHIVE" ] || { echo "archive missing: $ARCHIVE" >&2; exit 1; }
 xcodebuild -exportArchive -archivePath "$ARCHIVE" -exportOptionsPlist "$OUT/ExportOptions.plist" \
   -exportPath "$OUT/out" -allowProvisioningUpdates ${AUTH[@]+"${AUTH[@]}"} 2>&1 | tee -a "$OUT/build.log"
