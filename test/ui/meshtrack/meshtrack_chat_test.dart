@@ -50,7 +50,7 @@ void main() {
     final m = kit.service.page(ch.convKey).messages.first;
     await tester.pumpWidget(host(MessageBubble(
         key: ValueKey(m.id), slot: BubbleSlot(message: m, joinsOlder: false, joinsNewer: false, separatorAbove: false, showSender: true))));
-    expect(find.text('MeshTrack: shared a position'), findsOneWidget);
+    expect(find.text('Shared their position (MeshTrack)'), findsOneWidget);
     expect(find.textContaining('MT1'), findsNothing);
   });
 

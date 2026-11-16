@@ -77,7 +77,9 @@ class InsetRow extends StatelessWidget {
           ),
           if (value != null) ...[
             const SizedBox(width: Gap.m),
-            Flexible(flex: 2, child: Text(value!, textAlign: TextAlign.end, style: t.textTheme.bodyMedium?.copyWith(color: c.onSurfaceVariant))),
+            // Tight: the value fills its share and ends on the right, so the chevron lines up with every other row
+            // (a loose fit left the rest of its share empty after a short value: "Open >" sat mid-row).
+            Flexible(flex: 2, fit: FlexFit.tight, child: Text(value!, textAlign: TextAlign.end, style: t.textTheme.bodyMedium?.copyWith(color: c.onSurfaceVariant))),
           ],
           ?trailing,
           if (onTap != null && chevron && trailing == null) ...[
