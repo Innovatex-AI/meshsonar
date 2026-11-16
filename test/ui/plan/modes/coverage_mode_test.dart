@@ -205,6 +205,9 @@ void main() {
         cell(offsetM(_a, 300, 0), heard: true, snr: 5),
         cell(offsetM(_a, 0, 1200), heard: false),
         cell(offsetM(_a, -800, 0), heard: true, snr: -1),
+        cell(offsetM(_a, 0, -600), heard: true, snr: 3),
+        cell(offsetM(_a, 1500, 0), heard: true, snr: -4),
+        cell(offsetM(_a, -2600, 0), heard: true, snr: -12), // outside the prediction (2 km), still in the sweep
       ],
       asOf: '2026-11-15T00:00:00Z',
       grid: const CoverageGrid.square(cellDeg: 0.002),
@@ -215,10 +218,31 @@ void main() {
     await _coverage(tester, st);
     await _estimate(tester);
     expect(find.byKey(const Key('coverage-verify-loop')), findsOneWidget);
-    expect(find.textContaining('Measured cells inside the estimate'), findsOneWidget);
+    expect(find.textContaining('Measured cells compared'), findsOneWidget);
     expect(find.textContaining('Predicted to decode, but nothing was heard: 1 cell'), findsOneWidget);
+    expect(find.textContaining('Heard outside the prediction: 1 cell'), findsOneWidget);
     expect(find.textContaining('Mean SNR measured / predicted'), findsOneWidget);
-    expect(find.textContaining('Our drives near it: 3 drive cells within 2 km'), findsOneWidget);
+    expect(find.textContaining('Our drives near it: 5 drive cells within 2 km'), findsOneWidget);
+    await drain(tester);
+  });
+
+  testWidgets('verify loop with too few measured cells says there is not enough data yet', (tester) async {
+    phone(tester);
+    final h = Harness();
+    h.client.planVerifyResult = _verify();
+    h.client.publicCoverageResult = PublicCoverage(
+      cells: [CoverageCell(lat: _a.lat, lon: _a.lon + 0.003, pings: 3, heard: 2, bestSnr: 2, medianSnr: 2, repeaters: 1, lastAt: '2026-11-14T12:00:00Z')],
+      asOf: '2026-11-15T00:00:00Z',
+      grid: const CoverageGrid.square(cellDeg: 0.002),
+    );
+    final st = await openPlanner(tester, h);
+    await AppScopeRead.refresh(tester);
+    st.controller!.addNode(name: 'Hilltop', lat: _a.lat, lon: _a.lon, status: PlanNodeStatus.installed);
+    await _coverage(tester, st);
+    await _estimate(tester);
+    expect(find.byKey(const Key('coverage-verify-thin')), findsOneWidget);
+    expect(find.textContaining('Not enough data yet: 1 measured cell inside the estimate'), findsOneWidget);
+    expect(find.textContaining('Measured cells compared'), findsNothing);
     await drain(tester);
   });
 

@@ -109,23 +109,4 @@ void main() {
       expect(f.rows * f.cols, lessThanOrEqualTo(21000));
     });
   });
-
-  test('verify loop: agreement, both kinds of disagreement and the SNR bias over heard cells', () {
-    final f = _fp('a', _site);
-    final cells = <MeasuredCell>[
-      (at: offsetM(_site, 300, 0), heard: true, snr: 4.0), // predicted SNR ~ 17 - 7.5 = 9.5
-      (at: offsetM(_site, 0, 1500), heard: false, snr: null), // predicted decodes: disagreement
-      (at: offsetM(_site, 0, -2500), heard: true, snr: -9.0), // predicted no decode: heard anyway
-      (at: offsetM(_site, -2800, 0), heard: false, snr: null), // both no
-      (at: offsetM(_site, 9000, 0), heard: true, snr: 1.0), // outside: ignored
-    ];
-    final v = verifyLoop(f, cells, noiseDbm: kNoiseDbm, decodeSnrDb: -7.5);
-    expect(v.cells, 4);
-    expect(v.agree, 2);
-    expect(v.predictedNotHeard, 1);
-    expect(v.heardNotPredicted, 1);
-    expect(v.agreePct, 50);
-    expect(v.measuredSnr, closeTo(-2.5, 1e-9));
-    expect(v.biasDb, isNotNull);
-  });
 }

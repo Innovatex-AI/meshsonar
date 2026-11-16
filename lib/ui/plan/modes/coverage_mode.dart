@@ -143,7 +143,10 @@ class _SiteRun {
   final String key;
   final PlanResult<CoverageNumbers> result;
   final SiteFootprint? footprint;
-  const _SiteRun(this.key, this.result, this.footprint);
+
+  /// The plan-verify answer itself (null for the coverage painter), for the verify loop.
+  final PlanVerifyResult? verify;
+  const _SiteRun(this.key, this.result, this.footprint, [this.verify]);
 }
 
 class _Spot {
@@ -351,7 +354,7 @@ class CoverageBodyState extends State<CoverageBody> {
     if (v.ok) {
       final d = v.data!;
       run = _SiteRun(key, PlanResult.ok(CoverageNumbers.ofVerify(d), at: v.at, offlineAsOf: v.offlineAsOf),
-          SiteFootprint.fromVerify(id, d.raw, site: n.point, radio: p.radio));
+          SiteFootprint.fromVerify(id, d.raw, site: n.point, radio: p.radio), d);
     } else if (v.unavailable) {
       // The planner endpoint is not on this server yet: the website's coverage painter runs the same model.
       final pr = await CoveragePainterApi(s.planBaseUrl, s.planStore).paint(PainterParams(
@@ -378,7 +381,7 @@ class CoverageBodyState extends State<CoverageBody> {
       _busy.remove(id);
       // A failure keeps the last good footprint on the map (marked stale) rather than wiping it.
       final old = _session.runs[id];
-      _session.runs[id] = run.result.ok || old == null || !old.result.ok ? run : _SiteRun(old.key, run.result, null);
+      _session.runs[id] = run.result.ok || old == null || !old.result.ok ? run : _SiteRun(old.key, run.result, null, old.verify);
       _staleBefore = _staleIds();
     });
     if (run.result.ok) unawaited(AppHaptics.success());
@@ -720,17 +723,17 @@ class CoverageBodyState extends State<CoverageBody> {
   }
 
   /// Measured network cells (all drives and observers of the region), or null when none are loaded.
-  List<MeasuredCell>? _measuredCells(BuildContext context) {
+  List<PlanMeasuredCell>? _measuredCells(BuildContext context) {
     final cov = AppScope.of(context).networkCoverage;
     if (cov == null) return null;
     return [
       for (final c in cov.cells)
-        if (c.lat.isFinite && c.lon.isFinite) (at: PlanPoint(c.lat, c.lon), heard: c.heard > 0 || (c.nOk ?? 0) > 0, snr: c.snrMean ?? c.medianSnr),
+        if (c.lat.isFinite && c.lon.isFinite) PlanMeasuredCell(PlanPoint(c.lat, c.lon), heard: c.heard > 0 || (c.nOk ?? 0) > 0, snr: c.snrMean ?? c.medianSnr),
     ];
   }
 
   /// Improvement 20 (display): an installed node's estimate against the drives around it.
-  List<Widget> _verifyLoop(BuildContext context, PlanNode node, _SiteRun run, bool current, Units units, ThemeData t, List<MeasuredCell>? cells) {
+  List<Widget> _verifyLoop(BuildContext context, PlanNode node, _SiteRun run, bool current, Units units, ThemeData t, List<PlanMeasuredCell>? cells) {
     final head = Semantics(header: true, child: Text('Did it work?', style: t.textTheme.titleSmall));
     if (node.status == PlanNodeStatus.planned) {
       return [
@@ -756,14 +759,30 @@ class CoverageBodyState extends State<CoverageBody> {
         ),
       ));
     } else {
-      final v = verifyLoop(fp, cells, noiseDbm: _noise, decodeSnrDb: _decodeSnr);
-      if (v.cells == 0) {
-        words.add(PlanLine(AppSymbols.car, 'No measured cells inside the estimate around ${node.name} yet.'));
+      // The stored received power against the plan's radio now (the same numbers the layer draws).
+      final sens = _noise + _decodeSnr;
+      final v = compareVerifyWithMeasured(
+        run.verify ?? PlanVerifyResult(coveredKm2: run.result.data!.coveredKm2),
+        cells,
+        site: node.point,
+        marginAt: (at) {
+          final d = fp.dbmAt(at);
+          return d == null ? null : d - sens;
+        },
+        snrFloorDb: _decodeSnr,
+      );
+      if (!v.enough) {
+        words.add(PlanLine(AppSymbols.car,
+            v.compared == 0
+                ? 'Not enough data yet: no measured cells inside the estimate around ${node.name}. Drive around it to check the estimate.'
+                : 'Not enough data yet: ${v.compared} measured ${v.compared == 1 ? 'cell' : 'cells'} inside the estimate, at least ${v.minCells} are needed to compare. Drive around it.',
+            key: const Key('coverage-verify-thin')));
       } else {
-        words.add(PlanFact('Measured cells inside the estimate', '${v.cells}'));
+        words.add(PlanFact('Measured cells compared', '${v.compared}'));
         words.add(PlanFact('Estimate and drives agree', '${v.agreePct.toStringAsFixed(0)} %'));
-        if (v.predictedNotHeard > 0) words.add(PlanLine(AppSymbols.exclamationTriangle, 'Predicted to decode, but nothing was heard: ${v.predictedNotHeard} ${v.predictedNotHeard == 1 ? 'cell' : 'cells'}.'));
-        if (v.heardNotPredicted > 0) words.add(PlanLine(AppSymbols.waveform, 'Heard where the estimate said no: ${v.heardNotPredicted} ${v.heardNotPredicted == 1 ? 'cell' : 'cells'}.'));
+        words.add(PlanFact('Predicted covered and heard', '${v.coveredHeard}'));
+        if (v.coveredSilent > 0) words.add(PlanLine(AppSymbols.exclamationTriangle, 'Predicted to decode, but nothing was heard: ${v.coveredSilent} ${v.coveredSilent == 1 ? 'cell' : 'cells'}.'));
+        if (v.heardOutside > 0) words.add(PlanLine(AppSymbols.waveform, 'Heard outside the prediction: ${v.heardOutside} ${v.heardOutside == 1 ? 'cell' : 'cells'}.'));
         if (v.biasDb != null) {
           words.add(PlanFact('Mean SNR measured / predicted', '${_snrWords(v.measuredSnr!)} / ${_snrWords(v.predictedSnr!)}'));
           words.add(PlanLine(AppSymbols.gauge,
