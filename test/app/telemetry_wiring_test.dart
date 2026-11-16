@@ -219,6 +219,24 @@ void main() {
     expect(h.state.telemetryQueued, 1);
   });
 
+  test('third gate: a packet proven under a private key the phone holds is never uploaded, even if its key leaked into the # set', () async {
+    final h = await _ready();
+    final crew = List<int>.generate(16, (i) => 0x51 + i);
+    h.state
+      ..hashtagChannelKeys = (() => [crew])
+      ..privateChannelKeys = ((hash) => hash == channelHashByte(crew) ? [crew] : const []);
+    h.link.rx.add(_pkt(h.now, 7, key: crew));
+    await Future<void>.delayed(Duration.zero);
+    expect(h.state.telemetryQueued, 0);
+    h.state.privateChannelKeys = (hash) => hash == channelHashByte(crew) ? null : const []; // still being read
+    h.link.rx.add(_pkt(h.now, 8, key: crew));
+    await Future<void>.delayed(Duration.zero);
+    expect(h.state.telemetryQueued, 0, reason: 'fail closed while the key is read');
+    h.link.rx.add(_pkt(h.now, 9)); // control: Public is uploaded
+    await Future<void>.delayed(Duration.zero);
+    expect(h.state.telemetryQueued, 1);
+  });
+
   test('erase calls DELETE on the server', () async {
     final h = await _ready();
     expect(await h.state.eraseTelemetry(), 2);

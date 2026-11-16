@@ -1706,6 +1706,11 @@ class AppState extends ChangeNotifier with _ObserverWiring {
   ///
   /// [hashtagChannelNames] names the # channels too, so their packets (and Public's) may carry raw bytes in v2.
   List<String> Function()? hashtagChannelNames;
+
+  /// The private channel keys this phone holds whose on-air hash byte is the argument (set by the chat wiring,
+  /// lib/chat/private_channel_keys.dart). Null answer = a key is still being read: the packet counts as private. A group
+  /// packet proven under any of them never reaches an MQTT feed or the upload (third gate, lib/app/observer_wiring.dart).
+  List<List<int>>? Function(int channelHash)? privateChannelKeys;
   late final ShareableChannels _shareable = ShareableChannels(
     () => [publicChannelSecret16, ...?hashtagChannelKeys?.call()],
     named: () => [
@@ -1742,7 +1747,9 @@ class AppState extends ChangeNotifier with _ObserverWiring {
       pos: pos,
       ownPublicKey: _selfInfo?.publicKey,
     );
-    if (r != null) {
+    // Third gate (MeshTrack plan section 15): a group packet proven under a private key the phone holds is never
+    // uploaded either, even if a future change let its key into the shareable set.
+    if (r != null && !_onPrivateChannel(rx)) {
       _tele.add(r);
       _feedObserverEngine(r, rx);
     }
