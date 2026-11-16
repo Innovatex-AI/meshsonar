@@ -408,6 +408,20 @@ void main() {
       await Scrollable.ensureVisible(t.element(use.first), alignment: 0.3);
       await pumpFor(t, const Duration(milliseconds: 600));
       await shot(t, 'mt-23-channel-detail');
+      // Show position messages (review fix 5): the switch reveals a row that opens the display-only list.
+      final show = find.byKey(const Key('mt-show-positions'));
+      if (show.evaluate().isEmpty) _fail('no Show position messages switch');
+      await t.tap(show.first);
+      await pumpFor(t, const Duration(milliseconds: 800));
+      final listRow = find.byKey(const Key('mt-position-messages-row'));
+      if (!await scrollToFind(t, listRow, find.byKey(const Key('channel-detail')))) _fail('no Position messages row after turning the switch on');
+      await Scrollable.ensureVisible(t.element(listRow.first), alignment: 0.3);
+      await pumpFor(t, const Duration(milliseconds: 600));
+      await shot(t, 'mt-23a-channel-detail-show-on');
+      await t.tap(listRow.first);
+      await pumpFor(t, const Duration(seconds: 1));
+      if (!await waitFor(t, find.byKey(const Key('mt-position-messages')))) _fail('Position messages screen did not open');
+      await shot(t, 'mt-23b-position-messages');
       await popToRoots(t);
     });
 

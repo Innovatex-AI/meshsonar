@@ -17,7 +17,7 @@ const double kMtHit = 48;
 const String mtFeatureName = 'MeshTrack';
 
 /// The one-time disclosure the first time sharing is turned on (plan section 7, exact text).
-const String mtIntroTitle = 'MeshTrack.';
+const String mtIntroTitle = 'MeshTrack';
 const String mtIntroBody = 'See your friends on the map while you drive. Your position goes over your group\'s private channel, '
     'encrypted with its key. Only people with the group link can read it, and MeshSonar\'s servers never get it. It is sent '
     'only while you share, for the time you choose, and never inside your privacy zones. Like any message you send, the mesh '
