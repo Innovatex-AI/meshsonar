@@ -36,10 +36,10 @@ class SwitchableSink implements OutboundMessageSink {
   }
 
   @override
-  Future<int> sendChannel({required String radioId, required int slot, required String text, required int timestamp}) {
+  Future<int> sendChannel({required String radioId, required int slot, required String text, required int timestamp, int priority = CommandPriority.user}) {
     final a = adapter;
     if (a == null) throw const RadioNotConnected();
-    return a.sendChannel(radioId: radioId, slot: slot, text: text, timestamp: timestamp);
+    return a.sendChannel(radioId: radioId, slot: slot, text: text, timestamp: timestamp, priority: priority);
   }
 }
 

@@ -11,6 +11,8 @@ import 'package:path/path.dart' as p;
 /// lib/core/server_url.dart, kept equal to [sameServerHosts] by the test below), the public node map, and
 /// our basemap (api.meshsonar.com/basemap) with the OpenFreeMap fallback (tiles.openfreemap.org).
 const allowedServerHosts = {'meshsonar.com', 'cmh.meshsonar.com', 'cmh-meshcore.lovable.app'};
+/// Named in lib/ only so the app can refuse them; nothing ever connects to these.
+const refusedHosts = {'mqtt.meshsonar.com'};
 const allowedLiteralHosts = {...allowedServerHosts, 'www.opengis.net', 'map.meshcore.io', 'api.meshsonar.com', 'tiles.openfreemap.org', 'api.meshcore.nz', 'tiles.meshsonar.com', 'open-meteo.com', 'www.openstreetmap.org', 'opendatacommons.org', 'www.esri.com', 'www.usgs.gov', 'creativecommons.org', 'flasher.meshcore.io', 'protomaps.com', 'openfreemap.org'};
 // protomaps.com, openfreemap.org: basemap credit LINKS in the Credits sheet, opened in the browser on tap only (M2).
 // www.esri.com, www.usgs.gov (M3 Satellite imagery credit LINKS, on tap only; the imagery itself is fetched from the URLs in the Map Definition, never hard-coded here).
@@ -99,7 +101,15 @@ void main() {
       if (clientRe.hasMatch(src)) clients.add(p.basename(f.path));
     }
     expect(hosts.keys, containsAll(['map.meshcore.io', 'api.meshsonar.com', 'tiles.openfreemap.org']), reason: 'the scan itself works');
-    final unknown = {for (final e in hosts.entries) if (!allowedLiteralHosts.contains(e.key)) e.key: e.value};
+    // Hosts the app names only to REFUSE them (never contacted): build 67 O1a refuses our own broker as an MQTT feed
+    // (observer-and-data-platform-plan WS-OUT 9). It may appear only in the contract file that refuses it.
+    for (final h in refusedHosts) {
+      if (hosts.containsKey(h)) expect(hosts[h], 'lib/core/mqtt_contract.dart', reason: '$h is only ever named to refuse it');
+    }
+    final unknown = {
+      for (final e in hosts.entries)
+        if (!allowedLiteralHosts.contains(e.key) && !refusedHosts.contains(e.key)) e.key: e.value
+    };
     expect(unknown, isEmpty, reason: 'a new host in lib/ needs a spec decision (MeshSonar sends only to its server)');
     expect(clients.difference({'cmat_client.dart', 'repeater_directory.dart', 'region_repeaters_api.dart', 'region_overview_api.dart', 'region_reports_api.dart', 'region_packets_api.dart', 'region_analysis_api.dart', 'repeater_detail_api.dart', 'etag_client.dart', 'region_stats_api.dart', 'region_timeline_api.dart', 'coverage_v2.dart', 'live_stream.dart', 'radio_presets.dart', 'offline_packs.dart', 'offline_basemap.dart', 'repeater_sync.dart', 'tile_source.dart', 'basemap.dart', 'map_definition.dart', 'photo_cache.dart', 'photo_wire.dart'}), isEmpty);
     expect(hosts.keys.where((h) => h.contains('meshmapper')), isEmpty);

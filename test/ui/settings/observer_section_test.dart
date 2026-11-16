@@ -277,6 +277,56 @@ void main() {
       expect(find.textContaining('Added My broker'), findsOneWidget);
     });
 
+    testWidgetsT("MeshSonar's own server is refused as a feed host, in any spelling, with plain words", (tester) async {
+      final r = await _open(tester);
+      for (final host in ['mqtt.meshsonar.com', 'MQTT.MeshSonar.com.', 'mqtt.meshsonar.com:8883']) {
+        await _openPicker(tester);
+        await tester.tap(find.byKey(const Key('mqtt-preset-custom')));
+        await settleIo(tester);
+        await tester.enterText(find.byKey(const Key('mqtt-field-host')), host);
+        await tester.tap(find.byKey(const Key('mqtt-slot-save')));
+        await tester.pumpAndSettle();
+        expect(find.text(meshSonarBrokerRefusal), findsOneWidget, reason: host);
+        final err = tester.widget<TextField>(find.descendant(of: find.byKey(const Key('mqtt-field-host')), matching: find.byType(TextField)));
+        expect(err.decoration?.errorMaxLines, greaterThanOrEqualTo(3), reason: 'the refusal is a sentence: not cut to one line');
+        expect(r.h.state.settings.mqttSlots, isEmpty, reason: 'nothing saved for $host');
+        await tester.tap(find.byKey(const Key('mqtt-slot-cancel')));
+        await settleIo(tester);
+        await showSetting(tester, 'mqtt-add-feed');
+      }
+      expect(meshSonarBrokerRefusal, isNot(matches(RegExp(r'broker|MQTT_|IATA|JWT', caseSensitive: false))),
+          reason: 'plain words, no jargon');
+    });
+
+    testWidgetsT('a saved slot pointing at MeshSonar\'s own server says Not allowed, whatever the engine says', (tester) async {
+      const ours = MqttSlotSettings(id: 'slot-1', name: 'Ours', host: 'mqtt.meshsonar.com', enabled: true);
+      final r = await _open(tester,
+          settings: const Settings(driverKey: 'k-1234567890', keyStatus: DriverKeyStatus.approved, mqttSlots: [ours]));
+      await settleIo(tester);
+      expect(tester.widget<Text>(find.byKey(const Key('mqtt-slot-slot-1-status'))).data, 'Not allowed\n$meshSonarBrokerRefusal');
+      r.engine.emitStatus(const [ObserverFeedStatus(slotId: 'slot-1', state: ObserverFeedState.connecting)]);
+      await tester.pumpAndSettle();
+      expect(tester.widget<Text>(find.byKey(const Key('mqtt-slot-slot-1-status'))).data, 'Not allowed\n$meshSonarBrokerRefusal');
+      expect(r.h.state.settings.mqttSlots.single, ours, reason: 'the saved slot is kept, not dropped');
+      // It can never connect, so its switch is off and cannot be turned on (sim tour: it looked like a normal off feed).
+      final sw = tester.widget<Switch>(find.byKey(const Key('mqtt-slot-slot-1-switch')));
+      expect(sw.value, isFalse);
+      expect(sw.onChanged, isNull);
+    });
+
+    testWidgetsT('a preset list that names MeshSonar\'s own server never offers it', (tester) async {
+      final r = await _open(tester);
+      r.h.client
+        ..mqttPresetsEtag = '"s2"'
+        ..mqttPresetsResult = const MqttPresetList(presets: [
+          MqttPreset(id: 'ours', name: 'MeshSonar', host: 'mqtt.meshsonar.com', wsPath: '/mqtt'),
+          MqttPreset(id: 'corecomms', name: 'CoreComms', host: 'mqtt.corecomms.net', wsPath: '/mqtt'),
+        ]);
+      await _openPicker(tester);
+      expect(find.byKey(const Key('mqtt-preset-corecomms')), findsOneWidget);
+      expect(find.byKey(const Key('mqtt-preset-ours')), findsNothing);
+    });
+
     testWidgetsT('Test sends the form\'s feed to the engine (status message only) and shows the result', (tester) async {
       final r = await _open(tester,
           settings: const Settings(driverKey: 'k-1234567890', keyStatus: DriverKeyStatus.approved, mqttSlots: [_slotA]));

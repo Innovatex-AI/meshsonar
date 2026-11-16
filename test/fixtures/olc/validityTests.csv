@@ -1,0 +1,60 @@
+# Copied unchanged (below this header) from https://github.com/google/open-location-code test_data/validityTests.csv
+# (main branch, fetched 2026-11-16) as test vectors for lib/core/meshtrack/plus_code.dart.
+# Copyright 2014 Google Inc. Licensed under the Apache License, Version 2.0 (the "License"); you may not use this
+# file except in compliance with the License. You may obtain a copy of the License at
+# http://www.apache.org/licenses/LICENSE-2.0 (full text: LICENSE in this directory). Unless required by applicable law
+# or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing
+# permissions and limitations under the License.
+################################################################################
+#
+# Test data for validity tests.
+# Format of each line is:
+#   code,isValid,isShort,isFull
+#
+################################################################################
+#
+# Valid full codes:
+#
+################################################################################
+8FWC2345+G6,true,false,true
+8FWC2345+G6G,true,false,true
+8fwc2345+,true,false,true
+8FWCX400+,true,false,true
+84000000+,true,false,true
+################################################################################
+#
+# Valid short codes:
+#
+################################################################################
+WC2345+G6g,true,true,false
+2345+G6,true,true,false
+45+G6,true,true,false
++G6,true,true,false
+################################################################################
+#
+# Invalid codes
+#
+################################################################################
+G+,false,false,false
++,false,false,false
+8FWC2345+G,false,false,false
+8FWC2_45+G6,false,false,false
+8FWC2η45+G6,false,false,false
+8FWC2345+G6+,false,false,false
+8FWC2345G6+,false,false,false
+8FWC2300+G6,false,false,false
+WC2300+G6g,false,false,false
+WC2345+G,false,false,false
+WC2300+,false,false,false
+84900000+,false,false,false
+################################################################################
+#
+# Validate that codes at and exceeding 15 digits are still valid when all their
+# digits are valid, and invalid when not.
+#
+################################################################################
+849VGJQF+VX7QR3J,true,false,true
+849VGJQF+VX7QR3U,false,false,false
+849VGJQF+VX7QR3JW,true,false,true
+849VGJQF+VX7QR3JU,false,false,false

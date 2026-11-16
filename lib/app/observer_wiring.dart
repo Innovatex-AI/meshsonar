@@ -130,17 +130,17 @@ mixin _ObserverWiring on ChangeNotifier {
   }
 
   /// A packet passed the privacy filter ([record] non-null): the engine gets it only while this phone is an observer, and
-  /// under the same own-echo rule as the MeshSonar uploader (telemetry_uploader.dart markOwn / pingSent): an echo of one
-  /// of our own pings goes out only when that ping itself went up publicly (no privacy zone, no hidden drive), and
-  /// packets heard while a ping of ours is in flight wait until its hash is known.
+  /// only when it is traffic this phone overheard (WS-OUT 4, observer-and-data-platform-plan-2026-11-16.md): an echo of
+  /// one of our own pings never goes to an outside site, public or not, and neither does any packet on the drive channel
+  /// (the System channel the pings use), nor any group packet proven under a private channel key the phone holds
+  /// (the third gate, [_onPrivateChannel]). Packets heard while a ping of ours is in flight wait until its hash is known.
   void _feedObserverEngine(TelemetryRecord record, RxPacket rx) {
     if (!observerSharing) {
       _mqttHeld.clear();
       return;
     }
-    final own = _mqttOwnPublic(record);
-    if (own == false) return; // an echo of a ping that was not public
-    if (own == null && _mqttPingsOpen > 0) {
+    if (_mqttOwn(record) || _onDriveChannel(rx) || _onPrivateChannel(rx)) return;
+    if (_mqttPingsOpen > 0) {
       _mqttHeld.add((record, rx));
       while (_mqttHeld.length > _mqttHeldMax) {
         _mqttHeld.removeAt(0);
@@ -150,10 +150,34 @@ mixin _ObserverWiring on ChangeNotifier {
     observerEngine.onPublicPacket(record, rx);
   }
 
+  /// A group packet that proves under the drive channel's key (a # channel; a drive on Public is never dropped wholesale,
+  /// its own echoes still are by hash).
+  bool _onDriveChannel(RxPacket rx) {
+    final name = _s._settings.channel.trim();
+    if (!name.startsWith('#')) return false;
+    final p = MeshPacket.tryParse(rx.raw);
+    if (p == null || !telemetryGroupTypes.contains(p.payloadType)) return false;
+    return ShareableChannels(() => [hashtagSecret16(name)])(p.payload);
+  }
+
+  /// Third gate (MeshTrack plan section 15, WS-OUT): a group packet whose MAC verifies under ANY private channel key the
+  /// phone holds (a MeshTrack group or not). Cheap path: the payload's channel hash byte picks the keys first, so a MAC is
+  /// tried only for keys with that hash. A private key with this hash still being read counts as a match (fail closed).
+  bool _onPrivateChannel(RxPacket rx) {
+    final lookup = _s.privateChannelKeys;
+    if (lookup == null) return false;
+    final p = MeshPacket.tryParse(rx.raw);
+    if (p == null || !telemetryGroupTypes.contains(p.payloadType) || p.payload.length < 3) return false;
+    final keys = lookup(p.payload[0]);
+    if (keys == null) return true;
+    if (keys.isEmpty) return false;
+    return ShareableChannels(() => keys)(p.payload);
+  }
+
   // ---------- own-ping echoes for the MQTT feeds ----------
 
-  /// Hashes of our own pings -> whether that ping went up publicly (its echoes may then be published).
-  final Map<String, bool> _mqttOwnHashes = <String, bool>{};
+  /// Hashes of our own pings: their echoes never go to an MQTT feed.
+  final Set<String> _mqttOwnHashes = <String>{};
 
   /// Own pings sent whose hash is not known yet (their listen window is still open).
   int _mqttPingsOpen = 0;
@@ -164,10 +188,11 @@ mixin _ObserverWiring on ChangeNotifier {
   /// The longest a ping may stay unresolved before held packets are released (the uploader's echo window).
   static const Duration mqttEchoHold = Duration(seconds: 90);
 
-  /// Null = not an echo of ours; true/false = an echo of a ping that was / was not public.
-  bool? _mqttOwnPublic(TelemetryRecord record) {
+  /// An echo of one of our own transmissions (marked own, or its hash is one of our pings).
+  bool _mqttOwn(TelemetryRecord record) {
+    if (record.own) return true;
     final h = record.packetHash?.toLowerCase();
-    return h == null ? null : _mqttOwnHashes[h];
+    return h != null && _mqttOwnHashes.contains(h);
   }
 
   /// One of our own pings is going out now: hold packets until its hash is known ([_observerPingResolved]).
@@ -182,13 +207,13 @@ mixin _ObserverWiring on ChangeNotifier {
     });
   }
 
-  /// A ping of ours resolved: [hash] (null when unknown) is ours, [public] says whether it went up publicly. [tx] = this
-  /// is the ping a [_observerPingSent] opened (a transmitted one), so its window closes.
-  void _observerPingResolved(String? hash, {required bool public, required bool tx}) {
+  /// A ping of ours resolved: [hash] (null when unknown) is ours, so its echoes are dropped. [tx] = this is the ping a
+  /// [_observerPingSent] opened (a transmitted one), so its window closes.
+  void _observerPingResolved(String? hash, {required bool tx}) {
     if (hash != null && hash.isNotEmpty) {
-      _mqttOwnHashes[hash.toLowerCase()] = public;
+      _mqttOwnHashes.add(hash.toLowerCase());
       while (_mqttOwnHashes.length > 2048) {
-        _mqttOwnHashes.remove(_mqttOwnHashes.keys.first);
+        _mqttOwnHashes.remove(_mqttOwnHashes.first);
       }
     }
     if (tx && _mqttPingsOpen > 0) _mqttPingsOpen--;
@@ -199,14 +224,14 @@ mixin _ObserverWiring on ChangeNotifier {
     _releaseMqttHeld();
   }
 
-  /// Sends what was held when no window is open any more; echoes of non-public pings are dropped.
+  /// Sends what was held when no window is open any more; echoes of our own pings are dropped.
   void _releaseMqttHeld() {
     if (_mqttPingsOpen > 0 || _mqttHeld.isEmpty) return;
     final held = List.of(_mqttHeld);
     _mqttHeld.clear();
     if (!observerSharing) return;
     for (final (r, rx) in held) {
-      if (_mqttOwnPublic(r) != false) observerEngine.onPublicPacket(r, rx);
+      if (!_mqttOwn(r)) observerEngine.onPublicPacket(r, rx);
     }
   }
 

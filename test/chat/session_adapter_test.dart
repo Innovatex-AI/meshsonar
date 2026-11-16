@@ -27,6 +27,7 @@ class FakeSession implements r.RadioSession {
   r.SendResult nextSend = const r.SendResult.accepted(1000, expectedAck: 77, estTimeoutMs: 4200, flood: true);
   final sentContacts = <(String, String, int, int?)>[];
   final sentChannels = <(int, String)>[];
+  final channelPriorities = <int>[];
   final updated = <r.RadioContact>[];
   r.ContactListing listing = const r.ContactListing(totalOnRadio: 0, contacts: [], mostRecentLastMod: 0);
   int getContactsCalls = 0;
@@ -52,8 +53,9 @@ class FakeSession implements r.RadioSession {
   }
 
   @override
-  Future<r.SendResult> sendChannelMessage(int channelIndex, String text, {r.FloodScope? scope}) async {
+  Future<r.SendResult> sendChannelMessage(int channelIndex, String text, {r.FloodScope? scope, int priority = CommandPriority.user}) async {
     sentChannels.add((channelIndex, text));
+    channelPriorities.add(priority);
     return nextSend;
   }
 
@@ -223,6 +225,9 @@ void main() {
     s.nextSend = const r.SendResult.accepted(4242);
     expect(await a.sendChannel(radioId: radioA, slot: 1, text: 'hi', timestamp: 1), 4242);
     expect(s.sentChannels.single, (1, 'hi'));
+    expect(s.channelPriorities.single, CommandPriority.user, reason: 'a typed message goes at user priority');
+    await a.sendChannel(radioId: radioA, slot: 1, text: 'MT1 x', timestamp: 1, priority: CommandPriority.ping);
+    expect(s.channelPriorities.last, CommandPriority.ping, reason: 'the priority reaches the radio session');
   });
 
   test('outbox adopts the session timestamp for a channel message (echo matching depends on it)', () async {
@@ -284,7 +289,7 @@ class _Stamping implements OutboundMessageSink {
   Future<SendReceipt> sendDirect({required String radioId, required String contactPublicKey, required String text, required int timestamp, required int attempt, required bool forceFlood}) =>
       inner.sendDirect(radioId: radioId, contactPublicKey: contactPublicKey, text: text, timestamp: timestamp, attempt: attempt, forceFlood: forceFlood);
   @override
-  Future<int> sendChannel({required String radioId, required int slot, required String text, required int timestamp}) async => ts;
+  Future<int> sendChannel({required String radioId, required int slot, required String text, required int timestamp, int priority = CommandPriority.user}) async => ts;
 }
 
 ChatService _serviceWith(Harness h, OutboundMessageSink sink) =>

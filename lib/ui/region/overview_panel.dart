@@ -223,6 +223,7 @@ IconData _eventIcon(String type) => switch (type) {
   'repeater_quiet' => Icons.volume_off_outlined,
   'link_new' => Icons.link,
   'link_lost' => Icons.link_off,
+  'link_flap' => Icons.sync_problem_rounded,
   _ => Icons.info_outline,
 };
 

@@ -6,11 +6,15 @@
 //  * Chat never leaves the phone: nothing in here touches the network.
 //  * The wardrive channel (ChannelKind.system) is never chat: its traffic is stored read, counted, capped, and announced only as
 //    ChatEventKind.systemChanged.
+//  * Registered [ChannelTextTap]s see every inbound channel text before it is stored; one that consumes it takes it out of
+//    chat entirely (MeshTrack positions). With no tap registered nothing changes.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
+import '../radio/tx_arbiter.dart' show TrackTxGate;
 import 'channel_secret.dart';
+import 'channel_text_tap.dart';
 import 'contact_manager.dart';
 import 'db/message_repository.dart';
 import 'events.dart';
@@ -88,6 +92,15 @@ class ChatService {
   bool _started = false;
   bool _disposed = false;
   int _systemInserts = 0;
+
+  /// Inbound hooks, asked in registration order before a channel text is stored ([addChannelTextTap]).
+  final List<ChannelTextTap> _taps = [];
+
+  /// One-line diagnostics sink (never given message text). Set by the app wiring; null = silent.
+  void Function(String line)? diagLog;
+
+  /// The transmit arbiter's MeshTrack door, for [sendChannelTextSilently]. Set by the app wiring; null = such sends fail.
+  TrackTxGate? trackGate;
 
   ChatService({
     required this.store,
@@ -237,12 +250,59 @@ class ChatService {
     return c;
   }
 
+  // ------------------------------------------------------------------ channel text taps
+
+  /// Registers [tap] (after the ones already there). Registering the same tap twice has no effect.
+  void addChannelTextTap(ChannelTextTap tap) {
+    if (!_taps.any((t) => identical(t, tap))) _taps.add(tap);
+  }
+
+  /// Removes [tap]; true when it was registered.
+  bool removeChannelTextTap(ChannelTextTap tap) {
+    final i = _taps.indexWhere((t) => identical(t, tap));
+    if (i < 0) return false;
+    _taps.removeAt(i);
+    return true;
+  }
+
+  /// True when a tap took the message out of chat. A throwing tap counts as pass (logged without the text).
+  bool _tapConsumes(InboundChannelText e, Channel ch, String? name, String body, int now) {
+    if (_taps.isEmpty) return false;
+    final ev = ChannelTextEvent(
+      radioId: e.radioId,
+      channelId: ch.id ?? -1,
+      channelSlot: e.channelSlot,
+      channelKind: ch.kind,
+      convKey: ch.convKey,
+      senderName: name,
+      body: body,
+      senderTs: e.timestamp,
+      snr: e.snr,
+      pathLen: e.pathLen,
+      rssi: e.rssi,
+      receivedMs: now,
+      backlog: ChannelTextEvent.looksBacklogged(e.timestamp, now),
+    );
+    for (final t in List.of(_taps)) {
+      TapVerdict v;
+      try {
+        v = t.onChannelText(ev);
+      } catch (err) {
+        diagLog?.call('chat: channel text tap ${t.runtimeType} failed (${err.runtimeType}); message kept as chat');
+        v = TapVerdict.pass;
+      }
+      if (v == TapVerdict.consume) return true;
+    }
+    return false;
+  }
+
   void _onChannelText(InboundChannelText e) {
     final now = nowMs();
     final raw = _clamp(e.text);
     final ch = _channelForSlot(e.radioId, e.channelSlot);
     final convKey = ch.convKey;
     final (name, body) = splitSender(raw);
+    if (_tapConsumes(e, ch, name, body, now)) return; // not chat: no row, no event, no unread, no backup, no search
     final system = ch.isSystem;
     final m = ChatMessage(
       id: newId(),
@@ -496,6 +556,39 @@ class ChatService {
     _emit(ChatEvent.added(m, notify: false));
     _kick();
     return m;
+  }
+
+  /// Sends [text] on channel [channelId] WITHOUT a chat bubble (no stored message, no outbox entry, no event): MeshTrack's
+  /// position / request / meet-up / stop messages. Goes through the transmit arbiter as TxPriority.track: a send the arbiter
+  /// refuses comes back [SilentSendStatus.skipped] and is never queued. Never throws.
+  Future<SilentSendResult> sendChannelTextSilently({required String radioId, required int channelId, required String text}) async {
+    final body = text.trim();
+    final bytes = utf8.encode(body).length;
+    if (body.isEmpty) return SilentSendResult.failed('empty message', bytes);
+    final ch = store.channels.getById(channelId);
+    if (ch == null || ch.radioId != radioId) return SilentSendResult.failed('unknown channel', bytes);
+    if (ch.isSystem) return SilentSendResult.failed('the system channel is not a chat', bytes);
+    final slot = ch.slot;
+    if (slot == null) return SilentSendResult.failed('channel not on the radio', bytes);
+    final max = maxTextBytes(ch.convKey);
+    if (bytes > max) {
+      diagLog?.call('chat: silent channel send skipped, $bytes bytes over the $max-byte limit');
+      return SilentSendResult.failed('message is $bytes bytes, the limit is $max', bytes);
+    }
+    final out = sink;
+    if (out == null || !out.canSend) return SilentSendResult.failed('radio not connected', bytes);
+    final gate = trackGate;
+    if (gate == null) return SilentSendResult.failed('no transmit arbiter', bytes);
+    final d = gate.requestTrack(bytes);
+    if (!d.go) return SilentSendResult.skipped(d.reason!.name, d.message, bytes, airtimeLimited: d.airtimeLimited);
+    try {
+      final ts = await gate.runTrackSend(bytes, () => out.sendChannel(radioId: radioId, slot: slot, text: body, timestamp: nowMs() ~/ 1000, priority: CommandPriority.ping));
+      return SilentSendResult.sent(ts, bytes);
+    } on OutboundFailure catch (f) {
+      return SilentSendResult.failed(f.message, bytes);
+    } catch (err) {
+      return SilentSendResult.failed('send failed (${err.runtimeType})', bytes);
+    }
   }
 
   bool retryFailed(String messageId) {

@@ -4,6 +4,8 @@
 // which is how screens that only exist on some checkouts (e.g. a region hub) are covered.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/ui/app.dart' show AppScope;
+import 'package:meshsonar/ui/plan/planner_screen.dart';
 
 Future<void> pumpFor(WidgetTester t, Duration d) async {
   final end = DateTime.now().add(d);
@@ -27,6 +29,40 @@ Future<void> popToRoots(WidgetTester t) async {
     n.popUntil((r) => r.isFirst);
   }
   await pumpFor(t, const Duration(seconds: 1));
+}
+
+/// Scrolls the Scrollable under [within] down until [f] is built (lazy lists build rows only near the viewport), then
+/// brings it into view. False when the end of the list comes first.
+Future<bool> scrollToFind(WidgetTester t, Finder f, Finder within, {Duration wait = const Duration(seconds: 15)}) async {
+  if (!await waitFor(t, within, timeout: wait)) return false;
+  final end = DateTime.now().add(wait);
+  while (DateTime.now().isBefore(end)) {
+    if (f.evaluate().isNotEmpty) {
+      // Centred, not at the top edge: a pinned header (the Chat search and segments) would cover a row scrolled to the top.
+      try {
+        await Scrollable.ensureVisible(t.element(f.first), alignment: 0.5);
+      } catch (_) {}
+      await pumpFor(t, const Duration(milliseconds: 400));
+      return true;
+    }
+    final states = t.stateList<ScrollableState>(find.descendant(of: within.first, matching: find.byType(Scrollable)));
+    final s = states.where((x) => x.axisDirection == AxisDirection.down).firstOrNull;
+    if (s == null) {
+      await pumpFor(t, const Duration(milliseconds: 300));
+      continue;
+    }
+    final p = s.position;
+    if (p.pixels >= p.maxScrollExtent - 1) {
+      // At the end: the rows may still be on their way (the radio's contact sync); wait a little and look again.
+      await pumpFor(t, const Duration(milliseconds: 500));
+      if (f.evaluate().isNotEmpty) continue;
+      if (p.pixels >= p.maxScrollExtent - 1 && DateTime.now().isAfter(end.subtract(const Duration(seconds: 5)))) return false;
+      continue;
+    }
+    p.jumpTo((p.pixels + p.viewportDimension * 0.6).clamp(0, p.maxScrollExtent));
+    await pumpFor(t, const Duration(milliseconds: 300));
+  }
+  return f.evaluate().isNotEmpty;
 }
 
 /// Marks a screenshot point. The script watches stdout for these lines.
@@ -87,9 +123,10 @@ Future<void> openTab(WidgetTester t, String label) async {
   }
 }
 
-/// Scrolls the first vertical scrollable top to bottom in ~85% viewport steps, shooting each stop.
-Future<void> shootFullScroll(WidgetTester t, String prefix) async {
-  final scrollable = t.stateList<ScrollableState>(find.byType(Scrollable)).firstWhere(
+/// Scrolls the first vertical scrollable (under [within] when given) top to bottom in ~85% viewport steps, shooting each stop.
+Future<void> shootFullScroll(WidgetTester t, String prefix, {Finder? within}) async {
+  final scrollables = within == null ? find.byType(Scrollable) : find.descendant(of: within, matching: find.byType(Scrollable));
+  final scrollable = t.stateList<ScrollableState>(scrollables).firstWhere(
         (s) => s.axisDirection == AxisDirection.down && s.position.maxScrollExtent > 0,
       );
   final pos = scrollable.position;
@@ -152,21 +189,35 @@ final List<ScreenStep> screens = [
     await pumpFor(t, const Duration(seconds: 4));
     await shot(t, 'connect-after-simulator');
   }, optional: true),
+  // The antenna sheet after the first connect. Every control is scrolled into view before its tap: on an iPhone 17 Pro the
+  // gain switch sits below the fold (y 1007 of 874), the old blind tap missed it, Save stayed disabled (gain unanswered) and
+  // the sheet closed unsaved, so Start drive stayed off ("Set your antenna first") and drive-live/report/detail never ran (V-5).
   ScreenStep('antenna', (t) async {
     final sheet = find.byKey(const Key('antenna-sheet'));
     if (!await waitFor(t, sheet, timeout: const Duration(seconds: 6))) throw const _Skip();
     await shot(t, 'antenna-sheet');
+    Future<void> tapIn(Finder f) async {
+      await t.ensureVisible(f.first);
+      await pumpFor(t, const Duration(milliseconds: 300));
+      await t.tap(f.first);
+      await pumpFor(t, const Duration(milliseconds: 400));
+    }
     final mount = find.byWidgetPredicate((w) => w.key is ValueKey && '${(w.key as ValueKey).value}'.startsWith('mount-'));
-    if (mount.evaluate().isNotEmpty) await t.tap(mount.first);
-    await pumpFor(t, const Duration(milliseconds: 500));
-    await t.tap(find.byKey(const Key('antenna-gain-unknown')));
-    await pumpFor(t, const Duration(milliseconds: 300));
-    await t.enterText(find.byKey(const Key('antenna-height-field')), '5');
+    if (mount.evaluate().isNotEmpty) await tapIn(mount);
+    await tapIn(find.byKey(const Key('antenna-gain-unknown')));
+    final height = find.byKey(const Key('antenna-height-field'));
+    await t.ensureVisible(height);
+    await t.enterText(height, '5');
     await pumpFor(t, const Duration(milliseconds: 500));
     final save = find.byKey(const Key('antenna-save'));
     await t.ensureVisible(save);
+    await pumpFor(t, const Duration(milliseconds: 300));
+    if (t.widget<ButtonStyleButton>(save).onPressed == null) _stepFail('antenna: Save is still disabled after mount, gain and height were answered');
     await t.tap(save);
     await pumpFor(t, const Duration(seconds: 2));
+    final app = AppScope.of(t.element(find.byType(Scaffold).first));
+    if (sheet.evaluate().isNotEmpty || app.needsAntennaSetup) _stepFail('antenna: Save did not store the antenna setup');
+    _stepOk('antenna');
   }, optional: true),
   ScreenStep('drive-ready', (t) async {
     await openTab(t, 'Drive');
@@ -186,9 +237,25 @@ final List<ScreenStep> screens = [
     await shot(t, 'tab-more');
     await openTab(t, 'Drive');
   }),
+  // drive-live / drive-report / drive-detail (V-5, build 67): a real drive on the simulated radio, its report, then its
+  // card in Analyze > Drives. They need the debug-only simulated radio (the connect step): without it they skip. With it,
+  // every miss is a STEPFAIL (they used to be optional end to end, so a disabled Start drive skipped all three silently:
+  // the tour ran without a location grant, and Start drive is off until location is allowed).
   ScreenStep('drive-live', (t) async {
+    _droveOk = false;
+    final app = AppScope.of(t.element(find.byType(Scaffold).first));
+    if (!app.connected) throw const _Skip(); // no simulated radio on this checkout / release build
+    await popToRoots(t);
+    await openTab(t, 'Drive');
     final go = find.byKey(const Key('start-stop'));
-    await t.tap(go);
+    if (!await waitFor(t, go, timeout: const Duration(seconds: 10))) _stepFail('drive-live: no Start drive button on the Drive tab');
+    if (t.widget<ButtonStyleButton>(go.first).onPressed == null) {
+      _stepFail('drive-live: Start drive is disabled (${_text(t, 'dock-subtitle') ?? 'no reason shown'})');
+    }
+    await t.tap(go.first);
+    if (!await _until(t, () => app.driving, const Duration(seconds: 15))) {
+      _stepFail('drive-live: tapping Start drive did not start a drive (${_text(t, 'dock-subtitle') ?? 'no reason shown'})');
+    }
     await pumpFor(t, const Duration(seconds: 30));
     await shot(t, 'drive-live');
     // The mini drive bar on every other tab, then back to the Drive tab from the bar.
@@ -198,29 +265,50 @@ final List<ScreenStep> screens = [
     }
     await openTab(t, 'Region');
     await shot(t, 'minibar-analyze');
-    await t.tap(find.byKey(const Key('mini-bar-open')));
+    final bar = find.byKey(const Key('mini-bar-open'));
+    if (!await waitFor(t, bar, timeout: const Duration(seconds: 5))) _stepFail('drive-live: no mini drive bar on the Analyze tab while driving');
+    await t.tap(bar.first);
     await pumpFor(t, const Duration(seconds: 1));
     await shot(t, 'minibar-opened-drive');
-    await t.tap(go);
+    if (!await waitFor(t, go.hitTestable(), timeout: const Duration(seconds: 5))) _stepFail('drive-live: the mini bar did not bring back the Drive tab');
+    await t.tap(go.hitTestable().first);
     await pumpFor(t, const Duration(milliseconds: 600));
     await shot(t, 'stop-confirm');
     final confirm = find.byKey(const Key('stop-drive-confirm'));
-    if (confirm.evaluate().isEmpty) throw const _Skip();
-    await t.tap(confirm);
+    if (!await waitFor(t, confirm, timeout: const Duration(seconds: 5))) _stepFail('drive-live: Stop did not ask "Stop this drive?"');
+    await t.tap(confirm.first);
+    if (!await _until(t, () => !app.driving, const Duration(seconds: 15))) _stepFail('drive-live: Stop drive did not end the drive');
     await pumpFor(t, const Duration(seconds: 3));
     await shot(t, 'drive-stopped');
+    _droveOk = true;
+    _stepOk('drive-live');
   }, optional: true),
   ScreenStep('drive-report', (t) async {
     final card = find.byKey(const Key('view-report'));
-    if (card.evaluate().isEmpty) throw const _Skip();
-    await t.tap(card);
+    if (!await waitFor(t, card, timeout: const Duration(seconds: 5))) {
+      if (!_droveOk) throw const _Skip(); // no drive this run (no simulated radio)
+      _stepFail('drive-report: no Report button after the drive was saved');
+    }
+    await t.tap(card.first);
     await pumpFor(t, const Duration(seconds: 3));
+    if (!await waitFor(t, find.byKey(const Key('drive-report')), timeout: const Duration(seconds: 10))) {
+      _stepFail('drive-report: Report did not open the drive report');
+    }
     await shot(t, 'report');
     try {
-      await shootFullScroll(t, 'report-scroll');
+      await shootFullScroll(t, 'report-scroll', within: find.byKey(const Key('drive-report')));
     } catch (_) {}
-    await t.pageBack();
+    // On iOS the report is a full-height sheet with Done, not a pushed page: pageBack() found no back button there and
+    // threw, which skipped the step after its first shot.
+    final done = find.byKey(const Key('report-done'));
+    if (done.evaluate().isNotEmpty) {
+      await t.tap(done.first);
+    } else {
+      await t.pageBack();
+    }
     await pumpFor(t, const Duration(seconds: 1));
+    if (find.byKey(const Key('drive-report')).evaluate().isNotEmpty) _stepFail('drive-report: Done did not close the report');
+    _stepOk('drive-report');
   }, optional: true),
   ScreenStep('radio', (t) async {
     await openTab(t, 'Radio');
@@ -231,16 +319,63 @@ final List<ScreenStep> screens = [
     await shot(t, 'drives');
   }),
   ScreenStep('drive-detail', (t) async {
-    final open = find.byWidgetPredicate((w) => w.key is ValueKey && '${(w.key as ValueKey).value}'.startsWith('open-') && '${(w.key as ValueKey).value}' != 'open-progress');
-    if (open.evaluate().isEmpty) throw const _Skip();
+    // A drive card's InkWell ('open-<session id>' inside 'session-<session id>'). Other 'open-' keys are not drive cards:
+    // 'open-progress' (the Your progress card above the list, also an InkWell) opened Progress instead, and open-log /
+    // open-app-settings live on other screens.
+    final open = find.descendant(
+      of: find.byWidgetPredicate((w) => w.key is ValueKey && '${(w.key as ValueKey).value}'.startsWith('session-')),
+      matching: find.byWidgetPredicate((w) => w is InkWell && w.key is ValueKey && '${(w.key as ValueKey).value}'.startsWith('open-')),
+    );
+    if (!await waitFor(t, open, timeout: const Duration(seconds: 5))) {
+      if (!_droveOk) throw const _Skip();
+      _stepFail('drive-detail: the drive just saved has no card in Analyze > Drives');
+    }
     await t.tap(open.first);
     await pumpFor(t, const Duration(seconds: 3));
+    if (!await waitFor(t, find.byKey(const Key('drive-detail')), timeout: const Duration(seconds: 10))) {
+      _stepFail('drive-detail: tapping the drive card did not open its detail');
+    }
     await shot(t, 'detail');
     try {
-      await shootFullScroll(t, 'detail-scroll');
+      await shootFullScroll(t, 'detail-scroll', within: find.byKey(const Key('drive-detail')));
     } catch (_) {} // nothing to scroll on a big screen
     await t.pageBack();
     await pumpFor(t, const Duration(seconds: 1));
+    if (find.byKey(const Key('drive-detail')).evaluate().isNotEmpty) _stepFail('drive-detail: Back did not close the drive detail');
+    _stepOk('drive-detail');
+  }, optional: true),
+  // J2 (V-5, build 67): a repeater contact > Link to… opens the Planner in Link mode with the contact as an end. Runs here on
+  // the simulated radio (no server needed) as well as in planner_visual_test.dart. Repeaters live under Chat > Network below
+  // the radio card and the Nearby section, in a lazily built list: the rows only exist once scrolled near the viewport.
+  ScreenStep('j2-contact-link', (t) async {
+    final app = AppScope.of(t.element(find.byType(Scaffold).first));
+    if (!app.connected) throw const _Skip();
+    await popToRoots(t);
+    await openShellTab(t, 'Chat');
+    final seg = find.byKey(const Key('segment-network'));
+    if (!await waitFor(t, seg, timeout: const Duration(seconds: 8))) _stepFail('j2: no Network segment on the Chat tab');
+    await t.tap(seg.first);
+    await pumpFor(t, const Duration(seconds: 1));
+    final tile = find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key as ValueKey<String>).value.startsWith('network-row-'));
+    if (!await scrollToFind(t, tile, find.byKey(const Key('chat-scroll')))) _stepFail('j2: no repeater rows under Chat > Network with the simulated radio');
+    final prefix = (t.widget(tile.first).key as ValueKey<String>).value.substring('network-row-'.length).toLowerCase();
+    await t.tap(tile.first, warnIfMissed: false);
+    await pumpFor(t, const Duration(seconds: 1));
+    if (!await waitFor(t, find.byKey(const Key('contact-profile')), timeout: const Duration(seconds: 10))) _stepFail('j2: the repeater row did not open its profile');
+    final link = find.byKey(const Key('node-action-linkTo'));
+    if (!await scrollToFind(t, link, find.byKey(const Key('contact-profile')))) _stepFail('j2: the repeater profile has no Link to… row');
+    await shot(t, 'j2-contact-profile');
+    await t.tap(link.first, warnIfMissed: false);
+    await pumpFor(t, const Duration(seconds: 1));
+    final planner = find.byType(PlannerScreen, skipOffstage: false);
+    final ok = await _until(t, () {
+      if (planner.evaluate().isEmpty) return false;
+      final c = t.state<PlannerScreenState>(planner).controller;
+      return c != null && c.nodes.any((n) => n.existingKey?.toLowerCase().startsWith(prefix) ?? false) && find.byKey(const Key('plan-mode-link')).evaluate().isNotEmpty;
+    }, const Duration(seconds: 15));
+    if (!ok) _stepFail('j2: Link to… did not open the Planner in Link mode with the repeater as an end');
+    await shot(t, 'j2-contact-link');
+    _stepOk('j2-contact-link');
   }, optional: true),
   ScreenStep('settings', (t) async {
     await openTab(t, 'Settings');
@@ -326,4 +461,42 @@ final List<ScreenStep> screens = [
 
 class _Skip implements Exception {
   const _Skip();
+}
+
+/// A step that must pass once its preconditions hold: verify_sim.sh fails the run on the STEPFAIL line, and the throw ends the step.
+class _StepFailed implements Exception {
+  const _StepFailed(this.why);
+  final String why;
+  @override
+  String toString() => 'StepFailed: $why';
+}
+
+bool _droveOk = false;
+
+Never _stepFail(String why) {
+  // ignore: avoid_print
+  print('STEPFAIL $why');
+  throw _StepFailed(why);
+}
+
+void _stepOk(String step) {
+  // ignore: avoid_print
+  print('STEP $step ok');
+}
+
+Future<bool> _until(WidgetTester t, bool Function() cond, Duration timeout) async {
+  final end = DateTime.now().add(timeout);
+  while (DateTime.now().isBefore(end)) {
+    await t.pump(const Duration(milliseconds: 200));
+    if (cond()) return true;
+  }
+  return false;
+}
+
+/// The text of the Text widget keyed [k], or null.
+String? _text(WidgetTester t, String k) {
+  final f = find.byKey(Key(k));
+  if (f.evaluate().isEmpty) return null;
+  final w = t.widget(f.first);
+  return w is Text ? w.data : null;
 }

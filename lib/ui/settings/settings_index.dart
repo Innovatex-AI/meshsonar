@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 
 import '../../app/app_state.dart';
+import 'meshtrack_section.dart' show meshTrackAvailable, meshTrackSettingsEntries;
 import 'observer_section.dart' show observerSettingsEntries;
 import 'privacy_section.dart' show privacySettingsEntries;
 
@@ -15,7 +16,12 @@ class SettingsSectionInfo {
   final String id;
   final String title;
   final IconData icon;
-  const SettingsSectionInfo(this.id, this.title, this.icon);
+
+  /// A section that only exists in some builds (MeshTrack) says so; null = always shown.
+  final bool Function(AppState s)? available;
+  const SettingsSectionInfo(this.id, this.title, this.icon, {this.available});
+
+  bool isAvailable(AppState s) => available?.call(s) ?? true;
 }
 
 /// Display order, top to bottom (phone) / the left pane (wide screens).
@@ -27,6 +33,7 @@ const List<SettingsSectionInfo> settingsSections = [
   SettingsSectionInfo('privacy', 'Privacy & data sharing', Icons.privacy_tip_outlined),
   SettingsSectionInfo('observer', 'Observer', Icons.sensors),
   SettingsSectionInfo('notifications', 'Notifications', Icons.notifications_outlined),
+  SettingsSectionInfo('meshtrack', 'MeshTrack', Icons.people_alt_outlined, available: meshTrackAvailable),
   SettingsSectionInfo('wardriving', 'Wardriving', Icons.radar),
   SettingsSectionInfo('radio', 'Radio', Icons.settings_input_antenna),
   SettingsSectionInfo('my-radios-section', 'Claimed radios', Icons.verified_user_outlined),
@@ -37,6 +44,9 @@ const List<SettingsSectionInfo> settingsSections = [
 ];
 
 SettingsSectionInfo sectionInfo(String id) => settingsSections.firstWhere((s) => s.id == id);
+
+/// The sections this build shows, in display order.
+List<SettingsSectionInfo> visibleSettingsSections(AppState s) => [for (final x in settingsSections) if (x.isAvailable(s)) x];
 
 class SettingsEntry {
   /// The anchor id; also the row's widget key where the row had one before (tests and deep links rely on those).
@@ -220,6 +230,8 @@ const List<SettingsEntry> settingsEntries = [
   SettingsEntry('notif-test', 'notifications', 'Send a test notification',
       'Shows one alert in 3 seconds so you can check sound and what the lock screen shows.',
       keywords: ['test', 'try', 'check']),
+  // MeshTrack: the entries live next to their rows (lib/ui/settings/meshtrack_section.dart).
+  ...meshTrackSettingsEntries,
   // Diagnostics
   SettingsEntry('diagnostics-log', 'diagnostics', 'Diagnostic log',
       'Recent app events to help explain a problem. Secrets hidden, positions rounded when copied.',

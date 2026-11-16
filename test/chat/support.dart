@@ -32,6 +32,9 @@ class FakeSink implements OutboundMessageSink {
   int nextAck = 1000;
   final directs = <SentDirect>[];
   final channels = <({int slot, String text, int ts})>[];
+
+  /// The command queue class of each channel send, in order.
+  final channelPriorities = <int>[];
   int estTimeoutMs = 4000;
 
   @override
@@ -50,7 +53,7 @@ class FakeSink implements OutboundMessageSink {
   }
 
   @override
-  Future<int> sendChannel({required String radioId, required int slot, required String text, required int timestamp}) async {
+  Future<int> sendChannel({required String radioId, required int slot, required String text, required int timestamp, int priority = CommandPriority.user}) async {
     if (!connected) throw const RadioNotConnected();
     final f = failNext;
     if (f != null) {
@@ -58,6 +61,7 @@ class FakeSink implements OutboundMessageSink {
       throw f;
     }
     channels.add((slot: slot, text: text, ts: timestamp));
+    channelPriorities.add(priority);
     return timestamp;
   }
 }
@@ -79,15 +83,16 @@ class Harness {
   late final ChatService service;
   var _id = 0;
 
-  Harness({RetryPolicy policy = const RetryPolicy(jitterMs: 0, minGapMs: 0)}) : this.withSink(FakeSink(), policy: policy);
+  /// [selfName] is the radio's name (the `name: ` prefix the firmware adds to this phone's channel messages).
+  Harness({RetryPolicy policy = const RetryPolicy(jitterMs: 0, minGapMs: 0), String selfName = 'Me'}) : this.withSink(FakeSink(), policy: policy, selfName: selfName);
 
-  Harness.withSink(this.sink, {RetryPolicy policy = const RetryPolicy(jitterMs: 0, minGapMs: 0)}) {
+  Harness.withSink(this.sink, {RetryPolicy policy = const RetryPolicy(jitterMs: 0, minGapMs: 0), String selfName = 'Me'}) {
     service = ChatService(
       store: store,
       source: source,
       sink: sink,
       nowMs: clock.call,
-      selfName: () => 'Me',
+      selfName: () => selfName,
       newId: () => 'm${_id++}',
       policy: policy,
       autoTimer: false,

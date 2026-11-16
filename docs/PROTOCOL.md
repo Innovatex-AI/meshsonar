@@ -701,7 +701,7 @@ The phone can publish what its radio hears to outside MeshCore MQTT sites (Setti
 
 **Transport.** MQTT 3.1.1 over WebSocket only: `wss://host[:port]/path` (a slot with TLS switched off uses `ws://`; plain tcp is never used), subprotocol `mqtt`, keepalive 55 s, connect timeout 10 s,
 no client auto-reconnect (the engine reconnects with jittered backoff 1, 2, 4, 8, 16, 30 s x 0.5..1, floor 1 s, reset on success). CONNACK 4 or 5 = "Auth failed" (retry after 5 min with a fresh token).
-The engine keeps at most 10 slots, each its own connection and client id.
+The engine keeps at most 10 slots, each its own connection and client id: `ms` + the key's first 8 hex + 6 hex of the slot id + 4 hex random per install (kept in the Keychain as `meshsonar.mqtt_client_id`, the same across launches; Test adds `t`), at most 21 characters. A slot whose host is `mqtt.meshsonar.com` (any case, port, scheme or trailing dot) never connects (state Not allowed): MeshSonar's own HTTPS feed already carries those packets.
 
 **Login (JWT slots).** Username `v1_<PUBLIC KEY, 64 uppercase hex>`; password = the token `base64url(header).base64url(payload).HEX(signature)`:
 header `{"alg":"Ed25519","typ":"JWT"}`, payload in firmware order `publicKey` (uppercase hex), `aud`, `iat`, `exp` (no `owner`, `email` or `client` claims), base64url without padding.
@@ -715,14 +715,121 @@ otherwise the slot shows "No airport code for the topic" and publishes nothing (
 
 **`packets` message** (one JSON per public packet, QoS 0, not retained): `origin` = `MeshSonar <first 8 hex of the key>` (never the radio's own name or the person's), `origin_id` (key, uppercase), `timestamp` (ISO 8601 UTC with microseconds and `+00:00`),
 `type` `PACKET`, `direction` `rx`, `len`, `packet_type`, `payload_len`, `route` `F` or `D`, `raw` (uppercase hex of the packet), `SNR`, `RSSI` (when known), `hash`, `time`, `date` (`DD/MM/YYYY`), and `path` for direct routes only. All numbers are JSON strings, as the firmware sends them. There is no `score`.
-**`status` message** (QoS 1; retained only for a preset slot that asks for it, never for a custom slot): `status` `online`, `timestamp`, `origin`, `origin_id`, `model` and `firmware_version` when known, `client_version` `meshsonar-app/1`. Sent on connect, every 5 minutes, and once from Settings > Test (which publishes nothing else). No position, no stats, no last-will.
+**`status` message** (QoS 1; retained only for a preset slot that asks for it, never for a custom slot): `status` `online`, `timestamp`, `origin`, `origin_id`, `model` and `firmware_version` when known, `client_version` `meshsonar-app/1`. Sent on connect, every 5 minutes, and once from Settings > Test (which publishes nothing else). The same message with `status` `offline` is published when a live feed stops on purpose and is set as the connection's **last will** (QoS 1), so the broker publishes it when the link is lost; online, offline and will share one topic and one retain flag (`retainStatus && presetId != null`). Test sets no will. No position, no stats.
 Golden payloads: `test/core/mqtt/mqtt_payload_test.dart`.
 
-**What may leave the phone (two independent gates).** Packets reach the engine only through `onPublicPacket`, after AppState's observer filter (`TelemetryRecord.fromRx`), and only while "Share with MeshSonar" is on and a radio is connected. The engine then re-parses the bytes and publishes **only** ADVERT, PATH and TRACE packets
+**What may leave the phone (two independent gates).** Packets reach the engine only through `onPublicPacket`, after AppState's observer filter (`TelemetryRecord.fromRx`), and only while "Share with MeshSonar" is on and a radio is connected. Echoes of this phone's own pings (public or not) and packets on the drive channel never reach it (`observer_wiring.dart`, property test `test/app/observer_own_traffic_property_test.dart`). The engine then re-parses the bytes and publishes **only** ADVERT, PATH and TRACE packets
 and group packets (GRP_TXT, GRP_DATA) the filter proved belong to the Public channel or a `#name` channel (MAC checked), and only when the record's `raw` equals the bytes. Requests, responses, direct messages, anonymous requests, acks, multipart, control and custom packets are never published;
 neither are the person's name, position, cell, drive state or the contents of a private channel. A property test runs every payload type 0..15 x 4 routes x path x sizes x channel verdicts through the real filter (`test/core/mqtt/mqtt_privacy_property_test.dart`).
 
 **Limits.** Per slot: in-memory queue of 120 messages (drop-oldest, never written to disk, cleared when the radio drops) and at most 120 publishes a minute. A live connection keeps publishing while the process runs; a connection lost in the background is not retried until the app is in the foreground.
+
+## 15. MeshTrack v1 (build 67, `lib/core/meshtrack/`)
+
+MeshTrack shows friends on the map: each phone sends its position as ordinary MeshCore channel text on a **group**, which is
+one private channel (name + random 16-byte key). The channel's own encryption (AES-128 with the channel key, MAC checked) is
+the only protection; there is no other crypto, no server and nothing new on the air but channel text. The wardrive ping is
+never touched (it stays `MS:` + 10 random characters, section 5.1). Spec: meshsonar-infra
+`docs/planning/meshtrack-plan-2026-11-16.md`; core API: `lib/core/meshtrack/API.md`; app wiring: `lib/app/meshtrack_wiring.dart`.
+
+**Wire format** (`mt_wire.dart`). The body after the firmware's `name: ` prefix; ASCII, tokens separated by one space, prefix `MT1`.
+
+| Message | Body | Meaning |
+|---|---|---|
+| Position | `MT1 @<code>[ s<kmh>][ c<deg>]` | where I am; `s` = speed in km/h, integer 0-300 (clamped when sent); `c` = course 0-359, sent only at 5 km/h or more and when known |
+| Parked | `MT1 @<code> s0` | last position before going quiet (stopped 90 s); nothing more until I move over 50 m |
+| Request (all) | `MT1 ?` | "Where are you?" to everyone sharing in the group |
+| Request (one) | `MT1 ? <name>` | to one radio name (rest of the line, trimmed, at most 31 bytes; matched case-insensitively) |
+| Meet-up point | `MT1 !<code>[ <label>]` | label at most 24 UTF-8 bytes, control characters removed, shown as plain text only |
+| Clear meet-up | `MT1 !x` | |
+| Stopped | `MT1 x` | I stopped sharing (friends grey me out at once) |
+
+Example: `KE4BFI: MT1 @87G8Q2X5+7F2 s34 c270` (34 text bytes, a 53-byte GRP_TXT packet). The worst case (32-byte name, meet-up
+label) is about 85 bytes, under the 160-byte radio limit; `ChatService.maxTextBytes` is still checked before every send
+(too long = skipped with a diagnostics line).
+
+**Plus Codes** (`plus_code.dart`). Full (global) Open Location Code written in Dart from the published specification
+(github.com/google/open-location-code, Apache-2.0), tested against the upstream vectors in `test/fixtures/olc/`; computed on
+the phone, nothing calls Google. Alphabet `23456789CFGHJMPQRVWX`, 8 pair digits, `+`, grid digits. Sent: **11 digits** by
+default (`87G8Q2X5+7F2`, about 3 x 3.5 m; Settings > MeshTrack > Position friends see: Exact) or **8 digits** (`87G8Q2X5+`, about
+275 m; Approximate). Received: any valid full code (2 to 15 digits, `0`-padded codes included); short codes are never valid in
+an `MT1` message (there is no reference place). The centre of the code area is the position; half its height is the shown
+uncertainty. A code that decodes outside lat +/-90 or lon +/-180 drops the message.
+
+**Parse tolerance.** `parseMeshTrack(body)` never throws. It trims, collapses runs of spaces and tabs, takes `MT1`
+case-insensitively and upper-cases the code letters. Unknown trailing tokens are ignored (forward compatible). A bad optional
+token (`s999`, `c400`, `sx`) drops only that field; the first `s` and the first `c` token count. A bad code drops the message.
+Bodies over 160 UTF-8 bytes or with a line break are not MeshTrack. Anything that does not parse (`MT2 ...`, `MT1 hi`, plain
+chat) is **not consumed**: it stays an ordinary chat message.
+
+**What the receiver does** (`meshtrack_service.dart`, `track_group.dart`). Only text on a channel that is a MeshTrack group on
+this phone is looked at. A parsed `MT1` message is consumed by the chat inbound tap (`ChatService.addChannelTextTap`,
+`lib/chat/channel_text_tap.dart`) before it is stored: no bubble, no notification, no unread count, not in chat backup, export or
+search, whatever "Show position messages" says (that switch only lists them, from memory, under channel detail > Position
+messages; the map updates either way). MeshTrack sends go to the radio's command queue at ping priority, behind typed messages. Messages from my
+own radio name and messages with no sender name are consumed and ignored. Friend identity = the sender's name within the group
+(channel frames carry no sender key, so anyone with the key can use any name). Rules: one position per name per 5 s (extras
+dropped); at most 32 names per group (the oldest heard is dropped); duplicate receipts (same name, sender time, body) dropped
+with a 256-entry memory; a move that implies more than 300 km/h is shown as the new position with no trail segment and the
+row says "Position jumped". Time heard = receive time, or for backlog from the radio's offline queue the sender's time when it
+is plausible (not more than 30 s in the future, within 24 h). Staleness: full colour under 5 min, faded 5-15 min, grey 15 min to
+2 h, list only ("Not on the map") 2-24 h, then dropped; `MT1 x` greys a friend at once. Trails: last 30 min, at most 20 points,
+memory only. Last-known positions are kept in `meshtrack_last.json` (app support folder, 24 h) and cleared by Leave and by
+Delete my data.
+
+**Other apps' positions (interop forms accepted, receive only, MeshTrack groups only; `interop.dart`).**
+| Form | Example | Result |
+|---|---|---|
+| Plus Code typed in a message | `87G8Q2X5+7F2`, or `parked at 87G8Q2X5+7F2` | pin marked **typed**; the message **stays chat**. A short code (`Q2X5+7F`, 4+ characters before `+`, 2+ after) is recovered near my own last fix, and ignored when I have none. Two codes in one message = ignored |
+| `lat, lon` as the whole message | `39.96121, -82.99881` (optional parentheses) | pin marked **typed**, stays chat; both numbers need a decimal point; uncertainty from the fewest decimals typed (3 -> about 111 m, 5 -> about 1 m) |
+| `geo:` URI anywhere in the text | `geo:39.96121,-82.99881`, `geo:0,0?q=39.9,-82.9(Label)`, `;u=` uncertainty | pin marked **typed**, stays chat |
+| MeshCore-TEAM `#TEL:` | `#TEL:` + base64 (padding optional) of exactly 11 bytes: lat int32 BE x 1e7, lon int32 BE x 1e7, companion battery, phone battery, forwarding status | pin from **MeshCore-TEAM**; **consumed** (machine text). Only the position is used |
+| MeshCore-TEAM `#CAP:` | capability advert | consumed, no pin |
+`0, 0` and out-of-range coordinates are dropped. MeshCore-TEAM (CC BY-NC-SA 4.0) is credited in About; its format was read for
+interop and no code was used. MeshSonar never sends TEAM's format. A stock MeshCore app on the same channel simply reads our
+`MT1 ...` text, and its user can paste the code into a map app.
+
+**When a position is sent (rate rules, `smart_beacon.dart`).** Per GPS fix (the drive's location stream while driving; the
+phone's location while the app is in front when a group shares for "1 hour" or "Until I stop" without a drive):
+- First send at the first good fix after Share turns on (or a drive starts).
+- Moving: at 80 km/h or more every 60 s, at 10 km/h or less every 300 s, between `60 s x 80 / v` (40 km/h -> 120 s).
+- Turns: at 10 km/h or more, early when the course changed by more than `25 + 300 / v` degrees since the last send, at least 15 s after it.
+- Parked: under 3 km/h for 90 s -> one `MT1 @<code> s0`, then nothing until moved more than 50 m. No heartbeat.
+- Floor: never two sends closer than `max(20 s, 100 x the airtime of one position)` at the radio's LoRa preset.
+- Several groups (Share on for up to 3): one beacon = one send per sharing group, 3 s apart (each group has its own key);
+  every interval and the floor are multiplied by the number of sharing groups. Low traffic doubles every interval.
+- Requests: `MT1 ?` (or `? <my name>`) is answered only while sharing with that group, after a random 2-10 s, at most once per
+  30 s per group, and only when Answer "Where are you?" is on. Asking is allowed once per 60 s per group ("Asked"). A request
+  while not sharing shows "Sam asked where you are" with Send my position (at most one toast per 30 s per group).
+- Transmit budget (`lib/radio/tx_arbiter.dart`, `TxPriority.track`, queued like a ping, own ledger rows): MeshTrack airtime at
+  or under 1% of the rolling 10 minutes; the region's hour cap when known; no track send within 2 s of a user message or a
+  ping (and pings get the same 2 s gap after a track send). A refused send is skipped, never queued ("Sharing slower: airtime
+  limit" for 2 min); the next fix tries again. Queued MeshTrack messages older than 60 s are dropped (stop messages are not).
+- Never inside a ping's listen window: a due send waits while the engine is pinging or counting echoes, and while the next
+  ping is due within 3 s; it goes 1 s after the window closes.
+- Sent silently through `ChatService.sendChannelTextSilently` on the group's slot, with the channel's region scope when it has
+  one (the same as chat on that channel). Logs say only `meshtrack: sent position, N bytes` / `skipped: zone` and similar;
+  never a code, a coordinate or a name.
+
+**Privacy gates.**
+- **Zones:** no position (automatic, Send my position, answers) and no meet-up point is sent inside a privacy zone or within
+  **200 m plus the fix's accuracy** outside any zone edge (`PrivacyZones`, haversine). While the zones are not loaded, nothing
+  is sent (fail closed). The drive start/end trim does not apply.
+- **GPS:** accuracy must be 100 m or better and the fix at most 30 s old ("Waiting for GPS").
+- **Sharing ends** with its duration (This drive: the drive stops; 1 hour; Until I stop) and after 5 min without the radio, each
+  time with `MT1 x` once per group that got a position in that session (sent on reconnect if the radio was gone). Share switches
+  are forced off at app start and never turn back on by themselves, except a group's "Share on every drive" at drive start
+  (default off). Start fresh waits until the old group's `MT1 x` is on the air (`MeshTrackService.whenIdle`) before the channel
+  gets its new key.
+- **Eligible channels:** private channels only (`MeshTrackGroup.eligible`): never Public, never a `#` channel (its key comes from
+  its name), never the wardrive/system channel; joining such a link as a group is refused.
+- **Nothing reaches MeshSonar's server or MQTT feeds:** a MeshTrack packet is a GRP_TXT on a private channel, so
+  `TelemetryRecord.fromRx` makes no record of it; `mqttPacketJson` re-checks; MeshTrack keys are never added to the shareable
+  channel set; and the observer's third gate (`ObserverWiring`, section 14) drops any group packet whose MAC verifies under any
+  private key the phone holds, including our own beacon heard back.
+- **Keys:** every group's name and key is kept in the Keychain (`meshtrack.groups.v1`, next to the channel secrets), the per-group
+  switches in `settings.json` (`meshtrack.groups`). On connect, a group missing from the radio is written to a free channel
+  without asking (new radio, reinstall); a full radio leaves it "Not on this radio" (See and Share off) with Make room.
 
 ## Hardware checklist: chat redesign
 

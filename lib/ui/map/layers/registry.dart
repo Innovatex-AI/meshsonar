@@ -10,8 +10,11 @@ import '../../../core/map_prefs.dart' show LayerPrefs;
 import '../active_map_definition.dart';
 import '../../../core/map_view_state.dart' show MapViewState, kAppOnlyShowKeys, kHeardCellsLayerId, kWebsiteShowKeys;
 export '../../../core/map_view_state.dart' show kHeardCellsLayerId;
+import '../../../app/app_flags.dart' show AppFlags;
+import 'friends_layer.dart' show kFriendsLayerId;
 import 'map_layer.dart';
 import 'repeater_map_source.dart';
+export 'friends_layer.dart' show kFriendsLayerId;
 
 // The layers are the Map Definition's (plan unified-map-system §2.4, phase M2): ids, names, groups, defaults and the paint
 // order come from `layers[]` ([definitionLayerIds], [layerLabel], [defaultLayerState]). The app keeps four layers of its own
@@ -40,11 +43,18 @@ const List<MapLayerSpec> kMapLayers = [
   // Repeater names beside the markers (Andy, Oct 30 2026): a sub-switch under Repeaters (the definition's label rule: from z14
   // with collision; the switch lets a driver turn them off).
   MapLayerSpec(id: kLabelsLayerId, label: 'Names', group: LayerGroup.network, z: 75, defaultOn: true, onWebsite: false, serverFed: false),
+  // MeshTrack (build 67, meshtrack plan section 7): friends sharing in a group (pins, trails, meet-up point, my last sent
+  // position). App-only, never on the website (nothing reaches the server by design); drawn by the Drive map's host
+  // (friends_layer.dart) above the other layers. Listed in the sheet under Network while MeshTrack is in the build.
+  MapLayerSpec(id: kFriendsLayerId, label: 'Friends', group: LayerGroup.network, z: 78, defaultOn: true, onWebsite: false, serverFed: false),
   // The open plan (release 0.38, Map Definition minor 2 `plan` layer, panel-only): planned nodes, their predicted footprints
   // and planned links, drawn by the app from the plan JSON on top of everything. Off until a plan is shown (the Plan tab, or
   // a plan sent to the Drive map); never in the layers sheet.
   MapLayerSpec(id: kPlanLayerId, label: 'Plan', group: LayerGroup.network, z: 80, defaultOn: false, onWebsite: false, serverFed: false),
 ];
+
+/// Whether this build offers the Friends layer (MeshTrack on: AppFlags.meshTrack). Tests may replace it.
+bool Function() friendsLayerOffered = () => AppFlags.meshTrackOn;
 
 /// The plan layer's id, the same in the Map Definition (`layers[].id`), `meshsonar://` links and [MapLayerState].
 const String kPlanLayerId = 'plan';
@@ -62,7 +72,7 @@ String? appLayerId(String defId) => switch (defId) {
 String? definitionLayerId(String appId) => switch (appId) {
   kHeardCellsLayerId => 'heard',
   'hexes' => 'drive',
-  'pings' || 'heard' || kLabelsLayerId => null,
+  'pings' || 'heard' || kLabelsLayerId || kFriendsLayerId => null,
   _ => appId,
 };
 
@@ -89,6 +99,8 @@ List<(MapGroupDef, List<SheetRow>)> sheetRows([MapDefinition? def]) {
       (
         g,
         <SheetRow>[
+          // The app's own Friends layer (MeshTrack): drawn above the others, so first in Network.
+          if (g.id == 'network' && friendsLayerOffered()) (id: kFriendsLayerId, parent: null),
           for (final l in d.layerDefs.reversed)
             if (l.group == g.id && appLayerId(l.id) != null && (!l.panelOnly || l.id == 'drive') && _capabilityOf(l.id, d)) ...[
               (id: appLayerId(l.id)!, parent: null),

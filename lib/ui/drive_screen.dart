@@ -28,6 +28,7 @@ import 'map/map_key.dart';
 import 'map/legend_card.dart';
 import 'map/legend_sheet.dart' show showMapLegend;
 import 'map/layers/layers_sheet.dart' show showGeneratedLayersSheet;
+import 'map/layers/friends_layer.dart' show friendsLayerWidgets, showMeetHereMenu;
 import 'drive/gps_health_banner.dart';
 import 'map/map_health_overlay.dart';
 import 'map/map_tools.dart';
@@ -424,6 +425,7 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
                     children: [
                       AntennaChip(state: s),
                       PingSettingsChip(state: s),
+                      const MeshTrackChip(),
                       LogButton(state: s),
                     ],
                   ),
@@ -555,6 +557,12 @@ class _MapPane extends StatelessWidget {
           mapKey: MapKey(model: model),
           regionBorders: model.regionBorders,
           takesFocusRequests: true,
+          // MeshTrack: friends' pins, trails, the meet-up point and my last sent position (additive, above the other layers).
+          extraLayers: [if (model.friendsOn) ...friendsLayerWidgets(s.meshTrack!)],
+          // Long-press with a group: "Meet here" (the only long-press on the Drive map).
+          onLongPress: s.meshTrack != null && s.meshTrack!.state.groups.isNotEmpty
+              ? (context, hit) => showMeetHereMenu(context, s.meshTrack!, hit.lat, hit.lon)
+              : null,
           legend: LegendCard(
             key: const Key('drive-legend-card'),
             on: model.layerState.on,
@@ -700,6 +708,7 @@ class _StateChips extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           RegionChip(state: s, always: true),
+          const MeshTrackChip(),
           for (final c in chips.take(2)) ...[const SizedBox(height: Gap.xs), c],
         ],
       ),

@@ -3,6 +3,19 @@
 All notable changes to MeshSonar. Dates are local (US Eastern). This changelog was reconstructed from the commit
 history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md](ROADMAP.md).
 
+## [0.39.0+67] — 2026-11-16 — MeshTrack, MQTT feed safety, simulator tour fixes
+
+- **MeshTrack: see your friends on the map.** Make a group (a private channel) and invite friends with a QR code or link, or join theirs; while you share, your position goes to the group over the radio and their positions show on your Drive map with name, last heard, distance and direction. Share for This drive, 1 hour (no drive needed) or Until I stop, to up to 3 groups at once; nothing is sent inside or near your privacy zones, and nothing goes to MeshSonar's server. Friends on the official MeshCore app join with the same link and read your position as a Plus Code; positions they type, and MeshCore-TEAM positions, show on your map. Start fresh gives a group a new link to cut someone off; groups come back on a new radio or after a reinstall. Credits for Open Location Code and MeshCore-TEAM in About. Start fresh now sends the old group's stop message before the key changes (it could be lost).
+- **MeshTrack review fixes:** changing This drive / 1 hour / Until I stop while sharing sends nothing extra and keeps the stop message; Undo of a stop and drive restarts never beat the airtime floor; an airtime refusal backs off and is logged once; in Approximate the meet-up pin goes at 8 digits and the fix accuracy widens the zone buffer; Send my position, the "asked where you are" toast and Share on every drive show the intro first; position messages are never stored as chat (Show position messages lists them in channel detail instead); an unreadable Keychain group list is never written over; the ping window closes after a failed drive start; MeshTrack sends go at ping priority; Leave while the radio is gone still sends the stop on reconnect (within 10 min); no `s0` for a slow moving position.
+- **MQTT:** a failed install-id read no longer replaces the stored id; the last will carries no timestamp.
+- **MQTT feeds never get our own traffic:** echoes of this phone's own pings (public or not) and packets on the drive channel are dropped before the feed engine (observer-and-data-platform-plan WS-OUT 4). Property test over every packet type.
+- **Offline status and last will:** a feed says `offline` when it stops and sets the same message as its last will, on the online status topic with the same retain flag (WS-OUT 7).
+- **Per-install client id** instead of per launch (WS-OUT 8).
+- **`mqtt.meshsonar.com` is refused as a feed** in Settings > Observer and by the engine; a saved one shows Not allowed (WS-OUT 9).
+- **Link to… from a repeater contact** (Chat > Network > a repeater) puts it in the plan as an existing repeater, not as a handheld person (V-5).
+- **Phones without a barometer** (or Motion & Fitness refused) now show Air pressure as unavailable after 15 s of silence; the plugin's UNAVAILABLE report is no longer treated as an error (V-5).
+- **Simulator tour (V-5):** `verify_sim.sh` grants location by default (`GRANT_LOCATION=0` opts out); the antenna, drive-live, drive-report, drive-detail and new J2 contact > Link to… steps pass and print `STEP <name> ok` / `STEPFAIL`; J2 in `planner_visual_test.dart` is a required step.
+
 ## [0.38.0+66] — 2026-11-16 — Privacy zones on the phone, fewer warnings, universal links, CMH default
 
 ### Build 66 summary

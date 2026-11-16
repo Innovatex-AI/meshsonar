@@ -1,7 +1,7 @@
 // One MQTT connection, behind a small interface so the slot logic is tested without sockets
 // (test/core/mqtt/fake_transport.dart) and against real brokers (mosquitto, an in-process broker) with
 // [MqttClientTransport]. MQTT 3.1.1 over WebSocket only (`wss`, or `ws` for a slot with TLS off), never plain tcp;
-// QoS 0 packets, QoS 1 status; keepalive 55 s; no auto-reconnect inside the client (the slot owns backoff).
+// QoS 0 packets, QoS 1 status and last will; keepalive 55 s; no auto-reconnect inside the client (the slot owns backoff).
 // Pure Dart (dart:io through mqtt_client): no Flutter imports.
 import 'dart:async';
 
@@ -43,6 +43,13 @@ class MqttConnectRequest {
   final String? password;
   final int keepAliveSec;
   final Duration timeout;
+
+  /// Last will: what the broker publishes for this client when the connection ends without a clean disconnect (the
+  /// slot's `offline` status). Both null = no will. [willRetain] and the topic match the slot's online status.
+  final String? willTopic;
+  final String? willMessage;
+  final int willQos;
+  final bool willRetain;
   const MqttConnectRequest({
     required this.host,
     required this.port,
@@ -53,7 +60,14 @@ class MqttConnectRequest {
     this.password,
     this.keepAliveSec = 55,
     this.timeout = const Duration(seconds: 10),
+    this.willTopic,
+    this.willMessage,
+    this.willQos = 1,
+    this.willRetain = false,
   });
+
+  /// A last will is set (topic and message both present).
+  bool get hasWill => willTopic != null && willTopic!.isNotEmpty && willMessage != null;
 
   /// `wss://host/path` (port set separately).
   String get url => '${tls ? 'wss' : 'ws'}://$host${wsPath.startsWith('/') ? wsPath : '/$wsPath'}';
@@ -96,7 +110,15 @@ class MqttClientTransport implements MqttTransport {
       ..autoReconnect = false
       ..logging(on: false)
       ..setProtocolV311();
-    c.connectionMessage = MqttConnectMessage().withClientIdentifier(r.clientId).startClean();
+    var m = MqttConnectMessage().withClientIdentifier(r.clientId).startClean();
+    if (r.hasWill) {
+      m = m
+          .withWillTopic(r.willTopic!)
+          .withWillMessage(r.willMessage!)
+          .withWillQos(r.willQos >= 1 ? MqttQos.atLeastOnce : MqttQos.atMostOnce);
+      if (r.willRetain) m = m.withWillRetain();
+    }
+    c.connectionMessage = m;
     c.onDisconnected = () {
       final was = _up;
       _up = false;
