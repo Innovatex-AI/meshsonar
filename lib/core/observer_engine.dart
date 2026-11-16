@@ -72,6 +72,9 @@ enum ObserverFeedState {
   authFailed('Auth failed'),
   radioCantSign("Radio can't sign"),
   pausedInBackground('Paused in background'),
+
+  /// The slot points at MeshSonar's own server ([meshSonarBrokerHost]): never connected.
+  notAllowed('Not allowed'),
   error('Error');
 
   final String label;

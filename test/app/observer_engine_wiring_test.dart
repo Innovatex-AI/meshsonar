@@ -141,6 +141,40 @@ void main() {
     h.state.dispose();
   });
 
+  test('echoes of our own PUBLIC drive ping never reach the MQTT feeds either (WS-OUT 4)', () async {
+    final (h, engine, link) = await _ready();
+    await h.state.startDrive(); // a public drive: the ping itself goes up to MeshSonar with raw bytes
+    final echo = _group(20, publicChannelSecret16), other = _group(21, publicChannelSecret16);
+    final echoHash = MeshPacket.tryParse(echo.raw)!.hashHex;
+    h.state.debugObserverPingSent(DateTime.utc(2026, 10, 16, 18));
+    link.rx.add(echo);
+    link.rx.add(other);
+    await Future<void>.delayed(Duration.zero);
+    expect(engine.packets, isEmpty, reason: 'held while our ping is in flight');
+    h.state.debugOnPing(DrivePing(id: 'p2', ts: DateTime.utc(2026, 10, 16, 18), lat: 39.97, lon: -82.99, pktHash: echoHash));
+    expect(engine.packets.map((p) => p.$1.packetHash), [isNot(echoHash)],
+        reason: 'the overheard packet is released; the echo of our own public ping is not');
+    link.rx.add(_group(20, publicChannelSecret16)); // a later repeat of the same echo
+    await Future<void>.delayed(Duration.zero);
+    expect(engine.packets, hasLength(1));
+    await h.state.stopDrive();
+    h.state.dispose();
+  });
+
+  test('packets on the drive channel (the System channel) never reach the MQTT feeds', () async {
+    final (h, engine, link) = await _ready();
+    h.state
+      ..hashtagChannelKeys = (() => [hashtagSecret16('#ohio')])
+      ..hashtagChannelNames = (() => ['#ohio']);
+    final drive = hashtagSecret16(h.state.settings.channel);
+    link.rx.add(_group(30, drive)); // another driver's ping on our drive channel
+    link.rx.add(_group(31, hashtagSecret16('#ohio'))); // a # channel the phone holds
+    link.rx.add(_group(32, publicChannelSecret16));
+    await Future<void>.delayed(Duration.zero);
+    expect(engine.packets.map((p) => p.$1.channel), ['#ohio', 'public'], reason: 'the drive channel is dropped');
+    h.state.dispose();
+  });
+
   test('without an engine factory the app runs the engine that runs nothing', () async {
     final h = Harness()..approveKey();
     await h.state.init();

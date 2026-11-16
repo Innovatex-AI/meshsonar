@@ -62,6 +62,7 @@ import '../core/phone_sensors.dart';
 import '../core/units.dart';
 import 'build_flags.dart';
 import '../platform/app_lifecycle_bridge.dart';
+import '../radio/packet.dart' show MeshPacket;
 import '../radio/radio_api.dart';
 import '../radio/radio_session_impl.dart';
 import '../radio/companion_link.dart' show MeshCoreCompanionLink;
@@ -2663,8 +2664,8 @@ class AppState extends ChangeNotifier with _ObserverWiring {
     // ping itself goes up publicly.
     final public = _pingPublic(ping);
     if (ping.pktHash != null) _telemetry?.markOwn(ping.pktHash!, publicRaw: public);
-    // The MQTT feeds follow the same rule: echoes of a non-public ping never go to an outside site.
-    _observerPingResolved(ping.pktHash, public: public, tx: ping.kind == PingKind.tx);
+    // The MQTT feeds never get an echo of our own ping, public or not (observer_wiring.dart, WS-OUT 4).
+    _observerPingResolved(ping.pktHash, tx: ping.kind == PingKind.tx);
     final sid = _session?.id;
     if (sid == null) return;
     _pingCount++;
