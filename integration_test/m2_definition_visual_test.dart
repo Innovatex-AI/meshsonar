@@ -235,7 +235,10 @@ void main() {
     });
     await step('preview', () async {
       await pickColumbus(t, st);
-      await goTab(t, 'Plan', 'plan-list');
+      await goTab(t, 'Plan', 'planner');
+      // The Where-to-drive card is the Planner's fourth mode.
+      await t.tap(find.byKey(const Key('planner-mode-whereToDrive')));
+      await pumpFor(t, const Duration(seconds: 1));
       final card = find.byKey(const Key('plan-drive-next-map'));
       for (var i = 0; i < 12 && card.evaluate().isEmpty; i++) {
         await pumpFor(t, const Duration(seconds: 2));
