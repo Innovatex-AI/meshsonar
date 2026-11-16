@@ -3,7 +3,7 @@
 All notable changes to MeshSonar. Dates are local (US Eastern). This changelog was reconstructed from the commit
 history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md](ROADMAP.md).
 
-## [Unreleased]
+## [0.39.1+68] — 2026-11-16 — MeshTrack: Ask for location, polish
 
 - **Ask for location (MeshTrack MT-13).** On a person's contact screen, Ask for location asks their radio where it is with MeshCore's own telemetry request, so it works with people on any MeshCore app. You see the distance and direction, the person on the Drive map marked Asked, and Open on map; or "did not share a location" (with where they can allow it), or "No answer" with Try again; Cancel while asking. Once per 30 s per person, sent as a user message for airtime. The position stays on the phone in memory only (never uploaded or logged; gone after 2 h, and Delete my data forgets it everywhere); your own radio's telemetry settings are unchanged. Built from a reading of the MeshCore firmware source (`docs/protocol/telemetry-location-request.md`), not yet checked on hardware. The simulated radio's people answer all three ways (Bob with a position, Cara without, Ann not at all).
 
