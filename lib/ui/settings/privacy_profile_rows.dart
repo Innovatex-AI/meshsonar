@@ -61,9 +61,11 @@ class _PrivacyProfileRowsState extends State<PrivacyProfileRows> {
   }
 
   Future<void> _editText(String title, String? current, SettingField f, {String? Function(String)? problem, int maxLength = 40, TextCapitalization caps = TextCapitalization.none}) async {
-    final r = await showDialog<String>(
-      context: context,
-      builder: (_) => _TextDialog(title: title, initial: current ?? '', fieldKey: Key('profile-${f.name}-field'), problem: problem, maxLength: maxLength, caps: caps),
+    final r = await editSettingText(
+      context,
+      title: title,
+      initial: current ?? '',
+      validate: (v) => v.length > maxLength ? 'At most $maxLength characters' : problem?.call(v),
     );
     if (r != null) await _c!.set(f, r);
   }
@@ -135,54 +137,5 @@ class _PrivacyProfileRowsState extends State<PrivacyProfileRows> {
           child: Text(status, key: const Key('profile-status'), style: t.textTheme.bodySmall),
         ),
     ]);
-  }
-}
-
-
-/// The edit dialog; it owns its text controller, so the controller outlives the dialog's closing animation.
-class _TextDialog extends StatefulWidget {
-  final String title;
-  final String initial;
-  final Key fieldKey;
-  final String? Function(String)? problem;
-  final int maxLength;
-  final TextCapitalization caps;
-  const _TextDialog({required this.title, required this.initial, required this.fieldKey, this.problem, required this.maxLength, required this.caps});
-
-  @override
-  State<_TextDialog> createState() => _TextDialogState();
-}
-
-class _TextDialogState extends State<_TextDialog> {
-  late final TextEditingController _ctl = TextEditingController(text: widget.initial);
-
-  @override
-  void dispose() {
-    _ctl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final bad = widget.problem?.call(_ctl.text);
-    return AlertDialog(
-      title: Text(widget.title),
-      content: TextField(
-        key: widget.fieldKey,
-        controller: _ctl,
-        autofocus: true,
-        maxLength: widget.maxLength,
-        textCapitalization: widget.caps,
-        decoration: InputDecoration(errorText: bad),
-        onChanged: (_) => setState(() {}),
-        onSubmitted: (v) {
-          if (widget.problem?.call(v) == null) Navigator.pop(context, v);
-        },
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-        FilledButton(key: const Key('profile-save'), onPressed: bad == null ? () => Navigator.pop(context, _ctl.text) : null, child: const Text('Save')),
-      ],
-    );
   }
 }

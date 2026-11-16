@@ -45,12 +45,7 @@ void main() {
     } else {
       await t.tap(names.first);
       await pumpFor(t, const Duration(seconds: 1));
-      await shot(t, 'switch-confirm');
-      await t.tap(find.byKey(const Key('region-switch-cancel')));
-      await pumpFor(t, const Duration(seconds: 1));
-      await t.tap(names.first);
-      await pumpFor(t, const Duration(seconds: 1));
-      await t.tap(find.byKey(const Key('region-switch-confirm')));
+      await shot(t, 'switched');
       await pumpFor(t, const Duration(seconds: 3));
       await shot(t, 'map-after-switch');
     }

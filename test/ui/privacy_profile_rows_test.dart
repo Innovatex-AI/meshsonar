@@ -66,21 +66,23 @@ void main() {
     final h = await pump(tester);
     await tester.tap(find.byKey(const Key('profile-display')));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const Key('profile-display-field')), '  Andy  ');
-    await tester.tap(find.byKey(const Key('profile-save')));
+    await tester.enterText(find.byKey(const Key('edit-field')), '  Andy  ');
+    await tester.tap(find.byKey(const Key('edit-save')));
     await tester.pumpAndSettle();
     expect(h.c.posts.single, {'display': 'Andy'});
     expect(find.text('Andy'), findsOneWidget);
   });
 
   testWidgets('callsign refuses a bad value in the dialog', (tester) async {
-    await pump(tester);
+    final h = await pump(tester);
     await tester.tap(find.byKey(const Key('profile-callsign')));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const Key('profile-callsign-field')), 'a!');
+    await tester.enterText(find.byKey(const Key('edit-field')), 'a!');
     await tester.pumpAndSettle();
-    final save = tester.widget<FilledButton>(find.byKey(const Key('profile-save')));
-    expect(save.onPressed, isNull);
+    await tester.tap(find.byKey(const Key('edit-save')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('edit-field')), findsOneWidget);
+    expect(h.c.posts, isEmpty);
   });
 
   testWidgets('a key with no account: leaderboard is disabled and says why', (tester) async {

@@ -162,7 +162,7 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
       final msg = r == null
           ? 'Could not remove them just now. They stay hidden from public views and will be offered again.'
           : '${r.pings} earlier ping${r.pings == 1 ? '' : 's'} inside ${preview.pings == 0 ? 'the zone' : 'this zone'} ${r.pings == 1 ? 'was' : 'were'} removed from the server.';
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(key: const Key('zone-purge-result'), content: Text(msg)));
+      showAppToast(context, msg);
     } finally {
       _offering = false;
     }

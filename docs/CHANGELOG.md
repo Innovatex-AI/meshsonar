@@ -3,7 +3,14 @@
 All notable changes to MeshSonar. Dates are local (US Eastern). This changelog was reconstructed from the commit
 history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md](ROADMAP.md).
 
-## [Unreleased] — Build 66: privacy zones enforced on the phone, account toggles in the app
+## [0.38.0+66] — 2026-11-16 — Privacy zones on the phone, fewer warnings, universal links, CMH default
+
+### Build 66 summary
+- **Default region is Columbus (CMH)** when there is no GPS, manual pick or remembered region; first launch opens the map on Columbus.
+- **Universal links:** the Associated Domains capability is on and `applinks:meshsonar.com` is in `Runner.entitlements`; tapping a MeshSonar plan link opens the Planner. `release_ios.sh` archives through xcodebuild with the API key so profiles refresh.
+- **Warning cut:** MQTT cautions and operator badges removed; reversible confirms became silent actions or Undo toasts; "Careful" cards and the repeated claims card removed. Protective confirms and the data-collection disclosure stay.
+- **Bluetooth permission text** no longer claims background message delivery; a drive keeps recording while the screen is locked.
+
 
 ### Privacy zones (A6, Z1-Z9)
 - **Zones now work on the phone, not just at read time.** `PrivacyZones.hides(lat, lon)` (`lib/core/privacy_zones.dart`, same haversine as the editor and the website) is asked by every upload path. A ping inside a zone is never put in a drive-upload body: it is marked kept-on-this-phone (`zone_held.txt`, `ZoneHeldLedger`), stays in the drive log, stats and export, never counts as waiting or rejected, and is never retried. A drive entirely inside zones is not announced to the server at all.
