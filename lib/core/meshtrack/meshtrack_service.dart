@@ -628,6 +628,7 @@ class MeshTrackService {
     g.sentThisSession = false;
     g.stopPending = false;
     _beacon.reset();
+    if (!_radio && _disconnectTimer == null) _armDisconnectStop();
     _groupsChanged();
     _changed();
     _evaluate();
@@ -727,17 +728,25 @@ class MeshTrackService {
       }
       _pump();
     } else {
-      _disconnectTimer?.cancel();
-      _disconnectTimer = Timer(kMtDisconnectStopAfter, () {
-        _disconnectTimer = null;
-        if (_radio) return;
-        for (final g in _groups.values.where((g) => g.config.share).toList()) {
-          _stop(g, MtStopCause.radioDisconnected, notify: false);
-        }
-        _changed();
-      });
+      _armDisconnectStop();
     }
     _changed(save: false);
+  }
+
+  /// Sharing ends after [kMtDisconnectStopAfter] without the radio. Armed only while a group shares, so a phone that shares
+  /// nothing runs no timer.
+  void _armDisconnectStop() {
+    _disconnectTimer?.cancel();
+    _disconnectTimer = null;
+    if (_radio || !_groups.values.any((g) => g.config.share)) return;
+    _disconnectTimer = Timer(kMtDisconnectStopAfter, () {
+      _disconnectTimer = null;
+      if (_radio) return;
+      for (final g in _groups.values.where((g) => g.config.share).toList()) {
+        _stop(g, MtStopCause.radioDisconnected, notify: false);
+      }
+      _changed();
+    });
   }
 
   /// The ping engine's state, on every EngineStatus change.
