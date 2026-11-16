@@ -18,7 +18,6 @@ lib/ui/contacts/qr_scan_screen.dart|Icons.|3
 lib/ui/contacts/radio_list_sheet.dart|FilledButton|2
 lib/ui/radios/observer_join_screen.dart|Card(|1
 lib/ui/radios/observer_join_screen.dart|FilledButton|1
-lib/ui/radios/observer_join_screen.dart|Icons.|1
 lib/ui/radios/radio_setup/radio_setup_screen.dart|Card(|1
 lib/ui/radios/radio_setup/radio_setup_screen.dart|CircularProgressIndicator|2
 lib/ui/radios/radio_setup/radio_setup_screen.dart|Divider(|2
