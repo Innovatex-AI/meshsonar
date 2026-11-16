@@ -71,17 +71,13 @@ class MqttPresetCatalog {
   MqttPresetGroup groupOf(MqttPreset p) => _groups[p.id] ?? MqttPresetGroup.more;
 
   /// Presets whose name, host or region contain every word of [query] (any case), in file order; all of them for an
-  /// empty query. "caution" (or "operator") also finds the presets that need the operator's OK.
+  /// empty query.
   List<MqttPreset> search(String query) {
     final words = query.toLowerCase().split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
     if (words.isEmpty) return presets;
     return [
       for (final p in presets)
-        if (words.every((w) {
-          final hay = '${p.name} ${p.host} ${p.region ?? ''} ${groupOf(p).label}'.toLowerCase();
-          if (hay.contains(w)) return true;
-          return p.needsOperatorOk && ('caution'.startsWith(w) || 'operator'.startsWith(w));
-        }))
+        if (words.every((w) => '${p.name} ${p.host} ${p.region ?? ''} ${groupOf(p).label}'.toLowerCase().contains(w)))
           p,
     ];
   }
@@ -129,8 +125,6 @@ Map<String, dynamic> presetToJson(MqttPreset p, MqttPresetGroup group) => {
       if (p.aud != null) 'aud': p.aud,
       'group': group.wire,
       if (p.region != null) 'region': p.region,
-      if (p.needsOperatorOk) 'needsOperatorOk': true,
-      if (p.caution != null) 'caution': p.caution,
       if (p.needsRealIata) 'needsRealIata': true,
       'verified': p.verified,
       if (p.verifiedNote != null) 'verifiedNote': p.verifiedNote,

@@ -175,10 +175,6 @@ class MqttPreset {
   /// Where it is meaningful (`US`, `CA`, `EU`, a region name) for the picker's search and the regional list.
   final String? region;
 
-  /// The operator may only want fixed observers: the picker shows [caution] in plain words before it is turned on.
-  final bool needsOperatorOk;
-  final String? caution;
-
   /// The broker drops publishes without a real `[A-Z]{3}` airport code.
   final bool needsRealIata;
 
@@ -194,8 +190,6 @@ class MqttPreset {
     this.auth = MqttAuth.jwt,
     this.aud,
     this.region,
-    this.needsOperatorOk = false,
-    this.caution,
     this.needsRealIata = false,
     this.verified = false,
     this.verifiedNote,
@@ -216,8 +210,6 @@ class MqttPreset {
       auth: MqttAuth.parse(raw['auth']),
       aud: s('aud'),
       region: s('region'),
-      needsOperatorOk: raw['needsOperatorOk'] == true,
-      caution: s('caution'),
       needsRealIata: raw['needsRealIata'] == true,
       verified: raw['verified'] == true,
       verifiedNote: s('verifiedNote'),

@@ -1,4 +1,4 @@
-// Switching the viewed region from the map: the confirm sheet ("Switch to <region>?") and the "Nearest regions" sheet for a
+// Switching the viewed region from the map: the switch with an Undo toast (no confirm sheet) and the "Nearest regions" sheet for a
 // phone outside every region. Both end in the app's one switch, AppState.setViewingRegion (saved as the manual pick, so it
 // survives a restart; "Follow my location" in the region switcher goes back), and remember the region as a recent.
 //
@@ -15,17 +15,20 @@ import '../app.dart';
 import '../onboarding/ui_prefs.dart';
 import '../design/app_surfaces.dart';
 
-/// Asks "Switch to (region)?" and, on Switch, makes it the viewed region. Returns true when the region was switched. The
-/// sheet starts on Cancel (autofocus), so a stray tap or Return never switches; dismissing it is Cancel.
+/// Switches to [region] at once and says so with an Undo toast; Undo puts back the previous pick (or "Follow my
+/// location" if there was none). Returns true: the region was switched. No confirm sheet.
 Future<bool> confirmRegionSwitch(BuildContext context, RegionIndexEntry region) async {
   final s = AppScope.read(context);
-  final ok = await showAppSheet<bool>(
-    context,
-    detents: const [0.45],
-    builder: (_, c) => _ConfirmSheet(region: region),
-  );
-  if (ok != true) return false;
+  final before = s.settings.regionManual;
+  final following = !s.viewingIsManual;
   await switchViewedRegion(s, region);
+  if (!context.mounted) return true;
+  showAppToast(
+    context,
+    'Switched to ${shortNameOf(region)}.${following ? ' The app stops following your location.' : ''}',
+    actionLabel: 'Undo',
+    onAction: () => unawaited(s.setViewingRegion(before)),
+  );
   return true;
 }
 
@@ -33,56 +36,6 @@ Future<bool> confirmRegionSwitch(BuildContext context, RegionIndexEntry region) 
 Future<void> switchViewedRegion(AppState s, RegionIndexEntry region) async {
   unawaited(uiPrefsFor(s).pushRecentRegion(region.code));
   await s.setViewingRegion(region.code);
-}
-
-class _ConfirmSheet extends StatelessWidget {
-  final RegionIndexEntry region;
-  const _ConfirmSheet({required this.region});
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    final s = AppScope.read(context);
-    final name = shortNameOf(region);
-    final following = !s.viewingIsManual;
-    return SafeArea(
-      child: SingleChildScrollView(
-        key: const Key('region-switch-sheet'),
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-          Semantics(header: true, child: Text('Switch to $name?', style: t.textTheme.titleLarge)),
-          const SizedBox(height: 8),
-          Text('The map and stats will show that region.', style: t.textTheme.bodyLarge),
-          if (following) ...[
-            const SizedBox(height: 8),
-            Text('The app stops following your location until you choose "Follow my location" in the region switcher.',
-                style: t.textTheme.bodyMedium),
-          ],
-          const SizedBox(height: 16),
-          Row(children: [
-            Expanded(
-              child: OutlinedButton(
-                key: const Key('region-switch-cancel'),
-                autofocus: true,
-                style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Cancel'),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: FilledButton(
-                key: const Key('region-switch-confirm'),
-                style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Switch'),
-              ),
-            ),
-          ]),
-        ]),
-      ),
-    );
-  }
 }
 
 /// "Outside coverage": the regions nearest to the phone, one tap each (then the usual confirm).

@@ -110,7 +110,7 @@ void main() {
   });
 
   group('preset picker', () {
-    testWidgetsT('search, sections, caution badges with the plain warning; a preset is added OFF', (tester) async {
+    testWidgetsT('search, sections, no caution text; a preset is added OFF', (tester) async {
       final r = await _open(tester);
       await _openPicker(tester);
       expect(find.text('Popular'), findsOneWidget);
@@ -120,8 +120,8 @@ void main() {
       expect(find.byKey(const Key('mqtt-preset-letsmesh-us')), findsOneWidget);
       expect(find.byKey(const Key('mqtt-preset-letsmesh-eu')), findsOneWidget);
       expect(find.byKey(const Key('mqtt-preset-meshmapper')), findsNothing);
-      expect(find.byKey(const Key('mqtt-preset-letsmesh-us-caution')), findsOneWidget);
-      expect(find.textContaining('Ask the operator before you turn it on'), findsWidgets);
+      expect(find.byKey(const Key('mqtt-preset-letsmesh-us-caution')), findsNothing);
+      expect(find.textContaining('Ask the operator'), findsNothing);
       await tester.tap(find.byKey(const Key('mqtt-preset-letsmesh-us')));
       await settleIo(tester);
       final slots = r.h.state.settings.mqttSlots;
@@ -186,25 +186,16 @@ void main() {
   });
 
   group('a feed', () {
-    testWidgetsT('turning on a caution preset asks first; cancel keeps it off, Turn on enables it', (tester) async {
+    testWidgetsT('turning on a feed is one tap: no confirm, no caution badge', (tester) async {
       const slot = MqttSlotSettings(id: 'slot-1', presetId: 'meshmapper', name: 'MeshMapper', host: 'mqtt.meshmapper.net');
       final r = await _open(tester,
           settings: const Settings(driverKey: 'k-1234567890', keyStatus: DriverKeyStatus.approved, mqttSlots: [slot]));
       await settleIo(tester);
       await showSetting(tester, 'mqtt-slot-slot-1');
-      expect(find.textContaining('Ask the operator first'), findsOneWidget, reason: 'the row carries the badge while off');
+      expect(find.textContaining('Ask the operator'), findsNothing);
       await tester.tap(find.byKey(const Key('mqtt-slot-slot-1-switch')));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('mqtt-caution-slot-1')), findsOneWidget);
-      expect(find.textContaining('MeshMapper discourages phone observers'), findsOneWidget);
-      await tester.tap(find.byKey(const Key('mqtt-caution-slot-1-cancel')));
-      await tester.pumpAndSettle();
-      expect(r.h.state.settings.mqttSlots.single.enabled, isFalse);
-      await showSetting(tester, 'mqtt-slot-slot-1');
-      await tester.tap(find.byKey(const Key('mqtt-slot-slot-1-switch')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('mqtt-caution-slot-1-confirm')));
       await settleIo(tester);
+      expect(find.byKey(const Key('mqtt-caution-slot-1')), findsNothing, reason: 'no confirm dialog');
       expect(r.h.state.settings.mqttSlots.single.enabled, isTrue);
       expect(r.engine.last!.slots.single.enabled, isTrue);
     });
@@ -304,7 +295,7 @@ void main() {
       expect(r.h.state.settings.mqttSlots.single.wsPath, '/mqtt', reason: 'Test saves nothing');
     });
 
-    testWidgetsT('Delete asks, then removes the feed and its Keychain password', (tester) async {
+    testWidgetsT('Delete removes the feed at once (Undo brings it back) and its Keychain password after the window', (tester) async {
       const pw = MqttSlotSettings(id: 'slot-3', name: 'Pw', host: 'pw.example', auth: MqttAuth.password, username: 'u');
       final r = await _open(tester,
           settings: const Settings(driverKey: 'k-1234567890', keyStatus: DriverKeyStatus.approved, mqttSlots: [_slotA, pw]));
@@ -314,11 +305,13 @@ void main() {
       await settleIo(tester);
       await _inSheet(tester, 'mqtt-slot-delete');
       await tester.tap(find.byKey(const Key('mqtt-slot-delete')));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('mqtt-delete-slot-3')), findsOneWidget);
-      await tester.tap(find.byKey(const Key('mqtt-delete-slot-3-confirm')));
       await settleIo(tester);
+      expect(find.byKey(const Key('mqtt-delete-slot-3')), findsNothing, reason: 'no confirm dialog');
       expect(r.h.state.settings.mqttSlots.map((x) => x.id), ['slot-1']);
+      expect(find.text('Deleted Pw.'), findsOneWidget);
+      expect(await r.h.secretStore.read('mqtt.slot-3'), isNotNull, reason: 'the password waits out the Undo window');
+      await tester.pump(const Duration(seconds: 7));
+      await settleIo(tester);
       expect(await r.h.secretStore.read('mqtt.slot-3'), isNull);
     });
 
@@ -347,7 +340,6 @@ void main() {
       final all = [
         observerHelp,
         mqttFeedsHelp,
-        mqttOperatorCaution,
         ...observerSettingsEntries.expand((e) => [e.title, e.summary]),
         observerJoinTitle,
         observerJoinIntro,
