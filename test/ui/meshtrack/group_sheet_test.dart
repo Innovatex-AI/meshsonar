@@ -72,7 +72,7 @@ void main() {
         isButton: true,
         hasTapAction: true,
       ));
-      expect(tester.getSize(find.byKey(const Key('meshtrack-chip-hit'))).height, greaterThanOrEqualTo(44));
+      expect(tester.getSize(find.byKey(const Key('meshtrack-chip-hit'))).height, greaterThanOrEqualTo(48));
       sem.dispose();
 
       await tester.tap(find.byKey(const Key('meshtrack-chip-hit')));
@@ -350,6 +350,7 @@ void main() {
       expect(find.bySemanticsLabel('Message Sam'), findsOneWidget);
       expect(find.bySemanticsLabel(RegExp('Where are you\\? Ask Sam')), findsOneWidget);
       await expectLater(tester, meetsGuideline(iOSTapTargetGuideline));
+      await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
       await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
       sem.dispose();
       await rig.done(tester);

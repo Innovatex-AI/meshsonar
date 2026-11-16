@@ -10,6 +10,9 @@ import '../../core/units.dart';
 /// A position on the phone (my own fix) or of a friend.
 typedef MtLatLon = ({double lat, double lon});
 
+/// Every MeshTrack control is at least this tall and wide (48 pt, the larger of the app's two target sizes).
+const double kMtHit = 48;
+
 const String mtFeatureName = 'MeshTrack';
 
 /// The one-time disclosure the first time sharing is turned on (plan section 7, exact text).

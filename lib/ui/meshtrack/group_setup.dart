@@ -87,7 +87,7 @@ class _Primary extends StatelessWidget {
         child: SizedBox(
           width: double.infinity,
           child: CupertinoButton.filled(
-            minimumSize: const Size.square(Hit.min),
+            minimumSize: const Size.square(kMtHit),
             onPressed: busy ? null : onPressed,
             child: busy ? const CupertinoActivityIndicator(color: Colors.white) : Text(label, textAlign: TextAlign.center),
           ),
@@ -132,7 +132,7 @@ class _OpError extends StatelessWidget {
               const SizedBox(height: Gap.s),
               CupertinoButton(
                 key: const Key('mt-make-room'),
-                minimumSize: const Size.square(Hit.min),
+                minimumSize: const Size.square(kMtHit),
                 padding: EdgeInsets.zero,
                 onPressed: () => openMakeRoom(context),
                 child: const Text(mtMakeRoom),
@@ -315,7 +315,7 @@ class InviteScreen extends StatelessWidget {
             width: double.infinity,
             child: CupertinoButton(
               key: const Key('mt-invite-done'),
-              minimumSize: const Size.square(Hit.min),
+              minimumSize: const Size.square(kMtHit),
               onPressed: () => Navigator.of(context).pop(),
               child: const Text('Done'),
             ),

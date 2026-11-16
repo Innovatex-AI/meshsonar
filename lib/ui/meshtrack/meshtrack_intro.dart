@@ -35,13 +35,13 @@ class MeshTrackIntro extends StatelessWidget {
       controller: controller,
       primaryAction: CupertinoButton.filled(
         key: const Key('mt-intro-ok'),
-        minimumSize: const Size.square(Hit.min),
+        minimumSize: const Size.square(kMtHit),
         onPressed: () => Navigator.pop(context, true),
         child: const Text('Got it'),
       ),
       secondaryAction: CupertinoButton(
         key: const Key('mt-intro-not-now'),
-        minimumSize: const Size.square(Hit.min),
+        minimumSize: const Size.square(kMtHit),
         onPressed: () => Navigator.pop(context, false),
         child: const Text('Not now'),
       ),

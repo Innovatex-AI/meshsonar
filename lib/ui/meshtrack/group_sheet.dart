@@ -316,6 +316,7 @@ class _GroupSheetState extends State<GroupSheet> {
       padding: const EdgeInsets.fromLTRB(Gap.xs, Gap.xs, Layout.screenMargin, Gap.s),
       child: Row(children: [
         Hit.pad(
+          size: kMtHit,
           semanticsLabel: 'Back to groups',
           onTap: () => setState(() => _open = null),
           child: KeyedSubtree(key: const Key('mt-back'), child: AppSymbolIcon(AppSymbols.chevronLeft, size: 22, color: c.accent)),
@@ -367,7 +368,7 @@ class _GroupSheetState extends State<GroupSheet> {
             const SizedBox(height: Gap.m),
             CupertinoButton(
               key: const Key('mt-people-empty-invite'),
-              minimumSize: const Size.square(Hit.min),
+              minimumSize: const Size.square(kMtHit),
               onPressed: () => openInvite(context, g.channelId, g.name),
               child: const Text('Invite friends'),
             ),
@@ -483,9 +484,9 @@ class _HeaderButton extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         onTap: onPressed,
         child: Container(
-          constraints: const BoxConstraints(minHeight: Hit.min, minWidth: Hit.min),
+          constraints: const BoxConstraints(minHeight: kMtHit, minWidth: kMtHit),
           padding: const EdgeInsets.symmetric(horizontal: Gap.m, vertical: Gap.xs),
-          decoration: BoxDecoration(color: c.surfaceHigh, borderRadius: BorderRadius.circular(Hit.min / 2)),
+          decoration: BoxDecoration(color: c.surfaceHigh, borderRadius: BorderRadius.circular(kMtHit / 2)),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
             AppSymbolIcon(symbol, size: 18, color: on ? c.accent : c.textMuted),
             const SizedBox(width: Gap.xs),
@@ -509,8 +510,8 @@ class _WideButton extends StatelessWidget {
         child: SizedBox(
           width: double.infinity,
           child: filled
-              ? CupertinoButton.filled(minimumSize: const Size.square(Hit.min), onPressed: onPressed, child: Text(label, textAlign: TextAlign.center))
-              : CupertinoButton(minimumSize: const Size.square(Hit.min), onPressed: onPressed, child: Text(label, textAlign: TextAlign.center)),
+              ? CupertinoButton.filled(minimumSize: const Size.square(kMtHit), onPressed: onPressed, child: Text(label, textAlign: TextAlign.center))
+              : CupertinoButton(minimumSize: const Size.square(kMtHit), onPressed: onPressed, child: Text(label, textAlign: TextAlign.center)),
         ),
       );
 }
@@ -561,8 +562,8 @@ class _NotOnRadio extends StatelessWidget {
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Text(mtNotOnRadio, style: AppType.subhead.copyWith(color: c.textPrimary)),
           Wrap(spacing: Gap.m, children: [
-            CupertinoButton(key: const Key('mt-make-room'), minimumSize: const Size.square(Hit.min), padding: EdgeInsets.zero, onPressed: () => openMakeRoom(context), child: const Text(mtMakeRoom)),
-            CupertinoButton(key: const Key('mt-remove'), minimumSize: const Size.square(Hit.min), padding: EdgeInsets.zero, onPressed: onRemove, child: Text('Remove', style: TextStyle(color: c.danger))),
+            CupertinoButton(key: const Key('mt-make-room'), minimumSize: const Size.square(kMtHit), padding: EdgeInsets.zero, onPressed: () => openMakeRoom(context), child: const Text(mtMakeRoom)),
+            CupertinoButton(key: const Key('mt-remove'), minimumSize: const Size.square(kMtHit), padding: EdgeInsets.zero, onPressed: onRemove, child: Text('Remove', style: TextStyle(color: c.danger))),
           ]),
         ]),
       ),
@@ -605,7 +606,7 @@ class _MeetRow extends StatelessWidget {
               ),
             ),
           ),
-          CupertinoButton(key: const Key('mt-meet-clear'), minimumSize: const Size.square(Hit.min), onPressed: onClear, child: const Text('Clear')),
+          CupertinoButton(key: const Key('mt-meet-clear'), minimumSize: const Size.square(kMtHit), onPressed: onClear, child: const Text('Clear')),
         ]),
       ),
     );
@@ -651,6 +652,7 @@ class FriendRow extends StatelessWidget {
     final big = MediaQuery.textScalerOf(context).scale(17) > 17 * 1.5;
     final actions = [
       Hit.pad(
+        size: kMtHit,
         semanticsLabel: 'Message ${f.name}',
         onTap: onMessage,
         child: KeyedSubtree(key: Key('mt-message-${f.name}'), child: AppSymbolIcon(AppSymbols.message, size: 22, color: c.accent)),
@@ -662,7 +664,7 @@ class FriendRow extends StatelessWidget {
         excludeSemantics: true,
         child: CupertinoButton(
           key: Key('mt-ask-${f.name}'),
-          minimumSize: const Size.square(Hit.min),
+          minimumSize: const Size.square(kMtHit),
           padding: const EdgeInsets.symmetric(horizontal: Gap.s),
           onPressed: asked ? null : onAsk,
           child: Text(asked ? mtAsked : mtWhereAreYou, style: AppType.subhead.copyWith(fontWeight: FontWeight.w600, color: asked || onAsk == null ? c.textMuted : c.accent)),
@@ -692,7 +694,7 @@ class FriendRow extends StatelessWidget {
                   behavior: HitTestBehavior.opaque,
                   onTap: onTap,
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(minHeight: Hit.min),
+                    constraints: const BoxConstraints(minHeight: kMtHit),
                     child: Row(children: [
                       Opacity(
                         opacity: faded ? 0.55 : 1,
@@ -769,7 +771,7 @@ class _GroupCard extends StatelessWidget {
                     key: Key('mt-open-${g.channelId}'),
                     onTap: onOpen,
                     child: ConstrainedBox(
-                      constraints: const BoxConstraints(minHeight: Hit.min),
+                      constraints: const BoxConstraints(minHeight: kMtHit),
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(Layout.screenMargin, Gap.s, Gap.xs, Gap.s),
                         child: Row(children: [
@@ -793,6 +795,7 @@ class _GroupCard extends StatelessWidget {
                 ),
               ),
               Hit.pad(
+                size: kMtHit,
                 semanticsLabel: '${g.name} options',
                 onTap: onMenu,
                 child: KeyedSubtree(key: Key('mt-menu-${g.channelId}'), child: AppSymbolIcon(AppSymbols.ellipsisCircle, size: 24, color: c.accent)),
@@ -806,7 +809,7 @@ class _GroupCard extends StatelessWidget {
                   Text(mtNotOnRadio, key: Key('mt-not-on-radio-${g.channelId}'), style: AppType.footnote.copyWith(color: c.warning)),
                   CupertinoButton(
                     key: Key('mt-make-room-${g.channelId}'),
-                    minimumSize: const Size.square(Hit.min),
+                    minimumSize: const Size.square(kMtHit),
                     padding: EdgeInsets.zero,
                     onPressed: () => openMakeRoom(context),
                     child: const Text(mtMakeRoom),

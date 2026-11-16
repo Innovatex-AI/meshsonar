@@ -652,7 +652,7 @@ class _MeshTrackChipState extends State<MeshTrackChip> {
           key: const Key('meshtrack-chip-hit'),
           behavior: HitTestBehavior.opaque,
           onTap: () => unawaited(showGroupSheet(context)),
-          child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 44), child: Center(widthFactor: 1, heightFactor: 1, child: pill)),
+          child: ConstrainedBox(constraints: const BoxConstraints(minHeight: kMtHit), child: Center(widthFactor: 1, heightFactor: 1, child: pill)),
         ),
       ),
     );
