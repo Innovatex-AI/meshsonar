@@ -358,15 +358,7 @@ class _BodyState extends State<_Body> {
 
   Future<void> _reboot() async {
     if (_driveBlocks('rebooting the radio')) return;
-    final ok = await showAppConfirm(
-      context,
-      title: 'Reboot ${d.snapshot?.config.name ?? 'the radio'}?',
-      message: 'It disconnects for about 10 seconds and MeshSonar reconnects. Nothing is erased.',
-      confirmLabel: 'Reboot',
-      destructive: true,
-      confirmKey: const Key('reboot-confirm'),
-    );
-    if (ok) await _write(d.reboot);
+    await _write(d.reboot);
   }
 
   Future<void> _reset() async {

@@ -117,18 +117,18 @@ void main() {
       expect(c(keyN(1)).pathMode, PathMode.auto);
     });
 
-    testWidgetsT('Reset route: action sheet first, then the route is gone and a toast says so', (tester) async {
+    testWidgetsT('Reset route: the route is gone at once, the toast says so and Undo brings it back', (tester) async {
       await withRoute();
       await pumpRoute(tester, keyN(1));
       await tester.tap(find.byKey(const Key('route-reset')));
-      await tester.pumpAndSettle();
-      expect(c(keyN(1)).hasPath, isTrue);
-      await tester.tap(find.byKey(const Key('reset-route-confirm')));
       await tester.pumpAndSettle();
       await tester.pumpAndSettle();
       expect(c(keyN(1)).hasPath, isFalse);
       expect(find.text('Route cleared. The next message searches again.'), findsOneWidget);
       expect(find.text('No route yet'), findsOneWidget);
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+      expect(c(keyN(1)).hasPath, isTrue);
     });
 
     testWidgetsT('Find a route now: result card with the route, Use this route to Automatic', (tester) async {
@@ -228,7 +228,6 @@ void main() {
   group('Ping options (long press on the Ping tile)', () {
     testWidgetsT('the sheet offers Ping, Direct only and the 2 and 3 byte ID sizes; a choice runs the ping sheet', (tester) async {
       rig.store.contacts.upsert(repeater('a1', 'Ridge'));
-      rig.store.db.putSetting('ping_airtime_ack', '1');
       setScreen(tester);
       final ridge = c(hashKey('a1'));
       await tester.pumpWidget(MaterialApp(
@@ -293,7 +292,7 @@ void main() {
       expect(find.textContaining('share'), findsNothing);
     });
 
-    testWidgetsT('typed hashes: errors in words, then the chain; Save without testing asks, then writes and keeps the route', (tester) async {
+    testWidgetsT('typed hashes: errors in words, then the chain; Save without testing writes and keeps the route', (tester) async {
       await setup(tester);
       await openPicker(tester);
       await tester.enterText(find.byKey(const Key('picker-text')), 'zz');
@@ -306,9 +305,7 @@ void main() {
       expect(find.byKey(const Key('chip-1')), findsOneWidget);
       await tester.tap(find.byKey(const Key('picker-save')));
       await tester.pumpAndSettle();
-      expect(find.byKey(const Key('picker-save-untested')), findsOneWidget);
-      await tester.tap(find.byKey(const Key('picker-save-untested')));
-      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('picker-save-untested')), findsNothing);
       expect(rig.port.table[keyN(1)]!.outPath, [0xc3, 0xa1]);
       expect(rig.port.table[keyN(1)]!.outPathLen, 2);
       expect(c(keyN(1)).pathMode, PathMode.fixed);
@@ -344,8 +341,6 @@ void main() {
       await tester.tap(find.byKey(Key('pick-${hashKey('c3').substring(0, 8)}')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('picker-save')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('picker-save-untested')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('picker-save')), findsOneWidget);
       expect(c(keyN(1)).pathMode, PathMode.auto);

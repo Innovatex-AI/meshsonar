@@ -25,16 +25,15 @@ class RouteBrokenCard extends StatelessWidget {
   }
 
   Future<void> _reset(BuildContext context) async {
-    final ok = await showAppConfirm(context,
-        title: 'Reset the route to ${contact.displayName}?',
-        message: 'The saved route is forgotten and the next message searches again.',
-        confirmLabel: 'Reset route',
-        destructive: true,
-        confirmKey: const Key('broken-reset-confirm'));
-    if (!ok) return;
+    final before = manager.store.contacts.get(manager.radioId ?? '', contact.publicKey) ?? contact;
     await manager.resetPath(contact.publicKey);
     AppHaptics.success();
     onChanged?.call();
+    if (!context.mounted) return;
+    showAppToast(context, 'Route cleared. The next message searches again.', actionLabel: 'Undo', onAction: () async {
+      await manager.restorePath(before);
+      onChanged?.call();
+    });
   }
 
   @override

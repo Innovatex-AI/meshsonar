@@ -117,14 +117,6 @@ class _RoutePickerPageState extends State<RoutePickerPage> {
 
   Future<void> _save() async {
     if (_chain.isEmpty || _saving) return;
-    if (_tested != true) {
-      final go = await showAppConfirm(context,
-          title: 'Save without testing?',
-          message: 'The route has not been tested. A wrong route can stop messages from arriving.',
-          confirmLabel: 'Save without testing',
-          confirmKey: const Key('picker-save-untested'));
-      if (!go || !mounted) return;
-    }
     setState(() => _saving = true);
     final err = await _m.setRoute(widget.publicKey, _route);
     if (!mounted) return;

@@ -166,16 +166,6 @@ class _NetworkViewState extends State<NetworkView> with WidgetsBindingObserver {
       ],
     );
     if (wide == null || !mounted) return;
-    if (wide) {
-      final ok = await showAppConfirm(
-        context,
-        title: 'Announce to the whole mesh?',
-        message: 'Every repeater that hears it passes it on, so it costs airtime across the mesh. Your radio already announces itself now and then.',
-        confirmLabel: 'Announce',
-        confirmKey: const Key('announce-wide-confirm'),
-      );
-      if (!ok || !mounted) return;
-    }
     final res = await r.announce(wide: wide);
     if (mounted) _toast(res.message, ok: res.ok);
   }

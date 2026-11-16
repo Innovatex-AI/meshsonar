@@ -768,6 +768,26 @@ class ContactManager {
     }
   }
 
+  /// Undo of [resetPath]: puts the contact's saved route, mode and learned time back on the phone ([before] is the contact as it
+  /// was). When the radio is connected and route writes are enabled the route is written back there too; otherwise the radio
+  /// learns it again from the next message.
+  Future<void> restorePath(Contact before) async {
+    final id = radioId;
+    if (id == null) return;
+    final key = before.publicKey;
+    store.contacts.setPath(id, key, before.outPath, before.outPathLen);
+    store.contacts.setPathMode(id, key, before.pathMode, pinnedPath: before.pinnedPath, pinnedHashSize: before.pinnedHashSize);
+    store.contacts.setPathLearned(id, key, before.pathLearnedMs);
+    _changed();
+    final p = _port;
+    if (before.hasPath && routeWriteEnabled() && p != null && p.isConnected) {
+      try {
+        final onRadio = await p.fetch(key) ?? before;
+        await p.upload(onRadio.copyWith(outPath: before.outPath, outPathLen: before.outPathLen));
+      } catch (_) {}
+    }
+  }
+
   // ------------------------------------------------------------------ route mode (plan 4.7)
 
   /// True when the set-path radio write may run (AppFlags.routeWriteVerified in the app; tests force it).

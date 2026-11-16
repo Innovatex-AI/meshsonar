@@ -263,7 +263,6 @@ class _ClaimRepeaterScreenState extends State<ClaimRepeaterScreen> {
         onChanged: (_) => setState(() {}),
       ),
       const SizedBox(height: Gap.m),
-      _DisclosureCard(key: const Key('claim-disclosure')),
       const SizedBox(height: Gap.l),
       FilledButton.icon(
         key: const Key('claim-start'),
@@ -307,7 +306,6 @@ class _ClaimRepeaterScreenState extends State<ClaimRepeaterScreen> {
       const SizedBox(height: Gap.m),
       for (var i = 0; i < steps.length; i++) _StepRow(title: steps[i], state: i < at ? _StepState.done : (i == at ? _StepState.now : _StepState.waiting)),
       const SizedBox(height: Gap.l),
-      const _DisclosureCard(),
       const SizedBox(height: Gap.l),
       OutlinedButton.icon(
         key: const Key('claim-cancel'),
@@ -372,27 +370,7 @@ class _ClaimRepeaterScreenState extends State<ClaimRepeaterScreen> {
         ),
       ],
       const SizedBox(height: Gap.l),
-      const _DisclosureCard(),
     ];
-  }
-}
-
-class _DisclosureCard extends StatelessWidget {
-  const _DisclosureCard({super.key});
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    return Card(
-      color: t.colorScheme.surfaceContainerHigh,
-      child: Padding(
-        padding: const EdgeInsets.all(Gap.m),
-        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Icon(Icons.lock_outline, size: 20),
-          const SizedBox(width: Gap.s),
-          Expanded(child: Text(claimDisclosure, style: t.textTheme.bodyMedium)),
-        ]),
-      ),
-    );
   }
 }
 

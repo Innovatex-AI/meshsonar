@@ -21,7 +21,7 @@ import '../design/app_type.dart';
 import '../design/tokens.dart';
 import '../chat/hop_names.dart';
 import '../chat/message_info_card.dart';
-import '../chat/message_menu.dart' show confirmDeleteMessage;
+import '../chat/message_menu.dart' show deleteMessageWithUndo;
 
 /// Opens the details of one message as a sheet (detents 0.5 / 0.92; on an iPad it is the centred form sheet of showAppSheet).
 Future<void> showMessageDetails(BuildContext context, {required ChatService chat, required String messageId}) async {
@@ -254,10 +254,8 @@ class _MessageDetailsState extends State<MessageDetails> {
               key: const Key('details-delete'),
               minimumSize: Size.square(Hit.of(context)),
               onPressed: () async {
-                if (await confirmDeleteMessage(context)) {
-                  widget.chat.deleteMessage(m.id);
-                  if (context.mounted) Navigator.of(context).maybePop();
-                }
+                deleteMessageWithUndo(context, widget.chat, m.id);
+                if (context.mounted) Navigator.of(context).maybePop();
               },
               child: Text('Delete', style: TextStyle(color: c.danger)),
             ),

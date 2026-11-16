@@ -619,6 +619,12 @@ class ChatService {
     return ok;
   }
 
+  /// Undo of [deleteMessage]: puts [m] back and tells the open screens (same event as a delete: they re-read the thread).
+  void restoreMessage(ChatMessage m) {
+    store.messages.insert(m);
+    _emit(ChatEvent.deleted(m.convKey));
+  }
+
   int deleteHistory(String convKey) {
     final n = store.messages.deleteHistory(convKey);
     _emit(ChatEvent.deleted(convKey));
