@@ -7,7 +7,7 @@
 //   An old file's key is ignored and dropped on the next save.)
 //   zoomBySpeed     zoom out gently at highway speed (default off: the zoom stays where the person put it).
 //   healthOverlay   the small "Map and GPS health" readout on the map (Settings > Diagnostics).
-//   layers          per map page (`drive`, later `analyze`): which layers are on or off, the Pings colour mode, and the network
+//   layers          per map page (`drive`, `plan`, `detail`; [kMapLayerPages]): which layers are on or off, the Pings colour mode, and the network
 //                   coverage options (colour by, detail, window, source). See [LayerPrefs]. Drive plan 7.2 (fix F11).
 import 'dart:async';
 import 'dart:convert';
@@ -16,6 +16,16 @@ import 'package:flutter/foundation.dart' show ChangeNotifier, immutable, mapEqua
 
 /// The page-config ids [MapPrefs.layerPrefs] is kept under.
 const String kDriveLayerPage = 'drive';
+
+/// The Plan tab's full-screen map (release 0.38, Master Planner): its own remembered layers, apart from the Drive map's.
+const String kPlanLayerPage = 'plan';
+
+/// Every small map on a detail page (a repeater, a drive, a cell; ui/map/map_preview.dart). A layer with no choice here
+/// follows the Drive map's choice (see [MapPrefs.previewLayerOn]).
+const String kDetailLayerPage = 'detail';
+
+/// The pages a [LayerPrefs] can be kept under, in the order the file writes them.
+const List<String> kMapLayerPages = [kDriveLayerPage, kPlanLayerPage, kDetailLayerPage];
 
 /// What one map page remembers about its layers (Drive plan 7.2): only choices the person made. A layer with no entry in
 /// [toggles] takes the registry default, so a layer added later arrives with its own default instead of "off".
@@ -123,6 +133,19 @@ class MapPrefs extends ChangeNotifier {
   /// The remembered layer choices of map page [pageId] (read synchronously: the file is loaded before the first frame, see
   /// openSharedMapPrefs in main). [LayerPrefs.empty] when nothing was chosen.
   LayerPrefs layerPrefs(String pageId) => _layers[pageId] ?? LayerPrefs.empty;
+
+  /// Whether a map on [pageId] should draw layer [layerId], given [fallback] (what the page itself asks for): the page's own
+  /// choice wins, then (for every page but the Drive map) the Drive map's choice, then [fallback]. So a person who switched
+  /// Predicted coverage off on the Drive map does not see it again on every preview, and a page can still keep its own choice.
+  bool previewLayerOn(String pageId, String layerId, {required bool fallback}) {
+    final own = layerPrefs(pageId).toggles[layerId];
+    if (own != null) return own;
+    if (pageId != kDriveLayerPage) {
+      final drive = layerPrefs(kDriveLayerPage).toggles[layerId];
+      if (drive != null) return drive;
+    }
+    return fallback;
+  }
 
   /// Remembers [p] for [pageId]; an empty one forgets the page ("Reset layers").
   void setLayerPrefs(String pageId, LayerPrefs p) {

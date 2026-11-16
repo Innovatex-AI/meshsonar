@@ -20,6 +20,7 @@ import UserNotifications
     guard let messenger = engineBridge.pluginRegistry.registrar(forPlugin: "MeshSonarAlerts")?.messenger() else { return }
 
     HapticsChannel.register(messenger: messenger)
+    GeocoderChannel.register(messenger: messenger)
 
     // Badge count on the app icon (lib/platform/local_notifications_plugin.dart).
     FlutterMethodChannel(name: "app.meshsonar/alerts", binaryMessenger: messenger).setMethodCallHandler { call, result in

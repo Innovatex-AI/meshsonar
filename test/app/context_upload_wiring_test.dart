@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/app/drive_context_hook.dart' show collectionDisclosureVersion, collectionDisclosedKey;
 import 'package:meshsonar/app/services.dart';
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/drive_context.dart';
@@ -60,7 +61,7 @@ void main() {
     h.approveKey();
     h.settings.saved = h.settings.saved.copyWith(collectionOff: off);
     h.uiPrefsFile = File('${tmp.path}/ui_prefs.json')
-      ..writeAsStringSync(jsonEncode({'onboarding_seen': true, if (disclosed) 'collection_disclosed_v': 2}));
+      ..writeAsStringSync(jsonEncode({'onboarding_seen': true, if (disclosed) collectionDisclosedKey: collectionDisclosureVersion}));
     h.fake.siteConfigResult = caps;
     final s = DriveSession(id: 'd1', startedAt: t0, endedAt: t0.add(const Duration(minutes: 5)));
     h.store.seed(s, [

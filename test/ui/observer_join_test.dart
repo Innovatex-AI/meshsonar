@@ -1,4 +1,4 @@
-// More > Community > Become an observer: the wizard walks the existing claim flow; it adds no new network call.
+// More > Community > Set up a repeater observer: the guide walks the existing claim flow; it adds no new network call.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/ui/claims/claim_repeater_screen.dart';
@@ -23,6 +23,8 @@ void main() {
     expect(find.byKey(const Key('observer-why-not')), findsNothing);
     final btn = find.byKey(const Key('observer-claim-repeater'));
     await tester.ensureVisible(btn);
+    await tester.drag(find.byKey(const Key('observer-join-screen')), const Offset(0, -200)); // clear of the tab bar
+    await tester.pumpAndSettle();
     await tester.tap(btn);
     await tester.pumpAndSettle();
     expect(find.byType(ClaimRepeaterScreen), findsOneWidget);

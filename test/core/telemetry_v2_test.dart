@@ -158,11 +158,12 @@ void main() {
     expect(TelemetryRecord(at: _at, payloadType: 4, routeType: 1, cell: '39.96,-83.00').cell, isNull);
   });
 
-  test('home mode never carries a cell', () {
-    final r = TelemetryRecord.fromRx(_pkt(PayloadType.advert, List.filled(110, 3)), cell: '872a1072bffffff', mode: ObserverMode.home)!;
-    expect(r.cell, isNull);
-    expect(r.toJsonV2().containsKey('cell'), isFalse);
-    expect(r.mode, ObserverMode.home);
+  test('the modes are background and drive only (no Home observer since 0.38); a queued "home" reads back as background', () {
+    expect(ObserverMode.values.map((m) => m.wire), ['background', 'drive']);
+    expect(ObserverMode.parse('home'), ObserverMode.background);
+    expect(ObserverMode.parse('drive'), ObserverMode.drive);
+    final r = TelemetryRecord.fromRx(_pkt(PayloadType.advert, List.filled(110, 3)), cell: '872a1072bffffff')!;
+    expect(r.toJsonV2()['cell'], '872a1072bffffff', reason: 'a phone sitting still keeps its ~5 km cell');
   });
 
   test('the own radio\'s advert is dropped entirely; other adverts keep their raw', () {
@@ -179,8 +180,10 @@ void main() {
     expect(back.raw, r.raw);
     expect(back.channel, 'public');
     expect(back.cell, '872a1072bffffff');
-    final home = TelemetryRecord.fromRx(_pkt(PayloadType.advert, List.filled(110, 3)), mode: ObserverMode.home)!;
-    expect(TelemetryRecord.tryFromJson(home.toQueueJson())!.mode, ObserverMode.home);
+    final drive = TelemetryRecord.fromRx(_pkt(PayloadType.advert, List.filled(110, 3)), mode: ObserverMode.drive)!;
+    expect(TelemetryRecord.tryFromJson(drive.toQueueJson())!.mode, ObserverMode.drive);
+    // A record an older build queued as `home` is still sent, as background.
+    expect(TelemetryRecord.tryFromJson({...drive.toQueueJson(), 'mode': 'home'})!.mode, ObserverMode.background);
     // A tampered queue entry cannot widen what is sent.
     final ack = {'rx_ts': '2026-11-08T12:00:00.000Z', 'type': 3, 'route': 1, 'hash_size': 1, 'path': ['a1'], 'raw': 'abcd', 'cell': 'zz'};
     final t = TelemetryRecord.tryFromJson(ack)!;

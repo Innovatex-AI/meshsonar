@@ -10,9 +10,9 @@ import 'package:meshsonar/app/services.dart';
 
 import 'package:h3_ffi/h3_ffi.dart';
 import 'package:meshsonar/core/antenna_profile.dart';
-import 'package:meshsonar/core/api.dart' show Settings;
+import 'package:meshsonar/core/api.dart' show DriverKeyStatus, KeyRequestResult, Settings;
 import 'package:meshsonar/core/drive_end.dart';
-import 'package:meshsonar/core/home_observer.dart';
+import 'package:meshsonar/core/observer_status.dart';
 import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/core/privacy_zones.dart';
 import 'package:meshsonar/radio/protocol.dart' show AdvType;
@@ -25,7 +25,7 @@ import 'package:meshsonar/radio/radio_api.dart';
 
 import '../ui/fakes.dart';
 
-class _TeleClient extends FakeCmatClient implements TelemetryTransport, HomeObserverTransport, DriveEndTransport {
+class _TeleClient extends FakeCmatClient implements TelemetryTransport, ObserverStatusTransport, DriveEndTransport {
   _TeleClient(super.baseUrl);
   final driveEnds = <Map<String, dynamic>>[];
   @override
@@ -36,27 +36,20 @@ class _TeleClient extends FakeCmatClient implements TelemetryTransport, HomeObse
 
   final bodies = <String>[];
   int deletes = 0;
-  final homeCalls = <String>[];
+  final observerCalls = <String>[];
+  Map<String, dynamic> meBody = const {'observers': []};
+
   @override
-  Future<HomeObserverHttpResult> putHome(String driverKey, Map<String, dynamic> body) async {
-    homeCalls.add('PUT ${jsonEncode(body)}');
-    return const HomeObserverHttpResult(200, body: {'ok': true});
+  Future<ObserverHttpResult> heartbeat(String driverKey, Map<String, dynamic> body) async {
+    observerCalls.add('HEARTBEAT ${jsonEncode(body)}');
+    return const ObserverHttpResult(200);
   }
 
   @override
-  Future<HomeObserverHttpResult> heartbeat(String driverKey, Map<String, dynamic> body) async {
-    homeCalls.add('HEARTBEAT ${jsonEncode(body)}');
-    return const HomeObserverHttpResult(200);
+  Future<ObserverHttpResult> me(String driverKey) async {
+    observerCalls.add('ME');
+    return ObserverHttpResult(200, body: meBody);
   }
-
-  @override
-  Future<HomeObserverHttpResult> deleteHome(String driverKey, String observerId) async {
-    homeCalls.add('DELETE $observerId');
-    return const HomeObserverHttpResult(200);
-  }
-
-  @override
-  Future<HomeObserverHttpResult> me(String driverKey) async => const HomeObserverHttpResult(200, body: {'observers': []});
 
   @override
   Future<TelemetryHttpResult> postTelemetry(String driverKey, List<int> body) async {
@@ -103,6 +96,7 @@ class _H extends Harness {
       newId: b.newId,
       clock: () => now,
       regionIndexCache: b.regionIndexCache,
+      mayAutoCreateKey: b.mayAutoCreateKey,
     );
   }
 
@@ -298,81 +292,122 @@ void main() {
       expect(h.state.telemetryQueued, 1);
     });
 
-    test('Home observer: PUT with the chosen public level, packets go as mode home with no cell, off sends DELETE', () async {
-      final h = await _ready(before: (h) => h.location.currentFix = () => GeoFix(lat: 39.9612, lon: -82.9988, at: h.now));
+    test('no Home observer (0.38): a phone sitting still observes as background with its ~5 km cell; old home settings are ignored', () async {
+      final h = await _ready(before: (h) {
+        h.location.currentFix = () => GeoFix(lat: 39.9612, lon: -82.9988, at: h.now);
+        // What a build 61-63 phone with Home observer on left in settings.json.
+        h.settings.saved = Settings.fromJson({
+          ...h.settings.saved.toJson(),
+          'home_observer': {'on': true, 'lat': 39.95, 'lon': -83.01, 'location_public': 'exact'},
+          'home_antenna': 'fixedMast',
+        });
+      });
       h.state.debugHexEngine = h3;
-      expect(await h.state.startHomeObserver(39.95, -83.01, HomeLocationPublic.exact), HomeCallOutcome.ok);
-      final put = h.tele.homeCalls.firstWhere((c) => c.startsWith('PUT '));
-      final body = jsonDecode(put.substring(4)) as Map;
-      expect(body['id'], h.state.observerIdentity.id);
-      expect(body['location_public'], 'exact');
-      expect(body['lat'], 39.95);
-      expect(h.state.homeObserverActive, isTrue);
-      expect(h.state.settings.homeObserver!.on, isTrue);
+      expect(h.state.observerMode, ObserverMode.background);
+      expect(h.state.settings.toJson().containsKey('home_observer'), isFalse, reason: 'never written again');
+      expect(h.state.settings.toJson().containsKey('home_antenna'), isFalse);
       final j = await sendOne(h, _advert(h.now, List.filled(32, 0x15)));
-      expect((j['observer'] as Map)['mode'], 'home');
-      expect(((j['packets'] as List).single as Map).containsKey('cell'), isFalse);
-      expect(await h.state.stopHomeObserver(), HomeCallOutcome.ok);
-      expect(h.tele.homeCalls.last, 'DELETE ${h.state.observerIdentity.id}');
-      expect(h.state.homeObserverActive, isFalse);
-    });
+      expect((j['observer'] as Map)['mode'], 'background');
+      expect(((j['packets'] as List).single as Map)['cell'], matches(RegExp(r'^87[0-9a-f]{13}$')));
+    }, skip: h3 == null ? 'libh3 not found (brew install h3)' : false);
 
-    // P2 (HANDOFF "Phone observer data analysis + plan", Nov 10 2026): the radio block's antenna follows the mode.
-    Future<_H> withCarAntenna() => _ready(
-        before: (h) => h.settings.saved = h.settings.saved.copyWith(antennaProfiles: {
-              'abcdef0123': AntennaProfile(mount: AntennaMount.insideCar, heightM: 1.2, updatedAt: DateTime.utc(2026, 11, 1)),
-            }));
-
-    test('P2: background mode sends the drive antenna; home mode sends the home antenna, unknown by default', () async {
-      final h = await withCarAntenna();
-      var j = await sendOne(h, _advert(h.now, List.filled(32, 0x21)));
+    // P2 (Nov 10 2026), simplified in 0.38: the radio block always carries the drive antenna profile's mount.
+    test('the observer radio block sends the drive antenna, also in the heartbeat', () async {
+      final h = await _ready(
+          before: (h) => h.settings.saved = h.settings.saved.copyWith(antennaProfiles: {
+                'abcdef0123': AntennaProfile(mount: AntennaMount.insideCar, heightM: 1.2, updatedAt: DateTime.utc(2026, 11, 1)),
+              }));
+      final j = await sendOne(h, _advert(h.now, List.filled(32, 0x21)));
       expect((j['observer'] as Map)['mode'], 'background');
       expect(((j['observer'] as Map)['radio'] as Map)['antenna'], 'inside_car');
-
-      expect(await h.state.startHomeObserver(39.95, -83.01, HomeLocationPublic.exact), HomeCallOutcome.ok);
-      j = await sendOne(h, _advert(h.now, List.filled(32, 0x22)));
-      expect((j['observer'] as Map)['mode'], 'home');
-      expect(((j['observer'] as Map)['radio'] as Map)['antenna'], 'unknown', reason: 'never the car antenna at home');
-
-      await h.state.updateSettings(h.state.settings.copyWith(homeAntenna: AntennaMount.fixedMast));
-      j = await sendOne(h, _advert(h.now, List.filled(32, 0x23)));
-      expect(((j['observer'] as Map)['radio'] as Map)['antenna'], 'fixed_mast');
-
-      // The home heartbeat carries the same radio block.
-      final n = h.tele.homeCalls.length;
-      await h.state.homeObserverService.heartbeatNow();
-      final hb = h.tele.homeCalls.skip(n).firstWhere((c) => c.startsWith('HEARTBEAT '));
+      final n = h.tele.observerCalls.length;
+      await h.state.observerStatusService.heartbeatNow();
+      final hb = h.tele.observerCalls.skip(n).firstWhere((c) => c.startsWith('HEARTBEAT '));
       final hbBody = jsonDecode(hb.substring('HEARTBEAT '.length)) as Map;
-      expect(hbBody['mode'], 'home');
-      expect((hbBody['radio'] as Map)['antenna'], 'fixed_mast');
-
-      // Off again: back to the drive antenna; the home choice is kept for next time.
-      expect(await h.state.stopHomeObserver(), HomeCallOutcome.ok);
-      j = await sendOne(h, _advert(h.now, List.filled(32, 0x24)));
-      expect(((j['observer'] as Map)['radio'] as Map)['antenna'], 'inside_car');
-      expect(h.state.settings.homeAntenna, AntennaMount.fixedMast);
+      expect(hbBody['mode'], 'background');
+      expect((hbBody['radio'] as Map)['antenna'], 'inside_car');
     });
 
-    test('P2: the home antenna survives a restart (settings JSON) and "Don\'t know" clears it', () {
-      const s = Settings(homeAntenna: AntennaMount.roofMagMount);
-      expect(s.toJson()['home_antenna'], 'roofMagMount');
-      expect(Settings.fromJson(s.toJson()).homeAntenna, AntennaMount.roofMagMount);
-      expect(const Settings().toJson().containsKey('home_antenna'), isFalse, reason: 'default unknown is not written');
-      expect(Settings.fromJson({'home_antenna': 'bogus'}).homeAntenna, isNull);
-      expect(s.copyWith(clearHomeAntenna: true).homeAntenna, isNull);
-      expect(AppState.homeAntennaToken(null), 'unknown');
-      expect(AppState.homeAntennaToken(AntennaMount.fixedMast), 'fixed_mast');
-    });
-
-    test('an erase makes a new observer id and ends home mode', () async {
+    test('an erase makes a new observer id', () async {
       final h = await _ready();
-      await h.state.startHomeObserver(39.95, -83.01, HomeLocationPublic.rounded1km);
       final before = h.state.observerIdentity.id;
       expect(await h.state.eraseTelemetry(), 2);
       await Future<void>.delayed(Duration.zero);
       expect(h.state.observerIdentity.id, isNot(before));
       expect(h.state.observerIdentity.id, matches(RegExp(r'^[0-9a-f]{32}$')));
-      expect(h.state.homeObserverActive, isFalse);
+    });
+
+    test('GET observer/me fills this phone\'s status', () async {
+      final h = await _ready();
+      h.tele.meBody = {
+        'observers': [
+          {'id': h.state.observerIdentity.id, 'kind': 'mobile', 'packets_24h': 12}
+        ]
+      };
+      expect(await h.state.refreshObserverStatus(), ObserverCallOutcome.ok);
+      expect(h.state.observerStatusService.status!.packets24h, 12);
+    });
+  });
+
+  group('observer whenever a radio is connected (observer everywhere, Nov 15 2026)', () {
+    test('a fresh install makes its own driver key (ensureKey) and observes as soon as a radio connects', () async {
+      final h = _H();
+      h.settings.autoKeyOn = true; // the real default (Settings.autoKey = true); the test kit turns it off
+      h.tele.requestResult =
+          const KeyRequestResult(driverId: 'd1', key: 'ms_autokey0123456789abcdef', status: DriverKeyStatus.approved, display: 'Driver 7');
+      await h.state.init();
+      for (var i = 0; i < 8; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(h.state.keyApproved, isTrue, reason: 'no form, no tap: every install gets a key');
+      expect(h.state.settings.telemetryEnabled, isTrue, reason: 'ON by default');
+      expect(await h.state.connect(const RadioDevice(id: 'aa:bb', name: 'MeshCore-Truck'), RadioKind.bluetooth), isTrue);
+      expect(h.state.observerSharing, isTrue);
+      h.link.rx.add(_advert(h.now, List.filled(32, 0x41)));
+      await Future<void>.delayed(Duration.zero);
+      expect(h.state.telemetryQueued, 1);
+    });
+
+    test('a radio that drops by itself outside a drive asks the saved-radio auto-connect to bring it back', () async {
+      final h = await _ready();
+      var asked = 0;
+      h.state.onRadioDropped = () => asked++;
+      await h.link.rx.close(); // the link is gone (out of range, rebooted)
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+      expect(asked, 1);
+    });
+
+    test('a disconnect by the person is not a drop: nothing pulls the radio back', () async {
+      final h = await _ready();
+      var asked = 0;
+      h.state.onRadioDropped = () => asked++;
+      await h.state.disconnect();
+      await Future<void>.delayed(Duration.zero);
+      expect(asked, 0);
+    });
+
+    test('a drop during a drive is left to the drive\'s own reconnect loop', () async {
+      final h = await _ready();
+      await h.state.startDrive();
+      var asked = 0;
+      h.state.onRadioDropped = () => asked++;
+      await h.link.rx.close();
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+      expect(asked, 0);
+    });
+
+    test('the one opt-out clears the queue on the phone and stops the heartbeat', () async {
+      final h = await _ready();
+      h.link.rx.add(_advert(h.now, List.filled(32, 0x31)));
+      await Future<void>.delayed(Duration.zero);
+      expect(h.state.telemetryQueued, 1);
+      expect(h.state.observerStatusService.heartbeatRunning, isTrue);
+      await h.state.updateSettings(h.state.settings.copyWith(telemetryEnabled: false));
+      expect(h.state.telemetryQueued, 0, reason: 'turning it off deletes what is still waiting');
+      expect(h.state.observerSharing, isFalse);
+      expect(h.state.observerStatusService.heartbeatRunning, isFalse);
     });
   });
 
@@ -411,9 +446,9 @@ void main() {
       expect(pk.containsKey('cell'), isFalse);
     });
 
-    test('P2: drive mode sends the drive antenna, unchanged, even with a home antenna set', () async {
+    test('P2: drive mode sends the drive antenna', () async {
       final h = _H()..approveKey();
-      h.settings.saved = h.settings.saved.copyWith(homeAntenna: AntennaMount.fixedMast, antennaProfiles: {
+      h.settings.saved = h.settings.saved.copyWith(antennaProfiles: {
         'abcdef0123': AntennaProfile(mount: AntennaMount.roofMagMount, heightM: 1.8, updatedAt: DateTime.utc(2026, 11, 1)),
       });
       await h.state.init();
@@ -507,18 +542,18 @@ void main() {
       final h = await _ready();
       await Future<void>.delayed(Duration.zero);
       await Future<void>.delayed(Duration.zero);
-      final hb = h.tele.homeCalls.where((c) => c.startsWith('HEARTBEAT ')).toList();
+      final hb = h.tele.observerCalls.where((c) => c.startsWith('HEARTBEAT ')).toList();
       expect(hb, isNotEmpty);
       final body = jsonDecode(hb.first.substring('HEARTBEAT '.length)) as Map;
       expect(body['id'], h.state.observerIdentity.id);
       expect(body['mode'], 'background');
       expect((body['radio'] as Map)['sf'], 7);
-      expect(h.state.homeObserverService.heartbeatRunning, isTrue);
+      expect(h.state.observerStatusService.heartbeatRunning, isTrue);
       expect(hb, hasLength(1), reason: 'once at connect (the 5-minute timer runs only in the app wiring)');
       await h.state.updateSettings(h.state.settings.copyWith(telemetryEnabled: false));
-      final n = h.tele.homeCalls.length;
-      expect(await h.state.homeObserverService.heartbeatNow(), isNull, reason: 'sharing off: no heartbeat');
-      expect(h.tele.homeCalls.length, n);
+      final n = h.tele.observerCalls.length;
+      expect(await h.state.observerStatusService.heartbeatNow(), isNull, reason: 'sharing off: no heartbeat');
+      expect(h.tele.observerCalls.length, n);
     });
   });
 

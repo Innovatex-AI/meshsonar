@@ -59,10 +59,8 @@ void main() {
     expect(r.toJsonV2().containsKey('pos'), isFalse);
   });
 
-  test('pos is never on a background or home packet, and never with a bad fix', () {
-    for (final m in [ObserverMode.background, ObserverMode.home]) {
-      expect(TelemetryRecord.fromRx(_trace(3), mode: m, pos: pos)!.toJsonV2().containsKey('pos'), isFalse, reason: m.name);
-    }
+  test('pos is never on a background packet, and never with a bad fix', () {
+    expect(TelemetryRecord.fromRx(_trace(3), mode: ObserverMode.background, pos: pos)!.toJsonV2().containsKey('pos'), isFalse);
     expect(TelemetryRecord.fromRx(_trace(3), mode: ObserverMode.drive, pos: const TelemetryPos(39.9, -83, accM: 900))!.pos, isNull);
     expect(TelemetryRecord.fromRx(_trace(3), mode: ObserverMode.drive, pos: const TelemetryPos(0, 0))!.pos, isNull);
     expect(TelemetryRecord.fromRx(_trace(3), mode: ObserverMode.drive, pos: const TelemetryPos(95, 0))!.pos, isNull);

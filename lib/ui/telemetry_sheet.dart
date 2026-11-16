@@ -1,4 +1,5 @@
-// First-run disclosure of everything MeshSonar collects (version 2, stream 7): one block per category with its own
+// First-run disclosure of everything MeshSonar collects (version 3, release 0.38: the phone is an observer whenever a radio
+// is connected and the app is open; version 2 was stream 7's): one block per category with its own
 // switch, all on unless the person turns them off (opt-out, Andy Oct 2026), and two equally weighted choices,
 // "Continue" (keeps the switches as set) and "Turn all off". Every existing user sees it once; nothing of the
 // drive-context categories is collected before it has been seen (AppState.collectionOn).
@@ -21,7 +22,7 @@ const String disclosureHeading = 'What MeshSonar collects';
 
 /// Under the heading.
 const String disclosureLead = 'Everything below is on unless you turn it off here or later. No direct messages, no '
-    'private channels, never your exact position, and nothing about other apps, ever.';
+    'private channels, never your exact position outside a drive, and nothing about other apps, ever.';
 
 Future<void> showTelemetryDisclosure(BuildContext context) {
   // Raised by the phone on first run: the drive guard holds it while a drive is active. Only the two buttons close it.

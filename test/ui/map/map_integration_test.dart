@@ -352,7 +352,7 @@ void main() {
       expect(find.text('Active'), findsOneWidget);
       expect(find.text('+4.5 dB'), findsOneWidget);
       expect(find.textContaining('MeshSonar region roster (Columbus, US)'), findsOneWidget);
-      expect(find.byKey(const Key('repeater-sheet-open')), findsOneWidget);
+      expect(find.byKey(const Key('node-action-openPage')), findsOneWidget);
     });
   });
 

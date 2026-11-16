@@ -1,4 +1,4 @@
-// Plan tab, "Where to drive next": gaps near the phone from the network coverage the app already loaded, with Navigate into
+// Plan tab, Where to drive mode ("Where to drive next"): gaps near the phone from the network coverage the app already loaded, with Navigate into
 // Apple Maps. Honest states without a fix or without data.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,6 +10,14 @@ import 'shell_test.dart' show phone, drain;
 
 CoverageCell cell(double lat, double lon, {int pings = 6, int heard = 0}) => CoverageCell(
     lat: lat, lon: lon, pings: pings, heard: heard, bestSnr: null, medianSnr: null, repeaters: 0, lastAt: '2026-10-30T12:00:00Z');
+
+/// The Where to drive card is the Planner's fourth mode (release 0.38): open the Plan tab, then its chip.
+Future<void> openWhereToDrive(WidgetTester tester) async {
+  await tapShellTab(tester, 'Plan');
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const Key('planner-mode-whereToDrive')));
+  await tester.pumpAndSettle();
+}
 
 void main() {
   setUp(() => DriveNextCard.testMap = (c, me, t) => SizedBox(key: const Key('fake-map'), height: 10, child: Text('${t.length} targets')));
@@ -25,8 +33,7 @@ void main() {
       cells: [cell(40.136, -82.93), cell(40.126, -82.93, heard: 3)],
     );
     await h.pumpApp(tester);
-    await tapShellTab(tester, 'Plan');
-    await tester.pumpAndSettle();
+    await openWhereToDrive(tester);
     expect(find.byKey(const Key('plan-drive-next')), findsOneWidget);
     expect(find.text('Where to drive next'), findsOneWidget);
     expect(find.byKey(const Key('fake-map')), findsOneWidget);
@@ -34,6 +41,8 @@ void main() {
     expect(find.textContaining('Grey means'), findsNothing);
     expect(find.textContaining('Pick a place'), findsNothing);
     expect(find.textContaining('N'), findsWidgets);
+    await tester.ensureVisible(find.byKey(const Key('plan-navigate-0')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('plan-navigate-0')));
     await tester.pump();
     final u = h.openedUrls.last;
@@ -48,8 +57,7 @@ void main() {
     h.client.publicCoverageResult = PublicCoverage(
         asOf: 'x', grid: const CoverageGrid.square(cellDeg: 0.005), cells: [cell(40.126, -82.93, heard: 3)]);
     await h.pumpApp(tester);
-    await tapShellTab(tester, 'Plan');
-    await tester.pumpAndSettle();
+    await openWhereToDrive(tester);
     expect(find.textContaining('Nothing to drive to within'), findsOneWidget);
     expect(find.byKey(const Key('plan-navigate-0')), findsNothing);
     await drain(tester);
@@ -61,8 +69,7 @@ void main() {
     h.location.currentFix = () => null;
     h.location.permission = false;
     await h.pumpApp(tester);
-    await tapShellTab(tester, 'Plan');
-    await tester.pumpAndSettle();
+    await openWhereToDrive(tester);
     expect(find.byKey(const Key('plan-drive-next')), findsOneWidget);
     expect(find.textContaining('location'), findsWidgets);
     await drain(tester);

@@ -28,8 +28,8 @@ const List<String> allowedLines = [
   'a 5 km cell',
   'Server address moved',
   // The phone observer's location grid: an H3 resolution-7 cell is about 5 km across, and "Approximate (~5 km)" is the
-  // label the contract fixes (meshsonar-infra phone-observer-contract-v2 section 6); the home observer's public rounding
-  // is the 0.01 degree grid, about 1 km. Facts about the grids, not measurements.
+  // label the contract fixes (meshsonar-infra phone-observer-contract-v2 section 6); the planner's approximate point
+  // is rounded to the 0.01 degree grid, about 1 km. Facts about the grids, not measurements.
   '~5 km',
   '5 km across',
   'about 1 km',

@@ -12,7 +12,7 @@
 //  * Echoes of our own TX pings are observer packets too (contract section 8.1, Nov 9 2026): a record that arrives while
 //    one of our pings is in flight ([pingSent] until [TelemetryConfig.holdFor] after it) is held until that window ends, so
 //    the ping's hash is known, then sent with `own: true` ([markOwn]); raw only when that ping was uploaded publicly. Every
-//    other record goes at the normal cadence (no hold), so a home or background phone uploads within 5-60 s, not ~95 s
+//    other record goes at the normal cadence (no hold), so a background phone uploads within 5-60 s, not ~95 s
 //    (HANDOFF "Phone observer data analysis", P1). A v1 batch (no `own` field) still leaves own echoes out, as before.
 //    Drive positions sent sooner stay private: the server holds them pending until drive-end (contract section 8.7).
 //  * Cadence (contract section 6): in the foreground a batch at most every [TelemetryConfig.minGap] (5 s); in the background
@@ -221,11 +221,11 @@ class TelemetryUploader {
   /// Schedule the next flush by itself after records arrive. Tests switch it off and call [flush].
   final bool autoSchedule;
 
-  /// The observer block for v2 (random id + radio context) for a batch heard in [mode] (the antenna differs: home mode
-  /// sends the home antenna); null = not known yet, the batch goes as v1 (headers only).
+  /// The observer block for v2 (random id + radio context) for a batch heard in [mode]; null = not known yet, the batch
+  /// goes as v1 (headers only).
   final TelemetryObserver? Function(ObserverMode mode)? observer;
 
-  /// Called after the server confirmed an erase (the app then starts a new observer id and ends home mode).
+  /// Called after the server confirmed an erase (the app then starts a new observer id).
   final void Function()? onServerErased;
 
   /// Called with the server's `observer` answer to a v2 batch (`{"key": .., "kind": ..}`), so the app can say which

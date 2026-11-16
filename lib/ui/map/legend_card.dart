@@ -18,6 +18,7 @@ import 'coverage_bands.dart';
 import 'layers/observer_layer.dart' show MobileObserverPainter, ObserverSymbolColours, ObserverTrianglePainter;
 import 'layers/m3_layers.dart' show SnrLinkStyle, redundancyColour;
 import 'layers/registry.dart' show definitionLayerId;
+import 'layers/plan_layer.dart' show planLegendKey;
 import 'layers/repeater_sprites.dart' show RepeaterSymbolStyle;
 import 'sheets/coverage_cell_sheet.dart' show CoverageBandSwatch;
 
@@ -132,6 +133,7 @@ Widget legendEntryKey(BuildContext context, LegendEntryDef e, MapDefinition def)
       );
   }
   final obs = ObserverSymbolColours.of(br);
+  if (planLegendKey(context, e.symbol, state: e.state) case final k?) return k;
   switch (e.symbol) {
     case 'repeater':
       return RepeaterRingKey(state: e.state ?? 'fresh');

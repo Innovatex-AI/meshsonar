@@ -21,7 +21,7 @@ import 'settings_kit.dart';
 const String deleteMyDataLead =
     'This deletes what MeshSonar collected alongside your driving: the drive context (air '
     'pressure, altitude and direction, phone and radio readings, phone and app details, the weather lookup for your '
-    'drives) and the observer packets this phone shared (with their drive positions and its home observer). Your drives themselves (where each ping was sent and what '
+    'drives) and the observer packets this phone shared (with the positions they were shared with). Your drives themselves (where each ping was sent and what '
     'it heard) are not touched here: delete a drive from its own screen. Collection continues as the switches in '
     'Privacy & data sharing say; turn a switch off to stop it.';
 
@@ -30,15 +30,15 @@ const String deleteMyDataLead =
 /// from the website. An older server without the endpoint keeps the website hand-off.
 const String deleteAccountText =
     'Delete my account removes your driver key and every drive, ping, weather lookup, observer '
-    'packet, home observer and problem report the server holds for it. It cannot be undone. A website account you may have linked to '
+    'packet, observer position and problem report the server holds for it. It cannot be undone. A website account you may have linked to '
     'the key is separate: delete that one on the website. Drives on this phone stay unless you tick the box. '
     'You can make a new key afterwards.';
 
 /// What the person is told before "Download my data".
 const String exportText =
     'Download my data saves everything the server holds for your account (your keys, every drive '
-    'with each ping, the packets this phone shared as an observer with their drive positions and its home observer '
-    'position, and your reports) as '
+    'with each ping, the packets this phone shared as an observer with the positions they were shared with, and your '
+    'reports) as '
     'one file you can keep or share.';
 
 class DeleteMyDataScreen extends StatefulWidget {

@@ -1,0 +1,7664 @@
+{
+ "generatedFrom": "meshcore-insights src/lib/plan/link.ts + src/lib/tools/coverage.ts (release 0.38 S1)",
+ "ends": {
+  "a": {
+   "txDbm": 22,
+   "gainDbi": 3
+  },
+  "b": {
+   "txDbm": 20,
+   "gainDbi": 5
+  }
+ },
+ "radios": [
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "sensitivityDbm": -127.54119982655925,
+   "noiseFloorDbm": -120.04119982655925,
+   "lambdaM": 0.3292523082836825
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "sensitivityDbm": -130.04119982655925,
+   "noiseFloorDbm": -120.04119982655925,
+   "lambdaM": 0.3447404009576619
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "sensitivityDbm": -131.52059991327963,
+   "noiseFloorDbm": -114.02059991327963,
+   "lambdaM": 0.34477727264886
+  }
+ ],
+ "cases": [
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "hills",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 113.21724563448248,
+    "diffractionDb": 32.77157778639632,
+    "clutterDb": 72.54545454545455,
+    "pathLossDb": 218.53427796633338,
+    "abDb": -60.99307813977413,
+    "baDb": -62.99307813977413,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -306,
+    "tightest": {
+     "km": 0.5,
+     "raiseM": 223,
+     "end": "a",
+     "clearanceM": -38.4,
+     "zoneM": 12.6
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 83.8
+    },
+    "odds": 0.001,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -71,
+    "downDb": -61,
+    "upDb": -63
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "hills",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 113.21724563448248,
+    "diffractionDb": 32.77157778639632,
+    "clutterDb": 72.54545454545455,
+    "pathLossDb": 218.53427796633338,
+    "abDb": -60.99307813977413,
+    "baDb": -62.99307813977413,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -306,
+    "tightest": {
+     "km": 0.5,
+     "raiseM": 223,
+     "end": "a",
+     "clearanceM": -38.4,
+     "zoneM": 12.6
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 83.8
+    },
+    "odds": 0.001,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -73,
+    "downDb": -61,
+    "upDb": -63
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "hills",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 113.21724563448248,
+    "diffractionDb": 32.77157778639632,
+    "clutterDb": 72.54545454545455,
+    "pathLossDb": 218.53427796633338,
+    "abDb": -60.99307813977413,
+    "baDb": -62.99307813977413,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -306,
+    "tightest": {
+     "km": 0.5,
+     "raiseM": 223,
+     "end": "a",
+     "clearanceM": -38.4,
+     "zoneM": 12.6
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 83.8
+    },
+    "odds": 0.001,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -73,
+    "downDb": -61,
+    "upDb": -63
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "hills",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 113.21724563448248,
+    "diffractionDb": 32.77157778639632,
+    "clutterDb": 10.115702479338843,
+    "pathLossDb": 156.10452590021765,
+    "abDb": 1.436673926341598,
+    "baDb": -0.563326073658402,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -306,
+    "tightest": {
+     "km": 0.5,
+     "raiseM": 223,
+     "end": "a",
+     "clearanceM": -38.4,
+     "zoneM": 12.6
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 83.8
+    },
+    "odds": 0.001,
+    "tier": "Stretch",
+    "verdict": "marginal",
+    "marginDb": -8.6,
+    "downDb": 1.4,
+    "upDb": -0.6
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "hills",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 113.21724563448248,
+    "diffractionDb": 32.77157778639632,
+    "clutterDb": 10.115702479338843,
+    "pathLossDb": 156.10452590021765,
+    "abDb": 1.436673926341598,
+    "baDb": -0.563326073658402,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -306,
+    "tightest": {
+     "km": 0.5,
+     "raiseM": 223,
+     "end": "a",
+     "clearanceM": -38.4,
+     "zoneM": 12.6
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 83.8
+    },
+    "odds": 0.001,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -10.6,
+    "downDb": 1.4,
+    "upDb": -0.6
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "hills",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 113.21724563448248,
+    "diffractionDb": 32.77157778639632,
+    "clutterDb": 10.115702479338843,
+    "pathLossDb": 156.10452590021765,
+    "abDb": 1.436673926341598,
+    "baDb": -0.563326073658402,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -306,
+    "tightest": {
+     "km": 0.5,
+     "raiseM": 223,
+     "end": "a",
+     "clearanceM": -38.4,
+     "zoneM": 12.6
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 83.8
+    },
+    "odds": 0.001,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -10.6,
+    "downDb": 1.4,
+    "upDb": -0.6
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "hills",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 113.21724563448248,
+    "diffractionDb": 32.13503182812232,
+    "clutterDb": 73.86446280991737,
+    "pathLossDb": 219.21674027252217,
+    "abDb": -61.67554044596292,
+    "baDb": -63.67554044596292,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -277,
+    "tightest": {
+     "km": 0.5,
+     "raiseM": 224,
+     "end": "a",
+     "clearanceM": -34.8,
+     "zoneM": 12.6
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 84.4
+    },
+    "odds": 0.001,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -71.7,
+    "downDb": -61.7,
+    "upDb": -63.7
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "hills",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 113.21724563448248,
+    "diffractionDb": 32.13503182812232,
+    "clutterDb": 73.86446280991737,
+    "pathLossDb": 219.21674027252217,
+    "abDb": -61.67554044596292,
+    "baDb": -63.67554044596292,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -277,
+    "tightest": {
+     "km": 0.5,
+     "raiseM": 224,
+     "end": "a",
+     "clearanceM": -34.8,
+     "zoneM": 12.6
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 84.4
+    },
+    "odds": 0.001,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -73.7,
+    "downDb": -61.7,
+    "upDb": -63.7
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "hills",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 113.21724563448248,
+    "diffractionDb": 32.13503182812232,
+    "clutterDb": 73.86446280991737,
+    "pathLossDb": 219.21674027252217,
+    "abDb": -61.67554044596292,
+    "baDb": -63.67554044596292,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -277,
+    "tightest": {
+     "km": 0.5,
+     "raiseM": 224,
+     "end": "a",
+     "clearanceM": -34.8,
+     "zoneM": 12.6
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 84.4
+    },
+    "odds": 0.001,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -73.7,
+    "downDb": -61.7,
+    "upDb": -63.7
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "hills",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 113.21724563448248,
+    "diffractionDb": 32.13503182812232,
+    "clutterDb": 10.31404958677686,
+    "pathLossDb": 155.66632704938166,
+    "abDb": 1.8748727771775862,
+    "baDb": -0.12512722282241384,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -277,
+    "tightest": {
+     "km": 0.5,
+     "raiseM": 224,
+     "end": "a",
+     "clearanceM": -34.8,
+     "zoneM": 12.6
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 84.4
+    },
+    "odds": 0.001,
+    "tier": "Stretch",
+    "verdict": "marginal",
+    "marginDb": -8.1,
+    "downDb": 1.9,
+    "upDb": -0.1
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "hills",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 113.21724563448248,
+    "diffractionDb": 32.13503182812232,
+    "clutterDb": 10.31404958677686,
+    "pathLossDb": 155.66632704938166,
+    "abDb": 1.8748727771775862,
+    "baDb": -0.12512722282241384,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -277,
+    "tightest": {
+     "km": 0.5,
+     "raiseM": 224,
+     "end": "a",
+     "clearanceM": -34.8,
+     "zoneM": 12.6
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 84.4
+    },
+    "odds": 0.001,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -10.1,
+    "downDb": 1.9,
+    "upDb": -0.1
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "hills",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 113.21724563448248,
+    "diffractionDb": 32.13503182812232,
+    "clutterDb": 10.31404958677686,
+    "pathLossDb": 155.66632704938166,
+    "abDb": 1.8748727771775862,
+    "baDb": -0.12512722282241384,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -277,
+    "tightest": {
+     "km": 0.5,
+     "raiseM": 224,
+     "end": "a",
+     "clearanceM": -34.8,
+     "zoneM": 12.6
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 84.4
+    },
+    "odds": 0.001,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -10.1,
+    "downDb": 1.9,
+    "upDb": -0.1
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "hills",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 113.21724563448248,
+    "diffractionDb": 27.44063150172216,
+    "clutterDb": 56.71735537190083,
+    "pathLossDb": 197.37523250810546,
+    "abDb": -39.834032681546205,
+    "baDb": -41.834032681546205,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -228,
+    "tightest": {
+     "km": 6.4,
+     "raiseM": 196.5,
+     "end": "a",
+     "clearanceM": -71.6,
+     "zoneM": 31.4
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 71.6
+    },
+    "odds": 0.003,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -49.8,
+    "downDb": -39.8,
+    "upDb": -41.8
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "hills",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 113.21724563448248,
+    "diffractionDb": 27.44063150172216,
+    "clutterDb": 56.71735537190083,
+    "pathLossDb": 197.37523250810546,
+    "abDb": -39.834032681546205,
+    "baDb": -41.834032681546205,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -228,
+    "tightest": {
+     "km": 6.4,
+     "raiseM": 196.5,
+     "end": "a",
+     "clearanceM": -71.6,
+     "zoneM": 31.4
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 71.6
+    },
+    "odds": 0.003,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -51.8,
+    "downDb": -39.8,
+    "upDb": -41.8
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "hills",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 113.21724563448248,
+    "diffractionDb": 27.44063150172216,
+    "clutterDb": 56.71735537190083,
+    "pathLossDb": 197.37523250810546,
+    "abDb": -39.834032681546205,
+    "baDb": -41.834032681546205,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -228,
+    "tightest": {
+     "km": 6.4,
+     "raiseM": 196.5,
+     "end": "a",
+     "clearanceM": -71.6,
+     "zoneM": 31.4
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 71.6
+    },
+    "odds": 0.003,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -51.8,
+    "downDb": -39.8,
+    "upDb": -41.8
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "hills",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 113.21724563448248,
+    "diffractionDb": 27.44063150172216,
+    "clutterDb": 7.338842975206611,
+    "pathLossDb": 147.99672011141124,
+    "abDb": 9.544479715148015,
+    "baDb": 7.5444797151480145,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -228,
+    "tightest": {
+     "km": 6.4,
+     "raiseM": 196.5,
+     "end": "a",
+     "clearanceM": -71.6,
+     "zoneM": 31.4
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 71.6
+    },
+    "odds": 0.003,
+    "tier": "Stretch",
+    "verdict": "marginal",
+    "marginDb": -0.5,
+    "downDb": 9.5,
+    "upDb": 7.5
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "hills",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 113.21724563448248,
+    "diffractionDb": 27.44063150172216,
+    "clutterDb": 7.338842975206611,
+    "pathLossDb": 147.99672011141124,
+    "abDb": 9.544479715148015,
+    "baDb": 7.5444797151480145,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -228,
+    "tightest": {
+     "km": 6.4,
+     "raiseM": 196.5,
+     "end": "a",
+     "clearanceM": -71.6,
+     "zoneM": 31.4
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 71.6
+    },
+    "odds": 0.003,
+    "tier": "Stretch",
+    "verdict": "marginal",
+    "marginDb": -2.5,
+    "downDb": 9.5,
+    "upDb": 7.5
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "hills",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 113.21724563448248,
+    "diffractionDb": 27.44063150172216,
+    "clutterDb": 7.338842975206611,
+    "pathLossDb": 147.99672011141124,
+    "abDb": 9.544479715148015,
+    "baDb": 7.5444797151480145,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -228,
+    "tightest": {
+     "km": 6.4,
+     "raiseM": 196.5,
+     "end": "a",
+     "clearanceM": -71.6,
+     "zoneM": 31.4
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 71.6
+    },
+    "odds": 0.003,
+    "tier": "Stretch",
+    "verdict": "marginal",
+    "marginDb": -2.5,
+    "downDb": 9.5,
+    "upDb": 7.5
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "flat",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 113.21724563448248,
+    "diffractionDb": 4.543546632314087,
+    "clutterDb": 159.60000000000002,
+    "pathLossDb": 277.3607922667966,
+    "abDb": -119.81959244023733,
+    "baDb": -121.81959244023733,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 12,
+    "tightest": {
+     "km": 6,
+     "raiseM": 61,
+     "end": "a",
+     "clearanceM": 3.9,
+     "zoneM": 31.4
+    },
+    "ridge": null,
+    "odds": 0.064,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -129.8,
+    "downDb": -119.8,
+    "upDb": -121.8
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "flat",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 113.21724563448248,
+    "diffractionDb": 4.543546632314087,
+    "clutterDb": 159.60000000000002,
+    "pathLossDb": 277.3607922667966,
+    "abDb": -119.81959244023733,
+    "baDb": -121.81959244023733,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 12,
+    "tightest": {
+     "km": 6,
+     "raiseM": 61,
+     "end": "a",
+     "clearanceM": 3.9,
+     "zoneM": 31.4
+    },
+    "ridge": null,
+    "odds": 0.064,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -131.8,
+    "downDb": -119.8,
+    "upDb": -121.8
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "flat",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 113.21724563448248,
+    "diffractionDb": 4.543546632314087,
+    "clutterDb": 159.60000000000002,
+    "pathLossDb": 277.3607922667966,
+    "abDb": -119.81959244023733,
+    "baDb": -121.81959244023733,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 12,
+    "tightest": {
+     "km": 6,
+     "raiseM": 61,
+     "end": "a",
+     "clearanceM": 3.9,
+     "zoneM": 31.4
+    },
+    "ridge": null,
+    "odds": 0.064,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -131.8,
+    "downDb": -119.8,
+    "upDb": -121.8
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "flat",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 113.21724563448248,
+    "diffractionDb": 4.543546632314087,
+    "clutterDb": 24,
+    "pathLossDb": 141.76079226679656,
+    "abDb": 15.780407559762693,
+    "baDb": 13.780407559762693,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 12,
+    "tightest": {
+     "km": 6,
+     "raiseM": 61,
+     "end": "a",
+     "clearanceM": 3.9,
+     "zoneM": 31.4
+    },
+    "ridge": null,
+    "odds": 0.064,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 5.8,
+    "downDb": 15.8,
+    "upDb": 13.8
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "flat",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 113.21724563448248,
+    "diffractionDb": 4.543546632314087,
+    "clutterDb": 24,
+    "pathLossDb": 141.76079226679656,
+    "abDb": 15.780407559762693,
+    "baDb": 13.780407559762693,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 12,
+    "tightest": {
+     "km": 6,
+     "raiseM": 61,
+     "end": "a",
+     "clearanceM": 3.9,
+     "zoneM": 31.4
+    },
+    "ridge": null,
+    "odds": 0.064,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 3.8,
+    "downDb": 15.8,
+    "upDb": 13.8
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "flat",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 113.21724563448248,
+    "diffractionDb": 4.543546632314087,
+    "clutterDb": 24,
+    "pathLossDb": 141.76079226679656,
+    "abDb": 15.780407559762693,
+    "baDb": 13.780407559762693,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 12,
+    "tightest": {
+     "km": 6,
+     "raiseM": 61,
+     "end": "a",
+     "clearanceM": 3.9,
+     "zoneM": 31.4
+    },
+    "ridge": null,
+    "odds": 0.064,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 3.8,
+    "downDb": 15.8,
+    "upDb": 13.8
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "flat",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 113.21724563448248,
+    "diffractionDb": 5.142599710140541,
+    "clutterDb": 159.60000000000002,
+    "pathLossDb": 277.95984534462303,
+    "abDb": -120.41864551806378,
+    "baDb": -122.41864551806378,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 7,
+    "tightest": {
+     "km": 9.6,
+     "raiseM": 41,
+     "end": "b",
+     "clearanceM": 1.8,
+     "zoneM": 25.1
+    },
+    "ridge": null,
+    "odds": 0.059,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -130.4,
+    "downDb": -120.4,
+    "upDb": -122.4
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "flat",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 113.21724563448248,
+    "diffractionDb": 5.142599710140541,
+    "clutterDb": 159.60000000000002,
+    "pathLossDb": 277.95984534462303,
+    "abDb": -120.41864551806378,
+    "baDb": -122.41864551806378,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 7,
+    "tightest": {
+     "km": 9.6,
+     "raiseM": 41,
+     "end": "b",
+     "clearanceM": 1.8,
+     "zoneM": 25.1
+    },
+    "ridge": null,
+    "odds": 0.059,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -132.4,
+    "downDb": -120.4,
+    "upDb": -122.4
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "flat",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 113.21724563448248,
+    "diffractionDb": 5.142599710140541,
+    "clutterDb": 159.60000000000002,
+    "pathLossDb": 277.95984534462303,
+    "abDb": -120.41864551806378,
+    "baDb": -122.41864551806378,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 7,
+    "tightest": {
+     "km": 9.6,
+     "raiseM": 41,
+     "end": "b",
+     "clearanceM": 1.8,
+     "zoneM": 25.1
+    },
+    "ridge": null,
+    "odds": 0.059,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -132.4,
+    "downDb": -120.4,
+    "upDb": -122.4
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "flat",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 113.21724563448248,
+    "diffractionDb": 5.142599710140541,
+    "clutterDb": 23.801652892561982,
+    "pathLossDb": 142.16149823718501,
+    "abDb": 15.379701589374235,
+    "baDb": 13.379701589374235,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 7,
+    "tightest": {
+     "km": 9.6,
+     "raiseM": 41,
+     "end": "b",
+     "clearanceM": 1.8,
+     "zoneM": 25.1
+    },
+    "ridge": null,
+    "odds": 0.059,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 5.4,
+    "downDb": 15.4,
+    "upDb": 13.4
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "flat",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 113.21724563448248,
+    "diffractionDb": 5.142599710140541,
+    "clutterDb": 23.801652892561982,
+    "pathLossDb": 142.16149823718501,
+    "abDb": 15.379701589374235,
+    "baDb": 13.379701589374235,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 7,
+    "tightest": {
+     "km": 9.6,
+     "raiseM": 41,
+     "end": "b",
+     "clearanceM": 1.8,
+     "zoneM": 25.1
+    },
+    "ridge": null,
+    "odds": 0.059,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 3.4,
+    "downDb": 15.4,
+    "upDb": 13.4
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "flat",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 113.21724563448248,
+    "diffractionDb": 5.142599710140541,
+    "clutterDb": 23.801652892561982,
+    "pathLossDb": 142.16149823718501,
+    "abDb": 15.379701589374235,
+    "baDb": 13.379701589374235,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 7,
+    "tightest": {
+     "km": 9.6,
+     "raiseM": 41,
+     "end": "b",
+     "clearanceM": 1.8,
+     "zoneM": 25.1
+    },
+    "ridge": null,
+    "odds": 0.059,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 3.4,
+    "downDb": 15.4,
+    "upDb": 13.4
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "flat",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 113.21724563448248,
+    "diffractionDb": 1.1036983340618596,
+    "clutterDb": 65.9504132231405,
+    "pathLossDb": 180.27135719168484,
+    "abDb": -22.730157365125592,
+    "baDb": -24.730157365125592,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 44,
+    "tightest": {
+     "km": 9.2,
+     "raiseM": 6.5,
+     "end": "b",
+     "clearanceM": 11.6,
+     "zoneM": 26.6
+    },
+    "ridge": null,
+    "odds": 0.099,
+    "tier": "Possible",
+    "verdict": "unlikely",
+    "marginDb": -32.7,
+    "downDb": -22.7,
+    "upDb": -24.7
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "flat",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 113.21724563448248,
+    "diffractionDb": 1.1036983340618596,
+    "clutterDb": 65.9504132231405,
+    "pathLossDb": 180.27135719168484,
+    "abDb": -22.730157365125592,
+    "baDb": -24.730157365125592,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 44,
+    "tightest": {
+     "km": 9.2,
+     "raiseM": 6.5,
+     "end": "b",
+     "clearanceM": 11.6,
+     "zoneM": 26.6
+    },
+    "ridge": null,
+    "odds": 0.099,
+    "tier": "Possible",
+    "verdict": "unlikely",
+    "marginDb": -34.7,
+    "downDb": -22.7,
+    "upDb": -24.7
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "flat",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 113.21724563448248,
+    "diffractionDb": 1.1036983340618596,
+    "clutterDb": 65.9504132231405,
+    "pathLossDb": 180.27135719168484,
+    "abDb": -22.730157365125592,
+    "baDb": -24.730157365125592,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 44,
+    "tightest": {
+     "km": 9.2,
+     "raiseM": 6.5,
+     "end": "b",
+     "clearanceM": 11.6,
+     "zoneM": 26.6
+    },
+    "ridge": null,
+    "odds": 0.099,
+    "tier": "Possible",
+    "verdict": "unlikely",
+    "marginDb": -34.7,
+    "downDb": -22.7,
+    "upDb": -24.7
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "flat",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 113.21724563448248,
+    "diffractionDb": 1.1036983340618596,
+    "clutterDb": 3.3719008264462813,
+    "pathLossDb": 117.69284479499062,
+    "abDb": 39.84835503156863,
+    "baDb": 37.84835503156863,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 44,
+    "tightest": {
+     "km": 9.2,
+     "raiseM": 6.5,
+     "end": "b",
+     "clearanceM": 11.6,
+     "zoneM": 26.6
+    },
+    "ridge": null,
+    "odds": 0.099,
+    "tier": "Possible",
+    "verdict": "likely",
+    "marginDb": 29.8,
+    "downDb": 39.8,
+    "upDb": 37.8
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "flat",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 113.21724563448248,
+    "diffractionDb": 1.1036983340618596,
+    "clutterDb": 3.3719008264462813,
+    "pathLossDb": 117.69284479499062,
+    "abDb": 39.84835503156863,
+    "baDb": 37.84835503156863,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 44,
+    "tightest": {
+     "km": 9.2,
+     "raiseM": 6.5,
+     "end": "b",
+     "clearanceM": 11.6,
+     "zoneM": 26.6
+    },
+    "ridge": null,
+    "odds": 0.099,
+    "tier": "Possible",
+    "verdict": "likely",
+    "marginDb": 27.8,
+    "downDb": 39.8,
+    "upDb": 37.8
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "flat",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 113.21724563448248,
+    "diffractionDb": 1.1036983340618596,
+    "clutterDb": 3.3719008264462813,
+    "pathLossDb": 117.69284479499062,
+    "abDb": 39.84835503156863,
+    "baDb": 37.84835503156863,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 44,
+    "tightest": {
+     "km": 9.2,
+     "raiseM": 6.5,
+     "end": "b",
+     "clearanceM": 11.6,
+     "zoneM": 26.6
+    },
+    "ridge": null,
+    "odds": 0.099,
+    "tier": "Possible",
+    "verdict": "likely",
+    "marginDb": 27.8,
+    "downDb": 39.8,
+    "upDb": 37.8
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "short",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 96.73907081559611,
+    "diffractionDb": 26.353706597469582,
+    "clutterDb": 19.380000000000003,
+    "pathLossDb": 142.4727774130657,
+    "abDb": 15.06842241349355,
+    "baDb": 13.06842241349355,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -295,
+    "tightest": {
+     "km": 0.45,
+     "raiseM": 55.5,
+     "end": "a",
+     "clearanceM": -31.1,
+     "zoneM": 10.5
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 31.3
+    },
+    "odds": 0.039,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 5.1,
+    "downDb": 15.1,
+    "upDb": 13.1
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "short",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 96.73907081559611,
+    "diffractionDb": 26.353706597469582,
+    "clutterDb": 19.380000000000003,
+    "pathLossDb": 142.4727774130657,
+    "abDb": 15.06842241349355,
+    "baDb": 13.06842241349355,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -295,
+    "tightest": {
+     "km": 0.45,
+     "raiseM": 55.5,
+     "end": "a",
+     "clearanceM": -31.1,
+     "zoneM": 10.5
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 31.3
+    },
+    "odds": 0.039,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 3.1,
+    "downDb": 15.1,
+    "upDb": 13.1
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "short",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 96.73907081559611,
+    "diffractionDb": 26.353706597469582,
+    "clutterDb": 19.380000000000003,
+    "pathLossDb": 142.4727774130657,
+    "abDb": 15.06842241349355,
+    "baDb": 13.06842241349355,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -295,
+    "tightest": {
+     "km": 0.45,
+     "raiseM": 55.5,
+     "end": "a",
+     "clearanceM": -31.1,
+     "zoneM": 10.5
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 31.3
+    },
+    "odds": 0.039,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 3.1,
+    "downDb": 15.1,
+    "upDb": 13.1
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "short",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 96.73907081559611,
+    "diffractionDb": 26.353706597469582,
+    "clutterDb": 2.5714285714285716,
+    "pathLossDb": 125.66420598449426,
+    "abDb": 31.87699384206499,
+    "baDb": 29.87699384206499,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -295,
+    "tightest": {
+     "km": 0.45,
+     "raiseM": 55.5,
+     "end": "a",
+     "clearanceM": -31.1,
+     "zoneM": 10.5
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 31.3
+    },
+    "odds": 0.039,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 21.9,
+    "downDb": 31.9,
+    "upDb": 29.9
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "short",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 96.73907081559611,
+    "diffractionDb": 26.353706597469582,
+    "clutterDb": 2.5714285714285716,
+    "pathLossDb": 125.66420598449426,
+    "abDb": 31.87699384206499,
+    "baDb": 29.87699384206499,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -295,
+    "tightest": {
+     "km": 0.45,
+     "raiseM": 55.5,
+     "end": "a",
+     "clearanceM": -31.1,
+     "zoneM": 10.5
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 31.3
+    },
+    "odds": 0.039,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 19.9,
+    "downDb": 31.9,
+    "upDb": 29.9
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "short",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 96.73907081559611,
+    "diffractionDb": 26.353706597469582,
+    "clutterDb": 2.5714285714285716,
+    "pathLossDb": 125.66420598449426,
+    "abDb": 31.87699384206499,
+    "baDb": 29.87699384206499,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -295,
+    "tightest": {
+     "km": 0.45,
+     "raiseM": 55.5,
+     "end": "a",
+     "clearanceM": -31.1,
+     "zoneM": 10.5
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 31.3
+    },
+    "odds": 0.039,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 19.9,
+    "downDb": 31.9,
+    "upDb": 29.9
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "short",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 96.73907081559611,
+    "diffractionDb": 25.5944039325354,
+    "clutterDb": 21.66,
+    "pathLossDb": 143.99347474813152,
+    "abDb": 13.547725078427732,
+    "baDb": 11.547725078427732,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -278,
+    "tightest": {
+     "km": 0.45,
+     "raiseM": 54,
+     "end": "a",
+     "clearanceM": -29.3,
+     "zoneM": 10.5
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 29.9
+    },
+    "odds": 0.043,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 3.5,
+    "downDb": 13.5,
+    "upDb": 11.5
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "short",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 96.73907081559611,
+    "diffractionDb": 25.5944039325354,
+    "clutterDb": 21.66,
+    "pathLossDb": 143.99347474813152,
+    "abDb": 13.547725078427732,
+    "baDb": 11.547725078427732,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -278,
+    "tightest": {
+     "km": 0.45,
+     "raiseM": 54,
+     "end": "a",
+     "clearanceM": -29.3,
+     "zoneM": 10.5
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 29.9
+    },
+    "odds": 0.043,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 1.5,
+    "downDb": 13.5,
+    "upDb": 11.5
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "short",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 96.73907081559611,
+    "diffractionDb": 25.5944039325354,
+    "clutterDb": 21.66,
+    "pathLossDb": 143.99347474813152,
+    "abDb": 13.547725078427732,
+    "baDb": 11.547725078427732,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -278,
+    "tightest": {
+     "km": 0.45,
+     "raiseM": 54,
+     "end": "a",
+     "clearanceM": -29.3,
+     "zoneM": 10.5
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 29.9
+    },
+    "odds": 0.043,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 1.5,
+    "downDb": 13.5,
+    "upDb": 11.5
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "short",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 96.73907081559611,
+    "diffractionDb": 25.5944039325354,
+    "clutterDb": 2.742857142857143,
+    "pathLossDb": 125.07633189098866,
+    "abDb": 32.464867935570595,
+    "baDb": 30.464867935570595,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -278,
+    "tightest": {
+     "km": 0.45,
+     "raiseM": 54,
+     "end": "a",
+     "clearanceM": -29.3,
+     "zoneM": 10.5
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 29.9
+    },
+    "odds": 0.043,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 22.5,
+    "downDb": 32.5,
+    "upDb": 30.5
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "short",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 96.73907081559611,
+    "diffractionDb": 25.5944039325354,
+    "clutterDb": 2.742857142857143,
+    "pathLossDb": 125.07633189098866,
+    "abDb": 32.464867935570595,
+    "baDb": 30.464867935570595,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -278,
+    "tightest": {
+     "km": 0.45,
+     "raiseM": 54,
+     "end": "a",
+     "clearanceM": -29.3,
+     "zoneM": 10.5
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 29.9
+    },
+    "odds": 0.043,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 20.5,
+    "downDb": 32.5,
+    "upDb": 30.5
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "short",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 96.73907081559611,
+    "diffractionDb": 25.5944039325354,
+    "clutterDb": 2.742857142857143,
+    "pathLossDb": 125.07633189098866,
+    "abDb": 32.464867935570595,
+    "baDb": 30.464867935570595,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -278,
+    "tightest": {
+     "km": 0.45,
+     "raiseM": 54,
+     "end": "a",
+     "clearanceM": -29.3,
+     "zoneM": 10.5
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 29.9
+    },
+    "odds": 0.043,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 20.5,
+    "downDb": 32.5,
+    "upDb": 30.5
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "short",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 96.73907081559611,
+    "diffractionDb": 18.386440916793894,
+    "clutterDb": 13.68,
+    "pathLossDb": 128.80551173239002,
+    "abDb": 28.735688094169234,
+    "baDb": 26.735688094169234,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -125,
+    "tightest": {
+     "km": 0.54,
+     "raiseM": 30.5,
+     "end": "a",
+     "clearanceM": -13.9,
+     "zoneM": 11.2
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 13.9
+    },
+    "odds": 0.108,
+    "tier": "Possible",
+    "verdict": "likely",
+    "marginDb": 18.7,
+    "downDb": 28.7,
+    "upDb": 26.7
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "short",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 96.73907081559611,
+    "diffractionDb": 18.386440916793894,
+    "clutterDb": 13.68,
+    "pathLossDb": 128.80551173239002,
+    "abDb": 28.735688094169234,
+    "baDb": 26.735688094169234,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -125,
+    "tightest": {
+     "km": 0.54,
+     "raiseM": 30.5,
+     "end": "a",
+     "clearanceM": -13.9,
+     "zoneM": 11.2
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 13.9
+    },
+    "odds": 0.108,
+    "tier": "Possible",
+    "verdict": "likely",
+    "marginDb": 16.7,
+    "downDb": 28.7,
+    "upDb": 26.7
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "short",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 96.73907081559611,
+    "diffractionDb": 18.386440916793894,
+    "clutterDb": 13.68,
+    "pathLossDb": 128.80551173239002,
+    "abDb": 28.735688094169234,
+    "baDb": 26.735688094169234,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -125,
+    "tightest": {
+     "km": 0.54,
+     "raiseM": 30.5,
+     "end": "a",
+     "clearanceM": -13.9,
+     "zoneM": 11.2
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 13.9
+    },
+    "odds": 0.108,
+    "tier": "Possible",
+    "verdict": "likely",
+    "marginDb": 16.7,
+    "downDb": 28.7,
+    "upDb": 26.7
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "short",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 96.73907081559611,
+    "diffractionDb": 18.386440916793894,
+    "clutterDb": 1.885714285714286,
+    "pathLossDb": 117.0112260181043,
+    "abDb": 40.529973808454955,
+    "baDb": 38.529973808454955,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -125,
+    "tightest": {
+     "km": 0.54,
+     "raiseM": 30.5,
+     "end": "a",
+     "clearanceM": -13.9,
+     "zoneM": 11.2
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 13.9
+    },
+    "odds": 0.108,
+    "tier": "Possible",
+    "verdict": "likely",
+    "marginDb": 30.5,
+    "downDb": 40.5,
+    "upDb": 38.5
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "short",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 96.73907081559611,
+    "diffractionDb": 18.386440916793894,
+    "clutterDb": 1.885714285714286,
+    "pathLossDb": 117.0112260181043,
+    "abDb": 40.529973808454955,
+    "baDb": 38.529973808454955,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -125,
+    "tightest": {
+     "km": 0.54,
+     "raiseM": 30.5,
+     "end": "a",
+     "clearanceM": -13.9,
+     "zoneM": 11.2
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 13.9
+    },
+    "odds": 0.108,
+    "tier": "Possible",
+    "verdict": "likely",
+    "marginDb": 28.5,
+    "downDb": 40.5,
+    "upDb": 38.5
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 910.525,
+    "bwKHz": 62.5,
+    "sf": 7,
+    "cr": 5
+   },
+   "profile": "short",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 96.73907081559611,
+    "diffractionDb": 18.386440916793894,
+    "clutterDb": 1.885714285714286,
+    "pathLossDb": 117.0112260181043,
+    "abDb": 40.529973808454955,
+    "baDb": 38.529973808454955,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -125,
+    "tightest": {
+     "km": 0.54,
+     "raiseM": 30.5,
+     "end": "a",
+     "clearanceM": -13.9,
+     "zoneM": 11.2
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 13.9
+    },
+    "odds": 0.108,
+    "tier": "Possible",
+    "verdict": "likely",
+    "marginDb": 28.5,
+    "downDb": 40.5,
+    "upDb": 38.5
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "hills",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 112.8179785532638,
+    "diffractionDb": 32.57094960670258,
+    "clutterDb": 72.54545454545455,
+    "pathLossDb": 217.93438270542094,
+    "abDb": -57.893182878861694,
+    "baDb": -59.893182878861694,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -299,
+    "tightest": {
+     "km": 0.5,
+     "raiseM": 224,
+     "end": "a",
+     "clearanceM": -38.4,
+     "zoneM": 12.9
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 83.8
+    },
+    "odds": 0.001,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -67.9,
+    "downDb": -57.9,
+    "upDb": -59.9
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "hills",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 112.8179785532638,
+    "diffractionDb": 32.57094960670258,
+    "clutterDb": 72.54545454545455,
+    "pathLossDb": 217.93438270542094,
+    "abDb": -57.893182878861694,
+    "baDb": -59.893182878861694,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -299,
+    "tightest": {
+     "km": 0.5,
+     "raiseM": 224,
+     "end": "a",
+     "clearanceM": -38.4,
+     "zoneM": 12.9
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 83.8
+    },
+    "odds": 0.001,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -69.9,
+    "downDb": -57.9,
+    "upDb": -59.9
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "hills",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 112.8179785532638,
+    "diffractionDb": 32.57094960670258,
+    "clutterDb": 72.54545454545455,
+    "pathLossDb": 217.93438270542094,
+    "abDb": -57.893182878861694,
+    "baDb": -59.893182878861694,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -299,
+    "tightest": {
+     "km": 0.5,
+     "raiseM": 224,
+     "end": "a",
+     "clearanceM": -38.4,
+     "zoneM": 12.9
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 83.8
+    },
+    "odds": 0.001,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -69.9,
+    "downDb": -57.9,
+    "upDb": -59.9
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "hills",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 112.8179785532638,
+    "diffractionDb": 32.57094960670258,
+    "clutterDb": 10.115702479338843,
+    "pathLossDb": 155.50463063930522,
+    "abDb": 4.536569187254031,
+    "baDb": 2.536569187254031,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -299,
+    "tightest": {
+     "km": 0.5,
+     "raiseM": 224,
+     "end": "a",
+     "clearanceM": -38.4,
+     "zoneM": 12.9
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 83.8
+    },
+    "odds": 0.001,
+    "tier": "Stretch",
+    "verdict": "marginal",
+    "marginDb": -5.5,
+    "downDb": 4.5,
+    "upDb": 2.5
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "hills",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 112.8179785532638,
+    "diffractionDb": 32.57094960670258,
+    "clutterDb": 10.115702479338843,
+    "pathLossDb": 155.50463063930522,
+    "abDb": 4.536569187254031,
+    "baDb": 2.536569187254031,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -299,
+    "tightest": {
+     "km": 0.5,
+     "raiseM": 224,
+     "end": "a",
+     "clearanceM": -38.4,
+     "zoneM": 12.9
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 83.8
+    },
+    "odds": 0.001,
+    "tier": "Stretch",
+    "verdict": "marginal",
+    "marginDb": -7.5,
+    "downDb": 4.5,
+    "upDb": 2.5
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "hills",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 112.8179785532638,
+    "diffractionDb": 32.57094960670258,
+    "clutterDb": 10.115702479338843,
+    "pathLossDb": 155.50463063930522,
+    "abDb": 4.536569187254031,
+    "baDb": 2.536569187254031,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -299,
+    "tightest": {
+     "km": 0.5,
+     "raiseM": 224,
+     "end": "a",
+     "clearanceM": -38.4,
+     "zoneM": 12.9
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 83.8
+    },
+    "odds": 0.001,
+    "tier": "Stretch",
+    "verdict": "marginal",
+    "marginDb": -7.5,
+    "downDb": 4.5,
+    "upDb": 2.5
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "hills",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 112.8179785532638,
+    "diffractionDb": 31.93441470286335,
+    "clutterDb": 73.86446280991737,
+    "pathLossDb": 218.61685606604453,
+    "abDb": -58.57565623948528,
+    "baDb": -60.57565623948528,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -270,
+    "tightest": {
+     "km": 0.5,
+     "raiseM": 225,
+     "end": "a",
+     "clearanceM": -34.8,
+     "zoneM": 12.9
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 84.4
+    },
+    "odds": 0.002,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -68.6,
+    "downDb": -58.6,
+    "upDb": -60.6
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "hills",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 112.8179785532638,
+    "diffractionDb": 31.93441470286335,
+    "clutterDb": 73.86446280991737,
+    "pathLossDb": 218.61685606604453,
+    "abDb": -58.57565623948528,
+    "baDb": -60.57565623948528,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -270,
+    "tightest": {
+     "km": 0.5,
+     "raiseM": 225,
+     "end": "a",
+     "clearanceM": -34.8,
+     "zoneM": 12.9
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 84.4
+    },
+    "odds": 0.002,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -70.6,
+    "downDb": -58.6,
+    "upDb": -60.6
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "hills",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 112.8179785532638,
+    "diffractionDb": 31.93441470286335,
+    "clutterDb": 73.86446280991737,
+    "pathLossDb": 218.61685606604453,
+    "abDb": -58.57565623948528,
+    "baDb": -60.57565623948528,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -270,
+    "tightest": {
+     "km": 0.5,
+     "raiseM": 225,
+     "end": "a",
+     "clearanceM": -34.8,
+     "zoneM": 12.9
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 84.4
+    },
+    "odds": 0.002,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -70.6,
+    "downDb": -58.6,
+    "upDb": -60.6
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "hills",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 112.8179785532638,
+    "diffractionDb": 31.93441470286335,
+    "clutterDb": 10.31404958677686,
+    "pathLossDb": 155.06644284290402,
+    "abDb": 4.974756983655226,
+    "baDb": 2.974756983655226,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -270,
+    "tightest": {
+     "km": 0.5,
+     "raiseM": 225,
+     "end": "a",
+     "clearanceM": -34.8,
+     "zoneM": 12.9
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 84.4
+    },
+    "odds": 0.002,
+    "tier": "Stretch",
+    "verdict": "marginal",
+    "marginDb": -5,
+    "downDb": 5,
+    "upDb": 3
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "hills",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 112.8179785532638,
+    "diffractionDb": 31.93441470286335,
+    "clutterDb": 10.31404958677686,
+    "pathLossDb": 155.06644284290402,
+    "abDb": 4.974756983655226,
+    "baDb": 2.974756983655226,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -270,
+    "tightest": {
+     "km": 0.5,
+     "raiseM": 225,
+     "end": "a",
+     "clearanceM": -34.8,
+     "zoneM": 12.9
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 84.4
+    },
+    "odds": 0.002,
+    "tier": "Stretch",
+    "verdict": "marginal",
+    "marginDb": -7,
+    "downDb": 5,
+    "upDb": 3
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "hills",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 112.8179785532638,
+    "diffractionDb": 31.93441470286335,
+    "clutterDb": 10.31404958677686,
+    "pathLossDb": 155.06644284290402,
+    "abDb": 4.974756983655226,
+    "baDb": 2.974756983655226,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -270,
+    "tightest": {
+     "km": 0.5,
+     "raiseM": 225,
+     "end": "a",
+     "clearanceM": -34.8,
+     "zoneM": 12.9
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 84.4
+    },
+    "odds": 0.002,
+    "tier": "Stretch",
+    "verdict": "marginal",
+    "marginDb": -7,
+    "downDb": 5,
+    "upDb": 3
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "hills",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 112.8179785532638,
+    "diffractionDb": 27.240812113417185,
+    "clutterDb": 56.71735537190083,
+    "pathLossDb": 196.7761460385818,
+    "abDb": -36.73494621202255,
+    "baDb": -38.73494621202255,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -223,
+    "tightest": {
+     "km": 6.4,
+     "raiseM": 197.5,
+     "end": "a",
+     "clearanceM": -71.6,
+     "zoneM": 32.1
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 71.6
+    },
+    "odds": 0.003,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -46.7,
+    "downDb": -36.7,
+    "upDb": -38.7
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "hills",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 112.8179785532638,
+    "diffractionDb": 27.240812113417185,
+    "clutterDb": 56.71735537190083,
+    "pathLossDb": 196.7761460385818,
+    "abDb": -36.73494621202255,
+    "baDb": -38.73494621202255,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -223,
+    "tightest": {
+     "km": 6.4,
+     "raiseM": 197.5,
+     "end": "a",
+     "clearanceM": -71.6,
+     "zoneM": 32.1
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 71.6
+    },
+    "odds": 0.003,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -48.7,
+    "downDb": -36.7,
+    "upDb": -38.7
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "hills",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 112.8179785532638,
+    "diffractionDb": 27.240812113417185,
+    "clutterDb": 56.71735537190083,
+    "pathLossDb": 196.7761460385818,
+    "abDb": -36.73494621202255,
+    "baDb": -38.73494621202255,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -223,
+    "tightest": {
+     "km": 6.4,
+     "raiseM": 197.5,
+     "end": "a",
+     "clearanceM": -71.6,
+     "zoneM": 32.1
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 71.6
+    },
+    "odds": 0.003,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -48.7,
+    "downDb": -36.7,
+    "upDb": -38.7
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "hills",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 112.8179785532638,
+    "diffractionDb": 27.240812113417185,
+    "clutterDb": 7.338842975206611,
+    "pathLossDb": 147.39763364188758,
+    "abDb": 12.64356618467167,
+    "baDb": 10.64356618467167,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -223,
+    "tightest": {
+     "km": 6.4,
+     "raiseM": 197.5,
+     "end": "a",
+     "clearanceM": -71.6,
+     "zoneM": 32.1
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 71.6
+    },
+    "odds": 0.003,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 2.6,
+    "downDb": 12.6,
+    "upDb": 10.6
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "hills",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 112.8179785532638,
+    "diffractionDb": 27.240812113417185,
+    "clutterDb": 7.338842975206611,
+    "pathLossDb": 147.39763364188758,
+    "abDb": 12.64356618467167,
+    "baDb": 10.64356618467167,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -223,
+    "tightest": {
+     "km": 6.4,
+     "raiseM": 197.5,
+     "end": "a",
+     "clearanceM": -71.6,
+     "zoneM": 32.1
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 71.6
+    },
+    "odds": 0.003,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 0.6,
+    "downDb": 12.6,
+    "upDb": 10.6
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "hills",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 112.8179785532638,
+    "diffractionDb": 27.240812113417185,
+    "clutterDb": 7.338842975206611,
+    "pathLossDb": 147.39763364188758,
+    "abDb": 12.64356618467167,
+    "baDb": 10.64356618467167,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -223,
+    "tightest": {
+     "km": 6.4,
+     "raiseM": 197.5,
+     "end": "a",
+     "clearanceM": -71.6,
+     "zoneM": 32.1
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 71.6
+    },
+    "odds": 0.003,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 0.6,
+    "downDb": 12.6,
+    "upDb": 10.6
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "flat",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 112.8179785532638,
+    "diffractionDb": 4.576798606534997,
+    "clutterDb": 159.60000000000002,
+    "pathLossDb": 276.9947771597988,
+    "abDb": -116.95357733323954,
+    "baDb": -118.95357733323954,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 12,
+    "tightest": {
+     "km": 6,
+     "raiseM": 64,
+     "end": "a",
+     "clearanceM": 3.9,
+     "zoneM": 32.2
+    },
+    "ridge": null,
+    "odds": 0.064,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -127,
+    "downDb": -117,
+    "upDb": -119
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "flat",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 112.8179785532638,
+    "diffractionDb": 4.576798606534997,
+    "clutterDb": 159.60000000000002,
+    "pathLossDb": 276.9947771597988,
+    "abDb": -116.95357733323954,
+    "baDb": -118.95357733323954,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 12,
+    "tightest": {
+     "km": 6,
+     "raiseM": 64,
+     "end": "a",
+     "clearanceM": 3.9,
+     "zoneM": 32.2
+    },
+    "ridge": null,
+    "odds": 0.064,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -129,
+    "downDb": -117,
+    "upDb": -119
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "flat",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 112.8179785532638,
+    "diffractionDb": 4.576798606534997,
+    "clutterDb": 159.60000000000002,
+    "pathLossDb": 276.9947771597988,
+    "abDb": -116.95357733323954,
+    "baDb": -118.95357733323954,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 12,
+    "tightest": {
+     "km": 6,
+     "raiseM": 64,
+     "end": "a",
+     "clearanceM": 3.9,
+     "zoneM": 32.2
+    },
+    "ridge": null,
+    "odds": 0.064,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -129,
+    "downDb": -117,
+    "upDb": -119
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "flat",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 112.8179785532638,
+    "diffractionDb": 4.576798606534997,
+    "clutterDb": 24,
+    "pathLossDb": 141.3947771597988,
+    "abDb": 18.646422666760458,
+    "baDb": 16.646422666760458,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 12,
+    "tightest": {
+     "km": 6,
+     "raiseM": 64,
+     "end": "a",
+     "clearanceM": 3.9,
+     "zoneM": 32.2
+    },
+    "ridge": null,
+    "odds": 0.064,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 8.6,
+    "downDb": 18.6,
+    "upDb": 16.6
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "flat",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 112.8179785532638,
+    "diffractionDb": 4.576798606534997,
+    "clutterDb": 24,
+    "pathLossDb": 141.3947771597988,
+    "abDb": 18.646422666760458,
+    "baDb": 16.646422666760458,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 12,
+    "tightest": {
+     "km": 6,
+     "raiseM": 64,
+     "end": "a",
+     "clearanceM": 3.9,
+     "zoneM": 32.2
+    },
+    "ridge": null,
+    "odds": 0.064,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 6.6,
+    "downDb": 18.6,
+    "upDb": 16.6
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "flat",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 112.8179785532638,
+    "diffractionDb": 4.576798606534997,
+    "clutterDb": 24,
+    "pathLossDb": 141.3947771597988,
+    "abDb": 18.646422666760458,
+    "baDb": 16.646422666760458,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 12,
+    "tightest": {
+     "km": 6,
+     "raiseM": 64,
+     "end": "a",
+     "clearanceM": 3.9,
+     "zoneM": 32.2
+    },
+    "ridge": null,
+    "odds": 0.064,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 6.6,
+    "downDb": 18.6,
+    "upDb": 16.6
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "flat",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 112.8179785532638,
+    "diffractionDb": 5.162660563214399,
+    "clutterDb": 159.60000000000002,
+    "pathLossDb": 277.5806391164782,
+    "abDb": -117.53943928991896,
+    "baDb": -119.53943928991896,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 7,
+    "tightest": {
+     "km": 9.6,
+     "raiseM": 42.5,
+     "end": "b",
+     "clearanceM": 1.8,
+     "zoneM": 25.7
+    },
+    "ridge": null,
+    "odds": 0.059,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -127.5,
+    "downDb": -117.5,
+    "upDb": -119.5
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "flat",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 112.8179785532638,
+    "diffractionDb": 5.162660563214399,
+    "clutterDb": 159.60000000000002,
+    "pathLossDb": 277.5806391164782,
+    "abDb": -117.53943928991896,
+    "baDb": -119.53943928991896,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 7,
+    "tightest": {
+     "km": 9.6,
+     "raiseM": 42.5,
+     "end": "b",
+     "clearanceM": 1.8,
+     "zoneM": 25.7
+    },
+    "ridge": null,
+    "odds": 0.059,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -129.5,
+    "downDb": -117.5,
+    "upDb": -119.5
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "flat",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 112.8179785532638,
+    "diffractionDb": 5.162660563214399,
+    "clutterDb": 159.60000000000002,
+    "pathLossDb": 277.5806391164782,
+    "abDb": -117.53943928991896,
+    "baDb": -119.53943928991896,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 7,
+    "tightest": {
+     "km": 9.6,
+     "raiseM": 42.5,
+     "end": "b",
+     "clearanceM": 1.8,
+     "zoneM": 25.7
+    },
+    "ridge": null,
+    "odds": 0.059,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -129.5,
+    "downDb": -117.5,
+    "upDb": -119.5
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "flat",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 112.8179785532638,
+    "diffractionDb": 5.162660563214399,
+    "clutterDb": 23.801652892561982,
+    "pathLossDb": 141.7822920090402,
+    "abDb": 18.25890781751906,
+    "baDb": 16.25890781751906,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 7,
+    "tightest": {
+     "km": 9.6,
+     "raiseM": 42.5,
+     "end": "b",
+     "clearanceM": 1.8,
+     "zoneM": 25.7
+    },
+    "ridge": null,
+    "odds": 0.059,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 8.3,
+    "downDb": 18.3,
+    "upDb": 16.3
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "flat",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 112.8179785532638,
+    "diffractionDb": 5.162660563214399,
+    "clutterDb": 23.801652892561982,
+    "pathLossDb": 141.7822920090402,
+    "abDb": 18.25890781751906,
+    "baDb": 16.25890781751906,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 7,
+    "tightest": {
+     "km": 9.6,
+     "raiseM": 42.5,
+     "end": "b",
+     "clearanceM": 1.8,
+     "zoneM": 25.7
+    },
+    "ridge": null,
+    "odds": 0.059,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 6.3,
+    "downDb": 18.3,
+    "upDb": 16.3
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "flat",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 112.8179785532638,
+    "diffractionDb": 5.162660563214399,
+    "clutterDb": 23.801652892561982,
+    "pathLossDb": 141.7822920090402,
+    "abDb": 18.25890781751906,
+    "baDb": 16.25890781751906,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 7,
+    "tightest": {
+     "km": 9.6,
+     "raiseM": 42.5,
+     "end": "b",
+     "clearanceM": 1.8,
+     "zoneM": 25.7
+    },
+    "ridge": null,
+    "odds": 0.059,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 6.3,
+    "downDb": 18.3,
+    "upDb": 16.3
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "flat",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 112.8179785532638,
+    "diffractionDb": 1.2030980862400877,
+    "clutterDb": 65.9504132231405,
+    "pathLossDb": 179.97148986264438,
+    "abDb": -19.930290036085125,
+    "baDb": -21.930290036085125,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 43,
+    "tightest": {
+     "km": 9.2,
+     "raiseM": 7.5,
+     "end": "b",
+     "clearanceM": 11.6,
+     "zoneM": 27.2
+    },
+    "ridge": null,
+    "odds": 0.098,
+    "tier": "Possible",
+    "verdict": "unlikely",
+    "marginDb": -29.9,
+    "downDb": -19.9,
+    "upDb": -21.9
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "flat",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 112.8179785532638,
+    "diffractionDb": 1.2030980862400877,
+    "clutterDb": 65.9504132231405,
+    "pathLossDb": 179.97148986264438,
+    "abDb": -19.930290036085125,
+    "baDb": -21.930290036085125,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 43,
+    "tightest": {
+     "km": 9.2,
+     "raiseM": 7.5,
+     "end": "b",
+     "clearanceM": 11.6,
+     "zoneM": 27.2
+    },
+    "ridge": null,
+    "odds": 0.098,
+    "tier": "Possible",
+    "verdict": "unlikely",
+    "marginDb": -31.9,
+    "downDb": -19.9,
+    "upDb": -21.9
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "flat",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 112.8179785532638,
+    "diffractionDb": 1.2030980862400877,
+    "clutterDb": 65.9504132231405,
+    "pathLossDb": 179.97148986264438,
+    "abDb": -19.930290036085125,
+    "baDb": -21.930290036085125,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 43,
+    "tightest": {
+     "km": 9.2,
+     "raiseM": 7.5,
+     "end": "b",
+     "clearanceM": 11.6,
+     "zoneM": 27.2
+    },
+    "ridge": null,
+    "odds": 0.098,
+    "tier": "Possible",
+    "verdict": "unlikely",
+    "marginDb": -31.9,
+    "downDb": -19.9,
+    "upDb": -21.9
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "flat",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 112.8179785532638,
+    "diffractionDb": 1.2030980862400877,
+    "clutterDb": 3.3719008264462813,
+    "pathLossDb": 117.39297746595017,
+    "abDb": 42.64822236060908,
+    "baDb": 40.64822236060908,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 43,
+    "tightest": {
+     "km": 9.2,
+     "raiseM": 7.5,
+     "end": "b",
+     "clearanceM": 11.6,
+     "zoneM": 27.2
+    },
+    "ridge": null,
+    "odds": 0.098,
+    "tier": "Possible",
+    "verdict": "likely",
+    "marginDb": 32.6,
+    "downDb": 42.6,
+    "upDb": 40.6
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "flat",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 112.8179785532638,
+    "diffractionDb": 1.2030980862400877,
+    "clutterDb": 3.3719008264462813,
+    "pathLossDb": 117.39297746595017,
+    "abDb": 42.64822236060908,
+    "baDb": 40.64822236060908,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 43,
+    "tightest": {
+     "km": 9.2,
+     "raiseM": 7.5,
+     "end": "b",
+     "clearanceM": 11.6,
+     "zoneM": 27.2
+    },
+    "ridge": null,
+    "odds": 0.098,
+    "tier": "Possible",
+    "verdict": "likely",
+    "marginDb": 30.6,
+    "downDb": 42.6,
+    "upDb": 40.6
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "flat",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 112.8179785532638,
+    "diffractionDb": 1.2030980862400877,
+    "clutterDb": 3.3719008264462813,
+    "pathLossDb": 117.39297746595017,
+    "abDb": 42.64822236060908,
+    "baDb": 40.64822236060908,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 43,
+    "tightest": {
+     "km": 9.2,
+     "raiseM": 7.5,
+     "end": "b",
+     "clearanceM": 11.6,
+     "zoneM": 27.2
+    },
+    "ridge": null,
+    "odds": 0.098,
+    "tier": "Possible",
+    "verdict": "likely",
+    "marginDb": 30.6,
+    "downDb": 42.6,
+    "upDb": 40.6
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "short",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 96.33980373437741,
+    "diffractionDb": 26.15440159755167,
+    "clutterDb": 19.380000000000003,
+    "pathLossDb": 141.8742053319291,
+    "abDb": 18.16699449463016,
+    "baDb": 16.16699449463016,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -289,
+    "tightest": {
+     "km": 0.45,
+     "raiseM": 55.5,
+     "end": "a",
+     "clearanceM": -31.1,
+     "zoneM": 10.8
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 31.3
+    },
+    "odds": 0.04,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 8.2,
+    "downDb": 18.2,
+    "upDb": 16.2
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "short",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 96.33980373437741,
+    "diffractionDb": 26.15440159755167,
+    "clutterDb": 19.380000000000003,
+    "pathLossDb": 141.8742053319291,
+    "abDb": 18.16699449463016,
+    "baDb": 16.16699449463016,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -289,
+    "tightest": {
+     "km": 0.45,
+     "raiseM": 55.5,
+     "end": "a",
+     "clearanceM": -31.1,
+     "zoneM": 10.8
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 31.3
+    },
+    "odds": 0.04,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 6.2,
+    "downDb": 18.2,
+    "upDb": 16.2
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "short",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 96.33980373437741,
+    "diffractionDb": 26.15440159755167,
+    "clutterDb": 19.380000000000003,
+    "pathLossDb": 141.8742053319291,
+    "abDb": 18.16699449463016,
+    "baDb": 16.16699449463016,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -289,
+    "tightest": {
+     "km": 0.45,
+     "raiseM": 55.5,
+     "end": "a",
+     "clearanceM": -31.1,
+     "zoneM": 10.8
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 31.3
+    },
+    "odds": 0.04,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 6.2,
+    "downDb": 18.2,
+    "upDb": 16.2
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "short",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 96.33980373437741,
+    "diffractionDb": 26.15440159755167,
+    "clutterDb": 2.5714285714285716,
+    "pathLossDb": 125.06563390335765,
+    "abDb": 34.9755659232016,
+    "baDb": 32.9755659232016,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -289,
+    "tightest": {
+     "km": 0.45,
+     "raiseM": 55.5,
+     "end": "a",
+     "clearanceM": -31.1,
+     "zoneM": 10.8
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 31.3
+    },
+    "odds": 0.04,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 25,
+    "downDb": 35,
+    "upDb": 33
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "short",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 96.33980373437741,
+    "diffractionDb": 26.15440159755167,
+    "clutterDb": 2.5714285714285716,
+    "pathLossDb": 125.06563390335765,
+    "abDb": 34.9755659232016,
+    "baDb": 32.9755659232016,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -289,
+    "tightest": {
+     "km": 0.45,
+     "raiseM": 55.5,
+     "end": "a",
+     "clearanceM": -31.1,
+     "zoneM": 10.8
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 31.3
+    },
+    "odds": 0.04,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 23,
+    "downDb": 35,
+    "upDb": 33
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "short",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 96.33980373437741,
+    "diffractionDb": 26.15440159755167,
+    "clutterDb": 2.5714285714285716,
+    "pathLossDb": 125.06563390335765,
+    "abDb": 34.9755659232016,
+    "baDb": 32.9755659232016,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -289,
+    "tightest": {
+     "km": 0.45,
+     "raiseM": 55.5,
+     "end": "a",
+     "clearanceM": -31.1,
+     "zoneM": 10.8
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 31.3
+    },
+    "odds": 0.04,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 23,
+    "downDb": 35,
+    "upDb": 33
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "short",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 96.33980373437741,
+    "diffractionDb": 25.395583625876284,
+    "clutterDb": 21.66,
+    "pathLossDb": 143.3953873602537,
+    "abDb": 16.645812466305557,
+    "baDb": 14.645812466305557,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -271,
+    "tightest": {
+     "km": 0.45,
+     "raiseM": 54,
+     "end": "a",
+     "clearanceM": -29.3,
+     "zoneM": 10.8
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 29.9
+    },
+    "odds": 0.044,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 6.6,
+    "downDb": 16.6,
+    "upDb": 14.6
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "short",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 96.33980373437741,
+    "diffractionDb": 25.395583625876284,
+    "clutterDb": 21.66,
+    "pathLossDb": 143.3953873602537,
+    "abDb": 16.645812466305557,
+    "baDb": 14.645812466305557,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -271,
+    "tightest": {
+     "km": 0.45,
+     "raiseM": 54,
+     "end": "a",
+     "clearanceM": -29.3,
+     "zoneM": 10.8
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 29.9
+    },
+    "odds": 0.044,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 4.6,
+    "downDb": 16.6,
+    "upDb": 14.6
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "short",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 96.33980373437741,
+    "diffractionDb": 25.395583625876284,
+    "clutterDb": 21.66,
+    "pathLossDb": 143.3953873602537,
+    "abDb": 16.645812466305557,
+    "baDb": 14.645812466305557,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -271,
+    "tightest": {
+     "km": 0.45,
+     "raiseM": 54,
+     "end": "a",
+     "clearanceM": -29.3,
+     "zoneM": 10.8
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 29.9
+    },
+    "odds": 0.044,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 4.6,
+    "downDb": 16.6,
+    "upDb": 14.6
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "short",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 96.33980373437741,
+    "diffractionDb": 25.395583625876284,
+    "clutterDb": 2.742857142857143,
+    "pathLossDb": 124.47824450311084,
+    "abDb": 35.562955323448406,
+    "baDb": 33.562955323448406,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -271,
+    "tightest": {
+     "km": 0.45,
+     "raiseM": 54,
+     "end": "a",
+     "clearanceM": -29.3,
+     "zoneM": 10.8
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 29.9
+    },
+    "odds": 0.044,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 25.6,
+    "downDb": 35.6,
+    "upDb": 33.6
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "short",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 96.33980373437741,
+    "diffractionDb": 25.395583625876284,
+    "clutterDb": 2.742857142857143,
+    "pathLossDb": 124.47824450311084,
+    "abDb": 35.562955323448406,
+    "baDb": 33.562955323448406,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -271,
+    "tightest": {
+     "km": 0.45,
+     "raiseM": 54,
+     "end": "a",
+     "clearanceM": -29.3,
+     "zoneM": 10.8
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 29.9
+    },
+    "odds": 0.044,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 23.6,
+    "downDb": 35.6,
+    "upDb": 33.6
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "short",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 96.33980373437741,
+    "diffractionDb": 25.395583625876284,
+    "clutterDb": 2.742857142857143,
+    "pathLossDb": 124.47824450311084,
+    "abDb": 35.562955323448406,
+    "baDb": 33.562955323448406,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -271,
+    "tightest": {
+     "km": 0.45,
+     "raiseM": 54,
+     "end": "a",
+     "clearanceM": -29.3,
+     "zoneM": 10.8
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 29.9
+    },
+    "odds": 0.044,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 23.6,
+    "downDb": 35.6,
+    "upDb": 33.6
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "short",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 96.33980373437741,
+    "diffractionDb": 18.203782692133114,
+    "clutterDb": 13.68,
+    "pathLossDb": 128.22358642651054,
+    "abDb": 31.817613400048714,
+    "baDb": 29.817613400048714,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -122,
+    "tightest": {
+     "km": 0.54,
+     "raiseM": 30.5,
+     "end": "a",
+     "clearanceM": -13.9,
+     "zoneM": 11.4
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 13.9
+    },
+    "odds": 0.11,
+    "tier": "Possible",
+    "verdict": "likely",
+    "marginDb": 21.8,
+    "downDb": 31.8,
+    "upDb": 29.8
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "short",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 96.33980373437741,
+    "diffractionDb": 18.203782692133114,
+    "clutterDb": 13.68,
+    "pathLossDb": 128.22358642651054,
+    "abDb": 31.817613400048714,
+    "baDb": 29.817613400048714,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -122,
+    "tightest": {
+     "km": 0.54,
+     "raiseM": 30.5,
+     "end": "a",
+     "clearanceM": -13.9,
+     "zoneM": 11.4
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 13.9
+    },
+    "odds": 0.11,
+    "tier": "Possible",
+    "verdict": "likely",
+    "marginDb": 19.8,
+    "downDb": 31.8,
+    "upDb": 29.8
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "short",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 96.33980373437741,
+    "diffractionDb": 18.203782692133114,
+    "clutterDb": 13.68,
+    "pathLossDb": 128.22358642651054,
+    "abDb": 31.817613400048714,
+    "baDb": 29.817613400048714,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -122,
+    "tightest": {
+     "km": 0.54,
+     "raiseM": 30.5,
+     "end": "a",
+     "clearanceM": -13.9,
+     "zoneM": 11.4
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 13.9
+    },
+    "odds": 0.11,
+    "tier": "Possible",
+    "verdict": "likely",
+    "marginDb": 19.8,
+    "downDb": 31.8,
+    "upDb": 29.8
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "short",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 96.33980373437741,
+    "diffractionDb": 18.203782692133114,
+    "clutterDb": 1.885714285714286,
+    "pathLossDb": 116.42930071222482,
+    "abDb": 43.611899114334435,
+    "baDb": 41.611899114334435,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -122,
+    "tightest": {
+     "km": 0.54,
+     "raiseM": 30.5,
+     "end": "a",
+     "clearanceM": -13.9,
+     "zoneM": 11.4
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 13.9
+    },
+    "odds": 0.11,
+    "tier": "Possible",
+    "verdict": "likely",
+    "marginDb": 33.6,
+    "downDb": 43.6,
+    "upDb": 41.6
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "short",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 96.33980373437741,
+    "diffractionDb": 18.203782692133114,
+    "clutterDb": 1.885714285714286,
+    "pathLossDb": 116.42930071222482,
+    "abDb": 43.611899114334435,
+    "baDb": 41.611899114334435,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -122,
+    "tightest": {
+     "km": 0.54,
+     "raiseM": 30.5,
+     "end": "a",
+     "clearanceM": -13.9,
+     "zoneM": 11.4
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 13.9
+    },
+    "odds": 0.11,
+    "tier": "Possible",
+    "verdict": "likely",
+    "marginDb": 31.6,
+    "downDb": 43.6,
+    "upDb": 41.6
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.618,
+    "bwKHz": 62.5,
+    "sf": 8,
+    "cr": 8
+   },
+   "profile": "short",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 96.33980373437741,
+    "diffractionDb": 18.203782692133114,
+    "clutterDb": 1.885714285714286,
+    "pathLossDb": 116.42930071222482,
+    "abDb": 43.611899114334435,
+    "baDb": 41.611899114334435,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -122,
+    "tightest": {
+     "km": 0.54,
+     "raiseM": 30.5,
+     "end": "a",
+     "clearanceM": -13.9,
+     "zoneM": 11.4
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 13.9
+    },
+    "odds": 0.11,
+    "tier": "Possible",
+    "verdict": "likely",
+    "marginDb": 31.6,
+    "downDb": 43.6,
+    "upDb": 41.6
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "hills",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 112.81704960407777,
+    "diffractionDb": 32.5704828199258,
+    "clutterDb": 72.54545454545455,
+    "pathLossDb": 217.9329869694581,
+    "abDb": -56.41238705617849,
+    "baDb": -58.41238705617849,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -299,
+    "tightest": {
+     "km": 0.5,
+     "raiseM": 224,
+     "end": "a",
+     "clearanceM": -38.4,
+     "zoneM": 12.9
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 83.8
+    },
+    "odds": 0.001,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -66.4,
+    "downDb": -56.4,
+    "upDb": -58.4
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "hills",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 112.81704960407777,
+    "diffractionDb": 32.5704828199258,
+    "clutterDb": 72.54545454545455,
+    "pathLossDb": 217.9329869694581,
+    "abDb": -56.41238705617849,
+    "baDb": -58.41238705617849,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -299,
+    "tightest": {
+     "km": 0.5,
+     "raiseM": 224,
+     "end": "a",
+     "clearanceM": -38.4,
+     "zoneM": 12.9
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 83.8
+    },
+    "odds": 0.001,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -68.4,
+    "downDb": -56.4,
+    "upDb": -58.4
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "hills",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 112.81704960407777,
+    "diffractionDb": 32.5704828199258,
+    "clutterDb": 72.54545454545455,
+    "pathLossDb": 217.9329869694581,
+    "abDb": -56.41238705617849,
+    "baDb": -58.41238705617849,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -299,
+    "tightest": {
+     "km": 0.5,
+     "raiseM": 224,
+     "end": "a",
+     "clearanceM": -38.4,
+     "zoneM": 12.9
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 83.8
+    },
+    "odds": 0.001,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -68.4,
+    "downDb": -56.4,
+    "upDb": -58.4
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "hills",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 112.81704960407777,
+    "diffractionDb": 32.5704828199258,
+    "clutterDb": 10.115702479338843,
+    "pathLossDb": 155.5032349033424,
+    "abDb": 6.017365009937237,
+    "baDb": 4.017365009937237,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -299,
+    "tightest": {
+     "km": 0.5,
+     "raiseM": 224,
+     "end": "a",
+     "clearanceM": -38.4,
+     "zoneM": 12.9
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 83.8
+    },
+    "odds": 0.001,
+    "tier": "Stretch",
+    "verdict": "marginal",
+    "marginDb": -4,
+    "downDb": 6,
+    "upDb": 4
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "hills",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 112.81704960407777,
+    "diffractionDb": 32.5704828199258,
+    "clutterDb": 10.115702479338843,
+    "pathLossDb": 155.5032349033424,
+    "abDb": 6.017365009937237,
+    "baDb": 4.017365009937237,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -299,
+    "tightest": {
+     "km": 0.5,
+     "raiseM": 224,
+     "end": "a",
+     "clearanceM": -38.4,
+     "zoneM": 12.9
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 83.8
+    },
+    "odds": 0.001,
+    "tier": "Stretch",
+    "verdict": "marginal",
+    "marginDb": -6,
+    "downDb": 6,
+    "upDb": 4
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "hills",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 112.81704960407777,
+    "diffractionDb": 32.5704828199258,
+    "clutterDb": 10.115702479338843,
+    "pathLossDb": 155.5032349033424,
+    "abDb": 6.017365009937237,
+    "baDb": 4.017365009937237,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -299,
+    "tightest": {
+     "km": 0.5,
+     "raiseM": 224,
+     "end": "a",
+     "clearanceM": -38.4,
+     "zoneM": 12.9
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 83.8
+    },
+    "odds": 0.001,
+    "tier": "Stretch",
+    "verdict": "marginal",
+    "marginDb": -6,
+    "downDb": 6,
+    "upDb": 4
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "hills",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 112.81704960407777,
+    "diffractionDb": 31.933947946646214,
+    "clutterDb": 73.86446280991737,
+    "pathLossDb": 218.61546036064135,
+    "abDb": -57.094860447361725,
+    "baDb": -59.094860447361725,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -270,
+    "tightest": {
+     "km": 0.5,
+     "raiseM": 225,
+     "end": "a",
+     "clearanceM": -34.8,
+     "zoneM": 12.9
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 84.4
+    },
+    "odds": 0.002,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -67.1,
+    "downDb": -57.1,
+    "upDb": -59.1
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "hills",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 112.81704960407777,
+    "diffractionDb": 31.933947946646214,
+    "clutterDb": 73.86446280991737,
+    "pathLossDb": 218.61546036064135,
+    "abDb": -57.094860447361725,
+    "baDb": -59.094860447361725,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -270,
+    "tightest": {
+     "km": 0.5,
+     "raiseM": 225,
+     "end": "a",
+     "clearanceM": -34.8,
+     "zoneM": 12.9
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 84.4
+    },
+    "odds": 0.002,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -69.1,
+    "downDb": -57.1,
+    "upDb": -59.1
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "hills",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 112.81704960407777,
+    "diffractionDb": 31.933947946646214,
+    "clutterDb": 73.86446280991737,
+    "pathLossDb": 218.61546036064135,
+    "abDb": -57.094860447361725,
+    "baDb": -59.094860447361725,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -270,
+    "tightest": {
+     "km": 0.5,
+     "raiseM": 225,
+     "end": "a",
+     "clearanceM": -34.8,
+     "zoneM": 12.9
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 84.4
+    },
+    "odds": 0.002,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -69.1,
+    "downDb": -57.1,
+    "upDb": -59.1
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "hills",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 112.81704960407777,
+    "diffractionDb": 31.933947946646214,
+    "clutterDb": 10.31404958677686,
+    "pathLossDb": 155.06504713750084,
+    "abDb": 6.455552775778784,
+    "baDb": 4.455552775778784,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -270,
+    "tightest": {
+     "km": 0.5,
+     "raiseM": 225,
+     "end": "a",
+     "clearanceM": -34.8,
+     "zoneM": 12.9
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 84.4
+    },
+    "odds": 0.002,
+    "tier": "Stretch",
+    "verdict": "marginal",
+    "marginDb": -3.5,
+    "downDb": 6.5,
+    "upDb": 4.5
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "hills",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 112.81704960407777,
+    "diffractionDb": 31.933947946646214,
+    "clutterDb": 10.31404958677686,
+    "pathLossDb": 155.06504713750084,
+    "abDb": 6.455552775778784,
+    "baDb": 4.455552775778784,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -270,
+    "tightest": {
+     "km": 0.5,
+     "raiseM": 225,
+     "end": "a",
+     "clearanceM": -34.8,
+     "zoneM": 12.9
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 84.4
+    },
+    "odds": 0.002,
+    "tier": "Stretch",
+    "verdict": "marginal",
+    "marginDb": -5.5,
+    "downDb": 6.5,
+    "upDb": 4.5
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "hills",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 112.81704960407777,
+    "diffractionDb": 31.933947946646214,
+    "clutterDb": 10.31404958677686,
+    "pathLossDb": 155.06504713750084,
+    "abDb": 6.455552775778784,
+    "baDb": 4.455552775778784,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -270,
+    "tightest": {
+     "km": 0.5,
+     "raiseM": 225,
+     "end": "a",
+     "clearanceM": -34.8,
+     "zoneM": 12.9
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 84.4
+    },
+    "odds": 0.002,
+    "tier": "Stretch",
+    "verdict": "marginal",
+    "marginDb": -5.5,
+    "downDb": 6.5,
+    "upDb": 4.5
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "hills",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 112.81704960407777,
+    "diffractionDb": 27.240347298507032,
+    "clutterDb": 56.71735537190083,
+    "pathLossDb": 196.77475227448562,
+    "abDb": -35.254152361205996,
+    "baDb": -37.254152361205996,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -223,
+    "tightest": {
+     "km": 6.4,
+     "raiseM": 197.5,
+     "end": "a",
+     "clearanceM": -71.6,
+     "zoneM": 32.1
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 71.6
+    },
+    "odds": 0.003,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -45.3,
+    "downDb": -35.3,
+    "upDb": -37.3
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "hills",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 112.81704960407777,
+    "diffractionDb": 27.240347298507032,
+    "clutterDb": 56.71735537190083,
+    "pathLossDb": 196.77475227448562,
+    "abDb": -35.254152361205996,
+    "baDb": -37.254152361205996,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -223,
+    "tightest": {
+     "km": 6.4,
+     "raiseM": 197.5,
+     "end": "a",
+     "clearanceM": -71.6,
+     "zoneM": 32.1
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 71.6
+    },
+    "odds": 0.003,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -47.3,
+    "downDb": -35.3,
+    "upDb": -37.3
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "hills",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 112.81704960407777,
+    "diffractionDb": 27.240347298507032,
+    "clutterDb": 56.71735537190083,
+    "pathLossDb": 196.77475227448562,
+    "abDb": -35.254152361205996,
+    "baDb": -37.254152361205996,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -223,
+    "tightest": {
+     "km": 6.4,
+     "raiseM": 197.5,
+     "end": "a",
+     "clearanceM": -71.6,
+     "zoneM": 32.1
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 71.6
+    },
+    "odds": 0.003,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -47.3,
+    "downDb": -35.3,
+    "upDb": -37.3
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "hills",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 112.81704960407777,
+    "diffractionDb": 27.240347298507032,
+    "clutterDb": 7.338842975206611,
+    "pathLossDb": 147.3962398777914,
+    "abDb": 14.124360035488223,
+    "baDb": 12.124360035488223,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -223,
+    "tightest": {
+     "km": 6.4,
+     "raiseM": 197.5,
+     "end": "a",
+     "clearanceM": -71.6,
+     "zoneM": 32.1
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 71.6
+    },
+    "odds": 0.003,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 4.1,
+    "downDb": 14.1,
+    "upDb": 12.1
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "hills",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 112.81704960407777,
+    "diffractionDb": 27.240347298507032,
+    "clutterDb": 7.338842975206611,
+    "pathLossDb": 147.3962398777914,
+    "abDb": 14.124360035488223,
+    "baDb": 12.124360035488223,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -223,
+    "tightest": {
+     "km": 6.4,
+     "raiseM": 197.5,
+     "end": "a",
+     "clearanceM": -71.6,
+     "zoneM": 32.1
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 71.6
+    },
+    "odds": 0.003,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 2.1,
+    "downDb": 14.1,
+    "upDb": 12.1
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "hills",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 112.81704960407777,
+    "diffractionDb": 27.240347298507032,
+    "clutterDb": 7.338842975206611,
+    "pathLossDb": 147.3962398777914,
+    "abDb": 14.124360035488223,
+    "baDb": 12.124360035488223,
+    "los": false
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": -223,
+    "tightest": {
+     "km": 6.4,
+     "raiseM": 197.5,
+     "end": "a",
+     "clearanceM": -71.6,
+     "zoneM": 32.1
+    },
+    "ridge": {
+     "km": 6.4,
+     "lat": 37.11067,
+     "lon": -80.168,
+     "groundM": 363.8,
+     "aboveRayM": 71.6
+    },
+    "odds": 0.003,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 2.1,
+    "downDb": 14.1,
+    "upDb": 12.1
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "flat",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 112.81704960407777,
+    "diffractionDb": 4.576875122591129,
+    "clutterDb": 159.60000000000002,
+    "pathLossDb": 276.9939247266689,
+    "abDb": -115.4733248133893,
+    "baDb": -117.4733248133893,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 12,
+    "tightest": {
+     "km": 6,
+     "raiseM": 64,
+     "end": "a",
+     "clearanceM": 3.9,
+     "zoneM": 32.2
+    },
+    "ridge": null,
+    "odds": 0.064,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -125.5,
+    "downDb": -115.5,
+    "upDb": -117.5
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "flat",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 112.81704960407777,
+    "diffractionDb": 4.576875122591129,
+    "clutterDb": 159.60000000000002,
+    "pathLossDb": 276.9939247266689,
+    "abDb": -115.4733248133893,
+    "baDb": -117.4733248133893,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 12,
+    "tightest": {
+     "km": 6,
+     "raiseM": 64,
+     "end": "a",
+     "clearanceM": 3.9,
+     "zoneM": 32.2
+    },
+    "ridge": null,
+    "odds": 0.064,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -127.5,
+    "downDb": -115.5,
+    "upDb": -117.5
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "flat",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 112.81704960407777,
+    "diffractionDb": 4.576875122591129,
+    "clutterDb": 159.60000000000002,
+    "pathLossDb": 276.9939247266689,
+    "abDb": -115.4733248133893,
+    "baDb": -117.4733248133893,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 12,
+    "tightest": {
+     "km": 6,
+     "raiseM": 64,
+     "end": "a",
+     "clearanceM": 3.9,
+     "zoneM": 32.2
+    },
+    "ridge": null,
+    "odds": 0.064,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -127.5,
+    "downDb": -115.5,
+    "upDb": -117.5
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "flat",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 112.81704960407777,
+    "diffractionDb": 4.576875122591129,
+    "clutterDb": 24,
+    "pathLossDb": 141.3939247266689,
+    "abDb": 20.126675186610726,
+    "baDb": 18.126675186610726,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 12,
+    "tightest": {
+     "km": 6,
+     "raiseM": 64,
+     "end": "a",
+     "clearanceM": 3.9,
+     "zoneM": 32.2
+    },
+    "ridge": null,
+    "odds": 0.064,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 10.1,
+    "downDb": 20.1,
+    "upDb": 18.1
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "flat",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 112.81704960407777,
+    "diffractionDb": 4.576875122591129,
+    "clutterDb": 24,
+    "pathLossDb": 141.3939247266689,
+    "abDb": 20.126675186610726,
+    "baDb": 18.126675186610726,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 12,
+    "tightest": {
+     "km": 6,
+     "raiseM": 64,
+     "end": "a",
+     "clearanceM": 3.9,
+     "zoneM": 32.2
+    },
+    "ridge": null,
+    "odds": 0.064,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 8.1,
+    "downDb": 20.1,
+    "upDb": 18.1
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "flat",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 112.81704960407777,
+    "diffractionDb": 4.576875122591129,
+    "clutterDb": 24,
+    "pathLossDb": 141.3939247266689,
+    "abDb": 20.126675186610726,
+    "baDb": 18.126675186610726,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 12,
+    "tightest": {
+     "km": 6,
+     "raiseM": 64,
+     "end": "a",
+     "clearanceM": 3.9,
+     "zoneM": 32.2
+    },
+    "ridge": null,
+    "odds": 0.064,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 8.1,
+    "downDb": 20.1,
+    "upDb": 18.1
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "flat",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 112.81704960407777,
+    "diffractionDb": 5.162706712548711,
+    "clutterDb": 159.60000000000002,
+    "pathLossDb": 277.5797563166265,
+    "abDb": -116.05915640334689,
+    "baDb": -118.05915640334689,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 7,
+    "tightest": {
+     "km": 9.6,
+     "raiseM": 42.5,
+     "end": "b",
+     "clearanceM": 1.8,
+     "zoneM": 25.7
+    },
+    "ridge": null,
+    "odds": 0.059,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -126.1,
+    "downDb": -116.1,
+    "upDb": -118.1
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "flat",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 112.81704960407777,
+    "diffractionDb": 5.162706712548711,
+    "clutterDb": 159.60000000000002,
+    "pathLossDb": 277.5797563166265,
+    "abDb": -116.05915640334689,
+    "baDb": -118.05915640334689,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 7,
+    "tightest": {
+     "km": 9.6,
+     "raiseM": 42.5,
+     "end": "b",
+     "clearanceM": 1.8,
+     "zoneM": 25.7
+    },
+    "ridge": null,
+    "odds": 0.059,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -128.1,
+    "downDb": -116.1,
+    "upDb": -118.1
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "flat",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 112.81704960407777,
+    "diffractionDb": 5.162706712548711,
+    "clutterDb": 159.60000000000002,
+    "pathLossDb": 277.5797563166265,
+    "abDb": -116.05915640334689,
+    "baDb": -118.05915640334689,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 7,
+    "tightest": {
+     "km": 9.6,
+     "raiseM": 42.5,
+     "end": "b",
+     "clearanceM": 1.8,
+     "zoneM": 25.7
+    },
+    "ridge": null,
+    "odds": 0.059,
+    "tier": "Stretch",
+    "verdict": "unlikely",
+    "marginDb": -128.1,
+    "downDb": -116.1,
+    "upDb": -118.1
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "flat",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 112.81704960407777,
+    "diffractionDb": 5.162706712548711,
+    "clutterDb": 23.801652892561982,
+    "pathLossDb": 141.78140920918847,
+    "abDb": 19.739190704091158,
+    "baDb": 17.739190704091158,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 7,
+    "tightest": {
+     "km": 9.6,
+     "raiseM": 42.5,
+     "end": "b",
+     "clearanceM": 1.8,
+     "zoneM": 25.7
+    },
+    "ridge": null,
+    "odds": 0.059,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 9.7,
+    "downDb": 19.7,
+    "upDb": 17.7
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "flat",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 112.81704960407777,
+    "diffractionDb": 5.162706712548711,
+    "clutterDb": 23.801652892561982,
+    "pathLossDb": 141.78140920918847,
+    "abDb": 19.739190704091158,
+    "baDb": 17.739190704091158,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 7,
+    "tightest": {
+     "km": 9.6,
+     "raiseM": 42.5,
+     "end": "b",
+     "clearanceM": 1.8,
+     "zoneM": 25.7
+    },
+    "ridge": null,
+    "odds": 0.059,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 7.7,
+    "downDb": 19.7,
+    "upDb": 17.7
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "flat",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 112.81704960407777,
+    "diffractionDb": 5.162706712548711,
+    "clutterDb": 23.801652892561982,
+    "pathLossDb": 141.78140920918847,
+    "abDb": 19.739190704091158,
+    "baDb": 17.739190704091158,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 7,
+    "tightest": {
+     "km": 9.6,
+     "raiseM": 42.5,
+     "end": "b",
+     "clearanceM": 1.8,
+     "zoneM": 25.7
+    },
+    "ridge": null,
+    "odds": 0.059,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 7.7,
+    "downDb": 19.7,
+    "upDb": 17.7
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "flat",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 112.81704960407777,
+    "diffractionDb": 1.2033274593800423,
+    "clutterDb": 65.9504132231405,
+    "pathLossDb": 179.97079028659832,
+    "abDb": -18.45019037331869,
+    "baDb": -20.45019037331869,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 43,
+    "tightest": {
+     "km": 9.2,
+     "raiseM": 7.5,
+     "end": "b",
+     "clearanceM": 11.6,
+     "zoneM": 27.2
+    },
+    "ridge": null,
+    "odds": 0.098,
+    "tier": "Possible",
+    "verdict": "unlikely",
+    "marginDb": -28.5,
+    "downDb": -18.5,
+    "upDb": -20.5
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "flat",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 112.81704960407777,
+    "diffractionDb": 1.2033274593800423,
+    "clutterDb": 65.9504132231405,
+    "pathLossDb": 179.97079028659832,
+    "abDb": -18.45019037331869,
+    "baDb": -20.45019037331869,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 43,
+    "tightest": {
+     "km": 9.2,
+     "raiseM": 7.5,
+     "end": "b",
+     "clearanceM": 11.6,
+     "zoneM": 27.2
+    },
+    "ridge": null,
+    "odds": 0.098,
+    "tier": "Possible",
+    "verdict": "unlikely",
+    "marginDb": -30.5,
+    "downDb": -18.5,
+    "upDb": -20.5
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "flat",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 112.81704960407777,
+    "diffractionDb": 1.2033274593800423,
+    "clutterDb": 65.9504132231405,
+    "pathLossDb": 179.97079028659832,
+    "abDb": -18.45019037331869,
+    "baDb": -20.45019037331869,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 43,
+    "tightest": {
+     "km": 9.2,
+     "raiseM": 7.5,
+     "end": "b",
+     "clearanceM": 11.6,
+     "zoneM": 27.2
+    },
+    "ridge": null,
+    "odds": 0.098,
+    "tier": "Possible",
+    "verdict": "unlikely",
+    "marginDb": -30.5,
+    "downDb": -18.5,
+    "upDb": -20.5
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "flat",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 112.81704960407777,
+    "diffractionDb": 1.2033274593800423,
+    "clutterDb": 3.3719008264462813,
+    "pathLossDb": 117.3922778899041,
+    "abDb": 44.12832202337553,
+    "baDb": 42.12832202337553,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 43,
+    "tightest": {
+     "km": 9.2,
+     "raiseM": 7.5,
+     "end": "b",
+     "clearanceM": 11.6,
+     "zoneM": 27.2
+    },
+    "ridge": null,
+    "odds": 0.098,
+    "tier": "Possible",
+    "verdict": "likely",
+    "marginDb": 34.1,
+    "downDb": 44.1,
+    "upDb": 42.1
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "flat",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 112.81704960407777,
+    "diffractionDb": 1.2033274593800423,
+    "clutterDb": 3.3719008264462813,
+    "pathLossDb": 117.3922778899041,
+    "abDb": 44.12832202337553,
+    "baDb": 42.12832202337553,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 43,
+    "tightest": {
+     "km": 9.2,
+     "raiseM": 7.5,
+     "end": "b",
+     "clearanceM": 11.6,
+     "zoneM": 27.2
+    },
+    "ridge": null,
+    "odds": 0.098,
+    "tier": "Possible",
+    "verdict": "likely",
+    "marginDb": 32.1,
+    "downDb": 44.1,
+    "upDb": 42.1
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "flat",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 112.81704960407777,
+    "diffractionDb": 1.2033274593800423,
+    "clutterDb": 3.3719008264462813,
+    "pathLossDb": 117.3922778899041,
+    "abDb": 44.12832202337553,
+    "baDb": 42.12832202337553,
+    "los": true
+   },
+   "answer": {
+    "km": 12,
+    "fresnelClearancePct": 43,
+    "tightest": {
+     "km": 9.2,
+     "raiseM": 7.5,
+     "end": "b",
+     "clearanceM": 11.6,
+     "zoneM": 27.2
+    },
+    "ridge": null,
+    "odds": 0.098,
+    "tier": "Possible",
+    "verdict": "likely",
+    "marginDb": 32.1,
+    "downDb": 44.1,
+    "upDb": 42.1
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "short",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 96.3388747851914,
+    "diffractionDb": 26.153938019895826,
+    "clutterDb": 19.380000000000003,
+    "pathLossDb": 141.87281280508722,
+    "abDb": 19.647787108192404,
+    "baDb": 17.647787108192404,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -289,
+    "tightest": {
+     "km": 0.45,
+     "raiseM": 55.5,
+     "end": "a",
+     "clearanceM": -31.1,
+     "zoneM": 10.8
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 31.3
+    },
+    "odds": 0.04,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 9.6,
+    "downDb": 19.6,
+    "upDb": 17.6
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "short",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 96.3388747851914,
+    "diffractionDb": 26.153938019895826,
+    "clutterDb": 19.380000000000003,
+    "pathLossDb": 141.87281280508722,
+    "abDb": 19.647787108192404,
+    "baDb": 17.647787108192404,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -289,
+    "tightest": {
+     "km": 0.45,
+     "raiseM": 55.5,
+     "end": "a",
+     "clearanceM": -31.1,
+     "zoneM": 10.8
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 31.3
+    },
+    "odds": 0.04,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 7.6,
+    "downDb": 19.6,
+    "upDb": 17.6
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "short",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 96.3388747851914,
+    "diffractionDb": 26.153938019895826,
+    "clutterDb": 19.380000000000003,
+    "pathLossDb": 141.87281280508722,
+    "abDb": 19.647787108192404,
+    "baDb": 17.647787108192404,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -289,
+    "tightest": {
+     "km": 0.45,
+     "raiseM": 55.5,
+     "end": "a",
+     "clearanceM": -31.1,
+     "zoneM": 10.8
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 31.3
+    },
+    "odds": 0.04,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 7.6,
+    "downDb": 19.6,
+    "upDb": 17.6
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "short",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 96.3388747851914,
+    "diffractionDb": 26.153938019895826,
+    "clutterDb": 2.5714285714285716,
+    "pathLossDb": 125.0642413765158,
+    "abDb": 36.45635853676383,
+    "baDb": 34.45635853676383,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -289,
+    "tightest": {
+     "km": 0.45,
+     "raiseM": 55.5,
+     "end": "a",
+     "clearanceM": -31.1,
+     "zoneM": 10.8
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 31.3
+    },
+    "odds": 0.04,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 26.5,
+    "downDb": 36.5,
+    "upDb": 34.5
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "short",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 96.3388747851914,
+    "diffractionDb": 26.153938019895826,
+    "clutterDb": 2.5714285714285716,
+    "pathLossDb": 125.0642413765158,
+    "abDb": 36.45635853676383,
+    "baDb": 34.45635853676383,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -289,
+    "tightest": {
+     "km": 0.45,
+     "raiseM": 55.5,
+     "end": "a",
+     "clearanceM": -31.1,
+     "zoneM": 10.8
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 31.3
+    },
+    "odds": 0.04,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 24.5,
+    "downDb": 36.5,
+    "upDb": 34.5
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "short",
+   "haM": 6,
+   "hbM": 6,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 96.3388747851914,
+    "diffractionDb": 26.153938019895826,
+    "clutterDb": 2.5714285714285716,
+    "pathLossDb": 125.0642413765158,
+    "abDb": 36.45635853676383,
+    "baDb": 34.45635853676383,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -289,
+    "tightest": {
+     "km": 0.45,
+     "raiseM": 55.5,
+     "end": "a",
+     "clearanceM": -31.1,
+     "zoneM": 10.8
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 31.3
+    },
+    "odds": 0.04,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 24.5,
+    "downDb": 36.5,
+    "upDb": 34.5
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "short",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 96.3388747851914,
+    "diffractionDb": 25.395121211466126,
+    "clutterDb": 21.66,
+    "pathLossDb": 143.3939959966575,
+    "abDb": 18.126603916622116,
+    "baDb": 16.126603916622116,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -271,
+    "tightest": {
+     "km": 0.45,
+     "raiseM": 54,
+     "end": "a",
+     "clearanceM": -29.3,
+     "zoneM": 10.8
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 29.9
+    },
+    "odds": 0.044,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 8.1,
+    "downDb": 18.1,
+    "upDb": 16.1
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "short",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 96.3388747851914,
+    "diffractionDb": 25.395121211466126,
+    "clutterDb": 21.66,
+    "pathLossDb": 143.3939959966575,
+    "abDb": 18.126603916622116,
+    "baDb": 16.126603916622116,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -271,
+    "tightest": {
+     "km": 0.45,
+     "raiseM": 54,
+     "end": "a",
+     "clearanceM": -29.3,
+     "zoneM": 10.8
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 29.9
+    },
+    "odds": 0.044,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 6.1,
+    "downDb": 18.1,
+    "upDb": 16.1
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "short",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 96.3388747851914,
+    "diffractionDb": 25.395121211466126,
+    "clutterDb": 21.66,
+    "pathLossDb": 143.3939959966575,
+    "abDb": 18.126603916622116,
+    "baDb": 16.126603916622116,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -271,
+    "tightest": {
+     "km": 0.45,
+     "raiseM": 54,
+     "end": "a",
+     "clearanceM": -29.3,
+     "zoneM": 10.8
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 29.9
+    },
+    "odds": 0.044,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 6.1,
+    "downDb": 18.1,
+    "upDb": 16.1
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "short",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 96.3388747851914,
+    "diffractionDb": 25.395121211466126,
+    "clutterDb": 2.742857142857143,
+    "pathLossDb": 124.47685313951466,
+    "abDb": 37.043746773764965,
+    "baDb": 35.043746773764965,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -271,
+    "tightest": {
+     "km": 0.45,
+     "raiseM": 54,
+     "end": "a",
+     "clearanceM": -29.3,
+     "zoneM": 10.8
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 29.9
+    },
+    "odds": 0.044,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 27,
+    "downDb": 37,
+    "upDb": 35
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "short",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 96.3388747851914,
+    "diffractionDb": 25.395121211466126,
+    "clutterDb": 2.742857142857143,
+    "pathLossDb": 124.47685313951466,
+    "abDb": 37.043746773764965,
+    "baDb": 35.043746773764965,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -271,
+    "tightest": {
+     "km": 0.45,
+     "raiseM": 54,
+     "end": "a",
+     "clearanceM": -29.3,
+     "zoneM": 10.8
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 29.9
+    },
+    "odds": 0.044,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 25,
+    "downDb": 37,
+    "upDb": 35
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "short",
+   "haM": 10,
+   "hbM": 1.5,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 96.3388747851914,
+    "diffractionDb": 25.395121211466126,
+    "clutterDb": 2.742857142857143,
+    "pathLossDb": 124.47685313951466,
+    "abDb": 37.043746773764965,
+    "baDb": 35.043746773764965,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -271,
+    "tightest": {
+     "km": 0.45,
+     "raiseM": 54,
+     "end": "a",
+     "clearanceM": -29.3,
+     "zoneM": 10.8
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 29.9
+    },
+    "odds": 0.044,
+    "tier": "Stretch",
+    "verdict": "likely",
+    "marginDb": 25,
+    "downDb": 37,
+    "upDb": 35
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "short",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 96.3388747851914,
+    "diffractionDb": 18.203358741191728,
+    "clutterDb": 13.68,
+    "pathLossDb": 128.22223352638312,
+    "abDb": 33.298366386896504,
+    "baDb": 31.298366386896504,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -122,
+    "tightest": {
+     "km": 0.54,
+     "raiseM": 30.5,
+     "end": "a",
+     "clearanceM": -13.9,
+     "zoneM": 11.4
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 13.9
+    },
+    "odds": 0.11,
+    "tier": "Possible",
+    "verdict": "likely",
+    "marginDb": 23.3,
+    "downDb": 33.3,
+    "upDb": 31.3
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "short",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 96.3388747851914,
+    "diffractionDb": 18.203358741191728,
+    "clutterDb": 13.68,
+    "pathLossDb": 128.22223352638312,
+    "abDb": 33.298366386896504,
+    "baDb": 31.298366386896504,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -122,
+    "tightest": {
+     "km": 0.54,
+     "raiseM": 30.5,
+     "end": "a",
+     "clearanceM": -13.9,
+     "zoneM": 11.4
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 13.9
+    },
+    "odds": 0.11,
+    "tier": "Possible",
+    "verdict": "likely",
+    "marginDb": 21.3,
+    "downDb": 33.3,
+    "upDb": 31.3
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "short",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 15,
+    "dbPerKm": 13.3
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 96.3388747851914,
+    "diffractionDb": 18.203358741191728,
+    "clutterDb": 13.68,
+    "pathLossDb": 128.22223352638312,
+    "abDb": 33.298366386896504,
+    "baDb": 31.298366386896504,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -122,
+    "tightest": {
+     "km": 0.54,
+     "raiseM": 30.5,
+     "end": "a",
+     "clearanceM": -13.9,
+     "zoneM": 11.4
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 13.9
+    },
+    "odds": 0.11,
+    "tier": "Possible",
+    "verdict": "likely",
+    "marginDb": 21.3,
+    "downDb": 33.3,
+    "upDb": 31.3
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "short",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "down",
+   "raw": {
+    "fsplDb": 96.3388747851914,
+    "diffractionDb": 18.203358741191728,
+    "clutterDb": 1.885714285714286,
+    "pathLossDb": 116.4279478120974,
+    "abDb": 45.092652101182225,
+    "baDb": 43.092652101182225,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -122,
+    "tightest": {
+     "km": 0.54,
+     "raiseM": 30.5,
+     "end": "a",
+     "clearanceM": -13.9,
+     "zoneM": 11.4
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 13.9
+    },
+    "odds": 0.11,
+    "tier": "Possible",
+    "verdict": "likely",
+    "marginDb": 35.1,
+    "downDb": 45.1,
+    "upDb": 43.1
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "short",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "up",
+   "raw": {
+    "fsplDb": 96.3388747851914,
+    "diffractionDb": 18.203358741191728,
+    "clutterDb": 1.885714285714286,
+    "pathLossDb": 116.4279478120974,
+    "abDb": 45.092652101182225,
+    "baDb": 43.092652101182225,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -122,
+    "tightest": {
+     "km": 0.54,
+     "raiseM": 30.5,
+     "end": "a",
+     "clearanceM": -13.9,
+     "zoneM": 11.4
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 13.9
+    },
+    "odds": 0.11,
+    "tier": "Possible",
+    "verdict": "likely",
+    "marginDb": 33.1,
+    "downDb": 45.1,
+    "upDb": 43.1
+   }
+  },
+  {
+   "radio": {
+    "freqMHz": 869.525,
+    "bwKHz": 250,
+    "sf": 11,
+    "cr": 5
+   },
+   "profile": "short",
+   "haM": 30,
+   "hbM": 8,
+   "clutter": {
+    "canopyM": 10,
+    "dbPerKm": 2
+   },
+   "direction": "both",
+   "raw": {
+    "fsplDb": 96.3388747851914,
+    "diffractionDb": 18.203358741191728,
+    "clutterDb": 1.885714285714286,
+    "pathLossDb": 116.4279478120974,
+    "abDb": 45.092652101182225,
+    "baDb": 43.092652101182225,
+    "los": false
+   },
+   "answer": {
+    "km": 1.8,
+    "fresnelClearancePct": -122,
+    "tightest": {
+     "km": 0.54,
+     "raiseM": 30.5,
+     "end": "a",
+     "clearanceM": -13.9,
+     "zoneM": 11.4
+    },
+    "ridge": {
+     "km": 0.54,
+     "lat": 37.106,
+     "lon": -80.182,
+     "groundM": 298.1,
+     "aboveRayM": 13.9
+    },
+    "odds": 0.11,
+    "tier": "Possible",
+    "verdict": "likely",
+    "marginDb": 33.1,
+    "downDb": 45.1,
+    "upDb": 43.1
+   }
+  }
+ ]
+}

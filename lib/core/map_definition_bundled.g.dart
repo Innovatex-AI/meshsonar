@@ -5,13 +5,18 @@
 const String kBundledMapDefinitionJson = r'''
 {
   "v": 1,
-  "schemaMinor": 1,
+  "schemaMinor": 2,
   "capabilities": [
     "basemap.topo",
     "basemap.satellite",
     "layer.estimated",
     "layer.redundancy",
-    "layer.snrlinks"
+    "layer.snrlinks",
+    "layer.plan",
+    "plan.link",
+    "plan.coverage",
+    "plan.suggest",
+    "plan.share"
   ],
   "scope": {
     "kind": "region",
@@ -724,6 +729,41 @@ const String kBundledMapDefinitionJson = r'''
           "label": "Moving phone (approximate, ~5 km; fades 10 min after last heard)"
         }
       ]
+    },
+    {
+      "id": "plan",
+      "name": "Plan",
+      "group": "network",
+      "defaultOn": false,
+      "minZoom": 0,
+      "maxZoom": 22,
+      "source": {
+        "type": "local",
+        "what": "the plan's planned nodes, their predicted footprints and planned links (client-drawn from the plan JSON)"
+      },
+      "style": "plan",
+      "tap": "none",
+      "panelOnly": true,
+      "hint": "Your planned repeaters and links; a prediction, not a measurement.",
+      "legend": [
+        {
+          "kind": "symbol",
+          "symbol": "plan",
+          "label": "Planned repeater (dashed ring: not built yet)"
+        },
+        {
+          "kind": "bands",
+          "from": 5,
+          "to": 1,
+          "note": "Predicted signal from the planned repeaters"
+        },
+        {
+          "kind": "symbol",
+          "symbol": "planlink",
+          "state": "likely",
+          "label": "Planned link, likely to work (colour = verdict; dashed because it is a model)"
+        }
+      ]
     }
   ],
   "palettes": [
@@ -1126,6 +1166,34 @@ const String kBundledMapDefinitionJson = r'''
         "dark": "#0D1B26"
       },
       "casingOpacity": 0.6
+    },
+    "plan": {
+      "icon": "tower",
+      "sizePx": 24,
+      "ring": "dashed",
+      "colours": {
+        "light": {
+          "icon": "#FFFFFF",
+          "disc": "#6A1B9A",
+          "ring": "#6A1B9A"
+        },
+        "dark": {
+          "icon": "#12161B",
+          "disc": "#CE93D8",
+          "ring": "#CE93D8"
+        }
+      },
+      "footprintOpacity": 0.45,
+      "linkWidthPx": 3,
+      "linkDash": [
+        6,
+        4
+      ],
+      "verdictBand": {
+        "likely": 5,
+        "marginal": 3,
+        "unlikely": 1
+      }
     }
   },
   "labels": {
@@ -1231,10 +1299,44 @@ const String kBundledMapDefinitionJson = r'''
   "panels": [
     "layers",
     "live",
+    "plan",
     "cell:<res-11 H3 id>",
     "repeater:<public key>",
     "observer:<key>"
   ],
+  "plan": {
+    "planV": 1,
+    "maxNodes": 30,
+    "goals": [
+      {
+        "id": "coverage",
+        "name": "Coverage"
+      },
+      {
+        "id": "links",
+        "name": "Links"
+      },
+      {
+        "id": "redundancy",
+        "name": "Redundancy"
+      },
+      {
+        "id": "overall",
+        "name": "Best overall"
+      }
+    ],
+    "defaultGoal": "overall",
+    "share": {
+      "base": "https://meshsonar.com/share/plan",
+      "fragment": true,
+      "codec": "deflate+base64url"
+    },
+    "endpoints": {
+      "link": "plan-link",
+      "verify": "plan-verify",
+      "suggest": "plan-suggest"
+    }
+  },
   "coverage": {
     "v": 1,
     "res": 11,
@@ -1403,6 +1505,6 @@ const String kBundledMapDefinitionJson = r'''
     "heardAt": "2026-11-09T00:00:00.000Z",
     "heardCells": 1
   },
-  "version": "c79801aa"
+  "version": "d45b430c"
 }
 ''';

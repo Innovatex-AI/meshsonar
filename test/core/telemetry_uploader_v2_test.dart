@@ -164,17 +164,16 @@ void main() {
     expect(got, {'key': 'ab', 'kind': 'mobile'});
   });
 
-  test('home and background packets never share a batch; home batches say mode home and carry no cell', () async {
+  test('drive and background packets never share a batch; each batch says its mode', () async {
     final u = make();
     u.add(advert());
-    u.add(advert(mode: ObserverMode.home));
+    u.add(advert(mode: ObserverMode.drive));
     await u.flush();
     clock = clock.add(const Duration(seconds: 6));
     await u.flush();
     expect(tx.posts, hasLength(2));
     expect((tx.posts[0]['observer'] as Map)['mode'], 'background');
-    expect((tx.posts[1]['observer'] as Map)['mode'], 'home');
-    expect(((tx.posts[1]['packets'] as List).single as Map).containsKey('cell'), isFalse);
+    expect((tx.posts[1]['observer'] as Map)['mode'], 'drive');
   });
 
   test('foreground cadence: at most one batch every 5 s', () async {

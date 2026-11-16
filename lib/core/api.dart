@@ -8,15 +8,19 @@ import 'colour_palette.dart';
 import 'drive_context_wire.dart' show ContextUploadResult, DriveContextBatch;
 import 'driver_account.dart';
 import 'driver_summary.dart' show DriverSummary;
-import 'home_observer.dart' show HomeObserverConfig;
 import 'model.dart';
 import 'map_links.dart';
+import 'mqtt_contract.dart';
+import 'plan_contract.dart';
 import 'node_claim.dart';
 import 'privacy_zones.dart';
 import 'repeater_reach.dart';
 import 'region_lookup.dart';
 import 'server_url.dart';
 import 'units.dart';
+
+export 'mqtt_contract.dart';
+export 'plan_contract.dart';
 
 /// Per-session numbers for lists.
 class SessionSummary {
@@ -531,6 +535,25 @@ abstract class CmatClient {
   /// value clears that field. Returns the updated claim.
   Future<NodeClaim> updateClaim(String driverKey, String pubkey, Map<String, Object?> changes) =>
       throw const CmatException('not supported by this client');
+
+  // ---------- Master Planner (release 0.38; lib/core/plan_contract.dart). Public, no driver key; the region is this
+  // client's server (its Host), never a body field. Throws [CmatException] (400 bad input with a plain-words `error`,
+  // 404/501 = this server does not offer it, 429 with `retryAfterSec`, 503 busy) or on a network failure (status null).
+
+  /// `POST /api/cmh/plan-link` (`capabilities['plan.link']`): profile, Fresnel clearance, tightest point and metres to
+  /// raise, blocking ridge, terrain odds and verdict, and measured evidence for a pair of known nodes.
+  Future<PlanLinkResult> planLink(PlanLinkRequest request) => throw const CmatException('not supported by this client');
+
+  /// `POST /api/cmh/plan-verify` (`capabilities['plan.coverage']`): the modelled footprint of one site and what it adds
+  /// to today's coverage.
+  Future<PlanVerifyResult> planVerify(PlanVerifyRequest request) => throw const CmatException('not supported by this client');
+
+  /// `POST /api/cmh/plan-suggest` (`capabilities['plan.suggest']`): ranked candidate sites for a goal inside a box.
+  Future<PlanSuggestResult> planSuggest(PlanSuggestRequest request) => throw const CmatException('not supported by this client');
+
+  /// `GET /api/cmh/mqtt-presets` (public read, ETag): the MQTT broker presets. [ifNoneMatch] = the ETag of the copy the
+  /// app holds; the answer is then [MqttPresetFetch.notModified] when it did not change.
+  Future<MqttPresetFetch> mqttPresets({String? ifNoneMatch}) => throw const CmatException('not supported by this client');
 }
 
 /// The server's answer to a drive-context erase.
@@ -705,15 +728,6 @@ class Settings {
   /// the H3 res-7 cell the phone was in); true = "Region only" (no cell). Written only when true.
   final bool telemetryRegionOnly;
 
-  /// Home observer (lib/core/home_observer.dart): where the phone sits at home and how the public map shows it; null =
-  /// never set up. Written only when set.
-  final HomeObserverConfig? homeObserver;
-
-  /// The antenna the radio uses at home (Settings > Home observer > Antenna at home), sent in the observer block's
-  /// `radio.antenna` while Home observer is on; null = "Don't know" (sent as `unknown`, the default). Drive and background
-  /// mode keep sending the drive antenna. Kept when Home observer is turned off; written only when set.
-  final AntennaMount? homeAntenna;
-
   /// Map: write each repeater's name next to its marker (the "Repeater names" map layer). On by default; the layers
   /// sheet switch persists here.
   final bool mapRepeaterLabels;
@@ -744,6 +758,13 @@ class Settings {
   /// Drive-context categories (or `all`) whose erase on the server was asked for but has not gone through yet (offline,
   /// rate limit). Retried automatically; written only when non-empty so a default settings.json is unchanged.
   final Set<String> contextErasePending;
+
+  /// MQTT feeds to other MeshCore sites (Settings > Observer; lib/core/mqtt_contract.dart), at most [maxMqttSlots], in the
+  /// order shown. Every slot is off until turned on; passwords are never here (Keychain). Written only when non-empty.
+  final List<MqttSlotSettings> mqttSlots;
+
+  /// How many MQTT feed slots there are.
+  static const int maxMqttSlots = 10;
 
   bool collectionOn(String id) => id == 'packet_headers' ? telemetryEnabled : !collectionOff.contains(id);
 
@@ -787,8 +808,6 @@ class Settings {
     this.unitOverrides = const UnitOverrides(),
     this.telemetryEnabled = true,
     this.telemetryRegionOnly = false,
-    this.homeObserver,
-    this.homeAntenna,
     this.mapRepeaterLabels = true,
     this.colourPalette = ColourPalette.standard,
     this.baseMapStyle = 'chart',
@@ -797,6 +816,7 @@ class Settings {
     this.haptics = true,
     this.collectionOff = const {},
     this.contextErasePending = const {},
+    this.mqttSlots = const [],
   });
 
   Settings copyWith({
@@ -824,10 +844,6 @@ class Settings {
     UnitOverrides? unitOverrides,
     bool? telemetryEnabled,
     bool? telemetryRegionOnly,
-    HomeObserverConfig? homeObserver,
-    bool clearHomeObserver = false,
-    AntennaMount? homeAntenna,
-    bool clearHomeAntenna = false,
     bool? mapRepeaterLabels,
     ColourPalette? colourPalette,
     String? baseMapStyle,
@@ -836,6 +852,7 @@ class Settings {
     bool? haptics,
     Set<String>? collectionOff,
     Set<String>? contextErasePending,
+    List<MqttSlotSettings>? mqttSlots,
     bool clearKey = false,
   }) =>
       Settings(
@@ -862,8 +879,6 @@ class Settings {
         unitOverrides: unitOverrides ?? this.unitOverrides,
         telemetryEnabled: telemetryEnabled ?? this.telemetryEnabled,
         telemetryRegionOnly: telemetryRegionOnly ?? this.telemetryRegionOnly,
-        homeObserver: clearHomeObserver ? null : (homeObserver ?? this.homeObserver),
-        homeAntenna: clearHomeAntenna ? null : (homeAntenna ?? this.homeAntenna),
         mapRepeaterLabels: mapRepeaterLabels ?? this.mapRepeaterLabels,
         colourPalette: colourPalette ?? this.colourPalette,
         baseMapStyle: baseMapStyle ?? this.baseMapStyle,
@@ -872,6 +887,7 @@ class Settings {
         haptics: haptics ?? this.haptics,
         collectionOff: collectionOff ?? this.collectionOff,
         contextErasePending: contextErasePending ?? this.contextErasePending,
+        mqttSlots: mqttSlots == null ? this.mqttSlots : _slotsCapped(mqttSlots),
       );
 
   Map<String, dynamic> toJson() => {
@@ -899,8 +915,6 @@ class Settings {
         if (!unitOverrides.isEmpty) 'unit_overrides': unitOverrides.toJson(),
         if (!telemetryEnabled) 'telemetry_enabled': false,
         if (telemetryRegionOnly) 'telemetry_location': 'region',
-        if (homeObserver != null) 'home_observer': homeObserver!.toJson(),
-        if (homeAntenna != null) 'home_antenna': homeAntenna!.name,
         if (!mapRepeaterLabels) 'map_repeater_labels': false,
         if (colourPalette != ColourPalette.standard) 'colour_palette': colourPalette.id,
         if (baseMapStyle != 'chart') 'base_map_style': baseMapStyle,
@@ -909,6 +923,7 @@ class Settings {
         if (!haptics) 'haptics': false,
         if (collectionOff.isNotEmpty) 'collection_off': collectionOff.toList()..sort(),
         if (contextErasePending.isNotEmpty) 'context_erase_pending': contextErasePending.toList()..sort(),
+        if (mqttSlots.isNotEmpty) 'mqtt_slots': [for (final m in mqttSlots) m.toJson()],
       };
   factory Settings.fromJson(Map<String, dynamic> j) => Settings(
         serverUrl: _str(j['server_url']) ?? defaultServerUrl,
@@ -937,8 +952,7 @@ class Settings {
         unitOverrides: UnitOverrides.fromJson(j['unit_overrides']),
         telemetryEnabled: j['telemetry_enabled'] is bool ? j['telemetry_enabled'] as bool : true,
         telemetryRegionOnly: j['telemetry_location'] == 'region',
-        homeObserver: HomeObserverConfig.fromJson(j['home_observer']),
-        homeAntenna: AntennaMount.values.where((m) => m.name == j['home_antenna']).firstOrNull,
+        // `home_observer` / `home_antenna` (the Home observer, removed in 0.38) are ignored on read and not written again.
         mapRepeaterLabels: j['map_repeater_labels'] is bool ? j['map_repeater_labels'] as bool : true,
         colourPalette: ColourPalette.parse(j['colour_palette']),
         baseMapStyle: _str(j['base_map_style']) ?? 'chart',
@@ -955,7 +969,20 @@ class Settings {
             for (final v in l)
               if (v is String && v.isNotEmpty) v,
         },
+        mqttSlots: _slotsCapped([
+          if (j['mqtt_slots'] case final List l)
+            for (final v in l) ?MqttSlotSettings.tryParse(v),
+        ]),
       );
+
+  /// Slots with a unique id, at most [maxMqttSlots] (the first ones win).
+  static List<MqttSlotSettings> _slotsCapped(List<MqttSlotSettings> slots) {
+    final seen = <String>{};
+    return List.unmodifiable([
+      for (final m in slots)
+        if (seen.add(m.id)) m,
+    ].take(maxMqttSlots));
+  }
 
   /// A string field; anything else is null so the default applies.
   static String? _str(Object? v) => v is String ? v : null;

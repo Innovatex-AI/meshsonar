@@ -2,6 +2,7 @@
 // Data: `region-repeater` on the region host (lib/core/repeater_detail_api.dart). Every state is honest: loading,
 // not found in this region, offline/error with retry, and the server's own `Sourced` state (partial / pending /
 // stale / unavailable) shown as a banner. Unknown values render as "unknown", never as zero.
+// Under the identity: the node actions (Plan from here, Add to plan, Link to…, Ping, Claim, Administer).
 // Ends with "Your drives" (your_drives_section.dart): how the drives stored on this phone heard this repeater.
 import '../map/map_preview.dart';
 import 'dart:math' as math;
@@ -18,6 +19,8 @@ import '../charts/sparkline.dart';
 import '../theme.dart';
 import '../repeater_reach_section.dart';
 import '../your_drives_section.dart';
+import '../nodes/node_actions.dart' show NodeActionBar;
+import '../nodes/node_ref.dart';
 import 'snr_trend_card.dart';
 import '../design/app_surfaces.dart';
 
@@ -163,6 +166,7 @@ class _RepeaterDetailScreenState extends State<RepeaterDetailScreen> {
             ),
           if (!d.status.isReady) _statusBanner(context, d.status),
           _identity(context, row),
+          NodeActionBar(node: nodeRefOfRow(row)),
           const SizedBox(height: Gap.l),
           _stats(context, row, d),
           const SizedBox(height: Gap.l),
@@ -730,6 +734,22 @@ class _StatTile extends StatelessWidget {
     );
   }
 }
+
+/// The region row as the one node object (its actions: ui/nodes/node_actions.dart). A row of unknown role is a repeater:
+/// the region page lists repeaters and rooms.
+NodeRef nodeRefOfRow(RepeaterRowInfo r) => NodeRef(
+      key: r.key,
+      name: r.displayName,
+      kind: switch (r.role) {
+        'room' => NodeKind.room,
+        'companion' => NodeKind.companion,
+        'sensor' => NodeKind.sensor,
+        _ => NodeKind.repeater,
+      },
+      lat: r.lat,
+      lon: r.lon,
+      source: NodeSource.region,
+    );
 
 String _roleLabel(String r) => switch (r) {
   'repeater' => 'Repeater',

@@ -15,8 +15,8 @@
 
 /// Where a category's data goes once collected.
 enum CategoryDestination {
-  /// The shared live packet feed (`POST /api/cmh/telemetry`). Never carries coordinates (an H3 res-7 cell at most; the
-  /// home observer position goes separately, only when the person turns Home observer on).
+  /// The shared live packet feed (`POST /api/cmh/telemetry`). Never carries coordinates outside a drive (an H3 res-7 cell
+  /// at most; during a drive the drive's exact position after the drive privacy rules).
   telemetryFeed,
 
   /// Recorded with the driver's own drive on this phone; uploaded with that drive only when the server advertises
@@ -99,14 +99,15 @@ const String collectionDisclosureHeading =
 const List<DataCategory> dataCategories = [
   DataCategory(
     id: CategoryId.packetHeaders,
-    title: 'Share what my radio hears (observer)',
+    title: 'Share with MeshSonar',
     // Same facts as lib/ui/settings/data_sharing.dart telemetryCategory ("Shared" / "Never shared" bullets).
-    disclosure: 'What your radio hears, as an observer: packet type, the repeaters it passed through, signal strength '
-        '(SNR, RSSI), time, region and (unless you choose Region only) the ~5 km area you were in; public packets '
-        '(adverts, path, trace, Public and # channel messages) in full; repeats of your own pings; during a drive the '
-        'drive\'s exact position after your drive privacy; your radio\'s settings and a status every 5 minutes; a random '
-        'observer number; with Home observer on, the home position you place. Shared to the live map. Never direct messages or '
-        'private channels, never your name or radio key, never your exact position outside a drive.',
+    disclosure: 'Whenever your radio is connected and the app is open, your phone is an observer and shares what your '
+        'radio hears: packet type, the repeaters it passed through, signal strength (SNR, RSSI), time, region and '
+        '(unless you choose Region only) the ~5 km area you were in; public packets (adverts, path, trace, Public and # '
+        'channel messages) in full; repeats of your own pings, marked as yours; during a drive the drive\'s exact position '
+        'after your drive privacy; your radio\'s settings and a status every 5 minutes; a random observer number. Shared '
+        'to the live map. Never direct messages or private channels, never your name or radio key, never your exact '
+        'position outside a drive.',
     fields: [],
     destination: CategoryDestination.telemetryFeed,
     availability: CategoryAvailability.live,

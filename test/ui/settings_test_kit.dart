@@ -89,6 +89,10 @@ class DiskHarness extends Harness {
       regionIndexCache: b.regionIndexCache,
       regionCache: regionCache,
       directory: nodeMap,
+      observerEngineFactory: b.observerEngineFactory,
+      planRepository: b.planRepository,
+      incomingLinks: b.incomingLinks,
+      secretStore: b.secretStore,
     );
   }
 

@@ -10,7 +10,6 @@ import 'app/map_definition_wiring.dart';
 import 'app/wiring.dart';
 import 'platform/map_prefs_store.dart' show openSharedMapPrefs;
 import 'ui/app.dart';
-import 'ui/device_feedback.dart' show PlatformDeviceFeedback;
 import 'ui/map/offline_basemap.dart' show OfflineBasemap;
 
 Future<void> main() async {
@@ -22,8 +21,6 @@ Future<void> main() async {
     // Offline packs' coverage snapshots stand in for the coverage layers when the network fails (M2).
     AppState.coverageOfflineTiles = OfflineBasemap.instance.coverageTile;
     final state = AppState(services);
-    // Home observer keeps the screen awake while it is on (lib/app/app_state.dart _applyHomeMode).
-    state.keepAwakeHook = (on) => unawaited(const PlatformDeviceFeedback().keepAwake(on));
     AlertsRuntime? alerts;
     try {
       // Notifications, the link's lifecycle log and reconnect-on-launch. Never prompts at launch. A failure here must not
@@ -31,6 +28,11 @@ Future<void> main() async {
       alerts = await AlertsRuntime.createReal();
       AlertsHost.runtime.value = alerts;
       alerts.bindApp(state);
+      // The app is an observer whenever a radio is connected (observer everywhere, Nov 15 2026): a radio that dropped by
+      // itself outside a drive comes back through the saved-radio auto-connect, which honours Settings > Radio >
+      // Auto-connect (Always, the default) and a radio the person released on purpose.
+      final reconnect = alerts.reconnect;
+      if (reconnect != null) state.onRadioDropped = () => unawaited(reconnect.run(reason: 'foreground'));
     } catch (_) {}
     runApp(MeshSonarApp(state: state));
     await state.init();

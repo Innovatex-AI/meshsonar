@@ -13,10 +13,65 @@ import '../always_location_screen.dart';
 import '../app.dart';
 import 'data_sharing.dart';
 import 'delete_my_data.dart';
-import 'home_observer_screen.dart';
 import 'privacy_zones_screen.dart';
 import 'settings_index.dart';
 import 'settings_kit.dart';
+
+/// The searchable rows of this section (spread into settingsEntries by settings_index.dart, in this order). Each id is a
+/// SettingsAnchor below.
+const List<SettingsEntry> privacySettingsEntries = [
+  SettingsEntry('telemetry-toggle', 'privacy', 'Share with MeshSonar',
+      'Whenever your radio is connected and the app is open, your phone is an observer: public packets and signal strength your radio hears go to the live map. Never private messages or private channels.',
+      keywords: ['telemetry', 'observer', 'share what my radio hears', 'sharing', 'data collection', 'opt out', 'live feed', 'packets', 'packet headers', 'privacy']),
+  SettingsEntry('telemetry-location', 'privacy', 'Observer location',
+      'Approximate (~5 km hexagon, the default) or Region only. Never your exact position.',
+      keywords: ['location', 'observer', 'approximate', 'region only', 'hexagon', '5 km', 'privacy', 'telemetry']),
+  // Drive-context categories (stream 7; titles = lib/core/data_categories.dart).
+  SettingsEntry('collect-motion-toggle', 'privacy', 'Motion and altitude',
+      'GPS height, direction of travel and accuracy, saved with your drive (uploaded with it when the server accepts it).',
+      keywords: ['altitude', 'height', 'heading', 'course', 'gps accuracy', 'data collection', 'opt out']),
+  SettingsEntry('collect-barometer-toggle', 'privacy', 'Air pressure',
+      'Phone barometer during a drive, saved with your drive (uploaded with it when the server accepts it).',
+      keywords: ['barometer', 'pressure', 'hpa', 'inhg', 'motion & fitness', 'sensor', 'data collection', 'opt out']),
+  SettingsEntry('collect-phone_battery-toggle', 'privacy', 'Phone battery',
+      'Battery level and charging during a drive, saved with your drive (uploaded with it when the server accepts it).',
+      keywords: ['battery', 'charging', 'low power', 'data collection', 'opt out']),
+  SettingsEntry('collect-device-toggle', 'privacy', 'Phone and app details',
+      'System version, phone model code and app build, saved with your drive (uploaded with it when the server accepts it).',
+      keywords: ['device', 'model', 'ios version', 'android version', 'build', 'data collection', 'opt out']),
+  SettingsEntry('collect-radio_health-toggle', 'privacy', 'Radio health',
+      'Radio battery, uptime, error flags, packet counters and airtime during a drive, saved with your drive (uploaded with it when the server accepts it).',
+      keywords: ['radio battery', 'uptime', 'airtime', 'counters', 'stats', 'errors', 'data collection', 'opt out']),
+  SettingsEntry('collect-radio_config-toggle', 'privacy', 'Radio settings',
+      'Board, firmware and power limits of your radio, saved with your drive (uploaded with it when the server accepts it).',
+      keywords: ['firmware', 'board', 'max power', 'radio settings', 'data collection', 'opt out']),
+  SettingsEntry('collect-weather-toggle', 'privacy', 'Weather for my drives',
+      'The server looks up weather near your uploaded drives, on a coarse grid, when it supports it. Data: Open-Meteo.com.',
+      keywords: ['weather', 'temperature', 'open-meteo', 'data collection', 'opt out']),
+  SettingsEntry('telemetry-erase-now', 'privacy', 'Erase shared observer packets',
+      'Asks the server to delete every packet this phone sent as an observer.',
+      keywords: ['delete', 'erase', 'remove', 'telemetry', 'gdpr'], available: _privacyHasKey),
+  SettingsEntry('delete-my-data', 'privacy', 'Delete my data and account',
+      'Deletes the drive context and observer packets the server holds for you, the context and drives saved on this phone, and your account on the website.',
+      keywords: ['delete', 'erase', 'remove', 'gdpr', 'my data', 'privacy', 'forget', 'context', 'weather', 'sensors', 'account', 'driver key', 'drives']),
+  SettingsEntry('privacy-policy', 'privacy', 'Privacy policy',
+      'What MeshSonar shows in public and what stays yours, on meshsonar.com.',
+      keywords: ['privacy policy', 'policy', 'terms', 'legal']),
+  SettingsEntry('privacy-what-shared', 'privacy', 'What MeshSonar shares',
+      'Everything that leaves this phone, where it goes, and what never does.',
+      keywords: ['data', 'collected', 'disclosure', 'shared', 'privacy policy']),
+  SettingsEntry('privacy-location', 'privacy', 'Location while driving',
+      'Why the app asks for "Always" location and what it is never used for.',
+      keywords: ['gps', 'always', 'background', 'location', 'permission', 'tracking']),
+  SettingsEntry('privacy-zones', 'privacy', 'Privacy zones',
+      'Places where your pings are hidden from the public map, and how much of the start and end of each drive is trimmed.',
+      keywords: ['privacy zone', 'zones', 'home', 'hide', 'trim', 'start and end', 'private', 'map', 'location']),
+  SettingsEntry('privacy-zones-website', 'privacy', 'Manage privacy zones on the website',
+      'Hide pings near places like home, on the website. Applies to drives on the server.',
+      keywords: ['home', 'hide', 'zone', 'website']),
+];
+
+bool _privacyHasKey(AppState s) => s.hasKey;
 
 const String privacyHelp =
     'Everything that leaves this phone is listed here, with its own switch where you can turn '
@@ -32,17 +87,6 @@ List<Widget> privacySectionRows(BuildContext context) {
       ),
       if (identical(c, telemetryCategory)) ...[
         const SettingsAnchor(id: 'telemetry-location', child: TelemetryLocationTile()),
-        SettingsAnchor(
-          id: 'home-observer',
-          child: ListTile(
-            key: const Key('home-observer'),
-            leading: const Icon(Icons.home_work_outlined),
-            title: Text(settingsEntry('home-observer').title),
-            subtitle: Text(s.homeObserverActive ? 'On: this phone is a fixed observer at home.' : settingsEntry('home-observer').summary),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const HomeObserverScreen())),
-          ),
-        ),
       ],
     ],
     if (s.hasKey)

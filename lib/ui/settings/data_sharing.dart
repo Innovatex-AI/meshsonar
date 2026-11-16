@@ -137,11 +137,7 @@ bool _telemetryErasePending(AppState s) => s.telemetryErasePending;
 String? _telemetryStatus(AppState s) {
   final waiting = s.telemetryQueued;
   if (!s.hasKey) return 'On, but nothing is collected until this phone has a driver key.';
-  final parts = [
-    if (waiting > 0) '$waiting waiting on this phone to be sent.',
-    if (s.homeObserverActive) 'Home observer is on.',
-  ];
-  return parts.isEmpty ? null : parts.join(' ');
+  return waiting > 0 ? '$waiting waiting on this phone to be sent.' : null;
 }
 
 /// The phone observer (lib/core/telemetry.dart is the record; its wire keys are pinned by a test; contract meshsonar-infra
@@ -150,12 +146,14 @@ String? _telemetryStatus(AppState s) {
 const DataCategory telemetryCategory = DataCategory(
   id: 'telemetry',
   toggleKey: 'telemetry-toggle',
-  title: 'Share what my radio hears (observer)',
-  summary: 'Your phone is always an observer, also during drives: public packets, signal strength, time, region and '
-      'your ~5 km area (the drive position during a drive). Never private messages or private channels.',
-  disclosureTitle: 'Make your phone an observer',
-  disclosureLead: 'MeshSonar can share what your radio overhears on the mesh, so everyone gets a live view of the '
-      'network: which repeaters are heard where, and how well. This is on unless you turn it off.',
+  title: 'Share with MeshSonar',
+  summary: 'Whenever your radio is connected and the app is open, your phone is an observer: it shares public packets, '
+      'signal strength, time, region and your ~5 km area (the drive position during a drive). Never private messages or '
+      'private channels.',
+  disclosureTitle: 'Your phone is an observer',
+  disclosureLead: 'Whenever your radio is connected and the app is open, MeshSonar shares what your radio hears (public '
+      'packets only), so everyone gets a live view of the mesh: which repeaters are heard where, and how well. On unless '
+      'you turn it off; turn it off here or in Settings any time.',
   shared: [
     'For every packet: its packet type, route type, the repeaters it passed through (short path codes), signal strength (SNR, '
         'RSSI), the time it was heard and a fingerprint (a hash) so copies heard by others are counted once',
@@ -174,18 +172,17 @@ const DataCategory telemetryCategory = DataCategory(
         'antenna is mounted, and every 5 minutes while connected that this phone is still listening',
     'A random observer number made on this phone (not linked to you, your radio or your driver key; a new one after an '
         'erase), the app version and phone platform (iOS or Android)',
-    'Home observer only, if you turn it on: the home position you place on the map. The public map shows it exactly or '
-        'rounded to about 1 km, as you choose',
   ],
   neverShared: [
     'Direct messages and private channels (those packets are never recorded at all)',
     'Your name, your radio\'s name or public key, and adverts your own radio sends',
-    'Your exact position outside a drive (only the ~5 km area, or the region; the home position only in Home observer mode)',
-    'Your own pings and their echoes',
+    'Your exact position outside a drive (only the ~5 km area, or the region)',
+    'The contents of your own pings that you keep off the public map (their repeats go as header and signal only)',
+    'Anything to other sites: an MQTT feed gets packets only if you add one yourself in Settings > Observer',
   ],
-  destination: 'Collected only while this phone has a driver key, and sent only to your server '
-      '(the Server URL in Settings) once the server has accepted the key: every few seconds while the app is open, about '
-      'once a minute in the background.',
+  destination: 'Collected only while your radio is connected and this phone has a driver key, and sent only to your '
+      'server (the Server URL in Settings) once the server has accepted the key: every few seconds while the app is open, '
+      'about once a minute while iOS keeps it running in the background.',
   offEffect: 'Turning it off stops collection at once and deletes what is still waiting on this phone.',
   keepLabel: 'Share',
   offLabel: 'Turn off',
@@ -421,6 +418,12 @@ const List<DataFlow> otherDataFlows = [
       'Each ping\'s time, position, signal and which repeaters heard it, plus the antenna setup. Uploaded only to your '
           'server, under your driver key, when uploads are on (Settings > Drives & uploads). Without a key nothing is '
           'uploaded. Privacy zones on the website hide pings near places you choose.'),
+  DataFlow('MQTT feeds to other sites',
+      'Only feeds you add yourself in Settings > Observer, each off until you turn it on. A feed gets the same public '
+          'packets as Share with MeshSonar (never direct messages or private channels), their signal strength and your '
+          'radio\'s public key as the observer id. Never your position or your name. It runs only while the app is '
+          'running, your radio is connected and Share with MeshSonar is on. A feed password stays in the phone\'s '
+          'Keychain.'),
   DataFlow('The ping itself',
       'What your radio transmits is exactly "MS:" and 10 random characters. Never your position, name or any '
           'identifier.'),

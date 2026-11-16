@@ -2,7 +2,8 @@
 // wide (iPad, phones in landscape), and the mini drive bar above the tabs while a drive runs.
 //
 // Tab API: see shell_controller.dart (ShellScope). Seams for other work: ChatTabHost (chat_tab_host.dart) and
-// MiniDriveBar (mini_drive_bar.dart). The last open tab is remembered (UiPrefs.lastTab, by name).
+// MiniDriveBar (mini_drive_bar.dart). The last open tab is remembered (UiPrefs.lastTab, by name). A shared plan link that
+// reached the app (AppState.planInbox) opens the Plan tab with it (ShellController.openPlan).
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -80,9 +81,14 @@ class _HomeShellState extends State<HomeShell> {
     final s = AppScope.read(context);
     if (!identical(s, _state)) {
       _state?.removeListener(_onState);
+      _state?.planInbox.removeListener(_onPlanInbox);
       _state = s;
       s.addListener(_onState);
-      WidgetsBinding.instance.addPostFrameCallback((_) => _onState());
+      s.planInbox.addListener(_onPlanInbox);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _onState();
+        _onPlanInbox();
+      });
     }
     if (!_restored) {
       _restored = true;
@@ -114,6 +120,18 @@ class _HomeShellState extends State<HomeShell> {
     final key = _alerts!.coordinator.takePendingOpen();
     final open = ChatTabHost.openConversation;
     if (key != null && open != null) open(context, key);
+  }
+
+  /// Plan links waiting in the inbox open the Plan tab. When several arrived at once only the newest counts (the person
+  /// opened that one last), as a newer request replaces one the Plan tab has not taken yet.
+  void _onPlanInbox() {
+    final inbox = _state?.planInbox;
+    if (!mounted || inbox == null) return;
+    Uri? last;
+    for (var u = inbox.take(); u != null; u = inbox.take()) {
+      last = u;
+    }
+    if (last != null) _shell.openPlan(PlanRequest.openLink(last));
   }
 
   void _onShell() {
@@ -172,6 +190,7 @@ class _HomeShellState extends State<HomeShell> {
   void dispose() {
     dismissAppToast();
     _state?.removeListener(_onState);
+    _state?.planInbox.removeListener(_onPlanInbox);
     _shell.removeListener(_onShell);
     AlertsHost.runtime.removeListener(_bindAlerts);
     _alerts?.coordinator.pendingOpen.removeListener(_onPendingOpen);
@@ -277,7 +296,11 @@ class _HomeShellState extends State<HomeShell> {
               bottomNavigationBar: wide || immersive
                   ? null
                   : BlurBar(
-                      child: NavigationBar(
+                      // Like the iOS tab bar, the labels grow only a little with Dynamic Type: at AX3 a full-size label
+                      // would push the bar off the bottom of the screen. VoiceOver still reads the full label.
+                      child: MediaQuery(
+                        data: MediaQuery.of(context).copyWith(textScaler: MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.3)),
+                        child: NavigationBar(
                         key: const Key('shell-tabs'),
                         backgroundColor: Colors.transparent,
                         surfaceTintColor: Colors.transparent,
@@ -292,6 +315,7 @@ class _HomeShellState extends State<HomeShell> {
                               label: t.label,
                             ),
                         ],
+                        ),
                       ),
                     ),
             ),

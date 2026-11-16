@@ -7,33 +7,28 @@
 //   ShellScope.maybeOf(context)?.setImmersive(true);    // Drive only: hide the tab bar / rail (full-screen map)
 //   ShellScope.maybeOf(context)?.openAnalyze(AnalyzeView.drives);
 //   ShellScope.maybeOf(context)?.openMore(MoreItem.settings);
+//   ShellScope.maybeOf(context)?.openPlan(PlanRequest.fromNode(...)); // the Plan tab, with something to plan (see PlanRequest)
 import 'package:flutter/material.dart';
 
 import '../design/app_symbols.dart';
 
 /// The five top-level tabs, in display order. Persisted by [name] (never by index) so reordering stays safe.
 enum AppTab {
-  chat('Chat', Icons.chat_bubble_outline_rounded, Icons.chat_bubble_rounded),
-  drive('Drive', null, null, AppSymbols.car, AppSymbols.carFill),
-  analyze('Analyze', Icons.insights_outlined, Icons.insights_rounded),
-  plan('Plan', Icons.edit_road_outlined, Icons.edit_road_rounded),
-  more('More', Icons.more_horiz_rounded, Icons.more_horiz_rounded);
+  chat('Chat', AppSymbols.message, AppSymbols.messageFill),
+  drive('Drive', AppSymbols.car, AppSymbols.carFill),
+  analyze('Analyze', AppSymbols.chartBar, AppSymbols.chartBar),
+  plan('Plan', AppSymbols.map, AppSymbols.mapFill),
+  more('More', AppSymbols.ellipsisCircle, AppSymbols.ellipsisCircle);
 
   final String label;
 
-  /// Material glyphs for the tabs not yet moved to [AppSymbols] (Drive uses [symbol] / [selectedSymbol]).
-  final IconData? _icon;
-  final IconData? _selectedIcon;
-  final AppSymbol? symbol;
-  final AppSymbol? selectedSymbol;
-  const AppTab(this.label, this._icon, this._selectedIcon, [this.symbol, this.selectedSymbol]);
+  /// The tab's symbol (Cupertino on Apple platforms, Material elsewhere: [AppSymbolIcon]) and its selected form.
+  final AppSymbol symbol;
+  final AppSymbol selectedSymbol;
+  const AppTab(this.label, this.symbol, this.selectedSymbol);
 
-  /// The tab's icon as a widget (the Drive tab goes through [AppSymbolIcon]: SF-Symbols-style car on Apple platforms).
-  Widget iconWidget({required bool selected}) {
-    final sym = selected ? selectedSymbol : symbol;
-    if (sym != null) return AppSymbolIcon(sym, size: 24);
-    return Icon(selected ? _selectedIcon : _icon);
-  }
+  /// The tab's icon as a widget.
+  Widget iconWidget({required bool selected}) => AppSymbolIcon(selected ? selectedSymbol : symbol, size: 24);
 
   /// Looks a tab up by its persisted name. `'map'` is the pre-rename name of the Drive tab and still restores it
   /// (UiPrefs.lastTab saved by builds before the rename); new writes use `'drive'`.
@@ -50,7 +45,88 @@ enum AppTab {
 enum AnalyzeView { region, drives }
 
 /// Rows on the More tab that other code can open directly.
-enum MoreItem { radio, myRadios, wardriving, notifications, settings, about, legend, privacy, howItWorks, repeaters, trace, discover, adverts, rxLog, noiseFloor, telemetry, radioSetup, observerJoin, method, devices, myReports, leaderboard, chat, homeObserver }
+/// [observer] opens Settings at its Observer section (the Home observer row is gone, release 0.38).
+enum MoreItem { radio, myRadios, wardriving, notifications, settings, about, legend, privacy, howItWorks, repeaters, trace, discover, adverts, rxLog, noiseFloor, telemetry, radioSetup, observerJoin, method, devices, myReports, leaderboard, chat, observer }
+
+/// What a request to open the Plan tab carries (release 0.38, Master Planner). The Plan tab takes it with
+/// [ShellController.takePendingPlan] when it is shown.
+enum PlanRequestKind {
+  /// A shared plan link (universal link, pasted link): [PlanRequest.link].
+  openLink,
+
+  /// "Plan from here": a new plan starting at [PlanRequest.node] (coverage of that spot).
+  planFrom,
+
+  /// "Add to plan": [PlanRequest.node] joins the open plan.
+  addNode,
+
+  /// "Link to…": a link analysis with [PlanRequest.node] as one end; the person picks the other.
+  linkTo,
+
+  /// A point (a long-press, coordinates in a chat message): the planner opens with a pin at [PlanRequest.node].
+  point,
+
+  /// A saved plan by id: [PlanRequest.planId].
+  openSaved,
+}
+
+/// The node or spot a plan request is about. [key] is the network node's public key (lower-case hex) when it is one;
+/// null for a dropped pin or a coordinate. [source] says where it came from (`repeater`, `observer`, `contact`, `pin`,
+/// `chat`, `suggestion`).
+@immutable
+class PlanNodeSeed {
+  final String? key;
+  final String name;
+  final double lat, lon;
+  final String source;
+  const PlanNodeSeed({this.key, required this.name, required this.lat, required this.lon, required this.source});
+
+  @override
+  bool operator ==(Object other) =>
+      other is PlanNodeSeed && other.key == key && other.name == name && other.lat == lat && other.lon == lon && other.source == source;
+  @override
+  int get hashCode => Object.hash(key, name, lat, lon, source);
+}
+
+@immutable
+class PlanRequest {
+  final PlanRequestKind kind;
+  final Uri? link;
+  final PlanNodeSeed? node;
+  final String? planId;
+
+  const PlanRequest.openLink(Uri this.link)
+      : kind = PlanRequestKind.openLink,
+        node = null,
+        planId = null;
+  const PlanRequest.planFrom(PlanNodeSeed this.node)
+      : kind = PlanRequestKind.planFrom,
+        link = null,
+        planId = null;
+  const PlanRequest.addNode(PlanNodeSeed this.node)
+      : kind = PlanRequestKind.addNode,
+        link = null,
+        planId = null;
+  const PlanRequest.linkTo(PlanNodeSeed this.node)
+      : kind = PlanRequestKind.linkTo,
+        link = null,
+        planId = null;
+  const PlanRequest.point(PlanNodeSeed this.node)
+      : kind = PlanRequestKind.point,
+        link = null,
+        planId = null;
+  const PlanRequest.openSaved(String this.planId)
+      : kind = PlanRequestKind.openSaved,
+        link = null,
+        node = null;
+
+  @override
+  bool operator ==(Object other) => other is PlanRequest && other.kind == kind && other.link == link && other.node == node && other.planId == planId;
+  @override
+  int get hashCode => Object.hash(kind, link, node, planId);
+  @override
+  String toString() => 'PlanRequest(${kind.name})';
+}
 
 /// Where the pre-0.25 five tabs (0 Drive, 1 Region, 2 Drives, 3 Radio, 4 Settings) live now.
 class LegacyTab {
@@ -144,6 +220,23 @@ class ShellController extends ChangeNotifier {
     final wasChat = _tab == AppTab.chat;
     select(AppTab.chat);
     if (wasChat) notifyListeners();
+  }
+
+  /// Plan tab with something to plan: kept until the Plan tab takes it ([takePendingPlan]), so it works whether that tab
+  /// is already built or is built by this switch. A newer request replaces one not taken yet.
+  PlanRequest? _pendingPlan;
+  PlanRequest? get pendingPlan => _pendingPlan;
+  PlanRequest? takePendingPlan() {
+    final r = _pendingPlan;
+    _pendingPlan = null;
+    return r;
+  }
+
+  void openPlan(PlanRequest request) {
+    _pendingPlan = request;
+    final wasPlan = _tab == AppTab.plan;
+    select(AppTab.plan);
+    if (wasPlan) notifyListeners();
   }
 
   void openMore(MoreItem item) {

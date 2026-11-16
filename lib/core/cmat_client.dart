@@ -17,6 +17,8 @@
 //                                                                          medianSnr,repeaters,lastAt,h3?,
 //                                                                          noiseFloor?}], asOf, grid?, totals}
 //   <base>/api/cmh/photo-config | photo-upload | photo-upload-enc | photo-delete | photo-report   (lib/core/photo_api.dart, contract v1)
+//   <base>/api/cmh/plan-link | plan-verify | plan-suggest   POST (public)   (lib/core/plan_contract.dart, release 0.38)
+//   <base>/api/cmh/mqtt-presets   GET  (public, ETag)                  -> {v, asOf, presets[]}  (lib/core/mqtt_contract.dart)
 //   <base>/api/cmh/regions-index   GET  (public, no driver key)        -> {regions[{code,slug,name,url,
 //                                                                          bbox:[w,s,e,n]|null,boundary?}], asOf}
 // Errors come back as {error} (403 also carries {status}); they're thrown as CmatException(error, status: http code).
@@ -43,7 +45,7 @@ import 'privacy_zones.dart';
 import 'repeater_reach.dart';
 import 'report_body.dart' show problemReportMaxBytes;
 import 'drive_end.dart';
-import 'home_observer.dart';
+import 'observer_status.dart';
 import 'telemetry_uploader.dart';
 
 /// One rejected ping, as reported by the server (only the first 20 are listed).
@@ -89,7 +91,7 @@ DriverKeyStatus parseDriverKeyStatus(Object? s) => switch (s) {
       _ => DriverKeyStatus.unknown,
     };
 
-class HttpCmatClient implements CmatClient, TelemetryTransport, HomeObserverTransport, DriveEndTransport, PhotoTransport {
+class HttpCmatClient implements CmatClient, TelemetryTransport, ObserverStatusTransport, DriveEndTransport, PhotoTransport {
   @override
   final Uri baseUrl;
   final http.Client _http;
@@ -202,30 +204,22 @@ class HttpCmatClient implements CmatClient, TelemetryTransport, HomeObserverTran
   @override
   Future<TelemetryHttpResult> deleteTelemetry(String driverKey) => _telemetry('DELETE', driverKey, null);
 
-  // ---------- home observer (lib/core/home_observer.dart; contract section 4) ----------
+  // ---------- observer status (lib/core/observer_status.dart; contract section 8.3) ----------
   @override
-  Future<HomeObserverHttpResult> putHome(String driverKey, Map<String, dynamic> body) =>
-      _observer('PUT', endpoint('observer/home'), driverKey, homeObserverJson(body));
-
-  @override
-  Future<HomeObserverHttpResult> heartbeat(String driverKey, Map<String, dynamic> body) =>
-      _observer('POST', endpoint('observer/heartbeat'), driverKey, homeObserverJson(body));
-
-  @override
-  Future<HomeObserverHttpResult> deleteHome(String driverKey, String observerId) =>
-      _observer('DELETE', endpoint('observer/home').replace(queryParameters: {'id': observerId}), driverKey, null);
+  Future<ObserverHttpResult> heartbeat(String driverKey, Map<String, dynamic> body) =>
+      _observer('POST', endpoint('observer/heartbeat'), driverKey, observerJson(body));
 
   /// `POST /api/cmh/observer/drive-end` (contract section 8.7, lib/core/drive_end.dart).
   @override
   Future<int> driveEnd(String driverKey, Map<String, dynamic> body) async =>
-      (await _raw('POST', endpoint('observer/drive-end'), driverKey, homeObserverJson(body))).status;
+      (await _raw('POST', endpoint('observer/drive-end'), driverKey, observerJson(body))).status;
 
   @override
-  Future<HomeObserverHttpResult> me(String driverKey) => _observer('GET', endpoint('observer/me'), driverKey, null);
+  Future<ObserverHttpResult> me(String driverKey) => _observer('GET', endpoint('observer/me'), driverKey, null);
 
-  Future<HomeObserverHttpResult> _observer(String method, Uri url, String driverKey, List<int>? body) async {
+  Future<ObserverHttpResult> _observer(String method, Uri url, String driverKey, List<int>? body) async {
     final r = await _raw(method, url, driverKey, body);
-    return HomeObserverHttpResult(r.status, body: r.body);
+    return ObserverHttpResult(r.status, body: r.body);
   }
 
   Future<TelemetryHttpResult> _telemetry(String method, String driverKey, List<int>? body) =>
@@ -570,6 +564,67 @@ class HttpCmatClient implements CmatClient, TelemetryTransport, HomeObserverTran
         driverKey: driverKey, body: {'pubkey': pubkey.trim().toLowerCase(), ...changes});
     try {
       return NodeClaim.parse(j['claim']);
+    } on FormatException {
+      throw const CmatException('server sent an unreadable answer', status: 200);
+    }
+  }
+
+  // ---------- Master Planner (lib/core/plan_contract.dart; release 0.38). Public: no driver key, no region in the body.
+  @override
+  Future<PlanLinkResult> planLink(PlanLinkRequest request) =>
+      _plan('plan-link', request.toJson(), PlanLinkResult.parse, timeout: const Duration(seconds: 45));
+
+  @override
+  Future<PlanVerifyResult> planVerify(PlanVerifyRequest request) =>
+      // The server allows 30 s cold for one site; the margin covers a slow phone link.
+      _plan('plan-verify', request.toJson(), PlanVerifyResult.parse, timeout: const Duration(seconds: 60));
+
+  @override
+  Future<PlanSuggestResult> planSuggest(PlanSuggestRequest request) =>
+      _plan('plan-suggest', request.toJson(), PlanSuggestResult.parse, timeout: const Duration(seconds: 30));
+
+  /// Supplies this install's driver key for the planner calls. It only selects the per-driver rate allowance (phones behind one
+  /// carrier-NAT address would otherwise share a per-IP limit); nothing in the answer depends on it. Set by AppState.
+  String? Function()? driverKeyProvider;
+
+  Future<T> _plan<T>(String name, Map<String, dynamic> body, T Function(Map<String, dynamic>) parse, {required Duration timeout}) async {
+    final j = await _send('POST', name, body: body, timeout: timeout, driverKey: driverKeyProvider?.call());
+    try {
+      return parse(j);
+    } on FormatException {
+      throw const CmatException('server sent an unreadable answer', status: 200);
+    } on TypeError {
+      throw const CmatException('server sent an unreadable answer', status: 200);
+    }
+  }
+
+  @override
+  Future<MqttPresetFetch> mqttPresets({String? ifNoneMatch}) async {
+    final req = http.Request('GET', endpoint('mqtt-presets'));
+    req.headers['accept'] = 'application/json';
+    if (ifNoneMatch != null && ifNoneMatch.isNotEmpty) req.headers['if-none-match'] = ifNoneMatch;
+    final http.Response res;
+    try {
+      res = await _http.send(req).then(http.Response.fromStream).timeout(timeout);
+    } on TimeoutException {
+      throw CmatException('timed out talking to ${baseUrl.host}');
+    } on SocketException catch (e) {
+      throw CmatException('network error: ${e.message}');
+    } on http.ClientException catch (e) {
+      throw CmatException('network error: ${e.message}');
+    } on HandshakeException catch (e) {
+      throw CmatException('secure connection failed: ${e.message}');
+    }
+    final etag = res.headers['etag'];
+    if (res.statusCode == 304) return MqttPresetFetch.notModified(etag: etag ?? ifNoneMatch);
+    if (res.statusCode != 200) {
+      throw CmatException('server answered ${res.statusCode}${res.reasonPhrase == null ? '' : ' ${res.reasonPhrase}'}',
+          status: res.statusCode, retryAfterSec: int.tryParse(res.headers['retry-after'] ?? ''));
+    }
+    try {
+      final j = jsonDecode(utf8.decode(res.bodyBytes));
+      if (j is! Map<String, dynamic>) throw const FormatException('mqtt-presets');
+      return MqttPresetFetch.fresh(MqttPresetList.parse(j), etag: etag);
     } on FormatException {
       throw const CmatException('server sent an unreadable answer', status: 200);
     }

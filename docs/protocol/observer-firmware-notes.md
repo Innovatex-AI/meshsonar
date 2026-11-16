@@ -294,3 +294,25 @@ already on any working observer: WiFi set, radio `910.525,62.5,7,5`, clock synce
 
 The audience string above is the approved value from §7, item 2 (Andy, Oct 17); the broker must be configured
 with the same audience before owners are sent these commands.
+
+---
+
+## 9. App publisher (the MeshSonar phone app, release 0.38)
+
+The phone app is a second kind of publisher next to these firmware observers. It follows sections 3-5 on the wire, with these differences (code: `lib/core/mqtt/`, docs/PROTOCOL.md section 14):
+
+| Item | Firmware observer | MeshSonar app publisher |
+|---|---|---|
+| Transport | `wss`, `mqtts`, `mqtt`, `ws` | MQTT 3.1.1 over **WebSocket only** (`wss`; `ws` only for a custom slot with TLS off); never tcp |
+| Signing | the node signs with its own identity key | the **radio** signs through the companion `CMD_SIGN_*` flow; the phone holds no private key; the signature is 128 UPPERCASE hex |
+| JWT payload | `publicKey`, `aud`, `iat`, `exp`, optional `owner`, `client`... | `publicKey`, `aud`, `iat`, `exp` only (firmware order) |
+| `origin` | the node's name | `MeshSonar <first 8 hex of the radio key>`, never the radio's or the person's name |
+| `packets` | includes the firmware's extra fields | the fields in section 5.2 minus `score`; numbers are strings as in the firmware |
+| `status` | adds `radio`, `repeat`, `stats`; `client_version` `meshcore/<fw>` | `status`, `timestamp`, `origin`, `origin_id`, `model` and `firmware_version` when known, `client_version` = `meshsonar-app/1`; no `stats`, no position |
+| Status retain | per preset | **unretained on custom slots**; retained only when a preset asks (`retainStatus`) |
+| Packets sent | everything the node hears (configurable) | only public packets: ADVERT, PATH, TRACE and Public / `#name` group packets (never DMs, requests, responses, acks, multipart, control) |
+| Slots | 3 or 6 by board | up to 10 per phone |
+| Last-will | none | none (a dead observer is detected from silence, as in section 4) |
+| Rate | the firmware queue (6 or 50 packets) | 120-message in-memory queue per slot, drop-oldest, 120 publishes a minute |
+
+A broker operator can tell app publishers by `origin` (`MeshSonar ` prefix) and `client_version` `meshsonar-app/1`. Presets for outside brokers ship OFF; whether an operator accepts phone publishers is unverified until `verified` is set in the preset list.
