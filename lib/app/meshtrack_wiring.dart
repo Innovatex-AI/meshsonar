@@ -620,11 +620,12 @@ class MeshTrackWiring {
     if (b == null || radio == null || _disposed) return;
     final connected = _connected && b.radioConnected();
     final store = b.store;
-    final current = {for (final g in service.state.groups) g.channelId: g.config};
-    final out = <MtGroupConfig>[];
-    final uidByChannel = <int, String>{};
+    final resolved = <({String uid, int id, String name, bool onRadio})>[];
+    final dropped = <String>{};
+    final processed = <String>{};
     var changed = false;
     for (final r in List.of(_reg)) {
+      processed.add(r.uid);
       final st = _stored[r.uid] ??= _Stored();
       final mapped = st.rows[radio];
       Channel? row = mapped == null ? null : store.channels.getById(mapped);
@@ -632,6 +633,7 @@ class MeshTrackWiring {
         // The person deleted the channel on this radio (the channel delete flow): the group goes with it.
         _reg.remove(r);
         _stored.remove(r.uid);
+        dropped.add(r.uid);
         changed = true;
         continue;
       }
@@ -676,24 +678,33 @@ class MeshTrackWiring {
         r.name = row.name;
         changed = true;
       }
-      final prev = current[id];
+      resolved.add((uid: r.uid, id: id, name: row.name, onRadio: onRadio));
+    }
+    if (_disposed) return;
+    // Built from the state as it is now (the person may have switched Share while the radio was asked).
+    final current = {for (final g in service.state.groups) g.channelId: g.config};
+    final out = <MtGroupConfig>[];
+    final uidByChannel = <int, String>{};
+    for (final x in resolved) {
+      final st = _stored[x.uid];
+      if (st == null || _regOf(x.uid) == null) continue; // left while this ran
+      final prev = current[x.id];
       final base = prev ?? st.last;
-      final cfg = MtGroupConfig(
-        channelId: id,
-        name: row.name,
-        see: onRadio && st.see,
-        share: onRadio && (prev?.share ?? false),
+      out.add(MtGroupConfig(
+        channelId: x.id,
+        name: x.name,
+        see: x.onRadio && st.see,
+        share: x.onRadio && (prev?.share ?? false),
         duration: prev?.duration ?? base?.duration ?? MtShareDuration.thisDrive,
         shareUntil: prev?.shareUntil,
         shareEveryDrive: st.shareEveryDrive,
-        onRadio: onRadio,
-      );
-      uidByChannel[id] = r.uid;
-      out.add(cfg);
+        onRadio: x.onRadio,
+      ));
+      uidByChannel[x.id] = x.uid;
     }
-    // A group whose key is still being read from its channel (adopted a moment ago) stays as it is.
+    // Groups added while this ran (New group, Undo, an adopt still reading its key) stay as they are.
     for (final e in _uidByChannel.entries) {
-      if (uidByChannel.containsKey(e.key) || _regOf(e.value) != null) continue;
+      if (uidByChannel.containsKey(e.key) || dropped.contains(e.value) || processed.contains(e.value)) continue;
       final cfg = current[e.key];
       if (cfg == null) continue;
       uidByChannel[e.key] = e.value;
@@ -705,6 +716,7 @@ class MeshTrackWiring {
     service.syncGroups(out);
     _channelSig = _signature();
     if (changed) _log('meshtrack: groups matched to this radio');
+    if (changed || dropped.isNotEmpty) _persist();
     groups._notify();
   }
 
@@ -856,15 +868,21 @@ class MeshTrackGroupOps extends ChangeNotifier {
     final uid = _w._uidByChannel[channelId];
     final reg = uid == null ? null : _w._regOf(uid);
     if (reg == null) return const MtGroupOpResult(MtGroupOpStatus.failed, message: MtCopy.failed);
+    // The old group is retired first, so nothing puts the old key back on the radio while the new one is written.
+    _svc.leaveGroup(channelId); // stops sharing (MT1 x when a position went out) and forgets the old group's friends
     final ChannelJoin j;
     try {
       j = await n.b.admin.rekeyPrivate(old);
-    } on ChannelAdminException catch (e) {
-      return _fromAdmin(e);
     } catch (e) {
-      return const MtGroupOpResult(MtGroupOpStatus.failed, message: MtCopy.failed);
+      // Nothing changed on the radio: the old group comes back as it was (Share off).
+      _w._recentlyRemoved.remove(channelId);
+      _w._reg.add(reg);
+      _w._stored[reg.uid] = _Stored(rows: {n.radio: channelId}, see: cfg.see, shareEveryDrive: cfg.shareEveryDrive);
+      _w._uidByChannel[channelId] = reg.uid;
+      _svc.restoreGroup(cfg);
+      _notify();
+      return e is ChannelAdminException ? _fromAdmin(e) : const MtGroupOpResult(MtGroupOpStatus.failed, message: MtCopy.failed);
     }
-    _svc.leaveGroup(channelId); // stops sharing (MT1 x when a position went out) and forgets the old group's friends
     _w._recentlyRemoved.remove(channelId);
     final r = await _adopt(n.b, n.radio, j.channel, see: cfg.see);
     if (r.ok) _fresh[j.channel.id!] = (old: n.b.store.channels.getById(channelId) ?? old, oldConfig: cfg, oldReg: reg);

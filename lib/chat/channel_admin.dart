@@ -261,8 +261,8 @@ class ChannelAdmin {
   // ------------------------------------------------------------------ MeshTrack "Start fresh"
 
   /// A new random secret under the same name, written into [c]'s slot (so a full radio needs no extra room). The old row
-  /// loses the slot but keeps its history and its secret (shown as not on the radio); the new row takes the slot. Private
-  /// channels on the radio only. Returns the new row. Undo: [undoRekey].
+  /// loses the slot and is renamed "<name> (old)" but keeps its history and its secret (shown as not on the radio); the new
+  /// row takes the slot and the name. Private channels on the radio only. Returns the new row. Undo: [undoRekey].
   Future<ChannelJoin> rekeyPrivate(Channel c) async {
     if (c.kind != ChannelKind.private) {
       throw const ChannelAdminException(ChannelAdminError.notAllowed, 'Only a private channel can get a new key.');
@@ -274,7 +274,7 @@ class ChannelAdmin {
     final r = _needRadio();
     final secret = Uint8List.fromList(List<int>.generate(16, (_) => _rng.nextInt(256)));
     await _write(r, slot, c.name, secret);
-    await store.channels.save(c.copyWith(clearSlot: true));
+    await store.channels.save(c.copyWith(clearSlot: true, name: retiredName(c.name)));
     final saved = await store.channels.save(
         Channel(radioId: c.radioId, slot: slot, name: c.name, kind: ChannelKind.private, regionScope: c.regionScope, sortOrder: c.sortOrder),
         secret: secret);
@@ -293,9 +293,19 @@ class ChannelAdmin {
     final r = _needRadio();
     await _write(r, slot, old.name, secret);
     await store.channels.delete(fresh.id!);
-    final back = await store.channels.save(old.copyWith(slot: slot));
+    final back = await store.channels.save(old.copyWith(slot: slot, name: fresh.name));
     onChanged();
     return back;
+  }
+
+  /// "Family" -> "Family (old)", kept within the radio's name length (a retired channel can go back on the radio).
+  static String retiredName(String name) {
+    const tag = ' (old)';
+    var base = name;
+    while (base.isNotEmpty && utf8.encode('$base$tag').length > maxNameBytes) {
+      base = String.fromCharCodes(base.runes.toList().sublist(0, base.runes.length - 1));
+    }
+    return '$base$tag';
   }
 
   // ------------------------------------------------------------------ sharing
