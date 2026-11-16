@@ -52,7 +52,9 @@ import '../map/region_center.dart' show idleMapPosition, viewedRegionBounds, vie
 import '../shell/shell_controller.dart';
 import 'node_list.dart';
 import 'plan_modes.dart';
+import 'plan_share.dart' show PlanImportAdded, PlanImportOpen, showPlanImport, showPlanShare;
 import 'planner_sheet.dart';
+import 'saved_plans.dart' show showSavedPlans;
 
 class PlannerScreen extends StatefulWidget {
   const PlannerScreen({super.key});
@@ -500,7 +502,9 @@ class PlannerScreenState extends State<PlannerScreen> {
       actions: [
         const AppAction('Rename', 'rename', symbol: AppSymbols.squareAndPencil, key: Key('plan-menu-rename')),
         const AppAction('Radio and clutter', 'settings', symbol: AppSymbols.antenna, key: Key('plan-menu-settings')),
-        const AppAction('Open a saved plan', 'open', symbol: AppSymbols.tray, key: Key('plan-menu-open')),
+        const AppAction('Share or export', 'share', symbol: AppSymbols.squareAndArrowUp, key: Key('plan-menu-share')),
+        const AppAction('Saved plans', 'open', symbol: AppSymbols.tray, key: Key('plan-menu-open')),
+        const AppAction('Import a plan or contacts', 'import', symbol: AppSymbols.squareAndArrowDown, key: Key('plan-menu-import')),
         const AppAction('New plan', 'new', symbol: AppSymbols.plus, key: Key('plan-menu-new')),
         if (c.canUndo) const AppAction('Undo', 'undo', symbol: AppSymbols.chevronLeft, key: Key('plan-menu-undo')),
         if (c.canRedo) const AppAction('Redo', 'redo', symbol: AppSymbols.chevronRight, key: Key('plan-menu-redo')),
@@ -512,8 +516,12 @@ class PlannerScreenState extends State<PlannerScreen> {
         await _rename();
       case 'settings':
         await showPlanSettings(context, c, regionPreset: _s.siteConfig?.radioPreset);
+      case 'share':
+        await showPlanShare(context, c.plan);
       case 'open':
         await _openSavedList();
+      case 'import':
+        await _import();
       case 'new':
         await _open(_fresh());
         if (mounted) showAppToast(context, 'New plan. The last one is saved on this phone.');
@@ -556,19 +564,37 @@ class PlannerScreenState extends State<PlannerScreen> {
   }
 
   Future<void> _openSavedList() async {
-    final id = await showAppSheet<String>(
-      context,
-      detents: formSheetDetents(context),
-      builder: (ctx, scroll) => _SavedPlansSheet(saved: _saved, currentId: _c?.plan.id, scroll: scroll),
-    );
-    if (id == null || !mounted) return;
-    final p = await _saved.load(id);
+    final pick = await showSavedPlans(context, saved: _saved, current: _c);
+    if (pick == null || !mounted) return;
+    if (pick.import) return _import();
+    final p = await _saved.load(pick.openId!);
     if (!mounted) return;
     if (p == null) {
       showAppToast(context, 'That saved plan could not be read.', kind: AppToastKind.error);
       return;
     }
     await _open(p);
+  }
+
+  /// Paste import (plan_share.dart): a plan opens through [handle] like a tapped link; contacts join this plan.
+  Future<void> _import() async {
+    final c = _c;
+    if (c == null) return;
+    final at = _crosshair;
+    final claimed = {for (final cl in _s.claims.claims) if (!cl.ended) cl.pubkey.toLowerCase()};
+    final r = await showPlanImport(context, controller: c, near: at == null ? null : PlanPoint(at.latitude, at.longitude), claimed: claimed);
+    if (!mounted) return;
+    switch (r) {
+      case PlanImportOpen(:final link):
+        await handle(PlanRequest.openLink(link));
+      case PlanImportAdded(:final count) when count > 0:
+        showAppToast(context, 'Added $count ${count == 1 ? 'node' : 'nodes'} to the plan.', kind: AppToastKind.success, actionLabel: 'Undo', onAction: () {
+          for (var i = 0; i < count; i++) {
+            c.undo();
+          }
+        });
+      default:
+    }
   }
 
   // ------------------------------------------------------------------------------------------------ build
@@ -941,77 +967,4 @@ class _CrosshairPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_CrosshairPainter old) => old.line != line || old.halo != halo;
-}
-
-/// The saved plans on this phone (open one, delete one). Loading, empty and error states from the kit.
-class _SavedPlansSheet extends StatefulWidget {
-  final SavedPlans saved;
-  final String? currentId;
-  final ScrollController scroll;
-  const _SavedPlansSheet({required this.saved, required this.currentId, required this.scroll});
-  @override
-  State<_SavedPlansSheet> createState() => _SavedPlansSheetState();
-}
-
-class _SavedPlansSheetState extends State<_SavedPlansSheet> {
-  late Future<List<SavedPlanSummary>> _list = _read();
-
-  Future<List<SavedPlanSummary>> _read() async {
-    final l = await widget.saved.list();
-    l.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-    return l;
-  }
-
-  Future<void> _delete(SavedPlanSummary p) async {
-    final ok = await showAppConfirm(
-      context,
-      title: 'Delete "${p.name}"?',
-      message: 'The plan and its ${p.nodeCount} ${p.nodeCount == 1 ? 'node' : 'nodes'} are removed from this phone. Links you shared keep working.',
-      confirmLabel: 'Delete plan',
-      destructive: true,
-      confirmKey: Key('saved-plan-delete-confirm-${p.id}'),
-    );
-    if (!ok) return;
-    await widget.saved.delete(p.id);
-    if (mounted) setState(() => _list = _read());
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    return FutureBuilder<List<SavedPlanSummary>>(
-      future: _list,
-      builder: (context, snap) => AppSheetScaffold(
-        key: const Key('saved-plans'),
-        controller: widget.scroll,
-        title: 'Saved plans',
-        children: [
-          if (snap.connectionState != ConnectionState.done) ConstrainedBox(constraints: const BoxConstraints(minHeight: 160), child: AppLoadingView(label: 'Reading your plans…')),
-          if (snap.hasError)
-            ConstrainedBox(constraints: const BoxConstraints(minHeight: 200), child: AppErrorView(title: 'Could not read your plans', message: 'Try again.', onRetry: () => setState(() => _list = _read()))),
-          if (snap.hasData && snap.data!.isEmpty)
-            ConstrainedBox(constraints: const BoxConstraints(minHeight: 200), child: AppEmptyView(symbol: AppSymbols.tray, title: 'No saved plans yet', message: 'A plan is saved here as soon as you add a node.')),
-          if (snap.hasData)
-            for (final p in snap.data!)
-              ListTile(
-                key: Key('saved-plan-${p.id}'),
-                contentPadding: EdgeInsets.zero,
-                leading: AppSymbolIcon(p.id == widget.currentId ? AppSymbols.checkmarkCircleFill : AppSymbols.map, color: p.id == widget.currentId ? t.colorScheme.primary : null),
-                title: Text(p.name),
-                subtitle: Text('${p.nodeCount} ${p.nodeCount == 1 ? 'node' : 'nodes'} · saved ${p.updatedAt.toLocal().toString().substring(0, 16)}${p.id == widget.currentId ? ' · open now' : ''}'),
-                onTap: () => Navigator.of(context).pop(p.id),
-                trailing: p.id == widget.currentId
-                    ? null
-                    : IconButton(
-                        key: Key('saved-plan-delete-${p.id}'),
-                        tooltip: 'Delete ${p.name}',
-                        constraints: const BoxConstraints(minWidth: Hit.min, minHeight: Hit.min),
-                        onPressed: () => _delete(p),
-                        icon: const AppSymbolIcon(AppSymbols.trash),
-                      ),
-              ),
-        ],
-      ),
-    );
-  }
 }
