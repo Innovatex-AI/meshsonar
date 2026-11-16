@@ -161,6 +161,7 @@ class MtRig {
   DateTime clock = DateTime.now();
   late final FakeOps ops = FakeOps(svc);
   MtLatLon? here = (lat: 40.1262, lon: -82.9291); // Westerville
+  double? accuracy;
   ChatController? chat;
   Units units = Units.metric;
   final centred = <(double, double)>[];
@@ -170,6 +171,7 @@ class MtRig {
         ops: ops,
         units: units,
         here: () => here,
+        hereAccuracyM: () => accuracy,
         selfName: () => 'Andy',
         chat: () => chat,
         now: () => clock,

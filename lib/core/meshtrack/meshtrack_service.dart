@@ -23,7 +23,7 @@ import 'smart_beacon.dart';
 import 'track_group.dart';
 
 export 'interop.dart' show MtSource;
-export 'smart_beacon.dart' show MtFix, MtRate, meshTrackPositionAirtime;
+export 'smart_beacon.dart' show MtFix, MtRate, kMtMaxAccuracyM, meshTrackPositionAirtime;
 export 'track_group.dart'
     show MeshTrackGroup, MtFriend, MtMeetPin, MtStaleness, MtTrailPoint, mtStaleness, kMtMaxNames;
 
