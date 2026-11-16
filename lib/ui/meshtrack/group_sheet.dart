@@ -21,6 +21,7 @@ import '../design/app_symbols.dart';
 import '../design/app_type.dart';
 import '../design/app_widgets.dart' show AppSwitchTile;
 import '../design/avatar_style.dart';
+import '../design/sheet_detents.dart' show formSheetDetents;
 import '../design/tokens.dart';
 import '../settings/settings_kit.dart' show runWithUndo;
 import 'group_setup.dart';
@@ -42,7 +43,7 @@ Future<void> showGroupSheet(BuildContext context, {int? channelId}) async {
     await Navigator.of(context, rootNavigator: true).push(_SidePanelRoute(theme: Theme.of(context), builder: content));
     return;
   }
-  await showAppSheet<void>(context, detents: const [0.6, 0.92], builder: content);
+  await showAppSheet<void>(context, detents: formSheetDetents(context), builder: content);
 }
 
 /// The iPad side panel: slides in from the right edge, the map stays visible on the left.
@@ -160,10 +161,10 @@ class _GroupSheetState extends State<GroupSheet> {
   }
 
   /// Rebuild when an "Asked" label runs out (the 15 s state tick may be later).
-  void _wakeAt(DateTime? t) {
+  void _wakeAt(DateTime? t, DateTime now) {
     _askedTimer?.cancel();
     if (t == null) return;
-    final d = t.difference(DateTime.now());
+    final d = t.difference(now);
     _askedTimer = Timer(d.isNegative ? Duration.zero : d + const Duration(milliseconds: 50), _changed);
   }
 
@@ -199,9 +200,8 @@ class _GroupSheetState extends State<GroupSheet> {
         runSpacing: Gap.xs,
         children: [
           Semantics(header: true, child: Text(mtFeatureName, style: AppType.title2.copyWith(color: c.textPrimary))),
-          Row(mainAxisSize: MainAxisSize.min, children: [
+          Wrap(spacing: Gap.s, runSpacing: Gap.xs, children: [
             _HeaderButton(key: const Key('mt-new'), symbol: AppSymbols.plus, label: 'New group', onPressed: () => openNewGroup(context)),
-            const SizedBox(width: Gap.s),
             _HeaderButton(key: const Key('mt-join-open'), symbol: AppSymbols.qrcode, label: 'Join', onPressed: () => openJoinGroup(context)),
           ]),
         ],
@@ -240,6 +240,7 @@ class _GroupSheetState extends State<GroupSheet> {
         onOpen: () => setState(() => _open = g.channelId),
         onSee: (v) => b.service.setSee(g.channelId, v),
         onShare: (v) => _setShare(context, b, g, v),
+        now: b.now(),
         onDuration: (d) => _toast(context, b.service.setShare(g.channelId, true, duration: d)),
         onMenu: () => _menu(context, b, g),
       ),
@@ -331,12 +332,13 @@ class _GroupSheetState extends State<GroupSheet> {
 
   List<Widget> _people(BuildContext context, MeshTrackBinding b, MeshTrackState st, MtGroupView g) {
     final c = AppColors.of(context);
-    final now = DateTime.now();
+    final now = b.now();
     final me = b.here();
     final status = mtStatusLine(st);
     final notOnRadio = !g.config.onRadio || b.ops.notOnRadio(g.channelId);
     final inZone = st.reason == MtShareReason.privacyZone;
-    _wakeAt(g.askedUntil);
+    final asked = g.askedUntil != null && now.isBefore(g.askedUntil!);
+    _wakeAt(asked ? g.askedUntil : null, now);
     return [
       Padding(
         padding: const EdgeInsets.fromLTRB(Layout.screenMargin, 0, Layout.screenMargin, Gap.m),
@@ -353,7 +355,7 @@ class _GroupSheetState extends State<GroupSheet> {
       ),
       if (status != null) _StatusBanner(text: status, warn: st.reason != MtShareReason.sharing),
       if (notOnRadio) _NotOnRadio(onRemove: () => _leaveFromPeople(context, b, g)),
-      if (g.meet != null) _MeetRow(meet: g.meet!, me: me, units: b.units, onClear: () => _clearMeet(context, b, g)),
+      if (g.meet != null) _MeetRow(meet: g.meet!, me: me, units: b.units, now: now, onClear: () => _clearMeet(context, b, g)),
       if (g.friends.isEmpty)
         Padding(
           padding: const EdgeInsets.fromLTRB(Layout.screenMargin, Gap.l, Layout.screenMargin, Gap.l),
@@ -387,7 +389,7 @@ class _GroupSheetState extends State<GroupSheet> {
                     me: me,
                     units: b.units,
                     now: now,
-                    asked: g.askedUntil != null,
+                    asked: asked,
                     onTap: () => _centre(context, b, f),
                     onMessage: () => openMtMessage(context, b.chat(), g.channelId, f.name),
                     onAsk: notOnRadio ? null : () => _toast(context, b.service.askWhereAreYou(g.channelId, name: f.name)),
@@ -572,15 +574,16 @@ class _MeetRow extends StatelessWidget {
   final MtMeetPin meet;
   final MtLatLon? me;
   final Units units;
+  final DateTime now;
   final VoidCallback onClear;
-  const _MeetRow({required this.meet, required this.me, required this.units, required this.onClear});
+  const _MeetRow({required this.meet, required this.me, required this.units, required this.now, required this.onClear});
 
   @override
   Widget build(BuildContext context) {
     final c = AppColors.of(context);
     final where = mtDistanceAndPoint(me, meet.lat, meet.lon, units);
     final title = meet.label == null || meet.label!.isEmpty ? 'Meet-up point' : 'Meet-up point: ${meet.label}';
-    final sub = [if (meet.setBy != null) 'set by ${meet.setBy}', mtAgo(meet.at, DateTime.now()), ?where].join(' · ');
+    final sub = [if (meet.setBy != null) 'set by ${meet.setBy}', mtAgo(meet.at, now), ?where].join(' · ');
     return Padding(
       padding: const EdgeInsets.fromLTRB(Layout.screenMargin, 0, Layout.screenMargin, Gap.m),
       child: Container(
@@ -722,6 +725,7 @@ class _GroupCard extends StatelessWidget {
   final MtGroupView group;
   final MeshTrackState state;
   final bool notOnRadio;
+  final DateTime now;
   final VoidCallback onOpen;
   final ValueChanged<bool> onSee;
   final ValueChanged<bool> onShare;
@@ -732,6 +736,7 @@ class _GroupCard extends StatelessWidget {
     required this.group,
     required this.state,
     required this.notOnRadio,
+    required this.now,
     required this.onOpen,
     required this.onSee,
     required this.onShare,
@@ -745,7 +750,6 @@ class _GroupCard extends StatelessWidget {
     final g = group;
     final share = g.config.share;
     final capped = !share && !state.canShareMore;
-    final now = DateTime.now();
     final line = mtHeardLine(g);
     return Padding(
       padding: const EdgeInsets.fromLTRB(Layout.screenMargin, 0, Layout.screenMargin, Gap.m),

@@ -33,6 +33,9 @@ class MeshTrackBinding {
   /// The chat controller (Message, Make room); null before chat is up.
   final ChatController? Function() chat;
 
+  /// The clock the service uses (last heard, "Asked" for 60 s).
+  final DateTime Function() now;
+
   /// Row tap in the Group sheet: centre the Drive map on a friend. Null = [centreDriveMap].
   final void Function(BuildContext context, double lat, double lon)? onCentre;
   const MeshTrackBinding({
@@ -42,6 +45,7 @@ class MeshTrackBinding {
     required this.here,
     required this.selfName,
     required this.chat,
+    this.now = DateTime.now,
     this.onCentre,
   });
 }
