@@ -258,6 +258,46 @@ class ChannelAdmin {
     onChanged();
   }
 
+  // ------------------------------------------------------------------ MeshTrack "Start fresh"
+
+  /// A new random secret under the same name, written into [c]'s slot (so a full radio needs no extra room). The old row
+  /// loses the slot but keeps its history and its secret (shown as not on the radio); the new row takes the slot. Private
+  /// channels on the radio only. Returns the new row. Undo: [undoRekey].
+  Future<ChannelJoin> rekeyPrivate(Channel c) async {
+    if (c.kind != ChannelKind.private) {
+      throw const ChannelAdminException(ChannelAdminError.notAllowed, 'Only a private channel can get a new key.');
+    }
+    final slot = c.slot;
+    if (slot == null || c.id == null) {
+      throw const ChannelAdminException(ChannelAdminError.notOnRadio, 'This channel is not on the radio, so it cannot get a new key.');
+    }
+    final r = _needRadio();
+    final secret = Uint8List.fromList(List<int>.generate(16, (_) => _rng.nextInt(256)));
+    await _write(r, slot, c.name, secret);
+    await store.channels.save(c.copyWith(clearSlot: true));
+    final saved = await store.channels.save(
+        Channel(radioId: c.radioId, slot: slot, name: c.name, kind: ChannelKind.private, regionScope: c.regionScope, sortOrder: c.sortOrder),
+        secret: secret);
+    onChanged();
+    return ChannelJoin(saved, true);
+  }
+
+  /// Undo of [rekeyPrivate]: [old]'s secret goes back into [fresh]'s slot, [fresh] (new, no history worth keeping) is
+  /// removed and [old] gets its slot back. Returns the restored [old] row.
+  Future<Channel> undoRekey(Channel old, Channel fresh) async {
+    final slot = fresh.slot;
+    final secret = await store.channels.secretOf(old);
+    if (slot == null || secret == null || fresh.id == null) {
+      throw const ChannelAdminException(ChannelAdminError.notOnRadio, 'The old channel can no longer be put back on the radio.');
+    }
+    final r = _needRadio();
+    await _write(r, slot, old.name, secret);
+    await store.channels.delete(fresh.id!);
+    final back = await store.channels.save(old.copyWith(slot: slot));
+    onChanged();
+    return back;
+  }
+
   // ------------------------------------------------------------------ sharing
 
   /// The `meshcore://channel/add` link (also the text of the QR code). Needs the secret on this phone.
