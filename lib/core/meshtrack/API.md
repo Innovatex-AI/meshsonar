@@ -38,7 +38,8 @@ The clock (`now:`) and randomness (`random:`) are injected. Tests use fakeAsync.
 | `setRadioConnected(bool)` | Radio session state. Sends pause while disconnected; sharing ends after 5 min. |
 | `setPingWindow(MtPingWindow(listening:, nextPingAt:))` | Every `EngineStatus`: `listening = state == pinging \|\| heardSoFar != null`, `nextPingAt = EngineStatus.nextPingAt`. |
 | `driveStarted()` / `driveStopped()` | AppState drive start and stop. |
-| `onChannelText(MtInboundText) -> bool` | The chat inbound tap, **before** `store.messages.insert`. `true` means consumed: do not store, notify, back up or index it. `text` is the raw `name: body`. Also pass `senderTs`, `receivedAt`, `snr` and `pathLen`. |
+| `chat.addChannelTextTap(mt.channelTextTap)` | Register once (MT-4 seam, `lib/chat/channel_text_tap.dart`). Consumed MeshTrack text is never stored, notified, backed up or indexed. Typed positions pass, so they stay chat. |
+| `onChannelText(MtInboundText) -> bool` | The same decision without the tap: `MtInboundText(text: 'name: body', ...)` or `MtInboundText.fromTapEvent(e)`. |
 | `syncGroups(List<MtGroupConfig>)` | When channels change (rename, removal, `onRadio: false` for "Not on this radio"). |
 
 ## Commands (UI, MT-6)

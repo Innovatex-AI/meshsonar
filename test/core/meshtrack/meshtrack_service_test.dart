@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/chat/channel_secret.dart';
+import 'package:meshsonar/chat/channel_text_tap.dart';
 import 'package:meshsonar/chat/models.dart';
 import 'package:meshsonar/core/meshtrack/meshtrack_service.dart';
 import 'package:meshsonar/core/meshtrack/plus_code.dart';
@@ -470,6 +471,36 @@ void main() {
           expect(fs.firstWhere((f) => f.name == 'Bob').typed, isTrue);
           expect(fs.firstWhere((f) => f.name == 'Tim').source, MtSource.team);
           expect(h.s.state.group(1)!.heardLast30Min, 3);
+        }));
+
+    test('chat tap adapter (ChannelTextTap): consume vs pass, backlog sender time', () => _run((h) {
+          h.ready(share: false);
+          ChannelTextEvent ev(String? name, String body, {int ch = 1, int? senderTs}) => ChannelTextEvent(
+                radioId: 'r',
+                channelId: ch,
+                channelSlot: 2,
+                channelKind: ChannelKind.private,
+                convKey: 'c:$ch',
+                senderName: name,
+                body: body,
+                senderTs: senderTs ?? h.now.millisecondsSinceEpoch ~/ 1000,
+                snr: 4,
+                pathLen: null,
+                rssi: -90,
+                receivedMs: h.now.millisecondsSinceEpoch,
+                backlog: false,
+              );
+          final tap = h.s.channelTextTap;
+          final code = PlusCode.encode(40, -83);
+          expect(tap.onChannelText(ev('Sam', 'MT1 @$code')), TapVerdict.consume);
+          expect(tap.onChannelText(ev('Sam', 'hi all')), TapVerdict.pass);
+          expect(tap.onChannelText(ev('Sam', 'MT1 @$code', ch: 7)), TapVerdict.pass);
+          expect(tap.onChannelText(ev(null, 'MT1 @$code')), TapVerdict.consume);
+          final old = h.now.subtract(const Duration(hours: 1));
+          tap.onChannelText(ev('Ann', 'MT1 @$code', senderTs: old.millisecondsSinceEpoch ~/ 1000));
+          final ann = h.s.state.group(1)!.friends.firstWhere((f) => f.name == 'Ann');
+          expect(ann.lastHeard, old);
+          expect(ann.staleness, MtStaleness.grey);
         }));
 
     test('duplicates, meet pins, stop, See off', () => _run((h) {

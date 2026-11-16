@@ -13,6 +13,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 
+import '../../chat/channel_text_tap.dart' show ChannelTextEvent, ChannelTextTap, TapVerdict;
 import '../../radio/airtime.dart' show groupTextPacketBytes;
 import '../privacy_zones.dart' show PrivacyZones, distanceM;
 import 'interop.dart';
@@ -339,7 +340,22 @@ class MtInboundText {
 
   /// 0 = direct; null = unknown.
   final int? pathLen;
-  const MtInboundText({required this.channelId, required this.text, required this.receivedAt, this.senderTs, this.snr, this.pathLen});
+
+  /// Already split by the chat layer ([fromTapEvent]); null = split [text] here.
+  final ({String? name, String body})? split;
+  const MtInboundText({required this.channelId, required this.text, required this.receivedAt, this.senderTs, this.snr, this.pathLen})
+      : split = null;
+
+  /// From the chat inbound tap's event (lib/chat/channel_text_tap.dart, MT-4): sender name and body already split,
+  /// sender time in unix seconds (0 = unknown), receive time in epoch ms.
+  MtInboundText.fromTapEvent(ChannelTextEvent e)
+      : channelId = e.channelId,
+        text = e.senderName == null ? e.body : '${e.senderName}: ${e.body}',
+        receivedAt = DateTime.fromMillisecondsSinceEpoch(e.receivedMs, isUtc: true),
+        senderTs = e.senderTs > 0 ? DateTime.fromMillisecondsSinceEpoch(e.senderTs * 1000, isUtc: true) : null,
+        snr = e.snr,
+        pathLen = e.pathLen,
+        split = (name: e.senderName, body: e.body);
 }
 
 enum _Kind { position, stop, request, meet }
@@ -997,6 +1013,10 @@ class MeshTrackService {
   /// An inbound channel message, before chat stores it. Returns true when it is consumed (MeshTrack machine text on a
   /// group: not stored, not notified, not in backup or search). Typed positions return false (they stay chat) but
   /// still become a pin. Never throws.
+  /// The chat inbound tap (register with `ChatService.addChannelTextTap(mt.channelTextTap)`).
+  late final ChannelTextTap channelTextTap =
+      ChannelTextTap.of((e) => onChannelText(MtInboundText.fromTapEvent(e)) ? TapVerdict.consume : TapVerdict.pass);
+
   bool onChannelText(MtInboundText e) {
     try {
       return _onText(e);
@@ -1008,7 +1028,8 @@ class MeshTrackService {
   bool _onText(MtInboundText e) {
     final g = _groups[e.channelId];
     if (g == null) return false;
-    final (name, body) = splitMtSender(e.text);
+    final s = e.split;
+    final (name, body) = s != null ? (s.name, s.body) : splitMtSender(e.text);
     final msg = parseMeshTrack(body);
     final self = _selfNameOf();
     final isSelf = name != null && self != null && name == self;
