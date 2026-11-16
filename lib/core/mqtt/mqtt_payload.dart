@@ -92,16 +92,18 @@ String? mqttPacketMessage(TelemetryRecord record, RxPacket rx, {required String 
 }
 
 /// The `status` message: online (or offline when [online] is false), who (the radio's key), the radio model and firmware
-/// when known. No position.
+/// when known. No position. [timestamp] false leaves the time out (the last will: the broker sends it later, at an
+/// unknown time).
 Map<String, dynamic> mqttStatusJson({
   required String publicKeyHex,
   required DateTime at,
   String? model,
   String? firmware,
   bool online = true,
+  bool timestamp = true,
 }) => {
   'status': online ? 'online' : 'offline',
-  'timestamp': mqttTimestamp(at),
+  if (timestamp) 'timestamp': mqttTimestamp(at),
   'origin': mqttOrigin(publicKeyHex),
   'origin_id': publicKeyHex.toUpperCase(),
   if (model != null && model.isNotEmpty) 'model': model,

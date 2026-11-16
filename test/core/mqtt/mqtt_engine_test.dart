@@ -487,11 +487,15 @@ void main() {
           expect(c.willQos, 1);
           expect((jsonDecode(c.willMessage!) as Map)['status'], 'offline');
           expect((jsonDecode(c.willMessage!) as Map)['origin_id'], rfcPublicHex.toUpperCase());
+          // The will carries no time (the broker sends it later, whenever the link is lost); online and offline do.
+          expect((jsonDecode(c.willMessage!) as Map).containsKey('timestamp'), isFalse, reason: 'no timestamp in the last will');
+          expect((jsonDecode(online.payload) as Map).containsKey('timestamp'), isTrue);
           // Turned off: offline on the same topic and retain flag, then a clean disconnect.
           e.engine.update(engineState(slots: [s1.copyWith(enabled: false)], sign: e.radio.sign));
           e.settle();
           final offline = e.net.statuses().last;
           expect((jsonDecode(offline.payload) as Map)['status'], 'offline');
+          expect((jsonDecode(offline.payload) as Map).containsKey('timestamp'), isTrue, reason: 'a normal offline keeps its time');
           expect(offline.topic, online.topic);
           expect(offline.retain, online.retain);
           expect(offline.qos, 1);
@@ -572,6 +576,23 @@ void main() {
       final e = MqttObserverEngine(secrets: _BrokenStore(), clock: () => _t0, random: Random(3));
       expect(await e.installId(), matches(RegExp(r'^[0-9a-f]{4}$')));
       await e.dispose();
+    });
+
+    test('a store read that fails never overwrites the stored id: this launch uses a memory-only id', () async {
+      final store = _FlakyStore();
+      store.data[MqttObserverEngine.installIdSlot] = Uint8List.fromList([0xab, 0xcd]);
+      store.failReads = true;
+      final a = MqttObserverEngine(secrets: store, clock: () => _t0, random: Random(5));
+      final id = await a.installId();
+      expect(id, matches(RegExp(r'^[0-9a-f]{4}$')));
+      expect(store.writes, 0, reason: 'a read error must not overwrite the stored id');
+      expect(store.data[MqttObserverEngine.installIdSlot], [0xab, 0xcd]);
+      await a.dispose();
+      // The next launch reads the stored id again.
+      store.failReads = false;
+      final b = MqttObserverEngine(secrets: store, clock: () => _t0, random: Random(6));
+      expect(await b.installId(), 'abcd');
+      await b.dispose();
     });
 
     test('format: ms + 8 key hex + 6 slot hex + 4 install hex (20, Test 21), same across launches, <= 23', () {
@@ -662,4 +683,24 @@ class _BrokenStore implements SecretStore {
   Future<void> write(String ref, Uint8List secret) async => throw StateError('locked');
   @override
   Future<void> delete(String ref) async {}
+}
+
+class _FlakyStore implements SecretStore {
+  final Map<String, Uint8List> data = {};
+  bool failReads = false;
+  int writes = 0;
+  @override
+  Future<Uint8List?> read(String ref) async {
+    if (failReads) throw StateError('locked');
+    return data[ref];
+  }
+
+  @override
+  Future<void> write(String ref, Uint8List secret) async {
+    writes++;
+    data[ref] = secret;
+  }
+
+  @override
+  Future<void> delete(String ref) async => data.remove(ref);
 }
