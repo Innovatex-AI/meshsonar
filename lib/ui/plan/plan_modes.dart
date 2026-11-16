@@ -14,7 +14,6 @@
 // Keys: 'plan-mode-<id>' (the body), 'link-a' / 'link-b' (end pickers), 'link-run', 'link-result', 'link-verdict',
 // 'coverage-run', 'coverage-result', 'coverage-area', 'sites-goal-<goal>', 'sites-run', 'sites-result', 'site-<id>',
 // 'site-add-<id>', 'drive-next-show-map'.
-import 'dart:async';
 
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
@@ -23,19 +22,18 @@ import 'package:latlong2/latlong.dart' show LatLng;
 import '../../core/drive_next.dart' show driveNextTargets, DriveTarget;
 import '../../core/heard.dart' show bearingDeg, compass;
 import '../../core/hex_cells.dart' show loadHexEngine;
-import '../../core/plan/link_model.dart' show ftM;
 import '../../core/plan/plan_api.dart';
 import '../../core/plan/plan_controller.dart';
 import '../../core/plan_contract.dart';
 import '../../core/units.dart' show Units;
 import '../app.dart';
 import '../design/app_symbols.dart';
-import '../design/state_views.dart';
 import '../design/tokens.dart';
 import '../map/layers/plan_overlay.dart' show PlanLinkVerdict, PlanOverlayLink;
 import '../map/layers/registry.dart' show kPlanLayerId;
 import '../map/main_map_focus.dart';
 import '../shell/drive_next_card.dart';
+import 'modes/coverage_mode.dart';
 import 'modes/find_sites_mode.dart';
 import 'modes/link_mode.dart';
 
@@ -172,7 +170,7 @@ class PlanModeContext {
 /// The planner's chips, in order. A full mode replaces its line here when it lands (A8 link, A9 coverage, A10 find sites).
 final List<PlanMode> planModes = [
   const LinkMode(),
-  const _CoverageMode(),
+  const CoverageMode(),
   const FindSitesMode(),
   const WhereToDriveMode(),
 ];
@@ -275,236 +273,6 @@ Widget _primary(BuildContext context, {required Key key, required String label, 
       icon: busy ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : AppSymbolIcon(symbol, size: 18),
       label: Text(label),
     );
-
-// ------------------------------------------------------------------------------------------------ Coverage (compact)
-
-class _CoverageMode extends PlanMode {
-  const _CoverageMode();
-  @override
-  PlanModeId get id => PlanModeId.coverage;
-  @override
-  String get label => 'Coverage';
-  @override
-  AppSymbol get symbol => AppSymbols.antenna;
-  @override
-  String get hint => 'What a repeater at a node of the plan would cover.';
-  @override
-  Widget buildSheet(PlanModeContext context) => _CoverageBody(context, key: ValueKey('plan-mode-body-coverage-${context.intent?.seq}'));
-}
-
-/// The numbers the compact coverage body shows, from plan-verify or, when that endpoint is not there, the website's
-/// coverage painter (`/api/cmh/coverage`, the same model).
-class _CoverageView {
-  final double coveredKm2;
-  final List<(String id, String label, double km2)> bands;
-  final double? newAreaKm2;
-  final int? newPeople;
-  final List<(String key, String name, double km, double marginDb)> links;
-  final String note;
-  const _CoverageView({required this.coveredKm2, required this.bands, this.newAreaKm2, this.newPeople, required this.links, required this.note});
-
-  static _CoverageView ofVerify(PlanVerifyResult r) => _CoverageView(
-        coveredKm2: r.coveredKm2,
-        bands: [for (final b in r.bands) (b.id, b.label, b.areaKm2)],
-        newAreaKm2: r.newAreaKm2,
-        newPeople: r.newPeople,
-        links: [for (final l in r.links) (l.publicKey, l.name, l.km, l.marginDb)],
-        note: r.provenance.terrain.isEmpty ? '' : 'Terrain: ${r.provenance.terrain}.',
-      );
-
-  static _CoverageView ofPainter(PainterResult r) => _CoverageView(
-        coveredKm2: r.coveredKm2,
-        bands: [for (final b in r.bands) (b.id, b.label, b.areaKm2)],
-        newPeople: r.peopleNew,
-        links: [for (final l in r.links) (l.publicKey, l.name, l.km, l.marginDb)],
-        note: '${r.note} Terrain: ${r.terrainSource}.',
-      );
-}
-
-class _CoverageBody extends StatefulWidget {
-  final PlanModeContext ctx;
-  const _CoverageBody(this.ctx, {super.key});
-  @override
-  State<_CoverageBody> createState() => _CoverageBodyState();
-}
-
-class _CoverageBodyState extends State<_CoverageBody> {
-  String? _node;
-  bool _loading = false;
-  PlanResult<_CoverageView>? _res;
-  String? _resKey;
-  int _seq = 0;
-
-  PlanModeContext get ctx => widget.ctx;
-
-  @override
-  void initState() {
-    super.initState();
-    final i = ctx.intent;
-    _node = i?.kind == PlanModeIntentKind.coverageOf ? i!.nodeId : (ctx.selectedNodeId ?? ctx.controller.nodes.firstOrNull?.id);
-    ctx.hooks.onNodeTap = _onNodeTap;
-    ctx.plan.addListener(_onPlan);
-    ctx.setOverlay(PlanModeOverlay.empty);
-    if (i?.kind == PlanModeIntentKind.coverageOf) WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(_run()));
-  }
-
-  @override
-  void dispose() {
-    ctx.plan.removeListener(_onPlan);
-    if (ctx.hooks.onNodeTap == _onNodeTap) ctx.hooks.onNodeTap = null;
-    super.dispose();
-  }
-
-  void _onPlan() {
-    if (!mounted) return;
-    setState(() {
-      if (_node != null && ctx.controller.plan.node(_node!) == null) _node = ctx.controller.nodes.firstOrNull?.id;
-      _node ??= ctx.controller.nodes.firstOrNull?.id;
-    });
-  }
-
-  bool _onNodeTap(String id) {
-    if (ctx.controller.plan.node(id) == null) return false;
-    setState(() => _node = id);
-    ctx.selectNode(id);
-    return true;
-  }
-
-  PlanVerifyRequest? get _request {
-    final p = ctx.controller.plan;
-    final n = _node == null ? null : p.node(_node!);
-    if (n == null) return null;
-    return PlanVerifyRequest(
-      site: n.point,
-      radio: p.radio,
-      antennaM: n.antennaM,
-      txDbm: n.effectiveTxDbm,
-      gainDbi: n.effectiveGainDbi,
-      clutter: p.clutter,
-      receiverM: p.receiverM,
-      mount: n.mount,
-    );
-  }
-
-  Future<void> _run() async {
-    final r = _request;
-    if (r == null) return;
-    final key = PlanApi.verifyKey(r);
-    final n = ++_seq;
-    setState(() => _loading = true);
-    final s = AppScope.read(context);
-    final v = await ctx.api.verify(r);
-    PlanResult<_CoverageView> out;
-    if (v.ok) {
-      out = PlanResult.ok(_CoverageView.ofVerify(v.data!), at: v.at, offlineAsOf: v.offlineAsOf);
-    } else if (v.unavailable) {
-      // The planner endpoint is not on this server yet: the website's coverage painter runs the same model.
-      final p = await CoveragePainterApi(s.planBaseUrl, s.planStore).paint(PainterParams(
-        lat: r.site.lat,
-        lon: r.site.lon,
-        antennaFt: (r.antennaM / ftM).clamp(6, 200).toDouble(),
-        txDbm: r.txDbm.clamp(0, 30).toDouble(),
-        gainDbi: r.gainDbi.clamp(-3, 12).toDouble(),
-      ));
-      out = p.ok ? PlanResult.ok(_CoverageView.ofPainter(p.data!), at: p.at, offlineAsOf: p.offlineAsOf) : PlanResult.fail(p.error ?? v.error ?? 'No answer.');
-    } else {
-      out = PlanResult.fail(v.error ?? 'No answer.');
-    }
-    if (!mounted || n != _seq) return;
-    setState(() {
-      _loading = false;
-      _res = out;
-      _resKey = key;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    final units = AppScope.unitsOf(context);
-    final nodes = ctx.controller.nodes;
-    if (nodes.isEmpty) {
-      return AppEmptyView(
-        key: const Key('plan-mode-coverage'),
-        symbol: AppSymbols.antenna,
-        title: 'Add a node to estimate its coverage',
-        message: 'Long-press the map where a repeater could go, or add one from the network.',
-        actionLabel: 'Add from the network',
-        onAction: ctx.openNodePicker,
-      );
-    }
-    final p = ctx.controller.plan;
-    final node = _node == null ? null : p.node(_node!);
-    final req = _request;
-    final current = _res != null && req != null && _resKey == PlanApi.verifyKey(req);
-    return Column(key: const Key('plan-mode-coverage'), crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Padding(
-        padding: const EdgeInsets.symmetric(vertical: Gap.xs),
-        child: DropdownButtonFormField<String>(
-          key: Key('coverage-node-$_node'),
-          initialValue: _node,
-          isExpanded: true,
-          decoration: const InputDecoration(labelText: 'Site', border: OutlineInputBorder()),
-          items: [for (final n in nodes) DropdownMenuItem(value: n.id, child: Text(n.name, overflow: TextOverflow.ellipsis))],
-          onChanged: (v) => setState(() => _node = v),
-        ),
-      ),
-      if (node != null)
-        PlanFact('Antenna', '${units.height(node.antennaM)} above ground, ${node.effectiveTxDbm.round()} dBm, ${node.effectiveGainDbi.toStringAsFixed(1)} dBi'),
-      if (node != null)
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton.icon(
-            key: const Key('coverage-edit-node'),
-            style: TextButton.styleFrom(minimumSize: const Size(Hit.min, Hit.min)),
-            onPressed: () => ctx.editNode(node.id),
-            icon: const AppSymbolIcon(AppSymbols.squareAndPencil, size: 18),
-            label: const Text('Change height and power'),
-          ),
-        ),
-      _primary(context,
-          key: const Key('coverage-run'),
-          label: _loading ? 'Estimating coverage…' : current ? 'Estimate again' : 'Estimate coverage',
-          symbol: AppSymbols.antenna,
-          busy: _loading,
-          onPressed: req == null ? null : () => unawaited(_run())),
-      if (_loading) const PlanLine(AppSymbols.clock, 'The model reads terrain tiles and sweeps the area; the first run for a place can take up to a minute.'),
-      const SizedBox(height: Gap.s),
-      if (_res != null && !_res!.ok)
-        AppErrorView(key: const Key('coverage-error'), title: 'Could not estimate coverage', message: _res!.error, onRetry: () => unawaited(_run())),
-      if (_res != null && _res!.ok) _result(context, _res!, current, units, t),
-    ]);
-  }
-
-  Widget _result(BuildContext context, PlanResult<_CoverageView> r, bool current, Units units, ThemeData t) {
-    final d = r.data!;
-    final bandWords = {'below': 'No decode', 'fringe': 'Fringe (0 to 6 dB margin)', 'usable': 'Usable (6 to 12 dB)', 'solid': 'Solid (over 12 dB)'};
-    final heard = d.links.where((l) => l.$4 >= 0).toList();
-    return Column(key: const Key('coverage-result'), crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      if (!current) const PlanLine(AppSymbols.clock, 'The site or settings changed: this is the last result. Estimate again to update it.', key: Key('coverage-stale')),
-      Semantics(
-        label: 'Covered area, Estimate: ${areaWords(units, d.coveredKm2)}',
-        excludeSemantics: true,
-        child: Text(areaWords(units, d.coveredKm2), key: const Key('coverage-area'), style: numberStyle(context, size: 30)),
-      ),
-      Text('Estimate: area where a handheld can decode this site', style: t.textTheme.bodySmall),
-      const SizedBox(height: Gap.s),
-      for (final b in d.bands)
-        if (b.$1 != 'below') PlanFact(bandWords[b.$1] ?? b.$2, areaWords(units, b.$3)),
-      if (d.newAreaKm2 != null) PlanFact('New area not covered today', areaWords(units, d.newAreaKm2!)),
-      if (d.newPeople != null) PlanFact('People not covered by a live repeater today', '${d.newPeople}'),
-      const SizedBox(height: Gap.s),
-      if (heard.isEmpty)
-        const PlanLine(AppSymbols.antenna, 'No live repeater is predicted to hear this site.', key: Key('coverage-nolinks'))
-      else ...[
-        Semantics(header: true, child: Text('Predicted links to live repeaters', style: t.textTheme.titleSmall)),
-        for (final l in heard.take(8)) PlanFact('${l.$2} · ${units.distance(l.$3 * 1000)}', dbWords(l.$4, signed: true)),
-      ],
-      ...resultNotes(context, r),
-      if (d.note.isNotEmpty) Text('Estimate, not a measurement. ${d.note}', style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
-    ]);
-  }
-}
 
 // ------------------------------------------------------------------------------------------------ Where to drive
 

@@ -7,7 +7,7 @@
 // On the map: a long-press drops a planned node (or, while moving a node, puts it there); a tap on a plan node selects it
 // (a mode may take the tap first, e.g. Link picks its ends); a tap on a target the mode drew goes to the mode or opens the
 // target sheet (Navigate). Moving a node: "Move on the map" in the node editor shows a crosshair; pan the map under it and
-// press Set here, or long-press the spot.
+// press Set here, or long-press the spot. Or long-press a node's marker and drag it (CoverageMap.onPlanNodeDrag; one undo step).
 //
 // Requests from anywhere in the app (ShellController.openPlan, taken by plan_tab.dart) arrive at [PlannerScreenState.handle]:
 // a shared plan link, Plan from here, Add to plan, Link to…, a point, a saved plan.
@@ -50,6 +50,7 @@ import '../map/layers/registry.dart' show kPlanLayerId, layerStateFromPrefs;
 import '../map/layers/repeater_map_source.dart';
 import '../map/region_center.dart' show idleMapPosition, viewedRegionBounds, viewedRegionCenter;
 import '../shell/shell_controller.dart';
+import 'modes/footprint_layer.dart' show PlanFootprintController, PlanFootprintLayer, PlanFootprintScope;
 import 'node_list.dart';
 import 'plan_modes.dart';
 import 'plan_share.dart' show PlanImportAdded, PlanImportOpen, showPlanImport, showPlanShare;
@@ -74,6 +75,7 @@ class PlannerScreenState extends State<PlannerScreen> {
   String? _apiBase;
   PlanController? _c;
   final PlanOverlayController _overlay = PlanOverlayController();
+  final PlanFootprintController _footprint = PlanFootprintController();
   final MapViewController _view = MapViewController();
   AppStateRepeaterFeed? _feed;
   RepeaterMapSource? _source;
@@ -130,6 +132,7 @@ class PlannerScreenState extends State<PlannerScreen> {
     _source?.dispose();
     _feed?.dispose();
     _overlay.dispose();
+    _footprint.dispose();
     _view.dispose();
     _sheetScroll.dispose();
     super.dispose();
@@ -379,6 +382,30 @@ class PlannerScreenState extends State<PlannerScreen> {
     }
   }
 
+  // ------------------------------------------------------------------------------------------------ dragging a node
+
+  String? _dragging;
+
+  /// A plan node dragged on the map (CoverageMap.onPlanNodeDrag): one undo step for the whole drag.
+  void _onDrag(String id, LatLng at) {
+    final c = _c;
+    final n = c?.plan.node(id);
+    if (c == null || n == null || _moving != null || (n.lat == at.latitude && n.lon == at.longitude)) return;
+    c.moveNode(id, at.latitude, at.longitude, continuing: _dragging == id);
+    _dragging = id;
+  }
+
+  void _onDragEnd(String id, LatLng at) {
+    _onDrag(id, at);
+    final moved = _dragging == id;
+    _dragging = null;
+    final c = _c;
+    if (!moved || c == null || !mounted) return;
+    setState(() => _selected = id);
+    unawaited(AppHaptics.success());
+    showAppToast(context, 'Moved ${c.plan.node(id)?.name ?? 'the node'}.', actionLabel: 'Undo', onAction: c.undo);
+  }
+
   // ------------------------------------------------------------------------------------------------ requests
 
   /// Applies a request from elsewhere in the app (plan_tab.dart takes it from ShellController.takePendingPlan).
@@ -623,7 +650,10 @@ class PlannerScreenState extends State<PlannerScreen> {
     final fix = s.phoneFix;
     final c = _c;
     final topInset = MediaQuery.paddingOf(context).top;
-    return Scaffold(
+    // The coverage footprint: Coverage mode fills it (through the scope), the map draws it under the plan layer.
+    return PlanFootprintScope(
+      controller: _footprint,
+      child: Scaffold(
       key: const Key('planner'),
       body: LayoutBuilder(builder: (context, box) {
         _available = box.maxHeight;
@@ -650,6 +680,9 @@ class PlannerScreenState extends State<PlannerScreen> {
                 planOverlay: _overlay,
                 onPlanNode: _onPlanNode,
                 onLongPress: _onLongPress,
+                onPlanNodeDrag: _onDrag,
+                onPlanNodeDragEnd: _onDragEnd,
+                extraLayers: [PlanFootprintLayer(controller: _footprint)],
                 topClearance: topInset,
                 // At Full the map is behind the sheet: its controls and credit stay at the Medium line, clear of the status bar.
                 bottomClearance: _mapSheetHeight,
@@ -670,6 +703,7 @@ class PlannerScreenState extends State<PlannerScreen> {
           ),
         ]);
       }),
+      ),
     );
   }
 

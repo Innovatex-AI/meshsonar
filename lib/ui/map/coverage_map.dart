@@ -55,6 +55,10 @@
 //     plan node sheet (layers/plan_node_sheet.dart: Navigate, Remove plan from map).
 //   - [onLongPress]: a long-press on bare map (a [LongPressHit], "drop a pin"); a long-press on a plan node is a [PlanNodeHit]
 //     for [onPlanNode]. Without one a long-press does nothing (as before).
+//   - [extraLayers]: the host's own flutter_map layers, drawn above every map layer and under the plan layer (the planner's
+//     coverage footprint, ui/plan/modes/footprint_layer.dart). Empty by default.
+//   - [onPlanNodeDrag] / [onPlanNodeDragEnd]: long-press a plan node's marker and drag it ('plan-drag-<id>' handles over the
+//     plan's nodes, never the targets). Null (the default, the Drive map) = no handles, nothing changes.
 //   - [takesFocusRequests] false (the default) keeps a secondary map (the planner's, a detail map) from taking "Open the map
 //     here" requests meant for the Drive map.
 import 'dart:async' show StreamController, StreamSubscription, Timer, unawaited;
@@ -398,6 +402,15 @@ class CoverageMap extends StatefulWidget {
   /// A long-press on bare map (drop a pin). Null = a long-press does nothing.
   final MapHitHandler<LongPressHit>? onLongPress;
 
+  /// Host layers drawn above every map layer and under the plan layer (the planner's coverage footprint). Empty = none.
+  final List<Widget> extraLayers;
+
+  /// Dragging a plan node (not a target): a long-press on its marker picks it up, every move reports where it is now, and
+  /// [onPlanNodeDragEnd] reports where it was let go. Null = plan nodes cannot be dragged (a long-press on one is a
+  /// [PlanNodeHit], as before).
+  final void Function(String nodeId, LatLng at)? onPlanNodeDrag;
+  final void Function(String nodeId, LatLng at)? onPlanNodeDragEnd;
+
   const CoverageMap({
     super.key,
     required this.pings,
@@ -454,6 +467,9 @@ class CoverageMap extends StatefulWidget {
     this.planOverlay,
     this.onPlanNode,
     this.onLongPress,
+    this.extraLayers = const [],
+    this.onPlanNodeDrag,
+    this.onPlanNodeDragEnd,
   });
 
   /// True unless running under `flutter test`.
@@ -2114,9 +2130,21 @@ class _CoverageMapState extends State<CoverageMap> {
                   avoid: (size) => _overlayRects(),
                 ),
               ),
+            // The host's own layers (the planner's coverage footprint), under the plan layer.
+            ...widget.extraLayers,
             // The open plan (registry z 80): on top of everything, so its nodes win every tap.
             if (layerState.isOn(kPlanLayerId))
               if (_planSource case final plan?) ...planLayerWidgets(plan, onTap: _onPlanNodeTap),
+            // Drag handles over the plan's nodes, only when the host takes drags (the Drive map has none).
+            if (widget.onPlanNodeDrag != null && widget.interactive && layerState.isOn(kPlanLayerId))
+              if (_planSource case final plan?)
+                _PlanDragHandles(
+                  overlay: plan,
+                  onTap: _onPlanNodeTap,
+                  onHold: (n) => _applyHit(PlanNodeHit(nodeId: n.id, name: n.name, lat: n.at.latitude, lon: n.at.longitude)),
+                  onDrag: widget.onPlanNodeDrag!,
+                  onDragEnd: widget.onPlanNodeDragEnd,
+                ),
           ],
         ),
       banner: widget.banner,
@@ -2386,4 +2414,90 @@ class _CoverageMapState extends State<CoverageMap> {
     return parts.isEmpty ? null : parts.join(' · ');
   }
 
+}
+
+/// Invisible 44 pt handles over the plan's nodes (targets are not draggable): a tap is the node's tap, a long-press picks
+/// the node up and moves it under the finger, a long-press let go without moving is the long-press on the node (a
+/// [PlanNodeHit]). VoiceOver keeps the plan layer's own marker buttons (the planner offers Move on the map for them).
+class _PlanDragHandles extends StatelessWidget {
+  final PlanOverlayController overlay;
+  final ValueChanged<PlanOverlayNode> onTap, onHold;
+  final void Function(String nodeId, LatLng at) onDrag;
+  final void Function(String nodeId, LatLng at)? onDragEnd;
+  const _PlanDragHandles({required this.overlay, required this.onTap, required this.onHold, required this.onDrag, this.onDragEnd});
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: overlay,
+        builder: (context, _) {
+          final nodes = overlay.plan.nodes;
+          if (nodes.isEmpty) return const SizedBox.shrink();
+          return MarkerLayer(
+            key: const Key('plan-drag-layer'),
+            markers: [
+              for (final n in nodes)
+                Marker(
+                  key: ValueKey('plan-drag-marker-${n.id}'),
+                  point: n.at,
+                  width: 44,
+                  height: 44,
+                  child: _PlanDragHandle(key: ValueKey('plan-drag-${n.id}'), node: n, onTap: onTap, onHold: onHold, onDrag: onDrag, onDragEnd: onDragEnd),
+                ),
+            ],
+          );
+        },
+      );
+}
+
+class _PlanDragHandle extends StatefulWidget {
+  final PlanOverlayNode node;
+  final ValueChanged<PlanOverlayNode> onTap, onHold;
+  final void Function(String nodeId, LatLng at) onDrag;
+  final void Function(String nodeId, LatLng at)? onDragEnd;
+  const _PlanDragHandle({super.key, required this.node, required this.onTap, required this.onHold, required this.onDrag, this.onDragEnd});
+  @override
+  State<_PlanDragHandle> createState() => _PlanDragHandleState();
+}
+
+class _PlanDragHandleState extends State<_PlanDragHandle> {
+  Offset? _startScreen, _startGlobal;
+  LatLng? _last;
+
+  LatLng _at(Offset global) {
+    final cam = MapCamera.of(context);
+    return cam.screenOffsetToLatLng(_startScreen! + (global - _startGlobal!));
+  }
+
+  @override
+  Widget build(BuildContext context) => ExcludeSemantics(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => widget.onTap(widget.node),
+          onLongPressStart: (d) {
+            _startScreen = MapCamera.of(context).latLngToScreenOffset(widget.node.at);
+            _startGlobal = d.globalPosition;
+            _last = null;
+            unawaited(AppHaptics.selection());
+          },
+          onLongPressMoveUpdate: (d) {
+            if (_startScreen == null) return;
+            final at = _at(d.globalPosition);
+            _last = at;
+            widget.onDrag(widget.node.id, at);
+          },
+          onLongPressEnd: (d) {
+            if (_startScreen == null) return;
+            final moved = _last != null;
+            final at = moved ? _at(d.globalPosition) : widget.node.at;
+            _startScreen = _startGlobal = _last = null;
+            if (moved) {
+              widget.onDragEnd?.call(widget.node.id, at);
+            } else {
+              widget.onHold(widget.node);
+            }
+          },
+          onLongPressCancel: () => _startScreen = _startGlobal = _last = null,
+          child: const SizedBox.expand(),
+        ),
+      );
 }
