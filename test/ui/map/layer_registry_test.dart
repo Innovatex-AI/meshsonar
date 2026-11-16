@@ -38,9 +38,9 @@ void main() {
       // Nov 9 2026: + 'heardcells', the Heard (no ping) layer (phone observer contract section 8.5), between predicted and measured.
       // Nov 12 2026 (M3-2): + 'redundancy', 'snrlinks' and 'estimated' (Map Definition capabilities layer.redundancy / layer.snrlinks / layer.estimated).
       expect(kMapLayers.map((l) => l.id).toSet(), {
-        'borders', 'predicted', 'heardcells', 'measured', 'redundancy', 'hexes', 'pings', 'snrlinks', 'links', 'heard', 'repeaters', 'network', 'estimated', 'observers', 'phones', 'labels', 'plan',
+        'borders', 'predicted', 'heardcells', 'measured', 'redundancy', 'hexes', 'pings', 'snrlinks', 'links', 'heard', 'repeaters', 'network', 'estimated', 'observers', 'phones', 'labels', 'plan', 'friends',
       });
-      expect(kMapLayers, hasLength(17));
+      expect(kMapLayers, hasLength(18));
       expect(layerSpec('heardcells')!.z, greaterThan(layerSpec('predicted')!.z));
       expect(layerSpec('heardcells')!.z, lessThan(layerSpec('measured')!.z), reason: 'a pinged cell shows its Measured colour');
       expect(layerSpec('rings'), isNull);
@@ -51,7 +51,7 @@ void main() {
 
     test('defaults come from the Map Definition: every defaultOn layer, plus the drive extras; All MeshCore repeaters off', () {
       expect(kDefaultLayerState.on,
-          {'borders', 'predicted', 'heardcells', 'measured', 'hexes', 'links', 'repeaters', 'estimated', 'observers', 'phones', 'heard', 'pings', 'labels'});
+          {'borders', 'predicted', 'heardcells', 'measured', 'hexes', 'links', 'repeaters', 'estimated', 'observers', 'phones', 'heard', 'pings', 'labels', 'friends'});
       expect(kDefaultLayerState.isOn('redundancy'), isFalse, reason: 'Redundancy is off by default (the definition)');
       expect(kDefaultLayerState.isOn('snrlinks'), isFalse, reason: 'Links by SNR is off by default (the definition)');
       expect(kDefaultLayerState.mode, {'pings': 'snr'}, reason: 'no colour-by mode any more (D9)');
@@ -66,7 +66,8 @@ void main() {
       expect([for (final (g, _) in rows) g.name], ['Coverage', 'Network', 'Context']);
       expect([for (final r in rows[0].$2) r.id], ['hexes', 'pings', 'redundancy', 'measured', 'heardcells', 'predicted'],
           reason: 'This drive (the panel-only drive layer, the app drive panel) then the website rows');
-      expect([for (final r in rows[1].$2) r.id], ['phones', 'observers', 'estimated', 'repeaters', 'labels', 'network', 'links', 'snrlinks']);
+      expect([for (final r in rows[1].$2) r.id], ['friends', 'phones', 'observers', 'estimated', 'repeaters', 'labels', 'network', 'links', 'snrlinks'],
+          reason: 'MeshTrack Friends (app-only) first: drawn above the other layers');
       expect([for (final r in rows[2].$2) r.id], ['borders']);
       expect([for (final id in ['measured', 'heardcells', 'predicted', 'redundancy', 'snrlinks', 'estimated', 'phones', 'observers', 'repeaters', 'network', 'links', 'borders']) layerLabel(id, MapDefinition.bundled)], [
         'Measured coverage',
@@ -153,11 +154,11 @@ void main() {
     test('fromShow: null = defaults; website link keeps the drive layers; app link sets them', () {
       expect(MapLayerState.fromShow(null, defaults: kDefaultLayerState, known: kMapLayerIds), kDefaultLayerState);
       final web = MapLayerState.fromShow(const ['repeaters', 'network'], defaults: kDefaultLayerState, known: kMapLayerIds);
-      expect(web.on, {'repeaters', 'network', 'hexes', 'links', 'heard', 'pings', 'labels'}, reason: 'measured and predicted off: not listed');
+      expect(web.on, {'repeaters', 'network', 'hexes', 'links', 'heard', 'pings', 'labels', 'friends'}, reason: 'measured and predicted off: not listed');
       final app = MapLayerState.fromShow(const ['measured', 'pings'], defaults: kDefaultLayerState, known: kMapLayerIds, appLink: true);
       expect(app.on, {'measured', 'pings'});
       final none = MapLayerState.fromShow(const [], defaults: kDefaultLayerState, known: kMapLayerIds);
-      expect(none.on, {'hexes', 'links', 'heard', 'pings', 'labels'});
+      expect(none.on, {'hexes', 'links', 'heard', 'pings', 'labels', 'friends'});
     });
 
     test('layerStateForLink applies show; an old link\'s color= is ignored (one colour metric, D9)', () {
