@@ -182,6 +182,9 @@ void main() {
     final n = st.controller!.addNode(name: 'Hilltop', lat: _a.lat, lon: _a.lon);
     await _coverage(tester, st);
     await _estimate(tester);
+    await tapIn(tester, find.byKey(const Key('coverage-settings')));
+    await settle(tester);
+    expect(find.byKey(const Key('coverage-mount-tree')), findsOneWidget);
     await tapIn(tester, find.byKey(const Key('coverage-mount-tree')));
     expect(st.controller!.plan.node(n.id)!.mount, PlanMount.tree);
     expect(st.controller!.plan.node(n.id)!.antennaM, mountHeightM(PlanMount.tree));
@@ -297,6 +300,7 @@ void main() {
       st.controller!.addNode(name: 'Barn', lat: b.lat, lon: b.lon, status: PlanNodeStatus.installed);
       await _coverage(tester, st);
       await _estimate(tester, key: 'coverage-run-all');
+      await tapIn(tester, find.byKey(const Key('coverage-settings')));
       await _estimate(tester, key: 'coverage-matrix-run');
       await tapIn(tester, find.byKey(const Key('coverage-spot-centre')));
       await settle(tester);

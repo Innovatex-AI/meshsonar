@@ -567,7 +567,7 @@ class CoverageBodyState extends State<CoverageBody> {
           },
         ),
       ),
-      if (node != null) ..._siteSettings(context, node, units),
+      if (node != null) PlanFact('Antenna', '${units.height(node.antennaM)} above ground, ${node.effectiveTxDbm.round()} dBm, ${node.effectiveGainDbi.toStringAsFixed(1)} dBi'),
       const SizedBox(height: Gap.s),
       _button(
         key: const Key('coverage-run'),
@@ -592,6 +592,15 @@ class CoverageBodyState extends State<CoverageBody> {
       if (run != null && !run.result.ok && current)
         AppErrorView(key: const Key('coverage-error'), title: 'Could not estimate coverage', message: run.result.error, onRetry: () => unawaited(estimate(node.id))),
       if (run != null && run.result.ok && node != null) _siteCard(context, node, run, current, units, t),
+      if (node != null)
+        ExpansionTile(
+          key: const Key('coverage-settings'),
+          tilePadding: EdgeInsets.zero,
+          leading: const AppSymbolIcon(AppSymbols.gear),
+          title: const Text('Mount and receiver'),
+          subtitle: Text('${node.mount == null ? units.height(node.antennaM) : '${mountWords(node.mount!)} ${units.height(node.antennaM)}'} · ${CoverageReceiver.of(p.receiverM).label} ${units.height(p.receiverM ?? CoverageReceiver.of(p.receiverM).heightM)}'),
+          children: _siteSettings(context, node, units),
+        ),
       if (_field != null && _view != null) ...[
         const Divider(),
         ..._layerControls(context, units, t),
@@ -618,7 +627,6 @@ class CoverageBodyState extends State<CoverageBody> {
     final rx = CoverageReceiver.of(p.receiverM);
     final rxM = p.receiverM ?? rx.heightM;
     return [
-      PlanFact('Antenna', '${units.height(node.antennaM)} above ground, ${node.effectiveTxDbm.round()} dBm, ${node.effectiveGainDbi.toStringAsFixed(1)} dBi'),
       Semantics(header: true, child: Text('Mount', style: t.textTheme.titleSmall)),
       Wrap(spacing: Gap.s, runSpacing: Gap.xs, children: [
         for (final m in PlanMount.values)
