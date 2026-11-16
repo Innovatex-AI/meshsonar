@@ -350,8 +350,6 @@ class _ReportPreviewScreenState extends State<ReportPreviewScreen> {
   static String _plural(int n, String one) => '$n $one${n == 1 ? '' : 's'}';
 
   Future<void> _send(AppState s) async {
-    final saved = s.savedReport;
-    if (saved != null && saved.report.body != widget.report.body && !await _confirmReplace()) return;
     setState(() => _sending = true);
     final outcome = await s.sendProblemReport(widget.report, form: widget.form);
     if (!mounted) return;
@@ -365,16 +363,6 @@ class _ReportPreviewScreenState extends State<ReportPreviewScreen> {
     final nav = Navigator.of(context);
     await s.discardSavedReport();
     nav.pop(true);
-  }
-
-  Future<bool> _confirmReplace() async {
-    return showAppConfirm(
-      context,
-      title: 'Replace the saved report?',
-      message: 'A report saved on this phone hasn\'t been sent. If this one can\'t be sent either, it replaces the saved one.',
-      confirmLabel: 'Send this one',
-      confirmKey: const Key('report-replace-confirm'),
-    );
   }
 
   @override

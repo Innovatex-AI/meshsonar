@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../app/chat_controller.dart';
 import '../../chat/channel_admin.dart';
 import '../../chat/models.dart';
+import '../../chat/db/message_repository.dart' show MessageCursor;
 import '../design/app_haptics.dart';
 import '../design/app_surfaces.dart';
 import '../design/app_symbols.dart';
@@ -175,19 +176,22 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
   }
 
   Future<void> _clearHistory(Channel ch) async {
-    final ok = await showAppAlert(
-      context,
-      title: 'Clear the messages?',
-      message: 'The messages of this channel are removed from this phone. The channel stays.',
-      confirmLabel: 'Clear',
-      cancelLabel: 'Keep',
-      destructive: true,
-      confirmKey: const Key('clear-history-confirm'),
-    );
-    if (ok == true) {
-      c.service.deleteHistory(ch.convKey);
+    final all = <ChatMessage>[];
+    MessageCursor? cursor;
+    do {
+      final page = c.service.page(ch.convKey, before: cursor, limit: 500);
+      all.addAll(page.messages);
+      cursor = page.next;
+    } while (cursor != null);
+    c.service.deleteHistory(ch.convKey);
+    c.refresh();
+    if (!mounted) return;
+    showAppToast(context, 'Messages cleared.', actionLabel: 'Undo', onAction: () {
+      for (final m in all.reversed) {
+        c.store.messages.insert(m);
+      }
       c.refresh();
-    }
+    });
   }
 
   static const String _regionHelp =

@@ -102,8 +102,8 @@ void main() {
   group('NoteCard, ToolMap, ToolListener', () {
     testWidgets('a note speaks its kind in words, not just colour', (tester) async {
       final sem = tester.ensureSemantics();
-      await tester.pumpWidget(const MaterialApp(home: Scaffold(body: NoteCard('Nothing answered.', kind: NoteKind.caution, title: 'No reply'))));
-      expect(find.bySemanticsLabel(RegExp(r'^Careful\. No reply\. Nothing answered\.')), findsOneWidget);
+      await tester.pumpWidget(const MaterialApp(home: Scaffold(body: NoteCard('Nothing answered.', kind: NoteKind.info, title: 'No reply'))));
+      expect(find.bySemanticsLabel(RegExp(r'^Note\. No reply\. Nothing answered\.')), findsOneWidget);
       sem.dispose();
     });
 

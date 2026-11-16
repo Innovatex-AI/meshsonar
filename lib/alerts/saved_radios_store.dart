@@ -290,6 +290,18 @@ class SavedRadiosStore extends ChangeNotifier {
     await _save();
   }
 
+  /// Undo of [forget]: puts [r] back (with the star it had) when it is not in the list.
+  Future<void> restore(SavedRadio r, {bool starred = false, bool pinned = false}) async {
+    await load();
+    if (_radios.any((x) => x.id == r.id)) return;
+    _radios.add(r);
+    if (starred) {
+      _starredId = r.id;
+      _starPinned = pinned;
+    }
+    await _save();
+  }
+
   /// Removes [id] from the list (only the list). A forgotten star goes to the most recent radio left, unpinned.
   Future<void> forget(String id) async {
     await load();

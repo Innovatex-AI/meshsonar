@@ -268,9 +268,6 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('announce-wide')));
       await tester.pumpAndSettle();
-      expect(radio.announces, [false], reason: 'the mesh-wide advert needs a yes first');
-      await tester.tap(find.byKey(const Key('announce-wide-confirm')));
-      await tester.pumpAndSettle();
       expect(radio.announces, [false, true]);
       dismissAppToast();
     });

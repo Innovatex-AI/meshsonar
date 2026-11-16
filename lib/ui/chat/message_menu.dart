@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../chat/chat_service.dart' show ChatService;
 import '../../chat/models.dart' show ChatMessage, MessageState;
 import '../design/app_surfaces.dart';
 import '../design/app_symbols.dart';
@@ -122,15 +123,10 @@ Future<void> copyText(BuildContext context, String text) async {
   }
 }
 
-/// Asks before deleting; returns true to delete.
-Future<bool> confirmDeleteMessage(BuildContext context) async {
-  return showAppAlert(
-    context,
-    title: 'Delete this message?',
-    message: 'It is removed from this phone only. People you sent it to keep their copy.',
-    confirmLabel: 'Delete',
-    cancelLabel: 'Keep',
-    destructive: true,
-    confirmKey: const Key('confirm-delete-message'),
-  ).then((v) => v == true);
+/// Deletes the message from this phone now and offers Undo (people it was sent to keep their copy either way).
+void deleteMessageWithUndo(BuildContext context, ChatService service, String messageId) {
+  final m = service.store.messages.get(messageId);
+  if (m == null) return;
+  service.deleteMessage(messageId);
+  showAppToast(context, 'Message deleted.', actionLabel: 'Undo', onAction: () => service.restoreMessage(m));
 }

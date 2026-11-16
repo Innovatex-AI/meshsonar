@@ -265,8 +265,8 @@ class _ResultCard extends StatelessWidget {
       TelemetryStatus.ok => (NoteKind.good, 'Answer from ${r.who}'),
       TelemetryStatus.empty => (NoteKind.info, 'No readings'),
       TelemetryStatus.silent => (NoteKind.info, 'No answer'),
-      TelemetryStatus.noContact => (NoteKind.caution, 'Not a contact yet'),
-      TelemetryStatus.refused => (NoteKind.caution, 'The radio refused'),
+      TelemetryStatus.noContact => (NoteKind.info, 'Not a contact yet'),
+      TelemetryStatus.refused => (NoteKind.info, 'The radio refused'),
       TelemetryStatus.notConnected => (NoteKind.problem, 'No radio'),
       TelemetryStatus.tooSoon => (NoteKind.info, 'Please wait a moment'),
     };

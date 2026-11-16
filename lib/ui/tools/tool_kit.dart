@@ -264,7 +264,7 @@ class _CooldownButtonState extends State<CooldownButton> {
 
 // ---------------------------------------------------------------- notes
 
-enum NoteKind { info, caution, problem, good }
+enum NoteKind { info, problem, good }
 
 /// A short note with an icon and words. [kind] changes the icon and tint; the words always say what it means.
 class NoteCard extends StatelessWidget {
@@ -281,7 +281,6 @@ class NoteCard extends StatelessWidget {
     final (IconData icon, Color bg, Color fg, String word) = switch (kind) {
       NoteKind.info => (Icons.info_outline, c.surfaceContainerHigh, c.onSurface, 'Note'),
       NoteKind.good => (Icons.check_circle_outline, c.primaryContainer, c.onPrimaryContainer, 'OK'),
-      NoteKind.caution => (Icons.warning_amber_rounded, c.tertiaryContainer, c.onTertiaryContainer, 'Careful'),
       NoteKind.problem => (Icons.error_outline, c.errorContainer, c.onErrorContainer, 'Problem'),
     };
     return Semantics(

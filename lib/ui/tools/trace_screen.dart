@@ -225,7 +225,7 @@ class _TraceBodyState extends State<_TraceBody> {
                     'Hop ${a.index + 1} (${a.stop.name}) shares its ${_hashSize == 1 ? '1-byte' : '$_hashSize-byte'} hash with ${a.otherNames.join(', ')}. '
                     'The packet may go through the other one. Use a longer hash.',
                     key: Key('trace-ambiguous-${a.index}'),
-                    kind: NoteKind.caution,
+                    kind: NoteKind.info,
                     title: 'Ambiguous hop',
                   ),
                 ),
@@ -446,7 +446,7 @@ class _ResultCard extends StatelessWidget {
     final r = result;
     final (NoteKind kind, String title) = switch (r.status) {
       TraceStatus.ok => (NoteKind.good, 'Trace complete'),
-      TraceStatus.silent => (NoteKind.caution, 'No answer'),
+      TraceStatus.silent => (NoteKind.info, 'No answer'),
       TraceStatus.refused => (NoteKind.problem, 'The radio refused the trace'),
       TraceStatus.notConnected => (NoteKind.problem, 'No radio'),
       TraceStatus.tooSoon => (NoteKind.info, 'One moment'),
@@ -585,7 +585,7 @@ class _ComparisonCard extends StatelessWidget {
         if (!cmp.sameChain)
           const Padding(
             padding: EdgeInsets.only(top: Gap.s),
-            child: NoteCard('These two traces went through different repeaters. Only the repeaters in the second trace are compared.', kind: NoteKind.caution, title: 'Different chains'),
+            child: NoteCard('These two traces went through different repeaters. Only the repeaters in the second trace are compared.', kind: NoteKind.info, title: 'Different chains'),
           ),
         for (var i = 0; i < cmp.rows.length; i++)
           Semantics(

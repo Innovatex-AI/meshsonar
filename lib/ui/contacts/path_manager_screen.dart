@@ -114,7 +114,7 @@ class _PathManagerScreenState extends State<PathManagerScreen> {
     _say(switch (mode) {
       PathMode.auto => 'Automatic: MeshSonar picks the route.',
       PathMode.fixed => 'Keeping this route.',
-      PathMode.flood => 'Always search: every message goes to everyone nearby.',
+      PathMode.flood => 'Always search.',
     });
   }
 
@@ -151,17 +151,11 @@ class _PathManagerScreenState extends State<PathManagerScreen> {
   }
 
   Future<void> _reset(Contact c) async {
-    dismissAppToast(); // a toast from the last choice must not sit over the confirm sheet
-    final ok = await showAppConfirm(context,
-        title: 'Reset the route to ${c.displayName}?',
-        message: 'The saved route is forgotten and the next message searches again.',
-        confirmLabel: 'Reset route',
-        destructive: true,
-        confirmKey: const Key('reset-route-confirm'));
-    if (!ok) return;
+    final before = _contact ?? c;
     await _m.resetPath(c.publicKey);
     AppHaptics.success();
-    _say('Route cleared. The next message searches again.');
+    if (!mounted) return;
+    showAppToast(context, 'Route cleared. The next message searches again.', actionLabel: 'Undo', onAction: () => unawaited(_m.restorePath(before)));
   }
 
   @override

@@ -39,21 +39,14 @@ String lastConnectedText(DateTime? at, DateTime now) {
 
 enum _RadioAction { nickname, star, followRecent, forget }
 
-/// Asks, then forgets [r]. Returns true when it was forgotten.
-Future<bool> confirmForgetSavedRadio(BuildContext context, SavedRadiosStore store, SavedRadio r) async {
-  final ok = await showAppAlert(
-    context,
-    title: 'Forget ${r.displayName}?',
-    message: 'It leaves your saved radios${store.starredId == r.id ? ' and auto-connect moves to your most recent radio' : ''}. '
-        'Chat history, contacts and its antenna setup stay. It comes back the next time you connect to it.',
-    confirmLabel: 'Forget',
-    destructive: true,
-    dialogKey: const Key('saved-radio-forget-dialog'),
-    confirmKey: const Key('saved-radio-forget-confirm'),
-    cancelKey: const Key('saved-radio-forget-cancel'),
-  );
-  if (ok != true) return false;
+/// Forgets [r] (chat history, contacts and the antenna setup stay) and offers Undo. Returns true when it was forgotten.
+Future<bool> forgetSavedRadio(BuildContext context, SavedRadiosStore store, SavedRadio r) async {
+  final wasStarred = store.starredId == r.id;
+  final wasPinned = wasStarred && store.starPinned;
   await store.forget(r.id);
+  if (context.mounted) {
+    showAppToast(context, '${r.displayName} forgotten.', actionLabel: 'Undo', onAction: () => unawaited(store.restore(r, starred: wasStarred, pinned: wasPinned)));
+  }
   return true;
 }
 
@@ -100,7 +93,7 @@ Future<void> showSavedRadioActions(BuildContext context, SavedRadiosStore store,
     case _RadioAction.followRecent:
       await store.followMostRecent();
     case _RadioAction.forget:
-      await confirmForgetSavedRadio(context, store, r);
+      await forgetSavedRadio(context, store, r);
   }
 }
 
@@ -229,7 +222,7 @@ class _SavedRadioCard extends StatelessWidget {
     return Dismissible(
       key: ValueKey('saved-radio-dismiss-${r.id}'),
       direction: DismissDirection.endToStart,
-      confirmDismiss: (_) => confirmForgetSavedRadio(context, store, r),
+      confirmDismiss: (_) => forgetSavedRadio(context, store, r),
       background: Container(
         margin: const EdgeInsets.symmetric(vertical: 4),
         decoration: BoxDecoration(color: c.errorContainer, borderRadius: BorderRadius.circular(Corners.card)),

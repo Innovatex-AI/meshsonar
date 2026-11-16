@@ -20,7 +20,6 @@ import '../design/app_type.dart';
 import '../design/hop_chain.dart';
 import '../design/tokens.dart';
 
-const String _airtimeKey = 'ping_airtime_ack';
 
 /// "1.8 s" / "420 ms".
 String formatRtt(int ms) => ms < 950 ? '$ms ms' : '${(ms / 1000).toStringAsFixed(1)} s';
@@ -53,7 +52,7 @@ class PingSheetOutcome {
   const PingSheetOutcome(this.useRoute);
 }
 
-/// Pings [contact]. First time ever: an action sheet says it uses airtime. Returns the route picked with "Use this route".
+/// Pings [contact]. Returns the route picked with "Use this route".
 Future<PingSheetOutcome?> showPingSheet(
   BuildContext context, {
   required Contact contact,
@@ -64,16 +63,6 @@ Future<PingSheetOutcome?> showPingSheet(
   Future<void> Function(PathRoute route)? onUseRoute,
 }) async {
   final t = tools ?? radioToolsOf(context);
-  final db = manager.store.db;
-  if (db.setting(_airtimeKey) == null) {
-    final go = await showAppConfirm(context,
-        title: 'Ping uses radio airtime',
-        message: 'It sends a short message through the mesh and times the reply.',
-        confirmLabel: 'Ping',
-        confirmKey: const Key('ping-airtime-confirm'));
-    if (!go || !context.mounted) return null;
-    db.putSetting(_airtimeKey, '1');
-  }
   if (!context.mounted) return null;
   return showAppSheet<PingSheetOutcome>(
     context,

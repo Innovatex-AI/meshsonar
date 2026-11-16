@@ -93,7 +93,7 @@ class _NoiseBody extends StatelessWidget {
         const SizedBox(height: Gap.m),
         if (n.unsupported)
           const NoteCard('This radio’s firmware does not report noise (needs version 8 or newer).',
-              key: Key('noise-unsupported'), kind: NoteKind.caution, title: 'No noise readings')
+              key: Key('noise-unsupported'), kind: NoteKind.info, title: 'No noise readings')
         else if (samples.isEmpty)
           const NoteCard('Waiting for the first reading…', key: Key('noise-waiting'))
         else ...[
@@ -131,7 +131,7 @@ class _NoiseBody extends StatelessWidget {
   Widget _verdict(BuildContext context, NoiseMonitor n) {
     final v = n.verdict;
     if (v == null) return const SizedBox.shrink();
-    final kind = switch (v) { NoiseVerdict.normal => NoteKind.good, NoiseVerdict.elevated => NoteKind.caution, NoiseVerdict.interference => NoteKind.problem };
+    final kind = switch (v) { NoiseVerdict.normal => NoteKind.good, NoiseVerdict.elevated => NoteKind.info, NoiseVerdict.interference => NoteKind.problem };
     final t = Theme.of(context);
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       NoteCard(n.interpretation!, key: const Key('noise-verdict'), kind: kind, title: n.verdictWord),
@@ -232,7 +232,7 @@ class _NoiseBody extends StatelessWidget {
       if (flags.isEmpty)
         const NoteCard('No radio error flags are set.', key: Key('noise-flags-none'), kind: NoteKind.good)
       else
-        NoteCard(flags.join(' '), key: const Key('noise-flags'), kind: NoteKind.caution, title: 'Error flags (stay set until the radio restarts)'),
+        NoteCard(flags.join(' '), key: const Key('noise-flags'), kind: NoteKind.info, title: 'Error flags (stay set until the radio restarts)'),
     ]);
   }
 

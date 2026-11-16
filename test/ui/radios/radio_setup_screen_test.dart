@@ -124,17 +124,11 @@ void main() {
   });
 
   group('position', () {
-    testWidgets('phone location needs a confirm, only fills the boxes, and saves only on Save position', (tester) async {
+    testWidgets('phone location only fills the boxes, and saves only on Save position', (tester) async {
       final (rig, host) = await connectedRig(tester);
       host.phone = (lat: 39.9612, lon: -82.9988);
       await openScreen(tester, host);
       await tapAndWait(tester, find.byKey(const Key('setup-position-phone')));
-      expect(find.byKey(const Key('setup-phone-location-confirm')), findsOneWidget);
-      await tester.tap(find.text('Cancel'));
-      await tester.pumpAndSettle();
-      expect(tester.widget<TextField>(find.byKey(const Key('setup-lat-field'))).controller!.text, '');
-      await tapAndWait(tester, find.byKey(const Key('setup-position-phone')));
-      await tester.tap(find.byKey(const Key('setup-phone-location-ok')));
       await settle(tester);
       expect(tester.widget<TextField>(find.byKey(const Key('setup-lat-field'))).controller!.text, '39.96120');
       expect(count(rig, ToolCmd.setAdvertLatLon), 0, reason: 'copying into the boxes sends nothing');
@@ -163,7 +157,6 @@ void main() {
       host.phone = null;
       await openScreen(tester, host);
       await tapAndWait(tester, find.byKey(const Key('setup-position-phone')));
-      await tester.tap(find.byKey(const Key('setup-phone-location-ok')));
       await settle(tester);
       await reveal(tester, find.byKey(const Key('setup-result')));
       expect(find.textContaining('Your phone did not give a position'), findsOneWidget);

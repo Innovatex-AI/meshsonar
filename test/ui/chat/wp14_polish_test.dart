@@ -10,6 +10,7 @@ import 'package:meshsonar/chat/models.dart' as models show Route;
 import 'package:meshsonar/chat/quick_replies.dart';
 import 'package:meshsonar/chat/route_health.dart';
 import 'package:meshsonar/chat/tip_store.dart';
+import 'package:meshsonar/ui/design/app_surfaces.dart' show dismissAppToast;
 import 'package:meshsonar/core/plan/airtime_calc.dart';
 import 'package:meshsonar/radio/caps.dart';
 import 'package:meshsonar/radio/rx_facts.dart';
@@ -103,7 +104,7 @@ void main() {
       expect(routeLooksBroken(kit.store, bobWithRoute(learned: kit.clockMs + 60000)), isFalse);
     });
 
-    testWidgets('the conversation shows the card with both actions; Reset route confirms and clears the card', (tester) async {
+    testWidgets('the conversation shows the card with both actions; Reset route clears the card', (tester) async {
       setSize(tester);
       bobWithRoute();
       failedDms(3);
@@ -115,10 +116,9 @@ void main() {
       expect(find.byKey(const Key('broken-reset')), findsOneWidget);
       await tester.tap(find.byKey(const Key('broken-reset')));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('broken-reset-confirm')));
-      await tester.pumpAndSettle();
       expect(find.byKey(const Key('route-broken-card')), findsNothing);
       expect(kit.store.contacts.get(radioA, bobKey)!.hasPath, isFalse);
+      dismissAppToast();
     });
   });
 

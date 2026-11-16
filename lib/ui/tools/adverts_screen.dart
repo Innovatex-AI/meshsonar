@@ -13,7 +13,6 @@ import '../app.dart';
 import 'advert_facts.dart';
 import 'tool_kit.dart';
 import 'tools_host.dart';
-import '../design/app_surfaces.dart';
 
 class AdvertsScreen extends StatelessWidget {
   const AdvertsScreen({super.key});
@@ -48,20 +47,6 @@ class _AdvertsBodyState extends State<_AdvertsBody> {
   }
 
   Future<void> _send({required bool flood}) async {
-    if (flood) {
-      final ok = await showAppAlert(
-        context,
-        dialogKey: const Key('adverts-flood-confirm'),
-        title: 'Send an advert to the whole mesh?',
-        message: 'Every repeater that hears it will send it on, so it costs airtime across the whole mesh, not just yours '
-            '(about ${fmtAir(_adverts.estimateAirtimeMs())} for your radio alone). Your radio already sends adverts by itself, '
-            'and that is usually enough.',
-        confirmLabel: 'Send to the whole mesh',
-        confirmKey: const Key('adverts-flood-go'),
-        cancelKey: const Key('adverts-flood-cancel'),
-      );
-      if (ok != true || !mounted) return;
-    }
     setState(() => _sending = true);
     final r = await _adverts.send(flood: flood);
     if (!mounted) return;
