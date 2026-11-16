@@ -36,7 +36,7 @@ class KitSink implements OutboundMessageSink {
   }
 
   @override
-  Future<int> sendChannel({required String radioId, required int slot, required String text, required int timestamp}) async {
+  Future<int> sendChannel({required String radioId, required int slot, required String text, required int timestamp, int priority = CommandPriority.user}) async {
     if (!connected) throw const RadioNotConnected();
     final f = failNext;
     if (f != null) {
@@ -170,7 +170,7 @@ class FakeRadioSession implements r.RadioSession {
   @override
   Future<r.ContactListing> getContacts({int since = 0}) async => const r.ContactListing(totalOnRadio: 0, contacts: [], mostRecentLastMod: 0);
   @override
-  Future<r.SendResult> sendChannelMessage(int channelIndex, String text, {r.FloodScope? scope}) async {
+  Future<r.SendResult> sendChannelMessage(int channelIndex, String text, {r.FloodScope? scope, int priority = CommandPriority.user}) async {
     sentChannel.add((channelIndex, text, scope));
     return const r.SendResult.accepted(1000);
   }

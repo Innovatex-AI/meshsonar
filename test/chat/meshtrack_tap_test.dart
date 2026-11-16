@@ -262,6 +262,7 @@ void main() {
       expect(r.timestamp, h.clock.ms ~/ 1000);
       expect(h.sink.channels.single.slot, 1);
       expect(h.sink.channels.single.text, mtBody);
+      expect(h.sink.channelPriorities.single, CommandPriority.ping, reason: 'MeshTrack never jumps ahead of a user message');
       expect(h.store.messages.count(), 0);
       expect(h.store.db.raw.select('SELECT COUNT(*) AS n FROM outbox').first['n'], 0);
       expect(events, isEmpty);

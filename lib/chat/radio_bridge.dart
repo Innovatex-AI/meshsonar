@@ -3,6 +3,9 @@
 // sendDirect / sendChannel to the companion commands). No radio type is imported here.
 import 'dart:typed_data';
 
+import '../radio/command_queue.dart' show CommandPriority;
+export '../radio/command_queue.dart' show CommandPriority;
+
 import 'models.dart';
 
 sealed class InboundEvent {
@@ -193,6 +196,7 @@ abstract interface class OutboundMessageSink {
 
   /// CMD_SEND_CHANNEL_TXT_MSG. Channel messages have no ack: success is just "accepted". [text] is the body; the firmware
   /// prepends "name: ". Returns the timestamp that went into the packet (a session may stamp its own; chat adopts it so
-  /// echo recognition and receivers' dedupe agree). Throws an [OutboundFailure].
-  Future<int> sendChannel({required String radioId, required int slot, required String text, required int timestamp});
+  /// echo recognition and receivers' dedupe agree). [priority] is the radio command queue class ([CommandPriority]): a
+  /// message the person typed goes at user priority; MeshTrack's silent sends at ping priority. Throws an [OutboundFailure].
+  Future<int> sendChannel({required String radioId, required int slot, required String text, required int timestamp, int priority = CommandPriority.user});
 }
