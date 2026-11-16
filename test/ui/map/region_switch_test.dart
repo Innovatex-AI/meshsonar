@@ -64,27 +64,22 @@ Future<Harness> harness(WidgetTester tester) async {
 
 void main() {
   group('the confirm sheet and what the switch does', () {
-    testWidgets('asks "Switch to Dayton?", starts on Cancel, Cancel changes nothing', (tester) async {
+    testWidgets('switches at once with no sheet; the toast says so and Undo puts the old region back', (tester) async {
       final h = await harness(tester);
       final before = h.state.viewingRegion?.code;
       await pumpAsk(tester, h, day);
-      expect(find.text('Switch to Dayton?'), findsOneWidget);
-      expect(find.text('The map and stats will show that region.'), findsOneWidget);
-      final cancel = tester.widget<OutlinedButton>(k('region-switch-cancel'));
-      expect(cancel.autofocus, isTrue, reason: 'Cancel is the default');
-      expect(tester.getSize(k('region-switch-cancel')).height, greaterThanOrEqualTo(48));
-      expect(tester.getSize(k('region-switch-confirm')).height, greaterThanOrEqualTo(48));
-      await tester.tap(k('region-switch-cancel'));
+      expect(k('region-switch-sheet'), findsNothing, reason: 'no confirm sheet');
+      expect(find.textContaining('Switched to Dayton'), findsOneWidget);
+      expect(h.state.settings.regionManual, 'DAY');
+      await tester.tap(find.text('Undo'));
       await tester.pumpAndSettle();
-      expect(h.state.viewingRegion?.code, before);
       expect(h.state.settings.regionManual, isNull);
+      expect(h.state.viewingRegion?.code, before);
     });
 
     testWidgets('Switch makes Dayton the viewed region (saved as the manual pick), remembers it as recent', (tester) async {
       final h = await harness(tester);
       await pumpAsk(tester, h, day);
-      await tester.tap(k('region-switch-confirm'));
-      await tester.pumpAndSettle();
       expect(h.state.settings.regionManual, 'DAY');
       expect(h.state.viewingRegion?.code, 'DAY');
       expect(uiPrefsFor(h.state).recentRegions, ['DAY']);
@@ -125,7 +120,7 @@ void main() {
   });
 
   group('outside coverage', () {
-    testWidgets('the chip offers the nearest regions; picking one still asks first', (tester) async {
+    testWidgets('the chip offers the nearest regions; picking one switches and closes the sheet', (tester) async {
       final h = Harness();
       h.client.regionsIndexResult = [day, zzv];
       h.location.currentFix = () => null;
@@ -141,38 +136,9 @@ void main() {
       expect(find.textContaining('No MeshSonar region covers this location'), findsOneWidget);
       await tester.tap(k('nearest-region-DAY'));
       await tester.pumpAndSettle();
-      expect(find.text('Switch to Dayton?'), findsOneWidget);
-      await tester.tap(k('region-switch-confirm'));
-      await tester.pumpAndSettle();
+      expect(find.text('Switch to Dayton?'), findsNothing);
       expect(h.state.settings.regionManual, 'DAY');
       expect(find.text('Nearest regions'), findsNothing, reason: 'the sheet closes after a switch');
-    });
-  });
-
-  group('layout', () {
-    for (final (name, size, scale, dark) in [
-      ('iPhone', const Size(393, 852), 1.0, false),
-      ('iPhone 2.5x text dark', const Size(393, 852), 2.5, true),
-      ('iPad dark landscape', const Size(1366, 1024), 1.0, true),
-    ]) {
-      testWidgets('$name: the confirm sheet fits, buttons are 48 px targets, no overflow', (tester) async {
-        final h = await harness(tester);
-        await pumpAsk(tester, h, day, size: size, textScale: scale, brightness: dark ? Brightness.dark : Brightness.light);
-        expect(find.text('Switch to Dayton?'), findsOneWidget);
-        expect(tester.takeException(), isNull);
-        expect(tester.getSize(k('region-switch-confirm')).height, greaterThanOrEqualTo(47.9));
-        expect(tester.getRect(k('region-switch-sheet')).bottom, lessThanOrEqualTo(size.height + 0.5));
-        await tester.tap(k('region-switch-cancel'));
-        await tester.pumpAndSettle();
-      });
-    }
-
-    testWidgets('VoiceOver: the sheet title is a header', (tester) async {
-      final handle = tester.ensureSemantics();
-      final h = await harness(tester);
-      await pumpAsk(tester, h, day);
-      expect(tester.getSemantics(find.text('Switch to Dayton?')).flagsCollection.isHeader, isTrue);
-      handle.dispose();
     });
   });
 }

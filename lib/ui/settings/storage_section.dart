@@ -114,22 +114,8 @@ class _StorageRowsState extends State<StorageRows> {
   Future<void> _removeUploadedDrives(DriveStorageSplit split) async {
     final s = _s;
     final n = split.removable.length;
-    final keptLine = split.kept == 0
-        ? ''
-        : '\n\n${split.kept} drive${split.kept == 1 ? '' : 's'} not fully uploaded stay${split.kept == 1 ? 's' : ''} on this '
-            'phone${split.keptUnsentPings > 0 ? ' (${split.keptUnsentPings} pings the server does not have)' : ''}.';
-    final ok = await confirmSettingsChange(
-      context,
-      dialogKey: 'storage-drives-dialog',
-      title: 'Remove $n uploaded drive${n == 1 ? '' : 's'} from this phone?',
-      body: 'The server already has every ping in ${n == 1 ? 'it' : 'them'}, so ${n == 1 ? 'it stays' : 'they stay'} on '
-          'the coverage map and the website. This phone loses its copy: no export, drive report or ping log for '
-          '${n == 1 ? 'it' : 'them'} here afterwards.$keptLine',
-      confirmLabel: 'Remove',
-      destructive: true,
-    );
-    if (!ok || !mounted) return;
-    await _run(() async {
+    final what = 'Removing $n uploaded drive${n == 1 ? '' : 's'} from this phone.';
+    runWithUndo(context, what, commit: () async {
       var done = 0;
       // Re-checked against the latest list at removal time: a drive that changed meanwhile is skipped, never removed.
       final now = splitDrives(s.sessions, recordingId: s.currentSession?.id).removable.toSet();
@@ -137,22 +123,15 @@ class _StorageRowsState extends State<StorageRows> {
         if (!now.contains(id)) continue;
         if (await s.deleteSession(id, quiet: true)) done++;
       }
-      _say('Removed $done uploaded drive${done == 1 ? '' : 's'} from this phone.'
-          '${split.kept > 0 ? ' ${split.kept} not fully uploaded kept.' : ''}');
+      if (mounted) {
+        _say('Removed $done uploaded drive${done == 1 ? '' : 's'} from this phone.'
+            '${split.kept > 0 ? ' ${split.kept} not fully uploaded kept.' : ''}');
+        await _measure();
+      }
     });
   }
 
   Future<void> _clearRegion() async {
-    final ok = await confirmSettingsChange(
-      context,
-      dialogKey: 'storage-region-dialog',
-      title: 'Clear saved region data?',
-      body: 'Coverage, region pages and site details download again the next time you open them, which uses data. '
-          'Until then, with no signal, those screens have nothing to show. Your drives are not touched.',
-      confirmLabel: 'Clear',
-      destructive: true,
-    );
-    if (!ok || !mounted) return;
     final s = _s;
     await _run(() async {
       var n = 0;
@@ -164,16 +143,6 @@ class _StorageRowsState extends State<StorageRows> {
   }
 
   Future<void> _clearNames() async {
-    final ok = await confirmSettingsChange(
-      context,
-      dialogKey: 'storage-repeaters-dialog',
-      title: 'Forget saved repeater names?',
-      body: 'Repeaters show as short codes until the names download again with Refresh, which needs a working '
-          'driver key and signal. Drives keep what they recorded.',
-      confirmLabel: 'Forget',
-      destructive: true,
-    );
-    if (!ok || !mounted) return;
     final s = _s;
     await _run(() async {
       await s.clearRepeaterNames();
@@ -182,16 +151,6 @@ class _StorageRowsState extends State<StorageRows> {
   }
 
   Future<void> _clearNodeMap() async {
-    final ok = await confirmSettingsChange(
-      context,
-      dialogKey: 'storage-node-map-dialog',
-      title: 'Clear the public node map?',
-      body: 'Repeaters only the public map (map.meshcore.io) knows show as short codes until it downloads again '
-          'around the start of your next drive. That download is large (tens of MB) and needs signal.',
-      confirmLabel: 'Clear',
-      destructive: true,
-    );
-    if (!ok || !mounted) return;
     final s = _s;
     await _run(() async {
       await s.clearPublicNodeMap();
@@ -200,19 +159,13 @@ class _StorageRowsState extends State<StorageRows> {
   }
 
   Future<void> _discardReport() async {
-    final ok = await confirmSettingsChange(
-      context,
-      dialogKey: 'storage-report-dialog',
-      title: 'Discard the unsent problem report?',
-      body: 'What you wrote is deleted from this phone and never sent.',
-      confirmLabel: 'Discard',
-      destructive: true,
-    );
-    if (!ok || !mounted) return;
     final s = _s;
-    await _run(() async {
+    runWithUndo(context, 'Discarding the unsent problem report.', commit: () async {
       await s.discardSavedReport();
-      _say('Unsent problem report discarded.');
+      if (mounted) {
+        _say('Unsent problem report discarded.');
+        await _measure();
+      }
     });
   }
 

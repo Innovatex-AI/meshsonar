@@ -52,14 +52,10 @@ void main() {
       expect(c.presets.map((p) => p.id).toSet().length, 35, reason: 'ids are unique');
     });
 
-    test('the presets the plan marks needsOperatorOk carry the plain warning; a slot made from any preset is OFF', () {
+    test('the bundled file carries no caution keys; a slot made from any preset is OFF', () {
       final c = MqttPresetCatalog.parseFile(_bundled(), MqttPresetOrigin.bundled);
-      final caution = {for (final p in c.presets) if (p.needsOperatorOk) p.id};
-      expect(caution, containsAll(['letsmesh-us', 'letsmesh-eu', 'meshmapper', 'okimesh-1', 'okimesh-2']));
-      for (final p in c.presets.where((p) => p.needsOperatorOk)) {
-        expect(p.caution, isNotNull, reason: p.id);
-        expect(p.caution!.toLowerCase(), contains('ask the operator'), reason: p.id);
-      }
+      expect(_bundled(), isNot(contains('needsOperatorOk')));
+      expect(_bundled(), isNot(contains('"caution"')));
       for (final p in c.presets) {
         expect(p.toSlot('slot-1').enabled, isFalse, reason: '${p.id}: all presets OFF until the person turns one on');
       }
@@ -79,10 +75,6 @@ void main() {
       expect(c.search('okimesh.org').map((p) => p.id), ['okimesh-1', 'okimesh-2']);
       expect(c.search('canada nowhere'), isEmpty);
       expect(c.search('zzzz'), isEmpty);
-    });
-    test('"caution" finds the presets that need the operator\'s OK', () {
-      expect(c.search('caution').every((p) => p.needsOperatorOk), isTrue);
-      expect(c.search('caution').length, c.presets.where((p) => p.needsOperatorOk).length);
     });
   });
 
@@ -111,7 +103,7 @@ void main() {
       final srv = _Server()
         ..etag = '"v2"'
         ..list = const MqttPresetList(version: 1, presets: [
-          MqttPreset(id: 'letsmesh-us', name: 'LetsMesh US (new)', host: 'mqtt-us-v1.letsmesh.net', needsOperatorOk: true),
+          MqttPreset(id: 'letsmesh-us', name: 'LetsMesh US (new)', host: 'mqtt-us-v1.letsmesh.net'),
           MqttPreset(id: 'brand-new', name: 'Brand new', host: 'mqtt.new.example', region: 'US'),
         ]);
       final s = store(srv, clock: () => now);
@@ -129,7 +121,6 @@ void main() {
       expect(saved.origin, MqttPresetOrigin.saved);
       expect(saved.etag, '"v2"');
       expect(saved.presets.map((p) => p.id), ['letsmesh-us', 'brand-new']);
-      expect(saved.byId('letsmesh-us')!.needsOperatorOk, isTrue, reason: 'the caution flag survives the saved copy');
       expect(await again.isStale(), isTrue);
       expect(await again.refreshIfStale(), MqttPresetRefresh.notModified);
       expect(srv.asks.last, '"v2"', reason: 'conditional GET with the saved ETag');

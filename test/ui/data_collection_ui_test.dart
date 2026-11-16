@@ -234,22 +234,18 @@ void main() {
       expect(find.textContaining('Off: nothing is collected.'), findsOneWidget);
     });
 
-    testWidgetsT('on asks first with what is collected; cancel keeps it off', (tester) async {
+    testWidgetsT('on is one tap with no dialog: the toast says where it goes; Undo turns it back off', (tester) async {
       final h = await open(tester, setup: (h) => h.settings.saved = h.settings.saved.withCollection('device', false));
       await showSetting(tester, 'collect-device-toggle');
       await tester.tap(find.byKey(const Key('collect-device-toggle')));
       await tester.pumpAndSettle();
-      expect(find.byKey(const Key('device-on-dialog')), findsOneWidget);
-      expect(find.textContaining('Never shared: Your phone\'s name'), findsOneWidget);
-      await tester.tap(find.byKey(const Key('device-on-dialog-cancel')));
-      await tester.pumpAndSettle();
-      expect(h.state.settings.collectionOn('device'), isFalse);
-      await tester.tap(find.byKey(const Key('collect-device-toggle')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('device-on-dialog-confirm')));
-      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('device-on-dialog')), findsNothing);
       expect(h.state.settings.collectionOn('device'), isTrue);
       expect(h.settings.saved.toJson().containsKey('collection_off'), isFalse);
+      expect(find.textContaining('is on.'), findsOneWidget);
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+      expect(h.state.settings.collectionOn('device'), isFalse);
     });
 
     testWidgetsT('honest states: no barometer support, weather not available yet', (tester) async {

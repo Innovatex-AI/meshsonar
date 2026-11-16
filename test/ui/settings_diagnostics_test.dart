@@ -68,19 +68,19 @@ void main() {
     expect(redactionSummary({'driverKey': 1, 'secret': 1, 'coords': 1}), '2 secrets hidden, 1 position rounded');
   });
 
-  testWidgetsT('Clear asks, then empties the log; an empty log says what would appear', (tester) async {
+  testWidgetsT('Clear empties the log after the Undo window; an empty log says what would appear', (tester) async {
     final (h, _) = await open(tester);
     await showSetting(tester, 'diagnostics-log');
     await tester.tap(find.byKey(const Key('diagnostics-log')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('diagnostics-clear')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('diagnostics-clear-dialog-cancel')));
-    await tester.pumpAndSettle();
-    expect(h.state.diagnostics.lines, isNotEmpty);
+    expect(find.byKey(const Key('diagnostics-clear-dialog')), findsNothing);
+    await tester.tap(find.text('Undo'));
+    await tester.pump(const Duration(seconds: 7));
+    expect(h.state.diagnostics.lines, isNotEmpty, reason: 'Undo keeps the log');
     await tester.tap(find.byKey(const Key('diagnostics-clear')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('diagnostics-clear-dialog-confirm')));
+    await tester.pump(const Duration(seconds: 7));
     await tester.pumpAndSettle();
     expect(h.state.diagnostics.lines, isEmpty);
     expect(find.byKey(const Key('diagnostics-empty')), findsOneWidget);

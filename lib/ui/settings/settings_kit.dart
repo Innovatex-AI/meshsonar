@@ -1,5 +1,7 @@
 // Building blocks shared by every Settings section: the collapsible section card, the anchors that search and the
 // section index jump to, the slider row, the text-edit dialog and the consequence-stating confirmation dialog.
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/api.dart';
@@ -182,6 +184,38 @@ Future<bool> confirmSettingsChange(
     confirmKey: Key('$dialogKey-confirm'),
   );
   return ok == true;
+}
+
+// ---------- undo instead of asking ----------
+
+/// How long the Undo toast offers to take a removal back before it is carried out.
+const Duration undoWindow = Duration(seconds: 6);
+
+/// A reversible removal without a confirm dialog: shows [message] with an Undo button now, and runs [commit] after
+/// [undoWindow] unless Undo was tapped ([onUndo] then runs instead). [commit] also runs if another toast replaces this
+/// one, because the window is a timer, not the toast. Nothing is lost if the person taps Undo; if the app is closed
+/// inside the window the removal simply does not happen.
+void runWithUndo(
+  BuildContext context,
+  String message, {
+  required Future<void> Function() commit,
+  VoidCallback? onUndo,
+  Duration window = undoWindow,
+}) {
+  var undone = false;
+  showAppToast(
+    context,
+    message,
+    duration: window,
+    actionLabel: 'Undo',
+    onAction: () {
+      undone = true;
+      onUndo?.call();
+    },
+  );
+  Timer(window, () {
+    if (!undone) unawaited(commit());
+  });
 }
 
 // ---------- sliders ----------
