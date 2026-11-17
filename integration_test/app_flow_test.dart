@@ -58,23 +58,28 @@ void main() {
     await tapWhenReady(t, find.text('Simulator (no radio)'), 'Simulator option');
 
     await tapWhenReady(t, find.text('Start drive'), 'connected to the simulator radio', timeout: const Duration(seconds: 30));
-    expect(await waitFor(t, find.text('Stop drive')), isTrue, reason: 'drive started');
+    expect(await waitFor(t, find.descendant(of: find.byKey(const Key('start-stop')), matching: find.text('Stop'))), isTrue, reason: 'drive started');
 
     // let auto-pings run (first is immediate) and add two manual pings
     await pumpFor(t, const Duration(seconds: 12));
     for (var i = 0; i < 2; i++) {
-      await t.tap(find.text('Ping now'));
+      await t.tap(find.byKey(const Key('ping-now')));
       await pumpFor(t, const Duration(seconds: 9));
     }
-    expect(find.byKey(const Key('heard-box')), findsOneWidget, reason: 'pings recorded: the heard box is up');
+    expect(find.byKey(const Key('drive-panel')), findsOneWidget, reason: 'the Drive panel is up');
     await screen(t, 'drive-active');
 
-    // Full-screen map with the heard box and the controls; then back.
-    await tapWhenReady(t, find.byKey(const Key('map-fullscreen')), 'full-screen map button');
-    expect(await waitFor(t, find.byKey(const Key('fullscreen-close'))), isTrue, reason: 'full-screen map');
-    await screen(t, 'fullscreen-map');
-    await tapWhenReady(t, find.byKey(const Key('fullscreen-close')), 'exit full screen');
+    // The panel collapses to the pill (the map is never resized) and opens back to the Dock.
+    await t.fling(find.byKey(const Key('drive-panel-grabber')), const Offset(0, 300), 1500);
+    await pumpFor(t, const Duration(seconds: 1));
+    await screen(t, 'drive-collapsed');
+    await t.fling(find.byKey(const Key('drive-panel-grabber')), const Offset(0, -150), 1500);
+    await pumpFor(t, const Duration(seconds: 1));
     expect(await waitFor(t, find.byKey(const Key('drive-map'))), isTrue, reason: 'back on the Drive screen');
+
+    // The LOG button lives in the Medium panel.
+    await t.tap(find.byKey(const Key('drive-panel-grabber')));
+    await pumpFor(t, const Duration(seconds: 1));
 
     // The live ping log of this drive.
     await tapWhenReady(t, find.byKey(const Key('open-log')), 'LOG button');
@@ -83,7 +88,9 @@ void main() {
     await t.pageBack();
     await pumpFor(t, const Duration(seconds: 1));
 
-    await t.tap(find.text('Stop drive'));
+    await t.tap(find.byKey(const Key('start-stop')));
+    await pumpFor(t, const Duration(seconds: 1));
+    await tapWhenReady(t, find.byKey(const Key('stop-drive-confirm')), 'confirm stop');
     expect(await waitFor(t, find.text('Start drive'), timeout: const Duration(seconds: 30)), isTrue, reason: 'stopped');
     expect(await waitFor(t, find.byKey(const Key('view-report'))), isTrue, reason: 'drive report card');
     await screen(t, 'drive-stopped');

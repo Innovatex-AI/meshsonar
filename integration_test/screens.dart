@@ -140,6 +140,25 @@ Future<void> shootFullScroll(WidgetTester t, String prefix, {Finder? within}) as
   }
 }
 
+/// Build 70, item 70-2: the Drive panel slides over a map that never shrinks. Checks the map is the whole screen and shoots
+/// the panel at [name]; STEPFAIL when the map was resized.
+Future<void> _panelShot(WidgetTester t, String name) async {
+  await pumpFor(t, const Duration(milliseconds: 900));
+  final view = t.view.physicalSize / t.view.devicePixelRatio;
+  final map = find.byKey(const Key('drive-map'));
+  if (map.evaluate().isEmpty) _stepFail('$name: no Drive map');
+  final size = t.getSize(map.first);
+  if ((size.width - view.width).abs() > 1 || (size.height - view.height).abs() > 1) {
+    _stepFail('$name: the map is ${size.width.toStringAsFixed(0)}x${size.height.toStringAsFixed(0)}, the screen ${view.width.toStringAsFixed(0)}x${view.height.toStringAsFixed(0)}');
+  }
+  await shot(t, name);
+}
+
+double _panelTop(WidgetTester t) {
+  final p = find.byKey(const Key('drive-panel'));
+  return p.evaluate().isEmpty ? double.infinity : t.getTopLeft(p.first).dy;
+}
+
 class ScreenStep {
   const ScreenStep(this.name, this.run, {this.optional = false});
   final String name;
@@ -161,6 +180,14 @@ final List<ScreenStep> screens = [
   ScreenStep('drive', (t) async {
     await openTab(t, 'Drive');
     await shot(t, 'drive');
+  }),
+  // No radio: the panel sits at the Dock (bottom quarter of the screen), never the middle, over a full-screen map.
+  ScreenStep('panel-noradio', (t) async {
+    await openTab(t, 'Drive');
+    final view = t.view.physicalSize / t.view.devicePixelRatio;
+    await _panelShot(t, 'panel-noradio-dock');
+    if (_panelTop(t) < view.height * 0.7) _stepFail('panel-noradio: the panel is not at the Dock (top ${_panelTop(t).toStringAsFixed(0)})');
+    _stepOk('panel-noradio');
   }),
   // Connect screen: scanning / nothing found (the simulator has no Bluetooth radios), then the debug-only Simulator.
   ScreenStep('connect', (t) async {
@@ -223,6 +250,44 @@ final List<ScreenStep> screens = [
     await openTab(t, 'Drive');
     await shot(t, 'drive-ready');
   }),
+  // Every detent by drag and fling: Dock, Medium, Full (pulled past Medium, finger down), back to Dock, the collapsed pill, and
+  // the map pans at the Dock. The map is the whole screen at each one.
+  ScreenStep('panel-detents', (t) async {
+    await popToRoots(t);
+    await openTab(t, 'Drive');
+    final header = find.byKey(const Key('drive-panel-header'));
+    if (!await waitFor(t, header, timeout: const Duration(seconds: 5))) _stepFail('panel-detents: no panel header');
+    await _panelShot(t, 'panel-dock');
+    final dock = _panelTop(t);
+    await t.timedDrag(header, const Offset(0, -320), const Duration(milliseconds: 700));
+    await _panelShot(t, 'panel-medium');
+    final medium = _panelTop(t);
+    if (medium > dock - 100) _stepFail('panel-detents: a drag up did not open Medium (top $medium, dock $dock)');
+    final g = await t.startGesture(t.getCenter(find.byKey(const Key('drive-panel-grabber'))));
+    for (var i = 0; i < 10; i++) {
+      await g.moveBy(const Offset(0, -30));
+      await t.pump(const Duration(milliseconds: 16));
+    }
+    await _panelShot(t, 'panel-full');
+    await g.up();
+    await pumpFor(t, const Duration(milliseconds: 900));
+    await t.fling(header, const Offset(0, 400), 1500);
+    await _panelShot(t, 'panel-dock-again');
+    if ((_panelTop(t) - dock).abs() > 4) _stepFail('panel-detents: a fling down did not return to the Dock');
+    await t.dragFrom(Offset(t.view.physicalSize.width / t.view.devicePixelRatio / 2, 300), const Offset(-80, 60));
+    await pumpFor(t, const Duration(milliseconds: 600));
+    if ((_panelTop(t) - dock).abs() > 4) _stepFail('panel-detents: panning the map moved the panel');
+    await t.fling(header, const Offset(0, 160), 1500);
+    await _panelShot(t, 'panel-collapsed');
+    final nub = find.byKey(const Key('pill-nub'));
+    if (nub.evaluate().isNotEmpty) {
+      await t.tap(nub.first); // back to the Dock (the pill's Start button would start a drive)
+    } else if (header.evaluate().isNotEmpty) {
+      await t.fling(header, const Offset(0, -160), 1500);
+    }
+    await pumpFor(t, const Duration(seconds: 1));
+    _stepOk('panel-detents');
+  }, optional: true),
   // The five tabs, with a radio connected and no drive running.
   ScreenStep('tabs', (t) async {
     await openTab(t, 'Chat');

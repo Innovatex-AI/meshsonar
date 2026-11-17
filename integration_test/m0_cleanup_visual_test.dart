@@ -68,7 +68,7 @@ void main() {
       await shot(t, 'm0-analyze-tabs-end');
     }
 
-    // More: top, middle, bottom, then the Developer section after a long-press on About MeshSonar.
+    // More: top, middle, bottom (the Developer section and its Drive switch are gone, build 70).
     await openShellTab(t, 'More');
     if (find.byKey(const Key('more-list')).hitTestable().evaluate().isEmpty) await openShellTab(t, 'More');
     await shot(t, 'm0-more-top');
@@ -76,12 +76,6 @@ void main() {
     await shot(t, 'm0-more-middle');
     await _scrollMore(t, 'more-privacy-policy');
     await shot(t, 'm0-more-bottom');
-    await t.longPress(find.byKey(const Key('more-about')));
-    await pumpFor(t, const Duration(seconds: 1));
-    await _scrollMore(t, 'more-drive-redesign');
-    await shot(t, 'm0-more-developer');
-    await t.longPress(find.byKey(const Key('more-about')));
-    await pumpFor(t, const Duration(seconds: 1));
 
     // Method (coverage v2 text).
     await _scrollMore(t, 'more-method');
