@@ -1,6 +1,7 @@
-// The Drive panel on the real Drive screen (flag driveRedesign on): panel tops per device, hit zones, drag leaves the map alone,
+// The Drive panel on the real Drive screen (the only Drive screen since build 70): panel tops per device, hit zones, drag leaves the map alone,
 // MapInsets are written at settle, dock states, Ping debounce, auto-collapse with the Passenger switch, tab bar hook.
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -33,8 +34,6 @@ Future<Harness> pumpDrive(
   Brightness brightness = Brightness.light,
   double textScale = 1,
 }) async {
-  AppFlags.driveRedesign = true;
-  addTearDown(() => AppFlags.driveRedesign = false);
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -347,14 +346,25 @@ void main() {
     await tester.pump(const Duration(seconds: 25));
   });
 
-  testWidgets('flag off: the old footer layout still builds (escape hatch)', (tester) async {
+  testWidgets('a saved driveRedesign:false (older builds) still opens the panel layout: no footer, no full-screen button, no popup', (tester) async {
     useTallScreen(tester);
+    final dir = Directory.systemTemp.createTempSync('ms-flags');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final file = File('${dir.path}/redesign_flags.json')..writeAsStringSync('{"driveRedesign":false}');
+    await AppFlags.load(file);
     final h = Harness();
     await h.pumpApp(tester);
-    expect(AppFlags.driveRedesign, isFalse);
-    expect(find.byKey(const Key('drive-panel')), findsNothing);
-    expect(find.byKey(const Key('start-stop')), findsOneWidget);
-    expect(find.byType(AppBar), findsWidgets);
+    expect(find.byKey(const Key('drive-panel')), findsOneWidget);
+    expect(find.byKey(const Key('drive-panel-header')), findsOneWidget);
+    expect(find.byKey(const Key('map-hint')), findsNothing, reason: 'no "No pings yet" popup on the map');
+    expect(find.descendant(of: find.byKey(const Key('drive-map')), matching: find.text('No pings yet')), findsNothing);
+    expect(find.byType(AppBar), findsNothing, reason: 'the old footer layout had an app bar');
+    expect(find.byKey(const Key('map-fullscreen')), findsNothing);
+    expect(find.byKey(const Key('fullscreen-close')), findsNothing);
+    expect(find.byKey(const Key('heard-box')), findsNothing);
+    expect(find.byKey(const Key('drive-report-card')), findsNothing);
+    // The map is full bleed: the Drive map fills the screen.
+    expect(tester.getSize(find.byKey(const Key('drive-map'))), tester.view.physicalSize / tester.view.devicePixelRatio);
   });
 }
 

@@ -5,7 +5,6 @@
 //
 // API for the shell: `MiniDriveBar(onOpen: ...)`; it reads AppState itself and renders nothing when no drive runs.
 // Pure text logic is in [miniBarSummary] so tests and the accessibility label share it.
-import 'dart:async';
 
 import 'package:flutter/material.dart';
 
@@ -16,6 +15,7 @@ import '../../app/app_state.dart';
 import '../app.dart';
 import '../drive/drive_controls.dart' show LiveDot, confirmAndStopDrive;
 import '../drive/radio_link_status.dart';
+import '../drive/drive_clock.dart';
 import '../widgets.dart' show bestSnr;
 
 /// Text the bar shows for a drive, split for layout (visual) and one sentence for screen readers.
@@ -165,34 +165,16 @@ class MiniDriveBar extends StatefulWidget {
   State<MiniDriveBar> createState() => _MiniDriveBarState();
 }
 
-class _MiniDriveBarState extends State<MiniDriveBar> {
-  Timer? _tick;
-
-  void _wantTick(bool on) {
-    if (on && _tick == null) {
-      _tick = Timer.periodic(const Duration(seconds: 1), (_) {
-        if (mounted) setState(() {});
-      });
-    } else if (!on && _tick != null) {
-      _tick!.cancel();
-      _tick = null;
-    }
-  }
-
-  @override
-  void dispose() {
-    _tick?.cancel();
-    super.dispose();
-  }
+class _MiniDriveBarState extends State<MiniDriveBar> with DriveClock {
 
   @override
   Widget build(BuildContext context) {
     final s = AppScope.of(context);
     if (!s.driving) {
-      _wantTick(false);
+      wantClock(false);
       return const SizedBox.shrink();
     }
-    _wantTick(TickerMode.valuesOf(context).enabled);
+    wantClock(true);
 
     final t = Theme.of(context);
     final elapsed = _elapsed(s);

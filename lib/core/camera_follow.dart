@@ -63,6 +63,20 @@ double speedZoomOffset(double speedMps, {double maxLevels = 1.3}) {
   return -maxLevels * x * x * (3 - 2 * x);
 }
 
+/// The zoom-by-speed target snapped to [bands] steps below zero (build 70, battery plan A14): with the default 2 the camera
+/// only ever aims at 0, -0.65 or -1.3 levels, so a steady speed settles on one zoom (no endless tiny zoom changes that make the
+/// basemap re-rasterise) and a band change happens only when the speed really moved.
+double speedZoomBand(double speedMps, {double maxLevels = 1.3, int bands = 2}) {
+  final step = maxLevels / bands;
+  return (speedZoomOffset(speedMps, maxLevels: maxLevels) / step).round() * step;
+}
+
+/// [easeToward] that lands exactly on [target] once within [snap] (so an eased zoom stops changing instead of creeping).
+double easeTowardSnapped(double current, double target, double dtS, double tau, {double snap = 0.01}) {
+  final next = easeToward(current, target, dtS, tau);
+  return (target - next).abs() < snap ? target : next;
+}
+
 /// First-order ease of [current] toward [target] over [dtS] with time constant [tau].
 double easeToward(double current, double target, double dtS, double tau) {
   if (dtS <= 0) return current;

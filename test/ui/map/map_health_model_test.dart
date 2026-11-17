@@ -15,9 +15,39 @@ void main() {
   tearDown(() {
     DriveMapModel.debugFixes = null;
     MapPrefs.shared.healthOverlay = false;
+    MapHealthRecorder.enabled = false;
+  });
+
+  testWidgets('map health is off by default (battery plan A11): a drive records nothing until it is switched on', (t) async {
+    DriveMapModel.debugFixes = (s) => s.activeLocation.fixes;
+    final h = Harness()..approveKey();
+    await h.state.init();
+    final sink = MemoryHealthSink();
+    final model = DriveMapModel(h.state, healthSink: sink);
+    addTearDown(model.dispose);
+    await h.state.connect(h.bt.devices.first, RadioKind.bluetooth);
+    await h.state.startDrive();
+    await t.pump();
+    expect(model.health.running, isFalse, reason: 'Diagnostics map health is off');
+    for (var sec = 0; sec < 12; sec++) {
+      h.clockNow = h.clockNow.add(const Duration(seconds: 1));
+      h.location.fixController.add(GeoFix(lat: 40.126 + sec * 0.0001, lon: -82.93, at: h.clockNow, accuracyM: 6));
+      await t.pump(const Duration(milliseconds: 20));
+    }
+    expect(sink.records, isEmpty);
+    // Switched on mid-drive (Settings > Diagnostics > Map and GPS health overlay): recording starts at once.
+    MapPrefs.shared.healthOverlay = true;
+    await t.pump();
+    expect(model.health.running, isTrue);
+    MapPrefs.shared.healthOverlay = false;
+    await t.pump();
+    expect(model.health.running, isFalse);
+    await h.state.stopDrive();
+    await t.pump(const Duration(seconds: 15));
   });
 
   testWidgets('a drive writes a health sample every 10 s; none outside a drive', (t) async {
+    MapHealthRecorder.enabled = true;
     DriveMapModel.debugFixes = (s) => s.activeLocation.fixes;
     final h = Harness()..approveKey();
     await h.state.init();

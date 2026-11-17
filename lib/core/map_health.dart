@@ -35,6 +35,10 @@ class MemoryHealthSink implements MapHealthSink {
 typedef HealthProvider = Map<String, Object?> Function(double windowS);
 
 class MapHealthRecorder {
+  /// Build 70 (battery plan A11): the Drive map records health only while Settings > Diagnostics "Map and GPS health overlay" is
+  /// on, or while this is set (tests and the simulator tours). Default off: no frame-timings callback and no 10 s samples.
+  static bool enabled = false;
+
   final MapHealthSink sink;
   final Duration interval;
   final DateTime Function() clock;

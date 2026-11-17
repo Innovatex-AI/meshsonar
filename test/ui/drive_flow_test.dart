@@ -29,13 +29,14 @@ Future<void> connectViaUi(WidgetTester tester, {String device = 'MeshCore-Truck'
 }
 
 void main() {
-  testWidgets('empty drive screen explains what to do', (tester) async {
+  testWidgets('empty drive screen explains what to do (in the Dock, no popup over the map)', (tester) async {
     useTallScreen(tester);
     final h = Harness();
     await h.pumpApp(tester);
-    expect(find.text('Not connected'), findsOneWidget);
-    expect(find.text('No pings yet'), findsOneWidget);
-    expect(find.text('Connect radio'), findsOneWidget);
+    expect(tester.widget<Text>(find.byKey(const Key('status-line'))).data, 'Not connected');
+    expect(find.text('Connect your radio to begin'), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const Key('start-stop')), matching: find.text('Connect radio')), findsOneWidget);
+    expect(find.byKey(const Key('map-hint')), findsNothing, reason: 'the "No pings yet" popup is gone');
     await drain(tester);
   });
 
@@ -46,14 +47,13 @@ void main() {
     await h.pumpApp(tester);
 
     await connectViaUi(tester);
-    expect(find.text('Truck Radio'), findsOneWidget); // connection chip shows the radio's name
+    expect(find.text('Truck Radio'), findsWidgets); // the Dock shows the radio's name
     expect(h.bt.connects, 1);
 
     await tester.tap(find.byKey(const Key('start-stop')));
     await settle(tester);
     expect(h.state.driving, isTrue);
-    expect(find.text('Stop drive'), findsOneWidget);
-    expect(find.text('Driving. Listening on #wardriving.'), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const Key('start-stop')), matching: find.text('Stop')), findsOneWidget);
 
     // Session carries radio info, antenna and companion from SelfInfo/settings.
     final session = h.store.sessionsById.values.single;
@@ -70,32 +70,35 @@ void main() {
       Echo(repeater: 'ff09', snrDb: -3.0, hops: 1),
     ]));
     await settle(tester);
+    // The Medium panel lists who heard the last ping: the cached name, or the hex id when unknown.
+    await openDrivePanel(tester);
+    expect(find.descendant(of: find.byKey(const Key('drive-panel-medium')), matching: find.text('Westerville Water Tower')), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const Key('drive-panel-medium')), matching: find.textContaining(RegExp('ff09', caseSensitive: false))), findsOneWidget);
     e.emit(silentPing('p2'));
     await settle(tester);
 
     // Stored immediately, before stop.
     expect(h.store.pingsBySession[session.id]!.map((p) => p.id), ['p1', 'p2']);
-    // The heard box on the map lists who answered: the cached name, or the hex id when unknown.
-    expect(find.byKey(const Key('heard-box')), findsOneWidget);
-    expect(find.descendant(of: find.byKey(const ValueKey('heard-row-a1b2')), matching: find.text('Westerville Water Tower')),
-        findsOneWidget);
-    expect(find.descendant(of: find.byKey(const ValueKey('heard-row-ff09')), matching: find.text('FF09')), findsOneWidget);
     // The LOG button opens the live ping log of this drive.
+    await tester.ensureVisible(find.byKey(const Key('open-log')));
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.byKey(const Key('open-log')));
     await tester.pumpAndSettle();
     expect(find.text('Heard nothing'), findsWidgets);
     expect(find.textContaining('Westerville Water Tower'), findsWidgets); // name from cache
     await tester.pageBack();
     await settleLive(tester);
-    expect(tester.widget<Text>(find.byKey(const Key('stat-pings'))).data, '2');
-    expect(tester.widget<Text>(find.byKey(const Key('stat-heard'))).data, '1 heard');
-    expect(tester.widget<Text>(find.byKey(const Key('stat-pct'))).data, '50%');
+    await openDrivePanel(tester);
+    // The Medium list was scrolled down to the Log button: back up to the ratio row.
+    await tester.ensureVisible(find.byKey(const Key('medium-ratio'), skipOffstage: false));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(tester.widget<Text>(find.byKey(const Key('medium-ratio'))).data, '1 of 2 pings heard (50%)');
 
     // Ping now: emitted on the stream AND returned; counted once.
     await tester.tap(find.byKey(const Key('ping-now')));
     await settle(tester);
     expect(h.store.pingsBySession[session.id]!.length, 3);
-    expect(tester.widget<Text>(find.byKey(const Key('stat-pings'))).data, '3');
+    expect(tester.widget<Text>(find.byKey(const Key('medium-ratio'))).data, endsWith('of 3 pings heard (67%)'));
 
     await tester.tap(find.byKey(const Key('start-stop')));
     await tester.pump();
@@ -106,8 +109,8 @@ void main() {
     expect(h.store.calls.last, isNot('start'));
     expect(h.store.sessionsById[session.id]!.endedAt, isNotNull);
     expect(h.sync.syncedSessions, [session.id]);
-    expect(tester.widget<Text>(find.byKey(const Key('stat-synced'))).data, '3');
-    expect(find.text('Start drive'), findsOneWidget);
+    expect(h.store.synced[session.id], hasLength(3));
+    expect(tester.widget<Text>(find.byKey(const Key('status-line'))).data, 'Drive saved');
     await drain(tester);
   });
 
@@ -120,11 +123,12 @@ void main() {
     await tester.pump();
     h.engines.single.emit(silentPing('quiet'));
     await settle(tester);
-    expect(find.text('No repeaters heard'), findsOneWidget); // the result flash on the map
-    expect(find.text('Listening… nothing heard yet'), findsOneWidget); // the heard box
+    expect(find.byKey(const Key('dock-hero-caption')), findsOneWidget);
+    expect(tester.widget<Text>(find.byKey(const Key('dock-hero-caption'))).data, startsWith('No echo'));
+    await openDrivePanel(tester);
     expect(tester.widget<Text>(find.byKey(const Key('stat-snr'))).data, 'none');
     expect(h.store.pingsBySession.values.single.single.echoes, isEmpty);
-    expect(tester.widget<Text>(find.byKey(const Key('stat-pct'))).data, '0%');
+    expect(tester.widget<Text>(find.byKey(const Key('medium-ratio'))).data, '0 of 1 pings heard (0%)');
     await h.state.stopDrive();
     await drain(tester);
   });
@@ -151,7 +155,6 @@ void main() {
     expect(h.store.synced[sid], isEmpty);
     expect(find.textContaining('Pings are kept on this phone'), findsOneWidget);
     expect(find.textContaining('Failed host lookup'), findsNothing); // no raw errors
-    expect(tester.widget<Text>(find.byKey(const Key('stat-synced'))).data, '0');
 
     // Drives tab shows the unsynced count and the error banner.
     await openDrivesTab(tester);
@@ -193,7 +196,8 @@ void main() {
     await settle(tester);
     expect(h.sync.syncedSessions, isEmpty);
     expect(h.store.pingsBySession.values.single.length, 1);
-    expect(find.textContaining('once your driver key is ready'), findsOneWidget);
+    // On the Drive tab the finished Dock says "Drive saved" (the same sentence as a toast is not repeated, Drive plan 4.18).
+    expect(tester.widget<Text>(find.byKey(const Key('status-line'))).data, 'Drive saved');
     await drain(tester);
   });
 
@@ -207,6 +211,7 @@ void main() {
     h.engines.single.emit(silentPing('p1'));
     await settle(tester);
     expect(h.state.unsavedCount, 1);
+    await openDrivePanel(tester);
     expect(find.textContaining('not yet saved'), findsOneWidget);
     h.store.failAppend = false;
     h.engines.single.emit(silentPing('p2'));
@@ -297,21 +302,12 @@ void main() {
     await drain(tester);
   });
 
-  testWidgets('the Log button and the report card dismiss are at least 44 px tall', (tester) async {
+  testWidgets('the Log button is at least 44 px tall', (tester) async {
     useTallScreen(tester);
     final h = Harness();
     await h.pumpApp(tester);
+    await openDrivePanel(tester);
     expect(tester.getSize(find.byKey(const Key('open-log'))).height, greaterThanOrEqualTo(44));
-    await drain(tester);
-  });
-
-  testWidgets('stat tiles read as one thing to VoiceOver ("Pings: 0")', (tester) async {
-    useTallScreen(tester);
-    final h = Harness();
-    await h.pumpApp(tester);
-    final handle = tester.ensureSemantics();
-    expect(find.bySemanticsLabel('Pings: 0'), findsOneWidget);
-    handle.dispose();
     await drain(tester);
   });
 
@@ -329,7 +325,7 @@ void main() {
   });
 
   for (final scale in [2.0, 3.1]) {
-    testWidgets('Drive tab at ${scale}x text: no overflow, Start and Ping now stay on screen and tappable', (tester) async {
+    testWidgets('Drive tab at ${scale}x text: no overflow, Start stays on screen and tappable, the location note shows', (tester) async {
       tester.view.physicalSize = const Size(1179, 2556); // iPhone 17 Pro
       tester.view.devicePixelRatio = 3.0;
       tester.platformDispatcher.textScaleFactorTestValue = scale;
@@ -339,14 +335,16 @@ void main() {
       final h = Harness()..locationAccess = FakeLocationAccess(LocationAccess.notAsked);
       await h.pumpApp(tester);
       await settle(tester);
-      expect(find.byKey(const Key('location-note')), findsOneWidget);
       final screen = tester.view.physicalSize / tester.view.devicePixelRatio;
-      for (final k in ['start-stop', 'ping-now']) {
+      for (final k in ['start-stop']) {
         final r = tester.getRect(find.byKey(Key(k)));
         expect(r.bottom, lessThanOrEqualTo(screen.height), reason: '$k is on screen');
         expect(r.height, greaterThanOrEqualTo(44));
       }
       expect(tester.takeException(), isNull, reason: 'no layout overflow');
+      await openDrivePanel(tester);
+      expect(find.byKey(const Key('location-note')), findsOneWidget);
+      expect(tester.takeException(), isNull, reason: 'no layout overflow in the Medium panel');
       await drain(tester);
     });
   }

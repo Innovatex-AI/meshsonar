@@ -39,14 +39,14 @@ class _RegionHarness extends Harness {
 final regionChip = find.byKey(const Key('region-chip'));
 
 void main() {
-  testWidgets('state (a): no cache and no live fetch yet — the badge shows nothing', (tester) async {
+  testWidgets('state (a): no cache and no live fetch yet — the chip says Locating…, no region', (tester) async {
     final h = Harness();
     h.client.regionsIndexError = const CmatException('no regions-index endpoint', status: 404);
     await h.pumpApp(tester);
     await tester.pumpAndSettle(); // let init()'s unawaited refreshRegionIndex() resolve
     expect(h.state.regionIndexLoaded, isFalse);
     expect(h.state.currentRegion, isNull);
-    expect(regionChip, findsNothing);
+    expect(find.descendant(of: regionChip, matching: find.text('Locating…')), findsOneWidget);
   });
 
   testWidgets('state (b): a fix outside every known region\'s bbox — "Outside coverage"', (tester) async {
@@ -61,7 +61,7 @@ void main() {
     expect(find.text('Outside coverage'), findsOneWidget);
   });
 
-  testWidgets('state (c): offline on a stale cache — badge still matches, tooltip flags it', (tester) async {
+  testWidgets('state (c): offline on a stale cache — the chip still shows the matching region', (tester) async {
     final h = Harness();
     h.regionIndexCache.items = const [cmh]; // loaded before the (failing) live fetch
     h.client.regionsIndexError = const CmatException('offline', status: null);
@@ -70,10 +70,7 @@ void main() {
     expect(h.state.regionIndexLoaded, isTrue);
     expect(h.state.regionIndexStale, isTrue);
     expect(h.state.currentRegion?.code, 'CMH');
-    expect(find.text('CMH'), findsOneWidget);
-    await tester.longPress(regionChip);
-    await tester.pumpAndSettle();
-    expect(find.textContaining('offline'), findsWidgets);
+    expect(find.descendant(of: regionChip, matching: find.text('CMH')), findsOneWidget);
   });
 
   testWidgets('state (d): a normal match — the region\'s code, no stale flag', (tester) async {

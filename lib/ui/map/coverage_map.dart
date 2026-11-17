@@ -217,9 +217,6 @@ Color networkLevelColor(BuildContext context, CoverageLevel level) => MeshSonarC
 List<double>? tileMatrixFor(BaseMapStyle style, List<double> themeMatrix) =>
     style.ungraded ? null : (style.forcesDark ? kDarkTileMatrix : themeMatrix);
 
-/// Below this pane height the map's compass / heading / recenter buttons move left of the tool column.
-const double kCompactMapHeight = 380;
-
 /// What a map needs to draw coverage v2 (see [CoverageMap.coverageV2]).
 @immutable
 class CoverageV2Inputs {
@@ -269,6 +266,10 @@ class CoverageMap extends StatefulWidget {
 
   /// Load OpenStreetMap tiles. Defaults to on, except under `flutter test` (no network, no plugins there).
   final bool? showTiles;
+
+  /// Coverage on a plain background: no basemap tiles at all (no vector, satellite or offline-pack layer), only the chart
+  /// grid under the data. The Drive map sets it from [simpleBasemapNow] (Saver's "Simple basemap" while driving, build 70).
+  final bool plainBasemap;
 
   /// Prefix -> display name (falls back to the repeater's cached name).
   final String Function(String prefix)? repeaterLabel;
@@ -422,6 +423,7 @@ class CoverageMap extends StatefulWidget {
     this.showLinks = true,
     this.interactive = true,
     this.rotatable = false,
+    this.plainBasemap = false,
     this.showTiles,
     this.repeaterLabel,
     this.fallbackCenter,
@@ -1502,7 +1504,8 @@ class _CoverageMapState extends State<CoverageMap> {
     final cam = _controller.camera;
     var z = cam.zoom;
     if (_prefs.zoomBySpeed) {
-      _zoomOffset = easeToward(_zoomOffset, speedZoomOffset(pose.speedMps), dt, 1.5);
+      // Fewer zoom bands, landing exactly on each (battery plan A14): the basemap re-rasterises only on a real band change.
+      _zoomOffset = easeTowardSnapped(_zoomOffset, speedZoomBand(pose.speedMps), dt, 1.5);
       z = (_userZoom + _zoomOffset).clamp(3.0, 18.0).toDouble();
     } else {
       _zoomOffset = 0;
@@ -1776,7 +1779,7 @@ class _CoverageMapState extends State<CoverageMap> {
     // Topo / Satellite are drawn only while the definition in use advertises them; a saved choice an older cached definition does
     // not offer is Chart (M3, contract "Map Definition M3").
     final style = BaseMapStyle.effective(widget.baseStyle, ActiveMapDefinition.current);
-    final tiles = widget.showTiles ?? CoverageMap.tilesByDefault;
+    final tiles = !widget.plainBasemap && (widget.showTiles ?? CoverageMap.tilesByDefault);
     final wide = MediaQuery.sizeOf(context).shortestSide >= 600;
     // A downloaded region pack covering the map wins over online tiles; no pack (or a corrupt one) means online as before.
     final offlinePack = tiles && style.usesOfflinePack ? _pack.reader : null;

@@ -43,6 +43,7 @@ void main() {
       await h.pumpApp(tester);
       await h.state.connect(h.bt.devices.first, RadioKind.bluetooth);
       await tester.pumpAndSettle();
+      await openDrivePanel(tester);
       await tester.tap(find.byKey(const Key('antenna-chip')));
       await tester.pumpAndSettle();
       expect(sheet, findsOneWidget);
@@ -110,15 +111,18 @@ void main() {
       await h.pumpApp(tester);
       await h.state.connect(h.bt.devices.first, RadioKind.bluetooth);
       await tester.pumpAndSettle();
+      await openDrivePanel(tester);
       expect(find.descendant(of: find.byKey(const Key('antenna-chip')), matching: find.text('Inside car · 1.2 m')),
           findsOneWidget);
       await tester.tap(find.byKey(const Key('start-stop')));
       await settle(tester);
       expect(h.state.driving, isTrue);
+      await openDrivePanel(tester);
       expect(find.descendant(of: find.byKey(const Key('antenna-chip')), matching: find.text('Internal · 1.2 m')),
           findsOneWidget, reason: 'what the drive records (v1 type, gain, height)');
       await h.state.stopDrive();
       await settle(tester);
+      await openDrivePanel(tester);
       expect(find.descendant(of: find.byKey(const Key('antenna-chip')), matching: find.text('Inside car · 1.2 m')),
           findsOneWidget);
       await drain(tester);
@@ -177,29 +181,10 @@ void main() {
       expect(isEnabled(tester, find.byKey(const Key('start-stop'))), isTrue, reason: 'Stop drive always works');
       await h.state.stopDrive();
       await tester.pumpAndSettle();
-      expect(find.text(setupHint), findsOneWidget, reason: 'after the drive the radio asks again');
+      await openDrivePanel(tester);
+      expect(find.text(setupHint), findsWidgets, reason: 'after the drive the radio asks again');
       await drain(tester);
     });
-  });
-
-  testWidgets('(11) the full-screen map shows the setup hint while Start drive is disabled', (tester) async {
-    useTallScreen(tester);
-    final h = Harness(antennaProfile: false);
-    await h.pumpApp(tester);
-    await h.state.connect(h.bt.devices.first, RadioKind.bluetooth);
-    await tester.pumpAndSettle();
-    if (sheet.evaluate().isNotEmpty) {
-      Navigator.of(tester.element(sheet)).pop();
-      await tester.pumpAndSettle();
-    }
-    await tester.tap(find.byKey(const Key('map-fullscreen')));
-    await tester.pumpAndSettle();
-    expect(find.text(setupHint), findsOneWidget);
-    expect(isEnabled(tester, find.byKey(const Key('start-stop'))), isFalse);
-    await tester.tap(find.text(setupHint));
-    await tester.pumpAndSettle();
-    expect(sheet, findsOneWidget, reason: 'the hint opens the sheet from the full-screen map too');
-    await drain(tester);
   });
 
   group('(8) the saved report keeps its form', () {

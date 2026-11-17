@@ -4,7 +4,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:meshsonar/app/app_flags.dart';
 import 'package:meshsonar/app/app_state.dart';
 import 'package:meshsonar/core/gps_health.dart';
 import 'package:meshsonar/core/startup_location.dart';
@@ -27,8 +26,6 @@ Future<Harness> pump(
   Brightness brightness = Brightness.light,
   Harness? harness,
 }) async {
-  AppFlags.driveRedesign = true;
-  addTearDown(() => AppFlags.driveRedesign = false);
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -219,8 +216,6 @@ void main() {
       tester.view.physicalSize = size;
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
-      AppFlags.driveRedesign = true;
-      addTearDown(() => AppFlags.driveRedesign = false);
       final h = Harness();
       await h.state.init();
       await h.state.connect(h.bt.devices.first, RadioKind.bluetooth);

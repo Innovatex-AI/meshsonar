@@ -1,6 +1,6 @@
-// The Drive screen's second, mid-drive-only stats strip (lib/ui/drive/drive_live_stats.dart,
-// DriveLiveStatsStrip in lib/ui/drive/drive_controls.dart): distance and elapsed time this session, the live
-// new-vs-repeat grid-cell tally, and the current GPS fix's accuracy.
+// The live numbers of a drive in progress (the Medium panel, lib/ui/drive/panel/panel_medium.dart, fed by DriveLiveStats):
+// distance and elapsed time this session, the live tally of new grid cells, and the GPS fix's accuracy. They show only while
+// driving. (Until build 70 this was the old footer's DriveLiveStatsStrip.)
 import 'package:flutter/material.dart' hide Radio;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/app/app_state.dart';
@@ -8,7 +8,6 @@ import 'package:meshsonar/core/units.dart';
 import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/radio/radio_api.dart';
 import 'package:meshsonar/ui/drive_stats.dart' show haversineM;
-import 'package:meshsonar/ui/theme.dart';
 
 import 'fakes.dart';
 
@@ -26,19 +25,21 @@ Future<void> drain(WidgetTester tester) async {
 final distanceTile = find.byKey(const Key('stat-distance'));
 final elapsedTile = find.byKey(const Key('stat-elapsed'));
 final cellsTile = find.byKey(const Key('stat-cells'));
-final cellsLabel = find.byKey(const Key('stat-cells-label'));
 final gpsTile = find.byKey(const Key('stat-gps'));
 
 void main() {
-  testWidgets('the second strip only shows while actually driving', (tester) async {
+  testWidgets('the live numbers only show while actually driving', (tester) async {
     useTallScreen(tester);
     final h = Harness();
     await h.pumpApp(tester);
+    await h.state.connect(h.bt.devices.first, RadioKind.bluetooth);
+    await settle(tester);
+    await openDrivePanel(tester);
     expect(distanceTile, findsNothing);
 
-    await h.state.connect(h.bt.devices.first, RadioKind.bluetooth);
     await h.state.startDrive();
     await settle(tester);
+    await openDrivePanel(tester);
     expect(distanceTile, findsOneWidget);
     expect(elapsedTile, findsOneWidget);
     expect(cellsTile, findsOneWidget);
@@ -46,11 +47,11 @@ void main() {
 
     await h.state.stopDrive();
     await settle(tester);
-    expect(distanceTile, findsNothing); // the top strip's recap (pings/heard/SNR/synced) stays; this one doesn't
+    expect(distanceTile, findsNothing);
     await drain(tester);
   });
 
-  testWidgets('distance sums consecutive pings; cells split new vs. repeat; GPS accuracy is colour-coded', (tester) async {
+  testWidgets('distance sums consecutive pings; only cells never driven count as new; GPS accuracy updates live', (tester) async {
     useTallScreen(tester);
     final h = Harness();
 
@@ -66,6 +67,7 @@ void main() {
     await h.state.connect(h.bt.devices.first, RadioKind.bluetooth);
     await h.state.startDrive();
     await tester.pumpAndSettle(); // let the one-time earlier-drives history read resolve
+    await openDrivePanel(tester);
 
     // No GPS fix published yet.
     expect(tester.widget<Text>(gpsTile).data, 'No fix');
@@ -76,19 +78,16 @@ void main() {
 
     h.engines.single.emit(DrivePing(id: 'p0', ts: DateTime.utc(2026, 10, 16, 18, 0, 0), lat: p0.lat, lon: p0.lon, echoes: const []));
     await settle(tester);
-    expect(tester.widget<Text>(cellsTile).data, '1 new');
-    expect(tester.widget<Text>(cellsLabel).data, '0 repeat');
+    expect(tester.widget<Text>(cellsTile).data, '1');
 
     h.engines.single.emit(DrivePing(id: 'p1', ts: DateTime.utc(2026, 10, 16, 18, 0, 10), lat: p1.lat, lon: p1.lon, echoes: const []));
     await settle(tester);
     // Revisiting the same cell this drive doesn't bump either count.
-    expect(tester.widget<Text>(cellsTile).data, '1 new');
-    expect(tester.widget<Text>(cellsLabel).data, '0 repeat');
+    expect(tester.widget<Text>(cellsTile).data, '1');
 
     h.engines.single.emit(DrivePing(id: 'p2', ts: DateTime.utc(2026, 10, 16, 18, 0, 20), lat: p2.lat, lon: p2.lon, echoes: const []));
     await settle(tester);
-    expect(tester.widget<Text>(cellsTile).data, '1 new');
-    expect(tester.widget<Text>(cellsLabel).data, '1 repeat');
+    expect(tester.widget<Text>(cellsTile).data, '1', reason: 'cell B was driven yesterday: a repeat, not new');
 
     // Distance is the same running sum DriveStats/DriveReport use (haversine, ping to ping, in arrival order).
     final expectedM = haversineM(p0.lat, p0.lon, p1.lat, p1.lon) + haversineM(p1.lat, p1.lon, p2.lat, p2.lon);
@@ -97,9 +96,7 @@ void main() {
     // Elapsed ticks off the harness's clock (fixed in tests), so it reads a real, computed zero, not a placeholder.
     expect(tester.widget<Text>(elapsedTile).data, '0 s');
 
-    // GPS accuracy: colour-coded, and updates live as fresh fixes land.
-    final mc = MeshSonarColors.of(tester.element(gpsTile));
-    Color? gpsColor() => tester.widget<Text>(gpsTile).style?.color;
+    // GPS accuracy updates live as fresh fixes land.
 
     h.engines.single.setStatus(EngineStatus(
       EngineState.driving,
@@ -107,7 +104,6 @@ void main() {
     ));
     await settle(tester);
     expect(tester.widget<Text>(gpsTile).data, '±8 m');
-    expect(gpsColor(), mc.snrStrong);
 
     h.engines.single.setStatus(EngineStatus(
       EngineState.driving,
@@ -115,7 +111,6 @@ void main() {
     ));
     await settle(tester);
     expect(tester.widget<Text>(gpsTile).data, '±20 m');
-    expect(gpsColor(), mc.snrMid);
 
     h.engines.single.setStatus(EngineStatus(
       EngineState.driving,
@@ -123,7 +118,6 @@ void main() {
     ));
     await settle(tester);
     expect(tester.widget<Text>(gpsTile).data, '±45 m');
-    expect(gpsColor(), mc.snrWeak);
 
     await h.state.stopDrive();
     await drain(tester);
@@ -136,11 +130,11 @@ void main() {
     await h.state.connect(h.bt.devices.first, RadioKind.bluetooth);
     await h.state.startDrive();
     await tester.pumpAndSettle();
+    await openDrivePanel(tester);
 
     h.engines.single.emit(DrivePing(id: 'p0', ts: DateTime.utc(2026, 10, 16, 18, 0, 0), lat: 40.0, lon: -83.0, echoes: const []));
     await settle(tester);
-    expect(tester.widget<Text>(cellsTile).data, '1 new');
-    expect(tester.widget<Text>(cellsLabel).data, '0 repeat');
+    expect(tester.widget<Text>(cellsTile).data, '1');
 
     await h.state.stopDrive();
     await drain(tester);

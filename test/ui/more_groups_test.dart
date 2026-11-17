@@ -30,23 +30,17 @@ String _headerOf(WidgetTester tester, String rowKey, List<String> headers) {
 }
 
 void main() {
-  testWidgets('no Developer switch until a long-press on the version row; a second long-press hides it again', (tester) async {
+  testWidgets('no Developer section or "New Drive screen" switch, even after a long-press on the version row (build 70)', (tester) async {
     useTallScreen(tester);
     await Harness().pumpApp(tester);
     await tapShellTab(tester, 'More');
     await tester.pumpAndSettle();
+    await _scrollTo(tester, _inMore('more-about'));
+    await tester.longPress(_inMore('more-about'));
+    await tester.pumpAndSettle();
     expect(find.byKey(const Key('more-drive-redesign')), findsNothing);
     expect(find.text('Developer'), findsNothing);
-    await _scrollTo(tester, _inMore('more-about'));
-    await tester.longPress(_inMore('more-about'));
-    await tester.pumpAndSettle();
-    await _scrollTo(tester, find.byKey(const Key('more-drive-redesign')));
-    expect(find.byKey(const Key('more-drive-redesign')), findsOneWidget);
-    expect(find.text('Developer'), findsOneWidget);
-    await _scrollTo(tester, _inMore('more-about'));
-    await tester.longPress(_inMore('more-about'));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('more-drive-redesign')), findsNothing);
+    expect(find.text('New Drive screen'), findsNothing);
     await drain(tester);
   });
 

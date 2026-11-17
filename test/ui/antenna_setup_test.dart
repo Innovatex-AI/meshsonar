@@ -5,7 +5,7 @@
 //     roofMagMount|fixedMast>') ("Handheld", "Inside car", "Roof mag-mount", "Fixed mast"); gain field
 //     Key('antenna-gain-field') + "Don't know" switch Key('antenna-gain-unknown'); height field Key('antenna-height-field')
 //     in metres; Key('antenna-save'). Upgrade note "Before 0.4.0 you chose External" (or Internal).
-//   Drive screen: chip Key('antenna-chip') ("Roof mag-mount · 5.8 dBi · 1.8 m"), tap opens the sheet, locked while
+//   Drive screen (Medium panel): chip Key('antenna-chip') ("Roof mag-mount · 5.8 dBi · 1.8 m"), tap opens the sheet, locked while
 //     driving; without a profile Start drive is disabled and the hint "Set up this radio's antenna" reopens the sheet.
 //   Settings → Antenna: one row per saved radio ValueKey('antenna-profile-<key>'), tap to edit;
 //     ValueKey('antenna-forget-<key>') forgets it (optional confirm Key('antenna-forget-confirm')).
@@ -17,6 +17,7 @@ import 'package:meshsonar/core/antenna_profile.dart';
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/radio/radio_api.dart';
+import 'package:meshsonar/ui/design/app_surfaces.dart' show dismissAppToast;
 
 import 'fakes.dart';
 import 'fakes_m1.dart';
@@ -38,6 +39,9 @@ String fieldText(WidgetTester tester, String key) => tester
     .text;
 
 Future<void> connectUi(WidgetTester tester, {String device = 'MeshCore-Truck'}) async {
+  // An earlier toast (top-anchored on the Drive tab) can still cover the connect sheet's first row.
+  dismissAppToast();
+  await tester.pump();
   await tester.tap(find.byKey(const Key('connection-chip')));
   await tester.pumpAndSettle();
   await tester.tap(find.text(device));
@@ -91,11 +95,12 @@ void main() {
     // Dismissed without saving: Start drive stays disabled with the hint; the hint reopens the sheet.
     await closeSheet(tester);
     expect(startEnabled(tester), isFalse);
-    expect(find.text('Set up this radio\'s antenna'), findsOneWidget);
+    await openDrivePanel(tester); // the hint and the antenna chip live in the Medium panel
+    expect(find.text('Set up this radio\'s antenna'), findsWidgets);
     await h.state.startDrive();
     await tester.pump();
     expect(h.state.driving, isFalse, reason: 'no drive without the radio\'s antenna');
-    await tester.tap(find.text('Set up this radio\'s antenna'));
+    await tester.tap(find.text('Set up this radio\'s antenna').first);
     await tester.pumpAndSettle();
     expect(sheet, findsOneWidget);
 
@@ -119,6 +124,7 @@ void main() {
     expect(h.state.driving, isTrue);
     expect(h.store.sessionsById.values.single.antenna.toJson(), {'type': 'external', 'gain_dbi': 5.8, 'height_m': 1.8});
     // Locked while driving: the chip doesn't open the sheet.
+    await openDrivePanel(tester);
     await tester.tap(find.byKey(const Key('antenna-chip')));
     await tester.pumpAndSettle();
     expect(sheet, findsNothing);
@@ -305,6 +311,7 @@ void main() {
     await h.pumpApp(tester);
     await h.state.connect(h.bt.devices.first, RadioKind.bluetooth);
     await tester.pumpAndSettle();
+    await openDrivePanel(tester);
     expect(find.byKey(const Key('antenna-toggle')), findsNothing);
     expect(find.descendant(of: find.byKey(const Key('antenna-chip')), matching: find.textContaining('Inside car')),
         findsOneWidget);
