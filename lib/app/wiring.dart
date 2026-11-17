@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
 import 'app_flags.dart';
+import '../core/power_profile.dart';
 import '../core/observer_identity.dart';
 import '../core/claim_flow.dart' show FileClaimRestoreStore;
 import '../core/cmat_client.dart';
@@ -74,6 +75,7 @@ File redesignFlagsFile(Directory root) => File('${root.path}${Platform.pathSepar
 Future<AppServices> buildRealServices() async {
   final root = await _dataRoot();
   await AppFlags.load(redesignFlagsFile(root));
+  await PowerProfile.load(File('${root.path}${Platform.pathSeparator}power_profile.json'));
   Future<ChatStore>? chatStore;
 
   await BleEngineChoice.load(File('${root.path}${Platform.pathSeparator}ble_engine.txt'));
