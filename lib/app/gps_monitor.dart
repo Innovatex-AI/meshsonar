@@ -8,14 +8,22 @@
 //  3. `onHealth`: a GpsHealth (lib/core/gps_health.dart) recomputed once a second but delivered only when it CHANGED, so the UI is told
 //     a few times a minute, not on every fix.
 //
+//  4. power (build 70, battery plan §3): once a second a DrivePowerGovernor picks the drive GPS settings (chosen precision, capped
+//     at High with no radio, coarse while parked) into [tuning], counts seconds per GPS mode into PowerCounters, and calls
+//     [onAutoEnd] once when a drive left open should end (parked / no radio for the profile's minutes).
+//
 // Time runs on a monotonic reading ([mono]); the wall clock is used only to spot a cached position on arrival.
 import 'dart:async';
 
+import '../core/drive_gps_tuning.dart';
 import '../core/drive_health_sink.dart';
 import '../core/fix_window.dart';
 import '../core/gps_health.dart';
+import '../core/power_profile.dart';
 import '../core/startup_location.dart' show LocationAccess;
 import '../radio/radio_api.dart';
+import 'drive_power_governor.dart';
+import 'drive_visibility.dart';
 
 class GpsMonitor {
   final LocationSource location;
@@ -41,6 +49,16 @@ class GpsMonitor {
   final Duration period;
   final Duration minNotifyGap;
 
+  /// Whether a radio is connected now (null = always). With none, the GPS is capped at High and the no-radio clock runs.
+  final bool Function()? radioConnected;
+
+  /// Called once when the drive should end on its own (see DrivePowerGovernor). The caller stops and saves the drive.
+  final void Function(DriveAutoEnd end)? onAutoEnd;
+
+  /// Where the chosen drive GPS mode goes (the platform source re-subscribes on a change).
+  final DriveGpsTuning tuning;
+  final DrivePowerGovernor governor;
+
   GpsMonitor({
     required this.location,
     this.onFix,
@@ -54,8 +72,14 @@ class GpsMonitor {
     this.distance,
     this.period = const Duration(seconds: 1),
     this.minNotifyGap = const Duration(milliseconds: 1500),
+    this.radioConnected,
+    this.onAutoEnd,
+    DriveGpsTuning? tuning,
+    DrivePowerGovernor? governor,
   })  : clock = clock ?? DateTime.now,
-        mono = mono ?? _stopwatchMono();
+        mono = mono ?? _stopwatchMono(),
+        tuning = tuning ?? DriveGpsTuning.shared,
+        governor = governor ?? DrivePowerGovernor();
 
   static bool _never() => false;
 
@@ -77,6 +101,9 @@ class GpsMonitor {
   GpsHealth _health = GpsHealth.idle;
   Duration? _lastNotified;
   bool _disposed = false;
+  Duration? _countedTo;
+  int _countUs = 0;
+  DriveGpsMode? _countMode;
 
   /// The current health.
   GpsHealth get health => _health;
@@ -94,6 +121,12 @@ class GpsMonitor {
     _window.clear();
     _guard.reset();
     _access = LocationAccess.unknown;
+    governor.start(_startedAt!);
+    // The first subscription already runs with the right settings.
+    tuning.mode = governor.tick(_startedAt!, radioConnected: _radio()).mode;
+    _countedTo = _startedAt;
+    _countUs = 0;
+    _countMode = tuning.mode;
     try {
       _sub = location.fixes.listen(_onFix, onError: (Object _) {});
     } catch (_) {
@@ -109,6 +142,11 @@ class GpsMonitor {
     _timer = null;
     final s = _sub;
     _sub = null;
+    if (s != null) {
+      _countGps(mono());
+      tuning.mode = null; // no drive deciding: back to the chosen profile
+      DriveVisibility.slow.value = true;
+    }
     _publish(GpsHealth.idle, force: true);
     if (s != null) await s.cancel();
   }
@@ -129,6 +167,8 @@ class GpsMonitor {
       return;
     }
     fixes++;
+    governor.onFix(e, now);
+    DriveVisibility.noteSpeed(e.speedMps);
     final cb = onFix;
     if (cb != null) {
       try {
@@ -165,6 +205,8 @@ class GpsMonitor {
     if (since == null || now - since >= (noFix ? const Duration(seconds: 5) : const Duration(seconds: 30))) {
       unawaited(_refreshAccess());
     }
+    _power(now);
+    if (_disposed || _sub == null) return;
     final started = _startedAt ?? now;
     final pick = _window.pick(now, first: firstPingPending(), waited: now - started);
     if (pick != null) _usableSince ??= now;
@@ -178,6 +220,51 @@ class GpsMonitor {
       distance: distance,
     );
     _publish(health, force: force);
+  }
+
+  bool _radio() {
+    final r = radioConnected;
+    if (r == null) return true;
+    try {
+      return r();
+    } catch (_) {
+      return true;
+    }
+  }
+
+  void _power(Duration now) {
+    _countGps(now);
+    final d = governor.tick(now, radioConnected: _radio());
+    if (d.mode != tuning.mode) {
+      sink.record('gps_mode', {'mode': d.mode.name});
+      tuning.mode = d.mode;
+    }
+    _countMode = tuning.mode;
+    final end = d.end;
+    final cb = onAutoEnd;
+    if (end != null && cb != null) {
+      sink.record('auto_end', {'why': end.reason.name, 'min': end.minutes});
+      try {
+        cb(end);
+      } catch (_) {}
+    }
+  }
+
+  /// Adds the time since the last count to the seconds of the mode that was in force.
+  void _countGps(Duration now) {
+    final from = _countedTo;
+    final mode = _countMode;
+    _countedTo = now;
+    if (from == null || mode == null || now <= from) return;
+    _countUs += (now - from).inMicroseconds;
+    final whole = _countUs ~/ Duration.microsecondsPerSecond;
+    if (whole <= 0) return;
+    _countUs -= whole * Duration.microsecondsPerSecond;
+    PowerCounters.inc(switch (mode) {
+      DriveGpsMode.best => PowerCounters.gpsBestSeconds,
+      DriveGpsMode.high => PowerCounters.gpsHighSeconds,
+      DriveGpsMode.standard || DriveGpsMode.parked => PowerCounters.gpsLowSeconds,
+    }, whole);
   }
 
   void _publish(GpsHealth h, {bool force = false}) {
