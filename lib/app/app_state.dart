@@ -2316,6 +2316,38 @@ class AppState extends ChangeNotifier with _ObserverWiring {
   WardriveEngine? _engine;
   EngineStatus _status = const EngineStatus(EngineState.idle);
   EngineStatus get status => _status;
+
+  /// The drive engine's status at full rate (every GPS fix), for drive widgets that want each one. AppState itself notifies
+  /// on a status tick only when something other than the position moved (state, countdown, wait reason, heard count...),
+  /// and at most once per [statusNotifyEvery] for position-only ticks, so hidden tabs do not rebuild on every fix (battery
+  /// plan A4). [status] always returns the newest value.
+  final ValueNotifier<EngineStatus> driveStatus = ValueNotifier<EngineStatus>(const EngineStatus(EngineState.idle));
+  static const Duration statusNotifyEvery = Duration(seconds: 2);
+  EngineStatus? _statusNotified;
+  DateTime? _statusNotifiedAt;
+  GeoFix? _regionFedFix;
+
+  /// Whether this engine status tick is worth an AppState notify (see [driveStatus]).
+  bool _statusWorthNotify(EngineStatus st) {
+    final was = _statusNotified;
+    final now = services.clock();
+    bool moving(EngineStatus e) => (e.metresToGo ?? 0) > 0;
+    final significant = was == null ||
+        was.state != st.state ||
+        was.message != st.message ||
+        was.nextPingAt != st.nextPingAt ||
+        was.waitingFor != st.waitingFor ||
+        was.clockSkew != st.clockSkew ||
+        was.heardSoFar != st.heardSoFar ||
+        (was.lastFix == null) != (st.lastFix == null) ||
+        (was.metresToGo == null) != (st.metresToGo == null) ||
+        moving(was) != moving(st);
+    final at = _statusNotifiedAt;
+    if (!significant && at != null && now.difference(at).abs() < statusNotifyEvery) return false;
+    _statusNotified = st;
+    _statusNotifiedAt = now;
+    return true;
+  }
   DriveSession? _session;
   DriveSession? get currentSession => _session;
   bool get driving => _session != null;
@@ -2673,6 +2705,9 @@ class AppState extends ChangeNotifier with _ObserverWiring {
       monitor.start();
       _startObserverPolling();
       _status = engine.current;
+      driveStatus.value = _status;
+      _statusNotified = null;
+      _regionFedFix = null;
       _pingSub = engine.pings.listen(_onPing, onError: (Object e) => _say(friendlyError(e, action: 'A ping')));
       _statusSub = engine.status.listen((st) {
         _status = st;
@@ -2685,11 +2720,21 @@ class AppState extends ChangeNotifier with _ObserverWiring {
               'or this drive\'s pings carry the wrong times and the server may refuse them.');
         }
         if (st.state == EngineState.error && !_reconnecting && _link?.isConnected == false) unawaited(_reconnectRadio());
-        // Rides the engine's own GPS stream (already gated to active drives only) rather than opening a second,
-        // always-on Geolocator subscription just for region awareness.
-        if (st.lastFix != null) _updateRegion(st.lastFix);
         if (st.lastFix != null) _ctx?.onFix(st.lastFix!);
-        notifyListeners();
+        driveStatus.value = st;
+        // Battery plan A4: AppState (and every tab listening to it) hears about a position-only tick at most every 2 s.
+        // Region awareness rides the engine's own GPS stream (already gated to active drives only) rather than opening a
+        // second, always-on Geolocator subscription. It is fed on the notify cadence, and on any fix 100 m or more from the
+        // last one it saw so a border crossing is never missed; _updateRegion notifies itself, so it is that or ours.
+        final notify = _statusWorthNotify(st);
+        final f = st.lastFix;
+        final fed = _regionFedFix;
+        if (f != null && (notify || fed == null || haversineM(fed.lat, fed.lon, f.lat, f.lon) >= 100)) {
+          _regionFedFix = f;
+          _updateRegion(f);
+        } else if (notify) {
+          notifyListeners();
+        }
       });
       final txW = info?.radio.txDbm == null ? null : _dbmToWatts(info!.radio.txDbm!);
       await engine.start(WardriveConfig(
@@ -2894,6 +2939,7 @@ class AppState extends ChangeNotifier with _ObserverWiring {
       unawaited(_idle?.setDriving(false));
       _mt?.driveStopped(); // "This drive" shares end with the stop message
       _status = const EngineStatus(EngineState.idle);
+      driveStatus.value = _status;
     } finally {
       _busy = false;
       notifyListeners();
