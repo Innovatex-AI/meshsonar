@@ -8,6 +8,7 @@ import '../design/app_surfaces.dart';
 import '../../app/app_state.dart';
 import '../../core/diagnostics.dart';
 import '../../core/map_prefs.dart';
+import '../../core/power_profile.dart';
 import '../../core/redact.dart';
 import '../app.dart';
 import '../report_problem_screen.dart';
@@ -49,6 +50,7 @@ List<Widget> diagnosticsSectionRows(BuildContext context) {
         ),
       ),
     ),
+    const SettingsAnchor(id: 'diagnostics-power-counters', child: PowerCountersCard()),
     SettingsAnchor(
       id: 'report-problem',
       child: ListTile(
@@ -161,6 +163,109 @@ class _DiagnosticsLogScreenState extends State<DiagnosticsLogScreen> {
                       ),
               ),
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------- power counters (build 70, battery plan §4)
+
+const Map<String, String> _counterWords = {
+  PowerCounters.gpsBestSeconds: 'GPS, best accuracy',
+  PowerCounters.gpsHighSeconds: 'GPS, high accuracy',
+  PowerCounters.gpsLowSeconds: 'GPS, low accuracy',
+  PowerCounters.screenOnSeconds: 'Screen kept on',
+  PowerCounters.compassSeconds: 'Compass',
+  PowerCounters.mapFrame: 'Map frames drawn',
+  PowerCounters.bleCommand: 'Radio commands',
+  PowerCounters.blePoll: 'Radio message checks',
+  PowerCounters.httpRequest: 'Internet requests',
+  PowerCounters.timerWake: 'Timer wake-ups',
+};
+
+/// Keys counted in seconds (shown as minutes, and minutes per hour).
+const Set<String> _secondsCounters = {
+  PowerCounters.gpsBestSeconds,
+  PowerCounters.gpsHighSeconds,
+  PowerCounters.gpsLowSeconds,
+  PowerCounters.screenOnSeconds,
+  PowerCounters.compassSeconds,
+};
+
+String _rate(double v) => v >= 100 ? v.round().toString() : v.toStringAsFixed(1);
+
+/// One line per counter: (words, "12 min (4.0 min/h)" or "720 (240/h)"), the known counters first in a fixed order,
+/// then any other key by name. The rate is per hour since [since]; with under a minute counted it is left out.
+List<(String, String)> powerCounterLines(Map<String, int> counts, DateTime since, DateTime now) {
+  final hours = now.difference(since).inSeconds / 3600;
+  final keys = [..._counterWords.keys, ...(counts.keys.where((k) => !_counterWords.containsKey(k)).toList()..sort())];
+  return [
+    for (final k in keys)
+      () {
+        final n = counts[k] ?? 0;
+        final secs = _secondsCounters.contains(k);
+        final value = secs ? n / 60 : n.toDouble();
+        final total = secs ? '${_rate(value)} min' : '$n';
+        final per = hours < 1 / 60 ? '' : ' (${_rate(value / hours)}${secs ? ' min' : ''}/h)';
+        return (_counterWords[k] ?? k, '$total$per');
+      }(),
+  ];
+}
+
+/// Diagnostics > Power counters: what used power since the app started, with per-hour rates. Counted in code
+/// (lib/core/power_profile.dart PowerCounters); Refresh reads them again.
+class PowerCountersCard extends StatefulWidget {
+  const PowerCountersCard({super.key});
+  @override
+  State<PowerCountersCard> createState() => _PowerCountersCardState();
+}
+
+class _PowerCountersCardState extends State<PowerCountersCard> {
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final now = DateTime.now();
+    final since = PowerCounters.since;
+    final lines = powerCounterLines(PowerCounters.snapshot(), since, now);
+    final up = now.difference(since);
+    final upWords = up.inHours >= 1 ? '${up.inHours} h ${up.inMinutes % 60} min' : '${up.inMinutes} min';
+    return Padding(
+      key: const Key('diagnostics-power-counters'),
+      padding: const EdgeInsets.fromLTRB(16, 8, 8, 12),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Icon(Icons.battery_unknown_outlined),
+          const SizedBox(width: 16),
+          Expanded(child: Text(settingsEntry('diagnostics-power-counters').title, style: t.textTheme.titleMedium)),
+          IconButton(
+            key: const Key('diagnostics-power-counters-refresh'),
+            tooltip: 'Read the counters again',
+            icon: const Icon(Icons.refresh),
+            onPressed: () => setState(() {}),
+          ),
+        ]),
+        Padding(
+          padding: const EdgeInsets.only(left: 40, right: 8),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Since the app started $upWords ago. Rates are per hour. Stays on this phone.',
+                style: t.textTheme.bodySmall),
+            const SizedBox(height: 6),
+            for (final (what, value) in lines)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Expanded(child: Text(what, style: t.textTheme.bodyMedium)),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(value,
+                        key: Key('power-counter-$what'),
+                        textAlign: TextAlign.end,
+                        style: t.textTheme.bodyMedium?.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
+                  ),
+                ]),
+              ),
+          ]),
+        ),
+      ]),
     );
   }
 }

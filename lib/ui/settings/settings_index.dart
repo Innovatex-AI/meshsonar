@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 
 import '../../app/app_state.dart';
+import 'battery_section.dart' show batterySettingsEntries;
 import 'meshtrack_section.dart' show meshTrackAvailable, meshTrackSettingsEntries;
 import 'observer_section.dart' show observerSettingsEntries;
 import 'privacy_section.dart' show privacySettingsEntries;
@@ -33,6 +34,8 @@ const List<SettingsSectionInfo> settingsSections = [
   SettingsSectionInfo('radio', 'Radio', Icons.settings_input_antenna),
   SettingsSectionInfo('my-radios-section', 'Claimed radios', Icons.verified_user_outlined),
   SettingsSectionInfo('meshtrack', 'MeshTrack', Icons.people_alt_outlined, available: meshTrackAvailable),
+  // Battery sits with the driving sections: most of its settings are about a drive (build 70).
+  SettingsSectionInfo('battery', 'Battery', Icons.battery_charging_full),
   SettingsSectionInfo('display', 'Units & display', Icons.straighten),
   SettingsSectionInfo('maps', 'Map & offline maps', Icons.map_outlined),
   SettingsSectionInfo('privacy', 'Privacy & data sharing', Icons.privacy_tip_outlined),
@@ -233,6 +236,8 @@ const List<SettingsEntry> settingsEntries = [
       keywords: ['test', 'try', 'check']),
   // MeshTrack: the entries live next to their rows (lib/ui/settings/meshtrack_section.dart).
   ...meshTrackSettingsEntries,
+  // Battery: the entries live next to their rows (lib/ui/settings/battery_section.dart).
+  ...batterySettingsEntries,
   // Diagnostics
   SettingsEntry('diagnostics-log', 'diagnostics', 'Diagnostic log',
       'Recent app events to help explain a problem. Secrets hidden, positions rounded when copied.',
@@ -243,6 +248,10 @@ const List<SettingsEntry> settingsEntries = [
   SettingsEntry('map-health-overlay', 'diagnostics', 'Map and GPS health overlay',
       'Shows frame times, GPS update rate, camera mode and map source over the map. Samples are saved with each drive either way.',
       keywords: ['map', 'gps', 'fps', 'frame', 'jank', 'smooth', 'performance', 'overlay', 'health', 'debug']),
+  SettingsEntry('diagnostics-power-counters', 'diagnostics', 'Power counters',
+      'What used power since the app started: GPS, screen, compass and map minutes, radio commands and uploads per hour.',
+      keywords: ['battery', 'power', 'counters', 'energy', 'drain', 'gps', 'screen on', 'compass', 'ble', 'per hour'],
+      info: true),
   SettingsEntry('report-problem', 'diagnostics', 'Report a problem',
       'Send a report to your server\'s operators. You see exactly what is sent first.',
       keywords: ['bug', 'feedback', 'support', 'issue', 'help', 'contact']),
