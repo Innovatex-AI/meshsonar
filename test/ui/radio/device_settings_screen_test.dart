@@ -171,4 +171,28 @@ void main() {
     expect(tester.widget<FilledButton>(find.byKey(const Key('backup-create'))).onPressed, isNotNull);
     expect(r.radio.sent.where((s) => s.frame[0] == Cmd.exportPrivateKey), isEmpty, reason: 'nothing read before the button');
   });
+
+  testWidgets('A13: the 60 s battery read runs in front only; one read on return', (tester) async {
+    final r = rig();
+    await open(tester, r);
+    final start = r.radio.batteryReads;
+    await tester.pump(batteryReadEvery);
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(r.radio.batteryReads, start + 1, reason: 'in front: every 60 s');
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump(batteryReadEvery * 3);
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(r.radio.batteryReads, start + 1, reason: 'behind: no reads');
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(r.radio.batteryReads, start + 2, reason: 'one read on return');
+    await tester.pump(batteryReadEvery);
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(r.radio.batteryReads, start + 3, reason: 'the timer runs again');
+    await done(tester);
+  });
 }
