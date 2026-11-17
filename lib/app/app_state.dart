@@ -14,6 +14,7 @@ import 'package:h3_flutter/h3_flutter.dart' show H3;
 
 import '../core/antenna_profile.dart';
 import '../core/api.dart';
+import '../core/app_foreground.dart';
 import '../core/claim_flow.dart';
 import '../core/cmat_client.dart' show HttpCmatClient;
 import '../core/coverage_query.dart';
@@ -1303,6 +1304,7 @@ class AppState extends ChangeNotifier with _ObserverWiring {
   void debugOnForeground() => _onForeground(true);
 
   void _onForeground(bool fg) {
+    AppForeground.set(fg); // the radio layer's safety poll and other pure-Dart cadences follow it (battery plan A7)
     _mt?.setForeground(fg);
     _telemetry?.foreground = fg; // 5 s batches in front, 60 s or 50 packets behind (contract section 6)
     _observerForegroundChanged(fg);
