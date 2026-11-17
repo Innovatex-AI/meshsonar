@@ -46,8 +46,7 @@ void main() {
     await Future<void>.delayed(_tick * 5);
     expect(c.asks, behind, reason: 'behind: the poll is skipped');
 
-    h.state.debugOnForeground();
-    await Future<void>.delayed(const Duration(milliseconds: 5));
+    h.state.debugOnForeground(); // the ask starts synchronously, before any timer can fire
     expect(c.asks, behind + 1, reason: 'one ask on return');
     await h.state.stopDrive();
   });
