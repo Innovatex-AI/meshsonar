@@ -36,6 +36,7 @@ void main() {
       transport: net.create,
       queueCap: 100000,
       ratePerMinute: 100000,
+      connectStagger: Duration.zero,
     );
     engine.update(
       engineState(

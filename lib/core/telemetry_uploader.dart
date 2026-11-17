@@ -17,6 +17,13 @@
 //    Drive positions sent sooner stay private: the server holds them pending until drive-end (contract section 8.7).
 //  * Cadence (contract section 6): in the foreground a batch at most every [TelemetryConfig.minGap] (5 s); in the background
 //    every [TelemetryConfig.backgroundGap] (60 s) or as soon as [TelemetryConfig.backgroundBatch] (50) packets are ready.
+//    Build 70 (battery plan I3): the app passes [TelemetryUploader.backgroundGap] = the battery mode's
+//    PowerSettings.observerUploadBackS (Max data 60 s, Balanced 5 min, Saver 15 min); the early-batch threshold grows with
+//    it (up to [TelemetryConfig.batchSize]) so a slower mode really batches. Nothing is dropped for it: the queue waits.
+//  * Disk (battery plan A9): the queue file is rewritten at most every [TelemetryConfig.saveEvery] (30 s) while records
+//    wait; going to the background, [dispose], the opt-out, an erase and an emptied queue write at once. So a crash
+//    loses at most the last 30 s of queued packet headers (the save-first rule of docs/ARCHITECTURE.md is for pings, not
+//    for this best-effort telemetry queue).
 //  * Rate caps: intake per minute/hour, at most [TelemetryConfig.maxBatchesPerHour] batches per hour (the server allows
 //    12/min and 200/h; past half of it the gap widens to spread the rest), a bounded queue (oldest dropped) and a bounded
 //    disk file.
@@ -81,6 +88,9 @@ class TelemetryConfig {
   final Duration baseBackoff;
   final Duration maxBackoff;
   final Duration authBackoff;
+
+  /// The queue file is rewritten at most this often while records wait (battery plan A9). A crash loses at most this much.
+  final Duration saveEvery;
   const TelemetryConfig({
     this.batchSize = 200,
     this.maxQueue = 5000,
@@ -95,6 +105,7 @@ class TelemetryConfig {
     this.baseBackoff = const Duration(seconds: 30),
     this.maxBackoff = const Duration(minutes: 30),
     this.authBackoff = const Duration(hours: 1),
+    this.saveEvery = const Duration(seconds: 30),
   });
 }
 
@@ -253,7 +264,32 @@ class TelemetryUploader {
     this.onServerErased,
     this.onObserver,
     this.zones,
+    this.backgroundGap,
+    this.onBatchSent,
   }) : now = now ?? DateTime.now;
+
+  /// The background cadence right now (the app: the battery mode's observerUploadBackS). Null = [TelemetryConfig.backgroundGap].
+  final Duration Function()? backgroundGap;
+
+  /// Called after every batch the server took (the observer heartbeat rides along: observer_status.dart).
+  final void Function()? onBatchSent;
+
+  Duration get _bgGap {
+    final g = backgroundGap?.call();
+    return g == null || g <= Duration.zero ? config.backgroundGap : g;
+  }
+
+  /// Packets that make a background batch go before [_bgGap]: [TelemetryConfig.backgroundBatch] at the base 60 s cadence,
+  /// scaled up with a slower cadence, never above [TelemetryConfig.batchSize].
+  int get _bgBatch {
+    final base = config.backgroundGap.inMilliseconds;
+    final g = _bgGap.inMilliseconds;
+    if (base <= 0 || g <= base) return config.backgroundBatch;
+    return math.min(config.batchSize, (config.backgroundBatch * g / base).round());
+  }
+
+  /// When the last batch the server took was sent (null = none this run).
+  DateTime? lastSuccessAt;
 
   final List<TelemetryRecord> _queue = [];
 
@@ -289,6 +325,7 @@ class TelemetryUploader {
     _foreground = v;
     _timer?.cancel();
     _timer = null;
+    if (!v && _dirty) unawaited(_save(force: true)); // going behind: the app may be suspended, so write now
     if (_queue.isNotEmpty) _schedule();
   }
 
@@ -460,7 +497,7 @@ class TelemetryUploader {
         _pendingErase = false;
         _dirty = true;
         final d = r.body?['deleted'];
-        await _save();
+        await _save(force: true);
         onServerErased?.call();
         return d is num ? d.toInt() : 0;
       }
@@ -468,7 +505,7 @@ class TelemetryUploader {
         // The key is not (or no longer) accepted, so the server holds nothing we can still erase with it.
         _pendingErase = false;
         _dirty = true;
-        await _save();
+        await _save(force: true);
         return null;
       }
     } catch (_) {}
@@ -479,13 +516,13 @@ class TelemetryUploader {
     if (!autoSchedule || _timer != null) return;
     final t = now();
     // Wake at the cadence; when every waiting record is held by an own ping's echo window, not before that window ends.
-    var wait = _foreground ? _gap(t) : config.backgroundGap;
+    var wait = _foreground ? _gap(t) : _bgGap;
     final from = _holdFrom(t);
     if (_queue.isNotEmpty && from != null && _readyCount(t) == 0) {
       final ready = _holdEnd(from).difference(t);
       if (ready > wait) wait = ready;
     }
-    if (!_foreground && _readyCount(t) >= config.backgroundBatch) wait = _gap(t);
+    if (!_foreground && _readyCount(t) >= _bgBatch) wait = _gap(t);
     if (_lastSend != null) {
       final sinceLast = t.difference(_lastSend!);
       final left = _gap(t) - sinceLast;
@@ -581,9 +618,9 @@ class TelemetryUploader {
     if (eligible.isEmpty) return;
     // Background: a batch every minute, or sooner once enough packets are ready.
     if (!_foreground &&
-        eligible.length < config.backgroundBatch &&
+        eligible.length < _bgBatch &&
         _lastSend != null &&
-        t.difference(_lastSend!) < config.backgroundGap) {
+        t.difference(_lastSend!) < _bgGap) {
       return;
     }
     final region = eligible.first.region;
@@ -625,6 +662,8 @@ class TelemetryUploader {
       _nextAttempt = null;
       sent += batch.length;
       _removeBatch(batch);
+      lastSuccessAt = t;
+      onBatchSent?.call();
     } else if (s == 401 || s == 403) {
       _failures++;
       _nextAttempt = now().add(config.authBackoff);
@@ -647,12 +686,31 @@ class TelemetryUploader {
     _dirty = true;
   }
 
-  Future<void> _save() async {
+  DateTime? _savedAt;
+  Timer? _saveTimer;
+
+  /// Writes the queue file, at most every [TelemetryConfig.saveEvery] while records wait (a later save is scheduled
+  /// instead). [force], an emptied queue and a pending erase write at once.
+  Future<void> _save({bool force = false}) async {
     final f = queueFile;
     if (f == null) {
       _dirty = false;
       return;
     }
+    if (!force && _queue.isNotEmpty && !_pendingErase && config.saveEvery > Duration.zero) {
+      final at = _savedAt;
+      final t = now();
+      if (at != null && t.difference(at) < config.saveEvery) {
+        _saveTimer ??= Timer(config.saveEvery - t.difference(at), () {
+          _saveTimer = null;
+          if (_dirty) unawaited(_save(force: true));
+        });
+        return;
+      }
+    }
+    _saveTimer?.cancel();
+    _saveTimer = null;
+    _savedAt = now();
     try {
       if (_queue.isEmpty && !_pendingErase) {
         if (await f.exists()) await f.delete();
@@ -681,6 +739,8 @@ class TelemetryUploader {
   Future<void> dispose() async {
     _timer?.cancel();
     _timer = null;
-    if (_dirty) await _save();
+    if (_dirty) await _save(force: true);
+    _saveTimer?.cancel();
+    _saveTimer = null;
   }
 }

@@ -36,6 +36,7 @@ mixin _ObserverWiring on ChangeNotifier {
     mode: () => observerMode.wire,
     radio: () => _s._telemetryObserver(observerMode)?.radio.toJson() ?? const <String, dynamic>{},
     autoTimer: _s.services.observerHeartbeatTimer,
+    clock: _s.services.clock,
   );
 
   /// Sharing is on for a real radio, the disclosure was seen and the server took the key: this phone is an observer now.

@@ -25,13 +25,15 @@ class _Env {
   final InMemorySecretStore secrets = InMemorySecretStore();
   final TestRadioSigner radio = TestRadioSigner();
   late final MqttObserverEngine engine;
-  _Env(this.a, {int seed = 1}) {
+  // Most tests are about one feed's behaviour: feeds connect at once unless a test asks for the stagger (battery A12).
+  _Env(this.a, {int seed = 1, Duration stagger = Duration.zero}) {
     engine = MqttObserverEngine(
       secrets: secrets,
       clock: () => _t0.add(a.elapsed),
       transport: net.create,
       random: Random(seed),
       testLinger: Duration.zero,
+      connectStagger: stagger,
     );
   }
   void settle([Duration d = const Duration(milliseconds: 1)]) {
@@ -56,8 +58,8 @@ class _Env {
   }
 }
 
-void _run(void Function(_Env e) body, {int seed = 1}) => fakeAsync((a) {
-  final e = _Env(a, seed: seed);
+void _run(void Function(_Env e) body, {int seed = 1, Duration stagger = Duration.zero}) => fakeAsync((a) {
+  final e = _Env(a, seed: seed, stagger: stagger);
   body(e);
   unawaited(e.engine.dispose());
   a.flushMicrotasks();
@@ -142,6 +144,40 @@ void main() {
       expect(e.net.live, hasLength(1));
       expect(e.net.connects.last.url, 'wss://other.example.org/');
     });
+  });
+
+  test('A12: feeds that start together connect 2 s apart, not all at once (the default)', () {
+    _run((e) {
+      e.engine.update(
+        engineState(slots: [for (var i = 1; i <= 4; i++) slot('slot-$i', host: 'h$i.example.org')], sign: e.radio.sign),
+      );
+      e.settle();
+      expect(e.net.connects, hasLength(1), reason: 'the first at once');
+      e.settle(const Duration(seconds: 2));
+      expect(e.net.connects, hasLength(2));
+      e.settle(const Duration(seconds: 2));
+      expect(e.net.connects, hasLength(3));
+      e.settle(const Duration(seconds: 2));
+      expect(e.net.connects, hasLength(4));
+      expect(e.labels(), everyElement('Connected'));
+      // Back from the background: paused feeds resume staggered too.
+      e.engine.update(engineState(
+          foreground: false, slots: [for (var i = 1; i <= 4; i++) slot('slot-$i', host: 'h$i.example.org')], sign: e.radio.sign));
+      e.net.dropAll();
+      e.settle();
+      expect(e.labels(), everyElement('Paused in background'));
+      final before = e.net.connects.length;
+      e.engine.update(
+          engineState(slots: [for (var i = 1; i <= 4; i++) slot('slot-$i', host: 'h$i.example.org')], sign: e.radio.sign));
+      e.settle();
+      expect(e.net.connects.length, before + 1);
+      e.settle(const Duration(seconds: 6));
+      expect(e.net.connects.length, before + 4);
+    }, stagger: const Duration(seconds: 2));
+  });
+
+  test('the default stagger is 2 s', () {
+    expect(MqttObserverEngine(secrets: InMemorySecretStore(), clock: () => _t0).connectStagger, const Duration(seconds: 2));
   });
 
   test('ten slots at most, one connection per enabled slot, unique client ids', () {

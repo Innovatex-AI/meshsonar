@@ -4,7 +4,9 @@
 //  - Every DM and channel message the radio receives is appended to a RAM queue (addToOfflineQueue, MyMesh.cpp 224) and
 //    announced with PUSH_MSG_WAITING (0x83), a one-byte push that goes through the same lossy BLE queue as everything else
 //    (4 frames deep on ESP32, a full queue DROPS frames: SerialBLEInterface). So PUSH_MSG_WAITING can be lost: besides
-//    draining on the push, on connect and after a timeout, [startPolling] asks every few seconds.
+//    draining on the push, on connect, on return to the front and after every send, a backup "safety poll" asks now and
+//    then. Build 70 (battery plan A7): its interval comes from the battery mode, PowerSettings.radioPollFrontS in front and
+//    radioPollBackS in the background (0 = no backup poll, push only); Balanced = 30 s / 120 s, Max data = 5 s.
 //  - SYNC_NEXT_MESSAGE (10) is destructive: it pops the head and sends it. If the frame is lost on the way or the app dies
 //    with it in memory, the message is gone. So every frame is handed to the persister and that is AWAITED before the next
 //    SYNC_NEXT_MESSAGE goes out.
@@ -19,6 +21,8 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:typed_data';
 
+import '../core/app_foreground.dart';
+import '../core/power_profile.dart';
 import 'inbound.dart';
 import 'protocol.dart';
 import 'rx_facts.dart';
@@ -38,8 +42,9 @@ class MessageSync {
   /// Frames taken per drain at most. The queue holds up to 256.
   final int maxPerDrain;
 
-  /// How often the safety poll asks while there are listeners.
-  final Duration pollInterval;
+  /// How often the safety poll asks while there are listeners. Null (the app) = the battery mode's
+  /// PowerSettings.radioPollFrontS / radioPollBackS for the app's foreground state ([AppForeground]); tests pin one.
+  final Duration? pollInterval;
 
   /// Called for EVERY contact text frame including CLI replies (txt_type 1), for the claim flows.
   void Function(ContactTextFrame frame)? onContactText;
@@ -68,6 +73,7 @@ class MessageSync {
   final LinkedHashSet<String> _seen = LinkedHashSet<String>();
   static const int _seenMax = 512;
   Timer? _poll;
+  Duration? _pollEvery;
   bool _again = false;
   bool _disposed = false;
 
@@ -77,11 +83,41 @@ class MessageSync {
   int persistFailures = 0;
   int drains = 0;
 
-  MessageSync(this.source, {DateTime Function()? clock, this.maxPerDrain = 512, this.pollInterval = const Duration(seconds: 5)})
+  MessageSync(this.source, {DateTime Function()? clock, this.maxPerDrain = 512, this.pollInterval})
       : _clock = clock ?? DateTime.now {
     _out
       ..onListen = _maybePoll
       ..onCancel = _maybePoll;
+    AppForeground.addListener(_onForeground);
+    PowerProfile.addListener(_onProfile);
+  }
+
+  /// The safety poll interval right now; null = no backup poll (push only).
+  Duration? get currentPollInterval {
+    final fixed = pollInterval;
+    if (fixed != null) return fixed;
+    final p = PowerProfile.current;
+    final s = AppForeground.inForeground ? p.radioPollFrontS : p.radioPollBackS;
+    return s <= 0 ? null : Duration(seconds: s);
+  }
+
+  void _onForeground(bool fg) {
+    if (_disposed) return;
+    _restartPoll();
+    // Back in front: drain once now, so a message whose push was lost while locked shows at once.
+    if (fg && source.isConnected && _out.hasListener) requestDrain();
+  }
+
+  void _onProfile() {
+    if (_disposed) return;
+    if (_pollEvery != currentPollInterval) _restartPoll();
+  }
+
+  void _restartPoll() {
+    _poll?.cancel();
+    _poll = null;
+    _pollEvery = null;
+    _maybePoll();
   }
 
   /// Messages, after they were persisted. Broadcast. Listening starts the safety poll.
@@ -91,13 +127,21 @@ class MessageSync {
 
   void _maybePoll() {
     if (_disposed) return;
-    if (_out.hasListener) {
-      _poll ??= Timer.periodic(pollInterval, (_) {
-        if (source.isConnected && _run == null) unawaited(drain());
+    final every = currentPollInterval;
+    if (_out.hasListener && every != null) {
+      if (_poll != null && _pollEvery == every) return;
+      _poll?.cancel();
+      _pollEvery = every;
+      _poll = Timer.periodic(every, (_) {
+        if (source.isConnected && _run == null) {
+          PowerCounters.inc(PowerCounters.blePoll);
+          unawaited(drain());
+        }
       });
     } else {
       _poll?.cancel();
       _poll = null;
+      _pollEvery = null;
     }
   }
 
@@ -235,6 +279,8 @@ class MessageSync {
 
   void dispose() {
     _disposed = true;
+    AppForeground.removeListener(_onForeground);
+    PowerProfile.removeListener(_onProfile);
     _poll?.cancel();
     _poll = null;
     unawaited(_out.close());
