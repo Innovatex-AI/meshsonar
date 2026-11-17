@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 
 import '../../alerts/alerts_runtime.dart';
 import '../../app/app_state.dart';
+import '../../app/drive_visibility.dart';
 import '../alerts/alerts_status_strip.dart';
 import '../alerts/in_app_banner.dart';
 import '../always_location_screen.dart';
@@ -65,6 +66,9 @@ class _HomeShellState extends State<HomeShell> {
     _shell = ShellController(initial: widget.initialTab ?? AppTab.drive)..visited.add(AppTab.drive);
     _shell.visited.add(_shell.tab);
     _shell.addListener(_onShell);
+    // Battery (A2): the compass in Auto mode runs only while the Drive tab is shown and the app is in front.
+    DriveVisibility.ensureObserving();
+    DriveVisibility.setDriveTab(_shell.tab == AppTab.drive);
     // A tap on a message notification or in-app banner: go to the Chat tab and open that conversation
     // (ChatTabHost.openConversation, set by the chat wiring).
     AlertsHost.runtime.addListener(_bindAlerts);
@@ -137,6 +141,7 @@ class _HomeShellState extends State<HomeShell> {
   void _onShell() {
     final s = _state;
     final tab = _shell.tab;
+    DriveVisibility.setDriveTab(tab == AppTab.drive);
     if (s != null) {
       if (tab != _lastTab) unawaited(uiPrefsFor(s).setLastTab(tab.name));
       // The Drives list reads from disk: refresh it whenever it comes into view.

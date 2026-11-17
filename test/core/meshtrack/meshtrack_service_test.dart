@@ -845,4 +845,21 @@ void main() {
           expect(h.s.state.asked, isEmpty);
         }));
   });
+
+  test('battery A8: the 15 s tick only runs while a group is active (sharing or showing something that ages)', () => fakeAsync((a) {
+        final h = _H(a);
+        expect(h.s.tickRunning, isFalse, reason: 'no groups: nothing wakes every 15 s');
+        h.ready(share: false);
+        expect(h.s.tickRunning, isFalse, reason: 'a group that neither shares nor shows anything');
+        expect(h.s.setShare(1, true, duration: MtShareDuration.untilStopped), MtResult.ok);
+        expect(h.s.tickRunning, isTrue);
+        h.s.setShare(1, false);
+        a.elapse(const Duration(seconds: 16));
+        // The stop leaves the group's message log on screen (it ages out after the on-list window): the tick may run until then,
+        // and stops once nothing is left.
+        a.elapse(const Duration(hours: 25));
+        expect(h.s.tickRunning, isFalse);
+        h.s.dispose();
+        a.flushMicrotasks();
+      }));
 }

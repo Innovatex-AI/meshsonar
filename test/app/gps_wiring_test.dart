@@ -1,6 +1,7 @@
 // The app side of the GPS work: the drive owns the GPS stream (keepalive), the map gets every fix on `rawFixes`, the drive screen gets
 // `gpsHealth`, the trace gets the health records, and the drive timing is read back from the trace.
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/app/drive_power_governor.dart';
 import 'package:meshsonar/core/drive_timing.dart';
 import 'package:meshsonar/core/gps_health.dart';
 import 'package:meshsonar/radio/radio_api.dart';
@@ -74,5 +75,23 @@ void main() {
     await settle();
     expect(h.store.traces[sid]!.any((r) => r['health'] == 'frame' && r['late_ms'] == 140), isTrue);
     await h.state.stopDrive();
+  });
+
+  test('battery: a drive left open is ended through the normal stop path (saved, never deleted) and the person is told', () async {
+    final h = Harness();
+    await h.state.init();
+    expect(await h.state.connectSimulator(), isTrue);
+    final notices = <String>[];
+    h.state.driveAutoEndNotice = (e) async => notices.add(e.message);
+    await h.state.startDrive();
+    final sid = h.state.currentSession!.id;
+    await h.state.debugAutoEndDrive(const DriveAutoEnd(DriveAutoEndReason.parked, 30));
+    expect(h.state.driving, isFalse);
+    expect(h.store.sessionsById[sid], isNotNull, reason: 'never deleted');
+    expect(h.store.sessionsById[sid]!.endedAt, isNotNull, reason: 'ended and saved');
+    expect(notices, ['Drive ended: parked 30 min']);
+    // Not driving: nothing happens.
+    await h.state.debugAutoEndDrive(const DriveAutoEnd(DriveAutoEndReason.noRadio, 15));
+    expect(notices, hasLength(1));
   });
 }

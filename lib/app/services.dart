@@ -93,6 +93,9 @@ class AppServices {
   /// Fake GPS used with the simulated radio.
   final LocationSource simulatedLocation;
 
+  /// The cheaper phone position for MeshTrack sharing between drives (battery plan A8); null = use [location].
+  final LocationSource? meshTrackLocation;
+
   final WardriveEngine Function(CompanionLink link, LocationSource location) engineFactory;
   final RepeaterCache repeaterCache;
 
@@ -206,6 +209,7 @@ class AppServices {
     required this.linkFactory,
     required this.location,
     required this.simulatedLocation,
+    this.meshTrackLocation,
     required this.engineFactory,
     required this.repeaterCache,
     required this.exportDir,
