@@ -21,6 +21,7 @@ import UserNotifications
 
     HapticsChannel.register(messenger: messenger)
     GeocoderChannel.register(messenger: messenger)
+    LowPowerModeChannel.register(messenger: messenger)
 
     // Badge count on the app icon (lib/platform/local_notifications_plugin.dart).
     FlutterMethodChannel(name: "app.meshsonar/alerts", binaryMessenger: messenger).setMethodCallHandler { call, result in
@@ -54,5 +55,44 @@ import UserNotifications
         result(FlutterMethodNotImplemented)
       }
     }
+  }
+}
+
+/// iPhone Low Power Mode for the battery profile (lib/platform/low_power_mode.dart): `isOn` answers the current state, the event
+/// channel sends it once on listen and again on every NSProcessInfoPowerStateDidChange.
+final class LowPowerModeChannel: NSObject, FlutterStreamHandler {
+  private static var shared: LowPowerModeChannel?
+  private var sink: FlutterEventSink?
+  private var observer: NSObjectProtocol?
+
+  static func register(messenger: FlutterBinaryMessenger) {
+    let handler = LowPowerModeChannel()
+    shared = handler
+    FlutterMethodChannel(name: "meshsonar/power", binaryMessenger: messenger).setMethodCallHandler { call, result in
+      if call.method == "isOn" {
+        result(ProcessInfo.processInfo.isLowPowerModeEnabled)
+      } else {
+        result(FlutterMethodNotImplemented)
+      }
+    }
+    FlutterEventChannel(name: "meshsonar/power/events", binaryMessenger: messenger).setStreamHandler(handler)
+  }
+
+  func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
+    sink = events
+    events(ProcessInfo.processInfo.isLowPowerModeEnabled)
+    observer = NotificationCenter.default.addObserver(
+      forName: Notification.Name.NSProcessInfoPowerStateDidChange, object: nil, queue: .main
+    ) { [weak self] _ in
+      self?.sink?(ProcessInfo.processInfo.isLowPowerModeEnabled)
+    }
+    return nil
+  }
+
+  func onCancel(withArguments arguments: Any?) -> FlutterError? {
+    if let o = observer { NotificationCenter.default.removeObserver(o) }
+    observer = nil
+    sink = nil
+    return nil
   }
 }
