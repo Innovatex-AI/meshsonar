@@ -1,5 +1,6 @@
 // Builds the real AppServices from the concrete storage, sync, radio and platform classes.
 // This is the only app file that names concrete lib/core and lib/radio classes (see docs/CONTRACTS.md).
+import 'dart:async';
 import 'dart:io';
 
 import 'package:app_links/app_links.dart';
@@ -33,7 +34,9 @@ import '../platform/always_location.dart';
 import '../platform/app_version.dart';
 import '../platform/geolocator_idle_location.dart';
 import '../platform/geolocator_location.dart';
+import '../platform/geolocator_meshtrack_location.dart';
 import '../platform/location_access.dart';
+import '../platform/low_power_mode.dart';
 import '../platform/open_url.dart';
 import '../platform/phone_sensors_plus.dart';
 import '../chat/store.dart';
@@ -76,6 +79,7 @@ Future<AppServices> buildRealServices() async {
   final root = await _dataRoot();
   await AppFlags.load(redesignFlagsFile(root));
   await PowerProfile.load(File('${root.path}${Platform.pathSeparator}power_profile.json'));
+  unawaited(LowPowerModeFollower.start()); // iPhone Low Power Mode -> Saver (when the profile follows it); no-op elsewhere
   Future<ChatStore>? chatStore;
 
   await BleEngineChoice.load(File('${root.path}${Platform.pathSeparator}ble_engine.txt'));
@@ -104,6 +108,8 @@ Future<AppServices> buildRealServices() async {
     // Real GPS, cleaned: parked jitter is held still, poor fixes dropped (lib/core/position_filter.dart).
     location: realLocation,
     simulatedLocation: simLocation ?? realLocation,
+    // MeshTrack sharing between drives: best accuracy, 20 m filter, auto-pause (battery plan A8).
+    meshTrackLocation: FilteredLocationSource(GeolocatorMeshTrackLocationSource(oneShot: realLocation)),
     engineFactory: (link, location) => DefaultWardriveEngine(link: link, location: location),
     repeaterCache: FileRepeaterCache(File('${root.path}${Platform.pathSeparator}repeaters.json')),
     exportDir: () async {

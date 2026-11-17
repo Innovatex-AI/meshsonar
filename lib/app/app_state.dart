@@ -85,6 +85,8 @@ import 'app_flags.dart' show AppFlags;
 import 'chat_wiring.dart' show ChatWiring;
 import 'chat_controller.dart' show ChatController;
 import 'meshtrack_wiring.dart' show FileMtLastKnownStore, MeshTrackGroupOps, MeshTrackService, MeshTrackWiring, MtChatBinding, MtLastKnownStore;
+import 'drive_auto_end_notice.dart';
+import 'drive_power_governor.dart' show DriveAutoEnd;
 
 part 'observer_wiring.dart';
 
@@ -1471,7 +1473,8 @@ class AppState extends ChangeNotifier with _ObserverWiring {
           (dir == null ? null : FileMtLastKnownStore(File('${dir.path}${Platform.pathSeparator}meshtrack_last.json'))),
       radioParams: () => _selfInfo?.radio,
       wardriveChannelName: () => _settings.channel,
-      phoneLocation: () => _locationSource,
+      // Between drives MeshTrack has its own cheaper GPS request (battery plan A8), never the drive source.
+      phoneLocation: () => _radioKind == RadioKind.simulator ? _locationSource : (services.meshTrackLocation ?? _locationSource),
       log: diagnostics.add,
       now: services.clock,
     );
@@ -2668,6 +2671,9 @@ class AppState extends ChangeNotifier with _ObserverWiring {
         background: services.backgroundLocation,
         firstPingPending: () => _txCount == 0,
         distance: (m) => units.shortLength(m),
+        // Battery (build 70): no radio caps the GPS at High; a drive left parked / without a radio ends and is saved.
+        radioConnected: () => connected,
+        onAutoEnd: (end) => unawaited(_autoEndDrive(end)),
       );
       _gpsMonitor = monitor;
       monitor.start();
@@ -2841,6 +2847,31 @@ class AppState extends ChangeNotifier with _ObserverWiring {
       _pinging = false;
       notifyListeners();
     }
+  }
+
+  /// The notification for a drive that ended on its own; tests replace it.
+  @visibleForTesting
+  Future<void> Function(DriveAutoEnd end) driveAutoEndNotice = postDriveAutoEndNotice;
+
+  @visibleForTesting
+  Future<void> debugAutoEndDrive(DriveAutoEnd end) => _autoEndDrive(end);
+
+  /// A drive left open (parked / no radio for the battery profile's minutes): ended through the normal stop path, so it is
+  /// saved, never deleted, then the person is told.
+  Future<void> _autoEndDrive(DriveAutoEnd end) async {
+    if (!driving) return;
+    // A stop or start already in progress: try once more shortly instead of racing it.
+    if (_busy) {
+      await Future<void>.delayed(const Duration(seconds: 2));
+      if (!driving || _busy) return;
+    }
+    diagnostics.add('${end.message} (battery setting); drive saved');
+    await stopDrive();
+    if (driving) return;
+    _say('${end.message}. The drive is saved.');
+    try {
+      await driveAutoEndNotice(end);
+    } catch (_) {}
   }
 
   Future<void> stopDrive() async {
