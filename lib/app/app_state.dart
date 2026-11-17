@@ -27,6 +27,7 @@ import '../core/drive_health_sink.dart';
 import '../core/drive_timing.dart';
 import '../core/gps_health.dart';
 import '../core/drive_env_cache.dart';
+import '../core/power_profile.dart';
 import '../core/plan/plan_store.dart';
 import '../core/driver_account.dart';
 import '../core/driver_summary.dart';
@@ -1303,12 +1304,17 @@ class AppState extends ChangeNotifier with _ObserverWiring {
   @visibleForTesting
   void debugOnForeground() => _onForeground(true);
 
+  /// The app went behind (tests).
+  @visibleForTesting
+  void debugOnBackground() => _onForeground(false);
+
   void _onForeground(bool fg) {
     AppForeground.set(fg); // the radio layer's safety poll and other pure-Dart cadences follow it (battery plan A7)
     _mt?.setForeground(fg);
     _telemetry?.foreground = fg; // 5 s batches in front, 60 s or 50 packets behind (contract section 6)
     _observerForegroundChanged(fg);
     if (!fg) return;
+    if (_observerTimer != null) unawaited(pollObservers()); // skipped while behind (battery plan A6): ask once now
     unawaited(flushDriveEnds());
     _claims?.appResumed();
     unawaited(refreshLocationAccess());
@@ -1584,6 +1590,10 @@ class AppState extends ChangeNotifier with _ObserverWiring {
         now: () => services.clock().toUtc(),
         observer: _telemetryObserver,
         zones: () => privacyZones.gate,
+        // Battery mode: how often a locked phone uploads what it heard (nothing is dropped, the queue batches).
+        backgroundGap: () => Duration(seconds: PowerProfile.current.observerUploadBackS),
+        // The status heartbeat goes with a batch when one is due, instead of waking the network on its own clock.
+        onBatchSent: () => _observerStatus.rideAlong(),
         onServerErased: () => unawaited(_afterServerErase()),
         onObserver: (o) {
           final k = o['key'];
@@ -2440,6 +2450,10 @@ class AppState extends ChangeNotifier with _ObserverWiring {
   Timer? _observerTimer;
   static const Duration observerPollPeriod = Duration(seconds: 45);
 
+  /// The period actually used (tests shorten it).
+  @visibleForTesting
+  Duration observerPollEvery = observerPollPeriod;
+
   /// Repeater hearings this drive: the sum, over transmitted pings, of repeaters that repeated each one.
   int get echoCount => _drivePings.where((p) => p.kind == PingKind.tx).fold(0, (a, p) => a + p.echoes.length);
 
@@ -2461,7 +2475,11 @@ class AppState extends ChangeNotifier with _ObserverWiring {
       pingFeedback.markNoKey(); // nothing is uploaded without a key, so there is nothing to ask the server about
       return;
     }
-    _observerTimer = Timer.periodic(observerPollPeriod, (_) => unawaited(pollObservers()));
+    // Battery plan A6: the answer only feeds the screen, so a locked phone does not ask; it asks once on return
+    // ([_onForeground]).
+    _observerTimer = Timer.periodic(observerPollEvery, (_) {
+      if (AppForeground.inForeground) unawaited(pollObservers());
+    });
   }
 
   void _stopObserverPolling({bool finalPoll = false}) {
@@ -2523,8 +2541,16 @@ class AppState extends ChangeNotifier with _ObserverWiring {
   Duration? _driveSyncPeriod;
   Future<void>? _driveSyncInFlight;
 
-  /// Whether the in-drive upload timer should be running with the current settings.
-  bool get _wantDriveSync => driving && _settings.autoSync && _settings.syncDuringDrive && keyApproved;
+  /// Whether the in-drive upload timer should be running with the current settings. Both the person's "Upload during
+  /// the drive" switch and the battery mode (PowerSettings.uploadDuringDrive; Saver = at drive end only) must allow it;
+  /// otherwise the drive uploads when it ends, as with the switch off.
+  bool get _wantDriveSync =>
+      driving && _settings.autoSync && _settings.syncDuringDrive && PowerProfile.current.uploadDuringDrive && keyApproved;
+
+  bool _powerListening = false;
+
+  /// The battery mode changed: the in-drive upload follows at once.
+  void _onPowerProfile() => _scheduleDriveSync();
 
   /// Starts, restarts (new period) or stops the in-drive upload timer to match the settings.
   void _scheduleDriveSync() {
@@ -3332,6 +3358,10 @@ class AppState extends ChangeNotifier with _ObserverWiring {
     }
     unawaited(refreshLocationAccess());
     _resumeBridge ??= (AppLifecycleBridge(_onForeground)..attach());
+    if (!_powerListening) {
+      _powerListening = true;
+      PowerProfile.addListener(_onPowerProfile);
+    }
     _listenForLinks();
     unawaited(_loadDirectory());
     unawaited(refreshSiteConfig());
@@ -3865,6 +3895,7 @@ class AppState extends ChangeNotifier with _ObserverWiring {
     unawaited(_rawFixes.close());
     gpsHealth.dispose();
     _cancelDriveSync();
+    PowerProfile.removeListener(_onPowerProfile);
     _observerTimer?.cancel();
     _pingSub?.cancel();
     _statusSub?.cancel();
