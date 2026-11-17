@@ -13,11 +13,14 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' hide Path;
 
 import '../../app/app_state.dart';
+import '../../app/drive_context_hook.dart' show contextLedgerOf;
 import '../../core/api.dart' show DriveEnvStatus, WeatherSnapshot;
 import '../../core/drive_report.dart';
+import '../../core/drive_report_battery.dart' show loadDriveBatteryLine;
 import '../../core/drive_report_export.dart';
 import '../../core/drive_report_pdf.dart';
 import '../../core/drive_stats.dart' show formatDuration;
+import '../../core/drive_store.dart' show JsonlDriveStore;
 import '../../core/model.dart';
 import '../app.dart';
 import '../design/app_surfaces.dart' show AppAction, AppToastKind, showAppActionSheet, showAppSheet, showAppToast;
@@ -80,11 +83,23 @@ class DriveReportScreen extends StatefulWidget {
 
 class _DriveReportScreenState extends State<DriveReportScreen> {
   Future<DriveReport>? _report;
+  Future<String?>? _battery;
+
+  /// [_battery] once it has loaded: the exports never wait for it (an export made before it loads has no line).
+  String? _batteryLine;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _report ??= loadDriveReport(AppScope.read(context), widget.sessionId);
+    _battery ??= _batteryFor(widget.sessionId)..then((v) => _batteryLine = v, onError: (Object _) => null);
+  }
+
+  /// The phone battery headline of [sessionId] ("Battery: 82% → 61% ..."); null with fewer than 2 battery samples.
+  Future<String?> _batteryFor(String sessionId) {
+    final st = AppScope.read(context).services;
+    final store = st.store;
+    return loadDriveBatteryLine(contextLedgerOf(st), store is JsonlDriveStore ? store.root : null, sessionId);
   }
 
   String get _fileBase => 'meshsonar-report-${widget.sessionId.split('-').first}';
@@ -109,8 +124,10 @@ class _DriveReportScreenState extends State<DriveReportScreen> {
   Future<void> _share(DriveReport r, String title) async {
     final s = AppScope.read(context);
     final w = await _weatherForExport(r);
+    final battery = _batteryLine;
     if (!mounted) return;
-    await _write('$_fileBase.txt', () => r.toText(title: 'MeshSonar drive report: $title', units: s.units, duration: formatDuration, weather: w));
+    await _write('$_fileBase.txt',
+        () => r.toText(title: 'MeshSonar drive report: $title', units: s.units, duration: formatDuration, weather: w, battery: battery));
   }
 
   Future<void> _shareCsv(DriveReport r) async {
@@ -124,7 +141,9 @@ class _DriveReportScreenState extends State<DriveReportScreen> {
     final s = AppScope.read(context);
     try {
       final w = await _weatherForExport(r);
-      await shareReportPdf(s, '$_fileBase.pdf', driveReportPdf(r, title: title, units: s.units, duration: formatDuration, weather: w));
+      final battery = _batteryLine;
+      await shareReportPdf(
+          s, '$_fileBase.pdf', driveReportPdf(r, title: title, units: s.units, duration: formatDuration, weather: w, battery: battery));
     } catch (e) {
       if (mounted) showAppToast(context, 'Couldn\'t make the PDF. Text and CSV still work. $e', kind: AppToastKind.error);
     }
@@ -206,7 +225,7 @@ class _DriveReportScreenState extends State<DriveReportScreen> {
               ? Padding(padding: const EdgeInsets.all(16), child: ErrorBanner('Couldn\'t build the report. ${snap.error}'))
               : r == null
                   ? const Center(child: CircularProgressIndicator())
-                  : _ReportBody(report: r, title: title, onShare: () => _share(r, title), onCsv: () => _shareCsv(r)),
+                  : _ReportBody(report: r, battery: _battery, title: title, onShare: () => _share(r, title), onCsv: () => _shareCsv(r)),
         );
       },
     );
@@ -215,9 +234,10 @@ class _DriveReportScreenState extends State<DriveReportScreen> {
 
 class _ReportBody extends StatelessWidget {
   final DriveReport report;
+  final Future<String?>? battery;
   final String title;
   final VoidCallback onShare, onCsv;
-  const _ReportBody({required this.report, required this.title, required this.onShare, required this.onCsv});
+  const _ReportBody({required this.report, this.battery, required this.title, required this.onShare, required this.onCsv});
 
   @override
   Widget build(BuildContext context) {
@@ -229,6 +249,7 @@ class _ReportBody extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(12, 4, 12, 28),
         children: [
           _Hero(report: r, title: title),
+          DriveBatteryLine(line: battery),
           const SizedBox(height: 10),
           _Highlights(report: r),
           if (r.cells.isNotEmpty) ...[
@@ -298,6 +319,31 @@ class _ReportBody extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------- pieces
+
+/// The phone battery headline under the hero (build 70): "Battery: 82% → 61% (−21% in 1 h 40 min, −12.6%/h), mode
+/// Balanced". Hidden when the drive has fewer than 2 battery samples (category Phone battery off, or a short drive).
+class DriveBatteryLine extends StatelessWidget {
+  final Future<String?>? line;
+  const DriveBatteryLine({super.key, required this.line});
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<String?>(
+        future: line,
+        builder: (context, snap) {
+          final line = snap.data;
+          if (line == null) return const SizedBox.shrink();
+          final t = Theme.of(context);
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(6, 10, 6, 0),
+            child: Row(children: [
+              Icon(Icons.battery_std_outlined, size: 18, color: t.colorScheme.primary),
+              const SizedBox(width: 8),
+              Expanded(child: Text(line, key: const Key('report-battery-line'), style: t.textTheme.bodyMedium)),
+            ]),
+          );
+        },
+      );
+}
 
 class _Heading extends StatelessWidget {
   final String text;

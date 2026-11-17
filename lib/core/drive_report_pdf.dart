@@ -23,6 +23,7 @@ ReportDoc driveReportPdf(
   String? zone,
   String Function(Duration? d)? duration,
   List<WeatherSnapshot> weather = const [],
+  String? battery,
 }) {
   final local = wall ?? (DateTime t) => t.toLocal();
   final z = zone ?? DateTime.now().timeZoneName;
@@ -57,6 +58,7 @@ ReportDoc driveReportPdf(
       ('Heard', r.heardPercent == null ? '—' : '${r.heardPercent}% (${r.heardPings} of ${r.txPings})'),
       ('Grid cells', '${r.gridsMapped} (${r.gridsWithCoverage} with coverage, ${r.newGrids} new)'),
       ('Repeaters heard', '${r.repeaters.length} (${r.newRepeaters.length} new)'),
+      if (battery != null) ('Phone battery', battery.replaceFirst('Battery: ', '')),
       if (r.bestSnr != null) ('Best SNR', '${_db(r.bestSnr!)} dB'),
       if (r.farthest != null) ('Farthest repeater', '${r.farthest!.label} at ${u.distance(r.farthest!.farthestM!)}'),
       if (r.bestCell != null)
