@@ -82,8 +82,8 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
   @override
   void initState() {
     super.initState();
-    AppForeground.ensureObserving();
-    AppForeground.notifier.addListener(_syncClocks);
+    UiForeground.ensureObserving();
+    UiForeground.notifier.addListener(_syncClocks);
     PowerProfile.addListener(_powerChanged);
   }
 
@@ -158,7 +158,7 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
   }
 
   /// The Drive tab is what the person sees: it is the visible tab and the app is in front.
-  bool get _onScreen => _visible && (_shell == null || _shell!.tab == AppTab.drive) && AppForeground.value;
+  bool get _onScreen => _visible && (_shell == null || _shell!.tab == AppTab.drive) && UiForeground.value;
 
   /// Drive started or ended: the auto-collapse machine, Passenger and the radio queue's background refresh follow it.
   void _syncDriving(AppState s) {
@@ -240,7 +240,7 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
   @override
   void dispose() {
     _autoTimer?.cancel();
-    AppForeground.notifier.removeListener(_syncClocks);
+    UiForeground.notifier.removeListener(_syncClocks);
     PowerProfile.removeListener(_powerChanged);
     final st = _state;
     if (st != null && _remoteWas != null) st.radioSessions.remoteQueue.autoRefreshEnabled = _remoteWas!;

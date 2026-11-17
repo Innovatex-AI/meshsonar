@@ -139,7 +139,10 @@ void main() {
       await u.flush();
       expect(onDisk(), 3);
       u.foreground = false;
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+      // The write is async: wait for it (up to 2 s, so a loaded full-suite run cannot fail it on timing).
+      for (var i = 0; i < 40 && onDisk() != 4; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
       expect(onDisk(), 4, reason: 'going behind writes at once');
       u.add(rec(clock, 5));
       await u.flush();

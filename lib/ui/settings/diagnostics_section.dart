@@ -43,8 +43,8 @@ List<Widget> diagnosticsSectionRows(BuildContext context) {
           key: const Key('map-health-overlay'),
           secondary: const Icon(Icons.speed_outlined),
           title: Text(settingsEntry('map-health-overlay').title),
-          subtitle: const Text('Frame times, GPS rate, camera and map source over the map. A sample every 10 s is saved with each '
-              'drive either way (Drives > menu > Share map health). Stays on this phone.'),
+          subtitle: const Text('Frame times, GPS rate, camera and map source over the map. While this is on, a sample every 10 s is '
+              'saved with each drive (Drives > menu > Share map health). Off saves battery. Stays on this phone.'),
           value: MapPrefs.shared.healthOverlay,
           onChanged: (v) => MapPrefs.shared.healthOverlay = v,
         ),

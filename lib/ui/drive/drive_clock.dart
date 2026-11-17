@@ -8,7 +8,7 @@ import 'package:flutter/widgets.dart';
 import '../../core/power_profile.dart';
 
 /// Whether the app is in front (lifecycle resumed or inactive). Installed once by the first listener; true until told otherwise.
-abstract final class AppForeground {
+abstract final class UiForeground {
   static final ValueNotifier<bool> notifier = ValueNotifier<bool>(true);
   static _Observer? _observer;
 
@@ -37,7 +37,7 @@ abstract final class AppForeground {
 class _Observer with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    AppForeground.notifier.value = state == AppLifecycleState.resumed || state == AppLifecycleState.inactive;
+    UiForeground.notifier.value = state == AppLifecycleState.resumed || state == AppLifecycleState.inactive;
   }
 }
 
@@ -56,13 +56,13 @@ mixin DriveClock<T extends StatefulWidget> on State<T> {
   @override
   void initState() {
     super.initState();
-    AppForeground.ensureObserving();
-    AppForeground.notifier.addListener(_foregroundChanged);
+    UiForeground.ensureObserving();
+    UiForeground.notifier.addListener(_foregroundChanged);
   }
 
   void _foregroundChanged() {
     if (!mounted) return;
-    if (AppForeground.value) {
+    if (UiForeground.value) {
       setState(() {}); // back in front: build re-evaluates (and catches up the shown time)
     } else {
       _set(false);
@@ -72,7 +72,7 @@ mixin DriveClock<T extends StatefulWidget> on State<T> {
   /// [on]: the widget has something live to count (a drive is running). Visibility and the foreground are added here.
   void wantClock(bool on) {
     _want = on;
-    _set(_want && TickerMode.valuesOf(context).enabled && AppForeground.value);
+    _set(_want && TickerMode.valuesOf(context).enabled && UiForeground.value);
   }
 
   void _set(bool run) {
@@ -92,7 +92,7 @@ mixin DriveClock<T extends StatefulWidget> on State<T> {
   void dispose() {
     _clock?.cancel();
     _clock = null;
-    AppForeground.notifier.removeListener(_foregroundChanged);
+    UiForeground.notifier.removeListener(_foregroundChanged);
     super.dispose();
   }
 }
