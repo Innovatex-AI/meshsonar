@@ -6,6 +6,8 @@
 //   - the phone barometer subscription for `barometer` (1 Hz; the readings around each ping give that ping's median),
 //   - a phone sample every [phoneEvery] (barometer median of the last interval + battery) and on every charging
 //     change, for `barometer` / `phone_battery`,
+//   - both intervals follow the battery mode (PowerSettings.statsEveryS: 60 s, Saver 5 min) unless a caller pins them;
+//     a mode change mid-drive restarts the collectors on the new interval,
 //   - the session snapshot (phone/app details for `device`, radio identity for `radio_config`).
 //
 // [refresh] re-reads the switches: a category turned off is stopped at once (its stream subscription cancelled, the
@@ -25,6 +27,7 @@ import 'drive_context.dart';
 import 'drive_context_recorder.dart';
 import 'model.dart';
 import 'phone_sensors.dart';
+import 'power_profile.dart';
 
 typedef PeriodicTimerFactory = Timer Function(Duration period, void Function(Timer timer) tick);
 
@@ -42,8 +45,13 @@ class DriveContextSession {
 
   /// The radio's identity beyond Drive Format v1, read when the drive starts.
   final CompanionDetails? Function()? companion;
-  final Duration phoneEvery;
-  final Duration radioEvery;
+  final Duration? _phoneEvery;
+  final Duration? _radioEvery;
+
+  /// Phone / radio stats interval: the pinned one, else the battery mode's statsEveryS.
+  Duration get phoneEvery => _phoneEvery ?? _profileEvery;
+  Duration get radioEvery => _radioEvery ?? _profileEvery;
+  static Duration get _profileEvery => Duration(seconds: PowerProfile.current.statsEveryS.clamp(10, 3600));
 
   /// Barometer readings this close to a ping's time give that ping's pressure.
   final Duration pingPressureWindow;
@@ -74,8 +82,8 @@ class DriveContextSession {
     this.battery,
     this.deviceDetails,
     this.companion,
-    this.phoneEvery = const Duration(seconds: 60),
-    this.radioEvery = const Duration(seconds: 60),
+    this._phoneEvery,
+    this._radioEvery,
     this.pingPressureWindow = const Duration(seconds: 15),
     this.onStatus,
     DateTime Function()? clock,
@@ -97,6 +105,8 @@ class DriveContextSession {
   Future<void> start() async {
     if (_running) return;
     _running = true;
+    _usedEvery = (phoneEvery, radioEvery);
+    PowerProfile.addListener(_onProfile);
     refresh();
     await _snapshot();
     await _phoneSampleQueued();
@@ -105,6 +115,7 @@ class DriveContextSession {
   /// Stops everything; nothing is written after this.
   void stop() {
     _running = false;
+    PowerProfile.removeListener(_onProfile);
     _poller?.stop();
     _poller = null;
     unawaited(_baroSub?.cancel());
@@ -115,6 +126,21 @@ class DriveContextSession {
     _phoneTimer = null;
     _pressure.clear();
     recorder.close();
+  }
+
+  (Duration, Duration)? _usedEvery;
+
+  /// The battery mode changed: restart the timed collectors when their interval did.
+  void _onProfile() {
+    if (!_running) return;
+    final now = (phoneEvery, radioEvery);
+    if (now == _usedEvery) return;
+    _usedEvery = now;
+    _poller?.stop();
+    _poller = null;
+    _phoneTimer?.cancel();
+    _phoneTimer = null;
+    refresh();
   }
 
   /// Re-reads the switches: stops what was turned off, starts what was turned on.
