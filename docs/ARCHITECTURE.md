@@ -626,7 +626,8 @@ behaviour: silence, the replay rule, loss, caps, prefix matching, the blank-pass
 | `ui/settings/radio_section.dart` | ui | Radio tab link, channel, discovery, auto-ping sliders, per-radio antenna rows. |
 | `ui/settings/drives_section.dart` | ui | Upload toggles, upload interval, `LastUpload`. |
 | `ui/settings/storage_section.dart` | ui | Data & storage: sizes and per-item clear actions (uploaded drives only, region cache, repeater names, node map, offline maps link, unsent report). `storagePackManager` test seam. |
-| `ui/settings/diagnostics_section.dart` | ui | Diagnostic log screen (redacted view, copy, clear), `diagnosticsExport`, Report a problem link. |
+| `ui/settings/diagnostics_section.dart` | ui | Diagnostic log screen (redacted view, copy, clear), `diagnosticsExport`, Power counters card (`powerCounterLines`), Report a problem link. |
+| `ui/settings/battery_section.dart` | ui | Settings > Battery: mode picker, Low Power Mode follow, every `PowerSettings` knob (`PowerKnob`, `pickKnob`), `WhatsRunningScreen` (1.5). |
 | `ui/settings/about_section.dart` | ui | About and welcome tour rows. |
 | `core/storage_usage.dart` | core | `StorageSized`, `bytesOnDisk`, `driveSafeToRemove` / `splitDrives` (which drives may leave the phone), `formatStorageBytes`. |
 | `core/drive_stats.dart` | core | `DriveStats.of` (distance, duration, heard %, best/median SNR, repeaters, multi-hop, timeline); `formatDuration`. `ui/drive_stats.dart` is a re-export shim. |
@@ -643,6 +644,7 @@ behaviour: silence, the replay rule, loss, caps, prefix matching, the blank-pass
 | `core/repeater_history.dart` | core | `RepeaterHistory.compute`: one repeater across local drives (prefix match both ways, ids the lookup gives another repeater excluded, shared short ids counted apart): hearings, direct, best SNR, first/last, farthest, grid cells, drives. |
 | `core/report_pdf.dart` | core | PDF document model (heading, text, facts, table, bars, line) and `renderReportPdf` on the `pdf` package: vector charts, Barlow embedded when given, missing glyphs as "?". |
 | `core/drive_report_pdf.dart` | core | `driveReportPdf`: the drive report as a `ReportDoc` (units, local time + zone). |
+| `core/drive_report_battery.dart` | core | The report's phone battery line (`batteryUseOf`, `batteryLine`, `loadDriveBatteryLine`) and the local mode-at-start file (`recordDrivePowerMode`). |
 | `core/region_report_pdf.dart` | core | `regionReportPdf`: the `region-report` body as a `ReportDoc` (UTC, every row, server status notes). |
 | `core/plan/plan_model.dart`, `plan_controller.dart`, `plan_codec.dart`, `plan_export.dart`, `plan_api.dart`, `plan_analysis.dart`, `link_model.dart`, `saved_plans.dart`, `plan_repository.dart`, `plan_store.dart` | core | The Planner's pure-Dart core (section 1.3). |
 | `core/plan_contract.dart`, `core/mqtt_contract.dart` | core | Planner wire types and MQTT slot / preset types (exported from `core/api.dart`). |
