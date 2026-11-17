@@ -175,6 +175,36 @@ Files: core `lib/core/meshtrack/` (API.md there), wiring `lib/app/meshtrack_wiri
 - **Radio switch and reinstall.** Group names and keys live in the Keychain, so a second radio or a reinstall gets every group back on connect without asking; a radio without room shows the group as Not on this radio until room is made.
 - **Delete my data** clears last-known positions (`meshtrack_last.json`, 24 h), every meet-up point and the group list (the channels stay as chat channels).
 
+## Battery (Settings > Battery, build 70)
+
+Files: profile `lib/core/power_profile.dart` (`PowerSettings`, `PowerProfile`, `PowerCounters`), UI `lib/ui/settings/battery_section.dart`, counters card in `lib/ui/settings/diagnostics_section.dart`, report line `lib/core/drive_report_battery.dart`. Plan: meshsonar-infra `docs/planning/battery-efficiency-plan-2026-11-16.md` §3. Phone-only: the website has no counterpart beyond a Battery paragraph in its help/FAQ.
+
+- **Where.** Settings > Battery, after MeshTrack (search: battery, power, screen on, GPS, compass, low power, ...). One app-wide profile saved in `power_profile.json`; every change saves at once.
+- **What's running now** (`battery-running`, top row) opens a live list in plain words, rebuilt on every profile or app change: Drive (Running / Not running, "uploads at the end" when Drive data upload is off), GPS (precision and the parked pause while driving, else "Idle: no drive running"), Screen kept on, Compass, Map drawing (frames per second cap), Radio checks (app open / locked rates, "Off: no radio connected"), Observer uploads (locked interval and the queue), MQTT feeds (n open: connected or connecting), MeshTrack sharing (group names, only in builds with MeshTrack). The header says the mode in force and when Low Power Mode is overriding. A line with a setting opens that setting's choices.
+- **Battery mode** (`battery-mode`): Max data / **Balanced** (default) / Saver, as radio rows. Picking one sets every knob to its preset. Changing any knob shows **Custom** ("You changed a setting below. Pick a mode above to set them all again."). The "Now: ..." line names the current mode.
+- **Use Saver when iPhone Low Power Mode is on** (`battery-low-power`, default on). While Low Power Mode is on and this is on, the components obey Saver and the mode row says "iPhone Low Power Mode is on, so MeshSonar is using Saver. Balanced comes back when Low Power Mode is off." This switch does not make the mode Custom.
+- **Knobs** (each row shows its value; tap opens a sheet of choices; a change makes the mode Custom):
+
+| Knob | Key | Max data | Balanced | Saver | Choices |
+|---|---|---|---|---|---|
+| Keep screen on during a drive | `battery-screen-on` | Always | Drive tab only | Never | Always / Drive tab only / Never |
+| Map smoothness | `battery-map-fps` | 120 Hz | 60 Hz | 30 Hz | 120 / 60 / 30 Hz |
+| Drive GPS precision | `battery-gps` | Best | High | Standard | Best / High / Standard (less precise drive track) |
+| Pause GPS when parked | `battery-gps-pause` | Never | 3 min | 1 min | Never / 1 / 3 / 5 min |
+| End a drive left open: Parked | `battery-end-drive-parked` | Never | 30 min | 15 min | Never / 15 / 30 / 60 min |
+| End a drive left open: No radio | `battery-end-drive-no-radio` | Never | 15 min | 5 min | Never / 5 / 15 / 30 min |
+| Compass on the map | `battery-compass` | Always | Auto | Off | Always / Auto (Drive tab, slow or stopped) / Off (GPS course) |
+| Check radio for messages: App open | `battery-radio-checks-app-open` | 5 s | 30 s | 2 min | 5 s / 30 s / 2 min |
+| Check radio for messages: Phone locked | `battery-radio-checks-phone-locked` | 5 s | 2 min | Radio alert only | 5 s / 2 min / Radio alert only |
+| Observer uploads when locked | `battery-observer-uploads` | 60 s | 5 min | 15 min | 60 s / 5 / 15 min |
+| Drive data upload: Upload during a drive | `battery-drive-upload` | on | on | off | switch; works with Drives & uploads > Upload during the drive (both must be on) |
+| Radio and phone stats | `battery-stats` | 60 s | 60 s | 5 min | 60 s / 5 min |
+| Simple basemap while driving | `battery-simple-basemap` | off | off | on | switch |
+
+- **Rules.** The observer is never switched off by a mode, only how often it uploads; the radio's own message alert stays instant in every mode; a drive ended by "End a drive left open" is saved, never deleted.
+- **Diagnostics > Power counters** (`diagnostics-power-counters`, information row with Refresh): since the app started, GPS minutes by accuracy, screen-on, compass, map frames, radio commands, radio message checks, internet requests and timer wake-ups, each with a per-hour rate (no rate under one minute). Stays on the phone.
+- **Drive report battery line** (`report-battery-line`, under the hero): "Battery: 82% → 61% (−21% in 1 h 40 min, −12.6%/h), mode Balanced" from the Phone battery samples (first to last); no per-hour rate under 10 minutes; hidden with fewer than 2 samples (category off or a very short drive). The mode is the one in force at drive start (Saver while Low Power Mode overrode), recorded locally in `sessions/<id>/power_mode.txt` (never uploaded or exported; drives before build 70 have no mode). The same line is in the text and PDF exports when it has loaded.
+
 ## Chat (Chat tab, unreleased)
 
 Files: `ui/chat/*`, `ui/contacts/*`, `ui/shell/chat_tab*.dart`, `app/chat_controller.dart`, `app/chat_wiring.dart`, `chat/*`. Chat uses only the

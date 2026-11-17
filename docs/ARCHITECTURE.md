@@ -171,6 +171,26 @@ Pure-Dart core in `lib/core/plan/`, the screens in `lib/ui/plan/` and `lib/ui/sh
 
 Packets enter the engine only through `onPublicPacket`, only while sharing and a radio is connected, after AppState's filter. No location of any kind is read or sent by the engine.
 
+### 1.5 Power (build 70, battery modes)
+
+`lib/core/power_profile.dart` holds ONE app-wide profile. `PowerSettings` carries every knob; `maxData`, `balanced` (default) and `saver` are presets, and `tweak()` changes one knob and makes the mode `custom`. `PowerProfile.chosen` is what the person picked (Settings > Battery, `ui/settings/battery_section.dart`; saved to `power_profile.json`, loaded in `app/wiring.dart`); `PowerProfile.current` is what components obey: `saver` while iPhone Low Power Mode is on and `followLowPower` is set (`lowPowerOverride`, fed by `setLowPowerMode` from the native channel). Components read `current` when they act and may listen with `addListener` to re-apply. Pure Dart, so `lib/core` and `lib/radio` read it directly.
+
+| Knob (`PowerSettings`) | Max data | Balanced | Saver | Read by |
+|---|---|---|---|---|
+| `screenOn` | always | driveTabOnly | never | wakelock, `ui/drive_screen.dart` |
+| `mapFps` | 120 | 60 | 30 | puck/camera loop, `ui/map/live_puck.dart` |
+| `gps` | best | high | standard | drive GPS, `platform/geolocator_location.dart` |
+| `pauseGpsParkedMin` | 0 | 3 | 1 | drive GPS, `platform/geolocator_location.dart` |
+| `endDriveParkedMin` / `endDriveNoRadioMin` | 0 / 0 | 30 / 15 | 15 / 5 | drive auto-end (app state) |
+| `compass` | always | auto | off | `platform/compass_sensors_plus.dart` |
+| `radioPollFrontS` / `radioPollBackS` | 5 / 5 | 30 / 120 | 120 / 0 (push only) | backup BLE message check, `radio/message_sync.dart` |
+| `observerUploadBackS` | 60 | 300 | 900 | `core/telemetry_uploader.dart` |
+| `uploadDuringDrive` | true | true | false | drive sync during a drive (with `syncDuringDrive`) |
+| `statsEveryS` | 60 | 60 | 300 | radio + phone stats sampling for the drive report |
+| `simpleBasemap` | false | false | true | Drive map basemap |
+
+`PowerCounters` (same file) counts GPS seconds by accuracy, screen-on and compass seconds, map frames, BLE commands and polls, HTTP requests and timer wakes; Settings > Diagnostics shows them with per-hour rates since `PowerCounters.since`, and tests assert them. The drive report's battery line (`core/drive_report_battery.dart`) is computed from the `phone_battery` samples; the mode at drive start is written by `app/drive_context_hook.dart` to `sessions/<id>/power_mode.txt` beside the drive (local only, not part of the wire format).
+
 ### Dependency rules (as implemented)
 
 1. **`lib/core` and `lib/radio` (except `ble_transport.dart`) never import Flutter.** They run under plain `dart test`
