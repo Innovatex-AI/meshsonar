@@ -2203,9 +2203,11 @@ class AppState extends ChangeNotifier with _ObserverWiring {
   /// Why the last reconnect try failed ("Bluetooth is off", ...); null when none failed since the drop.
   String? get reconnectProblem => _reconnectProblem;
 
-  /// Wait before reconnect try [attempt] (1-based): quick at first, then up to 20 s. Tests shorten it.
+  /// Wait before reconnect try [attempt] (1-based): quick at first, then up to 20 s, then 60 s after 5 min of failing
+  /// (battery plan A10, [ReconnectBackoff]). Tests shorten it.
   @visibleForTesting
-  Duration Function(int attempt) reconnectDelay = (n) => Duration(seconds: n <= 1 ? 1 : math.min(20, 2 * n));
+  late Duration Function(int attempt) reconnectDelay = _reconnectBackoff.delay;
+  late final ReconnectBackoff _reconnectBackoff = ReconnectBackoff(clock: () => services.clock());
 
   Future<void> _reconnectRadio() async {
     final device = _device, kind = _radioKind, engine = _engine, sid = _session?.id, expectedKey = _radioKey;
@@ -2214,6 +2216,7 @@ class AppState extends ChangeNotifier with _ObserverWiring {
     _reconnecting = true;
     _reconnectAttempt = 0;
     _reconnectProblem = null;
+    _reconnectBackoff.reset(); // quick tries again after every drop; slower only after 5 min of failing
     diagnostics.add('Radio dropped during the drive; reconnecting');
     notifyListeners();
     try {

@@ -17,6 +17,29 @@ import 'tx_arbiter.dart';
 /// Wraps a connected transport in the companion protocol (MeshCoreCompanionLink in the real app).
 typedef LinkFactory = CompanionLink Function(ByteTransport transport);
 
+/// The wait before each reconnect try of a radio lost mid-drive (battery plan A10): 1 s, then 2 s per try up to 20 s,
+/// and 60 s once the radio has been failing for [slowAfter] (5 min), so a radio that is gone for good does not keep the
+/// phone scanning every 20 s for ever. [reset] at the start of every reconnect loop: a success ends the loop, so the
+/// next drop starts quick again.
+class ReconnectBackoff {
+  final DateTime Function() _clock;
+  final Duration slowAfter;
+  final Duration slow;
+  DateTime? _since;
+  ReconnectBackoff({DateTime Function()? clock, this.slowAfter = const Duration(minutes: 5), this.slow = const Duration(seconds: 60)})
+      : _clock = clock ?? DateTime.now;
+
+  /// The radio was just lost (or a new loop starts): quick tries again.
+  void reset() => _since = _clock();
+
+  /// Wait before try [attempt] (1-based).
+  Duration delay(int attempt) {
+    final since = _since ??= _clock();
+    if (_clock().difference(since) >= slowAfter) return slow;
+    return Duration(seconds: attempt <= 1 ? 1 : (2 * attempt).clamp(2, 20));
+  }
+}
+
 class RadioSessionManager {
   final LinkFactory linkFactory;
   final DateTime Function() _clock;
