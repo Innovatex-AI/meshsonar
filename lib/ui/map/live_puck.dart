@@ -26,6 +26,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../core/heading.dart';
+import '../../core/power_profile.dart';
 import '../../core/puck_motion.dart';
 import '../../radio/radio_api.dart';
 import '../theme.dart';
@@ -227,8 +228,13 @@ class PuckController extends ChangeNotifier {
       }
       if (target != null) {
         final before = heading.value;
-        _headingDeg = reducedMotion ? (heading..set(target)).value : heading.step(target, dt);
-        headingBusy = before != null && shortestArc(before, target).abs() > 0.3;
+        if (p.settled && before != null && shortestArc(before, target).abs() < kSettleHeadingDeg) {
+          // Parked and the heading only wobbles (< 2°): land on it and let the ticker sleep (battery plan A3).
+          _headingDeg = (heading..set(target)).value;
+        } else {
+          _headingDeg = reducedMotion ? (heading..set(target)).value : heading.step(target, dt);
+          headingBusy = before != null && shortestArc(before, target).abs() > 0.3;
+        }
       }
     }
     notifyListeners();
@@ -418,6 +424,15 @@ class _LinksPainter extends CustomPainter {
 }
 
 /// The puck: accuracy disc, ping rings and the direction arrow. Owns the frame ticker.
+/// Below this heading change a parked puck stops animating the arrow and settles (battery plan A3).
+const double kSettleHeadingDeg = 2;
+
+/// The puck/camera loop's frame cap: [mapFps] (PowerProfile: 120, 60 or 30), never above 30 while only the heading turns.
+int puckFrameCap(int mapFps, {bool headingOnly = false}) {
+  final cap = mapFps <= 0 ? 60 : mapFps;
+  return headingOnly ? math.min(cap, 30) : cap;
+}
+
 class PuckLayer extends StatefulWidget {
   final PuckController puck;
 
@@ -474,8 +489,15 @@ class _PuckLayerState extends State<PuckLayer> with SingleTickerProviderStateMix
   }
 
   void _onTick(Duration elapsed) {
+    // Frame cap (battery plan A3): PowerProfile.current.mapFps, and at most 30 fps while only the heading turns (the dot is
+    // still). A vsync closer than ~90% of the frame interval to the last drawn frame is skipped (nothing painted).
+    if (_last != Duration.zero) {
+      final fps = puckFrameCap(PowerProfile.current.mapFps, headingOnly: widget.puck.pose?.settled ?? false);
+      if ((elapsed - _last).inMicroseconds < 0.9 * 1e6 / fps) return;
+    }
     final dt = _last == Duration.zero ? 0.016 : (elapsed - _last).inMicroseconds / 1e6;
     _last = elapsed;
+    PowerCounters.inc(PowerCounters.mapFrame);
     final more = widget.puck.tick(reducedMotion: _reduced);
     widget.onFrame?.call();
     final p = widget.puck.pose;

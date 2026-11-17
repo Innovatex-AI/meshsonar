@@ -6,10 +6,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart' show FlutterMap;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/core/model.dart';
-import 'package:meshsonar/ui/drive/drive_controls.dart' show DriveStatsStrip;
 import 'package:meshsonar/ui/map/overlays/map_overlay_host.dart';
 
-import '../drive_redesign_test.dart' show driving, heardRow, settle, drain;
+import '../drive_redesign_test.dart' show driving, settle, drain;
 import '../fakes.dart';
 
 /// Pairs of visible Text widgets (under [root]) whose painted rects overlap by more than a sliver.
@@ -86,7 +85,6 @@ void main() {
     final h = await driving(tester);
     h.engines.single.emit(heardPing('p1', const [Echo(repeater: 'a1b2', snrDb: 6.5)]));
     await settle(tester);
-    expect(heardRow('a1b2'), findsOneWidget);
     expect(overlappingTexts(tester, find.byKey(const Key('drive-map'))), isEmpty);
 
     // Credits sheet open then closed.
@@ -112,20 +110,6 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byKey(const Key('layers-sheet')), findsNothing);
     expect(find.textContaining('Coverage cells ·'), findsNothing);
-    expect(overlappingTexts(tester, find.byKey(const Key('drive-map'))), isEmpty);
-    await h.state.stopDrive();
-    await drain(tester);
-  });
-
-  testWidgets('expanded and back: still no overlapping Text, and the footer collapses to status + buttons', (tester) async {
-    final h = await driving(tester);
-    h.engines.single.emit(heardPing('p1', const [Echo(repeater: 'a1b2', snrDb: 6.5)]));
-    await settle(tester);
-    await tester.tap(find.byKey(const Key('map-fullscreen')));
-    await settle(tester);
-    expect(find.byKey(const Key('fullscreen-close')), findsOneWidget);
-    expect(find.byKey(const Key('start-stop')), findsOneWidget);
-    expect(find.byType(DriveStatsStrip), findsNothing, reason: 'the footer stat strips collapse');
     expect(overlappingTexts(tester, find.byKey(const Key('drive-map'))), isEmpty);
     await h.state.stopDrive();
     await drain(tester);

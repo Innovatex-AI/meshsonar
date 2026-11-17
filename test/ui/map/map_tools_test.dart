@@ -1,5 +1,6 @@
-// Drive tab quick wins on screen: the base-map cycler (and what the map draws for each style, offline packs respected), the
-// filter drawer, the coverage % pill, the leaderboard / my stats sheet, and the ping sound + haptic settings.
+// Drive tab map tools on screen: what the map draws for each base-map style (offline packs respected), the filter drawer (from
+// the Map layers sheet), the map key and credits, and the ping sound + haptic settings. (The footer's base-map cycler and the
+// leaderboard trophy went with the old Drive layout in build 70.)
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -44,6 +45,29 @@ class _Sound implements PingSoundPlayer {
   final List<bool> played = [];
   @override
   Future<void> play({required bool heard}) async => played.add(heard);
+}
+
+/// The filter drawer opens from the Map layers sheet ("Filter pings and cells").
+Future<void> openFilter(WidgetTester tester) async {
+  await tester.tap(find.byKey(const Key('drive-map-layers')));
+  await settleLive(tester);
+  final list = find.descendant(of: find.byKey(const Key('layers-sheet')), matching: find.byType(Scrollable)).first;
+  await tester.scrollUntilVisible(find.byKey(const Key('layers-filter')), 200, scrollable: list);
+  await settleLive(tester);
+  await tester.tap(find.byKey(const Key('layers-filter')));
+  await settleLive(tester);
+}
+
+/// Closes the filter drawer and the layers sheet (Done) so nothing is left over the map.
+Future<void> closeSheets(WidgetTester tester) async {
+  for (var i = 0; i < 3 && find.byKey(const Key('map-filter-sheet')).evaluate().isNotEmpty; i++) {
+    Navigator.of(tester.element(find.byKey(const Key('map-filter-sheet')))).pop();
+    await settleLive(tester);
+  }
+  if (find.byKey(const Key('layers-done')).evaluate().isNotEmpty) {
+    await tester.tap(find.byKey(const Key('layers-done')));
+    await settleLive(tester);
+  }
 }
 
 Future<Harness> driving(WidgetTester tester, {List<DrivePing> pings = const []}) async {
@@ -179,25 +203,10 @@ void main() {
       await tester.pumpWidget(const SizedBox());
       await tester.runAsync(() => b.debugClose());
     });
-
-    testWidgets('the cycler button steps chart > street > dark > topo > satellite > chart, saves the choice and says what it is', (tester) async {
-      final h = await driving(tester);
-      expect(h.state.settings.baseMapStyle, 'chart');
-      final seen = <String>[];
-      for (var i = 0; i < 5; i++) {
-        await tester.tap(find.byKey(const Key('drive-map-style')));
-        await settleLive(tester);
-        seen.add(h.state.settings.baseMapStyle);
-        expect(find.textContaining('${BaseMapStyle.parse(seen.last).label}:'), findsOneWidget);
-      }
-      expect(seen, ['street', 'dark', 'topo', 'satellite', 'chart']);
-      expect(h.settings.saved.baseMapStyle, 'chart');
-      await stop(tester, h);
-    });
   });
 
   group('filter drawer', () {
-    testWidgets('narrows the pings drawn, says how many, badges the button, and Reset brings them back', (tester) async {
+    testWidgets('narrows the pings drawn, says how many, the layers sheet counts it, and Reset brings them back', (tester) async {
       final h = await driving(tester, pings: [
         heardPing('hit', const [Echo(repeater: 'a1', snrDb: 6)]),
         silentPing('miss'),
@@ -205,8 +214,7 @@ void main() {
       expect(find.byKey(const ValueKey('map-ping-hit')), findsOneWidget);
       expect(find.byKey(const ValueKey('map-ping-miss')), findsOneWidget);
 
-      await tester.tap(find.byKey(const Key('drive-map-filter')));
-      await settleLive(tester);
+      await openFilter(tester);
       expect(find.byKey(const Key('map-filter-sheet')), findsOneWidget);
       expect(find.text('Showing 2 of 2 of your pings, 0 of 0 network cells.'), findsOneWidget);
 
@@ -214,19 +222,22 @@ void main() {
       await settleLive(tester);
       expect(find.text('Showing 1 of 2 of your pings, 0 of 0 network cells.'), findsOneWidget);
 
-      await tester.tapAt(const Offset(10, 10)); // dismiss the sheet
-      await settleLive(tester);
+      await closeSheets(tester);
       expect(find.byKey(const ValueKey('map-ping-hit')), findsOneWidget);
       expect(find.byKey(const ValueKey('map-ping-miss')), findsNothing);
-      expect(find.text('1'), findsWidgets, reason: 'the badge counts one active filter');
-
-      await tester.tap(find.byKey(const Key('drive-map-filter')));
+      await tester.tap(find.byKey(const Key('drive-map-layers')));
       await settleLive(tester);
+      await tester.scrollUntilVisible(find.byKey(const Key('layers-filter')), 200,
+          scrollable: find.descendant(of: find.byKey(const Key('layers-sheet')), matching: find.byType(Scrollable)).first);
+      expect(find.descendant(of: find.byKey(const Key('layers-filter')), matching: find.text('1 active')), findsOneWidget,
+          reason: 'the layers sheet counts one active filter');
+      await closeSheets(tester);
+
+      await openFilter(tester);
       await tester.tap(find.byKey(const Key('filter-reset')));
       await settleLive(tester);
       expect(find.text('Showing 2 of 2 of your pings, 0 of 0 network cells.'), findsOneWidget);
-      await tester.tapAt(const Offset(10, 10));
-      await settleLive(tester);
+      await closeSheets(tester);
       expect(find.byKey(const ValueKey('map-ping-miss')), findsOneWidget);
       await stop(tester, h);
     });
@@ -236,8 +247,7 @@ void main() {
         heardPing('by-a1', const [Echo(repeater: 'a1', snrDb: 6)]),
         heardPing('by-b2', const [Echo(repeater: 'b2', snrDb: 2)]),
       ]);
-      await tester.tap(find.byKey(const Key('drive-map-filter')));
-      await settleLive(tester);
+      await openFilter(tester);
       await tester.tap(find.byKey(const Key('filter-repeater')));
       await settleLive(tester);
       expect(find.text('Any repeater').hitTestable(), findsWidgets);
@@ -301,49 +311,6 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
       expect(find.byKey(const Key('drive-coverage-pct')), findsNothing);
       expect(find.byKey(const Key('region-neighbours-layer')), findsNothing);
-      await stop(tester, h);
-    });
-  });
-
-  group('leaderboard and my stats', () {
-    testWidgets('shows the region leaderboard from the public endpoint and says there are no drives on the phone yet', (tester) async {
-      regionStatsApiFactory = (b) => RegionStatsApi(
-        b,
-        client: MockClient((r) async {
-          if (r.url.path == '/api/cmh/leaderboard') {
-            return http.Response(
-              '{"period":"30d","rows":[{"rank":1,"callsign":"KE4BFI","km":123.4,"drives":9,"cells":50,"repeatersHeard":12}]}',
-              200,
-              headers: {'content-type': 'application/json'},
-            );
-          }
-          return http.Response('{}', 404);
-        }),
-      );
-      final h = await driving(tester);
-      await tester.tap(find.byKey(const Key('drive-map-leaders')));
-      await tester.pump(const Duration(milliseconds: 300));
-      await tester.pump(const Duration(milliseconds: 300));
-      expect(find.byKey(const Key('map-leaders-sheet')), findsOneWidget);
-      expect(find.text('KE4BFI'), findsOneWidget);
-      expect(find.textContaining('9 drives'), findsOneWidget);
-      expect(find.byKey(const Key('leaders-me')), findsOneWidget);
-      await tester.tapAt(const Offset(10, 10));
-      await settleLive(tester);
-      await stop(tester, h);
-    });
-
-    testWidgets('a leaderboard that cannot be reached says so and the personal part still shows', (tester) async {
-      regionStatsApiFactory = (b) => RegionStatsApi(b, client: MockClient((r) async => http.Response('nope', 500)));
-      final h = await driving(tester);
-      await tester.tap(find.byKey(const Key('drive-map-leaders')));
-      await tester.pump(const Duration(milliseconds: 300));
-      await tester.pump(const Duration(milliseconds: 300));
-      final board = tester.widget<Text>(find.byKey(const Key('leaders-board')));
-      expect(board.data, isNotEmpty);
-      expect(find.byKey(const Key('leaders-me')), findsOneWidget);
-      await tester.tapAt(const Offset(10, 10));
-      await settleLive(tester);
       await stop(tester, h);
     });
   });

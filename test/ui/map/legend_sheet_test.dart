@@ -2,7 +2,6 @@
 // palette, is reachable from the layers sheet and Settings > About, and its swatch colours equal the colours the maps draw.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:meshsonar/app/app_flags.dart';
 import '../../support/cell_layers.dart';
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/colour_palette.dart';
@@ -54,14 +53,14 @@ Future<void> settleShort(WidgetTester t) async {
 
 void main() {
   group('sections', () {
-    testWidgets('all eight sections are there, in order, with headers', (tester) async {
+    testWidgets('all seven sections are there, in order, with headers (no heard box, build 70)', (tester) async {
       await pumpLegend(tester);
-      for (final id in ['pings', 'cells', 'repeaters', 'links', 'observers', 'heard', 'owned', 'why']) {
+      for (final id in ['pings', 'cells', 'repeaters', 'links', 'observers', 'owned', 'why']) {
         expect(find.byKey(Key('legend-section-$id')), findsOneWidget, reason: id);
       }
       expect(find.text('Map guide'), findsOneWidget);
       expect(find.byKey(const Key('legend-palette-note')), findsOneWidget);
-      final ys = [for (final id in ['pings', 'cells', 'repeaters', 'links', 'observers', 'heard', 'owned', 'why']) tester.getTopLeft(find.byKey(Key('legend-section-$id'))).dy];
+      final ys = [for (final id in ['pings', 'cells', 'repeaters', 'links', 'observers', 'owned', 'why']) tester.getTopLeft(find.byKey(Key('legend-section-$id'))).dy];
       expect([...ys]..sort(), ys);
     });
 
@@ -158,24 +157,10 @@ void main() {
       expect(tri.where((n) => n == '_TriPainter'), hasLength(2));
     });
 
-    testWidgets('no heard box section on the redesigned Drive screen (the default)', (tester) async {
-      final was = AppFlags.driveRedesign;
-      AppFlags.driveRedesign = true;
-      addTearDown(() => AppFlags.driveRedesign = was);
+    testWidgets('no heard box section (the Drive screen has no heard box)', (tester) async {
       await pumpLegend(tester);
       expect(find.byKey(const Key('legend-section-heard')), findsNothing);
       expect(find.text('The heard box'), findsNothing);
-    });
-
-    testWidgets('heard box (old Drive layout only): bright, dimmer and faint bars', (tester) async {
-      final was = AppFlags.driveRedesign;
-      AppFlags.driveRedesign = false;
-      addTearDown(() => AppFlags.driveRedesign = was);
-      await pumpLegend(tester);
-      expect(find.text('Bright bar: heard recently'), findsOneWidget);
-      expect(find.text('Dimmer bar: missed a ping or two'), findsOneWidget);
-      expect(find.text('Faint grey bar: not heard for a while'), findsOneWidget);
-      expect(swatchColor(tester, 'heard-fresh'), colours(tester).forPing(heard: true, snr: 5));
     });
 
     testWidgets('owned by you: the real chip and what it means', (tester) async {

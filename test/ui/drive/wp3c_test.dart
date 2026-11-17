@@ -2,7 +2,6 @@
 // only bottom surface); SE and AX3 keep the map; idle Immersive is the Start pill.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:meshsonar/app/app_flags.dart';
 import 'package:meshsonar/app/app_state.dart';
 import 'package:meshsonar/ui/app.dart';
 import 'package:meshsonar/ui/drive_screen.dart';
@@ -21,8 +20,6 @@ Future<Harness> pump(
   Brightness brightness = Brightness.light,
   bool reduceMotion = false,
 }) async {
-  AppFlags.driveRedesign = true;
-  addTearDown(() => AppFlags.driveRedesign = false);
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);

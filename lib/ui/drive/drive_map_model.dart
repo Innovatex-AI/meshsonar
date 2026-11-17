@@ -82,7 +82,7 @@ class DriveMapModel extends ChangeNotifier {
     if (linkGraph != null) linkGraphFetcher = linkGraph;
     if (roster != null) regionRepeatersFetcher = roster;
     _wireHealth();
-    SchedulerBinding.instance.addTimingsCallback(_onTimings);
+    _prefs.addListener(_syncHealth);
     // The remembered layer choices of this page (LayerPrefs, read synchronously: main loads the file before the first frame), so
     // there is no flash of defaults. Repeater names fall back to the old Settings.mapRepeaterLabels key until chosen here.
     _lp = _prefs.layerPrefs(pageId);
@@ -189,6 +189,27 @@ class DriveMapModel extends ChangeNotifier {
       _lastCellPaints = n;
       return {'cell_paints': d};
     };
+  }
+
+  /// Records while a drive runs AND map health is switched on (Diagnostics overlay, or [MapHealthRecorder.enabled]); the frame
+  /// timings callback exists only then (battery plan A11).
+  bool _timings = false;
+  void _syncHealth() {
+    if (_disposed) return;
+    final want = _fixSource != null && (MapHealthRecorder.enabled || _prefs.healthOverlay);
+    if (want && !health.running) {
+      health.start();
+    } else if (!want && health.running) {
+      health.stop();
+    }
+    if (want != _timings) {
+      _timings = want;
+      if (want) {
+        SchedulerBinding.instance.addTimingsCallback(_onTimings);
+      } else {
+        SchedulerBinding.instance.removeTimingsCallback(_onTimings);
+      }
+    }
   }
 
   void _onTimings(List<ui.FrameTiming> ts) {
@@ -715,18 +736,9 @@ class DriveMapModel extends ChangeNotifier {
 
   bool get simulated => state.radioKind == RadioKind.simulator;
 
-  /// The one camera for the whole app session (Drive plan 9.4 step 5): the in-tab map and the expanded ("full screen") map
-  /// are the same map instance, so panning in one is panning in the other and a layout change never loses the view.
+  /// The one camera for the whole app session (Drive plan 9.4 step 5): one map instance, so a panel detent change never loses
+  /// the view.
   final MapViewController mapView = MapViewController();
-
-  /// The map is expanded: the old footer (stat strips, chips) is collapsed so the map takes the screen. Temporary stand-in for
-  /// the full-screen route this replaces; WP3a turns it into the panel's Immersive state.
-  bool _expanded = false;
-  bool get expanded => _expanded;
-  void toggleExpanded() {
-    _expanded = !_expanded;
-    notifyListeners();
-  }
 
   /// The simulator's own (made-up) repeaters, so a Simulator drive shows where they are like a real one would.
   static final List<RepeaterRef> simulatorRepeaters = [
@@ -879,13 +891,13 @@ class DriveMapModel extends ChangeNotifier {
       if (src == null) {
         _fix = null;
         puck.reset();
-        health.stop();
+        _syncHealth();
         unawaited(_compassSub?.cancel());
         _compassSub = null;
         changed = true;
       } else {
         puck.reset();
-        health.start();
+        _syncHealth();
         unawaited(_compassSub?.cancel());
         _compassSub = _compass?.headings.listen(puck.onCompass, onError: (Object _) {});
         _notifiedFix = null;
@@ -1135,7 +1147,8 @@ class DriveMapModel extends ChangeNotifier {
     unawaited(_fixSub?.cancel());
     unawaited(_compassSub?.cancel());
     health.stop(flush: false);
-    SchedulerBinding.instance.removeTimingsCallback(_onTimings);
+    _prefs.removeListener(_syncHealth);
+    if (_timings) SchedulerBinding.instance.removeTimingsCallback(_onTimings);
     puck.dispose();
     healthTick.dispose();
     super.dispose();

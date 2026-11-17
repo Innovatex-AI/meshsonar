@@ -13,7 +13,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:meshsonar/app/app_flags.dart';
 import 'package:meshsonar/app/app_state.dart';
 import 'package:meshsonar/ui/app.dart';
 import 'package:meshsonar/ui/drive_screen.dart';
@@ -57,8 +56,6 @@ void main() {
       addTearDown(() => CoverageMap.tilesByDefault = false);
       CoverageMap.debugTileClient = MockClient((req) async => http.Response.bytes(osm.readAsBytesSync(), 200, headers: {'content-type': 'image/png'}));
       addTearDown(() => CoverageMap.debugTileClient = null);
-      AppFlags.driveRedesign = true;
-      addTearDown(() => AppFlags.driveRedesign = false);
       tester.view.physicalSize = const Size(393, 852);
       tester.view.devicePixelRatio = 1;
       tester.view.padding = const FakeViewPadding(top: 47, bottom: 34);
@@ -107,8 +104,6 @@ void main() {
       return http.Response.bytes(f.readAsBytesSync(), 200, headers: {'content-type': 'image/png'});
     });
     addTearDown(() => CoverageMap.debugTileClient = null);
-    AppFlags.driveRedesign = true;
-    addTearDown(() => AppFlags.driveRedesign = false);
     const size = Size(393, 852);
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
@@ -194,8 +189,6 @@ void main() {
           return http.Response.bytes(f.readAsBytesSync(), 200, headers: {'content-type': 'image/png'});
         });
         addTearDown(() => CoverageMap.debugTileClient = null);
-        AppFlags.driveRedesign = true;
-        addTearDown(() => AppFlags.driveRedesign = false);
         const size = Size(393, 852);
         tester.view.physicalSize = size;
         tester.view.devicePixelRatio = 1;

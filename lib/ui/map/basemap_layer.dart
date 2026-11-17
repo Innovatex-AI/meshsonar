@@ -13,7 +13,13 @@ import 'package:vector_map_tiles/vector_map_tiles.dart';
 import 'package:vector_tile_renderer/vector_tile_renderer.dart' as vtr;
 
 import '../../core/basemap.dart';
+import '../../core/power_profile.dart';
 import 'tile_source.dart';
+
+/// Whether a drive map shows coverage on a plain background instead of the basemap right now: a drive is running and the power
+/// profile asks for it (PowerProfile.current.simpleBasemap: Saver, or Custom with "Simple basemap" on). Build 70, battery plan.
+/// The renderer is not swapped; the basemap layers are simply left out (CoverageMap.plainBasemap).
+bool simpleBasemapNow({required bool driving}) => driving && PowerProfile.current.simpleBasemap;
 
 /// Serves our (or OpenFreeMap's) vector tiles to the renderer through a [MeshTileProvider].
 class NetworkBasemapTileProvider extends VectorTileProvider {

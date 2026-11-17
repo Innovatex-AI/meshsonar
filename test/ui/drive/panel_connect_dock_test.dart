@@ -9,7 +9,6 @@ import 'package:meshsonar/alerts/alert_prefs.dart';
 import 'package:meshsonar/alerts/alerts_runtime.dart';
 import 'package:meshsonar/alerts/launch_reconnect.dart';
 import 'package:meshsonar/alerts/saved_radios_store.dart';
-import 'package:meshsonar/app/app_flags.dart';
 import 'package:meshsonar/app/app_state.dart';
 import 'package:meshsonar/ui/app.dart';
 import 'package:meshsonar/ui/connect_screen.dart';
@@ -24,8 +23,6 @@ const _size = Size(402, 874);
 const _dockTop = 680.0, _immersiveTop = 752.0;
 
 Future<Harness> _pump(WidgetTester tester, {Harness? harness, String? savedDetent}) async {
-  AppFlags.driveRedesign = true;
-  addTearDown(() => AppFlags.driveRedesign = false);
   tester.view.physicalSize = _size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);

@@ -5,7 +5,6 @@
 import 'package:flutter/cupertino.dart' show CupertinoSwitch;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:meshsonar/app/app_flags.dart';
 import 'package:meshsonar/app/app_state.dart';
 import 'package:meshsonar/core/privacy_zones.dart';
 import 'package:meshsonar/ui/app.dart';
@@ -203,8 +202,6 @@ void main() {
 
   group('the real Drive panel', () {
     Future<Harness> pumpDrive(WidgetTester tester, MtRig rig, {required double w, required double h, double scale = 1, bool connect = true, bool drive = false, bool finished = false}) async {
-      AppFlags.driveRedesign = true;
-      addTearDown(() => AppFlags.driveRedesign = false);
       tester.view.physicalSize = Size(w, h);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);

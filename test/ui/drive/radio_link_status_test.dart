@@ -4,7 +4,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:meshsonar/app/app_flags.dart';
 import 'package:meshsonar/app/app_state.dart';
 import 'package:meshsonar/ui/app.dart';
 import 'package:meshsonar/ui/design/tokens.dart';
@@ -15,8 +14,6 @@ import 'package:meshsonar/ui/shell/mini_drive_bar.dart';
 import '../fakes.dart';
 
 Future<void> _pumpDrive(WidgetTester tester, Harness h) async {
-  AppFlags.driveRedesign = true;
-  addTearDown(() => AppFlags.driveRedesign = false);
   tester.view.physicalSize = const Size(402, 874);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -86,7 +83,7 @@ void main() {
   });
 
   group('every surface reads the helper', () {
-    testWidgets('not connected: Dock title, Dock button, capsule and chip', (tester) async {
+    testWidgets('not connected: Dock title, Dock button and capsule', (tester) async {
       final h = Harness();
       await h.state.init();
       await _pumpDrive(tester, h);
@@ -94,16 +91,9 @@ void main() {
       expect(find.descendant(of: find.byKey(const Key('start-stop')), matching: find.text('Connect radio')), findsOneWidget);
       expect(find.descendant(of: find.byKey(const Key('start-stop')), matching: find.byIcon(Icons.bluetooth_disabled_rounded)), findsOneWidget);
       expect(tester.widget<Text>(find.byKey(const Key('capsule-radio'))).data, 'No radio');
-      // The legacy app-bar chip: same words and glyph.
-      await tester.pumpWidget(AppScope(
-        state: h.state,
-        child: MaterialApp(theme: meshSonarTheme(Brightness.dark), home: Scaffold(body: ConnectionChip(state: h.state, onPressed: () {}))),
-      ));
-      expect(find.text('Not connected'), findsOneWidget);
-      expect(find.byIcon(Icons.bluetooth_disabled_rounded), findsOneWidget);
     });
 
-    testWidgets('connecting: spinner and the same word on the Dock, the capsule, the chip and the collapsed pill', (tester) async {
+    testWidgets('connecting: spinner and the same word on the Dock, the capsule and the collapsed pill', (tester) async {
       final h = Harness();
       h.bt.connectGate = Completer<void>();
       await h.state.init();
@@ -120,11 +110,6 @@ void main() {
       expect(find.descendant(of: find.byKey(const Key('pill-start')), matching: find.text('Connecting…')), findsOneWidget);
       expect(find.descendant(of: find.byKey(const Key('pill-start')), matching: find.byType(CircularProgressIndicator)), findsOneWidget);
       expect(find.descendant(of: find.byKey(const Key('pill-start')), matching: find.byIcon(Icons.bluetooth_searching_rounded)), findsNothing, reason: 'no lone Bluetooth glyph');
-      await tester.pumpWidget(AppScope(
-        state: h.state,
-        child: MaterialApp(theme: meshSonarTheme(Brightness.dark), home: Scaffold(body: ConnectionChip(state: h.state, onPressed: () {}))),
-      ));
-      expect(find.text('Connecting…'), findsOneWidget);
       h.bt.connectGate!.complete();
       await tester.pump(const Duration(milliseconds: 300));
     });
