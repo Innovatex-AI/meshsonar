@@ -35,6 +35,7 @@ import 'drive_context_wire.dart';
 import 'driver_account.dart';
 import 'driver_summary.dart';
 import 'model.dart';
+import 'power_profile.dart';
 import 'region_lookup.dart';
 import 'hex_cells.dart' show loadHexEngine;
 import 'map_links.dart';
@@ -92,6 +93,21 @@ DriverKeyStatus parseDriverKeyStatus(Object? s) => switch (s) {
       _ => DriverKeyStatus.unknown,
     };
 
+/// Counts every request the app's server client sends (PowerCounters.httpRequest, battery plan Phase 0).
+class CountingHttpClient extends http.BaseClient {
+  final http.Client inner;
+  CountingHttpClient(this.inner);
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) {
+    PowerCounters.inc(PowerCounters.httpRequest);
+    return inner.send(request);
+  }
+
+  @override
+  void close() => inner.close();
+}
+
 class HttpCmatClient implements CmatClient, TelemetryTransport, ObserverStatusTransport, DriveEndTransport, PhotoTransport {
   @override
   final Uri baseUrl;
@@ -113,7 +129,7 @@ class HttpCmatClient implements CmatClient, TelemetryTransport, ObserverStatusTr
     this.uploadTimeout = const Duration(seconds: 120),
     PhotoWire? photoWire,
     this.photoTimeouts = const PhotoUploadTimeouts(),
-  })  : _http = client ?? http.Client(),
+  })  : _http = CountingHttpClient(client ?? http.Client()),
         photoWire = photoWire ?? const IoPhotoWire();
 
   Uri endpoint(String name) {

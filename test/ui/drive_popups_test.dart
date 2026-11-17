@@ -147,6 +147,7 @@ void main() {
       await h.pumpApp(tester);
       await h.state.connect(h.bt.devices.first, RadioKind.bluetooth);
       await settle(tester);
+      await openDrivePanel(tester); // the chip lives in the Medium panel
       await tester.ensureVisible(find.byKey(const Key('ping-settings-chip')));
       await tester.tap(find.byKey(const Key('ping-settings-chip')));
       await tester.pumpAndSettle();

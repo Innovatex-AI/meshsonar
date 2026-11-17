@@ -16,8 +16,8 @@ import 'dart:async';
 
 import 'package:geolocator/geolocator.dart';
 
-/// What a consumer needs. Higher index wins.
-enum HubProfile { idle, drive }
+/// What a consumer needs. Higher index wins: idle (region watcher) < track (MeshTrack sharing between drives) < drive.
+enum HubProfile { idle, track, drive }
 
 class _Consumer {
   final HubProfile profile;

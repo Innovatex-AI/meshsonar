@@ -49,6 +49,10 @@ class MqttObserverEngine implements ObserverEngine {
   /// How long Test keeps its connection open after publishing the status message.
   final Duration testLinger;
 
+  /// Feeds that start in the same update (launch, radio connect, return to the front) open their connections this far
+  /// apart instead of all at once (battery plan A12): one radio burst at a time, and the radio signs one login at a time.
+  final Duration connectStagger;
+
   final MqttTokenService _tokens;
 
   /// The secure-store slot of this install's client-id part (2 random bytes, 4 hex characters in the client id).
@@ -66,6 +70,7 @@ class MqttObserverEngine implements ObserverEngine {
     this.authRetry = const Duration(minutes: 5),
     this.signRetry = const Duration(minutes: 10),
     this.testLinger = const Duration(milliseconds: 500),
+    this.connectStagger = const Duration(seconds: 2),
     Duration signTimeout = const Duration(seconds: 20),
   }) : _newTransport = transport ?? MqttClientTransport.new,
        _random = random ?? Random.secure(),
@@ -141,6 +146,7 @@ class MqttObserverEngine implements ObserverEngine {
     }
     _idle.removeWhere((id, _) => !ids.contains(id));
     final signChanged = prev.sign != state.sign;
+    var starts = 0; // feeds (re)connecting in this update, staggered by [connectStagger]
     for (final slot in _slots) {
       final plan = _plan(slot, state);
       if (plan is _Idle) {
@@ -155,13 +161,13 @@ class MqttObserverEngine implements ObserverEngine {
         r.slot = slot;
         if (signChanged) r.radioChanged();
         r.settingsChanged();
-        r.foregroundChanged(state.foreground);
+        if (r.foregroundChanged(state.foreground, after: connectStagger * starts)) starts++;
         continue;
       }
       _stopRunner(slot.id);
       final n = _SlotRunner(this, slot, plan.key, plan.iata, plan.publicKey);
       _runners[slot.id] = n;
-      n.start();
+      n.start(after: connectStagger * starts++);
     }
     _emit();
   }
@@ -463,7 +469,14 @@ class _SlotRunner {
     e._emit();
   }
 
-  void start() => unawaited(_connect());
+  /// Connects now, or after [after] (the engine staggers feeds that start together).
+  void start({Duration after = Duration.zero}) {
+    if (after <= Duration.zero) {
+      unawaited(_connect());
+    } else {
+      _schedule(after);
+    }
+  }
 
   /// The feed stops on purpose (turned off, sharing off, radio gone, settings changed, app closing): a live connection
   /// says `offline` first, on the same topic and with the same retain flag as `online`, then disconnects cleanly (a clean
@@ -504,11 +517,14 @@ class _SlotRunner {
     }
   }
 
-  void foregroundChanged(bool fg) {
+  /// Back in front: a feed paused in the background reconnects (after [after], staggered). True when it will.
+  bool foregroundChanged(bool fg, {Duration after = Duration.zero}) {
     if (fg && _st == ObserverFeedState.pausedInBackground) {
       _attempt = 0;
-      unawaited(_connect());
+      start(after: after);
+      return true;
     }
+    return false;
   }
 
   void _schedule(Duration d, {bool fresh = false}) {

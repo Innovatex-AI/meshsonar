@@ -11,6 +11,7 @@ import 'package:meshsonar/core/drive_context_wire.dart';
 import 'package:meshsonar/core/driver_summary.dart';
 import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/core/driver_settings.dart';
+import 'package:meshsonar/core/power_profile.dart';
 import 'package:meshsonar/core/privacy_zones.dart';
 import 'package:meshsonar/core/region_lookup.dart';
 import 'package:meshsonar/core/sync_service.dart';
@@ -193,6 +194,45 @@ void main() {
     expect(last.session.endedAt, isNotNull);
     expect([for (final b in h.uploads) ...b.pings.map((p) => p.id)], ['p1', 'p2', 'p3']);
     expect(h.state.lastUploadAt, isNotNull);
+  });
+
+  group('battery mode (PowerSettings.uploadDuringDrive)', () {
+    tearDown(PowerProfile.debugReset);
+
+    test('Saver: no upload during the drive, everything goes at Stop; both the switch and the mode must allow it', () async {
+      PowerProfile.debugReset(PowerSettings.saver);
+      final h = await driving();
+      await emit(h, 'p1');
+      await wait(tick * 4);
+      expect(h.sync.syncedSessions, isEmpty, reason: 'Saver = drive end only');
+      await h.state.stopDrive();
+      expect(h.sync.syncedSessions, hasLength(1));
+      expect(h.sync.endedAtSeen.single, isNotNull);
+    });
+
+    test('switching mode mid-drive starts or stops the in-drive upload at once', () async {
+      PowerProfile.debugReset(PowerSettings.saver);
+      final h = await driving();
+      await emit(h, 'p1');
+      await wait(tick * 2);
+      expect(h.sync.syncedSessions, isEmpty);
+      await PowerProfile.set(PowerSettings.balanced);
+      await until(() => h.sync.syncedSessions.isNotEmpty && !h.state.uploading);
+      await PowerProfile.set(PowerSettings.saver);
+      final n = h.sync.syncedSessions.length;
+      await wait(tick * 4);
+      expect(h.sync.syncedSessions.length, n);
+      await h.state.stopDrive();
+    });
+
+    test('Balanced with the person\'s switch off still waits for drive end', () async {
+      PowerProfile.debugReset(PowerSettings.balanced);
+      final h = await driving(settings: const Settings(syncDuringDrive: false, syncEveryMin: 1));
+      await emit(h, 'p1');
+      await wait(tick * 3);
+      expect(h.sync.syncedSessions, isEmpty);
+      await h.state.stopDrive();
+    });
   });
 
   test('a drive fully uploaded mid-drive still tells the server its end time at Stop', () async {

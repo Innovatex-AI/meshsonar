@@ -2,7 +2,6 @@
 // pill at the top.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:meshsonar/app/app_flags.dart';
 import 'package:meshsonar/app/app_state.dart';
 import 'package:meshsonar/ui/app.dart';
 import 'package:meshsonar/ui/drive_screen.dart';
@@ -12,8 +11,6 @@ import 'package:meshsonar/ui/map/overlays/map_overlay_host.dart';
 import '../fakes.dart';
 
 Future<Harness> pump(WidgetTester tester, Size size, {bool connect = false, bool drive = false, bool sim = false, double scale = 1}) async {
-  AppFlags.driveRedesign = true;
-  addTearDown(() => AppFlags.driveRedesign = false);
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);

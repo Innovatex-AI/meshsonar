@@ -1,10 +1,8 @@
 // The More tab: everything that is not a daily screen. It has its own Navigator, so Radio, Settings and the rest open
 // inside the tab and the tab bar and mini drive bar stay in view.
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 
-import '../../app/app_flags.dart';
 
 import '../../core/server_url.dart' show privacyPolicyUrl;
 import '../about_screen.dart';
@@ -21,8 +19,6 @@ import '../settings/observer_section.dart' show observerStatusLine;
 import '../tools/adverts_screen.dart';
 import '../tools/discover_screen.dart';
 import '../account/devices_screen.dart';
-import '../design/app_surfaces.dart' show showAppToast;
-import '../design/app_widgets.dart' show AppSwitchTile;
 import '../account/leaderboard_screen.dart';
 import '../account/reports_history_screen.dart';
 import '../tools/noise_screen.dart';
@@ -140,15 +136,6 @@ class MoreList extends StatefulWidget {
 }
 
 class _MoreListState extends State<MoreList> {
-  /// The Developer section is hidden until a long-press on the version row (About MeshSonar). Not remembered: it hides
-  /// again when the app restarts. The switches inside keep their own saved values.
-  bool _developer = false;
-
-  void _toggleDeveloper() {
-    setState(() => _developer = !_developer);
-    showAppToast(context, _developer ? 'Developer options shown at the end of the list.' : 'Developer options hidden.');
-  }
-
   @override
   Widget build(BuildContext context) {
     final onOpen = widget.onOpen;
@@ -224,8 +211,6 @@ class _MoreListState extends State<MoreList> {
               subtitle: Text('Version ${s.services.appInfo.version ?? ''}, licence, credits'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => onOpen(MoreItem.about),
-              // Developer options: a long-press on the version row shows (or hides) them.
-              onLongPress: _toggleDeveloper,
             ),
             ListTile(
               key: const Key('more-privacy-policy'),
@@ -235,22 +220,6 @@ class _MoreListState extends State<MoreList> {
               trailing: const Icon(Icons.open_in_new, size: 18),
               onTap: () => s.services.openUrl(Uri.parse(privacyPolicyUrl)),
             ),
-            if (_developer) ...[
-              header('Developer'),
-              ValueListenableBuilder<bool>(
-                valueListenable: AppFlags.driveRedesignNotifier,
-                builder: (context, on, _) => AppSwitchTile(
-                  switchKey: const Key('more-drive-redesign'),
-                  title: 'New Drive screen',
-                  subtitle: 'The map with the bottom panel. Turn off to go back to the old footer layout.',
-                  value: on,
-                  onChanged: (v) {
-                    final dir = s.services.uiPrefsFile?.parent;
-                    AppFlags.setDriveRedesign(v, file: dir == null ? null : File('${dir.path}${Platform.pathSeparator}redesign_flags.json'));
-                  },
-                ),
-              ),
-            ],
             const SizedBox(height: Gap.xl),
           ],
         ),

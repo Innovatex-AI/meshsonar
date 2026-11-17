@@ -508,9 +508,11 @@ class MeshTrackService {
 
   // ---------------------------------------------------------------- lifecycle and listening
 
-  /// Reads `meshtrack_last.json` (24 h TTL) and starts the 15 s staleness tick. Call once after construction.
+  /// Reads `meshtrack_last.json` (24 h TTL) and arms the 15 s staleness tick (it only runs while a group is active, see
+  /// [tickRunning]). Call once after construction.
   Future<void> start() async {
-    _tick ??= Timer.periodic(const Duration(seconds: 15), (_) => _onTick());
+    _started = true;
+    _syncTick();
     final s = _store;
     if (s == null) return;
     String? raw;
@@ -576,8 +578,30 @@ class MeshTrackService {
   /// Toasts: [MtAskedWhileNotSharing], [MtSharingStopped].
   Stream<MtEvent> get events => _events.stream;
 
+  bool _started = false;
+
+  /// True while the 15 s tick exists: a group is sharing, or something on screen ages with time (friends, a meet pin, the
+  /// message log, an asked position). With no active group nothing wakes every 15 s (battery plan A8).
+  bool get tickRunning => _tick != null;
+
+  bool get _tickWanted =>
+      _asked.isNotEmpty ||
+      _groups.values.any((g) =>
+          g.config.share || g.track.nameCount > 0 || g.track.meet != null || g.log.isNotEmpty || (g.askedUntil != null && _now().isBefore(g.askedUntil!)));
+
+  void _syncTick() {
+    if (_disposed || !_started) return;
+    if (_tickWanted) {
+      _tick ??= Timer.periodic(const Duration(seconds: 15), (_) => _onTick());
+    } else if (_tick != null) {
+      _tick!.cancel();
+      _tick = null;
+    }
+  }
+
   void _changed({bool save = true}) {
     if (_disposed) return;
+    _syncTick();
     _state = null;
     for (final l in List.of(_listeners)) {
       l();

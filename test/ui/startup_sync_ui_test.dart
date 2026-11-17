@@ -137,6 +137,7 @@ void main() {
       h.client.regionsIndexResult = const [cmh];
       await h.pumpApp(tester);
       await tester.pumpAndSettle();
+      await openDrivePanel(tester); // the note is a row of the Medium panel
       expect(find.byKey(const Key('location-note')), findsOneWidget);
       expect(find.textContaining('Allow location so the map opens where you are.'), findsOneWidget);
       expect(probe.requests, 0);
@@ -173,6 +174,7 @@ void main() {
       h.client.regionsIndexResult = const [cmh];
       await h.pumpApp(tester);
       await tester.pumpAndSettle();
+      await openDrivePanel(tester);
       expect(find.byKey(const Key('location-note')), findsOneWidget);
       probe.access = LocationAccess.granted;
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);

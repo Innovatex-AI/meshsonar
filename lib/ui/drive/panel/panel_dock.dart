@@ -19,6 +19,7 @@ import '../../../radio/radio_api.dart';
 import '../../design/tokens.dart';
 import '../drive_controls.dart' show confirmAndStopDrive, openConnect, openFinishedDriveReport;
 import '../radio_link_status.dart';
+import '../drive_clock.dart';
 import 'auto_collapse.dart';
 import 'panel_meshtrack.dart';
 
@@ -369,26 +370,13 @@ class DockHero extends StatefulWidget {
   State<DockHero> createState() => _DockHeroState();
 }
 
-class _DockHeroState extends State<DockHero> {
-  Timer? _tick;
-
-  @override
-  void initState() {
-    super.initState();
-    _tick = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted && TickerMode.valuesOf(context).enabled) setState(() {});
-    });
-  }
-
-  @override
-  void dispose() {
-    _tick?.cancel();
-    super.dispose();
-  }
+class _DockHeroState extends State<DockHero> with DriveClock {
+  // The 1 s clock exists only while a drive runs, this is visible and the app is in front (DriveClock).
 
   @override
   Widget build(BuildContext context) {
     final s = widget.state;
+    wantClock(s.driving);
     final c = AppColors.fromTheme(Theme.of(context));
     final last = lastTxPing(s.recentPings);
     final scale = MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.3);
@@ -448,22 +436,8 @@ class PingCircle extends StatefulWidget {
   State<PingCircle> createState() => _PingCircleState();
 }
 
-class _PingCircleState extends State<PingCircle> {
-  Timer? _tick;
-
-  @override
-  void initState() {
-    super.initState();
-    _tick = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted && TickerMode.valuesOf(context).enabled) setState(() {});
-    });
-  }
-
-  @override
-  void dispose() {
-    _tick?.cancel();
-    super.dispose();
-  }
+class _PingCircleState extends State<PingCircle> with DriveClock {
+  // The 1 s clock exists only while a drive runs, this is visible and the app is in front (DriveClock).
 
   void _tap() {
     final s = widget.state;
@@ -479,6 +453,7 @@ class _PingCircleState extends State<PingCircle> {
   @override
   Widget build(BuildContext context) {
     final s = widget.state;
+    wantClock(s.driving);
     final t = Theme.of(context);
     final c = AppColors.fromTheme(t);
     final st = s.status;

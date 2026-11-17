@@ -79,7 +79,10 @@ class _Body extends StatefulWidget {
   State<_Body> createState() => _BodyState();
 }
 
-class _BodyState extends State<_Body> {
+/// How often the open Device settings screen re-reads the radio's battery (in front only).
+const Duration batteryReadEvery = Duration(seconds: 60);
+
+class _BodyState extends State<_Body> with WidgetsBindingObserver {
   DeviceSettingsTool get d => widget.tools.device;
   StreamSubscription<void>? _sub;
   Timer? _battery;
@@ -94,13 +97,41 @@ class _BodyState extends State<_Body> {
       if (mounted) setState(() {});
     });
     _load();
-    _battery = Timer.periodic(const Duration(seconds: 60), (_) {
-      if (d.available(DeviceFeature.battery) && !widget.host.driveRecording && !d.busy) d.refreshBattery();
-    });
+    WidgetsBinding.instance.addObserver(this);
+    _startBatteryTimer();
+  }
+
+  /// The battery line refreshes every 60 s while the screen is open and the app is in front; the timer stops in the
+  /// background (battery plan A13) and restarts, with one read, on return.
+  void _startBatteryTimer() {
+    _battery?.cancel();
+    _battery = Timer.periodic(batteryReadEvery, (_) => _readBattery());
+  }
+
+  void _readBattery() {
+    if (d.available(DeviceFeature.battery) && !widget.host.driveRecording && !d.busy) d.refreshBattery();
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      if (_battery == null) {
+        _readBattery();
+        _startBatteryTimer();
+      }
+    } else if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden || state == AppLifecycleState.detached) {
+      _battery?.cancel();
+      _battery = null;
+    }
+  }
+
+  /// True while the 60 s battery read is scheduled (tests).
+  @visibleForTesting
+  bool get batteryTimerRunning => _battery != null;
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _sub?.cancel();
     _battery?.cancel();
     super.dispose();

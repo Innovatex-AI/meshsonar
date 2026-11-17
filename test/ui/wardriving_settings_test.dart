@@ -74,8 +74,11 @@ void main() {
     expect(e.config!.intervalSec, 30);
     expect(e.config!.listenWindow, const Duration(seconds: 10));
 
+    await openDrivePanel(tester); // the chip is in the Medium panel
     expect(find.byKey(const Key('ping-settings-chip')), findsOneWidget);
     expect(find.text('Ping 30 s / 15 m'), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('ping-settings-chip')));
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.byKey(const Key('ping-settings-chip')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('ping-settings-sheet')), findsOneWidget);

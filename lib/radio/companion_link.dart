@@ -12,6 +12,7 @@ import 'dart:typed_data';
 
 import '../core/drive_context.dart';
 import '../core/model.dart';
+import '../core/power_profile.dart';
 import '../core/plan/airtime_calc.dart' show AirRadio, timeOnAir;
 import 'claim_radio.dart';
 import 'caps.dart';
@@ -122,7 +123,7 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
       DateTime Function()? clock,
       this.appName = 'MeshSonar',
       this.claimReplyTimeout,
-      Duration messagePollInterval = const Duration(seconds: 5)})
+      Duration? messagePollInterval})
       : _clock = clock ?? DateTime.now {
     sync = MessageSync(this, clock: _clock, pollInterval: messagePollInterval)
       ..onContactText = _onContactText
@@ -310,6 +311,7 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
     if (!isConnected) throw StateError('radio not connected');
     final c = Completer<Frame>();
     _pending = c;
+    PowerCounters.inc(PowerCounters.bleCommand);
     try {
       await _transport.send(frame);
     } catch (e) {
@@ -434,7 +436,7 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
   /// (and clear a scope an earlier send left behind). Timestamps are strictly increasing so every send has its own
   /// (encrypted) fingerprint.
   Future<Frame> sendChannelFrame(int channelIndex, String text, {int priority = CommandPriority.normal, FloodScope? scope}) {
-    return _commands.run(() async {
+    return _drainAfter(_commands.run(() async {
       await _applyScope(scope);
       var ts = _clock().toUtc().millisecondsSinceEpoch ~/ 1000;
       if (ts <= _lastSentTs) ts = _lastSentTs + 1;
@@ -442,14 +444,23 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
       final f = await _send(encodeSendChannelText(channelIndex, ts, text));
       if (f is OkFrame || f is SentFrame || (f is UnknownFrame && f.code == Resp.sent)) _lastSentTs = ts;
       return f;
-    }, priority: priority);
+    }, priority: priority));
+  }
+
+  /// A drain after every send (battery plan A7): with the backup poll slower, an answer that came in while we were
+  /// sending is still picked up right away. The drain queues behind the send and never changes its result.
+  Future<T> _drainAfter<T>(Future<T> send) {
+    send.then((_) {
+      if (isConnected) sync.requestDrain();
+    }, onError: (Object _) {});
+    return send;
   }
 
   /// CMD_SEND_TXT_MSG to a contact. Returns the radio's answer: SENT (flood flag, expected ack, estimated timeout) or ERR.
   /// [timestamp] null = now (strictly increasing); a retry passes the first try's timestamp. Returns the timestamp used.
   Future<(Frame, int)> sendContactFrame(String pubkeyHex, String text,
       {int attempt = 0, int? timestamp, int priority = CommandPriority.user, FloodScope? scope}) {
-    return _commands.run(() async {
+    return _drainAfter(_commands.run(() async {
       await _applyScope(scope);
       var ts = timestamp ?? _clock().toUtc().millisecondsSinceEpoch ~/ 1000;
       if (timestamp == null) {
@@ -459,7 +470,7 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
       _lastAttemptTs = ts;
       final f = await _send(encodeSendTxt(txtTypePlain, attempt, ts, fromHex(pubkeyHex), text));
       return (f, ts);
-    }, priority: priority);
+    }, priority: priority));
   }
 
   /// Puts the flood scope a send wants on the radio, inside the send's queue slot (see scope_guard.dart).
@@ -602,6 +613,7 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
       _pending = reply;
       _telemetryWaiter = push;
       try {
+        PowerCounters.inc(PowerCounters.bleCommand);
         await _transport.send(encodeSelfTelemetryReq());
         final r = await Future.any<Object>([reply.future, push.future]).timeout(timeout);
         if (r is SelfTelemetry) return r;
@@ -670,6 +682,7 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
       };
       arm();
       try {
+        PowerCounters.inc(PowerCounters.bleCommand);
         await _transport.send(encodeGetContacts(since: since));
         await done.future;
       } finally {

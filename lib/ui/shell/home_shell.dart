@@ -10,12 +10,12 @@ import 'package:flutter/material.dart';
 
 import '../../alerts/alerts_runtime.dart';
 import '../../app/app_state.dart';
+import '../../app/drive_visibility.dart';
 import '../alerts/alerts_status_strip.dart';
 import '../alerts/in_app_banner.dart';
 import '../always_location_screen.dart';
 import '../antenna_sheet.dart';
 import '../app.dart';
-import '../../app/app_flags.dart';
 import '../design/app_surfaces.dart' show AppToastHost, ToastAnchor, dismissAppToast, showAppToast;
 import '../drive_screen.dart';
 import '../onboarding/ui_prefs.dart';
@@ -65,6 +65,9 @@ class _HomeShellState extends State<HomeShell> {
     _shell = ShellController(initial: widget.initialTab ?? AppTab.drive)..visited.add(AppTab.drive);
     _shell.visited.add(_shell.tab);
     _shell.addListener(_onShell);
+    // Battery (A2): the compass in Auto mode runs only while the Drive tab is shown and the app is in front.
+    DriveVisibility.ensureObserving();
+    DriveVisibility.setDriveTab(_shell.tab == AppTab.drive);
     // A tap on a message notification or in-app banner: go to the Chat tab and open that conversation
     // (ChatTabHost.openConversation, set by the chat wiring).
     AlertsHost.runtime.addListener(_bindAlerts);
@@ -137,6 +140,7 @@ class _HomeShellState extends State<HomeShell> {
   void _onShell() {
     final s = _state;
     final tab = _shell.tab;
+    DriveVisibility.setDriveTab(tab == AppTab.drive);
     if (s != null) {
       if (tab != _lastTab) unawaited(uiPrefsFor(s).setLastTab(tab.name));
       // The Drives list reads from disk: refresh it whenever it comes into view.
@@ -181,7 +185,7 @@ class _HomeShellState extends State<HomeShell> {
     final msg = s.takeNotice();
     if (msg == null) return;
     // The finished dock already says "Drive saved" (Drive plan 4.18 rule 3): the same sentence as a toast is deleted.
-    if (AppFlags.driveRedesign && msg.startsWith('Drive saved') && _shell.tab == AppTab.drive) return;
+    if (msg.startsWith('Drive saved') && _shell.tab == AppTab.drive) return;
     // Top-anchored on the Drive tab (its bottom is the dock and controls), bottom elsewhere (AppToastHost below).
     showAppToast(_contentKey.currentContext ?? context, msg, duration: const Duration(seconds: 6));
   }
@@ -245,9 +249,13 @@ class _HomeShellState extends State<HomeShell> {
                 final pages = IndexedStack(
                   index: tab.index,
                   children: [
+                    // Hidden tabs keep their state but get a disabled TickerMode: their animations and 1 s clocks stop (battery plan A5).
                     for (final t in AppTab.values)
                       if (_shell.visited.contains(t) || t == AppTab.drive)
-                        t == AppTab.drive ? _page(t) : MediaQuery.removePadding(context: context, removeBottom: true, child: _page(t))
+                        TickerMode(
+                          enabled: t == tab,
+                          child: t == AppTab.drive ? _page(t) : MediaQuery.removePadding(context: context, removeBottom: true, child: _page(t)),
+                        )
                       else
                         const SizedBox.shrink(),
                   ],
@@ -257,8 +265,8 @@ class _HomeShellState extends State<HomeShell> {
                 final content = AppToastHost(
                   anchor: onDrive ? ToastAnchor.top : ToastAnchor.bottom,
                   // Drive: below the region chip and up to two state chips (plan 4.18); elsewhere above the tab bar.
-                  inset: onDrive ? (AppFlags.driveRedesign ? 96 : 56) : 72,
-                  band: onDrive && AppFlags.driveRedesign,
+                  inset: onDrive ? 96 : 72,
+                  band: onDrive,
                   child: InAppBannerHost(
                     child: Column(key: _contentKey, children: [
                       Expanded(child: pages),

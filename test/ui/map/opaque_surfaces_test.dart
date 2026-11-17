@@ -7,9 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/core/gps_health.dart';
 import 'package:meshsonar/core/startup_location.dart';
 import 'package:meshsonar/ui/drive/gps_health_banner.dart';
-import 'package:meshsonar/ui/drive/heard_box.dart';
 import 'package:meshsonar/ui/map/map_info_panel.dart';
-import 'package:meshsonar/ui/map/map_layers.dart';
 import 'package:meshsonar/ui/map/parts/map_chips.dart';
 import 'package:meshsonar/ui/map/parts/simulated_tag.dart';
 import 'package:meshsonar/ui/theme.dart';
@@ -54,20 +52,6 @@ void main() {
       await pump(tester, GpsHealthView(health: health), b: b);
       expect(find.byType(GpsHealthView), findsOneWidget);
       expect(translucentFills(tester, find.byType(GpsHealthView)), isEmpty, reason: 'GPS banner');
-
-      await pump(
-        tester,
-        HeardBox(
-          heard: [
-            HeardView(id: 'a1b2', label: 'A1B2', snrDb: 5, bestSnrDb: 5, timesHeard: 1, phase: HeardPhase.fresh, pingsAgo: 0, holdLeft: 3, lastPingIndex: 1),
-          ],
-          holdPings: 3,
-          onSelect: (_) {},
-          driving: true,
-        ),
-        b: b,
-      );
-      expect(translucentFills(tester, find.byKey(const Key('heard-box'))), isEmpty, reason: 'Heard box');
 
       await pump(tester, MapInfoPanel(title: 't', summary: 's', busy: false, body: const SizedBox(height: 20), onClose: () {}), b: b);
       expect(translucentFills(tester, find.byType(MapInfoPanel)), isEmpty, reason: 'info panel');

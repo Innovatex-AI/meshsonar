@@ -1101,6 +1101,16 @@ Future<void> settleLive(WidgetTester tester, {Duration limit = const Duration(se
   }
 }
 
+/// Opens the Drive panel to Medium (antenna chip, ping settings chip, Log, location note, setup hint live there since the
+/// old footer layout was deleted in build 70). No-op when it is already open.
+Future<void> openDrivePanel(WidgetTester tester) async {
+  if (find.byKey(const Key('drive-panel-medium')).evaluate().isNotEmpty) return;
+  await tester.tap(find.byKey(const Key('drive-panel-grabber')));
+  for (var i = 0; i < 40; i++) {
+    await tester.pump(const Duration(milliseconds: 25));
+  }
+}
+
 /// Old "Drive" tab.
 Future<void> openDriveTab(WidgetTester tester) => tapShellTab(tester, 'Drive');
 

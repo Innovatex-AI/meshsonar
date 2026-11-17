@@ -74,10 +74,10 @@ void main() {
       await pumpFor(t, const Duration(seconds: 2));
       if (find.text('Start drive').hitTestable().evaluate().isNotEmpty) await t.tap(find.text('Start drive').last);
     }
-    expect(await waitFor(t, find.text('Stop drive')), isTrue);
+    expect(await waitFor(t, find.descendant(of: find.byKey(const Key('start-stop')), matching: find.text('Stop'))), isTrue);
     await pumpFor(t, const Duration(seconds: 12));
     for (var i = 0; i < 4; i++) {
-      await t.tap(find.text('Ping now'));
+      await t.tap(find.byKey(const Key('ping-now')));
       await pumpFor(t, const Duration(seconds: 8));
     }
     final map = find.byKey(const Key('drive-map'));
@@ -101,9 +101,9 @@ void main() {
     await t.tapAt(const Offset(20, 60));
     await pumpFor(t, const Duration(seconds: 1));
 
-    // full screen
-    await t.tap(find.byKey(const Key('map-fullscreen')));
-    expect(await waitFor(t, find.byKey(const Key('fullscreen-close'))), isTrue);
+    // full screen: the panel collapsed to the pill (the old full-screen button went with the footer layout, build 70)
+    await t.fling(find.byKey(const Key('drive-panel-grabber')), const Offset(0, 300), 1500);
+    await pumpFor(t, const Duration(seconds: 1));
     await shot(t, 'm07-fullscreen');
     final fs = find.byKey(const Key('drive-map'));
     await doubleTap(t, fs);

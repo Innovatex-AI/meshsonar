@@ -10,7 +10,6 @@ flowchart LR
     DRIVE[Drive] --- DRIVES[Drives] --- SETTINGS[Settings]
   end
   DRIVE --> CONNECT[Connect a radio]
-  DRIVE --> FULL[Full-screen map]
   DRIVE --> LOG[Ping log]
   DRIVE --> REPORT[Drive report]
   LOG --> PING[Ping detail sheet]
@@ -70,10 +69,10 @@ on Drive; a saved `map` from before the rename still restores Drive). Tapping th
 | Tab | Holds |
 |---|---|
 | Chat | Contacts \| Channels through the `ChatTabHost` seam (see Contacts and direct messages, below). Without a chat store: "Messages arrive here once you connect a radio". Unread badge on the tab icon. |
-| Drive | The coverage map and the drive controls (called Map before the redesign). Start drive is the big button. The tab runs behind the translucent, blurred tab bar (opaque under Reduce Transparency); `ShellController.immersive` hides the bar, the rail and the mini drive bar for the full-screen map. Icon: car. |
+| Drive | The coverage map and the drive controls (called Map before the redesign). Start drive is the big button. The tab runs behind the translucent, blurred tab bar (opaque under Reduce Transparency); `ShellController.immersive` hides the bar, the rail and the mini drive bar while the Drive panel is collapsed to its pill. Icon: car. |
 | Analyze | Segmented Region (the Region hub) \| Drives (drive list, reports, progress). Region hub tabs: Overview, Repeaters, Observers, Packets, Analysis, RF, Growth, Reports, Stats, Live, Silent, Wardrive. **Removed in M0 (Nov 8 2026):** Routes (flood routes: one packet / all floods, and the "Trace the flood route" / "Network flood routes" buttons), Findings (frozen Oct 15) and the Hops tab (the hop chart now appears once, in Analysis > Hops and top repeaters). |
 | Plan | The **Master Planner** (0.38): one full-screen map with a bottom sheet and the modes Link, Coverage, Find sites and Where to drive on one saved Plan (section "Plan tab: the Master Planner", below). **Removed (Nov 15 2026, app #219 and A7):** the separate Point-to-point link and Coverage painter screens (folded into the Planner), and the Airtime and load, Radio presets and Coverage check screens (earlier removed in M0 (Nov 8 2026): Planner, Recommended build, Site explorer, Scenarios, Build tracker, Field data, Airtime live channel load). |
-| More | Groups: Your radio (Radio, Claimed radios, Devices and keys), Radios and tools, Community (Leaderboard, Set up a repeater observer), Radios and tools also lists Observer (opens Settings > Observer), App (Chat, Wardriving, Notifications, Settings, Colour legend, How it works, Method), Help and about (Privacy, Report a problem, My reports, About MeshSonar, Privacy policy). The Developer section (New Drive screen switch) is hidden until a long-press on About MeshSonar (the version row) and hides again on a second long-press or a restart. Opens inside the tab (own Navigator), so the bars stay. The full More + Settings merge is phase X. |
+| More | Groups: Your radio (Radio, Claimed radios, Devices and keys), Radios and tools, Community (Leaderboard, Set up a repeater observer), Radios and tools also lists Observer (opens Settings > Observer), App (Chat, Wardriving, Notifications, Settings, Colour legend, How it works, Method), Help and about (Privacy, Report a problem, My reports, About MeshSonar, Privacy policy). The Developer section and its New Drive screen switch are gone (build 70): the panel layout is the only Drive screen, and a saved `driveRedesign:false` in `redesign_flags.json` is ignored. Opens inside the tab (own Navigator), so the bars stay. The full More + Settings merge is phase X. |
 
 Old tab names: Drive = Map (renamed in the Drive redesign); Region and Drives = Analyze; Radio and Settings = More. `HomeShell(legacyTab: n)` maps the old
 indexes 0..4 (`LegacyTab.fromIndex`).
@@ -174,6 +173,36 @@ Files: core `lib/core/meshtrack/` (API.md there), wiring `lib/app/meshtrack_wiri
 - **Ask for location** (contact screen of a person, MT-13; `ask_location_card.dart`, keys `ask-location*`). Asks one person's radio where it is with MeshCore's own telemetry request, so it works with people on any MeshCore app, no group needed. Footer: "Asks Sam's radio where it is. It answers only if they allow it." While asking: "Asking Sam Lee…" with a spinner and **Cancel**. A position: "2.4 km NE of you" (`Units`), "Answered just now", **Open on map** (Drive tab, Friends layer on, the person's pin marked **Asked**; with MeshTrack off in the build a one-off target instead) and Ask again. No position: "Sam Lee did not share a location. They can allow it in their MeshCore app's telemetry settings." No answer in 30 s (45 s when the radio has no route): "No answer from Sam Lee." + "They may be out of range, or their radio may not answer location requests." + **Try again**. Not on the radio, radio busy or no radio are said plainly (no radio: the row is dimmed, "Connect your radio to ask."). Once per 30 s per person ("Ask again in 25 s"); asking a second person right after the first (or after Stats) just goes a few seconds later. The position stays in memory only and is never uploaded or logged: after 2 h the pin and the answer (with Open on map) are gone, and Delete my data forgets it on the map, on the contact screen and in the Telemetry tool / Stats answers. Repeaters and rooms do not get it. Firmware reading, not yet verified on hardware: `docs/protocol/telemetry-location-request.md`. Simulator: Bob answers with a position, Cara without one, Ann never answers.
 - **Radio switch and reinstall.** Group names and keys live in the Keychain, so a second radio or a reinstall gets every group back on connect without asking; a radio without room shows the group as Not on this radio until room is made.
 - **Delete my data** clears last-known positions (`meshtrack_last.json`, 24 h), every meet-up point and the group list (the channels stay as chat channels).
+
+## Battery (Settings > Battery, build 70)
+
+Files: profile `lib/core/power_profile.dart` (`PowerSettings`, `PowerProfile`, `PowerCounters`), UI `lib/ui/settings/battery_section.dart`, counters card in `lib/ui/settings/diagnostics_section.dart`, report line `lib/core/drive_report_battery.dart`. Plan: meshsonar-infra `docs/planning/battery-efficiency-plan-2026-11-16.md` §3. Phone-only: the website has no counterpart beyond a Battery paragraph in its help/FAQ.
+
+- **Where.** Settings > Battery, after MeshTrack (search: battery, power, screen on, GPS, compass, low power, ...). One app-wide profile saved in `power_profile.json`; every change saves at once.
+- **What's running now** (`battery-running`, top row) opens a live list in plain words, rebuilt on every profile or app change: Drive (Running / Not running, "uploads at the end" when Drive data upload is off), GPS (precision and the parked pause while driving, else "Idle: no drive running"), Screen kept on, Compass, Map drawing (frames per second cap), Radio checks (app open / locked rates, "Off: no radio connected"), Observer uploads (locked interval and the queue), MQTT feeds (n open: connected or connecting), MeshTrack sharing (group names, only in builds with MeshTrack). The header says the mode in force and when Low Power Mode is overriding. A line with a setting opens that setting's choices.
+- **Battery mode** (`battery-mode`): Max data / **Balanced** (default) / Saver, as radio rows. Picking one sets every knob to its preset. Changing any knob shows **Custom** ("You changed a setting below. Pick a mode above to set them all again."). The "Now: ..." line names the current mode.
+- **Use Saver when iPhone Low Power Mode is on** (`battery-low-power`, default on). While Low Power Mode is on and this is on, the components obey Saver and the mode row says "iPhone Low Power Mode is on, so MeshSonar is using Saver. Balanced comes back when Low Power Mode is off." This switch does not make the mode Custom.
+- **Knobs** (each row shows its value; tap opens a sheet of choices; a change makes the mode Custom):
+
+| Knob | Key | Max data | Balanced | Saver | Choices |
+|---|---|---|---|---|---|
+| Keep screen on during a drive | `battery-screen-on` | Always | Drive tab only | Never | Always / Drive tab only / Never |
+| Map smoothness | `battery-map-fps` | 120 Hz | 60 Hz | 30 Hz | 120 / 60 / 30 Hz |
+| Drive GPS precision | `battery-gps` | Best | High | Standard | Best / High / Standard (less precise drive track) |
+| Pause GPS when parked | `battery-gps-pause` | Never | 3 min | 1 min | Never / 1 / 3 / 5 min |
+| End a drive left open: Parked | `battery-end-drive-parked` | Never | 30 min | 15 min | Never / 15 / 30 / 60 min |
+| End a drive left open: No radio | `battery-end-drive-no-radio` | Never | 15 min | 5 min | Never / 5 / 15 / 30 min |
+| Compass on the map | `battery-compass` | Always | Auto | Off | Always / Auto (Drive tab, slow or stopped) / Off (GPS course) |
+| Check radio for messages: App open | `battery-radio-checks-app-open` | 5 s | 30 s | 2 min | 5 s / 30 s / 2 min |
+| Check radio for messages: Phone locked | `battery-radio-checks-phone-locked` | 5 s | 2 min | Radio alert only | 5 s / 2 min / Radio alert only |
+| Observer uploads when locked | `battery-observer-uploads` | 60 s | 5 min | 15 min | 60 s / 5 / 15 min |
+| Drive data upload: Upload during a drive | `battery-drive-upload` | on | on | off | switch; works with Drives & uploads > Upload during the drive (both must be on) |
+| Radio and phone stats | `battery-stats` | 60 s | 60 s | 5 min | 60 s / 5 min |
+| Simple basemap while driving | `battery-simple-basemap` | off | off | on | switch |
+
+- **Rules.** The observer is never switched off by a mode, only how often it uploads; the radio's own message alert stays instant in every mode; a drive ended by "End a drive left open" is saved, never deleted.
+- **Diagnostics > Power counters** (`diagnostics-power-counters`, information row with Refresh): since the app started, GPS minutes by accuracy, screen-on, compass, map frames, radio commands, radio message checks, internet requests and timer wake-ups, each with a per-hour rate (no rate under one minute). Stays on the phone.
+- **Drive report battery line** (`report-battery-line`, under the hero): "Battery: 82% → 61% (−21% in 1 h 40 min, −12.6%/h), mode Balanced" from the Phone battery samples (first to last); no per-hour rate under 10 minutes; hidden with fewer than 2 samples (category off or a very short drive). The mode is the one in force at drive start (Saver while Low Power Mode overrode), recorded locally in `sessions/<id>/power_mode.txt` (never uploaded or exported; drives before build 70 have no mode). The same line is in the text and PDF exports when it has loaded.
 
 ## Chat (Chat tab, unreleased)
 
@@ -376,31 +405,25 @@ and ≥ 640 px) the map sits on the left and the controls on the right.
   connect shows in the Dock ("Connecting…" / "Reconnecting…" with Cancel) and never changes the detent; the map is usable with no radio.
   Only the person's own drag or tap, or the driving auto-collapse (Medium to Dock), moves the panel. Test:
   `test/ui/drive/panel_connect_dock_test.dart`.
-- **Live coverage map** (see [Map](#coverage-map)), with these overlays:
-  - **Heard box** (top left, see below), shown once a ping exists and while driving or something has been heard.
-  - **Full-screen** (`map-fullscreen`) and **Layers** (`drive-map-layers`) buttons (top right).
-  - **Map hint** (`map-hint`) while there are no pings: what to do next.
-  - **Ping result flash** (`ping-flash`) for ~4 s after each ping: "Heard by <name or N> · +x.x dB" or "No repeaters
-    heard", coloured by result.
-  - **View drive report** card (`drive-report-card`) after Stop, until dismissed or a new drive starts.
-- **Status row** (`status-line`): the engine's message ("Joining #wardriving", "Pinging", "Listening for repeaters",
-  "Heard 2 repeaters", "Heard nothing", "Move 40 m more to ping", "No GPS fix: waiting to ping", "Radio disconnected",
-  …), with a spinner, error icon or live dot.
-- **Next-ping indicator:** a countdown ring "Next ping N" (time), "Move N m" (distance), "Keep moving", or "Waiting
-  for GPS".
-- **Stats strip:** Pings · *N heard* with heard % · Last SNR dB ("none" if the last ping heard nothing) · Synced. These
-  are the current drive's numbers, or the last drive's after Stop.
-- **Live stats strip, while actually driving only** (hidden before Start and after Stop — the drive report covers the
-  final figures once it's over): Distance and Elapsed for this session (`DriveMapModel`/`AppState.drivePings`, same
-  haversine math as `DriveStats`/`DriveReport`) · a running **new vs. repeat grid-cell tally** — *N repeat* / *N new*
-  — the live counterpart of the drive report's "new grids" figure (`DriveLiveStats`, same `cellIndexOf` cell identity
-  and earlier-local-drives history rule as `drive_report.dart`, kept incrementally instead of recomputed once at the
-  end) · **GPS accuracy** of the current fix ("±N m", colour-coded good/fair/poor; "No fix" while waiting for one).
+- **One layout (build 70, item 70-2).** The map is full bleed and never resized: the panel slides over it between Dock, Medium
+  (pulled further it rubber-bands, "Full", and rests on Medium) and the collapsed pill, by drag or fling. The old footer layout
+  (map in a box, the full-screen button `map-fullscreen`, the heard box, the "No pings yet" map hint, the ping result flash, the
+  report card and the footer stat strips) was deleted with its More > Developer switch. The panel's own "No pings yet" row and
+  the mini bar text stay. Test: `test/ui/drive/panel_detents_test.dart`, `test/ui/drive/drive_panel_test.dart`.
+- **Battery (build 70, battery plan A1/A3/A5/A11/A14).** The screen stays awake per the battery mode's Screen on knob (`PowerProfile.current.screenOn`): always while
+  driving (Max data), only while the Drive tab is in front (Balanced), or never (Saver). The drive UI 1 s clocks (Dock hero,
+  Ping circle, mini bar, auto-collapse) run only while a drive runs, the widget is visible and the app is in front; hidden tabs
+  get a disabled TickerMode. The puck/camera loop is capped to the profile's fps (30 fps while only the heading turns, and it
+  sleeps when parked with under 2° of heading change). Map health is recorded only while Diagnostics > Map and GPS health
+  overlay is on. Zoom by speed aims at three zoom bands. Simple basemap (Saver) draws coverage on the plain chart grid while
+  driving. Test: `test/ui/drive/battery_ui_test.dart`.
+- **Live coverage map** (see [Map](#coverage-map)) with the region chip and up to two state chips top left, the status capsule
+  top right and the Layers button (`drive-map-layers`).
 - **Unsaved banner** while pings are waiting to be written to the device.
 - **Antenna chip** (`antenna-chip`): the connected radio's antenna, e.g. "Roof mag-mount · 5.8 dBi · 1.8 m". Tap it
   to change it before a drive. While driving it's **locked** and shows what the drive records ("External · 5.8 dBi ·
-  1.8 m"). A radio that hasn't been set up shows "Set up this radio's antenna" instead (`antenna-setup`, also on the
-  full-screen map), and Start drive is disabled until it is.
+  1.8 m"). A radio that hasn't been set up shows "Set up this radio's antenna" instead (`antenna-setup`), and Start drive
+  is disabled until it is.
 - **Antenna setup, once per radio** (`antenna-sheet`): when a radio without a saved antenna connects, "How is this
   radio's antenna set up?" opens: mount (`mount-handheld`, `mount-insideCar`, `mount-roofMagMount`,
   `mount-fixedMast`), gain −10 to 20 dBi or "Don't know" (`antenna-gain-unknown`), height 0 to 300 m. Saved per
@@ -492,26 +515,6 @@ and ≥ 640 px) the map sits on the left and the controls on the right.
 The filter keeps a parked phone from "driving around" and triggering distance pings. The map, the engine and the
 ping positions all share one filter instance.
 
-## Heard box
-
-(`ui/drive/heard_box.dart`, `core/heard.dart`, setting *Heard list hold*)
-
-- One row per repeater heard on this drive, keyed by the hex id as heard (`path[0]`).
-- **Hold:** a repeater stays **live** while it was heard within the last `heardHoldPings` tx pings (1–10 on the
-  slider, default 3). With hold 3, a repeater heard on ping *n* is still live on pings *n+1* and *n+2*, and goes
-  **stale** on *n+3*. Every tx ping counts, including ones that heard nothing.
-- Phases: **fresh** (heard on the latest ping: full colour, `×times heard`), **holding** (missed the latest ping:
-  dimmed, "missed N", pips for the pings left), **stale** (greyed, folded into "+N earlier"; tap to expand up to 8).
-- Rows are sorted live first, most recently heard first, then by last SNR.
-- Each row shows the name (CMAT first, then map.meshcore.io; ambiguous prefix → "ABC (2 possible)"; unknown → hex), the
-  live distance from the current position when the repeater's position is known, and the last SNR.
-- Up to `maxRows` live rows fit (it depends on map height, max 5; 7 in full-screen portrait), then "+N more in range".
-- Tap the header to collapse it to one line. Tap a row to select the repeater on the map; the map frames the repeater
-  together with your position.
-- The tracker resets at each Start. It is never cleared during a drive.
-- Changing *Heard list hold* in Settings applies at once, even mid-drive: the live/stale rule and the pips both use the
-  new value straight away (a shorter hold can grey out repeaters immediately; a longer one can bring them back).
-
 ## Coverage map
 
 (`ui/map/coverage_map.dart`; used on the Drive screen, in full-screen, in drive detail; the report has its own cell map)
@@ -566,7 +569,7 @@ simulator's repeaters in Simulator mode), **ping dots**, and the current **posit
   "753 cells measured"), "Loading…", "Couldn't load. Check the connection and retry." with **Retry**, "… · Offline - as
   of 2h ago" for a stored copy (with Retry), or a reason with the switch disabled: "Not available on this server yet"
   (the server answers 404), "No repeaters reported yet", "Pick a region to see its observers". A layer that is on can
-  always be switched off. The choices are shared between the Drive and full-screen maps but not saved (except Repeater names). Network coverage
+  always be switched off. The choices are not saved (except Repeater names). Network coverage
   fetches once at startup (and again if the server URL changes); a fetch failure keeps showing whatever was already
   drawn rather than clearing it.
 - **All MeshCore repeaters** (`network`, on by default): every repeater and room server with a public position, from
@@ -620,17 +623,12 @@ Circles where this driver's pings are hidden from every public view, for drives 
 - **Layout.** Phone: map on top (36% of the height, 200-380 px), list and editor scroll below; iPad and landscape (>= 720 dp wide): map left, panel right. Text up to 2.5x scrolls; the map banner and the neighbour names cap their own text at 1.3x so they never swallow the map, and are read in full by VoiceOver. All buttons and the pins are at least 48 px. VoiceOver: the map has a spoken summary ("N zones"), every zone is a labelled selected/unselected button ("Home, radius 400 m"), the sliders speak their value and step, and the zone list does everything the map does.
 - **Tests.** `test/core/privacy_zones_test.dart` (rounding, wrap, limits, select-not-add hit test), `test/app/privacy_zones_controller_test.dart` (queue, lazy key, offline, unsupported, refusals, in-flight edits), `test/core/privacy_zones_contract_test.dart` (the app's normalisation and client against the website's real `zones.ts` and `zone-handlers.ts` through bun; skips without bun or the checkout), `test/ui/privacy_zones_screen_test.dart` (the screen on iPhone / iPad, 2.5x text, dark, 48 px, VoiceOver, offline, no key, unsupported).
 
-## Drive tab quick tools (unreleased)
+## Map filter
 
-Under the layers button (Drive map and full-screen map): **base map** cycler (Chart, Street, Dark, plus Topo and Satellite when the Map Definition offers them; saved; offline packs drawn for Chart, Street and Dark; Topo and Satellite need a connection and say so offline), **filter** drawer (result, age, repeater, my pings only; badge shows how many are on), **trophy** (region leaderboard + your totals from this phone) and the **coverage pill** (share of cells and of your tx pings heard inside the view). Coverage options > Colour by adds **Ping age** (indigo ramp) and **Noise vs typical** (teal to rust); grey = mapped nothing heard, purple = heard signal unknown, green/blue/amber/red only for signal. Settings > Wardriving > Ping feedback: haptic tap (on) and sound (off), different for heard and heard nothing.
-
-## Full-screen map
-
-(Since Drive WP2 this is the Drive map itself, expanded: `map-fullscreen` / `fullscreen-close` toggle `DriveMapModel.expanded`; there is no second map or route. Before that, `ui/map/fullscreen_map.dart`.) The whole screen is map. It shows the heard box (top left), exit
-(`fullscreen-close`) and layers buttons (top right), the ping flash, and a bottom panel with the status row plus
-compact **Stop / Ping now** buttons (bottom-right half in landscape). **Two-finger rotate** is enabled, and a compass
-returns to north-up. It respects safe areas. It shares the `DriveMapModel` with the Drive screen, so the selection,
-layers and GPS stream are shared.
+The **filter** drawer (result, age, repeater, my pings only) opens from the Map layers sheet ("Filter pings and cells",
+`layers-filter`). The base map is chosen in the same sheet. (The Drive footer's tool column with the base-map cycler and the
+leaderboard trophy went with the old layout in build 70; Leaderboard is in More.) Settings > Wardriving > Ping feedback: haptic
+tap (on) and sound (off), different for heard and heard nothing.
 
 ## Map legend and colour palettes
 
@@ -642,9 +640,9 @@ current Colour by mode with their dB / % / dBm ranges, "mapped, nothing heard" g
 the faded look of a cell with fewer than 3 pings; chips switch the mode inside the sheet only), **Repeaters** (amber tower
 for repeaters this drive heard; advert age 24 h / 7 d / 30 d / older; room-server ring), **Link lines** (orange and solid in
 the standard palette, dashed and achromatic in the other two; the label is the best SNR), **Observers** (filled = online,
-hollow grey = offline), **The heard box** (bright / dimmer / faint bars), **Owned by you** (the real chip), and **Why**
+hollow grey = offline), **Owned by you** (the real chip), and **Why**
 (what a hexagon is, why a cell can be grey, what SNR means, why colours fade; expandable). Opened from the info icon in
-the Map layers sheet header (`layers-legend`, so from the Drive map and the full-screen map) and from Settings > About >
+the Map layers sheet header (`layers-legend`) and from Settings > About >
 **Map legend** (`map-legend`). Rows are one spoken item each (VoiceOver says what the colour means), at least 48 px tall,
 and wrap at the largest Dynamic Type.
 
@@ -712,7 +710,7 @@ Release and TestFlight builds do not contain the Simulator (`lib/app/build_flags
   logistic decode curve. Repeaters that heard a first-hop repeater produce 2-hop echoes. Reported SNR saturates at
   about +11.5 dB like real LoRa. 30% of pings also produce background Public traffic that must not count as an echo.
 - **Labelled everywhere:** the connection chip and the map show *SIMULATED GPS & RADIO*. The simulator's repeaters are
-  drawn on the map and named in the heard box.
+  drawn on the map.
 
 ## Ping log
 

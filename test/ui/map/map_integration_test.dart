@@ -215,7 +215,7 @@ void main() {
       expect(statusText(t, 'network'), startsWith('3 repeaters in and around Columbus, US'));
     });
 
-    testWidgets('ready: switched on, limited to the phone\'s region + margin, legend + credit; the fullscreen map shares it', (t) async {
+    testWidgets('ready: switched on, limited to the phone\'s region + margin, legend + credit', (t) async {
       useHugeScreen(t);
       final srv = FakeMapServer();
       final h = make(srv);
@@ -245,12 +245,7 @@ void main() {
       await t.tapAt(const Offset(200, 40));
       await t.pump();
       await t.pump(const Duration(milliseconds: 400));
-
-      await t.tap(find.byKey(const Key('map-fullscreen')));
-      await t.pump();
-      await t.pump();
-      await t.pump(const Duration(milliseconds: 400));
-      expect(find.byKey(RepeaterPainterLayer.paintKey, skipOffstage: false), findsOneWidget, reason: 'one map instance: expanding does not mount a second');
+      expect(find.byKey(RepeaterPainterLayer.paintKey, skipOffstage: false), findsOneWidget, reason: 'one map instance');
     });
 
     testWidgets('stale: the stored list stays on, the sheet says it is an offline copy with Retry', (t) async {

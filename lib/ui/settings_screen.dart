@@ -11,6 +11,7 @@ import 'design/app_surfaces.dart';
 import 'app.dart';
 import 'settings/about_section.dart';
 import 'settings/account_section.dart';
+import 'settings/battery_section.dart';
 import 'settings/diagnostics_section.dart';
 import 'settings/display_section.dart';
 import 'settings/drives_section.dart';
@@ -45,6 +46,7 @@ List<Widget> settingsSectionRows(BuildContext context, String id) => switch (id)
       'observer' => observerSectionRows(context),
       'notifications' => notificationsSectionRows(context),
       'meshtrack' => meshTrackSectionRows(context),
+      'battery' => batterySectionRows(context),
       'wardriving' => wardrivingSectionRows(context),
       'radio' => radioSectionRows(context),
       'my-radios-section' => myRadiosSectionRows(context),
@@ -63,6 +65,7 @@ String? settingsSectionHelp(String id) => switch (id) {
       'observer' => observerHelp,
       'notifications' => notificationsHelp,
       'meshtrack' => meshTrackHelp,
+      'battery' => batteryHelp,
       'wardriving' => wardrivingHelp,
       'radio' => radioHelp,
       'my-radios-section' => myRadiosHelp,

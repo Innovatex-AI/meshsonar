@@ -5,6 +5,8 @@
 //   header   = grabber row (16) + dock row (72): drag it up/down, tap it to toggle Dock <-> Medium. Buttons inside the dock row are
 //              deeper in the tree, so they win the tap; the rest of the header is the handle (>= 44 pt high everywhere).
 //   medium   = scrolling content below the header. It scrolls only at Medium and hands the drag to the panel at offset 0.
+import 'dart:math' as math;
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
@@ -118,6 +120,10 @@ class _Surface extends StatelessWidget {
   }
 }
 
+/// The dock row height the content is laid out for: the AX row at text scale >= 2 (as DriveDock.isAx), else the geometry's.
+double _rowFor(BuildContext context, PanelGeometry g) =>
+    MediaQuery.textScalerOf(context).scale(16) / 16 >= 2.0 ? math.max(g.dockRow, kPanelDockRowAx) : g.dockRow;
+
 class _Header extends StatelessWidget {
   final DrivePanelController controller;
   final Widget dock;
@@ -170,7 +176,12 @@ class _Header extends StatelessWidget {
                   ),
                 ),
               ),
-              SizedBox(height: g.dockRow, child: dock),
+              // The row height follows the text size one frame after it changes (the geometry is set after layout): clip that
+              // one frame instead of overflowing. When the two agree the dock fits and nothing is clipped.
+              SizedBox(
+                height: g.dockRow,
+                child: ClipRect(child: OverflowBox(alignment: Alignment.topCenter, minHeight: _rowFor(context, g), maxHeight: _rowFor(context, g), child: dock)),
+              ),
             ],
           ),
         ),

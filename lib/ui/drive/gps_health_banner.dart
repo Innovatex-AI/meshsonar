@@ -97,14 +97,3 @@ class GpsHealthView extends StatelessWidget {
     );
   }
 }
-
-/// The GPS health banner for the top slot of a map (MapOverlayHost places the slots under it from its size, so no height
-/// is measured or shared).
-class GpsBannerSlot extends StatelessWidget {
-  final AppState state;
-  final bool compact;
-  const GpsBannerSlot({super.key, required this.state, this.compact = false});
-
-  @override
-  Widget build(BuildContext context) => GpsHealthBanner(state: state, showWhenGood: false, compact: compact);
-}

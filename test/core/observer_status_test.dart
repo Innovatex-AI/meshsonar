@@ -90,10 +90,10 @@ void main() {
       heartbeatEvery: const Duration(milliseconds: 20),
     );
     s.startHeartbeat();
-    await Future<void>.delayed(const Duration(milliseconds: 75));
+    await Future<void>.delayed(const Duration(milliseconds: 90)); // re-armed every 1.2 periods (battery plan A6)
     s.stopHeartbeat();
     final hb = tx.calls.where((c) => c.startsWith('HB ')).toList();
-    expect(hb.length, greaterThanOrEqualTo(3), reason: 'once at start, then every period');
+    expect(hb.length, greaterThanOrEqualTo(3), reason: 'once at start, then by the timer');
     expect(jsonDecode(hb.first.split(' ').sublist(2).join(' ')), {'id': _id, 'mode': 'drive', 'radio': {'model': 'Heltec V3', 'sf': 7}});
   });
 

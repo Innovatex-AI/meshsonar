@@ -53,7 +53,6 @@ void main() {
     h.engines.single.emit(silentPing('p2'));
     await settle(tester);
     expect(fb.pings, [true, false]);
-    expect(find.byKey(const Key('ping-flash')), findsOneWidget);
 
     await h.state.stopDrive();
     await settle(tester);
@@ -71,6 +70,7 @@ void main() {
     await settle(tester);
     h.engines.single.emit(silentPing('bad'));
     await settle(tester);
+    await openDrivePanel(tester); // the Last SNR number is in the Medium panel
 
     final c = MeshSonarColors.of(tester.element(find.byKey(const Key('drive-map'))));
     Color dot(String id) =>
@@ -81,39 +81,37 @@ void main() {
 
     h.engines.single.emit(heardPing('ok', const [Echo(repeater: 'a1', snrDb: 4.25)]));
     await settle(tester);
-    expect(tester.widget<Text>(find.byKey(const Key('stat-snr'))).data, '+4.3');
+    expect(tester.widget<Text>(find.byKey(const Key('stat-snr'))).data, '+4.3 dB');
     await h.state.stopDrive();
     await drain(tester);
   });
 
-  testWidgets('shows the next auto-ping countdown while driving', (tester) async {
+  testWidgets('shows the next auto-ping countdown on the Ping button while driving', (tester) async {
     useTallScreen(tester);
     final h = Harness();
     await h.pumpApp(tester);
     await h.state.connect(h.bt.devices.first, RadioKind.bluetooth);
     await h.state.startDrive();
     await settle(tester);
-    expect(find.byKey(const Key('next-ping-countdown')), findsNothing);
 
     // Harness clock is fixed at 18:00:00; next ping due 23 s later.
     h.engines.single.setStatus(EngineStatus(EngineState.driving, nextPingAt: DateTime.utc(2026, 10, 16, 18, 0, 23)));
     await settle(tester);
-    expect(find.byKey(const Key('next-ping-countdown')), findsOneWidget);
     expect(tester.widget<Text>(find.byKey(const Key('next-ping-seconds'))).data, '23');
-    expect(find.text('Driving. Next ping in 23s.'), findsOneWidget);
 
-    // While listening the countdown hides.
+    // While listening the countdown hides (no number on the button).
+    String secs() => find.byKey(const Key('next-ping-seconds')).evaluate().isEmpty ? '' : tester.widget<Text>(find.byKey(const Key('next-ping-seconds'))).data ?? '';
     h.engines.single.setStatus(const EngineStatus(EngineState.pinging));
     await settle(tester);
-    expect(find.byKey(const Key('next-ping-countdown')), findsNothing);
+    expect(secs(), '');
 
     await h.state.stopDrive();
     await settle(tester);
-    expect(find.byKey(const Key('next-ping-countdown')), findsNothing);
+    expect(secs(), '');
     await drain(tester);
   });
 
-  testWidgets('discovery mode: Ping now is hidden (not just disabled) and the map hint says Listening',
+  testWidgets('discovery mode: Ping now is hidden (not just disabled) and the dock says Listening',
       (tester) async {
     useTallScreen(tester);
     final h = Harness()..settings.saved = const Settings().copyWith(discoveryMode: true);
@@ -125,15 +123,14 @@ void main() {
     expect(h.engines.single.config!.listenOnly, isTrue);
     expect(find.byKey(const Key('ping-now')), findsNothing);
     expect(find.byKey(const Key('start-stop')), findsOneWidget);
-    expect(find.text('Listening'), findsOneWidget);
-    expect(find.textContaining('Nothing is transmitted'), findsOneWidget);
+    expect(find.byKey(const Key('dock-hero-listening')), findsOneWidget);
 
     await h.state.stopDrive();
     await settle(tester);
     await drain(tester);
   });
 
-  testWidgets('a normal (non-discovery) drive still shows Ping now and ping-oriented hints', (tester) async {
+  testWidgets('a normal (non-discovery) drive still shows Ping now', (tester) async {
     useTallScreen(tester);
     final h = Harness();
     await h.pumpApp(tester);
@@ -143,24 +140,10 @@ void main() {
 
     expect(h.engines.single.config!.listenOnly, isFalse);
     expect(find.byKey(const Key('ping-now')), findsOneWidget);
-    expect(find.text('Waiting for the first ping'), findsOneWidget);
 
     await h.state.stopDrive();
     await settle(tester);
     await drain(tester);
-  });
-
-  testWidgets('empty state: hint over the map tells you what to do', (tester) async {
-    useTallScreen(tester);
-    final h = Harness();
-    await h.pumpApp(tester);
-    expect(find.byKey(const Key('drive-map')), findsOneWidget);
-    expect(find.byKey(const Key('map-hint')), findsOneWidget);
-    expect(find.textContaining('Tap Connect radio'), findsOneWidget);
-    expect(find.textContaining('Simulator'), findsNothing, reason: 'the hint never mentions a simulator');
-    // Start/Stop sits below the map (thumb reach).
-    final mapBottom = tester.getBottomLeft(find.byKey(const Key('drive-map'))).dy;
-    expect(tester.getTopLeft(find.byKey(const Key('start-stop'))).dy, greaterThan(mapBottom));
   });
 
   test('signal bars from RSSI', () {

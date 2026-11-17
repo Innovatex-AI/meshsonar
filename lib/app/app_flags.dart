@@ -1,8 +1,7 @@
-// Feature flags. The Chat redesign flag is gone (plan D23, removed in Chat WP15: the new Chat UI is unconditional). What is left:
-// the Drive redesign switch (default ON; More > Developer falls back to the old footer layout as an escape hatch, removed with
-// the Drive plan) and the set-path write gate. Persisted next to the other UI prefs in a small JSON file (an old 'chatRedesign'
-// key in that file is ignored).
-import 'dart:convert';
+// Feature flags: the set-path write gate and MeshTrack. The Chat redesign flag is gone (plan D23, removed in Chat WP15) and so is
+// the Drive redesign switch (build 70, item 70-2): the map with the bottom panel is the only Drive screen, the old footer layout
+// and its More > Developer switch were deleted. Older builds saved those switches in `redesign_flags.json`; [AppFlags.load]
+// still accepts that file and ignores every key in it (a saved `driveRedesign:false` or `chatRedesign` changes nothing).
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -12,12 +11,6 @@ abstract final class AppFlags {
   /// outbox rewrite of a path the radio forgot in Keep this route. Hidden until Andy's real-radio test passes (spikes S3/S13,
   /// HANDOFF checklist). Everything else about routes (display, mode, discovery, trace, ping, reset) is live.
   static const bool routeWriteVerified = false;
-
-  /// The new Drive screen (map plus bottom panel, Drive plan WP3). ON by default (Andy, Nov 2): More > Developer keeps a switch
-  /// that falls back to the old footer layout as an escape hatch.
-  static final ValueNotifier<bool> driveRedesignNotifier = ValueNotifier<bool>(true);
-  static bool get driveRedesign => driveRedesignNotifier.value;
-  static set driveRedesign(bool v) => driveRedesignNotifier.value = v;
 
   /// MeshTrack (friends on the map over a private channel; meshsonar-infra docs/planning/meshtrack-plan-2026-11-16.md section
   /// 11). ON in build 67 TestFlight; a build made with `--dart-define=MESHSONAR_MESHTRACK=false` hides the chip, the Friends
@@ -31,27 +24,7 @@ abstract final class AppFlags {
   /// What AppState reads: [debugMeshTrack] in tests, else [meshTrack].
   static bool get meshTrackOn => debugMeshTrack ?? meshTrack;
 
-
-  /// Reads the saved choice. A missing or damaged file leaves the default (on).
-  static Future<void> load(File? file) async {
-    if (file == null) return;
-    try {
-      final j = jsonDecode(await file.readAsString());
-      if (j is Map && j['driveRedesign'] is bool) driveRedesign = j['driveRedesign'] as bool;
-    } catch (_) {}
-  }
-
-  /// Sets the Drive flag and saves it (best effort: a failed write only costs the choice on the next launch).
-  static Future<void> setDriveRedesign(bool v, {File? file}) async {
-    driveRedesign = v;
-    await _save(file);
-  }
-
-  static Future<void> _save(File? file) async {
-    if (file == null) return;
-    try {
-      await file.parent.create(recursive: true);
-      await file.writeAsString(jsonEncode({'driveRedesign': driveRedesign}), flush: true);
-    } catch (_) {}
-  }
+  /// Reads `redesign_flags.json` from older builds. Nothing in it is a live flag any more, so every key is ignored (a missing or
+  /// damaged file is fine too); kept so the startup call stays harmless.
+  static Future<void> load(File? file) async {}
 }

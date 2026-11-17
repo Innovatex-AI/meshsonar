@@ -3,7 +3,7 @@
 // same functions the maps draw with (MeshSonarColors.forPing / levelColor, networkLevelColor, linkLine), so a swatch
 // can never disagree with the map, and it follows the chosen colour palette and light/dark.
 //
-// Keys: 'legend-sheet', 'legend-section-<id>' (pings, cells, repeaters, links, observers, heard, owned, why),
+// Keys: 'legend-sheet', 'legend-section-<id>' (pings, cells, repeaters, links, observers, owned, why),
 // 'legend-swatch-<id>' on every swatch (a [LegendSwatch] whose `color` is the map colour).
 //
 // Coverage v2 (server capability coverageV2): the coverage section is built from `/api/coverage/meta` (band labels and dB
@@ -15,7 +15,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import '../../app/app_flags.dart';
 import '../../core/colour_palette.dart';
 import '../../core/coverage_v2.dart';
 import '../../core/network_coverage.dart';
@@ -173,8 +172,6 @@ class _MapLegendSheetState extends State<MapLegendSheet> {
             _section(context, 'repeaters', Icons.cell_tower_rounded, 'Repeaters', _repeaters(context, mc)),
             _section(context, 'links', Icons.timeline_rounded, 'Link lines', _links(context, mc)),
             _section(context, 'observers', Icons.change_history_rounded, 'Observers', _observers(context, mc)),
-            // The heard box exists only on the old Drive layout (Developer > New Drive screen off); the redesigned screen has none.
-            if (!AppFlags.driveRedesign) _section(context, 'heard', Icons.list_alt_rounded, 'The heard box', _heard(context, mc)),
             _section(context, 'owned', Icons.verified_outlined, 'Owned by you', _owned(context)),
             _section(context, 'why', Icons.help_outline_rounded, 'Why', _why(context)),
           ],
@@ -483,31 +480,6 @@ class _MapLegendSheetState extends State<MapLegendSheet> {
         title: 'Circle with a phone: MeshSonar phone on the move',
         detail: 'A phone listening as an observer right now, shown at the middle of its ~5 km area (never its exact place). '
             'It fades out over 10 minutes after it was last heard from.',
-      ),
-    ];
-  }
-
-  List<Widget> _heard(BuildContext context, MeshSonarColors mc) {
-    final t = Theme.of(context);
-    return [
-      _note(context, 'The box on the full-screen map lists repeaters that answered your last pings, strongest signal first.'),
-      LegendRow(
-        id: 'heard-fresh',
-        swatch: LegendSwatch(color: mc.forPing(heard: true, snr: 5), shape: SwatchShape.bar),
-        title: 'Bright bar: heard recently',
-        detail: 'The bar uses the signal scale, and the number beside it is the SNR in dB.',
-      ),
-      LegendRow(
-        id: 'heard-missed',
-        swatch: LegendSwatch(color: Color.lerp(mc.forPing(heard: true, snr: 5), t.colorScheme.outline, 0.55)!, shape: SwatchShape.bar),
-        title: 'Dimmer bar: missed a ping or two',
-        detail: 'Still in range, just not on the last ping.',
-      ),
-      LegendRow(
-        id: 'heard-stale',
-        swatch: LegendSwatch(color: t.colorScheme.outline.withValues(alpha: 0.5), shape: SwatchShape.bar),
-        title: 'Faint grey bar: not heard for a while',
-        detail: 'Kept so a drive never loses a row.',
       ),
     ];
   }

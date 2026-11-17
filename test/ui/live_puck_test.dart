@@ -194,7 +194,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     await tester.tap(find.byKey(const Key('stop-drive-confirm')));
     await settle(tester);
-    expect(find.text('Start drive'), findsOneWidget);
+    expect(h.state.driving, isFalse);
     expect(puck().pose, isNull, reason: 'forgotten with the drive');
     await drain(tester);
   });

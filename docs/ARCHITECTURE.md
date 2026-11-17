@@ -171,6 +171,26 @@ Pure-Dart core in `lib/core/plan/`, the screens in `lib/ui/plan/` and `lib/ui/sh
 
 Packets enter the engine only through `onPublicPacket`, only while sharing and a radio is connected, after AppState's filter. No location of any kind is read or sent by the engine.
 
+### 1.5 Power (build 70, battery modes)
+
+`lib/core/power_profile.dart` holds ONE app-wide profile. `PowerSettings` carries every knob; `maxData`, `balanced` (default) and `saver` are presets, and `tweak()` changes one knob and makes the mode `custom`. `PowerProfile.chosen` is what the person picked (Settings > Battery, `ui/settings/battery_section.dart`; saved to `power_profile.json`, loaded in `app/wiring.dart`); `PowerProfile.current` is what components obey: `saver` while iPhone Low Power Mode is on and `followLowPower` is set (`lowPowerOverride`, fed by `setLowPowerMode` from the native channel). Components read `current` when they act and may listen with `addListener` to re-apply. Pure Dart, so `lib/core` and `lib/radio` read it directly.
+
+| Knob (`PowerSettings`) | Max data | Balanced | Saver | Read by |
+|---|---|---|---|---|
+| `screenOn` | always | driveTabOnly | never | wakelock, `ui/drive_screen.dart` |
+| `mapFps` | 120 | 60 | 30 | puck/camera loop, `ui/map/live_puck.dart` |
+| `gps` | best | high | standard | drive GPS, `platform/geolocator_location.dart` |
+| `pauseGpsParkedMin` | 0 | 3 | 1 | drive GPS, `platform/geolocator_location.dart` |
+| `endDriveParkedMin` / `endDriveNoRadioMin` | 0 / 0 | 30 / 15 | 15 / 5 | drive auto-end (app state) |
+| `compass` | always | auto | off | `platform/compass_sensors_plus.dart` |
+| `radioPollFrontS` / `radioPollBackS` | 5 / 5 | 30 / 120 | 120 / 0 (push only) | backup BLE message check, `radio/message_sync.dart` |
+| `observerUploadBackS` | 60 | 300 | 900 | `core/telemetry_uploader.dart` |
+| `uploadDuringDrive` | true | true | false | drive sync during a drive (with `syncDuringDrive`) |
+| `statsEveryS` | 60 | 60 | 300 | radio + phone stats sampling for the drive report |
+| `simpleBasemap` | false | false | true | Drive map basemap |
+
+`PowerCounters` (same file) counts GPS seconds by accuracy, screen-on and compass seconds, map frames, BLE commands and polls, HTTP requests and timer wakes; Settings > Diagnostics shows them with per-hour rates since `PowerCounters.since`, and tests assert them. The drive report's battery line (`core/drive_report_battery.dart`) is computed from the `phone_battery` samples; the mode at drive start is written by `app/drive_context_hook.dart` to `sessions/<id>/power_mode.txt` beside the drive (local only, not part of the wire format).
+
 ### Dependency rules (as implemented)
 
 1. **`lib/core` and `lib/radio` (except `ble_transport.dart`) never import Flutter.** They run under plain `dart test`
@@ -606,7 +626,8 @@ behaviour: silence, the replay rule, loss, caps, prefix matching, the blank-pass
 | `ui/settings/radio_section.dart` | ui | Radio tab link, channel, discovery, auto-ping sliders, per-radio antenna rows. |
 | `ui/settings/drives_section.dart` | ui | Upload toggles, upload interval, `LastUpload`. |
 | `ui/settings/storage_section.dart` | ui | Data & storage: sizes and per-item clear actions (uploaded drives only, region cache, repeater names, node map, offline maps link, unsent report). `storagePackManager` test seam. |
-| `ui/settings/diagnostics_section.dart` | ui | Diagnostic log screen (redacted view, copy, clear), `diagnosticsExport`, Report a problem link. |
+| `ui/settings/diagnostics_section.dart` | ui | Diagnostic log screen (redacted view, copy, clear), `diagnosticsExport`, Power counters card (`powerCounterLines`), Report a problem link. |
+| `ui/settings/battery_section.dart` | ui | Settings > Battery: mode picker, Low Power Mode follow, every `PowerSettings` knob (`PowerKnob`, `pickKnob`), `WhatsRunningScreen` (1.5). |
 | `ui/settings/about_section.dart` | ui | About and welcome tour rows. |
 | `core/storage_usage.dart` | core | `StorageSized`, `bytesOnDisk`, `driveSafeToRemove` / `splitDrives` (which drives may leave the phone), `formatStorageBytes`. |
 | `core/drive_stats.dart` | core | `DriveStats.of` (distance, duration, heard %, best/median SNR, repeaters, multi-hop, timeline); `formatDuration`. `ui/drive_stats.dart` is a re-export shim. |
@@ -623,6 +644,7 @@ behaviour: silence, the replay rule, loss, caps, prefix matching, the blank-pass
 | `core/repeater_history.dart` | core | `RepeaterHistory.compute`: one repeater across local drives (prefix match both ways, ids the lookup gives another repeater excluded, shared short ids counted apart): hearings, direct, best SNR, first/last, farthest, grid cells, drives. |
 | `core/report_pdf.dart` | core | PDF document model (heading, text, facts, table, bars, line) and `renderReportPdf` on the `pdf` package: vector charts, Barlow embedded when given, missing glyphs as "?". |
 | `core/drive_report_pdf.dart` | core | `driveReportPdf`: the drive report as a `ReportDoc` (units, local time + zone). |
+| `core/drive_report_battery.dart` | core | The report's phone battery line (`batteryUseOf`, `batteryLine`, `loadDriveBatteryLine`) and the local mode-at-start file (`recordDrivePowerMode`). |
 | `core/region_report_pdf.dart` | core | `regionReportPdf`: the `region-report` body as a `ReportDoc` (UTC, every row, server status notes). |
 | `core/plan/plan_model.dart`, `plan_controller.dart`, `plan_codec.dart`, `plan_export.dart`, `plan_api.dart`, `plan_analysis.dart`, `link_model.dart`, `saved_plans.dart`, `plan_repository.dart`, `plan_store.dart` | core | The Planner's pure-Dart core (section 1.3). |
 | `core/plan_contract.dart`, `core/mqtt_contract.dart` | core | Planner wire types and MQTT slot / preset types (exported from `core/api.dart`). |

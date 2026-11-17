@@ -322,7 +322,8 @@ class DriveReport {
   }
 
   /// Plain-text summary for sharing, in the person's units (said in the header).
-  String toText({String? title, Units units = Units.metric, String Function(Duration? d)? duration, List<WeatherSnapshot> weather = const []}) {
+  /// [battery]: the phone battery line (lib/core/drive_report_battery.dart), when the drive has one.
+  String toText({String? title, Units units = Units.metric, String Function(Duration? d)? duration, List<WeatherSnapshot> weather = const [], String? battery}) {
     final dist = units.distance;
     String dur(Duration? d) {
       if (d == null) return '—';
@@ -344,6 +345,7 @@ class DriveReport {
       ..writeln('$txPings pings, ${heardPercent == null ? '—' : '$heardPercent%'} heard')
       ..writeln('$gridsMapped grid cells mapped ($gridsWithCoverage with coverage, $newGrids new)')
       ..writeln('${repeaters.length} repeaters heard (${newRepeaters.length} new)');
+    if (battery != null) b.writeln(battery);
     if (bestSnr != null) b.writeln('Best SNR ${db(bestSnr!)} dB');
     final f = farthest;
     if (f != null) b.writeln('Farthest: ${f.label} at ${dist(f.farthestM!)}');

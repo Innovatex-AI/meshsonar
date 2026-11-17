@@ -14,6 +14,7 @@ import 'package:h3_flutter/h3_flutter.dart' show H3;
 
 import '../core/antenna_profile.dart';
 import '../core/api.dart';
+import '../core/app_foreground.dart';
 import '../core/claim_flow.dart';
 import '../core/cmat_client.dart' show HttpCmatClient;
 import '../core/coverage_query.dart';
@@ -26,6 +27,7 @@ import '../core/drive_health_sink.dart';
 import '../core/drive_timing.dart';
 import '../core/gps_health.dart';
 import '../core/drive_env_cache.dart';
+import '../core/power_profile.dart';
 import '../core/plan/plan_store.dart';
 import '../core/driver_account.dart';
 import '../core/driver_summary.dart';
@@ -85,6 +87,8 @@ import 'app_flags.dart' show AppFlags;
 import 'chat_wiring.dart' show ChatWiring;
 import 'chat_controller.dart' show ChatController;
 import 'meshtrack_wiring.dart' show FileMtLastKnownStore, MeshTrackGroupOps, MeshTrackService, MeshTrackWiring, MtChatBinding, MtLastKnownStore;
+import 'drive_auto_end_notice.dart';
+import 'drive_power_governor.dart' show DriveAutoEnd;
 
 part 'observer_wiring.dart';
 
@@ -1302,11 +1306,17 @@ class AppState extends ChangeNotifier with _ObserverWiring {
   @visibleForTesting
   void debugOnForeground() => _onForeground(true);
 
+  /// The app went behind (tests).
+  @visibleForTesting
+  void debugOnBackground() => _onForeground(false);
+
   void _onForeground(bool fg) {
+    AppForeground.set(fg); // the radio layer's safety poll and other pure-Dart cadences follow it (battery plan A7)
     _mt?.setForeground(fg);
     _telemetry?.foreground = fg; // 5 s batches in front, 60 s or 50 packets behind (contract section 6)
     _observerForegroundChanged(fg);
     if (!fg) return;
+    if (_observerTimer != null) unawaited(pollObservers()); // skipped while behind (battery plan A6): ask once now
     unawaited(flushDriveEnds());
     _claims?.appResumed();
     unawaited(refreshLocationAccess());
@@ -1471,7 +1481,8 @@ class AppState extends ChangeNotifier with _ObserverWiring {
           (dir == null ? null : FileMtLastKnownStore(File('${dir.path}${Platform.pathSeparator}meshtrack_last.json'))),
       radioParams: () => _selfInfo?.radio,
       wardriveChannelName: () => _settings.channel,
-      phoneLocation: () => _locationSource,
+      // Between drives MeshTrack has its own cheaper GPS request (battery plan A8), never the drive source.
+      phoneLocation: () => _radioKind == RadioKind.simulator ? _locationSource : (services.meshTrackLocation ?? _locationSource),
       log: diagnostics.add,
       now: services.clock,
     );
@@ -1582,6 +1593,10 @@ class AppState extends ChangeNotifier with _ObserverWiring {
         now: () => services.clock().toUtc(),
         observer: _telemetryObserver,
         zones: () => privacyZones.gate,
+        // Battery mode: how often a locked phone uploads what it heard (nothing is dropped, the queue batches).
+        backgroundGap: () => Duration(seconds: PowerProfile.current.observerUploadBackS),
+        // The status heartbeat goes with a batch when one is due, instead of waking the network on its own clock.
+        onBatchSent: () => _observerStatus.rideAlong(),
         onServerErased: () => unawaited(_afterServerErase()),
         onObserver: (o) {
           final k = o['key'];
@@ -2191,9 +2206,11 @@ class AppState extends ChangeNotifier with _ObserverWiring {
   /// Why the last reconnect try failed ("Bluetooth is off", ...); null when none failed since the drop.
   String? get reconnectProblem => _reconnectProblem;
 
-  /// Wait before reconnect try [attempt] (1-based): quick at first, then up to 20 s. Tests shorten it.
+  /// Wait before reconnect try [attempt] (1-based): quick at first, then up to 20 s, then 60 s after 5 min of failing
+  /// (battery plan A10, [ReconnectBackoff]). Tests shorten it.
   @visibleForTesting
-  Duration Function(int attempt) reconnectDelay = (n) => Duration(seconds: n <= 1 ? 1 : math.min(20, 2 * n));
+  late Duration Function(int attempt) reconnectDelay = _reconnectBackoff.delay;
+  late final ReconnectBackoff _reconnectBackoff = ReconnectBackoff(clock: () => services.clock());
 
   Future<void> _reconnectRadio() async {
     final device = _device, kind = _radioKind, engine = _engine, sid = _session?.id, expectedKey = _radioKey;
@@ -2202,6 +2219,7 @@ class AppState extends ChangeNotifier with _ObserverWiring {
     _reconnecting = true;
     _reconnectAttempt = 0;
     _reconnectProblem = null;
+    _reconnectBackoff.reset(); // quick tries again after every drop; slower only after 5 min of failing
     diagnostics.add('Radio dropped during the drive; reconnecting');
     notifyListeners();
     try {
@@ -2316,6 +2334,38 @@ class AppState extends ChangeNotifier with _ObserverWiring {
   WardriveEngine? _engine;
   EngineStatus _status = const EngineStatus(EngineState.idle);
   EngineStatus get status => _status;
+
+  /// The drive engine's status at full rate (every GPS fix), for drive widgets that want each one. AppState itself notifies
+  /// on a status tick only when something other than the position moved (state, countdown, wait reason, heard count...),
+  /// and at most once per [statusNotifyEvery] for position-only ticks, so hidden tabs do not rebuild on every fix (battery
+  /// plan A4). [status] always returns the newest value.
+  final ValueNotifier<EngineStatus> driveStatus = ValueNotifier<EngineStatus>(const EngineStatus(EngineState.idle));
+  static const Duration statusNotifyEvery = Duration(seconds: 2);
+  EngineStatus? _statusNotified;
+  DateTime? _statusNotifiedAt;
+  GeoFix? _regionFedFix;
+
+  /// Whether this engine status tick is worth an AppState notify (see [driveStatus]).
+  bool _statusWorthNotify(EngineStatus st) {
+    final was = _statusNotified;
+    final now = services.clock();
+    bool moving(EngineStatus e) => (e.metresToGo ?? 0) > 0;
+    final significant = was == null ||
+        was.state != st.state ||
+        was.message != st.message ||
+        was.nextPingAt != st.nextPingAt ||
+        was.waitingFor != st.waitingFor ||
+        was.clockSkew != st.clockSkew ||
+        was.heardSoFar != st.heardSoFar ||
+        (was.lastFix == null) != (st.lastFix == null) ||
+        (was.metresToGo == null) != (st.metresToGo == null) ||
+        moving(was) != moving(st);
+    final at = _statusNotifiedAt;
+    if (!significant && at != null && now.difference(at).abs() < statusNotifyEvery) return false;
+    _statusNotified = st;
+    _statusNotifiedAt = now;
+    return true;
+  }
   DriveSession? _session;
   DriveSession? get currentSession => _session;
   bool get driving => _session != null;
@@ -2438,6 +2488,10 @@ class AppState extends ChangeNotifier with _ObserverWiring {
   Timer? _observerTimer;
   static const Duration observerPollPeriod = Duration(seconds: 45);
 
+  /// The period actually used (tests shorten it).
+  @visibleForTesting
+  Duration observerPollEvery = observerPollPeriod;
+
   /// Repeater hearings this drive: the sum, over transmitted pings, of repeaters that repeated each one.
   int get echoCount => _drivePings.where((p) => p.kind == PingKind.tx).fold(0, (a, p) => a + p.echoes.length);
 
@@ -2459,7 +2513,11 @@ class AppState extends ChangeNotifier with _ObserverWiring {
       pingFeedback.markNoKey(); // nothing is uploaded without a key, so there is nothing to ask the server about
       return;
     }
-    _observerTimer = Timer.periodic(observerPollPeriod, (_) => unawaited(pollObservers()));
+    // Battery plan A6: the answer only feeds the screen, so a locked phone does not ask; it asks once on return
+    // ([_onForeground]).
+    _observerTimer = Timer.periodic(observerPollEvery, (_) {
+      if (AppForeground.inForeground) unawaited(pollObservers());
+    });
   }
 
   void _stopObserverPolling({bool finalPoll = false}) {
@@ -2521,8 +2579,16 @@ class AppState extends ChangeNotifier with _ObserverWiring {
   Duration? _driveSyncPeriod;
   Future<void>? _driveSyncInFlight;
 
-  /// Whether the in-drive upload timer should be running with the current settings.
-  bool get _wantDriveSync => driving && _settings.autoSync && _settings.syncDuringDrive && keyApproved;
+  /// Whether the in-drive upload timer should be running with the current settings. Both the person's "Upload during
+  /// the drive" switch and the battery mode (PowerSettings.uploadDuringDrive; Saver = at drive end only) must allow it;
+  /// otherwise the drive uploads when it ends, as with the switch off.
+  bool get _wantDriveSync =>
+      driving && _settings.autoSync && _settings.syncDuringDrive && PowerProfile.current.uploadDuringDrive && keyApproved;
+
+  bool _powerListening = false;
+
+  /// The battery mode changed: the in-drive upload follows at once.
+  void _onPowerProfile() => _scheduleDriveSync();
 
   /// Starts, restarts (new period) or stops the in-drive upload timer to match the settings.
   void _scheduleDriveSync() {
@@ -2668,11 +2734,17 @@ class AppState extends ChangeNotifier with _ObserverWiring {
         background: services.backgroundLocation,
         firstPingPending: () => _txCount == 0,
         distance: (m) => units.shortLength(m),
+        // Battery (build 70): no radio caps the GPS at High; a drive left parked / without a radio ends and is saved.
+        radioConnected: () => connected,
+        onAutoEnd: (end) => unawaited(_autoEndDrive(end)),
       );
       _gpsMonitor = monitor;
       monitor.start();
       _startObserverPolling();
       _status = engine.current;
+      driveStatus.value = _status;
+      _statusNotified = null;
+      _regionFedFix = null;
       _pingSub = engine.pings.listen(_onPing, onError: (Object e) => _say(friendlyError(e, action: 'A ping')));
       _statusSub = engine.status.listen((st) {
         _status = st;
@@ -2685,11 +2757,21 @@ class AppState extends ChangeNotifier with _ObserverWiring {
               'or this drive\'s pings carry the wrong times and the server may refuse them.');
         }
         if (st.state == EngineState.error && !_reconnecting && _link?.isConnected == false) unawaited(_reconnectRadio());
-        // Rides the engine's own GPS stream (already gated to active drives only) rather than opening a second,
-        // always-on Geolocator subscription just for region awareness.
-        if (st.lastFix != null) _updateRegion(st.lastFix);
         if (st.lastFix != null) _ctx?.onFix(st.lastFix!);
-        notifyListeners();
+        driveStatus.value = st;
+        // Battery plan A4: AppState (and every tab listening to it) hears about a position-only tick at most every 2 s.
+        // Region awareness rides the engine's own GPS stream (already gated to active drives only) rather than opening a
+        // second, always-on Geolocator subscription. It is fed on the notify cadence, and on any fix 100 m or more from the
+        // last one it saw so a border crossing is never missed; _updateRegion notifies itself, so it is that or ours.
+        final notify = _statusWorthNotify(st);
+        final f = st.lastFix;
+        final fed = _regionFedFix;
+        if (f != null && (notify || fed == null || haversineM(fed.lat, fed.lon, f.lat, f.lon) >= 100)) {
+          _regionFedFix = f;
+          _updateRegion(f);
+        } else if (notify) {
+          notifyListeners();
+        }
       });
       final txW = info?.radio.txDbm == null ? null : _dbmToWatts(info!.radio.txDbm!);
       await engine.start(WardriveConfig(
@@ -2843,6 +2925,31 @@ class AppState extends ChangeNotifier with _ObserverWiring {
     }
   }
 
+  /// The notification for a drive that ended on its own; tests replace it.
+  @visibleForTesting
+  Future<void> Function(DriveAutoEnd end) driveAutoEndNotice = postDriveAutoEndNotice;
+
+  @visibleForTesting
+  Future<void> debugAutoEndDrive(DriveAutoEnd end) => _autoEndDrive(end);
+
+  /// A drive left open (parked / no radio for the battery profile's minutes): ended through the normal stop path, so it is
+  /// saved, never deleted, then the person is told.
+  Future<void> _autoEndDrive(DriveAutoEnd end) async {
+    if (!driving) return;
+    // A stop or start already in progress: try once more shortly instead of racing it.
+    if (_busy) {
+      await Future<void>.delayed(const Duration(seconds: 2));
+      if (!driving || _busy) return;
+    }
+    diagnostics.add('${end.message} (battery setting); drive saved');
+    await stopDrive();
+    if (driving) return;
+    _say('${end.message}. The drive is saved.');
+    try {
+      await driveAutoEndNotice(end);
+    } catch (_) {}
+  }
+
   Future<void> stopDrive() async {
     final session = _session;
     if (session == null || _busy) return;
@@ -2894,6 +3001,7 @@ class AppState extends ChangeNotifier with _ObserverWiring {
       unawaited(_idle?.setDriving(false));
       _mt?.driveStopped(); // "This drive" shares end with the stop message
       _status = const EngineStatus(EngineState.idle);
+      driveStatus.value = _status;
     } finally {
       _busy = false;
       notifyListeners();
@@ -3330,6 +3438,10 @@ class AppState extends ChangeNotifier with _ObserverWiring {
     }
     unawaited(refreshLocationAccess());
     _resumeBridge ??= (AppLifecycleBridge(_onForeground)..attach());
+    if (!_powerListening) {
+      _powerListening = true;
+      PowerProfile.addListener(_onPowerProfile);
+    }
     _listenForLinks();
     unawaited(_loadDirectory());
     unawaited(refreshSiteConfig());
@@ -3863,6 +3975,7 @@ class AppState extends ChangeNotifier with _ObserverWiring {
     unawaited(_rawFixes.close());
     gpsHealth.dispose();
     _cancelDriveSync();
+    PowerProfile.removeListener(_onPowerProfile);
     _observerTimer?.cancel();
     _pingSub?.cancel();
     _statusSub?.cancel();

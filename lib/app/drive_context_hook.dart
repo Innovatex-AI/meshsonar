@@ -1,12 +1,16 @@
 // The drive-context hook for AppState (stream 7 WP2): builds one DriveContextSession per drive from the app's services
 // and the connected link, and reads the versioned disclosure flag. Kept out of app_state.dart so that file only gains
 // a few lines (start with the drive, stop with it, feed fixes and saved pings, refresh on a settings change).
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import '../core/drive_context.dart';
 import '../core/drive_context_recorder.dart';
 import '../core/drive_context_session.dart';
+import '../core/drive_report_battery.dart' show recordDrivePowerMode;
+import '../core/drive_store.dart' show JsonlDriveStore;
+import '../core/power_profile.dart';
 import '../radio/companion_link.dart';
 import '../radio/radio_session_impl.dart';
 import 'services.dart';
@@ -45,6 +49,10 @@ DriveContextSession? newDriveContext({
   required bool Function() pingBusy,
   void Function()? onStatus,
 }) {
+  final store = services.store;
+  // The battery mode at drive start, for the drive report's battery line (local only, never uploaded). The first call
+  // of a drive wins; a reconnect mid-drive keeps it.
+  if (store is JsonlDriveStore) unawaited(recordDrivePowerMode(store.root, sessionId, PowerProfile.current.mode));
   final ledger = contextLedgerOf(services);
   if (ledger == null) return null;
   final details = services.deviceDetails;

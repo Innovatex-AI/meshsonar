@@ -138,7 +138,42 @@ class ObserverStatusService {
     this.radio,
     this.heartbeatEvery = const Duration(minutes: 5),
     this.autoTimer = true,
-  });
+    DateTime Function()? clock,
+  }) : _clock = clock ?? DateTime.now;
+
+  final DateTime Function() _clock;
+  DateTime? _lastBeatAt;
+
+  /// Heartbeats that went with a telemetry batch instead of on their own timer wake (battery plan A6).
+  int heartbeatsCoalesced = 0;
+
+  /// Battery plan A6, "send the heartbeat with the telemetry batch": a heartbeat rides with a batch once 80 % of
+  /// [heartbeatEvery] passed since the last one (4 of 5 min), and the timer, re-armed after every heartbeat, waits 120 %
+  /// (6 min), so a phone uploading every 5 min (Balanced, locked) beats with its batches and the timer never wakes the
+  /// network alone. Without batches it beats every 6 min; either way well inside the server's 10 min "online" window
+  /// (greatest(last_heartbeat_at, last_packet_at), meshcore-insights migration 0116).
+  bool get _rideDue {
+    final at = _lastBeatAt;
+    return at == null || _clock().difference(at) >= heartbeatEvery * 0.8;
+  }
+
+  /// A telemetry batch the server took just went (the phone's network is awake anyway).
+  void rideAlong() {
+    if (!_started || !_rideDue) return;
+    heartbeatsCoalesced++;
+    unawaited(heartbeatNow());
+    _arm();
+  }
+
+  void _arm() {
+    if (!_started || !autoTimer) return;
+    _timer?.cancel();
+    _timer = Timer(heartbeatEvery * 1.2, () {
+      _timer = null;
+      unawaited(heartbeatNow());
+      _arm();
+    });
+  }
 
   Timer? _timer;
   int heartbeatsSent = 0;
@@ -176,13 +211,15 @@ class ObserverStatusService {
   /// One heartbeat, only while sharing is on and the radio is connected. Returns null when it was not due.
   Future<ObserverCallOutcome?> heartbeatNow() async {
     if (!active() || !connected()) return null;
+    _lastBeatAt = _clock();
     final id = await observerId();
     final o = await _call((tx, key) => tx.heartbeat(key, heartbeatBody(id)));
     if (o == ObserverCallOutcome.ok) heartbeatsSent++;
     return o;
   }
 
-  /// Starts (or keeps) the heartbeat: one now, then every [heartbeatEvery]. Each tick checks sharing and the radio.
+  /// Starts (or keeps) the heartbeat: one now, then with the telemetry batches or by the timer ([rideAlong]). Each beat
+  /// checks sharing and the radio.
   ///
   /// Without [autoTimer] (tests) only the one heartbeat at start goes.
   bool _started = false;
@@ -190,7 +227,7 @@ class ObserverStatusService {
     if (_started) return;
     _started = true;
     unawaited(heartbeatNow());
-    if (autoTimer) _timer = Timer.periodic(heartbeatEvery, (_) => unawaited(heartbeatNow()));
+    _arm();
   }
 
   void stopHeartbeat() {

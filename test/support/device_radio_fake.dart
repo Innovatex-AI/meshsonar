@@ -12,6 +12,9 @@ class DeviceRadioFake extends FakeToolsRadio {
   int fwCode = 14;
   String fwVersion = 'v1.18.0';
   int pathHashMode = 0;
+
+  /// GET_BATT_AND_STORAGE commands answered.
+  int batteryReads = 0;
   int blePin = 123456;
   int autoAddCfg = 0, autoAddHops = 0;
   bool autoAddSupported = true, batterySupported = true, keyExport = true, keyImport = true, cliSupported = true;
@@ -73,6 +76,7 @@ class DeviceRadioFake extends FakeToolsRadio {
         blePin = v;
         return const OkFrame();
       case Cmd.getBattAndStorage:
+        batteryReads++;
         return batterySupported ? const BattAndStorageFrame(batteryMv: 3920, storageUsedKb: 100, storageTotalKb: 1000) : const ErrFrame(ErrCode.unsupportedCmd);
       case Cmd.getAutoAddConfig:
         return autoAddSupported ? AutoAddConfigFrame(autoAddCfg, autoAddHops) : const ErrFrame(ErrCode.unsupportedCmd);

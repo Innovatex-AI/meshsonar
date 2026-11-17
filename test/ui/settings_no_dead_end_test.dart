@@ -165,7 +165,7 @@ void main() {
     });
 
     test('information rows are only the read-only status rows', () {
-      expect(settingsEntries.where((e) => e.info).map((e) => e.id), unorderedEquals(['site-region', 'site-radio-preset', 'last-upload', 'ping-message', 'ping-airtime', 'wardrive-counters', 'observer-status']));
+      expect(settingsEntries.where((e) => e.info).map((e) => e.id), unorderedEquals(['site-region', 'site-radio-preset', 'last-upload', 'ping-message', 'ping-airtime', 'wardrive-counters', 'observer-status', 'diagnostics-power-counters']));
     });
   });
 
