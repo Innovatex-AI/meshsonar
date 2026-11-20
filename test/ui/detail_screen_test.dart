@@ -52,12 +52,14 @@ void main() {
     expect(textOf(tester, 'stat-duration'), '10 min');
     expect(textOf(tester, 'stat-distance'), '2.2 km');
 
-    // Repeater name comes from the cache; count of pings that heard it.
+    // Repeater name comes from the cache; count of pings that heard it. Drives open inside More since build 71 (the tab
+    // area, not the whole screen), so the list is scrolled to the repeaters first.
+    final scroll = find.descendant(of: find.byKey(const Key('detail-scroll')), matching: find.byType(Scrollable)).first;
+    await tester.scrollUntilVisible(find.byKey(const ValueKey('repeater-count-ee')), 200, scrollable: scroll);
     expect(find.text('Polaris Water Tower'), findsWidgets);
     expect(textOf(tester, 'repeater-count-a1'), '2×');
     expect(textOf(tester, 'repeater-count-ee'), '1×');
 
-    final scroll = find.descendant(of: find.byKey(const Key('detail-scroll')), matching: find.byType(Scrollable)).first;
     await tester.scrollUntilVisible(find.byKey(const ValueKey('detail-ping-p1')), 200, scrollable: scroll);
     expect(find.text('Heard nothing'), findsOneWidget);
     expect(find.textContaining('2 repeaters'), findsOneWidget);

@@ -80,6 +80,7 @@ import 'privacy_zones_controller.dart';
 import 'context_upload_hook.dart';
 import 'drive_context_hook.dart';
 import 'messages.dart';
+import 'network_inbox.dart';
 import 'plan_inbox.dart';
 import 'ping_feedback.dart';
 import 'services.dart';
@@ -217,13 +218,20 @@ class AppState extends ChangeNotifier with _ObserverWiring {
   /// Shared plan links that reached the app and wait for the Plan tab (lib/app/plan_inbox.dart). Fed from
   /// [AppServices.incomingLinks] from [init] on; a pasted link goes in with [PlanInbox.offer].
   final PlanInbox planInbox = PlanInbox();
+
+  /// Network links (lib/app/network_inbox.dart) waiting for the Network tab: every incoming link that is not a plan link
+  /// is offered here (AZ-3.1).
+  final NetworkInbox networkInbox = NetworkInbox();
   StreamSubscription<Uri>? _incomingLinkSub;
+
+  /// Routes one incoming link: a plan link to [planInbox], a Network route to [networkInbox], anything else is ignored.
+  bool offerLink(Uri u) => planInbox.offer(u) || networkInbox.offer(u);
 
   void _listenForLinks() {
     final links = services.incomingLinks;
     if (links == null || _incomingLinkSub != null) return;
     try {
-      _incomingLinkSub = links().listen(planInbox.offer, onError: (Object e) => _logError('Incoming link failed', e));
+      _incomingLinkSub = links().listen(offerLink, onError: (Object e) => _logError('Incoming link failed', e));
     } catch (e) {
       _logError('Incoming links unavailable', e);
     }
@@ -937,6 +945,10 @@ class AppState extends ChangeNotifier with _ObserverWiring {
   /// most recently failed (offline, server hiccup). Region matching still runs off the stale cache; this only
   /// says it might be stale.
   bool get regionIndexStale => _regionIndexService.lastError != null;
+
+  /// True when the last `regions-index` fetch failed because the server could not be reached at all (no answer, no HTTP
+  /// status), as opposed to the server answering with an error. The Network tab's offline state reads it.
+  bool get regionIndexOffline => _regionIndexService.lastError != null && _regionIndexService.lastErrorStatus == null;
 
   RegionIndexEntry? _currentRegion;
 

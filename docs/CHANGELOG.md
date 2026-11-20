@@ -3,6 +3,12 @@
 All notable changes to MeshSonar. Dates are local (US Eastern). This changelog was reconstructed from the commit
 history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md](ROADMAP.md).
 
+## [Unreleased] — build 71 (analyzer Wave AZ)
+
+- **The Analyze tab is now Network (AZ-3.1).** A region header (name, a pulse chip when the server reports unusual activity, Export region report, region switcher) and five sections on a bar at the bottom of the screen: Now (Findings, Overview), Packets (List, Live), Nodes (Repeaters, Observers), Map (opens the full map on the region with the network layers on) and Insights (Analysis, RF, Growth, Reports, Stats, Silent repeaters, Wardrive share). Every view of the old 13 tabs is still there. Drives moved to More > Drives. Links to the site's Network pages (packets, nodes, observers, channels, insights, map) open the matching section in the app.
+- **Chat: the Network segment is now called Radio** (your radio, nodes heard nearby, the repeaters, rooms and sensors in its contacts, and the radio tools), so it no longer shares a name with the Network tab.
+- Under the hood: one typed `/v1` client (`lib/core/v1/`: envelope, error codes, cursor paging, ETag) with `summary`, `pulse` and `regions`, falling back quietly to today's endpoints until `/v1` is live.
+
 ## [0.40.0+70] — 2026-11-17 — Battery: modes, settings and less waste; one Drive layout
 
 - **Settings > Battery.** One mode picker (Max data, Balanced, Saver; Balanced is the default; changing any knob shows Custom) and every power knob under it: keep screen on (always / Drive tab only / never), map smoothness (120/60/30 Hz), drive GPS precision, pause GPS when parked, end a drive left open (parked or no radio; the drive is saved, with a notification), compass (always / auto / off), radio message check rate (front and locked), observer uploads when locked, upload during a drive, radio and phone stats rate, and a simple basemap while driving. "Use Saver when iPhone Low Power Mode is on" (default on). "What's running now" lists what is using power at the moment, each line linked to its setting. Diagnostics has a Power counters card.

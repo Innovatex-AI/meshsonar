@@ -75,11 +75,11 @@ void main() {
   testWidgets('four segments; Cmd-1..4 switch; labels stay on one line on an SE', (tester) async {
     await seed();
     await pumpTab(tester, size: const Size(375, 667));
-    for (final k in ['segment-chats', 'segment-contacts', 'segment-channels', 'segment-network']) {
+    for (final k in ['segment-chats', 'segment-contacts', 'segment-channels', 'segment-radio']) {
       expect(find.byKey(Key(k)), findsOneWidget, reason: k);
     }
     // One line: every segment label is as tall as a single 13 pt line inside its 44 pt target.
-    for (final label in ['Chats', 'Contacts', 'Channels', 'Network']) {
+    for (final label in ['Chats', 'Contacts', 'Channels', 'Radio']) {
       expect(tester.getSize(find.text(label)).height, lessThan(20), reason: label);
     }
     await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);

@@ -92,8 +92,7 @@ Future<void> openPlanTool(WidgetTester t, String id) async {
 
 /// Makes Columbus (CMH) the viewing region through the region switcher, like a person would.
 Future<void> selectColumbus(WidgetTester t) async {
-  await openShellTab(t, 'Analyze');
-  await t.tap(find.descendant(of: find.byKey(const Key('analyze-segments')), matching: find.text('Region')));
+  await openShellTab(t, 'Network');
   await pumpFor(t, const Duration(seconds: 2));
   final chip = find.byKey(const Key('region-switch-chip'));
   if (!await waitFor(t, chip)) return;
@@ -146,7 +145,7 @@ void main() {
 
     if (want('first')) {
       await step('tabs', () async {
-        for (final tab in ['Chat', 'Drive', 'Analyze', 'Plan', 'More']) {
+        for (final tab in ['Chat', 'Drive', 'Network', 'Plan', 'More']) {
           await openShellTab(t, tab);
           await shot(t, 'tab-${tab.toLowerCase()}');
           if (tab == 'More') await scrollShots(t, 'tab-more', max: 4);
@@ -168,19 +167,31 @@ void main() {
 
     if (want('region')) {
       await step('region', () async {
-        await openShellTab(t, 'Analyze');
-        await t.tap(find.descendant(of: find.byKey(const Key('analyze-segments')), matching: find.text('Region')));
+        await openShellTab(t, 'Network');
         await pumpFor(t, const Duration(seconds: 6));
         await shot(t, 'region-initial');
-        const tabs = ['Overview', 'Repeaters', 'Observers', 'Packets', 'Routes', 'Analysis', 'RF', 'Growth', 'Findings', 'Reports', 'Stats', 'Live', 'Hops', 'Silent', 'Wardrive'];
-        for (final name in tabs) {
+        // Network tab (AZ-3.1): five sections, two with two sub-views each, Insights as a list of pages.
+        const views = [('now', 0), ('now', 1), ('packets', 0), ('packets', 1), ('nodes', 0), ('nodes', 1), ('map', -1), ('insights', -1)];
+        for (final (section, sub) in views) {
+          final name = sub < 0 ? section : '$section-$sub';
           await step('region-$name', () async {
-            final tab = find.descendant(of: find.byType(TabBar), matching: find.text(name));
-            await t.ensureVisible(tab.first);
-            await t.tap(tab.first);
+            await t.tap(find.byKey(Key('network-section-$section')));
+            await pumpFor(t, const Duration(seconds: 1));
+            if (sub >= 0) await t.tap(find.byKey(Key('network-sub-$section-$sub')));
             await pumpFor(t, const Duration(seconds: 5));
             await shot(t, 'region-$name');
             await scrollShots(t, 'region-$name', max: 2);
+          });
+        }
+        for (final id in ['analysis', 'rf', 'growth', 'reports', 'stats', 'silent', 'wardrive']) {
+          await step('region-insight-$id', () async {
+            await t.tap(find.byKey(const Key('network-section-insights')));
+            await pumpFor(t, const Duration(seconds: 1));
+            await t.tap(find.byKey(Key('insight-$id')));
+            await pumpFor(t, const Duration(seconds: 5));
+            await shot(t, 'region-insight-$id');
+            await scrollShots(t, 'region-insight-$id', max: 2);
+            await back(t);
           });
         }
       });
@@ -197,7 +208,7 @@ void main() {
     }
 
     if (want('more')) {
-      const rows = ['more-devices', 'more-myReports', 'more-leaderboard', 'more-notifications', 'more-wardriving', 'more-observerJoin', 'more-radio', 'more-repeaters', 'more-myRadios', 'more-method', 'more-settings', 'more-about', 'more-privacy', 'more-trace', 'more-discover', 'more-adverts', 'more-rxLog', 'more-noiseFloor', 'more-telemetry', 'more-radioSetup'];
+      const rows = ['more-drives', 'more-devices', 'more-myReports', 'more-leaderboard', 'more-notifications', 'more-wardriving', 'more-observerJoin', 'more-radio', 'more-repeaters', 'more-myRadios', 'more-method', 'more-settings', 'more-about', 'more-privacy', 'more-trace', 'more-discover', 'more-adverts', 'more-rxLog', 'more-noiseFloor', 'more-telemetry', 'more-radioSetup'];
       for (final key in rows) {
         await step(key, () async {
           await openShellTab(t, 'More');

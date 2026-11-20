@@ -1,0 +1,165 @@
+{
+  "data": {
+    "nodes": {
+      "active24h": {
+        "repeater": 151,
+        "room": 10,
+        "sensor": 7,
+        "companion": 203
+      },
+      "total": {
+        "repeater": 184,
+        "room": 12,
+        "sensor": 9,
+        "companion": 611
+      },
+      "noLocation": 287,
+      "new7d": 14,
+      "silent": 9
+    },
+    "observers": {
+      "online": {
+        "fixed": 1,
+        "phone": 3,
+        "outside": 22
+      },
+      "total": {
+        "fixed": 1,
+        "phone": 7,
+        "outside": 31
+      }
+    },
+    "packets": {
+      "lastHour": 640,
+      "last24h": 14320,
+      "observations24h": 61210,
+      "bySource24h": {
+        "meshsonar": 4012,
+        "meshsonar-phone": 820,
+        "outside": 11980
+      },
+      "perHour": [
+        [
+          "2026-11-20T11:00:00.000Z",
+          510
+        ],
+        [
+          "2026-11-20T12:00:00.000Z",
+          604
+        ],
+        [
+          "2026-11-20T13:00:00.000Z",
+          588
+        ],
+        [
+          "2026-11-20T14:00:00.000Z",
+          640
+        ]
+      ]
+    },
+    "byType24h": {
+      "GRP_TXT": 5230,
+      "ADVERT": 1290,
+      "TXT_MSG": 3410,
+      "ACK": 2810,
+      "PATH": 410,
+      "TRACE": 31,
+      "REQ": 590,
+      "RESPONSE": 530,
+      "CONTROL": 19
+    },
+    "channels": {
+      "messages24h": 489,
+      "activeChannels24h": 4,
+      "top": [
+        {
+          "channel": {
+            "id": "public",
+            "name": "Public",
+            "kind": "public"
+          },
+          "messages24h": 412
+        },
+        {
+          "channel": {
+            "id": "tag:wardriving",
+            "name": "#wardriving",
+            "kind": "hashtag"
+          },
+          "messages24h": 58
+        }
+      ]
+    },
+    "hashSize": {
+      "1": 0.61,
+      "2": 0.34,
+      "3": 0.05
+    },
+    "pulse": {
+      "open": 1,
+      "top": {
+        "id": "pl_01JD7",
+        "kind": "traffic_spike",
+        "severity": "info"
+      }
+    },
+    "nodeList": {
+      "state": "complete",
+      "trusted": true,
+      "reason": "936 of 1,000 relayed hop appearances in the last 24 h match a placed node (93.6%).",
+      "computedAt": "2026-11-20T14:10:00.000Z"
+    },
+    "lastPacketAt": "2026-11-20T14:14:40.000Z"
+  },
+  "meta": {
+    "apiVersion": "1.0",
+    "region": {
+      "slug": "cmh",
+      "name": "Columbus",
+      "kind": "region"
+    },
+    "generatedAt": "2026-11-20T14:15:00.000Z",
+    "dataAt": "2026-11-20T14:14:40.000Z",
+    "status": {
+      "state": "ready",
+      "reason": null
+    },
+    "sources": {
+      "meshsonar": {
+        "id": "meshsonar",
+        "kind": "first_party",
+        "name": "MeshSonar observers",
+        "attribution": "MeshSonar",
+        "url": "https://meshsonar.com/observers"
+      },
+      "meshsonar-phone": {
+        "id": "meshsonar-phone",
+        "kind": "first_party_phone",
+        "name": "MeshSonar phone observers",
+        "attribution": "MeshSonar app users",
+        "url": "https://meshsonar.com/observers"
+      },
+      "src_12": {
+        "id": "src_12",
+        "kind": "outside",
+        "name": "Ohio Valley CoreScope",
+        "attribution": "Data from the Ohio Valley CoreScope instance",
+        "url": "https://corescope-ohio.example.org"
+      },
+      "src_31": {
+        "id": "src_31",
+        "kind": "outside",
+        "name": "Scioto Mesh Analyzer",
+        "attribution": "Data from Scioto Mesh Analyzer",
+        "url": "https://scioto-mesh.example.net"
+      }
+    },
+    "window": {
+      "name": "24h",
+      "from": "2026-11-19T14:15:00.000Z",
+      "to": "2026-11-20T14:15:00.000Z",
+      "resolution": "1h",
+      "rollup": "e3_hour"
+    }
+  }
+}

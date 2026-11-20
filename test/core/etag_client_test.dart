@@ -133,10 +133,10 @@ void main() {
   });
 
   test('which paths are cacheable', () {
-    for (final p in ['/api/cmh/region-repeater', '/api/cmh/region-overview', '/api/cmh/regions-index', '/api/cmh/public-coverage', '/api/cmh/site-config', '/v1/regions']) {
+    for (final p in ['/api/cmh/region-repeater', '/api/cmh/region-overview', '/api/cmh/regions-index', '/api/cmh/public-coverage', '/api/cmh/site-config', '/v1/regions', '/v1/summary', '/v1/pulse']) {
       expect(EtagClient.isCacheable(Uri.parse('https://x.test$p?a=1')), isTrue, reason: p);
     }
-    for (final p in ['/api/cmh/ping', '/api/cmh/upload', '/api/cmh/whoami']) {
+    for (final p in ['/api/cmh/ping', '/api/cmh/upload', '/api/cmh/whoami', '/v1/me/watches']) {
       expect(EtagClient.isCacheable(Uri.parse('https://x.test$p')), isFalse, reason: p);
     }
   });

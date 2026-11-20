@@ -1,5 +1,5 @@
 // ETag on the wire for the public, cacheable GETs (region-*, regions-index, public-coverage, site-config, public-stats,
-// leaderboard, /v1/regions). The server shares a 120 req/min/IP limit across these, so: send `If-None-Match` with the
+// leaderboard, /v1/regions, /v1/summary, /v1/pulse). The server shares a 120 req/min/IP limit across these, so: send `If-None-Match` with the
 // stored ETag, and on `304` serve the stored body (a 304 is cheap and does not need the body re-sent). Every 200 is
 // stored on disk (ETag + body + fetch time). When the network fails, the stored copy is served and [offlineSince]
 // says when it was fetched, so the UI can label it "Offline - as of 3h ago". Spec: parity spec C.2 / C.6 / WP-R5.
@@ -17,7 +17,7 @@ import 'region_cache.dart';
 
 /// Paths (after the host) this client may cache. Everything else is passed through. Region reads all live under
 /// `/api/cmh/` on the region's own host (the host picks the region).
-final _cacheablePath = RegExp(r'^/(api/cmh/(region-[a-z-]+|regions-index|public-coverage|site-config|public-stats|leaderboard|network-leaderboard)|v1/regions)/?$');
+final _cacheablePath = RegExp(r'^/(api/cmh/(region-[a-z-]+|regions-index|public-coverage|site-config|public-stats|leaderboard|network-leaderboard)|v1/(regions|summary|pulse))/?$');
 
 /// Response header the [EtagClient] adds: `network`, `304` or `offline` (the stored copy, served because the network failed).
 const cacheSourceHeader = 'x-meshsonar-cache';

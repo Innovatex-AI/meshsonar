@@ -89,7 +89,7 @@ void main() {
     await pumpFor(t, const Duration(seconds: 1));
 
     // Segments.
-    await t.tap(find.byKey(const Key('segment-network')));
+    await t.tap(find.byKey(const Key('segment-radio')));
     await pumpFor(t, const Duration(seconds: 1));
     await shot(t, 'network');
     await t.tap(find.byKey(const Key('segment-contacts')));

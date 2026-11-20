@@ -151,7 +151,7 @@ class NodeRef {
       positionPublic ? PlanNodeSeed(key: hasFullKey ? key : null, name: name, lat: lat!, lon: lon!, source: _seedSource) : null;
 
   /// A contact that is a site (a repeater, room or sensor in the radio's contact list) goes to the planner as a site, not
-  /// as a person: 'contact' makes a handheld end (V-5, build 67: Chat > Network > a repeater > Link to… put the repeater
+  /// as a person: 'contact' makes a handheld end (V-5, build 67: Chat > Radio > a repeater > Link to… put the repeater
   /// in the plan as "handheld · 5 ft").
   String get _seedSource => source == NodeSource.contact && kind.isSite ? NodeSource.network.seedSource : source.seedSource;
 

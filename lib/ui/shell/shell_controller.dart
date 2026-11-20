@@ -1,22 +1,27 @@
-// The app shell's navigation state: which of the five tabs is showing, which Analyze view, and the way for any
+// The app shell's navigation state: which of the five tabs is showing, which Network section, and the way for any
 // screen (the mini drive bar, a deep link, another agent's chat code) to move between tabs.
 //
 // Tab API for other code:
 //   ShellScope.maybeOf(context)?.select(AppTab.drive);  // go to a tab (no-op in isolated widget tests)
 //   ShellScope.maybeOf(context)?.openDrive();           // the Drive tab
 //   ShellScope.maybeOf(context)?.setImmersive(true);    // Drive only: hide the tab bar / rail (full-screen map)
-//   ShellScope.maybeOf(context)?.openAnalyze(AnalyzeView.drives);
+//   ShellScope.maybeOf(context)?.openNetwork(NetworkRequest.packet(hash)); // the Network tab at a section (see NetworkRequest)
+//   ShellScope.maybeOf(context)?.openChatRadio();      // Chat > Radio (the radio's own repeaters, rooms and tools)
 //   ShellScope.maybeOf(context)?.openMore(MoreItem.settings);
 //   ShellScope.maybeOf(context)?.openPlan(PlanRequest.fromNode(...)); // the Plan tab, with something to plan (see PlanRequest)
 import 'package:flutter/material.dart';
 
+import '../../core/network_request.dart';
 import '../design/app_symbols.dart';
+
+export '../../core/network_request.dart' show NetworkRequest, NetworkSection;
 
 /// The five top-level tabs, in display order. Persisted by [name] (never by index) so reordering stays safe.
 enum AppTab {
   chat('Chat', AppSymbols.message, AppSymbols.messageFill),
   drive('Drive', AppSymbols.car, AppSymbols.carFill),
-  analyze('Analyze', AppSymbols.chartBar, AppSymbols.chartBar),
+  /// The network analyzer (AZ-3.1, was "Analyze" until build 71): the viewed region's server data in five sections.
+  network('Network', AppSymbols.globe, AppSymbols.globe),
   plan('Plan', AppSymbols.map, AppSymbols.mapFill),
   more('More', AppSymbols.ellipsisCircle, AppSymbols.ellipsisCircle);
 
@@ -30,10 +35,12 @@ enum AppTab {
   /// The tab's icon as a widget.
   Widget iconWidget({required bool selected}) => AppSymbolIcon(selected ? selectedSymbol : symbol, size: 24);
 
-  /// Looks a tab up by its persisted name. `'map'` is the pre-rename name of the Drive tab and still restores it
-  /// (UiPrefs.lastTab saved by builds before the rename); new writes use `'drive'`.
+  /// Looks a tab up by its persisted name. `'map'` is the pre-rename name of the Drive tab and `'analyze'` the
+  /// pre-build-71 name of the Network tab; both still restore (UiPrefs.lastTab saved by older builds); new writes use
+  /// `'drive'` and `'network'`.
   static AppTab? byName(String? name) {
     if (name == 'map') return AppTab.drive;
+    if (name == 'analyze') return AppTab.network;
     for (final t in AppTab.values) {
       if (t.name == name) return t;
     }
@@ -41,12 +48,10 @@ enum AppTab {
   }
 }
 
-/// What the Analyze tab shows: the viewed region's website data, or this phone's drives and reports.
-enum AnalyzeView { region, drives }
-
 /// Rows on the More tab that other code can open directly.
 /// [observer] opens Settings at its Observer section (the Home observer row is gone, release 0.38).
-enum MoreItem { radio, myRadios, wardriving, notifications, settings, about, legend, privacy, howItWorks, repeaters, trace, discover, adverts, rxLog, noiseFloor, telemetry, radioSetup, observerJoin, method, devices, myReports, leaderboard, chat, observer }
+/// [drives] is this phone's drives, reports and progress (moved here from the old Analyze tab, AZ-3.1).
+enum MoreItem { drives, radio, myRadios, wardriving, notifications, settings, about, legend, privacy, howItWorks, repeaters, trace, discover, adverts, rxLog, noiseFloor, telemetry, radioSetup, observerJoin, method, devices, myReports, leaderboard, chat, observer }
 
 /// What a request to open the Plan tab carries (release 0.38, Master Planner). The Plan tab takes it with
 /// [ShellController.takePendingPlan] when it is shown.
@@ -131,14 +136,14 @@ class PlanRequest {
 /// Where the pre-0.25 five tabs (0 Drive, 1 Region, 2 Drives, 3 Radio, 4 Settings) live now.
 class LegacyTab {
   final AppTab tab;
-  final AnalyzeView? analyze;
+  final NetworkSection? network;
   final MoreItem? more;
-  const LegacyTab(this.tab, {this.analyze, this.more});
+  const LegacyTab(this.tab, {this.network, this.more});
 
   /// Maps an old tab index. Anything unknown opens the Drive tab.
   factory LegacyTab.fromIndex(int i) => switch (i) {
-        1 => const LegacyTab(AppTab.analyze, analyze: AnalyzeView.region),
-        2 => const LegacyTab(AppTab.analyze, analyze: AnalyzeView.drives),
+        1 => const LegacyTab(AppTab.network, network: NetworkSection.now),
+        2 => const LegacyTab(AppTab.more, more: MoreItem.drives),
         3 => const LegacyTab(AppTab.more, more: MoreItem.radio),
         4 => const LegacyTab(AppTab.more, more: MoreItem.settings),
         _ => const LegacyTab(AppTab.drive),
@@ -147,11 +152,11 @@ class LegacyTab {
 
 class ShellController extends ChangeNotifier {
   AppTab _tab;
-  AnalyzeView _analyze;
-  ShellController({AppTab initial = AppTab.drive, AnalyzeView analyze = AnalyzeView.region})
+  NetworkSection _network;
+  ShellController({AppTab initial = AppTab.drive, NetworkSection network = NetworkSection.now})
       : _tab = initial,
         // ignore: prefer_initializing_formals
-        _analyze = analyze;
+        _network = network;
 
   AppTab get tab => _tab;
 
@@ -167,7 +172,9 @@ class ShellController extends ChangeNotifier {
     _immersive = v;
     notifyListeners();
   }
-  AnalyzeView get analyzeView => _analyze;
+
+  /// The Network tab's section (kept while the person moves between tabs).
+  NetworkSection get networkSection => _network;
 
   /// Bumped when something asks the More tab to open [pendingMore]; the More tab consumes it.
   MoreItem? _pendingMore;
@@ -201,22 +208,41 @@ class ShellController extends ChangeNotifier {
   /// The Drive tab, which is where a drive runs and where the mini drive bar leads.
   void openDrive() => select(AppTab.drive);
 
-  void openAnalyze(AnalyzeView v) {
-    _analyze = v;
-    select(AppTab.analyze);
+  /// Network tab with something to show (a section, a node, a packet, a deep link): kept until the Network tab takes it
+  /// ([takePendingNetwork]), like [openPlan]. A newer request replaces one not taken yet. The section switches at once.
+  NetworkRequest? _pendingNetwork;
+  NetworkRequest? get pendingNetwork => _pendingNetwork;
+  NetworkRequest? takePendingNetwork() {
+    final r = _pendingNetwork;
+    _pendingNetwork = null;
+    return r;
+  }
+
+  void openNetwork(NetworkRequest request) {
+    _pendingNetwork = request;
+    // The live map belongs to Map (AZ-3.3); until it is built, a live-map link opens the live feed under Packets.
+    _network = request.section == NetworkSection.map && request.mapPanel == 'live' ? NetworkSection.packets : request.section;
+    final wasNetwork = _tab == AppTab.network;
+    select(AppTab.network);
+    if (wasNetwork) notifyListeners();
+  }
+
+  void setNetworkSection(NetworkSection s) {
+    if (s == _network) return;
+    _network = s;
     notifyListeners();
   }
 
-  /// Chat tab, Network segment (repeaters, rooms, sensors and the radio tools live there since the Chat redesign).
-  bool _pendingNetwork = false;
-  bool takePendingNetwork() {
-    final v = _pendingNetwork;
-    _pendingNetwork = false;
+  /// Chat tab, Radio segment (the radio's own repeaters, rooms, sensors and the radio tools; "Network" until build 71).
+  bool _pendingChatRadio = false;
+  bool takePendingChatRadio() {
+    final v = _pendingChatRadio;
+    _pendingChatRadio = false;
     return v;
   }
 
-  void openNetwork() {
-    _pendingNetwork = true;
+  void openChatRadio() {
+    _pendingChatRadio = true;
     final wasChat = _tab == AppTab.chat;
     select(AppTab.chat);
     if (wasChat) notifyListeners();
@@ -246,14 +272,8 @@ class ShellController extends ChangeNotifier {
     if (wasMore) notifyListeners();
   }
 
-  void setAnalyzeView(AnalyzeView v) {
-    if (v == _analyze) return;
-    _analyze = v;
-    notifyListeners();
-  }
-
   void openLegacy(LegacyTab l) {
-    if (l.analyze != null) _analyze = l.analyze!;
+    if (l.network != null) _network = l.network!;
     if (l.more != null) {
       openMore(l.more!);
     } else {

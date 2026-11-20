@@ -1,0 +1,54 @@
+{
+  "regions": [
+    {
+      "code": "CMH",
+      "slug": "cmh",
+      "name": "Columbus",
+      "status": "active",
+      "url": "https://cmh.meshsonar.com",
+      "bbox": [
+        -83.25,
+        39.8,
+        -82.75,
+        40.15
+      ],
+      "centroid": {
+        "lat": 39.975,
+        "lon": -83.0
+      },
+      "default_view": {
+        "lat": 39.975,
+        "lon": -83.0,
+        "zoom": 10
+      },
+      "default_preset": "USA",
+      "preset_none": null,
+      "timezone": "America/New_York",
+      "group": "ohio"
+    }
+  ],
+  "groups": [
+    {
+      "code": "OHIO",
+      "slug": "ohio",
+      "name": "Ohio",
+      "status": "active",
+      "url": "https://ohio.meshsonar.com",
+      "members": [
+        "CMH",
+        "CVG",
+        "DAY"
+      ],
+      "bbox": [
+        -84.82,
+        38.4,
+        -80.52,
+        41.98
+      ],
+      "centroid": {
+        "lat": 40.19,
+        "lon": -82.67
+      }
+    }
+  ]
+}

@@ -6,6 +6,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart' hide Radio;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/ui/design/app_surfaces.dart' show dismissAppToast;
 import 'package:meshsonar/app/app_state.dart';
 import 'package:meshsonar/app/services.dart';
 import 'package:meshsonar/core/api.dart';
@@ -1114,18 +1115,18 @@ Future<void> openDrivePanel(WidgetTester tester) async {
 /// Old "Drive" tab.
 Future<void> openDriveTab(WidgetTester tester) => tapShellTab(tester, 'Drive');
 
-/// Old "Region" tab: Analyze, Region view.
+/// Old "Region" tab: the Network tab (Analyze until build 71, AZ-3.1).
 Future<void> openRegionTab(WidgetTester tester) async {
-  await tapShellTab(tester, 'Analyze');
-  await tester.tap(find.descendant(of: find.byKey(const Key('analyze-segments')), matching: find.text('Region')));
+  await tapShellTab(tester, 'Network');
   await tester.pumpAndSettle();
 }
 
-/// Old "Drives" tab: Analyze, Drives view.
+/// Old "Drives" tab: More > Drives (it lived in the Analyze tab until build 71, AZ-3.1).
 Future<void> openDrivesTab(WidgetTester tester) async {
-  await tapShellTab(tester, 'Analyze');
-  await tester.tap(find.descendant(of: find.byKey(const Key('analyze-segments')), matching: find.text('Drives')));
-  await tester.pumpAndSettle();
+  // Drives is the first More row: a toast left from the Drive tab (top-anchored there) can sit over it.
+  dismissAppToast();
+  await tester.pump();
+  await _openMoreRow(tester, 'more-drives');
 }
 
 /// Old "Radio" tab: More, Radio.

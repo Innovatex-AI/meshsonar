@@ -20,7 +20,7 @@ void main() {
     await tester.tap(find.byKey(const Key('onboarding-next')));
     await tester.pumpAndSettle();
     expect(find.text('Find your way around'), findsOneWidget);
-    for (final tab in ['Chat', 'Drive', 'Analyze', 'Plan', 'More']) {
+    for (final tab in ['Chat', 'Drive', 'Network', 'Plan', 'More']) {
       expect(find.text(tab), findsWidgets);
     }
     await tester.tap(find.byKey(const Key('onboarding-next')));

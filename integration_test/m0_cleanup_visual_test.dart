@@ -1,5 +1,5 @@
 // Visual check for the M0 app cleanup (unified map plan, Nov 8 2026): the Plan tab (five tools, no frozen CMH tools), the
-// Analyze > Region tab bar (no Routes / Findings / Hops), the More list (groups, no Developer row until a long-press on
+// Network tab (Analyze > Region until build 71; Insights > Analysis), the More list (groups, no Developer row until a long-press on
 // About MeshSonar), and the rewritten Method page. Prints "SCREEN <name>" lines for scripts/verify_sim.sh to screenshot.
 //
 //   FLOW_TEST=integration_test/m0_cleanup_visual_test.dart DEVICES="iPhone 17 Pro" scripts/verify_sim.sh <worktree>
@@ -47,25 +47,23 @@ void main() {
     await t.pageBack();
     await pumpFor(t, const Duration(seconds: 1));
 
-    // Analyze > Region: the tab bar, then the Analysis tab (the one hop chart).
-    await openShellTab(t, 'Analyze');
-    final seg = find.descendant(of: find.byKey(const Key('analyze-segments')), matching: find.text('Region'));
-    if (await waitFor(t, seg)) await t.tap(seg);
+    // Network (Analyze until build 71): the region home, then Insights > Analysis (the one hop chart).
+    await openShellTab(t, 'Network');
     await pumpFor(t, const Duration(seconds: 5));
     await shot(t, 'm0-analyze-region');
-    final analysisTab = find.widgetWithText(Tab, 'Analysis');
-    if (await waitFor(t, analysisTab, timeout: const Duration(seconds: 5))) {
-      await t.ensureVisible(analysisTab);
-      await pumpFor(t, const Duration(milliseconds: 600));
-      await t.tap(analysisTab, warnIfMissed: false);
-      await pumpFor(t, const Duration(seconds: 6));
-      await shot(t, 'm0-analyze-analysis');
-    }
-    final wardrive = find.widgetWithText(Tab, 'Wardrive');
-    if (await waitFor(t, wardrive, timeout: const Duration(seconds: 3))) {
-      await t.ensureVisible(wardrive);
-      await pumpFor(t, const Duration(milliseconds: 600));
+    final insights = find.byKey(const Key('network-section-insights'));
+    if (await waitFor(t, insights, timeout: const Duration(seconds: 5))) {
+      await t.tap(insights);
+      await pumpFor(t, const Duration(seconds: 1));
       await shot(t, 'm0-analyze-tabs-end');
+      final analysis = find.byKey(const Key('insight-analysis'));
+      if (await waitFor(t, analysis, timeout: const Duration(seconds: 5))) {
+        await t.tap(analysis);
+        await pumpFor(t, const Duration(seconds: 6));
+        await shot(t, 'm0-analyze-analysis');
+        await t.pageBack();
+        await pumpFor(t, const Duration(seconds: 1));
+      }
     }
 
     // More: top, middle, bottom (the Developer section and its Drive switch are gone, build 70).

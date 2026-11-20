@@ -1,0 +1,88 @@
+{
+  "data": [
+    {
+      "id": "pl_01JD7",
+      "kind": "traffic_spike",
+      "severity": "info",
+      "state": "open",
+      "startedAt": "2026-11-20T12:30:00.000Z",
+      "endedAt": null,
+      "title": "Traffic 2.4x the usual for a Thursday morning",
+      "detail": "640 packets in the last hour against a usual 265 (35-day baseline).",
+      "evidence": {
+        "observed": 640,
+        "expected": 265,
+        "baselineDays": 35
+      },
+      "subjects": [],
+      "links": {
+        "web": "https://cmh.meshsonar.com/insights?tab=signal&window=24h"
+      }
+    },
+    {
+      "id": "pl_01JD2",
+      "kind": "repeater_silent",
+      "severity": "warn",
+      "state": "open",
+      "startedAt": "2026-11-20T05:00:00.000Z",
+      "endedAt": null,
+      "title": "Riverside RPT went quiet",
+      "detail": "Not heard for 9 h; usually heard every 40 min.",
+      "evidence": {
+        "lastHeardAt": "2026-11-20T05:00:00.000Z",
+        "offlineAfterH": 8
+      },
+      "subjects": [
+        {
+          "key": "a7b21db75893e8c8665e5060b05d5e03c68c963d5a3a6e7e0dba6b5e0b9cde85",
+          "name": "Riverside RPT",
+          "role": "repeater"
+        }
+      ],
+      "links": {
+        "web": "https://cmh.meshsonar.com/nodes/a7b21db75893e8c8665e5060b05d5e03c68c963d5a3a6e7e0dba6b5e0b9cde85"
+      }
+    }
+  ],
+  "page": {
+    "limit": 50,
+    "next": null
+  },
+  "meta": {
+    "apiVersion": "1.0",
+    "region": {
+      "slug": "cmh",
+      "name": "Columbus",
+      "kind": "region"
+    },
+    "generatedAt": "2026-11-20T14:15:00.000Z",
+    "dataAt": "2026-11-20T14:14:40.000Z",
+    "status": {
+      "state": "ready",
+      "reason": null
+    },
+    "sources": {
+      "meshsonar": {
+        "id": "meshsonar",
+        "kind": "first_party",
+        "name": "MeshSonar observers",
+        "attribution": "MeshSonar",
+        "url": "https://meshsonar.com/observers"
+      },
+      "src_12": {
+        "id": "src_12",
+        "kind": "outside",
+        "name": "Ohio Valley CoreScope",
+        "attribution": "Data from the Ohio Valley CoreScope instance",
+        "url": "https://corescope-ohio.example.org"
+      }
+    },
+    "window": {
+      "name": "7d",
+      "from": "2026-11-13T14:15:00.000Z",
+      "to": "2026-11-20T14:15:00.000Z",
+      "resolution": "1h",
+      "rollup": "pulse_event"
+    }
+  }
+}

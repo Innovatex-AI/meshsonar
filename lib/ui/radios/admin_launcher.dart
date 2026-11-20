@@ -1,4 +1,4 @@
-// Opens the repeater admin or room screens for a key, from Chat > Network, the node actions (ui/nodes/node_actions.dart:
+// Opens the repeater admin or room screens for a key, from Chat > Radio, the node actions (ui/nodes/node_actions.dart:
 // "Administer" on every repeater and room surface) or a contact profile. Builds the session
 // over the connected radio, the contact lookups, and the password vault. Says plainly why it cannot when there is no radio.
 import 'dart:io' show Platform;

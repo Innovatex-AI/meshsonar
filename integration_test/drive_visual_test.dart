@@ -185,11 +185,9 @@ Future<void> toMapTab(WidgetTester t) => goTab(t, 'Drive', 'drive-map', alt: 'Ma
 /// region's cells and repeaters), then waits for the data.
 Future<void> pickColumbus(WidgetTester t, AppState st) => pickRegion(t, st, query: 'columbus', code: 'CMH');
 
-/// Picks the region [code] in the Analyze region switcher (search [query]) and waits until it is the viewed region.
+/// Picks the region [code] in the Network tab's region switcher (search [query]) and waits until it is the viewed region.
 Future<void> pickRegion(WidgetTester t, AppState st, {required String query, required String code}) async {
-  await goTab(t, 'Analyze', 'analyze-segments');
-  final seg = find.descendant(of: find.byKey(const Key('analyze-segments')), matching: find.text('Region'));
-  if (seg.evaluate().isNotEmpty) await t.tap(seg.first, warnIfMissed: false);
+  await goTab(t, 'Network', 'network-tab');
   await pumpFor(t, const Duration(seconds: 2));
   final chip = find.byKey(const Key('region-switch-chip'));
   if (!await waitFor(t, chip, timeout: const Duration(seconds: 30))) throw StateError('region-switch-chip never appeared');
@@ -399,10 +397,8 @@ void main() {
       } else {
         // Current app: the chip is a plain label when a region is known; the switcher is the Region screen's chip.
         // ignore: avoid_print
-        print('NOTE 02-region-switcher via Analyze > Region > region-switch-chip (region-chip is not tappable in this build)');
-        await goTab(t, 'Analyze', 'analyze-segments');
-        final seg = find.descendant(of: find.byKey(const Key('analyze-segments')), matching: find.text('Region'));
-        if (seg.evaluate().isNotEmpty) await t.tap(seg.first, warnIfMissed: false);
+        print('NOTE 02-region-switcher via Network > region-switch-chip (region-chip is not tappable in this build)');
+        await goTab(t, 'Network', 'network-tab');
         await pumpFor(t, const Duration(seconds: 2));
         if (await tapKey(t, ['region-chip', 'region-switch-chip'], wait: const Duration(seconds: 2))) {
           await frame(t, '02-region-switcher');

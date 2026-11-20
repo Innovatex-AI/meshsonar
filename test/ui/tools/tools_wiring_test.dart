@@ -23,7 +23,7 @@ Future<void> showRow(WidgetTester tester, String key) async {
 }
 
 void main() {
-  // Chat WP11 moved Trace, Discover, Adverts and Rx log to Chat > Network > Tools; More keeps one "network" row that leads there
+  // Chat WP11 moved Trace, Discover, Adverts and Rx log to Chat > Radio > Tools; More keeps one "network" row that leads there
   // (reachability of the moved tools: test/ui/network/more_links_test.dart).
   testWidgets('More has a "Radios and tools" group: the Network row, then the tools that stayed, in order', (tester) async {
     useTallScreen(tester);

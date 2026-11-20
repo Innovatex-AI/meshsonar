@@ -98,9 +98,9 @@ Future<void> _openMoreRow(WidgetTester t, String key) async {
   await pumpFor(t, const Duration(seconds: 1));
 }
 
-Future<void> _analyze(WidgetTester t, String segment) async {
-  await openShellTab(t, 'Analyze');
-  await t.tap(find.descendant(of: find.byKey(const Key('analyze-segments')), matching: find.text(segment)));
+/// The Network tab (Analyze until build 71, AZ-3.1).
+Future<void> _network(WidgetTester t) async {
+  await openShellTab(t, 'Network');
   await pumpFor(t, const Duration(seconds: 1));
 }
 
@@ -111,9 +111,10 @@ Future<void> openTab(WidgetTester t, String label) async {
     case 'Drive':
       await openShellTab(t, 'Drive');
     case 'Region':
-      await _analyze(t, 'Region');
+      await _network(t);
     case 'Drives':
-      await _analyze(t, 'Drives');
+      // Drives live under More since build 71 (AZ-3.1).
+      await _openMoreRow(t, 'more-drives');
     case 'Radio':
       await _openMoreRow(t, 'more-radio');
     case 'Settings':
@@ -303,7 +304,7 @@ final List<ScreenStep> screens = [
     await openTab(t, 'Drive');
   }),
   // drive-live / drive-report / drive-detail (V-5, build 67): a real drive on the simulated radio, its report, then its
-  // card in Analyze > Drives. They need the debug-only simulated radio (the connect step): without it they skip. With it,
+  // card in More > Drives. They need the debug-only simulated radio (the connect step): without it they skip. With it,
   // every miss is a STEPFAIL (they used to be optional end to end, so a disabled Start drive skipped all three silently:
   // the tour ran without a location grant, and Start drive is off until location is allowed).
   ScreenStep('drive-live', (t) async {
@@ -393,7 +394,7 @@ final List<ScreenStep> screens = [
     );
     if (!await waitFor(t, open, timeout: const Duration(seconds: 5))) {
       if (!_droveOk) throw const _Skip();
-      _stepFail('drive-detail: the drive just saved has no card in Analyze > Drives');
+      _stepFail('drive-detail: the drive just saved has no card in More > Drives');
     }
     await t.tap(open.first);
     await pumpFor(t, const Duration(seconds: 3));
@@ -410,19 +411,19 @@ final List<ScreenStep> screens = [
     _stepOk('drive-detail');
   }, optional: true),
   // J2 (V-5, build 67): a repeater contact > Link to… opens the Planner in Link mode with the contact as an end. Runs here on
-  // the simulated radio (no server needed) as well as in planner_visual_test.dart. Repeaters live under Chat > Network below
+  // the simulated radio (no server needed) as well as in planner_visual_test.dart. Repeaters live under Chat > Radio below
   // the radio card and the Nearby section, in a lazily built list: the rows only exist once scrolled near the viewport.
   ScreenStep('j2-contact-link', (t) async {
     final app = AppScope.of(t.element(find.byType(Scaffold).first));
     if (!app.connected) throw const _Skip();
     await popToRoots(t);
     await openShellTab(t, 'Chat');
-    final seg = find.byKey(const Key('segment-network'));
+    final seg = find.byKey(const Key('segment-radio'));
     if (!await waitFor(t, seg, timeout: const Duration(seconds: 8))) _stepFail('j2: no Network segment on the Chat tab');
     await t.tap(seg.first);
     await pumpFor(t, const Duration(seconds: 1));
     final tile = find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key as ValueKey<String>).value.startsWith('network-row-'));
-    if (!await scrollToFind(t, tile, find.byKey(const Key('chat-scroll')))) _stepFail('j2: no repeater rows under Chat > Network with the simulated radio');
+    if (!await scrollToFind(t, tile, find.byKey(const Key('chat-scroll')))) _stepFail('j2: no repeater rows under Chat > Radio with the simulated radio');
     final prefix = (t.widget(tile.first).key as ValueKey<String>).value.substring('network-row-'.length).toLowerCase();
     await t.tap(tile.first, warnIfMissed: false);
     await pumpFor(t, const Duration(seconds: 1));
