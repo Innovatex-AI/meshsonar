@@ -12,6 +12,7 @@ import 'package:meshsonar/core/api.dart' show CmatException;
 import 'package:meshsonar/core/region_lookup.dart';
 import 'package:meshsonar/core/v1/network_api.dart';
 import 'package:meshsonar/core/v1/packets_api.dart' show PacketsApi, packetsApiFactory;
+import 'package:meshsonar/ui/network/network_share.dart';
 import 'package:meshsonar/ui/network/packets/packet_detail_screen.dart';
 import 'package:meshsonar/ui/region/region_report_export_sheet.dart';
 import 'package:meshsonar/ui/shell/network_tab.dart';
@@ -155,6 +156,40 @@ void main() {
     await tester.pump();
     expect(find.byType(RegionReportExportSheet), findsOneWidget);
     await tester.pumpAndSettle();
+  });
+
+  testWidgets('AZ-3.5: the header search finds a region locally while /v1 is not live and opens it', (tester) async {
+    useV1Fixtures();
+    final h = await pumpNetwork(tester);
+    await section(tester, 'insights');
+    await tester.tap(find.byKey(const Key('network-search')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('network-search-sheet')), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('network-search-input')), 'colum');
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('network-search-local')), findsOneWidget, reason: 'says it searched what the phone has');
+    final hit = find.byKey(const ValueKey('network-search-hit-region-Columbus, US'));
+    expect(hit, findsOneWidget);
+    await tester.tap(hit);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('network-search-sheet')), findsNothing);
+    expect(find.byKey(const Key('network-section-body-now')), findsOneWidget);
+    expect(h.client.regionsIndexResult, isNotEmpty);
+    await tester.pump(const Duration(seconds: 2));
+  });
+
+  testWidgets('AZ-3.5: Share sends the region-host link of the shown section', (tester) async {
+    useV1Fixtures();
+    final shared = <String>[];
+    debugNetworkShare = (text, subject) => shared.add(text);
+    addTearDown(() => debugNetworkShare = null);
+    await pumpNetwork(tester);
+    await section(tester, 'nodes', sub: 0);
+    await tester.tap(find.byKey(const Key('network-share')).first);
+    await tester.pump();
+    expect(shared, ['https://cmh.meshsonar.com/nodes']);
+    await tester.pump(const Duration(seconds: 2));
   });
 
   testWidgets('the pulse chip hides itself while the server has no /v1/pulse', (tester) async {

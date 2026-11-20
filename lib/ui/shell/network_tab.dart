@@ -28,6 +28,8 @@ import '../design/app_symbols.dart';
 import '../design/state_views.dart';
 import '../location_status.dart';
 import '../network/network_header.dart';
+import '../network/network_search.dart';
+import '../network/network_share.dart';
 import '../network/network_sections.dart';
 import '../network/nodes/node_routes.dart';
 import '../network/packets/packet_detail_screen.dart';
@@ -138,6 +140,11 @@ class _NetworkTabState extends State<NetworkTab> {
         title: Text(region?.name ?? 'Network', key: const Key('region-title'), maxLines: 1, overflow: TextOverflow.ellipsis),
         actions: [
           if (region != null)
+            NetworkShareButton(
+              request: NetworkRequest.section(_section, region: region.slug),
+              subject: '${region.name} on MeshSonar',
+            ),
+          if (region != null)
             IconButton(
               key: const Key('region-report-export'),
               tooltip: 'Export region report',
@@ -155,6 +162,10 @@ class _NetworkTabState extends State<NetworkTab> {
                 if (s.locationNote != null)
                   Padding(padding: const EdgeInsets.fromLTRB(12, 8, 12, 0), child: LocationNoteBanner(state: s)),
                 if (region.machineDerived) MachineDerivedNote(regionName: region.name),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 6, 12, 4),
+                  child: NetworkSearchField(key: ValueKey('network-search-${region.code}'), region: region),
+                ),
                 Align(
                   alignment: Alignment.centerLeft,
                   child: Padding(
