@@ -431,7 +431,9 @@ const Map<String, String> sectionWord = {
   'data': 'Data',
 };
 
-/// Most severe first, the engine's own order inside a severity.
+/// Most severe first, the engine's own order inside a severity. The severity is always the one the server sent: no code
+/// implies one (app-next-pass-list item 4, server 0146: `repeaters_lost` can be info, `repeaters_new` is rarer), and an
+/// unknown severity sorts last and reads "Note".
 List<Finding> sortFindings(List<Finding> rows) {
   final idx = <Finding, int>{for (var i = 0; i < rows.length; i++) rows[i]: i};
   final out = [...rows];
