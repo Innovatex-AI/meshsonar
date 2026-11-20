@@ -54,6 +54,8 @@ class _NetworkTabState extends State<NetworkTab> {
     _shell = shell;
     final pending = shell != null && shell.tab == AppTab.network ? shell.takePendingNetwork() : null;
     if (pending != null) {
+      // The section is already switched (openNetwork); pick the sub-view in this same build, then open the page.
+      _pickSub(pending);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) unawaited(_apply(pending));
       });
@@ -73,7 +75,14 @@ class _NetworkTabState extends State<NetworkTab> {
 
   void _setSub(NetworkSection s, int i) => setState(() => _sub[s] = i);
 
-  /// Takes a request: region, section, sub-view, then the page of the thing it names.
+  /// The sub-view a request asks for (no setState: called while building).
+  void _pickSub(NetworkRequest r) {
+    if (r.section == NetworkSection.map && r.mapPanel == 'live') _sub[NetworkSection.packets] = 1;
+    if (r.section == NetworkSection.nodes) _sub[NetworkSection.nodes] = r.observersView ? 1 : 0;
+    if (r.section == NetworkSection.packets && r.packetHash != null) _sub[NetworkSection.packets] = 0;
+  }
+
+  /// Takes a request after the frame: the region it names, then the page of the thing it names.
   Future<void> _apply(NetworkRequest r) async {
     final s = AppScope.read(context);
     var region = s.viewingRegion;
@@ -90,15 +99,7 @@ class _NetworkTabState extends State<NetworkTab> {
         if (!mounted) return;
       }
     }
-    // The live map belongs to Map (AZ-3.3); until then the live feed is Packets > Live.
-    final liveMap = r.section == NetworkSection.map && r.mapPanel == 'live';
-    final section = liveMap ? NetworkSection.packets : r.section;
-    _select(section);
-    setState(() {
-      if (liveMap) _sub[NetworkSection.packets] = 1;
-      if (section == NetworkSection.nodes) _sub[NetworkSection.nodes] = r.observersView ? 1 : 0;
-      if (section == NetworkSection.packets && r.packetHash != null) _sub[NetworkSection.packets] = 0;
-    });
+    if (!mounted) return;
     final reg = region;
     if (reg == null || !mounted) return;
     final nav = Navigator.of(context);

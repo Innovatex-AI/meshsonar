@@ -9,12 +9,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:meshsonar/core/api.dart' show CmatException;
-import 'package:meshsonar/core/network_request.dart';
 import 'package:meshsonar/core/region_lookup.dart';
 import 'package:meshsonar/core/v1/network_api.dart';
 import 'package:meshsonar/ui/region/packet_detail_screen.dart';
 import 'package:meshsonar/ui/region/region_report_export_sheet.dart';
 import 'package:meshsonar/ui/shell/network_tab.dart';
+import 'package:meshsonar/ui/shell/shell_controller.dart';
 
 import '../fakes.dart';
 
@@ -56,6 +56,13 @@ Future<void> section(WidgetTester tester, String name, {int? sub}) async {
     await tester.pump();
   }
   await tester.pump(const Duration(milliseconds: 500));
+}
+
+/// A few frames: the link reaches the inbox, the shell switches, the tab takes the request, the page is built.
+Future<void> frames(WidgetTester tester) async {
+  for (var i = 0; i < 6; i++) {
+    await tester.pump(const Duration(milliseconds: 300));
+  }
 }
 
 void main() {
@@ -188,11 +195,10 @@ void main() {
       final h = await pumpNetwork(tester);
       await tapShellTab(tester, 'Plan');
       h.incomingLinks.add(Uri.parse('https://cmh.meshsonar.com/insights?tab=signal'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 600));
-      await tester.pump(const Duration(milliseconds: 600));
-      expect(find.byType(NetworkTab), findsOneWidget);
+      await frames(tester);
       expect(find.byKey(const Key('insight-page-rf')), findsOneWidget, reason: 'tab=signal is the RF page');
+      expect(find.byType(NetworkTab, skipOffstage: false), findsOneWidget);
+      expect(ShellScope.maybeOf(tester.element(find.byType(NetworkTab, skipOffstage: false)))!.tab, AppTab.network);
       await tester.pageBack();
       await tester.pump(const Duration(milliseconds: 600));
       expect(find.byKey(const Key('network-insights-list')), findsOneWidget);
@@ -203,9 +209,7 @@ void main() {
       useV1Fixtures();
       final h = await pumpNetwork(tester);
       h.incomingLinks.add(Uri.parse('meshsonar://network/packets/C4B06EE8FC39B187?region=cmh'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 600));
-      await tester.pump(const Duration(milliseconds: 600));
+      await frames(tester);
       expect(find.byType(PacketDetailScreen), findsOneWidget);
       expect(tester.widget<PacketDetailScreen>(find.byType(PacketDetailScreen)).hash, 'c4b06ee8fc39b187');
       await tester.pageBack();
@@ -218,8 +222,7 @@ void main() {
       useV1Fixtures();
       final h = await pumpNetwork(tester);
       h.incomingLinks.add(Uri.parse('https://cmh.meshsonar.com/observers'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 600));
+      await frames(tester);
       expect(find.byKey(const Key('network-nodes-observers')), findsOneWidget);
       expect(h.state.planInbox.isEmpty, isTrue);
       expect(h.state.offerLink(Uri.parse('https://meshsonar.com/share/plan#abc')), isTrue);

@@ -220,7 +220,8 @@ class ShellController extends ChangeNotifier {
 
   void openNetwork(NetworkRequest request) {
     _pendingNetwork = request;
-    _network = request.section;
+    // The live map belongs to Map (AZ-3.3); until it is built, a live-map link opens the live feed under Packets.
+    _network = request.section == NetworkSection.map && request.mapPanel == 'live' ? NetworkSection.packets : request.section;
     final wasNetwork = _tab == AppTab.network;
     select(AppTab.network);
     if (wasNetwork) notifyListeners();
