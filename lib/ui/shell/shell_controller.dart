@@ -151,6 +151,13 @@ class LegacyTab {
 }
 
 class ShellController extends ChangeNotifier {
+  /// The running shell, for pages pushed on the root navigator (above ShellScope), such as a packet detail opened from
+  /// the Network tab. Set by HomeShell while it is mounted; null in tests that pump a single screen.
+  static ShellController? active;
+
+  /// The shell above [context], else the running one.
+  static ShellController? of(BuildContext context) => ShellScope.maybeRead(context) ?? active;
+
   AppTab _tab;
   NetworkSection _network;
   ShellController({AppTab initial = AppTab.drive, NetworkSection network = NetworkSection.now})
@@ -220,8 +227,7 @@ class ShellController extends ChangeNotifier {
 
   void openNetwork(NetworkRequest request) {
     _pendingNetwork = request;
-    // The live map belongs to Map (AZ-3.3); until it is built, a live-map link opens the live feed under Packets.
-    _network = request.section == NetworkSection.map && request.mapPanel == 'live' ? NetworkSection.packets : request.section;
+    _network = request.section;
     final wasNetwork = _tab == AppTab.network;
     select(AppTab.network);
     if (wasNetwork) notifyListeners();

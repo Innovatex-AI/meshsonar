@@ -1,0 +1,104 @@
+{
+  "data": {
+    "id": "d1a761a8d6478b879df8a2278225f4fc2c10d2f925f537c6cdd7921c7f147a0f",
+    "name": "MS Westside Observer",
+    "kind": "fixed",
+    "iata": "CMH",
+    "position": {
+      "lat": 39.97,
+      "lon": -83.07,
+      "precision": "rounded_1km"
+    },
+    "status": "online",
+    "lastSeen": "2026-11-20T14:14:40.000Z",
+    "packets1h": 640,
+    "packets24h": 14080,
+    "noiseFloorDbm": -112,
+    "batteryMv": null,
+    "firmware": "v1.18.0",
+    "clockOffsetS": 0.2,
+    "airtimeTxPct1h": 1.9,
+    "airtimeRxPct1h": 14.2,
+    "dutyCycleWarn": false,
+    "src": "meshsonar",
+    "key": "d1a761a8d6478b879df8a2278225f4fc2c10d2f925f537c6cdd7921c7f147a0f",
+    "model": "RAK4631",
+    "radio": {
+      "freqMhz": 910.525,
+      "bwKhz": 62.5,
+      "sf": 7,
+      "cr": 5
+    },
+    "uptimeS": 1209600,
+    "lastReboot": "2026-11-06T13:58:10.000Z",
+    "reboots7d": 0,
+    "neighborReport": {
+      "at": "2026-11-20T13:50:00.000Z",
+      "neighbors": [
+        {
+          "node": {
+            "key": "4f199584624bb836b6236a1becf56c22dc204f37e5775eda542895a88c4c164c",
+            "name": "Hilltop RPT",
+            "role": "repeater"
+          },
+          "snr": 6.25,
+          "heardAgoS": 1240
+        },
+        {
+          "node": {
+            "key": "3cd0c95448b8566d21060bfec77f420446b1122cb903ec140fe946603dbdfbd4",
+            "name": "Old Mill RPT",
+            "role": "repeater"
+          },
+          "snr": 2.5,
+          "heardAgoS": 3600
+        }
+      ]
+    },
+    "quality": {
+      "flags": [],
+      "trusted": true
+    },
+    "topNodes": [
+      {
+        "node": {
+          "key": "4f199584624bb836b6236a1becf56c22dc204f37e5775eda542895a88c4c164c",
+          "name": "Hilltop RPT",
+          "role": "repeater"
+        },
+        "packets": 412
+      },
+      {
+        "node": {
+          "key": "91f7b953529576091add8a19f9105e6572e43ea95429c60ed79ee1c4bf547ea4",
+          "name": "Library Room",
+          "role": "room"
+        },
+        "packets": 96
+      }
+    ]
+  },
+  "meta": {
+    "apiVersion": "1.0",
+    "region": {
+      "slug": "cmh",
+      "name": "Columbus",
+      "kind": "region"
+    },
+    "generatedAt": "2026-11-20T14:15:00.000Z",
+    "dataAt": "2026-11-20T14:14:40.000Z",
+    "status": {
+      "state": "ready",
+      "reason": null
+    },
+    "sources": {
+      "meshsonar": {
+        "id": "meshsonar",
+        "kind": "first_party",
+        "name": "MeshSonar observers",
+        "attribution": "MeshSonar",
+        "url": "https://meshsonar.com/observers"
+      }
+    }
+  }
+}

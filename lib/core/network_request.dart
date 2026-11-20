@@ -74,6 +74,9 @@ class NetworkRequest {
   /// Map panel (`/map?panel=live`).
   final String? mapPanel;
 
+  /// Live map: the time to show (`/map?panel=live&t=<RFC 3339>&packet=<hash>`, the packet detail's `links.replay`).
+  final DateTime? mapTime;
+
   const NetworkRequest({
     required this.section,
     this.region,
@@ -88,6 +91,7 @@ class NetworkRequest {
     this.mapPanel,
     this.observersList = false,
     this.packetFilter,
+    this.mapTime,
   });
 
   const NetworkRequest.section(this.section, {this.region, this.window})
@@ -100,7 +104,8 @@ class NetworkRequest {
         insightsTab = null,
         mapPanel = null,
         observersList = false,
-        packetFilter = null;
+        packetFilter = null,
+        mapTime = null;
 
   /// A node's page (Nodes section). [key] must be 64 hex.
   NetworkRequest.node(String key, {this.region})
@@ -115,7 +120,8 @@ class NetworkRequest {
         insightsTab = null,
         mapPanel = null,
         observersList = false,
-        packetFilter = null;
+        packetFilter = null,
+        mapTime = null;
 
   /// A packet (Packets section). [hash] must be 16 hex.
   NetworkRequest.packet(String hash, {this.region})
@@ -130,7 +136,8 @@ class NetworkRequest {
         insightsTab = null,
         mapPanel = null,
         observersList = false,
-        packetFilter = null;
+        packetFilter = null,
+        mapTime = null;
 
   /// An observer (Nodes section, Observers view).
   const NetworkRequest.observer(String this.observerId, {this.region})
@@ -144,7 +151,8 @@ class NetworkRequest {
         insightsTab = null,
         mapPanel = null,
         observersList = false,
-        packetFilter = null;
+        packetFilter = null,
+        mapTime = null;
 
   /// A channel (Insights section, Channels tab: AZ-3.7 / AZ-3.9 fill it).
   const NetworkRequest.channel(String this.channelId, {this.region})
@@ -157,6 +165,23 @@ class NetworkRequest {
         since = null,
         until = null,
         mapPanel = null,
+        observersList = false,
+        packetFilter = null,
+        mapTime = null;
+
+  /// The live map drawing one packet's path (Network > Map), at [at] (the packet detail's "Show on map").
+  NetworkRequest.mapPacket(String hash, {this.region, DateTime? at})
+      : section = NetworkSection.map,
+        packetHash = hash.toLowerCase(),
+        mapPanel = 'live',
+        mapTime = at?.toUtc(),
+        nodeKey = null,
+        observerId = null,
+        channelId = null,
+        window = null,
+        since = null,
+        until = null,
+        insightsTab = null,
         observersList = false,
         packetFilter = null;
 
@@ -174,7 +199,8 @@ class NetworkRequest {
       insightsTab: insightsTab,
       mapPanel: mapPanel,
       observersList: observersList,
-      packetFilter: packetFilter);
+      packetFilter: packetFilter,
+      mapTime: mapTime);
 
   /// The Packets list filters beyond the single [nodeKey] / [observerId] / [channelId] / [packetHash]; null = none.
   final PacketFilter? packetFilter;
@@ -252,7 +278,8 @@ class NetworkRequest {
       return re.hasMatch(x) ? x : null;
     }
 
-    NetworkRequest make(NetworkSection s, {String? node, String? hash, String? observer, String? channel, String? tab, String? panel, bool observersList = false}) =>
+    NetworkRequest make(NetworkSection s,
+            {String? node, String? hash, String? observer, String? channel, String? tab, String? panel, bool observersList = false, DateTime? mapTime}) =>
         NetworkRequest(
           section: s,
           region: region,
@@ -266,6 +293,7 @@ class NetworkRequest {
           insightsTab: tab,
           mapPanel: panel,
           observersList: observersList,
+          mapTime: mapTime,
         );
 
     if (segs.isEmpty) return make(NetworkSection.now);
@@ -313,7 +341,9 @@ class NetworkRequest {
         return make(NetworkSection.insights, tab: filter('tab', _tab));
       case 'map':
         if (id != null) return null;
-        return make(NetworkSection.map, panel: filter('panel', _tab));
+        final mp = filter('packet', _packetHash);
+        final mt = DateTime.tryParse(q['t'] ?? '')?.toUtc();
+        return make(NetworkSection.map, panel: filter('panel', _tab) ?? (mp != null ? 'live' : null), hash: mp, mapTime: mt);
       case 'live':
         // The site's old Live page; the contract's route is /map?panel=live.
         return id == null ? make(NetworkSection.map, panel: 'live') : null;
@@ -337,7 +367,8 @@ class NetworkRequest {
       insightsTab: insightsTab,
       mapPanel: mapPanel,
       observersList: observersList,
-      packetFilter: f == null || f.isEmpty ? null : f);
+      packetFilter: f == null || f.isEmpty ? null : f,
+      mapTime: mapTime);
 
   // ---------------------------------------------------------------- serialising
 
@@ -369,6 +400,8 @@ class NetworkRequest {
     }
     if (section == NetworkSection.insights && insightsTab != null && insightsTab != 'channels') q['tab'] = insightsTab!;
     if (section == NetworkSection.map && mapPanel != null) q['panel'] = mapPanel!;
+    if (section == NetworkSection.map && mapTime != null) q['t'] = mapTime!.toUtc().toIso8601String();
+    if (section == NetworkSection.map && packetHash != null) q['packet'] = packetHash!;
     if (window != null) {
       q['window'] = window!;
     } else {
@@ -406,10 +439,11 @@ class NetworkRequest {
       other.insightsTab == insightsTab &&
       other.mapPanel == mapPanel &&
       other.observersList == observersList &&
-      other.packetFilter == packetFilter;
+      other.packetFilter == packetFilter &&
+      other.mapTime == mapTime;
 
   @override
-  int get hashCode => Object.hash(section, region, nodeKey, packetHash, observerId, channelId, window, since, until, insightsTab, mapPanel, observersList, packetFilter);
+  int get hashCode => Object.hash(section, region, nodeKey, packetHash, observerId, channelId, window, since, until, insightsTab, mapPanel, observersList, packetFilter, mapTime);
 
   @override
   String toString() => 'NetworkRequest(${section.name}${region == null ? '' : ' $region'})';

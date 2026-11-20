@@ -199,6 +199,8 @@ void main() {
       final ent = File('ios/Runner/Runner.entitlements').readAsStringSync();
       expect(ent, contains('com.apple.developer.associated-domains'));
       expect(ent, contains('applinks:meshsonar.com'));
+      // AZ-3.5: region subdomains (cmh.meshsonar.com/nodes/...) open the app too; the site serves the AASA file on every host.
+      expect(ent, contains('applinks:*.meshsonar.com'));
       final pbx = File('ios/Runner.xcodeproj/project.pbxproj').readAsStringSync();
       expect('CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;'.allMatches(pbx).length, 3, reason: 'Debug, Release and Profile of Runner');
       expect(plist, contains('<key>FlutterDeepLinkingEnabled</key>\n\t<false/>'), reason: 'app_links, not Flutter, receives the links');

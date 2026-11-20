@@ -1,0 +1,111 @@
+{
+  "data": {
+    "key": "c48e58a12ba6d3040af2806c373e80452ef09c6a06b4d67eb82fa9cd3b69af65",
+    "prefix": {
+      "1": "c4",
+      "2": "c48e",
+      "3": "c48e58"
+    },
+    "name": "Kestrel-07",
+    "aka": [],
+    "role": "companion",
+    "position": null,
+    "positionReason": "not_advertised",
+    "positionSource": null,
+    "firstSeen": "2026-10-30T21:04:12.000Z",
+    "lastAdvertAt": "2026-11-18T14:00:00.000Z",
+    "lastHeardAt": "2026-11-20T14:02:05.000Z",
+    "health": {
+      "status": "active",
+      "lastHeardAt": "2026-11-20T14:02:05.000Z",
+      "lastHeardHow": "own_packet",
+      "offlineAfterH": 168,
+      "thresholdKind": "role_default",
+      "packetsToday": 4,
+      "relayed1h": null,
+      "relayed24h": null,
+      "avgSnr": 1.2,
+      "avgHops": 3.5,
+      "uptime": null
+    },
+    "hash": {
+      "size": 1,
+      "sizesSeen": [
+        1
+      ],
+      "inconsistent": false,
+      "multibyte": "unknown",
+      "collisions": {
+        "1": 0,
+        "2": 0,
+        "3": 0
+      }
+    },
+    "radio": null,
+    "scope": null,
+    "usefulness": null,
+    "battery": {
+      "mv": null,
+      "status": "unknown",
+      "at": null
+    },
+    "clock": {
+      "skewS": null,
+      "severity": "no_clock",
+      "driftSPerDay": null,
+      "samples": 1
+    },
+    "claim": {
+      "claimed": false,
+      "claimedBy": null
+    },
+    "recentAdverts": [
+      {
+        "hash": "33c6e06a80288aba",
+        "at": "2026-11-18T14:00:00.000Z",
+        "route": "FLOOD",
+        "hops": 3,
+        "observers": 2,
+        "signatureValid": true
+      }
+    ],
+    "links": {
+      "web": "https://cmh.meshsonar.com/nodes/c48e58a12ba6d3040af2806c373e80452ef09c6a06b4d67eb82fa9cd3b69af65",
+      "qr": null
+    },
+    "src": [
+      "src_12",
+      "meshsonar"
+    ]
+  },
+  "meta": {
+    "apiVersion": "1.0",
+    "region": {
+      "slug": "cmh",
+      "name": "Columbus",
+      "kind": "region"
+    },
+    "generatedAt": "2026-11-20T14:15:00.000Z",
+    "dataAt": "2026-11-20T14:14:40.000Z",
+    "status": {
+      "state": "ready",
+      "reason": null
+    },
+    "sources": {
+      "meshsonar": {
+        "id": "meshsonar",
+        "kind": "first_party",
+        "name": "MeshSonar observers",
+        "attribution": "MeshSonar",
+        "url": "https://meshsonar.com/observers"
+      },
+      "src_12": {
+        "id": "src_12",
+        "kind": "outside",
+        "name": "Ohio Valley CoreScope",
+        "attribution": "Data from the Ohio Valley CoreScope instance",
+        "url": "https://corescope-ohio.example.org"
+      }
+    }
+  }
+}

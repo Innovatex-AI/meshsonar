@@ -111,7 +111,9 @@ void main() {
         if (!allowedLiteralHosts.contains(e.key) && !refusedHosts.contains(e.key)) e.key: e.value
     };
     expect(unknown, isEmpty, reason: 'a new host in lib/ needs a spec decision (MeshSonar sends only to its server)');
-    expect(clients.difference({'cmat_client.dart', 'repeater_directory.dart', 'region_repeaters_api.dart', 'region_overview_api.dart', 'region_reports_api.dart', 'region_packets_api.dart', 'region_analysis_api.dart', 'repeater_detail_api.dart', 'etag_client.dart', 'region_stats_api.dart', 'region_timeline_api.dart', 'coverage_v2.dart', 'live_stream.dart', 'radio_presets.dart', 'offline_packs.dart', 'offline_basemap.dart', 'repeater_sync.dart', 'tile_source.dart', 'basemap.dart', 'map_definition.dart', 'photo_cache.dart', 'photo_wire.dart'}), isEmpty);
+    // live_api.dart (AZ-3.3) opens one client per /v1/stream connection on the region host, as live_stream.dart does for
+    // region-live, so a pause really drops the socket.
+    expect(clients.difference({'live_api.dart', 'cmat_client.dart', 'repeater_directory.dart', 'region_repeaters_api.dart', 'region_overview_api.dart', 'region_reports_api.dart', 'region_packets_api.dart', 'region_analysis_api.dart', 'repeater_detail_api.dart', 'etag_client.dart', 'region_stats_api.dart', 'region_timeline_api.dart', 'coverage_v2.dart', 'live_stream.dart', 'radio_presets.dart', 'offline_packs.dart', 'offline_basemap.dart', 'repeater_sync.dart', 'tile_source.dart', 'basemap.dart', 'map_definition.dart', 'photo_cache.dart', 'photo_wire.dart'}), isEmpty);
     expect(hosts.keys.where((h) => h.contains('meshmapper')), isEmpty);
   });
 

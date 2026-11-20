@@ -12,6 +12,7 @@ import 'package:meshsonar/core/api.dart' show CmatException;
 import 'package:meshsonar/core/region_lookup.dart';
 import 'package:meshsonar/core/v1/network_api.dart';
 import 'package:meshsonar/core/v1/packets_api.dart' show PacketsApi, packetsApiFactory;
+import 'package:meshsonar/ui/network/network_share.dart';
 import 'package:meshsonar/ui/network/packets/packet_detail_screen.dart';
 import 'package:meshsonar/ui/region/region_report_export_sheet.dart';
 import 'package:meshsonar/ui/shell/network_tab.dart';
@@ -107,16 +108,16 @@ void main() {
     expect(find.byKey(const Key('network-packets-list')), findsOneWidget);
     await section(tester, 'packets', sub: 1);
     expect(find.byKey(const Key('network-packets-live')), findsOneWidget);
-    // Nodes: Repeaters and Observers.
+    // Nodes: every role (AZ-3.4; the old Repeaters tab) and Observers.
     await section(tester, 'nodes', sub: 0);
-    expect(find.byKey(const Key('network-nodes-repeaters')), findsOneWidget);
+    expect(find.byKey(const Key('network-nodes-directory')), findsOneWidget);
     expect(find.byKey(const Key('network-packets-live')), findsNothing, reason: 'a hidden section is not built (no live stream behind it)');
     await section(tester, 'nodes', sub: 1);
     expect(find.byKey(const Key('network-nodes-observers')), findsOneWidget);
-    // Map: the placeholder that opens the full map.
+    // Map: the live map with replay (AZ-3.3), with a way to the full coverage map.
     await section(tester, 'map');
-    expect(find.byKey(const Key('network-map-placeholder')), findsOneWidget);
-    expect(find.byKey(const Key('network-map-open')), findsOneWidget);
+    expect(find.byKey(const Key('live-map')), findsOneWidget);
+    expect(find.byKey(const Key('live-map-open-full')), findsOneWidget);
     // Insights: Analysis, RF, Growth, Reports, Stats, Silent, Wardrive, each its own page.
     await section(tester, 'insights');
     for (final id in ['analysis', 'rf', 'growth', 'reports', 'stats', 'silent', 'wardrive']) {
@@ -141,18 +142,54 @@ void main() {
     useV1Fixtures();
     await pumpNetwork(tester);
     expect(find.byKey(const Key('pulse-chip')), findsOneWidget);
-    expect(find.textContaining('Riverside RPT went quiet'), findsOneWidget, reason: 'warn before info');
+    expect(find.descendant(of: find.byKey(const Key('pulse-chip')), matching: find.text('Unusual: Riverside RPT went quiet +1')), findsOneWidget,
+        reason: 'warn before info');
+    expect(find.byKey(const Key('what-changed')), findsOneWidget, reason: 'AZ-3.6 item 6: the "What changed" card on Now > Findings');
     expect(find.text('640 packets last hour · 151 repeaters heard · 26 observers online'), findsOneWidget);
     await tester.tap(find.byKey(const Key('pulse-chip')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('pulse-sheet')), findsOneWidget);
-    expect(find.text('Traffic 2.4x the usual for a Thursday morning'), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const Key('pulse-sheet')), matching: find.text('Traffic 2.4x the usual for a Thursday morning')), findsOneWidget);
     await tester.tapAt(const Offset(2, 2));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('region-report-export')));
     await tester.pump();
     expect(find.byType(RegionReportExportSheet), findsOneWidget);
     await tester.pumpAndSettle();
+  });
+
+  testWidgets('AZ-3.5: the header search finds a region locally while /v1 is not live and opens it', (tester) async {
+    useV1Fixtures();
+    final h = await pumpNetwork(tester);
+    await section(tester, 'insights');
+    await tester.tap(find.byKey(const Key('network-search')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('network-search-sheet')), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('network-search-input')), 'colum');
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('network-search-local')), findsOneWidget, reason: 'says it searched what the phone has');
+    final hit = find.byKey(const ValueKey('network-search-hit-region-Columbus, US'));
+    expect(hit, findsOneWidget);
+    await tester.tap(hit);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('network-search-sheet')), findsNothing);
+    expect(find.byKey(const Key('network-section-body-now')), findsOneWidget);
+    expect(h.client.regionsIndexResult, isNotEmpty);
+    await tester.pump(const Duration(seconds: 2));
+  });
+
+  testWidgets('AZ-3.5: Share sends the region-host link of the shown section', (tester) async {
+    useV1Fixtures();
+    final shared = <String>[];
+    debugNetworkShare = (text, subject) => shared.add(text);
+    addTearDown(() => debugNetworkShare = null);
+    await pumpNetwork(tester);
+    await section(tester, 'nodes', sub: 0);
+    await tester.tap(find.byKey(const Key('network-share')).first);
+    await tester.pump();
+    expect(shared, ['https://cmh.meshsonar.com/nodes']);
+    await tester.pump(const Duration(seconds: 2));
   });
 
   testWidgets('the pulse chip hides itself while the server has no /v1/pulse', (tester) async {
@@ -226,6 +263,32 @@ void main() {
       await tester.pageBack();
       await tester.pump(const Duration(milliseconds: 600));
       expect(find.byKey(const Key('network-packets-list')), findsOneWidget);
+      await tester.pump(const Duration(seconds: 2));
+    });
+
+    testWidgets('AZ-3.3: "Show on map" in the packet detail draws that packet on Network > Map', (tester) async {
+      useV1Fixtures();
+      final h = await pumpNetwork(tester);
+      h.incomingLinks.add(Uri.parse('meshsonar://network/packets/c4b06ee8fc39b187?region=cmh'));
+      await frames(tester);
+      final btn = find.byKey(const Key('packet-show-on-map'));
+      await tester.scrollUntilVisible(btn, 300, scrollable: find.descendant(of: find.byType(NetworkPacketScreen), matching: find.byType(Scrollable)).first);
+      await tester.pump();
+      await tester.tap(btn);
+      await frames(tester);
+      expect(find.byType(NetworkPacketScreen), findsNothing);
+      expect(find.byKey(const Key('live-map')), findsOneWidget);
+      expect(find.byKey(const Key('live-focus-card')), findsOneWidget);
+      await tester.pump(const Duration(seconds: 2));
+    });
+
+    testWidgets('AZ-3.3: the packet replay link (/map?panel=live&packet=) opens the live map on that packet', (tester) async {
+      useV1Fixtures();
+      final h = await pumpNetwork(tester);
+      h.incomingLinks.add(Uri.parse('https://cmh.meshsonar.com/map?panel=live&t=2026-11-20T14:02:05.120Z&packet=c4b06ee8fc39b187'));
+      await frames(tester);
+      expect(find.byKey(const Key('live-map')), findsOneWidget);
+      expect(find.byKey(const Key('live-focus-card')), findsOneWidget);
       await tester.pump(const Duration(seconds: 2));
     });
 

@@ -1,0 +1,85 @@
+{
+  "data": {
+    "query": "hill",
+    "results": [
+      {
+        "kind": "node",
+        "node": {
+          "key": "4f199584624bb836b6236a1becf56c22dc204f37e5775eda542895a88c4c164c",
+          "name": "Hilltop RPT",
+          "role": "repeater"
+        },
+        "region": "cmh",
+        "match": "name",
+        "url": "https://cmh.meshsonar.com/nodes/4f199584624bb836b6236a1becf56c22dc204f37e5775eda542895a88c4c164c"
+      },
+      {
+        "kind": "node",
+        "node": {
+          "key": "a70e50d47a757afc624567a35e00bc93baf97509844ea9f01b34942bc0d21027",
+          "name": "Quarry Hill RPT",
+          "role": "repeater"
+        },
+        "region": "cmh",
+        "match": "name",
+        "url": "https://cmh.meshsonar.com/nodes/a70e50d47a757afc624567a35e00bc93baf97509844ea9f01b34942bc0d21027"
+      },
+      {
+        "kind": "message",
+        "messageId": "c4b06ee8fc39b187",
+        "channel": {
+          "id": "public",
+          "name": "Public",
+          "kind": "public"
+        },
+        "snippet": "anyone hearing Hilltop this morning?",
+        "region": "cmh",
+        "match": "text",
+        "url": "https://cmh.meshsonar.com/channels/public#c4b06ee8fc39b187"
+      }
+    ],
+    "truncated": {
+      "node": false,
+      "observer": false,
+      "message": true,
+      "packet": false,
+      "region": false,
+      "channel": false
+    }
+  },
+  "meta": {
+    "apiVersion": "1.0",
+    "region": null,
+    "generatedAt": "2026-11-20T14:15:00.000Z",
+    "dataAt": "2026-11-20T14:14:40.000Z",
+    "status": {
+      "state": "ready",
+      "reason": null
+    },
+    "sources": {
+      "meshsonar": {
+        "id": "meshsonar",
+        "kind": "first_party",
+        "name": "MeshSonar observers",
+        "attribution": "MeshSonar",
+        "url": "https://meshsonar.com/observers"
+      },
+      "src_12": {
+        "id": "src_12",
+        "kind": "outside",
+        "name": "Ohio Valley CoreScope",
+        "attribution": "Data from the Ohio Valley CoreScope instance",
+        "url": "https://corescope-ohio.example.org"
+      }
+    },
+    "kinds": [
+      "node",
+      "packet",
+      "observer",
+      "channel",
+      "message",
+      "region"
+    ],
+    "perKind": 5
+  }
+}

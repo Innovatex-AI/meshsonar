@@ -1,0 +1,91 @@
+{
+  "data": [
+    {
+      "observer": {
+        "id": "d1a761a8d6478b879df8a2278225f4fc2c10d2f925f537c6cdd7921c7f147a0f",
+        "name": "MS Westside Observer",
+        "kind": "fixed",
+        "src": "meshsonar"
+      },
+      "direct": true,
+      "packets": 412,
+      "avgSnr": 6.1,
+      "avgRssi": -96,
+      "lastAt": "2026-11-20T14:05:30.000Z",
+      "src": "meshsonar"
+    },
+    {
+      "observer": {
+        "id": "src_12:7e9e8fe0a052ad046b73e9724234241a5f3b8cbad107bdfc18bcf6a27255877d",
+        "name": "OVCS Clintonville",
+        "kind": "outside",
+        "src": "src_12"
+      },
+      "direct": true,
+      "packets": 980,
+      "avgSnr": 3.4,
+      "avgRssi": -103,
+      "lastAt": "2026-11-20T14:05:00.000Z",
+      "src": "src_12"
+    },
+    {
+      "observer": {
+        "id": "08af2aa59175566e72f3b7157a9956104cea0983fa320d658f9c9fb39bfa7d50",
+        "name": "Phone observer 08f3",
+        "kind": "phone",
+        "src": "meshsonar-phone"
+      },
+      "direct": false,
+      "packets": 37,
+      "avgSnr": null,
+      "avgRssi": null,
+      "lastAt": "2026-11-20T14:01:30.000Z",
+      "src": "meshsonar-phone"
+    }
+  ],
+  "meta": {
+    "apiVersion": "1.0",
+    "region": {
+      "slug": "cmh",
+      "name": "Columbus",
+      "kind": "region"
+    },
+    "generatedAt": "2026-11-20T14:15:00.000Z",
+    "dataAt": "2026-11-20T14:14:40.000Z",
+    "status": {
+      "state": "ready",
+      "reason": null
+    },
+    "sources": {
+      "meshsonar": {
+        "id": "meshsonar",
+        "kind": "first_party",
+        "name": "MeshSonar observers",
+        "attribution": "MeshSonar",
+        "url": "https://meshsonar.com/observers"
+      },
+      "meshsonar-phone": {
+        "id": "meshsonar-phone",
+        "kind": "first_party_phone",
+        "name": "MeshSonar phone observers",
+        "attribution": "MeshSonar app users",
+        "url": "https://meshsonar.com/observers"
+      },
+      "src_12": {
+        "id": "src_12",
+        "kind": "outside",
+        "name": "Ohio Valley CoreScope",
+        "attribution": "Data from the Ohio Valley CoreScope instance",
+        "url": "https://corescope-ohio.example.org"
+      }
+    },
+    "window": {
+      "name": "24h",
+      "from": "2026-11-19T14:15:00.000Z",
+      "to": "2026-11-20T14:15:00.000Z",
+      "resolution": "raw",
+      "rollup": null
+    },
+    "relayOnlyObservers": 3
+  }
+}

@@ -1,0 +1,281 @@
+{
+  "data": [
+    {
+      "key": "4f199584624bb836b6236a1becf56c22dc204f37e5775eda542895a88c4c164c",
+      "prefix": "4f",
+      "name": "Hilltop RPT",
+      "role": "repeater",
+      "position": {
+        "lat": 40.01812,
+        "lon": -83.01544,
+        "precision": "exact"
+      },
+      "positionReason": null,
+      "status": "active",
+      "lastHeardAt": "2026-11-20T14:05:30.000Z",
+      "lastAdvertAt": "2026-11-20T09:00:00.000Z",
+      "firstSeen": "2026-03-14T18:22:05.000Z",
+      "adverts7d": 4,
+      "offlineAfterH": 6,
+      "hashSize": 2,
+      "hashSizeInconsistent": false,
+      "relayed24h": 1843,
+      "usefulness": {
+        "score": 0.71,
+        "grade": "A"
+      },
+      "battery": null,
+      "clock": {
+        "skewS": 2.0,
+        "severity": "ok"
+      },
+      "favourite": false,
+      "src": [
+        "meshsonar",
+        "src_12"
+      ]
+    },
+    {
+      "key": "3cd0c95448b8566d21060bfec77f420446b1122cb903ec140fe946603dbdfbd4",
+      "prefix": "3c",
+      "name": "Old Mill RPT",
+      "role": "repeater",
+      "position": {
+        "lat": 39.99655,
+        "lon": -83.10279,
+        "precision": "exact"
+      },
+      "positionReason": null,
+      "status": "active",
+      "lastHeardAt": "2026-11-20T14:05:00.000Z",
+      "lastAdvertAt": "2026-11-20T09:00:00.000Z",
+      "firstSeen": "2026-03-14T18:22:05.000Z",
+      "adverts7d": 3,
+      "offlineAfterH": 8,
+      "hashSize": 2,
+      "hashSizeInconsistent": false,
+      "relayed24h": 1102,
+      "usefulness": {
+        "score": 0.52,
+        "grade": "B"
+      },
+      "battery": null,
+      "clock": null,
+      "favourite": false,
+      "src": [
+        "meshsonar",
+        "src_12"
+      ]
+    },
+    {
+      "key": "a7b21db75893e8c8665e5060b05d5e03c68c963d5a3a6e7e0dba6b5e0b9cde85",
+      "prefix": "a7",
+      "name": "Riverside RPT",
+      "role": "repeater",
+      "position": {
+        "lat": 39.9612,
+        "lon": -83.0041,
+        "precision": "exact"
+      },
+      "positionReason": null,
+      "status": "degraded",
+      "lastHeardAt": "2026-11-20T05:00:00.000Z",
+      "lastAdvertAt": "2026-11-20T09:00:00.000Z",
+      "firstSeen": "2026-03-14T18:22:05.000Z",
+      "adverts7d": 1,
+      "offlineAfterH": 8,
+      "hashSize": 1,
+      "hashSizeInconsistent": false,
+      "relayed24h": 12,
+      "usefulness": {
+        "score": 0.18,
+        "grade": "D"
+      },
+      "battery": null,
+      "clock": {
+        "skewS": 5460.0,
+        "severity": "critical"
+      },
+      "favourite": false,
+      "src": [
+        "src_12"
+      ]
+    },
+    {
+      "key": "91f7b953529576091add8a19f9105e6572e43ea95429c60ed79ee1c4bf547ea4",
+      "prefix": "91",
+      "name": "Library Room",
+      "role": "room",
+      "position": {
+        "lat": 39.98701,
+        "lon": -83.02218,
+        "precision": "exact"
+      },
+      "positionReason": null,
+      "status": "active",
+      "lastHeardAt": "2026-11-20T14:00:40.000Z",
+      "lastAdvertAt": "2026-11-20T09:00:00.000Z",
+      "firstSeen": "2026-03-14T18:22:05.000Z",
+      "adverts7d": 6,
+      "offlineAfterH": 12,
+      "hashSize": 1,
+      "hashSizeInconsistent": false,
+      "relayed24h": 75,
+      "usefulness": {
+        "score": 0.33,
+        "grade": "C"
+      },
+      "battery": null,
+      "clock": null,
+      "favourite": false,
+      "src": [
+        "meshsonar",
+        "src_12"
+      ]
+    },
+    {
+      "key": "5d6b49e5fee4cba58e5947760d8ba36f6e4ccaf2c8ace4ffd4692d3c4fb308ce",
+      "prefix": "5d",
+      "name": "Creek Gauge",
+      "role": "sensor",
+      "position": {
+        "lat": 40.0553,
+        "lon": -83.06121,
+        "precision": "exact"
+      },
+      "positionReason": null,
+      "status": "active",
+      "lastHeardAt": "2026-11-20T13:30:00.000Z",
+      "lastAdvertAt": "2026-11-20T09:00:00.000Z",
+      "firstSeen": "2026-03-14T18:22:05.000Z",
+      "adverts7d": 24,
+      "offlineAfterH": 3,
+      "hashSize": 1,
+      "hashSizeInconsistent": false,
+      "relayed24h": null,
+      "usefulness": null,
+      "battery": {
+        "mv": 3712,
+        "status": "ok",
+        "at": "2026-11-20T13:30:00.000Z"
+      },
+      "clock": null,
+      "favourite": false,
+      "src": [
+        "src_12"
+      ]
+    },
+    {
+      "key": "c48e58a12ba6d3040af2806c373e80452ef09c6a06b4d67eb82fa9cd3b69af65",
+      "prefix": "c4",
+      "name": "Kestrel-07",
+      "role": "companion",
+      "position": null,
+      "positionReason": "not_advertised",
+      "status": "active",
+      "lastHeardAt": "2026-11-20T14:02:05.000Z",
+      "lastAdvertAt": "2026-11-20T09:00:00.000Z",
+      "firstSeen": "2026-03-14T18:22:05.000Z",
+      "adverts7d": 2,
+      "offlineAfterH": 168,
+      "hashSize": 1,
+      "hashSizeInconsistent": false,
+      "relayed24h": null,
+      "usefulness": null,
+      "battery": null,
+      "clock": null,
+      "favourite": false,
+      "src": [
+        "src_12",
+        "meshsonar"
+      ]
+    },
+    {
+      "key": "3c9f4f0d5b8d0d22e81eed085d02372a8b037a8ac1df62a84ced88eed980688f",
+      "prefix": "3c",
+      "name": "Eastgate RPT",
+      "role": "repeater",
+      "position": {
+        "lat": 39.7121,
+        "lon": -82.5998,
+        "precision": "exact"
+      },
+      "positionReason": null,
+      "status": "silent",
+      "lastHeardAt": "2026-11-16T14:00:00.000Z",
+      "lastAdvertAt": "2026-11-20T09:00:00.000Z",
+      "firstSeen": "2026-03-14T18:22:05.000Z",
+      "adverts7d": 0,
+      "offlineAfterH": 48,
+      "hashSize": 1,
+      "hashSizeInconsistent": false,
+      "relayed24h": 0,
+      "usefulness": {
+        "score": 0.05,
+        "grade": "F"
+      },
+      "battery": null,
+      "clock": null,
+      "favourite": false,
+      "src": [
+        "src_31"
+      ]
+    }
+  ],
+  "page": {
+    "limit": 100,
+    "next": null,
+    "approxTotal": 7
+  },
+  "meta": {
+    "apiVersion": "1.0",
+    "region": {
+      "slug": "cmh",
+      "name": "Columbus",
+      "kind": "region"
+    },
+    "generatedAt": "2026-11-20T14:15:00.000Z",
+    "dataAt": "2026-11-20T14:14:40.000Z",
+    "status": {
+      "state": "ready",
+      "reason": null
+    },
+    "sources": {
+      "meshsonar": {
+        "id": "meshsonar",
+        "kind": "first_party",
+        "name": "MeshSonar observers",
+        "attribution": "MeshSonar",
+        "url": "https://meshsonar.com/observers"
+      },
+      "src_12": {
+        "id": "src_12",
+        "kind": "outside",
+        "name": "Ohio Valley CoreScope",
+        "attribution": "Data from the Ohio Valley CoreScope instance",
+        "url": "https://corescope-ohio.example.org"
+      },
+      "src_31": {
+        "id": "src_31",
+        "kind": "outside",
+        "name": "Scioto Mesh Analyzer",
+        "attribution": "Data from Scioto Mesh Analyzer",
+        "url": "https://scioto-mesh.example.net"
+      }
+    },
+    "counts": {
+      "repeater": 4,
+      "room": 1,
+      "sensor": 1,
+      "companion": 1,
+      "unknown": 0
+    },
+    "statusCounts": {
+      "active": 5,
+      "degraded": 1,
+      "silent": 1,
+      "unknown": 0
+    },
+    "sort": "lastHeard:desc"
+  }
+}

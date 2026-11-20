@@ -1,0 +1,95 @@
+{
+  "data": {
+    "id": "d1a761a8d6478b879df8a2278225f4fc2c10d2f925f537c6cdd7921c7f147a0f",
+    "resolution": "5m",
+    "columns": [
+      "at",
+      "noiseFloorDbm",
+      "airtimeTxPct",
+      "airtimeRxPct",
+      "errorsPerMin",
+      "batteryMv",
+      "packetsRx",
+      "rebooted"
+    ],
+    "rows": [
+      [
+        "2026-11-20T14:00:00.000Z",
+        -112,
+        1.6,
+        13.0,
+        0.0,
+        null,
+        52,
+        false
+      ],
+      [
+        "2026-11-20T14:05:00.000Z",
+        -111,
+        2.1,
+        15.2,
+        0.2,
+        null,
+        61,
+        false
+      ],
+      [
+        "2026-11-20T14:10:00.000Z",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        false
+      ],
+      [
+        "2026-11-20T14:15:00.000Z",
+        -113,
+        1.8,
+        12.9,
+        0.0,
+        null,
+        49,
+        true
+      ]
+    ],
+    "gaps": [
+      [
+        "2026-11-20T14:10:00.000Z",
+        "2026-11-20T14:15:00.000Z"
+      ]
+    ],
+    "dutyCycleWarnPct": 10
+  },
+  "meta": {
+    "apiVersion": "1.0",
+    "region": {
+      "slug": "cmh",
+      "name": "Columbus",
+      "kind": "region"
+    },
+    "generatedAt": "2026-11-20T14:15:00.000Z",
+    "dataAt": "2026-11-20T14:14:40.000Z",
+    "status": {
+      "state": "ready",
+      "reason": null
+    },
+    "sources": {
+      "meshsonar": {
+        "id": "meshsonar",
+        "kind": "first_party",
+        "name": "MeshSonar observers",
+        "attribution": "MeshSonar",
+        "url": "https://meshsonar.com/observers"
+      }
+    },
+    "window": {
+      "name": "custom",
+      "from": "2026-11-20T14:00:00.000Z",
+      "to": "2026-11-20T14:20:00.000Z",
+      "resolution": "5m",
+      "rollup": "observer_metrics_5m"
+    }
+  }
+}

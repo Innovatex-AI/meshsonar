@@ -12,8 +12,9 @@
 // loading / offline ("Offline - as of") / error states inside a section.
 //
 // Website twins (analyzer-api-contract.md web routes): Now = region home `/`, Packets = `/packets` (a packet:
-// `/packets/:hash`, Decode a packet: `/tools/decode`), Nodes = `/nodes`
-// and `/observers`, Map = `/map`, Insights = `/insights?tab=`.
+// `/packets/:hash`, Decode a packet: `/tools/decode`), Nodes = `/nodes` (a node: `/nodes/:key`)
+// and `/observers` (`/observers/:id`), Map = `/map?panel=live` (a packet's path: `&packet=<hash>&t=<time>`),
+// Insights = `/insights?tab=`.
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
@@ -27,14 +28,15 @@ import '../design/app_symbols.dart';
 import '../design/state_views.dart';
 import '../location_status.dart';
 import '../network/network_header.dart';
+import '../network/network_search.dart';
+import '../network/network_share.dart';
 import '../network/network_sections.dart';
-import '../region/observer_detail_screen.dart';
+import '../network/nodes/node_routes.dart';
 import '../network/packets/packet_detail_screen.dart';
 import '../region/region_hub_screen.dart' show MachineDerivedNote;
 import '../region/region_report_export_sheet.dart';
 import '../region/region_switch_sheet.dart' show switchViewedRegion;
 import '../region/region_switcher.dart';
-import '../region/repeater_detail_screen.dart';
 import 'home_shell.dart' show shellRailWidth;
 
 class NetworkTab extends StatefulWidget {
@@ -49,6 +51,9 @@ class _NetworkTabState extends State<NetworkTab> {
 
   /// The last link into Packets > List (its filters and window); the list is rebuilt from it.
   NetworkRequest? _packetsRequest;
+
+  /// The last link into Map (a packet to draw, a time).
+  NetworkRequest? _mapRequest;
   ShellController? _shell;
 
   @override
@@ -81,7 +86,7 @@ class _NetworkTabState extends State<NetworkTab> {
 
   /// The sub-view a request asks for (no setState: called while building).
   void _pickSub(NetworkRequest r) {
-    if (r.section == NetworkSection.map && r.mapPanel == 'live') _sub[NetworkSection.packets] = 1;
+    if (r.section == NetworkSection.map) _mapRequest = r.packetHash == null ? null : r;
     if (r.section == NetworkSection.nodes) _sub[NetworkSection.nodes] = r.observersView ? 1 : 0;
     if (r.section == NetworkSection.packets) {
       _sub[NetworkSection.packets] = 0;
@@ -114,12 +119,9 @@ class _NetworkTabState extends State<NetworkTab> {
     if (r.packetHash != null && r.section == NetworkSection.packets && r.toWebUri().path != '/packets') {
       nav.push(MaterialPageRoute<void>(builder: (_) => NetworkPacketScreen(baseUrl: reg.url, regionSlug: reg.slug, hash: r.packetHash!)));
     } else if (r.nodeKey != null && r.section == NetworkSection.nodes) {
-      nav.push(MaterialPageRoute<void>(builder: (_) => RepeaterDetailScreen(baseUrl: reg.url, regionSlug: reg.slug, repeaterKey: r.nodeKey!)));
+      openNetworkNode(context, baseUrl: reg.url, regionSlug: reg.slug, nodeKey: r.nodeKey!);
     } else if (r.observerId != null && r.section == NetworkSection.nodes) {
-      final id = r.observerId!;
-      nav.push(MaterialPageRoute<void>(
-          builder: (_) => ObserverDetailScreen(
-              baseUrl: reg.url, regionSlug: reg.slug, observerKey: id, title: id.length > 12 ? 'Observer ${id.substring(0, 8)}…' : 'Observer $id')));
+      openNetworkObserver(context, baseUrl: reg.url, regionSlug: reg.slug, observerId: r.observerId!);
     } else if (r.section == NetworkSection.insights) {
       final e = insightForTab(r.insightsTab);
       if (e != null) openInsight(context, e, s, reg);
@@ -138,6 +140,11 @@ class _NetworkTabState extends State<NetworkTab> {
         title: Text(region?.name ?? 'Network', key: const Key('region-title'), maxLines: 1, overflow: TextOverflow.ellipsis),
         actions: [
           if (region != null)
+            NetworkShareButton(
+              request: NetworkRequest.section(_section, region: region.slug),
+              subject: '${region.name} on MeshSonar',
+            ),
+          if (region != null)
             IconButton(
               key: const Key('region-report-export'),
               tooltip: 'Export region report',
@@ -155,6 +162,10 @@ class _NetworkTabState extends State<NetworkTab> {
                 if (s.locationNote != null)
                   Padding(padding: const EdgeInsets.fromLTRB(12, 8, 12, 0), child: LocationNoteBanner(state: s)),
                 if (region.machineDerived) MachineDerivedNote(regionName: region.name),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 6, 12, 4),
+                  child: NetworkSearchField(key: ValueKey('network-search-${region.code}'), region: region),
+                ),
                 Align(
                   alignment: Alignment.centerLeft,
                   child: Padding(
@@ -172,6 +183,7 @@ class _NetworkTabState extends State<NetworkTab> {
                     sub: _sub[_section] ?? 0,
                     onSub: (i) => _setSub(_section, i),
                     packetsRequest: _packetsRequest,
+                    mapRequest: _mapRequest,
                     onOpenLive: () {
                       _select(NetworkSection.packets);
                       _setSub(NetworkSection.packets, 1);

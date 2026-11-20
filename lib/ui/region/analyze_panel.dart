@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import '../../core/analyze_api.dart';
 import '../../core/analyze_model.dart';
 import '../../core/zone_time.dart';
+import '../network/network_header.dart' show WhatChangedCard;
 import '../theme.dart';
 import 'repeater_detail_screen.dart' show openRepeaterDetail;
 
@@ -85,6 +86,8 @@ class _AnalyzePanelState extends State<AnalyzePanel> {
         key: const Key('analyze-list'),
         padding: const EdgeInsets.all(Gap.m),
         children: [
+          // "What changed" (network-pulse-plan section 4): the newest pulse items; hidden until the server has a pulse read.
+          WhatChangedCard(key: ValueKey('what-changed-${widget.baseUrl}'), baseUrl: widget.baseUrl),
           _Section<InsightsRead>(
             id: 'an-findings',
             title: 'What needs attention',
@@ -500,6 +503,39 @@ class _RepeaterLink extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------- E9
+/// The icon of a finding row, so no row is blank (app-next-pass-list item 3): by the finding code first, then by its
+/// section, then a plain default. Codes are the E9 engine's (meshcore-insights src/server/analysis-e9.ts) plus
+/// `traffic_spike` (server 0146); an unknown code still gets its section's icon.
+IconData findingIcon(Finding f) =>
+    _findingCodeIcons[f.code] ?? _findingSectionIcons[f.section] ?? Icons.info_outline;
+
+const Map<String, IconData> _findingCodeIcons = {
+  'traffic_spike': Icons.trending_up,
+  'no_packet_feed': Icons.portable_wifi_off,
+  'outside_only': Icons.public,
+  'critical_nodes': Icons.call_split,
+  'silent_repeaters': Icons.volume_off_outlined,
+  'repeaters_lost': Icons.remove_circle_outline,
+  'repeaters_new': Icons.add_circle_outline,
+  'low_uptime': Icons.hearing,
+  'weak_links': Icons.link_off,
+  'coverage_low': Icons.layers_outlined,
+  'coverage_measured_share': Icons.grid_on,
+  'node_list_incomplete': Icons.rule,
+  'observer_old_firmware': Icons.system_update_alt,
+  'observer_quality': Icons.sensors,
+  'units_stale': Icons.schedule,
+  'units_failed': Icons.error_outline,
+};
+
+const Map<String, IconData> _findingSectionIcons = {
+  'network': Icons.hub_outlined,
+  'traffic': Icons.swap_vert,
+  'links': Icons.link,
+  'coverage': Icons.map_outlined,
+  'data': Icons.storage_outlined,
+};
+
 class _FindingsBody extends StatelessWidget {
   final InsightsRead d;
   final String baseUrl, slug;
@@ -536,6 +572,12 @@ class _FindingsBody extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Padding(
+                  padding: const EdgeInsets.only(right: Gap.s, top: 2),
+                  child: ExcludeSemantics(
+                    child: Icon(findingIcon(rows[i]), key: Key('finding-icon:${rows[i].code}'), size: 20, color: tone(rows[i].severity)),
+                  ),
+                ),
                 Container(
                   margin: const EdgeInsets.only(right: Gap.s, top: 2),
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -620,19 +662,22 @@ class _HealthBody extends StatelessWidget {
                 Expanded(
                   child: _RepeaterLink(repeaterKey: r.key, label: name(r), baseUrl: baseUrl, slug: slug),
                 ),
-                Text(
-                  '${formatInt(r.relays24h)} relayed · ${uptimeText(r.uptime7d)} up · ${r.snrMean7d == null ? '—' : '${snrText(r.snrMean7d)} dB'}',
-                  style: t.textTheme.bodySmall,
+                Flexible(
+                  child: Text(
+                    '${formatInt(r.relays24h)} relayed · ${heardPctText('7 d', r.uptime7d)} · ${r.snrMean7d == null ? '—' : '${snrText(r.snrMean7d)} dB'}',
+                    style: t.textTheme.bodySmall,
+                    textAlign: TextAlign.end,
+                  ),
                 ),
               ],
             ),
           Text(
-            'Relayed in the last 24 h · uptime over 7 days · mean SNR over 7 days.',
+            'Relayed in the last 24 h · $heardLabel7d · mean SNR over 7 days. $heardLabel7d: $heardHelpText',
             style: t.textTheme.labelSmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
           ),
         ],
         if (weak.isNotEmpty) ...[
-          const _H3('Least reliable'),
+          const _H3('Heard least often'),
           for (final r in weak)
             Row(
               key: Key('weak:${r.key}'),
@@ -640,9 +685,12 @@ class _HealthBody extends StatelessWidget {
                 Expanded(
                   child: _RepeaterLink(repeaterKey: r.key, label: name(r), baseUrl: baseUrl, slug: slug),
                 ),
-                Text(
-                  '${uptimeText(r.uptime7d)} up · last heard ${formatInZone(r.lastHeardAt, tz)}',
-                  style: t.textTheme.bodySmall,
+                Flexible(
+                  child: Text(
+                    '${heardPctText('7 d', r.uptime7d)} · last heard ${formatInZone(r.lastHeardAt, tz)}',
+                    style: t.textTheme.bodySmall,
+                    textAlign: TextAlign.end,
+                  ),
                 ),
               ],
             ),

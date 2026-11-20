@@ -1,5 +1,5 @@
 // ETag on the wire for the public, cacheable GETs (region-*, regions-index, public-coverage, site-config, public-stats,
-// leaderboard, /v1/regions, /v1/summary, /v1/pulse, /v1/packets, /v1/packets/<hash>[/observations], /v1/filters/fields). The server shares a 120 req/min/IP limit across these, so: send `If-None-Match` with the
+// leaderboard, /v1/regions, /v1/summary, /v1/pulse, /v1/search, /v1/replay, /v1/packets/density, /v1/packets, /v1/packets/<hash>[/observations], /v1/filters/fields, /v1/nodes[/<key>[/<section>]], /v1/observers[/<id>[/metrics]]). The server shares a 120 req/min/IP limit across these, so: send `If-None-Match` with the
 // stored ETag, and on `304` serve the stored body (a 304 is cheap and does not need the body re-sent). Every 200 is
 // stored on disk (ETag + body + fetch time). When the network fails, the stored copy is served and [offlineSince]
 // says when it was fetched, so the UI can label it "Offline - as of 3h ago". Spec: parity spec C.2 / C.6 / WP-R5.
@@ -17,7 +17,7 @@ import 'region_cache.dart';
 
 /// Paths (after the host) this client may cache. Everything else is passed through. Region reads all live under
 /// `/api/cmh/` on the region's own host (the host picks the region).
-final _cacheablePath = RegExp(r'^/(api/cmh/(region-[a-z-]+|regions-index|public-coverage|site-config|public-stats|leaderboard|network-leaderboard)|v1/(regions|summary|pulse|packets|packets/[0-9a-f]{16}|packets/[0-9a-f]{16}/observations|filters/fields))/?$');
+final _cacheablePath = RegExp(r'^/(api/cmh/(region-[a-z-]+|regions-index|public-coverage|site-config|public-stats|leaderboard|network-leaderboard)|v1/(regions|summary|pulse|search|replay|packets/density|packets|packets/[0-9a-f]{16}|packets/[0-9a-f]{16}/observations|filters/fields|nodes|nodes/[0-9a-f]{64}(/(activity|heard-by|neighbors|paths|reach|clock|battery))?|observers|observers/[A-Za-z0-9_.%:-]{1,200}(/metrics)?))/?$');
 
 /// Response header the [EtagClient] adds: `network`, `304` or `offline` (the stored copy, served because the network failed).
 const cacheSourceHeader = 'x-meshsonar-cache';
