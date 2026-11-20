@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:meshsonar/core/api.dart' show CmatException;
+import 'package:meshsonar/core/network_request.dart';
 import 'package:meshsonar/core/region_lookup.dart';
 import 'package:meshsonar/core/v1/network_api.dart';
 import 'package:meshsonar/ui/region/packet_detail_screen.dart';

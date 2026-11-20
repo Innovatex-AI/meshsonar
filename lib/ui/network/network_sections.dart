@@ -12,11 +12,10 @@ import 'package:latlong2/latlong.dart';
 
 import '../../app/app_state.dart';
 import '../../core/airtime_share.dart';
-import '../../core/network_request.dart';
 import '../../core/region_lookup.dart';
 import '../app.dart';
 import '../design/app_symbols.dart';
-import '../map/layers/registry.dart' show kRosterLayerId;
+import '../map/layers/repeater_map_source.dart' show kRosterLayerId;
 import '../map/main_map_focus.dart';
 import '../region/analyze_panel.dart';
 import '../region/growth_panel.dart';
