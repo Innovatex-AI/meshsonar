@@ -1,0 +1,232 @@
+{
+  "data": {
+    "hash": "3d729e68c935af6f",
+    "type": 2,
+    "typeName": "TXT_MSG",
+    "route": "DIRECT",
+    "payloadVersion": 0,
+    "hashSize": 2,
+    "size": 42,
+    "firstSeen": "2026-11-20T14:05:15.120Z",
+    "lastSeen": "2026-11-20T14:05:15.120Z",
+    "raw": "0a424f19a7b26bc456c86336c5cc50103c47022b9f69d9516a51b1b543a3ebd6b06f6619c0d0516cbc3d",
+    "rawSource": "src_31",
+    "rawVerified": true,
+    "bytes": [
+      {
+        "start": 0,
+        "end": 1,
+        "group": "header",
+        "field": "header",
+        "label": "Header",
+        "hex": "0a",
+        "value": {
+          "routeType": 2,
+          "route": "DIRECT",
+          "payloadType": 2,
+          "type": "TXT_MSG",
+          "payloadVersion": 0
+        }
+      },
+      {
+        "start": 1,
+        "end": 2,
+        "group": "path_len",
+        "field": "pathLen",
+        "label": "Path length",
+        "hex": "42",
+        "value": {
+          "hashSize": 2,
+          "hopCount": 2,
+          "bytes": 4
+        }
+      },
+      {
+        "start": 2,
+        "end": 4,
+        "group": "path",
+        "field": "path[0]",
+        "label": "Hop 1",
+        "hex": "4f19",
+        "value": "4f19"
+      },
+      {
+        "start": 4,
+        "end": 6,
+        "group": "path",
+        "field": "path[1]",
+        "label": "Hop 2",
+        "hex": "a7b2",
+        "value": "a7b2"
+      },
+      {
+        "start": 6,
+        "end": 7,
+        "group": "payload",
+        "field": "dm.destHash",
+        "label": "Destination hash",
+        "hex": "6b",
+        "value": "6b"
+      },
+      {
+        "start": 7,
+        "end": 8,
+        "group": "payload",
+        "field": "dm.srcHash",
+        "label": "Source hash",
+        "hex": "c4",
+        "value": "c4"
+      },
+      {
+        "start": 8,
+        "end": 10,
+        "group": "mac",
+        "field": "dm.mac",
+        "label": "MAC",
+        "hex": "56c8",
+        "value": "56c8"
+      },
+      {
+        "start": 10,
+        "end": 42,
+        "group": "ciphertext",
+        "field": "dm.ciphertext",
+        "label": "Ciphertext (pairwise key)",
+        "hex": "6336c5cc50103c47022b9f69d9516a51b1b543a3ebd6b06f6619c0d0516cbc3d",
+        "value": "encrypted"
+      }
+    ],
+    "decoded": {
+      "direct": {
+        "destHash": "6b",
+        "srcHash": "c4",
+        "mac": "56c8",
+        "encrypted": true,
+        "content": null,
+        "destCandidates": [
+          {
+            "key": "6b1f158cc051a6bfe37d1f48af9819ab2e072d45f1d94ea17e21683b959352a5",
+            "name": "N0CALL Mobile",
+            "role": "companion"
+          }
+        ],
+        "srcCandidates": [
+          {
+            "key": "c48e58a12ba6d3040af2806c373e80452ef09c6a06b4d67eb82fa9cd3b69af65",
+            "name": "Kestrel-07",
+            "role": "companion"
+          }
+        ],
+        "note": "Direct messages are encrypted end to end; only the two ends can read them."
+      }
+    },
+    "origin": null,
+    "channel": null,
+    "scope": null,
+    "message": null,
+    "anomaly": null,
+    "observationCount": 1,
+    "observerCount": 1,
+    "observations": [
+      {
+        "id": "o1",
+        "observer": {
+          "id": "src_31:obs-1142",
+          "name": "Scioto North",
+          "kind": "outside",
+          "src": "src_31"
+        },
+        "at": "2026-11-20T14:05:15.120Z",
+        "snr": -4.5,
+        "rssi": -117,
+        "pathId": "p1",
+        "path": [
+          "4f19",
+          "a7b2"
+        ],
+        "src": "src_31"
+      }
+    ],
+    "observationsNext": null,
+    "observationsExpired": false,
+    "paths": [
+      {
+        "id": "p1",
+        "hops": [
+          {
+            "index": 0,
+            "prefix": "4f19",
+            "confidence": "unique",
+            "node": {
+              "key": "4f199584624bb836b6236a1becf56c22dc204f37e5775eda542895a88c4c164c",
+              "name": "Hilltop RPT",
+              "role": "repeater"
+            },
+            "score": 1.0,
+            "candidates": [],
+            "candidatesTotal": 1,
+            "evidence": [
+              "unique_prefix"
+            ]
+          },
+          {
+            "index": 1,
+            "prefix": "a7b2",
+            "confidence": "unique",
+            "node": {
+              "key": "a7b21db75893e8c8665e5060b05d5e03c68c963d5a3a6e7e0dba6b5e0b9cde85",
+              "name": "Riverside RPT",
+              "role": "repeater"
+            },
+            "score": 1.0,
+            "candidates": [],
+            "candidatesTotal": 1,
+            "evidence": [
+              "unique_prefix"
+            ]
+          }
+        ],
+        "observationIds": [
+          "o1"
+        ],
+        "direction": "remaining"
+      }
+    ],
+    "src": [
+      "src_31"
+    ],
+    "links": {
+      "web": "https://cmh.meshsonar.com/packets/3d729e68c935af6f",
+      "replay": "https://cmh.meshsonar.com/map?panel=live&t=2026-11-20T14:05:15.120Z&packet=3d729e68c935af6f"
+    }
+  },
+  "meta": {
+    "apiVersion": "1.0",
+    "region": {
+      "slug": "cmh",
+      "name": "Columbus",
+      "kind": "region"
+    },
+    "generatedAt": "2026-11-20T14:15:00.000Z",
+    "dataAt": "2026-11-20T14:14:40.000Z",
+    "status": {
+      "state": "ready",
+      "reason": null
+    },
+    "sources": {
+      "src_31": {
+        "id": "src_31",
+        "kind": "outside",
+        "name": "Scioto Mesh Analyzer",
+        "attribution": "Data from Scioto Mesh Analyzer",
+        "url": "https://scioto-mesh.example.net"
+      }
+    },
+    "nodeList": {
+      "state": "complete",
+      "trusted": true,
+      "reason": "936 of 1,000 relayed hop appearances in the last 24 h match a placed node (93.6%).",
+      "computedAt": "2026-11-20T14:10:00.000Z"
+    }
+  }
+}

@@ -10,7 +10,14 @@
 // No region = whatever region the app is viewing. Serialising writes the region host form (the site's own address).
 // Time window: `window=<15m..400d>` or `since` / `until` (RFC 3339), never both (contract 3.2).
 //
+// Packets list filters (AZ-3.2): every `/v1/packets` filter rides in [NetworkRequest.packetFilter] with the contract's
+// own parameter names (`type`, `route`, `observer`, `node`, `hash`, `channel`, `scope`, `source`, `filter`), so a list
+// state is a link the website opens too. A single node / observer / channel / whole hash also fills the older
+// [NetworkRequest.nodeKey] etc. fields (AZ-3.1 links); [NetworkRequest.listFilter] is the two merged.
+//
 // Pure Dart: no Flutter imports.
+import 'v1/packet_filter.dart';
+
 /// The five Network sections, in display order.
 enum NetworkSection {
   now('Now'),
@@ -80,6 +87,7 @@ class NetworkRequest {
     this.insightsTab,
     this.mapPanel,
     this.observersList = false,
+    this.packetFilter,
   });
 
   const NetworkRequest.section(this.section, {this.region, this.window})
@@ -91,7 +99,8 @@ class NetworkRequest {
         until = null,
         insightsTab = null,
         mapPanel = null,
-        observersList = false;
+        observersList = false,
+        packetFilter = null;
 
   /// A node's page (Nodes section). [key] must be 64 hex.
   NetworkRequest.node(String key, {this.region})
@@ -105,7 +114,8 @@ class NetworkRequest {
         until = null,
         insightsTab = null,
         mapPanel = null,
-        observersList = false;
+        observersList = false,
+        packetFilter = null;
 
   /// A packet (Packets section). [hash] must be 16 hex.
   NetworkRequest.packet(String hash, {this.region})
@@ -119,7 +129,8 @@ class NetworkRequest {
         until = null,
         insightsTab = null,
         mapPanel = null,
-        observersList = false;
+        observersList = false,
+        packetFilter = null;
 
   /// An observer (Nodes section, Observers view).
   const NetworkRequest.observer(String this.observerId, {this.region})
@@ -132,7 +143,8 @@ class NetworkRequest {
         until = null,
         insightsTab = null,
         mapPanel = null,
-        observersList = false;
+        observersList = false,
+        packetFilter = null;
 
   /// A channel (Insights section, Channels tab: AZ-3.7 / AZ-3.9 fill it).
   const NetworkRequest.channel(String this.channelId, {this.region})
@@ -145,7 +157,8 @@ class NetworkRequest {
         since = null,
         until = null,
         mapPanel = null,
-        observersList = false;
+        observersList = false,
+        packetFilter = null;
 
   /// The request in a copy with another region (deep links that name none take the viewed one).
   NetworkRequest withRegion(String? r) => NetworkRequest(
@@ -160,7 +173,28 @@ class NetworkRequest {
       until: until,
       insightsTab: insightsTab,
       mapPanel: mapPanel,
-      observersList: observersList);
+      observersList: observersList,
+      packetFilter: packetFilter);
+
+  /// The Packets list filters beyond the single [nodeKey] / [observerId] / [channelId] / [packetHash]; null = none.
+  final PacketFilter? packetFilter;
+
+  /// Everything the Packets list filters on: [packetFilter] with the single fields merged in.
+  PacketFilter get listFilter {
+    final f = packetFilter ?? PacketFilter.none;
+    return f.copyWith(
+      nodes: nodeKey == null || f.nodes.contains(nodeKey) ? null : [nodeKey!, ...f.nodes],
+      observers: observerId == null || f.observers.contains(observerId) ? null : [observerId!, ...f.observers],
+      channels: channelId == null ? null : {channelId!, ...f.channels},
+      hash: f.hash == null && packetHash != null && section == NetworkSection.packets && _hasListFilter ? packetHash : null,
+    );
+  }
+
+  bool get _hasListFilter => nodeKey != null || observerId != null || channelId != null || (packetFilter != null && !packetFilter!.isEmpty);
+
+  /// A Packets list request carrying [filter] (and the window), for share links of a list state.
+  static NetworkRequest packetList(PacketFilter filter, {String? region, String? window, DateTime? since, DateTime? until}) => NetworkRequest(
+      section: NetworkSection.packets, region: region, window: window, since: since, until: until, packetFilter: filter.isEmpty ? null : filter);
 
   /// The `/observers` list (Nodes section, Observers view) rather than the node directory.
   final bool observersList;
@@ -243,8 +277,20 @@ class NetworkRequest {
         return id == null ? make(NetworkSection.now) : null;
       case 'packets':
         if (id == null) {
-          return make(NetworkSection.packets,
-              node: filter('node', _nodeKey), hash: filter('hash', _packetHash), observer: filter('observer', _observer, lower: false), channel: filter('channel', _channel, lower: false));
+          final node = filter('node', _nodeKey), hash = filter('hash', _packetHash);
+          final observer = filter('observer', _observer, lower: false), channel = filter('channel', _channel, lower: false);
+          final rest = Map.of(q)
+            ..remove('region')
+            ..remove('window')
+            ..remove('since')
+            ..remove('until');
+          if (node != null) rest.remove('node');
+          if (hash != null) rest.remove('hash');
+          if (observer != null) rest.remove('observer');
+          if (channel != null) rest.remove('channel');
+          final pf = PacketFilter.fromQuery(rest);
+          final r = make(NetworkSection.packets, node: node, hash: hash, observer: observer, channel: channel);
+          return pf.isEmpty ? r : r.withFilter(pf);
         }
         final h = id.toLowerCase();
         return _packetHash.hasMatch(h) ? make(NetworkSection.packets, hash: h) : null;
@@ -277,6 +323,22 @@ class NetworkRequest {
   }
 
 
+  /// This request with [f] as its [packetFilter] (null when empty).
+  NetworkRequest withFilter(PacketFilter? f) => NetworkRequest(
+      section: section,
+      region: region,
+      nodeKey: nodeKey,
+      packetHash: packetHash,
+      observerId: observerId,
+      channelId: channelId,
+      window: window,
+      since: since,
+      until: until,
+      insightsTab: insightsTab,
+      mapPanel: mapPanel,
+      observersList: observersList,
+      packetFilter: f == null || f.isEmpty ? null : f);
+
   // ---------------------------------------------------------------- serialising
 
   String get _path {
@@ -284,7 +346,7 @@ class NetworkRequest {
       case NetworkSection.now:
         return '/';
       case NetworkSection.packets:
-        return packetHash != null && nodeKey == null && observerId == null && channelId == null ? '/packets/$packetHash' : '/packets';
+        return packetHash != null && !_hasListFilter ? '/packets/$packetHash' : '/packets';
       case NetworkSection.nodes:
         if (nodeKey != null) return '/nodes/$nodeKey';
         if (observerId != null) return '/observers/${Uri.encodeComponent(observerId!)}';
@@ -301,10 +363,9 @@ class NetworkRequest {
   Map<String, String> get _query {
     final q = <String, String>{};
     if (section == NetworkSection.packets && _path == '/packets') {
-      if (nodeKey != null) q['node'] = nodeKey!;
-      if (packetHash != null) q['hash'] = packetHash!;
-      if (observerId != null) q['observer'] = observerId!;
-      if (channelId != null) q['channel'] = channelId!;
+      final f = listFilter;
+      q.addAll(f.toQuery());
+      if (packetHash != null && f.hash == null) q['hash'] = packetHash!;
     }
     if (section == NetworkSection.insights && insightsTab != null && insightsTab != 'channels') q['tab'] = insightsTab!;
     if (section == NetworkSection.map && mapPanel != null) q['panel'] = mapPanel!;
@@ -344,10 +405,11 @@ class NetworkRequest {
       other.until == until &&
       other.insightsTab == insightsTab &&
       other.mapPanel == mapPanel &&
-      other.observersList == observersList;
+      other.observersList == observersList &&
+      other.packetFilter == packetFilter;
 
   @override
-  int get hashCode => Object.hash(section, region, nodeKey, packetHash, observerId, channelId, window, since, until, insightsTab, mapPanel, observersList);
+  int get hashCode => Object.hash(section, region, nodeKey, packetHash, observerId, channelId, window, since, until, insightsTab, mapPanel, observersList, packetFilter);
 
   @override
   String toString() => 'NetworkRequest(${section.name}${region == null ? '' : ' $region'})';

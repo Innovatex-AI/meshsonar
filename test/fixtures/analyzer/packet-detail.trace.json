@@ -1,0 +1,285 @@
+{
+  "data": {
+    "hash": "84e9744b6433a1b0",
+    "type": 9,
+    "typeName": "TRACE",
+    "route": "DIRECT",
+    "payloadVersion": 0,
+    "hashSize": 1,
+    "size": 17,
+    "firstSeen": "2026-11-20T14:05:30.120Z",
+    "lastSeen": "2026-11-20T14:05:30.120Z",
+    "raw": "2603281af6dec0175a00000000004f3c91",
+    "rawSource": "meshsonar",
+    "rawVerified": true,
+    "bytes": [
+      {
+        "start": 0,
+        "end": 1,
+        "group": "header",
+        "field": "header",
+        "label": "Header",
+        "hex": "26",
+        "value": {
+          "routeType": 2,
+          "route": "DIRECT",
+          "payloadType": 9,
+          "type": "TRACE",
+          "payloadVersion": 0
+        }
+      },
+      {
+        "start": 1,
+        "end": 2,
+        "group": "path_len",
+        "field": "pathLen",
+        "label": "Path length (hops completed)",
+        "hex": "03",
+        "value": {
+          "hopsCompleted": 3
+        }
+      },
+      {
+        "start": 2,
+        "end": 3,
+        "group": "path",
+        "field": "path[0]",
+        "label": "SNR at hop 1",
+        "hex": "28",
+        "value": 10.0
+      },
+      {
+        "start": 3,
+        "end": 4,
+        "group": "path",
+        "field": "path[1]",
+        "label": "SNR at hop 2",
+        "hex": "1a",
+        "value": 6.5
+      },
+      {
+        "start": 4,
+        "end": 5,
+        "group": "path",
+        "field": "path[2]",
+        "label": "SNR at hop 3",
+        "hex": "f6",
+        "value": -2.5
+      },
+      {
+        "start": 5,
+        "end": 9,
+        "group": "payload",
+        "field": "trace.tag",
+        "label": "Tag",
+        "hex": "dec0175a",
+        "value": "5a17c0de"
+      },
+      {
+        "start": 9,
+        "end": 13,
+        "group": "payload",
+        "field": "trace.authCode",
+        "label": "Auth code",
+        "hex": "00000000",
+        "value": 0
+      },
+      {
+        "start": 13,
+        "end": 14,
+        "group": "payload",
+        "field": "trace.flags",
+        "label": "Flags",
+        "hex": "00",
+        "value": {
+          "hashSize": 1
+        }
+      },
+      {
+        "start": 14,
+        "end": 17,
+        "group": "payload",
+        "field": "trace.hops",
+        "label": "Target hops",
+        "hex": "4f3c91",
+        "value": [
+          "4f",
+          "3c",
+          "91"
+        ]
+      }
+    ],
+    "decoded": {
+      "trace": {
+        "tag": "5a17c0de",
+        "authCode": 0,
+        "hashSize": 1,
+        "targets": [
+          "4f",
+          "3c",
+          "91"
+        ],
+        "hopsCompleted": 3,
+        "snr": [
+          10.0,
+          6.5,
+          -2.5
+        ]
+      }
+    },
+    "origin": null,
+    "channel": null,
+    "scope": null,
+    "message": null,
+    "anomaly": null,
+    "observationCount": 1,
+    "observerCount": 1,
+    "observations": [
+      {
+        "id": "o1",
+        "observer": {
+          "id": "d1a761a8d6478b879df8a2278225f4fc2c10d2f925f537c6cdd7921c7f147a0f",
+          "name": "MS Westside Observer",
+          "kind": "fixed",
+          "src": "meshsonar"
+        },
+        "at": "2026-11-20T14:05:30.120Z",
+        "snr": 7.25,
+        "rssi": -98,
+        "pathId": "p1",
+        "path": [
+          "4f",
+          "3c",
+          "91"
+        ],
+        "src": "meshsonar"
+      }
+    ],
+    "observationsNext": null,
+    "observationsExpired": false,
+    "paths": [
+      {
+        "id": "p1",
+        "hops": [
+          {
+            "index": 0,
+            "prefix": "4f",
+            "confidence": "unique",
+            "node": {
+              "key": "4f199584624bb836b6236a1becf56c22dc204f37e5775eda542895a88c4c164c",
+              "name": "Hilltop RPT",
+              "role": "repeater"
+            },
+            "score": 1.0,
+            "candidates": [],
+            "candidatesTotal": 1,
+            "evidence": [
+              "unique_prefix"
+            ]
+          },
+          {
+            "index": 1,
+            "prefix": "3c",
+            "confidence": "likely",
+            "node": {
+              "key": "3cd0c95448b8566d21060bfec77f420446b1122cb903ec140fe946603dbdfbd4",
+              "name": "Old Mill RPT",
+              "role": "repeater"
+            },
+            "score": 0.82,
+            "candidates": [
+              {
+                "node": {
+                  "key": "3cd0c95448b8566d21060bfec77f420446b1122cb903ec140fe946603dbdfbd4",
+                  "name": "Old Mill RPT",
+                  "role": "repeater"
+                },
+                "position": {
+                  "lat": 39.99655,
+                  "lon": -83.10279,
+                  "precision": "exact"
+                },
+                "score": 0.82,
+                "distanceKm": 8.4
+              },
+              {
+                "node": {
+                  "key": "3c9f4f0d5b8d0d22e81eed085d02372a8b037a8ac1df62a84ced88eed980688f",
+                  "name": "Eastgate RPT",
+                  "role": "repeater"
+                },
+                "position": {
+                  "lat": 39.7121,
+                  "lon": -82.5998,
+                  "precision": "exact"
+                },
+                "score": 0.09,
+                "distanceKm": 48.1
+              }
+            ],
+            "candidatesTotal": 2,
+            "evidence": [
+              "neighbor_edge",
+              "geo_near"
+            ]
+          },
+          {
+            "index": 2,
+            "prefix": "91",
+            "confidence": "unique",
+            "node": {
+              "key": "91f7b953529576091add8a19f9105e6572e43ea95429c60ed79ee1c4bf547ea4",
+              "name": "Library Room",
+              "role": "room"
+            },
+            "score": 1.0,
+            "candidates": [],
+            "candidatesTotal": 1,
+            "evidence": [
+              "unique_prefix"
+            ]
+          }
+        ],
+        "observationIds": [
+          "o1"
+        ]
+      }
+    ],
+    "src": [
+      "meshsonar"
+    ],
+    "links": {
+      "web": "https://cmh.meshsonar.com/packets/84e9744b6433a1b0",
+      "replay": "https://cmh.meshsonar.com/map?panel=live&t=2026-11-20T14:05:30.120Z&packet=84e9744b6433a1b0"
+    }
+  },
+  "meta": {
+    "apiVersion": "1.0",
+    "region": {
+      "slug": "cmh",
+      "name": "Columbus",
+      "kind": "region"
+    },
+    "generatedAt": "2026-11-20T14:15:00.000Z",
+    "dataAt": "2026-11-20T14:14:40.000Z",
+    "status": {
+      "state": "ready",
+      "reason": null
+    },
+    "sources": {
+      "meshsonar": {
+        "id": "meshsonar",
+        "kind": "first_party",
+        "name": "MeshSonar observers",
+        "attribution": "MeshSonar",
+        "url": "https://meshsonar.com/observers"
+      }
+    },
+    "nodeList": {
+      "state": "complete",
+      "trusted": true,
+      "reason": "936 of 1,000 relayed hop appearances in the last 24 h match a placed node (93.6%).",
+      "computedAt": "2026-11-20T14:10:00.000Z"
+    }
+  }
+}

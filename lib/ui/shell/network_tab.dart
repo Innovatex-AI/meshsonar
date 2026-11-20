@@ -11,7 +11,8 @@
 // error (it never loaded and the server answered with an error), empty (no region to show). Each panel keeps its own
 // loading / offline ("Offline - as of") / error states inside a section.
 //
-// Website twins (analyzer-api-contract.md web routes): Now = region home `/`, Packets = `/packets`, Nodes = `/nodes`
+// Website twins (analyzer-api-contract.md web routes): Now = region home `/`, Packets = `/packets` (a packet:
+// `/packets/:hash`, Decode a packet: `/tools/decode`), Nodes = `/nodes`
 // and `/observers`, Map = `/map`, Insights = `/insights?tab=`.
 import 'dart:async';
 
@@ -28,7 +29,7 @@ import '../location_status.dart';
 import '../network/network_header.dart';
 import '../network/network_sections.dart';
 import '../region/observer_detail_screen.dart';
-import '../region/packet_detail_screen.dart';
+import '../network/packets/packet_detail_screen.dart';
 import '../region/region_hub_screen.dart' show MachineDerivedNote;
 import '../region/region_report_export_sheet.dart';
 import '../region/region_switch_sheet.dart' show switchViewedRegion;
@@ -45,6 +46,9 @@ class NetworkTab extends StatefulWidget {
 class _NetworkTabState extends State<NetworkTab> {
   /// The shown sub-view per section (Findings | Overview, List | Live, Repeaters | Observers).
   final Map<NetworkSection, int> _sub = {};
+
+  /// The last link into Packets > List (its filters and window); the list is rebuilt from it.
+  NetworkRequest? _packetsRequest;
   ShellController? _shell;
 
   @override
@@ -79,7 +83,11 @@ class _NetworkTabState extends State<NetworkTab> {
   void _pickSub(NetworkRequest r) {
     if (r.section == NetworkSection.map && r.mapPanel == 'live') _sub[NetworkSection.packets] = 1;
     if (r.section == NetworkSection.nodes) _sub[NetworkSection.nodes] = r.observersView ? 1 : 0;
-    if (r.section == NetworkSection.packets && r.packetHash != null) _sub[NetworkSection.packets] = 0;
+    if (r.section == NetworkSection.packets) {
+      _sub[NetworkSection.packets] = 0;
+      final isList = r.packetHash == null || r.toWebUri().path == '/packets';
+      if (isList) _packetsRequest = r;
+    }
   }
 
   /// Takes a request after the frame: the region it names, then the page of the thing it names.
@@ -103,8 +111,8 @@ class _NetworkTabState extends State<NetworkTab> {
     final reg = region;
     if (reg == null || !mounted) return;
     final nav = Navigator.of(context);
-    if (r.packetHash != null && r.section == NetworkSection.packets) {
-      nav.push(MaterialPageRoute<void>(builder: (_) => PacketDetailScreen(baseUrl: reg.url, regionSlug: reg.slug, hash: r.packetHash!)));
+    if (r.packetHash != null && r.section == NetworkSection.packets && r.toWebUri().path != '/packets') {
+      nav.push(MaterialPageRoute<void>(builder: (_) => NetworkPacketScreen(baseUrl: reg.url, regionSlug: reg.slug, hash: r.packetHash!)));
     } else if (r.nodeKey != null && r.section == NetworkSection.nodes) {
       nav.push(MaterialPageRoute<void>(builder: (_) => RepeaterDetailScreen(baseUrl: reg.url, regionSlug: reg.slug, repeaterKey: r.nodeKey!)));
     } else if (r.observerId != null && r.section == NetworkSection.nodes) {
@@ -163,6 +171,7 @@ class _NetworkTabState extends State<NetworkTab> {
                     region: region,
                     sub: _sub[_section] ?? 0,
                     onSub: (i) => _setSub(_section, i),
+                    packetsRequest: _packetsRequest,
                     onOpenLive: () {
                       _select(NetworkSection.packets);
                       _setSub(NetworkSection.packets, 1);

@@ -1,0 +1,262 @@
+{
+  "data": {
+    "hash": "1c26c203910896f0",
+    "type": 5,
+    "typeName": "GRP_TXT",
+    "route": "TRANSPORT_FLOOD",
+    "payloadVersion": 0,
+    "hashSize": 1,
+    "size": 75,
+    "firstSeen": "2026-11-20T14:05:00.120Z",
+    "lastSeen": "2026-11-20T14:05:00.515Z",
+    "raw": "14989b000002914f6293492e18ce1ea2e6af3c128c0492a43151f9fa1d70d9d43d5c085cbeb191aa6b5bd45f2aca661b7bec26e3c565be8a9beb582ae98ce3018b028e83f384b78945036f",
+    "rawSource": "meshsonar",
+    "rawVerified": true,
+    "bytes": [
+      {
+        "start": 0,
+        "end": 1,
+        "group": "header",
+        "field": "header",
+        "label": "Header",
+        "hex": "14",
+        "value": {
+          "routeType": 0,
+          "route": "TRANSPORT_FLOOD",
+          "payloadType": 5,
+          "type": "GRP_TXT",
+          "payloadVersion": 0
+        }
+      },
+      {
+        "start": 1,
+        "end": 3,
+        "group": "transport",
+        "field": "transportCode1",
+        "label": "Transport code 1 (scope)",
+        "hex": "989b",
+        "value": "989b"
+      },
+      {
+        "start": 3,
+        "end": 5,
+        "group": "transport",
+        "field": "transportCode2",
+        "label": "Transport code 2 (reserved)",
+        "hex": "0000",
+        "value": "0000"
+      },
+      {
+        "start": 5,
+        "end": 6,
+        "group": "path_len",
+        "field": "pathLen",
+        "label": "Path length",
+        "hex": "02",
+        "value": {
+          "hashSize": 1,
+          "hopCount": 2,
+          "bytes": 2
+        }
+      },
+      {
+        "start": 6,
+        "end": 7,
+        "group": "path",
+        "field": "path[0]",
+        "label": "Hop 1",
+        "hex": "91",
+        "value": "91"
+      },
+      {
+        "start": 7,
+        "end": 8,
+        "group": "path",
+        "field": "path[1]",
+        "label": "Hop 2",
+        "hex": "4f",
+        "value": "4f"
+      },
+      {
+        "start": 8,
+        "end": 9,
+        "group": "payload",
+        "field": "grp.channelHash",
+        "label": "Channel hash",
+        "hex": "62",
+        "value": "62"
+      },
+      {
+        "start": 9,
+        "end": 11,
+        "group": "mac",
+        "field": "grp.mac",
+        "label": "MAC (HMAC-SHA256, 2 bytes)",
+        "hex": "9349",
+        "value": "9349"
+      },
+      {
+        "start": 11,
+        "end": 75,
+        "group": "ciphertext",
+        "field": "grp.ciphertext",
+        "label": "Ciphertext (AES-128-ECB)",
+        "hex": "2e18ce1ea2e6af3c128c0492a43151f9fa1d70d9d43d5c085cbeb191aa6b5bd45f2aca661b7bec26e3c565be8a9beb582ae98ce3018b028e83f384b78945036f",
+        "value": "no_key"
+      }
+    ],
+    "decoded": {
+      "group": {
+        "channelHash": "62",
+        "mac": "9349",
+        "decodeStatus": "no_key",
+        "keySource": null,
+        "plaintext": null,
+        "note": "Private channel: the key is not known to MeshSonar. Add your own key in the browser or app to read it on your device."
+      }
+    },
+    "origin": null,
+    "channel": {
+      "id": "enc:62",
+      "name": null,
+      "kind": "unknown"
+    },
+    "scope": {
+      "code": "989b",
+      "name": "#cmh",
+      "match": "unique",
+      "candidatesTested": 14
+    },
+    "message": null,
+    "anomaly": null,
+    "observationCount": 2,
+    "observerCount": 2,
+    "observations": [
+      {
+        "id": "o1",
+        "observer": {
+          "id": "d1a761a8d6478b879df8a2278225f4fc2c10d2f925f537c6cdd7921c7f147a0f",
+          "name": "MS Westside Observer",
+          "kind": "fixed",
+          "src": "meshsonar"
+        },
+        "at": "2026-11-20T14:05:00.120Z",
+        "snr": 3.0,
+        "rssi": -104,
+        "pathId": "p1",
+        "path": [
+          "91",
+          "4f"
+        ],
+        "src": "meshsonar"
+      },
+      {
+        "id": "o2",
+        "observer": {
+          "id": "src_12:7e9e8fe0a052ad046b73e9724234241a5f3b8cbad107bdfc18bcf6a27255877d",
+          "name": "OVCS Clintonville",
+          "kind": "outside",
+          "src": "src_12"
+        },
+        "at": "2026-11-20T14:05:00.515Z",
+        "snr": 0.5,
+        "rssi": -110,
+        "pathId": "p1",
+        "path": [
+          "91",
+          "4f"
+        ],
+        "src": "src_12"
+      }
+    ],
+    "observationsNext": null,
+    "observationsExpired": false,
+    "paths": [
+      {
+        "id": "p1",
+        "hops": [
+          {
+            "index": 0,
+            "prefix": "91",
+            "confidence": "unique",
+            "node": {
+              "key": "91f7b953529576091add8a19f9105e6572e43ea95429c60ed79ee1c4bf547ea4",
+              "name": "Library Room",
+              "role": "room"
+            },
+            "score": 1.0,
+            "candidates": [],
+            "candidatesTotal": 1,
+            "evidence": [
+              "unique_prefix"
+            ]
+          },
+          {
+            "index": 1,
+            "prefix": "4f",
+            "confidence": "unique",
+            "node": {
+              "key": "4f199584624bb836b6236a1becf56c22dc204f37e5775eda542895a88c4c164c",
+              "name": "Hilltop RPT",
+              "role": "repeater"
+            },
+            "score": 1.0,
+            "candidates": [],
+            "candidatesTotal": 1,
+            "evidence": [
+              "unique_prefix"
+            ]
+          }
+        ],
+        "observationIds": [
+          "o1",
+          "o2"
+        ]
+      }
+    ],
+    "src": [
+      "meshsonar",
+      "src_12"
+    ],
+    "links": {
+      "web": "https://cmh.meshsonar.com/packets/1c26c203910896f0",
+      "replay": "https://cmh.meshsonar.com/map?panel=live&t=2026-11-20T14:05:00.120Z&packet=1c26c203910896f0"
+    }
+  },
+  "meta": {
+    "apiVersion": "1.0",
+    "region": {
+      "slug": "cmh",
+      "name": "Columbus",
+      "kind": "region"
+    },
+    "generatedAt": "2026-11-20T14:15:00.000Z",
+    "dataAt": "2026-11-20T14:14:40.000Z",
+    "status": {
+      "state": "ready",
+      "reason": null
+    },
+    "sources": {
+      "meshsonar": {
+        "id": "meshsonar",
+        "kind": "first_party",
+        "name": "MeshSonar observers",
+        "attribution": "MeshSonar",
+        "url": "https://meshsonar.com/observers"
+      },
+      "src_12": {
+        "id": "src_12",
+        "kind": "outside",
+        "name": "Ohio Valley CoreScope",
+        "attribution": "Data from the Ohio Valley CoreScope instance",
+        "url": "https://corescope-ohio.example.org"
+      }
+    },
+    "nodeList": {
+      "state": "complete",
+      "trusted": true,
+      "reason": "936 of 1,000 relayed hop appearances in the last 24 h match a placed node (93.6%).",
+      "computedAt": "2026-11-20T14:10:00.000Z"
+    }
+  }
+}

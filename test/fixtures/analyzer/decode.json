@@ -1,0 +1,138 @@
+{
+  "data": {
+    "input": {
+      "hex": "1504e2a73c4f1179b650a2715967740eff02a15d16198e7b05f6f65cb76077f829347f3852534c014cbb5868785bb4ed138757cf85578644578cf9e7f6ab00cd72c62dcec2d5472d13",
+      "keysTried": [
+        "builtin_public",
+        "hashtag_list"
+      ]
+    },
+    "hash": "c4b06ee8fc39b187",
+    "type": 5,
+    "typeName": "GRP_TXT",
+    "route": "FLOOD",
+    "hashSize": 1,
+    "size": 73,
+    "bytes": [
+      {
+        "start": 0,
+        "end": 1,
+        "group": "header",
+        "field": "header",
+        "label": "Header",
+        "hex": "15",
+        "value": {
+          "routeType": 1,
+          "route": "FLOOD",
+          "payloadType": 5,
+          "type": "GRP_TXT",
+          "payloadVersion": 0
+        }
+      },
+      {
+        "start": 1,
+        "end": 2,
+        "group": "path_len",
+        "field": "pathLen",
+        "label": "Path length",
+        "hex": "04",
+        "value": {
+          "hashSize": 1,
+          "hopCount": 4,
+          "bytes": 4
+        }
+      },
+      {
+        "start": 2,
+        "end": 3,
+        "group": "path",
+        "field": "path[0]",
+        "label": "Hop 1",
+        "hex": "e2",
+        "value": "e2"
+      },
+      {
+        "start": 3,
+        "end": 4,
+        "group": "path",
+        "field": "path[1]",
+        "label": "Hop 2",
+        "hex": "a7",
+        "value": "a7"
+      },
+      {
+        "start": 4,
+        "end": 5,
+        "group": "path",
+        "field": "path[2]",
+        "label": "Hop 3",
+        "hex": "3c",
+        "value": "3c"
+      },
+      {
+        "start": 5,
+        "end": 6,
+        "group": "path",
+        "field": "path[3]",
+        "label": "Hop 4",
+        "hex": "4f",
+        "value": "4f"
+      },
+      {
+        "start": 6,
+        "end": 7,
+        "group": "payload",
+        "field": "grp.channelHash",
+        "label": "Channel hash",
+        "hex": "11",
+        "value": "11"
+      },
+      {
+        "start": 7,
+        "end": 9,
+        "group": "mac",
+        "field": "grp.mac",
+        "label": "MAC (HMAC-SHA256, 2 bytes)",
+        "hex": "79b6",
+        "value": "79b6"
+      },
+      {
+        "start": 9,
+        "end": 73,
+        "group": "ciphertext",
+        "field": "grp.ciphertext",
+        "label": "Ciphertext (AES-128-ECB)",
+        "hex": "50a2715967740eff02a15d16198e7b05f6f65cb76077f829347f3852534c014cbb5868785bb4ed138757cf85578644578cf9e7f6ab00cd72c62dcec2d5472d13",
+        "value": "decrypted"
+      }
+    ],
+    "decoded": {
+      "group": {
+        "channelHash": "11",
+        "mac": "79b6",
+        "decodeStatus": "decrypted",
+        "keySource": "builtin_public",
+        "plaintext": {
+          "timestamp": "2026-11-20T14:02:05.000Z",
+          "flags": 0,
+          "text": "Kestrel-07: anyone hearing Hilltop this morning?"
+        }
+      }
+    },
+    "known": true,
+    "links": {
+      "packet": "https://meshsonar.com/v1/packets/c4b06ee8fc39b187"
+    }
+  },
+  "meta": {
+    "apiVersion": "1.0",
+    "region": null,
+    "generatedAt": "2026-11-20T14:15:00.000Z",
+    "dataAt": "2026-11-20T14:14:40.000Z",
+    "status": {
+      "state": "ready",
+      "reason": null
+    },
+    "sources": {}
+  }
+}

@@ -289,6 +289,53 @@ class V1Client {
     return (v, offlineAsOfOf(res));
   }
 
+  /// POST a JSON [body] to an enveloped endpoint (`/v1/decode`) and parse its `data`. Never cached (`no-store`).
+  /// Throws [V1Error] or [V1NotLive] as [get] does.
+  Future<V1Envelope<T>> post<T>(String path, Object body, T Function(Object? data) parse) async {
+    final url = uri(path);
+    if (knownNotLive) throw V1NotLive(url);
+    final http.Response res;
+    try {
+      res = await _client
+          .post(url, headers: const {'accept': 'application/json', 'content-type': 'application/json'}, body: jsonEncode(body))
+          .timeout(timeout);
+    } on TimeoutException {
+      throw const V1Error(code: 'timeout', message: 'The server took too long to answer.', offline: true);
+    } on SocketException {
+      throw const V1Error(code: 'offline', message: 'No connection to the server.', offline: true);
+    } on http.ClientException {
+      throw const V1Error(code: 'offline', message: 'No connection to the server.', offline: true);
+    } on HandshakeException {
+      throw const V1Error(code: 'offline', message: 'The secure connection to the server failed.', offline: true);
+    }
+    Object? decoded;
+    try {
+      decoded = jsonDecode(utf8.decode(res.bodyBytes));
+    } catch (_) {
+      decoded = null;
+    }
+    if (res.statusCode != 200 && res.statusCode != 201) {
+      final err = V1Error.tryParse(res.statusCode, decoded, headers: res.headers);
+      if (err != null) throw err;
+      if (res.statusCode == 404 || res.statusCode == 405 || res.statusCode == 501) {
+        _markNotLive();
+        throw V1NotLive(url, status: res.statusCode);
+      }
+      throw V1Error(status: res.statusCode, code: 'http_${res.statusCode}', message: 'The server answered ${res.statusCode}.');
+    }
+    if (decoded is! Map<String, dynamic> || decoded['meta'] is! Map<String, dynamic> || !decoded.containsKey('data')) {
+      _markNotLive();
+      throw V1NotLive(url, status: res.statusCode);
+    }
+    final T data;
+    try {
+      data = parse(decoded['data']);
+    } catch (_) {
+      throw const V1Error(code: 'unreadable', message: 'The server sent something unreadable.');
+    }
+    return V1Envelope(data: data, page: V1Page.tryParse(decoded['page']), meta: V1Meta.fromJson(decoded['meta'] as Map<String, dynamic>));
+  }
+
   void _markNotLive() => _notLive[Uri.parse(baseUrl).host] = clock();
 
   Future<(Object?, http.Response)> _getJson(Uri url) async {

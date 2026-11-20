@@ -1,7 +1,7 @@
 // The five Network sections (AZ-3.1): Now, Packets, Nodes, Map, Insights. They re-home the old Analyze > Region area's
 // thirteen tabs without changing any panel (each still takes the region host and slug):
 //   Now      : Findings (old "Analyze" tab) | Overview
-//   Packets  : List (old "Packets") | Live (old "Live")
+//   Packets  : List (AZ-3.2: /v1/packets with filters, My radio, Decode a packet) | Live (old "Live")
 //   Nodes    : Repeaters | Observers
 //   Map      : the full map with the network layers (NetworkMapPlaceholder until the live map, AZ-3.3)
 //   Insights : Analysis, RF, Growth, Reports, Stats, Silent repeaters, Wardrive share (each opens as its own page)
@@ -25,6 +25,7 @@ import '../region/region_panels.dart';
 import '../region/rf_panel.dart';
 import '../region/stats_panel.dart';
 import 'network_header.dart';
+import 'packets/packet_list_view.dart';
 
 /// The sub-views of a section that has more than one (labels in display order).
 const Map<NetworkSection, List<String>> networkSubViews = {
@@ -136,7 +137,11 @@ class NetworkSectionBody extends StatelessWidget {
 
   /// Opens Packets > Live (the Map section's "Live packets").
   final VoidCallback onOpenLive;
-  const NetworkSectionBody({super.key, required this.section, required this.region, required this.sub, required this.onSub, required this.onOpenLive});
+
+  /// The request that opened Packets > List (its filters and window), when a link named some.
+  final NetworkRequest? packetsRequest;
+  const NetworkSectionBody(
+      {super.key, required this.section, required this.region, required this.sub, required this.onSub, required this.onOpenLive, this.packetsRequest});
 
   Widget _panel(BuildContext context, AppState s) {
     final r = region;
@@ -147,7 +152,9 @@ class NetworkSectionBody extends StatelessWidget {
             : KeyedSubtree(key: const Key('network-now-overview'), child: buildOverviewPanel(r.url, r.slug));
       case NetworkSection.packets:
         return sub == 0
-            ? KeyedSubtree(key: const Key('network-packets-list'), child: buildPacketsPanel(r.url, r.slug))
+            ? KeyedSubtree(
+                key: const Key('network-packets-list'),
+                child: PacketListView(key: ValueKey(packetsRequest), baseUrl: r.url, regionSlug: r.slug, request: packetsRequest))
             : LivePanel(key: const Key('network-packets-live'), baseUrl: r.url, regionSlug: r.slug);
       case NetworkSection.nodes:
         return sub == 0

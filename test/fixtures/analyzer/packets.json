@@ -1,0 +1,255 @@
+{
+  "data": [
+    {
+      "hash": "84e9744b6433a1b0",
+      "firstSeen": "2026-11-20T14:05:30.120Z",
+      "lastSeen": "2026-11-20T14:05:33.870Z",
+      "type": 9,
+      "typeName": "TRACE",
+      "route": "DIRECT",
+      "hashSize": 1,
+      "hops": 3,
+      "size": 17,
+      "observationCount": 1,
+      "observerCount": 1,
+      "bestSnr": 7.25,
+      "bestRssi": -98,
+      "src": [
+        "meshsonar"
+      ],
+      "summary": "Trace 4f > 3c > 91, 3 of 3 hops answered",
+      "origin": null,
+      "channel": null,
+      "scope": null,
+      "decodeStatus": "plain"
+    },
+    {
+      "hash": "3d729e68c935af6f",
+      "firstSeen": "2026-11-20T14:05:15.120Z",
+      "lastSeen": "2026-11-20T14:05:18.870Z",
+      "type": 2,
+      "typeName": "TXT_MSG",
+      "route": "DIRECT",
+      "hashSize": 2,
+      "hops": 2,
+      "size": 42,
+      "observationCount": 1,
+      "observerCount": 1,
+      "bestSnr": -4.5,
+      "bestRssi": -117,
+      "src": [
+        "src_31"
+      ],
+      "summary": "Direct message (encrypted)",
+      "origin": null,
+      "channel": null,
+      "scope": null,
+      "decodeStatus": "encrypted"
+    },
+    {
+      "hash": "1c26c203910896f0",
+      "firstSeen": "2026-11-20T14:05:00.120Z",
+      "lastSeen": "2026-11-20T14:05:03.870Z",
+      "type": 5,
+      "typeName": "GRP_TXT",
+      "route": "TRANSPORT_FLOOD",
+      "hashSize": 1,
+      "hops": 2,
+      "size": 75,
+      "observationCount": 2,
+      "observerCount": 2,
+      "bestSnr": 3.0,
+      "bestRssi": -104,
+      "src": [
+        "meshsonar",
+        "src_12"
+      ],
+      "summary": "Channel message on an unknown channel (hash 62)",
+      "origin": null,
+      "channel": {
+        "id": "enc:62",
+        "name": null,
+        "kind": "unknown"
+      },
+      "scope": {
+        "code": "989b",
+        "name": "#cmh",
+        "match": "unique"
+      },
+      "decodeStatus": "no_key"
+    },
+    {
+      "hash": "a03aaeaf864003ae",
+      "firstSeen": "2026-11-20T14:04:20.120Z",
+      "lastSeen": "2026-11-20T14:04:23.870Z",
+      "type": 5,
+      "typeName": "GRP_TXT",
+      "route": "FLOOD",
+      "hashSize": 2,
+      "hops": 2,
+      "size": 89,
+      "observationCount": 3,
+      "observerCount": 3,
+      "bestSnr": 9.5,
+      "bestRssi": -91,
+      "src": [
+        "meshsonar",
+        "src_12"
+      ],
+      "summary": "#wardriving: N0CALL Mobile: drive loop 3 done, 41 pings, Old Mill answered 38",
+      "origin": null,
+      "channel": {
+        "id": "tag:wardriving",
+        "name": "#wardriving",
+        "kind": "hashtag"
+      },
+      "scope": null,
+      "decodeStatus": "decrypted"
+    },
+    {
+      "hash": "c4b06ee8fc39b187",
+      "firstSeen": "2026-11-20T14:02:05.120Z",
+      "lastSeen": "2026-11-20T14:02:08.870Z",
+      "type": 5,
+      "typeName": "GRP_TXT",
+      "route": "FLOOD",
+      "hashSize": 1,
+      "hops": 4,
+      "size": 73,
+      "observationCount": 2,
+      "observerCount": 2,
+      "bestSnr": 1.75,
+      "bestRssi": -109,
+      "src": [
+        "src_12"
+      ],
+      "summary": "Public: Kestrel-07: anyone hearing Hilltop this morning?",
+      "origin": null,
+      "channel": {
+        "id": "public",
+        "name": "Public",
+        "kind": "public"
+      },
+      "scope": null,
+      "decodeStatus": "decrypted"
+    },
+    {
+      "hash": "4db95053d9fce608",
+      "firstSeen": "2026-11-20T14:01:30.120Z",
+      "lastSeen": "2026-11-20T14:01:33.870Z",
+      "type": 3,
+      "typeName": "ACK",
+      "route": "FLOOD",
+      "hashSize": 1,
+      "hops": 2,
+      "size": 8,
+      "observationCount": 1,
+      "observerCount": 1,
+      "bestSnr": -1.25,
+      "bestRssi": -112,
+      "src": [
+        "meshsonar-phone"
+      ],
+      "summary": "ACK f594c4e4",
+      "origin": null,
+      "channel": null,
+      "scope": null,
+      "decodeStatus": "plain"
+    },
+    {
+      "hash": "1add53ffce368256",
+      "firstSeen": "2026-11-20T14:00:40.120Z",
+      "lastSeen": "2026-11-20T14:00:43.870Z",
+      "type": 4,
+      "typeName": "ADVERT",
+      "route": "FLOOD",
+      "hashSize": 1,
+      "hops": 1,
+      "size": 124,
+      "observationCount": 2,
+      "observerCount": 2,
+      "bestSnr": 11.0,
+      "bestRssi": -84,
+      "src": [
+        "meshsonar"
+      ],
+      "summary": "Advert: Library Room (room)",
+      "origin": {
+        "key": "91f7b953529576091add8a19f9105e6572e43ea95429c60ed79ee1c4bf547ea4",
+        "name": "Library Room",
+        "role": "room"
+      },
+      "channel": null,
+      "scope": null,
+      "decodeStatus": "plain"
+    }
+  ],
+  "page": {
+    "limit": 50,
+    "next": "eyJ0IjoiMjAyNi0xMS0yMFQxNDowMDo0MC4xMjBaIiwiaCI6IjAwIn0",
+    "prev": "eyJ0IjoiMjAyNi0xMS0yMFQxNDowNTozMC4xMjBaIiwiZCI6Im5ld2VyIn0",
+    "approxTotal": 18342
+  },
+  "meta": {
+    "apiVersion": "1.0",
+    "region": {
+      "slug": "cmh",
+      "name": "Columbus",
+      "kind": "region"
+    },
+    "generatedAt": "2026-11-20T14:15:00.000Z",
+    "dataAt": "2026-11-20T14:14:40.000Z",
+    "status": {
+      "state": "ready",
+      "reason": null
+    },
+    "sources": {
+      "meshsonar": {
+        "id": "meshsonar",
+        "kind": "first_party",
+        "name": "MeshSonar observers",
+        "attribution": "MeshSonar",
+        "url": "https://meshsonar.com/observers"
+      },
+      "meshsonar-phone": {
+        "id": "meshsonar-phone",
+        "kind": "first_party_phone",
+        "name": "MeshSonar phone observers",
+        "attribution": "MeshSonar app users",
+        "url": "https://meshsonar.com/observers"
+      },
+      "src_12": {
+        "id": "src_12",
+        "kind": "outside",
+        "name": "Ohio Valley CoreScope",
+        "attribution": "Data from the Ohio Valley CoreScope instance",
+        "url": "https://corescope-ohio.example.org"
+      },
+      "src_31": {
+        "id": "src_31",
+        "kind": "outside",
+        "name": "Scioto Mesh Analyzer",
+        "attribution": "Data from Scioto Mesh Analyzer",
+        "url": "https://scioto-mesh.example.net"
+      }
+    },
+    "window": {
+      "name": "1h",
+      "from": "2026-11-20T13:15:00.000Z",
+      "to": "2026-11-20T14:15:00.000Z",
+      "resolution": "raw",
+      "rollup": null
+    },
+    "filter": {
+      "expression": "type in (GRP_TXT, ADVERT, TRACE, TXT_MSG, ACK)",
+      "parsed": true
+    },
+    "groupBy": "hash",
+    "nodeList": {
+      "state": "complete",
+      "trusted": true,
+      "reason": "936 of 1,000 relayed hop appearances in the last 24 h match a placed node (93.6%).",
+      "computedAt": "2026-11-20T14:10:00.000Z"
+    }
+  }
+}
