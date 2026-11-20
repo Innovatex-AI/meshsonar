@@ -395,6 +395,25 @@ String formatPct(double? share, [int digits = 1]) {
 /// `uptime7d` / `uptime30d` are percent numbers (0-100), not shares.
 String uptimeText(double? u) => u == null ? '—' : formatPct(u / 100, 0);
 
+// ---- "Heard" share (app-next-pass-list item 1, site #287): the server's `uptime7d` / `uptime30d` (and `/v1` node
+// detail `health.uptime` {h24, d7, d30}) is NOT radio uptime: it is the share of hours with traffic in which a source
+// heard the repeater. The UI calls it "Heard (7 d)" / "Heard (30 d)"; the JSON keys stay as they are.
+
+/// The help text shown with every "Heard" figure.
+const String heardHelpText = 'Share of hours with traffic in which a source heard this repeater.';
+
+/// "Heard (7 d)", "Heard (30 d)", "Heard (24 h)": [window] is the plain window ("7 d", "30 d", "24 h").
+String heardShareLabel(String window) => 'Heard ($window)';
+const String heardLabel7d = 'Heard (7 d)';
+const String heardLabel30d = 'Heard (30 d)';
+const String heardLabel24h = 'Heard (24 h)';
+
+/// "Heard (7 d) 89%" from a percent number (0-100, the region read's `uptime7d`).
+String heardPctText(String window, double? pct) => '${heardShareLabel(window)} ${uptimeText(pct)}';
+
+/// "Heard (7 d) 89%" from a share 0..1 (the `/v1` node detail `health.uptime.d7`).
+String heardShareText(String window, double? share) => '${heardShareLabel(window)} ${share == null ? '—' : formatPct(share, 0)}';
+
 /// Mean SNR with 1 decimal, null "—" (never 0).
 String snrText(double? v) => v == null ? '—' : v.toStringAsFixed(1);
 
@@ -532,7 +551,7 @@ List<RepeaterHealthRow> busiest(List<RepeaterHealthRow> rows, [int n = 8]) {
   return out.take(n).toList();
 }
 
-/// The least reliable repeaters: lowest 7-day uptime among those the region had traffic to judge them on.
+/// The repeaters heard least often ("Heard least often", site #287): lowest 7-day heard share among those the region had traffic to judge them on.
 List<RepeaterHealthRow> leastReliable(List<RepeaterHealthRow> rows, [int n = 5]) {
   final out = [
     for (final r in rows)

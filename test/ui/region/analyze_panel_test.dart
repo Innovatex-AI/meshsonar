@@ -100,7 +100,7 @@ void main() {
       expect(statText(t, 'Silent for 24 h'), '9');
       expect(statText(t, 'Relaying in 24 h'), '22');
       expect(find.byKey(Key('busy:${'k1'.padRight(64, '0')}')), findsOneWidget);
-      expect(find.textContaining('5,000 relayed · 89% up'), findsOneWidget);
+      expect(find.textContaining('5,000 relayed · Heard (7 d) 89%'), findsOneWidget);
       expect(find.text('New repeater'), findsNothing); // events are Text.rich spans
       expect(find.textContaining('New repeater'), findsOneWidget);
       // gate: the server sentence and its numbers

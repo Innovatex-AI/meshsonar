@@ -620,14 +620,17 @@ class _HealthBody extends StatelessWidget {
                 Expanded(
                   child: _RepeaterLink(repeaterKey: r.key, label: name(r), baseUrl: baseUrl, slug: slug),
                 ),
-                Text(
-                  '${formatInt(r.relays24h)} relayed · ${uptimeText(r.uptime7d)} up · ${r.snrMean7d == null ? '—' : '${snrText(r.snrMean7d)} dB'}',
-                  style: t.textTheme.bodySmall,
+                Flexible(
+                  child: Text(
+                    '${formatInt(r.relays24h)} relayed · ${heardPctText('7 d', r.uptime7d)} · ${r.snrMean7d == null ? '—' : '${snrText(r.snrMean7d)} dB'}',
+                    style: t.textTheme.bodySmall,
+                    textAlign: TextAlign.end,
+                  ),
                 ),
               ],
             ),
           Text(
-            'Relayed in the last 24 h · uptime over 7 days · mean SNR over 7 days.',
+            'Relayed in the last 24 h · $heardLabel7d · mean SNR over 7 days. $heardLabel7d: $heardHelpText',
             style: t.textTheme.labelSmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
           ),
         ],
@@ -640,9 +643,12 @@ class _HealthBody extends StatelessWidget {
                 Expanded(
                   child: _RepeaterLink(repeaterKey: r.key, label: name(r), baseUrl: baseUrl, slug: slug),
                 ),
-                Text(
-                  '${uptimeText(r.uptime7d)} up · last heard ${formatInZone(r.lastHeardAt, tz)}',
-                  style: t.textTheme.bodySmall,
+                Flexible(
+                  child: Text(
+                    '${heardPctText('7 d', r.uptime7d)} · last heard ${formatInZone(r.lastHeardAt, tz)}',
+                    style: t.textTheme.bodySmall,
+                    textAlign: TextAlign.end,
+                  ),
                 ),
               ],
             ),

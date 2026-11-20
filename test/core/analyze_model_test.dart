@@ -73,6 +73,12 @@ void main() {
       expect(uptimeText(89.3), '89%');
       expect(uptimeText(41.2), '41%');
       expect(uptimeText(null), '—');
+      // app-next-pass-list item 1: the figure is the heard share, never "uptime".
+      expect(heardPctText('7 d', 89.3), 'Heard (7 d) 89%');
+      expect(heardPctText('30 d', null), 'Heard (30 d) —');
+      expect(heardShareText('7 d', 0.893), 'Heard (7 d) 89%');
+      expect(heardLabel30d, 'Heard (30 d)');
+      expect(heardHelpText, 'Share of hours with traffic in which a source heard this repeater.');
     });
     test('busiest leaves out null relays (shared code); least reliable by lowest uptime', () {
       expect(busiest(health.rows).map((r) => r.name), ['Central', 'Ridge']);
