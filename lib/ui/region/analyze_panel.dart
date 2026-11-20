@@ -635,7 +635,7 @@ class _HealthBody extends StatelessWidget {
           ),
         ],
         if (weak.isNotEmpty) ...[
-          const _H3('Least reliable'),
+          const _H3('Heard least often'),
           for (final r in weak)
             Row(
               key: Key('weak:${r.key}'),
