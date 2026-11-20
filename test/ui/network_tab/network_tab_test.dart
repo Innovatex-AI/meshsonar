@@ -141,12 +141,14 @@ void main() {
     useV1Fixtures();
     await pumpNetwork(tester);
     expect(find.byKey(const Key('pulse-chip')), findsOneWidget);
-    expect(find.textContaining('Riverside RPT went quiet'), findsOneWidget, reason: 'warn before info');
+    expect(find.descendant(of: find.byKey(const Key('pulse-chip')), matching: find.text('Unusual: Riverside RPT went quiet +1')), findsOneWidget,
+        reason: 'warn before info');
+    expect(find.byKey(const Key('what-changed')), findsOneWidget, reason: 'AZ-3.6 item 6: the "What changed" card on Now > Findings');
     expect(find.text('640 packets last hour · 151 repeaters heard · 26 observers online'), findsOneWidget);
     await tester.tap(find.byKey(const Key('pulse-chip')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('pulse-sheet')), findsOneWidget);
-    expect(find.text('Traffic 2.4x the usual for a Thursday morning'), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const Key('pulse-sheet')), matching: find.text('Traffic 2.4x the usual for a Thursday morning')), findsOneWidget);
     await tester.tapAt(const Offset(2, 2));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('region-report-export')));

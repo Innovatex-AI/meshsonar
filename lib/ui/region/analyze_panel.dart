@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import '../../core/analyze_api.dart';
 import '../../core/analyze_model.dart';
 import '../../core/zone_time.dart';
+import '../network/network_header.dart' show WhatChangedCard;
 import '../theme.dart';
 import 'repeater_detail_screen.dart' show openRepeaterDetail;
 
@@ -85,6 +86,8 @@ class _AnalyzePanelState extends State<AnalyzePanel> {
         key: const Key('analyze-list'),
         padding: const EdgeInsets.all(Gap.m),
         children: [
+          // "What changed" (network-pulse-plan section 4): the newest pulse items; hidden until the server has a pulse read.
+          WhatChangedCard(key: ValueKey('what-changed-${widget.baseUrl}'), baseUrl: widget.baseUrl),
           _Section<InsightsRead>(
             id: 'an-findings',
             title: 'What needs attention',
