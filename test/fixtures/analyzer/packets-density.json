@@ -1,0 +1,84 @@
+{
+  "data": {
+    "bucket": "1m",
+    "counts": [
+      [
+        "2026-11-20T14:00:00.000Z",
+        31
+      ],
+      [
+        "2026-11-20T14:01:00.000Z",
+        28
+      ],
+      [
+        "2026-11-20T14:02:00.000Z",
+        40
+      ],
+      [
+        "2026-11-20T14:03:00.000Z",
+        35
+      ],
+      [
+        "2026-11-20T14:04:00.000Z",
+        52
+      ],
+      [
+        "2026-11-20T14:05:00.000Z",
+        47
+      ],
+      [
+        "2026-11-20T14:06:00.000Z",
+        38
+      ],
+      [
+        "2026-11-20T14:07:00.000Z",
+        44
+      ],
+      [
+        "2026-11-20T14:08:00.000Z",
+        29
+      ],
+      [
+        "2026-11-20T14:09:00.000Z",
+        33
+      ]
+    ]
+  },
+  "meta": {
+    "apiVersion": "1.0",
+    "region": {
+      "slug": "cmh",
+      "name": "Columbus",
+      "kind": "region"
+    },
+    "generatedAt": "2026-11-20T14:15:00.000Z",
+    "dataAt": "2026-11-20T14:14:40.000Z",
+    "status": {
+      "state": "ready",
+      "reason": null
+    },
+    "sources": {
+      "meshsonar": {
+        "id": "meshsonar",
+        "kind": "first_party",
+        "name": "MeshSonar observers",
+        "attribution": "MeshSonar",
+        "url": "https://meshsonar.com/observers"
+      },
+      "src_12": {
+        "id": "src_12",
+        "kind": "outside",
+        "name": "Ohio Valley CoreScope",
+        "attribution": "Data from the Ohio Valley CoreScope instance",
+        "url": "https://corescope-ohio.example.org"
+      }
+    },
+    "window": {
+      "name": "custom",
+      "from": "2026-11-20T14:00:00.000Z",
+      "to": "2026-11-20T14:10:00.000Z",
+      "resolution": "1m",
+      "rollup": null
+    }
+  }
+}

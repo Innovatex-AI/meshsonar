@@ -107,16 +107,16 @@ void main() {
     expect(find.byKey(const Key('network-packets-list')), findsOneWidget);
     await section(tester, 'packets', sub: 1);
     expect(find.byKey(const Key('network-packets-live')), findsOneWidget);
-    // Nodes: Repeaters and Observers.
+    // Nodes: every role (AZ-3.4; the old Repeaters tab) and Observers.
     await section(tester, 'nodes', sub: 0);
-    expect(find.byKey(const Key('network-nodes-repeaters')), findsOneWidget);
+    expect(find.byKey(const Key('network-nodes-directory')), findsOneWidget);
     expect(find.byKey(const Key('network-packets-live')), findsNothing, reason: 'a hidden section is not built (no live stream behind it)');
     await section(tester, 'nodes', sub: 1);
     expect(find.byKey(const Key('network-nodes-observers')), findsOneWidget);
-    // Map: the placeholder that opens the full map.
+    // Map: the live map with replay (AZ-3.3), with a way to the full coverage map.
     await section(tester, 'map');
-    expect(find.byKey(const Key('network-map-placeholder')), findsOneWidget);
-    expect(find.byKey(const Key('network-map-open')), findsOneWidget);
+    expect(find.byKey(const Key('live-map')), findsOneWidget);
+    expect(find.byKey(const Key('live-map-open-full')), findsOneWidget);
     // Insights: Analysis, RF, Growth, Reports, Stats, Silent, Wardrive, each its own page.
     await section(tester, 'insights');
     for (final id in ['analysis', 'rf', 'growth', 'reports', 'stats', 'silent', 'wardrive']) {
@@ -228,6 +228,32 @@ void main() {
       await tester.pageBack();
       await tester.pump(const Duration(milliseconds: 600));
       expect(find.byKey(const Key('network-packets-list')), findsOneWidget);
+      await tester.pump(const Duration(seconds: 2));
+    });
+
+    testWidgets('AZ-3.3: "Show on map" in the packet detail draws that packet on Network > Map', (tester) async {
+      useV1Fixtures();
+      final h = await pumpNetwork(tester);
+      h.incomingLinks.add(Uri.parse('meshsonar://network/packets/c4b06ee8fc39b187?region=cmh'));
+      await frames(tester);
+      final btn = find.byKey(const Key('packet-show-on-map'));
+      await tester.scrollUntilVisible(btn, 300, scrollable: find.descendant(of: find.byType(NetworkPacketScreen), matching: find.byType(Scrollable)).first);
+      await tester.pump();
+      await tester.tap(btn);
+      await frames(tester);
+      expect(find.byType(NetworkPacketScreen), findsNothing);
+      expect(find.byKey(const Key('live-map')), findsOneWidget);
+      expect(find.byKey(const Key('live-focus-card')), findsOneWidget);
+      await tester.pump(const Duration(seconds: 2));
+    });
+
+    testWidgets('AZ-3.3: the packet replay link (/map?panel=live&packet=) opens the live map on that packet', (tester) async {
+      useV1Fixtures();
+      final h = await pumpNetwork(tester);
+      h.incomingLinks.add(Uri.parse('https://cmh.meshsonar.com/map?panel=live&t=2026-11-20T14:02:05.120Z&packet=c4b06ee8fc39b187'));
+      await frames(tester);
+      expect(find.byKey(const Key('live-map')), findsOneWidget);
+      expect(find.byKey(const Key('live-focus-card')), findsOneWidget);
       await tester.pump(const Duration(seconds: 2));
     });
 

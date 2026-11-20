@@ -12,7 +12,7 @@ import '../../design/app_surfaces.dart' show showAppToast;
 import '../../map/layers/repeater_map_source.dart' show kRosterLayerId;
 import '../../map/main_map_focus.dart';
 import '../../region/region_common.dart' show RegionOfflineAsOf, clockUtc, dayUtc;
-import '../../shell/shell_controller.dart' show ShellScope;
+import '../../shell/shell_controller.dart' show ShellController;
 import '../../theme.dart';
 import 'byte_inspector.dart';
 import 'packet_ui.dart';
@@ -46,7 +46,12 @@ class PacketDetailBody extends StatelessWidget {
   /// The website twin of this view.
   final Uri? web;
   final DateTime Function() clock;
+
+  /// Draws this packet's path on the live map (Network > Map, AZ-3.3); null for a packet the network has no copy of
+  /// (the phone's own radio, a pasted packet), which opens the map around its named hops instead.
+  final VoidCallback? onShowOnMap;
   const PacketDetailBody({
+    this.onShowOnMap,
     super.key,
     required this.d,
     this.sources = const {},
@@ -282,7 +287,14 @@ class PacketDetailBody extends StatelessWidget {
       for (final p in d.paths) _path(context, p),
       if (d.paths.isEmpty) const PacketNote('No hops: the packet was heard straight from its sender.'),
       const SizedBox(height: Gap.s),
-      if (positions.isNotEmpty)
+      if (onShowOnMap != null)
+        OutlinedButton.icon(
+          key: const Key('packet-show-on-map'),
+          icon: const Icon(Icons.route),
+          label: const Text('Show the path on the live map'),
+          onPressed: onShowOnMap,
+        )
+      else if (positions.isNotEmpty)
         OutlinedButton.icon(
           key: const Key('packet-show-on-map'),
           icon: const Icon(Icons.map_outlined),
@@ -291,13 +303,17 @@ class PacketDetailBody extends StatelessWidget {
             final c = LatLng(positions.map((e) => e.latitude).reduce((a, b) => a + b) / positions.length,
                 positions.map((e) => e.longitude).reduce((a, b) => a + b) / positions.length);
             MainMapFocus.request(c, 11, showLayers: const {kRosterLayerId});
-            ShellScope.maybeRead(context)?.openDrive();
+            final shell = ShellController.of(context);
+            Navigator.of(context).popUntil((r) => r.isFirst);
+            shell?.openDrive();
           },
         ),
       Text(
-        positions.isNotEmpty
-            ? 'Opens the map around the named hops. Drawing the path itself on the map comes with the live map update.'
-            : 'Drawing this path on the map comes with the live map update.',
+        onShowOnMap != null
+            ? 'Draws it from its origin through the relays to each observer: solid for hops known for sure, dashed for likely ones, faint grey for hops nobody can place.'
+            : (positions.isNotEmpty
+                ? 'Opens the map around the named hops. The network has no copy of this packet to draw on the live map.'
+                : 'The network has no copy of this packet to draw on the live map.'),
         key: const Key('packet-map-note'),
         style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
       ),

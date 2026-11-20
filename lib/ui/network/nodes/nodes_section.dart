@@ -44,13 +44,13 @@ class NetworkNodesSection extends StatelessWidget {
             child: SizedBox(
               width: double.infinity,
               child: CupertinoSlidingSegmentedControl<int>(
-                key: const Key('nodes-sub'),
+                key: const Key('network-sub-nodes'),
                 groupValue: sub,
                 thumbColor: c.surfaceContainerHighest,
                 backgroundColor: c.onSurface.withValues(alpha: 0.10),
                 children: {
                   for (final (i, l) in [(0, 'Nodes'), (1, 'Observers')])
-                    i: ConstrainedBox(constraints: const BoxConstraints(minHeight: 36), child: Center(child: Text(l, key: Key('nodes-sub-$i'), maxLines: 1))),
+                    i: ConstrainedBox(constraints: const BoxConstraints(minHeight: 36), child: Center(child: Text(l, key: Key('network-sub-nodes-$i'), maxLines: 1))),
                 },
                 onValueChanged: (v) {
                   if (v != null) onSub(v);

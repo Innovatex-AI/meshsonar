@@ -153,7 +153,7 @@ void main() {
     expect(find.text('Hilltop RPT'), findsNothing);
     expect(find.byKey(const Key('packets-web-twin')), findsOneWidget);
 
-    await t.tap(find.byKey(const Key('nodes-sub-1')));
+    await t.tap(find.byKey(const Key('network-sub-nodes-1')));
     await settle(t);
     expect(find.byKey(const Key('observers-list')), findsOneWidget);
     expect(find.text('OVCS Clintonville'), findsOneWidget);

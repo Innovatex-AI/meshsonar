@@ -21,6 +21,7 @@ import '../../design/app_surfaces.dart' show showAppToast;
 import '../../design/state_views.dart';
 import '../../design/app_symbols.dart';
 import '../../region/region_common.dart' show RegionOfflineEmpty;
+import '../../shell/shell_controller.dart' show ShellController;
 import 'packet_context.dart';
 import 'packet_detail_body.dart';
 
@@ -212,7 +213,16 @@ class _NetworkPacketScreenState extends State<NetworkPacketScreen> {
         onRetry: _load,
         web: web,
         clock: clock,
+        onShowOnMap: () => showPacketOnLiveMap(context, hash: r.detail.hash, regionSlug: widget.regionSlug, at: r.detail.firstSeen),
       ),
     );
   }
+}
+
+/// Opens Network > Map drawing the path of packet [hash] (AZ-3.3), closing the pages above the tab.
+void showPacketOnLiveMap(BuildContext context, {required String hash, String? regionSlug, DateTime? at}) {
+  final shell = ShellController.of(context);
+  if (shell == null) return;
+  Navigator.of(context).popUntil((r) => r.isFirst);
+  shell.openNetwork(NetworkRequest.mapPacket(hash, region: regionSlug, at: at));
 }

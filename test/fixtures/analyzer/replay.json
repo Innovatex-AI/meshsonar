@@ -1,0 +1,543 @@
+{
+  "data": [
+    {
+      "hash": "1add53ffce368256",
+      "type": 4,
+      "typeName": "ADVERT",
+      "route": "FLOOD",
+      "hashSize": 1,
+      "firstSeen": "2026-11-20T14:00:40.120Z",
+      "origin": {
+        "key": "91f7b953529576091add8a19f9105e6572e43ea95429c60ed79ee1c4bf547ea4",
+        "name": "Library Room",
+        "role": "room"
+      },
+      "channel": null,
+      "message": null,
+      "observations": [
+        {
+          "id": "o1",
+          "observer": {
+            "id": "d1a761a8d6478b879df8a2278225f4fc2c10d2f925f537c6cdd7921c7f147a0f",
+            "name": "MS Westside Observer",
+            "kind": "fixed",
+            "src": "meshsonar"
+          },
+          "at": "2026-11-20T14:00:40.120Z",
+          "snr": 6.25,
+          "rssi": -97,
+          "pathId": "p1",
+          "src": "meshsonar"
+        },
+        {
+          "id": "o2",
+          "observer": {
+            "id": "08af2aa59175566e72f3b7157a9956104cea0983fa320d658f9c9fb39bfa7d50",
+            "name": "Phone observer 08f3",
+            "kind": "phone",
+            "src": "meshsonar-phone"
+          },
+          "at": "2026-11-20T14:00:40.410Z",
+          "snr": 11.0,
+          "rssi": -84,
+          "pathId": "p2",
+          "src": "meshsonar-phone"
+        }
+      ],
+      "paths": [
+        {
+          "id": "p1",
+          "hops": [
+            {
+              "index": 0,
+              "prefix": "4f",
+              "confidence": "unique",
+              "node": {
+                "key": "4f199584624bb836b6236a1becf56c22dc204f37e5775eda542895a88c4c164c",
+                "name": "Hilltop RPT",
+                "role": "repeater"
+              },
+              "score": 1.0,
+              "candidates": [],
+              "candidatesTotal": 1,
+              "evidence": [
+                "unique_prefix"
+              ]
+            }
+          ],
+          "observationIds": [
+            "o1"
+          ]
+        },
+        {
+          "id": "p2",
+          "hops": [],
+          "observationIds": [
+            "o2"
+          ]
+        }
+      ],
+      "unknownHops": [],
+      "settled": true,
+      "src": [
+        "meshsonar",
+        "meshsonar-phone"
+      ]
+    },
+    {
+      "hash": "c4b06ee8fc39b187",
+      "type": 5,
+      "typeName": "GRP_TXT",
+      "route": "FLOOD",
+      "hashSize": 1,
+      "firstSeen": "2026-11-20T14:02:05.120Z",
+      "origin": null,
+      "channel": {
+        "id": "public",
+        "name": "Public",
+        "kind": "public"
+      },
+      "message": {
+        "id": "c4b06ee8fc39b187",
+        "channel": {
+          "id": "public",
+          "name": "Public",
+          "kind": "public"
+        },
+        "sender": "Kestrel-07",
+        "senderVerified": false,
+        "text": "anyone hearing Hilltop this morning?",
+        "senderTime": "2026-11-20T14:02:05.000Z",
+        "hidden": false
+      },
+      "observations": [
+        {
+          "id": "o1",
+          "observer": {
+            "id": "src_12:7e9e8fe0a052ad046b73e9724234241a5f3b8cbad107bdfc18bcf6a27255877d",
+            "name": "OVCS Clintonville",
+            "kind": "outside",
+            "src": "src_12"
+          },
+          "at": "2026-11-20T14:02:05.120Z",
+          "snr": 1.75,
+          "rssi": -109,
+          "pathId": "p1",
+          "src": "src_12"
+        },
+        {
+          "id": "o2",
+          "observer": {
+            "id": "src_31:obs-1142",
+            "name": "Scioto North",
+            "kind": "outside",
+            "src": "src_31"
+          },
+          "at": "2026-11-20T14:02:06.030Z",
+          "snr": -3.0,
+          "rssi": -114,
+          "pathId": "p2",
+          "src": "src_31"
+        }
+      ],
+      "paths": [
+        {
+          "id": "p1",
+          "hops": [
+            {
+              "index": 0,
+              "prefix": "e2",
+              "confidence": "unknown",
+              "node": null,
+              "score": null,
+              "candidates": [],
+              "candidatesTotal": 0,
+              "evidence": [
+                "no_known_node"
+              ]
+            },
+            {
+              "index": 1,
+              "prefix": "a7",
+              "confidence": "ambiguous",
+              "node": null,
+              "score": null,
+              "candidates": [
+                {
+                  "node": {
+                    "key": "a7b21db75893e8c8665e5060b05d5e03c68c963d5a3a6e7e0dba6b5e0b9cde85",
+                    "name": "Riverside RPT",
+                    "role": "repeater"
+                  },
+                  "position": {
+                    "lat": 39.9612,
+                    "lon": -83.0041,
+                    "precision": "exact"
+                  },
+                  "score": 0.41,
+                  "distanceKm": 6.2
+                },
+                {
+                  "node": {
+                    "key": "a70e50d47a757afc624567a35e00bc93baf97509844ea9f01b34942bc0d21027",
+                    "name": "Quarry Hill RPT",
+                    "role": "repeater"
+                  },
+                  "position": {
+                    "lat": 40.08803,
+                    "lon": -82.95911,
+                    "precision": "exact"
+                  },
+                  "score": 0.38,
+                  "distanceKm": 9.8
+                }
+              ],
+              "candidatesTotal": 2,
+              "evidence": [
+                "prefix_collision",
+                "no_edge_majority"
+              ]
+            },
+            {
+              "index": 2,
+              "prefix": "3c",
+              "confidence": "likely",
+              "node": {
+                "key": "3cd0c95448b8566d21060bfec77f420446b1122cb903ec140fe946603dbdfbd4",
+                "name": "Old Mill RPT",
+                "role": "repeater"
+              },
+              "score": 0.82,
+              "candidates": [
+                {
+                  "node": {
+                    "key": "3cd0c95448b8566d21060bfec77f420446b1122cb903ec140fe946603dbdfbd4",
+                    "name": "Old Mill RPT",
+                    "role": "repeater"
+                  },
+                  "position": {
+                    "lat": 39.99655,
+                    "lon": -83.10279,
+                    "precision": "exact"
+                  },
+                  "score": 0.82,
+                  "distanceKm": 8.4
+                },
+                {
+                  "node": {
+                    "key": "3c9f4f0d5b8d0d22e81eed085d02372a8b037a8ac1df62a84ced88eed980688f",
+                    "name": "Eastgate RPT",
+                    "role": "repeater"
+                  },
+                  "position": {
+                    "lat": 39.7121,
+                    "lon": -82.5998,
+                    "precision": "exact"
+                  },
+                  "score": 0.09,
+                  "distanceKm": 48.1
+                }
+              ],
+              "candidatesTotal": 2,
+              "evidence": [
+                "neighbor_edge",
+                "geo_near"
+              ]
+            },
+            {
+              "index": 3,
+              "prefix": "4f",
+              "confidence": "unique",
+              "node": {
+                "key": "4f199584624bb836b6236a1becf56c22dc204f37e5775eda542895a88c4c164c",
+                "name": "Hilltop RPT",
+                "role": "repeater"
+              },
+              "score": 1.0,
+              "candidates": [],
+              "candidatesTotal": 1,
+              "evidence": [
+                "unique_prefix"
+              ]
+            }
+          ],
+          "observationIds": [
+            "o1"
+          ]
+        },
+        {
+          "id": "p2",
+          "hops": [
+            {
+              "index": 0,
+              "prefix": "e2",
+              "confidence": "unknown",
+              "node": null,
+              "score": null,
+              "candidates": [],
+              "candidatesTotal": 0,
+              "evidence": [
+                "no_known_node"
+              ]
+            },
+            {
+              "index": 1,
+              "prefix": "a7",
+              "confidence": "ambiguous",
+              "node": null,
+              "score": null,
+              "candidates": [
+                {
+                  "node": {
+                    "key": "a7b21db75893e8c8665e5060b05d5e03c68c963d5a3a6e7e0dba6b5e0b9cde85",
+                    "name": "Riverside RPT",
+                    "role": "repeater"
+                  },
+                  "position": {
+                    "lat": 39.9612,
+                    "lon": -83.0041,
+                    "precision": "exact"
+                  },
+                  "score": 0.41,
+                  "distanceKm": 6.2
+                },
+                {
+                  "node": {
+                    "key": "a70e50d47a757afc624567a35e00bc93baf97509844ea9f01b34942bc0d21027",
+                    "name": "Quarry Hill RPT",
+                    "role": "repeater"
+                  },
+                  "position": {
+                    "lat": 40.08803,
+                    "lon": -82.95911,
+                    "precision": "exact"
+                  },
+                  "score": 0.38,
+                  "distanceKm": 9.8
+                }
+              ],
+              "candidatesTotal": 2,
+              "evidence": [
+                "prefix_collision",
+                "no_edge_majority"
+              ]
+            },
+            {
+              "index": 2,
+              "prefix": "3c",
+              "confidence": "likely",
+              "node": {
+                "key": "3cd0c95448b8566d21060bfec77f420446b1122cb903ec140fe946603dbdfbd4",
+                "name": "Old Mill RPT",
+                "role": "repeater"
+              },
+              "score": 0.82,
+              "candidates": [
+                {
+                  "node": {
+                    "key": "3cd0c95448b8566d21060bfec77f420446b1122cb903ec140fe946603dbdfbd4",
+                    "name": "Old Mill RPT",
+                    "role": "repeater"
+                  },
+                  "position": {
+                    "lat": 39.99655,
+                    "lon": -83.10279,
+                    "precision": "exact"
+                  },
+                  "score": 0.82,
+                  "distanceKm": 8.4
+                },
+                {
+                  "node": {
+                    "key": "3c9f4f0d5b8d0d22e81eed085d02372a8b037a8ac1df62a84ced88eed980688f",
+                    "name": "Eastgate RPT",
+                    "role": "repeater"
+                  },
+                  "position": {
+                    "lat": 39.7121,
+                    "lon": -82.5998,
+                    "precision": "exact"
+                  },
+                  "score": 0.09,
+                  "distanceKm": 48.1
+                }
+              ],
+              "candidatesTotal": 2,
+              "evidence": [
+                "neighbor_edge",
+                "geo_near"
+              ]
+            }
+          ],
+          "observationIds": [
+            "o2"
+          ]
+        }
+      ],
+      "unknownHops": [
+        "e2"
+      ],
+      "settled": true,
+      "src": [
+        "src_12",
+        "src_31"
+      ]
+    },
+    {
+      "hash": "1c26c203910896f0",
+      "type": 5,
+      "typeName": "GRP_TXT",
+      "route": "TRANSPORT_FLOOD",
+      "hashSize": 1,
+      "firstSeen": "2026-11-20T14:05:00.120Z",
+      "origin": null,
+      "channel": {
+        "id": "enc:62",
+        "name": null,
+        "kind": "unknown"
+      },
+      "message": null,
+      "observations": [
+        {
+          "id": "o1",
+          "observer": {
+            "id": "d1a761a8d6478b879df8a2278225f4fc2c10d2f925f537c6cdd7921c7f147a0f",
+            "name": "MS Westside Observer",
+            "kind": "fixed",
+            "src": "meshsonar"
+          },
+          "at": "2026-11-20T14:05:00.120Z",
+          "snr": 3.0,
+          "rssi": -104,
+          "pathId": "p1",
+          "src": "meshsonar"
+        },
+        {
+          "id": "o2",
+          "observer": {
+            "id": "src_12:7e9e8fe0a052ad046b73e9724234241a5f3b8cbad107bdfc18bcf6a27255877d",
+            "name": "OVCS Clintonville",
+            "kind": "outside",
+            "src": "src_12"
+          },
+          "at": "2026-11-20T14:05:00.515Z",
+          "snr": 0.5,
+          "rssi": -110,
+          "pathId": "p1",
+          "src": "src_12"
+        }
+      ],
+      "paths": [
+        {
+          "id": "p1",
+          "hops": [
+            {
+              "index": 0,
+              "prefix": "91",
+              "confidence": "unique",
+              "node": {
+                "key": "91f7b953529576091add8a19f9105e6572e43ea95429c60ed79ee1c4bf547ea4",
+                "name": "Library Room",
+                "role": "room"
+              },
+              "score": 1.0,
+              "candidates": [],
+              "candidatesTotal": 1,
+              "evidence": [
+                "unique_prefix"
+              ]
+            },
+            {
+              "index": 1,
+              "prefix": "4f",
+              "confidence": "unique",
+              "node": {
+                "key": "4f199584624bb836b6236a1becf56c22dc204f37e5775eda542895a88c4c164c",
+                "name": "Hilltop RPT",
+                "role": "repeater"
+              },
+              "score": 1.0,
+              "candidates": [],
+              "candidatesTotal": 1,
+              "evidence": [
+                "unique_prefix"
+              ]
+            }
+          ],
+          "observationIds": [
+            "o1",
+            "o2"
+          ]
+        }
+      ],
+      "unknownHops": [],
+      "settled": true,
+      "src": [
+        "meshsonar",
+        "src_12"
+      ]
+    }
+  ],
+  "page": {
+    "limit": 500,
+    "next": "eyJ0IjoiMjAyNi0xMS0yMFQxNDowNTowMC4wMDBaIn0",
+    "spanLimit": "1h"
+  },
+  "meta": {
+    "apiVersion": "1.0",
+    "region": {
+      "slug": "cmh",
+      "name": "Columbus",
+      "kind": "region"
+    },
+    "generatedAt": "2026-11-20T14:15:00.000Z",
+    "dataAt": "2026-11-20T14:14:40.000Z",
+    "status": {
+      "state": "ready",
+      "reason": null
+    },
+    "sources": {
+      "meshsonar": {
+        "id": "meshsonar",
+        "kind": "first_party",
+        "name": "MeshSonar observers",
+        "attribution": "MeshSonar",
+        "url": "https://meshsonar.com/observers"
+      },
+      "meshsonar-phone": {
+        "id": "meshsonar-phone",
+        "kind": "first_party_phone",
+        "name": "MeshSonar phone observers",
+        "attribution": "MeshSonar app users",
+        "url": "https://meshsonar.com/observers"
+      },
+      "src_12": {
+        "id": "src_12",
+        "kind": "outside",
+        "name": "Ohio Valley CoreScope",
+        "attribution": "Data from the Ohio Valley CoreScope instance",
+        "url": "https://corescope-ohio.example.org"
+      },
+      "src_31": {
+        "id": "src_31",
+        "kind": "outside",
+        "name": "Scioto Mesh Analyzer",
+        "attribution": "Data from Scioto Mesh Analyzer",
+        "url": "https://scioto-mesh.example.net"
+      }
+    },
+    "window": {
+      "name": "custom",
+      "from": "2026-11-20T14:00:00.000Z",
+      "to": "2026-11-20T14:05:00.000Z",
+      "resolution": "raw",
+      "rollup": null
+    },
+    "nodeList": {
+      "state": "complete",
+      "trusted": true,
+      "reason": "936 of 1,000 relayed hop appearances in the last 24 h match a placed node (93.6%).",
+      "computedAt": "2026-11-20T14:10:00.000Z"
+    }
+  }
+}

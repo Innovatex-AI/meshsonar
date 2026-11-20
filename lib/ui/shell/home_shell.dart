@@ -63,6 +63,7 @@ class _HomeShellState extends State<HomeShell> {
   void initState() {
     super.initState();
     _shell = ShellController(initial: widget.initialTab ?? AppTab.drive)..visited.add(AppTab.drive);
+    ShellController.active = _shell;
     _shell.visited.add(_shell.tab);
     _shell.addListener(_onShell);
     // Battery (A2): the compass in Auto mode runs only while the Drive tab is shown and the app is in front.
@@ -206,6 +207,7 @@ class _HomeShellState extends State<HomeShell> {
     _shell.removeListener(_onShell);
     AlertsHost.runtime.removeListener(_bindAlerts);
     _alerts?.coordinator.pendingOpen.removeListener(_onPendingOpen);
+    if (identical(ShellController.active, _shell)) ShellController.active = null;
     _shell.dispose();
     super.dispose();
   }
