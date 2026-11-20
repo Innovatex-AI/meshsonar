@@ -1,0 +1,77 @@
+{
+  "data": {
+    "key": "5d6b49e5fee4cba58e5947760d8ba36f6e4ccaf2c8ace4ffd4692d3c4fb308ce",
+    "latestMv": 3712,
+    "latestAt": "2026-11-20T13:30:00.000Z",
+    "status": "ok",
+    "thresholds": {
+      "criticalBelowMv": 3000,
+      "lowBelowMv": 3300
+    },
+    "series": [
+      [
+        "2026-11-14T00:00:00.000Z",
+        3840
+      ],
+      [
+        "2026-11-15T00:00:00.000Z",
+        3815
+      ],
+      [
+        "2026-11-16T00:00:00.000Z",
+        3790
+      ],
+      [
+        "2026-11-17T00:00:00.000Z",
+        3770
+      ],
+      [
+        "2026-11-18T00:00:00.000Z",
+        3750
+      ],
+      [
+        "2026-11-19T00:00:00.000Z",
+        3731
+      ],
+      [
+        "2026-11-20T00:00:00.000Z",
+        3712
+      ]
+    ],
+    "seriesColumns": [
+      "at",
+      "mv"
+    ],
+    "source": "advert"
+  },
+  "meta": {
+    "apiVersion": "1.0",
+    "region": {
+      "slug": "cmh",
+      "name": "Columbus",
+      "kind": "region"
+    },
+    "generatedAt": "2026-11-20T14:15:00.000Z",
+    "dataAt": "2026-11-20T14:14:40.000Z",
+    "status": {
+      "state": "ready",
+      "reason": null
+    },
+    "sources": {
+      "src_12": {
+        "id": "src_12",
+        "kind": "outside",
+        "name": "Ohio Valley CoreScope",
+        "attribution": "Data from the Ohio Valley CoreScope instance",
+        "url": "https://corescope-ohio.example.org"
+      }
+    },
+    "window": {
+      "name": "7d",
+      "from": "2026-11-13T14:15:00.000Z",
+      "to": "2026-11-20T14:15:00.000Z",
+      "resolution": "1d",
+      "rollup": null
+    }
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "data": {
+    "key": "a7b21db75893e8c8665e5060b05d5e03c68c963d5a3a6e7e0dba6b5e0b9cde85",
+    "severity": "critical",
+    "skewS": 5460.0,
+    "skewRecentS": 5458.0,
+    "driftSPerDay": 1.8,
+    "bimodal": false,
+    "samples": [
+      {
+        "at": "2026-11-20T05:00:00.000Z",
+        "advertTime": "2026-11-20T06:31:00.000Z",
+        "observer": {
+          "id": "src_12:7e9e8fe0a052ad046b73e9724234241a5f3b8cbad107bdfc18bcf6a27255877d",
+          "name": "OVCS Clintonville",
+          "kind": "outside",
+          "src": "src_12"
+        },
+        "observerOffsetS": -1.0,
+        "skewS": 5461.0
+      },
+      {
+        "at": "2026-11-18T05:00:00.000Z",
+        "advertTime": "2026-11-18T06:29:32.000Z",
+        "observer": {
+          "id": "d1a761a8d6478b879df8a2278225f4fc2c10d2f925f537c6cdd7921c7f147a0f",
+          "name": "MS Westside Observer",
+          "kind": "fixed",
+          "src": "meshsonar"
+        },
+        "observerOffsetS": 0.0,
+        "skewS": 5372.0
+      }
+    ],
+    "bands": {
+      "okBelowS": 300,
+      "warningBelowS": 3600,
+      "criticalBelowS": 2592000,
+      "absurdBelowS": 31536000
+    }
+  },
+  "meta": {
+    "apiVersion": "1.0",
+    "region": {
+      "slug": "cmh",
+      "name": "Columbus",
+      "kind": "region"
+    },
+    "generatedAt": "2026-11-20T14:15:00.000Z",
+    "dataAt": "2026-11-20T14:14:40.000Z",
+    "status": {
+      "state": "ready",
+      "reason": null
+    },
+    "sources": {
+      "meshsonar": {
+        "id": "meshsonar",
+        "kind": "first_party",
+        "name": "MeshSonar observers",
+        "attribution": "MeshSonar",
+        "url": "https://meshsonar.com/observers"
+      },
+      "src_12": {
+        "id": "src_12",
+        "kind": "outside",
+        "name": "Ohio Valley CoreScope",
+        "attribution": "Data from the Ohio Valley CoreScope instance",
+        "url": "https://corescope-ohio.example.org"
+      }
+    },
+    "window": {
+      "name": "30d",
+      "from": "2026-10-21T14:15:00.000Z",
+      "to": "2026-11-20T14:15:00.000Z",
+      "resolution": "raw",
+      "rollup": null
+    }
+  }
+}

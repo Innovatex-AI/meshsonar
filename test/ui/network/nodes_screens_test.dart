@@ -1,0 +1,267 @@
+// Network > Nodes (AZ-3.4) widget tests, dark theme: the directory for every role with role / status / last-heard
+// filter chips, search, favourites first and the My nodes chip; the Nodes | Observers switch; the node page with every
+// section the API supplies and none it does not (hidden, never an empty box); the legacy fallback; star, Watch (sheet,
+// saved on the phone, says alerts come later) and Share (region-host link); the observer page with metrics; offline;
+// large text without overflow.
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:meshsonar/core/region_lookup.dart';
+import 'package:meshsonar/core/v1/nodes_api.dart';
+import 'package:meshsonar/ui/network/network_context.dart';
+import 'package:meshsonar/ui/network/network_share.dart';
+import 'package:meshsonar/ui/network/nodes/node_screen.dart';
+import 'package:meshsonar/ui/network/nodes/nodes_section.dart';
+import 'package:meshsonar/ui/network/nodes/observer_screen.dart';
+import 'package:meshsonar/ui/theme.dart';
+
+String fixture(String name) => File('test/fixtures/analyzer/$name.json').readAsStringSync();
+http.Response json(String body, [int status = 200]) => http.Response(body, status, headers: {'content-type': 'application/json'});
+const base = 'https://cmh.meshsonar.com';
+const hilltop = '4f199584624bb836b6236a1becf56c22dc204f37e5775eda542895a88c4c164c';
+const kestrel = 'c48e58a12ba6d3040af2806c373e80452ef09c6a06b4d67eb82fa9cd3b69af65';
+const westside = 'd1a761a8d6478b879df8a2278225f4fc2c10d2f925f537c6cdd7921c7f147a0f';
+const region = RegionIndexEntry(code: 'CMH', slug: 'cmh', name: 'Columbus', url: base);
+
+class Server {
+  final List<Uri> seen = [];
+  bool v1 = true, offline = false;
+  late final MockClient client = MockClient((r) async {
+    seen.add(r.url);
+    if (offline) throw const SocketException('down');
+    final p = r.url.path;
+    if (!v1 && p.startsWith('/v1/')) return http.Response('<html>', 404);
+    if (p == '/v1/nodes') {
+      final role = r.url.queryParameters['role'];
+      final j = jsonDecode(fixture('nodes')) as Map<String, dynamic>;
+      if (role != null) j['data'] = [for (final n in j['data'] as List) if (role.split(',').contains((n as Map)['role'])) n];
+      final q = r.url.queryParameters['q'];
+      if (q != null) j['data'] = [for (final n in j['data'] as List) if (((n as Map)['name'] as String).toLowerCase().contains(q)) n];
+      return json(jsonEncode(j));
+    }
+    if (p == '/v1/nodes/$hilltop') return json(fixture('node-detail'));
+    if (p == '/v1/nodes/$kestrel') return json(fixture('node-detail.no-location'));
+    for (final s in ['activity', 'heard-by', 'neighbors', 'paths', 'reach', 'clock', 'battery']) {
+      if (p == '/v1/nodes/$hilltop/$s') return json(fixture('node-$s'));
+    }
+    if (p == '/v1/observers') return json(fixture('observers'));
+    if (p == '/v1/observers/$westside') return json(fixture('observer-detail'));
+    if (p == '/v1/observers/$westside/metrics') return json(fixture('observer-metrics'));
+    if (p == '/api/cmh/region-repeater') {
+      return json(jsonEncode({
+        'status': {'state': 'ready'},
+        'row': {'key': hilltop, 'hashPrefix': '4f19', 'name': 'Hilltop RPT', 'role': 'repeater', 'lastHeardAt': '2026-11-20T14:05:00Z', 'heardHoursPct': 98, 'status': 'active'},
+        'neighbours': [],
+        'observers': [
+          {'key': westside, 'name': 'MS Westside', 'packets': 412, 'bestSnrDb': 9.5}
+        ],
+        'packetTypes': [],
+        'snrHourly': [],
+        'rssiHourly': [],
+      }));
+    }
+    if (p == '/api/cmh/region-repeaters') return json(jsonEncode({'status': {'state': 'ready'}, 'rows': [], 'counts': {}}));
+    return json('{"error":{"code":"not_found","message":"Unknown","requestId":"r"}}', 404);
+  });
+}
+
+Widget app(Widget child, {double scale = 1}) => MaterialApp(
+      theme: meshSonarTheme(Brightness.dark),
+      builder: (c, w) => MediaQuery(data: MediaQuery.of(c).copyWith(textScaler: TextScaler.linear(scale)), child: w!),
+      home: child,
+    );
+
+void tall(WidgetTester t) {
+  t.view.physicalSize = const Size(1170, 30000);
+  t.view.devicePixelRatio = 3;
+  addTearDown(t.view.reset);
+}
+
+Future<void> settle(WidgetTester t) async {
+  for (var i = 0; i < 8; i++) {
+    await t.pump(const Duration(milliseconds: 60));
+  }
+}
+
+void main() {
+  late Server s;
+  late NetworkFavouritesStore store;
+  NetworkFavouritesStore networkFavouritesForTest() => store;
+  setUp(() {
+    resetV1NotLive();
+    store = NetworkFavouritesStore();
+    debugResetNetworkFavourites(store);
+    s = Server();
+    nodesApiFactory = (b) => NodesApi(b, client: s.client);
+  });
+  tearDown(() {
+    nodesApiFactory = (b) => NodesApi(b);
+    debugNetworkShare = null;
+  });
+
+  testWidgets('directory: every role, filter chips go to the server, search, favourites first, My nodes', (t) async {
+    tall(t);
+    var sub = 0;
+    await t.pumpWidget(app(StatefulBuilder(builder: (c, set) => Scaffold(body: NetworkNodesSection(region: region, sub: sub, onSub: (i) => set(() => sub = i))))));
+    await settle(t);
+    for (final n in ['Hilltop RPT', 'Library Room', 'Creek Gauge', 'Kestrel-07', 'Eastgate RPT']) {
+      expect(find.text(n), findsOneWidget);
+    }
+    expect(find.textContaining('Companion · Active'), findsOneWidget);
+    expect(find.text('Companion 1'), findsOneWidget, reason: 'role chips carry the counts');
+
+    await t.ensureVisible(find.byKey(const Key('nodes-role-room')));
+    await t.tap(find.byKey(const Key('nodes-role-room')));
+    await settle(t);
+    expect(s.seen.last.queryParameters['role'], 'room');
+    expect(find.text('Library Room'), findsOneWidget);
+    expect(find.text('Hilltop RPT'), findsNothing);
+    await t.ensureVisible(find.byKey(const Key('nodes-role-room')));
+    await t.tap(find.byKey(const Key('nodes-role-room')));
+    await settle(t);
+
+    await t.ensureVisible(find.byKey(const Key('nodes-heard-24h')));
+    await t.tap(find.byKey(const Key('nodes-heard-24h')));
+    await settle(t);
+    expect(s.seen.last.queryParameters['lastHeard'], '24h');
+    await t.ensureVisible(find.byKey(const Key('nodes-heard-24h')));
+    await t.tap(find.byKey(const Key('nodes-heard-24h')));
+    await settle(t);
+
+    await t.enterText(find.byKey(const Key('nodes-search')), 'old');
+    await t.pump(const Duration(milliseconds: 400));
+    await settle(t);
+    expect(s.seen.last.queryParameters['q'], 'old');
+    expect(find.text('Old Mill RPT'), findsOneWidget);
+    await t.enterText(find.byKey(const Key('nodes-search')), '');
+    await t.pump(const Duration(milliseconds: 400));
+    await settle(t);
+
+    // Star Eastgate (the last row): it moves first; My nodes shows only it.
+    await networkFavouritesForTest().toggleFavourite(FavouriteKind.node, '3c9f4f0d5b8d0d22e81eed085d02372a8b037a8ac1df62a84ced88eed980688f');
+    await settle(t);
+    final ys = {for (final n in ['Hilltop RPT', 'Eastgate RPT']) n: t.getTopLeft(find.text(n)).dy};
+    expect(ys['Eastgate RPT']!, lessThan(ys['Hilltop RPT']!), reason: 'favourites first');
+    await t.ensureVisible(find.byKey(const Key('nodes-mine')));
+    await t.tap(find.byKey(const Key('nodes-mine')));
+    await settle(t);
+    expect(find.text('Eastgate RPT'), findsOneWidget);
+    expect(find.text('Hilltop RPT'), findsNothing);
+    expect(find.byKey(const Key('packets-web-twin')), findsOneWidget);
+
+    await t.tap(find.byKey(const Key('nodes-sub-1')));
+    await settle(t);
+    expect(find.byKey(const Key('observers-list')), findsOneWidget);
+    expect(find.text('OVCS Clintonville'), findsOneWidget);
+    expect(find.textContaining('Phone observer · Online'), findsOneWidget);
+  });
+
+  testWidgets('node page: every supplied section, star, watch sheet, share link', (t) async {
+    tall(t);
+    String? shared;
+    debugNetworkShare = (text, subject) => shared = text;
+    await t.pumpWidget(app(const NetworkNodeScreen(baseUrl: base, regionSlug: 'cmh', nodeKey: hilltop)));
+    await settle(t);
+    expect(find.byKey(const Key('node-title')), findsOneWidget);
+    for (final id in ['health', 'activity', 'types', 'snr', 'heard-by', 'neighbours', 'paths', 'reach', 'clock', 'battery', 'radio', 'hash', 'adverts']) {
+      expect(find.byKey(Key('node-section-$id')), findsOneWidget, reason: id);
+    }
+    expect(find.text('98%'), findsOneWidget, reason: 'Heard (7 d)');
+    expect(find.text('Heard (7 d)'), findsOneWidget);
+    expect(find.textContaining('Uptime'), findsNothing);
+    expect(find.text('Could be Riverside RPT or Quarry Hill RPT'), findsNothing);
+    expect(find.textContaining('could be Riverside RPT or Quarry Hill RPT'), findsOneWidget);
+
+    await t.tap(find.byKey(const Key('fav-node-$hilltop')));
+    await settle(t);
+    expect(networkFavouritesForTest().isFavourite(FavouriteKind.node, hilltop), isTrue);
+
+    await t.tap(find.byKey(const Key('watch-button')));
+    await settle(t);
+    expect(find.byKey(const Key('watch-sheet')), findsOneWidget);
+    expect(find.text('Alerts arrive in a later update; the watch is kept on this phone.'), findsOneWidget);
+    await t.tap(find.byKey(const Key('watch-event-clock_bad')));
+    await t.tap(find.byKey(const Key('watch-save')));
+    await settle(t);
+    final w = networkFavouritesForTest().watchOf('node', hilltop)!;
+    expect(w.events, ['silent', 'battery_low']);
+    expect(w.region, 'cmh');
+
+    await t.tap(find.byKey(const Key('network-share')));
+    await settle(t);
+    expect(shared, 'https://cmh.meshsonar.com/nodes/$hilltop');
+  });
+
+  testWidgets('node page hides the sections the API does not supply', (t) async {
+    tall(t);
+    await t.pumpWidget(app(const NetworkNodeScreen(baseUrl: base, regionSlug: 'cmh', nodeKey: kestrel)));
+    await settle(t);
+    expect(find.text('Never advertised a position'), findsOneWidget);
+    expect(find.byKey(const Key('node-section-health')), findsOneWidget);
+    for (final id in ['activity', 'snr', 'heard-by', 'neighbours', 'paths', 'reach', 'clock', 'battery', 'radio']) {
+      expect(find.byKey(Key('node-section-$id')), findsNothing, reason: id);
+    }
+    expect(find.byKey(const Key('node-section-hash')), findsOneWidget);
+  });
+
+  testWidgets('node page falls back to the region repeater read when /v1 is not live', (t) async {
+    tall(t);
+    s.v1 = false;
+    await t.pumpWidget(app(const NetworkNodeScreen(baseUrl: base, regionSlug: 'cmh', nodeKey: hilltop)));
+    await settle(t);
+    expect(find.byKey(const Key('node-legacy-note')), findsOneWidget);
+    expect(find.byKey(const Key('node-section-heard-by')), findsOneWidget);
+    expect(find.textContaining('best 9.5 dB'), findsOneWidget);
+    expect(find.byKey(const Key('node-section-paths')), findsNothing);
+    expect(find.byKey(const Key('node-section-battery')), findsNothing);
+  });
+
+  testWidgets('node page offline with nothing stored: the no-connection view', (t) async {
+    s.offline = true;
+    await t.pumpWidget(app(const NetworkNodeScreen(baseUrl: base, regionSlug: 'cmh', nodeKey: hilltop)));
+    await settle(t);
+    expect(find.byKey(const Key('region-offline-empty')), findsOneWidget);
+  });
+
+  testWidgets('observer page: metrics charts, neighbour report, star and share', (t) async {
+    tall(t);
+    String? shared;
+    debugNetworkShare = (text, subject) => shared = text;
+    await t.pumpWidget(app(const NetworkObserverScreen(baseUrl: base, regionSlug: 'cmh', observerId: westside)));
+    await settle(t);
+    expect(find.text('MS Westside Observer'), findsWidgets);
+    expect(find.byKey(const Key('node-section-observer-metrics')), findsOneWidget);
+    expect(find.byKey(const Key('chart-obs-noise')), findsOneWidget);
+    expect(find.byKey(const Key('chart-obs-airtime')), findsOneWidget);
+    expect(find.byKey(const Key('chart-obs-battery')), findsNothing, reason: 'no battery samples: hidden');
+    expect(find.byKey(const Key('node-section-observer-neighbours')), findsOneWidget);
+    expect(find.text('RAK4631'), findsOneWidget);
+    await t.tap(find.byKey(const Key('fav-observer-$westside')));
+    await t.tap(find.byKey(const Key('network-share')));
+    await settle(t);
+    expect(shared, 'https://cmh.meshsonar.com/observers/$westside');
+    expect(networkFavouritesForTest().isFavourite(FavouriteKind.observer, westside), isTrue);
+  });
+
+  testWidgets('large text: node and observer pages lay out without overflow', (t) async {
+    t.view.physicalSize = const Size(1170, 2532);
+    t.view.devicePixelRatio = 3;
+    addTearDown(t.view.reset);
+    await t.pumpWidget(app(const NetworkNodeScreen(baseUrl: base, regionSlug: 'cmh', nodeKey: hilltop), scale: 2.5));
+    await settle(t);
+    expect(t.takeException(), isNull);
+    await t.drag(find.byKey(const Key('node-page')), const Offset(0, -4000));
+    await settle(t);
+    expect(t.takeException(), isNull);
+    await t.pumpWidget(app(const NetworkObserverScreen(baseUrl: base, regionSlug: 'cmh', observerId: westside), scale: 2.5));
+    await settle(t);
+    expect(t.takeException(), isNull);
+    await t.pumpWidget(app(Scaffold(body: NetworkNodesSection(region: region, sub: 0, onSub: (_) {})), scale: 2.5));
+    await settle(t);
+    expect(t.takeException(), isNull);
+  });
+}

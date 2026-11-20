@@ -1,0 +1,209 @@
+{
+  "data": [
+    {
+      "hops": [
+        {
+          "index": 0,
+          "prefix": "e2",
+          "confidence": "unknown",
+          "node": null,
+          "score": null,
+          "candidates": [],
+          "candidatesTotal": 0,
+          "evidence": [
+            "no_known_node"
+          ]
+        },
+        {
+          "index": 1,
+          "prefix": "a7",
+          "confidence": "ambiguous",
+          "node": null,
+          "score": null,
+          "candidates": [
+            {
+              "node": {
+                "key": "a7b21db75893e8c8665e5060b05d5e03c68c963d5a3a6e7e0dba6b5e0b9cde85",
+                "name": "Riverside RPT",
+                "role": "repeater"
+              },
+              "position": {
+                "lat": 39.9612,
+                "lon": -83.0041,
+                "precision": "exact"
+              },
+              "score": 0.41,
+              "distanceKm": 6.2
+            },
+            {
+              "node": {
+                "key": "a70e50d47a757afc624567a35e00bc93baf97509844ea9f01b34942bc0d21027",
+                "name": "Quarry Hill RPT",
+                "role": "repeater"
+              },
+              "position": {
+                "lat": 40.08803,
+                "lon": -82.95911,
+                "precision": "exact"
+              },
+              "score": 0.38,
+              "distanceKm": 9.8
+            }
+          ],
+          "candidatesTotal": 2,
+          "evidence": [
+            "prefix_collision",
+            "no_edge_majority"
+          ]
+        },
+        {
+          "index": 2,
+          "prefix": "3c",
+          "confidence": "likely",
+          "node": {
+            "key": "3cd0c95448b8566d21060bfec77f420446b1122cb903ec140fe946603dbdfbd4",
+            "name": "Old Mill RPT",
+            "role": "repeater"
+          },
+          "score": 0.82,
+          "candidates": [
+            {
+              "node": {
+                "key": "3cd0c95448b8566d21060bfec77f420446b1122cb903ec140fe946603dbdfbd4",
+                "name": "Old Mill RPT",
+                "role": "repeater"
+              },
+              "position": {
+                "lat": 39.99655,
+                "lon": -83.10279,
+                "precision": "exact"
+              },
+              "score": 0.82,
+              "distanceKm": 8.4
+            },
+            {
+              "node": {
+                "key": "3c9f4f0d5b8d0d22e81eed085d02372a8b037a8ac1df62a84ced88eed980688f",
+                "name": "Eastgate RPT",
+                "role": "repeater"
+              },
+              "position": {
+                "lat": 39.7121,
+                "lon": -82.5998,
+                "precision": "exact"
+              },
+              "score": 0.09,
+              "distanceKm": 48.1
+            }
+          ],
+          "candidatesTotal": 2,
+          "evidence": [
+            "neighbor_edge",
+            "geo_near"
+          ]
+        },
+        {
+          "index": 3,
+          "prefix": "4f",
+          "confidence": "unique",
+          "node": {
+            "key": "4f199584624bb836b6236a1becf56c22dc204f37e5775eda542895a88c4c164c",
+            "name": "Hilltop RPT",
+            "role": "repeater"
+          },
+          "score": 1.0,
+          "candidates": [],
+          "candidatesTotal": 1,
+          "evidence": [
+            "unique_prefix"
+          ]
+        }
+      ],
+      "count": 41,
+      "lastAt": "2026-11-20T14:02:05.000Z",
+      "sampleHash": "c4b06ee8fc39b187"
+    },
+    {
+      "hops": [
+        {
+          "index": 0,
+          "prefix": "3cd0",
+          "confidence": "unique",
+          "node": {
+            "key": "3cd0c95448b8566d21060bfec77f420446b1122cb903ec140fe946603dbdfbd4",
+            "name": "Old Mill RPT",
+            "role": "repeater"
+          },
+          "score": 1.0,
+          "candidates": [],
+          "candidatesTotal": 1,
+          "evidence": [
+            "unique_prefix"
+          ]
+        },
+        {
+          "index": 1,
+          "prefix": "4f19",
+          "confidence": "unique",
+          "node": {
+            "key": "4f199584624bb836b6236a1becf56c22dc204f37e5775eda542895a88c4c164c",
+            "name": "Hilltop RPT",
+            "role": "repeater"
+          },
+          "score": 1.0,
+          "candidates": [],
+          "candidatesTotal": 1,
+          "evidence": [
+            "unique_prefix"
+          ]
+        }
+      ],
+      "count": 133,
+      "lastAt": "2026-11-20T14:04:20.000Z",
+      "sampleHash": "a03aaeaf864003ae"
+    }
+  ],
+  "page": {
+    "limit": 50,
+    "next": null
+  },
+  "meta": {
+    "apiVersion": "1.0",
+    "region": {
+      "slug": "cmh",
+      "name": "Columbus",
+      "kind": "region"
+    },
+    "generatedAt": "2026-11-20T14:15:00.000Z",
+    "dataAt": "2026-11-20T14:14:40.000Z",
+    "status": {
+      "state": "ready",
+      "reason": null
+    },
+    "sources": {
+      "meshsonar": {
+        "id": "meshsonar",
+        "kind": "first_party",
+        "name": "MeshSonar observers",
+        "attribution": "MeshSonar",
+        "url": "https://meshsonar.com/observers"
+      },
+      "src_12": {
+        "id": "src_12",
+        "kind": "outside",
+        "name": "Ohio Valley CoreScope",
+        "attribution": "Data from the Ohio Valley CoreScope instance",
+        "url": "https://corescope-ohio.example.org"
+      }
+    },
+    "window": {
+      "name": "7d",
+      "from": "2026-11-13T14:15:00.000Z",
+      "to": "2026-11-20T14:15:00.000Z",
+      "resolution": "raw",
+      "rollup": "subpath_day"
+    },
+    "totalPaths": 2,
+    "totalTransmissions": 174
+  }
+}

@@ -1,0 +1,143 @@
+{
+  "data": [
+    {
+      "node": {
+        "key": "3cd0c95448b8566d21060bfec77f420446b1122cb903ec140fe946603dbdfbd4",
+        "name": "Old Mill RPT",
+        "role": "repeater"
+      },
+      "position": {
+        "lat": 39.99655,
+        "lon": -83.10279,
+        "precision": "exact"
+      },
+      "confidence": "unique",
+      "count": 640,
+      "score": 0.97,
+      "edgeConfidence": 1.0,
+      "observers": 4,
+      "avgSnr": 4.75,
+      "distanceKm": 7.9,
+      "lastAt": "2026-11-20T14:05:00.000Z",
+      "kinds": [
+        "observed",
+        "reported"
+      ],
+      "src": [
+        "meshsonar",
+        "src_12"
+      ]
+    },
+    {
+      "node": {
+        "key": "91f7b953529576091add8a19f9105e6572e43ea95429c60ed79ee1c4bf547ea4",
+        "name": "Library Room",
+        "role": "room"
+      },
+      "position": {
+        "lat": 39.98701,
+        "lon": -83.02218,
+        "precision": "exact"
+      },
+      "confidence": "unique",
+      "count": 210,
+      "score": 0.88,
+      "edgeConfidence": 0.67,
+      "observers": 2,
+      "avgSnr": 8.0,
+      "distanceKm": 3.6,
+      "lastAt": "2026-11-20T14:05:00.000Z",
+      "kinds": [
+        "observed"
+      ],
+      "src": [
+        "meshsonar"
+      ]
+    },
+    {
+      "node": null,
+      "prefix": "a7",
+      "position": null,
+      "confidence": "ambiguous",
+      "count": 55,
+      "score": 0.31,
+      "edgeConfidence": 0.33,
+      "observers": 1,
+      "avgSnr": null,
+      "distanceKm": null,
+      "lastAt": "2026-11-20T14:02:05.000Z",
+      "candidates": [
+        {
+          "node": {
+            "key": "a7b21db75893e8c8665e5060b05d5e03c68c963d5a3a6e7e0dba6b5e0b9cde85",
+            "name": "Riverside RPT",
+            "role": "repeater"
+          },
+          "position": {
+            "lat": 39.9612,
+            "lon": -83.0041,
+            "precision": "exact"
+          },
+          "score": 0.41,
+          "distanceKm": 6.2
+        },
+        {
+          "node": {
+            "key": "a70e50d47a757afc624567a35e00bc93baf97509844ea9f01b34942bc0d21027",
+            "name": "Quarry Hill RPT",
+            "role": "repeater"
+          },
+          "position": {
+            "lat": 40.08803,
+            "lon": -82.95911,
+            "precision": "exact"
+          },
+          "score": 0.38,
+          "distanceKm": 9.8
+        }
+      ],
+      "kinds": [
+        "observed"
+      ],
+      "src": [
+        "src_12"
+      ]
+    }
+  ],
+  "meta": {
+    "apiVersion": "1.0",
+    "region": {
+      "slug": "cmh",
+      "name": "Columbus",
+      "kind": "region"
+    },
+    "generatedAt": "2026-11-20T14:15:00.000Z",
+    "dataAt": "2026-11-20T14:14:40.000Z",
+    "status": {
+      "state": "ready",
+      "reason": null
+    },
+    "sources": {
+      "meshsonar": {
+        "id": "meshsonar",
+        "kind": "first_party",
+        "name": "MeshSonar observers",
+        "attribution": "MeshSonar",
+        "url": "https://meshsonar.com/observers"
+      },
+      "src_12": {
+        "id": "src_12",
+        "kind": "outside",
+        "name": "Ohio Valley CoreScope",
+        "attribution": "Data from the Ohio Valley CoreScope instance",
+        "url": "https://corescope-ohio.example.org"
+      }
+    },
+    "params": {
+      "minCount": 5,
+      "minScore": 0.1,
+      "includeAmbiguous": true
+    },
+    "halfLifeH": 168
+  }
+}
