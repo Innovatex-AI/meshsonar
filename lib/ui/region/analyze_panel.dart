@@ -500,6 +500,39 @@ class _RepeaterLink extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------- E9
+/// The icon of a finding row, so no row is blank (app-next-pass-list item 3): by the finding code first, then by its
+/// section, then a plain default. Codes are the E9 engine's (meshcore-insights src/server/analysis-e9.ts) plus
+/// `traffic_spike` (server 0146); an unknown code still gets its section's icon.
+IconData findingIcon(Finding f) =>
+    _findingCodeIcons[f.code] ?? _findingSectionIcons[f.section] ?? Icons.info_outline;
+
+const Map<String, IconData> _findingCodeIcons = {
+  'traffic_spike': Icons.trending_up,
+  'no_packet_feed': Icons.portable_wifi_off,
+  'outside_only': Icons.public,
+  'critical_nodes': Icons.call_split,
+  'silent_repeaters': Icons.volume_off_outlined,
+  'repeaters_lost': Icons.remove_circle_outline,
+  'repeaters_new': Icons.add_circle_outline,
+  'low_uptime': Icons.hearing,
+  'weak_links': Icons.link_off,
+  'coverage_low': Icons.layers_outlined,
+  'coverage_measured_share': Icons.grid_on,
+  'node_list_incomplete': Icons.rule,
+  'observer_old_firmware': Icons.system_update_alt,
+  'observer_quality': Icons.sensors,
+  'units_stale': Icons.schedule,
+  'units_failed': Icons.error_outline,
+};
+
+const Map<String, IconData> _findingSectionIcons = {
+  'network': Icons.hub_outlined,
+  'traffic': Icons.swap_vert,
+  'links': Icons.link,
+  'coverage': Icons.map_outlined,
+  'data': Icons.storage_outlined,
+};
+
 class _FindingsBody extends StatelessWidget {
   final InsightsRead d;
   final String baseUrl, slug;
@@ -536,6 +569,12 @@ class _FindingsBody extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Padding(
+                  padding: const EdgeInsets.only(right: Gap.s, top: 2),
+                  child: ExcludeSemantics(
+                    child: Icon(findingIcon(rows[i]), key: Key('finding-icon:${rows[i].code}'), size: 20, color: tone(rows[i].severity)),
+                  ),
+                ),
                 Container(
                   margin: const EdgeInsets.only(right: Gap.s, top: 2),
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
