@@ -1,0 +1,119 @@
+{
+  "data": [
+    {
+      "id": "o1",
+      "observer": {
+        "id": "src_12:7e9e8fe0a052ad046b73e9724234241a5f3b8cbad107bdfc18bcf6a27255877d",
+        "name": "OVCS Clintonville",
+        "kind": "outside",
+        "src": "src_12"
+      },
+      "at": "2026-11-20T14:02:06.101Z",
+      "snr": 1.25,
+      "rssi": -110,
+      "pathId": "p1",
+      "path": [
+        "e2",
+        "a7",
+        "3c",
+        "4f"
+      ],
+      "src": "src_12"
+    },
+    {
+      "id": "o2",
+      "observer": {
+        "id": "d1a761a8d6478b879df8a2278225f4fc2c10d2f925f537c6cdd7921c7f147a0f",
+        "name": "MS Westside Observer",
+        "kind": "fixed",
+        "src": "meshsonar"
+      },
+      "at": "2026-11-20T14:02:07.102Z",
+      "snr": 0.75,
+      "rssi": -111,
+      "pathId": "p1",
+      "path": [
+        "e2",
+        "a7",
+        "3c",
+        "4f"
+      ],
+      "src": "meshsonar"
+    },
+    {
+      "id": "o3",
+      "observer": {
+        "id": "src_12:7e9e8fe0a052ad046b73e9724234241a5f3b8cbad107bdfc18bcf6a27255877d",
+        "name": "OVCS Clintonville",
+        "kind": "outside",
+        "src": "src_12"
+      },
+      "at": "2026-11-20T14:02:08.103Z",
+      "snr": 0.25,
+      "rssi": -112,
+      "pathId": "p1",
+      "path": [
+        "e2",
+        "a7",
+        "3c",
+        "4f"
+      ],
+      "src": "src_12"
+    },
+    {
+      "id": "o4",
+      "observer": {
+        "id": "d1a761a8d6478b879df8a2278225f4fc2c10d2f925f537c6cdd7921c7f147a0f",
+        "name": "MS Westside Observer",
+        "kind": "fixed",
+        "src": "meshsonar"
+      },
+      "at": "2026-11-20T14:02:09.104Z",
+      "snr": -0.25,
+      "rssi": -113,
+      "pathId": "p1",
+      "path": [
+        "e2",
+        "a7",
+        "3c",
+        "4f"
+      ],
+      "src": "meshsonar"
+    }
+  ],
+  "page": {
+    "limit": 200,
+    "next": "eyJvIjoib180In0"
+  },
+  "meta": {
+    "apiVersion": "1.0",
+    "region": {
+      "slug": "cmh",
+      "name": "Columbus",
+      "kind": "region"
+    },
+    "generatedAt": "2026-11-20T14:15:00.000Z",
+    "dataAt": "2026-11-20T14:14:40.000Z",
+    "status": {
+      "state": "ready",
+      "reason": null
+    },
+    "sources": {
+      "meshsonar": {
+        "id": "meshsonar",
+        "kind": "first_party",
+        "name": "MeshSonar observers",
+        "attribution": "MeshSonar",
+        "url": "https://meshsonar.com/observers"
+      },
+      "src_12": {
+        "id": "src_12",
+        "kind": "outside",
+        "name": "Ohio Valley CoreScope",
+        "attribution": "Data from the Ohio Valley CoreScope instance",
+        "url": "https://corescope-ohio.example.org"
+      }
+    },
+    "hash": "c4b06ee8fc39b187"
+  }
+}

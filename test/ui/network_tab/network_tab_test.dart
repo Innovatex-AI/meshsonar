@@ -11,7 +11,8 @@ import 'package:http/testing.dart';
 import 'package:meshsonar/core/api.dart' show CmatException;
 import 'package:meshsonar/core/region_lookup.dart';
 import 'package:meshsonar/core/v1/network_api.dart';
-import 'package:meshsonar/ui/region/packet_detail_screen.dart';
+import 'package:meshsonar/core/v1/packets_api.dart' show PacketsApi, packetsApiFactory;
+import 'package:meshsonar/ui/network/packets/packet_detail_screen.dart';
 import 'package:meshsonar/ui/region/region_report_export_sheet.dart';
 import 'package:meshsonar/ui/shell/network_tab.dart';
 import 'package:meshsonar/ui/shell/shell_controller.dart';
@@ -35,6 +36,15 @@ void useV1Fixtures({bool pulse = true}) {
         return http.Response('', 404);
       }));
   addTearDown(() => networkApiFactory = (b) => NetworkApi(b));
+  // Packets (AZ-3.2): the list and detail from the contract fixtures.
+  packetsApiFactory = (b) => PacketsApi(b, client: MockClient((r) async {
+        final p = r.url.path;
+        if (p == '/v1/packets') return http.Response(fixture('packets'), 200, headers: {'content-type': 'application/json'});
+        if (p == '/v1/packets/c4b06ee8fc39b187') return http.Response(fixture('packet-detail.grp-txt-outside-ambiguous'), 200, headers: {'content-type': 'application/json'});
+        if (p.endsWith('/observations')) return http.Response(fixture('packet-observations'), 200, headers: {'content-type': 'application/json'});
+        return http.Response('', 404);
+      }));
+  addTearDown(() => packetsApiFactory = (b) => PacketsApi(b));
 }
 
 Future<Harness> pumpNetwork(WidgetTester tester, {List<RegionIndexEntry> regions = const [cmh]}) async {
@@ -210,11 +220,25 @@ void main() {
       final h = await pumpNetwork(tester);
       h.incomingLinks.add(Uri.parse('meshsonar://network/packets/C4B06EE8FC39B187?region=cmh'));
       await frames(tester);
-      expect(find.byType(PacketDetailScreen), findsOneWidget);
-      expect(tester.widget<PacketDetailScreen>(find.byType(PacketDetailScreen)).hash, 'c4b06ee8fc39b187');
+      expect(find.byType(NetworkPacketScreen), findsOneWidget);
+      expect(tester.widget<NetworkPacketScreen>(find.byType(NetworkPacketScreen)).hash, 'c4b06ee8fc39b187');
+      expect(find.text('anyone hearing Hilltop this morning?'), findsOneWidget, reason: 'the /v1 detail is shown');
       await tester.pageBack();
       await tester.pump(const Duration(milliseconds: 600));
       expect(find.byKey(const Key('network-packets-list')), findsOneWidget);
+      await tester.pump(const Duration(seconds: 2));
+    });
+
+    testWidgets('a packets list link opens Packets > List with its filters and window', (tester) async {
+      useV1Fixtures();
+      final h = await pumpNetwork(tester);
+      h.incomingLinks.add(Uri.parse('https://cmh.meshsonar.com/packets?type=GRP_TXT&channel=public&window=24h'));
+      await frames(tester);
+      expect(find.byKey(const Key('network-packets-list')), findsOneWidget);
+      expect(find.byKey(const ValueKey('packets-chip-type:GRP_TXT')), findsOneWidget);
+      expect(find.byKey(const ValueKey('packets-chip-channel:public')), findsOneWidget);
+      expect(tester.widget<ChoiceChip>(find.byKey(const Key('packets-window-24h'))).selected, isTrue);
+      expect(find.textContaining('Kestrel-07'), findsOneWidget);
       await tester.pump(const Duration(seconds: 2));
     });
 

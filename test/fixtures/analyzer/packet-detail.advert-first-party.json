@@ -1,0 +1,269 @@
+{
+  "data": {
+    "hash": "1add53ffce368256",
+    "type": 4,
+    "typeName": "ADVERT",
+    "route": "FLOOD",
+    "payloadVersion": 0,
+    "hashSize": 1,
+    "size": 124,
+    "firstSeen": "2026-11-20T14:00:40.120Z",
+    "lastSeen": "2026-11-20T14:00:40.410Z",
+    "raw": "11014f91f7b953529576091add8a19f9105e6572e43ea95429c60ed79ee1c4bf547ea48852006bec4aa923f895eef2290881d79464fc7b7c2db48aa47c17b2b247b309421af6d874db6b7ff90c57a845a57a77b45e57bc9009b5455f81b0f7f270c4975a466a5593422762029c2e0dfb4c69627261727920526f6f6d",
+    "rawSource": "meshsonar",
+    "rawVerified": true,
+    "bytes": [
+      {
+        "start": 0,
+        "end": 1,
+        "group": "header",
+        "field": "header",
+        "label": "Header",
+        "hex": "11",
+        "value": {
+          "routeType": 1,
+          "route": "FLOOD",
+          "payloadType": 4,
+          "type": "ADVERT",
+          "payloadVersion": 0
+        }
+      },
+      {
+        "start": 1,
+        "end": 2,
+        "group": "path_len",
+        "field": "pathLen",
+        "label": "Path length",
+        "hex": "01",
+        "value": {
+          "hashSize": 1,
+          "hopCount": 1,
+          "bytes": 1
+        }
+      },
+      {
+        "start": 2,
+        "end": 3,
+        "group": "path",
+        "field": "path[0]",
+        "label": "Hop 1",
+        "hex": "4f",
+        "value": "4f"
+      },
+      {
+        "start": 3,
+        "end": 35,
+        "group": "payload",
+        "field": "advert.publicKey",
+        "label": "Public key",
+        "hex": "91f7b953529576091add8a19f9105e6572e43ea95429c60ed79ee1c4bf547ea4",
+        "value": "91f7b953529576091add8a19f9105e6572e43ea95429c60ed79ee1c4bf547ea4"
+      },
+      {
+        "start": 35,
+        "end": 39,
+        "group": "payload",
+        "field": "advert.timestamp",
+        "label": "Advert time",
+        "hex": "8852006b",
+        "value": "2026-11-20T14:00:40.000Z"
+      },
+      {
+        "start": 39,
+        "end": 103,
+        "group": "signature",
+        "field": "advert.signature",
+        "label": "Ed25519 signature",
+        "hex": "ec4aa923f895eef2290881d79464fc7b7c2db48aa47c17b2b247b309421af6d874db6b7ff90c57a845a57a77b45e57bc9009b5455f81b0f7f270c4975a466a55",
+        "value": "valid"
+      },
+      {
+        "start": 103,
+        "end": 104,
+        "group": "payload",
+        "field": "advert.flags",
+        "label": "Flags",
+        "hex": "93",
+        "value": {
+          "role": "room",
+          "hasLocation": true,
+          "hasName": true,
+          "feat1": false,
+          "feat2": false
+        }
+      },
+      {
+        "start": 104,
+        "end": 108,
+        "group": "payload",
+        "field": "advert.lat",
+        "label": "Latitude",
+        "hex": "42276202",
+        "value": 39.98701
+      },
+      {
+        "start": 108,
+        "end": 112,
+        "group": "payload",
+        "field": "advert.lon",
+        "label": "Longitude",
+        "hex": "9c2e0dfb",
+        "value": -83.02218
+      },
+      {
+        "start": 112,
+        "end": 124,
+        "group": "payload",
+        "field": "advert.name",
+        "label": "Name",
+        "hex": "4c69627261727920526f6f6d",
+        "value": "Library Room"
+      }
+    ],
+    "decoded": {
+      "advert": {
+        "publicKey": "91f7b953529576091add8a19f9105e6572e43ea95429c60ed79ee1c4bf547ea4",
+        "timestamp": "2026-11-20T14:00:40.000Z",
+        "signature": {
+          "valid": true,
+          "checked": true
+        },
+        "role": "room",
+        "name": "Library Room",
+        "position": {
+          "lat": 39.98701,
+          "lon": -83.02218
+        },
+        "feat1": null,
+        "feat2": null,
+        "battery": null,
+        "temperatureC": null,
+        "clockSkewS": 41.0
+      }
+    },
+    "origin": {
+      "key": "91f7b953529576091add8a19f9105e6572e43ea95429c60ed79ee1c4bf547ea4",
+      "name": "Library Room",
+      "role": "room"
+    },
+    "channel": null,
+    "scope": null,
+    "message": null,
+    "anomaly": null,
+    "observationCount": 2,
+    "observerCount": 2,
+    "observations": [
+      {
+        "id": "o1",
+        "observer": {
+          "id": "d1a761a8d6478b879df8a2278225f4fc2c10d2f925f537c6cdd7921c7f147a0f",
+          "name": "MS Westside Observer",
+          "kind": "fixed",
+          "src": "meshsonar"
+        },
+        "at": "2026-11-20T14:00:40.120Z",
+        "snr": 6.25,
+        "rssi": -97,
+        "pathId": "p1",
+        "path": [
+          "4f"
+        ],
+        "src": "meshsonar"
+      },
+      {
+        "id": "o2",
+        "observer": {
+          "id": "08af2aa59175566e72f3b7157a9956104cea0983fa320d658f9c9fb39bfa7d50",
+          "name": "Phone observer 08f3",
+          "kind": "phone",
+          "src": "meshsonar-phone"
+        },
+        "at": "2026-11-20T14:00:40.410Z",
+        "snr": 11.0,
+        "rssi": -84,
+        "pathId": "p2",
+        "path": [],
+        "src": "meshsonar-phone"
+      }
+    ],
+    "observationsNext": null,
+    "observationsExpired": false,
+    "paths": [
+      {
+        "id": "p1",
+        "hops": [
+          {
+            "index": 0,
+            "prefix": "4f",
+            "confidence": "unique",
+            "node": {
+              "key": "4f199584624bb836b6236a1becf56c22dc204f37e5775eda542895a88c4c164c",
+              "name": "Hilltop RPT",
+              "role": "repeater"
+            },
+            "score": 1.0,
+            "candidates": [],
+            "candidatesTotal": 1,
+            "evidence": [
+              "unique_prefix"
+            ]
+          }
+        ],
+        "observationIds": [
+          "o1"
+        ]
+      },
+      {
+        "id": "p2",
+        "hops": [],
+        "observationIds": [
+          "o2"
+        ]
+      }
+    ],
+    "src": [
+      "meshsonar",
+      "meshsonar-phone"
+    ],
+    "links": {
+      "web": "https://cmh.meshsonar.com/packets/1add53ffce368256",
+      "replay": "https://cmh.meshsonar.com/map?panel=live&t=2026-11-20T14:00:40.120Z&packet=1add53ffce368256"
+    }
+  },
+  "meta": {
+    "apiVersion": "1.0",
+    "region": {
+      "slug": "cmh",
+      "name": "Columbus",
+      "kind": "region"
+    },
+    "generatedAt": "2026-11-20T14:15:00.000Z",
+    "dataAt": "2026-11-20T14:14:40.000Z",
+    "status": {
+      "state": "ready",
+      "reason": null
+    },
+    "sources": {
+      "meshsonar": {
+        "id": "meshsonar",
+        "kind": "first_party",
+        "name": "MeshSonar observers",
+        "attribution": "MeshSonar",
+        "url": "https://meshsonar.com/observers"
+      },
+      "meshsonar-phone": {
+        "id": "meshsonar-phone",
+        "kind": "first_party_phone",
+        "name": "MeshSonar phone observers",
+        "attribution": "MeshSonar app users",
+        "url": "https://meshsonar.com/observers"
+      }
+    },
+    "nodeList": {
+      "state": "complete",
+      "trusted": true,
+      "reason": "936 of 1,000 relayed hop appearances in the last 24 h match a placed node (93.6%).",
+      "computedAt": "2026-11-20T14:10:00.000Z"
+    }
+  }
+}

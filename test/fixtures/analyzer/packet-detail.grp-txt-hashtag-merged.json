@@ -1,0 +1,303 @@
+{
+  "data": {
+    "hash": "a03aaeaf864003ae",
+    "type": 5,
+    "typeName": "GRP_TXT",
+    "route": "FLOOD",
+    "payloadVersion": 0,
+    "hashSize": 2,
+    "size": 89,
+    "firstSeen": "2026-11-20T14:04:20.120Z",
+    "lastSeen": "2026-11-20T14:04:21.090Z",
+    "raw": "15423cd04f1981bc904ca80f8e80c9016e6a0e9d56c16d19c149d87b2c7d92e4e443308bb6b5fb99679a25eafa50e4f5bd688a1e53ac48c32aa3a3b4ea516dce64e2c5bd2b55419a012c742272bb87ec6589eb1af2e494b61f",
+    "rawSource": "meshsonar",
+    "rawVerified": true,
+    "bytes": [
+      {
+        "start": 0,
+        "end": 1,
+        "group": "header",
+        "field": "header",
+        "label": "Header",
+        "hex": "15",
+        "value": {
+          "routeType": 1,
+          "route": "FLOOD",
+          "payloadType": 5,
+          "type": "GRP_TXT",
+          "payloadVersion": 0
+        }
+      },
+      {
+        "start": 1,
+        "end": 2,
+        "group": "path_len",
+        "field": "pathLen",
+        "label": "Path length",
+        "hex": "42",
+        "value": {
+          "hashSize": 2,
+          "hopCount": 2,
+          "bytes": 4
+        }
+      },
+      {
+        "start": 2,
+        "end": 4,
+        "group": "path",
+        "field": "path[0]",
+        "label": "Hop 1",
+        "hex": "3cd0",
+        "value": "3cd0"
+      },
+      {
+        "start": 4,
+        "end": 6,
+        "group": "path",
+        "field": "path[1]",
+        "label": "Hop 2",
+        "hex": "4f19",
+        "value": "4f19"
+      },
+      {
+        "start": 6,
+        "end": 7,
+        "group": "payload",
+        "field": "grp.channelHash",
+        "label": "Channel hash",
+        "hex": "81",
+        "value": "81"
+      },
+      {
+        "start": 7,
+        "end": 9,
+        "group": "mac",
+        "field": "grp.mac",
+        "label": "MAC (HMAC-SHA256, 2 bytes)",
+        "hex": "bc90",
+        "value": "bc90"
+      },
+      {
+        "start": 9,
+        "end": 89,
+        "group": "ciphertext",
+        "field": "grp.ciphertext",
+        "label": "Ciphertext (AES-128-ECB)",
+        "hex": "4ca80f8e80c9016e6a0e9d56c16d19c149d87b2c7d92e4e443308bb6b5fb99679a25eafa50e4f5bd688a1e53ac48c32aa3a3b4ea516dce64e2c5bd2b55419a012c742272bb87ec6589eb1af2e494b61f",
+        "value": "decrypted"
+      }
+    ],
+    "decoded": {
+      "group": {
+        "channelHash": "81",
+        "mac": "bc90",
+        "decodeStatus": "decrypted",
+        "keySource": "hashtag_list",
+        "plaintext": {
+          "timestamp": "2026-11-20T14:04:20.000Z",
+          "flags": 0,
+          "text": "N0CALL Mobile: drive loop 3 done, 41 pings, Old Mill answered 38"
+        }
+      }
+    },
+    "origin": null,
+    "channel": {
+      "id": "tag:wardriving",
+      "name": "#wardriving",
+      "kind": "hashtag"
+    },
+    "scope": null,
+    "message": {
+      "id": "a03aaeaf864003ae",
+      "channel": {
+        "id": "tag:wardriving",
+        "name": "#wardriving",
+        "kind": "hashtag"
+      },
+      "sender": "N0CALL Mobile",
+      "senderVerified": false,
+      "text": "drive loop 3 done, 41 pings, Old Mill answered 38",
+      "senderTime": "2026-11-20T14:04:20.000Z",
+      "hidden": false
+    },
+    "anomaly": null,
+    "observationCount": 3,
+    "observerCount": 3,
+    "observations": [
+      {
+        "id": "o1",
+        "observer": {
+          "id": "d1a761a8d6478b879df8a2278225f4fc2c10d2f925f537c6cdd7921c7f147a0f",
+          "name": "MS Westside Observer",
+          "kind": "fixed",
+          "src": "meshsonar"
+        },
+        "at": "2026-11-20T14:04:20.120Z",
+        "snr": 9.5,
+        "rssi": -91,
+        "pathId": "p1",
+        "path": [
+          "3cd0",
+          "4f19"
+        ],
+        "src": "meshsonar"
+      },
+      {
+        "id": "o2",
+        "observer": {
+          "id": "src_12:7e9e8fe0a052ad046b73e9724234241a5f3b8cbad107bdfc18bcf6a27255877d",
+          "name": "OVCS Clintonville",
+          "kind": "outside",
+          "src": "src_12"
+        },
+        "at": "2026-11-20T14:04:20.640Z",
+        "snr": 4.0,
+        "rssi": -102,
+        "pathId": "p1",
+        "path": [
+          "3cd0",
+          "4f19"
+        ],
+        "src": "src_12"
+      },
+      {
+        "id": "o3",
+        "observer": {
+          "id": "08af2aa59175566e72f3b7157a9956104cea0983fa320d658f9c9fb39bfa7d50",
+          "name": "Phone observer 08f3",
+          "kind": "phone",
+          "src": "meshsonar-phone"
+        },
+        "at": "2026-11-20T14:04:21.090Z",
+        "snr": 2.25,
+        "rssi": -106,
+        "pathId": "p2",
+        "path": [
+          "3cd0"
+        ],
+        "src": "meshsonar-phone"
+      }
+    ],
+    "observationsNext": null,
+    "observationsExpired": false,
+    "paths": [
+      {
+        "id": "p1",
+        "hops": [
+          {
+            "index": 0,
+            "prefix": "3cd0",
+            "confidence": "unique",
+            "node": {
+              "key": "3cd0c95448b8566d21060bfec77f420446b1122cb903ec140fe946603dbdfbd4",
+              "name": "Old Mill RPT",
+              "role": "repeater"
+            },
+            "score": 1.0,
+            "candidates": [],
+            "candidatesTotal": 1,
+            "evidence": [
+              "unique_prefix"
+            ]
+          },
+          {
+            "index": 1,
+            "prefix": "4f19",
+            "confidence": "unique",
+            "node": {
+              "key": "4f199584624bb836b6236a1becf56c22dc204f37e5775eda542895a88c4c164c",
+              "name": "Hilltop RPT",
+              "role": "repeater"
+            },
+            "score": 1.0,
+            "candidates": [],
+            "candidatesTotal": 1,
+            "evidence": [
+              "unique_prefix"
+            ]
+          }
+        ],
+        "observationIds": [
+          "o1",
+          "o2"
+        ]
+      },
+      {
+        "id": "p2",
+        "hops": [
+          {
+            "index": 0,
+            "prefix": "3cd0",
+            "confidence": "unique",
+            "node": {
+              "key": "3cd0c95448b8566d21060bfec77f420446b1122cb903ec140fe946603dbdfbd4",
+              "name": "Old Mill RPT",
+              "role": "repeater"
+            },
+            "score": 1.0,
+            "candidates": [],
+            "candidatesTotal": 1,
+            "evidence": [
+              "unique_prefix"
+            ]
+          }
+        ],
+        "observationIds": [
+          "o3"
+        ]
+      }
+    ],
+    "src": [
+      "meshsonar",
+      "meshsonar-phone",
+      "src_12"
+    ],
+    "links": {
+      "web": "https://cmh.meshsonar.com/packets/a03aaeaf864003ae",
+      "replay": "https://cmh.meshsonar.com/map?panel=live&t=2026-11-20T14:04:20.120Z&packet=a03aaeaf864003ae"
+    }
+  },
+  "meta": {
+    "apiVersion": "1.0",
+    "region": {
+      "slug": "cmh",
+      "name": "Columbus",
+      "kind": "region"
+    },
+    "generatedAt": "2026-11-20T14:15:00.000Z",
+    "dataAt": "2026-11-20T14:14:40.000Z",
+    "status": {
+      "state": "ready",
+      "reason": null
+    },
+    "sources": {
+      "meshsonar": {
+        "id": "meshsonar",
+        "kind": "first_party",
+        "name": "MeshSonar observers",
+        "attribution": "MeshSonar",
+        "url": "https://meshsonar.com/observers"
+      },
+      "meshsonar-phone": {
+        "id": "meshsonar-phone",
+        "kind": "first_party_phone",
+        "name": "MeshSonar phone observers",
+        "attribution": "MeshSonar app users",
+        "url": "https://meshsonar.com/observers"
+      },
+      "src_12": {
+        "id": "src_12",
+        "kind": "outside",
+        "name": "Ohio Valley CoreScope",
+        "attribution": "Data from the Ohio Valley CoreScope instance",
+        "url": "https://corescope-ohio.example.org"
+      }
+    },
+    "nodeList": {
+      "state": "complete",
+      "trusted": true,
+      "reason": "936 of 1,000 relayed hop appearances in the last 24 h match a placed node (93.6%).",
+      "computedAt": "2026-11-20T14:10:00.000Z"
+    }
+  }
+}
