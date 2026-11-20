@@ -14,7 +14,7 @@ import 'shell/home_shell.dart';
 import 'theme.dart';
 
 export 'shell/home_shell.dart' show HomeShell;
-export 'shell/shell_controller.dart' show AppTab, AnalyzeView, MoreItem, ShellController, ShellScope;
+export 'shell/shell_controller.dart' show AppTab, MoreItem, NetworkRequest, NetworkSection, ShellController, ShellScope;
 export 'theme.dart' show meshSonarTheme, meshSonarThemeMode, MeshSonarColors, Gap, Corners, numberStyle;
 
 /// Gives every screen the AppState and rebuilds dependents when it changes.

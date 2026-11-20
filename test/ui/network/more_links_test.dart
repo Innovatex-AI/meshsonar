@@ -1,4 +1,4 @@
-// More and Network (WP11): the radio tools and the repeaters list moved from More to Chat > Network. More keeps one row that
+// More and Network (WP11): the radio tools and the repeaters list moved from More to Chat > Radio. More keeps one row that
 // leads there, no duplicates, and nothing that was reachable before is unreachable now (the reachability test below walks every
 // entry the old More list had).
 import 'package:flutter/material.dart';
@@ -25,7 +25,7 @@ const oldMoreEntries = <String>[
   'radioSetup', 'observerJoin', 'wardriving', 'notifications', 'settings', 'legend', 'howItWorks', 'method', 'privacy', 'report', 'about', 'privacy-policy',
 ];
 
-/// Where each moved entry is reachable now: the tool id its screen shows, via Chat > Network > Tools.
+/// Where each moved entry is reachable now: the tool id its screen shows, via Chat > Radio > Tools.
 const movedToNetworkTools = <String, (String toolsKey, String screenKey)>{
   'trace': ('tools-trace', 'tool-trace'),
   'discover': ('tools-discover', 'tool-discover'),
@@ -119,7 +119,7 @@ void main() {
     final moved = oldMoreEntries.where((n) => !stayed.contains(n)).toSet();
     expect(moved, {'repeaters', ...movedToNetworkTools.keys}, reason: 'only the repeaters list and the four radio tools moved');
 
-    // They now open from Chat > Network: the repeaters list is the segment itself, the tools are in its Tools menu.
+    // They now open from Chat > Radio: the repeaters list is the segment itself, the tools are in its Tools menu.
     final row = find.byKey(const Key('more-network'));
     expect(await inMore(tester, 'more-network'), isTrue);
     await Scrollable.ensureVisible(tester.element(row), alignment: 0.3);

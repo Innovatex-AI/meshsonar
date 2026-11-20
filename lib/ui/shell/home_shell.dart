@@ -1,9 +1,10 @@
-// The app shell: five tabs (Chat, Drive, Analyze, Plan, More), a bottom bar on phones and a navigation rail from 700 dp
+// The app shell: five tabs (Chat, Drive, Network, Plan, More), a bottom bar on phones and a navigation rail from 700 dp
 // wide (iPad, phones in landscape), and the mini drive bar above the tabs while a drive runs.
 //
 // Tab API: see shell_controller.dart (ShellScope). Seams for other work: ChatTabHost (chat_tab_host.dart) and
 // MiniDriveBar (mini_drive_bar.dart). The last open tab is remembered (UiPrefs.lastTab, by name). A shared plan link that
-// reached the app (AppState.planInbox) opens the Plan tab with it (ShellController.openPlan).
+// reached the app (AppState.planInbox) opens the Plan tab with it (ShellController.openPlan); a Network link
+// (AppState.networkInbox) opens the Network tab at its section (ShellController.openNetwork).
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -20,7 +21,6 @@ import '../design/app_surfaces.dart' show AppToastHost, ToastAnchor, dismissAppT
 import '../drive_screen.dart';
 import '../onboarding/ui_prefs.dart';
 import '../telemetry_sheet.dart';
-import 'analyze_tab.dart';
 import 'blur_bar.dart';
 import '../../chat/conversation_row.dart' show unreadCountLabel;
 import '../chat/chat_banner_host.dart';
@@ -28,6 +28,7 @@ import 'chat_tab.dart';
 import 'chat_tab_host.dart';
 import 'mini_drive_bar.dart';
 import 'more_tab.dart';
+import 'network_tab.dart';
 import 'plan_tab.dart';
 import 'shell_controller.dart';
 
@@ -57,7 +58,6 @@ class _HomeShellState extends State<HomeShell> {
   /// Keeps every tab's state (map, scroll, More's Navigator) when the layout flips between rail and bar on rotation.
   final _contentKey = GlobalKey();
   AppTab _lastTab = AppTab.drive;
-  AnalyzeView _lastAnalyze = AnalyzeView.region;
 
   @override
   void initState() {
@@ -85,12 +85,15 @@ class _HomeShellState extends State<HomeShell> {
     if (!identical(s, _state)) {
       _state?.removeListener(_onState);
       _state?.planInbox.removeListener(_onPlanInbox);
+      _state?.networkInbox.removeListener(_onNetworkInbox);
       _state = s;
       s.addListener(_onState);
       s.planInbox.addListener(_onPlanInbox);
+      s.networkInbox.addListener(_onNetworkInbox);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _onState();
         _onPlanInbox();
+        _onNetworkInbox();
       });
     }
     if (!_restored) {
@@ -102,7 +105,6 @@ class _HomeShellState extends State<HomeShell> {
         if (saved != null && saved != _shell.tab) _shell.select(saved);
       }
       _lastTab = _shell.tab;
-      _lastAnalyze = _shell.analyzeView;
     }
   }
 
@@ -137,20 +139,25 @@ class _HomeShellState extends State<HomeShell> {
     if (last != null) _shell.openPlan(PlanRequest.openLink(last));
   }
 
+  /// Network links waiting in the inbox open the Network tab; as with plan links only the newest counts.
+  void _onNetworkInbox() {
+    final inbox = _state?.networkInbox;
+    if (!mounted || inbox == null) return;
+    NetworkRequest? last;
+    for (var r = inbox.take(); r != null; r = inbox.take()) {
+      last = r;
+    }
+    if (last != null) _shell.openNetwork(last);
+  }
+
   void _onShell() {
     final s = _state;
     final tab = _shell.tab;
     DriveVisibility.setDriveTab(tab == AppTab.drive);
     if (s != null) {
       if (tab != _lastTab) unawaited(uiPrefsFor(s).setLastTab(tab.name));
-      // The Drives list reads from disk: refresh it whenever it comes into view.
-      final enteringDrives = tab == AppTab.analyze &&
-          _shell.analyzeView == AnalyzeView.drives &&
-          (_lastTab != AppTab.analyze || _lastAnalyze != AnalyzeView.drives);
-      if (enteringDrives) s.refreshSessions();
     }
     _lastTab = tab;
-    _lastAnalyze = _shell.analyzeView;
   }
 
   void _onState() {
@@ -195,6 +202,7 @@ class _HomeShellState extends State<HomeShell> {
     dismissAppToast();
     _state?.removeListener(_onState);
     _state?.planInbox.removeListener(_onPlanInbox);
+    _state?.networkInbox.removeListener(_onNetworkInbox);
     _shell.removeListener(_onShell);
     AlertsHost.runtime.removeListener(_bindAlerts);
     _alerts?.coordinator.pendingOpen.removeListener(_onPendingOpen);
@@ -205,7 +213,7 @@ class _HomeShellState extends State<HomeShell> {
   Widget _page(AppTab t) => switch (t) {
         AppTab.chat => const ChatTab(),
         AppTab.drive => const DriveScreen(),
-        AppTab.analyze => const AnalyzeTab(),
+        AppTab.network => const NetworkTab(),
         AppTab.plan => const PlanTab(),
         AppTab.more => const MoreTab(),
       };

@@ -108,7 +108,7 @@ void main() {
       await finish(tester);
     });
 
-    testWidgets('Link to… from a repeater contact (Chat > Network): the repeater joins as an existing repeater, not a handheld', (tester) async {
+    testWidgets('Link to… from a repeater contact (Chat > Radio): the repeater joins as an existing repeater, not a handheld', (tester) async {
       phone(tester);
       final h = Harness();
       final st = await openPlanner(tester, h);

@@ -100,7 +100,7 @@ void main() {
     expect(find.text('Searching'), findsOneWidget);
   });
 
-  testWidgets('repeaters and rooms are not in Contacts (they live under Network)', (tester) async {
+  testWidgets('repeaters and rooms are not in Contacts (they live under Radio)', (tester) async {
     await boot(tester);
     port.radioAdd(radioContact(3, name: 'Lounge', type: ContactType.room));
     await kit.service.contacts.syncNow();

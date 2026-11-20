@@ -1,0 +1,69 @@
+{
+  "examples": [
+    {
+      "status": 400,
+      "body": {
+        "error": {
+          "code": "bad_filter",
+          "message": "Unknown field 'snrr' at position 0. Did you mean 'snr'?",
+          "param": "filter",
+          "at": 0,
+          "requestId": "req_7f3a1c92"
+        }
+      }
+    },
+    {
+      "status": 404,
+      "body": {
+        "error": {
+          "code": "not_found",
+          "message": "No packet with hash 0000000000000000 in the last 90 days.",
+          "param": "hash",
+          "requestId": "req_7f3a1c93"
+        }
+      }
+    },
+    {
+      "status": 410,
+      "body": {
+        "error": {
+          "code": "archived",
+          "message": "Packets older than 90 days are archived; rollups cover this window.",
+          "param": "since",
+          "requestId": "req_7f3a1c94"
+        }
+      }
+    },
+    {
+      "status": 429,
+      "headers": {
+        "Retry-After": "12",
+        "RateLimit-Limit": "300",
+        "RateLimit-Remaining": "0",
+        "RateLimit-Reset": "12"
+      },
+      "body": {
+        "error": {
+          "code": "rate_limited",
+          "message": "300 requests per minute per IP. Send an API key for a higher limit.",
+          "retryAfter": 12,
+          "requestId": "req_7f3a1c95"
+        }
+      }
+    },
+    {
+      "status": 503,
+      "headers": {
+        "Retry-After": "5"
+      },
+      "body": {
+        "error": {
+          "code": "query_timeout",
+          "message": "This query took longer than 7 s. Narrow the window or add a filter.",
+          "retryAfter": 5,
+          "requestId": "req_7f3a1c96"
+        }
+      }
+    }
+  ]
+}

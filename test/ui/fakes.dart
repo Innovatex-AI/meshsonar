@@ -1114,18 +1114,15 @@ Future<void> openDrivePanel(WidgetTester tester) async {
 /// Old "Drive" tab.
 Future<void> openDriveTab(WidgetTester tester) => tapShellTab(tester, 'Drive');
 
-/// Old "Region" tab: Analyze, Region view.
+/// Old "Region" tab: the Network tab (Analyze until build 71, AZ-3.1).
 Future<void> openRegionTab(WidgetTester tester) async {
-  await tapShellTab(tester, 'Analyze');
-  await tester.tap(find.descendant(of: find.byKey(const Key('analyze-segments')), matching: find.text('Region')));
+  await tapShellTab(tester, 'Network');
   await tester.pumpAndSettle();
 }
 
-/// Old "Drives" tab: Analyze, Drives view.
+/// Old "Drives" tab: More > Drives (it lived in the Analyze tab until build 71, AZ-3.1).
 Future<void> openDrivesTab(WidgetTester tester) async {
-  await tapShellTab(tester, 'Analyze');
-  await tester.tap(find.descendant(of: find.byKey(const Key('analyze-segments')), matching: find.text('Drives')));
-  await tester.pumpAndSettle();
+  await _openMoreRow(tester, 'more-drives');
 }
 
 /// Old "Radio" tab: More, Radio.

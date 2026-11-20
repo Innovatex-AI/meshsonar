@@ -54,15 +54,15 @@ void main() {
       await h.pumpApp(tester);
       expect(find.byKey(const Key('shell-tabs')), findsOneWidget);
       expect(find.byKey(const Key('shell-rail')), findsNothing);
-      for (final t in ['Chat', 'Drive', 'Analyze', 'Plan', 'More']) {
+      for (final t in ['Chat', 'Drive', 'Network', 'Plan', 'More']) {
         expect(find.descendant(of: find.byKey(const Key('shell-tabs')), matching: find.text(t)), findsOneWidget, reason: t);
       }
       // Fresh install opens on the Drive tab.
       expect(find.byType(DriveScreen), findsOneWidget);
       await tapShellTab(tester, 'Chat');
       expect(find.byKey(const Key('chat-empty')), findsOneWidget);
-      await tapShellTab(tester, 'Analyze');
-      expect(find.byKey(const Key('analyze-segments')), findsOneWidget);
+      await tapShellTab(tester, 'Network');
+      expect(find.byKey(const Key('network-tab')), findsOneWidget);
       await tapShellTab(tester, 'Plan');
       expect(find.byKey(const Key('planner')), findsOneWidget);
       await tapShellTab(tester, 'More');
@@ -76,7 +76,7 @@ void main() {
       await h.pumpApp(tester);
       expect(find.byKey(const Key('shell-rail')), findsOneWidget);
       expect(find.byKey(const Key('shell-tabs')), findsNothing);
-      for (final t in ['Chat', 'Drive', 'Analyze', 'Plan', 'More']) {
+      for (final t in ['Chat', 'Drive', 'Network', 'Plan', 'More']) {
         expect(find.descendant(of: find.byKey(const Key('shell-rail')), matching: find.text(t)), findsOneWidget, reason: t);
       }
       await openSettingsTab(tester);
@@ -116,13 +116,15 @@ void main() {
 
     test('old tab indexes land on the screen that now holds them', () {
       expect(LegacyTab.fromIndex(0).tab, AppTab.drive);
-      expect(LegacyTab.fromIndex(1).tab, AppTab.analyze);
-      expect(LegacyTab.fromIndex(1).analyze, AnalyzeView.region);
-      expect(LegacyTab.fromIndex(2).analyze, AnalyzeView.drives);
+      expect(LegacyTab.fromIndex(1).tab, AppTab.network);
+      expect(LegacyTab.fromIndex(1).network, NetworkSection.now);
+      expect(LegacyTab.fromIndex(2).tab, AppTab.more);
+      expect(LegacyTab.fromIndex(2).more, MoreItem.drives);
       expect(LegacyTab.fromIndex(3).more, MoreItem.radio);
       expect(LegacyTab.fromIndex(4).more, MoreItem.settings);
       expect(LegacyTab.fromIndex(99).tab, AppTab.drive);
-      expect(AppTab.byName('analyze'), AppTab.analyze);
+      expect(AppTab.byName('analyze'), AppTab.network, reason: 'a last tab saved before build 71 still restores');
+      expect(AppTab.byName('network'), AppTab.network);
       expect(AppTab.byName('nope'), isNull);
     });
 
@@ -234,26 +236,25 @@ void main() {
       await drain(tester);
     });
 
-    testWidgets('HomeShell(legacyTab: 2) opens Analyze > Drives, (legacyTab: 4) opens Settings', (tester) async {
+    testWidgets('HomeShell(legacyTab: 2) opens More > Drives, (legacyTab: 4) opens Settings', (tester) async {
       phone(tester);
       final h = Harness();
       await h.state.init();
       await tester.pumpWidget(AppScope(state: h.state, child: const MaterialApp(home: HomeShell(legacyTab: 2))));
       await tester.pumpAndSettle();
-      expect(find.byKey(const Key('analyze-segments')), findsOneWidget);
-      expect(tester.widget<SegmentedButton<AnalyzeView>>(find.byKey(const Key('analyze-segments'))).selected, {AnalyzeView.drives});
+      expect(find.byKey(const Key('refresh-drives')), findsOneWidget);
       await tester.pumpWidget(AppScope(state: h.state, child: MaterialApp(home: HomeShell(key: UniqueKey(), legacyTab: 4))));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('settings-list')), findsOneWidget);
       await drain(tester);
     });
 
-    testWidgets('tapping the Analyze segments switches between Region and Drives', (tester) async {
+    testWidgets('Drives moved from Analyze to More; the Network tab shows the region', (tester) async {
       phone(tester);
       final h = Harness();
       await h.pumpApp(tester);
       await openDrivesTab(tester);
-      expect(tester.widget<SegmentedButton<AnalyzeView>>(find.byKey(const Key('analyze-segments'))).selected, {AnalyzeView.drives});
+      expect(find.byKey(const Key('refresh-drives')), findsOneWidget);
       await openRegionTab(tester);
       expect(find.byKey(const Key('region-title')), findsOneWidget);
       await drain(tester);
@@ -332,7 +333,7 @@ void main() {
       await drain(tester);
     });
 
-    testWidgets('a provider plugged into ChatTabHost shows Chats | Contacts | Network and the unread badge', (tester) async {
+    testWidgets('a provider plugged into ChatTabHost shows Chats | Contacts | Radio and the unread badge', (tester) async {
       phone(tester);
       final h = Harness();
       ChatTabHost.provider.value = DebugFixtureChat();
@@ -343,7 +344,7 @@ void main() {
       expect(find.byKey(const Key('chat-segments')), findsOneWidget);
       expect(find.text('Fixture: Alex'), findsOneWidget);
       expect(find.text('Fixture: Public'), findsOneWidget);
-      await tester.tap(find.byKey(const Key('segment-network')));
+      await tester.tap(find.byKey(const Key('segment-radio')));
       await tester.pumpAndSettle();
       expect(find.text('Fixture: North Ridge repeater'), findsOneWidget);
       await drain(tester);
@@ -377,7 +378,7 @@ void main() {
       phone(tester);
       final h = await startDriving(tester);
       expect(find.byKey(const Key('mini-drive-bar')), findsNothing, reason: 'Drive tab is the drive screen');
-      for (final t in ['Chat', 'Analyze', 'Plan', 'More']) {
+      for (final t in ['Chat', 'Network', 'Plan', 'More']) {
         await tapShellTab(tester, t);
         expect(find.byKey(const Key('mini-drive-bar')), findsOneWidget, reason: t);
       }
@@ -483,7 +484,7 @@ void main() {
     testWidgets('Stop asks first; Keep driving leaves the drive running; Stop drive ends it', (tester) async {
       phone(tester);
       final h = await startDriving(tester);
-      await tapShellTab(tester, 'Analyze');
+      await tapShellTab(tester, 'Network');
       await tester.tap(find.byKey(const Key('mini-bar-stop')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('stop-drive-dialog')), findsOneWidget);

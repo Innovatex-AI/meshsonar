@@ -94,7 +94,7 @@ void main() {
     testWidgets('segments switch, the choice is kept for the session, a cold launch is Chats again', (tester) async {
       await seed();
       await pumpTab(tester);
-      await tester.tap(find.byKey(const Key('segment-network')));
+      await tester.tap(find.byKey(const Key('segment-radio')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('network-empty')), findsOneWidget);
       // Rebuild the tab: the session remembers Network.
@@ -392,7 +392,7 @@ void main() {
       kit.store.contacts.upsert(Contact(radioId: radioA, publicKey: 'd0d0000000000000000000000000000000000000000000000000000000000001', type: ContactType.sensor, name: 'Garage temp'));
       kit.store.contacts.upsert(Contact(radioId: radioA, publicKey: 'e0e0000000000000000000000000000000000000000000000000000000000001', type: ContactType.room, name: 'North room'));
       await pumpTab(tester);
-      await tester.tap(find.byKey(const Key('segment-network')));
+      await tester.tap(find.byKey(const Key('segment-radio')));
       await tester.pumpAndSettle();
       expect(find.text('REPEATERS'), findsOneWidget);
       expect(find.byKey(const Key('network-radio-card')), findsOneWidget);

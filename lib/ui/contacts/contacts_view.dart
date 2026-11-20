@@ -242,7 +242,7 @@ class _ContactsViewState extends State<ContactsView> {
         const SizedBox(height: Gap.xs),
         Text(
           hasOthers
-              ? 'People appear when their radio advertises. Repeaters and rooms are under Network.'
+              ? 'People appear when their radio advertises. Repeaters and rooms are under Radio.'
               : 'People appear when their radio advertises. You can also add one by QR code, link or key.',
           style: AppType.subhead.copyWith(color: col.textMuted),
           textAlign: TextAlign.center,

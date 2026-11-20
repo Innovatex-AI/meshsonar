@@ -14,6 +14,7 @@ import '../radio/radio_screen.dart';
 import '../radios/observer_join_screen.dart';
 import '../report_problem_screen.dart' show openReportProblem;
 import '../radios/radio_setup/radio_setup_screen.dart';
+import '../sessions_screen.dart';
 import '../settings_screen.dart';
 import '../settings/observer_section.dart' show observerStatusLine;
 import '../tools/adverts_screen.dart';
@@ -61,6 +62,7 @@ class _MoreTabState extends State<MoreTab> {
   }
 
   Widget _screenFor(MoreItem item) => switch (item) {
+        MoreItem.drives => const SessionsScreen(),
         MoreItem.radio => const RadioScreen(),
         MoreItem.myRadios => const SettingsScreen(initialSection: 'my-radios-section'),
         MoreItem.wardriving => const SettingsScreen(initialSection: 'wardriving'),
@@ -90,8 +92,8 @@ class _MoreTabState extends State<MoreTab> {
     if (nav == null) return;
     switch (item) {
       case MoreItem.repeaters:
-        // Repeaters and rooms live under Chat > Network now (the old list is retired).
-        ShellScope.maybeOf(context)?.openNetwork();
+        // Repeaters and rooms live under Chat > Radio now (the old list is retired).
+        ShellScope.maybeOf(context)?.openChatRadio();
       case MoreItem.legend:
         showMapLegend(nav.context);
       case MoreItem.howItWorks:
@@ -103,6 +105,8 @@ class _MoreTabState extends State<MoreTab> {
           ),
         ));
       default:
+        // The Drives list reads from disk: refresh it whenever it is opened (it lived in the Analyze tab until build 71).
+        if (item == MoreItem.drives) AppScope.read(context).refreshSessions();
         nav.popUntil((r) => r.isFirst);
         nav.push(MaterialPageRoute<void>(builder: (_) => _screenFor(item)));
     }
@@ -165,6 +169,8 @@ class _MoreListState extends State<MoreList> {
         child: ListView(
           key: const Key('more-list'),
           children: [
+            header('Your drives'),
+            row(MoreItem.drives, Icons.list_alt, 'Drives', 'Your drives, reports and progress'),
             header('Your radio'),
             row(MoreItem.radio, Icons.settings_input_antenna, 'Radio',
                 s.connected ? 'What your radio reports, compared with this region' : 'Not connected. Connect and see its settings'),
@@ -173,7 +179,7 @@ class _MoreListState extends State<MoreList> {
             row(MoreItem.devices, Icons.key_outlined, 'Devices and keys', 'Your driver key, other phones, MeshMapper forwarding'),
             header('Radios and tools'),
             row(MoreItem.repeaters, Icons.cell_tower, 'Repeaters, rooms and radio tools',
-                'In Chat, under Network: repeaters, rooms, sensors, Trace, Discover, Rx log, Adverts', keyName: 'network'),
+                'In Chat, under Radio: repeaters, rooms, sensors, Trace, Discover, Rx log, Adverts', keyName: 'network'),
             row(MoreItem.noiseFloor, Icons.show_chart, 'Noise floor and health', 'Interference and radio counters, live'),
             row(MoreItem.telemetry, Icons.thermostat, 'Telemetry', 'Battery, temperature and position of a node'),
             row(MoreItem.radioSetup, Icons.tune, 'Radio setup', 'Name, position, power and frequency, with checks'),

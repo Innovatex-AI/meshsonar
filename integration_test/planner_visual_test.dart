@@ -543,9 +543,9 @@ void main() {
 
     // ------------------------------------------------------------------------------------------ J1: a repeater anywhere
     await _home(t);
-    await openShellTab(t, 'Analyze');
-    await _tap(t, find.descendant(of: _key('analyze-segments'), matching: find.text('Region')));
-    final repTab = find.descendant(of: find.byType(TabBar), matching: find.text('Repeaters'));
+    await openShellTab(t, 'Network');
+    await _tap(t, _key('network-section-nodes'));
+    final repTab = _key('network-sub-nodes-0');
     if (await _tap(t, repTab, wait: const Duration(seconds: 20))) {
       final row = _prefix('repeater-row-');
       if (await waitFor(t, row, timeout: const Duration(seconds: 30))) {
@@ -622,19 +622,19 @@ void main() {
           }
         }
       }
-      // J2: a repeater contact > Link to… (V-5, build 67: a required step now). Repeaters live under Chat > Network
+      // J2: a repeater contact > Link to… (V-5, build 67: a required step now). Repeaters live under Chat > Radio
       // (rows 'network-row-<prefix>'), below the radio card and the Nearby section in a lazily built CustomScrollView,
       // so on a phone the Repeaters rows are not built until the list is scrolled: the old lookup waited for a row that
       // was never built and noted "no repeater rows". The contact profile is a lazy ListView too (the plan rows sit under
       // the claim card), so Link to… is scrolled into view inside 'contact-profile', not the first Scrollable on screen.
       await _home(t);
       await openShellTab(t, 'Chat');
-      await _tap(t, _key('segment-network'), what: 'segment-network');
+      await _tap(t, _key('segment-radio'), what: 'segment-radio');
       final tile = _prefix('network-row-');
       final rows = await scrollToFind(t, tile, _key('chat-scroll'));
       if (!rows) {
         await shot(t, 'planner-29-network-no-repeater');
-        _fail('J2: no repeater rows under Chat > Network with the simulated radio');
+        _fail('J2: no repeater rows under Chat > Radio with the simulated radio');
       } else {
         final prefix = (t.widget(tile.first).key as ValueKey<String>).value.substring('network-row-'.length).toLowerCase();
         final before = _plan(t).nodes.length;

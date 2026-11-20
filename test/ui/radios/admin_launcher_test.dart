@@ -1,4 +1,4 @@
-// The admin launcher (the Repeaters screen is retired; Chat > Network lists them), and the node actions' "Administer" (ui/nodes/node_actions.dart), through the real app state with a real
+// The admin launcher (the Repeaters screen is retired; Chat > Radio lists them), and the node actions' "Administer" (ui/nodes/node_actions.dart), through the real app state with a real
 // companion link over the fake radio (and, for the negative cases, the plain fake link that cannot administer).
 import 'dart:async';
 import 'dart:typed_data';
