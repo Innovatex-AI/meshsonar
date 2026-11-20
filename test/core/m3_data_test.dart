@@ -86,6 +86,24 @@ void main() {
       expect(snrLinkText(l.first), contains('SNR not measured'));
     });
 
+    test('hop pairs are one row per pair (server 0145): one line, the row\'s own packets, never halved or doubled', () {
+      // app-next-pass-list item 5
+      final one = LinkGraph.fromJson({'nodes': _nodes, 'links': [link(0, 2, 'observed', null, 300)]})!;
+      final l1 = snrLinks(one, _def);
+      expect(l1, hasLength(1));
+      expect(l1.single.packets, 300);
+      final reversed = LinkGraph.fromJson({'nodes': _nodes, 'links': [link(2, 0, 'observed', null, 300)]})!;
+      expect(snrLinks(reversed, _def).single.packets, 300, reason: 'the order of the ends does not matter');
+      // an older answer with one row per direction: still one line, the two directions summed
+      final both = LinkGraph.fromJson({'nodes': _nodes, 'links': [link(0, 2, 'observed', null, 120), link(2, 0, 'observed', null, 180)]})!;
+      expect(snrLinks(both, _def).single.packets, 300);
+      // a pair that is both reported and observed (one row per kind): one line, the reported SNR, the observed packets
+      final kinds = LinkGraph.fromJson({'nodes': _nodes, 'links': [link(0, 1, 'reported', 3.0, 5), link(0, 1, 'observed', null, 77)]})!;
+      final k = snrLinks(kinds, _def).single;
+      expect(k.snr, 3.0);
+      expect(k.packets, 77);
+    });
+
     test('the band follows the spreading factor of the default preset', () {
       final g = LinkGraph.fromJson({'nodes': _nodes, 'links': [link(0, 1, 'measured', -5.0, 3)]})!;
       expect(snrLinks(g, _def, sf: 7).single.band, 2, reason: '2.5 dB over the SF7 floor: Weak');

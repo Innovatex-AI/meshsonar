@@ -193,6 +193,9 @@ double linkWidth(int packets, MapDefinition d) {
 }
 
 /// One line per located pair of repeaters / rooms. [sf] picks the band edges (the default preset's spreading factor).
+/// Pairs are unordered (A-B = B-A). Since server 0145 the hop-pair reads send ONE row per pair (not one per direction):
+/// that row draws one line with its own packet count; an older answer with both directions still draws one line, its
+/// observed packets summed (app-next-pass-list item 5). Nothing is halved or doubled.
 List<SnrLink> snrLinks(LinkGraph? g, MapDefinition d, {int sf = 7}) {
   final nodes = g?.nodes ?? const <GraphNode>[];
   final acc = <String, _Acc>{};
