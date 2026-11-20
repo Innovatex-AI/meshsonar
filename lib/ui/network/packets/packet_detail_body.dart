@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../../core/v1/packets_api.dart';
+import '../../app.dart' show AppScope;
 import '../../design/app_surfaces.dart' show showAppToast;
 import '../../map/layers/repeater_map_source.dart' show kRosterLayerId;
 import '../../map/main_map_focus.dart';
@@ -205,7 +206,7 @@ class PacketDetailBody extends StatelessWidget {
           ('Signature', sig['checked'] == true ? (sig['valid'] == true ? 'Valid' : 'Not valid') : 'Not checked on the phone'),
           if (f['clockSkewS'] is num) ('Clock', '${(f['clockSkewS'] as num).round()} s ${(f['clockSkewS'] as num) >= 0 ? 'ahead' : 'behind'}'),
           if (f['battery'] is num) ('Battery', '${f['battery']} mV'),
-          if (f['temperatureC'] is num) ('Temperature', '${f['temperatureC']} °C'),
+          if (f['temperatureC'] is num) ('Temperature', AppScope.unitsOf(context).temperature((f['temperatureC'] as num).toDouble())),
         ]);
       case 'group':
         final pt = f['plaintext'] is Map ? f['plaintext'] as Map : null;
@@ -354,7 +355,7 @@ class PacketDetailBody extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(left: Gap.m, top: 2),
                 child: Text(
-                  '${c.node.label}${c.score == null ? '' : ', score ${c.score!.toStringAsFixed(2)}'}${c.distanceKm == null ? '' : ', ${c.distanceKm!.toStringAsFixed(1)} km away'}',
+                  '${c.node.label}${c.score == null ? '' : ', score ${c.score!.toStringAsFixed(2)}'}${c.distanceKm == null ? '' : ', ${AppScope.unitsOf(context).distance(c.distanceKm! * 1000)} away'}',
                   style: muted,
                 ),
               ),

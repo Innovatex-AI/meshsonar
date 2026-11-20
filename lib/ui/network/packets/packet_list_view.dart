@@ -31,8 +31,8 @@ import 'packet_detail_screen.dart';
 import 'packet_filter_sheet.dart';
 import 'packet_ui.dart';
 
-/// The window chips, in order. 30d and 90d need a narrowing filter (contract 3.3).
-const List<String> packetWindowChips = ['15m', '1h', '6h', '24h', '7d', '30d', '90d'];
+/// The window chips, in order (the contract's list windows without 3h). 30d and 90d need a narrowing filter (contract 3.3).
+final List<String> packetWindowChips = [for (final w in packetWindows.keys) if (w != '3h') w];
 
 enum _Load { loading, ready, error }
 

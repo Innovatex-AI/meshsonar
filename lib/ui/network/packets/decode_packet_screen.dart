@@ -76,7 +76,7 @@ class _DecodePacketScreenState extends State<DecodePacketScreen> {
       if (r == null) {
         setState(() {
           _result = local;
-          _error = local == null ? '$localProblem The server decoder is not available yet.' : null;
+          _error = local == null ? '${localProblem ?? ''} The server decoder is not available yet.' : null;
         });
       } else {
         setState(() {
@@ -88,7 +88,7 @@ class _DecodePacketScreenState extends State<DecodePacketScreen> {
       if (!mounted) return;
       setState(() {
         _result = local;
-        _error = local == null ? '$localProblem The server could not decode it either: ${e.message}' : 'The server did not answer: ${e.message}';
+        _error = local == null ? '${localProblem ?? ''} The server could not decode it either: ${e.message}' : 'The server did not answer: ${e.message}';
       });
     } finally {
       if (mounted) setState(() => _busy = false);

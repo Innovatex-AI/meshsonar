@@ -3,10 +3,13 @@
 // outside), the filter-language text field with suggestions from `GET /v1/filters/fields` (or the built-in copy) and
 // the mistake shown under it with its position, and saved filters stored on the device.
 // Website twin: the filter box of `/packets`.
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../core/v1/packets_api.dart';
 import '../../../core/v1/saved_packet_filters.dart';
+import '../../design/app_surfaces.dart' show showAppSheet;
 import '../../design/app_type.dart';
 import '../../theme.dart';
 
@@ -20,15 +23,10 @@ Future<PacketFilterResult?> showPacketFilterSheet(
   required SavedPacketFilterStore store,
   String? window,
 }) =>
-    showModalBottomSheet<PacketFilterResult>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      showDragHandle: true,
-      builder: (_) => FractionallySizedBox(
-        heightFactor: 0.92,
-        child: PacketFilterSheet(filter: filter, catalogue: catalogue, store: store, window: window),
-      ),
+    showAppSheet<PacketFilterResult>(
+      context,
+      detents: const [0.92],
+      builder: (_, controller) => PacketFilterSheet(filter: filter, catalogue: catalogue, store: store, window: window, controller: controller),
     );
 
 class PacketFilterSheet extends StatefulWidget {
@@ -36,7 +34,10 @@ class PacketFilterSheet extends StatefulWidget {
   final FilterCatalogue catalogue;
   final SavedPacketFilterStore store;
   final String? window;
-  const PacketFilterSheet({super.key, required this.filter, required this.catalogue, required this.store, this.window});
+
+  /// The sheet's scroll controller (so a drag on the list scrolls it before it moves the sheet).
+  final ScrollController? controller;
+  const PacketFilterSheet({super.key, required this.filter, required this.catalogue, required this.store, this.window, this.controller});
 
   @override
   State<PacketFilterSheet> createState() => _PacketFilterSheetState();
@@ -49,6 +50,8 @@ class _PacketFilterSheetState extends State<PacketFilterSheet> {
   final TextEditingController _observer = TextEditingController();
   late final TextEditingController _hash = TextEditingController(text: widget.filter.hash ?? '');
   final TextEditingController _channel = TextEditingController();
+  final TextEditingController _saveName = TextEditingController();
+  String? _saveError;
   late final TextEditingController _scope = TextEditingController(text: widget.filter.scope ?? '');
   String? _nodeError, _observerError, _hashError, _channelError, _scopeError;
   List<SavedPacketFilter> _saved = const [];
@@ -67,7 +70,7 @@ class _PacketFilterSheetState extends State<PacketFilterSheet> {
 
   @override
   void dispose() {
-    for (final c in [_text, _node, _observer, _hash, _channel, _scope]) {
+    for (final c in [_text, _node, _observer, _hash, _channel, _scope, _saveName]) {
       c.dispose();
     }
     super.dispose();
@@ -144,24 +147,19 @@ class _PacketFilterSheetState extends State<PacketFilterSheet> {
 
   Future<void> _save() async {
     final f = _collect();
+    final name = _saveName.text.trim();
     if (f == null) return;
-    final name = await showDialog<String>(
-      context: context,
-      builder: (c) {
-        final ctl = TextEditingController();
-        return AlertDialog(
-          title: const Text('Save this filter'),
-          content: TextField(key: const Key('filter-save-name'), controller: ctl, autofocus: true, decoration: const InputDecoration(labelText: 'Name')),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(c), child: const Text('Cancel')),
-            FilledButton(key: const Key('filter-save-confirm'), onPressed: () => Navigator.pop(c, ctl.text.trim()), child: const Text('Save')),
-          ],
-        );
-      },
-    );
-    if (name == null || name.isEmpty) return;
+    if (name.isEmpty) {
+      setState(() => _saveError = 'Give the filter a name.');
+      return;
+    }
     await widget.store.save(SavedPacketFilter(name, f, window: widget.window));
-    if (mounted) setState(() => _saved = widget.store.items);
+    if (!mounted) return;
+    setState(() {
+      _saved = widget.store.items;
+      _saveError = null;
+      _saveName.clear();
+    });
   }
 
   @override
@@ -178,7 +176,8 @@ class _PacketFilterSheetState extends State<PacketFilterSheet> {
       children: [
         Expanded(
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(Gap.l, 0, Gap.l, Gap.l),
+            controller: widget.controller,
+            padding: const EdgeInsets.fromLTRB(Gap.l, Gap.s, Gap.l, Gap.l),
             children: [
               Text('Filter packets', style: t.textTheme.titleLarge),
               if (_saved.isNotEmpty) ...[
@@ -339,6 +338,8 @@ class _PacketFilterSheetState extends State<PacketFilterSheet> {
                   onPressed: () => _text.text = ex,
                   child: Text(ex, style: AppType.mono.copyWith(fontSize: 14)),
                 ),
+              _title(context, 'Save this filter on the phone'),
+              _entry(context, _saveName, 'filter-save-name', 'Name, e.g. Traces near me', _saveError, () => unawaited(_save()), icon: Icons.bookmark_add_outlined, tip: 'Save'),
             ],
           ),
         ),
@@ -347,7 +348,6 @@ class _PacketFilterSheetState extends State<PacketFilterSheet> {
           child: Padding(
             padding: const EdgeInsets.fromLTRB(Gap.l, Gap.s, Gap.l, Gap.s),
             child: Wrap(alignment: WrapAlignment.end, spacing: Gap.s, runSpacing: Gap.s, children: [
-              TextButton(key: const Key('filter-save'), onPressed: _save, child: const Text('Save…')),
               OutlinedButton(
                 key: const Key('filter-clear'),
                 onPressed: () => Navigator.pop(context, (filter: PacketFilter.none, window: null)),
@@ -373,7 +373,9 @@ class _PacketFilterSheetState extends State<PacketFilterSheet> {
         child: Semantics(header: true, child: Text(s, style: Theme.of(context).textTheme.titleSmall)),
       );
 
-  Widget _entry(BuildContext context, TextEditingController c, String key, String hint, String? error, VoidCallback onAdd) => Row(
+  Widget _entry(BuildContext context, TextEditingController c, String key, String hint, String? error, VoidCallback onAdd,
+          {IconData icon = Icons.add_circle_outline, String tip = 'Add'}) =>
+      Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
@@ -385,7 +387,7 @@ class _PacketFilterSheetState extends State<PacketFilterSheet> {
               decoration: InputDecoration(hintText: hint, errorText: error, errorMaxLines: 2, border: const OutlineInputBorder()),
             ),
           ),
-          IconButton(key: Key('$key-add'), tooltip: 'Add', icon: const Icon(Icons.add_circle_outline), onPressed: onAdd),
+          IconButton(key: Key('$key-add'), tooltip: tip, icon: Icon(icon), onPressed: onAdd),
         ],
       );
 }

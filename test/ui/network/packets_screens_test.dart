@@ -225,6 +225,13 @@ void main() {
       expect(find.byKey(const ValueKey('filter-suggest-payload.name')), findsOneWidget);
       await t.enterText(find.byKey(const Key('filter-text')), 'snr > -5');
       await t.pump();
+      // Save it on the phone under a name; it shows at the top of the sheet.
+      await t.scrollUntilVisible(find.byKey(const Key('filter-save-name')), 300, scrollable: find.descendant(of: find.byKey(const Key('packet-filter-sheet')), matching: find.byType(Scrollable)).first);
+      await t.enterText(find.byKey(const Key('filter-save-name')), 'Traces');
+      await t.tap(find.byKey(const Key('filter-save-name-add')));
+      await t.pump();
+      await t.pump();
+      expect(find.byKey(const ValueKey('saved-filter-Traces'), skipOffstage: false), findsOneWidget);
       await t.tap(find.byKey(const Key('filter-apply')));
       await t.pumpAndSettle();
       final q = s.seen.last.queryParameters;
