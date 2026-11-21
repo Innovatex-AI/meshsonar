@@ -2,7 +2,7 @@
 //
 // Sections, each shown only when the API supplied it (absent = hidden, never an empty box): identity and position,
 // node actions, health, activity (packets per hour, packet types), SNR trend, heard by, neighbours, paths through,
-// reach, clock, battery, radio, hash size, recent adverts. The app bar has the favourite star, Watch (kept on the
+// reach, your drives and drive reach (when it has a position), clock, battery, radio, hash size, recent adverts. The app bar has the favourite star, Watch (kept on the
 // phone; alerts come with AZ-3.8) and Share (the region-host web link).
 // `/v1` not live: today's region-repeater fills identity, health, SNR trend, packet types, heard by and neighbours;
 // paths, reach, clock and battery do not exist there and stay hidden. Offline: the stored copy with "Offline - as of".
@@ -16,7 +16,11 @@ import '../../charts/chart_frame.dart';
 import '../../charts/time_line_chart.dart';
 import '../../nodes/node_actions.dart' show NodeActionBar;
 import '../../nodes/node_ref.dart';
+import '../../../core/repeater_detail_api.dart' show DailySnr;
 import '../../region/region_common.dart' show RegionOfflineAsOf, RegionOfflineEmpty, agoText;
+import '../../region/snr_trend_card.dart';
+import '../../repeater_reach_section.dart';
+import '../../your_drives_section.dart';
 import '../../theme.dart';
 import '../network_context.dart';
 import '../network_share.dart';
@@ -28,7 +32,10 @@ import 'node_ui.dart';
 
 class NetworkNodeScreen extends StatefulWidget {
   final String baseUrl, regionSlug, nodeKey;
-  const NetworkNodeScreen({super.key, required this.baseUrl, required this.regionSlug, required this.nodeKey});
+
+  /// Draw map tiles in the drive sections (off under `flutter test`).
+  final bool mapTiles;
+  const NetworkNodeScreen({super.key, required this.baseUrl, required this.regionSlug, required this.nodeKey, this.mapTiles = true});
   @override
   State<NetworkNodeScreen> createState() => _NetworkNodeScreenState();
 }
@@ -47,7 +54,9 @@ class _NetworkNodeScreenState extends State<NetworkNodeScreen> {
 
   Future<void> _reload() async {
     final f = _fetch();
-    setState(() => _f = f);
+    setState(() {
+      _f = f;
+    });
     try {
       await f;
     } catch (_) {}
@@ -71,7 +80,7 @@ class _NetworkNodeScreenState extends State<NetworkNodeScreen> {
             ),
             body: switch (snap.connectionState) {
               ConnectionState.done when snap.hasError => _error(context, snap.error),
-              ConnectionState.done => RefreshIndicator(onRefresh: _reload, child: NodePageBody(page: p!, baseUrl: widget.baseUrl, regionSlug: widget.regionSlug)),
+              ConnectionState.done => RefreshIndicator(onRefresh: _reload, child: NodePageBody(page: p!, baseUrl: widget.baseUrl, regionSlug: widget.regionSlug, mapTiles: widget.mapTiles)),
               _ => const Center(child: CircularProgressIndicator()),
             },
           );
@@ -106,7 +115,8 @@ NodeKind _kindOf(String role) => switch (role) {
 class NodePageBody extends StatelessWidget {
   final NodePage page;
   final String baseUrl, regionSlug;
-  const NodePageBody({super.key, required this.page, required this.baseUrl, required this.regionSlug});
+  final bool mapTiles;
+  const NodePageBody({super.key, required this.page, required this.baseUrl, required this.regionSlug, this.mapTiles = true});
 
   @override
   Widget build(BuildContext context) {
@@ -143,6 +153,19 @@ class NodePageBody extends StatelessWidget {
         if (page.neighbours != null && page.neighbours!.isNotEmpty) _neighbours(context, page.neighbours!),
         if (page.paths != null && page.paths!.isNotEmpty) _paths(context, page),
         if (page.reach != null && (page.reach!.links.isNotEmpty || page.reach!.directObservers.isNotEmpty)) _reach(context, page.reach!),
+        // What this phone's own drives know about the node (they need its position, and show nothing without drives).
+        if (!hidden && d.position != null) ...[
+          Padding(
+            key: const Key('node-your-drives'),
+            padding: const EdgeInsets.only(top: Gap.l),
+            child: YourDrivesSection(repeaterKey: d.key, lat: d.position!.lat, lon: d.position!.lon, mapTiles: mapTiles),
+          ),
+          Padding(
+            key: const Key('node-drive-reach'),
+            padding: const EdgeInsets.only(top: Gap.l),
+            child: RepeaterReachSection(repeaterKey: d.key, lat: d.position!.lat, lon: d.position!.lon, mapTiles: mapTiles),
+          ),
+        ],
         if (page.clock != null || (d.clockSeverity != null && d.clockSeverity != 'no_clock')) _clock(context, d, page.clock),
         if (page.battery != null || d.batteryMv != null) _battery(context, d, page.battery),
         if (d.radio != null) _radio(context, d.radio!),
@@ -254,26 +277,23 @@ class NodePageBody extends StatelessWidget {
     final snr = [for (final s in a.snrTrend) if (s.$2 != null) (s.$1, s.$2!)];
     if (snr.isNotEmpty) {
       String day(DateTime t) => '${t.month}/${t.day}';
-      out.add(NodeSection(id: 'snr', title: 'SNR trend', children: [
-        ChartFrame(
-          id: 'node-snr',
-          title: 'Mean SNR per day',
-          summary: 'Latest ${snrText(snr.last.$2)} on ${day(snr.last.$1)}; ${snr.length} days with readings.',
-          table: ChartTable(head: const ['Day', 'Mean SNR', 'Samples'], rows: [
-            for (final s in a.snrTrend.reversed) [day(s.$1), s.$2 == null ? 'no reading' : snrText(s.$2), '${s.$3}']
-          ]),
-          chart: TimeLineChart(
-            series: [ChartSeries(name: 'SNR', points: snr, color: pal[0])],
-            yLabel: 'SNR dB',
-            xFormat: day,
-            signedTicks: true,
-            dashedGrid: {0.0},
-            breakGap: const Duration(days: 2),
-            dotColor: (_) => pal[0],
+      // Collapsed by default (a small screen): the header says the latest reading; the card (summary, chart, table) is
+      // the one the old region repeater page had.
+      out.add(Padding(
+        key: const Key('node-section-snr'),
+        padding: const EdgeInsets.only(top: Gap.l),
+        child: Theme(
+          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            key: const PageStorageKey('node-snr-tile'),
+            tilePadding: EdgeInsets.zero,
+            childrenPadding: EdgeInsets.zero,
+            title: Semantics(header: true, child: Text('SNR trend', style: Theme.of(context).textTheme.titleMedium)),
+            subtitle: Text('Latest ${snrText(snr.last.$2)} on ${day(snr.last.$1)} · ${snr.length} days with readings', key: const Key('node-snr-latest')),
+            children: [SnrTrendCard(daily: [for (final s in a.snrTrend) DailySnr(s.$1, s.$2, s.$3)])],
           ),
-          caption: 'A day with no reading is a gap, not a zero.',
         ),
-      ]));
+      ));
     }
     return out;
   }

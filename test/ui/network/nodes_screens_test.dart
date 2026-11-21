@@ -12,6 +12,8 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:meshsonar/core/region_lookup.dart';
 import 'package:meshsonar/core/v1/nodes_api.dart';
+import 'package:meshsonar/ui/map/layers/repeater_map_source.dart';
+import 'package:meshsonar/ui/map/repeater_page_link.dart';
 import 'package:meshsonar/ui/network/network_context.dart';
 import 'package:meshsonar/ui/network/network_share.dart';
 import 'package:meshsonar/ui/network/nodes/node_screen.dart';
@@ -196,6 +198,101 @@ void main() {
     expect(shared, 'https://cmh.meshsonar.com/nodes/$hilltop');
   });
 
+  testWidgets('node page: the SNR trend is one collapsed header; tapping it shows the 30-day card', (t) async {
+    tall(t);
+    await t.pumpWidget(app(const NetworkNodeScreen(baseUrl: base, regionSlug: 'cmh', nodeKey: hilltop, mapTiles: false)));
+    await settle(t);
+    expect(find.text('SNR trend'), findsOneWidget);
+    expect(find.byKey(const Key('node-snr-latest')), findsOneWidget);
+    expect(find.byKey(const Key('repdetail-snr-trend')), findsNothing, reason: 'collapsed by default');
+    await t.ensureVisible(find.text('SNR trend'));
+    expect(t.getSize(find.byType(ExpansionTile)).height, greaterThanOrEqualTo(44));
+    await t.tap(find.text('SNR trend'));
+    await settle(t);
+    expect(find.byKey(const Key('repdetail-snr-trend')), findsOneWidget);
+    expect(find.text('30-day signal trend'), findsOneWidget);
+    expect(t.takeException(), isNull);
+  });
+
+  testWidgets('node page: the drive sections sit on a node with a position and not on one without', (t) async {
+    tall(t);
+    await t.pumpWidget(app(const NetworkNodeScreen(baseUrl: base, regionSlug: 'cmh', nodeKey: hilltop, mapTiles: false)));
+    await settle(t);
+    expect(find.byKey(const Key('node-your-drives')), findsOneWidget);
+    expect(find.byKey(const Key('node-drive-reach')), findsOneWidget);
+    await t.pumpWidget(app(const NetworkNodeScreen(key: Key('k'), baseUrl: base, regionSlug: 'cmh', nodeKey: kestrel, mapTiles: false)));
+    await settle(t);
+    expect(find.byKey(const Key('node-your-drives')), findsNothing);
+    expect(find.byKey(const Key('node-drive-reach')), findsNothing);
+  });
+
+  testWidgets('"Open repeater page" from a map sheet lands on the /v1 node screen', (t) async {
+    t.view.physicalSize = const Size(1125, 2436);
+    t.view.devicePixelRatio = 3;
+    addTearDown(t.view.reset);
+    await t.pumpWidget(app(Builder(
+      builder: (c) => Scaffold(
+        body: TextButton(
+          onPressed: () => openRepeaterPageFromMap(
+              c,
+              const RepeaterPoint(
+                layerId: 'roster',
+                source: RepeaterPointSource.roster,
+                key: hilltop,
+                name: 'Hilltop RPT',
+                isRoom: false,
+                lat: 40.01,
+                lon: -83.01,
+                band: 0,
+                region: RosterRegion(slug: 'cmh', name: 'CMH', baseUrl: base),
+              )),
+          child: const Text('open'),
+        ),
+      ),
+    )));
+    await t.tap(find.text('open'));
+    await settle(t);
+    expect(find.byKey(const Key('network-node-screen')), findsOneWidget);
+    expect(find.text('Hilltop RPT'), findsWidgets);
+    expect(s.seen.any((u) => u.path == '/v1/nodes/$hilltop'), isTrue);
+  });
+
+  testWidgets('ObserversDirectoryView stands alone: rows at least 44 pt, tap opens the observer page', (t) async {
+    t.view.physicalSize = const Size(1125, 2436); // 375 pt wide
+    t.view.devicePixelRatio = 3;
+    addTearDown(t.view.reset);
+    await t.pumpWidget(app(const Scaffold(body: ObserversDirectoryView(baseUrl: base, regionSlug: 'cmh'))));
+    await settle(t);
+    expect(find.byKey(const Key('observers-list')), findsOneWidget);
+    expect(find.text('OVCS Clintonville'), findsOneWidget);
+    final row = find.byKey(const Key('observer-row-$westside'));
+    await t.ensureVisible(row);
+    expect(t.getSize(row).height, greaterThanOrEqualTo(44));
+    expect(t.takeException(), isNull, reason: 'no overflow at 375 pt');
+    await t.tap(row);
+    await settle(t);
+    expect(find.byType(NetworkObserverScreen), findsOneWidget);
+  });
+
+  testWidgets('observers of a region nothing reports to: the server\'s own sentence (old name still works)', (t) async {
+    nodesApiFactory = (b) => NodesApi(b,
+        client: MockClient((r) async => json(jsonEncode({
+              'data': [],
+              'page': {'limit': 200, 'next': null, 'approxTotal': 0},
+              'meta': {
+                'apiVersion': '1.0',
+                'region': {'slug': 'phx', 'name': 'Southern Arizona, US', 'kind': 'region'},
+                'generatedAt': '2026-11-21T11:27:24.742Z',
+                'dataAt': null,
+                'status': {'state': 'pending', 'reason': 'No observers report to this region yet. Run an observer: it joins by itself.'},
+                'sources': {},
+              },
+            }))));
+    await t.pumpWidget(app(const Scaffold(body: ObserverListView(key: Key('phx'), baseUrl: 'https://phx.meshsonar.com', regionSlug: 'phx'))));
+    await settle(t);
+    expect(find.textContaining('No observers report to this region yet'), findsOneWidget);
+  });
+
   testWidgets('node page hides the sections the API does not supply', (t) async {
     tall(t);
     await t.pumpWidget(app(const NetworkNodeScreen(baseUrl: base, regionSlug: 'cmh', nodeKey: kestrel)));
@@ -245,6 +342,27 @@ void main() {
     await settle(t);
     expect(shared, 'https://cmh.meshsonar.com/observers/$westside');
     expect(networkFavouritesForTest().isFavourite(FavouriteKind.observer, westside), isTrue);
+  });
+
+  testWidgets('a 375 pt wide phone: node page, observer page and the directory lay out without overflow', (t) async {
+    t.view.physicalSize = const Size(1125, 2436);
+    t.view.devicePixelRatio = 3;
+    addTearDown(t.view.reset);
+    await t.pumpWidget(app(const NetworkNodeScreen(baseUrl: base, regionSlug: 'cmh', nodeKey: hilltop, mapTiles: false)));
+    await settle(t);
+    expect(t.takeException(), isNull);
+    for (var i = 0; i < 8; i++) {
+      await t.drag(find.byKey(const Key('node-page')), const Offset(0, -700));
+      await settle(t);
+      expect(t.takeException(), isNull);
+    }
+    await t.pumpWidget(app(const NetworkObserverScreen(baseUrl: base, regionSlug: 'cmh', observerId: westside)));
+    await settle(t);
+    expect(t.takeException(), isNull);
+    await t.pumpWidget(app(Scaffold(body: NetworkNodesSection(region: region, sub: 0, onSub: (_) {}))));
+    await settle(t);
+    expect(t.takeException(), isNull);
+    expect(t.getSize(find.byKey(const Key('network-sub-nodes'))).height, greaterThanOrEqualTo(44));
   });
 
   testWidgets('large text: node and observer pages lay out without overflow', (t) async {

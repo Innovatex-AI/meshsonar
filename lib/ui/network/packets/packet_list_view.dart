@@ -18,6 +18,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../../core/network_request.dart';
 import '../../../core/power_profile.dart';
+import '../../../core/v1/channels_api.dart' show isNoPacketFeed;
 import '../../../core/v1/local_decoder.dart';
 import '../../../core/v1/my_radio_packets.dart';
 import '../../../core/v1/network_api.dart' show NetworkReadSource;
@@ -76,6 +77,9 @@ class _PacketListViewState extends State<PacketListView> with WidgetsBindingObse
   DateTime? _asOf;
   List<String> _unapplied = const [];
   String? _statusNote;
+
+  /// The server said no packet feed covers this scope (`no_packet_feed`): its sentence, shown as a plain card.
+  String? _noFeedReason;
   bool? _nodeTrusted;
   _Load _load = _Load.loading;
   V1Error? _error;
@@ -222,7 +226,8 @@ class _PacketListViewState extends State<PacketListView> with WidgetsBindingObse
     _unapplied = p.unapplied;
     _nodeTrusted = p.nodeListTrusted;
     final st = p.status;
-    _statusNote = st != null && st.state.name != 'ready' ? (st.reason ?? 'The data is ${st.state.name}.') : null;
+    _noFeedReason = _rows.isEmpty && isNoPacketFeed(st) ? st!.reason : null;
+    _statusNote = _noFeedReason == null && st != null && st.state.name != 'ready' ? (st.reason ?? 'The data is ${st.state.name}.') : null;
   }
 
   Future<void> _loadMore() async {
@@ -340,8 +345,8 @@ class _PacketListViewState extends State<PacketListView> with WidgetsBindingObse
                 thumbColor: t.colorScheme.surfaceContainerHighest,
                 backgroundColor: t.colorScheme.onSurface.withValues(alpha: 0.10),
                 children: const {
-                  false: Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Text('Network', key: Key('packets-source-network'))),
-                  true: Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Text('My radio', key: Key('packets-source-mine'))),
+                  false: SizedBox(height: 44, child: Center(child: Text('Network', key: Key('packets-source-network')))),
+                  true: SizedBox(height: 44, child: Center(child: Text('My radio', key: Key('packets-source-mine')))),
                 },
                 onValueChanged: (v) => _setMine(v ?? false),
               ),
@@ -502,6 +507,7 @@ class _PacketListViewState extends State<PacketListView> with WidgetsBindingObse
           i -= head.length;
           if (_rows.isEmpty) {
             if (i == 0) {
+              if (_noFeedReason != null && !_mine) return NoPacketFeedCard(regionName: widget.regionSlug, reason: _noFeedReason);
               return Padding(
                 key: const Key('packets-empty'),
                 padding: const EdgeInsets.all(Gap.xl),

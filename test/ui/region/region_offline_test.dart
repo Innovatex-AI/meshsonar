@@ -16,14 +16,11 @@ import 'package:meshsonar/core/etag_client.dart';
 import 'package:meshsonar/core/live_stream.dart';
 import 'package:meshsonar/core/region_analysis_api.dart';
 import 'package:meshsonar/core/region_overview_api.dart';
-import 'package:meshsonar/core/region_packets_api.dart';
 import 'package:meshsonar/core/region_reports_api.dart';
 import 'package:meshsonar/core/region_stats_api.dart';
 import 'package:meshsonar/ui/region/analysis_panel.dart';
 import 'package:meshsonar/ui/region/live_screen.dart';
-import 'package:meshsonar/ui/region/observers_panel.dart';
 import 'package:meshsonar/ui/region/overview_panel.dart';
-import 'package:meshsonar/ui/region/packets_panel.dart';
 import 'package:meshsonar/ui/region/region_common.dart';
 import 'package:meshsonar/ui/region/reports_panel.dart';
 import 'package:meshsonar/ui/region/stats_panel.dart';
@@ -130,71 +127,7 @@ void main() {
     });
   });
 
-  group('observers', () {
-    testWidgets('stored copy: data plus Offline - as of', (t) async {
-      final net = Net()..stored = true;
-      regionApiFactory = (b) => RegionOverviewApi(b, client: net.client(_overviewBody));
-      await t.pumpWidget(_wrap(const ObserversPanel(baseUrl: 'https://cmh.example', regionSlug: 'cmh')));
-      await t.pumpAndSettle();
-      expect(find.text('OH.COL.OBS1'), findsOneWidget);
-      expect(find.byKey(_asOfKey), findsOneWidget);
-    });
 
-    testWidgets('nothing stored: No connection, Retry loads once online', (t) async {
-      final net = Net();
-      regionApiFactory = (b) => RegionOverviewApi(b, client: net.client(_overviewBody));
-      await t.pumpWidget(_wrap(const ObserversPanel(baseUrl: 'https://cmh.example', regionSlug: 'cmh')));
-      await t.pumpAndSettle();
-      expect(find.byKey(_emptyKey), findsOneWidget);
-      net.offline = false;
-      await _tapRetry(t);
-      expect(find.text('OH.COL.OBS1'), findsOneWidget);
-      expect(find.byKey(_emptyKey), findsNothing);
-    });
-  });
-
-  group('packets', () {
-    Object? body(String _) => {
-          'status': _status,
-          'rows': [
-            {'hash': 'a1', 'type': 4, 'route': 1, 'firstAt': DateTime.now().toUtc().toIso8601String(), 'observers': 2, 'minHops': 1},
-          ],
-        };
-    Widget panel(Net net) => _wrap(
-        PacketsPanel(
-            baseUrl: Uri.parse('https://cmh.example'),
-            regionSlug: 'cmh',
-            api: HttpRegionPacketsApi(Uri.parse('https://cmh.example'), client: net.client(body))),
-        scroll: false);
-
-    testWidgets('stored copy: rows plus Offline - as of', (t) async {
-      final net = Net()..stored = true;
-      await t.pumpWidget(panel(net));
-      await t.pumpAndSettle(const Duration(milliseconds: 1));
-      expect(find.text('Advert'), findsOneWidget);
-      expect(find.byKey(_asOfKey), findsOneWidget);
-      net.offline = false; // the next poll is live: the banner goes away
-      await t.pump(const Duration(seconds: 10));
-      await t.pump();
-      expect(find.byKey(_asOfKey), findsNothing);
-      await t.pumpWidget(const SizedBox());
-    });
-
-    testWidgets('nothing stored: No connection, Retry loads once online', (t) async {
-      final net = Net();
-      await t.pumpWidget(panel(net));
-      await t.pumpAndSettle(const Duration(milliseconds: 1));
-      expect(find.byKey(_emptyKey), findsOneWidget);
-      expect(find.byKey(const Key('packets-loading')), findsNothing);
-      net.offline = false;
-      await t.tap(find.byKey(_retryKey));
-      await t.pump();
-      await t.pump();
-      expect(find.byKey(_emptyKey), findsNothing);
-      expect(find.text('Advert'), findsOneWidget);
-      await t.pumpWidget(const SizedBox());
-    });
-  });
 
   group('analysis', () {
     Object? body(String name) => switch (name) {

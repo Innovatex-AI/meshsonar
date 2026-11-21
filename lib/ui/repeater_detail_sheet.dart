@@ -12,7 +12,7 @@ import 'app.dart' show AppScope;
 import 'charts/sparkline.dart';
 import 'nodes/node_actions.dart' show NodeActionBar;
 import 'nodes/node_ref.dart';
-import 'region/repeater_detail_screen.dart' show openRepeaterDetail;
+import 'network/nodes/node_routes.dart' show openNetworkNode;
 import 'repeater_widgets.dart';
 import 'theme.dart';
 import 'widgets.dart';
@@ -190,7 +190,7 @@ VoidCallback? _regionPage(BuildContext context, RepeaterMatch m) {
   final ref = m.ref;
   final region = AppScope.maybeOf(context)?.viewingRegion;
   if (ref == null || region == null || m.source != RepeaterSource.cmat) return null;
-  return () => openRepeaterDetail(context, baseUrl: region.url, regionSlug: region.slug, repeaterKey: ref.key);
+  return () => openNetworkNode(context, baseUrl: region.url, regionSlug: region.slug, nodeKey: ref.key);
 }
 
 /// A small SNR line chart. Nulls (heard, SNR not measured) are drawn as gaps. A dashed line marks 0 dB.

@@ -20,6 +20,9 @@ import '../network_context.dart';
 import '../packets/packet_ui.dart' show WebTwinLine;
 import 'node_routes.dart';
 import 'node_ui.dart';
+import 'observers_directory.dart';
+
+export 'observers_directory.dart';
 
 /// Nodes | Observers, the two views of Network > Nodes.
 class NetworkNodesSection extends StatelessWidget {
@@ -50,7 +53,7 @@ class NetworkNodesSection extends StatelessWidget {
                 backgroundColor: c.onSurface.withValues(alpha: 0.10),
                 children: {
                   for (final (i, l) in [(0, 'Nodes'), (1, 'Observers')])
-                    i: ConstrainedBox(constraints: const BoxConstraints(minHeight: 36), child: Center(child: Text(l, key: Key('network-sub-nodes-$i'), maxLines: 1))),
+                    i: ConstrainedBox(constraints: const BoxConstraints(minHeight: 44), child: Center(child: Text(l, key: Key('network-sub-nodes-$i'), maxLines: 1))),
                 },
                 onValueChanged: (v) {
                   if (v != null) onSub(v);
@@ -69,8 +72,9 @@ class NetworkNodesSection extends StatelessWidget {
   }
 }
 
-/// Favourites first, then the order the server (or the roster sort) gave.
-List<T> favouritesFirst<T>(List<T> rows, bool Function(T) fav) => [...rows.where(fav), ...rows.where((r) => !fav(r))];
+/// The observers list lives in observers_directory.dart (its own Network section since build 71); the old name stays
+/// for callers that still use it.
+typedef ObserverListView = ObserversDirectoryView;
 
 class NodeDirectoryView extends StatefulWidget {
   final String baseUrl, regionSlug;
@@ -319,108 +323,6 @@ class _NodeTile extends StatelessWidget {
       ]),
       subtitle: Text(bits.join(' · '), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
       trailing: Text(row.prefix, style: t.textTheme.labelMedium),
-    );
-  }
-}
-
-class ObserverListView extends StatefulWidget {
-  final String baseUrl, regionSlug;
-  const ObserverListView({super.key, required this.baseUrl, required this.regionSlug});
-  @override
-  State<ObserverListView> createState() => _ObserverListViewState();
-}
-
-class _ObserverListViewState extends State<ObserverListView> {
-  late Future<ObserverListPage> _f = _fetch();
-
-  Future<ObserverListPage> _fetch() async {
-    final api = nodesApiFactory(widget.baseUrl);
-    try {
-      return await api.observers();
-    } finally {
-      api.close();
-    }
-  }
-
-  Future<void> _reload() async {
-    final f = _fetch();
-    setState(() => _f = f);
-    try {
-      await f;
-    } catch (_) {}
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    return FutureBuilder<ObserverListPage>(
-      future: _f,
-      builder: (context, snap) {
-        if (snap.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
-        if (snap.hasError) {
-          final e = snap.error;
-          if (e is V1Error && e.offline) return SingleChildScrollView(child: RegionOfflineEmpty(what: 'the observers', onRetry: _reload));
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(Gap.xl),
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                Text(e is V1Error ? e.message : 'The observers did not load.', key: const Key('observers-error'), textAlign: TextAlign.center),
-                const SizedBox(height: Gap.m),
-                FilledButton(onPressed: _reload, child: const Text('Try again')),
-              ]),
-            ),
-          );
-        }
-        final p = snap.data!;
-        return FavouritesListener(builder: (context, store) {
-          final rows = favouritesFirst(p.rows, (r) => store.isFavourite(FavouriteKind.observer, r.id));
-          return RefreshIndicator(
-            onRefresh: _reload,
-            child: ListView(
-              key: const Key('observers-list'),
-              physics: const AlwaysScrollableScrollPhysics(),
-              children: [
-                if (p.offlineAsOf != null) Padding(padding: const EdgeInsets.symmetric(horizontal: Gap.l), child: RegionOfflineAsOf(asOf: p.offlineAsOf!, onRetry: _reload)),
-                if (p.source == NetworkReadSource.legacy)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(Gap.l, Gap.s, Gap.l, 0),
-                    child: Text('From the region observer list: airtime and clock come with the new observer service.',
-                        key: const Key('observers-legacy-note'), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
-                  ),
-                if (rows.isEmpty) const Padding(padding: EdgeInsets.all(Gap.xl), child: Text('No observer hears this region yet.', key: Key('observers-empty'), textAlign: TextAlign.center)),
-                for (final r in rows)
-                  ListTile(
-                    key: Key('observer-row-${r.id}'),
-                    leading: Padding(padding: const EdgeInsets.only(top: 6), child: StatusDot(r.status)),
-                    title: Row(children: [
-                      Flexible(child: Text(r.name, maxLines: 2, overflow: TextOverflow.ellipsis)),
-                      if (store.isFavourite(FavouriteKind.observer, r.id)) ...[
-                        const SizedBox(width: Gap.xs),
-                        Icon(Icons.star, size: 16, color: MeshSonarColors.of(context).beacon, semanticLabel: 'Favourite'),
-                      ],
-                    ]),
-                    subtitle: Text(
-                      [
-                        observerKindLabel(r.kind),
-                        observerStatusLabel(r.status),
-                        if (r.lastSeen != null) 'seen ${agoText(r.lastSeen)}',
-                        if (r.packets1h != null) '${r.packets1h} packets last hour',
-                        if (r.noiseFloorDbm != null) 'noise ${r.noiseFloorDbm!.round()} dBm',
-                      ].join(' · '),
-                      style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
-                    ),
-                    trailing: r.dutyCycleWarn ? Icon(Icons.warning_amber_rounded, color: MeshSonarColors.of(context).beacon, semanticLabel: 'Duty cycle high') : null,
-                    onTap: () => openNetworkObserver(context, baseUrl: widget.baseUrl, regionSlug: widget.regionSlug, observerId: r.id),
-                  ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: Gap.l, vertical: Gap.m),
-                  child: WebTwinLine(Uri(scheme: 'https', host: '${widget.regionSlug}.meshsonar.com', path: '/observers')),
-                ),
-              ],
-            ),
-          );
-        });
-      },
     );
   }
 }

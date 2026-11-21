@@ -6,7 +6,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:meshsonar/core/region_overview_api.dart';
-import 'package:meshsonar/ui/region/observers_panel.dart';
 import 'package:meshsonar/ui/region/overview_panel.dart';
 import 'package:meshsonar/ui/region/region_common.dart';
 import 'package:meshsonar/ui/theme.dart';
@@ -141,94 +140,7 @@ void main() {
     expect(find.text('612'), findsOneWidget);
   });
 
-  testWidgets(
-    'observers: sorted online first, shows counts, last seen, partial reason',
-    (tester) async {
-      final now = DateTime.now().toUtc();
-      final body = {
-        'status': {'state': 'partial', 'reason': 'Only CoreScope view.'},
-        'rows': [
-          {
-            'key': 'aaaa1111',
-            'name': 'Zed offline',
-            'online': false,
-            'lastStatusAt': now
-                .subtract(const Duration(days: 2))
-                .toIso8601String(),
-          },
-          {
-            'key': 'bbbb2222',
-            'name': 'Alpha online',
-            'online': true,
-            'lastPacketAt': now
-                .subtract(const Duration(minutes: 5))
-                .toIso8601String(),
-            'packetsPerHour': 64,
-            'nodesHeard24h': 71,
-            'noiseFloorDbm': -73,
-            'source': 'meshsonar',
-          },
-        ],
-      };
-      useClient((_) async => http.Response(jsonEncode(body), 200));
-      await tester.pumpWidget(
-        wrap(
-          const ObserversPanel(
-            baseUrl: 'https://cmh.example',
-            regionSlug: 'cmh',
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-      expect(find.text('1 online of 2'), findsOneWidget);
-      expect(find.text('Only CoreScope view.'), findsOneWidget);
-      expect(find.textContaining('64 pkt/h'), findsOneWidget);
-      expect(find.textContaining('seen 5 min ago'), findsOneWidget);
-      expect(find.textContaining('seen 2 d ago'), findsOneWidget);
-      expect(find.byKey(const Key('dot-online')), findsOneWidget);
-      expect(find.byKey(const Key('dot-offline')), findsOneWidget);
-      final y1 = tester
-          .getTopLeft(find.byKey(const Key('observer-bbbb2222')))
-          .dy;
-      final y2 = tester
-          .getTopLeft(find.byKey(const Key('observer-aaaa1111')))
-          .dy;
-      expect(y1, lessThan(y2));
-    },
-  );
 
-  testWidgets('observers: empty and error states', (tester) async {
-    useClient(
-      (_) async => http.Response(
-        jsonEncode({
-          'status': {'state': 'pending', 'reason': 'Nothing yet.'},
-          'rows': [],
-        }),
-        200,
-      ),
-    );
-    await tester.pumpWidget(
-      wrap(const ObserversPanel(baseUrl: 'https://a.example', regionSlug: 'a')),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('No observers listed'), findsOneWidget);
-    expect(find.text('Nothing yet.'), findsOneWidget);
-
-    useClient((_) async => throw Exception('offline'));
-    await tester.pumpWidget(
-      wrap(
-        const ObserversPanel(
-          key: ValueKey('b'),
-          baseUrl: 'https://b.example',
-          regionSlug: 'b',
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    // Unreachable with nothing stored: the shared honest offline state (region_offline_test.dart covers Retry).
-    expect(find.byKey(const Key('region-offline-empty')), findsOneWidget);
-    expect(find.text('No connection'), findsOneWidget);
-  });
 
   test('agoText and groupInt', () {
     final now = DateTime.utc(2026, 10, 24, 12);

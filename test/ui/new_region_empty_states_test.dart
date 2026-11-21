@@ -10,7 +10,6 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:meshsonar/core/region_overview_api.dart';
 import 'package:meshsonar/core/region_stats_api.dart';
-import 'package:meshsonar/ui/region/observers_panel.dart';
 import 'package:meshsonar/ui/region/overview_panel.dart';
 import 'package:meshsonar/ui/region/region_common.dart';
 import 'package:meshsonar/ui/region/stats_panel.dart';
@@ -56,13 +55,6 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 
-  testWidgets('observers: an honest "no observers" empty state with the server\'s reason, not an error', (tester) async {
-    await tester.pumpWidget(wrap(const ObserversPanel(baseUrl: 'https://ukk.example', regionSlug: 'ukk')));
-    await tester.pumpAndSettle();
-    expect(find.text('No observers listed'), findsOneWidget);
-    expect(find.textContaining('No trusted observers in this region yet'), findsWidgets);
-    expect(find.byType(CircularProgressIndicator), findsNothing);
-  });
 
   testWidgets('stats: "No drives here yet", never 0 km as a result', (tester) async {
     await tester.pumpWidget(MaterialApp(theme: meshSonarTheme(Brightness.dark), home: const Scaffold(body: StatsPanel(baseUrl: 'https://ukk.example', regionSlug: 'ukk'))));

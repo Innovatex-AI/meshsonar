@@ -40,11 +40,28 @@ class Server {
   final List<Uri> seen = [];
   bool v1 = true;
   bool offline = false;
+
+  /// The live answer of a region no feed covers (phx, swoh).
+  bool noFeed = false;
   late final MockClient client = MockClient((r) async {
     seen.add(r.url);
     if (offline) throw const SocketException('down');
     final p = r.url.path;
     if (!v1 && p.startsWith('/v1/')) return http.Response('<html>', 404);
+    if (noFeed && p == '/v1/packets') {
+      return json(jsonEncode({
+        'data': [],
+        'page': {'limit': 100, 'next': null},
+        'meta': {
+          'apiVersion': '1.0',
+          'region': {'slug': 'phx', 'name': 'Southern Arizona, US', 'kind': 'region'},
+          'generatedAt': '2026-11-21T11:27:24.566Z',
+          'dataAt': null,
+          'status': {'state': 'unavailable', 'code': 'no_packet_feed', 'reason': 'No packet feed covers Southern Arizona, US yet: no outside feed delivers packets here and no MeshSonar observer or phone reports to it.'},
+          'sources': {},
+        },
+      }));
+    }
     if (p == '/v1/packets') return json(r.url.queryParameters['cursor'] == 'eyJ0IjoiMjAyNi0xMS0yMFQxNDowMDo0MC4xMjBaIiwiaCI6IjAwIn0' ? page2() : fixture('packets'));
     if (p.endsWith('/observations')) return json(fixture('packet-observations'));
     if (p == '/v1/filters/fields') return json(fixture('filter-fields'));
@@ -293,6 +310,23 @@ void main() {
       await t.pumpWidget(const SizedBox());
     });
 
+    testWidgets('a region with no packet feed says so plainly, not an empty list or an error', (t) async {
+      t.view.physicalSize = const Size(1125, 2436); // 375 pt wide
+      t.view.devicePixelRatio = 3;
+      addTearDown(t.view.reset);
+      final s = Server()..noFeed = true;
+      await t.pumpWidget(list(s));
+      await settle(t);
+      expect(find.byKey(const Key('no-packet-feed')), findsOneWidget);
+      expect(find.text('No packet feed for cmh yet'), findsOneWidget);
+      expect(find.textContaining('No packet feed covers Southern Arizona, US yet'), findsOneWidget, reason: 'the server\'s sentence, once');
+      expect(find.byKey(const Key('packets-empty')), findsNothing);
+      expect(find.byKey(const Key('packets-status')), findsNothing);
+      expect(find.byKey(const Key('packets-error')), findsNothing);
+      expect(t.takeException(), isNull);
+      await t.pumpWidget(const SizedBox());
+    });
+
     testWidgets('offline with nothing stored: a no-connection view with Retry', (t) async {
       tall(t);
       final s = Server()..offline = true;
@@ -457,6 +491,24 @@ void main() {
       await t.pumpWidget(app(Scaffold(body: PacketListView(baseUrl: base, regionSlug: 'cmh', api: Server().api, clock: () => now)), scale: 2.0));
       await settle(t);
       expect(t.takeException(), isNull);
+      await t.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('a 375 pt wide phone: the detail and the list lay out without overflow, the source switch is 44 pt', (t) async {
+      t.view.physicalSize = const Size(1125, 7200); // 375 x 2400 pt
+      t.view.devicePixelRatio = 3;
+      addTearDown(t.view.reset);
+      for (final h in ['1add53ffce368256', 'c4b06ee8fc39b187']) {
+        await open(t, Server(), h);
+        expect(t.takeException(), isNull, reason: h);
+        await scrollTo(t, find.byKey(const Key('byte-inspector')));
+        expect(t.takeException(), isNull, reason: h);
+        await t.pumpWidget(const SizedBox());
+      }
+      await t.pumpWidget(list(Server(), log: RxLog(clock: () => now)));
+      await settle(t);
+      expect(t.takeException(), isNull);
+      expect(t.getSize(find.byKey(const Key('packets-source-switch'))).height, greaterThanOrEqualTo(44));
       await t.pumpWidget(const SizedBox());
     });
   });
