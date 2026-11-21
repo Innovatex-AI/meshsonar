@@ -221,6 +221,31 @@ void main() {
       expect(r.regions.single.code, 'CMH');
     });
 
+    test('post: 202 Accepted is a success (the report receipt); a bare 429 is rate_limited with Retry-After; sent once', () async {
+      var calls = 0;
+      var status = 202;
+      final c = V1Client('https://cmh.meshsonar.com', client: MockClient((r) async {
+        calls++;
+        expect(r.method, 'POST');
+        if (status == 429) return http.Response('slow down', 429, headers: {'retry-after': '90'});
+        return http.Response(
+            jsonEncode({
+              'data': {'id': 'rep_1', 'status': 'received'},
+              'meta': {'apiVersion': '1.0', 'status': {'state': 'ready', 'reason': null}},
+            }),
+            202,
+            headers: {'content-type': 'application/json'});
+      }));
+      final env = await c.post('messages/aa/report', {'reason': 'spam'}, (d) => (d as Map)['id']);
+      expect(env.data, 'rep_1');
+      expect(calls, 1);
+      status = 429;
+      await expectLater(c.post('messages/aa/report', {'reason': 'spam'}, (d) => d),
+          throwsA(isA<V1Error>().having((e) => e.code, 'code', 'rate_limited').having((e) => e.retryAfter, 'retryAfter', 90)));
+      expect(calls, 2, reason: 'never retried by the client');
+      expect(c.knownNotLive, isFalse);
+    });
+
     test('the not-live memory expires', () async {
       var now = DateTime.utc(2026, 11, 20, 12);
       final c = V1Client('https://cmh.meshsonar.com', clock: () => now, client: MockClient((r) async => http.Response('', 404)));

@@ -1,5 +1,5 @@
 // Network > Nodes (AZ-3.4) widget tests, dark theme: the directory for every role with role / status / last-heard
-// filter chips, search, favourites first and the My nodes chip; the Nodes | Observers switch; the node page with every
+// filter chips, search, favourites first and the My nodes chip; the node page with every
 // section the API supplies and none it does not (hidden, never an empty box); the legacy fallback; star, Watch (sheet,
 // saved on the phone, says alerts come later) and Share (region-host link); the observer page with metrics; offline;
 // large text without overflow.
@@ -107,8 +107,7 @@ void main() {
 
   testWidgets('directory: every role, filter chips go to the server, search, favourites first, My nodes', (t) async {
     tall(t);
-    var sub = 0;
-    await t.pumpWidget(app(StatefulBuilder(builder: (c, set) => Scaffold(body: NetworkNodesSection(region: region, sub: sub, onSub: (i) => set(() => sub = i))))));
+    await t.pumpWidget(app(const Scaffold(body: NodeDirectoryView(baseUrl: base, regionSlug: 'cmh'))));
     await settle(t);
     for (final n in ['Hilltop RPT', 'Library Room', 'Creek Gauge', 'Kestrel-07', 'Eastgate RPT']) {
       expect(find.text(n), findsOneWidget);
@@ -154,12 +153,6 @@ void main() {
     expect(find.text('Eastgate RPT'), findsOneWidget);
     expect(find.text('Hilltop RPT'), findsNothing);
     expect(find.byKey(const Key('packets-web-twin')), findsOneWidget);
-
-    await t.tap(find.byKey(const Key('network-sub-nodes-1')));
-    await settle(t);
-    expect(find.byKey(const Key('observers-list')), findsOneWidget);
-    expect(find.text('OVCS Clintonville'), findsOneWidget);
-    expect(find.textContaining('Phone observer · Online'), findsOneWidget);
   });
 
   testWidgets('node page: every supplied section, star, watch sheet, share link', (t) async {
@@ -265,6 +258,7 @@ void main() {
     await settle(t);
     expect(find.byKey(const Key('observers-list')), findsOneWidget);
     expect(find.text('OVCS Clintonville'), findsOneWidget);
+    expect(find.textContaining('Phone observer · Online'), findsOneWidget);
     final row = find.byKey(const Key('observer-row-$westside'));
     await t.ensureVisible(row);
     expect(t.getSize(row).height, greaterThanOrEqualTo(44));
@@ -359,10 +353,9 @@ void main() {
     await t.pumpWidget(app(const NetworkObserverScreen(baseUrl: base, regionSlug: 'cmh', observerId: westside)));
     await settle(t);
     expect(t.takeException(), isNull);
-    await t.pumpWidget(app(Scaffold(body: NetworkNodesSection(region: region, sub: 0, onSub: (_) {}))));
+    await t.pumpWidget(app(const Scaffold(body: NodeDirectoryView(baseUrl: base, regionSlug: 'cmh'))));
     await settle(t);
     expect(t.takeException(), isNull);
-    expect(t.getSize(find.byKey(const Key('network-sub-nodes'))).height, greaterThanOrEqualTo(44));
   });
 
   testWidgets('large text: node and observer pages lay out without overflow', (t) async {
@@ -378,7 +371,7 @@ void main() {
     await t.pumpWidget(app(const NetworkObserverScreen(baseUrl: base, regionSlug: 'cmh', observerId: westside), scale: 2.5));
     await settle(t);
     expect(t.takeException(), isNull);
-    await t.pumpWidget(app(Scaffold(body: NetworkNodesSection(region: region, sub: 0, onSub: (_) {})), scale: 2.5));
+    await t.pumpWidget(app(const Scaffold(body: NodeDirectoryView(baseUrl: base, regionSlug: 'cmh')), scale: 2.5));
     await settle(t);
     expect(t.takeException(), isNull);
   });

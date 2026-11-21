@@ -12,7 +12,7 @@ import 'package:meshsonar/core/region_overview_api.dart';
 import 'package:meshsonar/core/region_stats_api.dart';
 import 'package:meshsonar/ui/region/overview_panel.dart';
 import 'package:meshsonar/ui/region/region_common.dart';
-import 'package:meshsonar/ui/region/stats_panel.dart';
+import 'package:meshsonar/ui/region/stats_panel.dart' show regionStatsApiFactory;
 import 'package:meshsonar/ui/theme.dart';
 
 String fixture(String n) => File('test/fixtures/$n').readAsStringSync();
@@ -56,10 +56,4 @@ void main() {
   });
 
 
-  testWidgets('stats: "No drives here yet", never 0 km as a result', (tester) async {
-    await tester.pumpWidget(MaterialApp(theme: meshSonarTheme(Brightness.dark), home: const Scaffold(body: StatsPanel(baseUrl: 'https://ukk.example', regionSlug: 'ukk'))));
-    await tester.pumpAndSettle();
-    expect(find.text('No drives here yet'), findsOneWidget);
-    expect(find.textContaining('first uploaded drive'), findsOneWidget);
-  });
 }

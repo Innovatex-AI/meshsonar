@@ -1,8 +1,11 @@
 // One channel's messages (build 71). Website twin: `/channels/<id>`.
 // - Newest at the bottom; opens at the bottom. Scrolling to the top loads the next older page (50 a page) until 500
 //   rows are held; past that it says so and points at search.
-// - Light polling: every 20 s it asks for anything newer (`page.prev`), ONLY while this route is the visible top route,
-//   the app is in the foreground and the battery mode is not Saver. The Refresh button asks at once.
+// - Two hosts, one view: [ChannelReaderView] sits INSIDE Network > Channels (the section strip stays, so a link to
+//   another section is never hidden under a pushed page), and [ChannelReaderScreen] is the same view as a page (from a
+//   search result).
+// - Light polling: every 20 s it asks for anything newer (`page.prev`), ONLY while it can be seen (its route on top,
+//   its tab and section showing), the app is in the foreground and the battery mode is not Saver. Refresh asks at once.
 // - The list never moves under the finger: a new message is added in place only when the person is already at the
 //   bottom; otherwise it waits behind an "N new" pill (tap = show them and jump to the bottom).
 // - Tap a message for its packet; the row's "..." (or a long press) has Report, Open packet and Copy text. A hidden
@@ -31,7 +34,8 @@ String channelTitleOf(String channelId, [String? name]) =>
 Future<void> openChannelReader(BuildContext context, {required String baseUrl, required String? regionSlug, required String channelId, String? title}) =>
     Navigator.of(context).push<void>(MaterialPageRoute(builder: (_) => ChannelReaderScreen(baseUrl: baseUrl, regionSlug: regionSlug, channelId: channelId, title: title)));
 
-class ChannelReaderScreen extends StatefulWidget {
+/// The reader as a page of its own.
+class ChannelReaderScreen extends StatelessWidget {
   final String baseUrl;
   final String? regionSlug;
   final String channelId;
@@ -39,12 +43,31 @@ class ChannelReaderScreen extends StatefulWidget {
   const ChannelReaderScreen({super.key, required this.baseUrl, required this.regionSlug, required this.channelId, this.title});
 
   @override
-  State<ChannelReaderScreen> createState() => _ChannelReaderScreenState();
+  Widget build(BuildContext context) => Scaffold(
+        body: SafeArea(
+          child: ChannelReaderView(baseUrl: baseUrl, regionSlug: regionSlug, channelId: channelId, title: title, onBack: () => Navigator.of(context).maybePop()),
+        ),
+      );
+}
+
+/// The reader itself: a 48 pt header (back, channel name, search, refresh) over the messages.
+class ChannelReaderView extends StatefulWidget {
+  final String baseUrl;
+  final String? regionSlug;
+  final String channelId;
+  final String? title;
+
+  /// Back to wherever it was opened from (the channel list, or the page before).
+  final VoidCallback onBack;
+  const ChannelReaderView({super.key, required this.baseUrl, required this.regionSlug, required this.channelId, this.title, required this.onBack});
+
+  @override
+  State<ChannelReaderView> createState() => _ChannelReaderViewState();
 }
 
 enum _Load { loading, ready, error }
 
-class _ChannelReaderScreenState extends State<ChannelReaderScreen> with WidgetsBindingObserver {
+class _ChannelReaderViewState extends State<ChannelReaderView> with WidgetsBindingObserver {
   late final ChannelsApi _api = channelsApiFactory(widget.baseUrl);
   final ScrollController _scroll = ScrollController();
 
@@ -63,6 +86,9 @@ class _ChannelReaderScreenState extends State<ChannelReaderScreen> with WidgetsB
   bool _loadingOlder = false;
 
   bool _foreground = true;
+
+  /// False while its tab or section is not the one showing (tickers are off there).
+  bool _visible = true;
   bool _polling = false;
   bool _refreshing = false;
   Timer? _timer;
@@ -86,6 +112,7 @@ class _ChannelReaderScreenState extends State<ChannelReaderScreen> with WidgetsB
   void didChangeDependencies() {
     super.didChangeDependencies();
     _route = ModalRoute.of(context);
+    _visible = TickerMode.valuesOf(context).enabled;
   }
 
   @override
@@ -167,8 +194,8 @@ class _ChannelReaderScreenState extends State<ChannelReaderScreen> with WidgetsB
     }
   }
 
-  /// True while a poll may run: this route on top and visible, app in front, not Saver.
-  bool get _mayPoll => _foreground && (_route?.isCurrent ?? true) && PowerProfile.current.mode != BatteryMode.saver;
+  /// True while a poll may run: its route on top, its tab and section showing, app in front, not Saver.
+  bool get _mayPoll => _foreground && _visible && (_route?.isCurrent ?? true) && PowerProfile.current.mode != BatteryMode.saver;
 
   Future<void> _poll({bool manual = false}) async {
     if (!mounted || _polling || _prev == null || _load != _Load.ready) return;
@@ -220,28 +247,35 @@ class _ChannelReaderScreenState extends State<ChannelReaderScreen> with WidgetsB
   String get _title => channelTitleOf(widget.channelId, widget.title ?? (_rows.isEmpty ? null : _rows.last.channelName));
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(
-          title: Text(_title, key: const Key('channel-title'), maxLines: 1, overflow: TextOverflow.ellipsis),
-          actions: [
-            if (!_private) ...[
-              IconButton(
-                key: const Key('channel-search'),
-                tooltip: 'Search this channel',
-                icon: const Icon(Icons.search),
-                onPressed: () => openChannelSearch(context, baseUrl: widget.baseUrl, regionSlug: widget.regionSlug, channelId: widget.channelId, channelName: _title),
-              ),
-              IconButton(
-                key: const Key('channel-refresh'),
-                tooltip: 'Refresh',
-                icon: _refreshing ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.refresh),
-                onPressed: _refreshing ? null : _refresh,
-              ),
-            ],
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    return Column(children: [
+      SizedBox(
+        height: 48,
+        child: Row(children: [
+          IconButton(key: const Key('channel-back'), tooltip: 'Back to channels', icon: const Icon(Icons.arrow_back), onPressed: widget.onBack),
+          Expanded(
+            child: Semantics(header: true, child: Text(_title, key: const Key('channel-title'), maxLines: 1, overflow: TextOverflow.ellipsis, style: t.textTheme.titleMedium)),
+          ),
+          if (!_private) ...[
+            IconButton(
+              key: const Key('channel-search'),
+              tooltip: 'Search this channel',
+              icon: const Icon(Icons.search),
+              onPressed: () => openChannelSearch(context, baseUrl: widget.baseUrl, regionSlug: widget.regionSlug, channelId: widget.channelId, channelName: _title),
+            ),
+            IconButton(
+              key: const Key('channel-refresh'),
+              tooltip: 'Refresh',
+              icon: _refreshing ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.refresh),
+              onPressed: _refreshing ? null : _refresh,
+            ),
           ],
-        ),
-        body: SafeArea(child: _body(context)),
-      );
+        ]),
+      ),
+      Expanded(child: _body(context)),
+    ]);
+  }
 
   Widget _body(BuildContext context) {
     final t = Theme.of(context);

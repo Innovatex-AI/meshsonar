@@ -1,6 +1,8 @@
 // Network > Channels (build 71). Website twin: `/channels`. The channel list of the region (or, on the hub, of every
 // region): name, 24 h message and sender counts, last sender and when. Tap a readable channel for the reader
-// (channel_reader.dart); the search field on top opens message search (channel_search.dart). A private channel (no
+// (channel_reader.dart), shown INSIDE this section with a back arrow to the list, so the Network strip stays and a
+// link to another section is never hidden under a pushed page. The search field on top opens message search
+// (channel_search.dart). A private channel (no
 // key on the server) is listed, visibly disabled, with the reason inline: it does not navigate.
 // A region no packet feed covers says so plainly (NoPacketFeedCard) instead of an empty list.
 // No polling here: the list loads when shown and on pull to refresh (battery rules).
@@ -34,32 +36,27 @@ class _ChannelsData {
 
 class _ChannelsSectionState extends State<ChannelsSection> {
   late Future<_ChannelsData> _f = _fetch();
-  String? _opened;
+
+  /// The channel being read (id, name when known); null shows the list.
+  (String, String?)? _open;
 
   @override
   void initState() {
     super.initState();
-    _openInitial();
+    final id = widget.initialChannelId;
+    if (id != null && id.isNotEmpty) _open = (id, null);
   }
 
   @override
   void didUpdateWidget(ChannelsSection old) {
     super.didUpdateWidget(old);
-    if (old.baseUrl != widget.baseUrl) {
-      _opened = null;
-      _f = _fetch();
+    final moved = old.baseUrl != widget.baseUrl;
+    if (moved) _f = _fetch();
+    if (moved || old.initialChannelId != widget.initialChannelId) {
+      // a new link opens its channel; a link taken away (or another region) goes back to the list
+      final id = widget.initialChannelId;
+      _open = id != null && id.isNotEmpty ? (id, null) : null;
     }
-    if (old.initialChannelId != widget.initialChannelId || old.baseUrl != widget.baseUrl) _openInitial();
-  }
-
-  /// Opens the linked channel once per id (not again on every rebuild).
-  void _openInitial() {
-    final id = widget.initialChannelId;
-    if (id == null || id.isEmpty || id == _opened) return;
-    _opened = id;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) openChannelReader(context, baseUrl: widget.baseUrl, regionSlug: widget.regionSlug, channelId: id);
-    });
   }
 
   Future<_ChannelsData> _fetch() async {
@@ -90,9 +87,16 @@ class _ChannelsSectionState extends State<ChannelsSection> {
 
   Uri get _web => Uri(scheme: 'https', host: widget.regionSlug == null ? Uri.parse(widget.baseUrl).host : '${widget.regionSlug}.meshsonar.com', path: '/channels');
 
+  void _close() => setState(() => _open = null);
+
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
+    final open = _open;
+    if (open != null) {
+      return ChannelReaderView(
+          key: ValueKey('channel-reader-${widget.baseUrl}-${open.$1}'), baseUrl: widget.baseUrl, regionSlug: widget.regionSlug, channelId: open.$1, title: open.$2, onBack: _close);
+    }
     return FutureBuilder<_ChannelsData>(
       future: _f,
       builder: (context, snap) {
@@ -146,7 +150,7 @@ class _ChannelsSectionState extends State<ChannelsSection> {
                   padding: EdgeInsets.all(Gap.xl),
                   child: Text('No channel messages heard here in the last 24 hours.', key: Key('channels-empty'), textAlign: TextAlign.center),
                 ),
-              for (final r in rows) _ChannelTile(row: r, onTap: r.private ? null : () => openChannelReader(context, baseUrl: widget.baseUrl, regionSlug: widget.regionSlug, channelId: r.id, title: r.label)),
+              for (final r in rows) _ChannelTile(row: r, onTap: r.private ? null : () => setState(() => _open = (r.id, r.label))),
               Padding(padding: const EdgeInsets.symmetric(horizontal: Gap.l, vertical: Gap.m), child: WebTwinLine(_web)),
             ],
           ),

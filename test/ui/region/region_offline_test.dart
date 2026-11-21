@@ -4,7 +4,6 @@
 //  - Live: says it needs a connection, never spins forever, and Retry reconnects.
 // The stored copy is what EtagClient serves (a 200 with x-meshsonar-cache: offline + x-meshsonar-as-of); the fakes
 // below answer exactly that, the real client path is covered in test/core/region_offline_api_test.dart.
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -13,17 +12,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:meshsonar/core/etag_client.dart';
-import 'package:meshsonar/core/live_stream.dart';
 import 'package:meshsonar/core/region_analysis_api.dart';
 import 'package:meshsonar/core/region_overview_api.dart';
 import 'package:meshsonar/core/region_reports_api.dart';
 import 'package:meshsonar/core/region_stats_api.dart';
 import 'package:meshsonar/ui/region/analysis_panel.dart';
-import 'package:meshsonar/ui/region/live_screen.dart';
 import 'package:meshsonar/ui/region/overview_panel.dart';
 import 'package:meshsonar/ui/region/region_common.dart';
 import 'package:meshsonar/ui/region/reports_panel.dart';
-import 'package:meshsonar/ui/region/stats_panel.dart';
+import 'package:meshsonar/ui/region/stats_panel.dart' show regionStatsApiFactory;
 import 'package:meshsonar/ui/theme.dart';
 
 const _asOfKey = Key('region-offline-asof');
@@ -226,79 +223,6 @@ void main() {
       await _tapRetry(t);
       expect(find.byKey(_emptyKey), findsNothing);
       expect(find.text('Columbus, US'), findsOneWidget);
-    });
-  });
-
-  group('stats', () {
-    Object? body(String name) => switch (name) {
-          'public-stats' => {'km': 533.1, 'pings': 1715, 'drives': 45, 'drivers': 6, 'heardPct': 52.5, 'cellsHeardPct': 49.3, 'repeatersHeard': 67},
-          'leaderboard' => {'period': '30d', 'rows': []},
-          _ => {'activeDrivers': 0, 'drivers': [], 'pings15m': 0, 'lastUploadAt': null},
-        };
-
-    testWidgets('stored copy: figures plus Offline - as of; the live chip says it needs a connection', (t) async {
-      final net = Net()..stored = true;
-      // public-live is never stored: offline it fails even when the others come from the stored copy.
-      regionStatsApiFactory = (b) => RegionStatsApi(b, client: MockClient((r) {
-            if (r.url.path.endsWith('public-live')) throw const SocketException('Network is unreachable');
-            return net.answer(r, body);
-          }));
-      await t.pumpWidget(_wrap(const StatsPanel(baseUrl: 'https://x.example', regionSlug: 'x'), scroll: false));
-      await t.pumpAndSettle();
-      expect(find.text('533'), findsOneWidget);
-      expect(find.byKey(_asOfKey), findsOneWidget);
-      expect(find.text('Live drivers need a connection.'), findsOneWidget);
-      expect(find.byKey(_emptyKey), findsNothing);
-    });
-
-    testWidgets('nothing stored: No connection, Retry loads once online', (t) async {
-      final net = Net();
-      regionStatsApiFactory = (b) => RegionStatsApi(b, client: net.client(body));
-      await t.pumpWidget(_wrap(const StatsPanel(baseUrl: 'https://x.example', regionSlug: 'x'), scroll: false));
-      await t.pumpAndSettle();
-      expect(find.byKey(_emptyKey), findsOneWidget);
-      expect(find.byType(CircularProgressIndicator), findsNothing);
-      net.offline = false;
-      await _tapRetry(t);
-      expect(find.byKey(_emptyKey), findsNothing);
-      expect(find.text('533'), findsOneWidget);
-      expect(find.byKey(_asOfKey), findsNothing);
-    });
-  });
-
-  group('live', () {
-    testWidgets('offline: says Live needs a connection, no spinner; Retry reconnects and packets flow', (t) async {
-      var offline = true;
-      final body = StreamController<List<int>>();
-      final stream = LiveStream(Uri.parse('https://x.test'), connect: (r) async {
-        if (offline) throw const SocketException('Network is unreachable');
-        return http.StreamedResponse(body.stream, 200);
-      });
-      await t.pumpWidget(MaterialApp(home: Scaffold(body: LivePanel(baseUrl: 'https://x.test', regionSlug: 'cmh', stream: stream))));
-      await t.pump();
-      await t.pump();
-      expect(find.byKey(const Key('live-offline')), findsOneWidget);
-      expect(find.text('Live needs a connection'), findsOneWidget);
-      expect(find.byType(CircularProgressIndicator), findsNothing);
-      // Automatic backoff retries keep the honest state instead of flickering.
-      await t.pump(const Duration(seconds: 1));
-      await t.pump();
-      expect(find.byKey(const Key('live-offline')), findsOneWidget);
-
-      offline = false;
-      await t.tap(find.byKey(const Key('live-retry')));
-      await t.pump();
-      await t.pump();
-      expect(find.byKey(const Key('live-offline')), findsNothing);
-      body.add(utf8.encode('event: packet\ndata: {"kind":"packet","packet":{"hash":"ab12","type":5,"route":1,'
-          '"at":"${DateTime.now().toUtc().toIso8601String()}","observations":[{"observer":"o1","snrDb":7.5,"hops":2}],"hops":[]}}\n\n'));
-      await t.pump(const Duration(milliseconds: 50));
-      await t.pump();
-      expect(find.text('Group text'), findsOneWidget);
-      expect(stream.state, LiveConnState.live);
-      await t.pumpWidget(const SizedBox());
-      unawaited(stream.dispose());
-      unawaited(body.close());
     });
   });
 }

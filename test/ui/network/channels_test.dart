@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:meshsonar/core/etag_client.dart' show cacheAsOfHeader, cacheSourceHeader;
 import 'package:meshsonar/core/v1/channels_api.dart';
 import 'package:meshsonar/ui/network/channels/channel_reader.dart';
 import 'package:meshsonar/ui/network/channels/channel_search.dart';
@@ -16,7 +17,11 @@ import 'package:meshsonar/ui/network/channels/channels_section.dart';
 import 'package:meshsonar/ui/theme.dart';
 
 const base = 'https://cmh.meshsonar.com';
-http.Response js(Object body, [int status = 200]) => http.Response.bytes(utf8.encode(jsonEncode(body)), status, headers: {'content-type': 'application/json'});
+DateTime? _asOf;
+http.Response js(Object body, [int status = 200]) => http.Response.bytes(utf8.encode(jsonEncode(body)), status, headers: {
+      'content-type': 'application/json',
+      if (_asOf != null) ...{cacheSourceHeader: 'offline', cacheAsOfHeader: _asOf!.toIso8601String()},
+    });
 
 Map<String, dynamic> meta({Map<String, dynamic>? status, String name = 'Columbus, US'}) => {
       'apiVersion': '1.0',
@@ -66,8 +71,12 @@ class Server {
   int reportStatus = 202;
   int reports = 0;
 
+  /// Set: every answer is the phone's stored copy from this time (what the ETag client serves offline).
+  DateTime? storedAsOf;
+
   late final MockClient client = MockClient((r) async {
     seen.add(r);
+    _asOf = storedAsOf;
     if (offline) throw const SocketException('down');
     final p = r.url.path;
     final q = r.url.queryParameters;
@@ -131,6 +140,7 @@ void main() {
   setUp(() {
     resetV1NotLive();
     resetPacketFeedProbes();
+    _asOf = null;
     s = Server();
     channelsApiFactory = (b) => ChannelsApi(b, client: s.client);
   });
@@ -153,17 +163,25 @@ void main() {
       // a private row does not navigate
       await t.tap(find.byKey(const Key('channel-row-enc:fc')), warnIfMissed: false);
       await settle(t);
-      expect(find.byType(ChannelReaderScreen), findsNothing);
+      expect(find.byType(ChannelReaderView), findsNothing);
 
       // rows and the search field are at least 44 pt tall
       expect(t.getSize(find.byKey(const Key('channel-row-public'))).height, greaterThanOrEqualTo(44));
       expect(t.getSize(find.byKey(const Key('channels-search'))).height, greaterThanOrEqualTo(44));
 
+      // the reader opens INSIDE the section (no pushed page), with a 44 pt back arrow to the list
       await t.tap(find.byKey(const Key('channel-row-public')));
       await settle(t);
-      expect(find.byType(ChannelReaderScreen), findsOneWidget);
-      expect(find.byKey(const Key('channel-title')), findsOneWidget);
-      expect(find.text('Public'), findsWidgets);
+      expect(find.byType(ChannelReaderView), findsOneWidget);
+      expect(find.byType(ChannelReaderScreen), findsNothing);
+      expect(find.byType(ChannelsSection), findsOneWidget);
+      expect(t.widget<Text>(find.byKey(const Key('channel-title'))).data, 'Public');
+      expect(t.getSize(find.byKey(const Key('channel-back'))).height, greaterThanOrEqualTo(44));
+      expect(t.takeException(), isNull);
+      await t.tap(find.byKey(const Key('channel-back')));
+      await settle(t);
+      expect(find.byType(ChannelReaderView), findsNothing);
+      expect(find.text('#wardriving'), findsOneWidget);
     });
 
     testWidgets('a region with no packet feed says so plainly (one probe, remembered)', (t) async {
@@ -218,6 +236,21 @@ void main() {
       expect(find.text('#wardriving'), findsOneWidget);
     });
 
+    testWidgets('the stored copy is labelled "Offline - as of" on the list and in the reader', (t) async {
+      phone(t);
+      s.storedAsOf = DateTime.now().toUtc().subtract(const Duration(hours: 3));
+      await t.pumpWidget(app(const Scaffold(body: ChannelsSection(baseUrl: base, regionSlug: 'cmh'))));
+      await settle(t);
+      expect(find.text('#wardriving'), findsOneWidget);
+      expect(find.byKey(const Key('region-offline-asof')), findsOneWidget);
+      expect(find.textContaining('Offline - as of 3 h ago'), findsOneWidget);
+      await t.tap(find.byKey(const Key('channel-row-public')));
+      await settle(t);
+      expect(find.text('message number 3'), findsOneWidget);
+      expect(find.byKey(const Key('region-offline-asof')), findsOneWidget);
+      expect(t.takeException(), isNull);
+    });
+
     testWidgets('hub rows say where a channel was heard; initialChannelId opens the reader', (t) async {
       phone(t);
       s.channelRows = [
@@ -225,11 +258,12 @@ void main() {
       ];
       await t.pumpWidget(app(const Scaffold(body: ChannelsSection(baseUrl: 'https://meshsonar.com', regionSlug: null, initialChannelId: 'public'))));
       await settle(t);
-      expect(find.byType(ChannelReaderScreen), findsOneWidget);
-      await t.pageBack();
+      expect(find.byType(ChannelReaderView), findsOneWidget);
+      expect(find.byType(ChannelsSection), findsOneWidget, reason: 'the section stays on stage: nothing is pushed over the Network tab');
+      await t.tap(find.byKey(const Key('channel-back')));
       await settle(t);
       expect(find.text('Heard in yvr, san, lax +2'), findsOneWidget);
-      expect(find.byType(ChannelReaderScreen), findsNothing, reason: 'the link opens once, not on every rebuild');
+      expect(find.byType(ChannelReaderView), findsNothing, reason: 'the link opens once, not on every rebuild');
     });
   });
 
@@ -327,6 +361,27 @@ void main() {
       await settle(t);
       expect(s.polls, 2);
       expect(find.text('message number 5'), findsOneWidget);
+    });
+
+    testWidgets('no poll while its tab or section is not showing', (t) async {
+      phone(t);
+      var showing = false;
+      late StateSetter set;
+      await t.pumpWidget(app(Scaffold(
+        body: StatefulBuilder(builder: (c, s) {
+          set = s;
+          return TickerMode(enabled: showing, child: ChannelReaderView(baseUrl: base, regionSlug: 'cmh', channelId: 'public', title: 'Public', onBack: () {}));
+        }),
+      )));
+      await settle(t);
+      await t.pump(channelPollEvery);
+      await t.pump(channelPollEvery);
+      expect(s.polls, 0);
+      set(() => showing = true);
+      await settle(t);
+      await t.pump(channelPollEvery);
+      await settle(t);
+      expect(s.polls, 1);
     });
 
     testWidgets('the top of the list loads the older page', (t) async {

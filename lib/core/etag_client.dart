@@ -1,5 +1,5 @@
 // ETag on the wire for the public, cacheable GETs (region-*, regions-index, public-coverage, site-config, public-stats,
-// leaderboard, /v1/regions, /v1/summary, /v1/pulse, /v1/search, /v1/replay, /v1/packets/density, /v1/packets, /v1/packets/<hash>[/observations], /v1/filters/fields, /v1/nodes[/<key>[/<section>]], /v1/observers[/<id>[/metrics]]). The server shares a 120 req/min/IP limit across these, so: send `If-None-Match` with the
+// leaderboard, /v1/regions, /v1/summary, /v1/pulse, /v1/search, /v1/replay, /v1/packets/density, /v1/packets, /v1/packets/<hash>[/observations], /v1/filters/fields, /v1/nodes[/<key>[/<section>]], /v1/observers[/<id>[/metrics]], /v1/channels, the first page of /v1/channels/<id>/messages). The server shares a 120 req/min/IP limit across these, so: send `If-None-Match` with the
 // stored ETag, and on `304` serve the stored body (a 304 is cheap and does not need the body re-sent). Every 200 is
 // stored on disk (ETag + body + fetch time). When the network fails, the stored copy is served and [offlineSince]
 // says when it was fetched, so the UI can label it "Offline - as of 3h ago". Spec: parity spec C.2 / C.6 / WP-R5.
@@ -18,6 +18,9 @@ import 'region_cache.dart';
 /// Paths (after the host) this client may cache. Everything else is passed through. Region reads all live under
 /// `/api/cmh/` on the region's own host (the host picks the region).
 final _cacheablePath = RegExp(r'^/(api/cmh/(region-[a-z-]+|regions-index|public-coverage|site-config|public-stats|leaderboard|network-leaderboard)|v1/(regions|summary|pulse|search|replay|packets/density|packets|packets/[0-9a-f]{16}|packets/[0-9a-f]{16}/observations|filters/fields|nodes|nodes/[0-9a-f]{64}(/(activity|heard-by|neighbors|paths|reach|clock|battery))?|observers|observers/[A-Za-z0-9_.%:-]{1,200}(/metrics)?))/?$');
+
+/// `/v1/channels` and `/v1/channels/<id>/messages` (ids: `public`, `tag:<name>`, `enc:<hh>`, percent-encoded on the wire).
+final _channelPath = RegExp(r'^/v1/channels(/[A-Za-z0-9_.%:~-]{1,160}/messages)?/?$');
 
 /// Response header the [EtagClient] adds: `network`, `304` or `offline` (the stored copy, served because the network failed).
 const cacheSourceHeader = 'x-meshsonar-cache';
@@ -54,7 +57,15 @@ class EtagClient extends http.BaseClient {
 
   EtagClient(this._inner, this._cache, {this.serveStale = true, this.staleAfter = const Duration(seconds: 12)});
 
-  static bool isCacheable(Uri u) => _cacheablePath.hasMatch(u.path);
+  static bool isCacheable(Uri u) => _cacheablePath.hasMatch(u.path) || _isChannelRead(u);
+
+  /// The Channels reads kept for offline: the channel list (`/v1/channels`) and the FIRST page of a channel
+  /// (`/v1/channels/<id>/messages` with no `cursor`). Older pages and the 20 s polls carry a cursor and are never
+  /// stored: they would fill the cache with pages nobody opens offline. Message search is not stored either.
+  static bool _isChannelRead(Uri u) {
+    if (!_channelPath.hasMatch(u.path)) return false;
+    return !u.path.contains('/messages') || !u.queryParameters.containsKey('cursor');
+  }
 
   /// `region-activity` asks for a sliding window (`since`/`until`, hour-aligned), so every hour is a new URL. It is
   /// stored under its URL without the window, so offline the latest window is still there. Such a request never sends
