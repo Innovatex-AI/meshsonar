@@ -2003,7 +2003,8 @@ class _CoverageMapState extends State<CoverageMap> {
             // pack's vector tiles go on top of that. Where a pack ends the online/cached tiles carry on: never a blank edge.
             // Chart / Light / Dark: our vector basemap (OpenFreeMap fallback), every tile through the same cache and gate.
             if (tiles && style.isVector)
-              BasemapLayer(key: ValueKey('basemap-${style.id}'), dark: style.darkLook, look: style.look, tiles: _tiles(), reset: _tileReset.stream),
+              // One layer state for every vector style: it keeps the previous style's picture under the new one until that is drawn.
+              BasemapLayer(key: const ValueKey('basemap-vector'), dark: style.darkLook, look: style.look, tiles: _tiles(), reset: _tileReset.stream),
             // Satellite: Esri (our proxy) then NAIP then our names, from the definition (ui/map/satellite_layers.dart).
             if (tiles && style.isSatellite)
               ...satelliteLayers(ActiveMapDefinition.current, tiles: _tiles(), userAgentPackageName: CoverageMap.userAgentPackageName, reset: _tileReset.stream, wide: wide),

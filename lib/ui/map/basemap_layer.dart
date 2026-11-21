@@ -5,6 +5,7 @@
 // gate, circuit breaker and health counters as before; a tile an installed offline pack draws is never requested.
 import 'dart:async';
 import 'dart:io' show Platform;
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -68,6 +69,49 @@ final Map<(BasemapSource, bool, BasemapLook), vtr.Theme> _themes = {};
 vtr.Theme basemapTheme(BasemapSource source, {required bool dark, BasemapLook look = BasemapLook.road}) =>
     _themes.putIfAbsent((source, dark, look), () => vtr.ThemeReader().read(basemapStyle(source, dark: dark, look: look)));
 
+/// The renderer's knobs, sized for the screen (build 72: "slow" on an 11-inch iPad, which shows about 3.5 times the tiles of
+/// a phone). vector_map_tiles 9.0.0-beta.13 renders each vector tile to a picture on the device; its defaults (4 workers, 20
+/// parsed tiles and 10 MB of tile bytes in memory) are sized for a phone. The tile size is not an option in raster mode.
+@immutable
+class BasemapTuning {
+  /// Worker isolates that parse and prepare tiles (the package's shared pool: the first map built sets it for the app run).
+  final int concurrency;
+
+  /// Parsed tiles and raw tile bytes kept in memory.
+  final int tileDataCache;
+  final int tileBytesCache;
+  const BasemapTuning({required this.concurrency, required this.tileDataCache, required this.tileBytesCache});
+
+  /// The package's own defaults (a phone).
+  static const BasemapTuning packageDefaults = BasemapTuning(concurrency: 4, tileDataCache: 20, tileBytesCache: 10 * 1024 * 1024);
+
+  /// False = [packageDefaults] and no previous-style picture kept (the simulator comparison run).
+  static bool enabled = true;
+
+  /// 256 pt tiles that a [size] screen shows at once (one extra row and column: the map is rarely tile-aligned).
+  static int tilesOnScreen(Size size) => ((size.width / 256).ceil() + 1) * ((size.height / 256).ceil() + 1);
+
+  /// For a [size] screen on a device with [processors] cores.
+  static BasemapTuning forScreen(Size size, {int? processors}) {
+    if (!enabled) return packageDefaults;
+    final n = tilesOnScreen(size);
+    final cores = processors ?? (() {
+      try {
+        return Platform.numberOfProcessors;
+      } catch (_) {
+        return 4;
+      }
+    })();
+    return BasemapTuning(
+      // Two cores stay free for the UI and raster threads; never fewer workers than the package default.
+      concurrency: n <= 20 ? 4 : math.max(4, math.min(8, cores - 2)),
+      // Two screens of parsed tiles (a pan or a style switch re-uses them), within reason for memory.
+      tileDataCache: (n * 2).clamp(20, 64),
+      tileBytesCache: n <= 20 ? 10 * 1024 * 1024 : 24 * 1024 * 1024,
+    );
+  }
+}
+
 class BasemapLayer extends StatefulWidget {
   /// Forces the dark (true) or light (false) look; null follows the app theme.
   final bool? dark;
@@ -115,6 +159,30 @@ class _BasemapLayerState extends State<BasemapLayer> {
   final Map<BasemapSource, TileProviders> _providers = {};
   MeshTileProvider? _forProviders;
 
+  // No blank flash on a style switch: the previous style's layer stays UNDER the new one until the new tiles are drawn (the
+  // renderer has nothing pending), 6 s at most. Not for the names-only look over Satellite, which is transparent.
+  Widget? _current, _previous;
+  Timer? _previousTimer;
+  DateTime? _previousSince;
+
+  void _keepPrevious(Widget was) {
+    _previous = was;
+    _previousSince = DateTime.now();
+    _previousTimer?.cancel();
+    _previousTimer = Timer.periodic(const Duration(milliseconds: 250), (_) {
+      final age = DateTime.now().difference(_previousSince!);
+      final drawn = age > const Duration(milliseconds: 750) && PaintingBinding.instance.imageCache.pendingImageCount == 0;
+      if (!mounted || drawn || age > const Duration(seconds: 6)) _dropPrevious();
+    });
+  }
+
+  void _dropPrevious() {
+    _previousTimer?.cancel();
+    _previousTimer = null;
+    if (_previous != null && mounted) setState(() => _previous = null);
+    _previous = null;
+  }
+
   BasemapHealth get _health => BasemapHealth.instance;
 
   @override
@@ -145,6 +213,7 @@ class _BasemapLayerState extends State<BasemapLayer> {
   void dispose() {
     _sub?.cancel();
     _resetSub?.cancel();
+    _previousTimer?.cancel();
     super.dispose();
   }
 
@@ -171,20 +240,42 @@ class _BasemapLayerState extends State<BasemapLayer> {
     if (source == BasemapSource.openFreeMap && BasemapLayer.enabled) unawaited(_health.resolveOpenFreeMap());
     final dark = widget.dark ?? Theme.of(context).brightness == Brightness.dark;
     // Satellite names come from our tiles only (inside the extract, while our server answers); never from OpenFreeMap.
-    if (widget.look == BasemapLook.labels && source != BasemapSource.ours) return const SizedBox.shrink();
+    if (widget.look == BasemapLook.labels && source != BasemapSource.ours) {
+      _current = null;
+      return const SizedBox.shrink();
+    }
     final debug = BasemapLayer.debugBuilder;
     if (debug != null) {
       BasemapLayer.debugLook = widget.look;
       return debug(source, dark);
     }
-    if (!BasemapLayer.enabled || source == BasemapSource.none) return const SizedBox.shrink();
-    return VectorTileLayer(
-      key: ValueKey('basemap-${source.name}-${dark ? 'dark' : 'light'}-${widget.look.name}-$_generation'),
+    if (!BasemapLayer.enabled || source == BasemapSource.none) {
+      _current = null;
+      return const SizedBox.shrink();
+    }
+    final tuning = BasemapTuning.forScreen(MediaQuery.sizeOf(context));
+    final key = ValueKey('basemap-${source.name}-${dark ? 'dark' : 'light'}-${widget.look.name}-$_generation');
+    final was = _current;
+    final layer = VectorTileLayer(
+      key: key,
       theme: basemapTheme(source, dark: dark, look: widget.look),
       tileProviders: _providersFor(source, widget.tiles ?? BasemapLayer.sharedTiles),
       layerMode: VectorTileLayerMode.raster,
       maximumZoom: 19,
+      concurrency: tuning.concurrency,
+      memoryTileDataCacheMaxSize: tuning.tileDataCache,
+      memoryTileCacheMaxSize: tuning.tileBytesCache,
     );
+    if (was != null && was.key != key && BasemapTuning.enabled && widget.look != BasemapLook.labels) {
+      // Kept after this frame: the timer's setState must not run during build.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _keepPrevious(was));
+      });
+    }
+    _current = layer;
+    final under = _previous;
+    if (under == null || under.key == key) return layer;
+    return Stack(fit: StackFit.expand, children: [under, layer]);
   }
 }
 

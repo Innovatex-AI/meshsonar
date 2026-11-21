@@ -12,7 +12,9 @@ import 'package:meshsonar/core/basemap_styles.g.dart';
 import 'package:meshsonar/core/map_prefs.dart';
 import 'package:meshsonar/core/map_styles.dart';
 import 'package:meshsonar/ui/map/basemap_cache.dart';
-import 'package:meshsonar/ui/map/basemap_layer.dart' show basemapTheme;
+import 'dart:ui' show Size;
+
+import 'package:meshsonar/ui/map/basemap_layer.dart' show BasemapTuning, basemapTheme;
 import 'package:meshsonar/ui/map/coverage_map.dart' show skipsNetworkTile, styleDrawsOfflinePack;
 import 'package:meshsonar/ui/map/offline_basemap.dart' show offlineMapStyle;
 import 'package:vector_tile_renderer/vector_tile_renderer.dart' as vtr;
@@ -161,6 +163,29 @@ void main() {
         expect(skipsNetworkTile(style: s, packCovers: true), s == BaseMapStyle.topo || s == BaseMapStyle.satellite ? isFalse : isTrue,
             reason: '${s.id} inside a pack area');
       }
+    });
+  });
+
+  group('renderer tuning for the screen', () {
+    tearDown(() => BasemapTuning.enabled = true);
+
+    test('a phone keeps the package defaults; an 11-inch iPad gets more workers and room for two screens of tiles', () {
+      final phone = BasemapTuning.forScreen(const Size(402, 874), processors: 6);
+      expect(BasemapTuning.tilesOnScreen(const Size(402, 874)), 15);
+      expect((phone.concurrency, phone.tileDataCache, phone.tileBytesCache), (4, 30, 10 * 1024 * 1024));
+      final pad = BasemapTuning.forScreen(const Size(834, 1194), processors: 8);
+      expect(BasemapTuning.tilesOnScreen(const Size(834, 1194)), 30);
+      expect((pad.concurrency, pad.tileDataCache, pad.tileBytesCache), (6, 60, 24 * 1024 * 1024));
+      // Bounds: never fewer workers than the default, never more than 8; the parsed-tile cache stops at 64.
+      expect(BasemapTuning.forScreen(const Size(1366, 1024), processors: 2).concurrency, 4);
+      expect(BasemapTuning.forScreen(const Size(1366, 1024), processors: 16).concurrency, 8);
+      expect(BasemapTuning.forScreen(const Size(1366, 1024), processors: 8).tileDataCache, 64);
+    });
+
+    test('switched off it is the package defaults', () {
+      BasemapTuning.enabled = false;
+      final t = BasemapTuning.forScreen(const Size(834, 1194), processors: 8);
+      expect((t.concurrency, t.tileDataCache, t.tileBytesCache), (4, 20, 10 * 1024 * 1024));
     });
   });
 }
