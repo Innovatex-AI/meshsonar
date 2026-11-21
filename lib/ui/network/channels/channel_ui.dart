@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/v1/channels_api.dart';
+import '../../design/app_surfaces.dart' show AppAction, showAppActionSheet, showAppSheet;
 import '../../theme.dart';
 import '../packets/packet_detail_screen.dart' show openNetworkPacket;
 import '../packets/packet_ui.dart' show snrText;
@@ -112,68 +113,40 @@ TextSpan _highlighted(String text, List<(int, int)> ranges, ThemeData t) {
 
 /// The actions of one message: Report (not on a hidden message: there is nothing left to report), Open packet,
 /// Open channel (search), Copy text.
-Future<void> showMessageActions(BuildContext context, {required ChannelMessage message, required String baseUrl, required String? regionSlug, VoidCallback? onOpenChannel}) {
+Future<void> showMessageActions(BuildContext context, {required ChannelMessage message, required String baseUrl, required String? regionSlug, VoidCallback? onOpenChannel}) async {
   final m = message;
-  return showModalBottomSheet<void>(
-    context: context,
-    showDragHandle: true,
-    builder: (sheet) => SafeArea(
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        ListTile(
-          key: const Key('channel-msg-open-packet'),
-          leading: const Icon(Icons.receipt_long_outlined),
-          title: const Text('Open packet'),
-          onTap: () {
-            Navigator.of(sheet).pop();
-            openNetworkPacket(context, baseUrl: baseUrl, regionSlug: regionSlug, hash: m.packetHash);
-          },
-        ),
-        if (onOpenChannel != null)
-          ListTile(
-            key: const Key('channel-msg-open-channel'),
-            leading: const Icon(Icons.forum_outlined),
-            title: Text('Open ${m.channelName ?? 'channel'}'),
-            onTap: () {
-              Navigator.of(sheet).pop();
-              onOpenChannel();
-            },
-          ),
-        if (!m.hidden && m.text != null)
-          ListTile(
-            key: const Key('channel-msg-copy'),
-            leading: const Icon(Icons.copy),
-            title: const Text('Copy text'),
-            onTap: () {
-              Clipboard.setData(ClipboardData(text: m.text!));
-              Navigator.of(sheet).pop();
-            },
-          ),
-        if (!m.hidden)
-          ListTile(
-            key: const Key('channel-msg-report'),
-            leading: const Icon(Icons.flag_outlined),
-            title: const Text('Report this message'),
-            onTap: () {
-              Navigator.of(sheet).pop();
-              showReportSheet(context, baseUrl: baseUrl, messageId: m.id);
-            },
-          ),
-      ]),
-    ),
+  final pick = await showAppActionSheet<String>(
+    context,
+    actions: [
+      const AppAction('Open packet', 'packet', key: Key('channel-msg-open-packet')),
+      if (onOpenChannel != null) AppAction('Open ${m.channelName ?? 'channel'}', 'channel', key: const Key('channel-msg-open-channel')),
+      if (!m.hidden && m.text != null) const AppAction('Copy text', 'copy', key: Key('channel-msg-copy')),
+      if (!m.hidden) const AppAction('Report this message', 'report', destructive: true, key: Key('channel-msg-report')),
+    ],
   );
+  if (pick == null || !context.mounted) return;
+  switch (pick) {
+    case 'packet':
+      await openNetworkPacket(context, baseUrl: baseUrl, regionSlug: regionSlug, hash: m.packetHash);
+    case 'channel':
+      onOpenChannel?.call();
+    case 'copy':
+      await Clipboard.setData(ClipboardData(text: m.text!));
+    case 'report':
+      await showReportSheet(context, baseUrl: baseUrl, messageId: m.id);
+  }
 }
 
 /// The report form (the site's ReportForm): what a report does, a reason, an optional note, Send. Sent once.
-Future<void> showReportSheet(BuildContext context, {required String baseUrl, required String messageId}) => showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (_) => _ReportSheet(baseUrl: baseUrl, messageId: messageId),
-    );
+Future<void> showReportSheet(BuildContext context, {required String baseUrl, required String messageId}) =>
+    showAppSheet<void>(context, detents: const [0.8, 0.92], builder: (_, controller) => _ReportSheet(baseUrl: baseUrl, messageId: messageId, controller: controller));
 
 class _ReportSheet extends StatefulWidget {
   final String baseUrl, messageId;
-  const _ReportSheet({required this.baseUrl, required this.messageId});
+
+  /// The sheet's own scroll controller (dragging the form hands off to dragging the sheet).
+  final ScrollController controller;
+  const _ReportSheet({required this.baseUrl, required this.messageId, required this.controller});
   @override
   State<_ReportSheet> createState() => _ReportSheetState();
 }
@@ -230,8 +203,9 @@ class _ReportSheetState extends State<_ReportSheet> {
     final r = _receipt;
     return SafeArea(
       child: Padding(
-        padding: EdgeInsets.fromLTRB(Gap.l, 0, Gap.l, Gap.l + MediaQuery.viewInsetsOf(context).bottom),
+        padding: const EdgeInsets.fromLTRB(Gap.l, 0, Gap.l, Gap.l),
         child: SingleChildScrollView(
+          controller: widget.controller,
           child: r != null
               ? Column(key: const Key('report-received'), mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                   Text('Report received', style: t.textTheme.titleLarge),
