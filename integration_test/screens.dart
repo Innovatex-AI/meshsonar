@@ -340,8 +340,8 @@ final List<ScreenStep> screens = [
       _stepFail('network-header: the overflow menu lacks Share link or Export region report');
     }
     await shot(t, 'network-overflow');
-    await t.tapAt(const Offset(20, 300)); // the menu's barrier
-    await pumpFor(t, const Duration(seconds: 1));
+    await popToRoots(t); // the overflow is the app's action sheet (a route)
+    if (find.byKey(const Key('network-share')).evaluate().isNotEmpty) _stepFail('network-header: the overflow sheet did not close');
     _stepOk('network-header');
   }, optional: true),
   ScreenStep('drive', (t) async {
