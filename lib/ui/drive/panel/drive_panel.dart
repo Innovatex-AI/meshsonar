@@ -2,6 +2,10 @@
 // is tied to speed, the tab bar and a pinned dock. The panel is a sibling above the map, never inside the map's gesture arena,
 // and it never dims or resizes the map. Dragging only moves the panel (its own relayout boundary); the map is not touched.
 //
+// Look and words are the shared map panel's (design/map_panel.dart): the same grabber, chevron and surface, and the state
+// names Collapsed (Dock) and Open (Medium); the engine (physics, detents, auto-collapse) is this panel's own. Hidden (the
+// Immersive pill) exists only here. Id in the map's panel group: [kDrivePanelId].
+//
 //   header   = grabber row (16) + dock row (72): drag it up/down, tap it to toggle Dock <-> Medium. Buttons inside the dock row are
 //              deeper in the tree, so they win the tap; the rest of the header is the handle (>= 44 pt high everywhere).
 //   medium   = scrolling content below the header. It scrolls only at Medium and hands the drag to the panel at offset 0.
@@ -11,9 +15,13 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 
+import '../../design/map_panel.dart';
 import '../../design/tokens.dart';
 import 'drive_panel_controller.dart';
 import 'panel_physics.dart';
+
+/// The Drive panel's id in its map's MapPanelGroup. Its state is never saved: it always starts at the Dock.
+const String kDrivePanelId = 'drive.main';
 
 class DrivePanel extends StatelessWidget {
   final DrivePanelController controller;
@@ -39,11 +47,17 @@ class DrivePanel extends StatelessWidget {
   final bool hidden;
   const DrivePanel({super.key, required this.controller, required this.dock, this.mediumChildren = const [], this.onTouch, this.strip, this.cardWidth, this.cardLeft = 16, this.hidden = false});
 
-  /// Semantics value for a detent.
-  static String detentLabel(PanelDetent d) => switch (d) {
-        PanelDetent.immersive => 'Hidden',
-        PanelDetent.dock => 'Dock',
-        PanelDetent.medium => 'Expanded',
+  /// The shared state of a detent (design/map_panel.dart). Immersive has none: it is this panel's own "Hidden".
+  static MapPanelState? stateOf(PanelDetent d) => switch (d) {
+        PanelDetent.immersive => null,
+        PanelDetent.dock => MapPanelState.collapsed,
+        PanelDetent.medium => MapPanelState.open,
+      };
+
+  /// The words for a detent: the same state names as every map panel.
+  static String detentLabel(PanelDetent d) => switch (stateOf(d)) {
+        null => 'Hidden',
+        final s => mapPanelStateLabel(s),
       };
 
   @override
@@ -131,7 +145,6 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = AppColors.fromTheme(Theme.of(context));
     final g = controller.geometry!;
     void step(int dir) {
       final ds = g.detents;
@@ -144,12 +157,12 @@ class _Header extends StatelessWidget {
       explicitChildNodes: true,
       label: 'Panel',
       value: DrivePanel.detentLabel(controller.detent),
-      increasedValue: 'Expanded',
-      decreasedValue: 'Dock',
+      increasedValue: DrivePanel.detentLabel(PanelDetent.medium),
+      decreasedValue: DrivePanel.detentLabel(PanelDetent.dock),
       onIncrease: () => step(1),
       onDecrease: () => step(-1),
       customSemanticsActions: {
-        const CustomSemanticsAction(label: 'Expand'): () => controller.settleTo(PanelDetent.medium),
+        const CustomSemanticsAction(label: 'Open'): () => controller.settleTo(PanelDetent.medium),
         const CustomSemanticsAction(label: 'Collapse'): () => controller.settleTo(PanelDetent.dock),
         if (g.hasImmersive) const CustomSemanticsAction(label: 'Hide'): () => controller.settleTo(PanelDetent.immersive),
       },
@@ -167,13 +180,19 @@ class _Header extends StatelessWidget {
             children: [
               SizedBox(
                 height: kPanelHeaderHeight,
-                child: Center(
-                  child: Container(
-                    key: const Key('drive-panel-grabber'),
-                    width: 36,
-                    height: 5,
-                    decoration: BoxDecoration(color: c.textMuted.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(3)),
-                  ),
+                width: double.infinity,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    const MapPanelGrabber(key: Key('drive-panel-grabber')),
+                    // The same chevron as every map panel, in the grabber row so the dock row keeps its width.
+                    Positioned(
+                      right: 12,
+                      top: 0,
+                      bottom: 0,
+                      child: MapPanelChevron(key: const Key('drive-panel-chevron'), collapsed: controller.detent != PanelDetent.medium, size: 16),
+                    ),
+                  ],
                 ),
               ),
               // The row height follows the text size one frame after it changes (the geometry is set after layout): clip that

@@ -117,6 +117,12 @@ void main() {
     // Map: the live map with replay (AZ-3.3), with a way to the full coverage map.
     await section(tester, 'map');
     expect(find.byKey(const Key('live-map')), findsOneWidget);
+    // Build 71: the way to the coverage map is in the Live panel (collapsed on a phone; a tap on its header opens it).
+    if (find.byKey(const Key('live-map-open-full')).evaluate().isEmpty) {
+      await tester.tap(find.byKey(const Key('live-panel-header')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+    }
     expect(find.byKey(const Key('live-map-open-full')), findsOneWidget);
     // Insights: Analysis, RF, Growth, Reports, Stats, Silent, Wardrive, each its own page.
     await section(tester, 'insights');

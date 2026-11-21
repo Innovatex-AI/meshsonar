@@ -7,7 +7,7 @@
 // honest status line from [DriveMapModel.statusOf] and its inline key (drawn with the colour functions the map paints with).
 //
 // Non-modal (the map stays live above it, every toggle applies instantly): [showGeneratedLayersSheet] opens it in the Drive tab's
-// anchored host when given one, else as a non-modal app sheet with detents [0.4, 0.75].
+// map's transient panel slot when given one (MapPanel `drive.layers`), else as a non-modal app sheet with detents [0.4, 0.75].
 //
 // Keys: 'layers-sheet', 'layers-done', 'layers-base-map', 'base-map-<id>', 'layers-group-<groupId>' (+ 'layers-group-filters',
 // 'layers-group-palette'), the switch per layer from [layerSwitchKey], 'layer-<id>-status', 'layer-<id>-retry', 'layer-<id>-key',
@@ -19,6 +19,7 @@ import 'package:flutter/material.dart';
 import '../../../core/map_styles.dart';
 import '../../../core/network_coverage.dart' show CoverageLevel;
 import '../../design/anchored_sheet.dart';
+import '../../design/map_panel.dart';
 import '../../design/app_surfaces.dart';
 import '../../design/app_symbols.dart';
 import '../../design/app_widgets.dart' show AppSwitchTile;
@@ -71,14 +72,26 @@ Key layerSwitchKey(String id) => Key(switch (id) {
   return (title: layerLabel(spec.id, def), description: l == null ? own : (on ? null : l.hint));
 }
 
-/// Opens the sheet for [model]. With an [anchored] host (the Drive tab's) it sits above the dock; otherwise it is a non-modal
-/// app sheet, so the map behind stays interactive either way.
-Future<void> showGeneratedLayersSheet(BuildContext context, DriveMapModel model, {AnchoredSheetController? anchored}) {
-  if (anchored != null) {
-    anchored.show(
-      id: 'layers',
-      maxFraction: 0.75,
-      builder: (ctx) => MapLayersSheet(model: model, onDone: () => anchored.close('layers')),
+/// Opens the layers for [model]. On a map with a transient panel slot ([host], the Drive map's) they are the non-modal
+/// MapPanel `drive.layers` above the persistent panel, so the map is visible while layers are switched and the coverage
+/// timeline is scrubbed; otherwise a non-modal app sheet. The map behind stays interactive either way.
+Future<void> showGeneratedLayersSheet(BuildContext context, DriveMapModel model, {MapPanelHostController? host}) {
+  if (host != null) {
+    if (host.currentId == kLayersPanelId) {
+      host.close(kLayersPanelId);
+      return Future.value();
+    }
+    host.show(
+      id: kLayersPanelId,
+      builder: (ctx) => MapPanel(
+        id: kLayersPanelId,
+        title: 'Layers',
+        leading: const Icon(Icons.layers_outlined, size: 18),
+        bottomSafe: false,
+        onClose: () => host.close(kLayersPanelId),
+        closeKey: const Key('layers-done'),
+        child: MapLayersSheet(model: model, inPanel: true),
+      ),
     );
     return Future.value();
   }
@@ -90,13 +103,19 @@ Future<void> showGeneratedLayersSheet(BuildContext context, DriveMapModel model,
   );
 }
 
+/// The transient panel id of the layers on a map.
+const String kLayersPanelId = 'drive.layers';
+
 class MapLayersSheet extends StatefulWidget {
   final DriveMapModel model;
 
-  /// The sheet's scroll controller (hands a drag on the list to the sheet); null inside the anchored host.
+  /// The sheet's scroll controller (hands a drag on the list to the sheet); null inside a MapPanel.
   final ScrollController? scroll;
   final VoidCallback? onDone;
-  const MapLayersSheet({super.key, required this.model, this.scroll, this.onDone});
+
+  /// Inside a MapPanel: the panel's header is the title and the close button, so the sheet's own header row is left out.
+  final bool inPanel;
+  const MapLayersSheet({super.key, required this.model, this.scroll, this.onDone, this.inPanel = false});
 
   @override
   State<MapLayersSheet> createState() => _MapLayersSheetState();
@@ -124,7 +143,7 @@ class _MapLayersSheetState extends State<MapLayersSheet> {
     final t = Theme.of(context);
     final st = model.layerState;
     return [
-      _Header(title: 'Layers', trailing: _TextAction(key: const Key('layers-done'), label: 'Done', onTap: widget.onDone)),
+      if (!widget.inPanel) _Header(title: 'Layers', trailing: _TextAction(key: const Key('layers-done'), label: 'Done', onTap: widget.onDone)),
       Flexible(
         child: ListView(
           controller: widget.scroll,

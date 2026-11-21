@@ -1,12 +1,16 @@
-// The map's info panel for a tapped cell or repeater. It replaces the modal bottom sheet: it opens COLLAPSED to one line
-// (what was tapped and what the link lines found) so the map stays the focus, and the person expands it for the figures.
-// The link-line controls (Fit, Clear) live in its header.
+// The map's inspector for a tapped cell, ping or repeater: the transient MapPanel `drive.inspect` (design/map_panel.dart),
+// sitting directly above the map's persistent panel. It opens COLLAPSED to its header (what was tapped and what the link
+// lines found) so the map stays the focus, and the person opens it for the figures. Fit and Close live in its header.
+//
+// Driving safety (one of the two automatic moves allowed, see rule 1 in map_panel.dart): while the car moves it is locked
+// at its header, and it clears itself [MapInfoPanel.autoClear] after the last touch.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 
 import '../../core/map_links.dart';
 import '../../core/repeater_reach.dart';
+import '../design/map_panel.dart';
 import '../theme.dart';
 import 'cell_sheet.dart' show lastSeenText;
 import 'map_layers.dart' show formatSnrShort;
@@ -30,6 +34,9 @@ class MapInfoPanel extends StatefulWidget {
 
   /// Clears itself this long after the last touch (12 s while driving); null = stays until closed.
   final Duration? autoClear;
+
+  /// False when the panel sits on top of another panel that already clears the tab bar and the home indicator.
+  final bool bottomSafe;
   const MapInfoPanel({
     super.key,
     required this.title,
@@ -41,6 +48,7 @@ class MapInfoPanel extends StatefulWidget {
     this.badge,
     this.locked = false,
     this.autoClear,
+    this.bottomSafe = true,
   });
 
   @override
@@ -48,7 +56,6 @@ class MapInfoPanel extends StatefulWidget {
 }
 
 class _MapInfoPanelState extends State<MapInfoPanel> {
-  bool _open = false;
   Timer? _clear;
 
   @override
@@ -61,7 +68,6 @@ class _MapInfoPanelState extends State<MapInfoPanel> {
   void didUpdateWidget(MapInfoPanel old) {
     super.didUpdateWidget(old);
     if (old.autoClear != widget.autoClear) _arm();
-    if (widget.locked && _open) _open = false;
   }
 
   void _arm() {
@@ -85,94 +91,48 @@ class _MapInfoPanelState extends State<MapInfoPanel> {
 
   Widget _panel(BuildContext context) {
     final t = Theme.of(context);
-    final maxBody = (MediaQuery.sizeOf(context).height * 0.42).clamp(160.0, 420.0);
-    return Material(
-      color: t.colorScheme.surface,
-      elevation: 3,
-      borderRadius: BorderRadius.circular(14),
-      clipBehavior: Clip.antiAlias,
+    final dim = t.textTheme.labelMedium?.copyWith(color: t.colorScheme.onSurfaceVariant);
+    return MapPanel(
+      id: kInspectPanelId,
+      title: widget.title,
+      badge: widget.badge,
+      leading: widget.busy
+          ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+          : Icon(Icons.share_location_rounded, size: 18, color: MeshSonarColors.of(context).linkLine),
+      status: widget.locked
+          ? const Text('Open when stopped', key: Key('info-panel-locked'), style: TextStyle(fontWeight: FontWeight.w600))
+          : Text(widget.summary, key: const Key('info-panel-summary')),
+      action: widget.onFit == null
+          ? null
+          : IconButton(
+              key: const Key('link-fit'),
+              tooltip: 'Show all links',
+              constraints: const BoxConstraints(minWidth: kMapPanelRow, minHeight: kMapPanelRow),
+              icon: const Icon(Icons.fit_screen_rounded, size: 20),
+              onPressed: widget.onFit,
+            ),
+      onClose: widget.onClose,
+      initialState: MapPanelState.collapsed,
+      locked: widget.locked,
+      bottomSafe: widget.bottomSafe,
+      headerKey: const Key('info-panel-header'),
+      bodyKey: const Key('info-panel-body'),
+      closeKey: const Key('link-clear'),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          InkWell(
-            key: const Key('info-panel-header'),
-            onTap: widget.locked ? null : () => setState(() => _open = !_open),
-            child: Padding(
-              padding: const EdgeInsets.only(left: Gap.m),
-              child: Row(
-                children: [
-                  if (widget.busy)
-                    const Padding(
-                      padding: EdgeInsets.only(right: 8),
-                      child: SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
-                    )
-                  else
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: Icon(Icons.share_location_rounded, size: 18, color: MeshSonarColors.of(context).linkLine),
-                    ),
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(children: [
-                            Flexible(
-                              child: Text(
-                                widget.title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: t.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-                              ),
-                            ),
-                            if (widget.badge != null) ...[const SizedBox(width: 6), widget.badge!],
-                          ]),
-                          if (widget.locked)
-                            Text('Open when stopped', key: const Key('info-panel-locked'), style: t.textTheme.labelMedium?.copyWith(color: t.colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
-                          Text(
-                            widget.summary,
-                            key: const Key('info-panel-summary'),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: t.textTheme.labelMedium?.copyWith(color: t.colorScheme.onSurfaceVariant),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  if (widget.onFit != null)
-                    IconButton(
-                      key: const Key('link-fit'),
-                      tooltip: 'Show all links',
-                      constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-                      icon: const Icon(Icons.fit_screen_rounded, size: 20),
-                      onPressed: widget.onFit,
-                    ),
-                  if (!widget.locked) Icon(_open ? Icons.expand_more_rounded : Icons.expand_less_rounded, size: 22),
-                  IconButton(
-                    key: const Key('link-clear'),
-                    tooltip: 'Close',
-                    constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-                    icon: const Icon(Icons.close_rounded, size: 20),
-                    onPressed: widget.onClose,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (_open && !widget.locked)
-            ConstrainedBox(
-              key: const Key('info-panel-body'),
-              constraints: BoxConstraints(maxHeight: maxBody),
-              child: widget.body,
-            ),
+          // The header's one line in full.
+          Padding(padding: const EdgeInsets.fromLTRB(Gap.l, 0, Gap.l, Gap.xs), child: Text(widget.summary, style: dim)),
+          Flexible(child: widget.body),
         ],
       ),
     );
   }
 }
+
+/// The transient panel id of the map inspector.
+const String kInspectPanelId = 'drive.inspect';
 
 /// What every driver's public data says about one repeater (repeater-reach totals), as plain rows.
 class RepeaterReachStats extends StatelessWidget {

@@ -2,6 +2,9 @@
 // always usable. A NEW widget (the Drive panel's physics and dock are not reused or edited: their dock is speed-driven and
 // has no Full detent). Built on design/sheet_detents.dart: Full is [kFormSheetFull], and at large Dynamic Type
 // ([kFormSheetFullHeightScale] and up) the Medium detent is skipped, so the sheet never shows two lines of content.
+// Look and words are the shared map panel's (design/map_panel.dart): the same grabber and chevron, a tap on the handle
+// toggles Collapsed <-> Open, and the detents are named Collapsed (Dock), Open (Medium) and Full. Id in the map's panel
+// group: [kPlannerPanelId]; its state is never saved (it always starts collapsed).
 // The handle row is draggable (velocity snaps to the next detent) and, for VoiceOver, a button with increase / decrease
 // actions. Reduce Motion: the height changes with a short fade-length step instead of the spring-like curve. On an iPad the
 // sheet is the 760 dp reading column, centred.
@@ -25,6 +28,7 @@ import '../app.dart';
 import '../design/app_haptics.dart';
 import '../design/app_surfaces.dart';
 import '../design/app_symbols.dart';
+import '../design/map_panel.dart';
 import '../design/sheet_detents.dart';
 import '../design/tokens.dart';
 import '../settings/settings_kit.dart' show InfoTile, SliderTile;
@@ -71,11 +75,18 @@ abstract final class PlannerSheetMetrics {
   static PlannerDetent resolve(PlannerDetent d, BuildContext context) => detents(context).contains(d) ? d : PlannerDetent.full;
 }
 
-String detentWords(PlannerDetent d) => switch (d) {
-      PlannerDetent.dock => 'collapsed',
-      PlannerDetent.medium => 'half height',
-      PlannerDetent.full => 'full height',
+/// The Planner sheet's id in its map's MapPanelGroup.
+const String kPlannerPanelId = 'plan.main';
+
+/// The shared state of a detent (design/map_panel.dart).
+MapPanelState plannerPanelState(PlannerDetent d) => switch (d) {
+      PlannerDetent.dock => MapPanelState.collapsed,
+      PlannerDetent.medium => MapPanelState.open,
+      PlannerDetent.full => MapPanelState.full,
     };
+
+/// The same state names as every map panel: Collapsed, Open, Full.
+String detentWords(PlannerDetent d) => mapPanelStateLabel(plannerPanelState(d));
 
 class PlannerSheet extends StatefulWidget {
   final PlannerDetent detent;
@@ -111,8 +122,33 @@ class _PlannerSheetState extends State<PlannerSheet> {
   PlannerDetent get _current => PlannerSheetMetrics.resolve(widget.detent, context);
   double _h(PlannerDetent d) => PlannerSheetMetrics.heightOf(d, widget.availableHeight, context);
 
+  MapPanelGroup? _group;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final g = MapPanelScope.maybeRead(context);
+    if (!identical(g, _group)) {
+      _group?.removeListener(_groupChanged);
+      _group = g?..addListener(_groupChanged);
+    }
+  }
+
+  @override
+  void dispose() {
+    _group?.removeListener(_groupChanged);
+    super.dispose();
+  }
+
+  /// One open panel per map: the person opened another panel on this map, so the sheet goes back to its header.
+  void _groupChanged() {
+    final open = _group?.openId;
+    if (mounted && open != null && open != kPlannerPanelId && _current != PlannerDetent.dock) widget.onDetent(PlannerDetent.dock);
+  }
+
   void _go(PlannerDetent d) {
     if (d != _current) unawaited(AppHaptics.selection());
+    d == PlannerDetent.dock ? _group?.release(kPlannerPanelId) : _group?.claim(kPlannerPanelId);
     widget.onDetent(d);
     SemanticsService.sendAnnouncement(View.of(context), 'Plan sheet ${detentWords(d)}', Directionality.of(context));
   }
@@ -153,8 +189,11 @@ class _PlannerSheetState extends State<PlannerSheet> {
     final showBody = height > dock + 24;
     final ds = _detents;
     final i = ds.indexOf(current);
+    // A tap toggles, as on every map panel: Collapsed opens, anything else collapses.
+    void toggle() => _go(current == ds.first ? ds[1 < ds.length ? 1 : 0] : ds.first);
     final handle = GestureDetector(
       behavior: HitTestBehavior.opaque,
+      onTap: toggle,
       onVerticalDragStart: (_) => setState(() => _drag = target),
       onVerticalDragUpdate: (d) => setState(() => _drag = ((_drag ?? target) - d.delta.dy).clamp(dock, _h(PlannerDetent.full)).toDouble()),
       onVerticalDragEnd: _end,
@@ -163,14 +202,19 @@ class _PlannerSheetState extends State<PlannerSheet> {
         key: const Key('planner-sheet-handle'),
         button: true,
         label: 'Plan sheet, ${detentWords(current)}',
-        hint: i < ds.length - 1 ? 'Double-tap to make it taller' : 'Double-tap to make it smaller',
-        onTap: () => _go(i < ds.length - 1 ? ds[i + 1] : ds[math.max(0, i - 1)]),
+        hint: current == ds.first ? 'Double-tap to open' : 'Double-tap to collapse',
+        onTap: toggle,
         onIncrease: i < ds.length - 1 ? () => _step(1) : null,
         onDecrease: i > 0 ? () => _step(-1) : null,
         child: SizedBox(
           height: 22,
-          child: Center(
-            child: Container(width: 40, height: 5, decoration: BoxDecoration(color: t.colorScheme.outline, borderRadius: BorderRadius.circular(3))),
+          width: double.infinity,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              const MapPanelGrabber(),
+              Positioned(right: 12, top: 0, bottom: 0, child: MapPanelChevron(key: const Key('planner-sheet-chevron'), collapsed: current == ds.first, size: 18)),
+            ],
           ),
         ),
       ),

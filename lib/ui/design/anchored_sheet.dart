@@ -1,33 +1,34 @@
-// AnchoredSheetHost (Drive plan 3.4 / 5.7): hosts non-modal sheets INSIDE the Drive tab stack, bounded below by the dock's
-// top edge so Start / Stop / Ping are never covered. Used for layers, inspectors and the filter. Modal root-navigator
-// sheets stay `showAppSheet`. One sheet at a time: showing a new one replaces the current one (Layers and Inspector are
-// mutually exclusive). The map stays interactive: nothing here has a barrier.
+// MapPanelHost: the ONE transient slot of a map (build 71, plan "One shared panel"). A map has one persistent panel (the
+// Drive panel, the Live panel, the Planner sheet) and, directly above it, at most one transient MapPanel: an inspector, a
+// tapped observer, the layers, the legend, a focused packet. Showing a new one replaces the current one. Nothing here has a
+// barrier: the map stays interactive. Modal root-navigator sheets (forms: filters, settings, pickers) stay `showAppSheet`.
+//
+// A transient panel closes with its X, and when the person taps empty map ([MapPanelHostController.close] from the map's tap).
+// Opening one never changes the persistent panel's remembered state (MapPanel only saves what the person did to that panel).
+//
+// This file replaces the old AnchoredSheetHost (same job, never mounted).
 import 'package:flutter/material.dart';
 
-import 'tokens.dart';
-
-class AnchoredSheetController extends ChangeNotifier {
+class MapPanelHostController extends ChangeNotifier {
   String? _id;
   WidgetBuilder? _builder;
-  double _maxFraction = 0.6;
   VoidCallback? _onClosed;
 
   String? get currentId => _id;
   bool get isOpen => _id != null;
 
-  /// Shows [builder] as sheet [id], replacing any sheet that is open. [maxFraction] caps the height as a fraction of the
-  /// host area above the dock.
-  void show({required String id, required WidgetBuilder builder, double maxFraction = 0.6, VoidCallback? onClosed}) {
+  /// Shows the panel [builder] returns (a MapPanel with `onClose: () => close(id)` and `bottomSafe: false`) as [id], replacing
+  /// the one that is open. [onClosed] runs when it goes away (closed or replaced).
+  void show({required String id, required WidgetBuilder builder, VoidCallback? onClosed}) {
     final previous = _onClosed;
     _id = id;
     _builder = builder;
-    _maxFraction = maxFraction;
     _onClosed = onClosed;
-    if (previous != null) previous();
+    previous?.call();
     notifyListeners();
   }
 
-  /// Closes the sheet; with [id], only when that sheet is the open one.
+  /// Closes the panel; with [id], only when that panel is the one showing.
   void close([String? id]) {
     if (_id == null || (id != null && id != _id)) return;
     final cb = _onClosed;
@@ -39,107 +40,36 @@ class AnchoredSheetController extends ChangeNotifier {
   }
 }
 
-/// Wraps the Drive tab body. [bottomInset] is the height of the dock (and anything else sheets must stay above).
-class AnchoredSheetHost extends StatelessWidget {
-  final AnchoredSheetController controller;
+/// Wraps a map. [bottomInset] is the resting height of the persistent panel under the slot (its header, the tab bar zone and
+/// the home indicator included), so a transient panel sits directly on top of it and nothing hides under the tab bar.
+class MapPanelHost extends StatelessWidget {
+  final MapPanelHostController controller;
   final double bottomInset;
   final Widget child;
-  const AnchoredSheetHost({super.key, required this.controller, this.bottomInset = 0, required this.child});
+
+  /// A panel the owner builds itself each frame (the map inspector, whose content follows the map's state). Shown when the
+  /// controller has nothing to show.
+  final Widget? panel;
+  const MapPanelHost({super.key, required this.controller, required this.child, this.bottomInset = 0, this.panel});
 
   @override
   Widget build(BuildContext context) {
     return Stack(
+      fit: StackFit.expand,
       children: [
         Positioned.fill(child: child),
-        ListenableBuilder(
-          listenable: controller,
-          builder: (context, _) {
-            final b = controller._builder;
-            if (b == null) return const SizedBox.shrink();
-            return Positioned(
-              left: 0,
-              right: 0,
-              bottom: bottomInset,
-              child: LayoutBuilder(
-                builder: (context, c) {
-                  // The host's height is the Stack's; the sheet may use a fraction of what is above the dock.
-                  final h = (MediaQuery.sizeOf(context).height - bottomInset) * controller._maxFraction;
-                  return Center(
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(maxWidth: Layout.sheetMaxWidth, maxHeight: h),
-                      child: _AnchoredCard(
-                        key: ValueKey('anchored-${controller._id}'),
-                        onDismiss: () => controller.close(),
-                        child: b(context),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            );
-          },
+        Positioned.fill(
+          bottom: bottomInset,
+          child: ListenableBuilder(
+            listenable: controller,
+            builder: (context, _) {
+              final b = controller._builder;
+              final shown = b != null ? KeyedSubtree(key: ValueKey('map-panel-host-${controller._id}'), child: b(context)) : panel;
+              return shown ?? const SizedBox.shrink();
+            },
+          ),
         ),
       ],
-    );
-  }
-}
-
-class _AnchoredCard extends StatefulWidget {
-  final Widget child;
-  final VoidCallback onDismiss;
-  const _AnchoredCard({super.key, required this.child, required this.onDismiss});
-
-  @override
-  State<_AnchoredCard> createState() => _AnchoredCardState();
-}
-
-class _AnchoredCardState extends State<_AnchoredCard> {
-  double _drag = 0;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    final dark = t.brightness == Brightness.dark;
-    return Transform.translate(
-      offset: Offset(0, _drag),
-      child: Material(
-        color: t.colorScheme.surface,
-        elevation: dark ? 0 : 6,
-        shape: RoundedRectangleBorder(
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(Corners.card)),
-          side: dark ? BorderSide(color: t.colorScheme.outline) : BorderSide.none,
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onVerticalDragUpdate: (d) => setState(() => _drag = (_drag + d.delta.dy).clamp(0, 400)),
-              onVerticalDragEnd: (d) {
-                if (_drag > 80 || (d.primaryVelocity ?? 0) > 700) {
-                  widget.onDismiss();
-                } else {
-                  setState(() => _drag = 0);
-                }
-              },
-              child: SizedBox(
-                height: Hit.min,
-                width: double.infinity,
-                child: Center(
-                  child: Container(
-                    key: const Key('anchored-grabber'),
-                    width: 36,
-                    height: 5,
-                    decoration: BoxDecoration(color: t.colorScheme.outline, borderRadius: BorderRadius.circular(3)),
-                  ),
-                ),
-              ),
-            ),
-            Flexible(child: widget.child),
-          ],
-        ),
-      ),
     );
   }
 }

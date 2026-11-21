@@ -14,6 +14,8 @@ import '../app/app_state.dart';
 import '../core/dead_area.dart';
 import '../core/power_profile.dart';
 import 'app.dart';
+import 'design/anchored_sheet.dart';
+import 'design/map_panel.dart';
 import 'drive/dead_area_chip.dart';
 import 'device_feedback.dart';
 import 'location_status.dart';
@@ -69,6 +71,11 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
   /// The Drive tab is the visible tab (the shell gives hidden tabs a disabled TickerMode; true in isolated tests).
   bool _visible = true;
 
+  // One open panel on the Drive map (design/map_panel.dart rule 5): the Drive panel (`drive.main`, its own engine) and the
+  // one transient slot above it (inspector, layers, legend, a tapped observer).
+  final MapPanelGroup _panels = MapPanelGroup();
+  final MapPanelHostController _transient = MapPanelHostController();
+
   // The bottom panel, its auto-collapse and the settled overlay clearance.
   DrivePanelController? _panel;
   final PanelAutoCollapse _auto = PanelAutoCollapse();
@@ -85,6 +92,13 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
     UiForeground.ensureObserving();
     UiForeground.notifier.addListener(_syncClocks);
     PowerProfile.addListener(_powerChanged);
+    _panels.addListener(_panelGroupChanged);
+  }
+
+  /// The person opened another panel on this map (the inspector, layers, the legend): the Drive panel goes back to the Dock.
+  void _panelGroupChanged() {
+    final open = _panels.openId, p = _panel;
+    if (open != null && open != kDrivePanelId && p != null && p.detent == PanelDetent.medium) p.settleTo(PanelDetent.dock);
   }
 
   /// The battery mode changed: the wakelock rule, and the map's simple basemap.
@@ -137,6 +151,7 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
       // The tab bar follows the panel: Immersive hides it (250 ms, shell), anything else brings it back.
       _shell?.setImmersive(to == PanelDetent.immersive);
       if (to == PanelDetent.medium) _auto.touch(s.services.clock());
+      to == PanelDetent.medium ? _panels.claim(kDrivePanelId) : _panels.release(kDrivePanelId);
     };
     c.onSettled = () {
       // Overlay clearances and MapInsets are written once, here, never per animation frame.
@@ -245,6 +260,8 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
     final st = _state;
     if (st != null && _remoteWas != null) st.radioSessions.remoteQueue.autoRefreshEnabled = _remoteWas!;
     _panel?.dispose();
+    _panels.dispose();
+    _transient.dispose();
     _state?.removeListener(_onState);
     _shell?.removeListener(_shellChanged);
     _model?.dispose();
@@ -273,7 +290,9 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
   Widget _stage(BuildContext context, AppState s, DriveMapModel model, DriveLiveStats liveStats) {
     final panel = _panel!;
     final mq = MediaQuery.of(context);
-    return Scaffold(
+    return MapPanelScope(
+      group: _panels,
+      child: Scaffold(
       resizeToAvoidBottomInset: false,
       body: LayoutBuilder(
         builder: (context, box) {
@@ -315,6 +334,9 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
                     ? 16 + mq.viewPadding.bottom
                     : (_clearance ?? panel.extent.value) + (stripFor(s, s.gpsHealth.value) == null ? 0 : kPanelStripHeight),
                 rotatable: panel.detent == PanelDetent.immersive,
+                panelHost: _transient,
+                // Floating card: the transient panel is a card too, stacked on top of the Drive card.
+                panelInset: floating ? 16 + mq.viewPadding.bottom + g.dockHeight + 8 + (stripFor(s, s.gpsHealth.value) == null ? 0 : kPanelStripHeight) : null,
               ),
             ),
           );
@@ -369,6 +391,7 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
           );
         },
       ),
+      ),
     );
   }
 
@@ -383,7 +406,51 @@ class _MapPane extends StatelessWidget {
   final bool rotatable;
   final bool collapseCapsule;
   final bool inspectorLocked;
-  const _MapPane({required this.state, required this.model, this.collapseCapsule = false, this.inspectorLocked = false, this.topClearance = 0, this.bottomClearance = 0, this.rotatable = false});
+  final MapPanelHostController panelHost;
+  final double? panelInset;
+  const _MapPane({required this.state, required this.model, required this.panelHost, this.panelInset, this.collapseCapsule = false, this.inspectorLocked = false, this.topClearance = 0, this.bottomClearance = 0, this.rotatable = false});
+
+  /// The legend as the map's transient panel (a second tap on the chip closes it).
+  void _toggleLegend() {
+    if (panelHost.currentId == kLegendPanelId) return panelHost.close(kLegendPanelId);
+    final s = state;
+    panelHost.show(
+      id: kLegendPanelId,
+      builder: (context) => ListenableBuilder(
+        listenable: Listenable.merge([model, s]),
+        builder: (context, _) => MapPanel(
+          id: kLegendPanelId,
+          title: 'Legend',
+          leading: const Icon(Icons.palette_outlined, size: 18),
+          bottomSafe: false,
+          onClose: () => panelHost.close(kLegendPanelId),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Flexible(
+                child: LegendCard(
+                  asPanel: true,
+                  on: model.layerState.on,
+                  meta: model.coverageV2 ? s.coverageMeta : null,
+                  local: model.coverageFiltered,
+                  drivePanel: model.pings.isNotEmpty || s.driving,
+                ),
+              ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  key: const Key('legend-open-guide'),
+                  onPressed: () => showMapLegend(context, pingColors: model.pingColors),
+                  child: const Text('Full guide'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -403,6 +470,8 @@ class _MapPane extends StatelessWidget {
           plainBasemap: simpleBasemapNow(driving: s.driving),
           topClearance: topClearance,
           bottomClearance: bottomClearance,
+          panelHost: panelHost,
+          panelInset: panelInset,
           repeaterLabel: s.repeaterLabel,
           heard: model.heard,
           networkCells: model.visibleNetworkCells,
@@ -441,11 +510,12 @@ class _MapPane extends StatelessWidget {
             meta: model.coverageV2 ? s.coverageMeta : null,
             local: model.coverageFiltered,
             drivePanel: model.pings.isNotEmpty || s.driving,
+            onOpen: _toggleLegend,
           ),
           openLegend: () => showMapLegend(context, pingColors: model.pingColors),
           fallbackCenter: viewedRegionCenter(s),
           fallbackBounds: viewedRegionBounds(s),
-          onLayers: () => showGeneratedLayersSheet(context, model),
+          onLayers: () => showGeneratedLayersSheet(context, model, host: panelHost),
           inspectorLocked: inspectorLocked,
           inspectorAutoClear: s.driving ? kInspectorAutoClear : null,
           topLeading: _StateChips(state: s, model: model, maxWidth: box.maxWidth),

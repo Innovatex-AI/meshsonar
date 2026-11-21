@@ -6,6 +6,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/ui/design/map_panel.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:meshsonar/core/network_request.dart';
@@ -256,7 +257,12 @@ void main() {
       packetsApiFactory = (b) => PacketsApi(b);
     });
 
-    Future<LiveMapController> pump(WidgetTester tester, FakeSse fake, {NetworkRequest? request}) async {
+    Future<LiveMapController> pump(WidgetTester tester, FakeSse fake, {NetworkRequest? request, bool open = true}) async {
+      // A phone: the Live panel starts collapsed there.
+      tester.view.physicalSize = const Size(390 * 3, 844 * 3);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+      MapPanelStore.clear();
       late LiveMapController c;
       await tester.runAsync(() async {
         c = makeController(fake);
@@ -266,10 +272,48 @@ void main() {
         home: Scaffold(body: NetworkLiveMap(region: region, controller: c, showBasemap: false, request: request)),
       ));
       await tester.pump();
+      if (open) {
+        await tester.tap(find.byKey(const Key('live-panel-header')));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+      }
       return c;
     }
 
-    testWidgets('live: status, feed sheet, pause and play', (tester) async {
+    testWidgets('collapsed on a phone: one 56 pt header is the whole chrome (status, count, pause), nothing at the top', (tester) async {
+      final fake = FakeSse();
+      final c = await pump(tester, fake, open: false);
+      await tester.runAsync(() async {
+        await settle();
+        fake.send('event: status\ndata: {"observersOnline":26}\n\n');
+        fake.send(packetEvent('1111000011112222'));
+        await settle();
+      });
+      await tester.pump(const Duration(milliseconds: 50));
+      final panel = tester.getRect(find.byKey(const Key('map-panel-live.main')));
+      expect(panel.height, kMapPanelHeader);
+      expect(panel.bottom, 844);
+      expect(find.text('Live · 26 observers online'), findsOneWidget);
+      expect(find.text('1 packet'), findsOneWidget);
+      expect(find.byKey(const Key('live-map-pause')), findsOneWidget);
+      expect(find.byKey(const Key('live-panel-body')), findsNothing);
+      // Nothing but the map above the header.
+      final chrome = find.descendant(of: find.byKey(const Key('live-map')), matching: find.byType(Material));
+      for (final e in chrome.evaluate()) {
+        final r = tester.getRect(find.byWidget(e.widget));
+        expect(r.top, greaterThanOrEqualTo(panel.top - 0.5), reason: 'no bar or card above the panel header');
+      }
+      // Pause works from the collapsed header and does not open the panel; new packets do not open it either.
+      await tester.tap(find.byKey(const Key('live-map-pause')));
+      await tester.pump();
+      expect(find.byKey(const Key('live-map-play')), findsOneWidget);
+      expect(find.text('Paused'), findsOneWidget);
+      expect(find.byKey(const Key('live-panel-body')), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+      c.dispose();
+    });
+
+    testWidgets('live: status, the feed in the panel, pause and play', (tester) async {
       final fake = FakeSse();
       final c = await pump(tester, fake);
       await tester.runAsync(() async {
@@ -279,16 +323,21 @@ void main() {
         await settle();
       });
       await tester.pump(const Duration(milliseconds: 50));
-      expect(find.text('Live · 26 observers online'), findsOneWidget);
-      expect(find.text('Feed 1'), findsOneWidget);
+      expect(find.text('Live · 26 observers online'), findsNWidgets(2), reason: 'the header, and in full as the first body line');
+      expect(find.text('1 packet'), findsOneWidget);
+      expect(tester.getRect(find.byKey(const Key('map-panel-live.main'))).height, lessThanOrEqualTo(844 * 0.6 + 0.5));
+      expect(find.byKey(const Key('live-feed-row-1111000011112222')), findsOneWidget);
       await tester.tap(find.byKey(const Key('live-map-pause')));
       await tester.pump();
       expect(find.byKey(const Key('live-map-play')), findsOneWidget);
-      expect(find.text('Paused'), findsOneWidget);
-      await tester.tap(find.byKey(const Key('live-map-feed')));
+      expect(find.text('Paused'), findsNWidgets(2));
+      // Draw on the map: the packet becomes the transient panel and the Live panel goes back to its header.
+      await tester.tap(find.byKey(const Key('live-feed-draw-1111000011112222')));
+      await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
-      expect(find.byKey(const Key('live-feed-sheet')), findsOneWidget);
-      expect(find.byKey(const Key('live-feed-row-1111000011112222')), findsOneWidget);
+      expect(find.byKey(const Key('live-focus-card')), findsOneWidget);
+      expect(find.byKey(const Key('live-panel-body')), findsNothing, reason: 'one open panel per map');
+      expect(MapPanelStore.read('live.main'), MapPanelState.open, reason: 'a transient panel never changes the remembered state');
       await tester.pumpWidget(const SizedBox());
       c.dispose();
     });
@@ -309,9 +358,6 @@ void main() {
     });
 
     testWidgets('filters sheet and window chips', (tester) async {
-      tester.view.physicalSize = const Size(390 * 3, 844 * 3);
-      tester.view.devicePixelRatio = 3;
-      addTearDown(tester.view.reset);
       final fake = FakeSse();
       final c = await pump(tester, fake);
       await tester.tap(find.byKey(const Key('live-map-filters')));
@@ -327,14 +373,25 @@ void main() {
 
     testWidgets('Show on map: the packet is drawn as the focus with a Replay here action', (tester) async {
       final fake = FakeSse();
-      final c = await pump(tester, fake, request: NetworkRequest.mapPacket('c4b06ee8fc39b187', region: 'cmh'));
+      final c = await pump(tester, fake, request: NetworkRequest.mapPacket('c4b06ee8fc39b187', region: 'cmh'), open: false);
       await tester.runAsync(settle);
       await tester.pump();
       expect(c.focus?.hash, 'c4b06ee8fc39b187');
       expect(find.byKey(const Key('live-focus-card')), findsOneWidget);
       expect(find.textContaining('not placed'), findsOneWidget);
+      final focus = tester.getRect(find.byKey(const Key('map-panel-live.focus')));
+      expect(focus.bottom, tester.getRect(find.byKey(const Key('map-panel-live.main'))).top, reason: 'directly above the Live panel header');
+      final drawn = c.focus!;
       await tester.tap(find.byKey(const Key('live-focus-close')));
       await tester.pump();
+      expect(find.byKey(const Key('live-focus-card')), findsNothing);
+      // A tap on empty map closes it too.
+      c.showPacket(drawn);
+      await tester.pump();
+      expect(find.byKey(const Key('live-focus-card')), findsOneWidget);
+      await tester.tapAt(const Offset(195, 120));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(c.focus, isNull);
       expect(find.byKey(const Key('live-focus-card')), findsNothing);
       await tester.pumpWidget(const SizedBox());
       c.dispose();
@@ -344,6 +401,7 @@ void main() {
       tester.view.physicalSize = const Size(390 * 3, 844 * 3);
       tester.view.devicePixelRatio = 3;
       addTearDown(tester.view.reset);
+      MapPanelStore.clear();
       final fake = FakeSse();
       late LiveMapController c;
       await tester.runAsync(() async => c = makeController(fake));
@@ -355,6 +413,11 @@ void main() {
         ),
       ));
       await tester.pump();
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.byKey(const Key('live-panel-header')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.byKey(const Key('live-panel-body')), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
       c.dispose();

@@ -1,8 +1,13 @@
 // A thin strip above the tab bar for the two honest states of M3: "Reconnecting to <radio>…" after the app was started
 // again, and the warning that the radio's waiting-message queue was (nearly) full. Shows nothing when neither applies.
+//
+// The radio row's icon, spinner and first words are the shared ones (lib/ui/drive/radio_link_status.dart, rule 7 of the map
+// panel rules): "Reconnecting…" with the spinner while it works, "Not connected" with the Dock's glyph when it gave up. The
+// radio's name, or the sentence that says why, follows as the detail.
 import 'package:flutter/material.dart';
 
 import '../../alerts/alerts_runtime.dart';
+import '../drive/radio_link_status.dart';
 import '../theme.dart';
 
 class AlertsStatusStrip extends StatelessWidget {
@@ -24,10 +29,13 @@ class AlertsStatusStrip extends StatelessWidget {
             final status = reconnect?.statusText;
             if (reconnect != null && status != null) {
               final active = reconnect.active;
+              final link = RadioLinkStatus(active ? RadioLink.reconnecting : RadioLink.notConnected);
               rows.add(_Row(
                 key: const Key('reconnect-strip'),
-                icon: active ? null : Icons.bluetooth_disabled,
-                text: status,
+                icon: link.icon,
+                title: link.statusLabel,
+                text: active ? (reconnect.radioName ?? 'your radio') : status,
+                semantics: status,
                 action: active
                     ? null
                     : TextButton(key: const Key('reconnect-now'), onPressed: () => reconnect.run(reason: 'button'), child: const Text('Reconnect')),
@@ -52,10 +60,17 @@ class AlertsStatusStrip extends StatelessWidget {
 }
 
 class _Row extends StatelessWidget {
+  /// null = the spinner (a working state).
   final IconData? icon;
+
+  /// The shared status words, shown first and bold; null = [text] alone.
+  final String? title;
   final String text;
+
+  /// What VoiceOver reads instead of title + text.
+  final String? semantics;
   final Widget? action;
-  const _Row({super.key, required this.icon, required this.text, this.action});
+  const _Row({super.key, required this.icon, required this.text, this.title, this.semantics, this.action});
 
   @override
   Widget build(BuildContext context) {
@@ -73,7 +88,20 @@ class _Row extends StatelessWidget {
               else
                 Icon(icon, size: 20, color: cs.onSecondaryContainer),
               const SizedBox(width: Gap.m),
-              Expanded(child: Semantics(liveRegion: true, child: Text(text, style: TextStyle(color: cs.onSecondaryContainer)))),
+              Expanded(
+                child: Semantics(
+                  liveRegion: true,
+                  label: semantics,
+                  excludeSemantics: semantics != null,
+                  child: Text.rich(
+                    TextSpan(children: [
+                      if (title != null) TextSpan(text: '$title  ', style: const TextStyle(fontWeight: FontWeight.w700)),
+                      TextSpan(text: text),
+                    ]),
+                    style: TextStyle(color: cs.onSecondaryContainer),
+                  ),
+                ),
+              ),
               ?action,
             ],
           ),
