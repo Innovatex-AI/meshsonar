@@ -9,6 +9,11 @@ import '../layers/map_layer.dart';
 import 'observer_sheet.dart';
 import 'repeater_sheet.dart';
 
+/// The transient panel id a map shows a tapped thing under (design/map_panel.dart). On a map with a transient slot
+/// (CoverageMap) an observer, stacked repeaters and an estimated repeater are that panel; the modal sheets below are for
+/// callers without a map slot.
+const String kHitPanelId = 'drive.hit';
+
 /// Opens a host's own sheet for a hit the generic sheets do not cover (a plan node, a long-press pin). Returns true when it
 /// opened one.
 typedef MapHitHandler<T extends MapHit> = Future<bool> Function(BuildContext context, T hit);

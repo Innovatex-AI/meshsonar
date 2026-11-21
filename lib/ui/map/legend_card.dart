@@ -1,5 +1,7 @@
 // The ONE legend card (plan unified-map-system §2.5, the website's components/map/one/legend-card.tsx): compact on the map (the
-// band ramp and "Weak → strong signal"), expandable to every legend entry of the layers that are on, all from the Map
+// band ramp and "Weak → strong signal"). On a map with a transient panel slot a tap opens the MapPanel `drive.legend`
+// ([LegendCard.onOpen], [LegendCard.asPanel]) instead of growing over the map; elsewhere it expands in place to every legend
+// entry of the layers that are on, all from the Map
 // Definition (layer names, entry labels, symbols; dB ranges from its coverage meta). The palette chooser lives here (and in the
 // Layers sheet), never only in a hidden setting: Standard or Colour-blind safe, saved in Settings like everywhere else.
 //
@@ -185,7 +187,14 @@ class LegendCard extends StatefulWidget {
   /// The drive panel is open (the definition's panel-only `drive` layer is drawn).
   final bool drivePanel;
   final bool initiallyOpen;
-  const LegendCard({super.key, required this.on, this.meta, this.local = false, this.drivePanel = true, this.initiallyOpen = false});
+
+  /// The chip on a map with a transient panel slot: a tap calls this (the host shows the legend as a MapPanel) and the card
+  /// itself never grows over the map.
+  final VoidCallback? onOpen;
+
+  /// Only the entries (no chip, no card): the body of the legend MapPanel.
+  final bool asPanel;
+  const LegendCard({super.key, required this.on, this.meta, this.local = false, this.drivePanel = true, this.initiallyOpen = false, this.onOpen, this.asPanel = false});
 
   @override
   State<LegendCard> createState() => _LegendCardState();
@@ -228,12 +237,12 @@ class _LegendCardState extends State<LegendCard> {
 
     final head = Semantics(
       button: true,
-      expanded: _open,
+      expanded: widget.onOpen == null ? _open : null,
       label: anyCoverage ? 'Legend: weak to strong signal' : 'Legend',
       child: InkWell(
         key: const Key('legend-card-toggle'),
         borderRadius: BorderRadius.circular(12),
-        onTap: () => setState(() => _open = !_open),
+        onTap: widget.onOpen ?? () => setState(() => _open = !_open),
         child: ExcludeSemantics(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: Gap.s, vertical: 6),
@@ -247,7 +256,7 @@ class _LegendCardState extends State<LegendCard> {
                 ],
                 Text(anyCoverage ? 'Weak → strong signal' : 'Legend', style: t.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w600)),
                 const SizedBox(width: 4),
-                AppSymbolIcon(_open ? AppSymbols.chevronDown : AppSymbols.chevronUp, size: 12, color: t.colorScheme.onSurfaceVariant),
+                AppSymbolIcon(_open && widget.onOpen == null ? AppSymbols.chevronDown : AppSymbols.chevronUp, size: 12, color: t.colorScheme.onSurfaceVariant),
               ],
             ),
           ),
@@ -255,13 +264,13 @@ class _LegendCardState extends State<LegendCard> {
       ),
     );
 
-    final body = !_open
+    final body = !(_open && widget.onOpen == null) && !widget.asPanel
         ? null
         : ConstrainedBox(
-            constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.42, maxWidth: 300),
+            constraints: widget.asPanel ? const BoxConstraints() : BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.42, maxWidth: 300),
             child: SingleChildScrollView(
               key: const Key('legend-card-body'),
-              padding: const EdgeInsets.fromLTRB(Gap.s, 0, Gap.s, Gap.s),
+              padding: widget.asPanel ? const EdgeInsets.fromLTRB(Gap.l, 0, Gap.l, Gap.m) : const EdgeInsets.fromLTRB(Gap.s, 0, Gap.s, Gap.s),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -296,6 +305,7 @@ class _LegendCardState extends State<LegendCard> {
             ),
           );
 
+    if (widget.asPanel) return body!;
     return Material(
       key: const Key('legend-card'),
       color: t.colorScheme.surface.withValues(alpha: 0.94),
@@ -311,3 +321,6 @@ class _LegendCardState extends State<LegendCard> {
     );
   }
 }
+
+/// The transient panel id of the legend on a map.
+const String kLegendPanelId = 'drive.legend';

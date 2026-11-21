@@ -152,11 +152,11 @@ void main() {
       final sem = tester.ensureSemantics();
       final st = await openPlanner(tester, h);
       final handle = find.byKey(const Key('planner-sheet-handle'));
-      expect(tester.getSemantics(handle), isSemantics(label: 'Plan sheet, half height', isButton: true, hasTapAction: true, hasIncreaseAction: true, hasDecreaseAction: true));
-      tester.semantics.performAction(find.semantics.byLabel('Plan sheet, half height'), SemanticsAction.increase);
+      expect(tester.getSemantics(handle), isSemantics(label: 'Plan sheet, Open', isButton: true, hasTapAction: true, hasIncreaseAction: true, hasDecreaseAction: true));
+      tester.semantics.performAction(find.semantics.byLabel('Plan sheet, Open'), SemanticsAction.increase);
       await settle(tester);
       expect(st.detent, PlannerDetent.full);
-      tester.semantics.performAction(find.semantics.byLabel('Plan sheet, full height'), SemanticsAction.decrease);
+      tester.semantics.performAction(find.semantics.byLabel('Plan sheet, Full'), SemanticsAction.decrease);
       await settle(tester);
       expect(st.detent, PlannerDetent.medium);
       expect(find.bySemanticsLabel('Coverage mode'), findsOneWidget);

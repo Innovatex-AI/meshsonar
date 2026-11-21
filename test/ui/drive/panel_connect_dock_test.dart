@@ -71,6 +71,10 @@ void main() {
     expect(tester.widget<Text>(find.byKey(const Key('status-line'))).data, 'Not connected');
     expect(find.text('Connect radio'), findsOneWidget);
     await _expectMapUsableAndPanelAtDock(tester);
+    // Build 71: the Dock is a map panel like the others (shared grabber and chevron), and no route covers the map.
+    expect(find.byKey(const Key('drive-panel-grabber')), findsOneWidget);
+    expect(find.byKey(const Key('drive-panel-chevron')), findsOneWidget);
+    expect(Navigator.of(tester.element(find.byType(DriveScreen))).canPop(), isFalse, reason: 'cold start pushes no connect screen');
   });
 
   testWidgets('a panel left at Medium in an earlier run reopens at the Dock, not in the middle', (tester) async {

@@ -17,8 +17,9 @@
 // Layout: put a MapPanel in a `Positioned.fill` of the map's Stack (or in a MapPanelHost, anchored_sheet.dart). It aligns
 // itself to the bottom, takes only the height it needs and lets every touch outside its surface through to the map.
 //
-// Header, 56 pt (76 pt at text scale >= 2): a 12 pt grabber zone, then a 44 pt (64 pt) row:
-//   [leading 20] [title, 1 line] [status, 1 line] [action 44x44, optional] [chevron] [close 44x44, transient panels]
+// Header, 56 pt (72 pt at text scale >= 2): an 8 pt grabber zone, then a 48 pt (64 pt) row, so the close button keeps the
+// 48 pt target the Drive plan asks for while the car moves:
+//   [leading 20] [title, 1 line] [status, 1 line] [action, optional] [chevron] [close 48x48, transient panels]
 //
 // Keys: 'map-panel-<id>', 'map-panel-<id>-header', 'map-panel-<id>-body', 'map-panel-<id>-close' (each can be overridden).
 import 'package:flutter/material.dart';
@@ -36,8 +37,8 @@ String mapPanelStateLabel(MapPanelState s) => switch (s) {
       MapPanelState.full => 'Full',
     };
 
-const double kMapPanelGrabberZone = 12;
-const double kMapPanelRow = Hit.min;
+const double kMapPanelGrabberZone = 8;
+const double kMapPanelRow = 48;
 const double kMapPanelRowAx = 64;
 
 /// Header height at normal text sizes (grabber zone + row).
@@ -128,7 +129,9 @@ class MapPanelGrabber extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = AppColors.fromTheme(Theme.of(context));
-    return Container(width: 36, height: 5, decoration: BoxDecoration(color: c.textMuted.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(3)));
+    // An opaque fill (map surfaces are never translucent): the muted text colour at half strength over the surface.
+    final fill = Color.alphaBlend(c.textMuted.withValues(alpha: 0.5), c.surface);
+    return Container(width: 36, height: 5, decoration: BoxDecoration(color: fill, borderRadius: BorderRadius.circular(3)));
   }
 }
 
@@ -194,7 +197,7 @@ class MapPanel extends StatefulWidget {
   /// A marker right after the title (a small chip), shown in every state.
   final Widget? badge;
 
-  /// At most one header button (44 x 44), usable while the panel is collapsed.
+  /// At most one header button (at least 44 x 44), usable while the panel is collapsed.
   final Widget? action;
 
   /// Transient panels (an inspector, a legend, layers): shows a close button. Their state is not remembered.
@@ -439,7 +442,7 @@ class _MapPanelState extends State<MapPanel> {
             IconButton(
               key: widget.closeKey ?? Key('map-panel-${widget.id}-close'),
               tooltip: 'Close',
-              constraints: const BoxConstraints(minWidth: Hit.min, minHeight: Hit.min),
+              constraints: const BoxConstraints(minWidth: kMapPanelRow, minHeight: kMapPanelRow),
               icon: const Icon(Icons.close_rounded, size: 20),
               onPressed: widget.onClose,
             ),

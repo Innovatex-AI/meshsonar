@@ -140,13 +140,14 @@ export 'sheets/map_hit_sheet.dart' show MapHitHandler;
 import 'basemap_layer.dart';
 import 'satellite_layers.dart';
 import 'layers/m3_layers.dart';
-import '../design/app_surfaces.dart' show showAppSheet;
+import '../design/anchored_sheet.dart';
+import '../design/map_panel.dart';
 import '../../core/m3_data.dart' show RedundancyCell, RepeaterEstimate, SnrLink;
 import 'offline_basemap.dart';
 import 'sheets/map_hit_sheet.dart';
 import '../ping_detail_sheet.dart' show PingDetailSheet;
-import 'sheets/observer_sheet.dart' show ObserverSheetContext;
-import 'sheets/repeater_sheet.dart' show RepeaterSheet, RepeaterSheetContext;
+import 'sheets/observer_sheet.dart' show ObserverSheet, ObserverSheetContext;
+import 'sheets/repeater_sheet.dart' show RepeaterListSheet, RepeaterSheet, RepeaterSheetContext;
 import '../claims/claim_widgets.dart' show OwnedByYouChip;
 
 /// A line from a ping to a repeater it heard.
@@ -380,6 +381,14 @@ class CoverageMap extends StatefulWidget {
   final double topClearance;
   final double bottomClearance;
 
+  /// The map's one transient panel slot (design/anchored_sheet.dart): the inspector, a tapped observer, and whatever the
+  /// host shows through this controller (layers, legend). Null = the map keeps its own.
+  final MapPanelHostController? panelHost;
+
+  /// Where the transient panel's bottom edge sits, from the bottom of the map: the resting top of the persistent panel under
+  /// it. Null = [bottomClearance].
+  final double? panelInset;
+
   /// The base map under the data (street / dark / topo cycler). Offline region packs are drawn for every style that
   /// [BaseMapStyle.usesOfflinePack].
   final BaseMapStyle baseStyle;
@@ -462,6 +471,8 @@ class CoverageMap extends StatefulWidget {
     this.inspectorAutoClear,
     this.topClearance = 0,
     this.bottomClearance = 0,
+    this.panelHost,
+    this.panelInset,
     this.baseStyle = BaseMapStyle.chart,
     this.onBoundsChanged,
     this.telemetry,
@@ -502,6 +513,32 @@ class _CoverageMapState extends State<CoverageMap> {
   late final bool _ownsVc = widget.viewController == null;
   MapController get _controller => _vc.map;
   final MapHitResolver _hits = MapHitResolver();
+
+  // The transient panel slot. One at a time: a panel the host shows replaces the inspector, a new selection replaces it.
+  MapPanelHostController? _ownHost;
+  MapPanelHostController? _listenedHost;
+  MapPanelHostController get _panelHost => widget.panelHost ?? (_ownHost ??= MapPanelHostController());
+  double get _panelInset => widget.panelInset ?? widget.bottomClearance;
+
+  void _syncPanelHost() {
+    final h = _panelHost;
+    if (identical(h, _listenedHost)) return;
+    _listenedHost?.removeListener(_onPanelHost);
+    _listenedHost = h..addListener(_onPanelHost);
+  }
+
+  void _onPanelHost() {
+    if (!mounted) return;
+    // Something else took the slot: the inspector and its lines go away.
+    if (_panelHost.isOpen) _clearLinks();
+    setState(() {});
+  }
+
+  /// A tap on empty map: the transient panel closes and the lines are put away.
+  void _tapOnNothing() {
+    _panelHost.close();
+    _clearLinks();
+  }
   bool _ready = false;
   // Follow state: the camera drives itself until the person moves the map (lib/core/camera_follow.dart).
   CameraFollow get _fc => _vc.follow;
@@ -747,6 +784,7 @@ class _CoverageMapState extends State<CoverageMap> {
   /// Opens the inspector for one res-11 cell and draws lines to the repeaters that served it (keys resolved to names the same
   /// way cell-links does: an exact key, else a unique prefix among the drawn repeaters).
   Future<void> _showCoverageCell(CoverageV2Inputs v2, String id, double lat, double lon) async {
+    _panelHost.close(); // the newest thing the person tapped takes the one transient slot
     final h3 = CoverageMap.hexEngine;
     var cLat = lat, cLon = lon;
     if (h3 != null) {
@@ -810,6 +848,7 @@ class _CoverageMapState extends State<CoverageMap> {
       : 'Couldn\'t load the links. Check your connection.';
 
   Future<void> _showRepeaterLinks(RepeaterPoint p) async {
+    _panelHost.close(); // the newest thing the person tapped takes the one transient slot
     final app = _appOrNull();
     final h3 = CoverageMap.hexEngine;
     if (app == null || h3 == null || !app.reachEnabled) {
@@ -883,6 +922,7 @@ class _CoverageMapState extends State<CoverageMap> {
   }
 
   Future<void> _showCellLinks(NetworkCell n) async {
+    _panelHost.close(); // the newest thing the person tapped takes the one transient slot
     final c = n.cell, id = c?.h3;
     final app = _appOrNull();
     if (c == null || id == null || app == null || !app.cellLinksEnabled) {
@@ -964,6 +1004,7 @@ class _CoverageMapState extends State<CoverageMap> {
         onFit: !_linkBusy && (set?.ends.isNotEmpty ?? false) ? _fitLinks : null,
         onClose: _clearLinks,
         locked: widget.inspectorLocked,
+      bottomSafe: _panelInset == 0,
         autoClear: widget.inspectorAutoClear,
       );
     }
@@ -986,6 +1027,7 @@ class _CoverageMapState extends State<CoverageMap> {
         onFit: n > 0 ? _fitLinks : null,
         onClose: _clearLinks,
         locked: widget.inspectorLocked,
+      bottomSafe: _panelInset == 0,
         autoClear: widget.inspectorAutoClear,
       );
     }
@@ -1030,6 +1072,7 @@ class _CoverageMapState extends State<CoverageMap> {
       onFit: canFit ? _fitLinks : null,
       onClose: _clearLinks,
       locked: widget.inspectorLocked,
+      bottomSafe: _panelInset == 0,
       autoClear: widget.inspectorAutoClear,
     );
   }
@@ -1058,6 +1101,7 @@ class _CoverageMapState extends State<CoverageMap> {
 
   /// Tap a ping dot: a line to every repeater that heard it, labelled with its SNR, and the ping's own details.
   void _showPingLinks(DrivePing p) {
+    _panelHost.close(); // the newest thing the person tapped takes the one transient slot
     final app = _appOrNull();
     final lookup = app?.lookup;
     final ends = <LinkEnd>[];
@@ -1130,6 +1174,24 @@ class _CoverageMapState extends State<CoverageMap> {
       _showRepeaterLinks(hit.colocated.single);
       return;
     }
+    // An observer and repeaters stacked on one spot sit on the map: the transient panel, not a modal sheet.
+    if (hit is ObserverHit) {
+      _showHitPanel(
+        // The sheet names the observer itself; the header says what kind of thing was tapped.
+        title: 'Observer',
+        status: null,
+        child: ObserverSheet(observer: hit.observer, regionName: hit.regionName, ctx: ObserverSheetContext(position: here)),
+      );
+      return;
+    }
+    if (hit is ClusterHit && hit.colocated.length > 1) {
+      _showHitPanel(
+        title: 'Repeaters',
+        status: null,
+        child: RepeaterListSheet(points: hit.colocated, onPick: _showRepeaterLinks),
+      );
+      return;
+    }
     showMapHitSheet(
       context,
       hit,
@@ -1138,6 +1200,21 @@ class _CoverageMapState extends State<CoverageMap> {
       observerContext: ObserverSheetContext(position: here),
       onPlanNode: widget.onPlanNode ?? _planNodeSheet,
       onLongPress: widget.onLongPress,
+    );
+  }
+
+  /// Shows [child] as the map's transient panel `drive.hit` (closed by its X, a tap on empty map, or the next thing tapped).
+  void _showHitPanel({required String title, required String? status, required Widget child}) {
+    _panelHost.show(
+      id: kHitPanelId,
+      builder: (context) => MapPanel(
+        id: kHitPanelId,
+        title: title,
+        status: status == null ? null : Text(status),
+        bottomSafe: _panelInset == 0,
+        onClose: () => _panelHost.close(kHitPanelId),
+        child: child,
+      ),
     );
   }
 
@@ -1268,7 +1345,8 @@ class _CoverageMapState extends State<CoverageMap> {
       _vc.initialised = true;
       if (!widget.follow) _fc.userMoved();
     }
-    _hits.onNothing = _clearLinks; // a tap on nothing puts the lines away
+    _hits.onNothing = _tapOnNothing;
+    _syncPanelHost();
     if (widget.takesFocusRequests) MainMapFocus.notifier.addListener(_onFocusRequest);
     _prefs.addListener(_onPrefs);
     if (widget.puck != null) unawaited(openSharedMapPrefs());
@@ -1558,6 +1636,8 @@ class _CoverageMapState extends State<CoverageMap> {
   void dispose() {
     MainMapFocus.notifier.removeListener(_onFocusRequest);
     _hits.dispose();
+    _listenedHost?.removeListener(_onPanelHost);
+    _ownHost?.dispose();
     _boundsTimer?.cancel();
     _prefs.removeListener(_onPrefs);
     unawaited(_netSub?.cancel());
@@ -1657,18 +1737,17 @@ class _CoverageMapState extends State<CoverageMap> {
   void _showEstimate(RepeaterEstimate e) {
     if (!mounted) return;
     final d = ActiveMapDefinition.current;
-    showAppSheet<void>(
-      context,
-      detents: const [0.3, 0.5],
-      builder: (ctx, controller) => SingleChildScrollView(
+    final name = e.name?.trim().isNotEmpty == true ? e.name!.trim() : 'Repeater ${e.key.substring(0, e.key.length < 4 ? e.key.length : 4)}';
+    _showHitPanel(
+      title: name,
+      status: 'Estimated position',
+      child: Builder(
+       builder: (ctx) => SingleChildScrollView(
         key: const Key('estimated-sheet'),
-        controller: controller,
         padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(e.name?.trim().isNotEmpty == true ? e.name!.trim() : 'Repeater ${e.key.substring(0, e.key.length < 4 ? e.key.length : 4)}', style: Theme.of(ctx).textTheme.titleLarge),
-            const SizedBox(height: 4),
             Text('Estimated position, approximate', style: Theme.of(ctx).textTheme.titleSmall),
             const SizedBox(height: 8),
             Text('This ${e.role == 'room' ? 'room server' : 'repeater'} has not shared a position. MeshSonar placed it from the repeaters around it that have one; the real spot can be some distance away.', style: Theme.of(ctx).textTheme.bodyMedium),
@@ -1676,6 +1755,7 @@ class _CoverageMapState extends State<CoverageMap> {
             Text('${e.confidenceText(d)} (${e.anchors} ${e.anchors == 1 ? 'neighbour' : 'neighbours'}${e.spreadKm == null ? '' : ', up to ${AppScope.unitsOf(ctx).distance(approx: true, e.spreadKm! * 1000)} apart'}).', key: const Key('estimated-confidence'), style: Theme.of(ctx).textTheme.bodyMedium),
           ],
         ),
+       ),
       ),
     );
   }
@@ -1812,10 +1892,14 @@ class _CoverageMapState extends State<CoverageMap> {
     RepeaterRef? selected;
     if (_selectedRepeater != null) selected = _refFor(_selectedRepeater!);
 
-    return MapOverlayHost(
+    _syncPanelHost();
+    final inspector = _panel(context);
+    final transient = _panelHost.isOpen || inspector != null;
+    final overlays = MapOverlayHost(
       slotKeys: _slotKeys,
       topClearance: widget.topClearance,
-      bottomClearance: widget.bottomClearance,
+      // The buttons and the credit stay above the transient panel's header.
+      bottomClearance: transient ? _panelInset + mapPanelHeaderHeight(context) + (_panelInset == 0 ? MediaQuery.paddingOf(context).bottom : 0) : widget.bottomClearance,
       map: FlutterMap(
           mapController: _controller,
           options: MapOptions(
@@ -2200,6 +2284,7 @@ class _CoverageMapState extends State<CoverageMap> {
         },
       ),
     );
+    return MapPanelHost(controller: _panelHost, bottomInset: _panelInset, panel: inspector, child: overlays);
   }
 
   /// The top-leading slot's content with the legend card under it (the app keeps the lower-left corner free, Drive plan 9.3, so
@@ -2248,10 +2333,10 @@ class _CoverageMapState extends State<CoverageMap> {
     );
   }
 
-  /// The bottom slot: what the host puts there, then this map's own status (the info panel, the SIMULATED tag, the offline note).
+  /// The bottom slot: what the host puts there, then this map's own status (the SIMULATED tag, the offline note). The inspector
+  /// is not here: it is the map's transient MapPanel.
   /// Nothing here is a credit; the credit is the [AttributionLine].
   Widget? _bottomColumn(BuildContext context, bool tiles, MeshSonarColors mc, ThemeData t, BaseMapStyle style) {
-    final panel = _panel(context);
     final children = <Widget>[
       ?widget.bottom,
       // Topo and Satellite come from the network only (no offline pack draws them): with no connection say so, honestly, and point at
@@ -2276,7 +2361,6 @@ class _CoverageMapState extends State<CoverageMap> {
                   ),
                 ),
         ),
-      if (panel != null) ...[SizedBox(width: double.infinity, child: panel), const SizedBox(height: Gap.xs)],
       // New Drive screen: SIM is a badge in the status capsule and the offline state is a pill at the top; nothing bottom-left.
       if (widget.simulated && widget.onLayers == null) ...[const SimulatedTag(key: Key('map-simulated')), const SizedBox(height: Gap.xs)],
       if (!tiles && widget.onLayers == null)
