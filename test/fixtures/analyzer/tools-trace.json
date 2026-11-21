@@ -1,0 +1,91 @@
+{
+ "data": {
+  "hash": "50b835a910da5aac",
+  "tag": "3f9a12c4",
+  "targets": [
+   "a1",
+   "3f",
+   "c4"
+  ],
+  "hashSize": 1,
+  "hops": [
+   {
+    "index": 0,
+    "prefix": "a1",
+    "confidence": "unique",
+    "node": {
+     "key": "a11032bf794a6d6e0d9cb64239a1da85a9bfae12c0d744d1fac0cb04aeebcce7",
+     "name": "Nagglepuss2",
+     "role": "repeater"
+    },
+    "score": 0.92,
+    "snrDb": 9.25
+   },
+   {
+    "index": 1,
+    "prefix": "3f",
+    "confidence": "ambiguous",
+    "node": null,
+    "snrDb": -4.5
+   },
+   {
+    "index": 2,
+    "prefix": "c4",
+    "confidence": "unknown",
+    "node": null,
+    "snrDb": null
+   }
+  ],
+  "completed": 2,
+  "complete": false,
+  "observations": [
+   {
+    "observer": {
+     "id": "d1a761a8d6478b879df8a2278225f4fc2c10d2f925f537c6cdd7921c7f147a0f",
+     "name": "MS Westside",
+     "kind": "fixed",
+     "src": "ms"
+    },
+    "at": "2026-11-20T14:02:05.120Z",
+    "snr": 1.75,
+    "rssi": -109,
+    "hopsCompleted": 1,
+    "src": "ms"
+   },
+   {
+    "observer": {
+     "id": "okimesh:obs-9",
+     "name": null,
+     "kind": "outside",
+     "src": "okimesh"
+    },
+    "at": "2026-11-20T14:02:06.320Z",
+    "snr": null,
+    "rssi": null,
+    "hopsCompleted": 2,
+    "src": "okimesh"
+   }
+  ],
+  "spreadMs": 1200
+ },
+ "meta": {
+  "apiVersion": "1.0",
+  "region": {
+   "slug": "cmh",
+   "name": "Columbus, US",
+   "kind": "region"
+  },
+  "generatedAt": "2026-11-21T11:36:14.520Z",
+  "dataAt": "2026-11-21T11:27:14.940Z",
+  "status": {
+   "state": "ready",
+   "reason": null
+  },
+  "sources": {},
+  "candidates": 1250,
+  "copies": [
+   "50b835a910da5aac",
+   "7c1e02aa44b1d3f0"
+  ]
+ }
+}

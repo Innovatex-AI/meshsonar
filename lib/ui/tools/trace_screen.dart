@@ -15,6 +15,7 @@ import 'contact_ref.dart';
 import 'tool_kit.dart';
 import 'tools_host.dart';
 import '../design/app_surfaces.dart';
+import '../network/tools/trace_viewer_screen.dart';
 
 class TraceScreen extends StatelessWidget {
   /// Opens pre-filled with this contact (a repeater or room as the last hop, or the hops of its saved route).
@@ -254,6 +255,17 @@ class _TraceBodyState extends State<_TraceBody> {
                           await _trace.saveLast();
                           if (mounted) setState(() {});
                         },
+                ),
+              if (result != null && result.hops.isNotEmpty)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    key: const Key('trace-open-viewer'),
+                    style: TextButton.styleFrom(minimumSize: const Size(kToolTarget, kToolTarget)),
+                    onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => TraceViewerScreen.local(result))),
+                    icon: const Icon(Icons.timeline),
+                    label: const Text('Open in Trace Viewer'),
+                  ),
                 ),
               ..._savedSection(context),
             ]),

@@ -1,7 +1,6 @@
 // SitePageView and AnalyticsSection with a fake page engine (dark theme, 375 pt wide): loading, the error page and Retry,
 // links (native, another site, a dropped embed), the page router's address changes without a loop, Back inside the page
 // first, "Open in browser" without embed, the 17-tab list and initialTab.
-import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';

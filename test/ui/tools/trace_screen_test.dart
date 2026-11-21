@@ -236,6 +236,23 @@ void main() {
       expect(tools.trace.store.items.length, 1);
     });
 
+    testWidgets('a trace result opens in the native Trace Viewer (build 71)', (tester) async {
+      final (tools, _) = fakeTools(store: [saved('02', 'Hill', k, 2.0, 1.0, lat: 40.13, lon: -82.97)]);
+      final host = FakeToolsHost()..toolsValue = tools;
+      await pumpTool(tester, const TraceScreen(), host);
+      await settleReal(tester, real: const Duration(milliseconds: 50));
+      expect(find.byKey(const Key('trace-open-viewer')), findsNothing, reason: 'no result yet');
+      await tapKey(tester, 'trace-saved-02-open');
+      await tester.pump();
+      await tapKey(tester, 'trace-open-viewer');
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('tool-trace-viewer')), findsOneWidget);
+      expect(find.text('From your radio'), findsOneWidget);
+      expect(find.text('Hill'), findsWidgets);
+      expect(find.text('+2.0 dB'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('compare two saved traces: per hop A, B and the change in words', (tester) async {
       final (tools, _) = fakeTools(store: [saved('02', 'Hill', k, 2.0, 1.0), saved('01', 'Hill', k, 4.5, 3.0)]);
       final host = FakeToolsHost()..toolsValue = tools;
