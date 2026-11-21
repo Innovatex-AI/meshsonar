@@ -284,5 +284,7 @@ vtr.Theme _legacyTheme(bool dark) => _legacy.putIfAbsent(dark, () => vtr.ThemeRe
 /// The pre-M2 offline style (OpenMapTiles packs): OSM Carto colours through the same matrix as the online tiles (see core/offline_style.dart),
 /// labels drawn with Flutter text in the system font (SF Pro on iOS, spike S1; no glyph files needed in the app).
 /// It carries its own identity (id + the basemap render version) like every other style: the renderer's caches key on it.
+/// The id also carries [offlineStyleVersion], so an edit to the offline style still invalidates its cached renders (the
+/// version slot now holds the render version), and its key can never match a render kept from an older offline style.
 Map<String, dynamic> offlineMapStyle({required bool dark}) =>
-    withBasemapIdentity({...offlineStyle(dark: dark), 'id': 'meshsonar-offline-${dark ? 'dark' : 'light'}'});
+    withBasemapIdentity({...offlineStyle(dark: dark), 'id': 'meshsonar-offline-s$offlineStyleVersion-${dark ? 'dark' : 'light'}'});

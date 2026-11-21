@@ -7,6 +7,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/painting.dart' show Color;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/core/basemap.dart' show basemapRenderVersion;
 import 'package:meshsonar/core/offline_style.dart';
 import 'package:meshsonar/core/pmtiles_reader.dart';
 import 'package:meshsonar/ui/map/offline_basemap.dart';
@@ -149,8 +150,9 @@ void main() {
       expect(theme.layers.length, layers.length);
       // vector_map_tiles caches rendered tiles by theme id + version: the palettes must not share a key, and the
       // version must follow offlineStyleVersion so a style change invalidates on-device caches.
-      expect(theme.id, dark ? 'meshsonar-offline-dark' : 'meshsonar-offline-light');
-      expect(theme.version, '$offlineStyleVersion');
+      // Build 72: the id carries offlineStyleVersion and the version slot carries the shared basemap render version.
+      expect(theme.id, 'meshsonar-offline-s$offlineStyleVersion-${dark ? 'dark' : 'light'}');
+      expect(theme.version, '$basemapRenderVersion');
     }
   });
 
