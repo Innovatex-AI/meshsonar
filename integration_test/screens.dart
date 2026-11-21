@@ -331,6 +331,8 @@ final List<ScreenStep> screens = [
     final pad = t.view.padding.bottom / t.view.devicePixelRatio;
     _stepNote('network-header',
         'screen ${view.width.toStringAsFixed(0)}x${view.height.toStringAsFixed(0)}, safe bottom ${pad.toStringAsFixed(0)}, tab bar ${tabs.top.toStringAsFixed(0)}..${tabs.bottom.toStringAsFixed(0)}, section body ..${body.bottom.toStringAsFixed(0)}, strips: ${_rectsOf(t, [AlertsStatusStrip, MiniDriveBar, BlurBar])}');
+    // The tab bar is 72 pt plus the bottom safe area; a taller one means an inset crept in above the icons.
+    if ((tabs.height - (72 + pad)).abs() > 2) _stepFail('network-header: the tab bar is ${tabs.height.toStringAsFixed(0)} pt tall (expected ${(72 + pad).toStringAsFixed(0)})');
     if (gap.abs() > 2) _stepFail('network-header: ${gap.toStringAsFixed(0)} pt between the bottom of the section and the tab bar (expected none)');
     await t.tap(find.byKey(const Key('network-overflow')));
     await pumpFor(t, const Duration(seconds: 1));

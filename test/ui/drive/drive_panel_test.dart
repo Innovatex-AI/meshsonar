@@ -274,7 +274,7 @@ void main() {
 
   group('tab bar hook and Immersive', () {
     testWidgets('the panel hides and shows the tab bar through ShellController.immersive', (tester) async {
-      final shell = ShellController();
+      final shell = ShellController(initial: AppTab.drive);
       final h = await pumpDrive(tester, size: const Size(402, 874), navBar: 106, safeBottom: 34, drive: true, shell: shell);
       expect(shell.immersive, isFalse);
       await tester.fling(find.byKey(const Key('drive-panel-header')), const Offset(0, 120), 1500);
