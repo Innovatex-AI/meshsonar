@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../../core/v1/tools_api.dart';
 import '../../design/state_views.dart';
 import '../../theme.dart';
+import '../analytics/in_place_header.dart';
 import 'tool_common.dart';
 
 class PrefixToolScreen extends StatefulWidget {
@@ -15,7 +16,10 @@ class PrefixToolScreen extends StatefulWidget {
 
   /// Test seam.
   final ToolsApi? api;
-  const PrefixToolScreen({super.key, required this.baseUrl, required this.regionSlug, this.initialPrefix, this.api});
+
+  /// Given: the tool sits in place inside the Tools section and its back arrow calls this (see ToolFrame).
+  final VoidCallback? onClose;
+  const PrefixToolScreen({super.key, required this.baseUrl, required this.regionSlug, this.initialPrefix, this.api, this.onClose});
 
   @override
   State<PrefixToolScreen> createState() => _PrefixToolScreenState();
@@ -75,11 +79,11 @@ class _PrefixToolScreenState extends State<PrefixToolScreen> {
   Widget build(BuildContext context) {
     final t = Theme.of(context);
     final r = _report;
-    return Scaffold(
-      key: const Key('tool-prefix'),
-      appBar: AppBar(title: const Text('Prefix Tool')),
-      body: SafeArea(
-        child: ListView(padding: kToolPagePadding, children: [
+    return ToolFrame(
+      frameKey: const Key('tool-prefix'),
+      title: 'Prefix Tool',
+      onClose: widget.onClose,
+      body: ListView(padding: kToolPagePadding, children: [
           Text('Check whether a hash prefix is free for a new repeater, and see free ones to pick.', style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant)),
           const SizedBox(height: Gap.m),
           Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -115,7 +119,6 @@ class _PrefixToolScreenState extends State<PrefixToolScreen> {
           ],
           if (r != null) ..._body(context, r),
         ]),
-      ),
     );
   }
 

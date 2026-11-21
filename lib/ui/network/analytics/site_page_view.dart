@@ -22,6 +22,7 @@ import '../../design/state_views.dart';
 import '../../shell/shell_controller.dart' show ShellScope;
 import '../nodes/node_routes.dart';
 import '../packets/packet_detail_screen.dart' show openNetworkPacket;
+import 'in_place_header.dart';
 import 'site_links.dart';
 
 /// What the page engine tells the view.
@@ -99,6 +100,9 @@ class WebViewSiteEngine implements SiteWebEngine {
         .catchError((Object _) {}));
   }
 
+  /// For the on-device check only (integration_test_d): read-only questions to the page. App code does not use it.
+  WebViewController get controller => _c;
+
   @override
   Widget build(BuildContext context) => WebViewWidget(controller: _c);
   @override
@@ -124,7 +128,14 @@ class SitePageView extends StatefulWidget {
 
   /// Returns true when the app opened the link natively (the page then stays where it is).
   final bool Function(Uri link)? onNativeLink;
-  const SitePageView({super.key, required this.baseUrl, required this.path, required this.title, this.onNativeLink});
+
+  /// Null: a screen of its own (app bar, pushed over the tab). Given: the page sits in place inside a section under a
+  /// 48 pt header whose back arrow calls this.
+  final VoidCallback? onClose;
+  const SitePageView({super.key, required this.baseUrl, required this.path, required this.title, this.onNativeLink}) : onClose = null;
+
+  /// The page in place inside a Network section (a link opened it): no route is pushed, [onClose] returns to the list.
+  const SitePageView.inPlace({super.key, required this.baseUrl, required this.path, required this.title, required VoidCallback this.onClose, this.onNativeLink});
 
   @override
   State<SitePageView> createState() => _SitePageViewState();
@@ -155,16 +166,45 @@ class _SitePageViewState extends State<SitePageView> {
     _current = _start;
   }
 
+  /// Bumped when the engine is dropped, so a late event from the old one is ignored.
+  int _gen = 0;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_engine != null || _noEngine || _start == null) return;
+    if (_noEngine || _start == null) return;
+    // A hidden tab has its TickerMode off (home_shell): the web view is dropped there, so the page stops loading,
+    // polling and running scripts, and is loaded again at the same address when the tab shows.
+    final showing = TickerMode.valuesOf(context).enabled;
+    if (!showing) {
+      if (_engine != null) {
+        _gen++;
+        _engine = null;
+        _timer?.cancel();
+        _loading = false;
+        _canGoBack = false;
+      }
+      return;
+    }
+    if (_engine != null) return;
+    final g = ++_gen;
+    void on(void Function() f) {
+      if (g == _gen) f();
+    }
+
     try {
       _engine = siteWebEngineFactory(
-        SiteWebEvents(onNavigate: _onNavigate, onStarted: _onStarted, onFinished: _onFinished, onProgress: _onProgress, onMainFrameError: _onError, onUrlChange: _onUrlChange),
+        SiteWebEvents(
+          onNavigate: (u, main) => g == _gen ? _onNavigate(u, main) : false,
+          onStarted: (u) => on(() => _onStarted(u)),
+          onFinished: (u) => on(() => _onFinished(u)),
+          onProgress: (p) => on(() => _onProgress(p)),
+          onMainFrameError: (d) => on(() => _onError(d)),
+          onUrlChange: (u) => on(() => _onUrlChange(u)),
+        ),
         Theme.of(context).scaffoldBackgroundColor,
       );
-      _load();
+      _load(notify: false);
     } catch (_) {
       _noEngine = true;
       _loading = false;
@@ -177,18 +217,21 @@ class _SitePageViewState extends State<SitePageView> {
     super.dispose();
   }
 
-  void _load() {
+  /// [notify] false when called while the widget is being built (the build that follows shows the new state).
+  void _load({bool notify = true}) {
     final e = _engine, start = _start;
     if (e == null || start == null) return;
     _timer?.cancel();
     _timer = Timer(_patience, () {
       if (mounted && _loading) _onError('The page took too long to load.');
     });
-    setState(() {
+    void set() {
       _error = null;
       _loading = true;
       _progress = 0;
-    });
+    }
+
+    notify ? setState(set) : set();
     unawaited(e.load(_current != null && isMeshSonarHost(_current!) ? withEmbed(_current!) : start).catchError((Object _) => _onError('The page could not be loaded.')));
   }
 
@@ -327,6 +370,9 @@ class _SitePageViewState extends State<SitePageView> {
     final Widget body;
     if (_start == null) {
       body = const AppErrorView(key: Key('site-page-bad-address'), title: 'This page is not on MeshSonar', message: 'The app only shows meshsonar.com pages here.');
+    } else if (e == null && !_noEngine) {
+      // The tab is hidden: the web view is dropped until it shows again.
+      body = const SizedBox.expand();
     } else if (e == null) {
       body = AppErrorView(
         key: const Key('site-page-no-engine'),
@@ -360,6 +406,40 @@ class _SitePageViewState extends State<SitePageView> {
           ),
       ]);
     }
+    final actions = [
+      if (_canGoBack && widget.onClose == null)
+        IconButton(key: const Key('site-page-close'), tooltip: 'Close this page', onPressed: () => Navigator.of(context).pop(), icon: const Icon(Icons.close)),
+      if (e != null && _start != null) IconButton(key: const Key('site-page-reload'), tooltip: 'Reload', constraints: const BoxConstraints(minWidth: 48, minHeight: 48), onPressed: _load, icon: const Icon(Icons.refresh)),
+      if (_start != null)
+        IconButton(key: const Key('site-page-browser'), tooltip: 'Open in browser', constraints: const BoxConstraints(minWidth: 48, minHeight: 48), onPressed: _openInBrowser, icon: const Icon(Icons.open_in_browser)),
+    ];
+    final close = widget.onClose;
+    if (close != null) {
+      // In place inside a section: the back arrow steps back inside the page first, then returns to the list. No
+      // PopScope here, so the tab's own Back is never held.
+      return Material(
+        key: const Key('site-page'),
+        color: t.scaffoldBackgroundColor,
+        child: Column(children: [
+          InPlaceHeader(
+            title: widget.title,
+            backLabel: _canGoBack ? 'Back in this page' : 'Back to the list',
+            onBack: () {
+              if (_canGoBack) {
+                unawaited(_engine?.goBack().then((_) => _refreshBack()).catchError((Object _) {}));
+              } else {
+                close();
+              }
+            },
+            actions: [
+              if (_canGoBack) IconButton(key: const Key('site-page-close'), tooltip: 'Back to the list', constraints: const BoxConstraints(minWidth: 48, minHeight: 48), onPressed: close, icon: const Icon(Icons.close)),
+              ...actions,
+            ],
+          ),
+          Expanded(child: body),
+        ]),
+      );
+    }
     return PopScope(
       canPop: !_canGoBack,
       onPopInvokedWithResult: (didPop, _) {
@@ -368,15 +448,7 @@ class _SitePageViewState extends State<SitePageView> {
       child: Scaffold(
         key: const Key('site-page'),
         backgroundColor: t.scaffoldBackgroundColor,
-        appBar: AppBar(
-          title: Text(widget.title, overflow: TextOverflow.ellipsis),
-          actions: [
-            if (_canGoBack)
-              IconButton(key: const Key('site-page-close'), tooltip: 'Close this page', onPressed: () => Navigator.of(context).pop(), icon: const Icon(Icons.close)),
-            if (e != null && _start != null) IconButton(key: const Key('site-page-reload'), tooltip: 'Reload', onPressed: _load, icon: const Icon(Icons.refresh)),
-            if (_start != null) IconButton(key: const Key('site-page-browser'), tooltip: 'Open in browser', onPressed: _openInBrowser, icon: const Icon(Icons.open_in_browser)),
-          ],
-        ),
+        appBar: AppBar(title: Text(widget.title, overflow: TextOverflow.ellipsis), actions: actions),
         body: SafeArea(child: body),
       ),
     );

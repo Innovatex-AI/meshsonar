@@ -1,6 +1,7 @@
 // Network > Analytics (build 71, stream D): the website's 17 Analytics tabs as a plain list, same names and order as
 // the site's Analytics menu (meshcore-insights src/components/analyzer/analytics/tabs.ts). A row opens the tab's site
-// page inside the app ([SitePageView]); `initialTab` (from an `/analytics/<slug>` link) opens that tab straight away.
+// page inside the app ([SitePageView]); `initialTab` (from an `/analytics/<slug>` link) shows that tab in place inside
+// the section, with a back arrow to the list.
 import 'package:flutter/material.dart';
 
 import '../../radio/inset_list.dart';
@@ -60,27 +61,18 @@ class AnalyticsSection extends StatefulWidget {
 }
 
 class _AnalyticsSectionState extends State<AnalyticsSection> {
-  @override
-  void initState() {
-    super.initState();
-    _openInitial();
-  }
+  /// The tab a link opened, shown in place inside the section (no page is pushed over the Network tab, so the section
+  /// strip and the tab bar stay usable and a later link to another section is not hidden). Null = the list.
+  late AnalyticsTab? _shown = analyticsTabOf(widget.initialTab);
 
   @override
   void didUpdateWidget(AnalyticsSection old) {
     super.didUpdateWidget(old);
-    if (widget.initialTab != null && widget.initialTab != old.initialTab) _openInitial();
+    // A new link shows its tab; an unknown slug or none shows the list.
+    if (widget.initialTab != old.initialTab || widget.baseUrl != old.baseUrl) _shown = analyticsTabOf(widget.initialTab);
   }
 
-  /// An unknown slug shows the list.
-  void _openInitial() {
-    final tab = analyticsTabOf(widget.initialTab);
-    if (tab == null) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _open(tab);
-    });
-  }
-
+  /// A row tapped in the list opens the tab as its own page.
   void _open(AnalyticsTab tab) {
     Navigator.of(context).push(MaterialPageRoute<void>(
       settings: RouteSettings(name: tab.path),
@@ -90,6 +82,16 @@ class _AnalyticsSectionState extends State<AnalyticsSection> {
 
   @override
   Widget build(BuildContext context) {
+    final shown = _shown;
+    if (shown != null) {
+      return SitePageView.inPlace(
+        key: ValueKey('analytics-in-place-${widget.baseUrl}-${shown.slug}'),
+        baseUrl: widget.baseUrl,
+        path: shown.path,
+        title: shown.label,
+        onClose: () => setState(() => _shown = null),
+      );
+    }
     return ListView(
       key: const Key('analytics-section'),
       padding: const EdgeInsets.only(top: 12, bottom: 24),

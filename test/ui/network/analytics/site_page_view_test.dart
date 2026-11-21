@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/ui/network/analytics/analytics_section.dart';
+import 'package:meshsonar/ui/network/analytics/in_place_header.dart';
 import 'package:meshsonar/ui/network/analytics/site_links.dart';
 import 'package:meshsonar/ui/network/analytics/site_page_view.dart';
 import 'package:meshsonar/ui/theme.dart';
@@ -258,5 +259,72 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     expect(made, 0);
     expect(find.byKey(const Key('analytics-section')), findsOneWidget);
+  });
+
+  testWidgets('a linked tab shows IN PLACE: no page is pushed, the back arrow returns to the list, a new link shows the new tab', (tester) async {
+    final nav = GlobalKey<NavigatorState>();
+    Widget app(String? tab) => MaterialApp(navigatorKey: nav, theme: meshSonarTheme(Brightness.dark), home: Scaffold(body: AnalyticsSection(baseUrl: base, regionSlug: 'cmh', initialTab: tab)));
+    tester.view.physicalSize = const Size(375, 760);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(app('rf-signal'));
+    await tester.pump();
+    expect(nav.currentState!.canPop(), isFalse, reason: 'nothing was pushed over the section');
+    expect(find.byType(AnalyticsSection), findsOneWidget);
+    expect(engine.loads.single.toString(), '$base/analytics/rf-signal?embed=1');
+    expect(tester.getSize(find.byType(InPlaceHeader)).height, greaterThanOrEqualTo(48));
+    final first = engine;
+    await tester.pumpWidget(app('topology'));
+    await tester.pump();
+    expect(identical(engine, first), isFalse, reason: 'a new link is a new page');
+    expect(engine.loads.single.toString(), '$base/analytics/topology?embed=1');
+    expect(find.text('Topology'), findsOneWidget);
+    // inside the page: the arrow steps back in the page first
+    engine.finish();
+    engine.push('$base/analytics/topology?embed=1&window=7d');
+    await tester.pump();
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('in-place-back')));
+    await tester.pump();
+    await tester.pump();
+    expect(engine.backs, 1);
+    expect(find.byKey(const Key('site-page')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('in-place-back')));
+    await tester.pump();
+    expect(find.byKey(const Key('analytics-section')), findsOneWidget);
+    expect(find.byKey(const Key('site-page')), findsNothing);
+    expect(tester.takeException(), isNull);
+    await settleTimers(tester);
+  });
+
+  testWidgets('a page in a hidden tab drops its web view and loads again at the same address when shown', (tester) async {
+    var made = 0;
+    siteWebEngineFactory = (e, _) {
+      made++;
+      return engine = FakeEngine(e);
+    };
+    Widget app(bool showing) => MaterialApp(
+        theme: meshSonarTheme(Brightness.dark),
+        home: TickerMode(enabled: showing, child: Scaffold(body: SitePageView.inPlace(baseUrl: base, path: '/status', title: 'Status', onClose: () {}))));
+    await tester.pumpWidget(app(true));
+    await tester.pump();
+    engine.finish();
+    engine.push('$base/status?embed=1&x=1');
+    await tester.pump();
+    final first = engine;
+    expect(find.byKey(const Key('fake-web')), findsOneWidget);
+    await tester.pumpWidget(app(false));
+    await tester.pump();
+    expect(find.byKey(const Key('fake-web')), findsNothing, reason: 'the web view is gone while hidden');
+    // a late event from the dropped page changes nothing
+    first.events.onMainFrameError('late');
+    await tester.pump();
+    expect(find.byKey(const Key('site-page-error')), findsNothing);
+    await tester.pumpWidget(app(true));
+    await tester.pump();
+    expect(made, 2);
+    expect(engine.loads.single.toString(), '$base/status?embed=1&x=1');
+    expect(find.byKey(const Key('fake-web')), findsOneWidget);
+    await settleTimers(tester);
   });
 }

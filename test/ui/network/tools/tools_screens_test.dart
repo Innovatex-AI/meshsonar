@@ -161,6 +161,11 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
       await tester.pump();
       expect(find.byType(e.value.$1), findsOneWidget);
+      // in place: the section is still on stage, nothing was pushed, and the back arrow returns to the list
+      expect(find.byType(ToolsSection), findsOneWidget);
+      expect(Navigator.of(tester.element(find.byType(ToolsSection))).canPop(), isFalse);
+      expect(find.byKey(const Key('in-place-back')), findsOneWidget);
+      expect(tester.getSize(find.byKey(const Key('in-place-back'))).height, greaterThanOrEqualTo(48));
       if (e.value.$2 != null) expect(tester.widget<SitePageView>(find.byType(SitePageView)).path, e.value.$2);
       if (e.key.contains('hops=')) {
         expect(jsonDecode(server.seen.single.body), {'hops': ['a1', '3f'], 'hashSize': 1});
@@ -169,10 +174,26 @@ void main() {
       if (e.key.endsWith(traceHash)) expect(find.byKey(const Key('trace-summary')), findsOneWidget);
       if (e.key.contains('prefix=')) expect(server.seen.single.url.queryParameters, {'prefix': 'a1'});
       expect(tester.takeException(), isNull);
+      await tester.tap(find.byKey(const Key('in-place-back')));
+      await tester.pump();
+      expect(find.byKey(const Key('tools-section')), findsOneWidget);
+      expect(find.byType(e.value.$1), findsNothing);
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(seconds: 30));
     });
   }
+
+  testWidgets('a row tapped in the list opens the tool as its own page; a radio tool id opens its page too', (tester) async {
+    await pump(tester, const Scaffold(body: ToolsSection(baseUrl: base, regionSlug: 'cmh')));
+    await tester.tap(find.byKey(const Key('tool-row-prefix')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(PrefixToolScreen), findsOneWidget);
+    expect(find.byKey(const Key('in-place-back')), findsNothing);
+    expect(find.byType(AppBar), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(seconds: 30));
+  });
 
   testWidgets('a /tools/<name> the app does not know shows the list', (tester) async {
     final r = NetworkRequest.parse(Uri.parse('$base/tools/whatever'))!;
