@@ -1,7 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:meshsonar/ui/design/anchored_sheet.dart';
 import 'package:meshsonar/ui/design/app_symbols.dart';
 import 'package:meshsonar/ui/design/app_widgets.dart';
 import 'package:meshsonar/ui/design/state_views.dart';
@@ -98,31 +97,5 @@ void main() {
       expect(n, 1);
     });
   });
-
-  group('AnchoredSheetHost', () {
-    testWidgets('sits above the dock inset, replaces the previous sheet, drag down closes, map behind stays tappable', (tester) async {
-      await setSize(tester, const Size(400, 800));
-      final ctl = AnchoredSheetController();
-      var mapTaps = 0, closed = 0;
-      await tester.pumpWidget(designApp(home: (c) => AnchoredSheetHost(
-            controller: ctl,
-            bottomInset: 120,
-            child: GestureDetector(behavior: HitTestBehavior.opaque, key: const Key('map'), onTap: () => mapTaps++, child: const SizedBox.expand()),
-          )));
-      ctl.show(id: 'layers', builder: (c) => const SizedBox(height: 200, child: Text('Layers')), onClosed: () => closed++);
-      await tester.pump();
-      expect(find.text('Layers'), findsOneWidget);
-      expect(tester.getRect(find.byKey(const ValueKey('anchored-layers'))).bottom, closeTo(800 - 120, 0.5), reason: 'bounded by the dock top');
-      await tester.tapAt(const Offset(200, 100));
-      expect(mapTaps, 1, reason: 'no barrier');
-      ctl.show(id: 'inspector', builder: (c) => const SizedBox(height: 100, child: Text('Inspector')));
-      await tester.pump();
-      expect(find.text('Layers'), findsNothing);
-      expect(find.text('Inspector'), findsOneWidget);
-      expect(closed, 1, reason: 'replaced sheet reports closed');
-      await tester.drag(find.byKey(const Key('anchored-grabber')), const Offset(0, 200));
-      await tester.pump();
-      expect(ctl.isOpen, isFalse);
-    });
-  });
+  // The transient map panel slot (MapPanelHost, the former AnchoredSheetHost) is tested in map_panel_test.dart.
 }
