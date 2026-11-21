@@ -9,7 +9,7 @@ import '../../../core/v1/nodes_api.dart';
 import '../../region/region_common.dart' show RegionOfflineAsOf, RegionOfflineEmpty, agoText;
 import '../../theme.dart';
 import '../network_context.dart';
-import '../packets/packet_ui.dart' show WebTwinLine;
+import '../packets/packet_ui.dart' show WebTwinLine, plainServerText;
 import 'node_routes.dart';
 import 'node_ui.dart';
 
@@ -86,7 +86,7 @@ class _ObserversDirectoryViewState extends State<ObserversDirectoryView> {
                 if (rows.isEmpty)
                   Padding(
                     padding: const EdgeInsets.all(Gap.xl),
-                    child: Text(p.status != null && p.status!.state.name != 'ready' && p.status!.reason != null ? p.status!.reason! : 'No observer hears this region yet.',
+                    child: Text((p.status != null && p.status!.state.name != 'ready' ? plainServerText(p.status!.reason) : null) ?? 'No observer hears this region yet.',
                         key: const Key('observers-empty'), textAlign: TextAlign.center),
                   ),
                 for (final r in rows)

@@ -210,11 +210,24 @@ class NoPacketFeedCard extends StatelessWidget {
           ),
         ]),
         const SizedBox(height: Gap.s),
-        Text(reason ?? 'No observer or outside feed delivers packets for this region yet.', style: t.textTheme.bodyMedium),
+        Text(plainServerText(reason) ?? 'No observer or outside feed delivers packets for this region yet.', style: t.textTheme.bodyMedium),
         const SizedBox(height: Gap.s),
         Text('There are no $what to show until one does. Run an observer here, or pick another region at the top.',
             style: t.textTheme.bodySmall?.copyWith(color: c.onSurfaceVariant)),
       ]),
     );
   }
+}
+
+final RegExp _internalCode = RegExp(r'\b(AZ|OD|MT|WP|V)-\d');
+
+/// A sentence the server wrote, made fit to show: sentences that name an internal work item ("... arrive with AZ-1.5
+/// to AZ-1.8.") are dropped, the rest is kept as written. Null when nothing is left (or [text] is null or empty).
+String? plainServerText(String? text) {
+  if (text == null) return null;
+  final kept = [
+    for (final s in text.trim().split(RegExp(r'(?<=[.!?])\s+')))
+      if (s.trim().isNotEmpty && !_internalCode.hasMatch(s)) s.trim()
+  ];
+  return kept.isEmpty ? null : kept.join(' ');
 }

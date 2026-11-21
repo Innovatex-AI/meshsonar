@@ -12,7 +12,7 @@ import 'package:flutter/material.dart';
 import '../../../core/v1/channels_api.dart';
 import '../../region/region_common.dart' show RegionOfflineAsOf, RegionOfflineEmpty, agoText, groupInt;
 import '../../theme.dart';
-import '../packets/packet_ui.dart' show NoPacketFeedCard, PacketNote, WebTwinLine;
+import '../packets/packet_ui.dart' show NoPacketFeedCard, PacketNote, WebTwinLine, plainServerText;
 import 'channel_reader.dart';
 import 'channel_search.dart';
 
@@ -143,7 +143,7 @@ class _ChannelsSectionState extends State<ChannelsSection> {
               else if (storeOff)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: Gap.l),
-                  child: PacketNote(p.status.reason ?? 'Channel messages are not being stored on this server yet.', key: const Key('channels-store-off')),
+                  child: PacketNote(plainServerText(p.status.reason) ?? 'Channel messages are not being stored on this server yet.', key: const Key('channels-store-off')),
                 )
               else if (rows.isEmpty)
                 const Padding(

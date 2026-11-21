@@ -227,7 +227,7 @@ class _PacketListViewState extends State<PacketListView> with WidgetsBindingObse
     _nodeTrusted = p.nodeListTrusted;
     final st = p.status;
     _noFeedReason = _rows.isEmpty && isNoPacketFeed(st) ? st!.reason : null;
-    _statusNote = _noFeedReason == null && st != null && st.state.name != 'ready' ? (st.reason ?? 'The data is ${st.state.name}.') : null;
+    _statusNote = _noFeedReason == null && st != null && st.state.name != 'ready' ? (plainServerText(st.reason) ?? 'The data is ${st.state.name}.') : null;
   }
 
   Future<void> _loadMore() async {
@@ -365,28 +365,39 @@ class _PacketListViewState extends State<PacketListView> with WidgetsBindingObse
   Widget _toolbar(BuildContext context) {
     final t = Theme.of(context);
     final n = _filter.chips.length;
+    // One row, always: the three actions on the left (they scroll sideways if a label grows), Share at the right end.
     return Padding(
       padding: const EdgeInsets.fromLTRB(Gap.s, Gap.xs, Gap.s, 0),
-      child: Wrap(crossAxisAlignment: WrapCrossAlignment.center, spacing: Gap.xs, runSpacing: 0, children: [
-        if (!_mine)
-          TextButton.icon(
-            key: const Key('packets-filters'),
-            onPressed: _openSheet,
-            icon: const Icon(Icons.tune),
-            label: Text(n == 0 ? 'Filters' : 'Filters ($n)'),
+      child: Row(key: const Key('packets-toolbar'), children: [
+        Expanded(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(children: [
+              if (!_mine)
+                TextButton.icon(
+                  key: const Key('packets-filters'),
+                  onPressed: _openSheet,
+                  icon: const Icon(Icons.tune),
+                  label: Text(n == 0 ? 'Filters' : 'Filters ($n)'),
+                ),
+              TextButton.icon(
+                key: const Key('packets-live-toggle'),
+                onPressed: () {
+                  setState(() => _live = !_live);
+                  _sync();
+                  if (_live && !_mine) unawaited(_poll());
+                },
+                icon: Icon(_live ? Icons.pause_circle_outline : Icons.play_circle_outline),
+                label: Text(_live ? (_mine || !_saver ? 'Live' : 'Live (paused in Saver)') : 'Paused'),
+                style: TextButton.styleFrom(foregroundColor: _live ? t.colorScheme.primary : t.colorScheme.onSurfaceVariant),
+              ),
+              Tooltip(
+                message: 'Decode a packet',
+                child: TextButton.icon(key: const Key('packets-decode'), onPressed: _openDecode, icon: const Icon(Icons.data_object), label: const Text('Decode')),
+              ),
+            ]),
           ),
-        TextButton.icon(
-          key: const Key('packets-live-toggle'),
-          onPressed: () {
-            setState(() => _live = !_live);
-            _sync();
-            if (_live && !_mine) unawaited(_poll());
-          },
-          icon: Icon(_live ? Icons.pause_circle_outline : Icons.play_circle_outline),
-          label: Text(_live ? (_mine || !_saver ? 'Live' : 'Live (paused in Saver)') : 'Paused'),
-          style: TextButton.styleFrom(foregroundColor: _live ? t.colorScheme.primary : t.colorScheme.onSurfaceVariant),
         ),
-        TextButton.icon(key: const Key('packets-decode'), onPressed: _openDecode, icon: const Icon(Icons.data_object), label: const Text('Decode a packet')),
         if (!_mine) IconButton(key: const Key('packets-share'), tooltip: 'Share this list', onPressed: _share, icon: const Icon(Icons.ios_share)),
       ]),
     );

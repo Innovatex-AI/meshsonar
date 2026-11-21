@@ -154,7 +154,7 @@ class _DecodePacketScreenState extends State<DecodePacketScreen> {
         Expanded(
           child: r == null
               ? ListView(padding: const EdgeInsets.all(Gap.l), children: [WebTwinLine(Uri.https(networkApexHost, '/tools/decode'))])
-              : PacketDetailBody(key: ValueKey('decode-${r.hash}-${r.source.name}'), d: r, web: Uri.https(networkApexHost, '/tools/decode')),
+              : PacketDetailBody(key: ValueKey('decode-${r.hash}-${r.source.name}'), d: r, expandSections: true, web: Uri.https(networkApexHost, '/tools/decode')),
         ),
       ]),
     );

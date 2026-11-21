@@ -2,6 +2,10 @@
 // the phone's own radio, a pasted packet): summary header, the decoded message (Public and hashtag only), decoded
 // fields by type, the resolved path with per-hop confidence said honestly, "show on map", the observations table, the
 // byte inspector, and the source attribution. Screens wrap it (packet_detail_screen.dart, decode_packet_screen.dart).
+// Small screen order (build 71): the first screen answers what, when, who heard it and how far: header facts, the
+// message, then "Who heard it" (the first [packetObserversShown], the rest behind "Show all"). The long parts (every
+// hop of every path, the byte inspector) sit behind tappable headers, closed until asked for ([expandSections] opens
+// them from the start, for "Decode a packet" where the bytes are the point).
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:latlong2/latlong.dart';
@@ -30,6 +34,108 @@ class PacketCrossSource {
   const PacketCrossSource({this.radio, this.networkObservers, this.onOpenNetwork});
 }
 
+/// Observers listed before "Show all", and candidates listed under a hop several nodes share.
+const int packetObserversShown = 5;
+const int packetHopCandidatesShown = 3;
+
+/// A long section of the packet page behind a tappable header (at least 48 pt), closed until asked for.
+/// Keys: `packet-fold-<id>` on the header tile.
+class PacketFold extends StatelessWidget {
+  final String id, title;
+  final String? subtitle;
+  final bool initiallyExpanded;
+  final List<Widget> children;
+  const PacketFold({super.key, required this.id, required this.title, this.subtitle, this.initiallyExpanded = false, required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: Gap.s),
+      child: Theme(
+        data: t.copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          key: Key('packet-fold-$id'),
+          initiallyExpanded: initiallyExpanded,
+          tilePadding: EdgeInsets.zero,
+          childrenPadding: EdgeInsets.zero,
+          expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+          title: Semantics(header: true, child: Text(title, style: t.textTheme.titleMedium)),
+          subtitle: subtitle == null ? null : Text(subtitle!, key: Key('packet-fold-$id-summary'), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+          children: children,
+        ),
+      ),
+    );
+  }
+}
+
+/// "Who heard it": the first [packetObserversShown] observers, the rest behind "Show all N".
+class _ObserverList extends StatefulWidget {
+  final PacketDetail d;
+  final VoidCallback? onLoadMore;
+  final bool loadingMore;
+  const _ObserverList({required this.d, this.onLoadMore, this.loadingMore = false});
+  @override
+  State<_ObserverList> createState() => _ObserverListState();
+}
+
+class _ObserverListState extends State<_ObserverList> {
+  bool _all = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final d = widget.d;
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant);
+    final rows = _all ? d.observations : d.observations.take(packetObserversShown).toList();
+    final hidden = d.observations.length - rows.length;
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      PacketSectionTitle('Who heard it (${d.observationCount})'),
+      if (d.observationsExpired)
+        const PacketNote('The per-observer rows of this packet are older than 14 days and were removed; the counts above are kept.'),
+      for (final o in rows)
+        Container(
+          key: ValueKey('packet-obs-${o.id}'),
+          constraints: const BoxConstraints(minHeight: 48),
+          padding: const EdgeInsets.symmetric(vertical: Gap.xs),
+          decoration: BoxDecoration(border: Border(bottom: BorderSide(color: t.colorScheme.outlineVariant.withValues(alpha: 0.5)))),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Expanded(
+                child: Text('${o.observer.name}${o.observer.kind == 'outside' ? ' (outside feed)' : (o.observer.kind == 'phone' ? ' (phone)' : '')}',
+                    style: t.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+              ),
+              if (o.snr != null) Text(snrText(o.snr), style: t.textTheme.labelLarge?.copyWith(color: snrColor(context, o.snr!))),
+            ]),
+            Text(
+              [
+                clockUtc(o.at),
+                if (o.rssi != null) '${o.rssi!.round()} dBm',
+                // a long path would fill the row: say how far it came; the hops themselves are under Paths
+                o.path.isEmpty ? 'heard direct' : (o.path.length > 6 ? 'after ${o.path.length} hops' : 'path ${o.path.join(' > ')}'),
+              ].join(' · '),
+              style: muted,
+            ),
+          ]),
+        ),
+      if (hidden > 0)
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton(key: const Key('packet-obs-all'), onPressed: () => setState(() => _all = true), child: Text('Show all ${d.observations.length} listed')),
+        ),
+      if ((_all || hidden == 0) && d.observationsNext != null && widget.onLoadMore != null)
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton(
+            key: const Key('packet-obs-more'),
+            onPressed: widget.loadingMore ? null : widget.onLoadMore,
+            child: Text(widget.loadingMore ? 'Loading…' : 'Show more observers'),
+          ),
+        ),
+    ]);
+  }
+}
+
 class PacketDetailBody extends StatelessWidget {
   final PacketDetail d;
   final Map<String, V1Source> sources;
@@ -50,8 +156,12 @@ class PacketDetailBody extends StatelessWidget {
   /// Draws this packet's path on the live map (Network > Map, AZ-3.3); null for a packet the network has no copy of
   /// (the phone's own radio, a pasted packet), which opens the map around its named hops instead.
   final VoidCallback? onShowOnMap;
+
+  /// Start with Paths and Bytes open (the decode tool, and tests that read them).
+  final bool expandSections;
   const PacketDetailBody({
     this.onShowOnMap,
+    this.expandSections = false,
     super.key,
     required this.d,
     this.sources = const {},
@@ -98,20 +208,27 @@ class PacketDetailBody extends StatelessWidget {
         if (d.anomaly != null) PacketNote(d.anomaly!, icon: Icons.warning_amber_rounded),
         for (final m in d.missing) PacketNote(m, key: ValueKey('packet-missing-$m')),
         if (d.message != null) _message(context, d.message!),
+        if (d.observations.isNotEmpty || d.observationsExpired || d.observationCount > 0) _observations(context),
         if (fields.decoded.isNotEmpty) ...[
           const PacketSectionTitle('Decoded'),
           ..._decodedRows(context, fields),
         ],
         if (d.paths.isNotEmpty || d.type == 9) _paths(context),
-        if (d.observations.isNotEmpty || d.observationsExpired || d.observationCount > 0) _observations(context),
-        const PacketSectionTitle('Bytes'),
-        if (inspect != null) ...[
-          if (inspect != d) const PacketNote('These bytes are from your radio: this server does not send packet bytes yet.', key: Key('packet-bytes-from-radio')),
-          if (inspect.source == PacketSource.v1 && !inspect.rawVerified)
-            const PacketNote('The server could not confirm these bytes against the packet hash.', icon: Icons.warning_amber_rounded),
-          ByteInspector(key: ValueKey('inspector-${inspect.hash}'), raw: inspect.raw!, ranges: inspect.bytes),
-        ] else
-          const PacketNote('No bytes to show for this packet from this source.', key: Key('packet-no-bytes')),
+        PacketFold(
+          id: 'bytes',
+          title: 'Bytes',
+          subtitle: inspect?.raw == null ? 'Not sent by this source' : '${inspect!.raw!.length ~/ 2} bytes, every field labelled',
+          initiallyExpanded: expandSections,
+          children: [
+            if (inspect != null) ...[
+              if (inspect != d) const PacketNote('These bytes are from your radio: this server does not send packet bytes yet.', key: Key('packet-bytes-from-radio')),
+              if (inspect.source == PacketSource.v1 && !inspect.rawVerified)
+                const PacketNote('The server could not confirm these bytes against the packet hash.', icon: Icons.warning_amber_rounded),
+              ByteInspector(key: ValueKey('inspector-${inspect.hash}'), raw: inspect.raw!, ranges: inspect.bytes),
+            ] else
+              const PacketNote('No bytes to show for this packet from this source.', key: Key('packet-no-bytes')),
+          ],
+        ),
         if (sources.isNotEmpty) _attribution(context),
         if (web != null) WebTwinLine(web!),
       ],
@@ -280,12 +397,24 @@ class PacketDetailBody extends StatelessWidget {
         for (final h in p.hops)
           if (h.position != null) LatLng(h.position!.lat, h.position!.lon)
     ];
+    final longest = d.paths.fold<int>(0, (m, p) => p.hops.length > m ? p.hops.length : m);
+    final named = d.paths.fold<int>(0, (m, p) => m + p.hops.where((h) => h.confidence == HopConfidence.unique || h.confidence == HopConfidence.likely).length);
+    final total = d.paths.fold<int>(0, (m, p) => m + p.hops.length);
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      PacketSectionTitle(d.type == 9 ? 'Trace hops' : (d.paths.length > 1 ? 'Paths (${d.paths.length})' : 'Path')),
-      if (nodeListTrusted == false)
-        PacketNote(nodeListReason ?? 'The node list is not complete here, so no hop is named with more than "likely".', icon: Icons.rule),
-      for (final p in d.paths) _path(context, p),
-      if (d.paths.isEmpty) const PacketNote('No hops: the packet was heard straight from its sender.'),
+      PacketFold(
+        id: 'paths',
+        title: d.type == 9 ? 'Trace hops' : (d.paths.length > 1 ? 'Paths (${d.paths.length})' : 'Path'),
+        subtitle: d.paths.isEmpty
+            ? 'No hops: heard straight from its sender'
+            : '${d.paths.length > 1 ? 'Up to $longest' : '$longest'} ${longest == 1 ? 'hop' : 'hops'} · $named of $total named',
+        initiallyExpanded: expandSections,
+        children: [
+          if (nodeListTrusted == false)
+            PacketNote(plainServerText(nodeListReason) ?? 'The node list is not complete here, so no hop is named with more than "likely".', icon: Icons.rule),
+          for (final p in d.paths) _path(context, p),
+          if (d.paths.isEmpty) const PacketNote('No hops: the packet was heard straight from its sender.'),
+        ],
+      ),
       const SizedBox(height: Gap.s),
       if (onShowOnMap != null)
         OutlinedButton.icon(
@@ -342,7 +471,7 @@ class PacketDetailBody extends StatelessWidget {
   Widget _hop(BuildContext context, PacketPath p, PacketHop h) {
     final t = Theme.of(context);
     final muted = t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant);
-    String score(double? s) => s == null ? '' : ' (score ${s.toStringAsFixed(2)})';
+    String score(double? s) => s == null ? '' : ' (${(s.clamp(0.0, 1.0) * 100).round()}% likely)';
     final line = switch (h.confidence) {
       HopConfidence.unique => h.node?.label ?? 'One node has this code',
       HopConfidence.likely => '${h.node?.label ?? 'A node'}${score(h.score)}',
@@ -367,64 +496,23 @@ class PacketDetailBody extends StatelessWidget {
               if (h.snrDb != null) Text(snrText(h.snrDb), style: t.textTheme.labelMedium?.copyWith(color: snrColor(context, h.snrDb!))),
             ]),
             Text(line, style: t.textTheme.bodyMedium),
-            for (final c in shown.take(8))
+            for (final c in shown.take(packetHopCandidatesShown))
               Padding(
                 padding: const EdgeInsets.only(left: Gap.m, top: 2),
                 child: Text(
-                  '${c.node.label}${c.score == null ? '' : ', score ${c.score!.toStringAsFixed(2)}'}${c.distanceKm == null ? '' : ', ${AppScope.unitsOf(context).distance(c.distanceKm! * 1000)} away'}',
+                  '${c.node.label}${c.score == null ? '' : ', ${(c.score!.clamp(0.0, 1.0) * 100).round()}% likely'}${c.distanceKm == null ? '' : ', ${AppScope.unitsOf(context).distance(c.distanceKm! * 1000)} away'}',
                   style: muted,
                 ),
               ),
-            if (h.confidence == HopConfidence.ambiguous && h.candidatesTotal > shown.length)
-              Padding(padding: const EdgeInsets.only(left: Gap.m), child: Text('and ${h.candidatesTotal - shown.length} more', style: muted)),
+            if (h.confidence == HopConfidence.ambiguous && h.candidatesTotal > shown.take(packetHopCandidatesShown).length)
+              Padding(padding: const EdgeInsets.only(left: Gap.m), child: Text('and ${h.candidatesTotal - shown.take(packetHopCandidatesShown).length} more', style: muted)),
           ]),
         ),
       ),
     );
   }
 
-  Widget _observations(BuildContext context) {
-    final t = Theme.of(context);
-    final muted = t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant);
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      PacketSectionTitle('Who heard it (${d.observationCount})'),
-      if (d.observationsExpired)
-        const PacketNote('The per-observer rows of this packet are older than 14 days and were removed; the counts above are kept.'),
-      for (final o in d.observations)
-        Container(
-          key: ValueKey('packet-obs-${o.id}'),
-          constraints: const BoxConstraints(minHeight: 48),
-          padding: const EdgeInsets.symmetric(vertical: Gap.xs),
-          decoration: BoxDecoration(border: Border(bottom: BorderSide(color: t.colorScheme.outlineVariant.withValues(alpha: 0.5)))),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              Expanded(
-                child: Text('${o.observer.name}${o.observer.kind == 'outside' ? ' (outside feed)' : (o.observer.kind == 'phone' ? ' (phone)' : '')}',
-                    style: t.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
-              ),
-              if (o.snr != null) Text(snrText(o.snr), style: t.textTheme.labelLarge?.copyWith(color: snrColor(context, o.snr!))),
-            ]),
-            Text(
-              [
-                clockUtc(o.at),
-                if (o.rssi != null) '${o.rssi!.round()} dBm',
-                o.path.isEmpty ? 'heard direct' : 'path ${o.path.join(' > ')}',
-              ].join(' · '),
-              style: muted,
-            ),
-          ]),
-        ),
-      if (d.observationsNext != null && onLoadMoreObservations != null)
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton(
-            key: const Key('packet-obs-more'),
-            onPressed: loadingMore ? null : onLoadMoreObservations,
-            child: Text(loadingMore ? 'Loading…' : 'Show more observers'),
-          ),
-        ),
-    ]);
-  }
+  Widget _observations(BuildContext context) => _ObserverList(d: d, onLoadMore: onLoadMoreObservations, loadingMore: loadingMore);
 
   Widget _attribution(BuildContext context) {
     final t = Theme.of(context);

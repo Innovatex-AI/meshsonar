@@ -135,7 +135,7 @@ class ObserverPageBody extends StatelessWidget {
         if (r.iata != null) KvRow('Area', r.iata!),
         if (r.firmware != null) KvRow('Firmware', r.firmware!),
         if (d.model != null) KvRow('Model', d.model!),
-        if (d.radio != null) KvRow('Radio', d.radio!),
+        if (d.radio != null) KvRow('Radio', radioText(d.radio!), valueKey: const Key('observer-radio')),
         if (d.uptimeS != null) KvRow('Up for', _uptime(d.uptimeS!)),
         if (d.reboots7d != null) KvRow('Restarts in 7 days', '${d.reboots7d}${d.lastReboot == null ? '' : ', last ${agoText(d.lastReboot)}'}'),
         if (d.qualityFlags.isNotEmpty) KvRow('Data quality', d.qualityFlags.join(', ')),
@@ -187,8 +187,10 @@ class ObserverPageBody extends StatelessWidget {
         title: title,
         summary: last == null ? 'No readings.' : 'Latest ${last.$2.toStringAsFixed(1)} $unit at ${_time(last.$1)}; ${pts.length} readings.',
         table: ChartTable(head: const ['Time', 'Value'], rows: [for (final s in m.samples.reversed.take(96)) [_time(s.at), cell(s)]]),
-        caption: 'Every ${m.fiveMinute ? '5 minutes' : 'hour'}, in your time zone. A missing sample is a gap; red ticks are restarts.',
-        chart: TimeLineChart(series: series, yLabel: unit, xFormat: _time, breakGap: gap, floorMarks: reboots, refLine: ref, refLabel: refLabel, legend: series.length > 1),
+        // The dashed line is named in the caption under the chart, never on top of the data line.
+        caption: '${ref == null || refLabel == null ? '' : 'Dashed line: $refLabel (${trimNumber(ref, 1)} $unit). '}'
+            'Every ${m.fiveMinute ? '5 minutes' : 'hour'}, in your time zone. A missing sample is a gap; red ticks are restarts.',
+        chart: TimeLineChart(series: series, yLabel: unit, xFormat: _time, breakGap: gap, floorMarks: reboots, refLine: ref, legend: series.length > 1),
       );
     }
 
@@ -202,7 +204,7 @@ class ObserverPageBody extends StatelessWidget {
       NodeSection(id: 'observer-metrics', title: 'Last 24 hours', children: [
         if (nf.isNotEmpty)
           chart('obs-noise', 'Noise floor', 'dBm', [ChartSeries(name: 'Noise floor', points: nf, color: pal[0])], (s) => v(s.noiseFloorDbm, 0),
-              ref: -100, refLabel: 'interference'),
+              ref: -100, refLabel: 'interference above this'),
         if (tx.isNotEmpty || rx.isNotEmpty)
           chart(
               'obs-airtime',

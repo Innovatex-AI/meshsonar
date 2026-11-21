@@ -43,7 +43,11 @@ class NetworkPacketScreen extends StatefulWidget {
   final PacketsApi? api;
   final RxLog? radioLog;
   final DateTime Function()? clock;
-  const NetworkPacketScreen({super.key, required this.baseUrl, this.regionSlug, required this.hash, this.local, this.api, this.radioLog, this.clock});
+
+  /// Start with the Paths and Bytes sections open (they are closed on a phone until tapped).
+  final bool expandSections;
+  const NetworkPacketScreen(
+      {super.key, required this.baseUrl, this.regionSlug, required this.hash, this.local, this.api, this.radioLog, this.clock, this.expandSections = false});
 
   @override
   State<NetworkPacketScreen> createState() => _NetworkPacketScreenState();
@@ -163,6 +167,7 @@ class _NetworkPacketScreenState extends State<NetworkPacketScreen> {
     if (_localFirst) {
       final net = _read;
       return PacketDetailBody(
+        expandSections: widget.expandSections,
         d: widget.local!,
         clock: clock,
         web: web,
@@ -182,6 +187,7 @@ class _NetworkPacketScreenState extends State<NetworkPacketScreen> {
       final mine = _radio.isEmpty ? null : _radio.first.detail;
       if (mine != null) {
         return PacketDetailBody(
+        expandSections: widget.expandSections,
           d: mine.copyWith(missing: [
             e.notFound ? 'The network has no record of this packet; this is what your radio heard.' : 'The network copy did not load (${e.message}); this is what your radio heard.',
             ...mine.missing,
@@ -202,6 +208,7 @@ class _NetworkPacketScreenState extends State<NetworkPacketScreen> {
     return RefreshIndicator(
       onRefresh: _load,
       child: PacketDetailBody(
+        expandSections: widget.expandSections,
         d: r.detail,
         sources: r.sources,
         nodeListTrusted: r.nodeListTrusted,

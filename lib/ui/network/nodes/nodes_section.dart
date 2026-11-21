@@ -16,7 +16,7 @@ import '../../../core/v1/nodes_api.dart';
 import '../../region/region_common.dart' show RegionOfflineAsOf, RegionOfflineEmpty, agoText;
 import '../../theme.dart';
 import '../network_context.dart';
-import '../packets/packet_ui.dart' show WebTwinLine;
+import '../packets/packet_ui.dart' show WebTwinLine, plainServerText;
 import 'node_routes.dart';
 import 'node_ui.dart';
 import 'observers_directory.dart';
@@ -90,7 +90,7 @@ class _NodeDirectoryViewState extends State<NodeDirectoryView> {
         _roleCounts = p.roleCounts;
         _statusCounts = p.statusCounts;
         final st = p.status;
-        _statusNote = st != null && st.state.name != 'ready' ? (st.reason ?? 'The data is ${st.state.name}.') : null;
+        _statusNote = st != null && st.state.name != 'ready' ? (plainServerText(st.reason) ?? 'The data is ${st.state.name}.') : null;
         _state = _Load.ready;
       });
     } on V1Error catch (e) {
