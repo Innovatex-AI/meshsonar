@@ -432,6 +432,7 @@ class MeshTileProvider extends TileProvider {
   MeshTileProvider({
     super.headers,
     http.Client? client,
+    bool? ownsClient,
     TileFetchGate? gate,
     MapTileStats? stats,
     MapCachingProvider? cache,
@@ -439,7 +440,7 @@ class MeshTileProvider extends TileProvider {
     this.shouldSkip,
     this.imageRetryDelays = retryDelays,
   }) : _client = client ?? http.Client(),
-       _ownsClient = client == null,
+       _ownsClient = ownsClient ?? client == null, // a client handed in is the caller's, unless it says otherwise
        gate = gate ?? TileFetchGate(),
        stats = stats ?? MapTileStats.instance,
        cache = cache ?? BuiltInMapCachingProvider.getOrCreateInstance();
@@ -458,10 +459,24 @@ class MeshTileProvider extends TileProvider {
     );
   }
 
+  /// flutter_map calls this whenever ANY TileLayer that draws with this provider goes away (tile_layer.dart, State.dispose).
+  /// One provider is shared by every tile layer of a map (the two Satellite imagery layers, the vector basemap, the names), so
+  /// a layer leaving must NOT shut it down. Until build 72 it closed the HTTP client here: picking another basemap after
+  /// Satellite disposed the imagery layers, the client was closed, and every tile request after that failed with
+  /// "Client is already closed" until the app was restarted (three of those opened the breaker and the map went blank).
+  /// The owner ends the provider with [close].
   @override
   void dispose() {
-    if (_ownsClient) _client.close();
     super.dispose();
+  }
+
+  bool _closed = false;
+
+  /// Ends the provider for good: closes the HTTP client it made. Called by whoever created it (CoverageMap), once.
+  void close() {
+    if (_closed) return;
+    _closed = true;
+    if (_ownsClient) _client.close();
   }
 
   // ---- the load, separate from the ImageProvider so tests call it directly ----
@@ -611,7 +626,8 @@ class MeshTileProvider extends TileProvider {
           rec(TileOutcome.cancelled);
         } else {
           gate.recordFailure();
-          stats.recordFailureReason(e.runtimeType.toString());
+          final text = e.toString();
+          stats.recordFailureReason(text.length > 70 ? '${text.substring(0, 70)}…' : text);
           rec(cached != null ? TileOutcome.staleServed : TileOutcome.failed);
         }
         return cached?.bytes ?? TileProvider.transparentImage;

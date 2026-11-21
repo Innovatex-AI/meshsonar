@@ -1670,7 +1670,7 @@ class _CoverageMapState extends State<CoverageMap> {
     _reaskTimer?.cancel();
     _tileProvider?.gate.recoveries.removeListener(_onTilesRecovered);
     unawaited(_tileReset.close());
-    _tileProvider?.dispose();
+    _tileProvider?.close(); // the map owns the provider; a tile layer's own dispose() does not close it
     _pingScroll.dispose();
     _pack.basemap.removeListener(_onPacksChanged);
     _ownSource?.dispose();

@@ -471,6 +471,21 @@ void main() {
     });
   });
 
+  test('a tile layer going away (flutter_map calls dispose) does not close the shared provider: tiles still load; close() ends it', () async {
+    var closed = false;
+    final real = _ClosableClient(() => closed = true);
+    final p = MeshTileProvider(client: real, ownsClient: true, cache: MemCache(), gate: TileFetchGate(), stats: MapTileStats());
+    expect(await p.load('https://tile.example/a.png', skip: false, cancel: never), [1, 2, 3]);
+    // Satellite's two imagery layers are disposed when another basemap is picked; each calls dispose() on the provider.
+    p.dispose();
+    p.dispose();
+    expect(closed, isFalse, reason: 'the HTTP client stays open for the layers that remain');
+    expect(await p.load('https://tile.example/b.png', skip: false, cancel: never), [1, 2, 3], reason: 'the vector basemap still loads tiles');
+    p.close();
+    p.close();
+    expect(closed, isTrue);
+  });
+
   testWidgets('a raster tile that failed is retried, shown empty for now, and never kept in the image cache: the next ask fetches it', (tester) async {
     var up = false;
     final c = ScriptClient()..handler = (r) async => up ? http.StreamedResponse(Stream.value(TileProvider.transparentImage), 200) : throw http.ClientException('no route');
@@ -507,4 +522,15 @@ void main() {
       expect(PaintingBinding.instance.imageCache.containsKey(img), isTrue, reason: 'a real tile is kept');
     });
   });
+}
+
+/// A client the provider owns (it must close it on close(), and only then).
+class _ClosableClient extends ScriptClient {
+  final void Function() onClose;
+  _ClosableClient(this.onClose);
+  @override
+  void close() {
+    onClose();
+    super.close();
+  }
 }
