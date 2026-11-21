@@ -2,6 +2,7 @@
 // inspector are the ONE transient MapPanel directly above it. Never modal, one open at a time, closed by the X or a tap on
 // empty map; nothing hides under the tab bar.
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/ui/app.dart';
 import 'package:meshsonar/ui/design/map_panel.dart';
@@ -9,6 +10,7 @@ import 'package:meshsonar/ui/drive/panel/drive_panel.dart';
 import 'package:meshsonar/ui/drive/panel/panel_physics.dart';
 import 'package:meshsonar/ui/drive_screen.dart';
 import 'package:meshsonar/ui/map/map_info_panel.dart';
+import 'package:meshsonar/ui/map/overlays/map_controls.dart';
 
 import '../fakes.dart';
 
@@ -147,4 +149,92 @@ void main() {
     await tester.tap(find.byKey(const Key('link-clear')));
     expect(closed, 1);
   });
+
+  // Every map control stays tappable with the Drive panel Collapsed and Open, on a small and a current phone. Before build 71's
+  // follow-up the buttons stayed where they were until the panel's spring came to rest (more than a second), under the panel.
+  group('map controls are never covered by the panel', () {
+    bool hittable(WidgetTester tester, Finder f) {
+      final ro = tester.renderObject(f);
+      final res = HitTestResult();
+      WidgetsBinding.instance.hitTestInView(res, tester.getCenter(f), tester.view.viewId);
+      for (final e in res.path) {
+        RenderObject? n = e.target is RenderObject ? e.target as RenderObject : null;
+        while (n != null) {
+          if (n == ro) return true;
+          n = n.parent;
+        }
+      }
+      return false;
+    }
+
+    for (final (size, top, bar, home) in const [(Size(375, 667), 20.0, 72.0, 0.0), (Size(402, 874), 47.0, 106.0, 34.0)]) {
+      testWidgets('${size.width.toInt()}x${size.height.toInt()}: layers, recenter and the top chips, Collapsed and Open', (tester) async {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        MapPanelStore.clear();
+        final h = Harness();
+        await h.state.init();
+        await tester.pumpWidget(AppScope(
+          state: h.state,
+          child: MaterialApp(
+            theme: meshSonarTheme(Brightness.dark),
+            home: MediaQuery(
+              data: MediaQueryData(size: size, padding: EdgeInsets.only(top: top, bottom: bar), viewPadding: EdgeInsets.only(top: top, bottom: home)),
+              child: const DriveScreen(),
+            ),
+          ),
+        ));
+        await tester.pump(const Duration(milliseconds: 100));
+        // Move the map so Recenter shows too.
+        await tester.dragFrom(Offset(size.width / 2, top + 120), const Offset(-50, 30));
+        await tester.pump(const Duration(milliseconds: 300));
+
+        void expectAllTappable(String state) {
+          final panelTop = tester.getTopLeft(find.byKey(const Key('drive-panel'))).dy;
+          final buttons = find.byType(MapControlButton);
+          expect(buttons, findsWidgets);
+          expect(find.byKey(const Key('drive-map-layers')), findsOneWidget);
+          for (final e in buttons.evaluate()) {
+            if (!(e.widget as MapControlButton).visible) continue; // the compass shows only while the map is turned
+            final f = find.byWidget(e.widget);
+            expect(hittable(tester, f), isTrue, reason: '$state: ${e.widget.key} takes a tap at ${tester.getCenter(f)}');
+            expect(tester.getRect(f).bottom, lessThanOrEqualTo(panelTop), reason: '$state: ${e.widget.key} is above the panel');
+            expect(tester.getSize(f).shortestSide, greaterThanOrEqualTo(40), reason: '$state: ${e.widget.key} is not squeezed');
+          }
+          for (final k in ['legend-card-toggle', 'capsule-radio']) {
+            final f = find.byKey(Key(k));
+            if (f.evaluate().isEmpty) continue;
+            expect(hittable(tester, f), isTrue, reason: '$state: $k takes a tap');
+          }
+        }
+
+        expectAllTappable('Collapsed');
+        await tester.tap(find.byKey(const Key('drive-panel-grabber')));
+        // 0.4 s: the panel is visually open; the buttons must already be clear of it (not after the spring's long tail).
+        for (var i = 0; i < 16; i++) {
+          await tester.pump(const Duration(milliseconds: 25));
+        }
+        expect(tester.getTopLeft(find.byKey(const Key('drive-panel'))).dy, lessThan(size.height - bar - 200), reason: 'the panel is Open');
+        expectAllTappable('Open');
+        await _settle(tester);
+        await _settle(tester);
+        await _settle(tester);
+        expectAllTappable('Open, at rest');
+        expect(tester.takeException(), isNull);
+        // And the Layers button works while the panel is Open: it opens the layers and the Drive panel goes back to Collapsed.
+        await tester.tap(find.byKey(const Key('drive-map-layers')));
+        await _settle(tester);
+        await _settle(tester);
+        expect(_p('drive.layers'), findsOneWidget);
+        expectAllTappableAfterLayers(tester, hittable);
+      });
+    }
+  });
+}
+
+/// With the layers panel open (60 % above the Dock) the map buttons sit above its header or are covered by the panel the
+/// person just opened; closing it gives them back. Only checks nothing throws and Layers can be closed.
+void expectAllTappableAfterLayers(WidgetTester tester, bool Function(WidgetTester, Finder) hittable) {
+  expect(hittable(tester, find.byKey(const Key('layers-done'))), isTrue, reason: 'the open layers panel can be closed');
 }

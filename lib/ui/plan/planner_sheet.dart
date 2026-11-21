@@ -131,7 +131,32 @@ class _PlannerSheetState extends State<PlannerSheet> {
     if (!identical(g, _group)) {
       _group?.removeListener(_groupChanged);
       _group = g?..addListener(_groupChanged);
+      _synced = false;
     }
+    if (!_synced) {
+      _synced = true;
+      _syncGroup();
+    }
+  }
+
+  bool _synced = false;
+
+  /// Tells the group where the sheet is (after the frame: listeners rebuild). The screen also moves the sheet when the person
+  /// picks a mode or a node, so the group follows the detent, not only the handle.
+  void _syncGroup() {
+    final g = _group;
+    if (g == null) return;
+    final open = widget.detent != PlannerDetent.dock;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      open ? g.claim(kPlannerPanelId) : g.release(kPlannerPanelId);
+    });
+  }
+
+  @override
+  void didUpdateWidget(PlannerSheet old) {
+    super.didUpdateWidget(old);
+    if (old.detent != widget.detent) _syncGroup();
   }
 
   @override

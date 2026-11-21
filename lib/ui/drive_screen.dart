@@ -152,6 +152,11 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
       _shell?.setImmersive(to == PanelDetent.immersive);
       if (to == PanelDetent.medium) _auto.touch(s.services.clock());
       to == PanelDetent.medium ? _panels.claim(kDrivePanelId) : _panels.release(kDrivePanelId);
+      // The map's buttons move to where the panel is GOING, at once (one write per move, never per frame). Waiting for the
+      // spring to come to rest left them under the opened panel for more than a second: the panel is visually there in about
+      // 0.3 s, but the spring's tail is long, and for that time Layers and Recenter could not be tapped.
+      final target = c.geometry?.extentOf(to);
+      if (mounted && target != null && _clearance != target) setState(() => _clearance = target);
     };
     c.onSettled = () {
       // Overlay clearances and MapInsets are written once, here, never per animation frame.
