@@ -6,9 +6,10 @@
 // still ahead of a direct packet.
 //
 // One panel at the bottom (design/map_panel.dart, id `live.main`), collapsed on a phone: its header is the whole chrome
-// of the map (status dot and wording, packet count, pause / play). Open, it holds the notes that say honestly where the
-// packets come from, the scrubber with packet density over the chosen window (dropping it replays from that time), the
-// window, speed 0.25x to 8x, jump to live, Filters (a modal form: type, observer, My nodes) and the feed. A packet drawn
+// of the map (status dot and wording, packet count, pause / play). Open, one scrolling body: the scrubber with packet
+// density over the chosen window (dropping it replays from that time), the window, speed 0.25x to 8x, jump to live,
+// Filters (a modal form: type, observer, My nodes), the feed, then the legend and one plain line per note that says
+// honestly where the packets come from (the server's full sentence is behind "Details"). A packet drawn
 // on the map is the transient panel `live.focus` above it. Nothing sits at the top of the map.
 //
 // Battery: the stream is dropped and nothing animates while the section is off screen (TickerMode), the app is in
@@ -387,110 +388,139 @@ class _NetworkLiveMapState extends State<NetworkLiveMap> with SingleTickerProvid
     );
   }
 
+  /// What the panel says under the feed: (the one plain line, the full text behind "Details" or null).
+  List<(String, String?)> _notes() {
+    (String, String?) brief(String full) {
+      // First sentence; the rest is behind Details.
+      final m = RegExp(r'^(.+?[.!?])\s+(?=\S)').firstMatch(full);
+      return m == null ? (full, null) : (m.group(1)!, full);
+    }
+
+    return [
+      if (_c.source == NetworkReadSource.legacy)
+        ('Unresolved hops are not drawn.', "Today's live feed: only hops the server could place are sent, so unresolved hops are not drawn."),
+      // The server's sentence is internals (counts, thresholds): one plain line, the sentence behind Details.
+      if (_c.nodeListTrusted == false) ('Routes are hidden: not enough hops match known nodes yet.', _c.nodeListReason),
+      if (_c.note case final n?) brief(n),
+      if (_c.replayError case final n?) brief(n),
+      if (_focusError case final n?) brief(n),
+    ];
+  }
+
+  /// Body order (small screen, the feed is what the person opened the panel for): scrubber, window, controls, feed, then
+  /// the legend and the notes. One scroll view, so everything is reachable above the tab bar.
   Widget _body(BuildContext context, String label, List<LiveV2Packet> feed) {
     final t = Theme.of(context);
-    final notes = <String>[
-      if (_c.source == NetworkReadSource.legacy) "Today's live feed: only hops the server could place are sent, so unresolved hops are not drawn.",
-      if (_c.nodeListTrusted == false) _c.nodeListReason ?? 'The node list is not complete here, so no hop is named with more than "likely".',
-      ?_c.note,
-      ?_c.replayError,
-      ?_focusError,
-    ];
+    final cs = t.colorScheme;
     final now = DateTime.now().toUtc();
-    return CustomScrollView(
-      key: const Key('live-panel-body'),
-      slivers: [
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(Layout.screenMargin, 0, Layout.screenMargin, 4),
-          sliver: SliverList.list(children: [
-            // The header's wording in full (it is one line up there).
-            Text(label, key: const Key('live-map-status'), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
-            if (_saver && !_saverOverride)
-              Row(key: const Key('live-saver-banner'), children: [
-                Expanded(child: Text('Saver mode stops the live map to save battery.', style: t.textTheme.bodySmall)),
-                TextButton(
-                  key: const Key('live-saver-override'),
-                  onPressed: () => setState(() {
-                    _saverOverride = true;
-                    _sync();
-                  }),
-                  child: const Text('Show anyway'),
+    final count = '${feed.length} packet${feed.length == 1 ? '' : 's'}';
+    return LayoutBuilder(
+      builder: (context, box) => CustomScrollView(
+        key: const Key('live-panel-body'),
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(Layout.screenMargin, 0, Layout.screenMargin, 4),
+            sliver: SliverList.list(children: [
+              // The header's wording in full, only when the header had to cut it.
+              if (!mapPanelTitleFits(context, width: box.maxWidth, title: label, status: count, leading: true, action: true))
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Text(label, key: const Key('live-map-status'), style: t.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
                 ),
-              ]),
-            for (final n in notes) Padding(padding: const EdgeInsets.only(top: 4), child: Text(n, style: t.textTheme.bodySmall)),
-            const SizedBox(height: 6),
-            _Scrubber(controller: _c),
-            const SizedBox(height: 4),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(children: [
-                for (final w in liveWindows.keys)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 6),
-                    child: ChoiceChip(
-                      key: Key('live-window-$w'),
-                      label: Text(_windowLabels[w] ?? w),
-                      selected: _c.window == w,
-                      onSelected: (_) => unawaited(_c.setWindow(w)),
-                    ),
+              if (_saver && !_saverOverride)
+                Row(key: const Key('live-saver-banner'), children: [
+                  Expanded(child: Text('Saver mode stops the live map to save battery.', style: t.textTheme.bodySmall)),
+                  TextButton(
+                    key: const Key('live-saver-override'),
+                    onPressed: () => setState(() {
+                      _saverOverride = true;
+                      _sync();
+                    }),
+                    child: const Text('Show anyway'),
                   ),
-              ]),
-            ),
-            // Wrap, not Row: at large text sizes the controls take a second line instead of clipping.
-            Wrap(spacing: 4, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
-              TextButton(
-                key: const Key('live-map-speed'),
-                onPressed: _cycleSpeed,
-                child: Text(replaySpeedLabel(_c.speed), semanticsLabel: 'Replay speed ${_c.speed} times'),
+                ]),
+              _Scrubber(controller: _c),
+              const SizedBox(height: 4),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(children: [
+                  for (final w in liveWindows.keys)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: ChoiceChip(
+                        key: Key('live-window-$w'),
+                        label: Text(_windowLabels[w] ?? w),
+                        selected: _c.window == w,
+                        // The app's selected colour (the teal of the tab bar and the section strip), not the default
+                        // secondary fill, which reads as a warning on the dark theme.
+                        selectedColor: cs.primaryContainer,
+                        checkmarkColor: cs.onPrimaryContainer,
+                        labelStyle: _c.window == w ? TextStyle(color: cs.onPrimaryContainer) : null,
+                        onSelected: (_) => unawaited(_c.setWindow(w)),
+                      ),
+                    ),
+                ]),
               ),
-              if (_c.mode != LiveMode.live)
-                TextButton.icon(
-                  key: const Key('live-map-jump-live'),
-                  icon: const Icon(Icons.skip_next),
-                  label: const Text('Live'),
-                  onPressed: _c.jumpToLive,
+              // Wrap, not Row: at large text sizes the controls take a second line instead of clipping.
+              Wrap(spacing: 4, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                TextButton(
+                  key: const Key('live-map-speed'),
+                  onPressed: _cycleSpeed,
+                  child: Text(replaySpeedLabel(_c.speed), semanticsLabel: 'Replay speed ${_c.speed} times'),
                 ),
-              TextButton.icon(
-                key: const Key('live-map-filters'),
-                icon: Icon(_c.filter.isEmpty ? Icons.filter_list : Icons.filter_list_alt),
-                label: const Text('Filters'),
-                onPressed: () => _openFilters(context),
-              ),
-              TextButton.icon(
-                key: const Key('live-map-open-full'),
-                icon: const Icon(Icons.layers_outlined),
-                label: const Text('Coverage map'),
-                onPressed: () {
-                  final c = regionCentre(widget.region);
-                  if (c != null) MainMapFocus.request(c, 10, showLayers: networkMapLayers);
-                  ShellScope.maybeRead(context)?.openDrive();
-                },
+                if (_c.mode != LiveMode.live)
+                  TextButton.icon(
+                    key: const Key('live-map-jump-live'),
+                    icon: const Icon(Icons.skip_next),
+                    label: const Text('Live'),
+                    onPressed: _c.jumpToLive,
+                  ),
+                TextButton.icon(
+                  key: const Key('live-map-filters'),
+                  icon: Icon(_c.filter.isEmpty ? Icons.filter_list : Icons.filter_list_alt),
+                  label: const Text('Filters'),
+                  onPressed: () => _openFilters(context),
+                ),
+                TextButton.icon(
+                  key: const Key('live-map-open-full'),
+                  icon: const Icon(Icons.layers_outlined),
+                  label: const Text('Coverage map'),
+                  onPressed: () {
+                    final c = regionCentre(widget.region);
+                    if (c != null) MainMapFocus.request(c, 10, showLayers: networkMapLayers);
+                    ShellScope.maybeRead(context)?.openDrive();
+                  },
+                ),
+              ]),
+              Semantics(
+                header: true,
+                child: Text(feed.isEmpty ? 'Waiting for packets' : 'Feed · newest first', key: const Key('live-feed-heading'), style: t.textTheme.titleSmall),
               ),
             ]),
-            const _Legend(),
-            const SizedBox(height: 8),
-            Semantics(
-              header: true,
-              child: Text(feed.isEmpty ? 'Waiting for packets' : 'Feed · newest first', style: t.textTheme.titleSmall),
-            ),
-          ]),
-        ),
-        SliverList.builder(
-          key: const Key('live-feed-list'),
-          itemCount: feed.length,
-          itemBuilder: (ctx, i) => _FeedRow(
-            packet: feed[i],
-            now: now,
-            onOpen: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                builder: (_) => NetworkPacketScreen(baseUrl: widget.region.url, regionSlug: widget.region.slug, hash: feed[i].hash))),
-            onDraw: () {
-              _c.showPacket(feed[i]);
-              _fitFocus();
-            },
           ),
-        ),
-        const SliverToBoxAdapter(child: SizedBox(height: 12)),
-      ],
+          SliverList.builder(
+            key: const Key('live-feed-list'),
+            itemCount: feed.length,
+            itemBuilder: (ctx, i) => _FeedRow(
+              packet: feed[i],
+              now: now,
+              onOpen: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                  builder: (_) => NetworkPacketScreen(baseUrl: widget.region.url, regionSlug: widget.region.slug, hash: feed[i].hash))),
+              onDraw: () {
+                _c.showPacket(feed[i]);
+                _fitFocus();
+              },
+            ),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(Layout.screenMargin, 8, Layout.screenMargin, 12),
+            sliver: SliverList.list(children: [
+              const _Legend(),
+              for (final (i, n) in _notes().indexed) _Note(key: Key('live-note-$i'), summary: n.$1, details: n.$2),
+            ]),
+          ),
+        ],
+      ),
     );
   }
 
@@ -555,6 +585,43 @@ class _NetworkLiveMapState extends State<NetworkLiveMap> with SingleTickerProvid
         listenable: _c,
         builder: (ctx, _) => _FilterSheet(controller: sc, live: _c, observers: observers),
       ),
+    );
+  }
+}
+
+/// One plain line (two at most) about where the packets come from; the server's full sentence is behind "Details".
+class _Note extends StatefulWidget {
+  final String summary;
+  final String? details;
+  const _Note({super.key, required this.summary, this.details});
+  @override
+  State<_Note> createState() => _NoteState();
+}
+
+class _NoteState extends State<_Note> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final details = widget.details;
+    final has = details != null && details.trim().isNotEmpty && details.trim() != widget.summary.trim();
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(child: Text(widget.summary, maxLines: 2, overflow: TextOverflow.ellipsis, style: t.textTheme.bodySmall)),
+          if (has)
+            TextButton(
+              key: const Key('live-note-details'),
+              style: TextButton.styleFrom(minimumSize: const Size(Hit.min, Hit.min), padding: const EdgeInsets.symmetric(horizontal: 8)),
+              onPressed: () => setState(() => _open = !_open),
+              child: Text(_open ? 'Hide' : 'Details', semanticsLabel: _open ? 'Hide details' : 'Details: ${widget.summary}'),
+            ),
+        ]),
+        if (has && _open)
+          Text(details, key: const Key('live-note-full'), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+      ]),
     );
   }
 }
