@@ -1,6 +1,5 @@
-// The More list after M0 (Nov 8 2026, unified map plan §5): the Developer switch is not in the normal list and appears only
-// after a long-press on the version row (About MeshSonar); Leaderboard sits under Community and My reports under Help and
-// about, not under Your radio.
+// The More list. M0 (Nov 8 2026, unified map plan §5): no Developer switch, even after a long-press on the version row
+// (About MeshSonar). Build 71: nine rows, no group headers; the help rows (My reports among them) sit under Help.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -11,23 +10,6 @@ Finder _inMore(String key) => find.byKey(Key(key));
 
 Future<void> _scrollTo(WidgetTester tester, Finder f) => tester.scrollUntilVisible(f, 150,
     scrollable: find.descendant(of: find.byKey(const Key('more-list')), matching: find.byType(Scrollable)).first);
-
-/// The header text a row sits under: the nearest header above it in list order.
-String _headerOf(WidgetTester tester, String rowKey, List<String> headers) {
-  final rowY = tester.getTopLeft(_inMore(rowKey)).dy;
-  String? best;
-  double bestY = double.negativeInfinity;
-  for (final h in headers) {
-    final f = find.text(h);
-    if (f.evaluate().isEmpty) continue;
-    final y = tester.getTopLeft(f.first).dy;
-    if (y < rowY && y > bestY) {
-      bestY = y;
-      best = h;
-    }
-  }
-  return best ?? '';
-}
 
 void main() {
   testWidgets('no Developer section or "New Drive screen" switch, even after a long-press on the version row (build 70)', (tester) async {
@@ -44,17 +26,36 @@ void main() {
     await drain(tester);
   });
 
-  testWidgets('Leaderboard is under Community and My reports under Help and about, not under Your radio', (tester) async {
+  testWidgets('build 71: More is nine rows with no group headers; My reports sits under Help', (tester) async {
     tester.view.physicalSize = const Size(1200, 6000);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await Harness().pumpApp(tester);
     await tapShellTab(tester, 'More');
     await tester.pumpAndSettle();
-    const headers = ['Your radio', 'Radios and tools', 'Community', 'App', 'Help and about'];
-    expect(_headerOf(tester, 'more-leaderboard', headers), 'Community');
-    expect(_headerOf(tester, 'more-myReports', headers), 'Help and about');
-    expect(_headerOf(tester, 'more-devices', headers), 'Your radio');
+    const rows = ['more-drives', 'more-radio', 'more-devices', 'more-leaderboard', 'more-observerJoin', 'more-chat', 'more-settings', 'more-help', 'more-about'];
+    final list = find.byKey(const Key('more-list'));
+    expect(find.descendant(of: list, matching: find.byType(ListTile)), findsNWidgets(rows.length));
+    var lastY = double.negativeInfinity;
+    for (final k in rows) {
+      expect(_inMore(k), findsOneWidget, reason: k);
+      final y = tester.getTopLeft(_inMore(k)).dy;
+      expect(y, greaterThan(lastY), reason: '$k is in order');
+      lastY = y;
+    }
+    for (final h in ['Your drives', 'Your radio', 'Radios and tools', 'Community', 'App', 'Help and about']) {
+      expect(find.descendant(of: list, matching: find.text(h)), findsNothing, reason: 'no group header "$h"');
+    }
+    // Rows that only jumped into a Settings section are gone from the list.
+    for (final k in ['more-myRadios', 'more-observer', 'more-wardriving', 'more-notifications', 'more-privacy', 'more-network']) {
+      expect(_inMore(k), findsNothing, reason: k);
+    }
+    expect(_inMore('more-myReports'), findsNothing);
+    await tester.tap(_inMore('more-help'));
+    await tester.pumpAndSettle();
+    for (final k in ['more-howItWorks', 'more-method', 'more-legend', 'more-report', 'more-myReports', 'more-privacy-policy']) {
+      expect(_inMore(k), findsOneWidget, reason: '$k is under Help');
+    }
     expect(find.textContaining('square'), findsNothing, reason: 'cells are hexagons (coverage v2)');
     await drain(tester);
   });

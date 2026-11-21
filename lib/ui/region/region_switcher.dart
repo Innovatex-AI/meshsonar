@@ -227,12 +227,19 @@ class _RegionSwitcherSheetState extends State<RegionSwitcherSheet> {
         key: const Key('region-all'),
         leading: const Icon(Icons.public),
         title: const Text('All regions'),
-        subtitle: const Text('Compare every region and switch'),
+        subtitle: const Text('The whole network: summary, search, busiest regions'),
         trailing: const Icon(Icons.chevron_right),
         onTap: () {
           final nav = Navigator.of(context);
+          // Build 71: "All regions" is a state of the Network tab (network summary, global search, busiest regions).
+          // With no shell above (a test that pumps the sheet alone) it opens the regions comparison as before.
+          final shell = ShellController.of(context);
           nav.pop();
-          unawaited(nav.push(MaterialPageRoute<void>(builder: (_) => const RegionsScreen())));
+          if (shell != null) {
+            shell.openNetworkAllRegions();
+          } else {
+            unawaited(nav.push(MaterialPageRoute<void>(builder: (_) => const RegionsScreen())));
+          }
         },
       );
 

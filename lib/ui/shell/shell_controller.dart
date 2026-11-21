@@ -1,4 +1,4 @@
-// The app shell's navigation state: which of the five tabs is showing, which Network section, and the way for any
+// The app shell's navigation state: which of the five tabs is showing, which Network section (and "All regions"), and the way for any
 // screen (the mini drive bar, a deep link, another agent's chat code) to move between tabs.
 //
 // Tab API for other code:
@@ -6,7 +6,7 @@
 //   ShellScope.maybeOf(context)?.openDrive();           // the Drive tab
 //   ShellScope.maybeOf(context)?.setImmersive(true);    // Drive only: hide the tab bar / rail (full-screen map)
 //   ShellScope.maybeOf(context)?.openNetwork(NetworkRequest.packet(hash)); // the Network tab at a section (see NetworkRequest)
-//   ShellScope.maybeOf(context)?.openChatRadio();      // Chat > Radio (the radio's own repeaters, rooms and tools)
+//   ShellScope.maybeOf(context)?.openMore(MoreItem.radio); // More > Radio (the radio's own repeaters, rooms and tools)
 //   ShellScope.maybeOf(context)?.openMore(MoreItem.settings);
 //   ShellScope.maybeOf(context)?.openPlan(PlanRequest.fromNode(...)); // the Plan tab, with something to plan (see PlanRequest)
 import 'package:flutter/material.dart';
@@ -16,12 +16,14 @@ import '../design/app_symbols.dart';
 
 export '../../core/network_request.dart' show NetworkRequest, NetworkSection;
 
-/// The five top-level tabs, in display order. Persisted by [name] (never by index) so reordering stays safe.
+/// The five top-level tabs, in display order (build 71: Network | Drive | Chat | Plan | More). Persisted by [name]
+/// (never by index), so the reorder keeps a tab saved by an older build.
 enum AppTab {
-  chat('Chat', AppSymbols.message, AppSymbols.messageFill),
-  drive('Drive', AppSymbols.car, AppSymbols.carFill),
-  /// The network analyzer (AZ-3.1, was "Analyze" until build 71): the viewed region's server data in five sections.
+  /// The network analyzer (AZ-3.1, was "Analyze" until build 71): the site in the app, eight sections. First since
+  /// build 71: the app is a gateway to the site data, and a fresh install opens here.
   network('Network', AppSymbols.globe, AppSymbols.globe),
+  drive('Drive', AppSymbols.car, AppSymbols.carFill),
+  chat('Chat', AppSymbols.message, AppSymbols.messageFill),
   plan('Plan', AppSymbols.map, AppSymbols.mapFill),
   more('More', AppSymbols.ellipsisCircle, AppSymbols.ellipsisCircle);
 
@@ -51,7 +53,9 @@ enum AppTab {
 /// Rows on the More tab that other code can open directly.
 /// [observer] opens Settings at its Observer section (the Home observer row is gone, release 0.38).
 /// [drives] is this phone's drives, reports and progress (moved here from the old Analyze tab, AZ-3.1).
-enum MoreItem { drives, radio, myRadios, wardriving, notifications, settings, about, legend, privacy, howItWorks, repeaters, trace, discover, adverts, rxLog, noiseFloor, telemetry, radioSetup, observerJoin, method, devices, myReports, leaderboard, chat, observer }
+/// Build 71: the More list shows about nine rows; the other values still open their screen (a Settings section, a
+/// radio tool) for code that asks for them. [repeaters] and [radio] both open More > Radio; [help] the Help page.
+enum MoreItem { drives, radio, myRadios, wardriving, notifications, settings, about, legend, privacy, howItWorks, repeaters, trace, discover, adverts, rxLog, noiseFloor, telemetry, radioSetup, observerJoin, method, devices, myReports, leaderboard, chat, observer, help, radioSettings }
 
 /// What a request to open the Plan tab carries (release 0.38, Master Planner). The Plan tab takes it with
 /// [ShellController.takePendingPlan] when it is shown.
@@ -142,7 +146,7 @@ class LegacyTab {
 
   /// Maps an old tab index. Anything unknown opens the Drive tab.
   factory LegacyTab.fromIndex(int i) => switch (i) {
-        1 => const LegacyTab(AppTab.network, network: NetworkSection.now),
+        1 => const LegacyTab(AppTab.network, network: NetworkSection.home),
         2 => const LegacyTab(AppTab.more, more: MoreItem.drives),
         3 => const LegacyTab(AppTab.more, more: MoreItem.radio),
         4 => const LegacyTab(AppTab.more, more: MoreItem.settings),
@@ -160,7 +164,7 @@ class ShellController extends ChangeNotifier {
 
   AppTab _tab;
   NetworkSection _network;
-  ShellController({AppTab initial = AppTab.drive, NetworkSection network = NetworkSection.now})
+  ShellController({AppTab initial = AppTab.network, NetworkSection network = NetworkSection.home})
       : _tab = initial,
         // ignore: prefer_initializing_formals
         _network = network;
@@ -228,6 +232,8 @@ class ShellController extends ChangeNotifier {
   void openNetwork(NetworkRequest request) {
     _pendingNetwork = request;
     _network = request.section;
+    // A request for a region, or for a section that needs one, leaves "All regions".
+    if (request.region != null || !networkHubSections.contains(request.section)) _allRegions = false;
     final wasNetwork = _tab == AppTab.network;
     select(AppTab.network);
     if (wasNetwork) notifyListeners();
@@ -239,20 +245,31 @@ class ShellController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Chat tab, Radio segment (the radio's own repeaters, rooms, sensors and the radio tools; "Network" until build 71).
-  bool _pendingChatRadio = false;
-  bool takePendingChatRadio() {
-    final v = _pendingChatRadio;
-    _pendingChatRadio = false;
-    return v;
+  /// "All regions" (the region switcher's entry): the Network tab shows the whole network on the hub (summary, global
+  /// search, busiest regions) with the sections that need no region. For the session only; picking a region ends it.
+  bool _allRegions = false;
+  bool get networkAllRegions => _allRegions;
+
+  void setNetworkAllRegions(bool v) {
+    if (v == _allRegions) return;
+    _allRegions = v;
+    if (v && !networkHubSections.contains(_network)) _network = NetworkSection.home;
+    notifyListeners();
   }
 
-  void openChatRadio() {
-    _pendingChatRadio = true;
-    final wasChat = _tab == AppTab.chat;
-    select(AppTab.chat);
-    if (wasChat) notifyListeners();
+  /// The Network tab in "All regions", from anywhere (the switcher sheet).
+  void openNetworkAllRegions() {
+    _pendingNetwork = null;
+    _network = NetworkSection.home;
+    _allRegions = true;
+    final wasNetwork = _tab == AppTab.network;
+    select(AppTab.network);
+    if (wasNetwork) notifyListeners();
   }
+
+  /// The radio's own repeaters, rooms, sensors and radio tools. They were the Chat tab's Radio segment until build 71
+  /// and live at More > Radio now; this name is kept for callers written before the move.
+  void openChatRadio() => openMore(MoreItem.radio);
 
   /// Plan tab with something to plan: kept until the Plan tab takes it ([takePendingPlan]), so it works whether that tab
   /// is already built or is built by this switch. A newer request replaces one not taken yet.

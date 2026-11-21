@@ -1,4 +1,5 @@
-// The one search field of the Network header (AZ-3.5; website twin: the Cmd-K search of AZ-2.1). It searches node
+// The one search of the Network tab (AZ-3.5; website twin: the Cmd-K search of AZ-2.1). Build 71: a search icon in the
+// header line, and a full-width field in "All regions" (every region, on the hub). It searches node
 // names and key prefixes, packet hashes, observers and regions on `GET /v1/search`, or, while `/v1` is not live or the
 // phone is offline, over what the app already has: the node roster kept for the map, the region list, the observers
 // of the viewed region (their stored copy works offline). A result opens its page through the same NetworkRequest a
@@ -13,10 +14,12 @@ import '../../core/v1/search_api.dart';
 import '../app.dart';
 import '../design/app_surfaces.dart' show showAppSheet;
 
-/// The header's search field: a tap opens the search sheet with the keyboard up.
+/// A full-width search field: a tap opens the search sheet with the keyboard up. The region header uses its search
+/// icon instead (build 71); this field is the global search of "All regions" ([region] null, [hubUrl] the hub).
 class NetworkSearchField extends StatelessWidget {
-  final RegionIndexEntry region;
-  const NetworkSearchField({super.key, required this.region});
+  final RegionIndexEntry? region;
+  final String? hubUrl;
+  const NetworkSearchField({super.key, required this.region, this.hubUrl});
 
   @override
   Widget build(BuildContext context) {
@@ -29,11 +32,11 @@ class NetworkSearchField extends StatelessWidget {
         color: t.colorScheme.onSurface.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
-          key: const Key('network-search'),
+          key: const Key('network-search-field'),
           borderRadius: BorderRadius.circular(12),
-          onTap: () => openNetworkSearch(context, region),
+          onTap: () => openNetworkSearch(context, region, hubUrl: hubUrl),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 40),
+            constraints: const BoxConstraints(minHeight: 44),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: Row(children: [
@@ -52,8 +55,10 @@ class NetworkSearchField extends StatelessWidget {
   }
 }
 
-/// Opens the search sheet for [region]; a chosen result opens its Network page.
-Future<void> openNetworkSearch(BuildContext context, RegionIndexEntry region) async {
+/// Opens the search sheet for [region], or for every region on [hubUrl] when [region] is null ("All regions"); a
+/// chosen result opens its Network page.
+Future<void> openNetworkSearch(BuildContext context, RegionIndexEntry? region, {String? hubUrl}) async {
+  assert(region != null || hubUrl != null);
   final shell = ShellController.of(context);
   final app = AppScope.maybeOf(context);
   final nodes = <({String key, String? name, String role})>[];
@@ -70,7 +75,8 @@ Future<void> openNetworkSearch(BuildContext context, RegionIndexEntry region) as
     builder: (ctx, sc) => NetworkSearchSheet(
       controller: sc,
       region: region,
-      local: LocalSearchIndex(nodes: nodes, regions: regions, region: region.slug),
+      baseUrl: hubUrl,
+      local: LocalSearchIndex(nodes: nodes, regions: regions, region: region?.slug),
     ),
   );
   final req = picked?.request;
@@ -79,12 +85,14 @@ Future<void> openNetworkSearch(BuildContext context, RegionIndexEntry region) as
 
 class NetworkSearchSheet extends StatefulWidget {
   final ScrollController controller;
-  final RegionIndexEntry region;
+  /// The region searched; null searches every region on [baseUrl] (the hub).
+  final RegionIndexEntry? region;
+  final String? baseUrl;
   final LocalSearchIndex local;
 
   /// Debounce of typing before a search runs.
   final Duration debounce;
-  const NetworkSearchSheet({super.key, required this.controller, required this.region, required this.local, this.debounce = const Duration(milliseconds: 300)});
+  const NetworkSearchSheet({super.key, required this.controller, required this.region, this.baseUrl, required this.local, this.debounce = const Duration(milliseconds: 300)});
 
   @override
   State<NetworkSearchSheet> createState() => _NetworkSearchSheetState();
@@ -105,8 +113,12 @@ class _NetworkSearchSheetState extends State<NetworkSearchSheet> {
     unawaited(_loadObservers());
   }
 
+  String get _base => widget.region?.url ?? widget.baseUrl!;
+
   Future<void> _loadObservers() async {
-    final api = nodesApiFactory(widget.region.url);
+    // Observers are a region's: the hub search has no local list of them.
+    if (widget.region == null) return;
+    final api = nodesApiFactory(_base);
     try {
       final page = await api.observers();
       if (!mounted) return;
@@ -146,7 +158,7 @@ class _NetworkSearchSheetState extends State<NetworkSearchSheet> {
       return;
     }
     setState(() => _loading = true);
-    final api = searchApiFactory(widget.region.url);
+    final api = searchApiFactory(_base);
     try {
       final r = await api.search(q, local: _local);
       if (!mounted || gen != _gen) return;

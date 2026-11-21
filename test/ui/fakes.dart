@@ -6,6 +6,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart' hide Radio;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/ui/onboarding/ui_prefs.dart' show uiPrefsFor;
 import 'package:meshsonar/ui/design/app_surfaces.dart' show dismissAppToast;
 import 'package:meshsonar/app/app_state.dart';
 import 'package:meshsonar/app/services.dart';
@@ -860,8 +861,17 @@ class Harness {
 
   late final AppState state = AppState(services)..retryPendingAtLaunch = false;
 
-  Future<void> pumpApp(WidgetTester tester) async {
+  /// Pumps the whole app. [lastTab] is the tab saved by the last run (UiPrefs.lastTab, by name): 'drive' by default,
+  /// which is where every build before 71 opened and what most tests are written against. Pass null for a fresh
+  /// install (build 71 opens the Network tab then).
+  Future<void> pumpApp(WidgetTester tester, {String? lastTab = 'drive'}) async {
     await state.init();
+    if (lastTab != null) {
+      final prefs = uiPrefsFor(state);
+      await prefs.load();
+      // A test that saved its own last tab (a prefs file) keeps it.
+      if (prefs.lastTab == null) await prefs.setLastTab(lastTab);
+    }
     await tester.pumpWidget(MeshSonarApp(state: state));
     await tester.pump();
   }
@@ -1131,7 +1141,12 @@ Future<void> openDrivesTab(WidgetTester tester) async {
 
 /// Old "Radio" tab: More, Radio.
 Future<void> openRadioTab(WidgetTester tester) async {
+  // Build 71: More > Radio is the radio's lists; the read-only settings comparison is one row inside it.
   await _openMoreRow(tester, 'more-radio');
+  final row = find.byKey(const Key('more-radioSettings'));
+  await tester.scrollUntilVisible(row, 200, scrollable: find.descendant(of: find.byKey(const Key('more-radio-list')), matching: find.byType(Scrollable)).first);
+  await tester.tap(row);
+  await tester.pumpAndSettle();
 }
 
 /// Old "Settings" tab: More, Settings.

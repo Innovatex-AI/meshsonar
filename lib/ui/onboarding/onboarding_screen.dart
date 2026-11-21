@@ -86,11 +86,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         key: const Key('onboarding-page-tabs'),
                         art: const _TabsArt(),
                         title: 'Find your way around',
-                        body: 'Chat: contacts and channels, once your radio is connected.\n'
+                        body: 'Network: your region live. Packets, map, nodes, channels and analytics.\n'
                             'Drive: record a drive, ping, and see coverage live.\n'
-                            'Analyze: your region and your drives.\n'
+                            'Chat: contacts and channels, once your radio is connected.\n'
                             'Plan: tools for deciding where to build.\n'
-                            'More: your radio, settings, privacy and this tour.',
+                            'More: your radio, drives, settings, help and this tour.',
                       ),
                       _Page(
                         key: const Key('onboarding-page-2'),

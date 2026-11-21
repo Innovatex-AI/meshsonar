@@ -6,6 +6,7 @@ import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/ui/drive/drive_map_model.dart';
 import 'package:meshsonar/ui/settings/settings_index.dart';
 import 'package:meshsonar/ui/settings/settings_kit.dart';
+import 'package:meshsonar/ui/shell/shell_controller.dart';
 import 'package:meshsonar/app/app_state.dart' show RadioKind;
 import 'package:meshsonar/radio/radio_api.dart';
 
@@ -41,19 +42,14 @@ void main() {
     }
   });
 
-  testWidgets('More > Wardriving settings opens Settings on the Wardriving section with all five controls', (tester) async {
+  testWidgets('MoreItem.wardriving (the Drive ping sheet\'s link) opens Settings on the Wardriving section with all five controls', (tester) async {
     useTallScreen(tester);
     final h = Harness();
     await h.pumpApp(tester);
     await tapShellTab(tester, 'More');
-    // Scroll the More list itself: with the Chat redesign always on, the first Scrollable on screen is no longer the More list.
-    await tester.scrollUntilVisible(find.byKey(const Key('more-wardriving')), 200,
-        scrollable: find.descendant(of: find.byKey(const Key('more-list')), matching: find.byType(Scrollable)).first);
-    // ...and centre the row: the translucent tab bar covers the bottom edge, where scrollUntilVisible leaves it.
-    await Scrollable.ensureVisible(tester.element(find.byKey(const Key('more-wardriving'))), alignment: 0.5);
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('more-wardriving')), findsOneWidget);
-    await tester.tap(find.byKey(const Key('more-wardriving')));
+    // Build 71: More has no "Wardriving settings" row (it only jumped into Settings); code still opens the section.
+    expect(find.byKey(const Key('more-wardriving')), findsNothing);
+    ShellController.active!.openMore(MoreItem.wardriving);
     await tester.pumpAndSettle();
     for (final k in ['channel', 'send-pings', 'interval', 'min-distance', 'listen-window']) {
       expect(find.byKey(Key(k)), findsOneWidget, reason: k);

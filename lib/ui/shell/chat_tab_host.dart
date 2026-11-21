@@ -43,18 +43,18 @@ abstract class ChatTabProvider {
   /// Marks every conversation of the radio on screen read (the Chats header's "Mark all as read").
   void markAllRead() {}
 
-  // ---- the tab (Chats | Contacts | Channels | Network)
+  // ---- the tab (Chats | Contacts | Channels) and More > Radio ([networkSliver], build 71)
   /// The Chats inbox, as a sliver: Direct messages, Channels, Rooms and System in labelled sections.
   Widget chatsSliver(BuildContext context, ChatTabArgs args);
 
   /// The Channels list, as a sliver: every channel (Public first), sorted by recent activity or by name.
   Widget channelsSliver(BuildContext context, ChatTabArgs args);
 
-  /// The Network lists, as a sliver.
+  /// The radio's own network lists, as a sliver (shown at More > Radio since build 71; was Chat > Radio).
   Widget networkSliver(BuildContext context, ChatTabArgs args);
 
   /// The Contacts segment (a box widget with its own scrolling until the contacts rewrite lands).
-  /// [seeNearby] opens the Network segment, where the nodes heard nearby (Add / Ignore) now live.
+  /// [seeNearby] opens More > Radio, where the nodes heard nearby (Add / Ignore) live.
   Widget contactsSegment(BuildContext context, {VoidCallback? seeNearby});
 
   /// Add contact (QR code, link or key), shown as the nav button on the Contacts segment. Null = no such button.

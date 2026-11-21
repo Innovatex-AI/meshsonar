@@ -12,29 +12,76 @@ NetworkRequest? p(String s) => NetworkRequest.parse(Uri.parse(s));
 void main() {
   group('parse', () {
     test('each web route lands on its section', () {
-      expect(p('https://cmh.meshsonar.com/'), const NetworkRequest.section(NetworkSection.now, region: 'cmh'));
+      expect(p('https://cmh.meshsonar.com/'), const NetworkRequest.section(NetworkSection.home, region: 'cmh'));
       expect(p('https://cmh.meshsonar.com/packets')!.section, NetworkSection.packets);
       expect(p('https://cmh.meshsonar.com/packets/$hash'), NetworkRequest.packet(hash, region: 'cmh'));
       expect(p('https://cmh.meshsonar.com/nodes')!.section, NetworkSection.nodes);
       expect(p('https://cmh.meshsonar.com/nodes/$key'), NetworkRequest.node(key, region: 'cmh'));
       expect(p('https://cmh.meshsonar.com/repeaters/$key'), NetworkRequest.node(key, region: 'cmh'), reason: 'old /repeaters/* redirects to /nodes/*');
+      expect(p('https://cmh.meshsonar.com/observers'), const NetworkRequest.section(NetworkSection.observers, region: 'cmh'));
       expect(p('https://cmh.meshsonar.com/observers')!.observersView, isTrue);
-      expect(p('https://cmh.meshsonar.com/observers/compare')!.observersView, isTrue);
+      expect(p('https://cmh.meshsonar.com/observers/compare'), const NetworkRequest.toolOf('compare', region: 'cmh'));
       expect(p('https://cmh.meshsonar.com/observers/src_31:obs-1142'), const NetworkRequest.observer('src_31:obs-1142', region: 'cmh'));
       expect(p('https://cmh.meshsonar.com/channels/public'), const NetworkRequest.channel('public', region: 'cmh'));
       expect(p('https://cmh.meshsonar.com/channels/tag:LongFast')!.channelId, 'tag:LongFast', reason: 'hashtag case is kept');
-      expect(p('https://cmh.meshsonar.com/channels')!.insightsTab, 'channels');
-      expect(p('https://cmh.meshsonar.com/insights?tab=signal')!.insightsTab, 'signal');
-      expect(p('https://cmh.meshsonar.com/analysis')!.section, NetworkSection.insights);
-      expect(p('https://cmh.meshsonar.com/map?panel=live')!.mapPanel, 'live');
-      expect(p('https://cmh.meshsonar.com/live')!.mapPanel, 'live');
+      expect(p('https://cmh.meshsonar.com/channels'), const NetworkRequest.section(NetworkSection.channels, region: 'cmh'));
+      expect(p('https://cmh.meshsonar.com/live'), const NetworkRequest.section(NetworkSection.live, region: 'cmh'));
+      expect(p('https://cmh.meshsonar.com/map?panel=live')!.section, NetworkSection.live);
+      expect(p('https://cmh.meshsonar.com/pulse'), const NetworkRequest(section: NetworkSection.home, region: 'cmh', pulse: true));
+      expect(p('https://cmh.meshsonar.com/now')!.section, NetworkSection.home);
+    });
+
+    test('build 71 site routes: analytics, tools, scope audit, status', () {
+      expect(p('https://cmh.meshsonar.com/analytics'), const NetworkRequest.section(NetworkSection.analytics, region: 'cmh'));
+      for (final slug in ['overview', 'nodes', 'roles', 'topology', 'rf-signal', 'rf-health', 'hash-stats', 'hash-issues', 'route-patterns', 'distance', 'channels', 'scopes', 'clock-health', 'neighbor-graph', 'repeater-metrics', 'my-repeaters']) {
+        expect(p('https://cmh.meshsonar.com/analytics/$slug'), NetworkRequest.analytics(slug, region: 'cmh'), reason: slug);
+      }
+      expect(p('https://cmh.meshsonar.com/analytics/prefix-tool'), const NetworkRequest.toolOf('prefix', region: 'cmh'), reason: 'a native tool in the app');
+      expect(p('https://cmh.meshsonar.com/analytics/prefix-tool?prefix=a7b2'), const NetworkRequest.toolOf('prefix', arg: 'a7b2', region: 'cmh'));
+      expect(p('https://cmh.meshsonar.com/tools'), const NetworkRequest.section(NetworkSection.tools, region: 'cmh'));
+      expect(p('https://cmh.meshsonar.com/tools/path'), const NetworkRequest.toolOf('path', region: 'cmh'));
+      expect(p('https://cmh.meshsonar.com/tools/path?hops=a7,b2,c4')!.toolArg, 'a7,b2,c4');
+      expect(p('https://cmh.meshsonar.com/tools/trace'), const NetworkRequest.toolOf('trace', region: 'cmh'));
+      expect(p('https://cmh.meshsonar.com/tools/trace/$hash'), const NetworkRequest.toolOf('trace', arg: hash, region: 'cmh'));
+      expect(p('https://cmh.meshsonar.com/tools/region'), const NetworkRequest.toolOf('definition', region: 'cmh'));
+      expect(p('https://cmh.meshsonar.com/tools/decode'), const NetworkRequest.toolOf('decode', region: 'cmh'));
+      expect(p('https://cmh.meshsonar.com/tools/airtime')!.tool, 'airtime', reason: 'other tool names pass through');
+      expect(p('https://cmh.meshsonar.com/scope-audit'), const NetworkRequest.toolOf('scope-audit', region: 'cmh'));
+      expect(p('https://meshsonar.com/status'), const NetworkRequest.toolOf('status'));
+    });
+
+    test('the retired Insights links open their Analytics twin', () {
+      expect(p('https://cmh.meshsonar.com/insights'), const NetworkRequest.section(NetworkSection.analytics, region: 'cmh'));
+      expect(p('https://cmh.meshsonar.com/analysis'), const NetworkRequest.section(NetworkSection.analytics, region: 'cmh'));
+      expect(p('https://cmh.meshsonar.com/insights?tab=signal'), const NetworkRequest.analytics('rf-signal', region: 'cmh'));
+      expect(p('https://cmh.meshsonar.com/insights?tab=hashes'), const NetworkRequest.analytics('hash-stats', region: 'cmh'));
+      expect(p('https://cmh.meshsonar.com/insights?tab=growth'), const NetworkRequest.analytics('overview', region: 'cmh'), reason: 'no twin: the first tab');
+      expect(p('https://cmh.meshsonar.com/insights?tab=channels'), const NetworkRequest.section(NetworkSection.channels, region: 'cmh'));
+    });
+
+    test('section names saved or linked before build 71 still resolve', () {
+      expect(NetworkSection.byName('now'), NetworkSection.home);
+      expect(NetworkSection.byName('map'), NetworkSection.live);
+      expect(NetworkSection.byName('insights'), NetworkSection.analytics);
+      for (final s in NetworkSection.values) {
+        expect(NetworkSection.byName(s.name), s);
+      }
+      expect(NetworkSection.byName('nope'), isNull);
+      expect(NetworkSection.values.map((s) => s.label).toList(), ['Home', 'Packets', 'Live', 'Nodes', 'Channels', 'Observers', 'Analytics', 'Tools']);
+    });
+
+    test('the live map of one packet keeps the contract form /map?panel=live&packet=', () {
+      final r = p('https://cmh.meshsonar.com/map?panel=live&packet=$hash&t=2026-11-20T10:00:00Z')!;
+      expect(r, NetworkRequest.mapPacket(hash, region: 'cmh', at: DateTime.utc(2026, 11, 20, 10)));
+      expect(r.toWebUri().path, '/map');
+      expect(r.toWebUri().queryParameters['panel'], 'live');
     });
 
     test('region: the host, ?region= on the hub, or the app scheme; none = the viewed region', () {
       expect(p('https://meshsonar.com/packets')!.region, isNull);
       expect(p('https://meshsonar.com/packets?region=CMH')!.region, 'cmh');
       expect(p('meshsonar://network/nodes/$key?region=day')!.region, 'day');
-      expect(p('meshsonar://network')!.section, NetworkSection.now);
+      expect(p('meshsonar://network')!.section, NetworkSection.home);
     });
 
     test('upper-case keys and hashes are accepted and lower-cased', () {
@@ -70,7 +117,10 @@ void main() {
         'https://a.b.meshsonar.com/packets',
         'https://meshsonar.com/share/plan#abc',
         'https://meshsonar.com/plan',
-        'https://meshsonar.com/status',
+        'https://meshsonar.com/tools/trace/$hash/extra',
+        'https://meshsonar.com/analytics/overview/extra',
+        'https://meshsonar.com/tools/path/extra',
+        'https://meshsonar.com/pulse/x',
         'https://meshsonar.com/settings',
         'https://meshsonar.com/packets/nothex',
         'https://meshsonar.com/packets/$hash/extra',
@@ -92,20 +142,23 @@ void main() {
     test('web links use the region host, the hub without a region', () {
       expect(NetworkRequest.packet(hash, region: 'cmh').toWebUri().toString(), 'https://cmh.meshsonar.com/packets/$hash');
       expect(NetworkRequest.node(key).toWebUri().toString(), 'https://meshsonar.com/nodes/$key');
-      expect(const NetworkRequest.section(NetworkSection.now, region: 'day').toWebUri().toString(), 'https://day.meshsonar.com/');
+      expect(const NetworkRequest.section(NetworkSection.home, region: 'day').toWebUri().toString(), 'https://day.meshsonar.com/');
       expect(const NetworkRequest.channel('tag:LongFast', region: 'cmh').toWebUri().toString(), 'https://cmh.meshsonar.com/channels/tag%3ALongFast');
-      expect(const NetworkRequest(section: NetworkSection.insights, region: 'cmh', insightsTab: 'signal', window: '7d').toWebUri().toString(),
-          'https://cmh.meshsonar.com/insights?tab=signal&window=7d');
+      expect(const NetworkRequest(section: NetworkSection.analytics, region: 'cmh', analyticsTab: 'rf-signal', window: '7d').toWebUri().toString(),
+          'https://cmh.meshsonar.com/analytics/rf-signal?window=7d');
+      expect(const NetworkRequest.toolOf('scope-audit', region: 'cmh').toWebUri().toString(), 'https://cmh.meshsonar.com/scope-audit');
+      expect(const NetworkRequest.toolOf('prefix', arg: 'a7', region: 'cmh').toWebUri().toString(), 'https://cmh.meshsonar.com/analytics/prefix-tool?prefix=a7');
+      expect(const NetworkRequest.section(NetworkSection.live, region: 'cmh').toWebUri().toString(), 'https://cmh.meshsonar.com/live');
     });
 
     test('app links carry the region as a query', () {
       expect(NetworkRequest.packet(hash, region: 'cmh').toAppUri().toString(), 'meshsonar://network/packets/$hash?region=cmh');
-      expect(const NetworkRequest.section(NetworkSection.now).toAppUri().toString(), 'meshsonar://network');
+      expect(const NetworkRequest.section(NetworkSection.home).toAppUri().toString(), 'meshsonar://network');
     });
 
     final samples = <NetworkRequest>[
-      const NetworkRequest.section(NetworkSection.now),
-      const NetworkRequest.section(NetworkSection.now, region: 'cmh'),
+      const NetworkRequest.section(NetworkSection.home),
+      const NetworkRequest.section(NetworkSection.home, region: 'cmh'),
       const NetworkRequest.section(NetworkSection.packets, region: 'cmh', window: '24h'),
       NetworkRequest.packet(hash, region: 'cmh'),
       NetworkRequest.packet(hash),
@@ -115,14 +168,35 @@ void main() {
       NetworkRequest.node(key, region: 'cmh'),
       const NetworkRequest.observer('src_31:obs-1142', region: 'cmh'),
       NetworkRequest.observer(key),
-      const NetworkRequest(section: NetworkSection.nodes, region: 'cmh', observersList: true),
-      const NetworkRequest.section(NetworkSection.map, region: 'cmh'),
-      const NetworkRequest(section: NetworkSection.map, mapPanel: 'live'),
-      const NetworkRequest.section(NetworkSection.insights),
-      const NetworkRequest(section: NetworkSection.insights, region: 'cmh', insightsTab: 'hashes', window: '30d'),
+      const NetworkRequest.section(NetworkSection.observers, region: 'cmh'),
+      const NetworkRequest.section(NetworkSection.live, region: 'cmh'),
+      const NetworkRequest.section(NetworkSection.live),
+      NetworkRequest.mapPacket(hash, region: 'cmh', at: DateTime.utc(2026, 11, 20, 10)),
+      NetworkRequest.mapPacket(hash),
+      const NetworkRequest(section: NetworkSection.home, pulse: true),
+      const NetworkRequest(section: NetworkSection.home, region: 'cmh', pulse: true),
+      const NetworkRequest.section(NetworkSection.channels),
+      const NetworkRequest.section(NetworkSection.channels, region: 'cmh'),
       const NetworkRequest.channel('tag:LongFast', region: 'cmh'),
       const NetworkRequest.channel('enc:a3'),
-      const NetworkRequest(section: NetworkSection.insights, insightsTab: 'channels'),
+      const NetworkRequest.channel('public', region: 'day'),
+      const NetworkRequest.section(NetworkSection.analytics),
+      const NetworkRequest(section: NetworkSection.analytics, region: 'cmh', analyticsTab: 'hash-stats', window: '30d'),
+      const NetworkRequest.analytics('rf-signal', region: 'cmh'),
+      const NetworkRequest.analytics('topology'),
+      const NetworkRequest.section(NetworkSection.tools, region: 'cmh'),
+      const NetworkRequest.toolOf('path', region: 'cmh'),
+      const NetworkRequest.toolOf('path', arg: 'a7,b2,c4', region: 'cmh'),
+      const NetworkRequest.toolOf('trace'),
+      const NetworkRequest.toolOf('trace', arg: hash, region: 'cmh'),
+      const NetworkRequest.toolOf('prefix', region: 'cmh'),
+      const NetworkRequest.toolOf('prefix', arg: 'a7b2'),
+      const NetworkRequest.toolOf('scope-audit', region: 'cmh'),
+      const NetworkRequest.toolOf('compare', region: 'cmh'),
+      const NetworkRequest.toolOf('definition', region: 'cmh'),
+      const NetworkRequest.toolOf('status'),
+      const NetworkRequest.toolOf('decode', region: 'cmh'),
+      const NetworkRequest.toolOf('airtime', region: 'cmh'),
     ];
 
     for (final r in samples) {
