@@ -10,11 +10,16 @@
 //   1. Cache first. A fresh cached tile is shown with no request. A stale one is shown too when the network is down or the
 //      refresh fails; it is only refreshed when the network is up.
 //   2. Bounded network. At most [TileFetchGate.maxConcurrent] requests at once, newest request first (the tiles on screen now),
-//      each cancelled when its tile leaves the screen, each with a timeout and NO retry. A failed tile is just empty (the chart
-//      grid shows through) and tries again the next time it is asked for.
-//   3. Circuit breaker. [TileFetchGate.failuresToOpen] failures in a row open the gate for [TileFetchGate.openFor]: tiles are
-//      then served from the cache only, with no requests at all, until the gate lets one probe through (or the phone reports a
-//      network change). No error spam, no frame stalls from doomed requests.
+//      each cancelled when its tile leaves the screen, each with a timeout. A failed tile is tried again after 1 s, 3 s and
+//      10 s ([MeshTileProvider.loadWithRetry]); an empty answer for a failed tile is never kept as the tile (build 72).
+//   3. Circuit breaker, for a network that is really gone. [TileFetchGate.failuresToOpen] failures in a row WITH NO ANSWER
+//      FROM ANY SERVER (a timeout, no route), and no success in the last few seconds, open the gate: tiles are then served
+//      from the cache only, with no requests at all, until one probe gets through. The first probe goes out after
+//      [TileFetchGate.firstOpenFor] (3 s), then 6 s, 12 s, [TileFetchGate.openFor] at most; one success closes the breaker.
+//      A server that answers with an error (404, 500, 429) is a network that works: it never opens the breaker. A 429 or
+//      503 with Retry-After pauses new requests for that long and halves the requests in flight.
+//      Build 72: before, any three failures (HTTP errors included) opened it for 15 s, a probe that ended without a result
+//      left it shut for good, and a few slow tiles after a pan turned the whole map blank ("slow, don't refresh").
 //   4. Tiles an installed offline pack draws are not requested at all ([shouldSkip]).
 //   5. Everything is counted in [MapTileStats] for the "Map and GPS health" recorder and the source pill on the map.
 //
@@ -46,6 +51,17 @@ class MapTileStats extends ChangeNotifier {
 
   /// Injected clock (tests).
   DateTime Function() clock = DateTime.now;
+
+  /// Why the last tile requests failed ("timeout", "HTTP 503", "ClientException ..."), newest last, 20 at most. For the
+  /// health readout and the simulator harness: a failure is never just a count.
+  final List<String> failureReasons = [];
+  final Map<String, int> failureKinds = {};
+
+  void recordFailureReason(String reason) {
+    failureReasons.add(reason);
+    if (failureReasons.length > 20) failureReasons.removeAt(0);
+    failureKinds[reason] = (failureKinds[reason] ?? 0) + 1;
+  }
 
   void record(TileOutcome o) {
     _counts[o] = _counts[o]! + 1;
@@ -109,6 +125,8 @@ class MapTileStats extends ChangeNotifier {
     }
     _packHits = _packMisses = _totalPackHits = _totalPackMisses = 0;
     _lastNetworkOk = _lastCacheServe = _lastFailure = null;
+    failureReasons.clear();
+    failureKinds.clear();
   }
 }
 
@@ -134,7 +152,13 @@ class TileFetchGate {
   /// until it leaves and re-enters the view, so the queue must hold at least everything one screen asks for.
   int maxConcurrent;
   final int failuresToOpen;
+
+  /// The longest wait between probes while the breaker is open, and the first one.
   final Duration openFor;
+  final Duration firstOpenFor;
+
+  /// Failures do not open the breaker while some server answered this recently (a few slow tiles are not "offline").
+  final Duration graceAfterAnswer;
   int maxWaiting;
 
   /// Tile requests dropped because the queue was full (health readout, tests).
@@ -146,7 +170,15 @@ class TileFetchGate {
     if (concurrent != null && concurrent.clamp(1, 12) > maxConcurrent) maxConcurrent = concurrent.clamp(1, 12);
   }
   DateTime Function() clock;
-  TileFetchGate({this.maxConcurrent = 6, this.failuresToOpen = 3, this.openFor = const Duration(seconds: 15), this.maxWaiting = 48, DateTime Function()? clock})
+  TileFetchGate({
+    this.maxConcurrent = 6,
+    this.failuresToOpen = 3,
+    this.openFor = const Duration(seconds: 15),
+    this.firstOpenFor = const Duration(seconds: 3),
+    this.graceAfterAnswer = const Duration(seconds: 5),
+    this.maxWaiting = 48,
+    DateTime Function()? clock,
+  })
     : clock = clock ?? DateTime.now {
     _instances.add(this);
   }
@@ -158,6 +190,11 @@ class TileFetchGate {
   static bool get _forced => isDevelopmentBuild && debugForceOffline.value;
 
   static final List<TileFetchGate> _instances = [];
+
+  /// True while any gate's breaker is open, and the requests every gate has dropped from a full queue (health readout, the
+  /// simulator harness).
+  static bool get anyBreakerOpen => _instances.any((g) => g.isOpen);
+  static int get droppedTotal => _instances.fold(0, (n, g) => n + g.dropped);
 
   /// Tile loads in flight on any provider (disk cache read, queue, network), counted for [tilesSettled].
   static int _pendingLoads = 0;
@@ -183,34 +220,51 @@ class TileFetchGate {
   final ListQueue<_Waiter> _waiting = ListQueue(); // newest at the end: served first
   int _failuresInARow = 0;
   DateTime? _openUntil;
+  DateTime? _lastAnswer;
+  DateTime? _pausedUntil;
+  Duration? _nextOpenFor;
   bool _probing = false;
   bool _phoneOffline = false;
+
+  /// Counts every time the network came back after failures (the breaker closed, or a success followed failures). The map
+  /// listens and asks again for the tiles that failed.
+  final ValueNotifier<int> recoveries = ValueNotifier<int>(0);
 
   int get running => _running;
   int get waiting => _waiting.length;
 
-  /// True while the breaker is open (no requests are made).
+  /// True while the breaker is open (no requests are made): the network is gone, by the phone's word or by ours.
   bool get isOpen {
     if (_phoneOffline || _forced) return true;
     final u = _openUntil;
     return u != null && clock().isBefore(u);
   }
 
+  /// True while a server asked us to slow down (429 / 503 with Retry-After). Not "offline".
+  bool get paused {
+    final p = _pausedUntil;
+    return p != null && clock().isBefore(p);
+  }
+
   /// The phone's own view of the network (connectivity). Offline closes the door at once; online opens it and clears the count.
   void setPhoneOnline(bool online) {
+    final was = _phoneOffline;
     _phoneOffline = !online;
     if (online) {
       _openUntil = null;
+      _nextOpenFor = null;
       _failuresInARow = 0;
       _probing = false;
+      if (was) recoveries.value++;
     }
   }
 
   bool get phoneOffline => _phoneOffline || _forced;
 
-  /// May a request go out now? Open breaker: no, except one probe once [openFor] has passed.
+  /// May a request go out now? Open breaker: no, except one probe once the wait has passed. Paused by a server: no.
   bool get mayRequest {
     if (_phoneOffline || _forced) return false;
+    if (paused) return false;
     final u = _openUntil;
     if (u == null) return true;
     if (clock().isBefore(u)) return false;
@@ -221,10 +275,11 @@ class TileFetchGate {
   /// Waits for a free slot. Null when [cancel] completed first, or the queue was too long and this request was dropped.
   Future<TilePermit?> acquire(Future<void> cancel) {
     if (!mayRequest) return Future.value(null);
-    if (_openUntil != null) _probing = true; // half-open: this request is the probe
+    final probe = _openUntil != null;
+    if (probe) _probing = true; // half-open: this request is the probe
     if (_running < maxConcurrent) {
       _running++;
-      return Future.value(TilePermit._(this));
+      return Future.value(TilePermit._(this, probe: probe));
     }
     final w = _Waiter();
     _waiting.addLast(w);
@@ -238,8 +293,11 @@ class TileFetchGate {
     return w.completer.future;
   }
 
-  void _release() {
+  void _release(TilePermit p) {
     _running--;
+    // A probe that ended with no result (cancelled, its tile left the screen) must not keep the door shut: the next request
+    // is the probe. Before build 72 this left the breaker closed to everything until the phone reported a network change.
+    if (p.probe && _probing) _probing = false;
     while (_running < maxConcurrent && _waiting.isNotEmpty) {
       final w = _waiting.removeLast();
       if (w.completer.isCompleted) continue;
@@ -252,22 +310,86 @@ class TileFetchGate {
     }
   }
 
+  /// A server answered with a tile (or "nothing here"): the network works.
   void recordSuccess() {
+    final recovered = _failuresInARow > 0 || _openUntil != null;
     _failuresInARow = 0;
     _openUntil = null;
+    _nextOpenFor = null;
     _probing = false;
+    _lastAnswer = clock();
+    if (recovered) recoveries.value++;
   }
 
+  /// A server answered, but not with a tile (404, 500, 429...). The network works, so the breaker never opens for this; a
+  /// server that asks us to slow down ([retryAfter], or any 429 / 503) is given the time and fewer requests at once.
+  void recordServerError(int status, {Duration? retryAfter}) {
+    _failuresInARow = 0;
+    _openUntil = null;
+    _nextOpenFor = null;
+    _probing = false;
+    _lastAnswer = clock();
+    if (status == 429 || (status == 503 && retryAfter != null)) {
+      final wait = retryAfter ?? const Duration(seconds: 2);
+      _pausedUntil = clock().add(wait > const Duration(seconds: 30) ? const Duration(seconds: 30) : wait);
+      if (maxConcurrent > 4) maxConcurrent = (maxConcurrent ~/ 2) < 4 ? 4 : maxConcurrent ~/ 2;
+      slowedDown++;
+    }
+  }
+
+  /// Times a server told us to slow down (health readout, tests).
+  int slowedDown = 0;
+
+  /// No answer from any server (a timeout, no route). Enough of these in a row, with no answer in the last
+  /// [graceAfterAnswer], and the network is taken to be gone.
   void recordFailure() {
     _failuresInARow++;
+    final wasProbe = _probing;
     _probing = false;
-    if (_failuresInARow >= failuresToOpen) {
-      _openUntil = clock().add(openFor);
+    final last = _lastAnswer;
+    final quiet = last == null || clock().difference(last) >= graceAfterAnswer;
+    final alreadyShut = _openUntil != null && clock().isBefore(_openUntil!); // the rest of a batch that failed together
+    if (!alreadyShut && (wasProbe || (_failuresInARow >= failuresToOpen && quiet))) {
+      // First wait short, then longer while the probes keep failing; never longer than [openFor].
+      final wait = _nextOpenFor ?? firstOpenFor;
+      _openUntil = clock().add(wait);
+      final next = wait * 2;
+      _nextOpenFor = next > openFor ? openFor : next;
       // Everything waiting is for a network that is not there.
       while (_waiting.isNotEmpty) {
         _waiting.removeLast().completer.complete(null);
       }
     }
+  }
+}
+
+/// When the map may ask again for the tiles that failed, after the network came back ([TileFetchGate.recoveries]): at once,
+/// but not more often than every 5 s, and less and less often (10 s, 20 s, 60 s at most) while recoveries keep coming, so a
+/// connection that drops in and out does not make the map reload over and over. A minute of quiet starts over.
+class TileReask {
+  static const Duration first = Duration(seconds: 5), longest = Duration(seconds: 60);
+  DateTime? _last;
+  Duration _gap = first;
+
+  /// How long to wait before re-asking, given a recovery at [now] (zero = now). Call [done] when the re-ask ran.
+  Duration waitAt(DateTime now) {
+    final last = _last;
+    if (last == null) return Duration.zero;
+    final since = now.difference(last);
+    if (since >= longest) {
+      _gap = first;
+      return Duration.zero;
+    }
+    return since >= _gap ? Duration.zero : _gap - since;
+  }
+
+  void done(DateTime now) {
+    final last = _last;
+    if (last != null && now.difference(last) < longest) {
+      final next = _gap * 2;
+      _gap = next > longest ? longest : next;
+    }
+    _last = now;
   }
 }
 
@@ -277,12 +399,15 @@ class _Waiter {
 
 class TilePermit {
   final TileFetchGate _gate;
+
+  /// This request is the half-open probe of an open breaker.
+  final bool probe;
   bool _done = false;
-  TilePermit._(this._gate);
+  TilePermit._(this._gate, {this.probe = false});
   void release() {
     if (_done) return;
     _done = true;
-    _gate._release();
+    _gate._release(this);
   }
 }
 
@@ -298,6 +423,9 @@ class MeshTileProvider extends TileProvider {
   final MapCachingProvider? cache;
   final Duration timeout;
 
+  /// The waits a raster tile image retries with (tests shorten them).
+  final List<Duration> imageRetryDelays;
+
   /// True when an offline pack draws this tile (no request, no cache read).
   final bool Function(int z, int x, int y)? shouldSkip;
 
@@ -309,6 +437,7 @@ class MeshTileProvider extends TileProvider {
     MapCachingProvider? cache,
     this.timeout = const Duration(seconds: 8),
     this.shouldSkip,
+    this.imageRetryDelays = retryDelays,
   }) : _client = client ?? http.Client(),
        _ownsClient = client == null,
        gate = gate ?? TileFetchGate(),
@@ -350,6 +479,25 @@ class MeshTileProvider extends TileProvider {
     } finally {
       TileFetchGate._pendingLoads--;
     }
+  }
+
+  /// The waits before a failed tile is asked for again. After the last one the tile is left for the next pan, zoom or
+  /// network recovery ([TileFetchGate.recoveries]).
+  static const List<Duration> retryDelays = [Duration(seconds: 1), Duration(seconds: 3), Duration(seconds: 10)];
+
+  /// [loadWithOutcome], asked again after each of [delays] while the tile has nothing to show (a failed request, or no
+  /// request allowed and nothing cached). Stops at once when [cancel] completes (the tile left the screen).
+  Future<(Uint8List, TileOutcome)> loadWithRetry(String url, {required bool skip, required Future<void> cancel, List<Duration> delays = retryDelays}) async {
+    var cancelled = false;
+    unawaited(cancel.then((_) => cancelled = true));
+    var r = await loadWithOutcome(url, skip: skip, cancel: cancel);
+    for (final d in delays) {
+      if (cancelled || !(r.$2 == TileOutcome.failed || r.$2 == TileOutcome.offlineEmpty)) break;
+      await Future.any([Future<void>.delayed(d), cancel]);
+      if (cancelled) break;
+      r = await loadWithOutcome(url, skip: skip, cancel: cancel);
+    }
+    return r;
   }
 
   Future<Uint8List> _load(String url, {required bool skip, required Future<void> cancel, required void Function(TileOutcome) seen}) async {
@@ -435,22 +583,35 @@ class MeshTileProvider extends TileProvider {
           _store(url, res.headers, bytes);
           return bytes;
         }
-        throw http.ClientException('HTTP ${res.statusCode}', Uri.parse(url));
+        if (res.statusCode == 404) {
+          // The server has no tile there (outside the extract, beyond its zoom): a final answer, an empty tile, not a failure.
+          gate.recordSuccess();
+          rec(TileOutcome.networkOk);
+          return TileProvider.transparentImage;
+        }
+        // Any other status: a server that answers is a network that works (never the breaker); the tile itself failed.
+        final ra = int.tryParse(res.headers['retry-after'] ?? '');
+        gate.recordServerError(res.statusCode, retryAfter: ra == null ? null : Duration(seconds: ra));
+        stats.recordFailureReason('HTTP ${res.statusCode}');
+        rec(cached != null ? TileOutcome.staleServed : TileOutcome.failed);
+        return cached?.bytes ?? TileProvider.transparentImage;
       } on http.RequestAbortedException {
         timer.cancel();
         if (timedOut) {
           gate.recordFailure();
+          stats.recordFailureReason('timeout ${timeout.inSeconds}s');
           rec(cached != null ? TileOutcome.staleServed : TileOutcome.failed);
         } else {
           rec(TileOutcome.cancelled);
         }
         return cached?.bytes ?? TileProvider.transparentImage;
-      } catch (_) {
+      } catch (e) {
         timer.cancel();
         if (cancelled) {
           rec(TileOutcome.cancelled);
         } else {
           gate.recordFailure();
+          stats.recordFailureReason(e.runtimeType.toString());
           rec(cached != null ? TileOutcome.staleServed : TileOutcome.failed);
         }
         return cached?.bytes ?? TileProvider.transparentImage;
@@ -502,7 +663,12 @@ class MeshTileImage extends ImageProvider<MeshTileImage> {
   }
 
   Future<ui.Codec> _decode(MeshTileImage key, ImageDecoderCallback decode) async {
-    final bytes = await provider.load(key.url, skip: key.skip, cancel: key.cancel);
+    final (bytes, outcome) = await provider.loadWithRetry(key.url, skip: key.skip, cancel: key.cancel, delays: provider.imageRetryDelays);
+    // Nothing to show after the retries: an empty tile for now, but never kept as the tile. Forgotten, so the next ask (a
+    // pan, a zoom, the network coming back) fetches it.
+    if (outcome == TileOutcome.failed || outcome == TileOutcome.offlineEmpty) {
+      scheduleMicrotask(() => PaintingBinding.instance.imageCache.evict(key));
+    }
     try {
       return await ui.ImmutableBuffer.fromUint8List(bytes).then(decode);
     } catch (_) {

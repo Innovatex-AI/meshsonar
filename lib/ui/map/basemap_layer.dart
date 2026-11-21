@@ -28,7 +28,7 @@ class NetworkBasemapTileProvider extends VectorTileProvider {
   final String Function() urlTemplate;
   final MeshTileProvider tiles;
   final BasemapHealth health;
-  NetworkBasemapTileProvider({required this.source, required this.urlTemplate, required this.tiles, required this.health});
+  NetworkBasemapTileProvider({required this.source, required this.urlTemplate, required this.tiles, required this.health, this.retryDelays = defaultRetryDelays});
 
   static final Future<void> _never = Completer<void>().future;
 
@@ -42,14 +42,31 @@ class NetworkBasemapTileProvider extends VectorTileProvider {
   String urlFor(TileIdentity t) =>
       urlTemplate().replaceAll('{z}', '${t.z}').replaceAll('{x}', '${t.x}').replaceAll('{y}', '${t.y}');
 
+  /// A failed vector tile is asked for twice more (after 1 s and 3 s) before it is given up for now. Shorter than the raster
+  /// tiles' waits: the renderer draws a few tiles at a time, and a tile that waits holds one of its places.
+  static const List<Duration> defaultRetryDelays = [Duration(seconds: 1), Duration(seconds: 3)];
+  final List<Duration> retryDelays;
+
   @override
   Future<Uint8List> provide(TileIdentity tile) async {
     final skip = tiles.shouldSkip?.call(tile.z, tile.x, tile.y) ?? false;
-    final (bytes, outcome) = await tiles.loadWithOutcome(urlFor(tile), skip: skip, cancel: _never);
-    if (outcome == TileOutcome.failed) health.tileFailed(source);
+    final (bytes, outcome) = await tiles.loadWithRetry(urlFor(tile), skip: skip, cancel: _never, delays: retryDelays);
+    // Only a server that really failed us counts towards the OpenFreeMap fallback: not a phone with no network (the gate is
+    // shut, nothing was asked), where falling back would only change the credit over a map that cannot load either.
+    if (outcome == TileOutcome.failed && !tiles.gate.isOpen) health.tileFailed(source);
     if (outcome == TileOutcome.networkOk || outcome == TileOutcome.notModified) health.tileOk(source);
+    if (outcome == TileOutcome.failed || outcome == TileOutcome.offlineEmpty) {
+      // Thrown, so nothing is kept for this tile: the renderer caches no bytes and no picture, and the map asks again when
+      // the tile next comes into view or the network comes back (BasemapLayer re-asks on TileFetchGate.recoveries).
+      throw ProviderException(message: 'no basemap tile ${tile.z}/${tile.x}/${tile.y} (${outcome.name})', retryable: Retryable.retry);
+    }
+    if (outcome == TileOutcome.packCovered) {
+      // The offline pack draws this tile: nothing here, and nothing for the renderer to keep (no status: not an empty tile).
+      throw ProviderException(message: 'pack tile ${tile.z}/${tile.x}/${tile.y}', retryable: Retryable.none);
+    }
     if (identical(bytes, TileProvider.transparentImage)) {
-      throw ProviderException(message: 'no basemap tile ${tile.z}/${tile.x}/${tile.y}', retryable: Retryable.none);
+      // The server has no tile there (404): the renderer draws an empty tile (the style's background).
+      throw ProviderException(message: 'no basemap tile ${tile.z}/${tile.x}/${tile.y}', retryable: Retryable.none, statusCode: 404);
     }
     return bytes;
   }
@@ -60,6 +77,26 @@ BasemapSource basemapSourceAt(MapCamera camera, {BasemapHealth? health}) {
   final b = camera.visibleBounds;
   final inside = viewInsideOurBasemap(west: b.west, south: b.south, east: b.east, north: b.north, zoom: camera.zoom);
   return (health ?? BasemapHealth.instance).sourceFor(inside: inside);
+}
+
+/// The background a style paints under its tiles: what the map shows where a tile is not (yet) drawn. Null for the names-only
+/// look. Build 72: the map's own background was the app theme's, so a Dark map with tiles missing on a light iPad was a pale
+/// sheet that looked like another basemap.
+Color? basemapBackgroundColor(BasemapSource source, {required bool dark, BasemapLook look = BasemapLook.road}) {
+  for (final l in basemapStyle(source, dark: dark, look: look)['layers'] as List) {
+    if (l is Map && l['type'] == 'background') return parseStyleColor((l['paint'] as Map?)?['background-color']);
+  }
+  return null;
+}
+
+/// `#RRGGBB` or `rgb(r,g,b)` from a style (the two forms the generator writes for a background); null for anything else.
+Color? parseStyleColor(Object? v) {
+  if (v is! String) return null;
+  final hex = RegExp(r'^#([0-9a-fA-F]{6})$').firstMatch(v);
+  if (hex != null) return Color(0xFF000000 | int.parse(hex.group(1)!, radix: 16));
+  final rgb = RegExp(r'^rgb\((\d+),\s*(\d+),\s*(\d+)\)$').firstMatch(v);
+  if (rgb != null) return Color.fromARGB(255, int.parse(rgb.group(1)!), int.parse(rgb.group(2)!), int.parse(rgb.group(3)!));
+  return null;
 }
 
 /// Shared themes (parsed once). The renderer keys its tile caches (memory and disk) and its isolate registries on the theme's
@@ -141,6 +178,30 @@ class _BasemapLayerState extends State<BasemapLayer> {
 
   BasemapHealth get _health => BasemapHealth.instance;
 
+  // The network came back after failures: ask again for the tiles that failed (a new layer key; drawn tiles come straight
+  // from the renderer's caches). A map that hands in its own [BasemapLayer.reset] does this itself.
+  TileFetchGate? _watched;
+  final TileReask _reask = TileReask();
+  Timer? _reaskTimer;
+
+  void _watchGate() {
+    final g = widget.reset != null ? null : (widget.tiles ?? BasemapLayer.sharedTiles).gate;
+    if (identical(g, _watched)) return;
+    _watched?.recoveries.removeListener(_onRecovered);
+    _watched = g?..recoveries.addListener(_onRecovered);
+  }
+
+  void _onRecovered() {
+    if (!mounted || _reaskTimer != null) return;
+    final wait = _reask.waitAt(DateTime.now());
+    _reaskTimer = Timer(wait, () {
+      _reaskTimer = null;
+      if (!mounted) return;
+      _reask.done(DateTime.now());
+      setState(() => _generation++);
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -149,6 +210,7 @@ class _BasemapLayerState extends State<BasemapLayer> {
     });
     if (BasemapLayer.enabled) unawaited(_health.check());
     if (BasemapLayer.enabled) BasemapRenderCache.purgeOldOnce();
+    if (BasemapLayer.enabled) _watchGate();
     _listenReset();
   }
 
@@ -163,12 +225,15 @@ class _BasemapLayerState extends State<BasemapLayer> {
   void didUpdateWidget(BasemapLayer old) {
     super.didUpdateWidget(old);
     if (!identical(old.reset, widget.reset)) _listenReset();
+    if (BasemapLayer.enabled) _watchGate();
   }
 
   @override
   void dispose() {
     _sub?.cancel();
     _resetSub?.cancel();
+    _reaskTimer?.cancel();
+    _watched?.recoveries.removeListener(_onRecovered);
     super.dispose();
   }
 
