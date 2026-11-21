@@ -99,6 +99,13 @@ Future<void> section(WidgetTester tester, String name, {int? sub}) async {
   await tester.pump(const Duration(milliseconds: 300));
 }
 
+/// Closes the pages a section opened over the shell (a site page, a tool, a channel reader).
+Future<void> popPages(WidgetTester tester) async {
+  tester.state<NavigatorState>(find.byType(Navigator).first).popUntil((r) => r.isFirst);
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 600));
+}
+
 /// A few frames: the link reaches the inbox, the shell switches, the tab takes the request, the page is built.
 Future<void> frames(WidgetTester tester) async {
   for (var i = 0; i < 6; i++) {
@@ -529,14 +536,15 @@ void main() {
       h.incomingLinks.add(Uri.parse('https://cmh.meshsonar.com/insights?tab=signal'));
       await frames(tester);
       expect(ShellScope.maybeOf(tester.element(find.byType(NetworkTab, skipOffstage: false)))!.tab, AppTab.network);
-      expect(tester.widget<AnalyticsSection>(find.byType(AnalyticsSection)).initialTab, 'rf-signal', reason: 'tab=signal is RF signal on the site');
+      expect(tester.widget<AnalyticsSection>(find.byType(AnalyticsSection, skipOffstage: false)).initialTab, 'rf-signal', reason: 'tab=signal is RF signal on the site');
       h.incomingLinks.add(Uri.parse('https://cmh.meshsonar.com/analytics/topology'));
       await frames(tester);
-      expect(tester.widget<AnalyticsSection>(find.byType(AnalyticsSection)).initialTab, 'topology');
+      expect(tester.widget<AnalyticsSection>(find.byType(AnalyticsSection, skipOffstage: false)).initialTab, 'topology');
       // Picking the section by hand afterwards shows its list, not the linked tab again.
+      await popPages(tester);
       await section(tester, 'home');
       await section(tester, 'analytics');
-      expect(tester.widget<AnalyticsSection>(find.byType(AnalyticsSection)).initialTab, isNull);
+      expect(tester.widget<AnalyticsSection>(find.byType(AnalyticsSection, skipOffstage: false)).initialTab, isNull);
       await tester.pump(const Duration(seconds: 2));
     });
 
@@ -545,25 +553,27 @@ void main() {
       final h = await pumpNetwork(tester);
       h.incomingLinks.add(Uri.parse('https://cmh.meshsonar.com/channels/tag:LongFast'));
       await frames(tester);
-      expect(tester.widget<ChannelsSection>(find.byType(ChannelsSection)).initialChannelId, 'tag:LongFast');
+      expect(tester.widget<ChannelsSection>(find.byType(ChannelsSection, skipOffstage: false)).initialChannelId, 'tag:LongFast');
       h.incomingLinks.add(Uri.parse('https://cmh.meshsonar.com/tools/trace/c4b06ee8fc39b187'));
       await frames(tester);
-      var t = tester.widget<ToolsSection>(find.byType(ToolsSection));
+      var t = tester.widget<ToolsSection>(find.byType(ToolsSection, skipOffstage: false));
       expect((t.initialTool, t.initialArg), ('trace', 'c4b06ee8fc39b187'));
       h.incomingLinks.add(Uri.parse('https://cmh.meshsonar.com/scope-audit'));
       await frames(tester);
-      t = tester.widget<ToolsSection>(find.byType(ToolsSection));
+      t = tester.widget<ToolsSection>(find.byType(ToolsSection, skipOffstage: false));
       expect((t.initialTool, t.initialArg), ('scope-audit', null));
       h.incomingLinks.add(Uri.parse('https://cmh.meshsonar.com/analytics/prefix-tool?prefix=a7b2'));
       await frames(tester);
-      t = tester.widget<ToolsSection>(find.byType(ToolsSection));
+      t = tester.widget<ToolsSection>(find.byType(ToolsSection, skipOffstage: false));
       expect((t.initialTool, t.initialArg), ('prefix', 'a7b2'));
       h.incomingLinks.add(Uri.parse('https://cmh.meshsonar.com/status'));
       await frames(tester);
-      expect(tester.widget<ToolsSection>(find.byType(ToolsSection)).initialTool, 'status');
+      expect(tester.widget<ToolsSection>(find.byType(ToolsSection, skipOffstage: false)).initialTool, 'status');
+      // A new link closes the page the last one opened (a tool, a site page) and shows its own view.
       h.incomingLinks.add(Uri.parse('https://cmh.meshsonar.com/live'));
       await frames(tester);
-      expect(find.byKey(const Key('live-map')), findsOneWidget);
+      expect(find.byKey(const Key('live-map')), findsOneWidget, reason: 'not hidden under the Status page');
+      expect(find.byType(ToolsSection, skipOffstage: false), findsNothing);
       await tester.pump(const Duration(seconds: 2));
     });
 

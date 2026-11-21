@@ -544,12 +544,12 @@ void main() {
     // ------------------------------------------------------------------------------------------ J1: a repeater anywhere
     await _home(t);
     await openShellTab(t, 'Network');
-    await _tap(t, _key('network-section-nodes'));
-    final repTab = _key('network-sub-nodes-0');
-    if (await _tap(t, repTab, wait: const Duration(seconds: 20))) {
-      final row = _prefix('repeater-row-');
+    // Build 71: Nodes is the directory itself (no Nodes | Observers switch; Observers is its own section).
+    await openNetworkSection(t, 'nodes');
+    if (await waitFor(t, _key('network-nodes-directory'), timeout: const Duration(seconds: 20))) {
+      final row = _prefix('node-row-');
       if (await waitFor(t, row, timeout: const Duration(seconds: 30))) {
-        final key = (t.widget(row.first).key as ValueKey<String>).value.substring('repeater-row-'.length).toLowerCase();
+        final key = (t.widget(row.first).key as ValueKey<String>).value.substring('node-row-'.length).toLowerCase();
         await t.tap(row.first);
         await pumpFor(t, const Duration(seconds: 2));
         if (await waitFor(t, _key('node-actions'), timeout: const Duration(seconds: 20))) {
@@ -622,19 +622,20 @@ void main() {
           }
         }
       }
-      // J2: a repeater contact > Link to… (V-5, build 67: a required step now). Repeaters live under Chat > Radio
+      // J2: a repeater contact > Link to… (V-5, build 67: a required step now). Repeaters live under More > Radio (build 71)
       // (rows 'network-row-<prefix>'), below the radio card and the Nearby section in a lazily built CustomScrollView,
       // so on a phone the Repeaters rows are not built until the list is scrolled: the old lookup waited for a row that
       // was never built and noted "no repeater rows". The contact profile is a lazy ListView too (the plan rows sit under
       // the claim card), so Link to… is scrolled into view inside 'contact-profile', not the first Scrollable on screen.
       await _home(t);
-      await openShellTab(t, 'Chat');
-      await _tap(t, _key('segment-radio'), what: 'segment-radio');
+      await openShellTab(t, 'More');
+      if (_key('more-list').hitTestable().evaluate().isEmpty) await openShellTab(t, 'More');
+      await _tap(t, _key('more-radio'), what: 'more-radio');
       final tile = _prefix('network-row-');
-      final rows = await scrollToFind(t, tile, _key('chat-scroll'));
+      final rows = await scrollToFind(t, tile, _key('more-radio-list'));
       if (!rows) {
         await shot(t, 'planner-29-network-no-repeater');
-        _fail('J2: no repeater rows under Chat > Radio with the simulated radio');
+        _fail('J2: no repeater rows under More > Radio with the simulated radio');
       } else {
         final prefix = (t.widget(tile.first).key as ValueKey<String>).value.substring('network-row-'.length).toLowerCase();
         final before = _plan(t).nodes.length;

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:meshsonar/main.dart' as app;
+import 'package:meshsonar/ui/app.dart' show MoreItem;
 
 import 'screens.dart';
 
@@ -94,9 +95,11 @@ Future<void> openPlanTool(WidgetTester t, String id) async {
 Future<void> selectColumbus(WidgetTester t) async {
   await openShellTab(t, 'Network');
   await pumpFor(t, const Duration(seconds: 2));
-  final chip = find.byKey(const Key('region-switch-chip'));
+  // Build 71: the region name in the Network header opens the switcher.
+  final chip = find.byKey(const Key('network-region-button'));
   if (!await waitFor(t, chip)) return;
-  if ('${(t.widget(chip) as ActionChip).label is Text ? ((t.widget(chip) as ActionChip).label as Text).data : ''}'.startsWith('CMH')) return;
+  final title = find.byKey(const Key('region-title'));
+  if (title.evaluate().isNotEmpty && ((t.widget(title) as Text).data ?? '').startsWith('Columbus')) return;
   await t.tap(chip);
   await pumpFor(t, const Duration(seconds: 2));
   final search = find.byKey(const Key('region-search'));
@@ -170,28 +173,30 @@ void main() {
         await openShellTab(t, 'Network');
         await pumpFor(t, const Duration(seconds: 6));
         await shot(t, 'region-initial');
-        // Network tab (AZ-3.1): five sections, two with two sub-views each, Insights as a list of pages.
-        const views = [('now', 0), ('now', 1), ('packets', 0), ('packets', 1), ('nodes', 0), ('nodes', 1), ('map', -1), ('insights', -1)];
+        // Network tab (build 71): eight sections on one scrolling strip; only Home has sub-views (Findings | Overview).
+        const views = [('home', 0), ('home', 1), ('packets', -1), ('live', -1), ('nodes', -1), ('channels', -1), ('observers', -1), ('analytics', -1), ('tools', -1)];
         for (final (section, sub) in views) {
           final name = sub < 0 ? section : '$section-$sub';
           await step('region-$name', () async {
-            await t.tap(find.byKey(Key('network-section-$section')));
-            await pumpFor(t, const Duration(seconds: 1));
+            await openNetworkSection(t, section);
             if (sub >= 0) await t.tap(find.byKey(Key('network-sub-$section-$sub')));
             await pumpFor(t, const Duration(seconds: 5));
             await shot(t, 'region-$name');
             await scrollShots(t, 'region-$name', max: 2);
           });
         }
-        for (final id in ['analysis', 'rf', 'growth', 'reports', 'stats', 'silent', 'wardrive']) {
-          await step('region-insight-$id', () async {
-            await t.tap(find.byKey(const Key('network-section-insights')));
-            await pumpFor(t, const Duration(seconds: 1));
-            await t.tap(find.byKey(Key('insight-$id')));
-            await pumpFor(t, const Duration(seconds: 5));
-            await shot(t, 'region-insight-$id');
-            await scrollShots(t, 'region-insight-$id', max: 2);
-            await back(t);
+        // The old Insights pages are the site's Analytics tabs now, shown inside the app.
+        for (final id in ['overview', 'rf-signal', 'topology', 'hash-stats', 'route-patterns', 'nodes', 'rf-health']) {
+          await step('region-analytics-$id', () async {
+            await openNetworkSection(t, 'analytics');
+            final row = find.byKey(Key('analytics-tab-$id'));
+            await scrollToFind(t, row, find.byKey(const Key('analytics-section')));
+            await t.tap(row.first);
+            final problem = await sitePageProblem(t);
+            // ignore: avoid_print
+            if (problem != null) print('EXC analytics $id: $problem');
+            await shot(t, 'region-analytics-$id');
+            await popToRoots(t);
           });
         }
       });
@@ -208,9 +213,33 @@ void main() {
     }
 
     if (want('more')) {
-      const rows = ['more-drives', 'more-devices', 'more-myReports', 'more-leaderboard', 'more-notifications', 'more-wardriving', 'more-observerJoin', 'more-radio', 'more-repeaters', 'more-myRadios', 'more-method', 'more-settings', 'more-about', 'more-privacy', 'more-trace', 'more-discover', 'more-adverts', 'more-rxLog', 'more-noiseFloor', 'more-telemetry', 'more-radioSetup'];
+      // Build 71: nine rows on More; the rest are one level down, under Radio or Help ('parent/row'), or a Settings section
+      // ('settings:<MoreItem name>', opened the way the app's own links open it).
+      const rows = [
+        'more-drives', 'more-devices', 'more-leaderboard', 'more-observerJoin', 'more-radio', 'more-chat', 'more-settings', 'more-help', 'more-about',
+        'more-help/more-myReports', 'more-help/more-method', 'more-help/more-howItWorks',
+        'more-radio/more-radioSettings', 'more-radio/more-noiseFloor', 'more-radio/more-telemetry', 'more-radio/more-radioSetup',
+        'settings:notifications', 'settings:wardriving', 'settings:myRadios', 'settings:privacy', 'settings:observer',
+      ];
       for (final key in rows) {
         await step(key, () async {
+          await popToRoots(t);
+          if (key.startsWith('settings:')) {
+            await openSettingsSection(t, MoreItem.values.byName(key.substring('settings:'.length)));
+            await pumpFor(t, const Duration(seconds: 1));
+            await shot(t, key.replaceAll(':', '-'));
+            await popToRoots(t);
+            return;
+          }
+          if (key.contains('/')) {
+            final parts = key.split('/');
+            await openMoreSubRow(t, parts[0], parts[1]);
+            await pumpFor(t, const Duration(seconds: 2));
+            await shot(t, parts[1]);
+            await scrollShots(t, parts[1], max: 3);
+            await popToRoots(t);
+            return;
+          }
           await openShellTab(t, 'More');
           if (find.byKey(const Key('more-list')).hitTestable().evaluate().isEmpty) await openShellTab(t, 'More');
           final row = find.byKey(Key(key));
@@ -279,8 +308,7 @@ void main() {
           await t.tap(lay);
           await pumpFor(t, const Duration(seconds: 1));
           await shot(t, 'map-layers');
-          await t.tapAt(const Offset(5, 60));
-          await pumpFor(t, const Duration(seconds: 1));
+          await closeLayersPanel(t); // build 71: a panel on the map, closed with its X
         }
         final chip = find.byKey(const Key('ping-settings-chip'));
         if (chip.evaluate().isNotEmpty) {
@@ -300,8 +328,7 @@ void main() {
             await t.tap(ml);
             await pumpFor(t, const Duration(seconds: 1));
             await shot(t, 'map-fullscreen-layers');
-            await t.tapAt(const Offset(5, 60));
-            await pumpFor(t, const Duration(seconds: 1));
+            await closeLayersPanel(t);
           }
           await t.tap(find.byKey(const Key('fullscreen-close')));
           await pumpFor(t, const Duration(seconds: 1));

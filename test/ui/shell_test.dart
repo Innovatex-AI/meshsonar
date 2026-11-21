@@ -77,6 +77,22 @@ void main() {
       await drain(tester);
     });
 
+    testWidgets('the tab bar is 72 pt plus the bottom safe area: the status-bar inset never adds a blank band above the icons', (tester) async {
+      phone(tester);
+      tester.view.padding = const FakeViewPadding(top: 62 * 3, bottom: 34 * 3);
+      tester.view.viewPadding = const FakeViewPadding(top: 62 * 3, bottom: 34 * 3);
+      addTearDown(tester.view.reset);
+      final dpr = tester.view.devicePixelRatio;
+      final h = Harness();
+      await h.pumpApp(tester);
+      final bar = tester.getRect(find.byKey(const Key('shell-tabs')));
+      final bottomInset = 34 * 3 / dpr;
+      expect(bar.height, closeTo(72 + bottomInset, 0.5), reason: 'no top inset inside the bar');
+      final first = tester.getRect(find.descendant(of: find.byKey(const Key('shell-tabs')), matching: find.byType(NavigationDestination)).first);
+      expect(first.top, closeTo(bar.top, 0.5), reason: 'the destinations start at the top of the bar');
+      await drain(tester);
+    });
+
     testWidgets('iPad: a navigation rail instead of the bottom bar, same five tabs', (tester) async {
       phone(tester, w: 834, h: 1194);
       final h = Harness();

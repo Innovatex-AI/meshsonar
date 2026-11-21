@@ -62,19 +62,22 @@ builds an alert from a message its radio handed over; no server, no remote push,
 
 ## App shell: five tabs
 
-Files: `ui/shell/*`. Tabs `Chat | Drive | Network | Plan | More` (Network was Analyze until build 71; a saved `analyze` last tab restores Network): a bottom bar on phones, a navigation rail from 700 dp wide
-(iPad, phones in landscape). The last open tab is remembered (`ui_prefs.json` `last_tab`, by name; a fresh install opens
-on Drive; a saved `map` from before the rename still restores Drive). Tapping the open More tab again returns it to its list.
+Files: `ui/shell/*`. Tabs `Network | Drive | Chat | Plan | More` (build 71 order; Network was Analyze until build 71): a bottom bar on phones, a
+navigation rail from 700 dp wide (iPad, phones in landscape). The last open tab is remembered (`ui_prefs.json` `last_tab`, by
+name, never by position, so a tab saved by an older build restores to the same tab after the reorder; a saved `analyze` restores
+Network and a saved `map` restores Drive). **A fresh install opens on Network** (build 71: the app is a gateway to the site data).
+The Drive screen is still built at launch behind it, so the drive engine and map are ready. Tapping the open More tab again returns
+it to its list.
 
 | Tab | Holds |
 |---|---|
-| Chat | Contacts \| Channels through the `ChatTabHost` seam (see Contacts and direct messages, below). Without a chat store: "Messages arrive here once you connect a radio". Unread badge on the tab icon. |
+| Chat | Chats \| Contacts \| Channels through the `ChatTabHost` seam (see Contacts and direct messages, below). Build 71: the fourth segment, Radio, moved to More > Radio. Without a chat store: "Messages arrive here once you connect a radio". Unread badge on the tab icon (the only tab with a count badge). |
 | Drive | The coverage map and the drive controls (called Map before the redesign). Start drive is the big button. The tab runs behind the translucent, blurred tab bar (opaque under Reduce Transparency); `ShellController.immersive` hides the bar, the rail and the mini drive bar while the Drive panel is collapsed to its pill. Icon: car. |
-| Network | (AZ-3.1, build 71; was Analyze.) The network analyzer for the viewed region, no radio needed. Region header: name, pulse chip (`GET /v1/pulse`; hidden while the server has none, on an error or an offline copy), Export region report, region switcher; a one-line summary on Now (`GET /v1/summary`, falls back to `region-overview`). Five sections on a segmented bar at the bottom on phones (one-handed), under the header from 700 dp: **Now** (Findings \| Overview), **Packets** (List \| Live; AZ-3.2: List = `/v1/packets` grouped by hash with expandable observations, cursor paging with infinite scroll, pull to refresh, Live / Paused (no polling off screen, in the background or in Saver), window chips, a filter sheet with every contract filter, the filter language with suggestions from `/v1/filters/fields` and saved filters on the device, active-filter chips, share link; source switch Network \| My radio when a radio is connected (the Rx log decoded on the phone, `lib/core/v1/local_decoder.dart`); packet detail `NetworkPacketScreen` with decoded fields, hop confidence, observations, byte inspector, Show on map (draws the packet's path on Network > Map, AZ-3.3; a packet only the phone has opens the map around its named hops); Decode a packet (local first, `POST /v1/decode` only for types the phone cannot read); falls back to `region-packets` / `region-packet` while `/v1` is not live; web twins `/packets`, `/packets/:hash`, `/tools/decode`), **Nodes** (AZ-3.4: Nodes \| Observers; every role with role, status and last-heard chips, search, favourites starred on the device and listed first, a My nodes chip (starred nodes plus claimed radios, used across Network), node page with health, activity, SNR trend, heard-by, neighbours, paths through, reach, clock and battery where `/v1` sends them (absent sections hidden), Watch kept on the phone in the `me/watches` shape (no push until AZ-3.8), share; observer list and page with metrics; falls back to `region-repeaters?roles=all`, `region-repeater`, `region-observers`, `region-observer`; web twins `/nodes`, `/nodes/:key`, `/observers`, `/observers/:id`), **Map** (AZ-3.3: the live packet map with replay on the app's map stack. `/v1/stream` (region scope, Last-Event-ID resume, `missed` / `reset` read back through `/v1/replay`), falling back to `region-live`; packets drawn origin to relays to observers in the website's packet type colours, solid for unique hops, dashed for likely, faint grey ghost segments and marks for hops nobody can place, dotted for the route ahead of a direct packet; feed sheet, type / observer / My nodes filters, density scrubber (`/v1/packets/density`, else counted from replay pages) over 1 h to 30 d, replay at 0.25x to 8x from `/v1/replay` (else `region-replay`), pause, jump to live; the stream drops and nothing animates off screen, in the background or in Saver ("Show anyway" for this view), frames capped at the battery profile's map rate; `lib/core/v1/live_*.dart`, `lib/ui/network/live/`; web twin `/map?panel=live`, a packet's `&packet=<hash>&t=<time>`), **Insights** (Analysis, RF, Growth, Reports, Stats, Silent repeaters, Wardrive share, each its own page). Only the shown section is built (no hidden polling). Shell states: loading, offline, error, empty. Search (AZ-3.5): one field in the header (node name, key prefix, packet hash, observer, region) on `GET /v1/search`, falling back to the node roster, region list and observers on the phone; share buttons send region-host links (`https://cmh.meshsonar.com/nodes/<key>`). Deep links: `NetworkRequest` (`lib/core/network_request.dart`) parses the site routes (`/`, `/packets[/:hash]`, `/nodes[/:key]`, `/repeaters/:key`, `/observers[/:id]`, `/channels[/:id]`, `/insights?tab=`, `/map?panel=[&packet=&t=]`, `/live`) on meshsonar.com, a region host (universal links: `applinks:meshsonar.com` and `applinks:*.meshsonar.com`) or `meshsonar://network/...`; `AppState.networkInbox` -> `ShellController.openNetwork`. `/v1` client: `lib/core/v1/`. Drives moved to More > Drives. **Removed in M0 (Nov 8 2026):** Routes, Findings (frozen Oct 15) and the Hops tab. |
+| Network | (build 71; was Analyze.) The site in the app, for the viewed region or for every region, no radio needed: one header line, one strip of eight sections (Home, Packets, Live, Nodes, Channels, Observers, Analytics, Tools) and no second bar. See "Network tab: the site in the app", below. |
 | Plan | The **Master Planner** (0.38): one full-screen map with a bottom sheet and the modes Link, Coverage, Find sites and Where to drive on one saved Plan (section "Plan tab: the Master Planner", below). **Removed (Nov 15 2026, app #219 and A7):** the separate Point-to-point link and Coverage painter screens (folded into the Planner), and the Airtime and load, Radio presets and Coverage check screens (earlier removed in M0 (Nov 8 2026): Planner, Recommended build, Site explorer, Scenarios, Build tracker, Field data, Airtime live channel load). |
-| More | Groups: Your drives (Drives: the drive list, reports and progress, moved from Analyze in build 71), Your radio (Radio, Claimed radios, Devices and keys), Radios and tools, Community (Leaderboard, Set up a repeater observer), Radios and tools also lists Observer (opens Settings > Observer), App (Chat, Wardriving, Notifications, Settings, Colour legend, How it works, Method), Help and about (Privacy, Report a problem, My reports, About MeshSonar, Privacy policy). The Developer section and its New Drive screen switch are gone (build 70): the panel layout is the only Drive screen, and a saved `driveRedesign:false` in `redesign_flags.json` is ignored. Opens inside the tab (own Navigator), so the bars stay. The full More + Settings merge is phase X. |
+| More | Nine rows, no group headers (build 71 clutter pass): **Drives** (the drive list, reports and progress), **Radio** (More > Radio, below), **Devices and keys**, **Leaderboard**, **Set up a repeater observer**, **Chat settings**, **Settings**, **Help** (How it works with the tour, Method, Colour legend, Report a problem, My reports, Privacy policy), **About MeshSonar**. Rows that only jumped into a Settings section are gone: Claimed radios, Observer, Wardriving settings, Notifications and Privacy and data sharing are sections of Settings (the app's own links, e.g. the Drive ping sheet's "Wardriving settings", still open the section: `ShellController.openMore(MoreItem.wardriving)`). **More > Radio** (`ui/shell/more_radio_screen.dart`; the Chat tab's Radio segment until build 71): the radio card, nodes heard nearby, the repeaters, rooms and sensors in the radio's contacts with the Tools menu (Trace, Discover, Rx log, Adverts), a search field, then Radio settings and region preset (the read-only comparison), Radio setup, Noise floor and Telemetry. With no radio it says so and keeps the settings and tools rows. The radio tools are also listed once under Network > Tools. The Developer section and its New Drive screen switch are gone (build 70): the panel layout is the only Drive screen, and a saved `driveRedesign:false` in `redesign_flags.json` is ignored. Opens inside the tab (own Navigator), so the bars stay. The full More + Settings merge is phase X. |
 
-Old tab names: Drive = Map (renamed in the Drive redesign); Region = Network (was Analyze); Drives = More > Drives; Radio and Settings = More. `HomeShell(legacyTab: n)` maps the old
+Old tab names: Drive = Map (renamed in the Drive redesign); Region = Network (was Analyze); Chat > Radio ("Chat > Network" before that) = More > Radio; Drives = More > Drives; Radio and Settings = More. `HomeShell(legacyTab: n)` maps the old
 indexes 0..4 (`LegacyTab.fromIndex`).
 
 **Mini drive bar** (`ui/shell/mini_drive_bar.dart`): while a drive runs, a 56 dp opaque bar above the tab bar on every tab
@@ -86,6 +89,73 @@ separate Stop button.
 
 Shared states: `ui/state_widgets.dart` has `LoadingState` (a spinner that gives up after a timeout and becomes an
 `ErrorState` with Try again) and `ErrorState`; `EmptyState` is in `ui/widgets.dart`.
+
+## Network tab: the site in the app (build 71)
+
+Files: `ui/shell/network_tab.dart`, `ui/network/network_header.dart`, `network_sections.dart`, `network_search.dart`,
+`core/network_request.dart`, and one folder per section under `ui/network/`.
+
+**Header, one 48 pt line:** the region name (tap = region switcher; ellipsized first when the line is tight), the pulse chip
+(`GET /v1/pulse`: Normal, Unusual with the top event, No packet feed; hidden while the server has none, on an error or on an
+offline copy; on a narrow phone it collapses to its coloured dot before the buttons ever shrink), a search button (nodes, keys,
+packets, observers, regions) and one overflow menu: **Share link** (the site's address of the shown section) and **Export region
+report**. Every control is a 44 pt target. No second bar at the bottom: the only bottom bar is the app's tab bar.
+
+**Section strip, 44 pt, scrolls sideways:** Home · Packets · Live · Nodes · Channels · Observers · Analytics · Tools. The shown
+one is underlined and scrolled into view. Only the shown section is built, so a hidden one never polls or holds a live stream.
+
+| Section | What it is | Site twin |
+|---|---|---|
+| Home | The old "Now": a one-line summary (`GET /v1/summary`), then Findings \| Overview (the only sub-switch left), with the "What changed" card. | `/` (`/pulse` opens the pulse sheet) |
+| Packets | `/v1/packets` grouped by hash with expandable observations, filters and the filter language, saved filters, My radio, Decode a packet; a packet opens its page (decoded fields, path with hop confidence, who heard it, byte inspector). A region with no packet feed says so in a plain card. The old Live list sub-view is gone (Live is its own section). | `/packets`, `/packets/<hash>` |
+| Live | The live packet map with replay. ONE panel on the map (see "Panels on a map"): its header shows status and the packet count; open, it holds the scrubber, speed, filters and the feed. A drawn packet is a second, closable panel. | `/live`; one packet: `/map?panel=live&packet=<hash>&t=<time>` |
+| Nodes | The node directory, every role, with role / status / last-heard chips, search, My nodes, favourites first. A node opens its page (one look for every node: status, SNR trend and 30-day card under one header, neighbours, heard by, Your drives and drive reach when it has a position). | `/nodes`, `/nodes/<key>` |
+| Channels | Native: the channel list (private channels shown but not openable), a reader (newest at the bottom, polls every 20 s only while visible and in front, "N new" pill, older pages), message search (2+ characters) and Report a message. | `/channels`, `/channels/<id>` |
+| Observers | The observer list (it was a sub-view of Nodes); an observer opens its page. | `/observers`, `/observers/<id>` |
+| Analytics | The site's 17 Analytics tabs as a list; each opens the site page inside the app (below). They replace the seven old Insights screens (Analysis, RF, Growth, Reports, Stats, Silent repeaters, Wardrive share). | `/analytics/<slug>` |
+| Tools | Native: **Path Inspector** (hop prefixes to the routes they most likely stand for), **Trace Viewer** (recent traces, SNR per hop, who heard it; a trace run on your radio opens here too), **Prefix Tool** (is a hash prefix free), Decode a packet. Site pages in the app: Scope Audit, Compare observers, Region definition, Status. Radio tools (Trace path, Discover, Adverts, Rx log, Noise floor, Telemetry), each listed once. | `/tools/*`, `/scope-audit`, `/observers/compare`, `/status`, `/analytics/prefix-tool` |
+
+**Site pages inside the app** (`ui/network/analytics/site_page_view.dart`): a web view on `https://…meshsonar.com` only, opened
+with `embed=1` so the site's own bars are hidden; any other link goes to the system browser; a node, packet, observer or channel
+link inside the page opens the app's native screen; loading, "Can't reach MeshSonar" with Try again, and Open in browser. No
+cookies, tokens or script channel are passed in.
+
+**All regions** (first entry of the region switcher; for the session only): the header says "All regions" and the strip shows
+only the sections that need no region (Home, Channels, Analytics, Tools, all on the hub). Home there has the network summary,
+a global search field, "Back to <your region>", **Busiest regions, last 10 minutes** (`GET /v1/regions/busy`: name, code,
+packets per minute; loads when shown, no polling; says so when offline, on an error with Try again, or when no region had
+packets) and Every region (the comparison list). A busiest-regions row opens that region's Live section and makes it the viewed
+region, saved like any pick in the switcher. There is no world live map on the phone (battery and data).
+
+**No region yet** (a fresh install opens here before the region list has loaded): never a blank; "Loading regions", "You are
+offline" with Try again, "The region list did not load" with Try again, or "No region to show yet" with Choose a region. With a
+list and no GPS fix or pick, the nearest or default region shows.
+
+**Links** (`NetworkRequest`, pure Dart): every site route above parses from `https://meshsonar.com/...`,
+`https://<region>.meshsonar.com/...` and `meshsonar://network/...`, and serialises back to the same address (Share link). The
+retired `/insights?tab=` and `/analysis` open their Analytics twin; `/repeaters/<key>` opens the node. Section names from before
+build 71 (`now`, `map`, `insights`) still resolve (`NetworkSection.byName`).
+
+### Panels on a map (build 71, `ui/design/map_panel.dart`)
+
+One panel kind on every map (Live, Drive, Plan), twin of the site's float panel:
+
+1. Bottom-anchored, directly above the tab bar. Only the person moves it; a connection or data event never does (the two
+   driving-safety rules are the only exceptions: the Drive panel collapses at speed, the inspector clears itself while driving).
+2. The header is always visible and at least 44 pt: grabber, title, one status or count, chevron. Collapsed = header only.
+3. Tap the header or drag it to toggle. Same state names everywhere: Collapsed, Open (at most 60 % of the height), Full only
+   for the work panels (Planner, Drive stats).
+4. Never modal: nothing dims, the map under it pans and zooms.
+5. One open panel per map.
+6. Starts collapsed on a phone; the open state is remembered per panel.
+7. Connection wording and icon come from one helper (`ui/drive/radio_link_status.dart`) on every surface.
+8. Count badges only on the Chat tab; a panel header shows a status or a count of its own content.
+9. Forms (filters, settings, pickers) stay modal sheets.
+
+On the Drive map the inspector, **Layers** (with the coverage timeline), the **legend** (a tap on the legend chip), a tapped
+observer and stacked repeaters are panels in one slot above the Drive panel: a tap on empty map or the panel's X closes them (a
+back gesture does not, they are not pages). "What do the symbols mean?" inside Layers still opens the full legend as a sheet.
+
 
 ## Plan tab: the Master Planner (0.38)
 
@@ -319,8 +389,8 @@ Chat UI: the `chatRedesign` switch in More > Developer and the old Contacts | Ch
 Free, for the owner of the repeater. Files: `lib/ui/radios/` (`repeaters_screen.dart`, `admin_launcher.dart`, `repeater_admin/*`,
 `rooms/*`), logic in `lib/radio/repeater_*.dart` and `lib/radio/room_session.dart`.
 
-**Where.** Chat > Network > Repeaters and Rooms (every repeater and room your radio knows, plus the ones you claimed), or the Dashboard tile on a
-repeater's profile; "Administer this repeater" on a repeater's sheet (map and Analyze); a room contact in Chat opens its conversation with a join bar.
+**Where.** More > Radio > Repeaters and Rooms (every repeater and room your radio knows, plus the ones you claimed), or the Dashboard tile on a
+repeater's profile; "Administer this repeater" on a repeater's sheet (map and Network); a room contact in Chat opens its conversation with a join bar.
 Needs a connected radio that can do it (the built-in Simulator cannot: it has no repeaters, and the screen says so).
 
 **Login.** One sheet over the node: a single password field and "Log in as guest" (the node's reply decides the role), a warning for the factory
@@ -361,13 +431,13 @@ everyone together), writes 2 s apart.
 
 **Rooms.** In Chat a room contact shows a thin join bar (Log in to post, then Joined / Joined as admin / Joined, read only): a room only pushes its posts to radios that logged in. With the room password you read
 and post; with the admin password you can also manage it (the same admin screens, identity and access only). A read-only guest (the room allows
-guests) reads and sees why the composer is off. Rooms open as ordinary conversations from Chat > Network > Rooms.
+guests) reads and sees why the composer is off. Rooms open as ordinary conversations from More > Radio > Rooms.
 
 
 ## First-run intro (onboarding)
 
 Files: `ui/onboarding/*`. The intro has four pages and is shown once. `ui_prefs.json` `onboarding_seen` is set when
-it's finished or skipped. More > How it works replays it (no connect buttons).
+it's finished or skipped. More > Help > How it works replays it (no connect buttons).
 
 | Page | Content | Buttons |
 |---|---|---|
@@ -446,7 +516,7 @@ and ≥ 640 px) the map sits on the left and the controls on the right.
 
 ### Auto-ping cadence
 
-(`DefaultWardriveEngine`, settings *Auto-ping*, *Minimum distance* and *Listen window*; More > Wardriving settings, or the Drive tab's "Ping ..." chip)
+(`DefaultWardriveEngine`, settings *Auto-ping*, *Minimum distance* and *Listen window*; Settings > Wardriving, or the Drive tab's "Ping ..." chip)
 
 - An auto-ping goes out when **both** of these are true:
   1. **Time:** at least `intervalSec` (10–120 s; default 30) since the last ping, auto or manual. The gap is never
@@ -996,7 +1066,7 @@ Needs a server that lists `nodeClaims` in its site-config capabilities and an ap
 under Settings > Claimed radios say why they cannot be used. **A claim only manages a radio** (its name, whether its position is
 public, notes, giving it up). Recording, uploading and counting never check it: every radio and every driver keeps feeding data.
 
-- **Settings > Claimed radios** (and More > Claimed radios) lists the radios this key manages (from `my-radios`): type, how it was verified (radio signature, or an
+- **Settings > Claimed radios** lists the radios this key manages (from `my-radios`): type, how it was verified (radio signature, or an
   observer hearing the code), position public / hidden / server default, a short key. Edit sends only the changed fields
   (`PATCH claim`); Give up asks first and says the data keeps counting (`DELETE claim`). A link opens the website's `/me/radios`.
 - **Claim my radio** (needs a connected radio): `claim-start(sign)` with the radio's own public key, the radio signs the

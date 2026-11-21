@@ -89,9 +89,17 @@ void main() {
     await pumpFor(t, const Duration(seconds: 1));
 
     // Segments.
-    await t.tap(find.byKey(const Key('segment-radio')));
+    // Build 71: three segments; the radio's lists (the old Radio segment) are at More > Radio.
+    await t.tap(find.byKey(const Key('segment-channels')));
     await pumpFor(t, const Duration(seconds: 1));
+    await shot(t, 'channels-segment');
+    await openTab(t, 'More');
+    if (find.byKey(const Key('more-list')).hitTestable().evaluate().isEmpty) await openTab(t, 'More');
+    await t.tap(find.byKey(const Key('more-radio')));
+    await pumpFor(t, const Duration(seconds: 2));
     await shot(t, 'network');
+    await popToRoots(t);
+    await openTab(t, 'Chat');
     await t.tap(find.byKey(const Key('segment-contacts')));
     await pumpFor(t, const Duration(seconds: 1));
     await shot(t, 'contacts-segment');

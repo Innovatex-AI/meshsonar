@@ -50,6 +50,7 @@ void main() {
         await pumpFor(t, const Duration(seconds: 1));
       }
     }
+    await openShellTab(t, 'Drive'); // build 71: the app opens on the Network tab
     expect(await waitFor(t, find.text('Connect radio')), isTrue);
     await pumpFor(t, const Duration(milliseconds: 1200));
     await t.tap(find.text('Connect radio').last);
@@ -98,8 +99,7 @@ void main() {
     await t.tap(find.byKey(const Key('drive-map-layers')));
     await pumpFor(t, const Duration(seconds: 1));
     await shot(t, 'm06-layers-sheet');
-    await t.tapAt(const Offset(20, 60));
-    await pumpFor(t, const Duration(seconds: 1));
+    await closeLayersPanel(t); // build 71: a panel on the map, closed with its X ('layers-done')
 
     // full screen: the panel collapsed to the pill (the old full-screen button went with the footer layout, build 70)
     await t.fling(find.byKey(const Key('drive-panel-grabber')), const Offset(0, 300), 1500);
@@ -117,8 +117,7 @@ void main() {
     await t.tap(find.byKey(const Key('layer-labels')));
     await pumpFor(t, const Duration(seconds: 1));
     await shot(t, 'm11-fullscreen-layers-names-off');
-    await t.tapAt(const Offset(20, 60));
-    await pumpFor(t, const Duration(seconds: 1));
+    await closeLayersPanel(t);
     await shot(t, 'm12-fullscreen-names-off');
     // tap a repeater if one is on screen
     // ignore: avoid_print

@@ -47,22 +47,19 @@ void main() {
     await t.pageBack();
     await pumpFor(t, const Duration(seconds: 1));
 
-    // Network (Analyze until build 71): the region home, then Insights > Analysis (the one hop chart).
+    // Network (Analyze until build 71): the region home, then Analytics > Overview (a site page in the app).
     await openShellTab(t, 'Network');
     await pumpFor(t, const Duration(seconds: 5));
     await shot(t, 'm0-analyze-region');
-    final insights = find.byKey(const Key('network-section-insights'));
-    if (await waitFor(t, insights, timeout: const Duration(seconds: 5))) {
-      await t.tap(insights);
-      await pumpFor(t, const Duration(seconds: 1));
+    // Build 71: the old Insights pages are replaced by the site's Analytics tabs, shown inside the app.
+    if (await openNetworkSection(t, 'analytics')) {
       await shot(t, 'm0-analyze-tabs-end');
-      final analysis = find.byKey(const Key('insight-analysis'));
-      if (await waitFor(t, analysis, timeout: const Duration(seconds: 5))) {
-        await t.tap(analysis);
-        await pumpFor(t, const Duration(seconds: 6));
+      final overview = find.byKey(const Key('analytics-tab-overview'));
+      if (await waitFor(t, overview, timeout: const Duration(seconds: 5))) {
+        await t.tap(overview);
+        await sitePageProblem(t);
         await shot(t, 'm0-analyze-analysis');
-        await t.pageBack();
-        await pumpFor(t, const Duration(seconds: 1));
+        await popToRoots(t);
       }
     }
 
@@ -70,13 +67,14 @@ void main() {
     await openShellTab(t, 'More');
     if (find.byKey(const Key('more-list')).hitTestable().evaluate().isEmpty) await openShellTab(t, 'More');
     await shot(t, 'm0-more-top');
-    await _scrollMore(t, 'more-method');
+    // Build 71: More is nine rows; Method and the Privacy policy are under Help.
+    await _scrollMore(t, 'more-help');
     await shot(t, 'm0-more-middle');
-    await _scrollMore(t, 'more-privacy-policy');
+    await t.tap(find.byKey(const Key('more-help')));
+    await pumpFor(t, const Duration(seconds: 1));
     await shot(t, 'm0-more-bottom');
 
     // Method (coverage v2 text).
-    await _scrollMore(t, 'more-method');
     await t.tap(find.byKey(const Key('more-method')));
     await pumpFor(t, const Duration(seconds: 2));
     await shot(t, 'm0-method-top');

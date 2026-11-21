@@ -132,15 +132,19 @@ Future<bool> tapKey(WidgetTester t, List<String> keys, {Duration wait = const Du
   return true;
 }
 
-/// Closes the topmost sheet or dialog: pops the root navigator's top route (sheets, dialogs and action sheets are routes); when
-/// nothing popped and the non-modal layers sheet is open, toggles it off. Never taps blindly at a fixed spot (a stray tap at the
-/// top left once opened the guide page and left every later frame on it).
+/// Closes the topmost sheet or dialog: pops the root navigator's top route (sheets, dialogs and action sheets are routes).
+/// Build 71: Layers and the legend on the Drive map are panels, not routes (a pop does not close them): when nothing popped,
+/// the open panel is closed with its own X ('layers-done', 'map-panel-drive.legend-close'). Never taps blindly at a fixed spot
+/// (a stray tap at the top left once opened the guide page and left every later frame on it).
 Future<void> dismiss(WidgetTester t) async {
   final ctx = t.element(find.byType(Scaffold).first);
   final popped = await Navigator.of(ctx, rootNavigator: true).maybePop();
   await pumpFor(t, const Duration(seconds: 1));
-  if (!popped && find.byKey(const Key('layers-sheet')).evaluate().isNotEmpty) {
-    await tapKey(t, ['drive-map-layers'], quiet: true);
+  if (popped) return;
+  if (find.byKey(const Key('layers-sheet')).evaluate().isNotEmpty) {
+    if (!await tapKey(t, ['layers-done'], quiet: true)) await tapKey(t, ['drive-map-layers'], quiet: true);
+  } else if (find.byKey(const Key('map-panel-drive.legend')).evaluate().isNotEmpty) {
+    await tapKey(t, ['map-panel-drive.legend-close'], quiet: true);
   }
 }
 
@@ -189,10 +193,10 @@ Future<void> pickColumbus(WidgetTester t, AppState st) => pickRegion(t, st, quer
 Future<void> pickRegion(WidgetTester t, AppState st, {required String query, required String code}) async {
   await goTab(t, 'Network', 'network-tab');
   await pumpFor(t, const Duration(seconds: 2));
-  final chip = find.byKey(const Key('region-switch-chip'));
-  if (!await waitFor(t, chip, timeout: const Duration(seconds: 30))) throw StateError('region-switch-chip never appeared');
-  final label = (t.widget(chip) as ActionChip).label;
-  if (label is Text && (label.data ?? '').startsWith(code)) return;
+  // Build 71: the region name in the Network header is the switcher button ('network-region-button').
+  final chip = find.byKey(const Key('network-region-button'));
+  if (!await waitFor(t, chip, timeout: const Duration(seconds: 30))) throw StateError('network-region-button never appeared');
+  if (st.viewingRegion?.code == code && st.viewingIsManual) return;
   await t.tap(chip);
   await pumpFor(t, const Duration(seconds: 2));
   final search = find.byKey(const Key('region-search'));
@@ -397,10 +401,10 @@ void main() {
       } else {
         // Current app: the chip is a plain label when a region is known; the switcher is the Region screen's chip.
         // ignore: avoid_print
-        print('NOTE 02-region-switcher via Network > region-switch-chip (region-chip is not tappable in this build)');
+        print('NOTE 02-region-switcher via Network > network-region-button (region-chip is not tappable in this build)');
         await goTab(t, 'Network', 'network-tab');
         await pumpFor(t, const Duration(seconds: 2));
-        if (await tapKey(t, ['region-chip', 'region-switch-chip'], wait: const Duration(seconds: 2))) {
+        if (await tapKey(t, ['region-chip', 'network-region-button'], wait: const Duration(seconds: 2))) {
           await frame(t, '02-region-switcher');
           await dismiss(t);
         }
