@@ -285,12 +285,12 @@ void main() {
       final etag = EtagClient(inner, RegionCache(dir), staleAfter: const Duration(seconds: 2));
       final api = PacketsApi(base, client: etag);
       expect((await api.list(PacketFilter.none, PacketWindow.defaultWindow)).offlineAsOf, isNull);
-      await api.detail('84e9744b6433a1b0');
+      await api.detail('50b835a910da5aac');
       up = false;
       final p = await api.list(PacketFilter.none, PacketWindow.defaultWindow);
       expect(p.offlineAsOf, isNotNull);
       expect(p.rows.length, 7);
-      final d = (await api.detail('84e9744b6433a1b0')).detail;
+      final d = (await api.detail('50b835a910da5aac')).detail;
       expect(d.offlineAsOf, isNotNull);
       expect(d.typeName, 'TRACE');
     });

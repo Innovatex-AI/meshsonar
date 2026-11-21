@@ -145,12 +145,17 @@ class MeshPacket {
 const int packetHashSize = 8;
 
 /// MeshCore packet hash, as Packet::calculatePacketHash (src/Packet.cpp line 41): SHA-256 over the payload type byte,
-/// then (TRACE only) the path_len byte, then the payload; first 8 bytes. Route bits, transport codes and the path are
-/// not hashed, so every repeat of one transmission has the same hash. This is what observers publish as `hash` and
-/// what the server joins drive pings to observer receptions on.
+/// then (TRACE only) path_len, then the payload; first 8 bytes. Route bits, transport codes and the path are not
+/// hashed, so every repeat of one transmission has the same hash. This is what observers publish as `hash` and what
+/// the server joins drive pings to observer receptions on.
+///
+/// TRACE: the firmware does `sha.update(&path_len, sizeof(path_len))` and `path_len` is a uint16_t there, so TWO bytes
+/// go in, little-endian: the wire path_len byte, then 0x00. (Hashing one byte gave an id no server or observer
+/// publishes.) Same rule as the website's `packetHash` (meshcore-insights src/lib/observers/meshcore-pure.ts); a TRACE
+/// has one hash per hop count by firmware design.
 Uint8List packetHash(int payloadType, List<int> payload, {int pathLenByte = 0}) {
   final t = payloadType & 0x0F;
-  final data = <int>[t, if (t == PayloadType.trace) pathLenByte & 0xff, ...payload];
+  final data = <int>[t, if (t == PayloadType.trace) ...[pathLenByte & 0xff, 0x00], ...payload];
   return Uint8List.sublistView(sha256(data), 0, packetHashSize);
 }
 

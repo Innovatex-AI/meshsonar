@@ -144,14 +144,14 @@ void main() {
       final s = Server();
       await t.pumpWidget(list(s));
       await settle(t);
-      await t.tap(find.byKey(const Key('packet-row-expand-84e9744b6433a1b0')));
+      await t.tap(find.byKey(const Key('packet-row-expand-50b835a910da5aac')));
       await settle(t);
-      expect(s.count('/v1/packets/84e9744b6433a1b0/observations'), 1);
-      expect(find.byKey(const ValueKey('packet-row-obs-84e9744b6433a1b0')), findsOneWidget);
+      expect(s.count('/v1/packets/50b835a910da5aac/observations'), 1);
+      expect(find.byKey(const ValueKey('packet-row-obs-50b835a910da5aac')), findsOneWidget);
       expect(find.textContaining('OVCS Clintonville'), findsWidgets);
-      await t.tap(find.byKey(const Key('packet-row-expand-84e9744b6433a1b0')));
+      await t.tap(find.byKey(const Key('packet-row-expand-50b835a910da5aac')));
       await settle(t);
-      expect(find.byKey(const ValueKey('packet-row-obs-84e9744b6433a1b0')), findsNothing);
+      expect(find.byKey(const ValueKey('packet-row-obs-50b835a910da5aac')), findsNothing);
       await t.pumpWidget(const SizedBox());
     });
 
@@ -393,7 +393,7 @@ void main() {
       await scrollTo(t, find.byKey(const ValueKey('packet-path-p1')));
       expect(find.textContaining('Route still ahead'), findsOneWidget);
       await t.pumpWidget(const SizedBox());
-      await open(t, s, '84e9744b6433a1b0');
+      await open(t, s, '50b835a910da5aac');
       expect(find.text('Trace hops'), findsOneWidget);
       expect(find.text('10 dB, 6.5 dB, -2.5 dB'), findsOneWidget);
       expect(find.byKey(const Key('packet-map-note')), findsOneWidget);
@@ -405,7 +405,7 @@ void main() {
       final s = Server();
       final log = RxLog(clock: () => now);
       log.add(fromHex(data('packet-detail.trace')['raw'] as String), snrDb: 6.5);
-      await open(t, s, '84e9744b6433a1b0', log: log);
+      await open(t, s, '50b835a910da5aac', log: log);
       expect(find.byKey(const Key('packet-radio-heard')), findsOneWidget);
       expect(find.textContaining('Your radio heard this too: 6.5 dB'), findsOneWidget);
       await t.pumpWidget(const SizedBox());
@@ -434,15 +434,15 @@ void main() {
       await open(t, Server(), '0000000000000000');
       expect(find.byKey(const Key('packet-not-found')), findsOneWidget);
       await t.pumpWidget(const SizedBox());
-      await open(t, Server()..offline = true, '84e9744b6433a1b0');
+      await open(t, Server()..offline = true, '50b835a910da5aac');
       expect(find.byKey(const Key('region-offline-empty')), findsOneWidget);
       await t.pumpWidget(const SizedBox());
       String? shared;
       packetShareOverride = (x) async => shared = x;
-      await open(t, Server(), '84e9744b6433a1b0');
+      await open(t, Server(), '50b835a910da5aac');
       await t.tap(find.byKey(const Key('packet-share')));
       await t.pump();
-      expect(shared, 'https://cmh.meshsonar.com/packets/84e9744b6433a1b0');
+      expect(shared, 'https://cmh.meshsonar.com/packets/50b835a910da5aac');
       expect(find.byKey(const Key('packet-copy-hex')), findsOneWidget);
       await t.pumpWidget(const SizedBox());
     });
