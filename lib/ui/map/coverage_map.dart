@@ -150,6 +150,13 @@ import 'sheets/observer_sheet.dart' show ObserverSheet, ObserverSheetContext;
 import 'sheets/repeater_sheet.dart' show RepeaterListSheet, RepeaterSheet, RepeaterSheetContext;
 import '../claims/claim_widgets.dart' show OwnedByYouChip;
 
+/// Whether an installed offline pack is drawn under [style] (Chart, Light, Dark), and so whether its area's network tiles may
+/// be skipped. False for Topo and Satellite: no pack draws them, their tiles always come from the network or the tile cache.
+bool styleDrawsOfflinePack(BaseMapStyle style) => style.usesOfflinePack;
+
+/// Whether the network tile at a spot is skipped: only when a pack covers it AND the style draws the pack.
+bool skipsNetworkTile({required BaseMapStyle style, required bool packCovers}) => styleDrawsOfflinePack(style) && packCovers;
+
 /// A line from a ping to a repeater it heard.
 class PingLink {
   final RepeaterRef repeater;
@@ -1393,6 +1400,9 @@ class _CoverageMapState extends State<CoverageMap> {
 
   /// True when the installed pack draws tile z/x/y, so no request is made for it.
   bool _packDraws(int z, int x, int y) {
+    // Only for a style the pack is drawn under. Topo and Satellite draw no pack, so inside a pack area they must fetch their
+    // tiles like anywhere else (before build 72 they were skipped too and those styles stayed blank there).
+    if (!styleDrawsOfflinePack(BaseMapStyle.effective(widget.baseStyle, ActiveMapDefinition.current))) return false;
     final code = _pack.code;
     if (code == null) return false;
     final ip = _pack.basemap.managerOrNull?.installed[code];

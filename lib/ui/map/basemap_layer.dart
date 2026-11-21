@@ -14,6 +14,7 @@ import 'package:vector_tile_renderer/vector_tile_renderer.dart' as vtr;
 
 import '../../core/basemap.dart';
 import '../../core/power_profile.dart';
+import 'basemap_cache.dart';
 import 'tile_source.dart';
 
 /// Whether a drive map shows coverage on a plain background instead of the basemap right now: a drive is running and the power
@@ -61,7 +62,8 @@ BasemapSource basemapSourceAt(MapCamera camera, {BasemapHealth? health}) {
   return (health ?? BasemapHealth.instance).sourceFor(inside: inside);
 }
 
-/// Shared themes (parsed once; the renderer's caches key on the theme id).
+/// Shared themes (parsed once). The renderer keys its tile caches (memory and disk) and its isolate registries on the theme's
+/// id and version: every style has its own (core/basemap.dart, [basemapStyleIdentity]); two styles must never share one.
 final Map<(BasemapSource, bool, BasemapLook), vtr.Theme> _themes = {};
 vtr.Theme basemapTheme(BasemapSource source, {required bool dark, BasemapLook look = BasemapLook.road}) =>
     _themes.putIfAbsent((source, dark, look), () => vtr.ThemeReader().read(basemapStyle(source, dark: dark, look: look)));
@@ -122,6 +124,7 @@ class _BasemapLayerState extends State<BasemapLayer> {
       if (mounted) setState(() {});
     });
     if (BasemapLayer.enabled) unawaited(_health.check());
+    if (BasemapLayer.enabled) BasemapRenderCache.purgeOldOnce();
     _listenReset();
   }
 

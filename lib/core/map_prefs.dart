@@ -6,6 +6,7 @@
 //   (auto_resume_sec, the old "re-centre by itself" timer, was removed Nov 10 2026: a moved map stays put until Recenter.
 //   An old file's key is ignored and dropped on the next save.)
 //   zoomBySpeed     zoom out gently at highway speed (default off: the zoom stays where the person put it).
+//   basemapCachePurged  the basemap render version whose old disk renders were deleted (once per version).
 //   healthOverlay   the small "Map and GPS health" readout on the map (Settings > Diagnostics).
 //   layers          per map page (`drive`, `plan`, `detail`; [kMapLayerPages]): which layers are on or off, the Pings colour mode, and the network
 //                   coverage options (colour by, detail, window, source). See [LayerPrefs]. Drive plan 7.2 (fix F11).
@@ -121,6 +122,7 @@ class MapPrefs extends ChangeNotifier {
   bool _headingUp = false;
   bool _zoomBySpeed = false;
   bool _healthOverlay = false;
+  int _basemapCachePurged = 0;
   final Map<String, LayerPrefs> _layers = {};
   bool _loaded = false;
   Future<void>? _loading;
@@ -128,6 +130,10 @@ class MapPrefs extends ChangeNotifier {
   bool get headingUp => _headingUp;
   bool get zoomBySpeed => _zoomBySpeed;
   bool get healthOverlay => _healthOverlay;
+
+  /// The basemap render version whose old disk renders were already deleted (ui/map/basemap_cache.dart); 0 = never.
+  int get basemapCachePurged => _basemapCachePurged;
+  set basemapCachePurged(int v) => _set(() => _basemapCachePurged = v, _basemapCachePurged != v);
   bool get loaded => _loaded;
 
   /// The remembered layer choices of map page [pageId] (read synchronously: the file is loaded before the first frame, see
@@ -170,6 +176,7 @@ class MapPrefs extends ChangeNotifier {
     'heading_up': _headingUp,
     'zoom_by_speed': _zoomBySpeed,
     'health_overlay': _healthOverlay,
+    if (_basemapCachePurged != 0) 'basemap_cache_purged': _basemapCachePurged,
     if (_layers.isNotEmpty) 'layers': {for (final e in _layers.entries) e.key: e.value.toJson()},
   };
 
@@ -178,6 +185,7 @@ class MapPrefs extends ChangeNotifier {
     if (j['heading_up'] is bool) _headingUp = j['heading_up'] as bool;
     if (j['zoom_by_speed'] is bool) _zoomBySpeed = j['zoom_by_speed'] as bool;
     if (j['health_overlay'] is bool) _healthOverlay = j['health_overlay'] as bool;
+    if (j['basemap_cache_purged'] is int) _basemapCachePurged = j['basemap_cache_purged'] as int;
     final ls = j['layers'];
     if (ls is Map) {
       _layers.clear();

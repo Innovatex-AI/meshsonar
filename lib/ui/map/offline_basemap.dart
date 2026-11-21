@@ -16,7 +16,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:vector_map_tiles/vector_map_tiles.dart';
 import 'package:vector_tile_renderer/vector_tile_renderer.dart' as vtr;
 
-import '../../core/basemap.dart' show BasemapSource;
+import '../../core/basemap.dart' show BasemapSource, withBasemapIdentity;
 import '../../core/offline_packs.dart';
 import '../../core/offline_style.dart';
 import '../../core/pmtiles_reader.dart';
@@ -283,4 +283,6 @@ vtr.Theme _legacyTheme(bool dark) => _legacy.putIfAbsent(dark, () => vtr.ThemeRe
 
 /// The pre-M2 offline style (OpenMapTiles packs): OSM Carto colours through the same matrix as the online tiles (see core/offline_style.dart),
 /// labels drawn with Flutter text in the system font (SF Pro on iOS, spike S1; no glyph files needed in the app).
-Map<String, dynamic> offlineMapStyle({required bool dark}) => offlineStyle(dark: dark);
+/// It carries its own identity (id + the basemap render version) like every other style: the renderer's caches key on it.
+Map<String, dynamic> offlineMapStyle({required bool dark}) =>
+    withBasemapIdentity({...offlineStyle(dark: dark), 'id': 'meshsonar-offline-${dark ? 'dark' : 'light'}'});
