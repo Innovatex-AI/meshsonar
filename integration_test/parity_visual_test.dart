@@ -49,13 +49,10 @@ void main() {
       await pumpFor(t, const Duration(seconds: 3));
       await shot(t, 'map-after-switch');
     }
-    final chip = find.byKey(const Key('region-switch-chip'));
-    if (chip.evaluate().isNotEmpty) {
-      await t.tap(chip.first);
-      await pumpFor(t, const Duration(seconds: 1));
+    // Build 71: the region switcher opens from the region name in the Network header.
+    if (await openRegionSwitcher(t)) {
       await shot(t, 'switcher-recent');
-      await t.tapAt(const Offset(20, 60));
-      await pumpFor(t, const Duration(seconds: 1));
+      await popToRoots(t);
     }
 
     // ---- privacy zones

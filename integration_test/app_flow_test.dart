@@ -49,6 +49,12 @@ void main() {
       await t.tap(find.text('Skip'));
     }
 
+    // Build 71: the app opens on the Network tab; this flow is about a drive, so go to Drive first.
+    final driveTab = find.descendant(
+        of: find.byWidgetPredicate((w) => w.key == const Key('shell-tabs') || w.key == const Key('shell-rail')), matching: find.text('Drive'));
+    expect(await waitFor(t, driveTab), isTrue, reason: 'Drive tab');
+    await t.tap(driveTab.first);
+    await pumpFor(t, const Duration(seconds: 1));
     expect(await waitFor(t, find.text('Connect radio')), isTrue, reason: 'Drive screen with Connect radio');
     await screen(t, 'drive-empty');
     await tapWhenReady(t, find.text('Connect radio'), 'Connect radio button');

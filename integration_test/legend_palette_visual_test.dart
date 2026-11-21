@@ -89,10 +89,10 @@ void main() {
         n++;
       }
       expect(sheet, findsOneWidget);
-      await t.tapAt(const Offset(20, 60)); // scrim closes the legend
+      await t.tapAt(const Offset(20, 60)); // scrim closes the legend (a modal sheet)
       await pumpFor(t, const Duration(seconds: 1));
-      await t.tapAt(const Offset(20, 60)); // and the layers sheet
-      await pumpFor(t, const Duration(seconds: 1));
+      await closeLayersPanel(t); // build 71: Layers is a panel on the map, closed with its X ('layers-done')
+      expect(find.byKey(const Key('layers-sheet')), findsNothing, reason: 'the Layers panel closed');
     }
     // ignore: avoid_print
     print('VERIFY_DONE');

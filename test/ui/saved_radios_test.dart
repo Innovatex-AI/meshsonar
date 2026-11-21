@@ -251,14 +251,16 @@ void main() {
   });
 
   group('Claimed radios (renamed from My radios)', () {
-    testWidgets('More row, Settings section and the screen title say Claimed radios', (tester) async {
+    testWidgets('the Settings section and the screen title say Claimed radios (build 71: the More row moved into Settings)', (tester) async {
       install(tester, SavedRadiosStore());
       final h = Harness();
       useTallScreen(tester);
       await h.pumpApp(tester);
       await tapShellTab(tester, 'More');
-      expect(find.text('Claimed radios'), findsOneWidget);
+      // Build 71: More has no "Claimed radios" row any more (it only jumped into Settings); the Settings row names it.
+      expect(find.byKey(const Key('more-myRadios')), findsNothing);
       expect(find.text('My radios and claims'), findsNothing);
+      expect(find.descendant(of: find.byKey(const Key('more-settings')), matching: find.textContaining('claimed radios')), findsOneWidget);
       await openSettingsTab(tester);
       await showSetting(tester, 'my-radios');
       expect(find.text('CLAIMED RADIOS'), findsOneWidget, reason: 'section header');

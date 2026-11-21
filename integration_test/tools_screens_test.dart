@@ -7,29 +7,43 @@ import 'package:meshsonar/main.dart' as app;
 
 import 'screens.dart';
 
+/// Where each radio tool is since build 71: Trace, Discover, Rx log and Adverts in the Tools menu of More > Radio
+/// ('network-tools'), Noise floor, Telemetry and Radio setup as rows of More > Radio. (All of them are also rows of
+/// Network > Tools.) [rowKey] keeps the old `more-<name>` names this flow was written with.
+const Map<String, String> _radioMenuTools = {'more-trace': 'tools-trace', 'more-discover': 'tools-discover', 'more-rxLog': 'tools-rxlog', 'more-adverts': 'tools-adverts'};
+
 Future<void> openTool(WidgetTester t, String rowKey) async {
+  await popToRoots(t);
+  final menu = _radioMenuTools[rowKey];
+  if (menu == null) {
+    await openMoreSubRow(t, 'more-radio', rowKey);
+    await pumpFor(t, const Duration(seconds: 1));
+    return;
+  }
+  final toolsButton = find.byKey(const Key('network-tools'));
   await openShellTab(t, 'More');
-  if (!await waitFor(t, find.byKey(const Key('more-list')).hitTestable(), timeout: const Duration(seconds: 3))) {
-    await openShellTab(t, 'More');
-    await waitFor(t, find.byKey(const Key('more-list')));
+  if (find.byKey(const Key('more-list')).hitTestable().evaluate().isEmpty) await openShellTab(t, 'More');
+  await t.tap(find.byKey(const Key('more-radio')));
+  await pumpFor(t, const Duration(seconds: 1));
+  if (await waitFor(t, toolsButton, timeout: const Duration(seconds: 4))) {
+    await t.tap(toolsButton.first);
+    await pumpFor(t, const Duration(seconds: 1));
+    await t.tap(find.byKey(Key(menu)).first);
+  } else {
+    // No radio yet: More > Radio has no lists (and no Tools menu); the same tools are rows of Network > Tools.
+    final id = const {'more-trace': 'radio-trace', 'more-discover': 'discover', 'more-rxLog': 'rx-log', 'more-adverts': 'adverts'}[rowKey]!;
+    await openNetworkSection(t, 'tools');
+    final row = find.byKey(Key('tool-row-$id'));
+    await scrollToFind(t, row, find.byKey(const Key('tools-section')));
+    await t.tap(row.first);
   }
-  final row = find.byKey(Key(rowKey));
-  if (row.evaluate().isEmpty) {
-    await t.drag(find.byKey(const Key('more-list')), const Offset(0, 3000));
-    await t.pump(const Duration(milliseconds: 500));
-  }
-  if (row.evaluate().isEmpty) {
-    await t.dragUntilVisible(row, find.byKey(const Key('more-list')), const Offset(0, -150));
-  }
-  await t.ensureVisible(row);
-  await t.tap(row);
   await pumpFor(t, const Duration(seconds: 2));
 }
 
 Future<void> back(WidgetTester t) async {
   final b = find.byTooltip('Back');
   if (b.evaluate().isNotEmpty) {
-    await t.tap(b.first);
+    await t.tap(b.last);
   } else {
     await t.pageBack();
   }
