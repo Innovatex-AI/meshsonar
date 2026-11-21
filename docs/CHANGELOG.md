@@ -3,7 +3,12 @@
 All notable changes to MeshSonar. Dates are local (US Eastern). This changelog was reconstructed from the commit
 history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md](ROADMAP.md).
 
-## [Unreleased] — 0.42.0, build 72
+## [0.42.0+72] — 2026-11-21 — Drive map tiles fixed; Network opens on Live
+
+- **Drive map: the basemap changes when you pick one, and stays.** Every style (Chart, Light, Dark, Topo, Satellite) now has its own tile cache; before, they shared one, so tiles of the old style stayed on screen, two styles mixed, and after Satellite the other styles could show only street names. The old shared cache is deleted once at the first launch.
+- **Drive map: tiles keep loading after Satellite.** Leaving Satellite used to close the map's connection, so every tile after that failed and the map went blank until the app was restarted. A few failed tiles no longer switch the map to "offline"; failed tiles are retried, and the map asks again by itself when the connection is back.
+- **Drive map on an iPad:** tile requests beyond a small queue were dropped and stayed blank; the queue is now sized to the screen. Topo and Satellite also load inside an offline pack's area.
+- **Coverage is steadier:** a zoom step keeps the previous picture until the new one is ready, so coverage no longer blinks out and back.
 
 - **Network opens on Live; Home removed, its findings and overview are under Analytics.** The strip is now Live · Packets · Nodes · Channels · Observers · Analytics · Tools, and the Network tab opens on the live map. The Home section is gone. What it held: **Findings** ("What changed", "What needs attention") and **Region overview** are the first two rows of Analytics and open in place with a back arrow; the one-line summary is gone (the Live panel header already shows observers online and the packet count); the pulse chip in the header still opens the pulse sheet. Links to a region's home page (and `/pulse`) open Live.
 - **All regions: Regions · Channels · Analytics · Tools.** It opens on Regions: the network summary, the search across every region, Back to your region, the busiest regions and Every region. There is still no world live map on the phone.
