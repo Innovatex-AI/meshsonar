@@ -11,6 +11,8 @@ import 'package:meshsonar/core/plan/plan_api.dart';
 import 'package:meshsonar/core/plan/plan_codec.dart';
 import 'package:meshsonar/core/plan/plan_model.dart';
 import 'package:meshsonar/core/plan/plan_store.dart';
+import 'package:meshsonar/ui/design/map_panel.dart';
+import 'package:meshsonar/ui/map/coverage_map.dart' show CoverageMap;
 import 'package:meshsonar/ui/map/layers/map_layer.dart' show LongPressHit;
 import 'package:meshsonar/ui/map/layers/registry.dart' show kPlanLayerId;
 import 'package:meshsonar/ui/map/main_map_focus.dart';
@@ -111,6 +113,35 @@ void main() {
       expect(find.byKey(const Key('coverage-result')), findsOneWidget);
       expect(find.byKey(const Key('coverage-area')), findsOneWidget);
       expect(find.textContaining('North Ridge'), findsOneWidget);
+      await drain(tester);
+    });
+
+    testWidgets('one open panel on the Plan map: the sheet and the map share a group; a map panel opening collapses the sheet', (tester) async {
+      phone(tester);
+      final h = Harness();
+      final st = await openPlanner(tester, h);
+      await settle(tester);
+      final group = MapPanelScope.maybeRead(tester.element(find.byType(PlannerSheet)))!;
+      expect(identical(group, MapPanelScope.maybeRead(tester.element(find.byType(CoverageMap)))), isTrue, reason: 'the map inspector joins the same group');
+      expect(st.detent, PlannerDetent.medium);
+      expect(group.openId, kPlannerPanelId, reason: 'the open sheet is the map\'s open panel');
+      // What the map's transient panel does when the person opens it (MapPanel claims the group).
+      group.claim('drive.inspect');
+      await settle(tester);
+      expect(st.detent, PlannerDetent.dock, reason: 'one open panel per map');
+      expect(group.openId, 'drive.inspect');
+      // The person opens the sheet again: it takes the group back (the map panel collapses to its header).
+      await tester.tap(find.byKey(const Key('planner-sheet-handle')));
+      await settle(tester);
+      expect(st.detent, PlannerDetent.medium);
+      expect(group.openId, kPlannerPanelId);
+      // Picking a mode opens the sheet from the screen, not the handle: the group still follows.
+      group.claim('drive.inspect');
+      await settle(tester);
+      expect(st.detent, PlannerDetent.dock);
+      await tester.tap(find.byKey(Key('planner-mode-${PlanModeId.coverage.name}')));
+      await settle(tester);
+      if (st.detent != PlannerDetent.dock) expect(group.openId, kPlannerPanelId);
       await drain(tester);
     });
 

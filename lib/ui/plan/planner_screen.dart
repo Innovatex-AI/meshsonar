@@ -37,6 +37,7 @@ import '../../core/plan/saved_plans.dart';
 import '../../core/plan_contract.dart';
 import '../app.dart';
 import '../design/app_haptics.dart';
+import '../design/map_panel.dart';
 import '../design/app_surfaces.dart';
 import '../design/app_symbols.dart';
 import '../design/state_views.dart';
@@ -89,6 +90,9 @@ class PlannerScreenState extends State<PlannerScreen> {
 
   PlanModeId _mode = PlanModeId.link;
   PlannerDetent _detent = PlannerDetent.medium;
+
+  /// The Plan map's panel group (one open panel per map).
+  final MapPanelGroup _panels = MapPanelGroup();
   String? _selected;
   String? _moving;
   PlanModeOverlay _modeOverlay = PlanModeOverlay.empty;
@@ -144,6 +148,7 @@ class PlannerScreenState extends State<PlannerScreen> {
     _footprint.dispose();
     _view.dispose();
     _sheetScroll.dispose();
+    _panels.dispose();
     super.dispose();
   }
 
@@ -666,7 +671,11 @@ class PlannerScreenState extends State<PlannerScreen> {
     final c = _c;
     final topInset = MediaQuery.paddingOf(context).top;
     // The coverage footprint: Coverage mode fills it (through the scope), the map draws it under the plan layer.
-    return PlanFootprintScope(
+    // One open panel on the Plan map (design/map_panel.dart rule 5): the Planner sheet and the map's transient panel (the
+    // inspector, a tapped observer) share this group, so opening one sends the other back to its header.
+    return MapPanelScope(
+      group: _panels,
+      child: PlanFootprintScope(
       controller: _footprint,
       child: Scaffold(
       key: const Key('planner'),
@@ -718,6 +727,7 @@ class PlannerScreenState extends State<PlannerScreen> {
           ),
         ]);
       }),
+      ),
       ),
     );
   }

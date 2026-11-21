@@ -1,6 +1,6 @@
 # Working rules for agents on meshsonar (read first)
 
-Flutter app (iOS/Android/desktop), version in `pubspec.yaml` (0.37.0+63 in the tree; release 0.38.0+64 is planned and not cut yet: the integrator bumps `pubspec.yaml`, `test/app/app_version_test.dart` and the CHANGELOG at release). Platform state and open items: `meshsonar-infra/docs/HANDOFF.md`. Docs index: README.md "Documentation".
+Flutter app (iOS/Android/desktop), version in `pubspec.yaml` (0.40.0+70 in the tree; release 0.41.0+71, build 71, is prepared and not cut yet: the integrator bumps `pubspec.yaml` and `test/app/app_version_test.dart` at release; the CHANGELOG entry for 0.41.0 is written). Platform state and open items: `meshsonar-infra/docs/HANDOFF.md`. Docs index: README.md "Documentation".
 
 - **Privacy is non-negotiable.** On-air ping text is exactly `MS:` + 10 random chars (`lib/radio/wardrive_engine.dart`: `newPingTag`, `formatPingText`). Never put position, power, name or any identifier in it. Legacy `@[MapperBot]` fixtures in tests are captured packets; keep them.
 - Layers: `lib/core` and `lib/radio` are pure Dart (no Flutter imports); UI in `lib/ui`; platform seams in `lib/platform`. Save-first: a ping is on disk before anything else happens (docs/ARCHITECTURE.md).

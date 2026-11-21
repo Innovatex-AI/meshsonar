@@ -397,6 +397,54 @@ void main() {
       c.dispose();
     });
 
+    testWidgets('375x667 under the Network header (48) and section strip (44): the Open panel leaves at least 150 pt of map', (tester) async {
+      tester.view.physicalSize = const Size(375 * 2, 667 * 2);
+      tester.view.devicePixelRatio = 2;
+      addTearDown(tester.view.reset);
+      MapPanelStore.clear();
+      final fake = FakeSse();
+      late LiveMapController c;
+      await tester.runAsync(() async => c = makeController(fake));
+      await tester.pumpWidget(MaterialApp(
+        theme: meshSonarTheme(Brightness.dark),
+        home: MediaQuery(
+          // iPhone SE: 20 pt status bar; the tab bar zone (56) is the bottom padding the body runs behind.
+          data: const MediaQueryData(size: Size(375, 667), padding: EdgeInsets.only(top: 20, bottom: 56)),
+          child: Scaffold(
+            body: Column(children: [
+              const SizedBox(height: 20 + 48 + 44), // status bar, Network header, section strip
+              Expanded(child: NetworkLiveMap(region: region, controller: c, showBasemap: false)),
+            ]),
+          ),
+        ),
+      ));
+      await tester.pump();
+      await tester.runAsync(() async {
+        await settle();
+        for (var i = 0; i < 30; i++) {
+          fake.send(packetEvent('${(1000 + i)}000011112222', at: '2026-11-20T14:00:${(i % 60).toString().padLeft(2, '0')}.000Z'));
+        }
+        await settle();
+      });
+      await tester.pump(const Duration(milliseconds: 50));
+      final map = tester.getRect(find.byKey(const Key('live-map')));
+      expect(map.top, 112);
+      // Collapsed: the map keeps everything but the header.
+      var panel = tester.getRect(find.byKey(const Key('map-panel-live.main')));
+      expect(panel.top - map.top, greaterThanOrEqualTo(400));
+      await tester.tap(find.byKey(const Key('live-panel-header')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      panel = tester.getRect(find.byKey(const Key('map-panel-live.main')));
+      expect(find.byKey(const Key('live-panel-body')), findsOneWidget);
+      expect(panel.bottom, 667);
+      expect(panel.top - map.top, greaterThanOrEqualTo(150), reason: 'visible map above the Open panel: ${panel.top - map.top} pt');
+      expect(tester.getRect(find.byKey(const Key('live-panel-header'))).bottom, lessThanOrEqualTo(667 - 56), reason: 'nothing under the tab bar');
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+      c.dispose();
+    });
+
     testWidgets('large text does not break the controls', (tester) async {
       tester.view.physicalSize = const Size(390 * 3, 844 * 3);
       tester.view.devicePixelRatio = 3;

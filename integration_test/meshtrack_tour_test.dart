@@ -14,7 +14,7 @@ import 'package:meshsonar/app/app_state.dart';
 import 'package:meshsonar/core/mqtt_contract.dart';
 import 'package:meshsonar/main.dart' as app;
 import 'package:meshsonar/radio/simulator.dart' show simulatedFriendsChannelName;
-import 'package:meshsonar/ui/app.dart' show AppScope;
+import 'package:meshsonar/ui/app.dart' show AppScope, MoreItem;
 import 'package:meshsonar/ui/map/main_map_focus.dart';
 import 'package:meshsonar/ui/meshtrack/meshtrack_binding.dart';
 import 'package:meshsonar/ui/settings_screen.dart';
@@ -422,6 +422,8 @@ void main() {
         await pumpFor(t, const Duration(milliseconds: 500));
       }
       await shot(t, 'mt-20-layers');
+      await closeLayersPanel(t); // build 71: a panel on the map, closed with its X (a Navigator pop does not close it)
+      if (find.byKey(const Key('layers-sheet')).evaluate().isNotEmpty) _fail('the Layers panel did not close');
       await popToRoots(t);
     });
 
@@ -590,17 +592,10 @@ void main() {
   }, timeout: const Timeout(Duration(minutes: 25)));
 }
 
-/// Same as the screen tour's Observer step: More > Observer.
+/// Same as the screen tour's Observer step: Settings > Observer (its More row moved into Settings in build 71).
 Future<void> _openObserver(WidgetTester t) async {
   await openShellTab(t, 'More');
-  final row = find.byKey(const Key('more-observer'));
-  if (row.hitTestable().evaluate().isEmpty) {
-    await t.scrollUntilVisible(row, -200, scrollable: find.descendant(of: find.byKey(const Key('more-list')), matching: find.byType(Scrollable)).first);
-  }
-  await t.ensureVisible(row);
-  await pumpFor(t, const Duration(milliseconds: 500));
-  await t.tap(row);
-  await pumpFor(t, const Duration(seconds: 1));
+  await openSettingsSection(t, MoreItem.observer);
   final add = find.byKey(const Key('mqtt-add-feed'));
   if (!await waitFor(t, add)) _fail('no Observer feeds');
   await t.ensureVisible(add);

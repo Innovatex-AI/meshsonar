@@ -1,19 +1,11 @@
-// RF tab window selector (capability rfWindow) and the repeater detail's 30-day signal trend (capability snrDaily):
-// every state, the request each choice makes, the control absent without the capability, 2x text and dark mode.
-import 'dart:convert';
+// The 30-day signal trend card (now on the /v1 node page): numbers in words, gaps, 2x text and dark mode. (The old RF
+// tab and its window selector were retired in build 71.)
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/http.dart' as http;
-import 'package:http/testing.dart';
 import 'package:meshsonar/core/repeater_detail_api.dart';
-import 'package:meshsonar/ui/region/rf_panel.dart';
 import 'package:meshsonar/ui/region/snr_trend_card.dart';
 import 'package:meshsonar/ui/theme.dart';
-
-import '../../core/region_rf_growth_api_test.dart' as fx;
-
-final _now = DateTime.utc(2026, 10, 24, 22);
 
 Widget _app(Widget child, {Brightness b = Brightness.light, double text = 1}) => MaterialApp(
       theme: meshSonarTheme(b),
@@ -21,122 +13,7 @@ Widget _app(Widget child, {Brightness b = Brightness.light, double text = 1}) =>
       home: Scaffold(body: child),
     );
 
-Map<String, dynamic> _win(String bucket, int days) {
-  final to = bucket == 'day' ? DateTime.utc(2026, 10, 25) : DateTime.utc(2026, 10, 24, 22);
-  final from = to.subtract(Duration(days: days));
-  final b = fx.rfBody();
-  // The live observer reports in the window; the silent one does not.
-  b['bucket'] = bucket;
-  b['window'] = {'from': from.toIso8601String(), 'to': to.toIso8601String(), 'histogramFrom': from.toIso8601String()};
-  if (bucket == 'day') {
-    (b['observers'] as List)[1] = {
-      'key': 'e066d11b64aa', 'name': null, 'meanDbm': -77.6, 'maxDbm': -67.8, //
-      'series': [
-        {'at': '2026-10-22T00:00:00.000Z', 'dbm': -74.0},
-        {'at': '2026-10-23T00:00:00.000Z', 'dbm': -73.0},
-        {'at': '2026-10-24T00:00:00.000Z', 'dbm': -72.9},
-      ],
-    };
-  }
-  return b;
-}
-
 void main() {
-  group('RF window selector', () {
-    testWidgets('without the capability: no control, plain request, as before', (tester) async {
-      final urls = <Uri>[];
-      final c = MockClient((r) async {
-        urls.add(r.url);
-        return http.Response(jsonEncode(fx.rfBody()), 200);
-      });
-      await tester.pumpWidget(_app(RfPanel(baseUrl: 'https://cmh.meshsonar.com', regionSlug: 'cmh', client: c, now: () => _now)));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('rf-window')), findsNothing);
-      expect(urls.single.hasQuery, isFalse);
-    });
-
-    testWidgets('with it: 7 days is the start, each choice asks bucket+days, the window is named, daily points are UTC days', (tester) async {
-      final urls = <String>[];
-      final c = MockClient((r) async {
-        urls.add(r.url.query);
-        return http.Response(jsonEncode(_win(r.url.queryParameters['bucket']!, int.parse(r.url.queryParameters['days']!))), 200);
-      });
-      await tester.pumpWidget(_app(RfPanel(baseUrl: 'https://cmh.meshsonar.com', regionSlug: 'cmh', windows: true, client: c, now: () => _now)));
-      await tester.pumpAndSettle();
-      expect(urls, ['bucket=hour&days=7']);
-      for (final id in ['24h', '7d', '30d', '90d']) {
-        expect(find.byKey(Key('rf-window-$id')), findsOneWidget);
-      }
-      expect(find.text('24 hours'), findsOneWidget);
-      await tester.tap(find.byKey(const Key('rf-window-30d')));
-      await tester.pumpAndSettle();
-      expect(urls.last, 'bucket=day&days=30');
-      expect(find.byKey(const Key('rf-window')), findsOneWidget); // the control stays
-      await tester.scrollUntilVisible(find.byKey(const Key('chart-rf-noise')), 300,
-          scrollable: find.descendant(of: find.byKey(const Key('rf-list')), matching: find.byType(Scrollable)).first);
-      expect(find.textContaining('One point per UTC day'), findsOneWidget);
-      expect(find.textContaining('Window: Sep 25 (UTC) to Oct 24 (UTC)'), findsOneWidget);
-      // INNO-OB-2 stopped on Oct 21: more than 2 days before the window end.
-      expect(find.byKey(const Key('rf-silent-df0136c20a99f519')), findsOneWidget);
-      await tester.tap(find.byKey(const Key('rf-window-24h')));
-      await tester.pumpAndSettle();
-      expect(urls.last, 'bucket=hour&days=1');
-      expect(find.textContaining('One point per UTC day'), findsNothing);
-      expect(urls, hasLength(3));
-    });
-
-    testWidgets('loading keeps the control; a 400 says the server cannot show the window and Retry keeps it; recovers', (tester) async {
-      var bad = true;
-      final c = MockClient((r) async => bad && r.url.queryParameters['days'] == '90'
-          ? http.Response('{"error":"nope"}', 400)
-          : http.Response(jsonEncode(_win(r.url.queryParameters['bucket']!, int.parse(r.url.queryParameters['days']!))), 200));
-      await tester.pumpWidget(_app(RfPanel(baseUrl: 'https://cmh.meshsonar.com', regionSlug: 'cmh', windows: true, client: c, now: () => _now)));
-      expect(find.byKey(const Key('rf-window')), findsOneWidget);
-      expect(find.byKey(const Key('rf-loading')), findsOneWidget);
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('rf-window-90d')));
-      await tester.pump();
-      expect(find.byKey(const Key('rf-loading')), findsOneWidget);
-      expect(find.byKey(const Key('rf-window')), findsOneWidget);
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('rf-error')), findsOneWidget);
-      expect(find.textContaining('This server cannot show the 90 days window'), findsOneWidget);
-      bad = false;
-      await tester.tap(find.text('Retry'));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('rf-list')), findsOneWidget);
-      expect(find.text('90 days'), findsOneWidget);
-    });
-
-    testWidgets('other failures keep the window; an empty window and the offline copy are explicit (2x text, dark)', (tester) async {
-      var mode = 'down';
-      final c = MockClient((r) async {
-        if (mode == 'down') return http.Response('x', 503);
-        if (mode == 'empty') {
-          return http.Response(jsonEncode({'status': {'state': 'ready'}, 'bucket': 'hour', 'observers': [], 'noiseByHour': [], 'snrHistogram': []}), 200);
-        }
-        return http.Response(jsonEncode(_win('hour', 1)), 200,
-            headers: {'x-meshsonar-cache': 'offline', 'x-meshsonar-as-of': '2026-10-24T19:00:00.000Z'});
-      });
-      Widget panel() => _app(RfPanel(baseUrl: 'https://cmh.meshsonar.com', regionSlug: 'cmh', windows: true, client: c, now: () => _now), b: Brightness.dark, text: 2);
-      await tester.pumpWidget(panel());
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('rf-error')), findsOneWidget);
-      expect(find.byKey(const Key('rf-window')), findsOneWidget);
-      mode = 'empty';
-      await tester.tap(find.text('Retry'));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('rf-empty')), findsOneWidget);
-      expect(find.textContaining('No RF measurements in the last 7 days'), findsOneWidget);
-      mode = 'offline';
-      await tester.tap(find.byKey(const Key('rf-window-24h')));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('rf-offline')), findsOneWidget);
-      expect(find.textContaining('Offline - as of 3h ago'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
-  });
-
   group('30-day signal trend', () {
     List<DailySnr> days(List<double?> v) => [
           for (var i = 0; i < v.length; i++) DailySnr(DateTime.utc(2026, 10, 1 + i), v[i], v[i] == null ? 0 : 3),

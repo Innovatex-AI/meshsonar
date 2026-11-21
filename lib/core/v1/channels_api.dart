@@ -7,14 +7,11 @@
 // The scope is the host: a region host reads its region, the hub reads every region (rows then carry `regions`).
 // Only public channel text the API already serves is read; nothing is sent but the search words and a report's
 // reason and note. A report is sent ONCE: it is never retried by this client.
+// Offline: the channel list and the first page of a channel are stored by the shared ETag client (etag_client.dart),
+// so both come back with their "as of" time when the network fails; older pages, polls and search are not stored.
 // Pure Dart: no Flutter imports.
-import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
-
 import 'package:http/http.dart' as http;
 
-import '../etag_client.dart';
 import '../region_overview_api.dart' show RegionDataState, RegionDataStatus;
 import 'v1_client.dart';
 
@@ -239,11 +236,7 @@ void resetPacketFeedProbes([String? baseUrl]) => baseUrl == null ? _feedProbes.c
 class ChannelsApi {
   final String baseUrl;
   final V1Client v1;
-  final http.Client _post;
-  final Duration timeout;
-  ChannelsApi(this.baseUrl, {http.Client? client, DateTime Function()? clock, this.timeout = const Duration(seconds: 15)})
-      : v1 = V1Client(baseUrl, client: client, clock: clock),
-        _post = client ?? newRegionWireClient();
+  ChannelsApi(this.baseUrl, {http.Client? client, DateTime Function()? clock}) : v1 = V1Client(baseUrl, client: client, clock: clock);
 
   /// `GET /v1/channels`. Throws [V1Error] or [V1NotLive].
   Future<ChannelListPage> list() async {
@@ -273,45 +266,18 @@ class ChannelsApi {
     return MessagePage(rows: env.data, next: env.page?.next, offlineAsOf: env.offlineAsOf, status: env.meta.status);
   }
 
-  /// Sends one report, once. [reason] is a key of [reportReasons]. Throws [V1Error] (429 `rate_limited` carries
-  /// `retryAfter`; a network failure has `offline`) or [V1NotLive] (reports are not switched on). Never retried here.
+  /// Sends one report, once ([V1Client.post] never retries). [reason] is a key of [reportReasons]. The body is exactly
+  /// `{reason, note?}`: the server rejects any other field. Throws [V1Error] (429 `rate_limited` carries `retryAfter`;
+  /// a network failure has `offline`) or [V1NotLive] (reports are not switched on).
   Future<ReportReceipt> report(String messageId, {required String reason, String? note}) async {
-    final url = v1.uri('messages/${Uri.encodeComponent(messageId)}/report');
     final n = note?.trim() ?? '';
     final body = <String, String>{'reason': reason, if (n.isNotEmpty) 'note': n.length > reportNoteMaxChars ? n.substring(0, reportNoteMaxChars) : n};
-    final http.Response res;
-    try {
-      res = await _post.post(url, headers: const {'accept': 'application/json', 'content-type': 'application/json'}, body: jsonEncode(body)).timeout(timeout);
-    } on TimeoutException {
-      throw const V1Error(code: 'timeout', message: 'The server took too long to answer.', offline: true);
-    } on SocketException {
-      throw const V1Error(code: 'offline', message: 'No connection to the server.', offline: true);
-    } on http.ClientException {
-      throw const V1Error(code: 'offline', message: 'No connection to the server.', offline: true);
-    } on HandshakeException {
-      throw const V1Error(code: 'offline', message: 'The secure connection to the server failed.', offline: true);
-    }
-    Object? decoded;
-    try {
-      decoded = jsonDecode(utf8.decode(res.bodyBytes));
-    } catch (_) {
-      decoded = null;
-    }
-    if (res.statusCode < 200 || res.statusCode > 202) {
-      final err = V1Error.tryParse(res.statusCode, decoded, headers: res.headers);
-      if (err != null) throw err;
-      if (res.statusCode == 404 || res.statusCode == 405 || res.statusCode == 501) throw V1NotLive(url, status: res.statusCode);
-      throw V1Error(
-        status: res.statusCode,
-        code: res.statusCode == 429 ? 'rate_limited' : 'http_${res.statusCode}',
-        message: 'The server answered ${res.statusCode}.',
-        retryAfter: int.tryParse(res.headers['retry-after'] ?? ''),
-      );
-    }
-    final data = decoded is Map ? decoded['data'] : null;
-    final id = data is Map ? _s(data['id']) : null;
-    if (id == null) throw V1NotLive(url, status: res.statusCode);
-    return ReportReceipt(id: id, messageId: _s((data as Map)['messageId']) ?? messageId);
+    final env = await v1.post<ReportReceipt>('messages/${Uri.encodeComponent(messageId)}/report', body, (d) {
+      final id = d is Map ? _s(d['id']) : null;
+      if (id == null) throw const FormatException('no receipt id');
+      return ReportReceipt(id: id, messageId: _s((d as Map)['messageId']) ?? messageId);
+    });
+    return env.data;
   }
 
   /// Whether this host's scope has a packet feed. Asked once per host per session; a failure answers
@@ -331,10 +297,7 @@ class ChannelsApi {
     }
   }
 
-  void close() {
-    v1.close();
-    _post.close();
-  }
+  void close() => v1.close();
 }
 
 /// Tests replace this to inject a fake HTTP client; the Channels screens build their API through it.

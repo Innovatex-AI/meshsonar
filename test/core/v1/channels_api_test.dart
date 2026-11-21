@@ -7,6 +7,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:meshsonar/core/etag_client.dart' show cacheAsOfHeader, cacheSourceHeader;
 import 'package:meshsonar/core/region_overview_api.dart' show RegionDataState, RegionDataStatus;
 import 'package:meshsonar/core/v1/channels_api.dart';
 
@@ -209,6 +210,29 @@ void main() {
       await expectLater(api.report('aa', reason: 'spam'), throwsA(isA<V1Error>().having((e) => e.offline, 'offline', isTrue)));
       expect(calls, 1);
     });
+  });
+
+  test('offline: the list and a first page served from the stored copy carry their as-of time', () async {
+    final asOf = DateTime.utc(2026, 11, 21, 9);
+    final api = ChannelsApi(base,
+        client: MockClient((r) async => js(
+              r.url.path == '/v1/channels'
+                  ? {
+                      'data': [
+                        {'id': 'public', 'name': 'Public', 'kind': 'public', 'hashByte': '11', 'decodable': true, 'messages24h': 1}
+                      ],
+                      'meta': meta()
+                    }
+                  : {
+                      'data': [msg('aa', '2026-11-21T08:00:00.000Z')],
+                      'page': {'limit': 50, 'next': null, 'prev': 'NEWER'},
+                      'meta': meta()
+                    },
+              200,
+              {cacheSourceHeader: 'offline', cacheAsOfHeader: asOf.toIso8601String()},
+            )));
+    expect((await api.list()).offlineAsOf, asOf);
+    expect((await api.messages('public')).offlineAsOf, asOf);
   });
 
   group('packet feed probe', () {

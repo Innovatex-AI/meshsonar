@@ -150,7 +150,12 @@ class _HomeShellState extends State<HomeShell> {
     for (var r = inbox.take(); r != null; r = inbox.take()) {
       last = r;
     }
-    if (last != null) _shell.openNetwork(last);
+    if (last != null) {
+      // A link asks for a view: pages left open over the shell (a tool, a site page, a packet) would hide it, since the
+      // sections open their pages on this navigator. Close them first, as "Show on map" does.
+      Navigator.of(context).popUntil((r) => r.isFirst);
+      _shell.openNetwork(last);
+    }
   }
 
   void _onShell() {
@@ -318,8 +323,11 @@ class _HomeShellState extends State<HomeShell> {
                   : BlurBar(
                       // Like the iOS tab bar, the labels grow only a little with Dynamic Type: at AX3 a full-size label
                       // would push the bar off the bottom of the screen. VoiceOver still reads the full label.
-                      child: MediaQuery(
-                        data: MediaQuery.of(context).copyWith(textScaler: MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.3)),
+                      // withClampedTextScaling reads the MediaQuery the Scaffold gives its bottom bar (top padding removed).
+                      // Copying the outer MediaQuery here put the status-bar inset back, and the bar's SafeArea then added
+                      // it above the icons: a blank band as tall as the status bar (62 pt on an iPhone 17 Pro) on every tab.
+                      child: MediaQuery.withClampedTextScaling(
+                        maxScaleFactor: 1.3,
                         child: NavigationBar(
                         key: const Key('shell-tabs'),
                         backgroundColor: Colors.transparent,

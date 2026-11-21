@@ -10,7 +10,7 @@ import 'package:integration_test/integration_test.dart';
 import 'package:meshsonar/core/antenna_profile.dart';
 import 'package:meshsonar/main.dart' as app;
 import 'package:meshsonar/radio/crypto.dart' show sha256, toHex;
-import 'package:meshsonar/ui/app.dart' show AppScope;
+import 'package:meshsonar/ui/app.dart' show AppScope, MoreItem;
 import 'package:meshsonar/ui/map/coverage_map.dart';
 
 import 'screens.dart';
@@ -116,10 +116,8 @@ void main() {
       await pumpFor(t, const Duration(seconds: 1));
     }
     // Settings moved into More: the Wardriving settings are the screen this flow is about.
-    await openShellTab(t, 'More');
-    await t.scrollUntilVisible(find.byKey(const Key('more-wardriving')), 200, scrollable: find.descendant(of: find.byKey(const Key('more-list')), matching: find.byType(Scrollable)).first);
-    await t.tap(find.byKey(const Key('more-wardriving')));
-    await pumpFor(t, const Duration(seconds: 2));
+    // Build 71: More has no Wardriving row; the section opens the way the Drive ping sheet opens it.
+    await openSettingsSection(t, MoreItem.wardriving);
     await shot1(t, 'wardriving-settings');
     // ignore: avoid_print
     print('FRAMES $_shots/$_shots'); // HARNESS=1 (scripts/verify_sim.sh) checks every frame was captured

@@ -289,7 +289,8 @@ class V1Client {
     return (v, offlineAsOfOf(res));
   }
 
-  /// POST a JSON [body] to an enveloped endpoint (`/v1/decode`) and parse its `data`. Never cached (`no-store`).
+  /// POST a JSON [body] to an enveloped endpoint (`/v1/decode`, `/v1/messages/{id}/report`) and parse its `data`.
+  /// 200, 201 and 202 are success. Never cached (`no-store`) and sent once: this never retries.
   /// Throws [V1Error] or [V1NotLive] as [get] does.
   Future<V1Envelope<T>> post<T>(String path, Object body, T Function(Object? data) parse) async {
     final url = uri(path);
@@ -314,14 +315,20 @@ class V1Client {
     } catch (_) {
       decoded = null;
     }
-    if (res.statusCode != 200 && res.statusCode != 201) {
+    // 202 Accepted is a success too (`POST /v1/messages/{id}/report` answers it with a receipt).
+    if (res.statusCode != 200 && res.statusCode != 201 && res.statusCode != 202) {
       final err = V1Error.tryParse(res.statusCode, decoded, headers: res.headers);
       if (err != null) throw err;
       if (res.statusCode == 404 || res.statusCode == 405 || res.statusCode == 501) {
         _markNotLive();
         throw V1NotLive(url, status: res.statusCode);
       }
-      throw V1Error(status: res.statusCode, code: 'http_${res.statusCode}', message: 'The server answered ${res.statusCode}.');
+      throw V1Error(
+        status: res.statusCode,
+        code: res.statusCode == 429 ? 'rate_limited' : 'http_${res.statusCode}',
+        message: 'The server answered ${res.statusCode}.',
+        retryAfter: int.tryParse(res.headers['retry-after'] ?? ''),
+      );
     }
     if (decoded is! Map<String, dynamic> || decoded['meta'] is! Map<String, dynamic> || !decoded.containsKey('data')) {
       _markNotLive();

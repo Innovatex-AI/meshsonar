@@ -141,6 +141,44 @@ void main() {
     }
   });
 
+  test('channels: the list and a channel\'s first page are cacheable; cursor pages, polls and search are not', () {
+    for (final u in [
+      'https://cmh.meshsonar.com/v1/channels',
+      'https://meshsonar.com/v1/channels',
+      'https://cmh.meshsonar.com/v1/channels/public/messages?order=newest_first&limit=50',
+      'https://cmh.meshsonar.com/v1/channels/tag%3Atest/messages?order=newest_first&limit=50',
+    ]) {
+      expect(EtagClient.isCacheable(Uri.parse(u)), isTrue, reason: u);
+    }
+    for (final u in [
+      'https://cmh.meshsonar.com/v1/channels/public/messages?order=newest_first&limit=50&cursor=abc',
+      'https://cmh.meshsonar.com/v1/messages/search?q=test',
+      'https://cmh.meshsonar.com/v1/messages/aa/report',
+      'https://cmh.meshsonar.com/v1/channels/analytics/extra/messages',
+      'https://cmh.meshsonar.com/v1/channels/proposals',
+    ]) {
+      expect(EtagClient.isCacheable(Uri.parse(u)), isFalse, reason: u);
+    }
+  });
+
+  test('channels offline: the first page comes back from the stored copy with its as-of time; a cursor page fails', () async {
+    var down = false;
+    final first = Uri.parse('https://cmh.meshsonar.com/v1/channels/public/messages?order=newest_first&limit=50');
+    final c = make((req) async {
+      if (down) throw const SocketException('down');
+      return http.Response('{"data":[1]}', 200, headers: {'etag': '"m1"'});
+    });
+    await c.get(first);
+    await c.get(first.replace(queryParameters: {...first.queryParameters, 'cursor': 'OLDER'}));
+    final stored = now;
+    now = now.add(const Duration(hours: 2));
+    down = true;
+    final r = await c.get(first);
+    expect(r.body, '{"data":[1]}');
+    expect(offlineAsOfOf(r), stored);
+    await expectLater(c.get(first.replace(queryParameters: {...first.queryParameters, 'cursor': 'OLDER'})), throwsA(isA<SocketException>()));
+  });
+
   test('cache keys differ per query and stay file-name sized', () {
     final a = EtagClient.keyFor(Uri.parse('https://cmh.meshsonar.com/api/cmh/region-repeater?key=${'a' * 64}'));
     final b = EtagClient.keyFor(Uri.parse('https://cmh.meshsonar.com/api/cmh/region-repeater?key=${'b' * 64}'));

@@ -98,6 +98,21 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('short screens: Open leaves at least 150 pt of map', (tester) async {
+    for (final size in const [Size(375, 667), Size(667, 375), Size(568, 320)]) {
+      await _pump(tester, const SizedBox());
+      MapPanelStore.clear();
+      await _pump(tester, _map([_panel('a', height: 2000)]), size: size, padding: const EdgeInsets.only(bottom: 21));
+      await tester.tap(_header('a'));
+      await tester.pumpAndSettle();
+      expect(_body('a'), findsOneWidget);
+      final r = _rect(tester, 'a');
+      expect(r.top, greaterThanOrEqualTo(kMapPanelMinMap - 0.5), reason: '$size: ${r.top} pt of map above the open panel');
+      expect(r.height, lessThanOrEqualTo(size.height * kMapPanelOpen + 0.5));
+      expect(tester.takeException(), isNull);
+    }
+  });
+
   testWidgets('Full only for work panels', (tester) async {
     final seen = <MapPanelState>[];
     await _pump(tester, _map([_panel('a', onState: seen.add), _panel('w', allowFull: true, onState: seen.add)].sublist(0, 1)));

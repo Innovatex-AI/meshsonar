@@ -25,7 +25,7 @@ class RepeaterSheetContext {
   /// The phone's position, or null without a fix.
   final LatLng? position;
 
-  /// Opens the region repeater page (the host passes `openRepeaterDetail`); null = no link.
+  /// Opens the region repeater page (the host passes `openNetworkNode`); null = no link.
   final void Function(BuildContext context, RepeaterPoint point)? openRegionPage;
 
   final DateTime Function() clock;
