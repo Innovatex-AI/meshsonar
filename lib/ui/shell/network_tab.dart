@@ -1,26 +1,31 @@
-// The Network tab (AZ-3.1; the Analyze tab until build 71): the phone home of the network analyzer for the viewed
-// region. A region header (name, pulse chip, Export region report, region switcher), then five sections, Now, Packets,
-// Nodes, Map, Insights (lib/ui/network/network_sections.dart), switched by a segmented bar that sits at the bottom of
-// the screen on phones (thumb reach, one-handed) and under the header on wide screens.
+// The Network tab (build 71: the site in the app; AZ-3.1; the Analyze tab until build 71). One header line (region name
+// that opens the region switcher, pulse chip, search, one overflow menu with Share link and Export region report:
+// lib/ui/network/network_header.dart), then ONE horizontally scrolling section strip, Home · Packets · Live · Nodes ·
+// Channels · Observers · Analytics · Tools (lib/ui/network/network_sections.dart), then the shown section. There is no
+// second bottom bar: the only bar at the bottom is the app's tab bar.
+//
+// "All regions" (the switcher's entry; ShellController.networkAllRegions, session only): the whole network on the hub
+// with the sections that need no region. Its Home has the network summary, the global search and the busiest regions;
+// a region picked there (or in the switcher) becomes the viewed, remembered region.
 //
 // Opening it from anywhere: ShellScope.openNetwork(NetworkRequest...) (a deep link, a node or packet elsewhere in the
-// app). The request is taken here: the region switches when it names another one, the section and sub-view are picked,
-// and a node / observer / packet opens its page.
+// app). The request is taken here: the region switches when it names another one, the section is picked, and a node /
+// observer / packet opens its page; a channel, an analytics tab or a tool is handed to its section.
 //
 // Shell states: loading (the region list has never loaded), offline (it never loaded and the server cannot be reached),
-// error (it never loaded and the server answered with an error), empty (no region to show). Each panel keeps its own
-// loading / offline ("Offline - as of") / error states inside a section.
+// error (it never loaded and the server answered with an error), empty (no region to show: a prompt to choose one).
+// Each panel keeps its own loading / offline ("Offline - as of") / error states inside a section.
 //
-// Website twins (analyzer-api-contract.md web routes): Now = region home `/`, Packets = `/packets` (a packet:
-// `/packets/:hash`, Decode a packet: `/tools/decode`), Nodes = `/nodes` (a node: `/nodes/:key`)
-// and `/observers` (`/observers/:id`), Map = `/map?panel=live` (a packet's path: `&packet=<hash>&t=<time>`),
-// Insights = `/insights?tab=`.
+// Website twins (analyzer-api-contract.md web routes): Home = region home `/` (`/pulse` opens the pulse sheet),
+// Packets = `/packets` (a packet: `/packets/:hash`), Live = `/live` (a packet's path: `/map?panel=live&packet=&t=`),
+// Nodes = `/nodes` (`/nodes/:key`), Channels = `/channels` (`/channels/:id`), Observers = `/observers`
+// (`/observers/:id`), Analytics = `/analytics/<slug>`, Tools = `/tools/*`, `/scope-audit`, `/observers/compare`, `/status`.
 import 'dart:async';
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../../app/app_state.dart';
+import '../../core/network_request.dart' show networkHubSections;
 import '../../core/region_lookup.dart';
 import '../app.dart';
 import '../design/app_surfaces.dart' show showAppToast;
@@ -37,7 +42,6 @@ import '../region/region_hub_screen.dart' show MachineDerivedNote;
 import '../region/region_report_export_sheet.dart';
 import '../region/region_switch_sheet.dart' show switchViewedRegion;
 import '../region/region_switcher.dart';
-import 'home_shell.dart' show shellRailWidth;
 
 class NetworkTab extends StatefulWidget {
   const NetworkTab({super.key});
@@ -46,15 +50,26 @@ class NetworkTab extends StatefulWidget {
 }
 
 class _NetworkTabState extends State<NetworkTab> {
-  /// The shown sub-view per section (Findings | Overview, List | Live, Repeaters | Observers).
+  /// The shown sub-view per section (Home: Findings | Overview).
   final Map<NetworkSection, int> _sub = {};
 
-  /// The last link into Packets > List (its filters and window); the list is rebuilt from it.
+  /// The last link into Packets (its filters and window); the list is rebuilt from it.
   NetworkRequest? _packetsRequest;
 
-  /// The last link into Map (a packet to draw, a time).
+  /// The last link into Live (a packet to draw, a time).
   NetworkRequest? _mapRequest;
+
+  /// What the last link asked Channels / Analytics / Tools to open; cleared when the person picks a section by hand.
+  NetworkSectionTarget _target = NetworkSectionTarget.none;
   ShellController? _shell;
+
+  /// Without a shell above (a test that pumps this tab alone): the section and "All regions" live here.
+  NetworkSection _localSection = NetworkSection.home;
+  bool _localAll = false;
+
+  /// The manual region pick seen when "All regions" was entered: a new pick (the switcher) leaves "All regions".
+  bool _wasAll = false;
+  String? _manualAtAll;
 
   @override
   void didChangeDependencies() {
@@ -62,42 +77,83 @@ class _NetworkTabState extends State<NetworkTab> {
     final shell = ShellScope.maybeOf(context);
     _shell = shell;
     final pending = shell != null && shell.tab == AppTab.network ? shell.takePendingNetwork() : null;
-    if (pending != null) {
-      // The section is already switched (openNetwork); pick the sub-view in this same build, then open the page.
-      _pickSub(pending);
+    if (pending != null) _take(pending);
+    final manual = AppScope.of(context).settings.regionManual;
+    if (_all && !_wasAll) _manualAtAll = manual;
+    if (_all && _wasAll && manual != _manualAtAll) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) unawaited(_apply(pending));
+        if (mounted) _setAll(false);
+      });
+    }
+    _wasAll = _all;
+  }
+
+  NetworkSection get _section {
+    final s = _shell?.networkSection ?? _localSection;
+    return _all && !networkHubSections.contains(s) ? NetworkSection.home : s;
+  }
+
+  bool get _all => _shell?.networkAllRegions ?? _localAll;
+
+  void _setAll(bool v) {
+    if (_shell != null) {
+      _shell!.setNetworkAllRegions(v);
+    } else {
+      setState(() {
+        _localAll = v;
+        if (v && !networkHubSections.contains(_localSection)) _localSection = NetworkSection.home;
       });
     }
   }
 
-  NetworkSection get _section => _shell?.networkSection ?? _localSection;
-  NetworkSection _localSection = NetworkSection.now;
-
+  /// The person picked a section on the strip: what a link asked that section to open no longer applies.
   void _select(NetworkSection s) {
+    _target = NetworkSectionTarget.none;
     if (_shell != null) {
-      _shell!.setNetworkSection(s);
+      if (s == _shell!.networkSection) {
+        setState(() {});
+      } else {
+        _shell!.setNetworkSection(s);
+      }
     } else {
       setState(() => _localSection = s);
     }
   }
 
-  void _setSub(NetworkSection s, int i) => setState(() => _sub[s] = i);
+  /// Opens [r] in this tab: through the shell when there is one (it also switches to this tab).
+  void _open(NetworkRequest r) {
+    if (_shell != null) {
+      _shell!.openNetwork(r);
+      return;
+    }
+    setState(() {
+      _localSection = r.section;
+      if (r.region != null || !networkHubSections.contains(r.section)) _localAll = false;
+      _take(r);
+    });
+  }
 
-  /// The sub-view a request asks for (no setState: called while building).
-  void _pickSub(NetworkRequest r) {
-    if (r.section == NetworkSection.map) _mapRequest = r.packetHash == null ? null : r;
-    if (r.section == NetworkSection.nodes) _sub[NetworkSection.nodes] = r.observersView ? 1 : 0;
+  /// Takes a request: what its section should show now (no setState: may run while building), then, after the
+  /// frame, the region it names and the page of the thing it names.
+  void _take(NetworkRequest r) {
+    if (r.section == NetworkSection.live) _mapRequest = r.packetHash == null ? null : r;
     if (r.section == NetworkSection.packets) {
-      _sub[NetworkSection.packets] = 0;
       final isList = r.packetHash == null || r.toWebUri().path == '/packets';
       if (isList) _packetsRequest = r;
     }
+    _target = NetworkSectionTarget(channelId: r.channelId, analyticsTab: r.analyticsTab, tool: r.tool, toolArg: r.toolArg);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_apply(r));
+    });
   }
 
-  /// Takes a request after the frame: the region it names, then the page of the thing it names.
   Future<void> _apply(NetworkRequest r) async {
     final s = AppScope.read(context);
+    if (_all) {
+      // "All regions" is still on only for a hub section with no region: nothing to switch, no region page to open.
+      if (r.pulse) await openPulseSheet(context, s.settings.serverUrl);
+      return;
+    }
     var region = s.viewingRegion;
     if (r.region != null && r.region != region?.slug) {
       RegionIndexEntry? target;
@@ -107,6 +163,7 @@ class _NetworkTabState extends State<NetworkTab> {
       if (target == null) {
         showAppToast(context, 'That link is for a region this app does not know yet (${r.region!.toUpperCase()}). Showing ${region?.code ?? 'your region'}.');
       } else {
+        // The app's one switch: saved as the manual pick, so the region is remembered.
         await switchViewedRegion(s, target);
         region = target;
         if (!mounted) return;
@@ -114,88 +171,91 @@ class _NetworkTabState extends State<NetworkTab> {
     }
     if (!mounted) return;
     final reg = region;
-    if (reg == null || !mounted) return;
+    if (reg == null) return;
     final nav = Navigator.of(context);
     if (r.packetHash != null && r.section == NetworkSection.packets && r.toWebUri().path != '/packets') {
-      nav.push(MaterialPageRoute<void>(builder: (_) => NetworkPacketScreen(baseUrl: reg.url, regionSlug: reg.slug, hash: r.packetHash!)));
+      unawaited(nav.push(MaterialPageRoute<void>(builder: (_) => NetworkPacketScreen(baseUrl: reg.url, regionSlug: reg.slug, hash: r.packetHash!))));
     } else if (r.nodeKey != null && r.section == NetworkSection.nodes) {
       openNetworkNode(context, baseUrl: reg.url, regionSlug: reg.slug, nodeKey: r.nodeKey!);
-    } else if (r.observerId != null && r.section == NetworkSection.nodes) {
+    } else if (r.observerId != null && r.section == NetworkSection.observers) {
       openNetworkObserver(context, baseUrl: reg.url, regionSlug: reg.slug, observerId: r.observerId!);
-    } else if (r.section == NetworkSection.insights) {
-      final e = insightForTab(r.insightsTab);
-      if (e != null) openInsight(context, e, s, reg);
+    } else if (r.pulse) {
+      await openPulseSheet(context, reg.url);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final s = AppScope.of(context);
+    final all = _all;
     final region = s.viewingRegion;
-    final wide = MediaQuery.sizeOf(context).width >= shellRailWidth;
-    final bar = _SectionBar(selected: _section, onChanged: _select, wide: wide);
+    final hub = s.settings.serverUrl;
+    final section = _section;
+    final ready = all || region != null;
     return Scaffold(
       key: const Key('network-tab'),
       appBar: AppBar(
-        title: Text(region?.name ?? 'Network', key: const Key('region-title'), maxLines: 1, overflow: TextOverflow.ellipsis),
-        actions: [
-          if (region != null)
-            NetworkShareButton(
-              request: NetworkRequest.section(_section, region: region.slug),
-              subject: '${region.name} on MeshSonar',
-            ),
-          if (region != null)
-            IconButton(
-              key: const Key('region-report-export'),
-              tooltip: 'Export region report',
-              icon: const Icon(Icons.ios_share),
-              onPressed: () => showRegionReportExport(context, baseUrl: region.url, regionSlug: region.slug),
-            ),
-          const RegionSwitcherChip(),
-          const SizedBox(width: 12),
-        ],
+        automaticallyImplyLeading: false,
+        titleSpacing: 0,
+        toolbarHeight: NetworkHeaderBar.height,
+        title: NetworkHeaderBar(
+          title: all ? 'All regions' : (region?.name ?? 'Network'),
+          pulseBaseUrl: all ? hub : region?.url,
+          onRegion: () => unawaited(showRegionSwitcher(context)),
+          onSearch: !ready ? null : () => unawaited(openNetworkSearch(context, all ? null : region, hubUrl: hub)),
+          onShare: !ready
+              ? null
+              : () => unawaited(shareNetworkLink(context, NetworkRequest.section(section, region: all ? null : region!.slug),
+                  subject: '${all ? 'The MeshCore network' : region!.name} on MeshSonar')),
+          onExport: all || region == null ? null : () => showRegionReportExport(context, baseUrl: region.url, regionSlug: region.slug),
+        ),
+        bottom: !ready
+            ? null
+            : PreferredSize(
+                preferredSize: const Size.fromHeight(NetworkSectionStrip.height),
+                child: NetworkSectionStrip(
+                  sections: all ? networkHubSections : NetworkSection.values,
+                  selected: section,
+                  onChanged: _select,
+                ),
+              ),
       ),
-      body: region == null
-          ? _shellState(context, s)
-          : Column(
-              children: [
-                if (s.locationNote != null)
-                  Padding(padding: const EdgeInsets.fromLTRB(12, 8, 12, 0), child: LocationNoteBanner(state: s)),
-                if (region.machineDerived) MachineDerivedNote(regionName: region.name),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 6, 12, 4),
-                  child: NetworkSearchField(key: ValueKey('network-search-${region.code}'), region: region),
+      body: all
+          ? NetworkAllRegionsBody(
+              key: ValueKey('network-all-${section.name}'),
+              section: section,
+              hubUrl: hub,
+              viewed: region,
+              target: _target,
+              onBack: () => _setAll(false),
+              onOpenRegion: (slug) => _open(NetworkRequest.section(NetworkSection.live, region: slug)),
+            )
+          : region == null
+              ? _shellState(context, s)
+              : Column(
+                  children: [
+                    if (s.locationNote != null)
+                      Padding(padding: const EdgeInsets.fromLTRB(12, 8, 12, 0), child: LocationNoteBanner(state: s)),
+                    if (region.machineDerived) MachineDerivedNote(regionName: region.name),
+                    Expanded(
+                      // Keyed by region: switching region rebuilds the section against the new region host.
+                      child: NetworkSectionBody(
+                        key: ValueKey('network-${region.code}-${section.name}'),
+                        section: section,
+                        region: region,
+                        sub: _sub[section] ?? 0,
+                        onSub: (i) => setState(() => _sub[section] = i),
+                        packetsRequest: _packetsRequest,
+                        mapRequest: _mapRequest,
+                        target: _target,
+                      ),
+                    ),
+                  ],
                 ),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: PulseChip(key: ValueKey('network-pulse-${region.code}'), baseUrl: region.url),
-                  ),
-                ),
-                if (wide) bar,
-                Expanded(
-                  // Keyed by region: switching region rebuilds the section against the new region host.
-                  child: NetworkSectionBody(
-                    key: ValueKey('network-${region.code}-${_section.name}'),
-                    section: _section,
-                    region: region,
-                    sub: _sub[_section] ?? 0,
-                    onSub: (i) => _setSub(_section, i),
-                    packetsRequest: _packetsRequest,
-                    mapRequest: _mapRequest,
-                    onOpenLive: () {
-                      _select(NetworkSection.packets);
-                      _setSub(NetworkSection.packets, 1);
-                    },
-                  ),
-                ),
-                if (!wide) bar,
-              ],
-            ),
     );
   }
 
+  /// No region to show: never a blank. The region list is loading, could not load, or is empty (choose a region).
   Widget _shellState(BuildContext context, AppState s) {
     if (!s.regionIndexLoaded) {
       if (s.regionIndexOffline) {
@@ -226,66 +286,9 @@ class _NetworkTabState extends State<NetworkTab> {
       key: const Key('network-empty'),
       symbol: AppSymbols.globe,
       title: 'No region to show yet',
-      message: 'Pick a region to see its network: packets, nodes, findings and insights.',
+      message: 'Pick a region to see its network: packets, live map, nodes, channels and analytics.',
       actionLabel: 'Choose a region',
       onAction: () => unawaited(showRegionSwitcher(context)),
-    );
-  }
-}
-
-/// The five-section switch. 44 pt tall segments; labels keep their size at every text size (as the Chat segments do).
-class _SectionBar extends StatelessWidget {
-  final NetworkSection selected;
-  final ValueChanged<NetworkSection> onChanged;
-  final bool wide;
-  const _SectionBar({required this.selected, required this.onChanged, required this.wide});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = Theme.of(context).colorScheme;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: c.surface,
-        border: Border(
-          top: wide ? BorderSide.none : BorderSide(color: c.outlineVariant.withValues(alpha: 0.5), width: 0.5),
-          bottom: wide ? BorderSide(color: c.outlineVariant.withValues(alpha: 0.5), width: 0.5) : BorderSide.none,
-        ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
-        child: MediaQuery(
-          data: MediaQuery.of(context).copyWith(textScaler: TextScaler.noScaling),
-          child: Semantics(
-            container: true,
-            label: 'Network sections',
-            child: SizedBox(
-              width: double.infinity,
-              child: CupertinoSlidingSegmentedControl<NetworkSection>(
-                key: const Key('network-sections'),
-                groupValue: selected,
-                thumbColor: c.surfaceContainerHighest,
-                backgroundColor: c.onSurface.withValues(alpha: 0.10),
-                padding: const EdgeInsets.all(2),
-                children: {
-                  for (final s in NetworkSection.values)
-                    s: ConstrainedBox(
-                      constraints: const BoxConstraints(minHeight: 40),
-                      child: Center(
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Text(s.label, key: Key('network-section-${s.name}'), maxLines: 1, softWrap: false),
-                        ),
-                      ),
-                    ),
-                },
-                onValueChanged: (v) {
-                  if (v != null) onChanged(v);
-                },
-              ),
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

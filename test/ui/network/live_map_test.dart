@@ -226,7 +226,7 @@ void main() {
   group('NetworkRequest for the live map', () {
     test('the packet replay link opens Map with the packet and time, and round-trips', () {
       final r = NetworkRequest.parse(Uri.parse('https://cmh.meshsonar.com/map?panel=live&t=2026-11-20T14:02:05.120Z&packet=c4b06ee8fc39b187'))!;
-      expect(r.section, NetworkSection.map);
+      expect(r.section, NetworkSection.live);
       expect(r.region, 'cmh');
       expect(r.packetHash, 'c4b06ee8fc39b187');
       expect(r.mapTime, DateTime.utc(2026, 11, 20, 14, 2, 5, 120));

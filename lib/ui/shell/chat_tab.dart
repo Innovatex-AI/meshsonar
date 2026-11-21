@@ -1,5 +1,5 @@
 // The Chat tab shell (chat plan 3 and 4.1): large title "Chat" with the New button, a pinned sliding segmented control
-// Chats | Contacts | Channels | Radio, a collapsing search field, a status banner only when something is wrong, and the segment's
+// Chats | Contacts | Channels (build 71: the Radio segment moved to More > Radio), a collapsing search field, a status banner only when something is wrong, and the segment's
 // content as slivers under them. Chats is the default segment and a cold launch always opens it; the chosen segment is
 // remembered for the session only.
 //
@@ -21,9 +21,9 @@ import '../design/tokens.dart';
 import '../drive/drive_controls.dart' show openConnect;
 import 'chat_tab_host.dart';
 
-/// [radio] is the radio's own network: its card, nodes heard nearby, and the repeaters, rooms and sensors in its contact
-/// book with the radio tools. It was called "Network" until build 71, when the Analyze tab became the Network tab.
-enum ChatShellSegment { chats, contacts, channels, radio }
+/// The radio's own network (its card, nodes heard nearby, and the repeaters, rooms and sensors in its contact book with
+/// the radio tools) was a fourth segment, "Radio", until build 71; it is More > Radio now (more_radio_screen.dart).
+enum ChatShellSegment { chats, contacts, channels }
 
 class ChatTab extends StatelessWidget {
   const ChatTab({super.key});
@@ -78,10 +78,6 @@ class RedesignedChatTabState extends State<RedesignedChatTab> {
       _shell = shell;
       _seenReselect = shell?.reselectCount ?? 0;
     }
-    if (shell != null && shell.tab == AppTab.chat && shell.takePendingChatRadio() && _sessionSegment != ChatShellSegment.radio) {
-      _sessionSegment = ChatShellSegment.radio;
-      _search.clear();
-    }
     if (shell != null && shell.reselectCount != _seenReselect) {
       _seenReselect = shell.reselectCount;
       // Tapping the Chat tab again: back to the top of the list.
@@ -113,7 +109,6 @@ class RedesignedChatTabState extends State<RedesignedChatTab> {
             const SingleActivator(LogicalKeyboardKey.digit1, meta: true): () => _select(ChatShellSegment.chats),
             const SingleActivator(LogicalKeyboardKey.digit2, meta: true): () => _select(ChatShellSegment.contacts),
             const SingleActivator(LogicalKeyboardKey.digit3, meta: true): () => _select(ChatShellSegment.channels),
-            const SingleActivator(LogicalKeyboardKey.digit4, meta: true): () => _select(ChatShellSegment.radio),
             const SingleActivator(LogicalKeyboardKey.keyF, meta: true): () => _searchFocus.requestFocus(),
             if (p != null) SingleActivator(LogicalKeyboardKey.keyN, meta: true): () => _new(context, p),
             // Quick switcher: iPad width only (the split layout), like the other desktop-style shortcuts.
@@ -273,16 +268,15 @@ class RedesignedChatTabState extends State<RedesignedChatTab> {
                 controller: _search,
                 focusNode: _searchFocus,
                 placeholder: switch (seg) {
-                  ChatShellSegment.chats => 'Search chats and messages',
                   ChatShellSegment.channels => 'Search channels',
-                  _ => 'Search the network',
+                  _ => 'Search chats and messages',
                 },
                 onChanged: (_) => setState(() {}),
                 onSuffixTap: () => setState(_search.clear),
               ),
             ),
           ),
-        // Two one-time tips, one at a time: the swipe tip first (only once there is a conversation to swipe), then Radio.
+        // Two one-time tips, one at a time: the swipe tip first (only once there is a conversation to swipe), then where the radio's lists are.
         if (seg == ChatShellSegment.chats && _search.text.isEmpty && !p.isEmpty && !appTipStore.seen('chat-swipe-tip'))
           SliverToBoxAdapter(
             child: TipCard(
@@ -299,14 +293,14 @@ class RedesignedChatTabState extends State<RedesignedChatTab> {
               tipId: 'chat-network-tip',
               symbol: AppSymbols.antenna,
               title: 'Repeaters, rooms and your radio',
-              message: 'They live under Radio.',
+              message: 'They live in More, under Radio.',
             ),
           ),
         switch (seg) {
           ChatShellSegment.chats => p.chatsSliver(context, args),
           ChatShellSegment.channels => p.channelsSliver(context, args),
-          ChatShellSegment.radio => p.networkSliver(context, args),
-          ChatShellSegment.contacts => SliverFillRemaining(hasScrollBody: true, child: p.contactsSegment(context, seeNearby: () => _select(ChatShellSegment.radio))),
+          ChatShellSegment.contacts => SliverFillRemaining(
+              hasScrollBody: true, child: p.contactsSegment(context, seeNearby: () => ShellScope.maybeRead(context)?.openMore(MoreItem.radio))),
         },
       ],
     );
@@ -352,7 +346,6 @@ class _SegmentHeader extends SliverPersistentHeaderDelegate {
               ChatShellSegment.chats: _SegmentLabel('Chats', key: Key('segment-chats')),
               ChatShellSegment.contacts: _SegmentLabel('Contacts', key: Key('segment-contacts')),
               ChatShellSegment.channels: _SegmentLabel('Channels', key: Key('segment-channels')),
-              ChatShellSegment.radio: _SegmentLabel('Radio', key: Key('segment-radio')),
             },
             onValueChanged: (v) {
               if (v != null) onChanged(v);
@@ -399,7 +392,7 @@ class _SegmentLabel extends StatelessWidget {
   final String label;
   const _SegmentLabel(this.label, {super.key});
   @override
-  // Four segments on a 320-375 pt phone leave about 80 pt each: one line, shrunk to fit rather than wrapped.
+  // Three segments on a 320-375 pt phone leave about 100 pt each: one line, shrunk to fit rather than wrapped.
   Widget build(BuildContext context) => ConstrainedBox(
         constraints: const BoxConstraints(minHeight: Hit.min),
         child: Center(

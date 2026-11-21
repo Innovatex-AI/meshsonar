@@ -2,8 +2,9 @@
 // the section, the region, and optionally the node / packet / observer / channel it is about and a time window. It
 // parses from and serialises to the website's routes (analyzer-api-contract.md section 8, the web route table:
 // `/packets`, `/packets/:hash`, `/nodes`, `/nodes/:key` (old `/repeaters/*`), `/observers`, `/observers/:id`,
-// `/channels`, `/channels/:id`, `/insights?tab=`, `/map?panel=`), so a shared web link opens the same view in the app and
-// the app can share a link that opens on the site.
+// `/channels`, `/channels/:id`, `/analytics/:slug`, `/tools/*`, `/scope-audit`, `/status`, `/pulse`, `/live`,
+// `/map?panel=live&packet=`; the retired `/insights?tab=` and `/analysis` open their Analytics twin), so a shared web link
+// opens the same view in the app and the app can share a link that opens on the site.
 //
 // Region: the region host sets it (`https://cmh.meshsonar.com/packets`), or `?region=<slug>` on the hub
 // (`https://meshsonar.com/packets?region=cmh`), or `?region=` on the app scheme (`meshsonar://network/packets?region=cmh`).
@@ -18,17 +19,63 @@
 // Pure Dart: no Flutter imports.
 import 'v1/packet_filter.dart';
 
-/// The five Network sections, in display order.
+/// The eight Network sections, in display order (build 71: the site's own menu).
 enum NetworkSection {
-  now('Now'),
+  home('Home'),
   packets('Packets'),
+  live('Live'),
   nodes('Nodes'),
-  map('Map'),
-  insights('Insights');
+  channels('Channels'),
+  observers('Observers'),
+  analytics('Analytics'),
+  tools('Tools');
 
   final String label;
   const NetworkSection(this.label);
+
+  /// Looks a section up by name. The pre-build-71 names still resolve: `now` = Home, `map` = Live,
+  /// `insights` = Analytics.
+  static NetworkSection? byName(String? name) {
+    switch (name) {
+      case 'now':
+        return NetworkSection.home;
+      case 'map':
+        return NetworkSection.live;
+      case 'insights':
+        return NetworkSection.analytics;
+    }
+    for (final s in NetworkSection.values) {
+      if (s.name == name) return s;
+    }
+    return null;
+  }
 }
+
+/// The sections that work with no region (the "All regions" view on the hub).
+const List<NetworkSection> networkHubSections = [NetworkSection.home, NetworkSection.channels, NetworkSection.analytics, NetworkSection.tools];
+
+/// The site's analytics tab an old `/insights?tab=` name opens now (the site's Analytics replaced Insights).
+/// `channels` is not here: it is its own section.
+const Map<String, String> legacyInsightsTabs = {
+  'analysis': 'overview',
+  'overview': 'overview',
+  'hashes': 'hash-stats',
+  'roles': 'roles',
+  'routes': 'route-patterns',
+  'rf': 'rf-signal',
+  'signal': 'rf-signal',
+  'health': 'rf-health',
+  'topology': 'topology',
+};
+
+/// Tools whose site address is not `/tools/<id>` (id to path). Every other tool id serialises as `/tools/<id>`.
+const Map<String, String> networkToolPaths = {
+  'definition': '/tools/region',
+  'prefix': '/analytics/prefix-tool',
+  'scope-audit': '/scope-audit',
+  'compare': '/observers/compare',
+  'status': '/status',
+};
 
 /// The named windows of the contract (1.4).
 const Set<String> networkWindows = {'15m', '1h', '3h', '6h', '24h', '7d', '30d', '90d', '400d'};
@@ -44,6 +91,7 @@ final _slug = RegExp(r'^[a-z0-9][a-z0-9-]{0,31}$');
 final _tab = RegExp(r'^[a-z][a-z0-9-]{0,31}$');
 final _channel = RegExp(r'^(public|tag:[^\s/]{1,64}|enc:[0-9a-f]{2})$');
 final _observer = RegExp(r'^[A-Za-z0-9_.:-]{1,160}$');
+final _toolArg = RegExp(r'^[A-Za-z0-9_.:,>-]{1,512}$');
 
 /// Immutable: every field is final and equality is by value.
 class NetworkRequest {
@@ -68,11 +116,19 @@ class NetworkRequest {
   final String? window;
   final DateTime? since, until;
 
-  /// Insights tab (`/insights?tab=signal`), an open set of lowercase names.
-  final String? insightsTab;
+  /// Analytics tab slug (`/analytics/rf-signal`), an open set of lowercase names; null = the list.
+  final String? analyticsTab;
 
-  /// Map panel (`/map?panel=live`).
-  final String? mapPanel;
+  /// Tool id (Tools section): `path`, `trace`, `prefix`, `scope-audit`, `compare`, `definition`, `status`, `decode`, or
+  /// another `/tools/<name>` passed through; null = the list.
+  final String? tool;
+
+  /// The tool's argument from a link: a trace or packet hash (`/tools/trace/<hash>`), a prefix (`?prefix=`), a hop
+  /// list (`?hops=`).
+  final String? toolArg;
+
+  /// True for `/pulse`: Home with the pulse sheet open.
+  final bool pulse;
 
   /// Live map: the time to show (`/map?panel=live&t=<RFC 3339>&packet=<hash>`, the packet detail's `links.replay`).
   final DateTime? mapTime;
@@ -87,108 +143,41 @@ class NetworkRequest {
     this.window,
     this.since,
     this.until,
-    this.insightsTab,
-    this.mapPanel,
-    this.observersList = false,
+    this.analyticsTab,
+    this.tool,
+    this.toolArg,
+    this.pulse = false,
     this.packetFilter,
     this.mapTime,
   });
 
-  const NetworkRequest.section(this.section, {this.region, this.window})
-      : nodeKey = null,
-        packetHash = null,
-        observerId = null,
-        channelId = null,
-        since = null,
-        until = null,
-        insightsTab = null,
-        mapPanel = null,
-        observersList = false,
-        packetFilter = null,
-        mapTime = null;
+  const NetworkRequest.section(NetworkSection section, {String? region, String? window}) : this(section: section, region: region, window: window);
 
   /// A node's page (Nodes section). [key] must be 64 hex.
-  NetworkRequest.node(String key, {this.region})
-      : section = NetworkSection.nodes,
-        nodeKey = key.toLowerCase(),
-        packetHash = null,
-        observerId = null,
-        channelId = null,
-        window = null,
-        since = null,
-        until = null,
-        insightsTab = null,
-        mapPanel = null,
-        observersList = false,
-        packetFilter = null,
-        mapTime = null;
+  NetworkRequest.node(String key, {String? region}) : this(section: NetworkSection.nodes, nodeKey: key.toLowerCase(), region: region);
 
   /// A packet (Packets section). [hash] must be 16 hex.
-  NetworkRequest.packet(String hash, {this.region})
-      : section = NetworkSection.packets,
-        packetHash = hash.toLowerCase(),
-        nodeKey = null,
-        observerId = null,
-        channelId = null,
-        window = null,
-        since = null,
-        until = null,
-        insightsTab = null,
-        mapPanel = null,
-        observersList = false,
-        packetFilter = null,
-        mapTime = null;
+  NetworkRequest.packet(String hash, {String? region}) : this(section: NetworkSection.packets, packetHash: hash.toLowerCase(), region: region);
 
-  /// An observer (Nodes section, Observers view).
-  const NetworkRequest.observer(String this.observerId, {this.region})
-      : section = NetworkSection.nodes,
-        nodeKey = null,
-        packetHash = null,
-        channelId = null,
-        window = null,
-        since = null,
-        until = null,
-        insightsTab = null,
-        mapPanel = null,
-        observersList = false,
-        packetFilter = null,
-        mapTime = null;
+  /// An observer's page (Observers section).
+  const NetworkRequest.observer(String observerId, {String? region}) : this(section: NetworkSection.observers, observerId: observerId, region: region);
 
-  /// A channel (Insights section, Channels tab: AZ-3.7 / AZ-3.9 fill it).
-  const NetworkRequest.channel(String this.channelId, {this.region})
-      : section = NetworkSection.insights,
-        insightsTab = 'channels',
-        nodeKey = null,
-        packetHash = null,
-        observerId = null,
-        window = null,
-        since = null,
-        until = null,
-        mapPanel = null,
-        observersList = false,
-        packetFilter = null,
-        mapTime = null;
+  /// A channel (Channels section).
+  const NetworkRequest.channel(String channelId, {String? region}) : this(section: NetworkSection.channels, channelId: channelId, region: region);
 
-  /// The live map drawing one packet's path (Network > Map), at [at] (the packet detail's "Show on map").
-  NetworkRequest.mapPacket(String hash, {this.region, DateTime? at})
-      : section = NetworkSection.map,
-        packetHash = hash.toLowerCase(),
-        mapPanel = 'live',
-        mapTime = at?.toUtc(),
-        nodeKey = null,
-        observerId = null,
-        channelId = null,
-        window = null,
-        since = null,
-        until = null,
-        insightsTab = null,
-        observersList = false,
-        packetFilter = null;
+  /// One analytics tab of the site (Analytics section).
+  const NetworkRequest.analytics(String slug, {String? region}) : this(section: NetworkSection.analytics, analyticsTab: slug, region: region);
 
-  /// The request in a copy with another region (deep links that name none take the viewed one).
-  NetworkRequest withRegion(String? r) => NetworkRequest(
+  /// One tool (Tools section), with its argument when it has one.
+  const NetworkRequest.toolOf(String tool, {String? arg, String? region}) : this(section: NetworkSection.tools, tool: tool, toolArg: arg, region: region);
+
+  /// The live map drawing one packet's path (Network > Live), at [at] (the packet detail's "Show on map").
+  NetworkRequest.mapPacket(String hash, {String? region, DateTime? at})
+      : this(section: NetworkSection.live, packetHash: hash.toLowerCase(), mapTime: at?.toUtc(), region: region);
+
+  NetworkRequest _copy({String? Function()? region, PacketFilter? Function()? packetFilter}) => NetworkRequest(
       section: section,
-      region: r,
+      region: region == null ? this.region : region(),
       nodeKey: nodeKey,
       packetHash: packetHash,
       observerId: observerId,
@@ -196,11 +185,15 @@ class NetworkRequest {
       window: window,
       since: since,
       until: until,
-      insightsTab: insightsTab,
-      mapPanel: mapPanel,
-      observersList: observersList,
-      packetFilter: packetFilter,
+      analyticsTab: analyticsTab,
+      tool: tool,
+      toolArg: toolArg,
+      pulse: pulse,
+      packetFilter: packetFilter == null ? this.packetFilter : packetFilter(),
       mapTime: mapTime);
+
+  /// The request in a copy with another region (deep links that name none take the viewed one).
+  NetworkRequest withRegion(String? r) => _copy(region: () => r);
 
   /// The Packets list filters beyond the single [nodeKey] / [observerId] / [channelId] / [packetHash]; null = none.
   final PacketFilter? packetFilter;
@@ -222,11 +215,8 @@ class NetworkRequest {
   static NetworkRequest packetList(PacketFilter filter, {String? region, String? window, DateTime? since, DateTime? until}) => NetworkRequest(
       section: NetworkSection.packets, region: region, window: window, since: since, until: until, packetFilter: filter.isEmpty ? null : filter);
 
-  /// The `/observers` list (Nodes section, Observers view) rather than the node directory.
-  final bool observersList;
-
-  /// True when it asks for the Observers view of Nodes (an observer id, or the `/observers` list).
-  bool get observersView => observerId != null || observersList;
+  /// True when it opens the Observers section (the list or one observer). Kept for callers written before build 71.
+  bool get observersView => section == NetworkSection.observers;
 
   // ---------------------------------------------------------------- parsing
 
@@ -279,7 +269,7 @@ class NetworkRequest {
     }
 
     NetworkRequest make(NetworkSection s,
-            {String? node, String? hash, String? observer, String? channel, String? tab, String? panel, bool observersList = false, DateTime? mapTime}) =>
+            {String? node, String? hash, String? observer, String? channel, String? tab, String? tool, String? arg, bool pulse = false, DateTime? mapTime}) =>
         NetworkRequest(
           section: s,
           region: region,
@@ -290,19 +280,26 @@ class NetworkRequest {
           window: window,
           since: since,
           until: until,
-          insightsTab: tab,
-          mapPanel: panel,
-          observersList: observersList,
+          analyticsTab: tab,
+          tool: tool,
+          toolArg: arg,
+          pulse: pulse,
           mapTime: mapTime,
         );
 
-    if (segs.isEmpty) return make(NetworkSection.now);
+    if (segs.isEmpty) return make(NetworkSection.home);
     final head = segs.first.toLowerCase();
     final id = segs.length > 1 ? segs[1] : null;
-    if (segs.length > 2) return null;
+    final third = segs.length > 2 ? segs[2] : null;
+    if (segs.length > 3) return null;
+    // Only `/tools/trace/<hash>` has three parts.
+    if (third != null && !(head == 'tools' && id == 'trace')) return null;
     switch (head) {
       case 'now':
-        return id == null ? make(NetworkSection.now) : null;
+      case 'home':
+        return id == null ? make(NetworkSection.home) : null;
+      case 'pulse':
+        return id == null ? make(NetworkSection.home, pulse: true) : null;
       case 'packets':
         if (id == null) {
           final node = filter('node', _nodeKey), hash = filter('hash', _packetHash);
@@ -328,66 +325,81 @@ class NetworkRequest {
         final k = id.toLowerCase();
         return _nodeKey.hasMatch(k) ? make(NetworkSection.nodes, node: k) : null;
       case 'observers':
-        if (id == null || id == 'compare') return make(NetworkSection.nodes, observersList: true);
+        if (id == null) return make(NetworkSection.observers);
+        if (id == 'compare') return make(NetworkSection.tools, tool: 'compare');
         // Outside observer ids carry a colon; first-party ids are 64-hex keys (either case accepted, contract 13.5).
         final o = _nodeKey.hasMatch(id.toLowerCase()) ? id.toLowerCase() : id;
-        return _observer.hasMatch(o) ? make(NetworkSection.nodes, observer: o) : null;
+        return _observer.hasMatch(o) ? make(NetworkSection.observers, observer: o) : null;
       case 'channels':
-        if (id == null) return make(NetworkSection.insights, tab: 'channels');
-        return _channel.hasMatch(id) ? make(NetworkSection.insights, tab: 'channels', channel: id) : null;
+        if (id == null) return make(NetworkSection.channels);
+        return _channel.hasMatch(id) ? make(NetworkSection.channels, channel: id) : null;
+      case 'analytics':
+        if (id == null) return make(NetworkSection.analytics);
+        final slug = id.toLowerCase();
+        if (!_tab.hasMatch(slug)) return null;
+        // The Prefix Tool sits under /analytics on the site and is a native tool here.
+        if (slug == 'prefix-tool') return make(NetworkSection.tools, tool: 'prefix', arg: filter('prefix', _toolArg));
+        return make(NetworkSection.analytics, tab: slug);
       case 'insights':
       case 'analysis':
+        // The site's Analytics replaced Insights: an old tab name opens its twin there.
         if (id != null) return null;
-        return make(NetworkSection.insights, tab: filter('tab', _tab));
+        final old = filter('tab', _tab);
+        if (old == 'channels') return make(NetworkSection.channels);
+        return make(NetworkSection.analytics, tab: old == null ? null : (legacyInsightsTabs[old] ?? 'overview'));
+      case 'tools':
+        if (id == null) return make(NetworkSection.tools);
+        final name = id.toLowerCase();
+        if (!_tab.hasMatch(name)) return null;
+        if (name == 'trace') {
+          if (third == null) return make(NetworkSection.tools, tool: 'trace');
+          final h = third.toLowerCase();
+          return _toolArg.hasMatch(h) ? make(NetworkSection.tools, tool: 'trace', arg: h) : null;
+        }
+        if (name == 'region') return make(NetworkSection.tools, tool: 'definition');
+        if (name == 'path') return make(NetworkSection.tools, tool: 'path', arg: filter('hops', _toolArg, lower: false));
+        return make(NetworkSection.tools, tool: name);
+      case 'scope-audit':
+        return id == null ? make(NetworkSection.tools, tool: 'scope-audit') : null;
+      case 'status':
+        return id == null ? make(NetworkSection.tools, tool: 'status') : null;
       case 'map':
-        if (id != null) return null;
-        final mp = filter('packet', _packetHash);
-        final mt = DateTime.tryParse(q['t'] ?? '')?.toUtc();
-        return make(NetworkSection.map, panel: filter('panel', _tab) ?? (mp != null ? 'live' : null), hash: mp, mapTime: mt);
       case 'live':
-        // The site's old Live page; the contract's route is /map?panel=live.
-        return id == null ? make(NetworkSection.map, panel: 'live') : null;
+        // `/live` is the site's Live view; `/map?panel=live&packet=&t=` is the same map drawing one packet (links.replay).
+        if (id != null) return null;
+        final mt = DateTime.tryParse(q['t'] ?? q['at'] ?? '')?.toUtc();
+        return make(NetworkSection.live, hash: filter('packet', _packetHash), mapTime: mt);
       default:
         return null;
     }
   }
 
-
   /// This request with [f] as its [packetFilter] (null when empty).
-  NetworkRequest withFilter(PacketFilter? f) => NetworkRequest(
-      section: section,
-      region: region,
-      nodeKey: nodeKey,
-      packetHash: packetHash,
-      observerId: observerId,
-      channelId: channelId,
-      window: window,
-      since: since,
-      until: until,
-      insightsTab: insightsTab,
-      mapPanel: mapPanel,
-      observersList: observersList,
-      packetFilter: f == null || f.isEmpty ? null : f,
-      mapTime: mapTime);
+  NetworkRequest withFilter(PacketFilter? f) => _copy(packetFilter: () => f == null || f.isEmpty ? null : f);
 
   // ---------------------------------------------------------------- serialising
 
   String get _path {
     switch (section) {
-      case NetworkSection.now:
-        return '/';
+      case NetworkSection.home:
+        return pulse ? '/pulse' : '/';
       case NetworkSection.packets:
         return packetHash != null && !_hasListFilter ? '/packets/$packetHash' : '/packets';
       case NetworkSection.nodes:
-        if (nodeKey != null) return '/nodes/$nodeKey';
-        if (observerId != null) return '/observers/${Uri.encodeComponent(observerId!)}';
-        return observersList ? '/observers' : '/nodes';
-      case NetworkSection.insights:
-        if (channelId != null) return '/channels/${Uri.encodeComponent(channelId!)}';
-        if (insightsTab == 'channels') return '/channels';
-        return '/insights';
-      case NetworkSection.map:
-        return '/map';
+        return nodeKey != null ? '/nodes/$nodeKey' : '/nodes';
+      case NetworkSection.observers:
+        return observerId != null ? '/observers/${Uri.encodeComponent(observerId!)}' : '/observers';
+      case NetworkSection.channels:
+        return channelId != null ? '/channels/${Uri.encodeComponent(channelId!)}' : '/channels';
+      case NetworkSection.analytics:
+        return analyticsTab != null ? '/analytics/$analyticsTab' : '/analytics';
+      case NetworkSection.tools:
+        final t = tool;
+        if (t == null) return '/tools';
+        if (t == 'trace' && toolArg != null) return '/tools/trace/$toolArg';
+        return networkToolPaths[t] ?? '/tools/$t';
+      case NetworkSection.live:
+        return packetHash != null || mapTime != null ? '/map' : '/live';
     }
   }
 
@@ -398,10 +410,15 @@ class NetworkRequest {
       q.addAll(f.toQuery());
       if (packetHash != null && f.hash == null) q['hash'] = packetHash!;
     }
-    if (section == NetworkSection.insights && insightsTab != null && insightsTab != 'channels') q['tab'] = insightsTab!;
-    if (section == NetworkSection.map && mapPanel != null) q['panel'] = mapPanel!;
-    if (section == NetworkSection.map && mapTime != null) q['t'] = mapTime!.toUtc().toIso8601String();
-    if (section == NetworkSection.map && packetHash != null) q['packet'] = packetHash!;
+    if (section == NetworkSection.tools && toolArg != null) {
+      if (tool == 'prefix') q['prefix'] = toolArg!;
+      if (tool == 'path') q['hops'] = toolArg!;
+    }
+    if (section == NetworkSection.live && _path == '/map') {
+      q['panel'] = 'live';
+      if (mapTime != null) q['t'] = mapTime!.toUtc().toIso8601String();
+      if (packetHash != null) q['packet'] = packetHash!;
+    }
     if (window != null) {
       q['window'] = window!;
     } else {
@@ -436,14 +453,15 @@ class NetworkRequest {
       other.window == window &&
       other.since == since &&
       other.until == until &&
-      other.insightsTab == insightsTab &&
-      other.mapPanel == mapPanel &&
-      other.observersList == observersList &&
+      other.analyticsTab == analyticsTab &&
+      other.tool == tool &&
+      other.toolArg == toolArg &&
+      other.pulse == pulse &&
       other.packetFilter == packetFilter &&
       other.mapTime == mapTime;
 
   @override
-  int get hashCode => Object.hash(section, region, nodeKey, packetHash, observerId, channelId, window, since, until, insightsTab, mapPanel, observersList, packetFilter, mapTime);
+  int get hashCode => Object.hash(section, region, nodeKey, packetHash, observerId, channelId, window, since, until, analyticsTab, tool, toolArg, pulse, packetFilter, mapTime);
 
   @override
   String toString() => 'NetworkRequest(${section.name}${region == null ? '' : ' $region'})';

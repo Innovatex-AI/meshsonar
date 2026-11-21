@@ -36,12 +36,12 @@ const _howSections = <_Section>[
     'A region is a MeshMapper zone, with MeshMapper\'s name and border. Every ping is filed by where it was sent, not where you uploaded it, so a drive '
         'that crosses a border counts in both regions. Each region has its own site with its own map, drives and leaderboard; one sign-in works on all of them. '
         'Neighbouring regions can form a group that shows a combined map.',
-    'In the app, the Analyze tab shows the region you are viewing; the switcher at the top changes it.',
+    'In the app, the Network tab shows the region you are viewing; tap the region name at the top to change it.',
   ]),
   _Section('Go deeper', [
     <String>[
-      'Method (More > Method): how the figures are made and what they can and cannot say.',
-      'Analyze > Region: repeaters, observers, packets, analysis, RF, growth, reports and stats for the region.',
+      'Method (More > Help > Method): how the figures are made and what they can and cannot say.',
+      'Network: packets, the live map, nodes, channels, observers, analytics and tools for the region.',
       'More > Set up a repeater observer: make your own repeater report to MeshSonar.',
     ],
   ]),

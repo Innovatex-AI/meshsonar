@@ -1,4 +1,7 @@
-// The Network tab's region header pieces (AZ-3.1): the pulse chip and the one-line summary. Both read the `/v1` client
+// The Network tab's header (build 71): ONE 48 pt line, [region name, tap = region switcher] [pulse chip] [search]
+// [overflow: Share link, Export region report] (NetworkHeaderBar). On a narrow phone the name ellipsizes first, then the
+// pulse chip collapses to its dot; the search and overflow buttons always keep their 44 pt.
+// Its pieces (AZ-3.1): the pulse chip and the one-line summary. Both read the `/v1` client
 // (lib/core/v1/network_api.dart) for the viewed region's host and stay quiet when there is nothing to say:
 // - PulseChip (network-pulse-plan-2026-11-19.md section 4, app-next-pass-list item 6) reads GET /v1/pulse and
 //   GET /v1/summary and says one of three things: green "Normal" (the pulse read is live and nothing is open), amber
@@ -48,9 +51,13 @@ PulseChipState pulseChipStateOf(NetworkRead<List<PulseEvent>>? pulse, NetworkRea
   return open.isEmpty ? PulseChipState.normal : PulseChipState.unusual;
 }
 
+/// How the pulse chip is drawn: the Material chip, a 32 pt pill for the one-line header, or only its coloured icon.
+enum PulseChipStyle { chip, pill, dot }
+
 class PulseChip extends StatefulWidget {
   final String baseUrl;
-  const PulseChip({super.key, required this.baseUrl});
+  final PulseChipStyle style;
+  const PulseChip({super.key, required this.baseUrl, this.style = PulseChipStyle.chip});
 
   @override
   State<PulseChip> createState() => _PulseChipState();
@@ -103,6 +110,50 @@ class _PulseChipState extends State<PulseChip> {
               ),
             _ => (Icons.check_circle_outline, mc.levelStrong, 'Normal', 'Pulse: normal, nothing unusual right now'),
           };
+          void showSheet() => showAppSheet<void>(
+                context,
+                detents: const [0.5, 0.92],
+                builder: (ctx, c) => _PulseSheet(events: open, state: state, controller: c),
+              );
+          if (widget.style != PulseChipStyle.chip) {
+            final dot = widget.style == PulseChipStyle.dot;
+            return Semantics(
+              button: true,
+              label: spoken,
+              excludeSemantics: true,
+              child: InkWell(
+                key: const Key('pulse-chip'),
+                borderRadius: BorderRadius.circular(22),
+                onTap: showSheet,
+                child: SizedBox(
+                  height: 44,
+                  width: dot ? 44 : null,
+                  child: Center(
+                    widthFactor: dot ? null : 1,
+                    child: dot
+                        ? Icon(icon, key: Key('pulse-chip-${state.name}'), size: 22, color: color)
+                        : Container(
+                            height: 32,
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            decoration: BoxDecoration(borderRadius: BorderRadius.circular(16), border: Border.all(color: color.withValues(alpha: 0.6))),
+                            child: Row(mainAxisSize: MainAxisSize.min, children: [
+                              Icon(icon, size: 16, color: color),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: Text(label,
+                                    key: Key('pulse-chip-${state.name}'),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    textScaler: MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.3),
+                                    style: t.textTheme.labelMedium),
+                              ),
+                            ]),
+                          ),
+                  ),
+                ),
+              ),
+            );
+          }
           return Semantics(
             button: true,
             label: spoken,
@@ -112,15 +163,134 @@ class _PulseChipState extends State<PulseChip> {
               avatar: Icon(icon, size: 18, color: color),
               side: BorderSide(color: color.withValues(alpha: 0.6)),
               label: Text(label, key: Key('pulse-chip-${state.name}'), maxLines: 1, overflow: TextOverflow.ellipsis),
-              onPressed: () => showAppSheet<void>(
-                context,
-                detents: const [0.5, 0.92],
-                builder: (ctx, c) => _PulseSheet(events: open, state: state, controller: c),
-              ),
+              onPressed: showSheet,
             ),
           );
         },
       );
+}
+
+/// Opens the pulse sheet for [baseUrl] on its own (a `/pulse` link): reads the pulse, then shows what the chip shows.
+/// Quiet when the server has no pulse read (as the chip hides then).
+Future<void> openPulseSheet(BuildContext context, String baseUrl) async {
+  final api = networkApiFactory(baseUrl);
+  NetworkRead<List<PulseEvent>>? pulse;
+  NetworkRead<NetworkSummary>? summary;
+  try {
+    pulse = await api.pulse().then<NetworkRead<List<PulseEvent>>?>((v) => v, onError: (_) => null);
+    summary = await api.summary().then<NetworkRead<NetworkSummary>?>((v) => v, onError: (_) => null);
+  } finally {
+    api.close();
+  }
+  final state = pulseChipStateOf(pulse, summary);
+  if (!context.mounted || state == PulseChipState.hidden) return;
+  final open = [for (final e in pulse!.data) if (e.state == 'open') e];
+  await showAppSheet<void>(context, detents: const [0.5, 0.92], builder: (ctx, c) => _PulseSheet(events: open, state: state, controller: c));
+}
+
+/// The one-line Network header. Heights: 48 pt line; every control is a 44 pt target.
+class NetworkHeaderBar extends StatelessWidget {
+  /// The region name, or "All regions".
+  final String title;
+
+  /// The host the pulse chip reads (the region's, or the hub's).
+  final String? pulseBaseUrl;
+  final VoidCallback onRegion;
+  final VoidCallback? onSearch;
+  final VoidCallback? onShare;
+
+  /// Null hides "Export region report" (no region).
+  final VoidCallback? onExport;
+  const NetworkHeaderBar({super.key, required this.title, required this.pulseBaseUrl, required this.onRegion, this.onSearch, this.onShare, this.onExport});
+
+  static const double height = 48;
+
+  /// Below this much room for the name and the chip together, the chip shows only its dot (name first, then chip).
+  static const double pillFromWidth = 270;
+  static const double pillMaxWidth = 150;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final c = t.colorScheme;
+    // The header keeps one line at every text size: its text grows only a little (VoiceOver reads the full names).
+    final scaler = MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.3);
+    return SizedBox(
+      key: const Key('network-header'),
+      height: height,
+      child: LayoutBuilder(builder: (context, box) {
+        // 4 pt edge padding each side, two 44 pt buttons.
+        final room = box.maxWidth - 8 - 88;
+        final pill = room >= pillFromWidth;
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Row(children: [
+            Expanded(
+              child: Semantics(
+                button: true,
+                label: '$title. Change region',
+                excludeSemantics: true,
+                child: InkWell(
+                  key: const Key('network-region-button'),
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: onRegion,
+                  child: SizedBox(
+                    height: 44,
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 12, right: 4),
+                      child: Row(children: [
+                        Flexible(
+                          child: Text(title,
+                              key: const Key('region-title'), maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, textScaler: scaler, style: t.textTheme.titleMedium),
+                        ),
+                        Icon(Icons.expand_more, size: 20, color: c.onSurfaceVariant),
+                      ]),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            if (pulseBaseUrl != null)
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: pill ? pillMaxWidth : 44),
+                child: PulseChip(key: ValueKey('network-pulse-$pulseBaseUrl'), baseUrl: pulseBaseUrl!, style: pill ? PulseChipStyle.pill : PulseChipStyle.dot),
+              ),
+            SizedBox(
+              width: 44,
+              height: 44,
+              child: IconButton(
+                key: const Key('network-search'),
+                tooltip: 'Search nodes, keys, packets, observers and regions',
+                padding: EdgeInsets.zero,
+                icon: const Icon(Icons.search),
+                onPressed: onSearch,
+              ),
+            ),
+            SizedBox(
+              width: 44,
+              height: 44,
+              child: PopupMenuButton<String>(
+                key: const Key('network-overflow'),
+                tooltip: 'More',
+                padding: EdgeInsets.zero,
+                icon: const Icon(Icons.more_horiz),
+                onSelected: (v) => v == 'share' ? onShare?.call() : onExport?.call(),
+                itemBuilder: (_) => [
+                  if (onShare != null)
+                    const PopupMenuItem(key: Key('network-share'), value: 'share', child: ListTile(leading: Icon(Icons.ios_share), title: Text('Share link'), contentPadding: EdgeInsets.zero)),
+                  if (onExport != null)
+                    const PopupMenuItem(
+                        key: Key('region-report-export'),
+                        value: 'export',
+                        child: ListTile(leading: Icon(Icons.description_outlined), title: Text('Export region report'), contentPadding: EdgeInsets.zero)),
+                ],
+              ),
+            ),
+          ]),
+        );
+      }),
+    );
+  }
 }
 
 class _PulseSheet extends StatelessWidget {

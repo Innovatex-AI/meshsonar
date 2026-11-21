@@ -1,4 +1,4 @@
-// The app shell: five tabs (Chat, Drive, Network, Plan, More), a bottom bar on phones and a navigation rail from 700 dp
+// The app shell: five tabs (Network, Drive, Chat, Plan, More; build 71 order), a bottom bar on phones and a navigation rail from 700 dp
 // wide (iPad, phones in landscape), and the mini drive bar above the tabs while a drive runs.
 //
 // Tab API: see shell_controller.dart (ShellScope). Seams for other work: ChatTabHost (chat_tab_host.dart) and
@@ -36,7 +36,8 @@ import 'shell_controller.dart';
 const double shellRailWidth = 700;
 
 class HomeShell extends StatefulWidget {
-  /// Opens this tab; null restores the last open tab (Drive on a fresh install).
+  /// Opens this tab; null restores the last open tab (Network on a fresh install, build 71: the app is a gateway to
+  /// the site data). The saved tab is a name, so one saved by an older build restores to the same tab.
   final AppTab? initialTab;
 
   /// Opens where a pre-0.25 tab index lives now (0 Drive, 1 Region, 2 Drives, 3 Radio, 4 Settings). For old callers.
@@ -57,12 +58,13 @@ class _HomeShellState extends State<HomeShell> {
 
   /// Keeps every tab's state (map, scroll, More's Navigator) when the layout flips between rail and bar on rotation.
   final _contentKey = GlobalKey();
-  AppTab _lastTab = AppTab.drive;
+  AppTab _lastTab = AppTab.network;
 
   @override
   void initState() {
     super.initState();
-    _shell = ShellController(initial: widget.initialTab ?? AppTab.drive)..visited.add(AppTab.drive);
+    // The Drive screen is always built (its map and the drive engine's wiring), whichever tab shows first.
+    _shell = ShellController(initial: widget.initialTab ?? AppTab.network)..visited.add(AppTab.drive);
     ShellController.active = _shell;
     _shell.visited.add(_shell.tab);
     _shell.addListener(_onShell);

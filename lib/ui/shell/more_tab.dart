@@ -1,10 +1,16 @@
 // The More tab: everything that is not a daily screen. It has its own Navigator, so Radio, Settings and the rest open
 // inside the tab and the tab bar and mini drive bar stay in view.
+//
+// Build 71 (clutter pass): nine rows, no group headers: Drives, Radio, Devices and keys, Leaderboard, Add an observer,
+// Chat settings, Settings, Help, About. Rows that only jumped into a Settings section are gone (Claimed radios,
+// Observer, Wardriving settings, Notifications, Privacy and data sharing: all in Settings; their MoreItem values still
+// open the section for code that asks). Radio (more_radio_screen.dart) holds what was Chat > Radio plus Radio settings,
+// Radio setup, Noise floor and Telemetry. Help (more_help_screen.dart) holds How it works, Method, Colour legend,
+// Report a problem, My reports and the Privacy policy.
 
 import 'package:flutter/material.dart';
 
 
-import '../../core/server_url.dart' show privacyPolicyUrl;
 import '../about_screen.dart';
 import '../app.dart';
 import '../info/method_screens.dart';
@@ -12,11 +18,9 @@ import '../map/legend_sheet.dart' show showMapLegend;
 import '../onboarding/onboarding_screen.dart';
 import '../radio/radio_screen.dart';
 import '../radios/observer_join_screen.dart';
-import '../report_problem_screen.dart' show openReportProblem;
 import '../radios/radio_setup/radio_setup_screen.dart';
 import '../sessions_screen.dart';
 import '../settings_screen.dart';
-import '../settings/observer_section.dart' show observerStatusLine;
 import '../tools/adverts_screen.dart';
 import '../tools/discover_screen.dart';
 import '../account/devices_screen.dart';
@@ -27,6 +31,8 @@ import '../tools/rx_log_screen.dart';
 import '../tools/telemetry_screen.dart';
 import '../tools/trace_screen.dart';
 import '../chat/chat_settings_screen.dart';
+import 'more_help_screen.dart';
+import 'more_radio_screen.dart';
 
 class MoreTab extends StatefulWidget {
   const MoreTab({super.key});
@@ -63,7 +69,9 @@ class _MoreTabState extends State<MoreTab> {
 
   Widget _screenFor(MoreItem item) => switch (item) {
         MoreItem.drives => const SessionsScreen(),
-        MoreItem.radio => const RadioScreen(),
+        MoreItem.radio || MoreItem.repeaters => MoreRadioScreen(onOpen: (i) => _open(i, keep: true)),
+        MoreItem.radioSettings => const RadioScreen(),
+        MoreItem.help => MoreHelpScreen(onOpen: (i) => _open(i, keep: true)),
         MoreItem.myRadios => const SettingsScreen(initialSection: 'my-radios-section'),
         MoreItem.wardriving => const SettingsScreen(initialSection: 'wardriving'),
         MoreItem.notifications => const SettingsScreen(initialSection: 'notifications'),
@@ -84,16 +92,15 @@ class _MoreTabState extends State<MoreTab> {
         MoreItem.leaderboard => const LeaderboardScreen(),
         MoreItem.chat => const ChatSettingsScreen(),
         MoreItem.observer => const SettingsScreen(initialSection: 'observer'),
-        MoreItem.legend || MoreItem.howItWorks || MoreItem.repeaters => const SizedBox.shrink(),
+        MoreItem.legend || MoreItem.howItWorks => const SizedBox.shrink(),
       };
 
-  void _open(MoreItem item) {
+  /// Opens [item] over the More list. [keep] leaves the page it was opened from (Radio, Help) underneath, so Back
+  /// returns there.
+  void _open(MoreItem item, {bool keep = false}) {
     final nav = _nav.currentState;
     if (nav == null) return;
     switch (item) {
-      case MoreItem.repeaters:
-        // Repeaters and rooms live under Chat > Radio now (the old list is retired).
-        ShellScope.maybeOf(context)?.openChatRadio();
       case MoreItem.legend:
         showMapLegend(nav.context);
       case MoreItem.howItWorks:
@@ -107,7 +114,7 @@ class _MoreTabState extends State<MoreTab> {
       default:
         // The Drives list reads from disk: refresh it whenever it is opened (it lived in the Analyze tab until build 71).
         if (item == MoreItem.drives) AppScope.read(context).refreshSessions();
-        nav.popUntil((r) => r.isFirst);
+        if (!keep) nav.popUntil((r) => r.isFirst);
         nav.push(MaterialPageRoute<void>(builder: (_) => _screenFor(item)));
     }
   }
@@ -131,37 +138,34 @@ class _MoreTabState extends State<MoreTab> {
   }
 }
 
-class MoreList extends StatefulWidget {
+/// One row of the More tab and its pages: icon, title, one line, chevron. Key `more-<item name>`.
+class MoreRow extends StatelessWidget {
+  final MoreItem item;
+  final IconData icon;
+  final String title, subtitle;
+  final void Function(MoreItem) onOpen;
+  const MoreRow(this.item, this.icon, this.title, this.subtitle, {super.key, required this.onOpen});
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+        key: Key('more-${item.name}'),
+        minVerticalPadding: Gap.s,
+        leading: Icon(icon),
+        title: Text(title),
+        subtitle: Text(subtitle),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => onOpen(item),
+      );
+}
+
+class MoreList extends StatelessWidget {
   final void Function(MoreItem) onOpen;
   const MoreList({super.key, required this.onOpen});
 
   @override
-  State<MoreList> createState() => _MoreListState();
-}
-
-class _MoreListState extends State<MoreList> {
-  @override
   Widget build(BuildContext context) {
-    final onOpen = widget.onOpen;
     final s = AppScope.of(context);
-    final t = Theme.of(context);
-    Widget row(MoreItem item, IconData icon, String title, String subtitle, {String? keyName, bool external = false}) =>
-        ListTile(
-          key: Key('more-${keyName ?? item.name}'),
-          minVerticalPadding: Gap.s,
-          leading: Icon(icon),
-          title: Text(title),
-          subtitle: Text(subtitle),
-          trailing: Icon(external ? Icons.open_in_new : Icons.chevron_right, size: external ? 18 : 24),
-          onTap: () => onOpen(item),
-        );
-    Widget header(String text) => Padding(
-          padding: const EdgeInsets.fromLTRB(Gap.l, Gap.l, Gap.l, Gap.xs),
-          child: Semantics(
-            header: true,
-            child: Text(text, style: t.textTheme.labelLarge?.copyWith(color: t.colorScheme.primary)),
-          ),
-        );
+    Widget row(MoreItem item, IconData icon, String title, String subtitle) => MoreRow(item, icon, title, subtitle, onOpen: onOpen);
     return Scaffold(
       appBar: AppBar(title: const Text('More')),
       body: SafeArea(
@@ -169,46 +173,15 @@ class _MoreListState extends State<MoreList> {
         child: ListView(
           key: const Key('more-list'),
           children: [
-            header('Your drives'),
             row(MoreItem.drives, Icons.list_alt, 'Drives', 'Your drives, reports and progress'),
-            header('Your radio'),
             row(MoreItem.radio, Icons.settings_input_antenna, 'Radio',
-                s.connected ? 'What your radio reports, compared with this region' : 'Not connected. Connect and see its settings'),
-            row(MoreItem.myRadios, Icons.verified_user_outlined, 'Claimed radios',
-                'Radios and repeaters you claimed and manage'),
+                s.connected ? 'Your radio, repeaters, rooms, sensors and radio tools' : 'Not connected. Repeaters, rooms and radio tools'),
             row(MoreItem.devices, Icons.key_outlined, 'Devices and keys', 'Your driver key, other phones, MeshMapper forwarding'),
-            header('Radios and tools'),
-            row(MoreItem.repeaters, Icons.cell_tower, 'Repeaters, rooms and radio tools',
-                'In Chat, under Radio: repeaters, rooms, sensors, Trace, Discover, Rx log, Adverts', keyName: 'network'),
-            row(MoreItem.noiseFloor, Icons.show_chart, 'Noise floor and health', 'Interference and radio counters, live'),
-            row(MoreItem.telemetry, Icons.thermostat, 'Telemetry', 'Battery, temperature and position of a node'),
-            row(MoreItem.radioSetup, Icons.tune, 'Radio setup', 'Name, position, power and frequency, with checks'),
-            row(MoreItem.observer, Icons.sensors, 'Observer', observerStatusLine(s)),
-            header('Community'),
             row(MoreItem.leaderboard, Icons.emoji_events_outlined, 'Leaderboard', 'Drivers who opted in, this region or every region'),
-            row(MoreItem.observerJoin, Icons.visibility_outlined, observerJoinTitle,
-                'Step by step: make your repeater report to MeshSonar. Free'),
-            header('App'),
-            row(MoreItem.chat, Icons.chat_bubble_outline, 'Chat', 'Quick replies, Return key, haptics'),
-            row(MoreItem.wardriving, Icons.radar, 'Wardriving settings',
-                'Send pings, channel, interval, distance, listen window'),
-            row(MoreItem.notifications, Icons.notifications_outlined, 'Notifications',
-                'Message alerts, previews, quiet hours, per-conversation mute'),
-            row(MoreItem.settings, Icons.settings, 'Settings', 'Units, maps, uploads, storage, diagnostics, your driver key'),
-            row(MoreItem.legend, Icons.palette_outlined, 'Colour legend', 'What the map colours mean'),
-            row(MoreItem.howItWorks, Icons.explore_outlined, 'How it works', 'From a ping to a coloured hexagon on the map, and a tour of the tabs'),
-            row(MoreItem.method, Icons.menu_book_outlined, 'Method', 'How the figures are made, and what they cannot say'),
-            header('Help and about'),
-            row(MoreItem.privacy, Icons.privacy_tip_outlined, 'Privacy and data sharing', 'What is shared, and how to stop it'),
-            ListTile(
-              key: const Key('more-report'),
-              leading: const Icon(Icons.flag_outlined),
-              title: const Text('Report a problem'),
-              subtitle: const Text('Send the team what went wrong'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => openReportProblem(context),
-            ),
-            row(MoreItem.myReports, Icons.report_gmailerrorred_outlined, 'My reports', 'Problem reports you sent and where they stand'),
+            row(MoreItem.observerJoin, Icons.visibility_outlined, observerJoinTitle, 'Step by step: make your repeater report to MeshSonar. Free'),
+            row(MoreItem.chat, Icons.chat_bubble_outline, 'Chat settings', 'Quick replies, Return key, haptics'),
+            row(MoreItem.settings, Icons.settings, 'Settings', 'Wardriving, notifications, observer, privacy, claimed radios, maps, storage'),
+            row(MoreItem.help, Icons.help_outline, 'Help', 'How it works, method, colour legend, report a problem'),
             ListTile(
               key: const Key('more-about'),
               minVerticalPadding: Gap.s,
@@ -217,14 +190,6 @@ class _MoreListState extends State<MoreList> {
               subtitle: Text('Version ${s.services.appInfo.version ?? ''}, licence, credits'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => onOpen(MoreItem.about),
-            ),
-            ListTile(
-              key: const Key('more-privacy-policy'),
-              leading: const Icon(Icons.policy_outlined),
-              title: const Text('Privacy policy'),
-              subtitle: const Text('Opens in your browser'),
-              trailing: const Icon(Icons.open_in_new, size: 18),
-              onTap: () => s.services.openUrl(Uri.parse(privacyPolicyUrl)),
             ),
             const SizedBox(height: Gap.xl),
           ],

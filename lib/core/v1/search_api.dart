@@ -90,7 +90,7 @@ class SearchHit {
         final slug = s(r['slug']) ?? region ?? '';
         title = s(r['name']) ?? slug.toUpperCase();
         sub = 'Region${slug.isEmpty ? '' : ' · ${slug.toUpperCase()}'}';
-        req ??= slug.isEmpty ? null : NetworkRequest.section(NetworkSection.now, region: slug);
+        req ??= slug.isEmpty ? null : NetworkRequest.section(NetworkSection.home, region: slug);
         return SearchHit(kind: kind, match: s(j['match']) ?? 'name', title: title, subtitle: sub, region: slug.isEmpty ? null : slug, request: req, web: web);
       case SearchKind.other:
         title = s(j['title']) ?? s(j['kind']) ?? 'Result';
@@ -196,7 +196,7 @@ List<SearchHit> localSearch(String query, LocalSearchIndex ix, {int perKind = 5}
       return ea != eb ? ea.compareTo(eb) : a.name.compareTo(b.name);
     });
   out.addAll(regs.take(perKind).map((r) => SearchHit(
-      kind: SearchKind.region, match: 'name', title: r.name, subtitle: 'Region · ${r.slug.toUpperCase()}', region: r.slug, request: NetworkRequest.section(NetworkSection.now, region: r.slug))));
+      kind: SearchKind.region, match: 'name', title: r.name, subtitle: 'Region · ${r.slug.toUpperCase()}', region: r.slug, request: NetworkRequest.section(NetworkSection.home, region: r.slug))));
   return out;
 }
 
