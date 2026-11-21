@@ -1,5 +1,5 @@
 // The Network tab's header (build 71): ONE 48 pt line, [region name, tap = region switcher] [pulse chip] [search]
-// [overflow: Share link, Export region report] (NetworkHeaderBar). On a narrow phone the name ellipsizes first, then the
+// [overflow: an action sheet with Share link and Export region report] (NetworkHeaderBar). On a narrow phone the name ellipsizes first, then the
 // pulse chip collapses to its dot; the search and overflow buttons always keep their 44 pt.
 // Its pieces (AZ-3.1): the pulse chip and the one-line summary. Both read the `/v1` client
 // (lib/core/v1/network_api.dart) for the viewed region's host and stay quiet when there is nothing to say:
@@ -20,7 +20,8 @@ import '../../core/network_request.dart';
 
 import '../../core/region_cache.dart' show asOfLabel;
 import '../../core/v1/network_api.dart';
-import '../design/app_surfaces.dart' show showAppSheet;
+import '../design/app_surfaces.dart' show AppAction, showAppActionSheet, showAppSheet;
+import '../design/app_symbols.dart';
 import '../region/region_common.dart' show groupInt, agoText;
 import '../shell/shell_controller.dart' show ShellScope;
 import '../theme.dart';
@@ -269,21 +270,25 @@ class NetworkHeaderBar extends StatelessWidget {
             SizedBox(
               width: 44,
               height: 44,
-              child: PopupMenuButton<String>(
+              child: IconButton(
                 key: const Key('network-overflow'),
                 tooltip: 'More',
                 padding: EdgeInsets.zero,
                 icon: const Icon(Icons.more_horiz),
-                onSelected: (v) => v == 'share' ? onShare?.call() : onExport?.call(),
-                itemBuilder: (_) => [
-                  if (onShare != null)
-                    const PopupMenuItem(key: Key('network-share'), value: 'share', child: ListTile(leading: Icon(Icons.ios_share), title: Text('Share link'), contentPadding: EdgeInsets.zero)),
-                  if (onExport != null)
-                    const PopupMenuItem(
-                        key: Key('region-report-export'),
-                        value: 'export',
-                        child: ListTile(leading: Icon(Icons.description_outlined), title: Text('Export region report'), contentPadding: EdgeInsets.zero)),
-                ],
+                onPressed: onShare == null && onExport == null
+                    ? null
+                    : () async {
+                        // The app's own action sheet (no Material popup menu: test/lint/widget_ban_test.dart).
+                        final v = await showAppActionSheet<String>(
+                          context,
+                          actions: [
+                            if (onShare != null) const AppAction('Share link', 'share', key: Key('network-share'), symbol: AppSymbols.squareAndArrowUp),
+                            if (onExport != null) const AppAction('Export region report', 'export', key: Key('region-report-export')),
+                          ],
+                        );
+                        if (v == 'share') onShare?.call();
+                        if (v == 'export') onExport?.call();
+                      },
               ),
             ),
           ]),

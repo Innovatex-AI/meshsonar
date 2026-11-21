@@ -212,7 +212,7 @@ void main() {
     expect(find.descendant(of: find.byKey(const Key('pulse-sheet')), matching: find.text('Traffic 2.4x the usual for a Thursday morning')), findsOneWidget);
     await tester.tapAt(const Offset(2, 2));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('region-report-export')), findsNothing, reason: 'one overflow menu, not a row of icons');
+    expect(find.byKey(const Key('region-report-export')), findsNothing, reason: 'one overflow (an action sheet), not a row of icons');
     await tester.tap(find.byKey(const Key('network-overflow')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('network-share')), findsOneWidget);

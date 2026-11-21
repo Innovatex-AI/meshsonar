@@ -189,14 +189,24 @@ void main() {
     expect(retired.hasMatch(copy), isFalse, reason: retired.firstMatch(copy)?.group(0));
   });
 
-  test('the observer guide and More use one name each: Set up a repeater observer, Observer, Claimed radios', () {
+  test('the observer guide, More and Settings use one name each: Set up a repeater observer, Observer, Claimed radios', () {
     expect(observerJoinTitle, 'Set up a repeater observer');
     expect(observerJoinIntro, contains('Settings > Observer'));
+    // Build 71: More keeps the guide's row (titled by observerJoinTitle itself); the Observer and Claimed radios rows moved
+    // into Settings, so those two names are checked where they live now: the Settings sections.
     final more = File('lib/ui/shell/more_tab.dart').readAsStringSync();
-    expect(more, contains("'Observer'"));
-    expect(more, contains("'Claimed radios'"));
+    expect(more, contains('row(MoreItem.observerJoin, Icons.visibility_outlined, observerJoinTitle'), reason: 'the More row uses the one title');
+    expect(RegExp(r"row\(MoreItem\.[A-Za-z]+, [A-Za-z_.]+, '(Observer|Claimed radios|My radios|Home observer)'").hasMatch(more), isFalse,
+        reason: 'More has no Observer or Claimed radios row under any name (they are Settings sections)');
     expect(settingsEntry('my-radios').title, 'Claimed radios');
     expect(settingsSections.firstWhere((s) => s.id == 'my-radios-section').title, 'Claimed radios');
     expect(settingsSections.firstWhere((s) => s.id == 'observer').title, 'Observer');
+    // One name each, everywhere: no section under an older name.
+    final titles = [for (final s in settingsSections) s.title];
+    expect(titles.where((t) => t == 'Observer').length, 1);
+    expect(titles.where((t) => t == 'Claimed radios').length, 1);
+    for (final old in ['My radios', 'My radios and claims', 'Home observer']) {
+      expect(titles, isNot(contains(old)), reason: old);
+    }
   });
 }
