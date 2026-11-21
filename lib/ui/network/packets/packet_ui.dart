@@ -180,3 +180,41 @@ class HexText extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Text(hex, maxLines: maxLines, overflow: maxLines == null ? null : TextOverflow.ellipsis, style: AppType.mono.copyWith(color: Theme.of(context).colorScheme.onSurface));
 }
+
+/// A scope no packet feed covers (`meta.status.code == no_packet_feed`, e.g. phx, swoh): said plainly, in place of
+/// an empty list or an error. [reason] is the server's own sentence. Find it by the key `no-packet-feed`.
+class NoPacketFeedCard extends StatelessWidget {
+  /// The region's name or slug; null says "here".
+  final String? regionName;
+  final String? reason;
+
+  /// What this screen would have shown, e.g. "packets" or "channel messages".
+  final String what;
+  const NoPacketFeedCard({super.key, this.regionName, this.reason, this.what = 'packets'});
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final c = t.colorScheme;
+    return Container(
+      key: const Key('no-packet-feed'),
+      margin: const EdgeInsets.all(Gap.l),
+      padding: const EdgeInsets.all(Gap.l),
+      decoration: BoxDecoration(color: c.surfaceContainerHigh, borderRadius: BorderRadius.circular(Corners.card)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(Icons.portable_wifi_off, color: c.onSurfaceVariant),
+          const SizedBox(width: Gap.s),
+          Expanded(
+            child: Text(regionName == null ? 'No packet feed here yet' : 'No packet feed for $regionName yet',
+                key: const Key('no-packet-feed-title'), style: t.textTheme.titleMedium),
+          ),
+        ]),
+        const SizedBox(height: Gap.s),
+        Text(reason ?? 'No observer or outside feed delivers packets for this region yet.', style: t.textTheme.bodyMedium),
+        const SizedBox(height: Gap.s),
+        Text('There are no $what to show until one does. Run an observer here, or pick another region at the top.',
+            style: t.textTheme.bodySmall?.copyWith(color: c.onSurfaceVariant)),
+      ]),
+    );
+  }
+}

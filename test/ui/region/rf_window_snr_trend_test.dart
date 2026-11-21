@@ -1,14 +1,12 @@
 // RF tab window selector (capability rfWindow) and the repeater detail's 30-day signal trend (capability snrDaily):
 // every state, the request each choice makes, the control absent without the capability, 2x text and dark mode.
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:meshsonar/core/repeater_detail_api.dart';
-import 'package:meshsonar/ui/region/repeater_detail_screen.dart';
 import 'package:meshsonar/ui/region/rf_panel.dart';
 import 'package:meshsonar/ui/region/snr_trend_card.dart';
 import 'package:meshsonar/ui/theme.dart';
@@ -173,40 +171,5 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    Future<void> screen(WidgetTester t, {required bool? cap, Object? daily}) async {
-      t.view.physicalSize = const Size(800, 5000);
-      t.view.devicePixelRatio = 1;
-      addTearDown(t.view.reset);
-      final j = jsonDecode(File('test/fixtures/region_repeater_cmh.json').readAsStringSync()) as Map<String, dynamic>;
-      if (daily != null) j['snrDaily'] = daily;
-      await t.pumpWidget(MaterialApp(
-        theme: meshSonarTheme(Brightness.light),
-        home: RepeaterDetailScreen(
-          key: UniqueKey(),
-          baseUrl: 'https://cmh.meshsonar.com',
-          regionSlug: 'cmh',
-          repeaterKey: 'da5dc89c937225aadced4a1cb8a689c0d34ccab96576a0d0f69f3186c879c854',
-          client: MockClient((_) async => http.Response.bytes(utf8.encode(jsonEncode(j)), 200)),
-          mapTiles: false,
-          now: DateTime.utc(2026, 10, 24, 2),
-          snrDaily: cap,
-        ),
-      ));
-      await t.pumpAndSettle();
-    }
-
-    final sample = [
-      for (var i = 0; i < 10; i++) {'day': '2026-10-${(10 + i).toString().padLeft(2, '0')}', 'meanDb': 3.0 + i % 3, 'n': 2},
-    ];
-
-    testWidgets('detail screen: shown with the capability and the field; hidden without either', (t) async {
-      await screen(t, cap: true, daily: sample);
-      expect(find.byKey(const Key('repdetail-snr-trend')), findsOneWidget);
-      await screen(t, cap: false, daily: sample);
-      expect(find.byKey(const Key('repdetail-snr-trend')), findsNothing);
-      await screen(t, cap: true); // older server: field absent
-      expect(find.byKey(const Key('repdetail-snr-trend')), findsNothing);
-      expect(find.byKey(const Key('repdetail-sparkline')), findsOneWidget); // the rest of the screen is untouched
-    });
   });
 }

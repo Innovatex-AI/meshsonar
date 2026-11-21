@@ -42,7 +42,9 @@ class _NetworkObserverScreenState extends State<NetworkObserverScreen> {
 
   Future<void> _reload() async {
     final f = _fetch();
-    setState(() => _f = f);
+    setState(() {
+      _f = f;
+    });
     try {
       await f;
     } catch (_) {}

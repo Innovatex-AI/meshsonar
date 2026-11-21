@@ -13,7 +13,7 @@ import 'package:latlong2/latlong.dart';
 import '../../core/live_stream.dart';
 import '../../core/region_packets_api.dart' show packetTypeName, packetRouteName;
 import '../widgets.dart';
-import 'packet_detail_screen.dart';
+import '../network/packets/packet_detail_screen.dart' show openNetworkPacket;
 import 'region_common.dart';
 
 class LivePanel extends StatefulWidget {
@@ -195,7 +195,7 @@ class _LivePanelState extends State<LivePanel> with WidgetsBindingObserver {
                   separatorBuilder: (_, _) => const Divider(height: 1),
                   itemBuilder: (_, i) => _LiveRow(
                     packet: _rows[i],
-                    onTap: () => openPacketDetail(context, baseUrl: widget.baseUrl, regionSlug: widget.regionSlug, hash: _rows[i].hash),
+                    onTap: () => openNetworkPacket(context, baseUrl: widget.baseUrl, regionSlug: widget.regionSlug, hash: _rows[i].hash),
                   ),
                 ),
         ),

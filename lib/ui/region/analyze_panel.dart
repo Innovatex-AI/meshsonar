@@ -11,7 +11,7 @@ import '../../core/analyze_model.dart';
 import '../../core/zone_time.dart';
 import '../network/network_header.dart' show WhatChangedCard;
 import '../theme.dart';
-import 'repeater_detail_screen.dart' show openRepeaterDetail;
+import '../network/nodes/node_routes.dart' show openNetworkNode;
 
 class AnalyzePanel extends StatefulWidget {
   /// Region host (the server picks the region by host).
@@ -491,7 +491,7 @@ class _RepeaterLink extends StatelessWidget {
   Widget build(BuildContext context) => GestureDetector(
     key: Key('repeater-link:$repeaterKey'),
     behavior: HitTestBehavior.opaque,
-    onTap: () => openRepeaterDetail(context, baseUrl: baseUrl, regionSlug: slug, repeaterKey: repeaterKey),
+    onTap: () => openNetworkNode(context, baseUrl: baseUrl, regionSlug: slug, nodeKey: repeaterKey),
     child: Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Text(
