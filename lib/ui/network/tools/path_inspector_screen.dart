@@ -8,6 +8,7 @@ import '../../../core/v1/tools_api.dart';
 import '../../design/state_views.dart';
 import '../../design/app_symbols.dart';
 import '../../design/tokens.dart';
+import '../analytics/in_place_header.dart';
 import 'tool_common.dart';
 
 class PathInspectorScreen extends StatefulWidget {
@@ -19,7 +20,10 @@ class PathInspectorScreen extends StatefulWidget {
 
   /// Test seam.
   final ToolsApi? api;
-  const PathInspectorScreen({super.key, required this.baseUrl, required this.regionSlug, this.initialHops, this.api});
+
+  /// Given: the tool sits in place inside the Tools section and its back arrow calls this (see ToolFrame).
+  final VoidCallback? onClose;
+  const PathInspectorScreen({super.key, required this.baseUrl, required this.regionSlug, this.initialHops, this.api, this.onClose});
 
   @override
   State<PathInspectorScreen> createState() => _PathInspectorScreenState();
@@ -89,11 +93,11 @@ class _PathInspectorScreenState extends State<PathInspectorScreen> {
   Widget build(BuildContext context) {
     final t = Theme.of(context);
     final r = _result;
-    return Scaffold(
-      key: const Key('tool-path'),
-      appBar: AppBar(title: const Text('Path Inspector')),
-      body: SafeArea(
-        child: ListView(padding: kToolPagePadding, children: [
+    return ToolFrame(
+      frameKey: const Key('tool-path'),
+      title: 'Path Inspector',
+      onClose: widget.onClose,
+      body: ListView(padding: kToolPagePadding, children: [
           Text('Type the hop prefixes from a packet, in order. The app shows the full routes they most likely stand for.', style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant)),
           const SizedBox(height: Gap.m),
           TextField(
@@ -137,7 +141,6 @@ class _PathInspectorScreenState extends State<PathInspectorScreen> {
           if (_error != null) ToolErrorLine(_error!, key: const Key('path-error')),
           if (r != null) ..._results(context, r),
         ]),
-      ),
     );
   }
 
@@ -170,7 +173,7 @@ class _PathInspectorScreenState extends State<PathInspectorScreen> {
     final t = Theme.of(context);
     final open = _open == c.rank;
     final names = c.hops.map((h) => h.node?.label ?? h.prefix).join(' → ');
-    final facts = ['${(c.score * 100).round()}% match', if (c.totalKm != null) kmText(c.totalKm!)].join(' · ');
+    final facts = ['${(c.score * 100).round()}% match', if (c.totalKm != null) distanceText(context, c.totalKm!)].join(' · ');
     return ToolCard(
       key: Key('path-candidate-${c.rank}'),
       padding: const EdgeInsets.symmetric(horizontal: Gap.m),

@@ -23,40 +23,24 @@ Future<void> showRow(WidgetTester tester, String key) async {
 }
 
 void main() {
-  // Chat WP11 moved Trace, Discover, Adverts and Rx log to Chat > Radio > Tools; More keeps one "network" row that leads there
-  // (reachability of the moved tools: test/ui/network/more_links_test.dart).
-  testWidgets('More has a "Radios and tools" group: the Network row, then the tools that stayed, in order', (tester) async {
-    useTallScreen(tester);
-    final h = Harness();
-    await h.pumpApp(tester);
-    await openMore(tester);
-    expect(find.text('Radios and tools'), findsOneWidget);
-    final keys = ['network', 'noiseFloor', 'telemetry', 'radioSetup'];
-    // The list is lazy: scroll to each row, and check the order by the row's place in the list's scroll space.
-    final list = find.byKey(const Key('more-list'));
-    final top = tester.getTopLeft(list).dy;
-    final order = <double>[];
-    final scrollable = tester.state<ScrollableState>(find.descendant(of: list, matching: find.byType(Scrollable)).first);
-    for (final k in keys) {
-      await showRow(tester, 'more-$k');
-      expect(find.byKey(Key('more-$k')), findsOneWidget, reason: k);
-      order.add(scrollable.position.pixels + tester.getTopLeft(find.byKey(Key('more-$k'))).dy - top);
-    }
-    expect([...order]..sort(), order);
-  });
-
+  // Build 71: the radio tools live once in Network > Tools (test/ui/network/tools); More keeps one Radio row whose
+  // screen holds the radio's own settings and the tools that need no network (layout: test/ui/network/more_links_test.dart).
   for (final (item, id, title) in [
     ('noiseFloor', 'noise', 'Noise floor and health'),
     ('telemetry', 'telemetry', 'Telemetry'),
     ('radioSetup', 'radio-setup', 'Radio setup'),
   ]) {
-    testWidgets('$title opens from More; with no radio it says so and offers to connect', (tester) async {
+    testWidgets('$title opens from More > Radio; with no radio it says so and offers to connect', (tester) async {
       useTallScreen(tester);
       final h = Harness();
       await h.pumpApp(tester);
       await openMore(tester);
-      await showRow(tester, 'more-$item');
-      await tester.tap(find.byKey(Key('more-$item')));
+      await showRow(tester, 'more-radio');
+      await tester.tap(find.byKey(const Key('more-radio')));
+      await tester.pumpAndSettle();
+      final row = find.byKey(Key('more-$item'));
+      await tester.scrollUntilVisible(row, 200, scrollable: find.descendant(of: find.byKey(const Key('more-radio-list')), matching: find.byType(Scrollable)).first);
+      await tester.tap(row);
       await tester.pumpAndSettle();
       expect(find.byKey(Key('tool-$id')), findsOneWidget);
       expect(find.text('Radio not connected'), findsOneWidget);

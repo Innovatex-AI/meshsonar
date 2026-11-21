@@ -1,9 +1,11 @@
 // Network > Tools (build 71, stream D). One list, three groups:
 // - Network tools, native on `/v1`: Path Inspector, Trace Viewer, Prefix Tool, Decode a packet.
-// - Site pages shown inside the app ([SitePageView]): Scope Audit, Compare observers, Region definition, Status.
+// - Site pages shown inside the app ([SitePageView]): Scope Audit, Compare observers, Region definition, Status, and the
+//   site tools with no native twin (Airtime and load, Point-to-point link, Coverage painter).
 // - Radio tools (lib/ui/tools): Trace path, Discover, Adverts, Rx log, Noise floor, Telemetry. They live here once; each
 //   says so itself when no radio is connected. A radio trace's result opens in the native Trace Viewer.
-// `initialTool` (from a `/tools/<id>` link) opens that tool straight away with `initialArg`; an unknown id shows the list.
+// `initialTool` (from a `/tools/<id>` link) shows that tool in place inside the section with `initialArg`, under a back
+// arrow to the list; an unknown id shows the list. A row tapped in the list opens the tool as its own page.
 import 'package:flutter/material.dart';
 
 import '../../radio/inset_list.dart';
@@ -13,6 +15,7 @@ import '../../tools/noise_screen.dart';
 import '../../tools/rx_log_screen.dart';
 import '../../tools/telemetry_screen.dart';
 import '../../tools/trace_screen.dart';
+import '../analytics/in_place_header.dart';
 import '../analytics/site_page_view.dart';
 import '../packets/decode_packet_screen.dart';
 import 'path_inspector_screen.dart';
@@ -38,6 +41,10 @@ const List<ToolEntry> toolEntries = [
   ToolEntry('compare', 'Compare observers', 'What two observers both hear, and what only one does', ToolGroup.site, aliases: ['observers-compare']),
   ToolEntry('definition', 'Region definition', 'The regions and scope names covering a point', ToolGroup.site, aliases: ['region', 'region-def']),
   ToolEntry('status', 'Status', 'Whether packets are arriving and the summaries are current', ToolGroup.site),
+  // Site tools with no native twin here: the link parser passes `/tools/<name>` through with these ids.
+  ToolEntry('airtime', 'Airtime and load', 'Time on air for a packet and how busy the channel is', ToolGroup.site),
+  ToolEntry('link', 'Point-to-point link', 'Will two points hear each other: terrain and link budget', ToolGroup.site),
+  ToolEntry('painter', 'Coverage painter', 'Estimated coverage from a site you pick', ToolGroup.site),
   ToolEntry('radio-trace', 'Trace path', 'Send a trace from your radio along a chain of repeaters', ToolGroup.radio, aliases: ['trace-path']),
   ToolEntry('discover', 'Discover', 'Ask nearby repeaters to answer your radio', ToolGroup.radio),
   ToolEntry('adverts', 'Adverts', 'Adverts your radio has heard', ToolGroup.radio),
@@ -67,6 +74,7 @@ String sitePathOfTool(String id, String? arg) {
     'scope-audit' => '/scope-audit',
     'compare' => '/observers/compare',
     'definition' => '/tools/region',
+    'airtime' || 'link' || 'painter' => '/tools/$id',
     _ => '/status',
   };
   if (a.isEmpty) return base;
@@ -82,8 +90,9 @@ class ToolsSection extends StatefulWidget {
   final String baseUrl;
   final String? regionSlug;
 
-  /// A tool to open straight away: `path`, `trace`, `prefix`, `decode`, `scope-audit`, `compare`, `definition`,
-  /// `status`, or a radio tool (`radio-trace`, `discover`, `adverts`, `rx-log`, `noise`, `telemetry`); null or an
+  /// A tool to open straight away, as the link parser (lib/core/network_request.dart) names it: `path` (argument: the
+  /// `?hops=` list), `trace` (the hash of `/tools/trace/<hash>`), `prefix` (`?prefix=`), `decode`, `scope-audit`,
+  /// `compare`, `definition`, `status`, a site tool passed through (`airtime`, `link`, `painter`), or a radio tool (`radio-trace`, `discover`, `adverts`, `rx-log`, `noise`, `telemetry`); null or an
   /// unknown id shows the list.
   final String? initialTool;
 
@@ -96,43 +105,73 @@ class ToolsSection extends StatefulWidget {
 }
 
 class _ToolsSectionState extends State<ToolsSection> {
+  /// The tool a link opened, shown in place inside the section (no page is pushed over the Network tab). Null = the
+  /// list. Radio tools are never link targets; asked for by id they open as their own page.
+  ToolEntry? _shown;
+  String? _shownArg;
+
   @override
   void initState() {
     super.initState();
-    _openInitial();
+    _showInitial();
   }
 
   @override
   void didUpdateWidget(ToolsSection old) {
     super.didUpdateWidget(old);
-    if (widget.initialTool != null && (widget.initialTool != old.initialTool || widget.initialArg != old.initialArg)) _openInitial();
+    if (widget.initialTool != old.initialTool || widget.initialArg != old.initialArg || widget.baseUrl != old.baseUrl) _showInitial();
   }
 
-  void _openInitial() {
+  /// An unknown id, or none, shows the list.
+  void _showInitial() {
     final e = toolEntryOf(widget.initialTool);
-    if (e == null) return;
-    final arg = widget.initialArg;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _open(e, arg: arg);
-    });
+    final a = (widget.initialArg ?? '').trim();
+    _shown = e == null || e.group == ToolGroup.radio ? null : e;
+    _shownArg = a.isEmpty ? null : a;
+    if (e != null && e.group == ToolGroup.radio) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _open(e);
+      });
+    }
   }
 
-  void _open(ToolEntry e, {String? arg}) {
-    final a = (arg ?? '').trim().isEmpty ? null : arg!.trim();
-    final Widget page = switch (e.id) {
-      'path' => PathInspectorScreen(baseUrl: widget.baseUrl, regionSlug: widget.regionSlug, initialHops: a),
-      'trace' => TraceViewerScreen(baseUrl: widget.baseUrl, regionSlug: widget.regionSlug, initialHash: a),
-      'prefix' => PrefixToolScreen(baseUrl: widget.baseUrl, regionSlug: widget.regionSlug, initialPrefix: a),
-      'decode' => DecodePacketScreen(baseUrl: widget.baseUrl, regionSlug: widget.regionSlug, initialHex: a),
-      'radio-trace' => const TraceScreen(),
-      'discover' => const DiscoverScreen(),
-      'adverts' => const AdvertsScreen(),
-      'rx-log' => const RxLogScreen(),
-      'noise' => const NoiseScreen(),
-      'telemetry' => const TelemetryScreen(),
-      _ => SitePageView(baseUrl: widget.baseUrl, path: sitePathOfTool(e.id, a), title: e.title),
-    };
-    Navigator.of(context).push(MaterialPageRoute<void>(settings: RouteSettings(name: '/tools/${e.id}'), builder: (_) => page));
+  void _close() => setState(() {
+        _shown = null;
+        _shownArg = null;
+      });
+
+  /// The tool's page: in place under a back arrow when [onClose] is given, else a screen of its own.
+  Widget _page(ToolEntry e, String? a, {VoidCallback? onClose}) => switch (e.id) {
+        'path' => PathInspectorScreen(baseUrl: widget.baseUrl, regionSlug: widget.regionSlug, initialHops: a, onClose: onClose),
+        'trace' => TraceViewerScreen(baseUrl: widget.baseUrl, regionSlug: widget.regionSlug, initialHash: a, onClose: onClose),
+        'prefix' => PrefixToolScreen(baseUrl: widget.baseUrl, regionSlug: widget.regionSlug, initialPrefix: a, onClose: onClose),
+        'decode' => onClose == null
+            ? DecodePacketScreen(baseUrl: widget.baseUrl, regionSlug: widget.regionSlug, initialHex: a)
+            // The decode screen (lib/ui/network/packets) brings its own app bar; in place the section's header replaces
+            // it, so that bar is given no height here.
+            : Column(children: [
+                InPlaceHeader(title: e.title, onBack: onClose, backLabel: 'Back to Tools'),
+                Expanded(
+                  child: Theme(
+                    data: Theme.of(context).copyWith(appBarTheme: Theme.of(context).appBarTheme.copyWith(toolbarHeight: 0)),
+                    child: MediaQuery.removePadding(context: context, removeTop: true, child: DecodePacketScreen(baseUrl: widget.baseUrl, regionSlug: widget.regionSlug, initialHex: a)),
+                  ),
+                ),
+              ]),
+        'radio-trace' => const TraceScreen(),
+        'discover' => const DiscoverScreen(),
+        'adverts' => const AdvertsScreen(),
+        'rx-log' => const RxLogScreen(),
+        'noise' => const NoiseScreen(),
+        'telemetry' => const TelemetryScreen(),
+        _ => onClose == null
+            ? SitePageView(baseUrl: widget.baseUrl, path: sitePathOfTool(e.id, a), title: e.title)
+            : SitePageView.inPlace(baseUrl: widget.baseUrl, path: sitePathOfTool(e.id, a), title: e.title, onClose: onClose),
+      };
+
+  /// A row tapped in the list opens the tool as its own page.
+  void _open(ToolEntry e) {
+    Navigator.of(context).push(MaterialPageRoute<void>(settings: RouteSettings(name: '/tools/${e.id}'), builder: (_) => _page(e, null)));
   }
 
   List<Widget> _rows(ToolGroup g) => [
@@ -142,6 +181,10 @@ class _ToolsSectionState extends State<ToolsSection> {
 
   @override
   Widget build(BuildContext context) {
+    final shown = _shown;
+    if (shown != null) {
+      return KeyedSubtree(key: ValueKey('tools-in-place-${widget.baseUrl}-${shown.id}-$_shownArg'), child: _page(shown, _shownArg, onClose: _close));
+    }
     return ListView(
       key: const Key('tools-section'),
       padding: const EdgeInsets.only(top: 12, bottom: 24),

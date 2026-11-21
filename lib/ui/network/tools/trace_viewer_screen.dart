@@ -16,6 +16,7 @@ import '../../region/region_common.dart' show agoText, clockUtc;
 import '../nodes/node_routes.dart';
 import '../packets/packet_detail_screen.dart' show openNetworkPacket;
 import '../packets/packet_ui.dart' show HopConfidenceBadge;
+import '../analytics/in_place_header.dart';
 import 'tool_common.dart';
 
 final _hash = RegExp(r'^[0-9a-f]{16}$');
@@ -33,7 +34,10 @@ class TraceViewerScreen extends StatefulWidget {
   /// Test seams.
   final ToolsApi? api;
   final DateTime Function()? clock;
-  const TraceViewerScreen({super.key, required this.baseUrl, required this.regionSlug, this.initialHash, this.api, this.clock}) : local = null;
+
+  /// Given: the tool sits in place inside the Tools section and its back arrow calls this (see ToolFrame).
+  final VoidCallback? onClose;
+  const TraceViewerScreen({super.key, required this.baseUrl, required this.regionSlug, this.initialHash, this.api, this.clock, this.onClose}) : local = null;
 
   /// The radio's own result of a trace.
   const TraceViewerScreen.local(TraceResult this.local, {super.key})
@@ -41,7 +45,8 @@ class TraceViewerScreen extends StatefulWidget {
         regionSlug = null,
         initialHash = null,
         api = null,
-        clock = null;
+        clock = null,
+        onClose = null;
 
   @override
   State<TraceViewerScreen> createState() => _TraceViewerScreenState();
@@ -137,12 +142,11 @@ class _TraceViewerScreenState extends State<TraceViewerScreen> {
   @override
   Widget build(BuildContext context) {
     final local = widget.local;
-    return Scaffold(
-      key: const Key('tool-trace-viewer'),
-      appBar: AppBar(title: const Text('Trace Viewer')),
-      body: SafeArea(
-        child: ListView(padding: kToolPagePadding, children: local != null ? _localBody(context, local) : _serverBody(context)),
-      ),
+    return ToolFrame(
+      frameKey: const Key('tool-trace-viewer'),
+      title: 'Trace Viewer',
+      onClose: widget.onClose,
+      body: ListView(padding: kToolPagePadding, children: local != null ? _localBody(context, local) : _serverBody(context)),
     );
   }
 
@@ -379,7 +383,7 @@ class _TraceViewerScreenState extends State<TraceViewerScreen> {
               'Sent ${two(l.hour)}:${two(l.minute)}:${two(l.second)}',
               if (r.elapsed != null) 'answered in ${(r.elapsed!.inMilliseconds / 1000).toStringAsFixed(1)} s',
               '${r.hashSize}-byte hashes',
-              if (km != null) kmText(km),
+              if (km != null) distanceText(context, km),
             ].join(' · '),
             style: dim,
           ),
@@ -400,7 +404,7 @@ class _TraceViewerScreenState extends State<TraceViewerScreen> {
             node: null,
             missing: r.hops[i].stop.name,
             detail: [
-              if (r.hops[i].distanceKm != null) kmText(r.hops[i].distanceKm!),
+              if (r.hops[i].distanceKm != null) distanceText(context, r.hops[i].distanceKm!),
               if (r.hops[i].ambiguous) 'another node shares this hash',
             ].join(' · ').nullIfEmpty,
             trailing: SnrBar(r.hops[i].snrDb),
