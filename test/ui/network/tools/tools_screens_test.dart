@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:meshsonar/core/network_request.dart';
 import 'package:meshsonar/core/v1/tools_api.dart';
 import 'package:meshsonar/core/v1/v1_client.dart' show resetV1NotLive;
 import 'package:meshsonar/radio/tools/trace_tool.dart';
@@ -99,7 +100,7 @@ void main() {
   });
 
   test('tool ids, aliases and site paths', () {
-    for (final id in ['path', 'trace', 'prefix', 'scope-audit', 'compare', 'definition', 'status', 'decode']) {
+    for (final id in ['path', 'trace', 'prefix', 'scope-audit', 'compare', 'definition', 'status', 'decode', 'airtime', 'link', 'painter']) {
       expect(toolEntryOf(id), isNotNull, reason: id);
     }
     expect(toolEntryOf('RXLOG')!.id, 'rx-log');
@@ -111,6 +112,7 @@ void main() {
     expect(sitePathOfTool('definition', '39.96, -83.0'), '/tools/region?lat=39.96&lon=-83.0');
     expect(sitePathOfTool('definition', 'somewhere'), '/tools/region');
     expect(sitePathOfTool('status', 'https://evil.example/x'), '/status');
+    expect(sitePathOfTool('painter', null), '/tools/painter');
   });
 
   testWidgets('initialTool opens the tool with its argument; an unknown id shows the list', (tester) async {
@@ -130,6 +132,51 @@ void main() {
     expect(find.text('Status'), findsWidgets);
 
     await pump(tester, const Scaffold(body: ToolsSection(key: Key('d'), baseUrl: base, regionSlug: 'cmh', initialTool: 'nope', initialArg: 'x')));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byKey(const Key('tools-section')), findsOneWidget);
+    expect(find.byType(SitePageView), findsNothing);
+  });
+
+  // What stream A's link parser sends for each site address is what ToolsSection must open.
+  final links = <String, (Type, String?)>{
+    '/tools/path?hops=a1,3f': (PathInspectorScreen, null),
+    '/tools/path': (PathInspectorScreen, null),
+    '/tools/trace/$traceHash': (TraceViewerScreen, null),
+    '/tools/trace': (TraceViewerScreen, null),
+    '/analytics/prefix-tool?prefix=a1': (PrefixToolScreen, null),
+    '/tools/decode': (DecodePacketScreen, null),
+    '/scope-audit': (SitePageView, '/scope-audit'),
+    '/observers/compare': (SitePageView, '/observers/compare'),
+    '/tools/region': (SitePageView, '/tools/region'),
+    '/status': (SitePageView, '/status'),
+    '/tools/airtime': (SitePageView, '/tools/airtime'),
+    '/tools/link': (SitePageView, '/tools/link'),
+    '/tools/painter': (SitePageView, '/tools/painter'),
+  };
+  for (final e in links.entries) {
+    testWidgets('link ${e.key} opens ${e.value.$1}', (tester) async {
+      final r = NetworkRequest.parse(Uri.parse('$base${e.key}'))!;
+      expect(r.section, NetworkSection.tools);
+      await pump(tester, Scaffold(body: ToolsSection(baseUrl: base, regionSlug: 'cmh', initialTool: r.tool, initialArg: r.toolArg)));
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump();
+      expect(find.byType(e.value.$1), findsOneWidget);
+      if (e.value.$2 != null) expect(tester.widget<SitePageView>(find.byType(SitePageView)).path, e.value.$2);
+      if (e.key.contains('hops=')) {
+        expect(jsonDecode(server.seen.single.body), {'hops': ['a1', '3f'], 'hashSize': 1});
+        expect(find.byKey(const Key('path-candidate-1')), findsOneWidget);
+      }
+      if (e.key.endsWith(traceHash)) expect(find.byKey(const Key('trace-summary')), findsOneWidget);
+      if (e.key.contains('prefix=')) expect(server.seen.single.url.queryParameters, {'prefix': 'a1'});
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(seconds: 30));
+    });
+  }
+
+  testWidgets('a /tools/<name> the app does not know shows the list', (tester) async {
+    final r = NetworkRequest.parse(Uri.parse('$base/tools/whatever'))!;
+    await pump(tester, Scaffold(body: ToolsSection(baseUrl: base, regionSlug: 'cmh', initialTool: r.tool, initialArg: r.toolArg)));
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byKey(const Key('tools-section')), findsOneWidget);
     expect(find.byType(SitePageView), findsNothing);

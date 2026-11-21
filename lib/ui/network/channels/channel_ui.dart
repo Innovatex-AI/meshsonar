@@ -12,10 +12,10 @@ import '../packets/packet_ui.dart' show snrText;
 String messageTimeText(BuildContext context, DateTime at, {DateTime? now}) {
   final l = at.toLocal();
   final n = (now ?? DateTime.now()).toLocal();
-  final hm = TimeOfDay.fromDateTime(l).format(context);
-  if (l.year == n.year && l.month == n.month && l.day == n.day) return hm;
+  final clock = TimeOfDay.fromDateTime(l).format(context);
+  if (l.year == n.year && l.month == n.month && l.day == n.day) return clock;
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return '${months[l.month - 1]} ${l.day}, $hm';
+  return '${months[l.month - 1]} ${l.day}, $clock';
 }
 
 /// One message. Tap opens its packet; the trailing button (44 pt) opens the actions (report, packet, copy).

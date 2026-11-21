@@ -379,7 +379,7 @@ class _TraceViewerScreenState extends State<TraceViewerScreen> {
               'Sent ${two(l.hour)}:${two(l.minute)}:${two(l.second)}',
               if (r.elapsed != null) 'answered in ${(r.elapsed!.inMilliseconds / 1000).toStringAsFixed(1)} s',
               '${r.hashSize}-byte hashes',
-              if (km != null) kmText(km),
+              if (km != null) distanceText(context, km),
             ].join(' · '),
             style: dim,
           ),
@@ -400,7 +400,7 @@ class _TraceViewerScreenState extends State<TraceViewerScreen> {
             node: null,
             missing: r.hops[i].stop.name,
             detail: [
-              if (r.hops[i].distanceKm != null) kmText(r.hops[i].distanceKm!),
+              if (r.hops[i].distanceKm != null) distanceText(context, r.hops[i].distanceKm!),
               if (r.hops[i].ambiguous) 'another node shares this hash',
             ].join(' · ').nullIfEmpty,
             trailing: SnrBar(r.hops[i].snrDb),

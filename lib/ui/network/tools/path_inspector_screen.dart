@@ -170,7 +170,7 @@ class _PathInspectorScreenState extends State<PathInspectorScreen> {
     final t = Theme.of(context);
     final open = _open == c.rank;
     final names = c.hops.map((h) => h.node?.label ?? h.prefix).join(' → ');
-    final facts = ['${(c.score * 100).round()}% match', if (c.totalKm != null) kmText(c.totalKm!)].join(' · ');
+    final facts = ['${(c.score * 100).round()}% match', if (c.totalKm != null) distanceText(context, c.totalKm!)].join(' · ');
     return ToolCard(
       key: Key('path-candidate-${c.rank}'),
       padding: const EdgeInsets.symmetric(horizontal: Gap.m),

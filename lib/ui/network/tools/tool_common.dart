@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/v1/tools_api.dart';
+import '../../app.dart' show AppScope;
 import '../../design/tokens.dart';
 import '../../theme.dart';
 import '../nodes/node_routes.dart';
@@ -151,5 +152,6 @@ class SnrBar extends StatelessWidget {
   }
 }
 
-/// Kilometres as the tools print them.
-String kmText(double km) => km < 10 ? '${km.toStringAsFixed(1)} km' : '${km.round()} km';
+/// A distance the server gave in kilometres, in the person's units (Settings > Units), like every other distance in
+/// the app.
+String distanceText(BuildContext context, double km) => AppScope.unitsOf(context).distance(km * 1000);

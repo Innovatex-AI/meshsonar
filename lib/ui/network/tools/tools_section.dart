@@ -1,6 +1,7 @@
 // Network > Tools (build 71, stream D). One list, three groups:
 // - Network tools, native on `/v1`: Path Inspector, Trace Viewer, Prefix Tool, Decode a packet.
-// - Site pages shown inside the app ([SitePageView]): Scope Audit, Compare observers, Region definition, Status.
+// - Site pages shown inside the app ([SitePageView]): Scope Audit, Compare observers, Region definition, Status, and the
+//   site tools with no native twin (Airtime and load, Point-to-point link, Coverage painter).
 // - Radio tools (lib/ui/tools): Trace path, Discover, Adverts, Rx log, Noise floor, Telemetry. They live here once; each
 //   says so itself when no radio is connected. A radio trace's result opens in the native Trace Viewer.
 // `initialTool` (from a `/tools/<id>` link) opens that tool straight away with `initialArg`; an unknown id shows the list.
@@ -38,6 +39,10 @@ const List<ToolEntry> toolEntries = [
   ToolEntry('compare', 'Compare observers', 'What two observers both hear, and what only one does', ToolGroup.site, aliases: ['observers-compare']),
   ToolEntry('definition', 'Region definition', 'The regions and scope names covering a point', ToolGroup.site, aliases: ['region', 'region-def']),
   ToolEntry('status', 'Status', 'Whether packets are arriving and the summaries are current', ToolGroup.site),
+  // Site tools with no native twin here: the link parser passes `/tools/<name>` through with these ids.
+  ToolEntry('airtime', 'Airtime and load', 'Time on air for a packet and how busy the channel is', ToolGroup.site),
+  ToolEntry('link', 'Point-to-point link', 'Will two points hear each other: terrain and link budget', ToolGroup.site),
+  ToolEntry('painter', 'Coverage painter', 'Estimated coverage from a site you pick', ToolGroup.site),
   ToolEntry('radio-trace', 'Trace path', 'Send a trace from your radio along a chain of repeaters', ToolGroup.radio, aliases: ['trace-path']),
   ToolEntry('discover', 'Discover', 'Ask nearby repeaters to answer your radio', ToolGroup.radio),
   ToolEntry('adverts', 'Adverts', 'Adverts your radio has heard', ToolGroup.radio),
@@ -67,6 +72,7 @@ String sitePathOfTool(String id, String? arg) {
     'scope-audit' => '/scope-audit',
     'compare' => '/observers/compare',
     'definition' => '/tools/region',
+    'airtime' || 'link' || 'painter' => '/tools/$id',
     _ => '/status',
   };
   if (a.isEmpty) return base;
@@ -82,8 +88,9 @@ class ToolsSection extends StatefulWidget {
   final String baseUrl;
   final String? regionSlug;
 
-  /// A tool to open straight away: `path`, `trace`, `prefix`, `decode`, `scope-audit`, `compare`, `definition`,
-  /// `status`, or a radio tool (`radio-trace`, `discover`, `adverts`, `rx-log`, `noise`, `telemetry`); null or an
+  /// A tool to open straight away, as the link parser (lib/core/network_request.dart) names it: `path` (argument: the
+  /// `?hops=` list), `trace` (the hash of `/tools/trace/<hash>`), `prefix` (`?prefix=`), `decode`, `scope-audit`,
+  /// `compare`, `definition`, `status`, a site tool passed through (`airtime`, `link`, `painter`), or a radio tool (`radio-trace`, `discover`, `adverts`, `rx-log`, `noise`, `telemetry`); null or an
   /// unknown id shows the list.
   final String? initialTool;
 

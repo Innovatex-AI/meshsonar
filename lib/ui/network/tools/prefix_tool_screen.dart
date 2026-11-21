@@ -124,7 +124,7 @@ class _PrefixToolScreenState extends State<PrefixToolScreen> {
     final dim = t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant);
     final checks = [for (final c in r.checks) if (c.prefix != null) c];
     final overview = [
-      if (r.repeaters != null) '${r.repeaters} repeaters and rooms${r.radiusKm == null ? '' : ' within ${r.radiusKm!.round()} km'}',
+      if (r.repeaters != null) '${r.repeaters} repeaters and rooms${r.radiusKm == null ? '' : ' within ${distanceText(context, r.radiusKm!)}'}',
       if (r.freeOneByte != null) '${r.freeOneByte} one-byte prefix${r.freeOneByte == 1 ? '' : 'es'} still free',
     ].join(' · ');
     return [
@@ -143,7 +143,7 @@ class _PrefixToolScreenState extends State<PrefixToolScreen> {
               key: Key('prefix-suggestion-${s.prefix}'),
               materialTapTargetSize: MaterialTapTargetSize.padded,
               label: Text('${s.prefix}  ·  ${s.bytes} byte${s.bytes == 1 ? '' : 's'}', style: const TextStyle(fontFamily: 'monospace')),
-              tooltip: s.nearestUseKm == null ? 'Not in use nearby' : 'Nearest use ${kmText(s.nearestUseKm!)} away',
+              tooltip: s.nearestUseKm == null ? 'Not in use nearby' : 'Nearest use ${distanceText(context, s.nearestUseKm!)} away',
               onPressed: () => _pick(s.prefix),
             ),
         ]),
@@ -182,7 +182,7 @@ class _PrefixToolScreenState extends State<PrefixToolScreen> {
           Padding(
             padding: const EdgeInsets.only(top: Gap.xs),
             child: Text(
-              '${c.conflicts.length} node${c.conflicts.length == 1 ? '' : 's'} already use it${c.nearestConflictKm == null ? '' : ', the nearest ${kmText(c.nearestConflictKm!)} away'}.',
+              '${c.conflicts.length} node${c.conflicts.length == 1 ? '' : 's'} already use it${c.nearestConflictKm == null ? '' : ', the nearest ${distanceText(context, c.nearestConflictKm!)} away'}.',
               style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
             ),
           ),
