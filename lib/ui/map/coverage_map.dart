@@ -1371,8 +1371,22 @@ class _CoverageMapState extends State<CoverageMap> {
     if (!TileFetchGate.debugForceOffline.value) _tileReset.add(null);
   }
 
+  // The network came back after failed tile requests: every tile layer is asked again (throttled, see TileReask).
+  final TileReask _reask = TileReask();
+  Timer? _reaskTimer;
+  void _onTilesRecovered() {
+    if (!mounted || _reaskTimer != null) return;
+    _reaskTimer = Timer(_reask.waitAt(DateTime.now()), () {
+      _reaskTimer = null;
+      if (!mounted) return;
+      _reask.done(DateTime.now());
+      _tileReset.add(null);
+    });
+  }
+
   void _watchNetwork() {
     TileFetchGate.debugForceOffline.addListener(_onForcedOffline);
+    _tiles().gate.recoveries.addListener(_onTilesRecovered);
     final net = _pack.basemap.network;
     unawaited(net.current().then((k) {
       _tiles().gate.setPhoneOnline(k != NetworkKind.offline);
@@ -1653,8 +1667,10 @@ class _CoverageMapState extends State<CoverageMap> {
     unawaited(_netSub?.cancel());
     _offline.dispose();
     TileFetchGate.debugForceOffline.removeListener(_onForcedOffline);
+    _reaskTimer?.cancel();
+    _tileProvider?.gate.recoveries.removeListener(_onTilesRecovered);
     unawaited(_tileReset.close());
-    _tileProvider?.dispose();
+    _tileProvider?.close(); // the map owns the provider; a tile layer's own dispose() does not close it
     _pingScroll.dispose();
     _pack.basemap.removeListener(_onPacksChanged);
     _ownSource?.dispose();
@@ -1923,7 +1939,8 @@ class _CoverageMapState extends State<CoverageMap> {
             initialCameraFit: _initialFit,
             minZoom: 3,
             maxZoom: 18,
-            backgroundColor: mc.mapBackground,
+            // Where a tile is not drawn yet the map shows the STYLE's background (a Dark map stays dark), not the app theme's.
+            backgroundColor: _styleBackground(context, style, tiles) ?? mc.mapBackground,
             interactionOptions: InteractionOptions(
               flags: !widget.interactive
                   ? InteractiveFlag.none
@@ -2300,6 +2317,14 @@ class _CoverageMapState extends State<CoverageMap> {
       ),
     );
     return MapPanelHost(controller: _panelHost, bottomInset: _panelInset, panel: inspector, child: overlays);
+  }
+
+  /// The background of the vector style drawn now (ours; OpenFreeMap's styles use the same colours); null for Satellite and for
+  /// a map that draws no tiles.
+  Color? _styleBackground(BuildContext context, BaseMapStyle style, bool tiles) {
+    if (!tiles || !style.isVector) return null;
+    final dark = style.darkLook ?? Theme.of(context).brightness == Brightness.dark;
+    return basemapBackgroundColor(BasemapSource.ours, dark: dark, look: style.look);
   }
 
   /// The top-leading slot's content with the legend card under it (the app keeps the lower-left corner free, Drive plan 9.3, so
