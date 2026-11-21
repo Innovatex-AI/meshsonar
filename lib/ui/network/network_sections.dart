@@ -357,7 +357,9 @@ class _BusiestRegionsState extends State<BusiestRegions> {
     if (old.hubUrl != widget.hubUrl) _f = fetchBusyRegions(widget.hubUrl, limit: widget.limit);
   }
 
-  void _retry() => setState(() => _f = fetchBusyRegions(widget.hubUrl, limit: widget.limit));
+  void _retry() => setState(() {
+        _f = fetchBusyRegions(widget.hubUrl, limit: widget.limit);
+      });
 
   static String _rate(double perMin) => perMin >= 10 ? perMin.round().toString() : perMin.toStringAsFixed(1);
 

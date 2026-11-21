@@ -57,7 +57,14 @@ void main() {
       for (final t in ['Chat', 'Drive', 'Network', 'Plan', 'More']) {
         expect(find.descendant(of: find.byKey(const Key('shell-tabs')), matching: find.text(t)), findsOneWidget, reason: t);
       }
-      // Fresh install opens on the Drive tab.
+      // Build 71 order: Network | Drive | Chat | Plan | More, left to right.
+      final xs = [
+        for (final t in ['Network', 'Drive', 'Chat', 'Plan', 'More'])
+          tester.getCenter(find.descendant(of: find.byKey(const Key('shell-tabs')), matching: find.text(t))).dx
+      ];
+      expect(xs, [...xs]..sort(), reason: 'tab order');
+      expect(AppTab.values.map((t) => t.name).toList(), ['network', 'drive', 'chat', 'plan', 'more']);
+      // The harness restores a saved 'drive' tab (what every build before 71 opened on).
       expect(find.byType(DriveScreen), findsOneWidget);
       await tapShellTab(tester, 'Chat');
       expect(find.byKey(const Key('chat-empty')), findsOneWidget);
@@ -152,8 +159,33 @@ void main() {
       await drain(tester);
     });
 
+    testWidgets('build 71: a fresh install opens Network; a tab saved by build 70 restores to the same tab by name', (tester) async {
+      expect(ShellController().tab, AppTab.network);
+      phone(tester);
+      final fresh = Harness();
+      await fresh.pumpApp(tester, lastTab: null);
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.byKey(const Key('network-tab')), findsOneWidget, reason: 'fresh install: Network');
+      expect(find.byType(DriveScreen), findsNothing, reason: 'Drive is built but not shown');
+      await drain(tester);
+      // Build 70 saved the tab by name; its order was Chat, Drive, Network, Plan, More (indexes 0..4).
+      const build70 = ['chat', 'drive', 'network', 'plan', 'more'];
+      for (final name in build70) {
+        expect(AppTab.byName(name)!.name, name, reason: 'restores by identity, not by index');
+      }
+      expect(AppTab.byName('analyze'), AppTab.network, reason: 'the pre-rename name');
+      expect(AppTab.byName('map'), AppTab.drive);
+      await tester.pumpWidget(const SizedBox());
+      final saved = Harness();
+      await saved.pumpApp(tester, lastTab: 'chat');
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.byKey(const Key('chat-empty')), findsOneWidget, reason: "build 70's saved Chat tab opens Chat, though Chat moved from first to third");
+      expect(find.byKey(const Key('network-tab')), findsNothing);
+      await drain(tester);
+    });
+
     test('ShellController.immersive: Drive only, cleared when the tab changes', () {
-      final c = ShellController();
+      final c = ShellController(initial: AppTab.drive);
       expect(c.tab, AppTab.drive);
       expect(c.immersive, isFalse);
       c.setImmersive(true);
@@ -276,18 +308,27 @@ void main() {
       }
 
       await row('more-radio');
+      expect(find.byKey(const Key('more-radio-screen')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('more-radioSettings')));
+      await tester.pumpAndSettle();
       expect(find.byKey(const Key('radio-list')), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('more-radio-screen')), findsOneWidget, reason: 'Back returns to More > Radio');
       await row('more-settings'); // More again: back to the list first
       await tapShellTab(tester, 'More');
       expect(find.byKey(const Key('more-list')), findsOneWidget);
       await row('more-about');
       expect(find.text('About MeshSonar'), findsWidgets);
       await tapShellTab(tester, 'More'); // re-tap pops to the list
-      await row('more-legend');
+      await row('more-help');
+      await tester.tap(find.byKey(const Key('more-legend')));
+      await tester.pumpAndSettle();
       expect(find.byType(MapLegendSheet), findsOneWidget);
       await tester.tapAt(const Offset(2, 2));
       await tester.pumpAndSettle();
-      await row('more-howItWorks');
+      await tester.tap(find.byKey(const Key('more-howItWorks')));
+      await tester.pumpAndSettle();
       expect(find.byKey(const Key('howitworks-list')), findsOneWidget);
       await tester.scrollUntilVisible(find.byKey(const Key('howitworks-tour')), 200);
       await tester.tap(find.byKey(const Key('howitworks-tour')));
@@ -299,7 +340,9 @@ void main() {
       expect(find.byKey(const Key('howitworks-list')), findsOneWidget);
       await tapShellTab(tester, 'More'); // re-tap pops to the list
       expect(find.byKey(const Key('more-list')), findsOneWidget);
-      await row('more-privacy');
+      expect(find.byKey(const Key('more-privacy')), findsNothing, reason: 'build 71: rows that only jump into Settings are gone');
+      ShellController.active!.openMore(MoreItem.privacy);
+      await tester.pumpAndSettle();
       expect(find.byKey(const Key('settings-list')), findsOneWidget);
       await drain(tester);
     });
@@ -333,7 +376,7 @@ void main() {
       await drain(tester);
     });
 
-    testWidgets('a provider plugged into ChatTabHost shows Chats | Contacts | Radio and the unread badge', (tester) async {
+    testWidgets('a provider plugged into ChatTabHost shows Chats | Contacts | Channels and the unread badge; its radio lists are at More > Radio', (tester) async {
       phone(tester);
       final h = Harness();
       ChatTabHost.provider.value = DebugFixtureChat();
@@ -344,7 +387,9 @@ void main() {
       expect(find.byKey(const Key('chat-segments')), findsOneWidget);
       expect(find.text('Fixture: Alex'), findsOneWidget);
       expect(find.text('Fixture: Public'), findsOneWidget);
-      await tester.tap(find.byKey(const Key('segment-radio')));
+      expect(find.byKey(const Key('segment-radio')), findsNothing, reason: 'build 71: the Radio segment moved to More > Radio');
+      await tapShellTab(tester, 'More');
+      await tester.tap(find.byKey(const Key('more-radio')));
       await tester.pumpAndSettle();
       expect(find.text('Fixture: North Ridge repeater'), findsOneWidget);
       await drain(tester);

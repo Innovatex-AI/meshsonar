@@ -85,19 +85,14 @@ void main() {
   });
 
   group('observer', () {
-    testWidgets('More has no Home observer row; More > Observer opens Settings at the Observer section', (tester) async {
+    testWidgets('More has no Home observer row; the Observer row moved into Settings (build 71) and MoreItem.observer opens that section', (tester) async {
       _phone(tester);
       final h = Harness()..approveKey();
       await h.pumpApp(tester);
       await tapShellTab(tester, 'More');
       expect(find.byKey(const Key('more-homeObserver')), findsNothing);
-      final row = find.byKey(const Key('more-observer'));
-      await tester.scrollUntilVisible(row, 120,
-          scrollable: find.descendant(of: find.byKey(const Key('more-list')), matching: find.byType(Scrollable)).first);
-      expect(find.descendant(of: row, matching: find.text(observerStatusLine(h.state))), findsOneWidget);
-      Scrollable.ensureVisible(tester.element(row), alignment: 0.4);
-      await tester.pumpAndSettle();
-      await tester.tap(row);
+      expect(find.byKey(const Key('more-observer')), findsNothing, reason: 'a row that only jumped into Settings');
+      ShellController.active!.openMore(MoreItem.observer);
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('observer-status')), findsOneWidget);
       await _drain(tester);

@@ -13,6 +13,7 @@ import 'package:meshsonar/ui/design/app_surfaces.dart';
 import 'package:meshsonar/ui/design/app_widgets.dart' show MemoryTipStore, appTipStore;
 import 'package:meshsonar/ui/shell/chat_tab.dart';
 import 'package:meshsonar/ui/shell/chat_tab_host.dart';
+import 'package:meshsonar/ui/shell/more_radio_screen.dart';
 import 'package:meshsonar/ui/theme.dart';
 
 import '../fakes.dart' show Harness;
@@ -46,7 +47,7 @@ void main() {
     dismissAppToast();
   });
 
-  Future<void> pumpTab(WidgetTester tester, {Size size = phone, double scale = 1.0, Brightness brightness = Brightness.light}) async {
+  Future<void> pumpTab(WidgetTester tester, {Size size = phone, double scale = 1.0, Brightness brightness = Brightness.light, Widget? home}) async {
     tester.view.physicalSize = size * 3;
     tester.view.devicePixelRatio = 3.0;
     addTearDown(tester.view.reset);
@@ -57,7 +58,7 @@ void main() {
         debugShowCheckedModeBanner: false,
         theme: meshSonarTheme(brightness).copyWith(platform: TargetPlatform.iOS),
         builder: (context, child) => MediaQuery(data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(scale)), child: child!),
-        home: const Scaffold(body: ChatTab()),
+        home: home ?? const Scaffold(body: ChatTab()),
       ),
     ));
     await tester.pump();
@@ -94,12 +95,13 @@ void main() {
     testWidgets('segments switch, the choice is kept for the session, a cold launch is Chats again', (tester) async {
       await seed();
       await pumpTab(tester);
-      await tester.tap(find.byKey(const Key('segment-radio')));
+      expect(find.byKey(const Key('segment-radio')), findsNothing, reason: 'build 71: the Radio segment moved to More > Radio');
+      await tester.tap(find.byKey(const Key('segment-channels')));
       await tester.pumpAndSettle();
-      expect(find.byKey(const Key('network-empty')), findsOneWidget);
-      // Rebuild the tab: the session remembers Network.
+      expect(find.byKey(const Key('channels-sort')), findsOneWidget);
+      // Rebuild the tab: the session remembers Channels.
       await pumpTab(tester);
-      expect(find.byKey(const Key('network-empty')), findsOneWidget);
+      expect(find.byKey(const Key('channels-sort')), findsOneWidget);
       await tester.tap(find.byKey(const Key('segment-contacts')));
       await tester.pumpAndSettle();
       expect(find.text('Bob'), findsOneWidget, reason: 'the Contacts segment is the real contacts list');
@@ -383,7 +385,7 @@ void main() {
     });
   });
 
-  group('Network', () {
+  group('More > Radio (the Chat tab\'s Radio segment until build 71)', () {
     testWidgets('lists repeaters, rooms and sensors, five per section with Show all', (tester) async {
       for (var i = 0; i < 7; i++) {
         kit.store.contacts.upsert(Contact(
@@ -391,9 +393,9 @@ void main() {
       }
       kit.store.contacts.upsert(Contact(radioId: radioA, publicKey: 'd0d0000000000000000000000000000000000000000000000000000000000001', type: ContactType.sensor, name: 'Garage temp'));
       kit.store.contacts.upsert(Contact(radioId: radioA, publicKey: 'e0e0000000000000000000000000000000000000000000000000000000000001', type: ContactType.room, name: 'North room'));
-      await pumpTab(tester);
-      await tester.tap(find.byKey(const Key('segment-radio')));
+      await pumpTab(tester, home: MoreRadioScreen(onOpen: (_) {}));
       await tester.pumpAndSettle();
+      expect(find.byKey(const Key('more-radio-search')), findsOneWidget);
       expect(find.text('REPEATERS'), findsOneWidget);
       expect(find.byKey(const Key('network-radio-card')), findsOneWidget);
       expect(find.text('Ridge 0'), findsOneWidget);

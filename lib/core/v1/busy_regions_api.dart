@@ -34,7 +34,7 @@ class BusyRegion {
 Future<NetworkRead<List<BusyRegion>>> fetchBusyRegions(String hubUrl, {int limit = 20}) async {
   final api = networkApiFactory(hubUrl);
   try {
-    final env = await api.v1.getPage('regions/busy', BusyRegion.tryParse, query: {'limit': '$limit'});
+    final env = await api.v1.getPage('regions/busy', BusyRegion.tryParse, limit: limit);
     return NetworkRead(env.data, meta: env.meta, offlineAsOf: env.offlineAsOf);
   } finally {
     api.close();

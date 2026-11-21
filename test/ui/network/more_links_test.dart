@@ -1,6 +1,6 @@
-// More and Network (WP11): the radio tools and the repeaters list moved from More to Chat > Radio. More keeps one row that
-// leads there, no duplicates, and nothing that was reachable before is unreachable now (the reachability test below walks every
-// entry the old More list had).
+// More and the radio's network (WP11, then build 71): the repeaters list and the radio tools live at More > Radio (they were
+// Chat > Radio between WP11 and build 71). More has one Radio row, no duplicates, and nothing that was reachable before is
+// unreachable now (the reachability test below walks every entry the old More list had).
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/app/chat_controller.dart';
@@ -10,6 +10,9 @@ import 'package:meshsonar/ui/design/app_surfaces.dart';
 import 'package:meshsonar/ui/design/app_widgets.dart' show MemoryTipStore, appTipStore;
 import 'package:meshsonar/ui/shell/chat_tab.dart';
 import 'package:meshsonar/ui/shell/chat_tab_host.dart';
+import 'package:meshsonar/ui/info/method_screens.dart';
+import 'package:meshsonar/ui/settings_screen.dart';
+import 'package:meshsonar/ui/shell/shell_controller.dart';
 
 import '../chat/chat_kit.dart';
 import '../fakes.dart';
@@ -25,7 +28,7 @@ const oldMoreEntries = <String>[
   'radioSetup', 'observerJoin', 'wardriving', 'notifications', 'settings', 'legend', 'howItWorks', 'method', 'privacy', 'report', 'about', 'privacy-policy',
 ];
 
-/// Where each moved entry is reachable now: the tool id its screen shows, via Chat > Radio > Tools.
+/// Where each moved entry is reachable now: the tool id its screen shows, via More > Radio > Tools.
 const movedToNetworkTools = <String, (String toolsKey, String screenKey)>{
   'trace': ('tools-trace', 'tool-trace'),
   'discover': ('tools-discover', 'tool-discover'),
@@ -84,47 +87,72 @@ void main() {
     return f.evaluate().isNotEmpty;
   }
 
-  testWidgets('More has one row to Network and tools, and no duplicates of what moved', (tester) async {
+  testWidgets('More has one Radio row, and no duplicates of what lives inside it', (tester) async {
     await openMore(tester);
-    expect(find.text('Radios and tools'), findsOneWidget);
-    expect(await inMore(tester, 'more-network'), isTrue);
-    for (final moved in ['more-repeaters', 'more-trace', 'more-discover', 'more-adverts', 'more-rxLog']) {
-      expect(await inMore(tester, moved), isFalse, reason: '$moved is not duplicated in More');
-    }
-    // The tools that were not moved stay.
-    for (final k in ['more-noiseFloor', 'more-telemetry', 'more-radioSetup']) {
-      expect(await inMore(tester, k), isTrue, reason: k);
+    expect(find.text('Radios and tools'), findsNothing, reason: 'build 71: no group headers');
+    expect(await inMore(tester, 'more-radio'), isTrue);
+    for (final moved in ['more-network', 'more-repeaters', 'more-trace', 'more-discover', 'more-adverts', 'more-rxLog', 'more-noiseFloor', 'more-telemetry', 'more-radioSetup']) {
+      expect(await inMore(tester, moved), isFalse, reason: '$moved is not a row of More');
     }
   });
 
-  testWidgets('the More row deep-links to the Network segment of the Chat tab', (tester) async {
+  testWidgets('More > Radio shows the radio card and its lists (it was Chat > Radio until build 71)', (tester) async {
     await openMore(tester);
-    expect(await inMore(tester, 'more-network'), isTrue);
-    final row = find.byKey(const Key('more-network'));
-    await Scrollable.ensureVisible(tester.element(row), alignment: 0.3);
-    await tester.pump();
-    await tester.tap(row);
+    await tester.tap(find.byKey(const Key('more-radio')));
     await settleLive(tester);
+    expect(find.byKey(const Key('more-radio-screen')), findsOneWidget);
     expect(find.byKey(const Key('network-subtitle')), findsOneWidget);
     expect(find.byKey(const Key('network-radio-card')), findsOneWidget);
+    final list = find.descendant(of: find.byKey(const Key('more-radio-list')), matching: find.byType(Scrollable)).first;
+    for (final k in ['more-radioSettings', 'more-radioSetup', 'more-noiseFloor', 'more-telemetry']) {
+      await tester.scrollUntilVisible(find.byKey(Key(k)), 200, scrollable: list);
+      expect(find.byKey(Key(k)), findsOneWidget, reason: k);
+    }
+    // Chat has no Radio segment any more.
+    await tapShellTab(tester, 'Chat');
+    await settleLive(tester);
+    expect(find.byKey(const Key('segment-radio')), findsNothing);
+    expect(find.byKey(const Key('segment-channels')), findsOneWidget);
   });
 
   testWidgets('reachability: every entry the old More list had is still reachable', (tester) async {
     await openMore(tester);
+    final shell = ShellController.active!;
     final stayed = <String>[];
     for (final name in oldMoreEntries) {
-      final key = name == 'report' || name == 'privacy-policy' ? 'more-$name' : 'more-$name';
-      if (await inMore(tester, key)) stayed.add(name);
+      if (await inMore(tester, 'more-$name')) stayed.add(name);
     }
-    final moved = oldMoreEntries.where((n) => !stayed.contains(n)).toSet();
-    expect(moved, {'repeaters', ...movedToNetworkTools.keys}, reason: 'only the repeaters list and the four radio tools moved');
+    expect(stayed.toSet(), {'radio', 'devices', 'leaderboard', 'observerJoin', 'settings', 'about'});
 
-    // They now open from Chat > Radio: the repeaters list is the segment itself, the tools are in its Tools menu.
-    final row = find.byKey(const Key('more-network'));
-    expect(await inMore(tester, 'more-network'), isTrue);
-    await Scrollable.ensureVisible(tester.element(row), alignment: 0.3);
-    await tester.pump();
-    await tester.tap(row);
+    Future<void> back() async {
+      shell.select(AppTab.more); // tapping More again returns to its list
+      await settleLive(tester);
+    }
+
+    // Under Help.
+    await tester.tap(find.byKey(const Key('more-help')));
+    await tester.pumpAndSettle();
+    for (final k in ['more-myReports', 'more-legend', 'more-howItWorks', 'more-method', 'more-report', 'more-privacy-policy']) {
+      expect(find.byKey(Key(k)), findsOneWidget, reason: '$k is under Help');
+    }
+    await tester.tap(find.byKey(const Key('more-method')));
+    await tester.pumpAndSettle();
+    expect(find.byType(MethodScreen), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('more-help-list')), findsOneWidget, reason: 'Back returns to Help');
+    await back();
+
+    // In Settings (the rows that only jumped there): the MoreItem still opens the section for code that asks.
+    for (final item in [MoreItem.myRadios, MoreItem.wardriving, MoreItem.notifications, MoreItem.privacy, MoreItem.observer]) {
+      shell.openMore(item);
+      await tester.pumpAndSettle();
+      expect(find.byType(SettingsScreen), findsOneWidget, reason: item.name);
+      await back();
+    }
+
+    // Under Radio: the lists (the old "repeaters" row), the four radio tools in its Tools menu, and the rest as rows.
+    shell.openMore(MoreItem.repeaters);
     await settleLive(tester);
     expect(find.byKey(const Key('network-radio-card')), findsOneWidget);
     for (final e in movedToNetworkTools.entries) {
@@ -136,6 +164,11 @@ void main() {
       expect(find.byKey(Key(e.value.$2)), findsOneWidget, reason: '${e.key} opens its screen');
       await tester.pageBack();
       await tester.pumpAndSettle();
+    }
+    final list = find.descendant(of: find.byKey(const Key('more-radio-list')), matching: find.byType(Scrollable)).first;
+    for (final k in ['more-radioSettings', 'more-radioSetup', 'more-noiseFloor', 'more-telemetry']) {
+      await tester.scrollUntilVisible(find.byKey(Key(k)), 200, scrollable: list);
+      expect(find.byKey(Key(k)), findsOneWidget, reason: k);
     }
   });
 }
