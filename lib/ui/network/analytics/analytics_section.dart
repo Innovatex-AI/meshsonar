@@ -2,10 +2,22 @@
 // the site's Analytics menu (meshcore-insights src/components/analyzer/analytics/tabs.ts). A row opens the tab's site
 // page inside the app ([SitePageView]); `initialTab` (from an `/analytics/<slug>` link) shows that tab in place inside
 // the section, with a back arrow to the list.
+// Build 72: the region's native Findings and Region overview panels (the Network Home section until then) are the first
+// two rows ([AnalyticsNativeRow], supplied by network_sections.dart) and open in place the same way.
 import 'package:flutter/material.dart';
 
 import '../../radio/inset_list.dart';
+import 'in_place_header.dart';
 import 'site_page_view.dart';
+
+/// A native panel listed above the site's tabs (build 72: Findings and Region overview, the Network Home section until
+/// then). It opens in place inside the section under the same header as a linked site tab. [slug] is app-internal
+/// (`/analytics/<slug>` opens it; the site has no page under it).
+class AnalyticsNativeRow {
+  final String slug, label, about;
+  final WidgetBuilder builder;
+  const AnalyticsNativeRow({required this.slug, required this.label, required this.about, required this.builder});
+}
 
 /// One Analytics tab of the site: `/analytics/<slug>`.
 class AnalyticsTab {
@@ -54,7 +66,10 @@ class AnalyticsSection extends StatefulWidget {
 
   /// A tab slug to open straight away (from an `/analytics/<slug>` link); null shows the list.
   final String? initialTab;
-  const AnalyticsSection({super.key, required this.baseUrl, required this.regionSlug, this.initialTab});
+
+  /// Native panels shown as the first rows, in their own group; empty for "All regions".
+  final List<AnalyticsNativeRow> nativeRows;
+  const AnalyticsSection({super.key, required this.baseUrl, required this.regionSlug, this.initialTab, this.nativeRows = const []});
 
   @override
   State<AnalyticsSection> createState() => _AnalyticsSectionState();
@@ -65,11 +80,25 @@ class _AnalyticsSectionState extends State<AnalyticsSection> {
   /// strip and the tab bar stay usable and a later link to another section is not hidden). Null = the list.
   late AnalyticsTab? _shown = analyticsTabOf(widget.initialTab);
 
+  /// The native panel shown in place (a row tapped, or a link to its slug). Null = none.
+  late AnalyticsNativeRow? _native = _nativeOf(widget.initialTab);
+
+  AnalyticsNativeRow? _nativeOf(String? slug) {
+    final s = slug?.trim().toLowerCase();
+    for (final r in widget.nativeRows) {
+      if (r.slug == s) return r;
+    }
+    return null;
+  }
+
   @override
   void didUpdateWidget(AnalyticsSection old) {
     super.didUpdateWidget(old);
     // A new link shows its tab; an unknown slug or none shows the list.
-    if (widget.initialTab != old.initialTab || widget.baseUrl != old.baseUrl) _shown = analyticsTabOf(widget.initialTab);
+    if (widget.initialTab != old.initialTab || widget.baseUrl != old.baseUrl) {
+      _shown = analyticsTabOf(widget.initialTab);
+      _native = _nativeOf(widget.initialTab);
+    }
   }
 
   /// A row tapped in the list opens the tab as its own page.
@@ -82,6 +111,17 @@ class _AnalyticsSectionState extends State<AnalyticsSection> {
 
   @override
   Widget build(BuildContext context) {
+    final native = _native;
+    if (native != null) {
+      return Material(
+        key: Key('analytics-native-${native.slug}'),
+        color: Theme.of(context).scaffoldBackgroundColor,
+        child: Column(children: [
+          InPlaceHeader(title: native.label, onBack: () => setState(() => _native = null), backLabel: 'Back to Analytics'),
+          Expanded(child: native.builder(context)),
+        ]),
+      );
+    }
     final shown = _shown;
     if (shown != null) {
       return SitePageView.inPlace(
@@ -96,6 +136,14 @@ class _AnalyticsSectionState extends State<AnalyticsSection> {
       key: const Key('analytics-section'),
       padding: const EdgeInsets.only(top: 12, bottom: 24),
       children: [
+        if (widget.nativeRows.isNotEmpty)
+          InsetGroup(
+            header: 'This region',
+            rows: [
+              for (final r in widget.nativeRows)
+                InsetRow(key: Key('analytics-tab-${r.slug}'), title: r.label, subtitle: r.about, onTap: () => setState(() => _native = r)),
+            ],
+          ),
         InsetGroup(
           header: 'Analytics',
           footer: 'These are the website\'s Analytics pages, shown inside the app. They need a connection.',

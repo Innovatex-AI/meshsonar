@@ -72,7 +72,7 @@ void main() {
       expect(full.first.request, NetworkRequest.packet('c4b06ee8fc39b187', region: 'cmh'));
       final pre = localSearch('c4b06ee8', ix);
       expect(pre.first.request!.listFilter.hash, 'c4b06ee8');
-      expect(localSearch('day', ix).single.request, const NetworkRequest.section(NetworkSection.home, region: 'day'));
+      expect(localSearch('day', ix).single.request, const NetworkRequest.section(NetworkSection.live, region: 'day'));
       expect(localSearch('x', ix), isEmpty, reason: 'two characters at least');
       expect(localSearch('zzzz', ix), isEmpty);
     });
@@ -84,7 +84,7 @@ void main() {
       expect(NetworkRequest.packet('c4b06ee8fc39b187', region: 'cmh').toWebUri().toString(), 'https://cmh.meshsonar.com/packets/c4b06ee8fc39b187');
       expect(const NetworkRequest.observer('src_31:obs-1142', region: 'cmh').toWebUri().toString(), 'https://cmh.meshsonar.com/observers/src_31%3Aobs-1142');
       expect(const NetworkRequest.section(NetworkSection.nodes, region: 'day').toWebUri().toString(), 'https://day.meshsonar.com/nodes');
-      expect(const NetworkRequest.section(NetworkSection.home, region: 'day').toWebUri().toString(), 'https://day.meshsonar.com/');
+      expect(const NetworkRequest.section(NetworkSection.live, region: 'day').toWebUri().toString(), 'https://day.meshsonar.com/live');
       expect(const NetworkRequest.section(NetworkSection.live, region: 'cmh').toWebUri().toString(), 'https://cmh.meshsonar.com/live');
     });
   });
@@ -96,7 +96,7 @@ void main() {
       expect(p('https://cmh.meshsonar.com/nodes/$hilltop'), NetworkRequest.node(hilltop, region: 'cmh'));
       expect(p('https://day.meshsonar.com/packets/C4B06EE8FC39B187'), NetworkRequest.packet('c4b06ee8fc39b187', region: 'day'));
       expect(p('https://cmh.meshsonar.com/observers/src_31%3Aobs-1142'), const NetworkRequest.observer('src_31:obs-1142', region: 'cmh'));
-      expect(p('https://cmh.meshsonar.com/'), const NetworkRequest.section(NetworkSection.home, region: 'cmh'));
+      expect(p('https://cmh.meshsonar.com/'), const NetworkRequest.section(NetworkSection.live, region: 'cmh'));
       expect(p('https://cmh.meshsonar.com/repeaters/$hilltop')!.nodeKey, hilltop, reason: 'old /repeaters links still open the node');
       expect(p('https://swoh.meshsonar.com/map?panel=live')!.region, 'swoh');
       expect(p('https://CMH.MeshSonar.com/nodes')!.region, 'cmh', reason: 'host case does not matter');

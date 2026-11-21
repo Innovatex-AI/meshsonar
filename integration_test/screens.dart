@@ -1,6 +1,7 @@
 // The list of screens scripts/verify_sim.sh screenshots. Add a ScreenStep to extend it.
 // Build 71 (the app as a gateway to the site data): the app starts on the Network tab; the tour covers the Network header,
-// its eight sections (Home, Packets, Live, Nodes, Channels, Observers, Analytics, Tools), All regions, a node / packet /
+// its seven sections (Live first since build 72, then Packets, Nodes, Channels, Observers, Analytics with the region's
+// Findings and Region overview, Tools), All regions (Regions, Channels, Analytics, Tools), a node / packet /
 // observer page, the Drive map's panels (Drive panel, Layers, legend), the Plan sheet, Chat's three segments, More,
 // More > Radio, More > Help and Settings.
 // Each step runs in order against the real app; `shot('name')` prints "SCREEN name" and holds still so the script
@@ -323,10 +324,19 @@ final List<ScreenStep> screens = [
     for (final n in _networkSections) {
       if (find.byKey(Key('network-section-$n')).evaluate().isEmpty) _stepFail('network-header: no "$n" on the strip');
     }
+    // Build 72: no Home section; the tab opens on Live, the first name on the strip.
+    if (find.byKey(const Key('network-section-home')).evaluate().isNotEmpty) _stepFail('network-header: the strip still has Home');
+    if (!await waitFor(t, find.byKey(const Key('live-map')).hitTestable(), timeout: const Duration(seconds: 15))) {
+      _stepFail('network-header: the Network tab did not open on Live');
+    }
+    final liveLeft = t.getTopLeft(find.byKey(const Key('network-section-live'))).dx;
+    for (final n in _networkSections.skip(1)) {
+      if (t.getTopLeft(find.byKey(Key('network-section-$n'))).dx <= liveLeft) _stepFail('network-header: "$n" comes before Live on the strip');
+    }
     await shot(t, 'network-header');
     // No second bar and no blank band: the section runs down to the tab bar.
     final tabs = t.getRect(find.byKey(const Key('shell-tabs')));
-    final body = t.getRect(find.byKey(const Key('network-section-body-home')));
+    final body = t.getRect(find.byKey(const Key('network-section-body-live')));
     final gap = tabs.top - body.bottom;
     final pad = t.view.padding.bottom / t.view.devicePixelRatio;
     _stepNote('network-header',
@@ -760,19 +770,12 @@ final List<ScreenStep> screens = [
   // the run in scripts/verify_sim.sh.
   ScreenStep('region', (t) async {
     await popToRoots(t);
-    if (!await openNetworkSection(t, 'home')) _stepFail('region: no Home on the strip (${_shellStateOf(t)})');
-    if (!await waitFor(t, find.byKey(const Key('network-section-body-home')), timeout: const Duration(seconds: 10))) _stepFail('region: Home did not open');
+    // Build 72: the region's first section is Live (the Home section is gone).
+    if (!await openNetworkSection(t, 'live')) _stepFail('region: no Live on the strip (${_shellStateOf(t)})');
+    if (!await waitFor(t, find.byKey(const Key('network-section-body-live')), timeout: const Duration(seconds: 10))) _stepFail('region: Live did not open');
     await pumpFor(t, const Duration(seconds: 4));
     await shot(t, 'region');
-    await shot(t, 'network-home');
-    final overview = find.byKey(const Key('network-sub-home-1'));
-    if (overview.evaluate().isEmpty) _stepFail('network-home: no Findings | Overview switch');
-    await t.tap(overview.first);
-    await pumpFor(t, const Duration(seconds: 4));
-    await shot(t, 'network-home-overview');
-    await t.tap(find.byKey(const Key('network-sub-home-0')).first);
-    await pumpFor(t, const Duration(seconds: 1));
-    _stepOk('network-home');
+    _stepOk('region');
   }, optional: true),
   ScreenStep('network-packets', (t) async {
     await popToRoots(t);
@@ -933,6 +936,25 @@ final List<ScreenStep> screens = [
     if (!await openNetworkSection(t, 'analytics')) _stepFail('network-analytics: no Analytics on the strip');
     if (!await waitFor(t, find.byKey(const Key('analytics-section')), timeout: const Duration(seconds: 10))) _stepFail('network-analytics: the Analytics list did not open (blank)');
     await shot(t, 'network-analytics');
+    // Build 72: the region's Findings and Region overview (the Home section until then) are the first two rows; each
+    // opens its native panel in place, with a back arrow to the list.
+    for (final (slug, panel) in [('findings', 'network-findings'), ('region-overview', 'network-region-overview')]) {
+      final row = find.byKey(Key('analytics-tab-$slug'));
+      if (row.evaluate().isEmpty) _stepFail('network-analytics: no $slug row');
+      if (t.getTopLeft(row.first).dy >= t.getTopLeft(find.byKey(const Key('analytics-tab-overview')).first).dy) {
+        _stepFail('network-analytics: $slug is not above the site tabs');
+      }
+      await t.tap(row.first, warnIfMissed: false);
+      if (!await waitFor(t, find.byKey(Key(panel)), timeout: const Duration(seconds: 10))) _stepFail('network-analytics: $slug did not open its panel');
+      await pumpFor(t, const Duration(seconds: 4));
+      await shot(t, 'analytics-$slug');
+      if (find.byKey(const Key('network-sections')).hitTestable().evaluate().isEmpty) _stepFail('network-analytics: $slug covers the section strip (it should open in place)');
+      final back = find.byKey(const Key('in-place-back'));
+      if (back.evaluate().isEmpty) _stepFail('network-analytics: $slug has no back arrow');
+      await t.tap(back.first, warnIfMissed: false);
+      await pumpFor(t, const Duration(seconds: 1));
+      if (find.byKey(const Key('analytics-section')).evaluate().isEmpty) _stepFail('network-analytics: Back from $slug did not return to the list');
+    }
     final tab = find.byKey(const Key('analytics-tab-overview'));
     if (tab.evaluate().isEmpty) _stepFail('network-analytics: no Overview row');
     await t.ensureVisible(tab.first);
@@ -1059,9 +1081,9 @@ final List<ScreenStep> screens = [
     if (!await waitFor(t, find.byKey(const Key('network-all-regions')), timeout: const Duration(seconds: 10))) _stepFail('all-regions: All regions did not open');
     final title = _text(t, 'region-title');
     if (title != 'All regions') _stepFail('all-regions: the header says "$title"');
-    for (final n in _networkSections) {
+    for (final n in [..._networkSections, 'regions']) {
       final there = find.byKey(Key('network-section-$n')).evaluate().isNotEmpty;
-      final hub = const ['home', 'channels', 'analytics', 'tools'].contains(n);
+      final hub = const ['regions', 'channels', 'analytics', 'tools'].contains(n);
       if (there != hub) _stepFail('all-regions: "$n" is ${there ? 'on' : 'missing from'} the strip');
     }
     await _until(t, () => _firstKeyOf(t, ['busy-regions', 'busy-regions-empty', 'busy-regions-not-live', 'busy-regions-offline', 'busy-regions-error']) != 'none', const Duration(seconds: 25));
@@ -1127,7 +1149,8 @@ String? _text(WidgetTester t, String k) {
   return w is Text ? w.data : null;
 }
 
-const List<String> _networkSections = ['home', 'packets', 'live', 'nodes', 'channels', 'observers', 'analytics', 'tools'];
+/// A region's sections in strip order (build 72: Live first, no Home).
+const List<String> _networkSections = ['live', 'packets', 'nodes', 'channels', 'observers', 'analytics', 'tools'];
 
 /// Node keys seen on Network > Nodes (lowercase hex), for the tools' real queries.
 List<String> _nodeKeys = const [];

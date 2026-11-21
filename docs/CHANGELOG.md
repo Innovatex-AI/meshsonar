@@ -3,6 +3,11 @@
 All notable changes to MeshSonar. Dates are local (US Eastern). This changelog was reconstructed from the commit
 history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md](ROADMAP.md).
 
+## [Unreleased] — 0.42.0, build 72
+
+- **Network opens on Live; Home removed, its findings and overview are under Analytics.** The strip is now Live · Packets · Nodes · Channels · Observers · Analytics · Tools, and the Network tab opens on the live map. The Home section is gone. What it held: **Findings** ("What changed", "What needs attention") and **Region overview** are the first two rows of Analytics and open in place with a back arrow; the one-line summary is gone (the Live panel header already shows observers online and the packet count); the pulse chip in the header still opens the pulse sheet. Links to a region's home page (and `/pulse`) open Live.
+- **All regions: Regions · Channels · Analytics · Tools.** It opens on Regions: the network summary, the search across every region, Back to your region, the busiest regions and Every region. There is still no world live map on the phone.
+
 ## [0.41.0+71] — 2026-11-21 — The app as a gateway to the site: Network first, one panel on every map
 
 - **New tab order: Network | Drive | Chat | Plan | More.** A fresh install opens on Network. The tab you last used is still remembered, and a tab saved by an older build opens the same tab.

@@ -173,19 +173,30 @@ void main() {
         await openShellTab(t, 'Network');
         await pumpFor(t, const Duration(seconds: 6));
         await shot(t, 'region-initial');
-        // Network tab (build 71): eight sections on one scrolling strip; only Home has sub-views (Findings | Overview).
-        const views = [('home', 0), ('home', 1), ('packets', -1), ('live', -1), ('nodes', -1), ('channels', -1), ('observers', -1), ('analytics', -1), ('tools', -1)];
-        for (final (section, sub) in views) {
-          final name = sub < 0 ? section : '$section-$sub';
+        // Network tab (build 72): seven sections on one scrolling strip, Live first; no sub-views (Home is gone, its
+        // Findings and Region overview are the first two rows of Analytics).
+        const views = ['live', 'packets', 'nodes', 'channels', 'observers', 'analytics', 'tools'];
+        for (final section in views) {
+          final name = section;
           await step('region-$name', () async {
             await openNetworkSection(t, section);
-            if (sub >= 0) await t.tap(find.byKey(Key('network-sub-$section-$sub')));
             await pumpFor(t, const Duration(seconds: 5));
             await shot(t, 'region-$name');
             await scrollShots(t, 'region-$name', max: 2);
           });
         }
         // The old Insights pages are the site's Analytics tabs now, shown inside the app.
+        for (final id in ['findings', 'region-overview']) {
+          await step('region-analytics-$id', () async {
+            await openNetworkSection(t, 'analytics');
+            await t.tap(find.byKey(Key('analytics-tab-$id')).first);
+            await pumpFor(t, const Duration(seconds: 5));
+            await shot(t, 'region-analytics-$id');
+            await scrollShots(t, 'region-analytics-$id', max: 2);
+            await t.tap(find.byKey(const Key('in-place-back')).first);
+            await pumpFor(t, const Duration(seconds: 1));
+          });
+        }
         for (final id in ['overview', 'rf-signal', 'topology', 'hash-stats', 'route-patterns', 'nodes', 'rf-health']) {
           await step('region-analytics-$id', () async {
             await openNetworkSection(t, 'analytics');

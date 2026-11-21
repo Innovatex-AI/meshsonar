@@ -140,7 +140,7 @@ void main() {
     test('old tab indexes land on the screen that now holds them', () {
       expect(LegacyTab.fromIndex(0).tab, AppTab.drive);
       expect(LegacyTab.fromIndex(1).tab, AppTab.network);
-      expect(LegacyTab.fromIndex(1).network, NetworkSection.home);
+      expect(LegacyTab.fromIndex(1).network, NetworkSection.live);
       expect(LegacyTab.fromIndex(2).tab, AppTab.more);
       expect(LegacyTab.fromIndex(2).more, MoreItem.drives);
       expect(LegacyTab.fromIndex(3).more, MoreItem.radio);

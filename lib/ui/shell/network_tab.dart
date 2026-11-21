@@ -1,12 +1,13 @@
 // The Network tab (build 71: the site in the app; AZ-3.1; the Analyze tab until build 71). One header line (region name
 // that opens the region switcher, pulse chip, search, one overflow menu with Share link and Export region report:
-// lib/ui/network/network_header.dart), then ONE horizontally scrolling section strip, Home · Packets · Live · Nodes ·
-// Channels · Observers · Analytics · Tools (lib/ui/network/network_sections.dart), then the shown section. There is no
-// second bottom bar: the only bar at the bottom is the app's tab bar.
+// lib/ui/network/network_header.dart), then ONE horizontally scrolling section strip, Live · Packets · Nodes ·
+// Channels · Observers · Analytics · Tools (lib/ui/network/network_sections.dart), then the shown section. The tab opens
+// on Live (build 72: the Home section is gone; its Findings and Region overview are the first rows of Analytics). There
+// is no second bottom bar: the only bar at the bottom is the app's tab bar.
 //
 // "All regions" (the switcher's entry; ShellController.networkAllRegions, session only): the whole network on the hub
-// with the sections that need no region. Its Home has the network summary, the global search and the busiest regions;
-// a region picked there (or in the switcher) becomes the viewed, remembered region.
+// with the sections that need no region, Regions · Channels · Analytics · Tools. Regions has the network summary, the
+// global search and the busiest regions; a region picked there (or in the switcher) becomes the viewed, remembered region.
 //
 // Opening it from anywhere: ShellScope.openNetwork(NetworkRequest...) (a deep link, a node or packet elsewhere in the
 // app). The request is taken here: the region switches when it names another one, the section is picked, and a node /
@@ -16,8 +17,8 @@
 // error (it never loaded and the server answered with an error), empty (no region to show: a prompt to choose one).
 // Each panel keeps its own loading / offline ("Offline - as of") / error states inside a section.
 //
-// Website twins (analyzer-api-contract.md web routes): Home = region home `/` (`/pulse` opens the pulse sheet),
-// Packets = `/packets` (a packet: `/packets/:hash`), Live = `/live` (a packet's path: `/map?panel=live&packet=&t=`),
+// Website twins (analyzer-api-contract.md web routes): Live = `/live` (a packet's path: `/map?panel=live&packet=&t=`;
+// the region home `/` and `/pulse` open Live too, `/pulse` with the pulse sheet), Packets = `/packets` (`/packets/:hash`),
 // Nodes = `/nodes` (`/nodes/:key`), Channels = `/channels` (`/channels/:id`), Observers = `/observers`
 // (`/observers/:id`), Analytics = `/analytics/<slug>`, Tools = `/tools/*`, `/scope-audit`, `/observers/compare`, `/status`.
 import 'dart:async';
@@ -25,7 +26,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../app/app_state.dart';
-import '../../core/network_request.dart' show networkHubSections;
+import '../../core/network_request.dart' show networkHubSections, networkRegionSections;
 import '../../core/region_lookup.dart';
 import '../app.dart';
 import '../design/app_surfaces.dart' show showAppToast;
@@ -50,9 +51,6 @@ class NetworkTab extends StatefulWidget {
 }
 
 class _NetworkTabState extends State<NetworkTab> {
-  /// The shown sub-view per section (Home: Findings | Overview).
-  final Map<NetworkSection, int> _sub = {};
-
   /// The last link into Packets (its filters and window); the list is rebuilt from it.
   NetworkRequest? _packetsRequest;
 
@@ -64,7 +62,7 @@ class _NetworkTabState extends State<NetworkTab> {
   ShellController? _shell;
 
   /// Without a shell above (a test that pumps this tab alone): the section and "All regions" live here.
-  NetworkSection _localSection = NetworkSection.home;
+  NetworkSection _localSection = NetworkSection.live;
   bool _localAll = false;
 
   /// The manual region pick seen when "All regions" was entered: a new pick (the switcher) leaves "All regions".
@@ -90,7 +88,9 @@ class _NetworkTabState extends State<NetworkTab> {
 
   NetworkSection get _section {
     final s = _shell?.networkSection ?? _localSection;
-    return _all && !networkHubSections.contains(s) ? NetworkSection.home : s;
+    if (_all) return networkHubSections.contains(s) ? s : NetworkSection.regions;
+    // Regions exists only in All regions; a region opens on Live.
+    return s == NetworkSection.regions ? NetworkSection.live : s;
   }
 
   bool get _all => _shell?.networkAllRegions ?? _localAll;
@@ -101,7 +101,8 @@ class _NetworkTabState extends State<NetworkTab> {
     } else {
       setState(() {
         _localAll = v;
-        if (v && !networkHubSections.contains(_localSection)) _localSection = NetworkSection.home;
+        if (v && !networkHubSections.contains(_localSection)) _localSection = NetworkSection.regions;
+        if (!v && _localSection == NetworkSection.regions) _localSection = NetworkSection.live;
       });
     }
   }
@@ -214,7 +215,7 @@ class _NetworkTabState extends State<NetworkTab> {
             : PreferredSize(
                 preferredSize: const Size.fromHeight(NetworkSectionStrip.height),
                 child: NetworkSectionStrip(
-                  sections: all ? networkHubSections : NetworkSection.values,
+                  sections: all ? networkHubSections : networkRegionSections,
                   selected: section,
                   onChanged: _select,
                 ),
@@ -222,7 +223,7 @@ class _NetworkTabState extends State<NetworkTab> {
       ),
       body: all
           ? NetworkAllRegionsBody(
-              key: ValueKey('network-all-${section.name}'),
+              key: ValueKey('network-hub-${section.name}'),
               section: section,
               hubUrl: hub,
               viewed: region,
@@ -243,8 +244,6 @@ class _NetworkTabState extends State<NetworkTab> {
                         key: ValueKey('network-${region.code}-${section.name}'),
                         section: section,
                         region: region,
-                        sub: _sub[section] ?? 0,
-                        onSub: (i) => setState(() => _sub[section] = i),
                         packetsRequest: _packetsRequest,
                         mapRequest: _mapRequest,
                         target: _target,
