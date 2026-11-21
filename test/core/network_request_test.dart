@@ -12,7 +12,7 @@ NetworkRequest? p(String s) => NetworkRequest.parse(Uri.parse(s));
 void main() {
   group('parse', () {
     test('each web route lands on its section', () {
-      expect(p('https://cmh.meshsonar.com/'), const NetworkRequest.section(NetworkSection.home, region: 'cmh'));
+      expect(p('https://cmh.meshsonar.com/'), const NetworkRequest.section(NetworkSection.live, region: 'cmh'), reason: 'build 72: the region home opens Live');
       expect(p('https://cmh.meshsonar.com/packets')!.section, NetworkSection.packets);
       expect(p('https://cmh.meshsonar.com/packets/$hash'), NetworkRequest.packet(hash, region: 'cmh'));
       expect(p('https://cmh.meshsonar.com/nodes')!.section, NetworkSection.nodes);
@@ -27,8 +27,12 @@ void main() {
       expect(p('https://cmh.meshsonar.com/channels'), const NetworkRequest.section(NetworkSection.channels, region: 'cmh'));
       expect(p('https://cmh.meshsonar.com/live'), const NetworkRequest.section(NetworkSection.live, region: 'cmh'));
       expect(p('https://cmh.meshsonar.com/map?panel=live')!.section, NetworkSection.live);
-      expect(p('https://cmh.meshsonar.com/pulse'), const NetworkRequest(section: NetworkSection.home, region: 'cmh', pulse: true));
-      expect(p('https://cmh.meshsonar.com/now')!.section, NetworkSection.home);
+      expect(p('https://cmh.meshsonar.com/pulse'), const NetworkRequest(section: NetworkSection.live, region: 'cmh', pulse: true), reason: 'Live with the pulse sheet');
+      expect(p('https://cmh.meshsonar.com/now'), const NetworkRequest.section(NetworkSection.live, region: 'cmh'));
+      expect(p('https://cmh.meshsonar.com/home'), const NetworkRequest.section(NetworkSection.live, region: 'cmh'));
+      expect(p('https://meshsonar.com/regions'), const NetworkRequest.section(NetworkSection.regions), reason: 'All regions');
+      expect(p('https://cmh.meshsonar.com/analytics/findings'), const NetworkRequest.analytics(analyticsFindingsSlug, region: 'cmh'), reason: 'the moved Home panels');
+      expect(p('meshsonar://network/analytics/region-overview?region=cmh'), const NetworkRequest.analytics(analyticsRegionOverviewSlug, region: 'cmh'));
     });
 
     test('build 71 site routes: analytics, tools, scope audit, status', () {
@@ -60,14 +64,16 @@ void main() {
     });
 
     test('section names saved or linked before build 71 still resolve', () {
-      expect(NetworkSection.byName('now'), NetworkSection.home);
+      expect(NetworkSection.byName('now'), NetworkSection.live);
+      expect(NetworkSection.byName('home'), NetworkSection.live, reason: "build 71's Home is gone: Live");
       expect(NetworkSection.byName('map'), NetworkSection.live);
       expect(NetworkSection.byName('insights'), NetworkSection.analytics);
       for (final s in NetworkSection.values) {
         expect(NetworkSection.byName(s.name), s);
       }
       expect(NetworkSection.byName('nope'), isNull);
-      expect(NetworkSection.values.map((s) => s.label).toList(), ['Home', 'Packets', 'Live', 'Nodes', 'Channels', 'Observers', 'Analytics', 'Tools']);
+      expect(networkRegionSections.map((s) => s.label).toList(), ['Live', 'Packets', 'Nodes', 'Channels', 'Observers', 'Analytics', 'Tools'], reason: 'build 72: Live first, no Home');
+      expect(networkHubSections.map((s) => s.label).toList(), ['Regions', 'Channels', 'Analytics', 'Tools']);
     });
 
     test('the live map of one packet keeps the contract form /map?panel=live&packet=', () {
@@ -81,7 +87,7 @@ void main() {
       expect(p('https://meshsonar.com/packets')!.region, isNull);
       expect(p('https://meshsonar.com/packets?region=CMH')!.region, 'cmh');
       expect(p('meshsonar://network/nodes/$key?region=day')!.region, 'day');
-      expect(p('meshsonar://network')!.section, NetworkSection.home);
+      expect(p('meshsonar://network')!.section, NetworkSection.live);
     });
 
     test('upper-case keys and hashes are accepted and lower-cased', () {
@@ -142,7 +148,9 @@ void main() {
     test('web links use the region host, the hub without a region', () {
       expect(NetworkRequest.packet(hash, region: 'cmh').toWebUri().toString(), 'https://cmh.meshsonar.com/packets/$hash');
       expect(NetworkRequest.node(key).toWebUri().toString(), 'https://meshsonar.com/nodes/$key');
-      expect(const NetworkRequest.section(NetworkSection.home, region: 'day').toWebUri().toString(), 'https://day.meshsonar.com/');
+      expect(const NetworkRequest.section(NetworkSection.live, region: 'day').toWebUri().toString(), 'https://day.meshsonar.com/live');
+      expect(const NetworkRequest(section: NetworkSection.live, region: 'day', pulse: true).toWebUri().toString(), 'https://day.meshsonar.com/pulse');
+      expect(const NetworkRequest.section(NetworkSection.regions).toWebUri().toString(), 'https://meshsonar.com/regions');
       expect(const NetworkRequest.channel('tag:LongFast', region: 'cmh').toWebUri().toString(), 'https://cmh.meshsonar.com/channels/tag%3ALongFast');
       expect(const NetworkRequest(section: NetworkSection.analytics, region: 'cmh', analyticsTab: 'rf-signal', window: '7d').toWebUri().toString(),
           'https://cmh.meshsonar.com/analytics/rf-signal?window=7d');
@@ -153,12 +161,13 @@ void main() {
 
     test('app links carry the region as a query', () {
       expect(NetworkRequest.packet(hash, region: 'cmh').toAppUri().toString(), 'meshsonar://network/packets/$hash?region=cmh');
-      expect(const NetworkRequest.section(NetworkSection.home).toAppUri().toString(), 'meshsonar://network');
+      expect(const NetworkRequest.section(NetworkSection.live).toAppUri().toString(), 'meshsonar://network/live');
     });
 
     final samples = <NetworkRequest>[
-      const NetworkRequest.section(NetworkSection.home),
-      const NetworkRequest.section(NetworkSection.home, region: 'cmh'),
+      const NetworkRequest.section(NetworkSection.regions),
+      const NetworkRequest.analytics(analyticsFindingsSlug, region: 'cmh'),
+      const NetworkRequest.analytics(analyticsRegionOverviewSlug, region: 'cmh'),
       const NetworkRequest.section(NetworkSection.packets, region: 'cmh', window: '24h'),
       NetworkRequest.packet(hash, region: 'cmh'),
       NetworkRequest.packet(hash),
@@ -173,8 +182,8 @@ void main() {
       const NetworkRequest.section(NetworkSection.live),
       NetworkRequest.mapPacket(hash, region: 'cmh', at: DateTime.utc(2026, 11, 20, 10)),
       NetworkRequest.mapPacket(hash),
-      const NetworkRequest(section: NetworkSection.home, pulse: true),
-      const NetworkRequest(section: NetworkSection.home, region: 'cmh', pulse: true),
+      const NetworkRequest(section: NetworkSection.live, pulse: true),
+      const NetworkRequest(section: NetworkSection.live, region: 'cmh', pulse: true),
       const NetworkRequest.section(NetworkSection.channels),
       const NetworkRequest.section(NetworkSection.channels, region: 'cmh'),
       const NetworkRequest.channel('tag:LongFast', region: 'cmh'),

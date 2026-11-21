@@ -11,7 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:meshsonar/core/api.dart' show CmatException;
-import 'package:meshsonar/core/network_request.dart' show networkHubSections;
+import 'package:meshsonar/core/network_request.dart' show networkHubSections, networkRegionSections;
 import 'package:meshsonar/core/region_lookup.dart';
 import 'package:meshsonar/core/v1/busy_regions_api.dart';
 import 'package:meshsonar/core/v1/network_api.dart';
@@ -114,18 +114,28 @@ Future<void> frames(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('the tab is called Network and shows ONE strip of eight sections under a one-line header, Home first, no second bottom bar', (tester) async {
+  testWidgets('the tab is called Network and shows ONE strip of seven sections under a one-line header, Live first and no Home, no second bottom bar', (tester) async {
     useV1Fixtures();
     await pumpNetwork(tester);
     expect(find.descendant(of: find.byKey(const Key('shell-tabs')), matching: find.text('Network')), findsOneWidget);
     expect(find.descendant(of: find.byKey(const Key('shell-tabs')), matching: find.text('Analyze')), findsNothing);
-    final labels = [for (final s in NetworkSection.values) s.label];
-    expect(labels, ['Home', 'Packets', 'Live', 'Nodes', 'Channels', 'Observers', 'Analytics', 'Tools']);
-    for (final s in NetworkSection.values) {
+    final labels = [for (final s in networkRegionSections) s.label];
+    expect(labels, ['Live', 'Packets', 'Nodes', 'Channels', 'Observers', 'Analytics', 'Tools']);
+    for (final s in networkRegionSections) {
       expect(find.descendant(of: find.byKey(const Key('network-sections')), matching: find.byKey(Key('network-section-${s.name}'), skipOffstage: false)), findsOneWidget,
           reason: s.name);
     }
-    expect(find.byKey(const Key('network-section-body-home')), findsOneWidget);
+    // Build 72: no Home section; the tab opens on Live.
+    for (final gone in ['network-section-home', 'network-section-regions', 'network-section-body-home', 'network-sub-home', 'network-summary']) {
+      expect(find.byKey(Key(gone), skipOffstage: false), findsNothing, reason: gone);
+    }
+    expect(find.text('Home'), findsNothing);
+    expect(find.byKey(const Key('network-section-body-live')), findsOneWidget);
+    expect(find.byKey(const Key('live-map')), findsOneWidget, reason: 'the Network tab opens on Live');
+    final first = tester.getRect(find.byKey(const Key('network-section-live')));
+    for (final s in networkRegionSections.skip(1)) {
+      expect(tester.getRect(find.byKey(Key('network-section-${s.name}'), skipOffstage: false)).left, greaterThan(first.left), reason: 'Live is the first name on the strip');
+    }
     expect(find.byKey(const Key('region-title')), findsOneWidget);
     expect(find.text('Columbus, US'), findsOneWidget);
     // Header 48 pt, strip 44 pt, then the body: the strip sits ABOVE the content and nothing sits between the body and the tab bar.
@@ -133,12 +143,12 @@ void main() {
     final strip = tester.getRect(find.byType(NetworkSectionStrip));
     expect(strip.height, 44);
     final head = tester.getRect(find.byKey(const Key('network-header')));
-    final bodyRect = tester.getRect(find.byKey(const Key('network-section-body-home')));
+    final bodyRect = tester.getRect(find.byKey(const Key('network-section-body-live')));
     expect(head.bottom, lessThanOrEqualTo(strip.top));
     expect(strip.bottom, lessThanOrEqualTo(bodyRect.top));
     final tabs = tester.getRect(find.byKey(const Key('shell-tabs')));
     expect(bodyRect.bottom, closeTo(tabs.top, 1), reason: 'the body runs down to the tab bar: no second bar');
-    // The strip scrolls sideways (eight names do not fit a phone).
+    // The strip scrolls sideways (seven names do not fit a phone).
     await section(tester, 'tools');
     expect(find.byType(ToolsSection), findsOneWidget);
     await tester.pump(const Duration(seconds: 2));
@@ -147,16 +157,14 @@ void main() {
   testWidgets('every section is reachable; only the shown one is built; Packets has no Live list, Nodes no Observers switch, no Insights rows', (tester) async {
     useV1Fixtures();
     await pumpNetwork(tester);
-    // Home: Findings (old "Analyze") and Overview.
-    expect(find.byKey(const Key('network-now-findings')), findsOneWidget);
-    await section(tester, 'home', sub: 1);
-    expect(find.byKey(const Key('network-now-overview')), findsOneWidget);
+    // Live first: the tab opens on the live map.
+    expect(find.byKey(const Key('live-map')), findsOneWidget);
     // Packets: the list only.
     await section(tester, 'packets');
     expect(find.byKey(const Key('network-packets-list')), findsOneWidget);
     expect(find.byKey(const Key('network-sub-packets')), findsNothing, reason: 'the Live list sub-view is gone');
     expect(find.byKey(const Key('network-packets-live')), findsNothing);
-    expect(find.byKey(const Key('network-now-overview')), findsNothing, reason: 'a hidden section is not built');
+    expect(find.byKey(const Key('live-map')), findsNothing, reason: 'a hidden section is not built');
     // Live: the live map with replay (the old Map).
     await section(tester, 'live');
     expect(find.byKey(const Key('live-map')), findsOneWidget);
@@ -184,6 +192,27 @@ void main() {
     final an = tester.widget<AnalyticsSection>(find.byType(AnalyticsSection));
     expect((an.baseUrl, an.regionSlug, an.initialTab), ('https://cmh.meshsonar.com', 'cmh', null));
     expect(find.byType(ChannelsSection), findsNothing);
+    // Build 72: what Home held is the first two rows of Analytics, each opening its native panel in place.
+    final findings = find.byKey(const Key('analytics-tab-findings')), overview = find.byKey(const Key('analytics-tab-region-overview'));
+    expect(find.descendant(of: findings, matching: find.text('Findings')), findsOneWidget);
+    expect(find.descendant(of: overview, matching: find.text('Region overview')), findsOneWidget);
+    expect(tester.getTopLeft(findings).dy, lessThan(tester.getTopLeft(overview).dy));
+    expect(tester.getTopLeft(overview).dy, lessThan(tester.getTopLeft(find.byKey(const Key('analytics-tab-overview'))).dy), reason: 'above the site tabs');
+    await tester.tap(findings);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.byKey(const Key('network-findings')), findsOneWidget);
+    expect(find.byKey(const Key('what-changed')), findsOneWidget, reason: 'the "What changed" card moved with Findings');
+    expect(find.byKey(const Key('network-sections')), findsOneWidget, reason: 'in place: the strip stays');
+    await tester.tap(find.byKey(const Key('in-place-back')));
+    await tester.pump();
+    expect(find.byKey(const Key('analytics-section')), findsOneWidget);
+    await tester.tap(overview);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.byKey(const Key('network-region-overview')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('in-place-back')));
+    await tester.pump();
     await section(tester, 'tools');
     final tl = tester.widget<ToolsSection>(find.byType(ToolsSection));
     expect((tl.baseUrl, tl.regionSlug, tl.initialTool), ('https://cmh.meshsonar.com', 'cmh', null));
@@ -198,14 +227,15 @@ void main() {
     await tester.pump(const Duration(seconds: 2));
   });
 
-  testWidgets('region header: pulse chip from /v1/pulse, summary line, Export region report in the overflow menu', (tester) async {
+  testWidgets('region header: pulse chip from /v1/pulse, no summary line, Export region report in the overflow menu', (tester) async {
     useV1Fixtures();
     await pumpNetwork(tester);
     expect(find.byKey(const Key('pulse-chip')), findsOneWidget);
     expect(find.descendant(of: find.byKey(const Key('pulse-chip')), matching: find.text('Unusual: Riverside RPT went quiet +1')), findsOneWidget,
         reason: 'warn before info');
-    expect(find.byKey(const Key('what-changed')), findsOneWidget, reason: 'AZ-3.6 item 6: the "What changed" card on Home > Findings');
-    expect(find.text('640 packets last hour · 151 repeaters heard · 26 observers online'), findsOneWidget);
+    // Build 72: the summary line went with Home (the Live panel header shows observers and the packet count).
+    expect(find.text('640 packets last hour · 151 repeaters heard · 26 observers online'), findsNothing);
+    expect(find.byKey(const Key('network-summary')), findsNothing);
     await tester.tap(find.byKey(const Key('pulse-chip')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('pulse-sheet')), findsOneWidget);
@@ -247,7 +277,7 @@ void main() {
               ),
               bottom: PreferredSize(
                 preferredSize: const Size.fromHeight(NetworkSectionStrip.height),
-                child: NetworkSectionStrip(selected: NetworkSection.home, onChanged: (_) {}),
+                child: NetworkSectionStrip(selected: NetworkSection.live, onChanged: (_) {}),
               ),
             ),
           ),
@@ -316,7 +346,7 @@ void main() {
     await tester.tap(hit);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('network-search-sheet')), findsNothing);
-    expect(find.byKey(const Key('network-section-body-home')), findsOneWidget);
+    expect(find.byKey(const Key('network-section-body-live')), findsOneWidget, reason: 'a region hit opens the region on Live');
     expect(h.client.regionsIndexResult, isNotEmpty);
     await tester.pump(const Duration(seconds: 2));
   });
@@ -367,7 +397,9 @@ void main() {
       for (final s in NetworkSection.values) {
         expect(find.byKey(Key('network-section-${s.name}'), skipOffstage: false), networkHubSections.contains(s) ? findsOneWidget : findsNothing, reason: s.name);
       }
-      expect(networkHubSections, [NetworkSection.home, NetworkSection.channels, NetworkSection.analytics, NetworkSection.tools]);
+      expect(networkHubSections, [NetworkSection.regions, NetworkSection.channels, NetworkSection.analytics, NetworkSection.tools]);
+      expect(tester.widget<Text>(find.byKey(const Key('network-section-regions'))).data, 'Regions', reason: 'All regions opens on Regions');
+      expect(find.byKey(const Key('all-regions-every-region'), skipOffstage: false), findsOneWidget);
       expect(find.byKey(const Key('network-summary')), findsOneWidget, reason: 'the network summary, from the hub');
       expect(find.byKey(const Key('network-search-field')), findsOneWidget, reason: 'global search');
       expect(find.byKey(const Key('live-map')), findsNothing, reason: 'no world live map on the phone');
@@ -390,7 +422,7 @@ void main() {
       final tl = tester.widget<ToolsSection>(find.byType(ToolsSection));
       expect((Uri.parse(tl.baseUrl).host, tl.regionSlug), (hub, null));
       // The global search opens with no region.
-      await section(tester, 'home');
+      await section(tester, 'regions');
       await tester.tap(find.byKey(const Key('network-search')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('network-search-sheet')), findsOneWidget);
@@ -414,9 +446,10 @@ void main() {
       expect(h.state.viewingRegion!.code, 'DAY');
       expect(h.state.settings.regionManual, 'DAY', reason: 'saved as the manual pick: remembered across a restart');
       expect(h.settings.saved.regionManual, 'DAY', reason: 'written to settings');
-      for (final s in NetworkSection.values) {
-        expect(find.byKey(Key('network-section-${s.name}'), skipOffstage: false), findsOneWidget, reason: 'all eight sections are back');
+      for (final s in networkRegionSections) {
+        expect(find.byKey(Key('network-section-${s.name}'), skipOffstage: false), findsOneWidget, reason: 'the region sections are back');
       }
+      expect(find.byKey(const Key('network-section-regions'), skipOffstage: false), findsNothing);
       await tester.pump(const Duration(seconds: 2));
     });
 
@@ -425,7 +458,7 @@ void main() {
       await tester.tap(find.byKey(const Key('all-regions-back')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('network-all-regions')), findsNothing);
-      expect(find.byKey(const Key('network-section-body-home')), findsOneWidget);
+      expect(find.byKey(const Key('network-section-body-live')), findsOneWidget, reason: 'back in the region, on Live');
       expect(h.state.viewingRegion!.code, 'CMH');
       // Again, then pick Dayton in the switcher.
       await tester.tap(find.byKey(const Key('network-region-button')));
@@ -496,7 +529,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('network-sections')), findsOneWidget);
       expect(find.text('Columbus, US'), findsOneWidget, reason: 'with no GPS fix and no pick, the default region shows');
-      expect(find.byKey(const Key('network-section-body-home')), findsOneWidget);
+      expect(find.byKey(const Key('network-section-body-live')), findsOneWidget, reason: 'a fresh install opens on Live');
       await tester.pump(const Duration(seconds: 2));
     });
 
@@ -542,7 +575,7 @@ void main() {
       expect(tester.widget<AnalyticsSection>(find.byType(AnalyticsSection, skipOffstage: false)).initialTab, 'topology');
       // Picking the section by hand afterwards shows its list, not the linked tab again.
       await popPages(tester);
-      await section(tester, 'home');
+      await section(tester, 'packets');
       await section(tester, 'analytics');
       expect(tester.widget<AnalyticsSection>(find.byType(AnalyticsSection, skipOffstage: false)).initialTab, isNull);
       await tester.pump(const Duration(seconds: 2));
@@ -577,14 +610,31 @@ void main() {
       await tester.pump(const Duration(seconds: 2));
     });
 
-    testWidgets('a /pulse link opens Home with the pulse sheet', (tester) async {
+    testWidgets('links to the moved Home panels open them in place under Analytics', (tester) async {
+      useV1Fixtures();
+      final h = await pumpNetwork(tester);
+      h.incomingLinks.add(Uri.parse('meshsonar://network/analytics/findings?region=cmh'));
+      await frames(tester);
+      expect(find.byKey(const Key('analytics-native-findings')), findsOneWidget);
+      expect(find.byKey(const Key('network-findings')), findsOneWidget);
+      h.incomingLinks.add(Uri.parse('meshsonar://network/analytics/region-overview?region=cmh'));
+      await frames(tester);
+      expect(find.byKey(const Key('network-region-overview')), findsOneWidget);
+      // The old region home link opens Live.
+      h.incomingLinks.add(Uri.parse('https://cmh.meshsonar.com/'));
+      await frames(tester);
+      expect(find.byKey(const Key('live-map')), findsOneWidget);
+      await tester.pump(const Duration(seconds: 2));
+    });
+
+    testWidgets('a /pulse link opens Live with the pulse sheet', (tester) async {
       useV1Fixtures();
       final h = await pumpNetwork(tester);
       await section(tester, 'nodes');
       h.incomingLinks.add(Uri.parse('https://cmh.meshsonar.com/pulse'));
       await frames(tester);
       await tester.pumpAndSettle();
-      expect(find.byKey(const Key('network-section-body-home')), findsOneWidget);
+      expect(find.byKey(const Key('network-section-body-live')), findsOneWidget);
       expect(find.byKey(const Key('pulse-sheet')), findsOneWidget);
       await tester.tapAt(const Offset(2, 2));
       await tester.pumpAndSettle();

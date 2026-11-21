@@ -73,7 +73,7 @@ it to its list.
 |---|---|
 | Chat | Chats \| Contacts \| Channels through the `ChatTabHost` seam (see Contacts and direct messages, below). Build 71: the fourth segment, Radio, moved to More > Radio. Without a chat store: "Messages arrive here once you connect a radio". Unread badge on the tab icon (the only tab with a count badge). |
 | Drive | The coverage map and the drive controls (called Map before the redesign). Start drive is the big button. The tab runs behind the translucent, blurred tab bar (opaque under Reduce Transparency); `ShellController.immersive` hides the bar, the rail and the mini drive bar while the Drive panel is collapsed to its pill. Icon: car. |
-| Network | (build 71; was Analyze.) The site in the app, for the viewed region or for every region, no radio needed: one header line, one strip of eight sections (Home, Packets, Live, Nodes, Channels, Observers, Analytics, Tools) and no second bar. See "Network tab: the site in the app", below. |
+| Network | (build 71; was Analyze.) The site in the app, for the viewed region or for every region, no radio needed: one header line, one strip of seven sections (Live, Packets, Nodes, Channels, Observers, Analytics, Tools; it opens on Live since build 72) and no second bar. See "Network tab: the site in the app", below. |
 | Plan | The **Master Planner** (0.38): one full-screen map with a bottom sheet and the modes Link, Coverage, Find sites and Where to drive on one saved Plan (section "Plan tab: the Master Planner", below). **Removed (Nov 15 2026, app #219 and A7):** the separate Point-to-point link and Coverage painter screens (folded into the Planner), and the Airtime and load, Radio presets and Coverage check screens (earlier removed in M0 (Nov 8 2026): Planner, Recommended build, Site explorer, Scenarios, Build tracker, Field data, Airtime live channel load). |
 | More | Nine rows, no group headers (build 71 clutter pass): **Drives** (the drive list, reports and progress), **Radio** (More > Radio, below), **Devices and keys**, **Leaderboard**, **Set up a repeater observer**, **Chat settings**, **Settings**, **Help** (How it works with the tour, Method, Colour legend, Report a problem, My reports, Privacy policy), **About MeshSonar**. Rows that only jumped into a Settings section are gone: Claimed radios, Observer, Wardriving settings, Notifications and Privacy and data sharing are sections of Settings (the app's own links, e.g. the Drive ping sheet's "Wardriving settings", still open the section: `ShellController.openMore(MoreItem.wardriving)`). **More > Radio** (`ui/shell/more_radio_screen.dart`; the Chat tab's Radio segment until build 71): the radio card, nodes heard nearby, the repeaters, rooms and sensors in the radio's contacts with the Tools menu (Trace, Discover, Rx log, Adverts), a search field, then Radio settings and region preset (the read-only comparison), Radio setup, Noise floor and Telemetry. With no radio it says so and keeps the settings and tools rows. The radio tools are also listed once under Network > Tools. The Developer section and its New Drive screen switch are gone (build 70): the panel layout is the only Drive screen, and a saved `driveRedesign:false` in `redesign_flags.json` is ignored. Opens inside the tab (own Navigator), so the bars stay. The full More + Settings merge is phase X. |
 
@@ -101,18 +101,19 @@ offline copy; on a narrow phone it collapses to its coloured dot before the butt
 packets, observers, regions) and one overflow menu: **Share link** (the site's address of the shown section) and **Export region
 report**. Every control is a 44 pt target. No second bar at the bottom: the only bottom bar is the app's tab bar.
 
-**Section strip, 44 pt, scrolls sideways:** Home · Packets · Live · Nodes · Channels · Observers · Analytics · Tools. The shown
-one is underlined and scrolled into view. Only the shown section is built, so a hidden one never polls or holds a live stream.
+**Section strip, 44 pt, scrolls sideways:** Live · Packets · Nodes · Channels · Observers · Analytics · Tools. The tab opens on
+**Live** (build 72: the Home section was removed; its summary line is gone, the Live panel header shows observers online and the
+packet count, and its Findings and Overview are the first two rows of Analytics). The shown section is underlined and scrolled
+into view. Only the shown section is built, so a hidden one never polls or holds a live stream.
 
 | Section | What it is | Site twin |
 |---|---|---|
-| Home | The old "Now": a one-line summary (`GET /v1/summary`), then Findings \| Overview (the only sub-switch left), with the "What changed" card. | `/` (`/pulse` opens the pulse sheet) |
+| Live | The live packet map with replay. ONE panel on the map (see "Panels on a map"): its header shows status and the packet count; open, it holds the scrubber, speed, filters and the feed. A drawn packet is a second, closable panel. | `/live` (the region home `/`, `/now` and `/pulse` open Live too, `/pulse` with the pulse sheet); one packet: `/map?panel=live&packet=<hash>&t=<time>` |
 | Packets | `/v1/packets` grouped by hash with expandable observations, filters and the filter language, saved filters, My radio, Decode a packet; a packet opens its page (decoded fields, path with hop confidence, who heard it, byte inspector). A region with no packet feed says so in a plain card. The old Live list sub-view is gone (Live is its own section). | `/packets`, `/packets/<hash>` |
-| Live | The live packet map with replay. ONE panel on the map (see "Panels on a map"): its header shows status and the packet count; open, it holds the scrubber, speed, filters and the feed. A drawn packet is a second, closable panel. | `/live`; one packet: `/map?panel=live&packet=<hash>&t=<time>` |
 | Nodes | The node directory, every role, with role / status / last-heard chips, search, My nodes, favourites first. A node opens its page (one look for every node: status, SNR trend and 30-day card under one header, neighbours, heard by, Your drives and drive reach when it has a position). | `/nodes`, `/nodes/<key>` |
 | Channels | Native: the channel list (private channels shown but not openable), a reader (newest at the bottom, polls every 20 s only while visible and in front, "N new" pill, older pages), message search (2+ characters) and Report a message. | `/channels`, `/channels/<id>` |
 | Observers | The observer list (it was a sub-view of Nodes); an observer opens its page. | `/observers`, `/observers/<id>` |
-| Analytics | The site's 17 Analytics tabs as a list; each opens the site page inside the app (below). They replace the seven old Insights screens (Analysis, RF, Growth, Reports, Stats, Silent repeaters, Wardrive share). | `/analytics/<slug>` |
+| Analytics | First two rows, native, for a region (build 72; they were the Home section): **Findings** ("What changed", "What needs attention") and **Region overview**; each opens in place inside the section with a back arrow to the list (app links `/analytics/findings`, `/analytics/region-overview`). Then the site's 17 Analytics tabs as a list; each opens the site page inside the app (below). They replace the seven old Insights screens (Analysis, RF, Growth, Reports, Stats, Silent repeaters, Wardrive share). | `/analytics/<slug>` |
 | Tools | Native: **Path Inspector** (hop prefixes to the routes they most likely stand for), **Trace Viewer** (recent traces, SNR per hop, who heard it; a trace run on your radio opens here too), **Prefix Tool** (is a hash prefix free), Decode a packet. Site pages in the app: Scope Audit, Compare observers, Region definition, Status. Radio tools (Trace path, Discover, Adverts, Rx log, Noise floor, Telemetry), each listed once. | `/tools/*`, `/scope-audit`, `/observers/compare`, `/status`, `/analytics/prefix-tool` |
 
 **Site pages inside the app** (`ui/network/analytics/site_page_view.dart`): a web view on `https://…meshsonar.com` only, opened
@@ -121,7 +122,7 @@ link inside the page opens the app's native screen; loading, "Can't reach MeshSo
 cookies, tokens or script channel are passed in.
 
 **All regions** (first entry of the region switcher; for the session only): the header says "All regions" and the strip shows
-only the sections that need no region (Home, Channels, Analytics, Tools, all on the hub). Home there has the network summary,
+only the sections that need no region: **Regions · Channels · Analytics · Tools**, all on the hub. It opens on Regions (site twin `/regions`), which has the network summary,
 a global search field, "Back to <your region>", **Busiest regions, last 10 minutes** (`GET /v1/regions/busy`: name, code,
 packets per minute; loads when shown, no polling; says so when offline, on an error with Try again, or when no region had
 packets) and Every region (the comparison list). A busiest-regions row opens that region's Live section and makes it the viewed
@@ -134,7 +135,7 @@ list and no GPS fix or pick, the nearest or default region shows.
 **Links** (`NetworkRequest`, pure Dart): every site route above parses from `https://meshsonar.com/...`,
 `https://<region>.meshsonar.com/...` and `meshsonar://network/...`, and serialises back to the same address (Share link). The
 retired `/insights?tab=` and `/analysis` open their Analytics twin; `/repeaters/<key>` opens the node. Section names from before
-build 71 (`now`, `map`, `insights`) still resolve (`NetworkSection.byName`).
+build 71 (`now`, `map`, `insights`) and build 71's `home` still resolve (`NetworkSection.byName`: `now` and `home` are Live).
 
 ### Panels on a map (build 71, `ui/design/map_panel.dart`)
 

@@ -1,23 +1,25 @@
-// The Network sections (build 71, "the site in the app"): ONE horizontally scrolling strip under the header,
-//   Home · Packets · Live · Nodes · Channels · Observers · Analytics · Tools
+// The Network sections (build 71, "the site in the app"; build 72: Live first, no Home): ONE horizontally scrolling
+// strip under the header,
+//   Live · Packets · Nodes · Channels · Observers · Analytics · Tools
 // and the body of the shown section. No second bottom bar.
-//   Home      : Findings | Overview (the old "Now"; the only section with a sub-switch)
+//   Live      : the live packet map with replay (AZ-3.3, lib/ui/network/live/live_map_view.dart). The tab opens here.
 //   Packets   : /v1/packets with filters, My radio, Decode a packet (AZ-3.2)
-//   Live      : the live packet map with replay (AZ-3.3, lib/ui/network/live/live_map_view.dart; the old "Map")
 //   Nodes     : the node directory, every role (AZ-3.4)
-//   Channels  : lib/ui/network/channels/channels_section.dart (stream C)
-//   Observers : the observer list (was a Nodes sub-view)
-//   Analytics : the site's analytics tabs, lib/ui/network/analytics/analytics_section.dart (stream D)
-//   Tools     : lib/ui/network/tools/tools_section.dart (stream D)
-// "All regions" (the region switcher's entry) shows only the sections that need no region (networkHubSections), on the
-// hub: Home there is the network summary, the global search and the busiest regions (a tap opens that region's Live).
+//   Channels  : lib/ui/network/channels/channels_section.dart
+//   Observers : the observer list
+//   Analytics : Findings and Region overview (native; the Home section until build 72), then the site's analytics tabs
+//               (lib/ui/network/analytics/analytics_section.dart)
+//   Tools     : lib/ui/network/tools/tools_section.dart
+// "All regions" (the region switcher's entry) shows the sections that need no region (networkHubSections), on the hub:
+//   Regions · Channels · Analytics · Tools
+// Regions is the network summary, the global search and the busiest regions (a tap opens that region's Live).
 // Only the shown section is built, so hidden panels never poll or hold a live stream (battery rules).
 import 'dart:async';
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../../app/app_state.dart';
+import '../../core/network_request.dart' show analyticsFindingsSlug, analyticsRegionOverviewSlug, networkRegionSections;
 import '../../core/region_cache.dart' show asOfLabel;
 import '../../core/region_lookup.dart';
 import '../../core/v1/busy_regions_api.dart';
@@ -35,18 +37,13 @@ import 'nodes/nodes_section.dart';
 import 'packets/packet_list_view.dart';
 import 'tools/tools_section.dart';
 
-/// The sub-views of a section that has more than one (labels in display order). Only Home has any since build 71.
-const Map<NetworkSection, List<String>> networkSubViews = {
-  NetworkSection.home: ['Findings', 'Overview'],
-};
-
 /// The section strip: one line of section names that scrolls sideways, the shown one underlined. 44 pt tall (each
 /// name is a full-height target); the labels grow only a little with the text size so the line stays one line.
 class NetworkSectionStrip extends StatefulWidget {
   final List<NetworkSection> sections;
   final NetworkSection selected;
   final ValueChanged<NetworkSection> onChanged;
-  const NetworkSectionStrip({super.key, this.sections = NetworkSection.values, required this.selected, required this.onChanged});
+  const NetworkSectionStrip({super.key, this.sections = networkRegionSections, required this.selected, required this.onChanged});
 
   static const double height = 44;
 
@@ -134,49 +131,6 @@ class _NetworkSectionStripState extends State<NetworkSectionStrip> {
   }
 }
 
-/// The small sub-view switch at the top of a section (Findings | Overview).
-class NetworkSubSwitch extends StatelessWidget {
-  final NetworkSection section;
-  final int selected;
-  final ValueChanged<int> onChanged;
-  const NetworkSubSwitch({super.key, required this.section, required this.selected, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    final labels = networkSubViews[section]!;
-    final c = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-      child: MediaQuery(
-        data: MediaQuery.of(context).copyWith(textScaler: TextScaler.noScaling),
-        child: Semantics(
-          container: true,
-          label: '${section.label} views',
-          child: SizedBox(
-            width: double.infinity,
-            child: CupertinoSlidingSegmentedControl<int>(
-              key: Key('network-sub-${section.name}'),
-              groupValue: selected,
-              thumbColor: c.surfaceContainerHighest,
-              backgroundColor: c.onSurface.withValues(alpha: 0.10),
-              children: {
-                for (var i = 0; i < labels.length; i++)
-                  i: ConstrainedBox(
-                    constraints: const BoxConstraints(minHeight: 36),
-                    child: Center(child: Text(labels[i], key: Key('network-sub-${section.name}-$i'), maxLines: 1)),
-                  ),
-              },
-              onValueChanged: (v) {
-                if (v != null) onChanged(v);
-              },
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 /// What a link asked a section to open straight away (a channel, an analytics tab, a tool with its argument).
 @immutable
 class NetworkSectionTarget {
@@ -185,12 +139,10 @@ class NetworkSectionTarget {
   static const none = NetworkSectionTarget();
 }
 
-/// A section's body for [region]: the sub-switch (Home) and the shown panel.
+/// A section's body for [region]: the shown panel.
 class NetworkSectionBody extends StatelessWidget {
   final NetworkSection section;
   final RegionIndexEntry region;
-  final int sub;
-  final ValueChanged<int> onSub;
 
   /// The request that opened Packets (its filters and window), when a link named some.
   final NetworkRequest? packetsRequest;
@@ -199,28 +151,18 @@ class NetworkSectionBody extends StatelessWidget {
   final NetworkRequest? mapRequest;
   final NetworkSectionTarget target;
   const NetworkSectionBody(
-      {super.key,
-      required this.section,
-      required this.region,
-      required this.sub,
-      required this.onSub,
-      this.packetsRequest,
-      this.mapRequest,
-      this.target = NetworkSectionTarget.none});
+      {super.key, required this.section, required this.region, this.packetsRequest, this.mapRequest, this.target = NetworkSectionTarget.none});
 
   Widget _panel(BuildContext context, AppState s) {
     final r = region;
     switch (section) {
-      case NetworkSection.home:
-        return sub == 0
-            ? AnalyzePanel(key: const Key('network-now-findings'), baseUrl: r.url, regionSlug: r.slug, regionName: r.name, timezone: s.viewingTimezone)
-            : KeyedSubtree(key: const Key('network-now-overview'), child: buildOverviewPanel(r.url, r.slug));
+      case NetworkSection.live:
+      case NetworkSection.regions: // hub only; a region shows Live in its place
+        return NetworkLiveMap(key: ValueKey('network-live-map-${mapRequest?.packetHash}'), region: r, request: mapRequest);
       case NetworkSection.packets:
         return KeyedSubtree(
             key: const Key('network-packets-list'),
             child: PacketListView(key: ValueKey(packetsRequest), baseUrl: r.url, regionSlug: r.slug, request: packetsRequest));
-      case NetworkSection.live:
-        return NetworkLiveMap(key: ValueKey('network-live-map-${mapRequest?.packetHash}'), region: r, request: mapRequest);
       case NetworkSection.nodes:
         return KeyedSubtree(
             key: const Key('network-nodes-directory'), child: NodeDirectoryView(key: ValueKey('nodes-dir-${r.code}'), baseUrl: r.url, regionSlug: r.slug));
@@ -228,34 +170,51 @@ class NetworkSectionBody extends StatelessWidget {
         return KeyedSubtree(
             key: const Key('network-observers'), child: ObserverListView(key: ValueKey('nodes-obs-${r.code}'), baseUrl: r.url, regionSlug: r.slug));
       case NetworkSection.channels:
-      case NetworkSection.analytics:
       case NetworkSection.tools:
         return networkSiteSection(section, baseUrl: r.url, regionSlug: r.slug, target: target);
+      case NetworkSection.analytics:
+        return networkSiteSection(section, baseUrl: r.url, regionSlug: r.slug, target: target, nativeRows: regionAnalyticsRows(r, timezone: s.viewingTimezone));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final s = AppScope.of(context);
-    return Column(
-      key: Key('network-section-body-${section.name}'),
-      children: [
-        if (section == NetworkSection.home) NetworkSummaryLine(key: ValueKey('network-summary-${region.code}'), baseUrl: region.url),
-        if (networkSubViews.containsKey(section)) NetworkSubSwitch(section: section, selected: sub, onChanged: onSub),
-        Expanded(child: _panel(context, s)),
-      ],
-    );
+    return KeyedSubtree(key: Key('network-section-body-${section.name}'), child: _panel(context, s));
   }
 }
 
+/// The region's native panels at the top of Analytics (the Network Home section until build 72): Findings ("What
+/// changed", "What needs attention") and Region overview.
+List<AnalyticsNativeRow> regionAnalyticsRows(RegionIndexEntry r, {required String? timezone}) => [
+      AnalyticsNativeRow(
+        slug: analyticsFindingsSlug,
+        label: 'Findings',
+        about: 'What changed and what needs attention in this region',
+        builder: (_) => AnalyzePanel(key: const Key('network-findings'), baseUrl: r.url, regionSlug: r.slug, regionName: r.name, timezone: timezone),
+      ),
+      AnalyticsNativeRow(
+        slug: analyticsRegionOverviewSlug,
+        label: 'Region overview',
+        about: 'Repeaters, observers, packets and drives at a glance',
+        builder: (_) => KeyedSubtree(key: const Key('network-region-overview'), child: buildOverviewPanel(r.url, r.slug)),
+      ),
+    ];
+
 /// Channels, Analytics or Tools for a host: the region's ([regionSlug] set) or the hub's (null, "All regions").
 /// Keyed by its target, so a new link reopens the section at what it names.
-Widget networkSiteSection(NetworkSection section, {required String baseUrl, required String? regionSlug, NetworkSectionTarget target = NetworkSectionTarget.none}) =>
+Widget networkSiteSection(NetworkSection section,
+        {required String baseUrl, required String? regionSlug, NetworkSectionTarget target = NetworkSectionTarget.none, List<AnalyticsNativeRow> nativeRows = const []}) =>
     switch (section) {
       NetworkSection.channels =>
         ChannelsSection(key: ValueKey('network-channels-$baseUrl-${target.channelId}'), baseUrl: baseUrl, regionSlug: regionSlug, initialChannelId: target.channelId),
       NetworkSection.analytics =>
-        AnalyticsSection(key: ValueKey('network-analytics-$baseUrl-${target.analyticsTab}'), baseUrl: baseUrl, regionSlug: regionSlug, initialTab: target.analyticsTab),
+        AnalyticsSection(
+            key: ValueKey('network-analytics-$baseUrl-${target.analyticsTab}'),
+            baseUrl: baseUrl,
+            regionSlug: regionSlug,
+            initialTab: target.analyticsTab,
+            nativeRows: nativeRows),
       _ => ToolsSection(
           key: ValueKey('network-tools-$baseUrl-${target.tool}-${target.toolArg}'),
           baseUrl: baseUrl,
@@ -264,7 +223,7 @@ Widget networkSiteSection(NetworkSection section, {required String baseUrl, requ
           initialArg: target.toolArg),
     };
 
-/// "All regions": a section's body on the hub. Home is the network summary, the global search and the busiest
+/// "All regions": a section's body on the hub. Regions is the network summary, the global search and the busiest
 /// regions; Channels, Analytics and Tools are the same sections with no region.
 class NetworkAllRegionsBody extends StatelessWidget {
   final NetworkSection section;
@@ -290,7 +249,7 @@ class NetworkAllRegionsBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (section != NetworkSection.home) {
+    if (section != NetworkSection.regions) {
       return KeyedSubtree(key: Key('network-section-body-${section.name}'), child: networkSiteSection(section, baseUrl: hubUrl, regionSlug: null, target: target));
     }
     final t = Theme.of(context);

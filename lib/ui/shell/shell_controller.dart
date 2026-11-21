@@ -146,7 +146,7 @@ class LegacyTab {
 
   /// Maps an old tab index. Anything unknown opens the Drive tab.
   factory LegacyTab.fromIndex(int i) => switch (i) {
-        1 => const LegacyTab(AppTab.network, network: NetworkSection.home),
+        1 => const LegacyTab(AppTab.network, network: NetworkSection.live),
         2 => const LegacyTab(AppTab.more, more: MoreItem.drives),
         3 => const LegacyTab(AppTab.more, more: MoreItem.radio),
         4 => const LegacyTab(AppTab.more, more: MoreItem.settings),
@@ -164,7 +164,7 @@ class ShellController extends ChangeNotifier {
 
   AppTab _tab;
   NetworkSection _network;
-  ShellController({AppTab initial = AppTab.network, NetworkSection network = NetworkSection.home})
+  ShellController({AppTab initial = AppTab.network, NetworkSection network = NetworkSection.live})
       : _tab = initial,
         // ignore: prefer_initializing_formals
         _network = network;
@@ -234,6 +234,9 @@ class ShellController extends ChangeNotifier {
     _network = request.section;
     // A request for a region, or for a section that needs one, leaves "All regions".
     if (request.region != null || !networkHubSections.contains(request.section)) _allRegions = false;
+    // The Regions section exists only in All regions.
+    if (request.section == NetworkSection.regions && request.region == null) _allRegions = true;
+    if (!_allRegions && _network == NetworkSection.regions) _network = NetworkSection.live;
     final wasNetwork = _tab == AppTab.network;
     select(AppTab.network);
     if (wasNetwork) notifyListeners();
@@ -253,14 +256,16 @@ class ShellController extends ChangeNotifier {
   void setNetworkAllRegions(bool v) {
     if (v == _allRegions) return;
     _allRegions = v;
-    if (v && !networkHubSections.contains(_network)) _network = NetworkSection.home;
+    // All regions opens on Regions; back in a region, the hub-only Regions section becomes Live.
+    if (v && !networkHubSections.contains(_network)) _network = NetworkSection.regions;
+    if (!v && _network == NetworkSection.regions) _network = NetworkSection.live;
     notifyListeners();
   }
 
   /// The Network tab in "All regions", from anywhere (the switcher sheet).
   void openNetworkAllRegions() {
     _pendingNetwork = null;
-    _network = NetworkSection.home;
+    _network = NetworkSection.regions;
     _allRegions = true;
     final wasNetwork = _tab == AppTab.network;
     select(AppTab.network);

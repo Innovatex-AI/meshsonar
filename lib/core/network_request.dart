@@ -19,26 +19,30 @@
 // Pure Dart: no Flutter imports.
 import 'v1/packet_filter.dart';
 
-/// The eight Network sections, in display order (build 71: the site's own menu).
+/// The Network sections. A region shows [networkRegionSections] in that order (build 72: Live first, no Home); "All
+/// regions" shows [networkHubSections], where [regions] is its first section (the hub has no live map on the phone).
 enum NetworkSection {
-  home('Home'),
-  packets('Packets'),
   live('Live'),
+  packets('Packets'),
   nodes('Nodes'),
   channels('Channels'),
   observers('Observers'),
   analytics('Analytics'),
-  tools('Tools');
+  tools('Tools'),
+
+  /// "All regions" only: the network summary, the global search and the busiest regions.
+  regions('Regions');
 
   final String label;
   const NetworkSection(this.label);
 
-  /// Looks a section up by name. The pre-build-71 names still resolve: `now` = Home, `map` = Live,
-  /// `insights` = Analytics.
+  /// Looks a section up by name. Older names still resolve: `home` (build 71) and `now` = Live, the section the tab opens
+  /// on since Home was removed in build 72 (its findings and overview are under Analytics); `map` = Live; `insights` =
+  /// Analytics.
   static NetworkSection? byName(String? name) {
     switch (name) {
+      case 'home':
       case 'now':
-        return NetworkSection.home;
       case 'map':
         return NetworkSection.live;
       case 'insights':
@@ -51,8 +55,24 @@ enum NetworkSection {
   }
 }
 
-/// The sections that work with no region (the "All regions" view on the hub).
-const List<NetworkSection> networkHubSections = [NetworkSection.home, NetworkSection.channels, NetworkSection.analytics, NetworkSection.tools];
+/// A region's sections, in strip order.
+const List<NetworkSection> networkRegionSections = [
+  NetworkSection.live,
+  NetworkSection.packets,
+  NetworkSection.nodes,
+  NetworkSection.channels,
+  NetworkSection.observers,
+  NetworkSection.analytics,
+  NetworkSection.tools,
+];
+
+/// The sections that work with no region (the "All regions" view on the hub), in strip order.
+const List<NetworkSection> networkHubSections = [NetworkSection.regions, NetworkSection.channels, NetworkSection.analytics, NetworkSection.tools];
+
+/// The two native panels that were the Home section until build 72, now the first rows of Analytics. App-internal
+/// analytics slugs (`/analytics/findings`, `/analytics/region-overview`): the site has no page under them.
+const String analyticsFindingsSlug = 'findings';
+const String analyticsRegionOverviewSlug = 'region-overview';
 
 /// The site's analytics tab an old `/insights?tab=` name opens now (the site's Analytics replaced Insights).
 /// `channels` is not here: it is its own section.
@@ -127,7 +147,7 @@ class NetworkRequest {
   /// list (`?hops=`).
   final String? toolArg;
 
-  /// True for `/pulse`: Home with the pulse sheet open.
+  /// True for `/pulse`: Live with the pulse sheet open.
   final bool pulse;
 
   /// Live map: the time to show (`/map?panel=live&t=<RFC 3339>&packet=<hash>`, the packet detail's `links.replay`).
@@ -287,7 +307,8 @@ class NetworkRequest {
           mapTime: mapTime,
         );
 
-    if (segs.isEmpty) return make(NetworkSection.home);
+    // The region home `/` (and the old `/now`, `/home`) opens Live: the app has no Home section since build 72.
+    if (segs.isEmpty) return make(NetworkSection.live);
     final head = segs.first.toLowerCase();
     final id = segs.length > 1 ? segs[1] : null;
     final third = segs.length > 2 ? segs[2] : null;
@@ -297,9 +318,11 @@ class NetworkRequest {
     switch (head) {
       case 'now':
       case 'home':
-        return id == null ? make(NetworkSection.home) : null;
+        return id == null ? make(NetworkSection.live) : null;
       case 'pulse':
-        return id == null ? make(NetworkSection.home, pulse: true) : null;
+        return id == null ? make(NetworkSection.live, pulse: true) : null;
+      case 'regions':
+        return id == null ? make(NetworkSection.regions) : null;
       case 'packets':
         if (id == null) {
           final node = filter('node', _nodeKey), hash = filter('hash', _packetHash);
@@ -381,8 +404,8 @@ class NetworkRequest {
 
   String get _path {
     switch (section) {
-      case NetworkSection.home:
-        return pulse ? '/pulse' : '/';
+      case NetworkSection.regions:
+        return '/regions';
       case NetworkSection.packets:
         return packetHash != null && !_hasListFilter ? '/packets/$packetHash' : '/packets';
       case NetworkSection.nodes:
@@ -399,7 +422,8 @@ class NetworkRequest {
         if (t == 'trace' && toolArg != null) return '/tools/trace/$toolArg';
         return networkToolPaths[t] ?? '/tools/$t';
       case NetworkSection.live:
-        return packetHash != null || mapTime != null ? '/map' : '/live';
+        if (packetHash != null || mapTime != null) return '/map';
+        return pulse ? '/pulse' : '/live';
     }
   }
 
