@@ -166,6 +166,11 @@ void main() {
       expect(h.state.coverageMeta.version, 101);
       await tester.pumpWidget(MeshSonarApp(state: h.state));
       await tester.pump();
+      // Build 71: the app opens on the Network tab. The Drive map is mounted behind it (it still asks for its tiles), but it
+      // is offstage until the person goes to Drive, and this test is about what the Drive map draws.
+      expect(find.byKey(const Key('coverage-measured-layer'), skipOffstage: false), findsOneWidget, reason: 'the Drive map is kept ready behind the first tab');
+      await tapShellTab(tester, 'Drive');
+      await tester.pump(const Duration(milliseconds: 100));
       for (var i = 0; i < 6; i++) {
         await tester.runAsync(() => h.state.coverageTiles.idle());
         await tester.pump(const Duration(milliseconds: 100));
