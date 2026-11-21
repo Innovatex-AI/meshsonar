@@ -1,0 +1,107 @@
+{
+ "data": {
+  "candidates": [
+   {
+    "rank": 1,
+    "score": 0.41,
+    "speculative": true,
+    "hops": [
+     {
+      "prefix": "a1",
+      "node": {
+       "key": "a10f4e754a4ae71cace6d45970f59754da883e911140a12ac54841939051b12d",
+       "name": "KE9EJF Porta-peater",
+       "role": "repeater"
+      },
+      "hopScore": 0.74
+     },
+     {
+      "prefix": "3f",
+      "node": {
+       "key": "3f35e309b39e616352277e74df6874454f6ac48a99006b3d05ce96c84fcada9f",
+       "name": "IN.MAR.I70.Dvsn.Obsvr.R",
+       "role": "room"
+      },
+      "hopScore": 0.23
+     }
+    ],
+    "totalKm": 35.98
+   },
+   {
+    "rank": 2,
+    "score": 0.41,
+    "speculative": true,
+    "hops": [
+     {
+      "prefix": "a1",
+      "node": {
+       "key": "a11032bf794a6d6e0d9cb64239a1da85a9bfae12c0d744d1fac0cb04aeebcce7",
+       "name": "Nagglepuss2",
+       "role": "repeater"
+      },
+      "hopScore": 0.74
+     },
+     {
+      "prefix": "3f",
+      "node": {
+       "key": "3f2176cca30e518fca1c6c96f1f9dc3a6499e42e5f5ff26ed08d9089f82223ab",
+       "name": "MechaNodezilla",
+       "role": "repeater"
+      },
+      "hopScore": 0.23
+     }
+    ],
+    "totalKm": 26.14
+   },
+   {
+    "rank": 3,
+    "score": 0.41,
+    "speculative": true,
+    "hops": [
+     {
+      "prefix": "a1",
+      "node": {
+       "key": "a1266cd2cd5fb5d221bad660686262f83474c4431ed5d525718504a96a53ab28",
+       "name": "KY.BOO.Big Dog Way",
+       "role": "repeater"
+      },
+      "hopScore": 0.74
+     },
+     {
+      "prefix": "3f",
+      "node": {
+       "key": "3f2cf0f570d85bdf4d7f504a3c14b65f7ba38493721529493d8377cc0b27e687",
+       "name": "Round Barn -R",
+       "role": "repeater"
+      },
+      "hopScore": 0.23
+     }
+    ],
+    "totalKm": 22.67
+   }
+  ],
+  "weights": {
+   "edge": 0.35,
+   "geo": 0.2,
+   "recency": 0.15,
+   "selectivity": 0.3
+  },
+  "speculativeBelow": 0.7,
+  "unknownHops": []
+ },
+ "meta": {
+  "apiVersion": "1.0",
+  "region": {
+   "slug": "cmh",
+   "name": "Columbus, US",
+   "kind": "region"
+  },
+  "generatedAt": "2026-11-21T11:36:14.303Z",
+  "dataAt": null,
+  "status": {
+   "state": "ready",
+   "reason": null
+  },
+  "sources": {}
+ }
+}

@@ -1,0 +1,132 @@
+{
+ "data": {
+  "query": "a1",
+  "checks": [
+   {
+    "bytes": 1,
+    "prefix": "a1",
+    "free": false,
+    "conflicts": [
+     {
+      "key": "a11032bf794a6d6e0d9cb64239a1da85a9bfae12c0d744d1fac0cb04aeebcce7",
+      "name": "Nagglepuss2",
+      "role": "repeater"
+     },
+     {
+      "key": "a1266cd2cd5fb5d221bad660686262f83474c4431ed5d525718504a96a53ab28",
+      "name": "KY.BOO.Big Dog Way",
+      "role": "repeater"
+     },
+     {
+      "key": "a12d8581f54cbc2815bfbc2d32b59ae7f0fde4d3ae4abfafa5e721338122289c",
+      "name": "Repeato",
+      "role": "repeater"
+     },
+     {
+      "key": "a12e51db335449961a0ccb7a2f36fba43d5d9f9e1dab1b5503bbb14e0639a2bd",
+      "name": "KF8BVB QTH RPTR",
+      "role": "repeater"
+     },
+     {
+      "key": "a13ca8b6d1ab98e67b11e1ccdfac4f49525e8b9fd6d2957872a3c40a1c710c14",
+      "name": "OH.BRO.W8DLS.Mt Orab",
+      "role": "repeater"
+     }
+    ],
+    "nearestConflictKm": 1,
+    "reserved": false
+   },
+   {
+    "bytes": 2,
+    "prefix": null,
+    "free": true,
+    "conflicts": [],
+    "nearestConflictKm": null,
+    "reserved": false
+   },
+   {
+    "bytes": 3,
+    "prefix": null,
+    "free": true,
+    "conflicts": [],
+    "nearestConflictKm": null,
+    "reserved": false
+   }
+  ],
+  "suggestions": [
+   {
+    "bytes": 1,
+    "prefix": "0a",
+    "nearestUseKm": null
+   },
+   {
+    "bytes": 1,
+    "prefix": "1a",
+    "nearestUseKm": null
+   },
+   {
+    "bytes": 1,
+    "prefix": "21",
+    "nearestUseKm": null
+   },
+   {
+    "bytes": 2,
+    "prefix": "f56a",
+    "nearestUseKm": null
+   },
+   {
+    "bytes": 3,
+    "prefix": "10a5c1",
+    "nearestUseKm": null
+   }
+  ],
+  "available": {
+   "1": 8,
+   "2": null,
+   "3": null
+  },
+  "overview": {
+   "repeaters": 176,
+   "byHashSize": {
+    "1": 34,
+    "2": 39,
+    "3": 7,
+    "unknown": 96
+   },
+   "conflicts": {
+    "1": 1,
+    "2": 0,
+    "3": 0
+   },
+   "wouldCollide": {
+    "1": 44,
+    "2": 1,
+    "3": 0
+   },
+   "recommendation": "2",
+   "note": "2-byte prefixes recommended."
+  },
+  "center": {
+   "lat": 39.961208,
+   "lon": -82.999134,
+   "radiusKm": 200
+  },
+  "note": "A prefix is the first bytes of the public key; to change it you generate a new key. Conflicts count repeaters and rooms heard in the last 30 days across the network within the radius."
+ },
+ "meta": {
+  "apiVersion": "1.0",
+  "region": {
+   "slug": "cmh",
+   "name": "Columbus, US",
+   "kind": "region"
+  },
+  "generatedAt": "2026-11-21T11:36:14.520Z",
+  "dataAt": "2026-11-21T11:27:14.940Z",
+  "status": {
+   "state": "ready",
+   "reason": null
+  },
+  "sources": {},
+  "candidates": 1250
+ }
+}
