@@ -129,10 +129,22 @@ MapSource currentMapSource(MapTileStats s, DateTime now, {required bool packActi
 
 /// Concurrency cap + circuit breaker for tile requests.
 class TileFetchGate {
-  final int maxConcurrent;
+  /// Requests in flight at once, and how many may wait behind them. Sized for a phone by default; a map on a bigger screen
+  /// asks for more with [ensureRoom]. A request beyond [maxWaiting] is DROPPED (the oldest first) and its tile stays blank
+  /// until it leaves and re-enters the view, so the queue must hold at least everything one screen asks for.
+  int maxConcurrent;
   final int failuresToOpen;
   final Duration openFor;
-  final int maxWaiting;
+  int maxWaiting;
+
+  /// Tile requests dropped because the queue was full (health readout, tests).
+  int dropped = 0;
+
+  /// Makes room for a screen that needs it; never shrinks. [concurrent] is capped at 12.
+  void ensureRoom({required int waiting, int? concurrent}) {
+    if (waiting > maxWaiting) maxWaiting = waiting;
+    if (concurrent != null && concurrent.clamp(1, 12) > maxConcurrent) maxConcurrent = concurrent.clamp(1, 12);
+  }
   DateTime Function() clock;
   TileFetchGate({this.maxConcurrent = 6, this.failuresToOpen = 3, this.openFor = const Duration(seconds: 15), this.maxWaiting = 48, DateTime Function()? clock})
     : clock = clock ?? DateTime.now {
@@ -217,7 +229,8 @@ class TileFetchGate {
     final w = _Waiter();
     _waiting.addLast(w);
     while (_waiting.length > maxWaiting) {
-      _waiting.removeFirst().completer.complete(null); // the oldest is surely off screen by now
+      _waiting.removeFirst().completer.complete(null); // the oldest is off screen by now (the queue holds several screens)
+      dropped++;
     }
     unawaited(cancel.then((_) {
       if (!w.completer.isCompleted && _waiting.remove(w)) w.completer.complete(null);

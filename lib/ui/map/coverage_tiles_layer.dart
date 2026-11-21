@@ -10,7 +10,9 @@
 //
 // Tiles: integer zoom, at most 16 (z16 hexagons are exact deeper in); predicted from meta.predictedFromZoom (8). A tile not
 // in memory yet is stood in for by its nearest loaded ancestor of the same kind (hexagons by hexagons from meta.hexFromZoom,
-// points by points below it), so a pan or zoom rarely blanks the layer and never shows dots where hexagons belong.
+// points by points below it), else by its loaded children. A zoom step keeps the whole previous picture until the new
+// zoom's tiles are in (kCoverageHold at most): no hole where coverage was, one swap per step (see "steadiness" below).
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
@@ -19,6 +21,34 @@ import 'package:flutter_map/flutter_map.dart';
 import '../../core/coverage_v2.dart';
 import 'cell_raster_layer.dart';
 import 'coverage_bands.dart';
+
+/// Counters for the steadiness of one coverage layer (tests and the simulator probe; plain ints, nothing is logged).
+class CoverageLayerStats {
+  /// build() calls of the layer.
+  int builds = 0;
+
+  /// Times the picture handed to the painter was replaced.
+  int dataSwaps = 0;
+
+  /// Builds in which something that was drawn in the previous build is drawn by nothing now (a hole where coverage was).
+  int dropFrames = 0;
+
+  /// Viewport tiles that lost their picture, summed over those builds.
+  int droppedTiles = 0;
+
+  void reset() => builds = dataSwaps = dropFrames = droppedTiles = 0;
+
+  @override
+  String toString() => 'builds=$builds dataSwaps=$dataSwaps dropFrames=$dropFrames droppedTiles=$droppedTiles';
+}
+
+/// True when tile a (z, x, y) and tile b cover some of the same ground (one is the other or its ancestor).
+bool coverageTilesOverlap((int, int, int) a, (int, int, int) b) {
+  final (az, ax, ay) = a;
+  final (bz, bx, by) = b;
+  if (az <= bz) return (bx >> (bz - az)) == ax && (by >> (bz - az)) == ay;
+  return (ax >> (az - bz)) == bx && (ay >> (az - bz)) == by;
+}
 
 class CoverageTilesLayer extends StatefulWidget {
   final CoverageTileLayer layer;
@@ -52,6 +82,7 @@ class CoverageTilesLayerState extends State<CoverageTilesLayer> {
 
   @override
   void dispose() {
+    _holdTimer?.cancel();
     widget.store.removeListener(_onTile);
     super.dispose();
   }
@@ -66,6 +97,13 @@ class CoverageTilesLayerState extends State<CoverageTilesLayer> {
   CellLayerData _data = CellLayerData.empty;
   List<CellStyle>? _styles;
   CoverageBandColors? _stylesFor;
+
+  /// Steadiness counters of this layer (tests).
+  final CoverageLayerStats stats = CoverageLayerStats();
+  List<(int, int, int)> _drawnTiles = const [];
+
+  /// Viewport tiles that draw nothing now although coverage was drawn over them in the last complete picture (tests: 0 = steady).
+  int holes = 0;
 
   /// Cells in the data handed to the painter now (tests).
   int get cellCount => _data.shapes.length;
@@ -87,45 +125,130 @@ class CoverageTilesLayerState extends State<CoverageTilesLayer> {
     return _shapes[key] = out;
   }
 
+  // ---- steadiness (build 72, "the coverage is jumpy") ----
+  // One picture per zoom step. When the tile zoom changes and the new zoom's tiles are not all in yet, the picture that is on
+  // screen stays, whole, until they are (or [kCoverageHold] passes): no hole where coverage was, and dots turn into hexagons
+  // (or back) once for the whole view, not tile by tile as each lands. Within one zoom (a pan) a tile that is not in yet is
+  // stood in for by its nearest loaded ancestor of the same kind, else by its loaded children, so zooming out keeps the
+  // finer tiles until the coarser one lands. The Nov 8 rule still holds once the hold is over: at a hexagon zoom a point
+  // tile never stands in.
+  int? _shownZ;
+  Timer? _holdTimer;
+  bool _holdExpired = false;
+
+  /// True while a zoom step is showing the previous picture (tests).
+  bool get holding => _holdTimer != null;
+
+  void _endHold() {
+    _holdTimer?.cancel();
+    _holdTimer = null;
+    _holdExpired = false;
+  }
+
   @override
   Widget build(BuildContext context) {
     final camera = MapCamera.of(context);
     final meta = widget.meta;
     final measured = widget.layer != CoverageTileLayer.predicted; // measured and heard follow the measured zoom rules
-    if (!measured && camera.zoom < meta.predictedFromZoom) return const SizedBox.shrink();
+    stats.builds++;
+    if (!measured && camera.zoom < meta.predictedFromZoom) {
+      _endHold();
+      _shownZ = null;
+      _drawnTiles = const [];
+      holes = 0;
+      return const SizedBox.shrink();
+    }
     final z = coverageTileZoom(camera.zoom);
     final b = camera.visibleBounds;
     final preset = meta.defaultPreset;
     final version = meta.versionFor(widget.layer);
+    final store = widget.store;
+    String keyOf(int tz, int tx, int ty) => coverageTileKey(widget.layer, preset, version, tz, tx, ty);
+
+    // What this view needs: ask for what is missing, forget queued requests for views the map has left, and make room for
+    // a big screen (three screens of tiles for each of the three coverage layers, plus their stand-ins).
+    final tiles = tilesCovering(b.south, b.west, b.north, b.east, z);
+    final wanted = <String>{for (final (x, y) in tiles) keyOf(z, x, y)};
+    store.ensureRoom(capacity: tiles.length * 3 * 3 * 2, concurrent: tiles.length ~/ 2);
+    store.prune(widget.layer, wanted);
+    var resolved = true;
+    for (final (x, y) in tiles) {
+      final key = keyOf(z, x, y);
+      if (store.has(key)) continue;
+      store.want(widget.layer, preset, version, z, x, y);
+      if (store.loading(key)) resolved = false;
+    }
+
+    // A zoom step whose tiles are still on their way: keep the picture that is on screen, whole.
+    final shownOverlapsView = _shownZ != null && tiles.any((t) => _drawnTiles.any((d) => coverageTilesOverlap(d, (z, t.$1, t.$2))));
+    if (_shownZ != null && z != _shownZ && !resolved && !_holdExpired && !_data.isEmpty && shownOverlapsView) {
+      _holdTimer ??= Timer(kCoverageHold, () {
+        if (!mounted) return;
+        setState(() => _holdExpired = true);
+      });
+      holes = 0;
+      return CellRasterLayer(key: ValueKey('coverage-tiles-${widget.layer.name}'), data: _data);
+    }
+    _endHold();
+    _shownZ = z;
+
     final used = <String>[];
     final parts = <List<CellShape>>[];
+    final drawn = <(int, int, int)>[];
+    final bare = <(int, int, int)>[];
+    void use(String key, CoverageTileData d, (int, int, int) at) {
+      drawn.add(at);
+      if (used.contains(key)) return;
+      used.add(key);
+      parts.add(_shapesOf(key, d));
+    }
+
     // Stand-ins come only from tiles of the same kind: at a hexagon zoom (>= meta.hexFromZoom) never from a point tile below it.
     // Andy's field shot (dark, z14, Polaris, Nov 8): while the big z13/z14 Predicted tiles were still loading over cellular, the
     // z12 Predicted tile (a grid of points) stood in for them and drew a fine dot-matrix over the whole area. A gap that fills in
     // as the hexagon tile lands is honest; dots at a hexagon zoom are not.
     final hexes = z >= meta.hexFromZoom;
     final minZ = hexes ? meta.hexFromZoom : (measured ? 0 : meta.predictedFromZoom);
-    for (final (x, y) in tilesCovering(b.south, b.west, b.north, b.east, z)) {
-      final key = coverageTileKey(widget.layer, preset, version, z, x, y);
-      final d = widget.store.peek(key);
+    for (final (x, y) in tiles) {
+      final key = keyOf(z, x, y);
+      final d = store.peek(key);
       if (d != null) {
-        used.add(key);
-        parts.add(_shapesOf(key, d));
+        use(key, d, (z, x, y));
         continue;
       }
-      widget.store.want(widget.layer, preset, version, z, x, y);
-      // Stand-in: the nearest loaded ancestor (its cells cover this tile too).
+      var stood = false;
+      // The nearest loaded ancestor (its cells cover this tile too).
       for (var pz = z - 1, px = x >> 1, py = y >> 1; pz >= minZ && pz >= z - 4; pz--, px >>= 1, py >>= 1) {
-        final pk = coverageTileKey(widget.layer, preset, version, pz, px, py);
-        final pd = widget.store.peek(pk);
+        final pk = keyOf(pz, px, py);
+        final pd = store.peek(pk);
         if (pd == null) continue;
-        if (!used.contains(pk)) {
-          used.add(pk);
-          parts.add(_shapesOf(pk, pd));
-        }
+        use(pk, pd, (pz, px, py));
+        stood = true;
         break;
       }
+      // Else its loaded children, one or two levels down (zooming out: the finer tiles stay until the coarser one lands).
+      // Below the hexagon zoom the painter draws every cell as a dot, so hexagon children read as dots there.
+      for (var dz = 1; !stood && dz <= 2 && z + dz <= 16; dz++) {
+        final n = 1 << dz;
+        for (var cx = x * n; cx < (x + 1) * n; cx++) {
+          for (var cy = y * n; cy < (y + 1) * n; cy++) {
+            final ck = keyOf(z + dz, cx, cy);
+            if (!store.has(ck)) continue;
+            use(ck, store.peek(ck)!, (z + dz, cx, cy));
+            stood = true;
+          }
+        }
+      }
+      if (!stood) bare.add((z, x, y));
     }
+    final lost = [for (final t in bare) if (_drawnTiles.any((d) => coverageTilesOverlap(d, t))) t];
+    holes = lost.length;
+    if (lost.isNotEmpty) {
+      stats.dropFrames++;
+      stats.droppedTiles += lost.length;
+    }
+    // The reference is the last picture with no hole: a hole stays a hole until it is filled.
+    if (lost.isEmpty) _drawnTiles = drawn;
     final sig = used.join(',');
     if (_stylesFor != widget.colors || _styles == null) {
       _styles = switch (widget.layer) {
@@ -138,6 +261,7 @@ class CoverageTilesLayerState extends State<CoverageTilesLayer> {
     }
     if (sig != _usedSig) {
       _usedSig = sig;
+      stats.dataSwaps++;
       final all = parts.length == 1 ? parts.single : [for (final p in parts) ...p];
       _data = CellLayerData(all, _styles!,
           dotBelowZoom: meta.hexFromZoom.toDouble(), dotPx: widget.layer == CoverageTileLayer.heard ? kHeardDotPx : (measured ? 3 : 2));
@@ -146,6 +270,10 @@ class CoverageTilesLayerState extends State<CoverageTilesLayer> {
     return CellRasterLayer(key: ValueKey('coverage-tiles-${widget.layer.name}'), data: _data);
   }
 }
+
+/// How long a zoom step may keep the previous picture while its tiles load. After it the view is drawn from what is in
+/// (with honest gaps), so a dead connection never leaves a stale picture for good.
+const Duration kCoverageHold = Duration(seconds: 4);
 
 /// Hit test over loaded measured/predicted tiles: the res-11 cell id under [lat]/[lon] at tile zoom [z] (hexagons, by
 /// point-in-polygon), or, zoomed out, the dot within [radiusDeg] of it (its centroid's cell is resolved by the caller with h3).

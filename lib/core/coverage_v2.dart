@@ -565,8 +565,11 @@ String coverageTileKey(CoverageTileLayer layer, String preset, int version, int 
 /// back to the saved JSON cells.
 class CoverageTileStore {
   final CoverageV2Client client;
-  final int capacity;
-  final int maxConcurrent;
+
+  /// Tiles kept in memory, and requests in flight at once. Grown by the map for a big screen ([ensureRoom]): an 11-inch iPad
+  /// shows about 3.5 times the tiles of a phone.
+  int capacity;
+  int maxConcurrent;
   final Future<CoverageTileData> Function(Uint8List bytes, CoverageTileLayer layer, int z, int x, int y) decode;
   CoverageTileStore(this.client, {this.capacity = 400, this.maxConcurrent = 6, this.decode = decodeCoverageTileAsync, this.offlineTiles});
 
@@ -584,8 +587,8 @@ class CoverageTileStore {
   DateTime Function() clock = DateTime.now;
 
   final Map<String, CoverageTileData> _tiles = {};
-  final Map<String, Future<void>> _inflight = {};
-  final List<void Function()> _queue = [];
+  final Map<String, Completer<void>> _inflight = {};
+  final List<(String, void Function())> _queue = [];
   int _running = 0;
   final Set<void Function()> _listeners = {};
 
@@ -615,6 +618,35 @@ class CoverageTileStore {
 
   bool has(String key) => _tiles.containsKey(key);
 
+  /// True while the tile is queued or being fetched.
+  bool loading(String key) => _inflight.containsKey(key);
+
+  /// Makes room for a screen that needs it: never shrinks. [concurrent] is capped at 12 (one host, HTTP/2).
+  void ensureRoom({required int capacity, required int concurrent}) {
+    if (capacity > this.capacity) this.capacity = capacity;
+    final c = concurrent.clamp(1, 12);
+    if (c > maxConcurrent) {
+      maxConcurrent = c;
+      _pump();
+    }
+  }
+
+  /// Drops the queued (not yet started) requests of [layer] that are not in [keep]: tiles of a zoom or a place the map has
+  /// already left. Without this a quick zoom through several levels queues every level's tiles and the ones in view wait
+  /// behind them. Requests already on the wire finish. Returns how many were dropped.
+  int prune(CoverageTileLayer layer, Set<String> keep) {
+    final prefix = '${layer.name}|';
+    var n = 0;
+    _queue.removeWhere((e) {
+      final key = e.$1;
+      if (!key.startsWith(prefix) || keep.contains(key)) return false;
+      _inflight.remove(key)?.complete();
+      n++;
+      return true;
+    });
+    return n;
+  }
+
   /// Puts a decoded tile in memory as if it had been fetched (tests).
   void debugPut(String key, CoverageTileData d) => _put(key, d);
 
@@ -629,8 +661,8 @@ class CoverageTileStore {
       _fromPack[key] = clock();
     }
     final c = Completer<void>();
-    _inflight[key] = c.future;
-    _queue.add(() async {
+    _inflight[key] = c;
+    _queue.add((key, () async {
       Future<bool> fromPack() async {
         final src = offlineTiles;
         if (src == null || _tiles.containsKey(key)) return false;
@@ -668,7 +700,7 @@ class CoverageTileStore {
         _pump();
         _notify();
       }
-    });
+    }));
     _pump();
   }
 
@@ -684,7 +716,7 @@ class CoverageTileStore {
   void _pump() {
     while (_running < maxConcurrent && _queue.isNotEmpty) {
       _running++;
-      final job = _queue.removeLast(); // newest first: the view the person is looking at now
+      final job = _queue.removeLast().$2; // newest first: the view the person is looking at now
       job();
     }
   }
@@ -698,7 +730,7 @@ class CoverageTileStore {
   /// Test seam: completes when nothing is in flight.
   Future<void> idle() async {
     while (_inflight.isNotEmpty) {
-      await Future.wait([..._inflight.values]);
+      await Future.wait([for (final c in _inflight.values) c.future]);
     }
   }
 }

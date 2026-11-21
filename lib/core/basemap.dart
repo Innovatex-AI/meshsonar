@@ -68,6 +68,17 @@ extension BasemapSourceX on BasemapSource {
   };
 }
 
+/// THE basemap render version: the one number to bump when anything about how a basemap tile is drawn changes (a style edit,
+/// a palette change, a renderer option). It is part of every theme's identity (id + version), and vector_map_tiles keys its
+/// rendered-tile caches, in memory and on disk, on that identity, so a bump makes every old render unreachable; the disk cache
+/// folder carries it too (ui/map/basemap_cache.dart), and the folders of other versions are deleted once.
+/// History: 1 = builds 57 to 71, where no style had an id and all seven shared "default / none" (tiles of one style were
+/// served for every other style). 2 = build 72, every style has its own id.
+const int basemapRenderVersion = 2;
+
+/// The identity the renderer caches a style's tiles under: `<id>/v<version>`. Distinct for every style.
+String basemapStyleIdentity(Map<String, dynamic> style) => '${style['id']}/v${(style['metadata'] as Map?)?['version']}';
+
 /// Which of our Protomaps looks a vector layer draws (M3): the Road / Light / Dark map, the Topo palette (the Map Definition's
 /// `basemaps[topo].topo` overrides laid over Protomaps' light / dark flavour, baked by tool/basemap/make_basemap_styles.mjs), or
 /// only the town and road names (drawn over Satellite imagery inside our extract, black flavour).
@@ -85,10 +96,25 @@ Map<String, dynamic> basemapStyle(BasemapSource source, {required bool dark, Bas
     (_, false, _) => protomapsLightStyleJson,
     (_, true, _) => protomapsDarkStyleJson,
   };
-  return _parsed.putIfAbsent(json, () => jsonDecode(json) as Map<String, dynamic>);
+  return _parsed.putIfAbsent(json, () => withBasemapIdentity(jsonDecode(json) as Map<String, dynamic>));
 }
 
 final Map<String, Map<String, dynamic>> _parsed = {};
+
+/// [style] with the identity the renderer needs: its own `id` (the generator bakes it; a style without one falls back to its
+/// `name`, and one with neither is refused: under the renderer's "default" id it would share every other style's cached tiles)
+/// and the current [basemapRenderVersion] as `metadata.version`.
+Map<String, dynamic> withBasemapIdentity(Map<String, dynamic> style) {
+  final id = style['id'] ?? style['name'];
+  if (id is! String || id.isEmpty || id == 'default') {
+    throw StateError('a basemap style needs its own id (got "$id"): without one its tiles are cached under another style');
+  }
+  return {
+    ...style,
+    'id': id,
+    'metadata': {...?(style['metadata'] as Map?)?.cast<String, dynamic>(), 'version': '$basemapRenderVersion'},
+  };
+}
 
 /// True when the view lies inside our extract (website `viewInsideBasemap`, same rule).
 bool viewInsideOurBasemap({required double west, required double south, required double east, required double north, required double zoom}) {
