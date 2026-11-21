@@ -14,7 +14,10 @@ import 'package:meshsonar/core/region_lookup.dart';
 import 'package:meshsonar/core/v1/nodes_api.dart';
 import 'package:meshsonar/ui/map/layers/repeater_map_source.dart';
 import 'package:meshsonar/ui/map/repeater_page_link.dart';
+import 'package:meshsonar/ui/charts/time_line_chart.dart';
 import 'package:meshsonar/ui/network/network_context.dart';
+import 'package:meshsonar/ui/network/nodes/node_ui.dart';
+import 'package:meshsonar/ui/network/packets/packet_ui.dart' show plainServerText;
 import 'package:meshsonar/ui/network/network_share.dart';
 import 'package:meshsonar/ui/network/nodes/node_screen.dart';
 import 'package:meshsonar/ui/network/nodes/nodes_section.dart';
@@ -285,6 +288,55 @@ void main() {
     await t.pumpWidget(app(const Scaffold(body: ObserverListView(key: Key('phx'), baseUrl: 'https://phx.meshsonar.com', regionSlug: 'phx'))));
     await settle(t);
     expect(find.textContaining('No observers report to this region yet'), findsOneWidget);
+  });
+
+  test('shareText never shows over 100%; radioText reads the raw and the labelled forms; server text drops internal codes', () {
+    expect(shareText(1.042), '100%');
+    expect(shareText(0.98), '98%');
+    expect(shareText(-0.1), '0%');
+    expect(radioText('910.525024,62.5,7,5'), '910.525 MHz · BW 62.5 kHz · SF 7 · CR 5');
+    expect(radioText('910.525 MHz · 62.5 kHz · SF7 · CR5'), '910.525 MHz · BW 62.5 kHz · SF 7 · CR 5');
+    expect(radioText('869.618,250.0,11,5'), '869.618 MHz · BW 250 kHz · SF 11 · CR 5');
+    expect(radioText('LongFast preset'), 'LongFast preset');
+    expect(
+        plainServerText('Some figures are missing: relay figures and hop-based activity (the node list is incomplete, so hop codes cannot be tied to this node). '
+            'Radio, scope, usefulness, battery, clock, claim and recent adverts arrive with AZ-1.5 to AZ-1.8.'),
+        'Some figures are missing: relay figures and hop-based activity (the node list is incomplete, so hop codes cannot be tied to this node).');
+    expect(plainServerText('Comes with AZ-3.11.'), isNull);
+    expect(plainServerText('No observers report to this region yet.'), 'No observers report to this region yet.');
+  });
+
+  testWidgets('node page: a 24 h share the server sends over 1 shows as 100%, and its note carries no internal code', (t) async {
+    tall(t);
+    final j = jsonDecode(fixture('node-detail')) as Map<String, dynamic>;
+    (((j['data'] as Map)['health'] as Map)['uptime'] as Map)['h24'] = 1.042; // 25 hourly buckets over a 24 h base
+    (j['meta'] as Map)['status'] = {'state': 'partial', 'reason': 'Some figures are missing: relay figures. Radio and clock arrive with AZ-1.5 to AZ-1.8.'};
+    nodesApiFactory = (b) => NodesApi(b,
+        client: MockClient((r) async => r.url.path == '/v1/nodes/$hilltop' ? json(jsonEncode(j)) : json('{"error":{"code":"not_found","message":"none","requestId":"r"}}', 404)));
+    await t.pumpWidget(app(const NetworkNodeScreen(baseUrl: base, regionSlug: 'cmh', nodeKey: hilltop, mapTiles: false)));
+    await settle(t);
+    expect(find.text('Heard (24 h)'), findsOneWidget);
+    expect(find.text('100%'), findsOneWidget);
+    expect(find.textContaining('104%'), findsNothing);
+    expect(t.widget<Text>(find.byKey(const Key('node-status-note'))).data, 'Some figures are missing: relay figures.');
+    expect(find.textContaining('AZ-'), findsNothing);
+  });
+
+  testWidgets('observer page: radio settings are spelled out and the dashed line is named under the chart', (t) async {
+    tall(t);
+    final j = jsonDecode(fixture('observer-detail')) as Map<String, dynamic>;
+    (j['data'] as Map)['radio'] = '910.525024,62.5,7,5';
+    final inner = s.client;
+    nodesApiFactory = (b) => NodesApi(b, client: MockClient((r) async => r.url.path == '/v1/observers/$westside' ? json(jsonEncode(j)) : inner.get(r.url)));
+    await t.pumpWidget(app(const NetworkObserverScreen(baseUrl: base, regionSlug: 'cmh', observerId: westside)));
+    await settle(t);
+    expect(t.widget<Text>(find.byKey(const Key('observer-radio'))).data, '910.525 MHz · BW 62.5 kHz · SF 7 · CR 5');
+    expect(find.textContaining('910.525024'), findsNothing);
+    expect(find.textContaining('Dashed line: interference above this (-100 dBm).', skipOffstage: false), findsOneWidget);
+    expect(find.textContaining('Dashed line: duty limit', skipOffstage: false), findsOneWidget);
+    for (final c in t.widgetList<TimeLineChart>(find.byType(TimeLineChart, skipOffstage: false))) {
+      expect(c.refLabel, isNull, reason: 'no label drawn on top of the data line');
+    }
   });
 
   testWidgets('node page hides the sections the API does not supply', (t) async {

@@ -20,7 +20,7 @@ import '../../../core/power_profile.dart';
 import '../../../core/v1/channels_api.dart';
 import '../../region/region_common.dart' show RegionOfflineAsOf, RegionOfflineEmpty, groupInt;
 import '../../theme.dart';
-import '../packets/packet_ui.dart' show NoPacketFeedCard, PacketNote;
+import '../packets/packet_ui.dart' show NoPacketFeedCard, PacketNote, plainServerText;
 import 'channel_search.dart';
 import 'channel_ui.dart';
 
@@ -161,7 +161,7 @@ class _ChannelReaderViewState extends State<ChannelReaderView> with WidgetsBindi
         _prev = p.prev;
         _asOf = p.offlineAsOf;
         _feed = feed;
-        _emptyReason = p.status.state.name != 'ready' ? p.status.reason : null;
+        _emptyReason = p.status.state.name != 'ready' ? plainServerText(p.status.reason) : null;
         _load = _Load.ready;
       });
       if (_scroll.hasClients) _scroll.jumpTo(0);

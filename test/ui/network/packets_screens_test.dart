@@ -16,6 +16,7 @@ import 'package:meshsonar/radio/crypto.dart';
 import 'package:meshsonar/radio/tools/rx_log.dart';
 import 'package:meshsonar/ui/network/packets/byte_inspector.dart';
 import 'package:meshsonar/ui/network/packets/decode_packet_screen.dart';
+import 'package:meshsonar/ui/network/packets/packet_detail_body.dart' show packetObserversShown;
 import 'package:meshsonar/ui/network/packets/packet_detail_screen.dart';
 import 'package:meshsonar/ui/network/packets/packet_list_view.dart';
 import 'package:meshsonar/ui/theme.dart';
@@ -40,6 +41,9 @@ class Server {
   final List<Uri> seen = [];
   bool v1 = true;
   bool offline = false;
+
+  /// Adds this many observations to a packet detail (a busy packet).
+  int extraObservers = 0;
 
   /// The live answer of a region no feed covers (phx, swoh).
   bool noFeed = false;
@@ -69,7 +73,24 @@ class Server {
     if (p.startsWith('/v1/packets/')) {
       final h = p.split('/').last;
       for (final n in ['advert-first-party', 'grp-txt-outside-ambiguous', 'grp-txt-hashtag-merged', 'grp-txt-private-undecodable', 'txt-msg-encrypted', 'trace']) {
-        if (data('packet-detail.$n')['hash'] == h) return json(fixture('packet-detail.$n'));
+        if (data('packet-detail.$n')['hash'] == h) {
+          if (extraObservers == 0) return json(fixture('packet-detail.$n'));
+          final j = jsonDecode(fixture('packet-detail.$n')) as Map<String, dynamic>;
+          final d = j['data'] as Map<String, dynamic>;
+          final obs = d['observations'] as List;
+          final first = obs.first as Map;
+          for (var i = 0; i < extraObservers; i++) {
+            obs.add({
+              ...first,
+              'id': 'x$i',
+              'observer': {...(first['observer'] as Map), 'id': 'extra-$i', 'name': 'Extra observer $i'},
+              'path': [for (var k = 0; k < 9; k++) 'a$k'],
+            });
+          }
+          d['observationCount'] = obs.length;
+          d['observerCount'] = obs.length;
+          return json(jsonEncode(j));
+        }
       }
       return json(notFound, 404);
     }
@@ -358,6 +379,10 @@ void main() {
       expect(find.text('Packet (your radio)'), findsOneWidget);
       expect(find.byKey(const Key('packet-network-heard')), findsOneWidget);
       expect(find.textContaining('Also heard by the network: 2 observers'), findsOneWidget);
+      // the bytes are one tap away, behind their header
+      await t.ensureVisible(find.byKey(const Key('packet-fold-bytes')));
+      await t.tap(find.byKey(const Key('packet-fold-bytes')));
+      await t.pumpAndSettle();
       expect(find.byKey(const Key('byte-inspector')), findsOneWidget);
       await t.pumpWidget(const SizedBox());
       // No radio: no switch.
@@ -369,8 +394,8 @@ void main() {
   });
 
   group('detail', () {
-    Future<void> open(WidgetTester t, Server s, String hash, {RxLog? log, double scale = 1}) async {
-      await t.pumpWidget(app(NetworkPacketScreen(baseUrl: base, regionSlug: 'cmh', hash: hash, api: s.api, radioLog: log, clock: () => now), scale: scale));
+    Future<void> open(WidgetTester t, Server s, String hash, {RxLog? log, double scale = 1, bool expand = true}) async {
+      await t.pumpWidget(app(NetworkPacketScreen(baseUrl: base, regionSlug: 'cmh', hash: hash, api: s.api, radioLog: log, clock: () => now, expandSections: expand), scale: scale));
       await settle(t);
     }
 
@@ -394,6 +419,50 @@ void main() {
       await t.pumpWidget(const SizedBox());
     });
 
+    testWidgets('small screen: who heard it comes first (5, then Show all); Paths and Bytes are closed until tapped', (t) async {
+      t.view.physicalSize = const Size(1206, 2622); // 402 x 874 pt
+      t.view.devicePixelRatio = 3;
+      addTearDown(t.view.reset);
+      final s = Server()..extraObservers = 6; // 8 observations
+      await open(t, s, 'c4b06ee8fc39b187', expand: false);
+      // the first screen: what, when, how far, who heard it
+      expect(find.byKey(const Key('packet-detail-title')), findsOneWidget);
+      expect(find.text('Hops'), findsOneWidget);
+      expect(find.text('Who heard it (8)'), findsOneWidget);
+      expect(t.getTopLeft(find.text('Who heard it (8)')).dy, lessThan(874), reason: 'on the first screen, no scrolling');
+      expect(find.byWidgetPredicate((w) => w is Container && w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('packet-obs-'), skipOffstage: false), findsNWidgets(packetObserversShown));
+      // a long path is a hop count in the row, not a line of codes
+      expect(find.textContaining('after 9 hops', skipOffstage: false), findsWidgets);
+
+      // closed: no hop rows and no byte inspector are built
+      final body = find.descendant(of: find.byKey(const Key('packet-detail-body')), matching: find.byType(Scrollable)).first;
+      await t.scrollUntilVisible(find.byKey(const Key('packet-fold-paths')), 200, scrollable: body);
+      expect(find.byKey(const Key('packet-fold-paths-summary')), findsOneWidget);
+      expect(find.text('Up to 4 hops · 3 of 7 named'), findsOneWidget);
+      expect(find.byKey(const ValueKey('packet-hop-p1-0'), skipOffstage: false), findsNothing);
+      expect(find.byKey(const Key('byte-inspector'), skipOffstage: false), findsNothing);
+      expect(t.getSize(find.byKey(const Key('packet-fold-paths'))).height, greaterThanOrEqualTo(48));
+
+      await t.tap(find.byKey(const Key('packet-fold-paths')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const ValueKey('packet-hop-p1-0'), skipOffstage: false), findsOneWidget);
+
+      await t.scrollUntilVisible(find.byKey(const Key('packet-fold-bytes')), 200, scrollable: body);
+      await t.ensureVisible(find.byKey(const Key('packet-fold-bytes')));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('packet-fold-bytes')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('byte-inspector'), skipOffstage: false), findsOneWidget);
+
+      await t.scrollUntilVisible(find.byKey(const Key('packet-obs-all')), -200, scrollable: body);
+      expect(find.text('Show all 8 listed'), findsOneWidget);
+      await t.tap(find.byKey(const Key('packet-obs-all')));
+      await t.pumpAndSettle();
+      expect(find.byWidgetPredicate((w) => w is Container && w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('packet-obs-'), skipOffstage: false), findsNWidgets(8));
+      expect(t.takeException(), isNull);
+      await t.pumpWidget(const SizedBox());
+    });
+
     testWidgets('public message with ambiguous path: the text, says-it-is sender, candidates, likely score, unknown', (t) async {
       tall(t);
       final s = Server();
@@ -402,8 +471,8 @@ void main() {
       expect(find.text('Says it is Kestrel-07'), findsOneWidget);
       await scrollTo(t, find.byKey(const ValueKey('packet-hop-p1-3')));
       expect(find.text('Ambiguous'), findsWidgets);
-      expect(find.text('Riverside RPT, score 0.41, 6.2 km away'), findsWidgets);
-      expect(find.text('Old Mill RPT (score 0.82)'), findsWidgets);
+      expect(find.text('Riverside RPT, 41% likely, 6.2 km away'), findsWidgets);
+      expect(find.text('Old Mill RPT (82% likely)'), findsWidgets);
       expect(find.text('No known node has this code'), findsWidgets);
       expect(find.byKey(const Key('packet-show-on-map')), findsOneWidget, reason: 'the likely hop has a position');
       await t.pumpWidget(const SizedBox());
@@ -509,6 +578,9 @@ void main() {
       await settle(t);
       expect(t.takeException(), isNull);
       expect(t.getSize(find.byKey(const Key('packets-source-switch'))).height, greaterThanOrEqualTo(44));
+      // Share sits in the action row, not on a row of its own
+      expect(t.getCenter(find.byKey(const Key('packets-share'))).dy, closeTo(t.getCenter(find.byKey(const Key('packets-filters'))).dy, 1));
+      expect(find.descendant(of: find.byKey(const Key('packets-toolbar')), matching: find.byKey(const Key('packets-share'))), findsOneWidget);
       await t.pumpWidget(const SizedBox());
     });
   });

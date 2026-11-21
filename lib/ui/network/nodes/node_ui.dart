@@ -70,8 +70,30 @@ String clockSeverityLabel(String s) => switch (s) {
       _ => s,
     };
 
-/// A 0..1 share as "98%".
-String shareText(double v) => '${(v * 100).round()}%';
+/// A 0..1 share as "98%". A share is never over 100%: the server's 24 h figure counts the hour in progress as a 25th
+/// hour over a 24 hour base, so it can arrive as 1.04; that is every hour heard, shown as 100%.
+String shareText(double v) => '${(v.clamp(0.0, 1.0) * 100).round()}%';
+
+/// A number with at most [dp] decimals and no trailing zeros: 910.525024 -> "910.525", 62.5 -> "62.5", 7.0 -> "7".
+String trimNumber(num v, int dp) {
+  final s = v.toStringAsFixed(dp);
+  return s.contains('.') ? s.replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '') : s;
+}
+
+final RegExp _radioPart = RegExp(r'^\s*(\d+(?:\.\d+)?)\s*(mhz|khz)?\s*$', caseSensitive: false);
+
+/// Radio settings as people read them: "910.525 MHz · BW 62.5 kHz · SF 7 · CR 5". Accepts what observers report: the raw
+/// "910.525024,62.5,7,5" (frequency MHz, bandwidth kHz, spreading factor, coding rate) or the already labelled
+/// "910.525024 MHz · 62.5 kHz · SF7 · CR5". Anything else is returned as it came.
+String radioText(String raw) {
+  final parts = raw.split(RegExp(r'\s*[,·]\s*'));
+  if (parts.length != 4) return raw;
+  final f = _radioPart.firstMatch(parts[0]), bw = _radioPart.firstMatch(parts[1]);
+  final sf = int.tryParse(parts[2].replaceFirst(RegExp(r'^\s*SF\s*', caseSensitive: false), '').trim());
+  final cr = int.tryParse(parts[3].replaceFirst(RegExp(r'^\s*CR\s*', caseSensitive: false), '').trim());
+  if (f == null || bw == null || sf == null || cr == null) return raw;
+  return '${trimNumber(double.parse(f.group(1)!), 3)} MHz · BW ${trimNumber(double.parse(bw.group(1)!), 2)} kHz · SF $sf · CR $cr';
+}
 
 /// One titled block of a page. Pages build a section only when it has data (a missing section is hidden).
 class NodeSection extends StatelessWidget {

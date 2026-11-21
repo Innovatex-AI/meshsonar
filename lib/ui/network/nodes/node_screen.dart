@@ -25,7 +25,7 @@ import '../../theme.dart';
 import '../network_context.dart';
 import '../network_share.dart';
 import '../packets/packet_detail_screen.dart' show NetworkPacketScreen;
-import '../packets/packet_ui.dart' show HopConfidenceBadge, WebTwinLine, snrText;
+import '../packets/packet_ui.dart' show HopConfidenceBadge, WebTwinLine, plainServerText, snrText;
 import '../../../core/v1/packet_models.dart' show hopConfidenceOf, packetTypeLabel;
 import 'node_routes.dart';
 import 'node_ui.dart';
@@ -142,8 +142,8 @@ class NodePageBody extends StatelessWidget {
         if (page.source == NetworkReadSource.legacy)
           Text('From the region repeater page: paths through, reach, clock and battery come with the new node service.',
               key: const Key('node-legacy-note'), style: muted),
-        if (page.status != null && page.status!.state.name != 'ready' && page.status!.reason != null)
-          Padding(padding: const EdgeInsets.only(top: Gap.xs), child: Text(page.status!.reason!, key: const Key('node-status-note'), style: muted)),
+        if (page.status != null && page.status!.state.name != 'ready' && plainServerText(page.status!.reason) != null)
+          Padding(padding: const EdgeInsets.only(top: Gap.xs), child: Text(plainServerText(page.status!.reason)!, key: const Key('node-status-note'), style: muted)),
         _identity(context, d, hidden),
         const SizedBox(height: Gap.s),
         NodeActionBar(node: ref),
@@ -309,7 +309,7 @@ class NodePageBody extends StatelessWidget {
           subtitle: Text([
             observerKindLabel(h.observer.kind),
             h.direct ? 'heard directly' : 'heard through relays',
-            '${h.packets} packets',
+            '${h.packets} ${h.packets == 1 ? 'packet' : 'packets'}',
             if (h.avgSnr != null) 'mean ${snrText(h.avgSnr)}',
             if (h.bestSnr != null) 'best ${snrText(h.bestSnr)}',
             if (h.lastAt != null) 'last ${agoText(h.lastAt)}',
@@ -328,7 +328,7 @@ class NodePageBody extends StatelessWidget {
             contentPadding: EdgeInsets.zero,
             title: Text(n.label),
             subtitle: Text([
-              if (n.count != null) '${n.count} packets',
+              if (n.count != null) '${n.count} ${n.count == 1 ? 'packet' : 'packets'}',
               if (n.avgSnr != null) snrText(n.avgSnr),
               if (n.distanceKm != null) distanceText(context, n.distanceKm!),
               if (n.kinds.isNotEmpty) n.kinds.join(', '),
@@ -352,7 +352,7 @@ class NodePageBody extends StatelessWidget {
         ListTile(
           contentPadding: EdgeInsets.zero,
           title: Text(r.hops.map(hop).join(' › ')),
-          subtitle: Text(['${r.count} packets', if (r.lastAt != null) 'last ${agoText(r.lastAt)}'].join(' · ')),
+          subtitle: Text(['${r.count} ${r.count == 1 ? 'packet' : 'packets'}', if (r.lastAt != null) 'last ${agoText(r.lastAt)}'].join(' · ')),
           onTap: r.sampleHash == null
               ? null
               : () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => NetworkPacketScreen(baseUrl: baseUrl, regionSlug: regionSlug, hash: r.sampleHash!))),
@@ -417,9 +417,9 @@ class NodePageBody extends StatelessWidget {
         if (r.model != null) KvRow('Model', r.model!),
         if (r.firmware != null) KvRow('Firmware', r.firmware!),
         if (r.preset != null) KvRow('Preset', r.preset!),
-        if (r.freqMhz != null) KvRow('Frequency', '${r.freqMhz} MHz'),
+        if (r.freqMhz != null) KvRow('Frequency', '${trimNumber(r.freqMhz!, 3)} MHz'),
         if (r.bwKhz != null || r.sf != null)
-          KvRow('Settings', [if (r.bwKhz != null) '${r.bwKhz} kHz', if (r.sf != null) 'SF${r.sf}', if (r.cr != null) 'CR${r.cr}'].join(' · ')),
+          KvRow('Settings', [if (r.bwKhz != null) 'BW ${trimNumber(r.bwKhz!, 2)} kHz', if (r.sf != null) 'SF ${r.sf}', if (r.cr != null) 'CR ${r.cr}'].join(' · ')),
         if (r.differsFromNearby) const KvRow('Note', 'Its radio settings differ from nearby nodes'),
       ]);
 
