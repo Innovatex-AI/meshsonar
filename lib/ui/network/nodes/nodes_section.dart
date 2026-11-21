@@ -1,4 +1,5 @@
-// Network > Nodes (AZ-3.4). Website twins: `/nodes` (the directory, every role) and `/observers`.
+// Network > Nodes (AZ-3.4). Website twins: `/nodes` (the directory, every role) and `/observers`. The Network tab's
+// section strip hosts NodeDirectoryView and the observers list directly (the old Nodes | Observers switch is gone).
 //
 // - Nodes: every role (repeater, room, companion, sensor) from `GET /v1/nodes`, with role, status and last-heard filter
 //   chips, a search field (name or key prefix), a "My nodes" chip (starred nodes plus claimed radios), favourites first,
@@ -9,10 +10,8 @@
 // No polling: the lists load when shown and on pull to refresh (battery rules).
 import 'dart:async';
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
-import '../../../core/region_lookup.dart';
 import '../../../core/v1/nodes_api.dart';
 import '../../region/region_common.dart' show RegionOfflineAsOf, RegionOfflineEmpty, agoText;
 import '../../theme.dart';
@@ -23,54 +22,6 @@ import 'node_ui.dart';
 import 'observers_directory.dart';
 
 export 'observers_directory.dart';
-
-/// Nodes | Observers, the two views of Network > Nodes.
-class NetworkNodesSection extends StatelessWidget {
-  final RegionIndexEntry region;
-
-  /// 0 = the node directory (every role), 1 = observers.
-  final int sub;
-  final ValueChanged<int> onSub;
-  const NetworkNodesSection({super.key, required this.region, required this.sub, required this.onSub});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = Theme.of(context).colorScheme;
-    return Column(children: [
-      Padding(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-        child: MediaQuery(
-          data: MediaQuery.of(context).copyWith(textScaler: TextScaler.noScaling),
-          child: Semantics(
-            container: true,
-            label: 'Nodes views',
-            child: SizedBox(
-              width: double.infinity,
-              child: CupertinoSlidingSegmentedControl<int>(
-                key: const Key('network-sub-nodes'),
-                groupValue: sub,
-                thumbColor: c.surfaceContainerHighest,
-                backgroundColor: c.onSurface.withValues(alpha: 0.10),
-                children: {
-                  for (final (i, l) in [(0, 'Nodes'), (1, 'Observers')])
-                    i: ConstrainedBox(constraints: const BoxConstraints(minHeight: 44), child: Center(child: Text(l, key: Key('network-sub-nodes-$i'), maxLines: 1))),
-                },
-                onValueChanged: (v) {
-                  if (v != null) onSub(v);
-                },
-              ),
-            ),
-          ),
-        ),
-      ),
-      Expanded(
-        child: sub == 0
-            ? NodeDirectoryView(key: ValueKey('nodes-dir-${region.code}'), baseUrl: region.url, regionSlug: region.slug)
-            : ObserverListView(key: ValueKey('nodes-obs-${region.code}'), baseUrl: region.url, regionSlug: region.slug),
-      ),
-    ]);
-  }
-}
 
 /// The observers list lives in observers_directory.dart (its own Network section since build 71); the old name stays
 /// for callers that still use it.

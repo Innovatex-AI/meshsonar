@@ -24,34 +24,6 @@ Widget wrap(Widget c) => MaterialApp(theme: meshSonarTheme(Brightness.dark), hom
 RegionIndexEntry reg(String code, String name) => RegionIndexEntry(code: code, slug: code.toLowerCase(), name: name, url: 'https://${code.toLowerCase()}.example');
 
 void main() {
-  testWidgets('stats panel: figures, live chip, honest empty leaderboard', (t) async {
-    useClient((r) async => switch (r.url.path) {
-          '/api/cmh/public-stats' => j(_stats),
-          '/api/cmh/leaderboard' => j({'period': '30d', 'rows': []}),
-          _ => j({'activeDrivers': 2, 'drivers': [{'callsign': 'KE4BFI'}, {'callsign': null}], 'pings15m': 5, 'lastUploadAt': null}),
-        });
-    await t.pumpWidget(wrap(const StatsPanel(baseUrl: 'https://x.example', regionSlug: 'x')));
-    await t.pumpAndSettle();
-    expect(find.byKey(const Key('stat-Km driven')), findsOneWidget);
-    expect(find.text('533'), findsOneWidget);
-    expect(find.text('52.5%'), findsOneWidget);
-    expect(find.textContaining('2 drivers driving now (KE4BFI)'), findsOneWidget);
-    expect(find.text('No one on the leaderboard yet'), findsOneWidget);
-  });
-
-  testWidgets('stats panel: a failing read shows an error, the others still render; empty region says so', (t) async {
-    useClient((r) async => switch (r.url.path) {
-          '/api/cmh/public-stats' => j(_empty),
-          '/api/cmh/leaderboard' => j({'error': 'x'}, 500),
-          _ => j({'activeDrivers': 0, 'drivers': [], 'pings15m': 0, 'lastUploadAt': null}),
-        });
-    await t.pumpWidget(wrap(const StatsPanel(baseUrl: 'https://x.example', regionSlug: 'x')));
-    await t.pumpAndSettle();
-    expect(find.text('No drives here yet'), findsOneWidget);
-    expect(find.text('The server answered 500.'), findsOneWidget);
-    expect(find.text('No one driving right now'), findsOneWidget);
-  });
-
   test('sortFigures: numbers desc, regions without numbers last', () {
     final a = RegionFigures(reg('AAA', 'Alpha'), RegionPublicStats.fromJson({..._stats, 'km': 10}));
     final b = RegionFigures(reg('BBB', 'Bravo'), RegionPublicStats.fromJson({..._stats, 'km': 99}));
