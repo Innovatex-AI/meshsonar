@@ -191,6 +191,17 @@ class _BasemapLayerState extends State<BasemapLayer> {
     _watched = g?..recoveries.addListener(_onRecovered);
   }
 
+  /// Before the tiles are asked again: Flutter's image cache keeps a tile image that FAILED (its stream reported an error)
+  /// as a live, pending entry under the tile's key, and hands that same failed stream to the next widget that asks for the
+  /// key. A new layer alone would therefore get the old error back and fetch nothing (seen on the simulator: 2 tiles loaded
+  /// after the network came back, the rest stayed blank). The renderer's key type is private, so the failed entries cannot
+  /// be evicted one by one: the image cache is emptied. Drawn tiles come back from the renderer's disk cache.
+  void _forgetFailedTiles() {
+    final ic = PaintingBinding.instance.imageCache;
+    ic.clear();
+    ic.clearLiveImages();
+  }
+
   void _onRecovered() {
     if (!mounted || _reaskTimer != null) return;
     final wait = _reask.waitAt(DateTime.now());
@@ -198,6 +209,7 @@ class _BasemapLayerState extends State<BasemapLayer> {
       _reaskTimer = null;
       if (!mounted) return;
       _reask.done(DateTime.now());
+      _forgetFailedTiles();
       setState(() => _generation++);
     });
   }
@@ -217,7 +229,9 @@ class _BasemapLayerState extends State<BasemapLayer> {
   void _listenReset() {
     _resetSub?.cancel();
     _resetSub = widget.reset?.listen((_) {
-      if (mounted) setState(() => _generation++); // a new layer key: tiles that failed are asked for again
+      if (!mounted) return;
+      _forgetFailedTiles();
+      setState(() => _generation++); // a new layer key: tiles that failed are asked for again
     });
   }
 
