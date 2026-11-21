@@ -92,7 +92,7 @@ class RosterRegion {
   /// Display name ("CMH", "Columbus").
   final String name;
 
-  /// The region host's base URL (what `openRepeaterDetail` needs).
+  /// The region host's base URL (what `openNetworkNode` needs).
   final String baseUrl;
   const RosterRegion({required this.slug, required this.name, required this.baseUrl});
 }

@@ -48,6 +48,9 @@ const double kMapPanelHeader = kMapPanelGrabberZone + kMapPanelRow;
 const double kMapPanelOpen = 0.6;
 const double kMapPanelFull = 0.92;
 
+/// An Open panel always leaves at least this much of the map visible above it (short screens, landscape).
+const double kMapPanelMinMap = 150;
+
 /// From this width up a panel is a floating card (iPad, landscape phone) and may start open.
 const double kMapPanelWide = 700;
 const double kMapPanelCardWidth = 380;
@@ -367,14 +370,21 @@ class _MapPanelState extends State<MapPanel> {
         final wide = box.hasBoundedWidth && box.maxWidth >= kMapPanelWide;
         final safe = widget.bottomSafe ? mq.padding.bottom : 0.0;
         final share = state == MapPanelState.full ? kMapPanelFull : widget.openFraction;
-        final bodyMax = (avail * share - headerH - (wide ? 0 : safe)).clamp(0.0, avail);
+        // Open also leaves at least [kMapPanelMinMap] of map on a short screen (Full is a work panel: it may cover the map).
+        var panelMax = avail * share;
+        if (state != MapPanelState.full && avail - panelMax < kMapPanelMinMap) panelMax = avail - kMapPanelMinMap;
+        final bodyMax = (panelMax - headerH - (wide ? 0 : safe)).clamp(0.0, avail);
         _report(headerH + (wide ? 16 + safe : safe));
         final column = Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _header(context, state, headerH),
-            AnimatedSize(
+            // Never taller than the room there is: when the area above the persistent panel shrinks while this panel is still
+            // animating (the person opened the other panel), the body is cut to fit instead of overflowing.
+            ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: (avail - headerH - (wide ? 16 + safe : safe)).clamp(0.0, double.infinity)),
+              child: AnimatedSize(
               duration: Motion.of(context, Motion.sheet),
               curve: Curves.easeOutCubic,
               alignment: Alignment.topCenter,
@@ -385,6 +395,7 @@ class _MapPanelState extends State<MapPanel> {
                       constraints: state == MapPanelState.full ? BoxConstraints.tightFor(height: bodyMax) : BoxConstraints(maxHeight: bodyMax),
                       child: widget.child,
                     ),
+              ),
             ),
             // The surface runs down behind the tab bar / home indicator, the content stops above it.
             if (!wide && safe > 0) SizedBox(height: safe),
