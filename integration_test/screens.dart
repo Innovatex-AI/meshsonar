@@ -9,7 +9,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/ui/app.dart' show AppScope, MoreItem, ShellController;
+import 'package:meshsonar/ui/alerts/alerts_status_strip.dart';
 import 'package:meshsonar/ui/plan/planner_screen.dart';
+import 'package:meshsonar/ui/shell/blur_bar.dart';
+import 'package:meshsonar/ui/shell/mini_drive_bar.dart';
 
 Future<void> pumpFor(WidgetTester t, Duration d) async {
   final end = DateTime.now().add(d);
@@ -39,6 +42,15 @@ Future<void> popToRoots(WidgetTester t) async {
 /// brings it into view. False when the end of the list comes first.
 Future<bool> scrollToFind(WidgetTester t, Finder f, Finder within, {Duration wait = const Duration(seconds: 15)}) async {
   if (!await waitFor(t, within, timeout: wait)) return false;
+  // The search only scrolls down: a list an earlier step left scrolled past the row (a lazy list does not keep rows far
+  // above the viewport) would never show it. Start from the top when the row is not built.
+  if (f.evaluate().isEmpty) {
+    final top = t.stateList<ScrollableState>(find.descendant(of: within.first, matching: find.byType(Scrollable))).where((x) => x.axisDirection == AxisDirection.down).firstOrNull;
+    if (top != null && top.position.pixels > 0) {
+      top.position.jumpTo(0);
+      await pumpFor(t, const Duration(milliseconds: 400));
+    }
+  }
   final end = DateTime.now().add(wait);
   while (DateTime.now().isBefore(end)) {
     if (f.evaluate().isNotEmpty) {
@@ -312,6 +324,14 @@ final List<ScreenStep> screens = [
       if (find.byKey(Key('network-section-$n')).evaluate().isEmpty) _stepFail('network-header: no "$n" on the strip');
     }
     await shot(t, 'network-header');
+    // No second bar and no blank band: the section runs down to the tab bar.
+    final tabs = t.getRect(find.byKey(const Key('shell-tabs')));
+    final body = t.getRect(find.byKey(const Key('network-section-body-home')));
+    final gap = tabs.top - body.bottom;
+    final pad = t.view.padding.bottom / t.view.devicePixelRatio;
+    _stepNote('network-header',
+        'screen ${view.width.toStringAsFixed(0)}x${view.height.toStringAsFixed(0)}, safe bottom ${pad.toStringAsFixed(0)}, tab bar ${tabs.top.toStringAsFixed(0)}..${tabs.bottom.toStringAsFixed(0)}, section body ..${body.bottom.toStringAsFixed(0)}, strips: ${_rectsOf(t, [AlertsStatusStrip, MiniDriveBar, BlurBar])}');
+    if (gap.abs() > 2) _stepFail('network-header: ${gap.toStringAsFixed(0)} pt between the bottom of the section and the tab bar (expected none)');
     await t.tap(find.byKey(const Key('network-overflow')));
     await pumpFor(t, const Duration(seconds: 1));
     if (find.byKey(const Key('network-share')).evaluate().isEmpty || find.byKey(const Key('region-report-export')).evaluate().isEmpty) {
@@ -677,7 +697,10 @@ final List<ScreenStep> screens = [
     const rows = ['more-drives', 'more-radio', 'more-devices', 'more-leaderboard', 'more-observerJoin', 'more-chat', 'more-settings', 'more-help', 'more-about'];
     final list = find.byKey(const Key('more-list'));
     for (final k in rows) {
-      if (!await scrollToFind(t, find.byKey(Key(k)), list, wait: const Duration(seconds: 4))) _stepFail('more: no row $k');
+      if (!await scrollToFind(t, find.byKey(Key(k)), list, wait: const Duration(seconds: 4))) {
+        final seen = [for (final e in _prefixed('more-').evaluate()) (e.widget.key as ValueKey<String>).value];
+        _stepFail('more: no row $k (More list on screen: ${list.hitTestable().evaluate().isNotEmpty}; rows built: $seen)');
+      }
     }
     final n = find.descendant(of: list, matching: find.byType(ListTile), skipOffstage: false).evaluate().length;
     if (n > rows.length) _stepFail('more: $n rows on the More list, expected ${rows.length}');
@@ -1141,3 +1164,10 @@ Future<void> _dismissKeyboard(WidgetTester t) async {
   FocusManager.instance.primaryFocus?.unfocus();
   await pumpFor(t, const Duration(milliseconds: 600));
 }
+
+/// "Type top..bottom" for each of [types] on screen (layout diagnostics in a NOTE line).
+String _rectsOf(WidgetTester t, List<Type> types) => [
+      for (final ty in types)
+        for (final e in find.byType(ty).evaluate())
+          '$ty ${t.getRect(find.byElementPredicate((x) => identical(x, e))).top.toStringAsFixed(0)}..${t.getRect(find.byElementPredicate((x) => identical(x, e))).bottom.toStringAsFixed(0)}'
+    ].join(', ');
