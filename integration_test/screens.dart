@@ -186,15 +186,28 @@ Future<String?> sitePageProblem(WidgetTester t, {Duration timeout = const Durati
 
 Future<void> _openMoreRow(WidgetTester t, String key) async {
   await openShellTab(t, 'More');
-  // The More tab keeps its own stack: tapping it again goes back to its list.
-  if (find.byKey(const Key('more-list')).hitTestable().evaluate().isEmpty) await openShellTab(t, 'More');
+  // The More tab keeps its own stack (Radio and Help push pages over pages): tapping it again goes back to its list.
+  final list = find.byKey(const Key('more-list'));
+  for (var i = 0; i < 3 && list.hitTestable().evaluate().isEmpty; i++) {
+    await openShellTab(t, 'More');
+  }
   final row = find.byKey(Key(key));
   if (row.evaluate().isEmpty) {
-    await t.scrollUntilVisible(row, 150,
-        scrollable: find.descendant(of: find.byKey(const Key('more-list')), matching: find.byType(Scrollable)).first);
+    // A lazily built list scrolled past the row does not hold it: start from the top.
+    final sc = t.stateList<ScrollableState>(find.descendant(of: list, matching: find.byType(Scrollable))).firstOrNull;
+    sc?.position.jumpTo(0);
+    await pumpFor(t, const Duration(milliseconds: 400));
   }
-  await t.ensureVisible(row);
-  await t.tap(row);
+  if (!await scrollToFind(t, row, list, wait: const Duration(seconds: 8))) {
+    final keys = [
+      for (final e in find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key as ValueKey<String>).value.startsWith('more-')).evaluate())
+        (e.widget.key as ValueKey<String>).value
+    ];
+    throw StateError('no $key on the More list (list on screen: ${list.hitTestable().evaluate().isNotEmpty}; more-* keys: $keys)');
+  }
+  await t.ensureVisible(row.first);
+  await pumpFor(t, const Duration(milliseconds: 300));
+  await t.tap(row.first);
   await pumpFor(t, const Duration(seconds: 1));
 }
 
