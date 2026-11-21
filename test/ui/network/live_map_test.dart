@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/ui/design/map_panel.dart';
 import 'package:http/http.dart' as http;
@@ -257,9 +258,9 @@ void main() {
       packetsApiFactory = (b) => PacketsApi(b);
     });
 
-    Future<LiveMapController> pump(WidgetTester tester, FakeSse fake, {NetworkRequest? request, bool open = true}) async {
+    Future<LiveMapController> pump(WidgetTester tester, FakeSse fake, {NetworkRequest? request, bool open = true, double width = 390}) async {
       // A phone: the Live panel starts collapsed there.
-      tester.view.physicalSize = const Size(390 * 3, 844 * 3);
+      tester.view.physicalSize = Size(width * 3, 844 * 3);
       tester.view.devicePixelRatio = 3;
       addTearDown(tester.view.reset);
       MapPanelStore.clear();
@@ -323,14 +324,14 @@ void main() {
         await settle();
       });
       await tester.pump(const Duration(milliseconds: 50));
-      expect(find.text('Live · 26 observers online'), findsNWidgets(2), reason: 'the header, and in full as the first body line');
+      expect(find.text('Live · 26 observers online'), findsWidgets);
       expect(find.text('1 packet'), findsOneWidget);
       expect(tester.getRect(find.byKey(const Key('map-panel-live.main'))).height, lessThanOrEqualTo(844 * 0.6 + 0.5));
       expect(find.byKey(const Key('live-feed-row-1111000011112222')), findsOneWidget);
       await tester.tap(find.byKey(const Key('live-map-pause')));
       await tester.pump();
       expect(find.byKey(const Key('live-map-play')), findsOneWidget);
-      expect(find.text('Paused'), findsNWidgets(2));
+      expect(find.text('Paused'), findsOneWidget);
       // Draw on the map: the packet becomes the transient panel and the Live panel goes back to its header.
       await tester.tap(find.byKey(const Key('live-feed-draw-1111000011112222')));
       await tester.pump();
@@ -393,6 +394,138 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
       expect(c.focus, isNull);
       expect(find.byKey(const Key('live-focus-card')), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+      c.dispose();
+    });
+
+    const reason = 'Partial: node list incomplete. 949 of 2,592 hop codes heard in the last 24 h match a known node (37%); weighted by packets, '
+        '79% of hop appearances sit on a placed node (90% needed); routes are not drawn on the map and hop codes are marked unconfirmed.';
+
+    testWidgets('the status is said once: the body repeats it in full only when the header had to cut it', (tester) async {
+      final fake = FakeSse();
+      final c = await pump(tester, fake);
+      await tester.runAsync(() async {
+        await settle();
+        fake.send('event: status\ndata: {"observersOnline":26}\n\n');
+        await settle();
+      });
+      await tester.pump(const Duration(milliseconds: 50));
+      // The test font is far wider than the app's: this wording does not fit the 390 pt header here, so it is cut there...
+      final header = find.descendant(of: find.byKey(const Key('live-panel-header')), matching: find.text('Live · 26 observers online'));
+      final para = tester.renderObject<RenderParagraph>(find.descendant(of: header, matching: find.byType(RichText)));
+      expect(para.didExceedMaxLines, isTrue, reason: 'the header had to cut it');
+      // ...and the body says it in full.
+      expect(find.byKey(const Key('live-map-status')), findsOneWidget);
+      expect(tester.widget<Text>(find.byKey(const Key('live-map-status'))).data, 'Live · 26 observers online');
+      // A wording that fits is in the header only.
+      await tester.tap(find.byKey(const Key('live-map-pause')));
+      await tester.pump();
+      final short = find.descendant(of: find.byKey(const Key('live-panel-header')), matching: find.text('Paused'));
+      expect(tester.renderObject<RenderParagraph>(find.descendant(of: short, matching: find.byType(RichText))).didExceedMaxLines, isFalse);
+      expect(find.text('Paused'), findsOneWidget, reason: 'not said twice');
+      expect(find.byKey(const Key('live-map-status')), findsNothing);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+      c.dispose();
+    });
+
+    testWidgets('a server note is one plain line with Details for the full sentence', (tester) async {
+      final fake = FakeSse();
+      final c = await pump(tester, fake);
+      await tester.runAsync(() async {
+        await settle();
+        fake.send('event: status\ndata: ${jsonEncode({'observersOnline': 4, 'nodeList': {'trusted': false, 'reason': reason}})}\n\n');
+        await settle();
+      });
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(c.nodeListTrusted, isFalse);
+      final line = find.text('Routes are hidden: not enough hops match known nodes yet.');
+      expect(line, findsOneWidget);
+      expect(tester.getSize(line).height, lessThan(40), reason: 'one or two lines, not a paragraph');
+      expect(find.textContaining('949 of 2,592'), findsNothing, reason: 'the internals are behind Details');
+      final details = find.byKey(const Key('live-note-details'));
+      await tester.ensureVisible(details);
+      await tester.pump();
+      expect(tester.getSize(details).height, greaterThanOrEqualTo(44));
+      await tester.tap(details);
+      await tester.pump();
+      expect(find.byKey(const Key('live-note-full')), findsOneWidget);
+      expect(find.text(reason), findsOneWidget, reason: 'the server\'s sentence, word for word');
+      await tester.tap(details);
+      await tester.pump();
+      expect(find.byKey(const Key('live-note-full')), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+      c.dispose();
+    });
+
+    testWidgets('body order and reach: scrubber, window, controls, feed, then legend and notes; every feed row can be scrolled above the tab bar', (tester) async {
+      tester.view.physicalSize = const Size(402 * 3, 874 * 3);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+      MapPanelStore.clear();
+      final fake = FakeSse();
+      late LiveMapController c;
+      await tester.runAsync(() async => c = makeController(fake));
+      const bar = 83.0;
+      await tester.pumpWidget(MaterialApp(
+        theme: meshSonarTheme(Brightness.dark),
+        home: MediaQuery(
+          data: const MediaQueryData(size: Size(402, 874), padding: EdgeInsets.only(top: 59, bottom: bar)),
+          child: Scaffold(
+            body: Column(children: [
+              const SizedBox(height: 59 + 48 + 44),
+              Expanded(child: NetworkLiveMap(region: region, controller: c, showBasemap: false)),
+            ]),
+          ),
+        ),
+      ));
+      await tester.pump();
+      await tester.runAsync(() async {
+        await settle();
+        fake.send('event: status\ndata: ${jsonEncode({'observersOnline': 4, 'nodeList': {'trusted': false, 'reason': reason}})}\n\n');
+        for (var i = 0; i < 12; i++) {
+          fake.send(packetEvent('${1000 + i}000011112222', at: '2026-11-20T14:00:${i.toString().padLeft(2, '0')}.000Z'));
+        }
+        await settle();
+      });
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tap(find.byKey(const Key('live-panel-header')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      double y(Finder f) => tester.getTopLeft(f).dy;
+      final scrub = y(find.byKey(const Key('live-map-scrubber')));
+      final chips = y(find.byKey(const Key('live-window-1h')));
+      final controls = y(find.byKey(const Key('live-map-filters')));
+      final heading = y(find.byKey(const Key('live-feed-heading')));
+      expect(scrub < chips && chips < controls && controls < heading, isTrue, reason: 'scrubber, window, controls, feed');
+      // The first feed row is on screen above the tab bar without scrolling (the feed is not pushed out by notes).
+      final rows = find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key as ValueKey<String>).value.startsWith('live-feed-row-'));
+      expect(rows, findsWidgets);
+      expect(y(rows.first) + 44, lessThanOrEqualTo(874 - bar), reason: 'the first feed row shows above the tab bar (the test font is taller than the app\'s)');
+      expect(y(rows.first), greaterThan(heading));
+      expect(find.text('Routes are hidden: not enough hops match known nodes yet.').hitTestable(), findsNothing, reason: 'notes come after the feed');
+      // The body scrolls: the last feed row, then the legend and the note, come up above the tab bar.
+      final body = find.byKey(const Key('live-panel-body'));
+      for (var i = 0; i < 12 && find.text('Routes are hidden: not enough hops match known nodes yet.').hitTestable().evaluate().isEmpty; i++) {
+        await tester.drag(body, const Offset(0, -200));
+        await tester.pump(const Duration(milliseconds: 300));
+      }
+      final note = find.text('Routes are hidden: not enough hops match known nodes yet.');
+      expect(note.hitTestable(), findsOneWidget);
+      expect(tester.getRect(note).bottom, lessThanOrEqualTo(874 - bar));
+      expect(tester.getRect(rows.last).bottom, lessThan(y(note)), reason: 'feed first, then legend and notes');
+      expect(tester.getRect(find.byKey(const Key('map-panel-live.main'))).bottom, 874);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+      c.dispose();
+    });
+
+    testWidgets('the selected window chip uses the app\'s selected colour (primaryContainer), not the secondary fill', (tester) async {
+      final fake = FakeSse();
+      final c = await pump(tester, fake);
+      final chip = tester.widget<ChoiceChip>(find.byKey(Key('live-window-${c.window}')));
+      expect(chip.selected, isTrue);
+      expect(chip.selectedColor, meshSonarTheme(Brightness.dark).colorScheme.primaryContainer);
       await tester.pumpWidget(const SizedBox());
       c.dispose();
     });

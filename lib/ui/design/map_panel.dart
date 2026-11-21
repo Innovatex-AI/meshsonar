@@ -182,6 +182,25 @@ class _TopLine extends RoundedRectangleBorder {
   }
 }
 
+/// Whether a header [title] fits on its one line next to [status] in a panel [width] wide (the header's own geometry: margin,
+/// leading, action, chevron, close). A body uses it to repeat the title in full only when the header had to cut it.
+bool mapPanelTitleFits(BuildContext context, {required double width, required String title, String? status, bool leading = false, bool action = false, bool close = false}) {
+  final t = Theme.of(context);
+  final scaler = MediaQuery.textScalerOf(context);
+  double w(String text, TextStyle? style) {
+    final p = TextPainter(text: TextSpan(text: text, style: style), maxLines: 1, textDirection: TextDirection.ltr, textScaler: scaler)..layout();
+    final out = p.width;
+    p.dispose();
+    return out;
+  }
+
+  // Row: 16 margin, [20 + 8 leading], title area, [action 48], 8 + 22 + 8 chevron, [close 48], 4 margin.
+  final area = width - Layout.screenMargin - (leading ? 28 : 0) - (action ? kMapPanelRow : 0) - 38 - (close ? kMapPanelRow : 0) - 4;
+  var room = area;
+  if (status != null) room -= 8 + w(status, t.textTheme.labelMedium).clamp(0.0, area * 0.6);
+  return w(title, t.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)) <= room;
+}
+
 class MapPanel extends StatefulWidget {
   /// Stable id; the remembered state is stored under it.
   final String id;
