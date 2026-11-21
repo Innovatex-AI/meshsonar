@@ -1871,6 +1871,11 @@ class _CoverageMapState extends State<CoverageMap> {
     final style = BaseMapStyle.effective(widget.baseStyle, ActiveMapDefinition.current);
     final tiles = !widget.plainBasemap && (widget.showTiles ?? CoverageMap.tilesByDefault);
     final wide = MediaQuery.sizeOf(context).shortestSide >= 600;
+    // The tile request queue holds what this screen can ask for at once (a request beyond it is dropped and its tile stays blank).
+    if (tiles && BasemapTuning.enabled) {
+      final screen = MediaQuery.sizeOf(context);
+      _tiles().gate.ensureRoom(waiting: BasemapTuning.requestsFor(screen), concurrent: BasemapTuning.requestConcurrencyFor(screen));
+    }
     // A downloaded region pack covering the map wins over online tiles; no pack (or a corrupt one) means online as before.
     final offlinePack = tiles && style.usesOfflinePack ? _pack.reader : null;
     _ensureSorted();
@@ -2003,8 +2008,7 @@ class _CoverageMapState extends State<CoverageMap> {
             // pack's vector tiles go on top of that. Where a pack ends the online/cached tiles carry on: never a blank edge.
             // Chart / Light / Dark: our vector basemap (OpenFreeMap fallback), every tile through the same cache and gate.
             if (tiles && style.isVector)
-              // One layer state for every vector style: it keeps the previous style's picture under the new one until that is drawn.
-              BasemapLayer(key: const ValueKey('basemap-vector'), dark: style.darkLook, look: style.look, tiles: _tiles(), reset: _tileReset.stream),
+              BasemapLayer(key: ValueKey('basemap-${style.id}'), dark: style.darkLook, look: style.look, tiles: _tiles(), reset: _tileReset.stream),
             // Satellite: Esri (our proxy) then NAIP then our names, from the definition (ui/map/satellite_layers.dart).
             if (tiles && style.isSatellite)
               ...satelliteLayers(ActiveMapDefinition.current, tiles: _tiles(), userAgentPackageName: CoverageMap.userAgentPackageName, reset: _tileReset.stream, wide: wide),

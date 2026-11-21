@@ -3,6 +3,7 @@
 //    memory and on disk, and its isolate registries on it. Builds 57 to 71 had none, so all seven were "default / none".
 // 2. The renders those builds left on disk are deleted once, and only those.
 // 3. Network tiles inside an offline pack's area are skipped only under a style that draws the pack.
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -17,6 +18,7 @@ import 'dart:ui' show Size;
 import 'package:meshsonar/ui/map/basemap_layer.dart' show BasemapTuning, basemapTheme;
 import 'package:meshsonar/ui/map/coverage_map.dart' show skipsNetworkTile, styleDrawsOfflinePack;
 import 'package:meshsonar/ui/map/offline_basemap.dart' show offlineMapStyle;
+import 'package:meshsonar/ui/map/tile_source.dart' show TileFetchGate;
 import 'package:vector_tile_renderer/vector_tile_renderer.dart' as vtr;
 
 /// What vector_map_tiles caches a theme's tiles under (raster/tile_loader.dart `themeIdentity`, storage_image_cache `themeKey`).
@@ -166,26 +168,32 @@ void main() {
     });
   });
 
-  group('renderer tuning for the screen', () {
-    tearDown(() => BasemapTuning.enabled = true);
+  group('tile request queue sized for the screen', () {
+    test('one iPad screen of one layer is more than the phone queue holds: requests were dropped, tiles stayed blank', () async {
+      const pad = Size(834, 1194);
+      final oneLayer = ((pad.width / 256).ceil() + 3) * ((pad.height / 256).ceil() + 3); // tiles in view plus the pan buffer
+      expect(oneLayer, 56);
+      final never = Completer<void>().future;
+      // The phone default: 6 running + 48 waiting.
+      final phone = TileFetchGate();
+      final asked = [for (var i = 0; i < oneLayer * 3; i++) phone.acquire(never)]; // Satellite: two imagery layers and the names
+      expect(phone.dropped, oneLayer * 3 - 6 - 48, reason: '114 of 168 requests dropped');
+      expect(await asked[6], isNull, reason: 'a dropped request gets no permit: its tile is never fetched');
 
-    test('a phone keeps the package defaults; an 11-inch iPad gets more workers and room for two screens of tiles', () {
-      final phone = BasemapTuning.forScreen(const Size(402, 874), processors: 6);
-      expect(BasemapTuning.tilesOnScreen(const Size(402, 874)), 15);
-      expect((phone.concurrency, phone.tileDataCache, phone.tileBytesCache), (4, 30, 10 * 1024 * 1024));
-      final pad = BasemapTuning.forScreen(const Size(834, 1194), processors: 8);
-      expect(BasemapTuning.tilesOnScreen(const Size(834, 1194)), 30);
-      expect((pad.concurrency, pad.tileDataCache, pad.tileBytesCache), (6, 60, 24 * 1024 * 1024));
-      // Bounds: never fewer workers than the default, never more than 8; the parsed-tile cache stops at 64.
-      expect(BasemapTuning.forScreen(const Size(1366, 1024), processors: 2).concurrency, 4);
-      expect(BasemapTuning.forScreen(const Size(1366, 1024), processors: 16).concurrency, 8);
-      expect(BasemapTuning.forScreen(const Size(1366, 1024), processors: 8).tileDataCache, 64);
-    });
-
-    test('switched off it is the package defaults', () {
-      BasemapTuning.enabled = false;
-      final t = BasemapTuning.forScreen(const Size(834, 1194), processors: 8);
-      expect((t.concurrency, t.tileDataCache, t.tileBytesCache), (4, 20, 10 * 1024 * 1024));
+      // Sized for the screen: nothing is dropped.
+      final gate = TileFetchGate()..ensureRoom(waiting: BasemapTuning.requestsFor(pad), concurrent: BasemapTuning.requestConcurrencyFor(pad));
+      expect((gate.maxWaiting, gate.maxConcurrent), (336, 10));
+      for (var i = 0; i < oneLayer * 3; i++) {
+        gate.acquire(never);
+      }
+      expect(gate.dropped, 0);
+      expect(gate.running, 10);
+      expect(gate.waiting, oneLayer * 3 - 10);
+      // A phone opened afterwards never shrinks it; a phone's own numbers stay the defaults or more.
+      gate.ensureRoom(waiting: BasemapTuning.requestsFor(const Size(402, 874)), concurrent: BasemapTuning.requestConcurrencyFor(const Size(402, 874)));
+      expect((gate.maxWaiting, gate.maxConcurrent), (336, 10));
+      expect(BasemapTuning.requestsFor(const Size(402, 874)), greaterThanOrEqualTo(48));
+      expect(BasemapTuning.requestConcurrencyFor(const Size(402, 874)), 6);
     });
   });
 }
