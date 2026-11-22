@@ -7,6 +7,7 @@ import 'package:cryptography/cryptography.dart' as cr;
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/node_claim.dart';
 import 'package:meshsonar/core/person_identity.dart';
+import 'package:meshsonar/core/person_observers.dart';
 import 'package:meshsonar/radio/crypto.dart' show fromHex;
 
 import '../ui/fakes.dart' show FakeCmatClient;
@@ -146,5 +147,44 @@ class FakeProofClient extends FakeCmatClient {
     wire.add('link-start');
     if (linkError != null) throw linkError!;
     return LinkStart(code: 'ABCDEFGHJKMN', url: linkUrl, expiresAt: DateTime.now().add(const Duration(minutes: 10)));
+  }
+
+  // ---- ID step 5: the person's observers ----
+  PersonObservers observerList = PersonObservers.empty;
+  Object? observersError, offerError, prefError, claimError;
+
+  @override
+  Future<PersonObservers> personObservers(String driverKey) async {
+    wire.add('person-observers');
+    if (observersError != null) throw observersError!;
+    return observerList;
+  }
+
+  @override
+  Future<OfferOutcome> answerObserverOffer(String driverKey, String key, {required bool accept}) async {
+    wire.add('offer $key ${accept ? 'accept' : 'decline'}');
+    if (offerError != null) throw offerError!;
+    observerList = PersonObservers(observerList.observers, [for (final o in observerList.offers) if (o.key != key) o]);
+    return accept ? OfferOutcome.accepted : OfferOutcome.declined;
+  }
+
+  @override
+  Future<void> setShowRadioName(String driverKey, String key, bool show) async {
+    wire.add('pref $key $show');
+    if (prefError != null) throw prefError!;
+  }
+
+  @override
+  Future<NodeClaim> updateClaim(String driverKey, String pubkey, Map<String, Object?> changes) async {
+    wire.add('claim-update $pubkey ${changes.entries.map((e) => '${e.key}=${e.value}').join(',')}');
+    if (claimError != null) throw claimError!;
+    return NodeClaim(pubkey: pubkey, method: ClaimMethod.signature);
+  }
+
+  @override
+  Future<void> releaseClaim(String driverKey, String pubkey) async {
+    wire.add('claim-release $pubkey');
+    if (claimError != null) throw claimError!;
+    observerList = PersonObservers([for (final o in observerList.observers) if (o.key != pubkey) o], observerList.offers);
   }
 }
