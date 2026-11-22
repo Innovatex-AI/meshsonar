@@ -153,6 +153,7 @@ void main() {
       });
       await tester.pump(const Duration(milliseconds: 50));
       final before = liveNodeMarkerBuilds;
+      expect(before, greaterThan(0), reason: 'the node layer is on the map');
       await tester.runAsync(() async {
         for (var i = 1; i <= 200; i++) {
           fake.send(packetEvent('${(1000 + i).toRadixString(16).padLeft(4, '0')}000011112222', at: '2026-11-20T14:${(i ~/ 60).toString().padLeft(2, '0')}:${(i % 60).toString().padLeft(2, '0')}.000Z'));
