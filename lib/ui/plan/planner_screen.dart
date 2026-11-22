@@ -28,7 +28,7 @@ import 'package:flutter_map/flutter_map.dart' show CameraFit, LatLngBounds;
 import 'package:latlong2/latlong.dart' show LatLng;
 
 import '../../app/app_state.dart';
-import '../../core/map_prefs.dart' show MapPrefs, kPlanLayerPage;
+import '../../core/map_prefs.dart' show kPlanLayerPage;
 import '../../core/plan/plan_api.dart';
 import '../../core/plan/plan_codec.dart' show decodePlanUri;
 import '../../core/plan/plan_controller.dart';
@@ -48,7 +48,12 @@ import '../map/layers/app_repeater_feed.dart';
 import '../map/layers/map_layer.dart' show LongPressHit, PlanNodeHit, MapLayerState;
 import '../map/layers/plan_node_sheet.dart' show showPlanNodeSheet;
 import '../map/layers/plan_overlay.dart';
-import '../map/layers/registry.dart' show kPlanLayerId, layerStateFromPrefs;
+import '../map/layers/layers_model.dart' show PageLayersModel;
+import '../map/layers/layers_sheet.dart' show showGeneratedLayersSheet;
+import '../map/layers/registry.dart' show kPlanLayerId;
+import '../map/legend_card.dart' show LegendCard, kLegendPanelId;
+import '../map/legend_sheet.dart' show showMapLegend;
+import '../map/map_layers.dart' show PingColorMode;
 import '../map/layers/repeater_map_source.dart';
 import '../map/main_map_focus.dart' show MainMapFocus;
 import '../map/region_center.dart' show idleMapPosition, viewedRegionBounds, viewedRegionCenter;
@@ -93,6 +98,13 @@ class PlannerScreenState extends State<PlannerScreen> {
 
   /// The Plan map's panel group (one open panel per map).
   final MapPanelGroup _panels = MapPanelGroup();
+
+  /// The Plan map's transient panel slot (Layers, Legend, an inspector): panels join [_panels], so the Planner sheet goes back to
+  /// its header while one is open and they never stack.
+  final MapPanelHostController _host = MapPanelHostController();
+
+  /// What the one Layers panel reads and writes on this map (remembered under the `plan` page).
+  late PageLayersModel _layersModel;
   String? _selected;
   String? _moving;
   PlanModeOverlay _modeOverlay = PlanModeOverlay.empty;
@@ -134,6 +146,14 @@ class PlannerScreenState extends State<PlannerScreen> {
     };
     _feed = AppStateRepeaterFeed(_s);
     _source = RepeaterMapSource(_feed!, clock: _s.services.clock);
+    _layersModel = PageLayersModel(
+      pageId: kPlanLayerPage,
+      state: _s,
+      repeaterSource: _source!,
+      repeaterFeed: _feed!,
+      mapName: 'the Plan map',
+      alwaysOn: const {kPlanLayerId},
+    )..addListener(_onLayersChanged);
     unawaited(_load());
   }
 
@@ -142,6 +162,8 @@ class PlannerScreenState extends State<PlannerScreen> {
     _refit?.cancel();
     _c?.removeListener(_onPlan);
     unawaited(_c?.dispose());
+    _layersModel.dispose();
+    _host.dispose();
     _source?.dispose();
     _feed?.dispose();
     _overlay.dispose();
@@ -662,7 +684,45 @@ class PlannerScreenState extends State<PlannerScreen> {
         editNode: _edit,
       );
 
-  MapLayerState get _layers => layerStateFromPrefs(MapPrefs.shared.layerPrefs(kPlanLayerPage)).toggle(kPlanLayerId, true);
+  MapLayerState get _layers => _layersModel.layerState;
+
+  void _onLayersChanged() {
+    if (mounted) setState(() {});
+  }
+
+  /// The legend as the map's transient panel (a second tap on the chip closes it).
+  void _toggleLegend() {
+    if (_host.currentId == kLegendPanelId) return _host.close(kLegendPanelId);
+    final s = _s;
+    _host.show(
+      id: kLegendPanelId,
+      builder: (context) => ListenableBuilder(
+        listenable: Listenable.merge([_layersModel, s]),
+        builder: (context, _) => MapPanel(
+          id: kLegendPanelId,
+          title: 'Legend',
+          leading: const Icon(Icons.palette_outlined, size: 18),
+          bottomSafe: false,
+          onClose: () => _host.close(kLegendPanelId),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Flexible(child: LegendCard(asPanel: true, on: _layers.on, meta: s.coverageV2 ? s.coverageMeta : null, drivePanel: false)),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  key: const Key('legend-open-guide'),
+                  onPressed: () => showMapLegend(context, pingColors: PingColorMode.snr),
+                  child: const Text('Full guide'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -697,6 +757,17 @@ class PlannerScreenState extends State<PlannerScreen> {
                 fallbackBounds: viewedRegionBounds(s),
                 repeaterSource: _source,
                 layerState: _layers,
+                baseStyle: _layersModel.baseStyle,
+                panelHost: _host,
+                onLayers: () => showGeneratedLayersSheet(context, _layersModel, host: _host),
+                legend: LegendCard(
+                  key: const Key('planner-legend-card'),
+                  on: _layers.on,
+                  meta: s.coverageV2 ? s.coverageMeta : null,
+                  drivePanel: false,
+                  onOpen: _toggleLegend,
+                ),
+                openLegend: () => showMapLegend(context, pingColors: PingColorMode.snr),
                 repeaterLabel: s.repeaterLabel,
                 coverageV2: s.coverageV2
                     ? CoverageV2Inputs(tiles: s.coverageTiles, meta: s.coverageMeta, drawTiles: !s.coverageTiles.offline, fetchCell: s.coverageCell, heard: s.coverageHeard)

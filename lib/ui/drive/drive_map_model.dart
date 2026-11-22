@@ -42,6 +42,7 @@ import '../../radio/simulator.dart' show defaultSimulatedRepeaters;
 import '../map/active_map_definition.dart';
 import '../map/coverage_timeline_controller.dart';
 import '../map/layers/app_repeater_feed.dart';
+import '../map/layers/layers_model.dart';
 import '../map/layers/map_layer.dart';
 import '../map/layers/observer_layer.dart' show positionedObservers;
 import '../map/layers/registry.dart';
@@ -57,7 +58,8 @@ import '../map/map_layers.dart';
 import '../map/main_map_focus.dart' show MainMapFocus;
 import '../region/region_common.dart' show regionApiFactory;
 
-class DriveMapModel extends ChangeNotifier {
+class DriveMapModel extends ChangeNotifier implements MapLayersModel {
+  @override
   final AppState state;
   DriveMapModel(
     this.state, {
@@ -101,6 +103,7 @@ class DriveMapModel extends ChangeNotifier {
   }
 
   /// The page-config id the layer choices are remembered under (`drive`; the Analyze map gets its own later).
+  @override
   final String pageId;
   final MapPrefs _prefs;
   late LayerPrefs _lp;
@@ -231,9 +234,11 @@ class DriveMapModel extends ChangeNotifier {
 
   /// The two repeater lists the map draws (`network`: every MeshCore repeater; `repeaters`: the viewed region's roster),
   /// read from the repeater sync through AppState.
+  @override
   late final AppStateRepeaterFeed repeaterFeed;
 
   /// Render-ready points + cluster indexes for both repeater layers (built off the UI isolate for big lists).
+  @override
   late final RepeaterMapSource repeaterSource;
 
   List<DrivePing> _pings = const [];
@@ -259,6 +264,7 @@ class DriveMapModel extends ChangeNotifier {
   /// The live fix behind [position] (continuous while driving, via the same subscription), for callers that
   /// need more than lat/lon -- e.g. its reported accuracy for a live GPS-accuracy indicator.
   GeoFix? get fix => _fix ?? (state.driving ? state.status.lastFix : null);
+  @override
   LatLng? get position {
     final f = fix;
     return f == null ? null : LatLng(f.lat, f.lon);
@@ -291,6 +297,7 @@ class DriveMapModel extends ChangeNotifier {
     }
     return _borders;
   }
+  @override
   MapLayerState get layerState => _layerState;
 
   /// The Friends layer draws (MeshTrack in the build and the switch on).
@@ -326,6 +333,7 @@ class DriveMapModel extends ChangeNotifier {
   /// Turns one registry layer on or off (each definition layer is its own switch, as on the website: Repeaters and All
   /// MeshCore repeaters are two layers).
   /// The app's "heard this drive" highlight follows them: on while either repeater layer is on.
+  @override
   void setLayer(String id, bool on) {
     var n = _layerState.toggle(id, on);
     if (id == kRosterLayerId || id == kNetworkLayerId) n = n.toggle('heard', n.isOn(kRosterLayerId) || n.isOn(kNetworkLayerId));
@@ -337,11 +345,14 @@ class DriveMapModel extends ChangeNotifier {
   set repeatersAll(bool all) => layerState = withRepeaterScope(_layerState, all: all);
 
   /// How the Pings and Your-coverage layers colour (By SNR / Heard).
+  @override
   PingColorMode get pingColors => pingColorModeOf(_layerState);
+  @override
   set pingColors(PingColorMode m) => layerState = _layerState.withMode('pings', m == PingColorMode.result ? 'result' : 'snr');
 
   /// "Reset layers": every layer, the Pings mode and the network coverage options back to the defaults, and forgets the saved
   /// choices. The base map, the filter and the timeline position are not layers and stay.
+  @override
   void resetLayers() {
     _saveLayerPrefs(LayerPrefs.empty);
     final was = _layerState;
@@ -649,6 +660,7 @@ class DriveMapModel extends ChangeNotifier {
   }
 
   /// The switch state and the line under it for registry layer [id].
+  @override
   LayerStatus statusOf(String id) => (id == 'estimated' || id == 'snrlinks' || id == 'redundancy') ? _m3Status(id) : layerStatus(
     id,
     MapLayerInputs(
@@ -667,6 +679,7 @@ class DriveMapModel extends ChangeNotifier {
   );
 
   /// Retry for a layer whose status says it can be retried.
+  @override
   Future<void> retry(String id) async {
     switch (id) {
       case 'measured':
@@ -960,10 +973,13 @@ class DriveMapModel extends ChangeNotifier {
 
   /// The base map drawn under everything: the saved choice (Settings.baseMapStyle), or Chart when the Map Definition in use does
   /// not offer it (Topo / Satellite from a cached definition that predates M3, or one whose server dropped the capability).
+  @override
   BaseMapStyle get baseStyle => BaseMapStyle.effective(BaseMapStyle.parse(state.settings.baseMapStyle), ActiveMapDefinition.current);
 
   /// The base maps the person may pick now (the definition's `capabilities`): the picker and the cycler show exactly these.
+  @override
   List<BaseMapStyle> get availableBaseStyles => BaseMapStyle.availableFor(ActiveMapDefinition.current);
+  @override
   void setBaseStyle(BaseMapStyle v) {
     if (v == baseStyle || !availableBaseStyles.contains(v)) return;
     unawaited(state.updateSettings(state.settings.copyWith(baseMapStyle: v.id)));
@@ -973,6 +989,7 @@ class DriveMapModel extends ChangeNotifier {
   void cycleBaseStyle() => setBaseStyle(baseStyle.nextAvailable(availableBaseStyles));
 
   MapFilter _filter = MapFilter.none;
+  @override
   MapFilter get filter => _filter;
   set filter(MapFilter f) {
     if (f == _filter) return;
@@ -1033,6 +1050,7 @@ class DriveMapModel extends ChangeNotifier {
 
   // ---------- coverage v2 (tiles + This drive + inspector) and the network-coverage filters (since, source, timeline) ----------
   /// The server offers coverage v2 (site-config capability); otherwise the old public-coverage path draws (D12).
+  @override
   bool get coverageV2 => state.coverageV2;
 
   /// The window, source or timeline looks at something other than "everything, now". Tiles have no time or source filter, so
@@ -1063,6 +1081,7 @@ class DriveMapModel extends ChangeNotifier {
   late CoverageQuery _query;
 
   /// The layer's filters; `res == null` means automatic by zoom.
+  @override
   CoverageQuery get coverageQuery => _query;
   set coverageQuery(CoverageQuery q) {
     if (q == _query) return;
