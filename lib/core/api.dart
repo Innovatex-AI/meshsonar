@@ -13,6 +13,7 @@ import 'map_links.dart';
 import 'mqtt_contract.dart';
 import 'plan_contract.dart';
 import 'node_claim.dart';
+import 'person_identity.dart';
 import 'driver_settings.dart';
 import 'privacy_zones.dart';
 import 'repeater_reach.dart';
@@ -281,6 +282,11 @@ class SiteConfig {
   bool get reachH3 => capabilities.contains('reachH3');
   bool get rfWindow => capabilities.contains('rfWindow');
   bool get snrDaily => capabilities.contains('snrDaily');
+
+  /// ID steps 2 and 3 (`capabilities.radioProof`, advertised only while the server's flag is on; OFF on production at build
+  /// 73): radio proof at connect, `person-devices`, `person-notices`, `link-start`. Absent = the app keeps the old flow and
+  /// makes none of those calls.
+  bool get radioProof => capabilities.contains(kRadioProofCapability);
 }
 
 /// The non-empty list of format id strings under [key] of a `capabilities` object; malformed = empty.
@@ -563,6 +569,40 @@ abstract class CmatClient {
   // ---------- Master Planner (release 0.38; lib/core/plan_contract.dart). Public, no driver key; the region is this
   // client's server (its Host), never a body field. Throws [CmatException] (400 bad input with a plain-words `error`,
   // 404/501 = this server does not offer it, 429 with `retryAfterSec`, 503 busy) or on a network failure (status null).
+
+  // ---- ID steps 2 and 3 (capabilities.radioProof). Every call is `x-driver-key`; the server answers 404 while its flag is off. ----
+
+  /// `POST radio-proof-start {pubkey}`: the text the connected radio must sign.
+  Future<ProofStart> radioProofStart(String driverKey, String pubkey) => throw const CmatException('not supported by this client');
+
+  /// `POST radio-proof-complete {proofId, signature}`. Throws [CmatException] (422 `bad_signature`, 410, 404, 429).
+  Future<ProofResult> radioProofComplete(String driverKey, String proofId, String signatureHex) =>
+      throw const CmatException('not supported by this client');
+
+  /// `POST radio-proof-decide {proofId, decision: join|take}` after `owned_by_other`. Asking again while `join_pending` is a poll.
+  Future<DecideResult> radioProofDecide(String driverKey, String proofId, {required bool join}) =>
+      throw const CmatException('not supported by this client');
+
+  /// `GET person-devices`.
+  Future<List<PersonDevice>> personDevices(String driverKey) => throw const CmatException('not supported by this client');
+
+  /// `POST person-device-rename {id, name}`; null name = the default name.
+  Future<void> renameDevice(String driverKey, String id, String? name) => throw const CmatException('not supported by this client');
+
+  /// `POST person-device-remove {id}`: the device's key is revoked; its drives stay.
+  Future<void> removeDevice(String driverKey, String id) => throw const CmatException('not supported by this client');
+
+  /// `POST link-start`: a one-time link to open in the browser to add this device to an account.
+  Future<LinkStart> linkStart(String driverKey) => throw const CmatException('not supported by this client');
+
+  /// `GET person-notices`.
+  Future<PersonNotices> personNotices(String driverKey) => throw const CmatException('not supported by this client');
+
+  /// `POST person-notice {id, action: read|approve|deny}`.
+  Future<void> personNoticeAct(String driverKey, String id, String action) => throw const CmatException('not supported by this client');
+
+  /// `POST person-prefs {askFirst}`.
+  Future<bool> setAskFirst(String driverKey, bool askFirst) => throw const CmatException('not supported by this client');
 
   /// `POST /api/cmh/plan-link` (`capabilities['plan.link']`): profile, Fresnel clearance, tightest point and metres to
   /// raise, blocking ridge, terrain odds and verdict, and measured evidence for a pair of known nodes.

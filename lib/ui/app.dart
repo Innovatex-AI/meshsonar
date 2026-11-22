@@ -9,6 +9,7 @@ import '../core/units.dart';
 import '../platform/accessibility_channel.dart';
 import 'design/app_haptics.dart';
 import 'design/drive_guard.dart';
+import 'claims/radio_proof_sheet.dart';
 import 'onboarding/first_run_gate.dart';
 import 'shell/home_shell.dart';
 import 'theme.dart';
@@ -90,7 +91,7 @@ class _MeshSonarAppState extends State<MeshSonarApp> {
               darkTheme: meshSonarTheme(Brightness.dark, palette: palette, definition: def),
               themeMode: meshSonarThemeMode(),
               builder: meshSonarAppBuilder,
-              home: FirstRunGate(builder: () => const HomeShell()),
+              home: RadioProofHost(child: FirstRunGate(builder: () => const HomeShell())),
             ),
           );
         },
