@@ -9,7 +9,10 @@ import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/core/privacy_zones.dart';
 import 'package:meshsonar/ui/drive_detail_map.dart';
 import 'package:meshsonar/ui/map/active_map_definition.dart';
+import 'package:meshsonar/core/map_prefs.dart';
 import 'package:meshsonar/ui/map/coverage_map.dart';
+import 'package:meshsonar/ui/map/layers/layers_sheet.dart' show layerSwitchKey;
+import 'package:meshsonar/ui/map/layers/registry.dart' show kDefaultLayerState;
 
 import '../support/tool_definition.dart';
 import 'fakes.dart';
@@ -82,7 +85,30 @@ void main() {
     final zones = tester.widgetList<PolygonLayer>(find.byType(PolygonLayer)).expand((l) => l.polygons).where((p) => p.pattern.segments != null);
     expect(zones, isEmpty);
     final map = tester.widget<CoverageMap>(find.byType(CoverageMap));
-    expect(map.layerState, isNull, reason: 'no preset: the default layers of build 73');
+    expect(map.layerState!.on, kDefaultLayerState.on, reason: 'no preset: the default layers of build 73 (build 75 hands them over through the Layers model)');
     expect(map.extraLayers, isEmpty);
   });
+
+  for (final (name, def) in [('live definition', null), ('bundled definition', MapDefinition.bundled)]) {
+    testWidgets('$name: the Layers button opens the shared sheet for page drive-detail and a choice is remembered under that page', (tester) async {
+      MapPrefs.shared.setLayerPrefs(kDriveDetailLayerPage, LayerPrefs.empty);
+      addTearDown(() => MapPrefs.shared.setLayerPrefs(kDriveDetailLayerPage, LayerPrefs.empty));
+      await openDetail(tester, def ?? liveToolDefinition());
+      expect(find.byKey(const Key('drive-map-layers')), findsOneWidget);
+      expect(find.byKey(const Key('drive-key')), findsOneWidget, reason: 'the key stays under the Layers button');
+      await tester.tap(find.byKey(const Key('drive-map-layers')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('layers-sheet')), findsOneWidget);
+      final sw = find.byKey(layerSwitchKey('hexes'));
+      await tester.dragUntilVisible(sw, find.descendant(of: find.byKey(const Key('layers-sheet')), matching: find.byType(Scrollable)).first, const Offset(0, -120));
+      await tester.ensureVisible(sw);
+      await tester.pump(const Duration(milliseconds: 300));
+      final before = tester.widget<CoverageMap>(find.byType(CoverageMap)).layerState!.isOn('hexes');
+      await tester.tap(sw);
+      await tester.pumpAndSettle();
+      expect(MapPrefs.shared.layerPrefs(kDriveDetailLayerPage).toggles['hexes'], !before);
+      expect(tester.widget<CoverageMap>(find.byType(CoverageMap)).layerState!.isOn('hexes'), !before);
+      expect(MapPrefs.shared.layerPrefs('drive').toggles.containsKey('hexes'), isFalse, reason: 'the Drive map keeps its own choice');
+    });
+  }
 }

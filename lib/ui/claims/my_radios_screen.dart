@@ -9,12 +9,33 @@ import '../../app/app_state.dart';
 import '../../core/api.dart';
 import '../../core/claim_flow.dart';
 import '../../core/node_claim.dart';
+import '../../core/person_identity.dart' show PersonNotice;
 import '../app.dart';
 import '../settings/settings_kit.dart' show confirmSettingsChange;
 import 'claim_radio_screen.dart';
+import '../account/person_observers_screen.dart';
+import 'claim_proof_label.dart';
 import 'claim_repeater_screen.dart';
+import 'claim_repeaters_screen.dart';
 import 'claim_widgets.dart';
 import '../design/app_surfaces.dart';
+
+/// Gives up a claim after a confirm, through the existing release call (Claimed radios and Claim several repeaters share it).
+Future<void> releaseRadioClaim(BuildContext context, AppState s, NodeClaim c) async {
+  final ok = await confirmSettingsChange(context,
+      dialogKey: 'release-radio',
+      title: 'Give up ${c.label}?',
+      body: 'You stop managing this radio. Its data stays and keeps counting exactly as before. You can claim it again later.',
+      confirmLabel: 'Give up',
+      destructive: true);
+  if (!ok || !context.mounted) return;
+  try {
+    await s.claims.release(c.pubkey);
+  } on CmatException catch (e) {
+    if (!context.mounted) return;
+    showAppToast(context, 'Could not give it up: ${e.message}', kind: AppToastKind.error);
+  }
+}
 
 class MyRadiosScreen extends StatefulWidget {
   const MyRadiosScreen({super.key});
@@ -34,6 +55,12 @@ class _MyRadiosScreenState extends State<MyRadiosScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       c.refresh();
       c.loadPending();
+      final st = AppScope.read(context);
+      if (st.radioProofCapable) {
+        // ID step 6: the transfer notice reads the person's notices and the observers that name one of their radios
+        st.personDevices.refresh();
+        st.personObservers.refresh();
+      }
     });
   }
 
@@ -45,28 +72,7 @@ class _MyRadiosScreenState extends State<MyRadiosScreen> {
         ClaimNodeType.unknown => 'Radio',
       };
 
-  String _how(ClaimMethod m) => switch (m) {
-        ClaimMethod.signature => 'Verified by the radio\'s signature',
-        ClaimMethod.advert => 'Verified by an observer hearing the code',
-        ClaimMethod.login => 'Logged in as admin from your app',
-        ClaimMethod.other => 'Verified',
-      };
-
-  Future<void> _release(AppState s, NodeClaim c) async {
-    final ok = await confirmSettingsChange(context,
-        dialogKey: 'release-radio',
-        title: 'Give up ${c.label}?',
-        body: 'You stop managing this radio. Its data stays and keeps counting exactly as before. You can claim it again later.',
-        confirmLabel: 'Give up',
-        destructive: true);
-    if (!ok || !mounted) return;
-    try {
-      await s.claims.release(c.pubkey);
-    } on CmatException catch (e) {
-      if (!mounted) return;
-      showAppToast(context, 'Could not give it up: ${e.message}', kind: AppToastKind.error);
-    }
-  }
+  Future<void> _release(AppState s, NodeClaim c) => releaseRadioClaim(context, s, c);
 
   Future<void> _edit(AppState s, NodeClaim c) async {
     await showAppSheet<void>(
@@ -82,6 +88,7 @@ class _MyRadiosScreenState extends State<MyRadiosScreen> {
     final c = s.claims;
     final t = Theme.of(context);
     final enabled = s.nodeClaimsEnabled;
+    final v6 = s.radioProofCapable; // ID step 6; off = this screen is exactly build 74
     return Scaffold(
       appBar: AppBar(title: const Text('Claimed radios')),
       body: SafeArea(
@@ -112,6 +119,14 @@ class _MyRadiosScreenState extends State<MyRadiosScreen> {
                     label: const Text('Claim my radio'),
                     onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const ClaimRadioScreen())),
                   ),
+                  if (s.repeaterBatchEnabled)
+                    OutlinedButton.icon(
+                      key: const Key('my-radios-claim-several'),
+                      style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
+                      icon: const Icon(Icons.playlist_add_check),
+                      label: const Text('Claim several repeaters'),
+                      onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const ClaimRepeatersScreen())),
+                    ),
                   OutlinedButton.icon(
                     key: const Key('my-radios-claim-repeater'),
                     style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
@@ -129,6 +144,7 @@ class _MyRadiosScreenState extends State<MyRadiosScreen> {
                         key: const Key('my-radios-repeater-soon'), style: t.textTheme.bodySmall),
                   ),
                 const SizedBox(height: Gap.l),
+                if (v6) ...[for (final n in _movedNotices(s)) _MovedCard(notice: n), if (s.personObservers.offers.isNotEmpty) _OfferedCard(count: s.personObservers.offers.length)],
                 for (final p in c.pending) _PendingRestoreCard(pending: p),
                 Text('Your radios', style: t.textTheme.titleMedium),
                 const SizedBox(height: Gap.s),
@@ -150,7 +166,7 @@ class _MyRadiosScreenState extends State<MyRadiosScreen> {
                         const SizedBox(height: Gap.xs),
                         Wrap(spacing: Gap.s, runSpacing: Gap.xs, children: [
                           _Chip(_typeWord(claim.nodeType), Icons.cell_tower),
-                          _Chip(_how(claim.method), Icons.verified_outlined),
+                          if (!v6) ClaimProofLabel(claim.method, style: ClaimProofStyle.legacyChip),
                           if (claim.health != null) _Chip(claim.health!.words, _healthIcon(claim.health!)),
                           if (claim.health?.batteryMv != null)
                             _Chip(
@@ -164,6 +180,10 @@ class _MyRadiosScreenState extends State<MyRadiosScreen> {
                             claim.positionPublic == true ? Icons.visibility_outlined : Icons.visibility_off_outlined,
                           ),
                         ]),
+                        if (v6) ...[
+                          const SizedBox(height: Gap.xs),
+                          KeyedSubtree(key: ValueKey('proof-${claim.pubkey}'), child: ClaimProofLabel(claim.method)),
+                        ],
                         const SizedBox(height: Gap.xs),
                         Text(claim.pubkey.substring(0, 16), style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
                         if (claim.verifiedAt != null) Text('Claimed ${claim.verifiedAt!.toLocal().toIso8601String().substring(0, 10)}', style: t.textTheme.bodySmall),
@@ -201,7 +221,7 @@ class _MyRadiosScreenState extends State<MyRadiosScreen> {
                           minVerticalPadding: Gap.s,
                           leading: const Icon(Icons.history),
                           title: Text(p.label),
-                          subtitle: Text(claimEndText(p.endReason ?? ClaimEndReason.unknown) +
+                          subtitle: Text((v6 ? claimEndTextWithChange(p.endReason ?? ClaimEndReason.unknown) : claimEndText(p.endReason ?? ClaimEndReason.unknown)) +
                               (p.releasedAt == null ? '' : ' · ${p.releasedAt!.toIso8601String().substring(0, 10)}')),
                         ),
                     ],
@@ -219,6 +239,78 @@ class _MyRadiosScreenState extends State<MyRadiosScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// A claim of yours that another owner's newer proof took over, in the words of the website: the radio alone moved.
+String claimEndTextWithChange(ClaimEndReason r) => r == ClaimEndReason.replaced
+    ? 'Another owner proved they control it, so it moved to them. Your drives and devices were not touched'
+    : claimEndText(r);
+
+/// Unread "a radio of yours was taken over" notices (`person-notices`, kind `radio_taken`).
+List<PersonNotice> _movedNotices(AppState s) => [
+      for (final n in s.personDevices.notices)
+        if (n.kind == 'radio_taken' && !n.read) n,
+    ];
+
+class _MovedCard extends StatelessWidget {
+  final PersonNotice notice;
+  const _MovedCard({required this.notice});
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    return Card(
+      key: ValueKey('moved-${notice.id}'),
+      color: t.colorScheme.tertiaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(Gap.m),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('A radio of yours moved to another owner', style: t.textTheme.titleMedium?.copyWith(color: t.colorScheme.onTertiaryContainer)),
+          const SizedBox(height: Gap.xs),
+          Text(notice.words, style: TextStyle(color: t.colorScheme.onTertiaryContainer)),
+          const SizedBox(height: Gap.xs),
+          Text('If that was not expected, claim it again with a stronger proof: a signature beats a login at once.',
+              style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onTertiaryContainer)),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              key: ValueKey('moved-ok-${notice.id}'),
+              style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+              onPressed: () async {
+                final st = AppScope.read(context);
+                try {
+                  await st.personDevices.noticeAct(notice.id, 'read');
+                } on CmatException catch (e) {
+                  if (context.mounted) showAppToast(context, 'Could not mark it read: ${e.message}', kind: AppToastKind.error);
+                }
+              },
+              child: const Text('Got it'),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+/// Observers whose login names one of your radios as their owner wait for your answer on More > Observers.
+class _OfferedCard extends StatelessWidget {
+  final int count;
+  const _OfferedCard({required this.count});
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    return Card(
+      key: const Key('offered-card'),
+      child: ListTile(
+        minVerticalPadding: Gap.s,
+        leading: const Icon(Icons.mark_email_unread_outlined),
+        title: Text(count == 1 ? 'An observer says it is yours' : '$count observers say they are yours'),
+        subtitle: Text('Its login names one of your radios as its owner. Say yes or no under Observers.', style: t.textTheme.bodySmall),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const PersonObserversScreen())),
       ),
     );
   }

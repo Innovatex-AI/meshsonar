@@ -78,6 +78,7 @@ import 'claims.dart';
 import 'driver_key_vault.dart';
 import 'person_devices.dart';
 import 'person_observers.dart';
+import 'repeater_batch.dart';
 import 'radio_proof.dart';
 import 'driver_settings_controller.dart';
 import 'privacy_zones_controller.dart';
@@ -572,6 +573,16 @@ class AppState extends ChangeNotifier with _ObserverWiring {
           if (nodeClaimsEnabled) await claims.refresh();
         },
       )..addListener(notifyListeners);
+
+  RepeaterBatchController? _repeaterBatch;
+
+  /// "Claim several repeaters" (ID step 6): the session's rows, kept while the app runs. Only used while [repeaterBatchEnabled].
+  RepeaterBatchController get repeaterBatch => _repeaterBatch ??= RepeaterBatchController(claims: claims, connected: () => connected)
+    ..addListener(notifyListeners);
+
+  /// ID step 6 (repeaters in one sitting, the "how it was proven" label, the transfer notice) shows only when the server offers
+  /// radio proof. Off (production at build 75) = Claimed radios behaves exactly as in build 74.
+  bool get repeaterBatchEnabled => radioProofCapable && repeaterClaimEnabled;
 
   DriverKeyVault? _keyVault;
 

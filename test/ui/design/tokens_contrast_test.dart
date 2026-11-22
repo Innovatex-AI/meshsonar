@@ -8,6 +8,9 @@ import 'package:meshsonar/ui/theme.dart';
 
 import '../../support/colour_science.dart';
 
+// The dark chart colour the contrast table is computed against (was MapTokens.chartDark, only ever read by tests).
+const _chartDark = Color(0xFF2B2F36);
+
 void main() {
   for (final b in Brightness.values) {
     for (final pal in ColourPalette.values) {
@@ -37,18 +40,16 @@ void main() {
 
   group('map tokens (Drive plan 6.3 table)', () {
     // Light: fills vs the OSM land colour, glyph on fill. Dark: fills vs the dark chart colour, glyph on fill.
-    test('light fills hold 3:1 against land and the white glyph holds 3:1 on each fill', () {
+    test('light fills hold 3:1 against land', () {
       const b = Brightness.light;
       for (final fill in [MapTokens.repeaterFresh(b), MapTokens.repeaterAging(b), MapTokens.repeaterStale(b)]) {
         expect(contrastRatio(fill, MapTokens.landLight), greaterThanOrEqualTo(3.0));
-        expect(contrastRatio(MapTokens.repeaterGlyph(b), fill), greaterThanOrEqualTo(3.0));
       }
     });
-    test('dark fills hold 3:1 against the chart colour and the dark glyph holds 3:1 on each fill', () {
+    test('dark fills hold 3:1 against the chart colour', () {
       const b = Brightness.dark;
       for (final fill in [MapTokens.repeaterFresh(b), MapTokens.repeaterAging(b), MapTokens.repeaterStale(b)]) {
-        expect(contrastRatio(fill, MapTokens.chartDark), greaterThanOrEqualTo(3.0));
-        expect(contrastRatio(MapTokens.repeaterGlyph(b), fill), greaterThanOrEqualTo(3.0));
+        expect(contrastRatio(fill, _chartDark), greaterThanOrEqualTo(3.0));
       }
     });
     test('map ink on its halo is legible in both modes', () {

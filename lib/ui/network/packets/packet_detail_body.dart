@@ -17,6 +17,7 @@ import '../../map/layers/repeater_map_source.dart' show kRosterLayerId;
 import '../../map/main_map_focus.dart';
 import '../../map/still/path_layer.dart';
 import '../../map/still/path_map.dart';
+import '../../map/still/still_nodes.dart' show stillRepeatersOf;
 import '../../region/region_common.dart' show RegionOfflineAsOf, clockUtc, dayUtc;
 import '../../shell/shell_controller.dart' show ShellController;
 import '../../theme.dart';
@@ -188,10 +189,15 @@ class PacketDetailBody extends StatelessWidget {
   /// (the phone's own radio, a pasted packet), which opens the map around its named hops instead.
   final VoidCallback? onShowOnMap;
 
+  /// The region this packet was read from; with it the route map draws that region's loaded repeaters behind the path (when the
+  /// app is viewing the same region). Null (a pasted or radio packet) = none.
+  final String? regionSlug;
+
   /// Start with Paths and Bytes open (the decode tool, and tests that read them).
   final bool expandSections;
   const PacketDetailBody({
     this.onShowOnMap,
+    this.regionSlug,
     this.expandSections = false,
     super.key,
     required this.d,
@@ -498,6 +504,7 @@ class PacketDetailBody extends StatelessWidget {
           spec: spec,
           style: style,
           semanticLabel: 'Map of the route: ${spec.placed.length} of ${spec.hops.length} hops have a position.',
+          repeaters: stillRepeatersOf(context, regionSlug: regionSlug),
         ),
       ),
       Padding(

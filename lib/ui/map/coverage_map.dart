@@ -430,6 +430,11 @@ class CoverageMap extends StatefulWidget {
   final void Function(String nodeId, LatLng at)? onPlanNodeDrag;
   final void Function(String nodeId, LatLng at)? onPlanNodeDragEnd;
 
+  /// A tap anywhere on the map (before any hit is resolved), and the map becoming ready. Null (the default, the Drive and Plan
+  /// maps) = nothing extra happens. The Live map closes its drawn packet on a tap and fits a packet once the camera exists.
+  final void Function(LatLng at)? onMapTap;
+  final VoidCallback? onMapReady;
+
   const CoverageMap({
     super.key,
     required this.pings,
@@ -492,6 +497,8 @@ class CoverageMap extends StatefulWidget {
     this.extraLayers = const [],
     this.onPlanNodeDrag,
     this.onPlanNodeDragEnd,
+    this.onMapTap,
+    this.onMapReady,
   });
 
   /// True unless running under `flutter test`.
@@ -2030,6 +2037,7 @@ class _CoverageMapState extends State<CoverageMap> {
             onPointerCancel: (_, _) => _fc.pointerUp(),
             onMapReady: () {
               _ready = true;
+              widget.onMapReady?.call();
               if (widget.takesFocusRequests && MainMapFocus.notifier.value != null) {
                 WidgetsBinding.instance.addPostFrameCallback((_) => _onFocusRequest());
               }
@@ -2053,6 +2061,7 @@ class _CoverageMapState extends State<CoverageMap> {
               }
             },
             onTap: (_, point) {
+              widget.onMapTap?.call(point);
               // A repeater, ping, observer or cluster drawn on top of a cell gets the tap, not the cell under it: the cell is
               // only one candidate, and the resolver picks the winner by priority once the tap has reached every source.
               final ls = widget.layerState ?? kDefaultLayerState;

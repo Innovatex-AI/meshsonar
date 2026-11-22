@@ -1,6 +1,6 @@
 // Network > Map: the live packet map with replay (AZ-3.3; website twin `/map?panel=live`, a packet's replay link
-// `/map?panel=live&t=<time>&packet=<hash>`). On the app's one map stack (MapPreview: our basemap, the Map Definition,
-// the credit line), packets are drawn as they propagate, origin to relays to observers, in the packet type colours
+// `/map?panel=live&t=<time>&packet=<hash>`). Since build 75 on the full map engine (CoverageMap: our basemap, the Map Definition's
+// `live` page preset, the Layers button and sheet for page `live`, the one legend chip, the credit line), packets are drawn as they propagate, origin to relays to observers, in the packet type colours
 // (packet_type_colors.dart, the website's palette): solid for unique hops, dashed for likely ones, faint grey ghost
 // segments with ghost marks for hops nobody can place (never a certain line through them), dotted for the route
 // still ahead of a direct packet.
@@ -15,36 +15,77 @@
 // Battery: the stream is dropped and nothing animates while the section is off screen (TickerMode), the app is in
 // the background, or the battery mode is Saver (a banner offers "Show anyway" for this view); frames are capped at
 // the battery profile's map frame rate and the ticker sleeps when nothing moves.
+//
+// Cost: a packet never rebuilds the map. The nodes (and their names) rebuild only when the set of nodes a packet is crossing
+// changes, the packet lines and dots are their own layer listening to the controller, and the panels listen to it too; the
+// CoverageMap itself is rebuilt only by what the person or the layout changes (Layers, basemap, the panel's height).
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show setEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../../app/app_state.dart' show AppState;
 import '../../../core/power_profile.dart';
-import '../../../core/region_lookup.dart';
 import '../../../core/map_styles.dart' show BaseMapStyle;
+import '../../../core/region_lookup.dart';
 import '../../../core/v1/live_api.dart';
 import '../../../core/v1/live_geometry.dart';
 import '../../../core/v1/live_replay.dart';
 import '../../../core/v1/network_api.dart' show NetworkReadSource;
-import '../../../core/v1/nodes_api.dart' show NodeQuery, NodeRow, nodesApiFactory;
-import '../../../core/v1/packets_api.dart' show packetsApiFactory, packetTypeLabel, packetTypeWireName;
+import '../../../core/v1/nodes_api.dart'
+    show NodeQuery, NodeRow, nodesApiFactory;
+import '../../../core/v1/packets_api.dart'
+    show packetsApiFactory, packetTypeLabel, packetTypeWireName;
 import '../../app.dart';
+import '../../design/anchored_sheet.dart' show MapPanelHostController;
 import '../../design/app_surfaces.dart' show showAppSheet;
 import '../../design/map_panel.dart';
 import '../../design/tokens.dart';
-import '../../map/layers/repeater_map_source.dart' show kRosterLayerId;
+import '../../map/active_map_definition.dart';
+import '../../../core/map_definition_pages.dart';
+import '../../map/core/map_view_controller.dart';
+import '../../map/coverage_map.dart';
+import '../../map/layers/app_repeater_feed.dart';
+import '../../map/layers/layers_model.dart' show PageLayersModel;
+import '../../map/layers/layers_sheet.dart' show showGeneratedLayersSheet;
+import '../../map/layers/map_layer.dart' show MapLayerState;
+import '../../map/layers/region_borders_layer.dart' show regionBorderRings;
+import '../../map/layers/registry.dart' show repeatersOn;
+import '../../map/layers/repeater_map_source.dart'
+    show RepeaterMapSource, kLabelsLayerId, kRosterLayerId;
+import '../../map/legend_card.dart' show LegendCard, kLegendPanelId;
+import '../../map/legend_sheet.dart' show showMapLegend;
 import '../../map/main_map_focus.dart';
-import '../../map/map_preview.dart';
+import '../../map/map_layers.dart' show PingColorMode;
 import '../network_context.dart';
 import '../packets/packet_detail_screen.dart';
 import '../packets/packet_ui.dart' show ageText, snrText;
 import 'live_map_controller.dart';
 import 'live_nodes_layer.dart';
 import 'packet_type_colors.dart';
+
+/// The page id the Live map's layer choices are remembered under (Map Definition page `live`).
+const String kLiveLayerPage = 'live';
+
+/// The region's box as bounds; null without a usable one.
+LatLngBounds? _regionBounds(RegionIndexEntry r) {
+  final b = r.bbox;
+  if (b == null || b.length != 4 || !(b[0] < b[2] && b[1] < b[3])) return null;
+  // A whole region fits below the first name zoom, where only the nodes a packet is crossing are drawn: an empty map on first
+  // open. So the map opens on the region's middle, at most about 0.6 degree across (just past zoom 9 on a phone; build 74 opened at 9).
+  const halfLon = 0.3, halfLat = 0.26;
+  final midLon = (b[0] + b[2]) / 2, midLat = (b[1] + b[3]) / 2;
+  final w = math.min((b[2] - b[0]) / 2, halfLon),
+      h = math.min((b[3] - b[1]) / 2, halfLat);
+  return LatLngBounds(
+    LatLng(midLat - h, midLon - w),
+    LatLng(midLat + h, midLon + w),
+  );
+}
 
 /// The middle of a region's box; null without one.
 LatLng? regionCentre(RegionIndexEntry r) {
@@ -54,7 +95,12 @@ LatLng? regionCentre(RegionIndexEntry r) {
 }
 
 /// The layers the full map shows for the network (the toolbar's "Open the full map").
-const Set<String> networkMapLayers = {kRosterLayerId, 'observers', 'snrlinks', 'estimated'};
+const Set<String> networkMapLayers = {
+  kRosterLayerId,
+  'observers',
+  'snrlinks',
+  'estimated',
+};
 
 /// "14:02:05" in the phone's time.
 String clockText(DateTime t) {
@@ -63,7 +109,13 @@ String clockText(DateTime t) {
   return '${two(l.hour)}:${two(l.minute)}:${two(l.second)}';
 }
 
-const Map<String, String> _windowLabels = {'1h': '1 h', '6h': '6 h', '24h': '24 h', '7d': '7 d', '30d': '30 d'};
+const Map<String, String> _windowLabels = {
+  '1h': '1 h',
+  '6h': '6 h',
+  '24h': '24 h',
+  '7d': '7 d',
+  '30d': '30 d',
+};
 
 class NetworkLiveMap extends StatefulWidget {
   final RegionIndexEntry region;
@@ -74,16 +126,26 @@ class NetworkLiveMap extends StatefulWidget {
   /// Test seams.
   final LiveMapController? controller;
   final bool showBasemap;
-  const NetworkLiveMap({super.key, required this.region, this.request, this.controller, this.showBasemap = true});
+  const NetworkLiveMap({
+    super.key,
+    required this.region,
+    this.request,
+    this.controller,
+    this.showBasemap = true,
+  });
 
   @override
   State<NetworkLiveMap> createState() => _NetworkLiveMapState();
 }
 
-class _NetworkLiveMapState extends State<NetworkLiveMap> with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+class _NetworkLiveMapState extends State<NetworkLiveMap>
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late final LiveMapController _c;
   late final Ticker _ticker;
-  final MapController _map = MapController();
+
+  /// The one camera of this map (CoverageMap draws on its controller).
+  final MapViewController _view = MapViewController();
+  MapController get _map => _view.map;
   bool _mapReady = false;
   Duration _lastFrame = Duration.zero, _lastTick = Duration.zero;
   bool _foreground = true, _visible = true, _saverOverride = false;
@@ -98,6 +160,22 @@ class _NetworkLiveMapState extends State<NetworkLiveMap> with SingleTickerProvid
   final MapPanelGroup _panels = MapPanelGroup();
   double? _mainExtent;
 
+  /// The map's transient panel slot (Layers, Legend): its panels join [_panels], so the Live panel goes back to its header while
+  /// one is open and they never stack. A drawn packet and the Layers panel share the same spot, so one closes the other.
+  final MapPanelHostController _host = MapPanelHostController();
+
+  /// What the one Layers panel reads and writes on this map (remembered under page `live`).
+  PageLayersModel? _layers;
+  RepeaterMapSource? _source;
+  AppStateRepeaterFeed? _feed;
+  AppState? _state;
+
+  /// The nodes a drawn packet is crossing now; the node layer listens to this, not to every packet.
+  final ValueNotifier<Set<String>> _inUse = ValueNotifier(const <String>{});
+  late final LatLng _centre =
+      regionCentre(widget.region) ?? const LatLng(39.96, -83.0);
+  late final LatLngBounds? _bounds = _regionBounds(widget.region);
+
   bool get _saver => PowerProfile.current.mode == BatteryMode.saver;
   bool get _active => _foreground && _visible && (!_saver || _saverOverride);
 
@@ -105,7 +183,12 @@ class _NetworkLiveMapState extends State<NetworkLiveMap> with SingleTickerProvid
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _c = widget.controller ?? LiveMapController(baseUrl: widget.region.url, regionSlug: widget.region.slug);
+    _c =
+        widget.controller ??
+        LiveMapController(
+          baseUrl: widget.region.url,
+          regionSlug: widget.region.slug,
+        );
     _c.addListener(_changed);
     _ticker = createTicker(_onTick);
     PowerProfile.addListener(_powerChanged);
@@ -119,6 +202,22 @@ class _NetworkLiveMapState extends State<NetworkLiveMap> with SingleTickerProvid
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    if (_layers == null) {
+      // The Layers model of this map: page `live`, started from the definition's `live` preset, drawing the nodes and their names.
+      final s = _state = AppScope.read(context);
+      final feed = _feed = AppStateRepeaterFeed(s);
+      final source = _source = RepeaterMapSource(feed, clock: s.services.clock);
+      _layers = PageLayersModel(
+        pageId: kLiveLayerPage,
+        state: s,
+        repeaterSource: source,
+        repeaterFeed: feed,
+        mapName: 'the Live map',
+        drawn: kLiveDrawnLayerIds,
+        defaults: liveDefaultLayerState,
+      )..addListener(_onLayersChanged);
+      _host.addListener(_onHost);
+    }
     final v = TickerMode.valuesOf(context).enabled;
     if (v != _visible) _visible = v;
     final f = networkFavourites(context);
@@ -153,7 +252,19 @@ class _NetworkLiveMapState extends State<NetworkLiveMap> with SingleTickerProvid
   void _changed() {
     if (!mounted) return;
     _wake();
-    setState(() {});
+    // The panels and the packet layer listen to the controller themselves; only the nodes in use can move the node layer.
+    final use = _nodesInUse();
+    if (!setEquals(use, _inUse.value)) _inUse.value = use;
+    // A drawn packet and the Layers panel share one spot: the newest one wins.
+    if (_c.focus != null && _host.isOpen) _host.close();
+  }
+
+  void _onLayersChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _onHost() {
+    if (_host.isOpen && _c.focus != null) _c.clearFocus();
   }
 
   /// Runs the ticker only while something moves (it sleeps when idle).
@@ -171,12 +282,19 @@ class _NetworkLiveMapState extends State<NetworkLiveMap> with SingleTickerProvid
   void _onTick(Duration elapsed) {
     final fps = PowerProfile.current.mapFps.clamp(15, 120);
     final frameUs = 1000000 ~/ fps;
-    if (_lastTick != Duration.zero && (elapsed - _lastFrame).inMicroseconds < frameUs) return;
+    if (_lastTick != Duration.zero &&
+        (elapsed - _lastFrame).inMicroseconds < frameUs) {
+      return;
+    }
     final dt = _lastTick == Duration.zero ? Duration.zero : elapsed - _lastTick;
     _lastTick = elapsed;
     _lastFrame = elapsed;
     PowerCounters.inc(PowerCounters.mapFrame);
-    _c.tick(dt > const Duration(milliseconds: 250) ? const Duration(milliseconds: 250) : dt);
+    _c.tick(
+      dt > const Duration(milliseconds: 250)
+          ? const Duration(milliseconds: 250)
+          : dt,
+    );
   }
 
   // ---- positions: the app's node roster, the hop candidates in each packet, the observer list
@@ -184,11 +302,22 @@ class _NetworkLiveMapState extends State<NetworkLiveMap> with SingleTickerProvid
     final s = AppScope.maybeOf(context);
     final nodes = <String, GeoPoint>{};
     if (s != null) {
-      for (final r in [...s.globalRepeaterSet.rows, ...s.regionRepeaterSet.rows]) {
+      for (final r in [
+        ...s.globalRepeaterSet.rows,
+        ...s.regionRepeaterSet.rows,
+      ]) {
         nodes[r.key.toLowerCase()] = GeoPoint(r.lat, r.lon);
       }
     }
-    _c.setPositions(LivePositions(node: (k) => nodes[k], observer: (id) => _observerPos[id] ?? _observerPos[id.toLowerCase()] ?? nodes[id.toLowerCase()]));
+    _c.setPositions(
+      LivePositions(
+        node: (k) => nodes[k],
+        observer: (id) =>
+            _observerPos[id] ??
+            _observerPos[id.toLowerCase()] ??
+            nodes[id.toLowerCase()],
+      ),
+    );
   }
 
   /// The region's nodes with a position, a few pages of `GET /v1/nodes` (else today's roster). A failure leaves the map as it was:
@@ -199,7 +328,11 @@ class _NetworkLiveMapState extends State<NetworkLiveMap> with SingleTickerProvid
       final rows = <NodeRow>[];
       String? cursor;
       for (var page = 0; page < 8; page++) {
-        final p = await api.nodes(const NodeQuery(roles: {'repeater', 'room'}, hasLocation: true), cursor: cursor, limit: 200);
+        final p = await api.nodes(
+          const NodeQuery(roles: {'repeater', 'room'}, hasLocation: true),
+          cursor: cursor,
+          limit: 200,
+        );
         rows.addAll(p.rows);
         cursor = p.next;
         if (cursor == null) break;
@@ -236,7 +369,9 @@ class _NetworkLiveMapState extends State<NetworkLiveMap> with SingleTickerProvid
     try {
       final page = await api.observers();
       for (final o in page.rows) {
-        if (o.position != null) _observerPos[o.id] = GeoPoint(o.position!.lat, o.position!.lon);
+        if (o.position != null) {
+          _observerPos[o.id] = GeoPoint(o.position!.lat, o.position!.lon);
+        }
       }
       if (mounted) _updatePositions();
     } catch (_) {
@@ -254,7 +389,13 @@ class _NetworkLiveMapState extends State<NetworkLiveMap> with SingleTickerProvid
       _c.showPacket(LiveV2Packet.fromDetail(d.detail, fallbackTime: at));
       _fitFocus();
     } on V1Error catch (e) {
-      if (mounted) setState(() => _focusError = e.notFound ? 'That packet is not on record here.' : e.message);
+      if (mounted) {
+        setState(
+          () => _focusError = e.notFound
+              ? 'That packet is not on record here.'
+              : e.message,
+        );
+      }
     } finally {
       api.close();
     }
@@ -268,7 +409,18 @@ class _NetworkLiveMapState extends State<NetworkLiveMap> with SingleTickerProvid
     if (pts.length == 1) {
       _map.move(pts.first, 12);
     } else {
-      _map.fitCamera(CameraFit.coordinates(coordinates: pts, padding: EdgeInsets.fromLTRB(40, 40, 40, (_mainExtent ?? kMapPanelHeader) + kMapPanelHeader + 100), maxZoom: 13));
+      _map.fitCamera(
+        CameraFit.coordinates(
+          coordinates: pts,
+          padding: EdgeInsets.fromLTRB(
+            40,
+            40,
+            40,
+            (_mainExtent ?? kMapPanelHeader) + kMapPanelHeader + 100,
+          ),
+          maxZoom: 13,
+        ),
+      );
     }
   }
 
@@ -280,13 +432,48 @@ class _NetworkLiveMapState extends State<NetworkLiveMap> with SingleTickerProvid
     _c.removeListener(_changed);
     _ticker.dispose();
     if (widget.controller == null) _c.dispose();
+    _host.removeListener(_onHost);
+    _host.dispose();
+    _layers?.dispose();
+    _source?.dispose();
+    _feed?.dispose();
+    _inUse.dispose();
+    _view.dispose();
     _panels.dispose();
     super.dispose();
   }
 
   // ---------------------------------------------------------------- drawing
 
-  List<Widget> _overlays(BuildContext context) {
+  /// The packet lines and dots: their own layer, listening to the controller, so a packet never rebuilds the map or the nodes.
+  Widget _packetLayer() => ListenableBuilder(
+    listenable: _c,
+    builder: (context, _) => _packets(context),
+  );
+
+  /// The nodes and their names (under the packets): rebuilt when the set of nodes in use, the layers or the basemap change.
+  Widget _nodeLayer(
+    MapLayerState layers,
+    Brightness brightness,
+    BaseMapStyle style,
+  ) {
+    if (!repeatersOn(layers)) return const SizedBox.shrink();
+    return ValueListenableBuilder<Set<String>>(
+      valueListenable: _inUse,
+      builder: (context, inUse, _) => Stack(
+        fit: StackFit.expand,
+        children: liveNodeLayers(
+          nodes: _nodes,
+          inUse: inUse,
+          style: style,
+          brightness: brightness,
+          showNames: layers.isOn(kLabelsLayerId),
+        ),
+      ),
+    );
+  }
+
+  Widget _packets(BuildContext context) {
     final lines = <Polyline>[];
     final circles = <CircleMarker>[];
     final ghost = ghostColor(context);
@@ -301,17 +488,59 @@ class _NetworkLiveMapState extends State<NetworkLiveMap> with SingleTickerProvid
         final pts = [LatLng(s.a.lat, s.a.lon), LatLng(end.lat, end.lon)];
         switch (s.style) {
           case SegmentStyle.solid:
-            lines.add(Polyline(points: pts, color: color.withValues(alpha: 0.25 * alpha), strokeWidth: 6, strokeCap: StrokeCap.round));
-            lines.add(Polyline(points: pts, color: color.withValues(alpha: 0.9 * alpha), strokeWidth: 2.5));
+            lines.add(
+              Polyline(
+                points: pts,
+                color: color.withValues(alpha: 0.25 * alpha),
+                strokeWidth: 6,
+                strokeCap: StrokeCap.round,
+              ),
+            );
+            lines.add(
+              Polyline(
+                points: pts,
+                color: color.withValues(alpha: 0.9 * alpha),
+                strokeWidth: 2.5,
+              ),
+            );
           case SegmentStyle.dashed:
-            lines.add(Polyline(points: pts, color: color.withValues(alpha: 0.85 * alpha), strokeWidth: 2, pattern: StrokePattern.dashed(segments: const [8, 6])));
+            lines.add(
+              Polyline(
+                points: pts,
+                color: color.withValues(alpha: 0.85 * alpha),
+                strokeWidth: 2,
+                pattern: StrokePattern.dashed(segments: const [8, 6]),
+              ),
+            );
           case SegmentStyle.ghost:
-            lines.add(Polyline(points: pts, color: ghost.withValues(alpha: 0.45 * alpha), strokeWidth: 1.5, pattern: StrokePattern.dashed(segments: const [4, 6])));
+            lines.add(
+              Polyline(
+                points: pts,
+                color: ghost.withValues(alpha: 0.45 * alpha),
+                strokeWidth: 1.5,
+                pattern: StrokePattern.dashed(segments: const [4, 6]),
+              ),
+            );
           case SegmentStyle.ahead:
-            lines.add(Polyline(points: pts, color: color.withValues(alpha: 0.7 * alpha), strokeWidth: 2, pattern: const StrokePattern.dotted()));
+            lines.add(
+              Polyline(
+                points: pts,
+                color: color.withValues(alpha: 0.7 * alpha),
+                strokeWidth: 2,
+                pattern: const StrokePattern.dotted(),
+              ),
+            );
         }
         if (f < 1 && s.style != SegmentStyle.ghost) {
-          circles.add(CircleMarker(point: pts.last, radius: 4, color: dot.withValues(alpha: alpha), borderColor: color, borderStrokeWidth: 2));
+          circles.add(
+            CircleMarker(
+              point: pts.last,
+              radius: 4,
+              color: dot.withValues(alpha: alpha),
+              borderColor: color,
+              borderStrokeWidth: 2,
+            ),
+          );
         }
       }
       for (final m in d.marks) {
@@ -319,19 +548,47 @@ class _NetworkLiveMapState extends State<NetworkLiveMap> with SingleTickerProvid
         final p = LatLng(m.point.lat, m.point.lon);
         switch (m.kind) {
           case MarkKind.ghost:
-            circles.add(CircleMarker(point: p, radius: 3, color: ghost.withValues(alpha: 0.6 * alpha)));
+            circles.add(
+              CircleMarker(
+                point: p,
+                radius: 3,
+                color: ghost.withValues(alpha: 0.6 * alpha),
+              ),
+            );
           case MarkKind.observer:
-            circles.add(CircleMarker(point: p, radius: 5, color: Theme.of(context).colorScheme.surface.withValues(alpha: alpha), borderColor: color.withValues(alpha: alpha), borderStrokeWidth: 2));
+            circles.add(
+              CircleMarker(
+                point: p,
+                radius: 5,
+                color: Theme.of(context).colorScheme.surface
+                    .withValues(alpha: alpha),
+                borderColor: color.withValues(alpha: alpha),
+                borderStrokeWidth: 2,
+              ),
+            );
           case MarkKind.origin:
-            circles.add(CircleMarker(point: p, radius: 6, color: color.withValues(alpha: alpha), borderColor: dot.withValues(alpha: alpha), borderStrokeWidth: 1.5));
+            circles.add(
+              CircleMarker(
+                point: p,
+                radius: 6,
+                color: color.withValues(alpha: alpha),
+                borderColor: dot.withValues(alpha: alpha),
+                borderStrokeWidth: 1.5,
+              ),
+            );
           case MarkKind.hop:
           case MarkKind.likelyHop:
-            circles.add(CircleMarker(
+            circles.add(
+              CircleMarker(
                 point: p,
                 radius: 4,
-                color: color.withValues(alpha: (m.kind == MarkKind.hop ? 0.9 : 0.5) * alpha),
+                color: color.withValues(
+                  alpha: (m.kind == MarkKind.hop ? 0.9 : 0.5) * alpha,
+                ),
                 borderColor: dot.withValues(alpha: 0.6 * alpha),
-                borderStrokeWidth: 1));
+                borderStrokeWidth: 1,
+              ),
+            );
         }
       }
     }
@@ -342,12 +599,14 @@ class _NetworkLiveMapState extends State<NetworkLiveMap> with SingleTickerProvid
       final (prog, alpha) = _c.progressOf(a);
       draw(a.drawing, packetTypeColor(context, a.packet.type), prog, alpha);
     }
-    return [
-      // The nodes and their names go under the packets (MAP slices 2 and 3); the lines and dots stay the picture.
-      ...liveNodeLayers(nodes: _nodes, inUse: _nodesInUse(), style: BaseMapStyle.chart, brightness: Theme.of(context).brightness),
-      PolylineLayer(key: const Key('live-map-lines'), polylines: lines),
-      CircleLayer(key: const Key('live-map-marks'), circles: circles),
-    ];
+    // The lines and dots stay the picture (the nodes are drawn under them, MAP slices 2 and 3).
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        PolylineLayer(key: const Key('live-map-lines'), polylines: lines),
+        CircleLayer(key: const Key('live-map-marks'), circles: circles),
+      ],
+    );
   }
 
   // ---------------------------------------------------------------- UI
@@ -358,25 +617,56 @@ class _NetworkLiveMapState extends State<NetworkLiveMap> with SingleTickerProvid
 
   @override
   Widget build(BuildContext context) {
-    final centre = regionCentre(widget.region) ?? const LatLng(39.96, -83.0);
-    final focus = _c.focus;
-    final rest = _mainExtent ?? kMapPanelHeader + MediaQuery.paddingOf(context).bottom;
+    final model = _layers!;
+    final st = _state!;
+    final layers = model.layerState;
+    final base = model.baseStyle;
+    final brightness = Theme.of(context).brightness;
+    final rest =
+        _mainExtent ?? kMapPanelHeader + MediaQuery.paddingOf(context).bottom;
+    final preset = ActiveMapDefinition.current.hasPages
+        ? ActiveMapDefinition.current.pagePreset(kLiveLayerPage)
+        : null;
     return MapPanelScope(
       group: _panels,
       child: Stack(
         key: const Key('live-map'),
+        fit: StackFit.expand,
         children: [
           Positioned.fill(
-            child: MapPreview(
-              mapKey: const Key('live-map-canvas'),
-              controller: _map,
-              center: centre,
-              zoom: 9,
-              interaction: MapPreviewInteraction.edit,
-              tiles: widget.showBasemap,
-              overlays: _overlays(context),
+            child: CoverageMap(
+              key: const Key('live-map-canvas'),
+              viewController: _view,
+              pings: const [],
+              follow: false,
+              fallbackCenter: _centre,
+              fallbackBounds: _bounds,
+              showTiles: widget.showBasemap ? null : false,
+              layerState: layers,
+              baseStyle: base,
+              panelHost: _host,
+              onLayers: () =>
+                  showGeneratedLayersSheet(context, model, host: _host),
+              legend: LegendCard(
+                key: const Key('live-legend-card'),
+                on: layers.on,
+                meta: st.coverageV2 ? st.coverageMeta : null,
+                drivePanel: false,
+                onOpen: _toggleLegend,
+              ),
+              openLegend: () =>
+                  showMapLegend(context, pingColors: PingColorMode.snr),
+              // The region's border, only when the definition's `live` page has it (a definition without pages draws none, as in build 74).
+              regionBorders: preset?.has('borders') == true
+                  ? regionBorderRings(widget.region)
+                  : const [],
+              extraLayers: [
+                _nodeLayer(layers, brightness, base),
+                _packetLayer(),
+              ],
+              bottomClearance: rest,
               // A tap on empty map closes the transient panel (the drawn packet).
-              onTap: (_, _) {
+              onMapTap: (_) {
                 if (_c.focus != null) _c.clearFocus();
               },
               onMapReady: () {
@@ -385,9 +675,65 @@ class _NetworkLiveMapState extends State<NetworkLiveMap> with SingleTickerProvid
               },
             ),
           ),
-          Positioned.fill(child: _mainPanel(context)),
-          if (focus != null) Positioned.fill(bottom: rest, child: _focusPanel(context, focus)),
+          // The panels listen to the controller themselves: a packet rebuilds them, never the map.
+          ListenableBuilder(
+            listenable: _c,
+            builder: (context, _) =>
+                Positioned.fill(child: _mainPanel(context)),
+          ),
+          ListenableBuilder(
+            listenable: _c,
+            builder: (context, _) => switch (_c.focus) {
+              final focus? => Positioned.fill(
+                bottom: rest,
+                child: _focusPanel(context, focus),
+              ),
+              null => const SizedBox.shrink(),
+            },
+          ),
         ],
+      ),
+    );
+  }
+
+  /// The legend as the map's transient panel (a second tap on the chip closes it).
+  void _toggleLegend() {
+    if (_host.currentId == kLegendPanelId) return _host.close(kLegendPanelId);
+    final s = _state!, model = _layers!;
+    _host.show(
+      id: kLegendPanelId,
+      builder: (context) => ListenableBuilder(
+        listenable: Listenable.merge([model, s]),
+        builder: (context, _) => MapPanel(
+          id: kLegendPanelId,
+          title: 'Legend',
+          leading: const Icon(Icons.palette_outlined, size: 18),
+          bottomSafe: false,
+          onClose: () => _host.close(kLegendPanelId),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Flexible(
+                child: LegendCard(
+                  asPanel: true,
+                  on: model.layerState.on,
+                  meta: s.coverageV2 ? s.coverageMeta : null,
+                  drivePanel: false,
+                ),
+              ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  key: const Key('legend-open-guide'),
+                  onPressed: () =>
+                      showMapLegend(context, pingColors: PingColorMode.snr),
+                  child: const Text('Full guide'),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -398,17 +744,36 @@ class _NetworkLiveMapState extends State<NetworkLiveMap> with SingleTickerProvid
     if (!_foreground) return ('Paused (app in background)', cs.outline);
     switch (_c.mode) {
       case LiveMode.paused:
-        return (_c.missedWhilePaused > 0 ? 'Paused · +${_c.missedWhilePaused} new' : 'Paused', cs.outline);
+        return (
+          _c.missedWhilePaused > 0
+              ? 'Paused · +${_c.missedWhilePaused} new'
+              : 'Paused',
+          cs.outline,
+        );
       case LiveMode.replay:
         final c = _c.replayClock;
-        return ('Replay ${replaySpeedLabel(_c.speed)} · ${c == null ? '' : clockText(c.playhead)}', cs.tertiary);
+        return (
+          'Replay ${replaySpeedLabel(_c.speed)} · ${c == null ? '' : clockText(c.playhead)}',
+          cs.tertiary,
+        );
       case LiveMode.live:
         break;
     }
     return switch (_c.streamState) {
-      NetLiveState.live => (_c.observersOnline == null ? 'Live' : 'Live · ${_c.observersOnline} observers online', cs.primary),
-      NetLiveState.connecting || NetLiveState.idle => ('Connecting', cs.outline),
-      NetLiveState.reconnecting => (_c.allPackets.isEmpty ? 'Live needs a connection, retrying' : 'Reconnecting, showing earlier packets', cs.error),
+      NetLiveState.live => (
+        _c.observersOnline == null
+            ? 'Live'
+            : 'Live · ${_c.observersOnline} observers online',
+        cs.primary,
+      ),
+      NetLiveState.connecting ||
+      NetLiveState.idle => ('Connecting', cs.outline),
+      NetLiveState.reconnecting => (
+        _c.allPackets.isEmpty
+            ? 'Live needs a connection, retrying'
+            : 'Reconnecting, showing earlier packets',
+        cs.error,
+      ),
       NetLiveState.paused => ('Paused', cs.outline),
     };
   }
@@ -423,11 +788,17 @@ class _NetworkLiveMapState extends State<NetworkLiveMap> with SingleTickerProvid
       headerKey: const Key('live-panel-header'),
       leading: Icon(Icons.circle, size: 10, color: color),
       // The panel's own content count (rule 8), never a message count.
-      status: Text('${feed.length} packet${feed.length == 1 ? '' : 's'}', key: const Key('live-map-count')),
+      status: Text(
+        '${feed.length} packet${feed.length == 1 ? '' : 's'}',
+        key: const Key('live-map-count'),
+      ),
       action: IconButton(
         key: Key(paused ? 'live-map-play' : 'live-map-pause'),
         tooltip: paused ? 'Play' : 'Pause',
-        constraints: const BoxConstraints(minWidth: Hit.min, minHeight: Hit.min),
+        constraints: const BoxConstraints(
+          minWidth: Hit.min,
+          minHeight: Hit.min,
+        ),
         icon: Icon(paused ? Icons.play_arrow : Icons.pause),
         onPressed: paused ? _c.play : _c.pause,
       ),
@@ -446,9 +817,16 @@ class _NetworkLiveMapState extends State<NetworkLiveMap> with SingleTickerProvid
 
     return [
       if (_c.source == NetworkReadSource.legacy)
-        ('Unresolved hops are not drawn.', "Today's live feed: only hops the server could place are sent, so unresolved hops are not drawn."),
+        (
+          'Unresolved hops are not drawn.',
+          "Today's live feed: only hops the server could place are sent, so unresolved hops are not drawn.",
+        ),
       // The server's sentence is internals (counts, thresholds): one plain line, the sentence behind Details.
-      if (_c.nodeListTrusted == false) ('Routes are hidden: not enough hops match known nodes yet.', _c.nodeListReason),
+      if (_c.nodeListTrusted == false)
+        (
+          'Routes are hidden: not enough hops match known nodes yet.',
+          _c.nodeListReason,
+        ),
       if (_c.note case final n?) brief(n),
       if (_c.replayError case final n?) brief(n),
       if (_focusError case final n?) brief(n),
@@ -467,84 +845,140 @@ class _NetworkLiveMapState extends State<NetworkLiveMap> with SingleTickerProvid
         key: const Key('live-panel-body'),
         slivers: [
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(Layout.screenMargin, 0, Layout.screenMargin, 4),
-            sliver: SliverList.list(children: [
-              // The header's wording in full, only when the header had to cut it.
-              if (!mapPanelTitleFits(context, width: box.maxWidth, title: label, status: count, leading: true, action: true))
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: Text(label, key: const Key('live-map-status'), style: t.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
-                ),
-              if (_saver && !_saverOverride)
-                Row(key: const Key('live-saver-banner'), children: [
-                  Expanded(child: Text('Saver mode stops the live map to save battery.', style: t.textTheme.bodySmall)),
-                  TextButton(
-                    key: const Key('live-saver-override'),
-                    onPressed: () => setState(() {
-                      _saverOverride = true;
-                      _sync();
-                    }),
-                    child: const Text('Show anyway'),
-                  ),
-                ]),
-              _Scrubber(controller: _c),
-              const SizedBox(height: 4),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(children: [
-                  for (final w in liveWindows.keys)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 6),
-                      child: ChoiceChip(
-                        key: Key('live-window-$w'),
-                        label: Text(_windowLabels[w] ?? w),
-                        selected: _c.window == w,
-                        // The app's selected colour (the teal of the tab bar and the section strip), not the default
-                        // secondary fill, which reads as a warning on the dark theme.
-                        selectedColor: cs.primaryContainer,
-                        checkmarkColor: cs.onPrimaryContainer,
-                        labelStyle: _c.window == w ? TextStyle(color: cs.onPrimaryContainer) : null,
-                        onSelected: (_) => unawaited(_c.setWindow(w)),
+            padding: const EdgeInsets.fromLTRB(
+              Layout.screenMargin,
+              0,
+              Layout.screenMargin,
+              4,
+            ),
+            sliver: SliverList.list(
+              children: [
+                // The header's wording in full, only when the header had to cut it.
+                if (!mapPanelTitleFits(
+                  context,
+                  width: box.maxWidth,
+                  title: label,
+                  status: count,
+                  leading: true,
+                  action: true,
+                ))
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Text(
+                      label,
+                      key: const Key('live-map-status'),
+                      style: t.textTheme.bodySmall?.copyWith(
+                        color: cs.onSurfaceVariant,
                       ),
                     ),
-                ]),
-              ),
-              // Wrap, not Row: at large text sizes the controls take a second line instead of clipping.
-              Wrap(spacing: 4, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
-                TextButton(
-                  key: const Key('live-map-speed'),
-                  onPressed: _cycleSpeed,
-                  child: Text(replaySpeedLabel(_c.speed), semanticsLabel: 'Replay speed ${_c.speed} times'),
-                ),
-                if (_c.mode != LiveMode.live)
-                  TextButton.icon(
-                    key: const Key('live-map-jump-live'),
-                    icon: const Icon(Icons.skip_next),
-                    label: const Text('Live'),
-                    onPressed: _c.jumpToLive,
                   ),
-                TextButton.icon(
-                  key: const Key('live-map-filters'),
-                  icon: Icon(_c.filter.isEmpty ? Icons.filter_list : Icons.filter_list_alt),
-                  label: const Text('Filters'),
-                  onPressed: () => _openFilters(context),
+                if (_saver && !_saverOverride)
+                  Row(
+                    key: const Key('live-saver-banner'),
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Saver mode stops the live map to save battery.',
+                          style: t.textTheme.bodySmall,
+                        ),
+                      ),
+                      TextButton(
+                        key: const Key('live-saver-override'),
+                        onPressed: () => setState(() {
+                          _saverOverride = true;
+                          _sync();
+                        }),
+                        child: const Text('Show anyway'),
+                      ),
+                    ],
+                  ),
+                _Scrubber(controller: _c),
+                const SizedBox(height: 4),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      for (final w in liveWindows.keys)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: ChoiceChip(
+                            key: Key('live-window-$w'),
+                            label: Text(_windowLabels[w] ?? w),
+                            selected: _c.window == w,
+                            // The app's selected colour (the teal of the tab bar and the section strip), not the default
+                            // secondary fill, which reads as a warning on the dark theme.
+                            selectedColor: cs.primaryContainer,
+                            checkmarkColor: cs.onPrimaryContainer,
+                            labelStyle: _c.window == w
+                                ? TextStyle(color: cs.onPrimaryContainer)
+                                : null,
+                            onSelected: (_) => unawaited(_c.setWindow(w)),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
-                TextButton.icon(
-                  key: const Key('live-map-open-full'),
-                  icon: const Icon(Icons.layers_outlined),
-                  label: const Text('Coverage map'),
-                  onPressed: () {
-                    final c = regionCentre(widget.region);
-                    if (c != null) MainMapFocus.request(c, 10, showLayers: networkMapLayers);
-                    ShellScope.maybeRead(context)?.openDrive();
-                  },
+                // Wrap, not Row: at large text sizes the controls take a second line instead of clipping.
+                Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    TextButton(
+                      key: const Key('live-map-speed'),
+                      onPressed: _cycleSpeed,
+                      child: Text(
+                        replaySpeedLabel(_c.speed),
+                        semanticsLabel: 'Replay speed ${_c.speed} times',
+                      ),
+                    ),
+                    if (_c.mode != LiveMode.live)
+                      TextButton.icon(
+                        key: const Key('live-map-jump-live'),
+                        icon: const Icon(Icons.skip_next),
+                        label: const Text('Live'),
+                        onPressed: _c.jumpToLive,
+                      ),
+                    TextButton.icon(
+                      key: const Key('live-map-filters'),
+                      icon: Icon(
+                        _c.filter.isEmpty
+                            ? Icons.filter_list
+                            : Icons.filter_list_alt,
+                      ),
+                      label: const Text('Filters'),
+                      onPressed: () => _openFilters(context),
+                    ),
+                    TextButton.icon(
+                      key: const Key('live-map-open-full'),
+                      icon: const Icon(Icons.layers_outlined),
+                      label: const Text('Coverage map'),
+                      onPressed: () {
+                        final c = regionCentre(widget.region);
+                        if (c != null) {
+                          MainMapFocus.request(
+                            c,
+                            10,
+                            showLayers: networkMapLayers,
+                          );
+                        }
+                        ShellScope.maybeRead(context)?.openDrive();
+                      },
+                    ),
+                  ],
                 ),
-              ]),
-              Semantics(
-                header: true,
-                child: Text(feed.isEmpty ? 'Waiting for packets' : 'Feed · newest first', key: const Key('live-feed-heading'), style: t.textTheme.titleSmall),
-              ),
-            ]),
+                Semantics(
+                  header: true,
+                  child: Text(
+                    feed.isEmpty
+                        ? 'Waiting for packets'
+                        : 'Feed · newest first',
+                    key: const Key('live-feed-heading'),
+                    style: t.textTheme.titleSmall,
+                  ),
+                ),
+              ],
+            ),
           ),
           SliverList.builder(
             key: const Key('live-feed-list'),
@@ -552,8 +986,15 @@ class _NetworkLiveMapState extends State<NetworkLiveMap> with SingleTickerProvid
             itemBuilder: (ctx, i) => _FeedRow(
               packet: feed[i],
               now: now,
-              onOpen: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                  builder: (_) => NetworkPacketScreen(baseUrl: widget.region.url, regionSlug: widget.region.slug, hash: feed[i].hash))),
+              onOpen: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => NetworkPacketScreen(
+                    baseUrl: widget.region.url,
+                    regionSlug: widget.region.slug,
+                    hash: feed[i].hash,
+                  ),
+                ),
+              ),
               onDraw: () {
                 _c.showPacket(feed[i]);
                 _fitFocus();
@@ -561,11 +1002,19 @@ class _NetworkLiveMapState extends State<NetworkLiveMap> with SingleTickerProvid
             ),
           ),
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(Layout.screenMargin, 8, Layout.screenMargin, 12),
-            sliver: SliverList.list(children: [
-              const _Legend(),
-              for (final (i, n) in _notes().indexed) _Note(key: Key('live-note-$i'), summary: n.$1, details: n.$2),
-            ]),
+            padding: const EdgeInsets.fromLTRB(
+              Layout.screenMargin,
+              8,
+              Layout.screenMargin,
+              12,
+            ),
+            sliver: SliverList.list(
+              children: [
+                const _Legend(),
+                for (final (i, n) in _notes().indexed)
+                  _Note(key: Key('live-note-$i'), summary: n.$1, details: n.$2),
+              ],
+            ),
           ),
         ],
       ),
@@ -581,34 +1030,44 @@ class _NetworkLiveMapState extends State<NetworkLiveMap> with SingleTickerProvid
       key: const Key('live-focus-card'),
       id: 'live.focus',
       title: '${packetTypeLabel(p.typeName)} · ${p.hash.substring(0, 8)}',
-      leading: Container(width: 10, height: 10, decoration: BoxDecoration(color: packetTypeColor(context, p.type), shape: BoxShape.circle)),
+      leading: Container(
+        width: 10,
+        height: 10,
+        decoration: BoxDecoration(
+          color: packetTypeColor(context, p.type),
+          shape: BoxShape.circle,
+        ),
+      ),
       status: Text(heard),
       bottomSafe: false,
       onClose: _c.clearFocus,
       closeKey: const Key('live-focus-close'),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(Layout.screenMargin, 0, 4, 8),
-        child: Row(children: [
-          Expanded(
-            child: Text(
-              [
-                heard,
-                if (d.unplaced > 0) '${d.unplaced} hop${d.unplaced == 1 ? '' : 's'} not placed',
-                if (d.isEmpty) 'no known positions to draw',
-              ].join(' · '),
-              style: t.textTheme.bodySmall,
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                [
+                  heard,
+                  if (d.unplaced > 0)
+                    '${d.unplaced} hop${d.unplaced == 1 ? '' : 's'} not placed',
+                  if (d.isEmpty) 'no known positions to draw',
+                ].join(' · '),
+                style: t.textTheme.bodySmall,
+              ),
             ),
-          ),
-          TextButton(
-            key: const Key('live-focus-replay'),
-            onPressed: () {
-              final at = p.firstSeen.subtract(const Duration(seconds: 30));
-              _c.clearFocus();
-              unawaited(_c.replayFrom(at));
-            },
-            child: const Text('Replay here'),
-          ),
-        ]),
+            TextButton(
+              key: const Key('live-focus-replay'),
+              onPressed: () {
+                final at = p.firstSeen.subtract(const Duration(seconds: 30));
+                _c.clearFocus();
+                unawaited(_c.replayFrom(at));
+              },
+              child: const Text('Replay here'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -631,7 +1090,8 @@ class _NetworkLiveMapState extends State<NetworkLiveMap> with SingleTickerProvid
       detents: const [0.6, 0.92],
       builder: (ctx, sc) => ListenableBuilder(
         listenable: _c,
-        builder: (ctx, _) => _FilterSheet(controller: sc, live: _c, observers: observers),
+        builder: (ctx, _) =>
+            _FilterSheet(controller: sc, live: _c, observers: observers),
       ),
     );
   }
@@ -653,23 +1113,52 @@ class _NoteState extends State<_Note> {
   Widget build(BuildContext context) {
     final t = Theme.of(context);
     final details = widget.details;
-    final has = details != null && details.trim().isNotEmpty && details.trim() != widget.summary.trim();
+    final has =
+        details != null &&
+        details.trim().isNotEmpty &&
+        details.trim() != widget.summary.trim();
     return Padding(
       padding: const EdgeInsets.only(top: 6),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Expanded(child: Text(widget.summary, maxLines: 2, overflow: TextOverflow.ellipsis, style: t.textTheme.bodySmall)),
-          if (has)
-            TextButton(
-              key: const Key('live-note-details'),
-              style: TextButton.styleFrom(minimumSize: const Size(Hit.min, Hit.min), padding: const EdgeInsets.symmetric(horizontal: 8)),
-              onPressed: () => setState(() => _open = !_open),
-              child: Text(_open ? 'Hide' : 'Details', semanticsLabel: _open ? 'Hide details' : 'Details: ${widget.summary}'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  widget.summary,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: t.textTheme.bodySmall,
+                ),
+              ),
+              if (has)
+                TextButton(
+                  key: const Key('live-note-details'),
+                  style: TextButton.styleFrom(
+                    minimumSize: const Size(Hit.min, Hit.min),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                  ),
+                  onPressed: () => setState(() => _open = !_open),
+                  child: Text(
+                    _open ? 'Hide' : 'Details',
+                    semanticsLabel: _open
+                        ? 'Hide details'
+                        : 'Details: ${widget.summary}',
+                  ),
+                ),
+            ],
+          ),
+          if (has && _open)
+            Text(
+              details,
+              key: const Key('live-note-full'),
+              style: t.textTheme.bodySmall?.copyWith(
+                color: t.colorScheme.onSurfaceVariant,
+              ),
             ),
-        ]),
-        if (has && _open)
-          Text(details, key: const Key('live-note-full'), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
-      ]),
+        ],
+      ),
     );
   }
 }
@@ -679,15 +1168,24 @@ class _Legend extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
-    final muted = t.textTheme.labelSmall?.copyWith(color: t.colorScheme.onSurfaceVariant);
+    final muted = t.textTheme.labelSmall?.copyWith(
+      color: t.colorScheme.onSurfaceVariant,
+    );
     return Semantics(
       label: 'Legend: solid line, hop known for sure. Dashed, likely hop. Faint grey, hops nobody can place.',
       excludeSemantics: true,
-      child: Wrap(spacing: 12, runSpacing: 2, children: [
-        Text('━ unique hop', style: muted),
-        Text('╌ likely hop', style: muted),
-        Text('┈ unplaced (ghost) hops', style: muted?.copyWith(color: ghostColor(context))),
-      ]),
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 2,
+        children: [
+          Text('━ unique hop', style: muted),
+          Text('╌ likely hop', style: muted),
+          Text(
+            '┈ unplaced (ghost) hops',
+            style: muted?.copyWith(color: ghostColor(context)),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -709,12 +1207,16 @@ class _ScrubberState extends State<_Scrubber> {
     final (from, to) = c.windowRange();
     if (c.mode == LiveMode.live) return 1;
     final at = c.replayClock?.playhead ?? to;
-    return (at.difference(from).inMilliseconds / to.difference(from).inMilliseconds).clamp(0.0, 1.0);
+    return (at.difference(from).inMilliseconds /
+            to.difference(from).inMilliseconds)
+        .clamp(0.0, 1.0);
   }
 
   DateTime _timeAt(double f) {
     final (from, to) = c.windowRange();
-    return from.add(Duration(milliseconds: (to.difference(from).inMilliseconds * f).round()));
+    return from.add(
+      Duration(milliseconds: (to.difference(from).inMilliseconds * f).round()),
+    );
   }
 
   void _drop(double f) {
@@ -730,7 +1232,9 @@ class _ScrubberState extends State<_Scrubber> {
   Widget build(BuildContext context) {
     final t = Theme.of(context);
     final frac = _drag ?? _playheadFrac();
-    final label = _drag != null ? clockText(_timeAt(_drag!)) : (c.mode == LiveMode.live ? 'Live' : clockText(_timeAt(frac)));
+    final label = _drag != null
+        ? clockText(_timeAt(_drag!))
+        : (c.mode == LiveMode.live ? 'Live' : clockText(_timeAt(frac)));
     return Semantics(
       key: const Key('live-map-scrubber'),
       slider: true,
@@ -740,39 +1244,46 @@ class _ScrubberState extends State<_Scrubber> {
       decreasedValue: clockText(_timeAt((frac - 0.05).clamp(0, 1))),
       onIncrease: () => _drop((frac + 0.05).clamp(0.0, 1.0)),
       onDecrease: () => _drop((frac - 0.05).clamp(0.0, 1.0)),
-      child: LayoutBuilder(builder: (context, box) {
-        final w = box.maxWidth;
-        double f(Offset p) => (p.dx / w).clamp(0.0, 1.0);
-        return GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onHorizontalDragStart: (d) => setState(() => _drag = f(d.localPosition)),
-          onHorizontalDragUpdate: (d) => setState(() => _drag = f(d.localPosition)),
-          onHorizontalDragEnd: (_) => _drop(_drag ?? 1),
-          onTapUp: (d) => _drop(f(d.localPosition)),
-          child: SizedBox(
-            height: 44,
-            child: CustomPaint(
-              painter: _DensityPainter(
-                counts: c.density?.counts.map((e) => e.$2).toList() ?? const [],
-                playhead: frac,
-                bar: t.colorScheme.primary.withValues(alpha: 0.45),
-                head: t.colorScheme.onSurface,
-                base: t.colorScheme.outlineVariant,
-              ),
-              child: Align(
-                alignment: Alignment.topRight,
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 4),
-                  child: Text(
-                    c.density == null && !c.densityLoading ? '$label · no density from the server' : label,
-                    style: t.textTheme.labelSmall,
+      child: LayoutBuilder(
+        builder: (context, box) {
+          final w = box.maxWidth;
+          double f(Offset p) => (p.dx / w).clamp(0.0, 1.0);
+          return GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onHorizontalDragStart: (d) =>
+                setState(() => _drag = f(d.localPosition)),
+            onHorizontalDragUpdate: (d) =>
+                setState(() => _drag = f(d.localPosition)),
+            onHorizontalDragEnd: (_) => _drop(_drag ?? 1),
+            onTapUp: (d) => _drop(f(d.localPosition)),
+            child: SizedBox(
+              height: 44,
+              child: CustomPaint(
+                painter: _DensityPainter(
+                  counts:
+                      c.density?.counts.map((e) => e.$2).toList() ?? const [],
+                  playhead: frac,
+                  bar: t.colorScheme.primary.withValues(alpha: 0.45),
+                  head: t.colorScheme.onSurface,
+                  base: t.colorScheme.outlineVariant,
+                ),
+                child: Align(
+                  alignment: Alignment.topRight,
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 4),
+                    child: Text(
+                      c.density == null && !c.densityLoading
+                          ? '$label · no density from the server'
+                          : label,
+                      style: t.textTheme.labelSmall,
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-        );
-      }),
+          );
+        },
+      ),
     );
   }
 }
@@ -781,13 +1292,23 @@ class _DensityPainter extends CustomPainter {
   final List<int> counts;
   final double playhead;
   final Color bar, head, base;
-  const _DensityPainter({required this.counts, required this.playhead, required this.bar, required this.head, required this.base});
+  const _DensityPainter({
+    required this.counts,
+    required this.playhead,
+    required this.bar,
+    required this.head,
+    required this.base,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
     final top = 14.0;
     final h = size.height - top;
-    canvas.drawLine(Offset(0, size.height - 0.5), Offset(size.width, size.height - 0.5), Paint()..color = base);
+    canvas.drawLine(
+      Offset(0, size.height - 0.5),
+      Offset(size.width, size.height - 0.5),
+      Paint()..color = base,
+    );
     if (counts.isNotEmpty) {
       final mx = counts.fold<int>(1, math.max);
       final bw = size.width / counts.length;
@@ -795,49 +1316,88 @@ class _DensityPainter extends CustomPainter {
       for (var i = 0; i < counts.length; i++) {
         final bh = counts[i] / mx * h;
         if (bh <= 0) continue;
-        canvas.drawRect(Rect.fromLTWH(i * bw + 0.5, size.height - bh, math.max(1, bw - 1), bh), p);
+        canvas.drawRect(
+          Rect.fromLTWH(
+            i * bw + 0.5,
+            size.height - bh,
+            math.max(1, bw - 1),
+            bh,
+          ),
+          p,
+        );
       }
     }
     final x = playhead * size.width;
-    canvas.drawLine(Offset(x, top - 2), Offset(x, size.height), Paint()
-      ..color = head
-      ..strokeWidth = 2);
+    canvas.drawLine(
+      Offset(x, top - 2),
+      Offset(x, size.height),
+      Paint()
+        ..color = head
+        ..strokeWidth = 2,
+    );
   }
 
   @override
-  bool shouldRepaint(_DensityPainter old) => old.counts != counts || old.playhead != playhead || old.bar != bar;
+  bool shouldRepaint(_DensityPainter old) =>
+      old.counts != counts || old.playhead != playhead || old.bar != bar;
 }
 
 class _FeedRow extends StatelessWidget {
   final LiveV2Packet packet;
   final DateTime now;
   final VoidCallback onOpen, onDraw;
-  const _FeedRow({required this.packet, required this.now, required this.onOpen, required this.onDraw});
+  const _FeedRow({
+    required this.packet,
+    required this.now,
+    required this.onOpen,
+    required this.onDraw,
+  });
 
   @override
   Widget build(BuildContext context) {
     final p = packet;
-    final text = p.message?.hidden == true ? 'Message hidden by a moderator' : p.message?.text;
+    final text = p.message?.hidden == true
+        ? 'Message hidden by a moderator'
+        : p.message?.text;
     return ListTile(
       key: Key('live-feed-row-${p.hash}'),
-      leading: Container(width: 12, height: 12, decoration: BoxDecoration(color: packetTypeColor(context, p.type), shape: BoxShape.circle)),
+      leading: Container(
+        width: 12,
+        height: 12,
+        decoration: BoxDecoration(
+          color: packetTypeColor(context, p.type),
+          shape: BoxShape.circle,
+        ),
+      ),
       title: Text(
-        p.origin?.name != null ? '${packetTypeLabel(p.typeName)}: ${p.origin!.name}' : (p.channel != null ? '${packetTypeLabel(p.typeName)} on ${p.channel!.label}' : packetTypeLabel(p.typeName)),
+        p.origin?.name != null
+            ? '${packetTypeLabel(p.typeName)}: ${p.origin!.name}'
+            : (p.channel != null
+                  ? '${packetTypeLabel(p.typeName)} on ${p.channel!.label}'
+                  : packetTypeLabel(p.typeName)),
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
       ),
-      subtitle: Text([
-        if (text != null) (text.length > 60 ? '${text.substring(0, 60)}…' : text),
+      subtitle: Text(
         [
-          '${p.hops} hop${p.hops == 1 ? '' : 's'}',
-          '${p.observations.length} heard',
-          if (p.bestSnr != null) 'best ${snrText(p.bestSnr)}',
-          ageText(p.firstSeen, now),
-        ].join(' · '),
-      ].join('\n')),
+          if (text != null)
+            (text.length > 60 ? '${text.substring(0, 60)}…' : text),
+          [
+            '${p.hops} hop${p.hops == 1 ? '' : 's'}',
+            '${p.observations.length} heard',
+            if (p.bestSnr != null) 'best ${snrText(p.bestSnr)}',
+            ageText(p.firstSeen, now),
+          ].join(' · '),
+        ].join('\n'),
+      ),
       isThreeLine: text != null,
       onTap: onOpen,
-      trailing: IconButton(key: Key('live-feed-draw-${p.hash}'), tooltip: 'Draw on the map', icon: const Icon(Icons.route), onPressed: onDraw),
+      trailing: IconButton(
+        key: Key('live-feed-draw-${p.hash}'),
+        tooltip: 'Draw on the map',
+        icon: const Icon(Icons.route),
+        onPressed: onDraw,
+      ),
     );
   }
 }
@@ -846,7 +1406,11 @@ class _FilterSheet extends StatelessWidget {
   final ScrollController controller;
   final LiveMapController live;
   final Map<String, String> observers;
-  const _FilterSheet({required this.controller, required this.live, required this.observers});
+  const _FilterSheet({
+    required this.controller,
+    required this.live,
+    required this.observers,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -857,45 +1421,86 @@ class _FilterSheet extends StatelessWidget {
       controller: controller,
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       children: [
-        Semantics(header: true, child: Text('Filters', style: t.textTheme.titleLarge)),
+        Semantics(
+          header: true,
+          child: Text('Filters', style: t.textTheme.titleLarge),
+        ),
         const SizedBox(height: 8),
         SwitchListTile(
           key: const Key('live-filter-mine'),
           contentPadding: EdgeInsets.zero,
           title: const Text('My nodes'),
-          subtitle: Text(live.myNodes.isEmpty
-              ? 'Star nodes or observers under Nodes, or claim your radio, to use this.'
-              : 'Only packets from, through or heard by your starred and claimed nodes.'),
+          subtitle: Text(
+            live.myNodes.isEmpty
+                ? 'Star nodes or observers under Nodes, or claim your radio, to use this.'
+                : 'Only packets from, through or heard by your starred and claimed nodes.',
+          ),
           value: f.myNodesOnly,
           onChanged: (v) => live.setFilter(f.copyWith(myNodesOnly: v)),
         ),
         const SizedBox(height: 8),
         Text('Packet types', style: t.textTheme.titleSmall),
         const SizedBox(height: 4),
-        Wrap(spacing: 6, runSpacing: 6, children: [
-          for (final ty in livePacketTypes)
-            FilterChip(
-              key: Key('live-filter-type-$ty'),
-              avatar: CircleAvatar(backgroundColor: packetTypeColor(context, ty), radius: 6),
-              label: Text(packetTypeLabel(packetTypeWireName(ty))),
-              selected: f.types.contains(ty),
-              onSelected: (on) => live.setFilter(f.copyWith(types: on ? {...f.types, ty} : ({...f.types}..remove(ty)))),
-            ),
-        ]),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            for (final ty in livePacketTypes)
+              FilterChip(
+                key: Key('live-filter-type-$ty'),
+                avatar: CircleAvatar(
+                  backgroundColor: packetTypeColor(context, ty),
+                  radius: 6,
+                ),
+                label: Text(packetTypeLabel(packetTypeWireName(ty))),
+                selected: f.types.contains(ty),
+                onSelected: (on) => live.setFilter(
+                  f.copyWith(
+                    types: on ? {...f.types, ty} : ({...f.types}..remove(ty)),
+                  ),
+                ),
+              ),
+          ],
+        ),
         const SizedBox(height: 12),
         Text('Observer', style: t.textTheme.titleSmall),
-        if (observers.isEmpty) Text('Observers appear here once packets arrive.', style: t.textTheme.bodySmall),
+        if (observers.isEmpty)
+          Text(
+            'Observers appear here once packets arrive.',
+            style: t.textTheme.bodySmall,
+          ),
         RadioGroup<String?>(
           groupValue: f.observerId,
-          onChanged: (v) => live.setFilter(v == null ? f.copyWith(clearObserver: true) : f.copyWith(observerId: v)),
-          child: Column(children: [
-            if (observers.isNotEmpty) const RadioListTile<String?>(key: Key('live-filter-observer-all'), contentPadding: EdgeInsets.zero, title: Text('All observers'), value: null),
-            for (final e in observers.entries)
-              RadioListTile<String?>(key: Key('live-filter-observer-${e.key}'), contentPadding: EdgeInsets.zero, title: Text(e.value), value: e.key),
-          ]),
+          onChanged: (v) => live.setFilter(
+            v == null
+                ? f.copyWith(clearObserver: true)
+                : f.copyWith(observerId: v),
+          ),
+          child: Column(
+            children: [
+              if (observers.isNotEmpty)
+                const RadioListTile<String?>(
+                  key: Key('live-filter-observer-all'),
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('All observers'),
+                  value: null,
+                ),
+              for (final e in observers.entries)
+                RadioListTile<String?>(
+                  key: Key('live-filter-observer-${e.key}'),
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(e.value),
+                  value: e.key,
+                ),
+            ],
+          ),
         ),
         if (!f.isEmpty)
-          TextButton(key: const Key('live-filter-clear'), onPressed: () => live.setFilter(LiveFilter.none), child: const Text('Clear filters')),
+          TextButton(
+            key: const Key('live-filter-clear'),
+            onPressed: () => live.setFilter(LiveFilter.none),
+            child: const Text('Clear filters'),
+          ),
       ],
     );
   }

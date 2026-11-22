@@ -15,6 +15,7 @@ import '../../charts/chart_frame.dart';
 import '../../charts/time_line_chart.dart';
 import '../../map/map_preview.dart' show MapPreview;
 import '../../map/still/place_map.dart';
+import '../../map/still/still_nodes.dart' show stillRepeatersOf;
 import '../../region/region_common.dart' show RegionOfflineAsOf, RegionOfflineEmpty, agoText;
 import '../../theme.dart';
 import '../network_context.dart';
@@ -148,7 +149,7 @@ class ObserverPageBody extends StatelessWidget {
           Padding(
             key: const Key('observer-map'),
             padding: const EdgeInsets.only(top: Gap.s),
-            child: StillPlaceMap(page: 'observer', role: 'observer', name: r.name, lat: r.position!.lat, lon: r.position!.lon, freshness: switch (r.status) { 'online' => 'fresh', 'stale' => 'recent', _ => 'stale' }),
+            child: StillPlaceMap(page: 'observer', role: 'observer', name: r.name, lat: r.position!.lat, lon: r.position!.lon, freshness: switch (r.status) { 'online' => 'fresh', 'stale' => 'recent', _ => 'stale' }, repeaters: stillRepeatersOf(context, regionSlug: regionSlug)),
           ),
         if (lastHour.isNotEmpty) NodeSection(id: 'observer-now', title: 'Now', children: lastHour),
         if (page.metrics != null) ..._metrics(context, page.metrics!),

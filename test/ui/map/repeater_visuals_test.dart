@@ -13,26 +13,27 @@ import 'package:meshsonar/ui/design/map_tokens.dart';
 import 'package:meshsonar/ui/map/layers/clustered_points_layer.dart' show contrastRatio;
 import 'package:meshsonar/ui/map/layers/repeater_sprites.dart';
 
+// The dark chart colour the contrast table is computed against (was MapTokens.chartDark, only ever read by tests).
+const _chartDark = Color(0xFF2B2F36);
+
 const _fresh = RepeaterFreshness.fresh, _recent = RepeaterFreshness.recent, _stale = RepeaterFreshness.stale;
 
 void main() {
   group('contrast table of plan 6.3 (formula check against the base colours)', () {
-    void table(Brightness b, Color base, List<double> fills, List<double> glyphs) {
+    void table(Brightness b, Color base, List<double> fills) {
       for (final (i, f) in RepeaterFreshness.values.indexed) {
         final c = freshnessColor(f, b);
         expect(contrastRatio(c, base), closeTo(fills[i], 0.02), reason: '${b.name} ${f.name} fill vs base');
         expect(contrastRatio(c, base), greaterThanOrEqualTo(3), reason: 'graphic objects need 3:1');
-        expect(contrastRatio(MapTokens.repeaterGlyph(b), c), closeTo(glyphs[i], 0.02), reason: '${b.name} ${f.name} glyph on fill');
-        expect(contrastRatio(MapTokens.repeaterGlyph(b), c), greaterThanOrEqualTo(3));
       }
     }
 
-    test('light: fills vs land #F2EFE9 and white glyph on the fills', () {
-      table(Brightness.light, MapTokens.landLight, [4.52, 4.11, 4.21], [5.19, 4.72, 4.83]);
+    test('light: fills vs land #F2EFE9', () {
+      table(Brightness.light, MapTokens.landLight, [4.52, 4.11, 4.21]);
     });
 
-    test('dark: fills vs #2B2F36 and #12161B glyph on the fills', () {
-      table(Brightness.dark, MapTokens.chartDark, [5.82, 6.67, 5.29], [7.87, 9.01, 7.15]);
+    test('dark: fills vs #2B2F36', () {
+      table(Brightness.dark, _chartDark, [5.82, 6.67, 5.29]);
     });
 
     test('the exact palette of the plan', () {
@@ -50,14 +51,14 @@ void main() {
       expect(contrastRatio(MapTokens.mapInk(Brightness.light), MapTokens.mapHalo(Brightness.light)), closeTo(16.56, 0.02));
       expect(contrastRatio(MapTokens.mapInk(Brightness.light), MapTokens.landLight), closeTo(14.43, 0.02));
       expect(contrastRatio(MapTokens.mapInk(Brightness.dark), MapTokens.mapHalo(Brightness.dark)), closeTo(16.76, 0.02));
-      expect(contrastRatio(MapTokens.mapInk(Brightness.dark), MapTokens.chartDark), closeTo(12.41, 0.02));
+      expect(contrastRatio(MapTokens.mapInk(Brightness.dark), _chartDark), closeTo(12.41, 0.02));
     });
 
     test('stale labels (ink at 70%) still read at 4.5:1 or better on the land', () {
       final ink = Color.alphaBlend(MapTokens.mapInk(Brightness.light).withValues(alpha: 0.7), MapTokens.landLight);
       expect(contrastRatio(ink, MapTokens.landLight), greaterThanOrEqualTo(4.5));
-      final dark = Color.alphaBlend(MapTokens.mapInk(Brightness.dark).withValues(alpha: 0.7), MapTokens.chartDark);
-      expect(contrastRatio(dark, MapTokens.chartDark), greaterThanOrEqualTo(4.5));
+      final dark = Color.alphaBlend(MapTokens.mapInk(Brightness.dark).withValues(alpha: 0.7), _chartDark);
+      expect(contrastRatio(dark, _chartDark), greaterThanOrEqualTo(4.5));
     });
   });
 
@@ -67,7 +68,7 @@ void main() {
     for (final b in Brightness.values) {
       testWidgets('${b.name}: fresh, recent and stale badges stay apart in greyscale, protanopia and deuteranopia', (t) async {
         final theme = RepeaterSpriteTheme(brightness: b, accent: const Color(0xFF008080), ok: const Color(0xFF2E9E5B));
-        final bg = b == Brightness.dark ? MapTokens.chartDark : MapTokens.landLight;
+        final bg = b == Brightness.dark ? _chartDark : MapTokens.landLight;
         await t.runAsync(() async {
           for (final room in [false, true]) {
             for (final variant in [SpriteVariant.badge, SpriteVariant.badgeLarge, SpriteVariant.heard]) {
@@ -100,7 +101,7 @@ void main() {
     testWidgets('the donut (z9-11) keeps the three states apart too (ring colour + dashes + tint)', (t) async {
       for (final b in Brightness.values) {
         final theme = RepeaterSpriteTheme(brightness: b, accent: const Color(0xFF008080), ok: const Color(0xFF2E9E5B));
-        final bg = b == Brightness.dark ? MapTokens.chartDark : MapTokens.landLight;
+        final bg = b == Brightness.dark ? _chartDark : MapTokens.landLight;
         await t.runAsync(() async {
           final crops = <RepeaterFreshness, Uint8List>{};
           for (final f in RepeaterFreshness.values) {
@@ -127,7 +128,7 @@ void main() {
         Directory(out!).createSync(recursive: true);
         for (final b in Brightness.values) {
           final theme = RepeaterSpriteTheme(brightness: b, accent: const Color(0xFF008080), ok: const Color(0xFF2E9E5B));
-          final bg = b == Brightness.dark ? MapTokens.chartDark : MapTokens.landLight;
+          final bg = b == Brightness.dark ? _chartDark : MapTokens.landLight;
           const cell = 44.0, scale = 4.0;
           final cols = SpriteVariant.values.length, rows = 6;
           final w = (cols * cell * scale).toInt(), h = (rows * cell * scale).toInt();

@@ -16,6 +16,7 @@ import '../../charts/chart_frame.dart';
 import '../../charts/time_line_chart.dart';
 import '../../map/map_preview.dart' show MapPreview;
 import '../../map/still/place_map.dart';
+import '../../map/still/still_nodes.dart' show stillRepeatersOf;
 import '../../nodes/node_actions.dart' show NodeActionBar;
 import '../../nodes/node_ref.dart';
 import '../../../core/repeater_detail_api.dart' show DailySnr;
@@ -152,7 +153,7 @@ class NodePageBody extends StatelessWidget {
           Padding(
             key: const Key('node-map'),
             padding: const EdgeInsets.only(top: Gap.s),
-            child: StillPlaceMap(page: 'node', role: d.role, name: d.label, lat: d.position!.lat, lon: d.position!.lon, tiles: mapTiles ? null : false),
+            child: StillPlaceMap(page: 'node', role: d.role, name: d.label, lat: d.position!.lat, lon: d.position!.lon, tiles: mapTiles ? null : false, nodeKey: d.key, repeaters: stillRepeatersOf(context, regionSlug: regionSlug)),
           ),
         const SizedBox(height: Gap.s),
         NodeActionBar(node: ref),
