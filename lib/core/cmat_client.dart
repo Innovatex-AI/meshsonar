@@ -41,6 +41,7 @@ import 'hex_cells.dart' show loadHexEngine;
 import 'map_links.dart';
 import 'node_claim.dart';
 import 'person_identity.dart';
+import 'person_observers.dart';
 import 'photo_api.dart';
 import 'photo_wire.dart';
 import 'driver_settings.dart';
@@ -665,6 +666,20 @@ class HttpCmatClient implements CmatClient, TelemetryTransport, ObserverStatusTr
   Future<bool> setAskFirst(String driverKey, bool askFirst) async {
     final j = await _send('POST', 'person-prefs', driverKey: driverKey, body: {'askFirst': askFirst});
     return j['askFirst'] == true;
+  }
+
+  @override
+  Future<PersonObservers> personObservers(String driverKey) async => PersonObservers.parse(await _send('GET', 'person-observers', driverKey: driverKey));
+
+  @override
+  Future<OfferOutcome> answerObserverOffer(String driverKey, String key, {required bool accept}) async {
+    final j = await _send('POST', 'person-observer-offer', driverKey: driverKey, body: {'key': key.trim().toLowerCase(), 'action': accept ? 'accept' : 'decline'});
+    return parseOfferOutcome(j);
+  }
+
+  @override
+  Future<void> setShowRadioName(String driverKey, String key, bool show) async {
+    await _send('POST', 'person-observer-pref', driverKey: driverKey, body: {'key': key.trim().toLowerCase(), 'showRadioName': show});
   }
 
   @override

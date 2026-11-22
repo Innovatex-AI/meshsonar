@@ -14,6 +14,7 @@ import 'mqtt_contract.dart';
 import 'plan_contract.dart';
 import 'node_claim.dart';
 import 'person_identity.dart';
+import 'person_observers.dart';
 import 'driver_settings.dart';
 import 'privacy_zones.dart';
 import 'repeater_reach.dart';
@@ -603,6 +604,18 @@ abstract class CmatClient {
 
   /// `POST person-prefs {askFirst}`.
   Future<bool> setAskFirst(String driverKey, bool askFirst) => throw const CmatException('not supported by this client');
+
+  // ---- ID step 5 (capabilities.radioProof): the person's observers. A fixed observer's name and position use [updateClaim], its release [releaseClaim]. ----
+
+  /// `GET person-observers`: the observers on the account and the offers waiting for a yes or no.
+  Future<PersonObservers> personObservers(String driverKey) => throw const CmatException('not supported by this client');
+
+  /// `POST person-observer-offer {key, action: accept|decline}`. Throws [CmatException] (409 code `owned`, 404 `not_found`, 400).
+  Future<OfferOutcome> answerObserverOffer(String driverKey, String key, {required bool accept}) =>
+      throw const CmatException('not supported by this client');
+
+  /// `POST person-observer-pref {key, showRadioName}`. Throws [CmatException] (404 `not_found`).
+  Future<void> setShowRadioName(String driverKey, String key, bool show) => throw const CmatException('not supported by this client');
 
   /// `POST /api/cmh/plan-link` (`capabilities['plan.link']`): profile, Fresnel clearance, tightest point and metres to
   /// raise, blocking ridge, terrain odds and verdict, and measured evidence for a pair of known nodes.
