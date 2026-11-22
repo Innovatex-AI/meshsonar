@@ -46,7 +46,6 @@ import '../../design/app_surfaces.dart' show showAppSheet;
 import '../../design/map_panel.dart';
 import '../../design/tokens.dart';
 import '../../map/active_map_definition.dart';
-import '../../../core/map_definition_v2.dart';
 import '../../../core/map_definition_pages.dart';
 import '../../map/core/map_view_controller.dart';
 import '../../map/coverage_map.dart';
@@ -76,7 +75,16 @@ const String kLiveLayerPage = 'live';
 LatLngBounds? _regionBounds(RegionIndexEntry r) {
   final b = r.bbox;
   if (b == null || b.length != 4 || !(b[0] < b[2] && b[1] < b[3])) return null;
-  return LatLngBounds(LatLng(b[1], b[0]), LatLng(b[3], b[2]));
+  // A whole region fits below the first name zoom, where only the nodes a packet is crossing are drawn: an empty map on first
+  // open. So the map opens on the region's middle, at most about one degree across (zoom 9 on a phone, where build 74 opened).
+  const halfLon = 0.5, halfLat = 0.42;
+  final midLon = (b[0] + b[2]) / 2, midLat = (b[1] + b[3]) / 2;
+  final w = math.min((b[2] - b[0]) / 2, halfLon),
+      h = math.min((b[3] - b[1]) / 2, halfLat);
+  return LatLngBounds(
+    LatLng(midLat - h, midLon - w),
+    LatLng(midLat + h, midLon + w),
+  );
 }
 
 /// The middle of a region's box; null without one.
@@ -663,19 +671,7 @@ class _NetworkLiveMapState extends State<NetworkLiveMap>
               },
               onMapReady: () {
                 _mapReady = true;
-                if (_c.focus != null) {
-                  _fitFocus();
-                  return;
-                }
-                // The region box fits below the first name zoom, where only the nodes a packet is crossing are drawn: an empty
-                // map on first open. Open where build 74 did, on the region's middle at the first zoom that shows its nodes.
-                final first = ActiveMapDefinition.current.labelSpec.minZoom
-                    .toDouble();
-                try {
-                  if (_map.camera.zoom < first) _map.move(_centre, first);
-                } catch (_) {
-                  // the controller is not attached in a test that pumps the view without a laid-out map
-                }
+                if (_c.focus != null) _fitFocus();
               },
             ),
           ),
