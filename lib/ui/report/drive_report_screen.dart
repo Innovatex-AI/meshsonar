@@ -21,14 +21,19 @@ import '../../core/drive_report_export.dart';
 import '../../core/drive_report_pdf.dart';
 import '../../core/drive_stats.dart' show formatDuration;
 import '../../core/drive_store.dart' show JsonlDriveStore;
+import '../../core/map_tool_style.dart';
 import '../../core/model.dart';
+import '../../core/privacy_zones.dart' show PrivacyZone, distanceM;
 import '../app.dart';
 import '../design/app_surfaces.dart' show AppAction, AppToastKind, showAppActionSheet, showAppSheet, showAppToast;
 import '../design/app_symbols.dart' show AppSymbols;
+import '../map/active_map_definition.dart';
 import '../map/coverage_map.dart' show CoverageMap;
 import '../map/layers/repeater_name_labels.dart' show RepeaterNameLabels;
 import '../map/layers/repeater_painter_layer.dart' show RepeaterBadge, RepeaterPainterLayer;
 import '../map/layers/repeater_sprites.dart' show RepeaterFreshness;
+import '../map/tools/drive_key.dart';
+import '../map/tools/zone_layer.dart';
 import '../onboarding/ui_prefs.dart' show driveLabel;
 import '../widgets.dart';
 import 'drive_context_section.dart';
@@ -557,6 +562,16 @@ Color heardColor(MeshSonarColors m, ReportCell c) {
   return m.snrAt(f);
 }
 
+/// The zones whose circle reaches the part of the world the report map frames (a zone of another city is neither drawn nor counted
+/// in the key), and only when the definition carries the tool style: without it the report map draws no zone, as in build 73.
+List<PrivacyZone> _zonesOnMap(List<PrivacyZone> all, double south, double north, double west, double east) {
+  if (MapToolStyle.of(ActiveMapDefinition.current) == null || south > north) return const [];
+  return [
+    for (final z in all)
+      if (distanceM(z.lat.clamp(south, north).toDouble(), z.lon.clamp(west, east).toDouble(), z.lat, z.lon) <= z.radiusM) z,
+  ];
+}
+
 class _CellMap extends StatelessWidget {
   final DriveReport report;
   const _CellMap({required this.report});
@@ -590,6 +605,7 @@ class _CellMap extends StatelessWidget {
         ),
     ];
     final tiles = CoverageMap.tilesByDefault;
+    final zones = _zonesOnMap(s.privacyZones.zones, south, north, west, east);
     return Column(children: [
       ClipRRect(
         borderRadius: BorderRadius.circular(Corners.card),
@@ -606,6 +622,8 @@ class _CellMap extends StatelessWidget {
             tiles: tiles,
             openAt: LatLng((south + north) / 2, (west + east) / 2),
             overlays: [
+              // The phone's privacy zones over the cells, from the definition's `symbols.tools.zone` (nothing without it: build 73 drew none).
+              if (zones.isNotEmpty) ZoneLayer(zones: zones),
               PolygonLayer(polygons: [
                 for (final c in r.cells)
                   Polygon(
@@ -630,6 +648,10 @@ class _CellMap extends StatelessWidget {
         ),
       ),
       const SizedBox(height: 8),
+      if (zones.isNotEmpty) ...[
+        Align(alignment: Alignment.centerLeft, child: DriveKey(dots: false, zones: zones.length)),
+        const SizedBox(height: 8),
+      ],
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4),
         child: Row(children: [
