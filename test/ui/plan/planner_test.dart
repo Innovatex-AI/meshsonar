@@ -10,6 +10,7 @@ import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/plan/plan_api.dart';
 import 'package:meshsonar/core/plan/plan_codec.dart';
 import 'package:meshsonar/core/plan/plan_model.dart';
+import 'package:meshsonar/core/map_styles.dart' show BaseMapStyle;
 import 'package:meshsonar/core/plan/plan_store.dart';
 import 'package:meshsonar/ui/design/map_panel.dart';
 import 'package:meshsonar/ui/map/coverage_map.dart' show CoverageMap;
@@ -142,6 +143,28 @@ void main() {
       await tester.tap(find.byKey(Key('planner-mode-${PlanModeId.coverage.name}')));
       await settle(tester);
       if (st.detent != PlannerDetent.dock) expect(group.openId, kPlannerPanelId);
+      await drain(tester);
+    });
+
+    testWidgets('Layers, legend and basemap on the Plan map: the Layers panel joins the map\'s group, so it and the sheet never stack', (tester) async {
+      phone(tester);
+      final h = Harness();
+      final st = await openPlanner(tester, h);
+      await settle(tester);
+      expect(find.byKey(const Key('drive-map-layers')), findsOneWidget, reason: 'the Plan map has the Layers button');
+      expect(find.byKey(const Key('planner-legend-card')), findsOneWidget, reason: 'and the legend chip');
+      expect(tester.widget<CoverageMap>(find.byKey(const Key('planner-map'))).baseStyle, BaseMapStyle.chart);
+      final group = MapPanelScope.maybeRead(tester.element(find.byType(PlannerSheet)))!;
+      expect(group.openId, kPlannerPanelId);
+      await tester.tap(find.byKey(const Key('drive-map-layers')));
+      await settle(tester);
+      expect(find.byKey(const Key('layers-sheet')), findsOneWidget);
+      expect(group.openId, 'drive.layers', reason: 'one open panel per map');
+      expect(st.detent, PlannerDetent.dock, reason: 'the planner sheet went back to its header');
+      // A saved choice shows on the map: Dark.
+      await tester.tap(find.byKey(const Key('base-map-dark')));
+      await settle(tester);
+      expect(tester.widget<CoverageMap>(find.byKey(const Key('planner-map'))).baseStyle, BaseMapStyle.dark);
       await drain(tester);
     });
 

@@ -112,6 +112,29 @@ List<(MapGroupDef, List<SheetRow>)> sheetRows([MapDefinition? def]) {
   ];
 }
 
+/// A layer of the definition that this app cannot draw on any map (the Activity group's Live packets and Path), shown in the
+/// Layers sheet as a disabled row with [reason], never hidden (the website's panel does the same).
+typedef InactiveRow = ({String groupId, String id, String name, String reason});
+
+/// The Activity group's rows the app cannot draw, from the definition (empty for a definition without that group).
+List<InactiveRow> inactiveRows([MapDefinition? def]) {
+  final d = def ?? ActiveMapDefinition.current;
+  return [
+    for (final l in d.layerDefs.reversed)
+      if (l.group == 'activity' && appLayerId(l.id) == null)
+        (
+          groupId: l.group,
+          id: l.id,
+          name: l.name,
+          reason: switch (l.id) {
+            'live' => 'Packets crossing the mesh right now: on the website, not drawn in the app yet.',
+            'path' => 'Drawn by a page that has a route to show (a packet, a trace), not on this map.',
+            _ => 'Not drawn on this map.',
+          },
+        ),
+  ];
+}
+
 /// The M3 layers are offered only while the definition advertises their capability string (a client checks it before relying on a
 /// feature); every other layer needs none.
 bool _capabilityOf(String defId, MapDefinition d) => switch (defId) {

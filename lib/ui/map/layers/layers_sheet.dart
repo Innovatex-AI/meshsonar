@@ -1,4 +1,10 @@
-// The map Layers sheet = the website's Layers panel (plan unified-map-system §2.4-2.5, phase M2), generated from the Map
+// The ONE Layers sheet (build 74, MAP slice 4): any map opens it with a [MapLayersModel] (layers_model.dart: the Drive map's
+// DriveMapModel, the Plan map's PageLayersModel). Order: Basemap, Coverage, Network, Activity, Mine, Context, Labels, Filters
+// (with a count when set; the Drive map's), Size and colour, Palette, Reset. A layer or an Activity row the map cannot draw shows
+// disabled with a one-line reason, never hidden. Basemap offers Road, Dark, Topo, Satellite when the definition has
+// `variables.basemap` (Chart and Light are one Road), else build 73's list.
+//
+// The website's Layers panel (plan unified-map-system §2.4-2.5, phase M2), generated from the Map
 // Definition (registry.dart [sheetRows]): Basemap, then the definition's groups (Coverage, Network, Context) with its layers,
 // names and hints (top of the map first: Measured, Heard by phones, Predicted; Moving phones, Observers, Repeaters, All MeshCore
 // repeaters, Link lines; Region borders), Filters ("Measured in" / "Drives from" from `filters`, plus the app's growth
@@ -10,12 +16,13 @@
 // map's transient panel slot when given one (MapPanel `drive.layers`), else as a non-modal app sheet with detents [0.4, 0.75].
 //
 // Keys: 'layers-sheet', 'layers-done', 'layers-base-map', 'base-map-<id>', 'layers-group-<groupId>' (+ 'layers-group-filters',
-// 'layers-group-palette'), the switch per layer from [layerSwitchKey], 'layer-<id>-status', 'layer-<id>-retry', 'layer-<id>-key',
+// 'layers-group-palette', 'layers-group-labels', 'layers-group-activity', 'layers-group-mine'), the switch per layer from [layerSwitchKey], 'layer-<id>-status', 'layer-<id>-retry', 'layer-<id>-key',
 // 'layer-color-snr', 'layer-color-result', 'layers-palette-<paletteId>', 'layers-filter', 'layers-credits', 'layers-legend',
 // 'layers-reset', 'network-legend'.
 import 'package:flutter/cupertino.dart' show CupertinoButton, CupertinoSlidingSegmentedControl;
 import 'package:flutter/material.dart';
 
+import '../../../core/map_definition.dart' show MapGroupDef;
 import '../../../core/map_styles.dart';
 import '../../../core/network_coverage.dart' show CoverageLevel;
 import '../../design/anchored_sheet.dart';
@@ -26,6 +33,8 @@ import '../../design/app_widgets.dart' show AppSwitchTile;
 import '../../design/map_tokens.dart';
 import '../../design/tokens.dart' show Hit;
 import '../../drive/drive_map_model.dart';
+import '../../../core/coverage_query.dart' show CoverageSince, CoverageSource;
+import 'layers_model.dart';
 import '../../theme.dart';
 import '../../../core/coverage_v2.dart' show CoverageMeta;
 import '../coverage_bands.dart';
@@ -76,7 +85,7 @@ Key layerSwitchKey(String id) => Key(switch (id) {
 /// Opens the layers for [model]. On a map with a transient panel slot ([host], the Drive map's) they are the non-modal
 /// MapPanel `drive.layers` above the persistent panel, so the map is visible while layers are switched and the coverage
 /// timeline is scrubbed; otherwise a non-modal app sheet. The map behind stays interactive either way.
-Future<void> showGeneratedLayersSheet(BuildContext context, DriveMapModel model, {MapPanelHostController? host}) {
+Future<void> showGeneratedLayersSheet(BuildContext context, MapLayersModel model, {MapPanelHostController? host}) {
   if (host != null) {
     if (host.currentId == kLayersPanelId) {
       host.close(kLayersPanelId);
@@ -108,7 +117,7 @@ Future<void> showGeneratedLayersSheet(BuildContext context, DriveMapModel model,
 const String kLayersPanelId = 'drive.layers';
 
 class MapLayersSheet extends StatefulWidget {
-  final DriveMapModel model;
+  final MapLayersModel model;
 
   /// The sheet's scroll controller (hands a drag on the list to the sheet); null inside a MapPanel.
   final ScrollController? scroll;
@@ -123,7 +132,7 @@ class MapLayersSheet extends StatefulWidget {
 }
 
 class _MapLayersSheetState extends State<MapLayersSheet> {
-  DriveMapModel get model => widget.model;
+  MapLayersModel get model => widget.model;
 
   @override
   Widget build(BuildContext context) {
@@ -140,9 +149,30 @@ class _MapLayersSheetState extends State<MapLayersSheet> {
 
   // ------------------------------------------------------------------ the main page
 
+  /// Node Names live in the Labels section (not under Repeaters): present while the definition has the Repeaters layer.
+  bool get _hasNames => [for (final (_, rows) in sheetRows()) for (final r in rows) r.id].contains(kLabelsLayerId);
+
+  /// The definition's groups in the one order of the panel, each with its switch rows (Names leaves for Labels) and the rows
+  /// the app cannot draw (shown disabled).
+  List<(MapGroupDef, List<SheetRow>, List<InactiveRow>)> _groups() {
+    const order = ['coverage', 'network', 'activity', 'mine', 'context'];
+    final off = inactiveRows();
+    final out = [
+      for (final (g, rows) in sheetRows())
+        (g, [for (final r in rows) if (r.id != kLabelsLayerId) r], [for (final r in off) if (r.groupId == g.id) r]),
+    ];
+    int rank(String id) => order.contains(id) ? order.indexOf(id) : order.length;
+    return [...out]..sort((a, b) => rank(a.$1.id).compareTo(rank(b.$1.id)));
+  }
+
   List<Widget> _mainPage(BuildContext context) {
     final t = Theme.of(context);
     final st = model.layerState;
+    // The Filters section is the Drive map's (pings, cells, the growth timeline): a map without them does not get the section.
+    final m = model;
+    final drive = m is DriveMapModel ? m : null;
+    final q = model.coverageQuery;
+    final filterCount = model.filter.activeCount + (q.since != CoverageSince.all ? 1 : 0) + (q.source != CoverageSource.all ? 1 : 0) + (q.until != null ? 1 : 0);
     return [
       if (!widget.inPanel) _Header(title: 'Layers', trailing: _TextAction(key: const Key('layers-done'), label: 'Done', onTap: widget.onDone)),
       Flexible(
@@ -153,20 +183,28 @@ class _MapLayersSheetState extends State<MapLayersSheet> {
           children: [
             const _SectionLabel('Basemap', key: Key('layers-group-base')),
             _BaseMapPicker(model: model),
-            // The definition's groups and layers, in the website's panel order (top of the map first).
-            for (final (g, rows) in sheetRows())
-              if (rows.isNotEmpty) ...[
+            // The definition's groups in the one order of the website's panel (Coverage, Network, Activity, Mine, Context),
+            // top of the map first inside a group. Rows the app cannot draw show disabled with their reason, never hidden.
+            for (final (g, rows, off) in _groups())
+              if (rows.isNotEmpty || off.isNotEmpty) ...[
                 _SectionLabel(g.name, key: Key('layers-group-${g.id}')),
                 for (final row in rows) ..._layer(context, layerSpec(row.id)!, st, sub: row.parent != null),
+                for (final r in off) _InactiveRow(row: r),
               ],
-            const _SectionLabel('Filters', key: Key('layers-group-filters')),
-            Padding(padding: const EdgeInsets.symmetric(horizontal: Gap.l), child: CoverageOptionsBody(model: model)),
-            _NavRow(
-              key: const Key('layers-filter'),
-              title: 'Filter pings and cells',
-              trailing: model.filter.activeCount == 0 ? null : '${model.filter.activeCount} active',
-              onTap: () => showMapFilterSheet(context, model),
-            ),
+            if (_hasNames) ...[
+              const _SectionLabel('Labels', key: Key('layers-group-labels')),
+              ..._layer(context, layerSpec(kLabelsLayerId)!, st),
+            ],
+            if (drive != null) ...[
+              _SectionLabel(filterCount == 0 ? 'Filters' : 'Filters · $filterCount', key: const Key('layers-group-filters')),
+              Padding(padding: const EdgeInsets.symmetric(horizontal: Gap.l), child: CoverageOptionsBody(model: drive)),
+              _NavRow(
+                key: const Key('layers-filter'),
+                title: 'Filter pings and cells',
+                trailing: model.filter.activeCount == 0 ? null : '${model.filter.activeCount} active',
+                onTap: () => showMapFilterSheet(context, drive),
+              ),
+            ],
             const _SectionLabel('Size and colour', key: Key('layers-group-size')),
             const MapSizeControls(),
             const ColourByControl(),
@@ -221,10 +259,11 @@ class _MapLayersSheetState extends State<MapLayersSheet> {
     final statusId = spec.id;
     final status = model.statusOf(statusId);
     // A sub-switch (Ping dots, Names) works only while its parent is on.
-    final parentOff = sub && !(spec.id == kLabelsLayerId ? repeatersOn(st) : st.isOn('hexes'));
+    final parentOff = spec.id == kLabelsLayerId ? !repeatersOn(st) : sub && !st.isOn('hexes');
     final unsupported = status.availability == LayerAvailability.unsupported;
     // Drive layers draw what this phone recorded: no status line. Server-fed layers always say where they stand.
-    final detail = spec.serverFed ? status.detail : null;
+    // A layer this map cannot draw says why (the Plan map has no drive), and Names says what it waits for.
+    final detail = (spec.serverFed || unsupported) ? status.detail : (spec.id == kLabelsLayerId && parentOff ? 'Turn on Repeaters to show names.' : null);
     final tile = AppSwitchTile(
       title: p.title,
       subtitle: p.description,
@@ -261,7 +300,7 @@ class _MapLayersSheetState extends State<MapLayersSheet> {
             ],
           ),
         ),
-      if (spec.id == 'pings') _PingModeRow(model: model),
+      if (spec.id == 'pings' && !unsupported) _PingModeRow(model: model),
       if (on && !unsupported) _InlineKey(layerId: spec.id, model: model),
     ];
   }
@@ -269,6 +308,21 @@ class _MapLayersSheetState extends State<MapLayersSheet> {
 }
 
 // ====================================================================================================== pieces
+
+/// A layer of the definition the app cannot draw (Live packets, Path): a disabled switch with the reason under it.
+class _InactiveRow extends StatelessWidget {
+  final InactiveRow row;
+  const _InactiveRow({required this.row});
+
+  @override
+  Widget build(BuildContext context) => AppSwitchTile(
+    title: row.name,
+    subtitle: row.reason,
+    switchKey: Key('layer-${row.id}'),
+    value: false,
+    onChanged: null,
+  );
+}
 
 class _Header extends StatelessWidget {
   final String title;
@@ -377,7 +431,7 @@ class _NavRow extends StatelessWidget {
 
 /// The base maps the definition offers (Chart, Light, Dark; Topo and Satellite when it advertises them) as 72 x 72 tiles (replaces the cycling button and its toast, U10).
 class _BaseMapPicker extends StatelessWidget {
-  final DriveMapModel model;
+  final MapLayersModel model;
   const _BaseMapPicker({required this.model});
 
   static Color _tint(BaseMapStyle s, Brightness b) => switch (s) {
@@ -404,7 +458,7 @@ class _BaseMapPicker extends StatelessWidget {
             Semantics(
               button: true,
               selected: s == sel,
-              label: '${s.label} base map. ${s.blurb}',
+              label: '${s.labelIn(ActiveMapDefinition.current)} base map. ${s.blurb}',
               child: ExcludeSemantics(
                 child: GestureDetector(
                   key: Key('base-map-${s.id}'),
@@ -429,7 +483,7 @@ class _BaseMapPicker extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 2),
-                        Text(s.label, style: t.textTheme.labelMedium, maxLines: 1),
+                        Text(s.labelIn(ActiveMapDefinition.current), style: t.textTheme.labelMedium, maxLines: 1),
                         // Scaled to the tile's width: at the default text size "needs signal" is wider than the tile and was cut to "needs".
                         if (s.needsNetwork)
                           FittedBox(
@@ -452,7 +506,7 @@ class _BaseMapPicker extends StatelessWidget {
 
 /// By SNR | Heard, under the Ping dots row (the dots' colours; This drive's cells always use the coverage bands with v2).
 class _PingModeRow extends StatelessWidget {
-  final DriveMapModel model;
+  final MapLayersModel model;
   const _PingModeRow({required this.model});
 
   @override
@@ -483,7 +537,7 @@ class _PingModeRow extends StatelessWidget {
 /// The inline key under a layer's row: swatches from the colour functions the map paints with.
 class _InlineKey extends StatelessWidget {
   final String layerId;
-  final DriveMapModel model;
+  final MapLayersModel model;
   const _InlineKey({required this.layerId, required this.model});
 
   @override
@@ -517,7 +571,7 @@ class KeyItem {
 
 /// The inline key of layer [layerId] right now (empty when the layer has none). Public so tests and the guide can read the same
 /// rows the sheet shows.
-List<KeyItem> layerKeyItems(BuildContext context, String layerId, DriveMapModel model) {
+List<KeyItem> layerKeyItems(BuildContext context, String layerId, MapLayersModel model) {
   final mc = MeshSonarColors.of(context);
   Widget dot(Color c) => LegendSwatch(color: c, shape: SwatchShape.dot, size: 16);
   Widget hex(Color c, {bool none = false}) => LegendSwatch(color: c, size: 18, silentCell: none);

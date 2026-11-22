@@ -246,12 +246,13 @@ void main() {
     testWidgets('the website Layers panel: Basemap, Coverage, Network, Context, Filters, Palette; rows and names from the definition', (t) async {
       await openSheet(t);
       final ys = [
-        for (final g in ['base', 'coverage', 'network', 'context', 'filters', 'palette']) t.getTopLeft(find.byKey(Key('layers-group-$g'), skipOffstage: false)).dy,
+        for (final g in ['base', 'coverage', 'network', 'context', 'labels', 'filters', 'palette']) t.getTopLeft(find.byKey(Key('layers-group-$g'), skipOffstage: false)).dy,
       ];
       expect([...ys]..sort(), ys);
       final rows = [
         'layer-hexes', 'layer-pings', 'layer-network-coverage', 'layer-heardcells', 'layer-predicted', //
-        'layer-phones', 'layer-observers', 'layer-region-repeaters', 'layer-labels', 'layer-network', 'layer-links', 'layer-borders',
+        'layer-phones', 'layer-observers', 'layer-region-repeaters', 'layer-network', 'layer-links', 'layer-borders',
+        'layer-labels', // Names moved to the Labels section, below Context (build 74)
       ];
       final rowY = [for (final id in rows) t.getTopLeft(find.byKey(Key(id), skipOffstage: false)).dy];
       expect([...rowY]..sort(), rowY, reason: 'top of the map first, as on the website');
