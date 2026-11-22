@@ -10,6 +10,7 @@ import '../../theme.dart';
 import '../map_preview.dart';
 import '../node_symbol.dart';
 import 'path_map.dart' show stillMapTiles;
+import 'still_nodes.dart';
 
 class StillPlaceMap extends StatelessWidget {
   /// `node` or `observer`.
@@ -22,6 +23,11 @@ class StillPlaceMap extends StatelessWidget {
   final String freshness;
   final double fallbackHeight;
   final bool? tiles;
+
+  /// The region's loaded repeaters / observers, drawn behind the place when the page preset lists those layers (null = none).
+  /// [nodeKey] is the place's own node, left out of them (it is drawn above).
+  final List<StillNode>? repeaters, observers;
+  final String? nodeKey;
   const StillPlaceMap({
     super.key,
     required this.page,
@@ -32,7 +38,16 @@ class StillPlaceMap extends StatelessWidget {
     this.freshness = 'fresh',
     this.fallbackHeight = 200,
     this.tiles,
+    this.repeaters,
+    this.observers,
+    this.nodeKey,
   });
+
+  List<StillNode>? _without(List<StillNode>? l) {
+    final own = nodeKey?.toLowerCase();
+    if (l == null || own == null) return l;
+    return [for (final n in l) if (n.key != own) n];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -54,6 +69,8 @@ class StillPlaceMap extends StatelessWidget {
             zoom: 13,
             interaction: MapPreviewInteraction.pan,
             tiles: stillMapTiles(tiles),
+            repeaters: _without(repeaters),
+            observers: _without(observers),
             openAt: at,
             overlays: [
               IgnorePointer(

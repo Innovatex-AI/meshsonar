@@ -12,12 +12,16 @@ import '../../../radio/tools/trace_tool.dart' show TraceResult, TraceStatus;
 import '../../design/state_views.dart';
 import '../../design/app_symbols.dart';
 import '../../design/tokens.dart';
+import '../../map/still/path_layer.dart' show PathKey, activePathStyle;
+import '../../map/still/path_map.dart' show StillPathMap;
+import '../../map/still/still_nodes.dart';
 import '../../region/region_common.dart' show agoText, clockUtc;
 import '../nodes/node_routes.dart';
 import '../packets/packet_detail_screen.dart' show openNetworkPacket;
 import '../packets/packet_ui.dart' show HopConfidenceBadge;
 import '../analytics/in_place_header.dart';
 import 'tool_common.dart';
+import 'tool_path_spec.dart';
 
 final _hash = RegExp(r'^[0-9a-f]{16}$');
 
@@ -35,9 +39,13 @@ class TraceViewerScreen extends StatefulWidget {
   final ToolsApi? api;
   final DateTime Function()? clock;
 
+  /// Test seam: the region's repeaters to place the hops on the route map. Null = the viewed region's loaded list
+  /// ([stillRepeatersOf]); none loaded = no map.
+  final List<StillNode>? nodes;
+
   /// Given: the tool sits in place inside the Tools section and its back arrow calls this (see ToolFrame).
   final VoidCallback? onClose;
-  const TraceViewerScreen({super.key, required this.baseUrl, required this.regionSlug, this.initialHash, this.api, this.clock, this.onClose}) : local = null;
+  const TraceViewerScreen({super.key, required this.baseUrl, required this.regionSlug, this.initialHash, this.api, this.clock, this.nodes, this.onClose}) : local = null;
 
   /// The radio's own result of a trace.
   const TraceViewerScreen.local(TraceResult this.local, {super.key})
@@ -46,6 +54,7 @@ class TraceViewerScreen extends StatefulWidget {
         initialHash = null,
         api = null,
         clock = null,
+        nodes = null,
         onClose = null;
 
   @override
@@ -297,6 +306,7 @@ class _TraceViewerScreenState extends State<TraceViewerScreen> {
         const SizedBox(height: Gap.l),
         Semantics(header: true, child: Text('Hops', style: t.textTheme.titleMedium)),
         Text('The SNR is how well each hop heard the trace arrive.', style: dim),
+        ..._map(context, v),
         for (final h in v.hops)
           ToolNodeRow(
             key: Key('trace-hop-${h.index}'),
@@ -313,6 +323,35 @@ class _TraceViewerScreenState extends State<TraceViewerScreen> {
       Semantics(header: true, child: Text('Heard by', style: t.textTheme.titleMedium)),
       if (v.observations.isEmpty) Padding(padding: const EdgeInsets.only(top: Gap.xs), child: Text('No observer reports are kept for this trace.', style: dim)),
       for (var i = 0; i < v.observations.length; i++) _observation(context, v.observations[i], i),
+    ];
+  }
+
+  /// The trace's hops joined in order on the numbered path map (the Map Definition's `symbols.path`; none without it, or without a
+  /// loaded region repeater list to place the hops from). A hop with no position is listed under the map, never drawn, and the
+  /// line stops there. The observers' positions are not in the answer, so none is drawn.
+  List<Widget> _map(BuildContext context, TraceView v) {
+    final style = activePathStyle();
+    final nodes = widget.nodes ?? stillRepeatersOf(context, regionSlug: widget.regionSlug);
+    if (style == null || nodes == null || nodes.isEmpty || v.hops.isEmpty) return const [];
+    final t = Theme.of(context);
+    final dim = t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant);
+    final spec = toolPathSpec([for (final h in v.hops) ToolHopInput(prefix: h.prefix, node: h.node, sure: h.confidence == HopConfidence.unique)], nodes);
+    final unplaced = spec.unplaced;
+    if (spec.placed.isEmpty) {
+      return [Padding(padding: const EdgeInsets.only(top: Gap.s), child: Text('Map: none of this trace\'s hops has a position here, so there is nothing to draw.', key: const Key('trace-map-none'), style: dim))];
+    }
+    return [
+      const SizedBox(height: Gap.s),
+      StillPathMap(
+        key: const Key('trace-map'),
+        spec: spec,
+        style: style,
+        semanticLabel: 'The trace on the map: ${spec.placed.length} of ${spec.hops.length} hops placed.',
+        repeaters: nodes,
+      ),
+      Padding(padding: const EdgeInsets.only(top: Gap.xs), child: PathKey(style: style, unplaced: unplaced.length, total: spec.hops.length)),
+      if (unplaced.isNotEmpty) Padding(padding: const EdgeInsets.only(top: Gap.xs), child: Text('Not drawn: ${unplacedListText(spec)}', key: const Key('trace-map-unplaced'), style: dim)),
+      const SizedBox(height: Gap.xs),
     ];
   }
 

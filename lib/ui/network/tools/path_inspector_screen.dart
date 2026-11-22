@@ -8,8 +8,12 @@ import '../../../core/v1/tools_api.dart';
 import '../../design/state_views.dart';
 import '../../design/app_symbols.dart';
 import '../../design/tokens.dart';
+import '../../map/still/path_layer.dart' show PathKey, activePathStyle;
+import '../../map/still/path_map.dart' show StillPathMap;
+import '../../map/still/still_nodes.dart';
 import '../analytics/in_place_header.dart';
 import 'tool_common.dart';
+import 'tool_path_spec.dart';
 
 class PathInspectorScreen extends StatefulWidget {
   final String baseUrl;
@@ -21,9 +25,13 @@ class PathInspectorScreen extends StatefulWidget {
   /// Test seam.
   final ToolsApi? api;
 
+  /// Test seam: the region's repeaters to place the hops on the route map. Null = the viewed region's loaded list
+  /// ([stillRepeatersOf]); none loaded = no map.
+  final List<StillNode>? nodes;
+
   /// Given: the tool sits in place inside the Tools section and its back arrow calls this (see ToolFrame).
   final VoidCallback? onClose;
-  const PathInspectorScreen({super.key, required this.baseUrl, required this.regionSlug, this.initialHops, this.api, this.onClose});
+  const PathInspectorScreen({super.key, required this.baseUrl, required this.regionSlug, this.initialHops, this.api, this.nodes, this.onClose});
 
   @override
   State<PathInspectorScreen> createState() => _PathInspectorScreenState();
@@ -169,6 +177,39 @@ class _PathInspectorScreenState extends State<PathInspectorScreen> {
     ];
   }
 
+  /// The open route on the numbered path map (the Map Definition's `symbols.path`; none without it, or without a loaded region
+  /// repeater list to place the hops from). Hops with no position are listed under the map, never drawn.
+  List<Widget> _map(BuildContext context, PathCandidate c) {
+    final style = activePathStyle();
+    final nodes = widget.nodes ?? stillRepeatersOf(context, regionSlug: widget.regionSlug);
+    if (style == null || nodes == null || nodes.isEmpty) return const [];
+    final t = Theme.of(context);
+    final spec = toolPathSpec([for (final h in c.hops) ToolHopInput(prefix: h.prefix, node: h.node, sure: h.hopScore != null && h.hopScore! >= 0.99)], nodes);
+    final unplaced = spec.unplaced;
+    return [
+      if (spec.placed.isEmpty)
+        Padding(
+          padding: const EdgeInsets.only(bottom: Gap.xs),
+          child: Text('Map: none of this route\'s hops has a position here, so there is nothing to draw.', key: const Key('path-map-none'), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+        )
+      else ...[
+        StillPathMap(
+          key: Key('path-map-${c.rank}'),
+          spec: spec,
+          style: style,
+          semanticLabel: 'Route ${c.rank} on the map: ${spec.placed.length} of ${spec.hops.length} hops placed.',
+          repeaters: nodes,
+        ),
+        Padding(padding: const EdgeInsets.only(top: Gap.xs), child: PathKey(style: style, unplaced: unplaced.length, total: spec.hops.length)),
+        if (unplaced.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: Gap.xs, bottom: Gap.xs),
+            child: Text('Not drawn: ${unplacedListText(spec)}', key: const Key('path-map-unplaced'), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+          ),
+      ],
+    ];
+  }
+
   Widget _candidate(BuildContext context, PathCandidate c) {
     final t = Theme.of(context);
     final open = _open == c.rank;
@@ -206,6 +247,7 @@ class _PathInspectorScreenState extends State<PathInspectorScreen> {
             ),
           ),
         ),
+        if (open) ..._map(context, c),
         if (open)
           for (var i = 0; i < c.hops.length; i++)
             ToolNodeRow(

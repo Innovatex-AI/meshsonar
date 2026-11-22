@@ -220,6 +220,7 @@ class _NetworkPacketScreenState extends State<NetworkPacketScreen> {
         onRetry: _load,
         web: web,
         clock: clock,
+        regionSlug: widget.regionSlug,
         onShowOnMap: () => showPacketOnLiveMap(context, hash: r.detail.hash, regionSlug: widget.regionSlug, at: r.detail.firstSeen),
       ),
     );
