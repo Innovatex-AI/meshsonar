@@ -156,7 +156,7 @@ class _PersonObserversScreenState extends State<PersonObserversScreen> {
                             padding: EdgeInsets.symmetric(vertical: Gap.m),
                             child: Text(
                               'No observers yet. Connect your radio in the MeshSonar app and the phone shows up here by itself. '
-                              'An observer you run on your own radio is added by claiming it on My radios.',
+                              'An observer you run on your own radio is added by claiming it under Claimed radios.',
                               key: Key('person-observers-empty'),
                             ),
                           ),
