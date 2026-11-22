@@ -22,6 +22,7 @@ import 'map/coverage_map.dart' show CoverageMap;
 import 'region/region_dataset_view.dart' show FigureStrip;
 import 'settings_screen.dart' show DriverKeyScreen;
 import 'widgets.dart';
+import 'map/node_symbol.dart';
 
 final _hex = RegExp(r'^[0-9a-fA-F]{8,64}$');
 
@@ -264,7 +265,7 @@ class _ReachMap extends StatelessWidget {
                   ),
               ]),
               if (lat != null && lon != null)
-                MarkerLayer(markers: [Marker(point: LatLng(lat!, lon!), width: 24, height: 24, child: Icon(Icons.cell_tower, color: m.beacon, size: 24))]),
+                MarkerLayer(markers: [Marker(point: LatLng(lat!, lon!), width: 40, height: 40, child: const Center(child: NodeSymbol(role: 'repeater')))]),
             ],
           ),
         ),

@@ -16,6 +16,7 @@ import 'onboarding/ui_prefs.dart' show driveLabel;
 import 'report/drive_report_screen.dart' show openDriveReport;
 import 'report/local_drives.dart';
 import 'widgets.dart';
+import 'map/node_symbol.dart';
 
 /// Drives listed under the facts before "and N more".
 const int yourDrivesListed = 5;
@@ -209,7 +210,7 @@ class _CellMap extends StatelessWidget {
               ]),
               if (lat != null && lon != null)
                 MarkerLayer(markers: [
-                  Marker(point: LatLng(lat!, lon!), width: 24, height: 24, child: Icon(Icons.cell_tower, color: m.beacon, size: 24)),
+                  Marker(point: LatLng(lat!, lon!), width: 40, height: 40, child: const Center(child: NodeSymbol(role: 'repeater'))),
                 ]),
             ],
           ),

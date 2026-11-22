@@ -139,6 +139,7 @@ class MapPrefs extends ChangeNotifier {
   bool _zoomBySpeed = false;
   bool _healthOverlay = false;
   MapSizeChoice _labelSize = MapSizeChoice.normal, _iconSize = MapSizeChoice.normal;
+  String? _colourBy;
   int _basemapCachePurged = 0;
   final Map<String, LayerPrefs> _layers = {};
   bool _loaded = false;
@@ -154,6 +155,10 @@ class MapPrefs extends ChangeNotifier {
   set labelSize(MapSizeChoice v) => _set(() => _labelSize = v, _labelSize != v);
   set iconSize(MapSizeChoice v) => _set(() => _iconSize = v, _iconSize != v);
   double get labelScale => _labelSize.scale;
+
+  /// "Colour nodes by" (Map Definition `variables.colourBy`: `none`, `status`, `hash`, `role`); null = the definition's default.
+  String? get colourBy => _colourBy;
+  set colourBy(String? v) => _set(() => _colourBy = v, _colourBy != v);
   double get iconScale => _iconSize.scale;
 
   /// The basemap render version whose old disk renders were already deleted (ui/map/basemap_cache.dart); 0 = never.
@@ -203,6 +208,7 @@ class MapPrefs extends ChangeNotifier {
     'health_overlay': _healthOverlay,
     if (_labelSize != MapSizeChoice.normal) 'label_size': _labelSize.id,
     if (_iconSize != MapSizeChoice.normal) 'icon_size': _iconSize.id,
+    if (_colourBy != null) 'colour_by': _colourBy,
     if (_basemapCachePurged != 0) 'basemap_cache_purged': _basemapCachePurged,
     if (_layers.isNotEmpty) 'layers': {for (final e in _layers.entries) e.key: e.value.toJson()},
   };
@@ -214,6 +220,7 @@ class MapPrefs extends ChangeNotifier {
     if (j['health_overlay'] is bool) _healthOverlay = j['health_overlay'] as bool;
     _labelSize = MapSizeChoice.parse(j['label_size']);
     _iconSize = MapSizeChoice.parse(j['icon_size']);
+    _colourBy = j['colour_by'] is String ? j['colour_by'] as String : null;
     if (j['basemap_cache_purged'] is int) _basemapCachePurged = j['basemap_cache_purged'] as int;
     final ls = j['layers'];
     if (ls is Map) {

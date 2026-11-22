@@ -10,10 +10,10 @@ import 'package:latlong2/latlong.dart';
 import '../../chat/hop_resolver.dart';
 import '../../chat/message_info.dart';
 import '../../chat/models.dart';
-import '../design/app_symbols.dart';
 import '../design/app_type.dart';
 import '../design/tokens.dart';
 import '../theme.dart' show MeshSonarColors;
+import '../map/node_symbol.dart';
 
 String _clock(int ms) {
   final d = DateTime.fromMillisecondsSinceEpoch(ms);
@@ -265,7 +265,7 @@ class MessagePathMapScreen extends StatelessWidget {
                 width: 140,
                 height: 44,
                 child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  AppSymbolIcon(AppSymbols.antenna, color: m.beacon, size: 22, scaleWithText: false),
+                  const NodeSymbol(role: 'repeater', size: 22, scaled: false),
                   Text(connect ? '${i + 1}. ${placed[i].label}' : placed[i].label, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.caption.copyWith(fontWeight: FontWeight.w600)),
                 ]),
               ),
