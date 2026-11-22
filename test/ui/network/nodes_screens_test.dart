@@ -10,7 +10,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:meshsonar/core/map_definition.dart';
 import 'package:meshsonar/core/region_lookup.dart';
+import 'package:meshsonar/ui/map/active_map_definition.dart';
 import 'package:meshsonar/core/v1/nodes_api.dart';
 import 'package:meshsonar/ui/map/layers/repeater_map_source.dart';
 import 'package:meshsonar/ui/map/repeater_page_link.dart';
@@ -426,5 +428,45 @@ void main() {
     await t.pumpWidget(app(const Scaffold(body: NodeDirectoryView(baseUrl: base, regionSlug: 'cmh')), scale: 2.5));
     await settle(t);
     expect(t.takeException(), isNull);
+  });
+
+  group('MAP slice 5: the small maps on the node and observer pages', () {
+    void useLive() {
+      ActiveMapDefinition.notifier.value = MapDefinition.parse(File('test/fixtures/map_v2/definition-v2-minor7-cmh.json').readAsStringSync());
+      addTearDown(() => ActiveMapDefinition.notifier.value = MapDefinition.bundled);
+    }
+
+    testWidgets('node page: a map on a node with a position when the definition presets `node`; none without a position', (t) async {
+      useLive();
+      tall(t);
+      await t.pumpWidget(app(const NetworkNodeScreen(baseUrl: base, regionSlug: 'cmh', nodeKey: hilltop, mapTiles: false)));
+      await settle(t);
+      expect(find.byKey(const Key('node-map')), findsOneWidget);
+      expect(find.byKey(const Key('still-node-map')), findsOneWidget);
+      expect(find.byKey(const Key('still-place-name')), findsOneWidget);
+      await t.pumpWidget(app(const NetworkNodeScreen(key: Key('k'), baseUrl: base, regionSlug: 'cmh', nodeKey: kestrel, mapTiles: false)));
+      await settle(t);
+      expect(find.byKey(const Key('node-map')), findsNothing);
+    });
+
+    testWidgets('node page: with the bundled definition (no pages) there is no small map, as in build 73', (t) async {
+      tall(t);
+      await t.pumpWidget(app(const NetworkNodeScreen(baseUrl: base, regionSlug: 'cmh', nodeKey: hilltop, mapTiles: false)));
+      await settle(t);
+      expect(find.byKey(const Key('node-map')), findsNothing);
+    });
+
+    testWidgets('observer page: a map for a fixed observer with a position; none without the preset', (t) async {
+      useLive();
+      tall(t);
+      await t.pumpWidget(app(const NetworkObserverScreen(baseUrl: base, regionSlug: 'cmh', observerId: westside)));
+      await settle(t);
+      expect(find.byKey(const Key('observer-map')), findsOneWidget);
+      expect(find.byKey(const Key('still-observer-map')), findsOneWidget);
+      ActiveMapDefinition.notifier.value = MapDefinition.bundled;
+      await t.pumpWidget(app(const NetworkObserverScreen(key: Key('k'), baseUrl: base, regionSlug: 'cmh', observerId: westside)));
+      await settle(t);
+      expect(find.byKey(const Key('observer-map')), findsNothing);
+    });
   });
 }

@@ -9,6 +9,7 @@ import '../../radio/tools/discover_tool.dart';
 import '../../radio/tools/radio_tools.dart';
 import '../app.dart';
 import 'contact_ref.dart';
+import '../map/still/path_layer.dart';
 import 'tool_kit.dart';
 import 'tools_host.dart';
 import '../design/app_surfaces.dart';
@@ -185,10 +186,19 @@ class _DiscoverBodyState extends State<_DiscoverBody> {
     final label = placed.isEmpty
         ? 'No position is known for the ${results.length} node${results.length == 1 ? '' : 's'} found, so there is no map.'
         : 'Map of ${placed.length} node${placed.length == 1 ? '' : 's'} found${unplaced == 0 ? '' : ', and $unplaced more without a known position'}.';
+    final you = me != null && placed.isNotEmpty
+        ? MapPin(point: LatLng(me.lat, me.lon), label: 'You', icon: Icons.person_pin_circle, color: Theme.of(context).colorScheme.primary)
+        : null;
+    // MAP slice 5: the nodes that answered, numbered and named like a path's hops (no line: they are not a chain).
+    final pathSpec = PathSpec(chain: false, hops: [
+      for (var i = 0; i < results.length; i++)
+        PathHop(n: i + 1, name: results[i].displayName, lat: results[i].lat, lon: results[i].lon),
+    ]);
     return ToolMap(
+      path: pathSpec,
+      pathPins: [?you],
       pins: [
-        if (me != null && placed.isNotEmpty)
-          MapPin(point: LatLng(me.lat, me.lon), label: 'You', icon: Icons.person_pin_circle, color: Theme.of(context).colorScheme.primary),
+        ?you,
         for (final n in placed) MapPin(point: LatLng(n.lat!, n.lon!), label: n.displayName, icon: Icons.cell_tower, color: mc.forPing(heard: true, snr: n.weakestSnrDb)),
       ],
       semanticLabel: label,

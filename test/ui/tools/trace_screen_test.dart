@@ -2,6 +2,10 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'dart:io';
+
+import 'package:meshsonar/core/map_definition.dart';
+import 'package:meshsonar/ui/map/active_map_definition.dart';
 import 'package:meshsonar/radio/inbound.dart';
 import 'package:meshsonar/radio/protocol.dart';
 import 'package:meshsonar/radio/session.dart' show LinkState;
@@ -234,6 +238,31 @@ void main() {
       await tester.pump();
       expect(find.byKey(const Key('trace-saved-02')), findsNothing);
       expect(tools.trace.store.items.length, 1);
+    });
+
+    testWidgets('MAP slice 5: with symbols.path the result map is the numbered, named path with its key; without it, build 73', (tester) async {
+      final (tools, _) = fakeTools(store: [saved('02', 'Hill', k, 2.0, 1.0, lat: 40.13, lon: -82.97), saved('01', 'Hill', k, 4.0, 3.0)]);
+      final host = FakeToolsHost()..toolsValue = tools;
+      await pumpTool(tester, const TraceScreen(), host);
+      await settleReal(tester, real: const Duration(milliseconds: 50));
+      await tester.ensureVisible(find.byKey(const Key('trace-saved-02-open')));
+      await tester.tap(find.byKey(const Key('trace-saved-02-open')));
+      await tester.pump();
+      expect(find.byKey(const Key('tool-map')), findsOneWidget);
+      expect(find.byKey(const Key('path-key')), findsNothing);
+      expect(find.byKey(const Key('path-disc-1')), findsNothing);
+      ActiveMapDefinition.notifier.value = MapDefinition.parse(File('test/fixtures/map_v2/definition-v2-minor7-cmh.json').readAsStringSync());
+      addTearDown(() => ActiveMapDefinition.notifier.value = MapDefinition.bundled);
+      await tester.pumpWidget(const SizedBox());
+      await pumpTool(tester, const TraceScreen(), host);
+      await settleReal(tester, real: const Duration(milliseconds: 50));
+      await tester.ensureVisible(find.byKey(const Key('trace-saved-02-open')));
+      await tester.tap(find.byKey(const Key('trace-saved-02-open')));
+      await tester.pump();
+      expect(find.byKey(const Key('path-key')), findsOneWidget);
+      expect(find.byKey(const Key('path-disc-1')), findsOneWidget);
+      expect(find.text('1 · Hill'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
     });
 
     testWidgets('a trace result opens in the native Trace Viewer (build 71)', (tester) async {

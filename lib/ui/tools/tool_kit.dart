@@ -13,6 +13,8 @@ import '../../radio/tools/radio_tools.dart';
 import '../theme.dart';
 import 'tools_host.dart';
 import '../map/node_symbol.dart';
+import '../map/still/path_layer.dart';
+import '../map/still/path_map.dart';
 
 /// Smallest tap target (logical px).
 const double kToolTarget = 48;
@@ -419,11 +421,19 @@ class ToolMap extends StatelessWidget {
   final List<MapLine> lines;
   final double height;
   final String semanticLabel;
-  const ToolMap({super.key, required this.pins, this.lines = const [], this.height = 220, required this.semanticLabel});
+
+  /// MAP slice 5: the numbered, named path (the ONE path layer, page `path`). Drawn instead of [pins] and [lines] when the Map
+  /// Definition carries `symbols.path`; then only [pathPins] (a "You" pin) are drawn beside it, and the path key sits under the
+  /// map. Without the definition's path style the map draws [pins] and [lines] exactly as build 73 did.
+  final PathSpec? path;
+  final List<MapPin> pathPins;
+  const ToolMap({super.key, required this.pins, this.lines = const [], this.height = 220, required this.semanticLabel, this.path, this.pathPins = const []});
 
   @override
   Widget build(BuildContext context) {
     final m = MeshSonarColors.of(context);
+    final style = path == null ? null : activePathStyle();
+    if (style != null) return _pathMap(context, path!, style);
     final pts = <LatLng>[for (final p in pins) p.point, for (final l in lines) ...l.points];
     if (pts.isEmpty) {
       return Container(
@@ -474,6 +484,43 @@ class ToolMap extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// The path version of the map: the ONE path layer and its key.
+  Widget _pathMap(BuildContext context, PathSpec spec, MapPathStyle style) {
+    final m = MeshSonarColors.of(context);
+    final pts = [...spec.points, for (final p in pathPins) p.point];
+    if (pts.isEmpty) {
+      return Container(
+        key: const Key('tool-map-empty'),
+        height: height * 0.5,
+        alignment: Alignment.center,
+        padding: const EdgeInsets.all(Gap.l),
+        decoration: BoxDecoration(color: m.mapBackground, borderRadius: BorderRadius.circular(Corners.small)),
+        child: Text(semanticLabel, textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodyMedium),
+      );
+    }
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      KeyedSubtree(
+        key: const Key('tool-map'),
+        child: StillPathMap(
+          spec: spec,
+          style: style,
+          semanticLabel: semanticLabel,
+          fallbackHeight: height,
+          tiles: tilesEnabled,
+          extraPoints: [for (final p in pathPins) p.point],
+          overlays: [
+            MarkerLayer(markers: [
+              for (final p in pathPins)
+                Marker(point: p.point, width: 40, height: 40, child: p.child ?? Icon(p.icon, color: p.color ?? m.beacon, size: 28)),
+            ]),
+          ],
+        ),
+      ),
+      const SizedBox(height: Gap.xs),
+      PathKey(key: const Key('tool-map-path-key'), style: style, unplaced: spec.unplaced.length, total: spec.hops.length),
+    ]);
   }
 }
 

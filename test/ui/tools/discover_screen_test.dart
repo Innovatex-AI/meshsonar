@@ -2,6 +2,10 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'dart:io';
+
+import 'package:meshsonar/core/map_definition.dart';
+import 'package:meshsonar/ui/map/active_map_definition.dart';
 import 'package:meshsonar/radio/companion_link.dart' show ControlPacket;
 import 'package:meshsonar/radio/inbound.dart';
 import 'package:meshsonar/radio/protocol.dart';
@@ -102,6 +106,31 @@ void main() {
     await tester.tap(find.byKey(Key('discover-type-${AdvType.sensor}')));
     await tester.pump();
     expect(tester.widget<FilterChip>(find.byKey(Key('discover-type-${AdvType.sensor}'))).selected, isTrue);
+  });
+
+  testWidgets('MAP slice 5: with symbols.path the found nodes are numbered, named discs with the path key (no line); without it, build 73', (tester) async {
+    final (rig, host) = await connectedRig(tester);
+    await pumpTool(tester, const DiscoverScreen(), host);
+    await advance(tester, 0.3);
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
+    await advance(tester, 0.5);
+    await simScan(tester);
+    expect(find.byKey(const Key('tool-map')), findsOneWidget);
+    expect(find.byKey(const Key('path-key')), findsNothing, reason: 'the bundled definition has no symbols.path');
+    ActiveMapDefinition.notifier.value = MapDefinition.parse(File('test/fixtures/map_v2/definition-v2-minor7-cmh.json').readAsStringSync());
+    addTearDown(() => ActiveMapDefinition.notifier.value = MapDefinition.bundled);
+    await tester.pumpWidget(const SizedBox());
+    final (_, host2) = await connectedRig(tester);
+    await pumpTool(tester, const DiscoverScreen(), host2);
+    await advance(tester, 0.3);
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
+    await advance(tester, 0.5);
+    await simScan(tester);
+    expect(find.byKey(const Key('path-key')), findsOneWidget);
+    expect(find.byKey(const Key('path-disc-1')), findsOneWidget);
+    expect(find.byKey(const Key('path-lines-solid')), findsNothing);
+    expect(rig, isNotNull);
+    await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets('scan on the simulated radio: sends the control frame, lists the nearest repeater with both directions', (tester) async {
