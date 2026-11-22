@@ -10,9 +10,11 @@
 //     `symbols.set`, `variables.colourBy`, `packetTypes`.
 // Each reader falls back to the numbers the app already drew with (the Drive map's), so an older definition (the bundled copy,
 // a version 1 answer) draws exactly what build 72 drew. Pure Dart: no Flutter imports.
+import 'dart:convert' show jsonDecode;
 import 'dart:math' as math;
 
 import 'map_definition.dart';
+import 'node_symbol_fallback.dart';
 
 const String kSummaryCapability = 'coverage.summary';
 const String kLabelSpecCapability = 'labels.spec';
@@ -433,27 +435,36 @@ class PacketTypeColours {
   }
 }
 
-/// The version 2 readers. Every one is null (or the Drive numbers) when the definition does not carry the block.
+final Expando<CoverageLadder> _ladders = Expando();
+final Expando<MapLabelSpec> _specs = Expando();
+final Expando<NodeSymbolSet> _sets = Expando();
+
+/// The version 2 readers. Every one is null (or the Drive numbers) when the definition does not carry the block. Each is read
+/// once per definition (the maps ask on every build).
 extension MapDefinitionV2 on MapDefinition {
   /// The coverage summary ladder; null when the server did not send it (no summary picture, build 72 behaviour).
-  CoverageLadder? get coverageLadder {
+  CoverageLadder? get coverageLadder => _ladders[this] ??= () {
     if (!hasCapability(kSummaryCapability)) return null;
     final l = json['ladder'];
     return l is Map ? CoverageLadder.fromJson(l.cast<String, dynamic>()) : null;
-  }
+  }();
 
   /// `labels.spec`, else the Drive numbers.
-  MapLabelSpec get labelSpec {
+  MapLabelSpec get labelSpec => _specs[this] ??= () {
     final s = labels['spec'];
     return (s is Map ? MapLabelSpec.fromJson(s.cast<String, dynamic>()) : null) ?? MapLabelSpec.drive;
-  }
+  }();
 
   bool get hasLabelSpec => labels['spec'] is Map;
 
-  NodeSymbolSet? get symbolSet {
+  NodeSymbolSet? get symbolSet => _sets[this] ??= () {
     final s = symbol('set');
     return s.isEmpty ? null : NodeSymbolSet.fromJson(s);
-  }
+  }();
+
+  /// The symbol set to draw: the definition's `symbols.set`, else the one the app carries (the live answer of Nov 22 2026), so a
+  /// map never has no symbols.
+  NodeSymbolSet get nodeSymbols => symbolSet ?? fallbackNodeSymbolSet;
 
   ColourByDef? get colourBy {
     final v = json['variables'];
@@ -466,3 +477,6 @@ extension MapDefinitionV2 on MapDefinition {
     return p is Map ? PacketTypeColours.fromJson(p.cast<String, dynamic>()) : null;
   }
 }
+
+/// The symbol set the app carries (see [kFallbackNodeSymbolSetJson]).
+final NodeSymbolSet fallbackNodeSymbolSet = NodeSymbolSet.fromJson((jsonDecode(kFallbackNodeSymbolSetJson) as Map).cast<String, dynamic>())!;

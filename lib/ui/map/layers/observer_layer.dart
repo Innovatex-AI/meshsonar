@@ -14,6 +14,7 @@ import 'package:latlong2/latlong.dart' show LatLng;
 
 import '../../../core/region_overview_api.dart' show RegionObserver;
 import '../active_map_definition.dart';
+import '../node_symbol.dart';
 import 'map_layer.dart';
 
 /// True when [o] carries a drawable public position (both set, finite, in range, not 0/0).
@@ -55,7 +56,6 @@ class ObserverLayer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final sym = ObserverSymbolColours.of(Theme.of(context).brightness);
     final at = (now ?? DateTime.now)().toUtc();
     return MarkerLayer(
       markers: [
@@ -75,14 +75,8 @@ class ObserverLayer extends StatelessWidget {
                   behavior: HitTestBehavior.opaque,
                   onTap: onHit == null ? null : () => onHit!(ObserverHit(o, regionName: regionName)),
                   child: Center(
-                    child: Opacity(
-                      opacity: observerOpacity(o, at),
-                      child: CustomPaint(
-                        key: ValueKey('map-observer-${o.key}-mobile'),
-                        size: const Size(18, 18),
-                        painter: MobileObserverPainter(fill: sym.phoneFill, glyph: sym.phoneStroke, halo: sym.phoneFill),
-                      ),
-                    ),
+                    // The set's phone (MAP slice 3), fading over the 10 minutes after it was last heard.
+                    child: NodeSymbol(key: ValueKey('map-observer-${o.key}-mobile'), role: 'phone', opacity: observerOpacity(o, at)),
                   ),
                 ),
               ),
@@ -102,16 +96,10 @@ class ObserverLayer extends StatelessWidget {
                 key: ValueKey('map-observer-${o.key}'),
                 behavior: HitTestBehavior.opaque,
                 onTap: onHit == null ? null : () => onHit!(ObserverHit(o, regionName: regionName)),
+                // The set's observer badge (an eye on a mast), no longer a triangle (MAP slice 3): heard recently = a solid ring, offline =
+                // faded with no ring, the same freshness rule as every node.
                 child: Center(
-                  child: CustomPaint(
-                    key: ValueKey('map-observer-${o.key}-${o.online ? 'online' : 'offline'}'),
-                    size: const Size(20, 18),
-                    painter: ObserverTrianglePainter(
-                      fill: o.online ? sym.observerStroke : null,
-                      stroke: o.online ? sym.observerFill : sym.observerOffline,
-                      halo: sym.observerFill,
-                    ),
-                  ),
+                  child: NodeSymbol(key: ValueKey('map-observer-${o.key}-${o.online ? 'online' : 'offline'}'), role: 'observer', freshness: o.online ? 'fresh' : 'stale'),
                 ),
               ),
               ),

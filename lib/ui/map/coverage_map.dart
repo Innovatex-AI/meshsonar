@@ -2332,7 +2332,9 @@ class _CoverageMapState extends State<CoverageMap> {
                   selectedDetail: selected == null ? null : _detailFor(selected, origin),
                   origin: origin,
                   puck: pos,
-                  pill: style == BaseMapStyle.street || style == BaseMapStyle.topo || style.isSatellite,
+                  // MAP slice 2: names follow the basemap showing (ink and halo), and only Topo and Satellite use a pill.
+                  pill: labelToneFor(style, t.brightness).pill,
+                  darkMap: labelToneFor(style, t.brightness).dark,
                   linkTags: [
                     if (_captions)
                       for (final h in liveLinks)

@@ -20,7 +20,10 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
-import '../../design/map_tokens.dart';
+import '../../../core/map_definition_v2.dart';
+import '../../../core/map_prefs.dart';
+import '../../../core/map_styles.dart' show BaseMapStyle;
+import '../active_map_definition.dart';
 import 'clustered_points_layer.dart' show visibleSlice;
 import 'repeater_map_source.dart';
 import 'repeater_painter_layer.dart';
@@ -45,18 +48,41 @@ const double kLabelMoveThreshold = 24;
 const Duration kLabelHold = Duration(milliseconds: 300);
 const Duration kLabelFade = Duration(milliseconds: 120);
 
-/// Most labels drawn at [zoom] (selected and heard ones count first).
-int labelBudgetForZoom(double zoom) {
-  if (zoom < kLabelMinZoomHeard) return 0;
-  if (zoom < kLabelMinZoom) return 12;
-  if (zoom < 12) return 24;
-  if (zoom < 13) return 40;
-  if (zoom < 14) return 56;
-  return 80;
+/// Most labels drawn at [zoom] (selected and heard ones count first). The numbers are the Map Definition's `labels.spec`
+/// (MAP slice 2); a definition without it gives the Drive numbers this app has always used (12 / 24 / 40 / 56 / 80 from
+/// zoom 9 / 11 / 12 / 13 / 14).
+int labelBudgetForZoom(double zoom, {MapLabelSpec? spec}) => (spec ?? ActiveMapDefinition.current.labelSpec).budgetAt(zoom);
+
+/// Label font size: 12 below zoom 12, 13 from 12, 14 from 14 (`labels.spec.size`).
+double labelFontSizeForZoom(double zoom, {MapLabelSpec? spec}) => (spec ?? ActiveMapDefinition.current.labelSpec).sizeAt(zoom);
+
+/// How names look on the map that is showing: ink and halo dark or light, and whether they sit on a pill.
+@immutable
+class LabelTone {
+  final bool dark, pill;
+  const LabelTone(this.dark, this.pill);
+  @override
+  bool operator ==(Object other) => other is LabelTone && other.dark == dark && other.pill == pill;
+  @override
+  int get hashCode => Object.hash(dark, pill);
 }
 
-/// Label font size: 13 pt from z12, 14 pt from z14, never below 12.
-double labelFontSizeForZoom(double zoom) => zoom >= 14 ? 14 : (zoom >= 12 ? 13 : 12);
+/// The Map Definition basemap id a [style] draws (`road`, `topo`, `satellite`): Chart, Light and Dark are all the Road map.
+String basemapDefinitionId(BaseMapStyle style) => switch (style) {
+  BaseMapStyle.topo => 'topo',
+  BaseMapStyle.satellite => 'satellite',
+  _ => 'road',
+};
+
+/// Names follow the basemap that is showing, not the app theme (MAP slice 2 fix): Light is always the light map, Dark always the
+/// dark map, Chart follows the theme, Satellite is dark underneath; and only Topo and Satellite (busy pictures under the text)
+/// put the name on a pill; Road is a halo. Before this Light and Dark sat on pills and the ink followed the app theme.
+LabelTone labelToneFor(BaseMapStyle style, Brightness appBrightness, {MapLabelSpec? spec}) {
+  final s = spec ?? ActiveMapDefinition.current.labelSpec;
+  final id = basemapDefinitionId(style);
+  final dark = style.darkLook ?? s.darkUnder(id, appDark: appBrightness == Brightness.dark);
+  return LabelTone(dark, s.pillFor(id));
+}
 
 /// Placement priorities (lower is placed first).
 abstract final class LabelPriority {
@@ -343,6 +369,12 @@ class RepeaterNameLabels extends StatefulWidget {
   /// False: only the link distance tags are drawn (the "Repeater names" layer switch is off).
   final bool showNames;
 
+  /// The map under the names is dark (true) or light (false); null = follow the app theme. See [labelToneFor].
+  final bool? darkMap;
+
+  /// The person's Label size (Small 0.85, Normal 1.0, Large 1.25); null = the saved choice ([MapPrefs.labelScale]).
+  final double? labelScale;
+
   const RepeaterNameLabels({
     super.key,
     required this.sources,
@@ -357,6 +389,8 @@ class RepeaterNameLabels extends StatefulWidget {
     this.inset = EdgeInsets.zero,
     this.pill = false,
     this.showNames = true,
+    this.darkMap,
+    this.labelScale,
   });
 
   static const ValueKey<String> paintKey = ValueKey('repeater-name-labels-paint');
@@ -390,10 +424,16 @@ class RepeaterNameLabelsState extends State<RepeaterNameLabels> {
   bool _reduce = false;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      widget.labelScale != null ? _buildLabels(context) : ListenableBuilder(listenable: MapPrefs.shared, builder: (context, _) => _buildLabels(context));
+
+  Widget _buildLabels(BuildContext context) {
     final camera = MapCamera.of(context);
     final cs = Theme.of(context).colorScheme;
-    final brightness = Theme.of(context).brightness;
+    final spec = ActiveMapDefinition.current.labelSpec;
+    final scale = widget.labelScale ?? MapPrefs.shared.labelScale;
+    final dark = widget.darkMap ?? Theme.of(context).brightness == Brightness.dark;
+    final brightness = dark ? Brightness.dark : Brightness.light;
     final scaler = MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.6);
     final reduce = MediaQuery.disableAnimationsOf(context);
     if (reduce != _reduce) {
@@ -403,13 +443,15 @@ class RepeaterNameLabelsState extends State<RepeaterNameLabels> {
     }
     final zoom = camera.zoom;
     final hasSelected = widget.selectedKey != null;
-    if (zoom < kLabelMinZoomHeard && !hasSelected && widget.linkTags.isEmpty) {
+    if (zoom < spec.minZoom && !hasSelected && widget.linkTags.isEmpty) {
       _geo.clear();
       return const SizedBox.shrink();
     }
     final size = camera.size;
-    final fontSize = labelFontSizeForZoom(zoom);
+    final fontSize = labelFontSizeForZoom(zoom, spec: spec) * scale;
     final version = Object.hash(
+      spec.hashCode,
+      ActiveMapDefinition.current.version,
       identityHashCode(widget.badges),
       identityHashCode(widget.linkTags),
       Object.hashAll([for (final (s, l) in widget.sources) Object.hash(identityHashCode(s.indexOf(l)), identityHashCode(s.pointsOf(l)))]),
@@ -432,7 +474,7 @@ class RepeaterNameLabelsState extends State<RepeaterNameLabels> {
     final now = SchedulerBinding.instance.currentFrameTimeStamp;
     List<PlacedLabel>? fresh;
     if (need) {
-      fresh = _place(camera, brightness, scaler, fontSize, size);
+      fresh = _place(camera, brightness, scaler, fontSize, size, spec, scale);
       _version = version;
       _zoom = zoom;
       _size = size;
@@ -470,12 +512,18 @@ class RepeaterNameLabelsState extends State<RepeaterNameLabels> {
           key: RepeaterNameLabels.paintKey,
           painter: LabelPainter(
             labels: draw,
-            ink: MapTokens.mapInk(brightness),
-            halo: MapTokens.mapHalo(brightness),
+            ink: Color(spec.inkFor(dark)),
+            halo: Color(spec.haloFor(dark)),
             pill: widget.pill,
             fontSize: fontSize,
             scaler: scaler,
             surface: cs.surface,
+            scale: scale,
+            staleOpacity: spec.staleOpacity,
+            pillAlpha: spec.pillAlpha,
+            pillRadius: spec.pillRadius,
+            haloPx: spec.haloPx,
+            maxWidth: spec.maxWidthPx,
           ),
           size: size,
         ),
@@ -494,7 +542,7 @@ class RepeaterNameLabelsState extends State<RepeaterNameLabels> {
     return Colors.grey;
   }
 
-  List<PlacedLabel> _place(MapCamera camera, Brightness brightness, TextScaler scaler, double fontSize, Size size) {
+  List<PlacedLabel> _place(MapCamera camera, Brightness brightness, TextScaler scaler, double fontSize, Size size, MapLabelSpec spec, double scale) {
     final zoom = camera.zoom;
     final sources = <RepeaterSceneSource>[];
     final sel = <int>[];
@@ -541,7 +589,8 @@ class RepeaterNameLabelsState extends State<RepeaterNameLabels> {
       } else {
         prio = LabelPriority.rest;
       }
-      final wantsLabel = widget.showNames && onS && (isSel || prio <= LabelPriority.heard || zoom >= kLabelMinZoom);
+      // `labels.spec.things`: a repeater (or room) that matters right now is named from its important zoom, the rest from theirs.
+      final wantsLabel = widget.showNames && onS && (isSel || spec.names(it.room ? 'room' : 'repeater', zoom, important: prio <= LabelPriority.heard));
       var text = it.name;
       if (isSel && widget.selectedDetail != null) {
         text = '$text\n${widget.selectedDetail}';
@@ -585,15 +634,16 @@ class RepeaterNameLabelsState extends State<RepeaterNameLabels> {
     );
     final style = LabelPainter.styleFor(fontSize);
     final pad = widget.pill ? const Size(12, 4) : const Size(6, 2);
+    final detail = LabelPainter.detailSize * scale;
     final placed = placeRepeaterLabels(
       candidates: cands,
       measure: (t) {
-        final tp = LabelPainter.measureText(t, style, scaler, fontSize);
+        final tp = LabelPainter.measureText(t, style, scaler, fontSize, detailPx: detail, maxWidth: spec.maxWidthPx);
         return Size(tp.width + pad.width, tp.height + pad.height);
       },
       bounds: bounds,
       obstacles: obstacles,
-      budget: labelBudgetForZoom(zoom),
+      budget: labelBudgetForZoom(zoom, spec: spec),
     );
     final plan = [
       for (final p in placed)
@@ -653,7 +703,24 @@ class LabelPainter extends CustomPainter {
   final bool pill;
   final double fontSize;
   final TextScaler scaler;
-  LabelPainter({required this.labels, required this.ink, required this.halo, required this.pill, required this.fontSize, required this.scaler, required this.surface});
+
+  /// The person's Label size (0.85 / 1 / 1.25) and the `labels.spec` numbers (the Drive ones by default).
+  final double scale, staleOpacity, pillAlpha, pillRadius, haloPx, maxWidth;
+  LabelPainter({
+    required this.labels,
+    required this.ink,
+    required this.halo,
+    required this.pill,
+    required this.fontSize,
+    required this.scaler,
+    required this.surface,
+    this.scale = 1,
+    this.staleOpacity = 0.7,
+    this.pillAlpha = 0.88,
+    this.pillRadius = 8,
+    this.haloPx = 3,
+    this.maxWidth = kLabelMaxWidth,
+  });
 
   /// null = the system font (SF Pro on iOS). Tests that cannot load it set a stand-in.
   @visibleForTesting
@@ -667,8 +734,9 @@ class LabelPainter extends CustomPainter {
   static const double detailSize = 12;
 
   /// Lays out [text]; a '\n' starts the second line (12 pt, 70% ink).
-  static TextPainter measureText(String text, TextStyle style, TextScaler scaler, double fontSize, {Color? color, Paint? foreground}) {
-    final key = '$text|$fontFamily|$fontSize|${color?.toARGB32()}|${foreground?.color.toARGB32()}|${scaler.scale(12)}';
+  static TextPainter measureText(String text, TextStyle style, TextScaler scaler, double fontSize,
+      {Color? color, Paint? foreground, double detailPx = detailSize, double maxWidth = kLabelMaxWidth}) {
+    final key = '$text|$fontFamily|$fontSize|${color?.toARGB32()}|${foreground?.color.toARGB32()}|${scaler.scale(12)}|$detailPx|$maxWidth';
     return cache.get(key, () {
       final nl = text.indexOf('\n');
       TextStyle line1 = style.copyWith(color: foreground == null ? color : null, foreground: foreground);
@@ -678,7 +746,7 @@ class LabelPainter extends CustomPainter {
           TextSpan(
             text: '\n${text.substring(nl + 1)}',
             style: line1.copyWith(
-              fontSize: detailSize,
+              fontSize: detailPx,
               fontWeight: FontWeight.w500,
               color: foreground == null && color != null ? color.withValues(alpha: color.a * 0.7) : null,
             ),
@@ -690,7 +758,7 @@ class LabelPainter extends CustomPainter {
         textScaler: scaler,
         maxLines: nl < 0 ? 1 : 2,
         ellipsis: '…',
-      )..layout(maxWidth: kLabelMaxWidth * math.min(scaler.scale(1), 1.3));
+      )..layout(maxWidth: maxWidth * math.min(scaler.scale(1), 1.3));
     });
   }
 
@@ -698,13 +766,14 @@ class LabelPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final style = styleFor(fontSize);
     final padX = pill ? 6.0 : 3.0, padY = pill ? 2.0 : 1.0;
+    final detail = detailSize * scale;
     for (final l in labels) {
       final a = l.alpha;
-      final inkColor = (l.stale ? ink.withValues(alpha: 0.7) : ink).withValues(alpha: (l.stale ? 0.7 : 1.0) * a);
+      final inkColor = (l.stale ? ink.withValues(alpha: staleOpacity) : ink).withValues(alpha: (l.stale ? staleOpacity : 1.0) * a);
       final at = l.rect.topLeft + Offset(padX, padY);
       if (l.tag) {
-        final rr = RRect.fromRectAndRadius(l.rect, const Radius.circular(8));
-        canvas.drawRRect(rr, Paint()..color = halo.withValues(alpha: 0.88 * a));
+        final rr = RRect.fromRectAndRadius(l.rect, Radius.circular(pillRadius));
+        canvas.drawRRect(rr, Paint()..color = halo.withValues(alpha: pillAlpha * a));
         canvas.drawRRect(
           rr,
           Paint()
@@ -712,20 +781,20 @@ class LabelPainter extends CustomPainter {
             ..strokeWidth = 1.5
             ..color = (l.tagColor ?? ink).withValues(alpha: a),
         );
-        measureText(l.text, style, scaler, fontSize, color: ink.withValues(alpha: a)).paint(canvas, at);
+        measureText(l.text, style, scaler, fontSize, color: ink.withValues(alpha: a), detailPx: detail, maxWidth: maxWidth).paint(canvas, at);
         continue;
       }
       if (pill) {
-        canvas.drawRRect(RRect.fromRectAndRadius(l.rect, const Radius.circular(8)), Paint()..color = halo.withValues(alpha: 0.88 * a));
+        canvas.drawRRect(RRect.fromRectAndRadius(l.rect, Radius.circular(pillRadius)), Paint()..color = halo.withValues(alpha: pillAlpha * a));
       } else {
         final stroke = Paint()
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 3.0
+          ..strokeWidth = haloPx
           ..strokeJoin = StrokeJoin.round
           ..color = halo.withValues(alpha: a);
-        measureText(l.text, style, scaler, fontSize, foreground: stroke).paint(canvas, at);
+        measureText(l.text, style, scaler, fontSize, foreground: stroke, detailPx: detail, maxWidth: maxWidth).paint(canvas, at);
       }
-      measureText(l.text, style, scaler, fontSize, color: inkColor).paint(canvas, at);
+      measureText(l.text, style, scaler, fontSize, color: inkColor, detailPx: detail, maxWidth: maxWidth).paint(canvas, at);
     }
   }
 

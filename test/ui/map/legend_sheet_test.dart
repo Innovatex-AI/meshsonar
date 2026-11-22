@@ -2,6 +2,7 @@
 // palette, is reachable from the layers sheet and Settings > About, and its swatch colours equal the colours the maps draw.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/ui/map/node_symbol.dart';
 import '../../support/cell_layers.dart';
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/colour_palette.dart';
@@ -149,12 +150,12 @@ void main() {
       });
     }
 
-    testWidgets('observers: filled when online, hollow grey when offline', (tester) async {
+    testWidgets('observers: the set\'s eye-on-a-mast badge with a solid ring online, faded with no ring offline; the phone outline', (tester) async {
       await pumpLegend(tester);
-      expect(find.text('Filled triangle: observer online'), findsOneWidget);
-      expect(find.text('Hollow grey triangle: offline'), findsOneWidget);
-      final tri = tester.widgetList<CustomPaint>(find.descendant(of: find.byKey(const Key('legend-section-observers')), matching: find.byType(CustomPaint))).map((c) => c.painter.runtimeType.toString());
-      expect(tri.where((n) => n == '_TriPainter'), hasLength(2));
+      expect(find.text('Eye on a mast, solid ring: observer online'), findsOneWidget);
+      expect(find.text('Eye on a mast, faded, no ring: offline'), findsOneWidget);
+      final marks = tester.widgetList<NodeSymbol>(find.descendant(of: find.byKey(const Key('legend-section-observers')), matching: find.byType(NodeSymbol))).toList();
+      expect([for (final m in marks) '${m.role}/${m.freshness}'], ['observer/fresh', 'observer/stale', 'phone/fresh']);
     });
 
     testWidgets('no heard box section (the Drive screen has no heard box)', (tester) async {

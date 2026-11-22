@@ -17,7 +17,7 @@ import '../design/app_symbols.dart';
 import '../theme.dart';
 import 'active_map_definition.dart';
 import 'coverage_bands.dart';
-import 'layers/observer_layer.dart' show MobileObserverPainter, ObserverSymbolColours, ObserverTrianglePainter;
+import 'node_symbol.dart';
 import 'layers/m3_layers.dart' show SnrLinkStyle, redundancyColour;
 import 'layers/registry.dart' show definitionLayerId;
 import 'layers/plan_layer.dart' show planLegendKey;
@@ -134,23 +134,14 @@ Widget legendEntryKey(BuildContext context, LegendEntryDef e, MapDefinition def)
         ),
       );
   }
-  final obs = ObserverSymbolColours.of(br);
   if (planLegendKey(context, e.symbol, state: e.state) case final k?) return k;
   switch (e.symbol) {
     case 'repeater':
       return RepeaterRingKey(state: e.state ?? 'fresh');
     case 'observer':
-      final online = e.state != 'offline';
-      return ExcludeSemantics(
-        child: CustomPaint(
-          size: const Size(16, 14),
-          painter: ObserverTrianglePainter(fill: online ? obs.observerStroke : null, stroke: online ? obs.observerFill : obs.observerOffline, halo: obs.observerFill),
-        ),
-      );
+      return ExcludeSemantics(child: NodeSymbol(role: 'observer', freshness: e.state == 'offline' ? 'stale' : 'fresh', size: 18, scaled: false));
     case 'phone':
-      return ExcludeSemantics(
-        child: CustomPaint(size: const Size.square(14), painter: MobileObserverPainter(fill: obs.phoneFill, glyph: obs.phoneStroke, halo: obs.phoneFill)),
-      );
+      return const ExcludeSemantics(child: NodeSymbol(role: 'phone', size: 18, scaled: false));
     case 'estimated':
       // Estimated position (M3): the repeater symbol, paler by confidence (the definition's opacity for the state).
       final o = def.symbol('estimated')['opacity'];
