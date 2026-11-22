@@ -10,7 +10,6 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:meshsonar/core/map_definition.dart';
-import 'package:meshsonar/core/map_definition_v2.dart';
 import 'package:meshsonar/core/map_prefs.dart';
 import 'package:meshsonar/core/map_styles.dart';
 import 'package:meshsonar/core/region_overview_api.dart';
@@ -161,13 +160,13 @@ void main() {
     });
   });
 
-  RepeaterBadge _badge() => RepeaterBadge(key: 'ee' * 32, name: 'Hilltop', lat: 39.96, lon: -83.0, heard: true);
+  RepeaterBadge aBadge() => RepeaterBadge(key: 'ee' * 32, name: 'Hilltop', lat: 39.96, lon: -83.0, heard: true);
 
   group('Label size', () {
     List<Widget> names() => [
       RepeaterNameLabels(
         sources: const [],
-        badges: [_badge()],
+        badges: [aBadge()],
       ),
     ];
 
@@ -187,7 +186,7 @@ void main() {
         final tone = labelToneFor(s, b);
         await _pumpMap(
           t,
-          [RepeaterNameLabels(sources: const [], badges: [_badge()], pill: tone.pill, darkMap: tone.dark)],
+          [RepeaterNameLabels(sources: const [], badges: [aBadge()], pill: tone.pill, darkMap: tone.dark)],
           b: b,
         );
         return t.widget<CustomPaint>(find.byKey(RepeaterNameLabels.paintKey)).painter! as LabelPainter;
