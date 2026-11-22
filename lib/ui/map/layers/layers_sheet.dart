@@ -1,4 +1,10 @@
-// The map Layers sheet = the website's Layers panel (plan unified-map-system §2.4-2.5, phase M2), generated from the Map
+// The ONE Layers sheet (build 74, MAP slice 4): any map opens it with a [MapLayersModel] (layers_model.dart: the Drive map's
+// DriveMapModel, the Plan map's PageLayersModel). Order: Basemap, Coverage, Network, Activity, Mine, Context, Labels, Filters
+// (with a count when set; the Drive map's), Size and colour, Palette, Reset. A layer or an Activity row the map cannot draw shows
+// disabled with a one-line reason, never hidden. Basemap offers Road, Dark, Topo, Satellite when the definition has
+// `variables.basemap` (Chart and Light are one Road), else build 73's list.
+//
+// The website's Layers panel (plan unified-map-system §2.4-2.5, phase M2), generated from the Map
 // Definition (registry.dart [sheetRows]): Basemap, then the definition's groups (Coverage, Network, Context) with its layers,
 // names and hints (top of the map first: Measured, Heard by phones, Predicted; Moving phones, Observers, Repeaters, All MeshCore
 // repeaters, Link lines; Region borders), Filters ("Measured in" / "Drives from" from `filters`, plus the app's growth
@@ -10,7 +16,7 @@
 // map's transient panel slot when given one (MapPanel `drive.layers`), else as a non-modal app sheet with detents [0.4, 0.75].
 //
 // Keys: 'layers-sheet', 'layers-done', 'layers-base-map', 'base-map-<id>', 'layers-group-<groupId>' (+ 'layers-group-filters',
-// 'layers-group-palette'), the switch per layer from [layerSwitchKey], 'layer-<id>-status', 'layer-<id>-retry', 'layer-<id>-key',
+// 'layers-group-palette', 'layers-group-labels', 'layers-group-activity', 'layers-group-mine'), the switch per layer from [layerSwitchKey], 'layer-<id>-status', 'layer-<id>-retry', 'layer-<id>-key',
 // 'layer-color-snr', 'layer-color-result', 'layers-palette-<paletteId>', 'layers-filter', 'layers-credits', 'layers-legend',
 // 'layers-reset', 'network-legend'.
 import 'package:flutter/cupertino.dart' show CupertinoButton, CupertinoSlidingSegmentedControl;
