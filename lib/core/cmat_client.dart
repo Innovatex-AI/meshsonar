@@ -40,6 +40,7 @@ import 'region_lookup.dart';
 import 'hex_cells.dart' show loadHexEngine;
 import 'map_links.dart';
 import 'node_claim.dart';
+import 'person_identity.dart';
 import 'photo_api.dart';
 import 'photo_wire.dart';
 import 'driver_settings.dart';
@@ -590,6 +591,80 @@ class HttpCmatClient implements CmatClient, TelemetryTransport, ObserverStatusTr
   @override
   Future<void> releaseClaim(String driverKey, String pubkey) async {
     await _send('DELETE', 'claim', driverKey: driverKey, query: {'pubkey': pubkey.trim().toLowerCase()});
+  }
+
+  // ---- ID steps 2 and 3 (capabilities.radioProof) ----
+
+  Never _unreadable(int status) => throw CmatException('server sent an unreadable answer', status: status);
+
+  @override
+  Future<ProofStart> radioProofStart(String driverKey, String pubkey) async {
+    final j = await _send('POST', 'radio-proof-start', driverKey: driverKey, body: {'pubkey': pubkey.trim().toLowerCase()}, ok: const {200, 201});
+    try {
+      return ProofStart.parse(j);
+    } on FormatException {
+      _unreadable(201);
+    }
+  }
+
+  @override
+  Future<ProofResult> radioProofComplete(String driverKey, String proofId, String signatureHex) async {
+    final j = await _send('POST', 'radio-proof-complete', driverKey: driverKey, body: {'proofId': proofId, 'signature': signatureHex.toLowerCase()});
+    try {
+      return ProofResult.parse(j);
+    } on FormatException {
+      _unreadable(200);
+    }
+  }
+
+  @override
+  Future<DecideResult> radioProofDecide(String driverKey, String proofId, {required bool join}) async {
+    final j = await _send('POST', 'radio-proof-decide', driverKey: driverKey, body: {'proofId': proofId, 'decision': join ? 'join' : 'take'});
+    try {
+      return DecideResult.parse(j);
+    } on FormatException {
+      _unreadable(200);
+    }
+  }
+
+  @override
+  Future<List<PersonDevice>> personDevices(String driverKey) async {
+    final j = await _send('GET', 'person-devices', driverKey: driverKey);
+    return [if (j['devices'] is List) for (final d in j['devices'] as List) ?PersonDevice.tryParse(d)];
+  }
+
+  @override
+  Future<void> renameDevice(String driverKey, String id, String? name) async {
+    await _send('POST', 'person-device-rename', driverKey: driverKey, body: {'id': id, 'name': name});
+  }
+
+  @override
+  Future<void> removeDevice(String driverKey, String id) async {
+    await _send('POST', 'person-device-remove', driverKey: driverKey, body: {'id': id});
+  }
+
+  @override
+  Future<LinkStart> linkStart(String driverKey) async {
+    final j = await _send('POST', 'link-start', driverKey: driverKey, ok: const {200, 201}, body: const <String, Object?>{});
+    try {
+      return LinkStart.parse(j);
+    } on FormatException {
+      _unreadable(201);
+    }
+  }
+
+  @override
+  Future<PersonNotices> personNotices(String driverKey) async => PersonNotices.parse(await _send('GET', 'person-notices', driverKey: driverKey));
+
+  @override
+  Future<void> personNoticeAct(String driverKey, String id, String action) async {
+    await _send('POST', 'person-notice', driverKey: driverKey, body: {'id': id, 'action': action});
+  }
+
+  @override
+  Future<bool> setAskFirst(String driverKey, bool askFirst) async {
+    final j = await _send('POST', 'person-prefs', driverKey: driverKey, body: {'askFirst': askFirst});
+    return j['askFirst'] == true;
   }
 
   @override

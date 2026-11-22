@@ -9,6 +9,7 @@ import '../design/app_surfaces.dart';
 import 'confirm_sheet.dart';
 import '../account/devices_screen.dart';
 import '../../app/app_state.dart';
+import '../../app/messages.dart' show friendlyError;
 import '../../core/api.dart';
 import '../../core/server_url.dart';
 import '../app.dart';
@@ -186,6 +187,28 @@ class AccountLinks extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = AppScope.of(context);
     final t = Theme.of(context);
+    if (s.radioProofCapable) {
+      // ID step 3: no key to handle; an email is added on the website through a one-time link.
+      return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+        Text(
+          'Add an email so you can sign in on the website and see the same devices, radios and drives there. '
+          'You sign in on the website; the app never sees a password.',
+          key: const Key('account-hint'),
+          style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
+        ),
+        const AddToAccountButton(),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            key: const Key('key-website'),
+            style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 0)),
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const DevicesScreen())),
+            icon: const Icon(Icons.devices_outlined, size: 18),
+            label: const Text('Devices'),
+          ),
+        ),
+      ]);
+    }
     return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
       Text(
         'Your keys, drives and reports are all in the app. The same pages are on the website at ${s.webPage('/me')} if you sign in there.',
@@ -202,6 +225,53 @@ class AccountLinks extends StatelessWidget {
           label: const Text('Devices and keys'),
         ),
       ),
+    ]);
+  }
+}
+
+/// "Add this iPhone to my account": asks the server for a one-time code (`link-start`) and opens its link in the system browser.
+/// The person signs in on the website and adds the device there. No password and no key passes through the app.
+class AddToAccountButton extends StatefulWidget {
+  const AddToAccountButton({super.key});
+  @override
+  State<AddToAccountButton> createState() => _AddToAccountButtonState();
+}
+
+class _AddToAccountButtonState extends State<AddToAccountButton> {
+  bool _busy = false;
+  String? _error;
+
+  Future<void> _go() async {
+    final s = AppScope.read(context);
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final link = await s.personDevices.startLink();
+      final ok = await s.services.openUrl(link.url);
+      if (!ok && mounted) setState(() => _error = 'Could not open a browser. Try again.');
+    } catch (e) {
+      if (mounted) setState(() => _error = friendlyError(e, action: 'Adding this device'));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final word = MediaQuery.sizeOf(context).shortestSide >= 600 ? 'iPad' : 'iPhone';
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Align(
+        alignment: Alignment.centerLeft,
+        child: FilledButton.tonalIcon(
+          key: const Key('add-to-account'),
+          onPressed: _busy ? null : _go,
+          icon: _busy ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.mail_outline, size: 18),
+          label: Text('Add this $word to my account'),
+        ),
+      ),
+      if (_error != null) ErrorBanner(_error!),
     ]);
   }
 }
@@ -278,6 +348,10 @@ class _DriverKeySectionState extends State<DriverKeySection> {
           const SizedBox(height: 10),
           if (st.display != null)
             Text('Shown on the map as: ${st.display}', style: t.textTheme.titleSmall),
+          if (s.radioProofCapable)
+            Text('This phone signs in with a token kept in the Keychain. It is never shown, copied or pasted.',
+                key: const Key('key-keychain-note'), style: t.textTheme.bodyMedium)
+          else ...[
           Row(children: [
             Expanded(
               child: _revealKey
@@ -302,7 +376,9 @@ class _DriverKeySectionState extends State<DriverKeySection> {
                 },
               ),
           ]),
-          Text('Works on ${st.serverUrl}. Keep it private: anyone with it can upload drives as you.',
+          ],
+          if (!s.radioProofCapable)
+            Text('Works on ${st.serverUrl}. Keep it private: anyone with it can upload drives as you.',
               key: const Key('key-info'), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
           const SizedBox(height: 6),
           Text(keyStatusHelp(st.keyStatus), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),

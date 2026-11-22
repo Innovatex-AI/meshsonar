@@ -6,6 +6,7 @@ import 'package:meshsonar/core/driver_account.dart';
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/map_links.dart';
 import 'package:meshsonar/core/node_claim.dart';
+import 'package:meshsonar/core/person_identity.dart';
 import 'package:meshsonar/core/repeater_reach.dart';
 import 'package:meshsonar/core/drive_context_wire.dart';
 import 'package:meshsonar/core/driver_summary.dart';
@@ -252,6 +253,27 @@ void main() {
 }
 
 class RecordingClient implements CmatClient {
+  // ID steps 2 and 3 (radioProof): never called by an upload test.
+  @override
+  Future<ProofStart> radioProofStart(String driverKey, String pubkey) => throw UnimplementedError();
+  @override
+  Future<ProofResult> radioProofComplete(String driverKey, String proofId, String signatureHex) => throw UnimplementedError();
+  @override
+  Future<DecideResult> radioProofDecide(String driverKey, String proofId, {required bool join}) => throw UnimplementedError();
+  @override
+  Future<List<PersonDevice>> personDevices(String driverKey) => throw UnimplementedError();
+  @override
+  Future<void> renameDevice(String driverKey, String id, String? name) => throw UnimplementedError();
+  @override
+  Future<void> removeDevice(String driverKey, String id) => throw UnimplementedError();
+  @override
+  Future<LinkStart> linkStart(String driverKey) => throw UnimplementedError();
+  @override
+  Future<PersonNotices> personNotices(String driverKey) => throw UnimplementedError();
+  @override
+  Future<void> personNoticeAct(String driverKey, String id, String action) => throw UnimplementedError();
+  @override
+  Future<bool> setAskFirst(String driverKey, bool askFirst) => throw UnimplementedError();
   @override
   Future<RepeaterReach> repeaterReach(String driverKey, String repeaterKey, {double? lat, double? lon, bool h3 = false}) => throw UnimplementedError();
   @override

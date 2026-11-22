@@ -15,6 +15,7 @@ import '../app.dart';
 import '../settings/settings_kit.dart' show confirmSettingsChange;
 import '../widgets.dart';
 import '../design/app_surfaces.dart';
+import 'person_devices_screen.dart';
 
 const Duration keyRevealFor = Duration(seconds: 30);
 
@@ -44,6 +45,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
     if (_started) return;
     _started = true;
     final s = AppScope.read(context);
+    if (s.radioProofCapable) return; // ID step 3: PersonDevicesScreen is shown instead; no driver-devices call
     unawaited(s.settlePendingKey());
     _future = s.accountAvailable ? s.loadDriverDevices() : null;
   }
@@ -59,6 +61,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
   @override
   Widget build(BuildContext context) {
     final s = AppScope.of(context);
+    if (s.radioProofCapable) return const PersonDevicesScreen();
     final t = Theme.of(context);
     return Scaffold(
       appBar: AppBar(title: const Text('Devices and keys')),

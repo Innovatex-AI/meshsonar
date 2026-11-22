@@ -75,6 +75,9 @@ import 'gps_monitor.dart';
 import '../core/privacy_zone_store.dart' show MemoryPrivacyZoneStore;
 import '../core/region_neighbours.dart';
 import 'claims.dart';
+import 'driver_key_vault.dart';
+import 'person_devices.dart';
+import 'radio_proof.dart';
 import 'driver_settings_controller.dart';
 import 'privacy_zones_controller.dart';
 import 'context_upload_hook.dart';
@@ -516,6 +519,67 @@ class AppState extends ChangeNotifier with _ObserverWiring {
         timing: claimTiming,
         wait: claimWait,
       )..addListener(notifyListeners);
+
+  // ---------- ID steps 2 and 3 (capabilities.radioProof; OFF on production at build 73) ----------
+  /// The server advertises radio proof and person devices (`capabilities.radioProof`, its flag is on) and this phone has a key.
+  /// False (the production state at build 73) = the old flow runs and none of the calls below is ever made.
+  bool get radioProofCapable => hasKey && radioProofOffered;
+
+  /// The server advertises radio proof (with or without a key on this phone yet).
+  bool get radioProofOffered => uploadSiteConfig?.radioProof == true;
+
+  /// Radio proof at connect needs an approved key as well.
+  bool get radioProofEnabled => radioProofCapable && keyApproved;
+
+  RadioProofController? _radioProof;
+
+  /// Radio proof at connect and the "Is that you?" question (lib/app/radio_proof.dart). Only built when [radioProofEnabled].
+  RadioProofController get radioProof => _radioProof ??= RadioProofController(
+        client: () => client,
+        driverKey: () => _settings.driverKey,
+        radio: () {
+          final s = radioSessions.session;
+          return s != null && s.isConnected && s.supportsClaims ? s : null;
+        },
+        enabled: () => radioProofEnabled,
+        clock: services.clock,
+        wait: claimWait,
+        say: _say,
+        onOwnershipChanged: () async {
+          if (nodeClaimsEnabled) await claims.refresh();
+          await personDevices.refresh();
+        },
+      )..addListener(notifyListeners);
+
+  PersonDevicesController? _personDevices;
+
+  /// The person's devices, notices and "ask me first" (lib/app/person_devices.dart).
+  PersonDevicesController get personDevices => _personDevices ??= PersonDevicesController(
+        client: () => client,
+        driverKey: () => _settings.driverKey,
+        enabled: () => radioProofCapable,
+      )..addListener(notifyListeners);
+
+  DriverKeyVault? _keyVault;
+
+  /// Keychain copy of the driver key, kept only while radio proof is on (see lib/app/driver_key_vault.dart). settings.json
+  /// stays the primary copy for every build; with the capability absent the Keychain is never read or written for the key.
+  Future<void> _reconcileKeyVault() async {
+    final store = services.secretStore;
+    if (store == null || !radioProofOffered) return;
+    try {
+      final host = Uri.tryParse(_settings.serverUrl)?.host ?? '';
+      if (host.isEmpty) return;
+      final vault = _keyVault ??= DriverKeyVault(store);
+      final r = await vault.reconcile(host, _settings.driverKey);
+      if (r.adopted && r.key != null && !hasKey) {
+        await updateSettings(_settings.copyWith(driverKey: r.key, keyStatus: DriverKeyStatus.pending));
+        unawaited(refreshKeyStatus(quiet: true));
+      }
+    } catch (e) {
+      _logError('Saving the driver key to the Keychain failed', e);
+    }
+  }
 
   /// This driver key has claimed the radio [pubkey] (false until the list has loaded, or without claims support).
   bool ownsRadio(String pubkey) => _claims?.owns(pubkey) ?? false;
@@ -1972,6 +2036,10 @@ class AppState extends ChangeNotifier with _ObserverWiring {
       unawaited(_afterUploadCaps(server));
       unawaited(syncPrivacyZonesIfPending());
       if (nodeClaimsEnabled) unawaited(claims.refresh());
+      if (radioProofOffered) {
+        unawaited(_reconcileKeyVault());
+        if (radioProofEnabled) radioProof.radioChanged(); // a radio that connected before the site-config arrived
+      }
     } catch (e) {
       _logError('Fetching the upload server\'s site-config failed', e);
     }
@@ -2165,6 +2233,7 @@ class AppState extends ChangeNotifier with _ObserverWiring {
       _telemetrySub = _observerStream(link).listen(_onTelemetryRx, onError: (Object _) {});
       _connecting = false;
       _claims?.radioChanged();
+      if (radioProofEnabled) radioProof.radioChanged();
       // A radio used for the first time is asked once how its antenna is set up (the UI opens the sheet).
       _antennaPrompt = antennaProfile == null;
       diagnostics.add('Connected to ${kind == RadioKind.simulator ? 'the simulator' : 'radio "${info.name}"'}, '
@@ -2244,6 +2313,7 @@ class AppState extends ChangeNotifier with _ObserverWiring {
           final link = session.link;
           _selfInfo = session.selfInfo;
           _claims?.radioChanged();
+          if (radioProofEnabled) radioProof.radioChanged();
           unawaited(_telemetrySub?.cancel());
           _telemetrySub = _observerStream(link).listen(_onTelemetryRx, onError: (Object _) {});
           _attachGate(engine);
@@ -3539,7 +3609,11 @@ class AppState extends ChangeNotifier with _ObserverWiring {
       for (final c in dataCategories)
         if (c.id != CategoryId.packetHeaders && _settings.collectionOn(c.id) && !s.collectionOn(c.id)) c.id,
     ];
+    // The Keychain copy of a key the person removed goes with it (only while radio proof is on: otherwise the Keychain is untouched).
+    final vaultStore = services.secretStore;
+    final dropVaultHost = keyBefore != null && s.driverKey == null && radioProofCapable && vaultStore != null ? Uri.tryParse(_settings.serverUrl)?.host : null;
     _settings = s;
+    if (dropVaultHost != null && dropVaultHost.isNotEmpty) unawaited(DriverKeyVault(vaultStore!).delete(dropVaultHost));
     if (_loaded) _applyObserverState(); // sharing switched: the heartbeat and the observer engine follow at once
     if (switchedOff.isNotEmpty) unawaited(_contextCategoriesOff(switchedOff)); // unsent context is stripped, weather erased
     // Weather switched on or off: drives the server holds with the other choice get the new one (one small request each).
@@ -3610,6 +3684,15 @@ class AppState extends ChangeNotifier with _ObserverWiring {
     if (!services.mayAutoCreateKey(_settings.serverUrl)) return false; // a dev build never makes a driver on production
     final now = DateTime.now();
     if (_autoKeyNotBefore != null && now.isBefore(_autoKeyNotBefore!)) return false;
+    // ID step 2: a reinstall (settings.json gone, the Keychain kept) gets its old key back instead of a new person. Only when the
+    // server offers radio proof; otherwise this is skipped and the key is requested exactly as before.
+    if (services.secretStore != null) {
+      await refreshUploadSiteConfig();
+      if (radioProofOffered) {
+        await _reconcileKeyVault();
+        if (hasKey) return true;
+      }
+    }
     final ok = await requestKey(name: autoKeyName);
     if (ok) {
       _autoKeyFails = 0;
@@ -3976,6 +4059,7 @@ class AppState extends ChangeNotifier with _ObserverWiring {
 
   @override
   void dispose() {
+    _radioProof?.dismiss(); // an unanswered "Is that you?" stops waiting
     removeListener(_meshTrackSync);
     ChatWiring.controller.removeListener(_meshTrackChat);
     unawaited(_mt?.dispose());
