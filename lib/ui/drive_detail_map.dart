@@ -5,22 +5,26 @@
 // Map Definition's `drive-detail` page preset for the layers, the privacy zones from `symbols.tools.zone` and the part of the drive
 // a zone hides drawn faded and dashed from `symbols.tools.hiddenTrack`. A definition without `pages` / `symbols.tools` (the bundled
 // copy) leaves every one of those on what build 73 drew: the default layers, the Chart basemap choice as before, no zone, no
-// hidden line (the key still names the ping colours). No Layers button: legend and basemap only.
+// hidden line (the key still names the ping colours).
+//
+// Build 75: a Layers button opens the shared Layers sheet for page `drive-detail` (a non-modal app sheet: the map is a small one inside a
+// page); what the person switches is remembered under that page. With nothing chosen and no preset the layers are the defaults of build 74.
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../core/map_definition.dart';
 import '../core/map_definition_pages.dart';
-import '../core/map_styles.dart';
 import '../core/map_tool_style.dart';
 import '../core/model.dart';
 import '../core/privacy_zones.dart';
 import 'app.dart';
 import 'map/active_map_definition.dart';
 import 'map/coverage_map.dart';
+import 'map/layers/layers_model.dart' show PageLayersModel;
+import 'map/layers/layers_sheet.dart' show showGeneratedLayersSheet;
 import 'map/layers/map_layer.dart';
-import 'map/layers/registry.dart' show appLayerId, defaultLayerState, definitionLayerId, kMapLayers;
-import 'map/layers/repeater_map_source.dart' show kLabelsLayerId;
+import 'map/layers/registry.dart' show appLayerId, defaultLayerState, definitionLayerId, kDefaultLayerState, kMapLayers;
+import 'map/layers/repeater_map_source.dart' show RepeaterMapSource, StaticRepeaterMapFeed, kLabelsLayerId;
 import 'map/region_center.dart';
 import 'map/tools/drive_key.dart';
 import 'map/tools/hidden_track_layer.dart';
@@ -41,7 +45,14 @@ MapLayerState? driveDetailLayerState(MapDefinition def, {String page = 'drive-de
   return MapLayerState(on: Set.unmodifiable(on), mode: base.mode);
 }
 
-class DriveDetailMap extends StatelessWidget {
+/// The registry layers the drive detail map draws: this drive's cells and ping dots, and the server's measured cells. (The zones and
+/// the hidden part are the definition's `zones` / `track` layers, drawn from [DriveDetailMap]'s own data, not registry layers.)
+const Set<String> kDriveDetailDrawnLayerIds = {'hexes', 'pings', 'measured'};
+
+/// The page id the drive detail map's layer choices are remembered under (Map Definition page `drive-detail`).
+const String kDriveDetailLayerPage = 'drive-detail';
+
+class DriveDetailMap extends StatefulWidget {
   final List<DrivePing> pings;
 
   /// Draw the phone's privacy zones and the part of the drive they hide (the drive on this phone). The server's copy of a drive
@@ -50,35 +61,78 @@ class DriveDetailMap extends StatelessWidget {
   const DriveDetailMap({super.key, required this.pings, this.showZones = true});
 
   @override
+  State<DriveDetailMap> createState() => _DriveDetailMapState();
+}
+
+class _DriveDetailMapState extends State<DriveDetailMap> {
+  PageLayersModel? _layers;
+  StaticRepeaterMapFeed? _feed;
+  RepeaterMapSource? _source;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_layers != null) return;
+    // The Layers sheet's model for this map: page `drive-detail`, started from the definition's preset. This map draws no repeater
+    // lists, so the model gets an empty feed (the rows read "Not drawn on this map").
+    final s = AppScope.read(context);
+    final feed = _feed = StaticRepeaterMapFeed();
+    final source = _source = RepeaterMapSource(feed, clock: s.services.clock);
+    _layers = PageLayersModel(
+      pageId: kDriveDetailLayerPage,
+      state: s,
+      repeaterSource: source,
+      repeaterFeed: feed,
+      mapName: 'the drive map',
+      drawn: kDriveDetailDrawnLayerIds,
+      defaults: () => driveDetailLayerState(ActiveMapDefinition.current) ?? kDefaultLayerState,
+    );
+  }
+
+  @override
+  void dispose() {
+    _layers?.dispose();
+    _source?.dispose();
+    _feed?.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final s = AppScope.of(context);
+    final model = _layers!;
     return ValueListenableBuilder<MapDefinition>(
       valueListenable: ActiveMapDefinition.notifier,
-      builder: (context, def, _) {
-        final tool = MapToolStyle.of(def);
-        final zones = showZones && tool != null ? s.privacyZones.zones : const <PrivacyZone>[];
-        final List<List<LatLng>> runs = zones.isEmpty ? const [] : hiddenRuns(pings, PrivacyZones(zones));
-        return CoverageMap(
-          pings: pings,
-          repeaters: s.repeaters,
-          repeaterLabel: s.repeaterLabel,
-          follow: false,
-          fitToPings: true,
-          showLinks: false,
-          fallbackCenter: viewedRegionCenter(s),
-          baseStyle: BaseMapStyle.effective(BaseMapStyle.parse(s.settings.baseMapStyle), def),
-          layerState: driveDetailLayerState(def),
-          legend: Align(
-            alignment: Alignment.centerLeft,
-            child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 300), child: DriveKey(hiddenPart: runs.isNotEmpty, zones: zones.length, definition: def)),
-          ),
-          extraLayers: [
-            if (zones.isNotEmpty) ZoneLayer(zones: zones, definition: def),
-            if (runs.isNotEmpty) HiddenTrackLayer(runs: runs, definition: def),
-          ],
-          coverageV2: s.coverageV2 ? CoverageV2Inputs(tiles: s.coverageTiles, meta: s.coverageMeta, drawTiles: false, fetchCell: s.coverageCell) : null,
-        );
-      },
+      builder: (context, def, _) => ListenableBuilder(
+        listenable: model,
+        builder: (context, _) {
+          final tool = MapToolStyle.of(def);
+          final zones = widget.showZones && tool != null ? s.privacyZones.zones : const <PrivacyZone>[];
+          final List<List<LatLng>> runs = zones.isEmpty ? const [] : hiddenRuns(widget.pings, PrivacyZones(zones));
+          return CoverageMap(
+            pings: widget.pings,
+            repeaters: s.repeaters,
+            repeaterLabel: s.repeaterLabel,
+            follow: false,
+            fitToPings: true,
+            showLinks: false,
+            fallbackCenter: viewedRegionCenter(s),
+            baseStyle: model.baseStyle,
+            layerState: model.layerState,
+            // The shared Layers sheet, as a non-modal app sheet: this map sits inside a page, too small to host a panel.
+            onLayers: () => showGeneratedLayersSheet(context, model),
+            legend: Align(
+              alignment: Alignment.centerLeft,
+              child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 300), child: DriveKey(hiddenPart: runs.isNotEmpty, zones: zones.length, definition: def)),
+            ),
+            extraLayers: [
+              if (zones.isNotEmpty) ZoneLayer(zones: zones, definition: def),
+              if (runs.isNotEmpty) HiddenTrackLayer(runs: runs, definition: def),
+            ],
+            coverageV2: s.coverageV2 ? CoverageV2Inputs(tiles: s.coverageTiles, meta: s.coverageMeta, drawTiles: false, fetchCell: s.coverageCell) : null,
+          );
+        },
+      ),
     );
   }
 }

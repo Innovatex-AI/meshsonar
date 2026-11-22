@@ -12,6 +12,10 @@
 // Keys (tests): 'privacy-zones-screen', 'zones-map', 'zone-status', 'zone-add', 'zone-add-here', 'zone-add-banner',
 // 'zone-add-cancel', 'zone-tile-<i>', 'zone-editor', 'zone-name', 'zone-radius', 'zone-move', 'zone-here', 'zone-delete',
 // 'zone-trim', 'zone-limit', 'zones-unsupported', 'zones-website'.
+import '../../core/map_styles.dart' show BaseMapStyle;
+import '../../core/pmtiles_reader.dart' show PmtilesReader;
+import '../map/active_map_definition.dart';
+import '../map/basemap_layer.dart' show BasemapLayer;
 import '../map/map_preview.dart';
 import 'dart:async';
 import 'dart:math' as math;
@@ -43,6 +47,22 @@ const String privacyZonesExplain = 'Pings inside a zone stay on this phone: they
 const String privacyZonesEdgeNote = 'A ping just outside a zone shows where its edge is, so draw a zone a little bigger than the place '
     'you want to hide. Packets your phone hears inside a zone are shared with no position. Adding or enlarging a zone also offers '
     'to remove what the server already holds inside it.';
+
+/// The base layer of the zone editor for the reader's saved base map [style] (build 75): Chart (the build 74 map, which follows the
+/// theme) is null, so MapPreview draws its default; Light and Dark force their look; Topo draws the topographic palette; an installed
+/// offline pack draws under the styles that use one. Satellite is NOT drawn here: the editor's map is a MapPreview, whose credit line
+/// cannot carry the imagery credits Satellite requires, so it keeps the Chart map (the Drive map and the drive detail map draw it).
+/// Offline, an installed pack replaces the online tiles exactly as before.
+@visibleForTesting
+Widget? zonesBasemap({required BaseMapStyle style, required bool tiles, PmtilesReader? offline, String? packCode}) {
+  if (!tiles) return null;
+  final drawn = style.isSatellite ? BaseMapStyle.chart : style;
+  if (offline != null && drawn.usesOfflinePack) {
+    return OfflineBasemapLayer(key: ValueKey('zones-offline-$packCode'), reader: offline, dark: drawn.darkLook);
+  }
+  if (drawn == BaseMapStyle.chart) return null;
+  return BasemapLayer(key: ValueKey('zones-basemap-${drawn.id}'), dark: drawn.darkLook, look: drawn.look);
+}
 
 /// The line under the Settings row: how many zones, and whether any wait to be sent.
 String privacyZonesSummary(AppState s, Units units) {
@@ -340,6 +360,9 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
     );
   }
 
+  /// The base map the reader chose (Layers > Basemap, saved on the phone), as far as this editor can draw it.
+  BaseMapStyle _style(AppState s) => BaseMapStyle.effective(BaseMapStyle.parse(s.settings.baseMapStyle), ActiveMapDefinition.current);
+
   Widget _mapBox(BuildContext context, AppState s, {double? height}) {
     final t = Theme.of(context);
     final zones = _zones;
@@ -358,7 +381,7 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
         fit: start.bounds == null ? null : CameraFit.bounds(bounds: start.bounds!, padding: const EdgeInsets.all(40), maxZoom: 16),
         interaction: MapPreviewInteraction.edit,
         tiles: _tiles,
-        basemap: offline == null ? null : OfflineBasemapLayer(key: ValueKey('zones-offline-${_pack.code}'), reader: offline),
+        basemap: zonesBasemap(style: _style(s), tiles: _tiles, offline: offline, packCode: _pack.code),
         onMapReady: () {
           _mapReady = true;
           _framedKey = _keyOf(start);

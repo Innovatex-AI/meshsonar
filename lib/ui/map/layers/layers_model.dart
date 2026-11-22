@@ -66,6 +66,7 @@ class PageLayersModel extends ChangeNotifier implements MapLayersModel {
     this.mapName = 'this map',
     this.alwaysOn = const {},
     this.drawn = kPageDrawnLayerIds,
+    this.defaults,
     MapPrefs? prefs,
   }) : _prefs = prefs ?? MapPrefs.shared {
     _prefs.addListener(notifyListeners);
@@ -92,6 +93,10 @@ class PageLayersModel extends ChangeNotifier implements MapLayersModel {
   /// The registry layers this map draws.
   final Set<String> drawn;
 
+  /// What the page starts with before the person chooses anything (a page preset of the definition); null = the registry defaults.
+  /// Read each time, so a definition that arrives later is followed.
+  final MapLayerState Function()? defaults;
+
   @override
   void dispose() {
     _prefs.removeListener(notifyListeners);
@@ -104,7 +109,7 @@ class PageLayersModel extends ChangeNotifier implements MapLayersModel {
 
   @override
   MapLayerState get layerState {
-    var s = layerStateFromPrefs(_lp);
+    var s = layerStateFromPrefs(_lp, defaults: defaults?.call());
     for (final id in alwaysOn) {
       s = s.toggle(id, true);
     }

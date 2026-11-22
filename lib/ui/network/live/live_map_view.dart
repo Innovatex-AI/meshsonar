@@ -1,6 +1,6 @@
 // Network > Map: the live packet map with replay (AZ-3.3; website twin `/map?panel=live`, a packet's replay link
-// `/map?panel=live&t=<time>&packet=<hash>`). On the app's one map stack (MapPreview: our basemap, the Map Definition,
-// the credit line), packets are drawn as they propagate, origin to relays to observers, in the packet type colours
+// `/map?panel=live&t=<time>&packet=<hash>`). Since build 75 on the full map engine (CoverageMap: our basemap, the Map Definition's
+// `live` page preset, the Layers button and sheet for page `live`, the one legend chip, the credit line), packets are drawn as they propagate, origin to relays to observers, in the packet type colours
 // (packet_type_colors.dart, the website's palette): solid for unique hops, dashed for likely ones, faint grey ghost
 // segments with ghost marks for hops nobody can place (never a certain line through them), dotted for the route
 // still ahead of a direct packet.
@@ -15,17 +15,23 @@
 // Battery: the stream is dropped and nothing animates while the section is off screen (TickerMode), the app is in
 // the background, or the battery mode is Saver (a banner offers "Show anyway" for this view); frames are capped at
 // the battery profile's map frame rate and the ticker sleeps when nothing moves.
+//
+// Cost: a packet never rebuilds the map. The nodes (and their names) rebuild only when the set of nodes a packet is crossing
+// changes, the packet lines and dots are their own layer listening to the controller, and the panels listen to it too; the
+// CoverageMap itself is rebuilt only by what the person or the layout changes (Layers, basemap, the panel's height).
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show setEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../../app/app_state.dart' show AppState;
 import '../../../core/power_profile.dart';
-import '../../../core/region_lookup.dart';
 import '../../../core/map_styles.dart' show BaseMapStyle;
+import '../../../core/region_lookup.dart';
 import '../../../core/v1/live_api.dart';
 import '../../../core/v1/live_geometry.dart';
 import '../../../core/v1/live_replay.dart';
@@ -33,18 +39,41 @@ import '../../../core/v1/network_api.dart' show NetworkReadSource;
 import '../../../core/v1/nodes_api.dart' show NodeQuery, NodeRow, nodesApiFactory;
 import '../../../core/v1/packets_api.dart' show packetsApiFactory, packetTypeLabel, packetTypeWireName;
 import '../../app.dart';
+import '../../design/anchored_sheet.dart' show MapPanelHostController;
 import '../../design/app_surfaces.dart' show showAppSheet;
 import '../../design/map_panel.dart';
 import '../../design/tokens.dart';
-import '../../map/layers/repeater_map_source.dart' show kRosterLayerId;
+import '../../map/active_map_definition.dart';
+import '../../../core/map_definition_pages.dart';
+import '../../map/core/map_view_controller.dart';
+import '../../map/coverage_map.dart';
+import '../../map/layers/app_repeater_feed.dart';
+import '../../map/layers/layers_model.dart' show PageLayersModel;
+import '../../map/layers/layers_sheet.dart' show showGeneratedLayersSheet;
+import '../../map/layers/map_layer.dart' show MapLayerState;
+import '../../map/layers/region_borders_layer.dart' show regionBorderRings;
+import '../../map/layers/registry.dart' show repeatersOn;
+import '../../map/layers/repeater_map_source.dart' show RepeaterMapSource, kLabelsLayerId, kRosterLayerId;
+import '../../map/legend_card.dart' show LegendCard, kLegendPanelId;
+import '../../map/legend_sheet.dart' show showMapLegend;
 import '../../map/main_map_focus.dart';
-import '../../map/map_preview.dart';
+import '../../map/map_layers.dart' show PingColorMode;
 import '../network_context.dart';
 import '../packets/packet_detail_screen.dart';
 import '../packets/packet_ui.dart' show ageText, snrText;
 import 'live_map_controller.dart';
 import 'live_nodes_layer.dart';
 import 'packet_type_colors.dart';
+
+/// The page id the Live map's layer choices are remembered under (Map Definition page `live`).
+const String kLiveLayerPage = 'live';
+
+/// The region's box as bounds; null without a usable one.
+LatLngBounds? _regionBounds(RegionIndexEntry r) {
+  final b = r.bbox;
+  if (b == null || b.length != 4 || !(b[0] < b[2] && b[1] < b[3])) return null;
+  return LatLngBounds(LatLng(b[1], b[0]), LatLng(b[3], b[2]));
+}
 
 /// The middle of a region's box; null without one.
 LatLng? regionCentre(RegionIndexEntry r) {
@@ -83,7 +112,9 @@ class NetworkLiveMap extends StatefulWidget {
 class _NetworkLiveMapState extends State<NetworkLiveMap> with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late final LiveMapController _c;
   late final Ticker _ticker;
-  final MapController _map = MapController();
+  /// The one camera of this map (CoverageMap draws on its controller).
+  final MapViewController _view = MapViewController();
+  MapController get _map => _view.map;
   bool _mapReady = false;
   Duration _lastFrame = Duration.zero, _lastTick = Duration.zero;
   bool _foreground = true, _visible = true, _saverOverride = false;
@@ -97,6 +128,21 @@ class _NetworkLiveMapState extends State<NetworkLiveMap> with SingleTickerProvid
   /// One open panel on this map; the Live panel's resting height (the drawn packet sits on top of it).
   final MapPanelGroup _panels = MapPanelGroup();
   double? _mainExtent;
+
+  /// The map's transient panel slot (Layers, Legend): its panels join [_panels], so the Live panel goes back to its header while
+  /// one is open and they never stack. A drawn packet and the Layers panel share the same spot, so one closes the other.
+  final MapPanelHostController _host = MapPanelHostController();
+
+  /// What the one Layers panel reads and writes on this map (remembered under page `live`).
+  PageLayersModel? _layers;
+  RepeaterMapSource? _source;
+  AppStateRepeaterFeed? _feed;
+  AppState? _state;
+
+  /// The nodes a drawn packet is crossing now; the node layer listens to this, not to every packet.
+  final ValueNotifier<Set<String>> _inUse = ValueNotifier(const <String>{});
+  late final LatLng _centre = regionCentre(widget.region) ?? const LatLng(39.96, -83.0);
+  late final LatLngBounds? _bounds = _regionBounds(widget.region);
 
   bool get _saver => PowerProfile.current.mode == BatteryMode.saver;
   bool get _active => _foreground && _visible && (!_saver || _saverOverride);
@@ -119,6 +165,22 @@ class _NetworkLiveMapState extends State<NetworkLiveMap> with SingleTickerProvid
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    if (_layers == null) {
+      // The Layers model of this map: page `live`, started from the definition's `live` preset, drawing the nodes and their names.
+      final s = _state = AppScope.read(context);
+      final feed = _feed = AppStateRepeaterFeed(s);
+      final source = _source = RepeaterMapSource(feed, clock: s.services.clock);
+      _layers = PageLayersModel(
+        pageId: kLiveLayerPage,
+        state: s,
+        repeaterSource: source,
+        repeaterFeed: feed,
+        mapName: 'the Live map',
+        drawn: kLiveDrawnLayerIds,
+        defaults: liveDefaultLayerState,
+      )..addListener(_onLayersChanged);
+      _host.addListener(_onHost);
+    }
     final v = TickerMode.valuesOf(context).enabled;
     if (v != _visible) _visible = v;
     final f = networkFavourites(context);
@@ -153,7 +215,19 @@ class _NetworkLiveMapState extends State<NetworkLiveMap> with SingleTickerProvid
   void _changed() {
     if (!mounted) return;
     _wake();
-    setState(() {});
+    // The panels and the packet layer listen to the controller themselves; only the nodes in use can move the node layer.
+    final use = _nodesInUse();
+    if (!setEquals(use, _inUse.value)) _inUse.value = use;
+    // A drawn packet and the Layers panel share one spot: the newest one wins.
+    if (_c.focus != null && _host.isOpen) _host.close();
+  }
+
+  void _onLayersChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _onHost() {
+    if (_host.isOpen && _c.focus != null) _c.clearFocus();
   }
 
   /// Runs the ticker only while something moves (it sleeps when idle).
@@ -280,13 +354,33 @@ class _NetworkLiveMapState extends State<NetworkLiveMap> with SingleTickerProvid
     _c.removeListener(_changed);
     _ticker.dispose();
     if (widget.controller == null) _c.dispose();
+    _host.removeListener(_onHost);
+    _host.dispose();
+    _layers?.dispose();
+    _source?.dispose();
+    _feed?.dispose();
+    _inUse.dispose();
+    _view.dispose();
     _panels.dispose();
     super.dispose();
   }
 
   // ---------------------------------------------------------------- drawing
 
-  List<Widget> _overlays(BuildContext context) {
+  /// The packet lines and dots: their own layer, listening to the controller, so a packet never rebuilds the map or the nodes.
+  Widget _packetLayer() => ListenableBuilder(listenable: _c, builder: (context, _) => _packets(context));
+
+  /// The nodes and their names (under the packets): rebuilt when the set of nodes in use, the layers or the basemap change.
+  Widget _nodeLayer(MapLayerState layers, Brightness brightness, BaseMapStyle style) {
+    if (!repeatersOn(layers)) return const SizedBox.shrink();
+    return ValueListenableBuilder<Set<String>>(
+      valueListenable: _inUse,
+      builder: (context, inUse, _) =>
+          Stack(fit: StackFit.expand, children: liveNodeLayers(nodes: _nodes, inUse: inUse, style: style, brightness: brightness, showNames: layers.isOn(kLabelsLayerId))),
+    );
+  }
+
+  Widget _packets(BuildContext context) {
     final lines = <Polyline>[];
     final circles = <CircleMarker>[];
     final ghost = ghostColor(context);
@@ -342,12 +436,11 @@ class _NetworkLiveMapState extends State<NetworkLiveMap> with SingleTickerProvid
       final (prog, alpha) = _c.progressOf(a);
       draw(a.drawing, packetTypeColor(context, a.packet.type), prog, alpha);
     }
-    return [
-      // The nodes and their names go under the packets (MAP slices 2 and 3); the lines and dots stay the picture.
-      ...liveNodeLayers(nodes: _nodes, inUse: _nodesInUse(), style: BaseMapStyle.chart, brightness: Theme.of(context).brightness),
+    // The lines and dots stay the picture (the nodes are drawn under them, MAP slices 2 and 3).
+    return Stack(fit: StackFit.expand, children: [
       PolylineLayer(key: const Key('live-map-lines'), polylines: lines),
       CircleLayer(key: const Key('live-map-marks'), circles: circles),
-    ];
+    ]);
   }
 
   // ---------------------------------------------------------------- UI
@@ -358,25 +451,46 @@ class _NetworkLiveMapState extends State<NetworkLiveMap> with SingleTickerProvid
 
   @override
   Widget build(BuildContext context) {
-    final centre = regionCentre(widget.region) ?? const LatLng(39.96, -83.0);
-    final focus = _c.focus;
+    final model = _layers!;
+    final st = _state!;
+    final layers = model.layerState;
+    final base = model.baseStyle;
+    final brightness = Theme.of(context).brightness;
     final rest = _mainExtent ?? kMapPanelHeader + MediaQuery.paddingOf(context).bottom;
+    final preset = ActiveMapDefinition.current.hasPages ? ActiveMapDefinition.current.pagePreset(kLiveLayerPage) : null;
     return MapPanelScope(
       group: _panels,
       child: Stack(
         key: const Key('live-map'),
+        fit: StackFit.expand,
         children: [
           Positioned.fill(
-            child: MapPreview(
-              mapKey: const Key('live-map-canvas'),
-              controller: _map,
-              center: centre,
-              zoom: 9,
-              interaction: MapPreviewInteraction.edit,
-              tiles: widget.showBasemap,
-              overlays: _overlays(context),
+            child: CoverageMap(
+              key: const Key('live-map-canvas'),
+              viewController: _view,
+              pings: const [],
+              follow: false,
+              fallbackCenter: _centre,
+              fallbackBounds: _bounds,
+              showTiles: widget.showBasemap ? null : false,
+              layerState: layers,
+              baseStyle: base,
+              panelHost: _host,
+              onLayers: () => showGeneratedLayersSheet(context, model, host: _host),
+              legend: LegendCard(
+                key: const Key('live-legend-card'),
+                on: layers.on,
+                meta: st.coverageV2 ? st.coverageMeta : null,
+                drivePanel: false,
+                onOpen: _toggleLegend,
+              ),
+              openLegend: () => showMapLegend(context, pingColors: PingColorMode.snr),
+              // The region's border, only when the definition's `live` page has it (a definition without pages draws none, as in build 74).
+              regionBorders: preset?.has('borders') == true ? regionBorderRings(widget.region) : const [],
+              extraLayers: [_nodeLayer(layers, brightness, base), _packetLayer()],
+              bottomClearance: rest,
               // A tap on empty map closes the transient panel (the drawn packet).
-              onTap: (_, _) {
+              onMapTap: (_) {
                 if (_c.focus != null) _c.clearFocus();
               },
               onMapReady: () {
@@ -385,9 +499,50 @@ class _NetworkLiveMapState extends State<NetworkLiveMap> with SingleTickerProvid
               },
             ),
           ),
-          Positioned.fill(child: _mainPanel(context)),
-          if (focus != null) Positioned.fill(bottom: rest, child: _focusPanel(context, focus)),
+          // The panels listen to the controller themselves: a packet rebuilds them, never the map.
+          ListenableBuilder(listenable: _c, builder: (context, _) => Positioned.fill(child: _mainPanel(context))),
+          ListenableBuilder(
+            listenable: _c,
+            builder: (context, _) => switch (_c.focus) {
+              final focus? => Positioned.fill(bottom: rest, child: _focusPanel(context, focus)),
+              null => const SizedBox.shrink(),
+            },
+          ),
         ],
+      ),
+    );
+  }
+
+  /// The legend as the map's transient panel (a second tap on the chip closes it).
+  void _toggleLegend() {
+    if (_host.currentId == kLegendPanelId) return _host.close(kLegendPanelId);
+    final s = _state!, model = _layers!;
+    _host.show(
+      id: kLegendPanelId,
+      builder: (context) => ListenableBuilder(
+        listenable: Listenable.merge([model, s]),
+        builder: (context, _) => MapPanel(
+          id: kLegendPanelId,
+          title: 'Legend',
+          leading: const Icon(Icons.palette_outlined, size: 18),
+          bottomSafe: false,
+          onClose: () => _host.close(kLegendPanelId),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Flexible(child: LegendCard(asPanel: true, on: model.layerState.on, meta: s.coverageV2 ? s.coverageMeta : null, drivePanel: false)),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  key: const Key('legend-open-guide'),
+                  onPressed: () => showMapLegend(context, pingColors: PingColorMode.snr),
+                  child: const Text('Full guide'),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
