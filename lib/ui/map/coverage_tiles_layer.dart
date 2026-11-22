@@ -286,18 +286,34 @@ class CoverageTilesLayerState extends State<CoverageTilesLayer> {
       stats.dataSwaps++;
       final List<CellShape> all;
       if (summary) {
-        // A summary hexagon on a tile edge is the same feature in both tiles: draw it once, or its fill doubles there.
-        final seen = <String>{};
-        all = [];
+        // A summary hexagon near a tile edge is a feature in both tiles (each tile also carries its buffer, where a hexagon may be
+        // cut off): draw it once, from the tile its centre is in (the whole hexagon), or its fill doubles there.
+        final pick = <String, (int, int, bool)>{};
+        final loose = <(int, int)>[];
         for (var i = 0; i < used.length; i++) {
           final d = store.peek(used[i]);
           if (d == null) continue;
+          final tz = used[i].split('|').last.split('/').map(int.parse).toList();
+          final south = tileLat(tz[2] + 1.0, tz[0]), north = tileLat(tz[2].toDouble(), tz[0]);
+          final west = tileLon(tz[1].toDouble(), tz[0]), east = tileLon(tz[1] + 1.0, tz[0]);
           for (var f = 0; f < parts[i].length; f++) {
             final h = d.h[f];
-            if (h.isNotEmpty && !seen.add(h)) continue;
-            all.add(parts[i][f]);
+            if (h.isEmpty) {
+              loose.add((i, f));
+              continue;
+            }
+            var lat = 0.0, lon = 0.0;
+            final n = d.starts[f + 1] - d.starts[f];
+            for (var v = d.starts[f]; v < d.starts[f + 1]; v++) {
+              lat += d.latLon[2 * v] / n;
+              lon += d.latLon[2 * v + 1] / n;
+            }
+            final inside = lat >= south && lat < north && lon >= west && lon < east;
+            final have = pick[h];
+            if (have == null || (!have.$3 && inside)) pick[h] = (i, f, inside);
           }
         }
+        all = [for (final e in pick.values) parts[e.$1][e.$2], for (final (i, f) in loose) parts[i][f]];
       } else {
         all = parts.length == 1 ? parts.single : [for (final p in parts) ...p];
       }
