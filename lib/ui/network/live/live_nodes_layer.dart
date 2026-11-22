@@ -18,12 +18,10 @@ import '../../../core/v1/nodes_api.dart' show NodeRow;
 import '../../drive_detail_map.dart' show driveDetailLayerState;
 import '../../map/active_map_definition.dart';
 import '../../map/layers/map_layer.dart' show MapLayerState;
-import '../../map/layers/repeater_map_source.dart'
-    show kLabelsLayerId, kRosterLayerId;
+import '../../map/layers/repeater_map_source.dart' show kLabelsLayerId, kRosterLayerId;
 import '../../map/layers/repeater_name_labels.dart';
 import '../../map/layers/repeater_painter_layer.dart' show RepeaterBadge;
-import '../../map/layers/repeater_sprites.dart'
-    show RepeaterFreshness, freshnessOfAge, spriteVariantFor;
+import '../../map/layers/repeater_sprites.dart' show RepeaterFreshness, freshnessOfAge, spriteVariantFor;
 import '../../map/map_size_controls.dart' show colourByNow;
 import '../../map/node_symbol.dart';
 
@@ -32,19 +30,11 @@ import '../../map/node_symbol.dart';
 MapLayerState liveDefaultLayerState([MapDefinition? def]) {
   final d = def ?? ActiveMapDefinition.current;
   final fromPreset = d.hasPages ? driveDetailLayerState(d, page: 'live') : null;
-  return fromPreset ??
-      MapLayerState(
-        on: Set.unmodifiable({kRosterLayerId, kLabelsLayerId}),
-        mode: const {'pings': 'snr'},
-      );
+  return fromPreset ?? MapLayerState(on: Set.unmodifiable({kRosterLayerId, kLabelsLayerId}), mode: const {'pings': 'snr'});
 }
 
 /// The registry layers the Live map draws: the nodes (Repeaters, with Names under it) and, with a preset, the region border.
-const Set<String> kLiveDrawnLayerIds = {
-  kRosterLayerId,
-  kLabelsLayerId,
-  'borders',
-};
+const Set<String> kLiveDrawnLayerIds = {kRosterLayerId, kLabelsLayerId, 'borders'};
 
 /// Tests: how many times the node markers rebuilt (the layer must not rebuild per packet).
 @visibleForTesting
@@ -53,27 +43,21 @@ int liveNodeMarkerBuilds = 0;
 /// The Live nodes that can be drawn: repeaters and room servers with a position.
 List<NodeRow> liveDrawableNodes(Iterable<NodeRow> rows) => [
   for (final r in rows)
-    if (r.position != null &&
-        (r.role == 'repeater' || r.role == 'room') &&
-        r.position!.lat.abs() <= 90 &&
-        r.position!.lon.abs() <= 180)
-      r,
+    if (r.position != null && (r.role == 'repeater' || r.role == 'room') && r.position!.lat.abs() <= 90 && r.position!.lon.abs() <= 180) r,
 ];
 
 /// The symbol-set freshness id of a node: heard in 24 h solid, 7 d dashed, older none.
-String liveNodeFreshness(NodeRow r, DateTime now) =>
-    switch (freshnessOfAge(r.lastHeardAt ?? r.lastAdvertAt, now)) {
-      RepeaterFreshness.fresh => 'fresh',
-      RepeaterFreshness.recent => 'recent',
-      RepeaterFreshness.stale => 'stale',
-    };
+String liveNodeFreshness(NodeRow r, DateTime now) => switch (freshnessOfAge(r.lastHeardAt ?? r.lastAdvertAt, now)) {
+  RepeaterFreshness.fresh => 'fresh',
+  RepeaterFreshness.recent => 'recent',
+  RepeaterFreshness.stale => 'stale',
+};
 
 /// The tint id of [r] under "Colour nodes by" [variable] (`status`, `hash`, `role`), or null for neutral.
 String? liveNodeTint(NodeRow r, String variable) => switch (variable) {
   'status' => r.status,
   'role' => r.role,
-  'hash' =>
-    r.hashSize == null ? 'unknown' : (r.hashSize! >= 2 ? 'multi' : 'one'),
+  'hash' => r.hashSize == null ? 'unknown' : (r.hashSize! >= 2 ? 'multi' : 'one'),
   _ => null,
 };
 
@@ -90,12 +74,7 @@ List<Widget> liveNodeLayers({
   if (rows.isEmpty) return const [];
   final tone = labelToneFor(style, brightness);
   return [
-    _LiveNodeMarkers(
-      key: const Key('live-nodes-markers'),
-      rows: rows,
-      inUse: inUse,
-      now: now,
-    ),
+    _LiveNodeMarkers(key: const Key('live-nodes-markers'), rows: rows, inUse: inUse, now: now),
     RepeaterNameLabels(
       key: const Key('live-nodes-names'),
       sources: const [],
@@ -127,35 +106,26 @@ class _LiveNodeMarkers extends StatelessWidget {
   final List<NodeRow> rows;
   final Set<String> inUse;
   final DateTime? now;
-  const _LiveNodeMarkers({
-    super.key,
-    required this.rows,
-    required this.inUse,
-    this.now,
-  });
+  const _LiveNodeMarkers({super.key, required this.rows, required this.inUse, this.now});
 
   @override
   Widget build(BuildContext context) {
     liveNodeMarkerBuilds++;
     final camera = MapCamera.of(context);
     final spec = ActiveMapDefinition.current.labelSpec;
-    // Below the spec's first name zoom the badges are drawn smaller and fainter (the whole region stays on the map, as on the
-    // website's Live and as build 74 drew it); the ones a packet is crossing keep their full size.
+    // Below the spec's first name zoom a whole region of badges is a smear: only the ones in use are drawn.
     final far = camera.zoom < spec.minZoom;
     final at = now ?? DateTime.now();
     return ListenableBuilder(
       listenable: MapPrefs.shared,
       builder: (context, _) {
         final variable = colourByNow();
-        final full =
-            spriteVariantFor(camera.zoom).diameter * MapPrefs.shared.iconScale;
+        final size = spriteVariantFor(camera.zoom).diameter * MapPrefs.shared.iconScale;
         return MarkerLayer(
           markers: [
             for (final r in rows)
-              () {
-                final used = inUse.contains(r.key.toLowerCase());
-                final size = far && !used ? full * 0.72 : full;
-                return Marker(
+              if (!far || inUse.contains(r.key.toLowerCase()))
+                Marker(
                   point: LatLng(r.position!.lat, r.position!.lon),
                   width: size + 8,
                   height: size + 8,
@@ -169,12 +139,11 @@ class _LiveNodeMarkers extends StatelessWidget {
                         tintVariable: variable,
                         size: size,
                         // Dim, so the packets stay the picture (the site's Live nodes are at 0.5); a node a packet is crossing is solid.
-                        opacity: used ? 1 : (far ? 0.5 : 0.62),
+                        opacity: inUse.contains(r.key.toLowerCase()) ? 1 : 0.62,
                       ),
                     ),
                   ),
-                );
-              }(),
+                ),
           ],
         );
       },
