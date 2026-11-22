@@ -1,6 +1,6 @@
 {
   "v": 1,
-  "schemaMinor": 2,
+  "schemaMinor": 3,
   "capabilities": [
     "basemap.topo",
     "basemap.satellite",
@@ -11,7 +11,8 @@
     "plan.link",
     "plan.coverage",
     "plan.suggest",
-    "plan.share"
+    "plan.share",
+    "layer.nodes"
   ],
   "scope": {
     "kind": "region",
@@ -1189,6 +1190,167 @@
         "marginal": 3,
         "unlikely": 1
       }
+    },
+    "node": {
+      "sizePx": 16,
+      "strokePx": 1.6,
+      "roles": [
+        {
+          "id": "repeater",
+          "shape": "circle",
+          "letter": "R",
+          "label": "Repeater: a circle"
+        },
+        {
+          "id": "room",
+          "shape": "hexagon",
+          "letter": "M",
+          "label": "Room server: a hexagon"
+        },
+        {
+          "id": "companion",
+          "shape": "square",
+          "letter": "C",
+          "label": "Companion (someone's radio): a square"
+        },
+        {
+          "id": "sensor",
+          "shape": "triangle",
+          "letter": "S",
+          "label": "Sensor: a triangle"
+        },
+        {
+          "id": "unknown",
+          "shape": "diamond",
+          "letter": "?",
+          "label": "Role not known yet: a diamond"
+        }
+      ],
+      "status": [
+        {
+          "id": "active",
+          "opacity": 1,
+          "colours": {
+            "light": "#0B6FB8",
+            "dark": "#5AB0EE"
+          },
+          "label": "Active: heard within its usual rhythm"
+        },
+        {
+          "id": "degraded",
+          "opacity": 1,
+          "colours": {
+            "light": "#C77800",
+            "dark": "#F0B440"
+          },
+          "label": "Degraded: heard, but less often than usual"
+        },
+        {
+          "id": "silent",
+          "opacity": 0.55,
+          "colours": {
+            "light": "#6B7280",
+            "dark": "#8B95A3"
+          },
+          "label": "Silent: nothing heard past its offline threshold (faded)"
+        },
+        {
+          "id": "unknown",
+          "opacity": 0.8,
+          "colours": {
+            "light": "#A3ACB8",
+            "dark": "#5C6673"
+          },
+          "label": "Unknown: not enough history to judge yet"
+        }
+      ],
+      "stroke": {
+        "light": "#FFFFFF",
+        "dark": "#0D1117"
+      },
+      "hash": [
+        {
+          "id": "multi",
+          "colours": {
+            "light": "#00876A",
+            "dark": "#3DD6A8"
+          },
+          "label": "Uses a 2- or 3-byte hash: its hops read clearly in paths"
+        },
+        {
+          "id": "one",
+          "colours": {
+            "light": "#C2410C",
+            "dark": "#FF8A5C"
+          },
+          "label": "Uses a 1-byte hash: its hops can be confused with others"
+        },
+        {
+          "id": "mixed",
+          "colours": {
+            "light": "#A16207",
+            "dark": "#E8C547"
+          },
+          "label": "Seen with more than one hash size"
+        },
+        {
+          "id": "unknown",
+          "colours": {
+            "light": "#A3ACB8",
+            "dark": "#5C6673"
+          },
+          "label": "Hash size not seen yet"
+        }
+      ],
+      "prefixMinZoom": 12,
+      "heat": {
+        "radiusPx": 22,
+        "opacity": 0.6,
+        "maxZoom": 14,
+        "ramp": {
+          "light": [
+            "#DCEBFA",
+            "#7DB6EC",
+            "#2F7FC8",
+            "#0B4A86"
+          ],
+          "dark": [
+            "#16324F",
+            "#2F6FAE",
+            "#5AB0EE",
+            "#BFE2FF"
+          ]
+        }
+      },
+      "important": {
+        "colours": {
+          "light": "#A11D6A",
+          "dark": "#F27AC0"
+        },
+        "widthPx": [
+          2,
+          6
+        ],
+        "opacity": 0.85,
+        "label": "Important link: the mesh would split without it, or it joins two critical nodes",
+        "nodeLabel": "Critical node: losing it cuts part of the mesh off (ring)"
+      },
+      "neighbour": {
+        "colours": {
+          "light": "#0F766E",
+          "dark": "#2DD4BF"
+        },
+        "widthPx": 2.2,
+        "fadeOthers": 0.18,
+        "label": "Direct neighbour of the selected node (line from it)"
+      },
+      "selected": {
+        "colours": {
+          "light": "#111827",
+          "dark": "#F9FAFB"
+        },
+        "label": "Selected node (ring)"
+      }
     }
   },
   "labels": {
@@ -1500,5 +1662,5 @@
     "heardAt": "2026-11-09T00:00:00.000Z",
     "heardCells": 1
   },
-  "version": "d45b430c"
+  "version": "f8ca36f8"
 }

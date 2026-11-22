@@ -31,7 +31,7 @@ void main() {
     if (web.existsSync()) expect(jsonDecode(bundled), jsonDecode(web.readAsStringSync()), reason: 'copy the website fixture again when the definition changes');
     final d = MapDefinition.parse(bundled);
     expect(d.v, 1);
-    expect(d.schemaMinor, 2);
+    expect(d.schemaMinor, 3);
     expect(d.layers.map((l) => l['id']), containsAllInOrder(['borders', 'predicted', 'heard', 'measured', 'repeaters']));
     expect(d.palettes.map((p) => p['id']), containsAll(['standard', 'colour_blind']));
     expect((d.coverage['tiles'] as Map)['hexFromZoom'], 13);
