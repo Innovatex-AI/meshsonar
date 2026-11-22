@@ -13,6 +13,8 @@ import '../../../core/network_request.dart';
 import '../../../core/v1/nodes_api.dart';
 import '../../charts/chart_frame.dart';
 import '../../charts/time_line_chart.dart';
+import '../../map/map_preview.dart' show MapPreview;
+import '../../map/still/place_map.dart';
 import '../../region/region_common.dart' show RegionOfflineAsOf, RegionOfflineEmpty, agoText;
 import '../../theme.dart';
 import '../network_context.dart';
@@ -141,6 +143,13 @@ class ObserverPageBody extends StatelessWidget {
         if (d.qualityFlags.isNotEmpty) KvRow('Data quality', d.qualityFlags.join(', ')),
         if (d.trusted == false) const KvRow('Data quality', 'Not trusted for hop naming'),
         if (r.kind == 'phone') Text('Phone observers never show a position.', style: muted),
+        // MAP slice 5: the observer's small map (page `observer`), when the definition presets one and it has a public position.
+        if (r.kind != 'phone' && r.position != null && MapPreview.presetOf('observer') != null)
+          Padding(
+            key: const Key('observer-map'),
+            padding: const EdgeInsets.only(top: Gap.s),
+            child: StillPlaceMap(page: 'observer', role: 'observer', name: r.name, lat: r.position!.lat, lon: r.position!.lon, freshness: switch (r.status) { 'online' => 'fresh', 'stale' => 'recent', _ => 'stale' }),
+          ),
         if (lastHour.isNotEmpty) NodeSection(id: 'observer-now', title: 'Now', children: lastHour),
         if (page.metrics != null) ..._metrics(context, page.metrics!),
         if (d.neighbours.isNotEmpty)

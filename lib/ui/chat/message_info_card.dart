@@ -14,6 +14,8 @@ import '../design/app_type.dart';
 import '../design/tokens.dart';
 import '../theme.dart' show MeshSonarColors;
 import '../map/node_symbol.dart';
+import '../map/still/path_layer.dart';
+import '../map/still/path_map.dart';
 
 String _clock(int ms) {
   final d = DateTime.fromMillisecondsSinceEpoch(ms);
@@ -227,7 +229,7 @@ class MessagePathMapScreen extends StatelessWidget {
                           key: const Key('path-map-none'), textAlign: TextAlign.center, style: AppType.body.copyWith(color: c.textMuted)),
                     ),
                   )
-                : (mapBuilder ?? _defaultMap)(context, placed, connect),
+                : (mapBuilder ?? (c, p, k) => _defaultMap(c, p, k, all: nodes))(context, placed, connect),
           ),
           if (missing.isNotEmpty)
             Container(
@@ -245,9 +247,12 @@ class MessagePathMapScreen extends StatelessWidget {
     );
   }
 
-  static Widget _defaultMap(BuildContext context, List<HopNode> placed, bool connect) {
+  static Widget _defaultMap(BuildContext context, List<HopNode> placed, bool connect, {List<HopNode>? all}) {
     final m = MeshSonarColors.of(context);
     final pts = [for (final n in placed) LatLng(n.lat!, n.lon!)];
+    // MAP slice 5: the ONE path layer (numbered, named, solid certain / dashed likely) when the definition carries it.
+    final style = activePathStyle();
+    if (style != null) return _pathMap(context, style, all ?? placed, connect);
     return Stack(children: [
       MapPreview(
         mapKey: const Key('path-map'),
@@ -271,6 +276,38 @@ class MessagePathMapScreen extends StatelessWidget {
               ),
           ]),
         ],
+      ),
+    ]);
+  }
+
+  /// A hop with a position and a unique name is certain; an ambiguous one (several nodes share the code) is likely. A hop with
+  /// no position or no name keeps its number, is listed under the map, and breaks the line. [connect] false = the repeaters that
+  /// relayed it, in no order: no line and no numbers.
+  static Widget _pathMap(BuildContext context, MapPathStyle style, List<HopNode> nodes, bool connect) {
+    final spec = PathSpec(chain: connect, numbered: connect, hops: [
+      for (var i = 0; i < nodes.length; i++)
+        PathHop(
+          n: i + 1,
+          name: nodes[i].label,
+          lat: nodes[i].hasPosition && nodes[i].known ? nodes[i].lat : null,
+          lon: nodes[i].hasPosition && nodes[i].known ? nodes[i].lon : null,
+          certainty: nodes[i].ambiguous ? PathCertainty.likely : PathCertainty.certain,
+        ),
+    ]);
+    return Column(children: [
+      Expanded(
+        child: StillPathMap(
+          mapKey: const Key('path-map'),
+          spec: spec,
+          style: style,
+          interaction: MapPreviewInteraction.edit,
+          fallbackHeight: double.infinity,
+          semanticLabel: 'Map of the route: ${spec.placed.length} of ${nodes.length} repeaters have a position.',
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.all(Gap.m),
+        child: PathKey(style: style, unplaced: spec.unplaced.length, total: spec.hops.length),
       ),
     ]);
   }
