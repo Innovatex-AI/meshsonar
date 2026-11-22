@@ -18,6 +18,7 @@
 import 'basemap.dart' show BasemapLook, OurBasemap;
 import 'map_basemaps.dart';
 import 'map_definition.dart' show MapDefinition;
+import 'map_definition_pages.dart';
 
 enum BaseMapStyle {
   chart('chart', 'Chart', 'Our map, light or dark with your theme', 19, OurBasemap.attribution, true),
@@ -75,17 +76,26 @@ enum BaseMapStyle {
   /// Forces the dark grading (and the dark offline style) whatever the theme says.
   bool get forcesDark => this == BaseMapStyle.dark;
 
-  /// The styles the person may pick given the Map Definition in use: Chart, Light and Dark always; Topo and Satellite only when
-  /// the definition advertises them (and Satellite has an imagery source).
+  /// The definition says the basemaps as variables (`variables.basemap`, schemaMinor 7): Chart and Light become ONE entry, Road
+  /// (Chart's id and look: the map follows the theme). Without that block (the bundled copy, an older server) the list is build 73's.
+  static bool roadMerged(MapDefinition d) => d.basemapVariableIds != null;
+
+  /// The name shown for this style under [d]: Chart is called Road when the definition merges Chart and Light.
+  String labelIn(MapDefinition d) => this == BaseMapStyle.chart && roadMerged(d) ? 'Road' : label;
+
+  /// The styles the person may pick given the Map Definition in use: Chart, Light and Dark always (Road and Dark when the
+  /// definition merges Chart and Light); Topo and Satellite only when the definition advertises them (and Satellite has an
+  /// imagery source).
   static List<BaseMapStyle> availableFor(MapDefinition d) => [
     BaseMapStyle.chart,
-    BaseMapStyle.street,
+    if (!roadMerged(d)) BaseMapStyle.street,
     BaseMapStyle.dark,
     if (d.offersTopo) BaseMapStyle.topo,
     if (d.offersSatellite) BaseMapStyle.satellite,
   ];
 
   /// What is drawn when [wanted] (the saved choice) is not offered by [d] (a cached definition from before M3): Chart.
+  /// A saved Light (`street`) therefore draws as Road when the definition merges them (the stored id is not rewritten).
   static BaseMapStyle effective(BaseMapStyle wanted, MapDefinition d) => availableFor(d).contains(wanted) ? wanted : BaseMapStyle.chart;
 
   /// The style stored as [id]; anything unknown (a newer app's choice, a damaged file) is the default.

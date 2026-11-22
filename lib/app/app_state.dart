@@ -77,6 +77,7 @@ import '../core/region_neighbours.dart';
 import 'claims.dart';
 import 'driver_key_vault.dart';
 import 'person_devices.dart';
+import 'person_observers.dart';
 import 'radio_proof.dart';
 import 'driver_settings_controller.dart';
 import 'privacy_zones_controller.dart';
@@ -558,6 +559,18 @@ class AppState extends ChangeNotifier with _ObserverWiring {
         client: () => client,
         driverKey: () => _settings.driverKey,
         enabled: () => radioProofCapable,
+      )..addListener(notifyListeners);
+
+  PersonObserversController? _personObservers;
+
+  /// The person's observers and owner offers (lib/app/person_observers.dart).
+  PersonObserversController get personObservers => _personObservers ??= PersonObserversController(
+        client: () => client,
+        driverKey: () => _settings.driverKey,
+        enabled: () => radioProofCapable,
+        onClaimsChanged: () async {
+          if (nodeClaimsEnabled) await claims.refresh();
+        },
       )..addListener(notifyListeners);
 
   DriverKeyVault? _keyVault;

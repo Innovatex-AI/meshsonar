@@ -119,7 +119,7 @@ class _ServerDriveScreenState extends State<ServerDriveScreen> {
             final isHidden = _hidden ?? x.review == 'hidden';
             final heardPct = d.pings.isEmpty ? null : (100 * d.heardCount / d.pings.length).round();
             return ListView(key: const Key('server-drive-screen'), padding: const EdgeInsets.all(Gap.l), children: [
-              if (pings.isNotEmpty) SizedBox(height: 240, child: ClipRRect(borderRadius: BorderRadius.circular(Corners.card), child: DriveDetailMap(pings: pings))),
+              if (pings.isNotEmpty) SizedBox(height: 240, child: ClipRRect(borderRadius: BorderRadius.circular(Corners.card), child: DriveDetailMap(pings: pings, showZones: false))),
               const SizedBox(height: Gap.m),
               Text(
                 '${formatDateTime(x.startedAt)}${x.endedAt == null ? '' : ' to ${formatDateTime(x.endedAt!)}'}',

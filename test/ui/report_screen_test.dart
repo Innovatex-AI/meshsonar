@@ -2,7 +2,12 @@
 // grids/repeaters against an earlier drive, "not on MeshSonar" tags, charts and Share report.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:meshsonar/core/map_definition.dart';
 import 'package:meshsonar/core/model.dart';
+import 'package:meshsonar/core/privacy_zones.dart';
+import 'package:meshsonar/ui/map/active_map_definition.dart';
+import '../support/tool_definition.dart';
 import 'package:meshsonar/ui/report/drive_report_screen.dart';
 
 import 'fakes.dart';
@@ -30,6 +35,40 @@ Harness seeded() {
 }
 
 void main() {
+  Future<void> openReport(WidgetTester tester, {required MapDefinition def, required List<PrivacyZone> zones}) async {
+    useTallScreen(tester);
+    ActiveMapDefinition.notifier.value = def;
+    addTearDown(() => ActiveMapDefinition.notifier.value = MapDefinition.bundled);
+    final h = seeded();
+    await h.pumpApp(tester);
+    await h.state.privacyZones.setZones(zones);
+    await openDrivesTab(tester);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('session-new')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('detail-report')));
+    await tester.pumpAndSettle();
+  }
+
+  List<Polygon> dashedPolygons(WidgetTester tester) =>
+      [for (final l in tester.widgetList<PolygonLayer>(find.byType(PolygonLayer))) ...l.polygons.where((p) => p.pattern.segments != null)];
+
+  testWidgets('report map: a zone on the drive is drawn from the definition and named in the key; the squares stay', (tester) async {
+    await openReport(tester, def: liveToolDefinition(), zones: const [PrivacyZone(lat: 40.1031, lon: -82.9301, radiusM: 200), PrivacyZone(lat: 41.5, lon: -80, radiusM: 200)]);
+    expect(dashedPolygons(tester), hasLength(1), reason: 'only the zone that reaches the map; the far one is neither drawn nor counted');
+    expect(find.text('Privacy zone'), findsOneWidget);
+    expect(find.byKey(const Key('drive-key-bands')), findsNothing, reason: 'the report keeps its own heard scale');
+    final squares = [for (final l in tester.widgetList<PolygonLayer>(find.byType(PolygonLayer))) ...l.polygons.where((p) => p.pattern.segments == null && p.points.length == 4)];
+    expect(squares, hasLength(3), reason: 'the three cells are still squares');
+  });
+
+  testWidgets('report map: without tool style (the bundled definition) no zone and no key, as in build 73', (tester) async {
+    await openReport(tester, def: MapDefinition.bundled, zones: const [PrivacyZone(lat: 40.1031, lon: -82.9301, radiusM: 200)]);
+    expect(dashedPolygons(tester), isEmpty);
+    expect(find.byKey(const Key('drive-key')), findsNothing);
+    expect(find.byType(CircleLayer), findsNothing);
+  });
+
   testWidgets('report opens from drive detail and shows hero numbers, new grids and repeaters', (tester) async {
     useTallScreen(tester);
     final h = seeded();

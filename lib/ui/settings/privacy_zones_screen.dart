@@ -31,6 +31,8 @@ import 'confirm_sheet.dart';
 import '../map/coverage_map.dart' show CoverageMap;
 import '../map/offline_basemap.dart';
 import '../map/region_center.dart';
+import '../map/tools/drive_key.dart';
+import '../map/tools/zone_layer.dart';
 import 'privacy_zones_start.dart';
 
 /// The copy that says what a zone does. One place, so the screen, the search entry and the docs agree.
@@ -368,17 +370,8 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
         },
         onTap: (_, p) => unawaited(_onMapTap(p)),
         overlays: [
-          CircleLayer(circles: [
-            for (var i = 0; i < zones.length; i++)
-              CircleMarker(
-                point: LatLng(zones[i].lat, zones[i].lon),
-                radius: zones[i].radiusM,
-                useRadiusInMeter: true,
-                color: (i == sel ? t.colorScheme.primary : t.colorScheme.tertiary).withValues(alpha: i == sel ? 0.30 : 0.18),
-                borderColor: i == sel ? t.colorScheme.primary : t.colorScheme.tertiary,
-                borderStrokeWidth: i == sel ? 3 : 2,
-              ),
-          ]),
+          // The zones: the definition's `symbols.tools.zone` (dashed edge, active when selected), else the colours of build 73.
+          ZoneLayer(zones: zones, selected: sel, fallback: ZoneFallback.of(t)),
           // The number on each zone is also its tap target for a zone too small to hit on screen (48 px).
           MarkerLayer(markers: [
             for (var i = 0; i < zones.length; i++)
@@ -395,12 +388,7 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
                     behavior: HitTestBehavior.opaque,
                     onTap: () => unawaited(_mode == _Mode.select ? _select(i) : _onMapTap(LatLng(zones[i].lat, zones[i].lon))),
                     child: Center(
-                      child: CircleAvatar(
-                        radius: 13,
-                        backgroundColor: i == sel ? t.colorScheme.primary : t.colorScheme.tertiary,
-                        foregroundColor: i == sel ? t.colorScheme.onPrimary : t.colorScheme.onTertiary,
-                        child: Text('${i + 1}', style: t.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w700, color: i == sel ? t.colorScheme.onPrimary : t.colorScheme.onTertiary)),
-                      ),
+                      child: ZonePin(index: i, selected: i == sel, fallback: ZoneFallback.of(t)),
                     ),
                   ),
                 ),
@@ -412,6 +400,8 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
     final bannered = Stack(children: [
       Positioned.fill(child: map),
       if (_mode != _Mode.select) Positioned(left: Gap.s, right: Gap.s, top: Gap.s, child: _modeBanner(context)),
+      // The key: what the dashed circle is (words from the definition; nothing when it has no tool style).
+      if (zones.isNotEmpty) Positioned(left: Gap.s, bottom: 24, child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 220), child: DriveKey(dots: false, zones: zones.length))),
     ]);
     return height == null ? bannered : SizedBox(height: height, child: bannered);
   }

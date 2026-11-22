@@ -54,8 +54,9 @@ enum AppTab {
 /// [observer] opens Settings at its Observer section (the Home observer row is gone, release 0.38).
 /// [drives] is this phone's drives, reports and progress (moved here from the old Analyze tab, AZ-3.1).
 /// Build 71: the More list shows about nine rows; the other values still open their screen (a Settings section, a
-/// radio tool) for code that asks for them. [repeaters] and [radio] both open More > Radio; [help] the Help page.
-enum MoreItem { drives, radio, myRadios, wardriving, notifications, settings, about, legend, privacy, howItWorks, repeaters, trace, discover, adverts, rxLog, noiseFloor, telemetry, radioSetup, observerJoin, method, devices, myReports, leaderboard, chat, observer, help, radioSettings }
+/// radio tool) for code that asks for them. [observers] is More > Observers (ID step 5, build 74): shown only when
+/// the server offers radio proof (`AppState.radioProofCapable`). [repeaters] and [radio] both open More > Radio; [help] the Help page.
+enum MoreItem { drives, radio, myRadios, wardriving, notifications, settings, about, legend, privacy, howItWorks, repeaters, trace, discover, adverts, rxLog, noiseFloor, telemetry, radioSetup, observerJoin, method, devices, myReports, leaderboard, chat, observer, help, radioSettings, observers }
 
 /// What a request to open the Plan tab carries (release 0.38, Master Planner). The Plan tab takes it with
 /// [ShellController.takePendingPlan] when it is shown.

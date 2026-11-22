@@ -25,6 +25,7 @@ import '../tools/adverts_screen.dart';
 import '../tools/discover_screen.dart';
 import '../account/devices_screen.dart';
 import '../account/leaderboard_screen.dart';
+import '../account/person_observers_screen.dart';
 import '../account/reports_history_screen.dart';
 import '../tools/noise_screen.dart';
 import '../tools/rx_log_screen.dart';
@@ -88,6 +89,7 @@ class _MoreTabState extends State<MoreTab> {
         MoreItem.observerJoin => const ObserverJoinScreen(),
         MoreItem.method => const MethodScreen(),
         MoreItem.devices => const DevicesScreen(),
+        MoreItem.observers => const PersonObserversScreen(),
         MoreItem.myReports => const ReportsHistoryScreen(),
         MoreItem.leaderboard => const LeaderboardScreen(),
         MoreItem.chat => const ChatSettingsScreen(),
@@ -177,6 +179,7 @@ class MoreList extends StatelessWidget {
             row(MoreItem.radio, Icons.settings_input_antenna, 'Radio',
                 s.connected ? 'Your radio, repeaters, rooms, sensors and radio tools' : 'Not connected. Repeaters, rooms and radio tools'),
             row(MoreItem.devices, Icons.key_outlined, 'Devices and keys', 'Your driver key, other phones, MeshMapper forwarding'),
+            if (s.radioProofCapable) row(MoreItem.observers, Icons.cell_tower, 'Observers', 'Your observers, this phone, and radios that may be yours'),
             row(MoreItem.leaderboard, Icons.emoji_events_outlined, 'Leaderboard', 'Drivers who opted in, this region or every region'),
             row(MoreItem.observerJoin, Icons.visibility_outlined, observerJoinTitle, 'Step by step: make your repeater report to MeshSonar. Free'),
             row(MoreItem.chat, Icons.chat_bubble_outline, 'Chat settings', 'Quick replies, Return key, haptics'),

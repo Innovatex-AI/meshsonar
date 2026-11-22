@@ -15,11 +15,42 @@ import '../../app.dart' show AppScope;
 import '../../design/app_surfaces.dart' show showAppToast;
 import '../../map/layers/repeater_map_source.dart' show kRosterLayerId;
 import '../../map/main_map_focus.dart';
+import '../../map/still/path_layer.dart';
+import '../../map/still/path_map.dart';
 import '../../region/region_common.dart' show RegionOfflineAsOf, clockUtc, dayUtc;
 import '../../shell/shell_controller.dart' show ShellController;
 import '../../theme.dart';
 import 'byte_inspector.dart';
 import 'packet_ui.dart';
+
+/// The path of [d] to draw on its small map: the path with the most placed hops (the first on a tie), its hops numbered in order.
+/// A unique hop is certain and a likely one is likely; ambiguous, unknown and other hops have no position and are not drawn.
+/// Null when no hop of any path can be placed.
+PathSpec? packetPathSpec(PacketDetail d) {
+  PathSpec? best;
+  var bestPlaced = 0;
+  for (final p in d.paths) {
+    final hops = <PathHop>[
+      for (final h in p.hops)
+        () {
+          final pos = h.confidence == HopConfidence.unique || h.confidence == HopConfidence.likely ? h.position : null;
+          return PathHop(
+            n: h.index + 1,
+            name: h.node?.label ?? h.prefix,
+            lat: pos?.lat,
+            lon: pos?.lon,
+            certainty: h.confidence == HopConfidence.unique ? PathCertainty.certain : PathCertainty.likely,
+          );
+        }(),
+    ];
+    final placed = hops.where((h) => h.placed).length;
+    if (placed > bestPlaced) {
+      bestPlaced = placed;
+      best = PathSpec(hops: hops);
+    }
+  }
+  return best;
+}
 
 /// Extra lines a screen adds about other sources of the same packet.
 class PacketCrossSource {
@@ -415,6 +446,7 @@ class PacketDetailBody extends StatelessWidget {
           if (d.paths.isEmpty) const PacketNote('No hops: the packet was heard straight from its sender.'),
         ],
       ),
+      ..._pathMap(context),
       const SizedBox(height: Gap.s),
       if (onShowOnMap != null)
         OutlinedButton.icon(
@@ -447,6 +479,32 @@ class PacketDetailBody extends StatelessWidget {
         style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
       ),
     ]);
+  }
+
+  /// MAP slice 5: the packet's route on a small map (page `path`): the numbered, named hops, solid for a hop known for sure and
+  /// dashed for a likely one. A hop nobody can place keeps its number, is listed in the Path section and breaks the line. Needs
+  /// the definition's `symbols.path`; without it the page is what build 73 showed (no map). Draws the path with the
+  /// most placed hops ([packetPathSpec]); the observers' positions are not in the packet detail, so none is drawn.
+  List<Widget> _pathMap(BuildContext context) {
+    final style = activePathStyle();
+    if (style == null || d.paths.isEmpty) return const [];
+    final spec = packetPathSpec(d);
+    if (spec == null) return const [];
+    return [
+      Padding(
+        padding: const EdgeInsets.only(top: Gap.s),
+        child: StillPathMap(
+          key: const Key('packet-path-map'),
+          spec: spec,
+          style: style,
+          semanticLabel: 'Map of the route: ${spec.placed.length} of ${spec.hops.length} hops have a position.',
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.only(top: Gap.xs),
+        child: PathKey(style: style, unplaced: spec.unplaced.length, total: spec.hops.length),
+      ),
+    ];
   }
 
   Widget _path(BuildContext context, PacketPath p) {

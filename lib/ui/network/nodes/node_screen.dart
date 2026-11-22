@@ -14,6 +14,8 @@ import '../../../core/network_request.dart';
 import '../../../core/v1/nodes_api.dart';
 import '../../charts/chart_frame.dart';
 import '../../charts/time_line_chart.dart';
+import '../../map/map_preview.dart' show MapPreview;
+import '../../map/still/place_map.dart';
 import '../../nodes/node_actions.dart' show NodeActionBar;
 import '../../nodes/node_ref.dart';
 import '../../../core/repeater_detail_api.dart' show DailySnr;
@@ -145,6 +147,13 @@ class NodePageBody extends StatelessWidget {
         if (page.status != null && page.status!.state.name != 'ready' && plainServerText(page.status!.reason) != null)
           Padding(padding: const EdgeInsets.only(top: Gap.xs), child: Text(plainServerText(page.status!.reason)!, key: const Key('node-status-note'), style: muted)),
         _identity(context, d, hidden),
+        // MAP slice 5: the node's small map (page `node`), when the definition presets one and the node has a public position.
+        if (!hidden && d.position != null && MapPreview.presetOf('node') != null)
+          Padding(
+            key: const Key('node-map'),
+            padding: const EdgeInsets.only(top: Gap.s),
+            child: StillPlaceMap(page: 'node', role: d.role, name: d.label, lat: d.position!.lat, lon: d.position!.lon, tiles: mapTiles ? null : false),
+          ),
         const SizedBox(height: Gap.s),
         NodeActionBar(node: ref),
         if (d.health != null) _health(context, d),
